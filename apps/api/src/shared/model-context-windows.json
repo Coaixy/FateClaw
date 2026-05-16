@@ -1,0 +1,74 @@
+[
+  {
+    "prefixes": ["gpt-5.5-pro", "gpt-5.5"],
+    "tokens": 1050000
+  },
+  {
+    "prefixes": ["gpt-5.4-pro", "gpt-5.4"],
+    "tokens": 1050000
+  },
+  {
+    "prefixes": ["gpt-5"],
+    "tokens": 400000
+  },
+  {
+    "prefixes": ["claude-opus-4.7", "claude-opus-4"],
+    "tokens": 1000000
+  },
+  {
+    "prefixes": ["claude-sonnet-4.6", "claude-sonnet-4"],
+    "tokens": 1000000
+  },
+  {
+    "prefixes": ["gemini-3.1-pro"],
+    "tokens": 1000000
+  },
+  {
+    "prefixes": ["deepseek-v4", "deepseek-chat", "deepseek-reasoner"],
+    "tokens": 1000000
+  },
+  {
+    "prefixes": ["qwen3.6-plus", "qwen-plus"],
+    "tokens": 1000000
+  },
+  {
+    "prefixes": ["qwen3.6", "qwen3-max", "qwen-max"],
+    "tokens": 262144
+  },
+  {
+    "prefixes": ["doubao-seed-2-0", "doubao-seed-2", "doubao-2"],
+    "tokens": 256000
+  },
+  {
+    "prefixes": ["doubao-seed-1-8", "doubao-seed-1-6"],
+    "tokens": 256000
+  },
+  {
+    "prefixes": ["doubao-1-5-pro-256k"],
+    "tokens": 256000
+  },
+  {
+    "prefixes": ["doubao-1-5-pro-32k"],
+    "tokens": 32000
+  },
+  {
+    "prefixes": ["kimi-k2.6", "kimi-k2.5", "kimi-k2"],
+    "tokens": 256000
+  },
+  {
+    "prefixes": ["glm-4.7", "glm-4.6"],
+    "tokens": 200000
+  },
+  {
+    "prefixes": ["hunyuan-lite", "hunyuan-standard-256k"],
+    "tokens": 256000
+  },
+  {
+    "prefixes": ["hunyuan-turbos", "hunyuan-t1"],
+    "tokens": 32000
+  },
+  {
+    "prefixes": ["ernie-4.5", "ernie-5.0-thinking"],
+    "tokens": 128000
+  }
+]

@@ -1,0 +1,16 @@
+# Core runtime
+/apps/api/ @gavrielc @gabi-simons
+/packages/agent-runner/ @gavrielc @gabi-simons
+/packages/contracts/ @gavrielc @gabi-simons
+
+# Frontend
+/apps/web/ @gavrielc @gabi-simons
+
+# Skills
+/skills/ @gavrielc @gabi-simons
+
+# Project metadata and release-sensitive files
+/package.json @gavrielc @gabi-simons
+/pnpm-lock.yaml @gavrielc @gabi-simons
+/LICENSE @gavrielc @gabi-simons
+/.github/ @gavrielc @gabi-simons

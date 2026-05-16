@@ -1,0 +1,59 @@
+{
+  "manifestVersion": 2,
+  "name": "八字排盘",
+  "description": "八字排盘：四柱、大运、完整流年、格局，基于 bazi-ts-lib 本地计算",
+  "trigger": "用户询问八字、四柱、大运、流年、格局等命理相关问题",
+  "requiresLoad": true,
+  "entry": {
+    "type": "script",
+    "file": "paipan.js"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "solarDate": {
+        "type": "string",
+        "description": "阳历出生日期 YYYY-MM-DD"
+      },
+      "hour": {
+        "type": "integer",
+        "description": "出生小时 0-23（24 小时制）",
+        "minimum": 0,
+        "maximum": 23
+      },
+      "minute": {
+        "type": "integer",
+        "description": "出生分钟 0-59",
+        "minimum": 0,
+        "maximum": 59,
+        "default": 0
+      },
+      "gender": {
+        "type": "string",
+        "description": "性别",
+        "enum": ["男", "女", "male", "female"]
+      },
+      "zishiMode": {
+        "type": "string",
+        "description": "子时切换：early=23:00~00:00 算次日；late=算当日",
+        "enum": ["early", "late"],
+        "default": "early"
+      },
+      "childLimitMode": {
+        "type": "string",
+        "description": "起运算法",
+        "enum": ["default", "china95", "lunar_sect1", "lunar_sect2"],
+        "default": "default"
+      },
+      "include": {
+        "type": "array",
+        "description": "要返回的部分，默认全部",
+        "items": {
+          "type": "string",
+          "enum": ["bazi", "fortune", "pattern"]
+        }
+      }
+    },
+    "required": ["solarDate", "hour", "gender"]
+  }
+}

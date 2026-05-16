@@ -1,0 +1,69 @@
+{
+  "name": "nanoclaw",
+  "version": "1.2.21",
+  "description": "FateClaw（命枢）是具备排盘和用户知识库检索能力的开源玄学 Agent。",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run build:api",
+    "build:api": "pnpm --filter @nanoclaw/api build",
+    "build:agent": "pnpm --filter nanoclaw-agent-runner build",
+    "build:web": "pnpm --filter fateclaw-web build",
+    "build:all": "pnpm run build:api && pnpm run build:agent && pnpm run build:web",
+    "start": "pnpm --filter @nanoclaw/api start",
+    "dev": "concurrently -n api,web -c blue,green \"pnpm --filter @nanoclaw/api dev\" \"pnpm --filter fateclaw-web dev\"",
+    "dev:api": "pnpm --filter @nanoclaw/api dev",
+    "dev:api-only": "pnpm --filter @nanoclaw/api dev:api-only",
+    "dev:light": "concurrently -n api,web -c blue,green \"pnpm --filter @nanoclaw/api dev:api-only\" \"pnpm --filter fateclaw-web dev\"",
+    "dev:web": "pnpm --filter fateclaw-web dev",
+    "typecheck": "pnpm --filter @nanoclaw/api typecheck && pnpm --filter nanoclaw-agent-runner exec tsc --noEmit && pnpm --filter fateclaw-web exec tsc --noEmit",
+    "format": "pnpm --filter @nanoclaw/api format",
+    "format:fix": "pnpm --filter @nanoclaw/api format:fix",
+    "format:check": "pnpm --filter @nanoclaw/api format:check",
+    "prepare": "husky",
+    "lint": "pnpm --filter @nanoclaw/api lint",
+    "lint:fix": "pnpm --filter @nanoclaw/api lint:fix",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest --passWithNoTests",
+    "login": "pnpm --filter @nanoclaw/api login",
+    "accounts": "pnpm --filter @nanoclaw/api accounts",
+    "account:remove": "pnpm --filter @nanoclaw/api account:remove",
+    "clean": "bash scripts/clean.sh",
+    "clean:all": "bash scripts/clean.sh --all",
+    "clean:dist": "bash scripts/clean.sh --dist",
+    "pack": "bash scripts/pack.sh --light --skip-install --jobs 4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@vitest/coverage-v8": "^4.1.4",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-no-catch-all": "^1.1.0",
+    "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "javascript-obfuscator": "^5.4.1",
+    "terser": "^5.46.1",
+    "typescript-eslint": "^8.57.1",
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-jwt": ">=6.2.2",
+      "vite": ">=8.0.5",
+      "picomatch": ">=4.0.4",
+      "brace-expansion@^1.0.0": "1.1.13",
+      "brace-expansion@^5.0.0": "5.0.5"
+    },
+    "packageExtensions": {
+      "@alicloud/openapi-core@1.0.7": {
+        "dependencies": {
+          "@alicloud/tea-typescript": "^1.8.0"
+        }
+      }
+    }
+  }
+}

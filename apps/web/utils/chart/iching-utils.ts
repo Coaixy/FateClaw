@@ -1,0 +1,94 @@
+// 爻值：6=老阴（变阳） 7=少阳（静） 8=少阴（静） 9=老阳（变阴）
+export type YaoValue = 6 | 7 | 8 | 9;
+
+export interface IchingYao {
+  position: number; // 1=初 .. 6=上
+  yaoValue: YaoValue;
+  isMoving: boolean;
+  tianGan: string;
+  diZhi: string;
+  naJia?: string;
+  naYin?: string;
+  wuXing: string;
+  liuQin: string;
+  liuShou: string;
+  shiYing: string; // '世' | '應' | '初' | '二' | '三' | '四' | '五' | '六'
+  xingXiu?: string;
+}
+
+export interface IchingFuShen {
+  fuLiuQin: string;
+  fuNaJia: string;
+  fuWuXing: string;
+  // 伏神索引统一按 0 基保存，和 yaoList 下标一致。
+  hostYaoIndex: number;
+  hostNaJia?: string; // 仅作辅助展示，不参与定位。
+  feiWuXing?: string;
+  relation?: string;
+}
+
+export interface IchingGua {
+  guaName?: string;
+  palace?: string;
+  palaceWuXing?: string;
+  palaceLevel?: string;
+  wuXingStar?: string;
+  yaoList: IchingYao[];
+  guaCi?: string;
+  yaoCi?: string[];
+  tuanCi?: string;
+  shenYao?: number;
+  fuShen?: IchingFuShen[];
+  pangFuShen?: IchingFuShen[];
+}
+
+// true 表示阳爻（—），false 表示阴爻（x）
+export function isYang(value: number): boolean {
+  return value === 7 || value === 9;
+}
+
+// 动爻：6（老阴）或 9（老阳）
+export function isDongByValue(value: number): boolean {
+  return value === 6 || value === 9;
+}
+
+// 世应判断：shiYing 字段为 '世' / '應'（繁体） 或其他位置名
+export function isShi(shiYing: string | undefined): boolean {
+  return shiYing === '世';
+}
+export function isYing(shiYing: string | undefined): boolean {
+  return shiYing === '應' || shiYing === '应';
+}
+export function getShiYingLabel(shiYing: string | undefined): '世' | '应' | '' {
+  if (isShi(shiYing)) return '世';
+  if (isYing(shiYing)) return '应';
+  return '';
+}
+
+// 六兽着色
+const LIUSHOU_COLOR: Record<string, string> = {
+  青龙: 'text-emerald-400',
+  朱雀: 'text-rose-400',
+  勾陈: 'text-yellow-600',
+  腾蛇: 'text-amber-300',
+  螣蛇: 'text-amber-300',
+  白虎: 'text-slate-300',
+  玄武: 'text-sky-400',
+};
+
+export function getLiuShouColor(liushou: string): string {
+  return LIUSHOU_COLOR[liushou] ?? 'text-muted';
+}
+
+// 六亲着色
+const LIUQIN_COLOR: Record<string, string> = {
+  子孙: 'text-emerald-400',
+  妻财: 'text-yellow-400',
+  官鬼: 'text-rose-400',
+  父母: 'text-sky-400',
+  兄弟: 'text-amber-300',
+};
+
+export function getLiuQinColor(liuqin: string): string {
+  return LIUQIN_COLOR[liuqin] ?? 'text-ink';
+}

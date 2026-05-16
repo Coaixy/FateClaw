@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+packages/*/dist/
+apps/web/out/
+apps/web/.next/
+
+# Lockfiles — project uses pnpm, ignore npm lockfiles
+package-lock.json
+
+# Local data & auth
+store/
+data/
+logs/
+!apps/web/app/admin/(dashboard)/logs/
+
+# Groups - only track base structure and specific CLAUDE.md files
+groups/*
+!groups/main/
+!groups/global/
+groups/main/*
+groups/global/*
+!groups/main/CLAUDE.md
+!groups/global/CLAUDE.md
+
+# Secrets
+*.keys.json
+.env
+
+# Temp files
+.tmp-*
+.worktrees/
+.claude/
+
+# Archives
+*.tar.gz
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Skills system (local per-installation state)
+.nanoclaw/
+*.tsbuildinfo
+.omx/

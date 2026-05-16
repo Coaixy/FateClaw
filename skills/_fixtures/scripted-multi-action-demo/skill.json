@@ -1,0 +1,20 @@
+{
+  "manifestVersion": 2,
+  "name": "Scripted Multi Action Demo",
+  "description": "用于测试单脚本公开入口的 demo skill",
+  "trigger": "测试 scripted skill 运行时",
+  "requiresLoad": true,
+  "entry": {
+    "type": "script",
+    "file": "ask.js"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string",
+        "description": "测试回显内容"
+      }
+    }
+  }
+}

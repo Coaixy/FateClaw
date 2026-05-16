@@ -1,0 +1,38 @@
+{
+  "manifestVersion": 2,
+  "name": "通枢解读",
+  "description": "玄学专业解读分析 — 对八字、奇门、紫微、六爻、梅花、塔罗、风水等玄学内容进行深度解读",
+  "trigger": "用户请求解读玄学相关内容：包括排盘数据解读、命理分析、卦象解读、星盘分析、塔罗解读、风水点评、手相面相、姓名学、择日择吉等；或用户直接给出玄学术语/数据要求分析",
+  "requiresLoad": false,
+  "entry": {
+    "type": "tool",
+    "tool": "interpret_xuanxue"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "content": {
+        "type": "string",
+        "description": "可选。仅在运行时无法从本轮 artifact、activeBoardContext 或历史 toolContext 自动取得盘面时使用。系统排盘/手动排盘主流程不要复制大段盘面；运行时会注入官方盘面的确定性 AI 摘要。用户自贴盘面只允许通过专用 inputKind=user_pasted_board 协议入口传入。"
+      },
+      "question": {
+        "type": "string",
+        "description": "用户的具体问题（可选）"
+      },
+      "category": {
+        "type": "string",
+        "description": "术数类别提示，如 '八字'、'奇门'、'紫微' 等（可选，帮助模型聚焦解读角度）"
+      },
+      "extra_context": {
+        "type": "string",
+        "description": "额外的解读参考资料（通常由 interpret_xuanxue 工具自动注入用户知识，无需手动传入）"
+      },
+      "content_source": {
+        "type": "string",
+        "enum": ["skill", "user"],
+        "description": "content 的来源：'skill' = 由系统排盘 skill（如 bazi-paipan）产出；'user' = 仅限专用 inputKind=user_pasted_board 协议入口。默认 'skill'"
+      }
+    },
+    "required": []
+  }
+}

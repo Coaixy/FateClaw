@@ -1,0 +1,120 @@
+import type {
+  ChatInputKindDto,
+  ChatSessionDto,
+  ChatSessionSendRequestDto,
+  ChatSessionSendResponseDto,
+  MessageDto,
+  SessionMessageListResponseDto,
+  UserPastedBoardInputDto,
+} from '@nanoclaw/contracts/chat';
+import type { SuccessResponse } from '@nanoclaw/contracts/common';
+
+import { requestJson } from '@/lib/http/client';
+
+export type Message = MessageDto;
+export type ChatSession = ChatSessionDto;
+export type ChatInputKind = ChatInputKindDto;
+export type UserPastedBoardInput = UserPastedBoardInputDto;
+
+type NormalChatSessionSendOptions = {
+  selectedBoardMessageId?: string;
+  inputKind?: 'normal';
+  pastedBoard?: never;
+};
+
+type UserPastedBoardChatSessionSendOptions = {
+  selectedBoardMessageId?: string;
+  inputKind: 'user_pasted_board';
+  pastedBoard: UserPastedBoardInput;
+};
+
+export type ChatSessionSendOptions =
+  | NormalChatSessionSendOptions
+  | UserPastedBoardChatSessionSendOptions;
+
+/**
+ * Skill artifact context（来自 agent-runner 的 tool_context）。
+ * 当前仍属于前端展示协议，后续可以继续下沉到 contracts。
+ */
+export interface SkillContextEntry {
+  skill: string;
+  output: string;
+  artifactType?: string;
+  artifactTitle?: string;
+  artifactData?: unknown;
+}
+
+export function parseToolContext(raw?: string | null): SkillContextEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export const messagesApi = {
+  list: (accountId: string, limit = 50, before?: string) =>
+    requestJson<Message[]>(
+      `/api/messages/${encodeURIComponent(accountId)}?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+    ),
+};
+
+export const chatSessionsApi = {
+  list: () => requestJson<ChatSession[]>('/api/chat-sessions'),
+  create: (title?: string) =>
+    requestJson<ChatSession>('/api/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+  update: (sessionId: string, title: string) =>
+    requestJson<SuccessResponse>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
+      { method: 'PATCH', body: JSON.stringify({ title }) },
+    ),
+  remove: (sessionId: string) =>
+    requestJson<SuccessResponse>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    ),
+  messages: (sessionId: string, limit = 50, before?: string) =>
+    requestJson<SessionMessageListResponseDto>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+    ),
+  send: (
+    sessionId: string,
+    content: string,
+    options?: ChatSessionSendOptions,
+  ) => {
+    let body: ChatSessionSendRequestDto;
+
+    if (options?.inputKind === 'user_pasted_board') {
+      const pastedBoard = options.pastedBoard;
+      if (!pastedBoard) {
+        throw new Error('pastedBoard is required for user_pasted_board input');
+      }
+      body = {
+        content,
+        selected_board_message_id: options.selectedBoardMessageId,
+        input_kind: 'user_pasted_board',
+        pasted_board: pastedBoard,
+      };
+    } else {
+      body = {
+        content,
+        selected_board_message_id: options?.selectedBoardMessageId,
+        input_kind: options?.inputKind,
+      };
+    }
+
+    return requestJson<ChatSessionSendResponseDto>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        exposeServerErrorMessage: true,
+      },
+    );
+  },
+};

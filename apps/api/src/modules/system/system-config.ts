@@ -1,0 +1,603 @@
+import { randomUUID } from 'node:crypto';
+
+import { SKILL_API_BASE } from '../../infrastructure/config.js';
+import {
+  createConfigAuditLog,
+  createOfficialModelConfig,
+  deleteOfficialModelConfig,
+  getOfficialModelConfig,
+  getSystemSecret,
+  getUserModelConfig,
+  getUserModelSelection,
+  listConfigAuditLogs,
+  listOfficialModelConfigs,
+  updateOfficialModelConfig,
+  upsertSystemSecret,
+  upsertUserModelConfig,
+  upsertUserModelSelection,
+} from '../../infrastructure/db.js';
+import { getDefaultMaxOutputTokens } from '../../shared/output-token-policy.js';
+import {
+  MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
+  normalizeConfiguredContextWindowTokens,
+  resolveContextWindow,
+} from '../../shared/model-context-window.js';
+import type {
+  ModelProviderType,
+  OfficialModelConfig,
+  UserModelConfig,
+  UserModelSelection,
+} from '../../shared/types.js';
+
+type RuntimeSecretSource = 'database' | 'missing';
+export type ProviderAuthMode =
+  | 'openai_api_key'
+  | 'anthropic_api_key'
+  | 'claude_code_oauth_token'
+  | 'gemini_api_key';
+
+export interface ResolvedProviderSecret {
+  value: string | null;
+  source: RuntimeSecretSource;
+  authMode: ProviderAuthMode;
+}
+
+export type LlmRuntimeSource = 'custom' | 'official';
+export type LlmBillingMode = 'none' | 'metered';
+
+export interface EffectiveLlmRuntimeConfig {
+  source: LlmRuntimeSource;
+  billingMode: LlmBillingMode;
+  modelConfigId: string;
+  providerKey: string;
+  providerType: ModelProviderType;
+  displayName: string;
+  authMode: ProviderAuthMode;
+  secret: string;
+  secretSource: RuntimeSecretSource;
+  baseUrl: string | null;
+  model: string;
+  contextWindowTokens: number;
+  maxOutputTokens: number;
+  skillApiBase: string;
+  inputTokenPricePerMillionPoints: number;
+  outputTokenPricePerMillionPoints: number;
+}
+
+export type EffectiveAgentRuntimeConfig = EffectiveLlmRuntimeConfig;
+
+export interface AdminOfficialModelView extends OfficialModelConfig {
+  has_secret: boolean;
+  secret_source: RuntimeSecretSource;
+  auth_mode: ProviderAuthMode;
+  context_window_tokens: number | null;
+}
+
+export interface UserModelSettingsOverview {
+  custom:
+    | (UserModelConfig & {
+        has_secret: boolean;
+        auth_mode: ProviderAuthMode;
+        context_window_tokens: number | null;
+      })
+    | null;
+  selection: UserModelSelection | null;
+  official_models: AdminOfficialModelView[];
+}
+
+function defaultAuthMode(providerType: ModelProviderType): ProviderAuthMode {
+  if (providerType === 'gemini') return 'gemini_api_key';
+  if (providerType === 'anthropic') return 'anthropic_api_key';
+  return 'openai_api_key';
+}
+
+function normalizeAuthMode(
+  providerType: ModelProviderType,
+  value: unknown,
+): ProviderAuthMode {
+  if (
+    value === 'openai_api_key' ||
+    value === 'anthropic_api_key' ||
+    value === 'claude_code_oauth_token' ||
+    value === 'gemini_api_key'
+  ) {
+    return value;
+  }
+  return defaultAuthMode(providerType);
+}
+
+function normalizeModelContextWindowTokens(
+  extraJson: Record<string, unknown> | null | undefined,
+  label: string,
+): number | null {
+  if (extraJson?.context_window_tokens !== undefined) {
+    return normalizeConfiguredContextWindowTokens(
+      extraJson.context_window_tokens,
+      label,
+    );
+  }
+  // 兼容旧库：历史 UI 文案叫 max_output_tokens，但实际常被当成模型上下文长度填写。
+  // 只有数值达到上下文窗口下限时才迁移语义；较小的旧“输出上限”配置直接忽略。
+  const legacyValue = extraJson?.max_output_tokens;
+  if (
+    legacyValue === undefined ||
+    legacyValue === null ||
+    legacyValue === 0 ||
+    (typeof legacyValue === 'number' &&
+      legacyValue < MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS)
+  ) {
+    return null;
+  }
+  // 新保存统一写 context_window_tokens，避免再误传为 API max_tokens。
+  return normalizeConfiguredContextWindowTokens(legacyValue, label);
+}
+
+function withModelContextWindowTokens(
+  extraJson: Record<string, unknown> | null | undefined,
+  contextWindowTokens: number | null | undefined,
+): Record<string, unknown> {
+  const next = { ...(extraJson ?? {}) };
+  if (contextWindowTokens === undefined) {
+    return next;
+  }
+  if (contextWindowTokens === null) {
+    delete next.context_window_tokens;
+    delete next.max_output_tokens;
+  } else {
+    next.context_window_tokens = contextWindowTokens;
+    delete next.max_output_tokens;
+  }
+  return next;
+}
+
+async function resolveSecret(input: {
+  secretKey: string | null;
+  protocol: ModelProviderType;
+  extraJson?: Record<string, unknown> | null;
+}): Promise<ResolvedProviderSecret> {
+  const authMode = normalizeAuthMode(
+    input.protocol,
+    input.extraJson?.auth_mode,
+  );
+  if (!input.secretKey) {
+    return { value: null, source: 'missing', authMode };
+  }
+  const secret = await getSystemSecret(input.secretKey);
+  if (!secret?.secret_value) {
+    return { value: null, source: 'missing', authMode };
+  }
+  return { value: secret.secret_value, source: 'database', authMode };
+}
+
+function requireModelName(modelName: string, label: string): string {
+  const model = modelName.trim();
+  if (!model) {
+    throw new Error(`${label} 未配置模型名`);
+  }
+  return model;
+}
+
+async function resolveOfficialRuntime(
+  selection: UserModelSelection,
+): Promise<EffectiveLlmRuntimeConfig> {
+  if (!selection.official_model_id) {
+    throw new Error('当前选择的官方模型无效，请重新选择模型');
+  }
+  const model = await getOfficialModelConfig(selection.official_model_id);
+  if (!model || !model.enabled) {
+    throw new Error('当前选择的官方模型不可用，请重新选择模型');
+  }
+  const secret = await resolveSecret({
+    secretKey: model.api_key_secret_key,
+    protocol: model.protocol,
+    extraJson: model.extra_json,
+  });
+  if (!secret.value) {
+    throw new Error('当前选择的官方模型未配置密钥，请联系管理员');
+  }
+  const modelName = requireModelName(model.model_name, model.display_name);
+  const contextWindowTokens = resolveContextWindow({
+    model: modelName,
+    configured: normalizeModelContextWindowTokens(
+      model.extra_json,
+      model.display_name,
+    ),
+  });
+  return {
+    source: 'official',
+    billingMode: 'metered',
+    modelConfigId: model.id,
+    providerKey: model.model_key,
+    providerType: model.protocol,
+    displayName: model.display_name,
+    authMode: secret.authMode,
+    secret: secret.value,
+    secretSource: secret.source,
+    baseUrl: model.base_url,
+    model: modelName,
+    contextWindowTokens,
+    // 输出上限不再从后台配置读取，避免把“上下文窗口”误传成供应商 API 的 max_tokens。
+    maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
+    skillApiBase: SKILL_API_BASE,
+    inputTokenPricePerMillionPoints: model.input_token_price_per_million_points,
+    outputTokenPricePerMillionPoints:
+      model.output_token_price_per_million_points,
+  };
+}
+
+async function resolveCustomRuntime(
+  userId: string,
+): Promise<EffectiveLlmRuntimeConfig> {
+  const config = await getUserModelConfig(userId);
+  if (!config) {
+    throw new Error('当前选择了自配模型，但尚未保存模型配置');
+  }
+  const secret = await resolveSecret({
+    secretKey: config.api_key_secret_key,
+    protocol: config.protocol,
+    extraJson: config.extra_json,
+  });
+  if (!secret.value) {
+    throw new Error('当前选择了自配模型，但尚未保存 API Key');
+  }
+  const modelName = requireModelName(config.model_name, '自配模型');
+  const contextWindowTokens = resolveContextWindow({
+    model: modelName,
+    configured: normalizeModelContextWindowTokens(
+      config.extra_json,
+      '自配模型',
+    ),
+  });
+  return {
+    source: 'custom',
+    billingMode: 'none',
+    modelConfigId: userId,
+    providerKey: `custom:${userId}`,
+    providerType: config.protocol,
+    displayName: '自配模型',
+    authMode: secret.authMode,
+    secret: secret.value,
+    secretSource: secret.source,
+    baseUrl: config.base_url,
+    model: modelName,
+    contextWindowTokens,
+    maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
+    skillApiBase: SKILL_API_BASE,
+    inputTokenPricePerMillionPoints: 0,
+    outputTokenPricePerMillionPoints: 0,
+  };
+}
+
+export function invalidateSystemConfigCache(): void {
+  // 保留导出兼容测试和调用点。用户级模型选择不做全局 runtime 缓存。
+}
+
+export async function resolveUserLlmRuntime(
+  userId: string,
+): Promise<EffectiveLlmRuntimeConfig> {
+  const selection = await getUserModelSelection(userId);
+  if (!selection) {
+    throw new Error('未选择模型，请先在模型设置中选择官方模型或自配模型');
+  }
+  if (selection.source === 'custom') {
+    return resolveCustomRuntime(userId);
+  }
+  return resolveOfficialRuntime(selection);
+}
+
+export async function getEffectiveAgentRuntimeConfig(
+  userId: string,
+): Promise<EffectiveAgentRuntimeConfig> {
+  return resolveUserLlmRuntime(userId);
+}
+
+export async function getEffectiveAgentModel(userId: string): Promise<string> {
+  return (await resolveUserLlmRuntime(userId)).model;
+}
+
+export async function listOfficialModelViews(): Promise<
+  AdminOfficialModelView[]
+> {
+  const models = await listOfficialModelConfigs();
+  return Promise.all(
+    models.map(async (model) => {
+      const secret = await resolveSecret({
+        secretKey: model.api_key_secret_key,
+        protocol: model.protocol,
+        extraJson: model.extra_json,
+      });
+      return {
+        ...model,
+        has_secret: Boolean(secret.value),
+        secret_source: secret.source,
+        auth_mode: secret.authMode,
+        context_window_tokens: normalizeModelContextWindowTokens(
+          model.extra_json,
+          model.display_name,
+        ),
+      };
+    }),
+  );
+}
+
+export async function getSystemConfigOverview(): Promise<{
+  official_models: AdminOfficialModelView[];
+  providers: AdminOfficialModelView[];
+  runtime: null;
+  audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
+}> {
+  const [models, auditLogs] = await Promise.all([
+    listOfficialModelViews(),
+    listConfigAuditLogs(50),
+  ]);
+  return {
+    official_models: models,
+    providers: models,
+    runtime: null,
+    audit_logs: auditLogs,
+  };
+}
+
+export async function setOfficialModelSecret(args: {
+  modelId: string;
+  secretValue: string;
+  authMode?: ProviderAuthMode;
+  actor?: string;
+}): Promise<void> {
+  const actor = args.actor ?? 'admin';
+  const model = await getOfficialModelConfig(args.modelId);
+  if (!model) {
+    throw new Error('官方模型不存在');
+  }
+  const secretKey =
+    model.api_key_secret_key || `official-model:${model.id}:secret`;
+  await upsertSystemSecret({
+    key: secretKey,
+    secretValue: args.secretValue,
+    updatedBy: actor,
+  });
+  await updateOfficialModelConfig({
+    id: model.id,
+    modelKey: model.model_key,
+    protocol: model.protocol,
+    displayName: model.display_name,
+    enabled: model.enabled,
+    priority: model.priority,
+    baseUrl: model.base_url,
+    modelName: model.model_name,
+    apiKeySecretKey: secretKey,
+    inputTokenPricePerMillionPoints: model.input_token_price_per_million_points,
+    outputTokenPricePerMillionPoints:
+      model.output_token_price_per_million_points,
+    extraJson: {
+      ...(model.extra_json ?? {}),
+      auth_mode: args.authMode ?? defaultAuthMode(model.protocol),
+    },
+  });
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'official_model.secret.updated',
+    targetType: 'official_model',
+    targetKey: model.id,
+    before: { had_secret: Boolean(model.api_key_secret_key) },
+    after: { secret_key: secretKey },
+  });
+}
+
+export async function createOfficialModel(args: {
+  modelKey: string;
+  protocol: ModelProviderType;
+  displayName: string;
+  enabled?: boolean;
+  priority?: number;
+  baseUrl?: string | null;
+  modelName: string;
+  inputTokenPricePerMillionPoints?: number;
+  outputTokenPricePerMillionPoints?: number;
+  contextWindowTokens?: number | null;
+  actor?: string;
+}): Promise<OfficialModelConfig> {
+  const actor = args.actor ?? 'admin';
+  const created = await createOfficialModelConfig({
+    id: `official-model-${randomUUID()}`,
+    modelKey: args.modelKey,
+    protocol: args.protocol,
+    displayName: args.displayName,
+    enabled: args.enabled ?? true,
+    priority: args.priority ?? 0,
+    baseUrl: args.baseUrl ?? null,
+    modelName: args.modelName,
+    inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints ?? 0,
+    outputTokenPricePerMillionPoints:
+      args.outputTokenPricePerMillionPoints ?? 0,
+    extraJson: withModelContextWindowTokens({}, args.contextWindowTokens),
+  });
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'official_model.created',
+    targetType: 'official_model',
+    targetKey: created.id,
+    after: created,
+  });
+  return created;
+}
+
+export async function updateOfficialModel(args: {
+  id: string;
+  modelKey: string;
+  protocol: ModelProviderType;
+  displayName: string;
+  enabled: boolean;
+  priority: number;
+  baseUrl?: string | null;
+  modelName: string;
+  inputTokenPricePerMillionPoints: number;
+  outputTokenPricePerMillionPoints: number;
+  contextWindowTokens?: number | null;
+  actor?: string;
+}): Promise<OfficialModelConfig> {
+  const actor = args.actor ?? 'admin';
+  const before = await getOfficialModelConfig(args.id);
+  if (!before) {
+    throw new Error('官方模型不存在');
+  }
+  const updated = await updateOfficialModelConfig({
+    id: args.id,
+    modelKey: args.modelKey,
+    protocol: args.protocol,
+    displayName: args.displayName,
+    enabled: args.enabled,
+    priority: args.priority,
+    baseUrl: args.baseUrl ?? null,
+    modelName: args.modelName,
+    apiKeySecretKey: before.api_key_secret_key,
+    inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints,
+    outputTokenPricePerMillionPoints: args.outputTokenPricePerMillionPoints,
+    extraJson: withModelContextWindowTokens(
+      before.extra_json,
+      args.contextWindowTokens,
+    ),
+  });
+  if (!updated) {
+    throw new Error('官方模型更新失败');
+  }
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'official_model.updated',
+    targetType: 'official_model',
+    targetKey: updated.id,
+    before,
+    after: updated,
+  });
+  return updated;
+}
+
+export async function removeOfficialModel(
+  id: string,
+  actor = 'admin',
+): Promise<void> {
+  const target = await getOfficialModelConfig(id);
+  if (!target) {
+    throw new Error('官方模型不存在');
+  }
+  await deleteOfficialModelConfig(id);
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'official_model.deleted',
+    targetType: 'official_model',
+    targetKey: id,
+    before: target,
+  });
+}
+
+export async function getUserModelSettingsOverview(
+  userId: string,
+): Promise<UserModelSettingsOverview> {
+  const [custom, selection, officialModels] = await Promise.all([
+    getUserModelConfig(userId),
+    getUserModelSelection(userId),
+    listOfficialModelViews(),
+  ]);
+  const customSecret = custom
+    ? await resolveSecret({
+        secretKey: custom.api_key_secret_key,
+        protocol: custom.protocol,
+        extraJson: custom.extra_json,
+      })
+    : null;
+  return {
+    custom: custom
+      ? {
+          ...custom,
+          has_secret: Boolean(customSecret?.value),
+          auth_mode: customSecret?.authMode ?? defaultAuthMode(custom.protocol),
+          context_window_tokens: normalizeModelContextWindowTokens(
+            custom.extra_json,
+            '自配模型',
+          ),
+        }
+      : null,
+    selection: selection ?? null,
+    official_models: officialModels,
+  };
+}
+
+export async function saveUserCustomModelConfig(args: {
+  userId: string;
+  protocol: ModelProviderType;
+  baseUrl?: string | null;
+  modelName: string;
+  authMode?: ProviderAuthMode;
+  contextWindowTokens?: number | null;
+}): Promise<UserModelConfig> {
+  const existing = await getUserModelConfig(args.userId);
+  return upsertUserModelConfig({
+    userId: args.userId,
+    protocol: args.protocol,
+    baseUrl: args.baseUrl ?? null,
+    modelName: args.modelName,
+    apiKeySecretKey: existing?.api_key_secret_key ?? null,
+    extraJson: {
+      ...withModelContextWindowTokens(
+        existing?.extra_json,
+        args.contextWindowTokens,
+      ),
+      auth_mode: args.authMode ?? defaultAuthMode(args.protocol),
+    },
+  });
+}
+
+export async function setUserCustomModelSecret(args: {
+  userId: string;
+  secretValue: string;
+  authMode?: ProviderAuthMode;
+}): Promise<void> {
+  const config = await getUserModelConfig(args.userId);
+  if (!config) {
+    throw new Error('请先保存自配模型基础配置');
+  }
+  const secretKey =
+    config.api_key_secret_key || `user-model:${args.userId}:secret`;
+  await upsertSystemSecret({
+    key: secretKey,
+    secretValue: args.secretValue,
+    updatedBy: args.userId,
+  });
+  await upsertUserModelConfig({
+    userId: args.userId,
+    protocol: config.protocol,
+    baseUrl: config.base_url,
+    modelName: config.model_name,
+    apiKeySecretKey: secretKey,
+    extraJson: {
+      ...(config.extra_json ?? {}),
+      auth_mode: args.authMode ?? defaultAuthMode(config.protocol),
+    },
+  });
+}
+
+export async function setUserModelSelection(args: {
+  userId: string;
+  source: UserModelSelection['source'];
+  officialModelId?: string | null;
+}): Promise<UserModelSelection> {
+  if (args.source === 'official') {
+    if (!args.officialModelId) {
+      throw new Error('请选择官方模型');
+    }
+    const model = await getOfficialModelConfig(args.officialModelId);
+    if (!model || !model.enabled) {
+      throw new Error('选择的官方模型不可用');
+    }
+  }
+  return upsertUserModelSelection({
+    userId: args.userId,
+    source: args.source,
+    officialModelId:
+      args.source === 'official' ? (args.officialModelId ?? null) : null,
+  });
+}

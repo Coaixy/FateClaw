@@ -1,0 +1,146 @@
+export type SkillParamType =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'array'
+  | 'object';
+
+/** 单个参数的属性定义（JSON Schema 子集）。 */
+export interface SkillParamProperty {
+  type: SkillParamType | SkillParamType[];
+  description: string;
+  /** 参数缺失时自动填充的默认值。 */
+  default?: unknown;
+  /** 枚举值约束。 */
+  enum?: unknown[];
+  /** 数值下限（含）。 */
+  minimum?: number;
+  /** 数值上限（含）。 */
+  maximum?: number;
+  /** 数组最小长度。 */
+  minItems?: number;
+  /** 数组最大长度。 */
+  maxItems?: number;
+  /** 数组元素类型约束。 */
+  items?: { type: string; enum?: unknown[] };
+}
+
+export interface SkillConditionalRequirement {
+  when: {
+    field: string;
+    equals: unknown;
+  };
+  required: string[];
+  description?: string;
+}
+
+export interface SkillExamplePayload {
+  name?: string;
+  description?: string;
+  value: Record<string, unknown>;
+}
+
+/** Skill stdin 参数 Schema（JSON Schema object 子集）。 */
+export interface SkillParametersSchema {
+  type: 'object';
+  properties: Record<string, SkillParamProperty>;
+  required?: string[];
+  conditionalRequired?: SkillConditionalRequirement[];
+  atLeastOneOf?: string[][];
+  /** 成组字段：组内字段必须同时提供或同时不提供。 */
+  allOrNoneOf?: string[][];
+  examples?: SkillExamplePayload[];
+}
+
+export type SkillEntry =
+  | {
+      type: 'script';
+      file: string;
+    }
+  | {
+      type: 'tool';
+      tool: string;
+      fallbackScript?: string;
+    };
+
+export interface SkillManifest {
+  /** manifest 版本号。当前统一结构版本为 2。 */
+  manifestVersion?: number;
+  name?: string;
+  description?: string;
+  trigger?: string;
+  /** 是否要求模型先调用 load_skill。默认 true。 */
+  requiresLoad?: boolean;
+  /** 唯一公开入口。 */
+  entry?: SkillEntry;
+  parameters?: SkillParametersSchema;
+}
+
+export interface SkillMetadata {
+  dir: string;
+  name: string;
+  description: string;
+  trigger: string;
+  entry?: SkillEntry;
+  /** stdin 参数 Schema，用于执行前验证和 AI 提示生成。 */
+  parameters?: SkillParametersSchema;
+  /** Skill 类型：official = 官方（默认），user = 用户自定义知识 Skill */
+  type?: 'official' | 'user';
+  /** 官方 skill 元数据来源。 */
+  manifestSource?: 'skill.json' | 'user-skill';
+  /** 官方 skill manifest 版本。 */
+  manifestVersion?: number;
+  /** 是否要求先 load_skill。 */
+  requiresLoad?: boolean;
+  /** 用户 Skill 的内联知识内容（仅 type='user'） */
+  content?: string;
+  /** 用户 Skill 来源：self = 自建，subscribed = 订阅他人 */
+  source?: 'self' | 'subscribed';
+  /** 用户 Skill 的类别（知识类别，如 '通用'、'八字'） */
+  category?: string;
+  /** 用户 Skill 的路由模式 */
+  usageMode?: 'force_injected' | 'reference_only';
+}
+
+export interface SkillRuntimePayload {
+  protocol_version: 1;
+  skill_name: string;
+  display_name: string;
+  requires_load: boolean;
+  manifest_source: 'skill.json' | 'user-skill';
+  entry?: SkillEntry;
+  parameter_signature?: string;
+  parameters_schema?: SkillParametersSchema;
+}
+
+export interface SkillRuntimeGuidancePayload {
+  protocol_version: 1;
+  skill_name: string;
+  recommended_entry:
+    | { type: 'script'; file: string }
+    | { type: 'tool'; tool: string; fallbackScript?: string }
+    | { type: 'knowledge_only' };
+  notes: string[];
+}
+
+export interface SystemPromptOptions {
+  userName?: string;
+  assistantName?: string;
+  /** 运行时基础设施依赖，用于 prompt 动态段读取。 */
+  deps?: import('../deps.js').AgentRuntimeDeps;
+  /** 上下文预算信息，用于在 prompt 中提示模型控制回复长度。 */
+  budgetInfo?: { estimatedTokens: number; contextWindow: number };
+  /** 当前对话中已执行过的 skill 目录名列表（从 history.toolContext 提取）。 */
+  executedSkills?: string[];
+}
+
+/**
+ * System prompt 分片结构。
+ * cached 部分内容稳定，适合 Anthropic cache_control / OpenAI 前缀缓存。
+ * uncached 部分包含时间、提醒列表等频繁变化的动态内容。
+ */
+export interface SystemPromptParts {
+  cached: string;
+  uncached: string;
+}
