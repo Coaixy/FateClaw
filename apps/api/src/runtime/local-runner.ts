@@ -6,6 +6,7 @@
  */
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { createInterface } from 'readline';
 
@@ -85,6 +86,39 @@ export async function ensureLocalAgentRunning(
   return startPromise;
 }
 
+/**
+ * 解析 tsx CLI 入口，返回 { command, args } 以绕过 Windows 上 spawn npx 找不到
+ * npx.cmd 导致 ENOENT 的问题。
+ *
+ * 优先用 createRequire 解析 tsx 模块路径（pnpm 兼容），直接用 node 执行 tsx CLI；
+ * 解析失败时回退到平台感知的 npx（Windows: npx.cmd）。
+ */
+function resolveDevAgentCommand(projectRoot: string): {
+  command: string;
+  args: string[];
+} {
+  try {
+    const projectRequire = createRequire(
+      path.join(projectRoot, 'package.json'),
+    );
+    const tsxPkgPath = projectRequire.resolve('tsx/package.json');
+    const tsxPkg = JSON.parse(fs.readFileSync(tsxPkgPath, 'utf-8'));
+    const bin = typeof tsxPkg.bin === 'string' ? tsxPkg.bin : tsxPkg.bin?.tsx;
+    if (bin) {
+      return {
+        command: process.execPath,
+        args: [path.join(path.dirname(tsxPkgPath), bin)],
+      };
+    }
+  } catch {
+    // tsx 未在 node_modules 中，回退到 npx
+  }
+
+  return process.platform === 'win32'
+    ? { command: 'npx.cmd', args: ['tsx'] }
+    : { command: 'npx', args: ['tsx'] };
+}
+
 async function doSpawnLocalAgent(accountId: string): Promise<void> {
   // 本地开发默认优先源码，生产/显式指定时再使用 dist，避免源码与运行物漂移
   const projectRoot = resolveProjectRoot();
@@ -106,16 +140,20 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     '启动本地 agent 进程',
   );
 
-  const child = spawn(
-    ...((mode === 'dist'
-      ? ['node', [daemonEntry]]
-      : ['npx', ['tsx', daemonEntry]]) as [string, string[]]),
-    {
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: projectRoot,
-    },
-  );
+  const devAgent = resolveDevAgentCommand(projectRoot);
+  const [command, commandArgs] =
+    mode === 'dist'
+      ? (['node', [daemonEntry]] as [string, string[]])
+      : ([devAgent.command, [...devAgent.args, daemonEntry]] as [
+          string,
+          string[],
+        ]);
+
+  const child = spawn(command, commandArgs, {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: projectRoot,
+  });
 
   if (child.stdout) {
     let stdoutBuf: string[] = [];
