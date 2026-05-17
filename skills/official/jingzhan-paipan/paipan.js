@@ -17,6 +17,7 @@ import {
   decodePan,
   solarToLunar,
 } from 'iching-shifa';
+import { isDirectCliRun } from '../_shared/cli-entry.js';
 
 const METHODS = ['dayan', 'lueshifa', 'manual', 'three', 'array', 'time'];
 
@@ -140,8 +141,7 @@ async function mainFromCli() {
 
 function isDirectRun() {
   // 浏览器/移动端 import 时没有 process；这里只让 Node CLI 兼容旧后端脚本执行方式。
-  if (typeof process === 'undefined' || !process.argv?.[1]) return false;
-  return new URL(import.meta.url).pathname === process.argv[1];
+  return isDirectCliRun(import.meta.url);
 }
 
 if (isDirectRun()) {
