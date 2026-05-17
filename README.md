@@ -186,8 +186,7 @@ FateClaw/
 
 - Node.js 20+
 - pnpm 9+
-- PostgreSQL
-- Redis
+- Docker（推荐，用于启动本地 PostgreSQL / Redis；也可自行安装这两个服务）
 - 至少一个可用的大模型 API Key
 
 ### 1. 安装依赖
@@ -196,7 +195,15 @@ FateClaw/
 pnpm install
 ```
 
-### 2. 准备环境变量
+### 2. 启动本地基础设施
+
+```bash
+docker compose up -d
+```
+
+该命令只启动开发所需的 PostgreSQL 和 Redis，不会启动 API 或 Web。PostgreSQL 容器会自动创建 `fateclaw` 数据库；API 首次启动时会自动创建和补齐所需表结构。
+
+### 3. 准备环境变量
 
 ```bash
 cp .env.example .env
@@ -218,15 +225,7 @@ ALLOWED_ORIGINS=http://localhost:3001
 - `SKILLS_DIR` 可选，用于显式指定官方 Skill 根目录，例如 Windows 服务部署可设为 `C:\apps\FateClaw\skills\official`，避免服务启动目录变化时误报排盘脚本不存在。
 - 注册和找回密码依赖阿里云短信验证码；本地开发如不接短信服务，可先通过数据库插入测试用户或临时接入自己的短信配置。
 - 模型 Provider 主要通过管理后台写入数据库配置。
-
-### 3. 初始化数据库
-
-```bash
-createdb fateclaw
-psql "$DATABASE_URL" < scripts/init-pg.sql
-```
-
-API 启动时还会执行幂等迁移，补齐 `official_model_configs`、`system_secrets`、`user_model_configs` 等运行期表。
+- `DATABASE_URL` 需要指向一个已存在且可连接的 PostgreSQL 库；API 首次启动会自动创建和补齐所需表结构，无需手动执行 `scripts/init-pg.sql`。
 
 ### 4. 启动开发环境
 

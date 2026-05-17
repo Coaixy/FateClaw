@@ -19,15 +19,11 @@
 ```bash
 pnpm install
 cp .env.example .env
+docker compose up -d
 pnpm run dev
 ```
 
-基础设施至少需要 PostgreSQL 和 Redis。数据库初始化：
-
-```bash
-createdb fateclaw
-psql "$DATABASE_URL" < scripts/init-pg.sql
-```
+本地基础设施至少需要 PostgreSQL 和 Redis；推荐直接用仓库内的 `docker-compose.yml` 启动。API 首次启动会自动创建和补齐所需表结构，无需手动执行 `scripts/init-pg.sql`。
 
 ## 分支和提交
 

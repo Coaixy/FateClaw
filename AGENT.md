@@ -148,7 +148,7 @@ Web 负责：
 - `packages/agent-runner/src/tools/skill/`: Skill 装载与执行
 - `apps/web/app/admin/`: 管理后台
 - `skills/official/`: 官方 Skill 元数据和说明
-- `scripts/init-pg.sql`: 数据库初始化脚本
+- `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
 ## 常见误区
 
