@@ -9,6 +9,7 @@ import type {
 
 import { getResolvedEnabledOfficialSkillNames } from '../../infrastructure/db.js';
 import { resolveOfficialSkillsDir } from '../../infrastructure/official-skills-path.js';
+import { pickSystemEnv } from '../../infrastructure/process-env.js';
 import {
   loadOfficialSkillCatalog,
   type OfficialSkillCatalogEntry,
@@ -391,7 +392,8 @@ function validateAndNormalizeInput(
 
 function resolveInterpreter(fileName: string): string {
   const ext = path.extname(fileName).toLowerCase();
-  if (ext === '.js') return 'node';
+  // 使用当前 Node 可执行文件，避免 Windows 服务环境 PATH 缺失时找不到 `node`。
+  if (ext === '.js') return process.execPath;
   if (ext === '.py') return 'python3';
   if (ext === '.sh') return '/bin/bash';
   throw new DirectPaipanError(
@@ -408,13 +410,12 @@ function buildExecutionEnv(args: {
   skillDir: string;
 }): Record<string, string> {
   const env: Record<string, string | undefined> = {
+    ...pickSystemEnv(),
     HUSHBAY_ACCOUNT_ID: args.accountId,
     HUSHBAY_USER_ID: args.userId,
     HUSHBAY_TIMEZONE: 'Asia/Shanghai',
     SKILL_NAME: args.skill.dir,
     SKILL_DIR: args.skillDir,
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
     TZ: process.env.TZ || 'Asia/Shanghai',
   };
 

@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 
 import { JWT_SECRET } from '../../infrastructure/config.js';
 import { logger } from '../../infrastructure/logger.js';
+import { resolveProjectRoot } from '../../infrastructure/project-root.js';
 import { accountRoutes } from './account-routes.js';
 import { adminRoutes } from './admin-routes.js';
 import { authRoutes } from './auth-routes.js';
@@ -185,7 +186,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   });
 
   // Serve static frontend (apps/web/out/) if it exists
-  const webOutDir = path.resolve(process.cwd(), 'apps', 'web', 'out');
+  const webOutDir = path.resolve(resolveProjectRoot(), 'apps', 'web', 'out');
   if (fs.existsSync(webOutDir)) {
     await app.register(fastifyStatic, {
       root: webOutDir,

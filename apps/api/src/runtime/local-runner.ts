@@ -11,6 +11,7 @@ import { createInterface } from 'readline';
 
 import { agentEnvToRecord, buildAgentEnv } from './agent-env.js';
 import { logger } from '../infrastructure/logger.js';
+import { resolveProjectRoot } from '../infrastructure/project-root.js';
 
 const localAgentProcesses = new Map<string, ChildProcess>();
 
@@ -86,7 +87,8 @@ export async function ensureLocalAgentRunning(
 
 async function doSpawnLocalAgent(accountId: string): Promise<void> {
   // 本地开发默认优先源码，生产/显式指定时再使用 dist，避免源码与运行物漂移
-  const agentRunnerBase = path.join(process.cwd(), 'packages', 'agent-runner');
+  const projectRoot = resolveProjectRoot();
+  const agentRunnerBase = path.join(projectRoot, 'packages', 'agent-runner');
   const { daemonEntry, mode } = resolveLocalAgentEntry({ agentRunnerBase });
 
   const agentEnv = await buildAgentEnv(accountId);
@@ -111,7 +113,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: process.cwd(),
+      cwd: projectRoot,
     },
   );
 

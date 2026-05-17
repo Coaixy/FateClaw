@@ -6,6 +6,7 @@
  */
 
 import { getContext } from './context.js';
+import { pickSystemEnv } from './process-env.js';
 
 /**
  * 构建传给 skill 脚本的 env。
@@ -18,6 +19,7 @@ export function buildSkillEnv(
   const ctx = getContext();
 
   const env: Record<string, string | undefined> = {
+    ...pickSystemEnv(),
     // 身份上下文
     HUSHBAY_ACCOUNT_ID: ctx.accountId,
     HUSHBAY_USER_ID: ctx.userId || undefined,
@@ -29,8 +31,6 @@ export function buildSkillEnv(
     SKILL_API_BASE: ctx.skillApiBase,
 
     // 系统必需
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
     TZ: ctx.timezone,
   };
 

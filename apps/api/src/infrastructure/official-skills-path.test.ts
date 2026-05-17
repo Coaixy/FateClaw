@@ -21,6 +21,37 @@ afterEach(() => {
 });
 
 describe('resolveOfficialSkillsDir', () => {
+  it('reads SKILLS_DIR from project .env when process env is not set', () => {
+    const projectDir = createTempProject();
+    const configuredDir = path.join(projectDir, 'configured-skills');
+    fs.mkdirSync(configuredDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, 'package.json'), '{}', 'utf-8');
+    fs.writeFileSync(
+      path.join(projectDir, 'pnpm-workspace.yaml'),
+      'packages: []\n',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectDir, '.env'),
+      `SKILLS_DIR=${configuredDir}\n`,
+      'utf-8',
+    );
+
+    expect(
+      resolveOfficialSkillsDir({
+        cwd: projectDir,
+        moduleDir: path.join(
+          projectDir,
+          'apps',
+          'api',
+          'dist',
+          'infrastructure',
+        ),
+        envSkillsDir: '',
+      }),
+    ).toBe(configuredDir);
+  });
+
   it('uses explicit SKILLS_DIR before probing deployment layout', () => {
     const projectDir = createTempProject();
     const configuredDir = path.join(projectDir, 'custom-skills');

@@ -103,7 +103,8 @@ function resolveInterpreter(ext: string): string | null {
     case '.py':
       return 'python3';
     case '.js':
-      return 'node';
+      // 使用当前 Node 可执行文件，避免 Windows 服务环境 PATH 缺失时找不到 `node`。
+      return process.execPath;
     default:
       return null;
   }
