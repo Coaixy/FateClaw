@@ -8,6 +8,7 @@ import type {
 } from '@nanoclaw/contracts/chat';
 
 import { getResolvedEnabledOfficialSkillNames } from '../../infrastructure/db.js';
+import { resolveOfficialSkillsDir } from '../../infrastructure/official-skills-path.js';
 import {
   loadOfficialSkillCatalog,
   type OfficialSkillCatalogEntry,
@@ -16,7 +17,7 @@ import {
   type SkillParametersSchema,
 } from '../skills/skill-manifest.js';
 
-const SKILLS_DIR = path.resolve(process.cwd(), 'skills', 'official');
+const SKILLS_DIR = resolveOfficialSkillsDir();
 const PAIPAN_SKILL_DIRS = new Set([
   'bazi-paipan',
   'ziwei-paipan',

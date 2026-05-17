@@ -3,11 +3,11 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 
 import { seedOfficialSkills } from './db.js';
 import { logger } from './logger.js';
 import { loadOfficialSkillCatalog } from '../modules/skills/skill-manifest.js';
+import { resolveOfficialSkillsDir } from './official-skills-path.js';
 
 /**
  * 扫描 skills/official/ 目录，将官方 Skill 名称写入 skill_global_config 表。
@@ -15,7 +15,7 @@ import { loadOfficialSkillCatalog } from '../modules/skills/skill-manifest.js';
  * 在服务启动时调用，确保新增官方 Skill 自动入库且默认开启。
  */
 export async function seedOfficialSkillsFromDir(): Promise<void> {
-  const officialDir = path.resolve(process.cwd(), 'skills', 'official');
+  const officialDir = resolveOfficialSkillsDir();
   if (!fs.existsSync(officialDir)) return;
 
   const names = loadOfficialSkillCatalog(officialDir).map(

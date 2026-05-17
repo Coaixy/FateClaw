@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { resolveOfficialSkillsDir } from '../../infrastructure/official-skills-path.js';
+
 export type SkillParamType =
   | 'string'
   | 'number'
@@ -200,7 +202,7 @@ function loadOfficialSkillDescriptor(
 }
 
 export function loadOfficialSkillCatalog(
-  skillsDir: string = path.resolve(process.cwd(), 'skills', 'official'),
+  skillsDir: string = resolveOfficialSkillsDir(),
 ): OfficialSkillCatalogEntry[] {
   if (!fs.existsSync(skillsDir)) return [];
 

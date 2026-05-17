@@ -215,6 +215,7 @@ ALLOWED_ORIGINS=http://localhost:3001
 说明：
 
 - `JWT_SECRET` 和 `MANAGER_KEY` 必须使用强随机值，可用 `openssl rand -hex 32` 生成。
+- `SKILLS_DIR` 可选，用于显式指定官方 Skill 根目录，例如 Windows 服务部署可设为 `C:\apps\FateClaw\skills\official`，避免服务启动目录变化时误报排盘脚本不存在。
 - 注册和找回密码依赖阿里云短信验证码；本地开发如不接短信服务，可先通过数据库插入测试用户或临时接入自己的短信配置。
 - 模型 Provider 主要通过管理后台写入数据库配置。
 
@@ -274,6 +275,8 @@ Agent 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密
 - `iching-paipan`：六爻纳甲排盘
 - `jingzhan-paipan`：周易经占排盘
 - `xuanxue-jiedu`：玄学解读入口工具
+
+部署时如果官方 Skill 不在默认仓库结构下，可通过 `SKILLS_DIR` 指向 `skills/official` 目录本身。
 
 用户知识库由 Web 控台创建，核心字段包括用途描述、触发提示、强规则内容、参考知识章节和可见性。解读 Agent 会通过 `list_knowledge_sections` / `read_knowledge_section` 读取相关章节，避免把长知识一次性塞入上下文。
 
