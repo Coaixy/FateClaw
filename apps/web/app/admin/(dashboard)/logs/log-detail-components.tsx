@@ -54,7 +54,7 @@ export function UsageBreakdown({
 
 export function extractFinalOutput(log: ConversationLog): string {
   const finalEvidence = log.agent_graph?.evidence.find(
-    (item) => item.source === 'final_reply',
+    (item) => item.source === 'assistant_reply',
   );
   if (isRecord(finalEvidence?.payload) && typeof finalEvidence.payload.text === 'string') {
     return finalEvidence.payload.text;
@@ -135,11 +135,6 @@ export function TranscriptEventView({ event }: { event: TranscriptEvent }) {
           <span className="font-mono font-medium">
             {event.invocation.toolName}
           </span>
-          {event.invocation.displayTitle && (
-            <span className="text-[12px] text-muted font-normal">
-              — {event.invocation.displayTitle}
-            </span>
-          )}
           {isLong && <Chevron size={12} />}
         </button>
         {(expanded || !isLong) && (

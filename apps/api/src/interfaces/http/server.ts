@@ -17,6 +17,7 @@ import { chatSessionsRoutes } from './chat-sessions-routes.js';
 import { messagesRoutes } from './messages-routes.js';
 import { modelSettingsRoutes } from './model-settings-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
+import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
 
 import { normalizeHttpError } from './http-error.js';
 import { skillsRoutes } from './skills-routes.js';
@@ -85,6 +86,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(fastifyJwt, {
     secret: JWT_SECRET,
   });
+  registerAiChatStreamWebSocket(app);
 
   // Auth decorator — routes call request.requireAuth() to enforce JWT
   app.decorateRequest('requireAuth', async () => {

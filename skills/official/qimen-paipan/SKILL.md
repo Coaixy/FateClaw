@@ -10,25 +10,25 @@ description: 奇门遁甲排盘：按指定时间或当前时间生成时家奇�
 ## 使用流程
 
 1. 从用户消息中提取时间（默认当前时间）
-2. 调用 Pi custom tool `qimen_paipan`
-3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
+2. Web/API 侧排盘运行时执行本 Skill 的脚本 entry
+3. 如果用户要求解读，排盘成功后的盘面进入 Pi 上下文，由解读类 Markdown Skill 继续完成分析
 
-## 调用方式
+## 入参示例
 
 当前时间起盘：
 
-```js
-qimen_paipan({})
+```json
+{}
 ```
 
 指定时间起盘：
 
-```js
-qimen_paipan({
-  solarDate: "2026-04-17",
-  hour: 14,
-  minute: 30
-})
+```json
+{
+  "solarDate": "2026-04-17",
+  "hour": 14,
+  "minute": 30
+}
 ```
 
 ## 参数

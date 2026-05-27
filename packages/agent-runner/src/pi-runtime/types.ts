@@ -1,11 +1,9 @@
 import type {
   AgentTaskGraph,
-  Artifact,
   ContainerInput,
   LlmRuntimeSnapshot,
   SkillContextEntry,
   TokenUsage,
-  ToolResult,
 } from '../types.js';
 import type { RequestScope } from '../request-scope.js';
 import type { RequestRuntime } from '../runtime.js';
@@ -35,11 +33,5 @@ export interface PiToolExecutionRecord {
   output: string;
   modelOutput?: string;
   isError: boolean;
-  skillContextEntry?: SkillContextEntry;
-}
-
-export interface PiToolRunResult {
-  result: ToolResult;
-  artifact?: Artifact;
   skillContextEntry?: SkillContextEntry;
 }

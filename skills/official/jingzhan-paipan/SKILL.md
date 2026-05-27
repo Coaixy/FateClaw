@@ -11,16 +11,16 @@ description: 周易经占排盘：按大衍筮法、略筮法或指定卦爻生�
 
 1. 确认用户想用经占（周易古法）
 2. 确认起卦方式（推荐大衍筮法或略筮法）
-3. 调用 Pi custom tool `jingzhan_paipan`
-4. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
+3. Web/API 侧排盘运行时执行本 Skill 的脚本 entry
+4. 如果用户要求解读，排盘成功后的盘面进入 Pi 上下文，由解读类 Markdown Skill 继续完成分析
 
-## 调用方式
+## 入参示例
 
-```js
-jingzhan_paipan({
-  method: "dayan",
-  question: "近期运势"
-})
+```json
+{
+  "method": "dayan",
+  "question": "近期运势"
+}
 ```
 
 ## 参数说明

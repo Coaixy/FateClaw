@@ -295,7 +295,6 @@ export async function queryLatestFollowupWorkflowContext(args: {
     'account_id = $1',
     'deleted_at IS NULL',
     'is_bot_message = true',
-    'tool_context IS NOT NULL',
   ];
 
   if (args.sessionId) {
@@ -306,7 +305,7 @@ export async function queryLatestFollowupWorkflowContext(args: {
   }
 
   const { rows } = await getPool().query(
-    `SELECT tool_context
+    `SELECT content, tool_context
      FROM messages
      WHERE ${conditions.join(' AND ')}
      ORDER BY timestamp DESC
@@ -319,15 +318,15 @@ export async function queryLatestFollowupWorkflowContext(args: {
     interpretationOutput: '',
   };
 
-  for (const row of rows as Array<{ tool_context: string | null }>) {
+  for (const row of rows as Array<{
+    content: string | null;
+    tool_context: string | null;
+  }>) {
     const toolContext = parseStoredToolContext(row.tool_context);
-    if (toolContext.length === 0) continue;
 
     if (!context.interpretationOutput) {
-      const interpretation = toolContext.find(
-        (entry) => entry.skill === 'xuanxue-jiedu',
-      );
-      context.interpretationOutput = interpretation?.output ?? '';
+      context.interpretationOutput =
+        typeof row.content === 'string' ? row.content : '';
     }
 
     if (!context.boardSkill) {

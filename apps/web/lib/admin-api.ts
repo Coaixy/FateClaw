@@ -688,14 +688,12 @@ export interface TranscriptEvent {
     id: string;
     toolName: string;
     args: Record<string, unknown>;
-    displayTitle?: string;
   };
   invocationId?: string;
   ok?: boolean;
   output?: string;
   modelOutput?: string;
   artifactId?: string;
-  errorCode?: string;
 }
 
 /**
@@ -727,7 +725,7 @@ export interface AgentTaskNode {
 
 export interface AgentEvidenceNode {
   id: string;
-  source: 'history' | 'artifact' | 'final_reply';
+  source: 'history' | 'artifact' | 'assistant_reply';
   category?: string;
   producer?: string;
   title: string;

@@ -18,7 +18,7 @@ const MAX_SKILL_READ_CHARS = 40_000;
 
 const readParamsSchema = Type.Object({
   path: Type.String({
-    description: 'Pi Skill 文件的绝对路径，只能读取本轮可见官方 Skill 目录内的文件。',
+    description: 'Pi Skill 文件的绝对路径，只能读取本轮 <available_skills> 暴露的授权 Skill 目录内文件。',
   }),
 });
 
@@ -103,11 +103,12 @@ export function createPiSkillReadTool(
     name: 'read',
     label: 'read',
     description:
-      '读取本轮可见的官方 Pi Skill 文件。只能读取 <available_skills> 中 location 指向的官方 Skill 目录，不能读取用户私有知识库或任意本地文件。',
-    promptSnippet: 'Read an official Pi Skill file exposed in <available_skills>.',
+      '读取本轮可见的 Pi Skill 文件。只能读取 <available_skills> 中 location 指向的授权 Skill 目录，不能读取任意本地文件。',
+    promptSnippet: 'Read an authorized Pi Skill file exposed in <available_skills>.',
     promptGuidelines: [
-      '只用 read 读取 <available_skills> 中 location 指向的官方 Skill 文件。',
-      '不要尝试用 read 读取用户私有知识库、.pi/skills、~/.pi/agent 或任意未列出的路径。',
+      '只用 read 读取 <available_skills> 中 location 指向的授权 Skill 文件。',
+      '可以按 SKILL.md/index.md 的相对路径指引读取同一 Skill 目录内的 Markdown 文件。',
+      '不要尝试用 read 读取 .pi/skills、~/.pi/agent 或任意未列出的路径。',
     ],
     parameters: readParamsSchema,
     executionMode: 'sequential',

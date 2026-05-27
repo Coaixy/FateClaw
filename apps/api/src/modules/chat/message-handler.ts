@@ -239,8 +239,8 @@ export async function buildStructuredInput(
 /**
  * 为 AI 对话（chat session）构建结构化输入。
  * 与 buildStructuredInput 的区别：
- * - 历史仅限当前 session 的消息（无 Redis context_boundary）
- * - Soul.md 仍然加载（保留人设）
+ * - AI 历史由 Pi session 文件负责，FateClaw DB 只保留业务展示副本
+ * - 选中盘面、自贴盘面等显式上下文通过专用字段传入
  */
 export async function buildStructuredInputForSession(
   identity: {
@@ -254,40 +254,9 @@ export async function buildStructuredInputForSession(
   model: string,
   contextWindowTokens?: number,
 ): Promise<StructuredInput> {
-  const budget = computeTokenBudget(model, userMessage, {
-    contextWindowTokens,
-  });
-
-  let soulActual = 0;
-  const soulRaw = identity.soulAccountId
-    ? await getSoulContent(identity.soulAccountId)
-    : '';
-  if (soulRaw) {
-    const truncated = truncateToTokenBudget(soulRaw, budget.soulBudget);
-    soulActual = estimateTokens(truncated);
-  }
-  const historyBudget = budget.historyBudget + (budget.soulBudget - soulActual);
-
-  const estimatedMsgCount = Math.max(
-    10,
-    Math.ceil((historyBudget / 200) * 1.2),
-  );
-  const recentMsgs = await getRecentMessages(
-    identity.runtimeId,
-    estimatedMsgCount,
-    undefined,
-    undefined,
-    sessionId,
-  );
-  const { history } = buildHistoryViews({
-    recentMsgs,
-    historyBudget,
-    skillContextBudget: budget.skillContextBudget,
-  });
-
   return {
     userMessage,
-    history,
+    history: [],
     userName: identity.userName,
     assistantName: identity.assistantName,
   };

@@ -1,6 +1,5 @@
 import {
   createAgentSession,
-  SessionManager,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 
@@ -17,8 +16,15 @@ import {
   createPiEventCollector,
   extractAssistantTextFromMessages,
 } from './events.js';
+import {
+  enrichAiChatStreamEvent,
+  publishAiChatStreamEvent,
+} from '../ai-chat-stream.js';
+import { log } from '../io.js';
+import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
+import { getRequestId } from '../request-scope.js';
 
 export interface PiSessionRunResult {
   text: string | null;
@@ -50,7 +56,6 @@ export async function runPiSession(args: {
     totalTokens: 0,
   };
   const records: PiToolExecutionRecord[] = [];
-  let finalReply: string | null = null;
   let lastAssistantText: string | null = null;
 
   const providerRuntime = createPiProviderRuntime(args.containerInput.llmRuntime);
@@ -59,7 +64,6 @@ export async function runPiSession(args: {
     containerInput: args.containerInput,
     runtime: args.runtime,
     requestScope: args.requestScope,
-    userId,
   });
   const resourceLoader = await createPiResourceLoader({
     deps: args.runtime.deps,
@@ -71,23 +75,11 @@ export async function runPiSession(args: {
   const readableSkills = resourceLoader
     .getSkills()
     .skills.filter((skill) => !skill.disableModelInvocation);
-  const enabledSkillNames =
-    await args.runtime.deps.skillCatalog.listEnabledSkillNames(userId);
   const customTools = createPiCustomTools({
-    runtime: args.runtime,
     requestScope: args.requestScope,
-    llmRuntime: args.containerInput.llmRuntime,
-    enabledSkillNames,
-    inputKind: args.containerInput.inputKind,
-    pastedBoard: args.containerInput.pastedBoard,
-    activeBoardContext: args.containerInput.activeBoardContext,
-    userId,
     readableSkills,
     recordExecution(record) {
       records.push(record);
-    },
-    setFinalReply(text) {
-      finalReply = text;
     },
   });
 
@@ -98,15 +90,20 @@ export async function runPiSession(args: {
     images: { blockImages: true },
     enableInstallTelemetry: false,
   });
+  const cwd = process.cwd();
+  const piSession = createFateClawPiSessionManager({
+    cwd,
+    sessionId: args.containerInput.sessionId,
+  });
   const { session } = await createAgentSession({
-    cwd: process.cwd(),
-    agentDir: process.cwd(),
+    cwd,
+    agentDir: cwd,
     model: providerRuntime.model,
     thinkingLevel: 'off',
     authStorage: providerRuntime.authStorage,
     modelRegistry: providerRuntime.modelRegistry,
     resourceLoader,
-    sessionManager: SessionManager.inMemory(process.cwd()),
+    sessionManager: piSession.manager,
     settingsManager,
     noTools: 'all',
     tools: allowedToolNames,
@@ -120,6 +117,21 @@ export async function runPiSession(args: {
       setLastAssistantText(text) {
         lastAssistantText = text;
       },
+      publishStreamEvent(event) {
+        void publishAiChatStreamEvent({
+          sessionId: args.containerInput.sessionId,
+          event: enrichAiChatStreamEvent({
+            event,
+            requestId: getRequestId(args.requestScope),
+            accountId: args.containerInput.accountId,
+            sessionId: args.containerInput.sessionId,
+          }),
+        }).catch((err) => {
+          log(
+            `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      },
     }),
   );
 
@@ -131,6 +143,9 @@ export async function runPiSession(args: {
         model: args.containerInput.llmRuntime.model,
         customToolCount: customTools.length,
         builtinToolsDisabled: true,
+        piSessionId: piSession.piSessionId,
+        piSessionFile: piSession.sessionFile,
+        piSessionPersisted: piSession.persisted,
       },
       args.requestScope,
     );
@@ -139,7 +154,6 @@ export async function runPiSession(args: {
     });
     return {
       text:
-        finalReply ??
         extractAssistantTextFromMessages(session.state.messages) ??
         lastAssistantText,
       usage,

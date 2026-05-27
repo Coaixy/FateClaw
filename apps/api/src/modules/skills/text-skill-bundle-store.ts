@@ -102,6 +102,10 @@ export function writeTextSkillBundle(
     input.description,
     '',
     input.triggerHint ? `触发提示：${input.triggerHint}` : '',
+    '',
+    '## 知识正文',
+    '',
+    '需要使用本知识时，先读取 `index.md` 查看结构，再读取 `docs/knowledge.md` 获取正文。',
   ]
     .filter(Boolean)
     .join('\n');

@@ -10,20 +10,18 @@ description: 紫微斗数排盘：根据阳历出生时间和性别生成十二�
 ## 使用流程
 
 1. 从用户消息中提取：阳历出生日期、出生时间（小时精确即可）、性别
-2. 调用 Pi custom tool `ziwei_paipan`，直接传入 JSON 参数
-3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
+2. Web/API 侧排盘运行时执行本 Skill 的脚本 entry，直接传入 JSON 参数
+3. 如果用户要求解读，排盘成功后的盘面进入 Pi 上下文，由解读类 Markdown Skill 继续完成分析
 
-## 调用方式
+## 入参示例
 
-执行：
-
-```js
-ziwei_paipan({
-  solarDate: "2000-08-16",
-  hour: 4,
-  minute: 0,
-  gender: "male"
-})
+```json
+{
+  "solarDate": "2000-08-16",
+  "hour": 4,
+  "minute": 0,
+  "gender": "male"
+}
 ```
 
 ## 参数说明

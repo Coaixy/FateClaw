@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserPastedBoardInput } from './api';
-import { chatSessionsApi } from './api';
+import { buildChatSessionStreamUrl, chatSessionsApi } from './api';
 import { sendChatSessionMessageWithOptions } from './hooks/use-chat-messages';
 
 import { requestJson } from '@/lib/http/client';
 
 vi.mock('@/lib/http/client', () => ({
+  getApiBase: () => '',
   requestJson: vi.fn(),
 }));
 
@@ -117,6 +118,35 @@ describe('sendChatSessionMessageWithOptions', () => {
     expect(sender).toHaveBeenCalledWith('s 1', '看这个盘', {
       selectedBoardMessageId: 'board-1',
     });
+  });
+});
+
+describe('buildChatSessionStreamUrl', () => {
+  const originalWindow = globalThis.window;
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: {
+          protocol: 'https:',
+          host: 'app.example.test',
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: originalWindow,
+    });
+  });
+
+  it('builds same-origin websocket URLs with token query auth', () => {
+    expect(buildChatSessionStreamUrl('s 1', 'token value')).toBe(
+      'wss://app.example.test/api/chat-sessions/s/s%201/stream?token=token%20value',
+    );
   });
 });
 

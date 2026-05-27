@@ -1,6 +1,5 @@
 import { closeAgentDb } from './agent-db.js';
 import { getContext, initContext } from './context.js';
-import { getDefaultAgentRuntimeDeps, type AgentRuntimeDeps } from './deps.js';
 import { executeContainerInput } from './request-boundary.js';
 import { log } from './io.js';
 import {
@@ -9,12 +8,10 @@ import {
   setRequestId,
 } from './request-scope.js';
 import { connectRedis, disconnectRedis, getRedis } from './redis.js';
-import { executePiPaipanRequest } from './pi-runtime/paipan-request.js';
 import {
   InboxRequest,
   LlmRuntimeSnapshot,
   OutboxResponse,
-  PaipanInboxRequest,
 } from './types.js';
 
 function isLlmRuntimeSnapshot(
@@ -56,21 +53,6 @@ function isLlmRuntimeSnapshot(
 function parseInboxRequest(raw: string): InboxRequest {
   const parsed = JSON.parse(raw) as Partial<InboxRequest>;
 
-  if (parsed.type === 'paipan') {
-    if (
-      !parsed.requestId ||
-      !parsed.accountId ||
-      typeof (parsed as Partial<PaipanInboxRequest>).userId !== 'string' ||
-      typeof (parsed as Partial<PaipanInboxRequest>).skillDir !== 'string' ||
-      !(parsed as Partial<PaipanInboxRequest>).input ||
-      typeof (parsed as Partial<PaipanInboxRequest>).input !== 'object' ||
-      Array.isArray((parsed as Partial<PaipanInboxRequest>).input)
-    ) {
-      throw new Error('无效的 paipan inbox 请求');
-    }
-    return parsed as PaipanInboxRequest;
-  }
-
   if (
     (parsed.type !== 'chat' && parsed.type !== 'task') ||
     !parsed.requestId ||
@@ -82,22 +64,6 @@ function parseInboxRequest(raw: string): InboxRequest {
   }
 
   return parsed as InboxRequest;
-}
-
-/**
- * 创建定制的 AgentRuntimeDeps，将 messageBus.pushOutbox 指向指定队列。
- */
-function createCustomDeps(outboxQueue: string): AgentRuntimeDeps {
-  const defaultDeps = getDefaultAgentRuntimeDeps();
-  return {
-    ...defaultDeps,
-    messageBus: {
-      ...defaultDeps.messageBus,
-      async pushOutbox(_accountId: string, payload: object) {
-        await getRedis().lpush(outboxQueue, JSON.stringify(payload));
-      },
-    },
-  };
 }
 
 async function processInboxMessage(
@@ -121,39 +87,22 @@ async function processInboxMessage(
       `正在处理收件箱请求 requestId=${request.requestId} type=${request.type} accountId=${request.accountId}${request.outboxQueue ? ` outboxQueue=${request.outboxQueue}` : ''}`,
     );
 
-    // 如果指定了 outboxQueue，创建定制的 deps
-    const customDeps = request.outboxQueue
-      ? createCustomDeps(request.outboxQueue)
-      : undefined;
-
-    const output =
-      request.type === 'paipan'
-        ? await executePiPaipanRequest({
-            accountId,
-            userId: request.userId,
-            skillDir: request.skillDir,
-            input: request.input,
-            displayTitle: request.displayTitle,
-            requestScope,
-            deps: customDeps ?? getDefaultAgentRuntimeDeps(),
-          })
-        : await executeContainerInput(
-            {
-              accountId,
-              sessionId: request.sessionId,
-              llmRuntime: request.llmRuntime,
-              userMessage: request.userMessage,
-              inputKind: request.inputKind,
-              pastedBoard: request.pastedBoard,
-              activeBoardContext: request.activeBoardContext,
-              history: request.history ?? [],
-              userName: request.userName,
-              assistantName: request.assistantName,
-              personaPrompt: request.personaPrompt,
-            },
-            requestScope,
-            customDeps,
-          );
+    const output = await executeContainerInput(
+      {
+        accountId,
+        sessionId: request.sessionId,
+        llmRuntime: request.llmRuntime,
+        userMessage: request.userMessage,
+        inputKind: request.inputKind,
+        pastedBoard: request.pastedBoard,
+        activeBoardContext: request.activeBoardContext,
+        history: request.history ?? [],
+        userName: request.userName,
+        assistantName: request.assistantName,
+        personaPrompt: request.personaPrompt,
+      },
+      requestScope,
+    );
 
     const response: OutboxResponse = {
       type: 'response',

@@ -46,8 +46,6 @@ const ERROR_TRACE_TYPES = new Set([
   'context_trimmed',
   'protocol_violation',
   'truncated_tool_calls_fallback',
-  'xuanxue_upstream_rejected',
-  'xuanxue_validation_rejected',
   'trace_overflow',
 ]);
 

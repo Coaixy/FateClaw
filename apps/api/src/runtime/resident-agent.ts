@@ -3,7 +3,6 @@ import {
   InboxRequestResult,
   submitAiChatInboxRequest,
   submitInboxRequest,
-  submitPiPaipanRequest,
 } from './ipc-worker.js';
 import { ensureLocalAgentRunning } from './local-runner.js';
 import {
@@ -53,19 +52,6 @@ export async function dispatchAiChatPrompt(input: {
     personaPrompt: input.personaPrompt,
     llmRuntime: input.llmRuntime,
   });
-}
-
-export async function dispatchPiPaipan(input: {
-  accountId: string;
-  userId: string;
-  skillDir: string;
-  skillInput: Record<string, unknown>;
-  displayTitle?: string;
-}): Promise<InboxRequestResult> {
-  await ensureLocalAgentRunning(input.accountId);
-  addAccountListener(input.accountId);
-
-  return submitPiPaipanRequest(input);
 }
 
 export async function dispatchResidentPrompt(input: {

@@ -26,6 +26,12 @@ import {
 } from './ipc-payloads.js';
 import { logger } from '../infrastructure/logger.js';
 import {
+  publishAiChatStreamEvent,
+  streamEventFromMessagePayload,
+  streamEventFromProgressPayload,
+  streamEventFromResponsePayload,
+} from './ai-chat-stream.js';
+import {
   recordConversationLogFailure,
   recordConversationLogSuccess,
 } from '../shared/conversation-log-metrics.js';
@@ -287,6 +293,17 @@ async function processAiChatResponse(
     const finalText = text ? appendFinalTurnMarker(text, payload.usage) : '';
     const finalMetadata = buildFinalMetadata(payload);
 
+    await publishAiChatStreamEvent({
+      sessionId: pending?.sessionId,
+      event: streamEventFromResponsePayload({
+        payload,
+        accountId,
+        sessionId: pending?.sessionId,
+        text: finalText || text,
+        metadata: finalMetadata,
+      }),
+    });
+
     logger.info(
       {
         accountId,
@@ -395,6 +412,17 @@ async function processAiChatMessage(
     );
     return;
   }
+  const streamEvent = streamEventFromMessagePayload({
+    payload,
+    accountId,
+    sessionId: pending.sessionId,
+  });
+  if (streamEvent) {
+    await publishAiChatStreamEvent({
+      sessionId: pending.sessionId,
+      event: streamEvent,
+    });
+  }
 
   const ownerUserId = await resolveOwnerUserId({ accountId, pending });
   const msgId = `aichat-interm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -455,6 +483,14 @@ async function processAiChatProgress(
     );
     return;
   }
+  await publishAiChatStreamEvent({
+    sessionId: pending.sessionId,
+    event: streamEventFromProgressPayload({
+      payload,
+      accountId,
+      sessionId: pending.sessionId,
+    }),
+  });
 
   const stage = (payload.metadata as Record<string, unknown>)?.stage;
   const text = payload.text?.trim() || '处理中';

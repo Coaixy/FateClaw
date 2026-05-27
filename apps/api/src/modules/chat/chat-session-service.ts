@@ -42,7 +42,6 @@ import {
 } from '../../contracts-adapter/chat-contract.js';
 import {
   buildActiveBoardContext,
-  extractDirectBoardEntries,
   type ActiveBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './message-handler.js';
@@ -86,45 +85,15 @@ async function releaseChatSessionProcessing(sessionId: string): Promise<void> {
   await getRedis().del(sessionProcessingKey(sessionId));
 }
 
-function buildSelectedBoardHistoryEntry(message: NewMessage) {
-  const paipanEntries = extractDirectBoardEntries(message.tool_context);
-  if (paipanEntries.length === 0) {
-    return null;
-  }
-  const rawBoardBlocks = paipanEntries.map((entry) =>
-    [`【${entry.artifactTitle || entry.skill} 原始 JSON】`, entry.output].join(
-      '\n',
-    ),
-  );
-  return {
-    role: 'assistant' as const,
-    // 选中某张手动排盘后，直接把原始 JSON 放入历史内容。
-    // 这样首轮解读不会只看到“已生成：xxx”或用户问题文本。
-    content: [
-      `【用户本次明确指定的盘面】\n${message.content}`,
-      ...rawBoardBlocks,
-    ].join('\n\n'),
-    timestamp: message.timestamp,
-    toolContext: paipanEntries,
-  };
-}
-
-type SelectedBoardHistoryEntry = NonNullable<
-  ReturnType<typeof buildSelectedBoardHistoryEntry>
->;
-
 function buildSelectedBoardContext(message: NewMessage): {
-  historyEntry: SelectedBoardHistoryEntry;
   activeBoardContext: ActiveBoardContextDto;
 } | null {
-  const historyEntry = buildSelectedBoardHistoryEntry(message);
   const activeBoardContext = buildActiveBoardContext(message);
-  if (!historyEntry || !activeBoardContext) {
+  if (!activeBoardContext) {
     return null;
   }
 
   return {
-    historyEntry,
     activeBoardContext,
   };
 }
@@ -360,19 +329,12 @@ export async function sendOwnedChatSessionMessage(
       llmRuntime.model,
       llmRuntime.contextWindowTokens,
     );
-    if (selectedBoardContext?.ok) {
-      structured.history = [
-        ...structured.history,
-        selectedBoardContext.data.historyEntry,
-      ];
-    }
-
     const output = await dispatchAiChatPrompt({
       accountId: session.account_id,
       userMessage: structured.userMessage,
       inputKind: input.inputKind,
       pastedBoard: input.pastedBoard,
-      history: structured.history,
+      history: [],
       activeBoardContext: selectedBoardContext?.ok
         ? selectedBoardContext.data.activeBoardContext
         : undefined,

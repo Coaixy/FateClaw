@@ -8,10 +8,6 @@
 
 import type { AgentRuntimeDeps } from './deps.js';
 import { getDefaultAgentRuntimeDeps } from './deps.js';
-import {
-  loadEnabledSkillNames,
-  loadSkillMetadataList,
-} from './skill-metadata.js';
 
 export interface CommandResult {
   text: string;
@@ -51,54 +47,16 @@ const commands: Record<string, CommandHandler> = {
   },
 
   memory: {
-    description: '让 AI 总结长期记忆',
-    execute: async (accountId, _args, deps) => {
-      try {
-        const content = await deps.memoryStore.read(accountId);
-        if (!content.trim()) {
-          return { text: '长期记忆为空。' };
-        }
-      } catch {
-        return { text: '读取记忆失败。' };
-      }
-
-      return {
-        text: '',
-        rewrite:
-          '请调用 read_memory 读取我的长期记忆，然后用简洁的方式总结你对我的了解。',
-      };
+    description: '查看长期记忆状态',
+    execute: async (_accountId, _args, _deps) => {
+      return { text: '长期记忆由 Web/API 控制面管理，Pi session 会在请求上下文中自动使用。' };
     },
   },
 
   skills: {
     description: '查看 Skills 列表及开启状态',
-    execute: async (accountId, _args, deps) => {
-      const allSkills = await loadSkillMetadataList(undefined, accountId, deps);
-      if (allSkills.length === 0) {
-        return { text: '当前没有可用的 Skills。' };
-      }
-
-      const enabledList = await loadEnabledSkillNames(deps);
-      const enabledSet = new Set(enabledList);
-
-      const lines = ['Skills 列表：', ''];
-      for (const skill of allSkills) {
-        // 用户 Skill 在 DB 查询中已按 enabled=true 过滤，直接显示为启用
-        const isEnabled =
-          skill.type === 'user'
-            ? true
-            : enabledSet !== null
-              ? enabledSet.has(skill.name)
-              : true;
-        const icon = isEnabled ? '✅' : '❌';
-        const tag = skill.type === 'user' ? ' [自定义]' : '';
-        lines.push(`  ${icon} ${skill.name}${tag} — ${skill.description}`);
-      }
-      lines.push(
-        '',
-        '告诉我要开启或关闭哪个 Skill，我来帮你操作。',
-      );
-      return { text: lines.join('\n') };
+    execute: async (_accountId, _args, _deps) => {
+      return { text: 'Skills 目录与启停由 Web/API 控制面管理；Pi 只会读取本轮授权的用户知识资源。' };
     },
   },
 
@@ -111,33 +69,8 @@ const commands: Record<string, CommandHandler> = {
 
   reminders: {
     description: '查看已设置的提醒',
-    execute: async (accountId, _args, deps) => {
-      try {
-        const tasks = await deps.taskStore.list(accountId);
-
-        if (tasks.length === 0) {
-          return { text: '当前没有已设置的提醒。' };
-        }
-
-        const lines = ['提醒列表：', ''];
-        for (const task of tasks) {
-          const statusIcon =
-            task.status === 'active'
-              ? '✅'
-              : task.status === 'paused'
-                ? '⏸️'
-                : '❌';
-          lines.push(
-            `  ${statusIcon} [${task.id}]`,
-            `     ${task.prompt.slice(0, 60)}`,
-            `     ${task.schedule_type}: ${task.schedule_value} | 下次: ${task.next_run || 'N/A'}`,
-            '',
-          );
-        }
-        return { text: lines.join('\n') };
-      } catch {
-        return { text: '读取提醒列表失败。' };
-      }
+    execute: async (_accountId, _args, _deps) => {
+      return { text: '提醒由 Web/API 控制面管理，Pi session 不再直接创建或查询提醒。' };
     },
   },
 };

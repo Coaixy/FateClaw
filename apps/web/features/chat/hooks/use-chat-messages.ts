@@ -9,9 +9,11 @@ import {
 } from 'react';
 
 import {
+  buildChatSessionStreamUrl,
   chatSessionsApi,
   type ChatSession,
   type ChatSessionSendOptions,
+  type ChatSessionStreamEvent,
   type Message,
 } from '../api';
 import {
@@ -56,6 +58,8 @@ export function useChatMessages(options: {
   const activeSessionRef = useRef('');
   const shouldAutoScrollRef = useRef(true);
   const creatingRef = useRef(false);
+  const streamSocketRef = useRef<WebSocket | null>(null);
+  const streamingMessageIdRef = useRef<string | null>(null);
   const isPending = sending || processing || awaitingRefresh;
 
   useEffect(() => {
@@ -189,6 +193,132 @@ export function useChatMessages(options: {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [options.selectedSession, pollMessages]);
+
+  const upsertStreamingAssistantMessage = useCallback(
+    (sessionId: string, content: string) => {
+      const existingId = streamingMessageIdRef.current;
+      const accountId =
+        options.sessions.find((session) => session.id === sessionId)
+          ?.account_id ?? 'web';
+
+      setMessages((previous) => {
+        if (existingId) {
+          const existingIndex = previous.findIndex(
+            (message) => message.id === existingId,
+          );
+          if (existingIndex >= 0) {
+            const next = [...previous];
+            next[existingIndex] = {
+              ...next[existingIndex],
+              content,
+              timestamp: new Date().toISOString(),
+            };
+            return next;
+          }
+        }
+
+        const id = `stream-bot-${Date.now()}`;
+        streamingMessageIdRef.current = id;
+        return [
+          ...previous,
+          {
+            id,
+            account_id: accountId,
+            sender: '',
+            sender_name: '',
+            content,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: {
+              kind: 'streaming',
+            },
+          },
+        ];
+      });
+    },
+    [options.sessions],
+  );
+
+  useEffect(() => {
+    streamSocketRef.current?.close();
+    streamSocketRef.current = null;
+    streamingMessageIdRef.current = null;
+
+    const sessionId = options.selectedSession;
+    if (!sessionId || typeof window === 'undefined') return;
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    let closedByEffect = false;
+    let socket: WebSocket | null = null;
+
+    try {
+      socket = new WebSocket(buildChatSessionStreamUrl(sessionId, token));
+      streamSocketRef.current = socket;
+    } catch {
+      return;
+    }
+
+    socket.onmessage = (event) => {
+      if (activeSessionRef.current !== sessionId) return;
+      let payload: ChatSessionStreamEvent;
+      try {
+        payload = JSON.parse(event.data) as ChatSessionStreamEvent;
+      } catch {
+        return;
+      }
+
+      if (payload.type === 'assistant_delta') {
+        upsertStreamingAssistantMessage(sessionId, payload.snapshot);
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'assistant_message' && payload.text.trim()) {
+        upsertStreamingAssistantMessage(sessionId, payload.text);
+        return;
+      }
+
+      if (payload.type === 'progress') {
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'final' || payload.type === 'error') {
+        streamingMessageIdRef.current = null;
+        setProcessing(false);
+        setAwaitingRefresh(true);
+        void loadMessages(sessionId, { background: true });
+      }
+    };
+
+    socket.onerror = () => {
+      if (activeSessionRef.current === sessionId) {
+        setAwaitingRefresh(true);
+      }
+    };
+
+    socket.onclose = () => {
+      if (!closedByEffect && activeSessionRef.current === sessionId) {
+        streamSocketRef.current = null;
+      }
+    };
+
+    return () => {
+      closedByEffect = true;
+      socket?.close();
+      if (streamSocketRef.current === socket) {
+        streamSocketRef.current = null;
+      }
+      streamingMessageIdRef.current = null;
+    };
+  }, [
+    loadMessages,
+    options.selectedSession,
+    upsertStreamingAssistantMessage,
+  ]);
 
   useEffect(() => {
     const element = scrollRef.current;

@@ -10,20 +10,18 @@ description: 八字排盘：四柱、大运、完整流年、格局，基于 baz
 ## 使用流程
 
 1. 从用户消息中提取：阳历出生日期、出生时间（精确到分钟更好）、性别
-2. 调用 Pi custom tool `bazi_paipan`，直接传入 JSON 参数
-3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
+2. Web/API 侧排盘运行时执行本 Skill 的脚本 entry，直接传入 JSON 参数
+3. 如果用户要求解读，排盘成功后的盘面进入 Pi 上下文，由解读类 Markdown Skill 继续完成分析
 
-## 调用方式
+## 入参示例
 
-执行：
-
-```js
-bazi_paipan({
-  solarDate: "1990-05-15",
-  hour: 10,
-  minute: 30,
-  gender: "男"
-})
+```json
+{
+  "solarDate": "1990-05-15",
+  "hour": 10,
+  "minute": 30,
+  "gender": "男"
+}
 ```
 
 ## 参数说明

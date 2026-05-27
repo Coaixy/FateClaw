@@ -10,6 +10,7 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { requestJson } from '@/lib/http/client';
+import { getApiBase } from '@/lib/http/client';
 
 export type Message = MessageDto;
 export type ChatSession = ChatSessionDto;
@@ -32,6 +33,52 @@ export type ChatSessionSendOptions =
   | NormalChatSessionSendOptions
   | UserPastedBoardChatSessionSendOptions;
 
+export type ChatSessionStreamEvent =
+  | { type: 'connected'; timestamp?: string; sessionId?: string }
+  | {
+      type: 'assistant_delta';
+      timestamp?: string;
+      sessionId?: string;
+      delta: string;
+      snapshot: string;
+    }
+  | {
+      type: 'assistant_message';
+      timestamp?: string;
+      sessionId?: string;
+      text: string;
+    }
+  | {
+      type: 'tool_start' | 'tool_update' | 'tool_end';
+      timestamp?: string;
+      sessionId?: string;
+      toolCallId: string;
+      toolName: string;
+      isError?: boolean;
+    }
+  | {
+      type: 'progress';
+      timestamp?: string;
+      sessionId?: string;
+      text: string;
+      stage?: string;
+      workflow?: string;
+    }
+  | {
+      type: 'final';
+      timestamp?: string;
+      sessionId?: string;
+      text: string;
+      status: 'success' | 'error';
+    }
+  | {
+      type: 'error';
+      timestamp?: string;
+      sessionId?: string;
+      error: string;
+      publicErrorText?: string;
+    };
+
 /**
  * Skill artifact context（来自 agent-runner 的 tool_context）。
  * 当前仍属于前端展示协议，后续可以继续下沉到 contracts。
@@ -52,6 +99,24 @@ export function parseToolContext(raw?: string | null): SkillContextEntry[] {
   } catch {
     return [];
   }
+}
+
+export function buildChatSessionStreamUrl(sessionId: string, token: string) {
+  const base = getApiBase();
+  const path = `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream?token=${encodeURIComponent(token)}`;
+  const sameOriginUrl = (targetPath: string) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${targetPath}`;
+  };
+  if (!base) {
+    return sameOriginUrl(path);
+  }
+  if (!/^https?:\/\//.test(base)) {
+    return sameOriginUrl(`${base.replace(/\/$/, '')}${path}`);
+  }
+  const url = new URL(path, base);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.toString();
 }
 
 export const messagesApi = {

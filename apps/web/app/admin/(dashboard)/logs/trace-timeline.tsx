@@ -29,9 +29,7 @@ type TraceCategory =
   | 'iteration'
   | 'orchestration'
   | 'tool'
-  | 'error'
-  | 'xuanxue'
-  | 'contract';
+  | 'error';
 
 const TRACE_EVENT_META: Record<
   string,
@@ -84,7 +82,7 @@ const TRACE_EVENT_META: Record<
     label: 'Specialist 失败',
     category: 'error',
   },
-  final_reply: {
+  assistant_reply: {
     icon: CheckCircle2,
     colorClass: 'text-green-400',
     label: '最终回复',
@@ -149,78 +147,6 @@ const TRACE_EVENT_META: Record<
     colorClass: 'text-orange-400',
     label: '协议违例',
     category: 'error',
-  },
-  contract_requirement_registered: {
-    icon: Flag,
-    colorClass: 'text-cyan-300',
-    label: '动作契约注册',
-    category: 'contract',
-  },
-  contract_action_recorded: {
-    icon: Wrench,
-    colorClass: 'text-cyan-300',
-    label: '动作契约记录',
-    category: 'contract',
-  },
-  contract_finalization_checked: {
-    icon: CheckCircle2,
-    colorClass: 'text-cyan-300',
-    label: '动作契约校验',
-    category: 'contract',
-  },
-  contract_repair_requested: {
-    icon: AlertTriangle,
-    colorClass: 'text-orange-400',
-    label: '动作契约修复',
-    category: 'error',
-  },
-  contract_enforcement_disabled: {
-    icon: AlertTriangle,
-    colorClass: 'text-yellow-400',
-    label: '动作契约关闭',
-    category: 'error',
-  },
-  xuanxue_policy_resolved: {
-    icon: Sparkles,
-    colorClass: 'text-purple-300',
-    label: '规则解析',
-    category: 'xuanxue',
-  },
-  xuanxue_interpretation_started: {
-    icon: Sparkles,
-    colorClass: 'text-purple-400',
-    label: '解读材料准备',
-    category: 'xuanxue',
-  },
-  interpret_xuanxue_args_content_injected: {
-    icon: FileText,
-    colorClass: 'text-purple-300',
-    label: '解读内容注入',
-    category: 'xuanxue',
-  },
-  interpret_xuanxue_prompt_prepared: {
-    icon: FileText,
-    colorClass: 'text-purple-300',
-    label: 'Interpret Prompt',
-    category: 'xuanxue',
-  },
-  xuanxue_upstream_rejected: {
-    icon: AlertTriangle,
-    colorClass: 'text-orange-400',
-    label: '上游 artifact 拒绝',
-    category: 'error',
-  },
-  xuanxue_validation_rejected: {
-    icon: AlertTriangle,
-    colorClass: 'text-orange-400',
-    label: '盘面校验拒绝',
-    category: 'error',
-  },
-  xuanxue_polished_content_detected: {
-    icon: HelpCircle,
-    colorClass: 'text-purple-300',
-    label: '疑似润色盘面',
-    category: 'xuanxue',
   },
   trace_overflow: {
     icon: Flag,
@@ -556,143 +482,7 @@ function ReadableTraceDetail({
     );
   }
 
-  if (event.type === 'interpret_xuanxue_args_content_injected') {
-    return (
-      <TraceDetailCard tone="purple">
-        <TraceMetricChips
-          items={[
-            { label: 'boardSkill', value: fieldText(event, 'boardSkill') },
-            { label: 'source', value: fieldText(event, 'source') },
-            { label: 'contentBytes', value: fieldText(event, 'contentBytes') },
-            {
-              label: 'argKeys',
-              value: fieldStringList(event, 'originalArgKeys').join(','),
-            },
-          ]}
-        />
-      </TraceDetailCard>
-    );
-  }
-
-  if (event.type === 'interpret_xuanxue_prompt_prepared') {
-    const runtimePrompt =
-      fieldTextChunks(event.runtimePromptChunks).join('') ||
-      fieldText(event, 'runtimePrompt');
-    return (
-      <TraceDetailCard tone="purple">
-        <TraceMetricChips
-          items={[
-            { label: 'category', value: fieldText(event, 'category') },
-            { label: 'board', value: fieldText(event, 'boardSource') },
-            { label: 'upstream', value: fieldText(event, 'upstreamSkillName') },
-            { label: 'promptBytes', value: fieldText(event, 'promptBytes') },
-            {
-              label: 'contentBytes',
-              value: fieldText(event, 'authoritativeContentBytes'),
-            },
-          ]}
-        />
-        {runtimePrompt && (
-          <div className="mt-2">
-            <CollapsibleTraceText
-              label="interpret_xuanxue 内部 prompt"
-              text={runtimePrompt}
-              tone="purple"
-            />
-          </div>
-        )}
-      </TraceDetailCard>
-    );
-  }
-
-  if (event.type === 'xuanxue_interpretation_started') {
-    return (
-      <TraceDetailCard tone="purple">
-        <TraceMetricChips
-          items={[
-            { label: 'category', value: fieldText(event, 'category') },
-            { label: 'source', value: fieldText(event, 'contentSource') },
-            { label: 'board', value: fieldText(event, 'boardSource') },
-            { label: 'mode', value: fieldText(event, 'analysisMode') },
-            { label: 'bytes', value: fieldText(event, 'authoritativeContentBytes') },
-            { label: 'upstream', value: fieldText(event, 'upstreamSkillName') },
-            { label: 'force', value: fieldText(event, 'force') },
-            { label: 'queryable', value: fieldText(event, 'queryable') },
-          ]}
-        />
-        {fieldText(event, 'queryText') && (
-          <div className="mt-2">
-            <CollapsibleTraceText
-              label="query"
-              text={fieldText(event, 'queryText')}
-              tone="purple"
-            />
-          </div>
-        )}
-      </TraceDetailCard>
-    );
-  }
-
   return null;
-}
-
-function PolicyResolutionCard({
-  event,
-}: {
-  event: TraceEventEntry;
-}) {
-  const forceSkillDirs = Array.isArray(event.forceSkillDirs)
-    ? event.forceSkillDirs.filter((item): item is string => typeof item === 'string')
-    : [];
-  const queryableSkillDirs = Array.isArray(event.queryableSkillDirs)
-    ? event.queryableSkillDirs.filter((item): item is string => typeof item === 'string')
-    : [];
-  const category =
-    typeof event.category === 'string' ? event.category : '未指定';
-
-  return (
-    <div className="mt-2 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-        <Sparkles size={12} className="text-purple-400" />
-        <span className="text-purple-300 font-medium">玄学规则解析</span>
-        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
-          {category}
-        </span>
-      </div>
-      <div className="space-y-1 text-[11px]">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-purple-300">实际强注入</span>
-          {forceSkillDirs.length > 0 ? (
-            forceSkillDirs.map((dir) => (
-              <span
-                key={dir}
-                className="px-1 py-0.5 rounded bg-purple-500/10 text-purple-200 font-mono"
-              >
-                {dir}
-              </span>
-            ))
-          ) : (
-            <span className="text-muted">无</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-cyan-300">实际按需查询</span>
-          {queryableSkillDirs.length > 0 ? (
-            queryableSkillDirs.map((dir) => (
-              <span
-                key={dir}
-                className="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-200 font-mono"
-              >
-                {dir}
-              </span>
-            ))
-          ) : (
-            <span className="text-muted">无</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function TraceEventRow({
@@ -714,22 +504,9 @@ function TraceEventRow({
   );
   const hasPayload = payloadEntries.length > 0;
   const inlinePreview = buildInlinePreview(event);
-  const isXuanxueEvent =
-    meta.category === 'xuanxue' ||
-    (event.type === 'tool_call' &&
-      ['interpret_xuanxue', 'list_knowledge_sections', 'read_knowledge_section'].includes(
-        typeof event.toolName === 'string' ? event.toolName : '',
-      )) ||
-    (event.type === 'tool_result' &&
-      ['interpret_xuanxue', 'list_knowledge_sections', 'read_knowledge_section'].includes(
-        typeof event.toolName === 'string' ? event.toolName : '',
-      ));
-  const leftBorder = isXuanxueEvent
-    ? 'border-l-2 border-purple-500/40 pl-2'
-    : '';
 
   return (
-    <div className={`py-1 ${leftBorder}`}>
+    <div className="py-1">
       <button
         onClick={() => hasPayload && setExpanded(!expanded)}
         className={`w-full flex items-center gap-1.5 text-[12px] text-left ${
@@ -759,9 +536,6 @@ function TraceEventRow({
       </button>
       {expanded && hasPayload && (
         <div className="ml-[80px]">
-          {event.type === 'xuanxue_policy_resolved' && (
-            <PolicyResolutionCard event={event} />
-          )}
           <ReadableTraceDetail event={event} />
           <div className="mt-2">
             <button
@@ -808,16 +582,6 @@ function buildInlinePreview(event: TraceEventEntry): string {
   if (specialist) pieces.push(specialist);
   const promptPreview = get('promptPreview');
   if (promptPreview) pieces.push(preview(promptPreview, 60));
-  if (event.type === 'xuanxue_policy_resolved') {
-    const forceCount = Array.isArray(event.forceSkillDirs)
-      ? event.forceSkillDirs.length
-      : 0;
-    const queryCount = Array.isArray(event.queryableSkillDirs)
-      ? event.queryableSkillDirs.length
-      : 0;
-    pieces.push(`force=${forceCount}`);
-    pieces.push(`query=${queryCount}`);
-  }
   if (event.type === 'specialist_completed') {
     const textLength = get('textLength');
     const skillCount = get('skillCount');
@@ -837,35 +601,6 @@ function buildInlinePreview(event: TraceEventEntry): string {
   if (event.type === 'specialist_failed') {
     const failureReason = get('failureReason');
     if (failureReason) pieces.push(preview(failureReason, 80));
-  }
-  if (event.type.startsWith('contract_')) {
-    const requirementId = get('requirementId');
-    if (requirementId) pieces.push(requirementId);
-    const payload = isRecord(event.payload) ? event.payload : {};
-    const action = payload.action;
-    const status = payload.status;
-    const mode = payload.mode;
-    if (typeof action === 'string') pieces.push(action);
-    if (typeof status === 'string') pieces.push(status);
-    if (typeof mode === 'string') pieces.push(`mode=${mode}`);
-    if (payload.allowed === false) pieces.push('denied');
-    if (payload.allowed === true) pieces.push('allowed');
-  }
-  if (event.type === 'xuanxue_interpretation_started') {
-    const category = get('category');
-    if (category) pieces.push(category);
-    const contentSource = get('contentSource');
-    if (contentSource) pieces.push(contentSource);
-    const force = get('force');
-    if (force) pieces.push(`force=${force}`);
-    const queryable = get('queryable');
-    if (queryable) pieces.push(`query=${queryable}`);
-  }
-  if (event.type === 'interpret_xuanxue_prompt_prepared') {
-    const promptBytes = get('promptBytes');
-    if (promptBytes) pieces.push(`${promptBytes}b`);
-    const boardSource = get('boardSource');
-    if (boardSource) pieces.push(boardSource);
   }
   const sectionTitle = get('sectionTitle');
   if (sectionTitle) pieces.push(`§${sectionTitle}`);

@@ -22,21 +22,6 @@ interface TraceLikeEntry {
   tool?: unknown;
   toolName?: unknown;
   args?: unknown;
-  queryText?: unknown;
-  skillDir?: unknown;
-  skillName?: unknown;
-  sectionTitle?: unknown;
-  forceSkillDirs?: unknown;
-  forceSkillNames?: unknown;
-  queryableSkillDirs?: unknown;
-  queryableSkillNames?: unknown;
-  iterations?: unknown;
-}
-
-function asStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : [];
 }
 
 function toTraceEntries(value: unknown): TraceLikeEntry[] {
@@ -46,14 +31,6 @@ function toTraceEntries(value: unknown): TraceLikeEntry[] {
           !!item && typeof item === 'object' && !Array.isArray(item),
       )
     : [];
-}
-
-function formatSkillList(names: string[], dirs: string[]): string | undefined {
-  const labels = new Set<string>();
-  for (const name of names) labels.add(name);
-  for (const dir of dirs) labels.add(dir);
-  if (labels.size === 0) return undefined;
-  return Array.from(labels).join('、');
 }
 
 function buildUserQueryProcess(traceEvents: unknown): QueryProcessStepDto[] {
@@ -71,103 +48,32 @@ function buildUserQueryProcess(traceEvents: unknown): QueryProcessStepDto[] {
         ? event.timestamp
         : new Date().toISOString();
 
-    if (event.type === 'xuanxue_policy_resolved') {
-      const forceNames = asStringArray(event.forceSkillNames);
-      const forceDirs = asStringArray(event.forceSkillDirs);
-      const queryNames = asStringArray(event.queryableSkillNames);
-      const queryDirs = asStringArray(event.queryableSkillDirs);
-      const forced = formatSkillList(forceNames, forceDirs);
-      const queryable = formatSkillList(queryNames, queryDirs);
-      const detail = [
-        forced ? `直接应用：${forced}` : null,
-        queryable ? `可查章节：${queryable}` : null,
-      ]
-        .filter(Boolean)
-        .join('；');
-      if (detail) {
-        steps.push({
-          type: 'matched_skills',
-          timestamp,
-          title: '命中知识库',
-          detail,
-        });
-      }
-      continue;
-    }
-
-    if (event.type === 'xuanxue_interpretation_started') {
-      const queryText =
-        typeof event.queryText === 'string' ? event.queryText : undefined;
-      steps.push({
-        type: 'interpretation_start',
-        timestamp,
-        title: '开始解读',
-        detail: queryText ? `解读问题：${queryText}` : undefined,
-        queryText,
-      });
-      continue;
-    }
-
     if (event.type === 'tool_call') {
       const tool = typeof event.toolName === 'string' ? event.toolName : '';
-      if (
-        tool !== 'list_knowledge_sections' &&
-        tool !== 'read_knowledge_section'
-      ) {
+      if (tool !== 'read') {
         continue;
       }
       const toolArgs =
         event.args && typeof event.args === 'object'
           ? (event.args as Record<string, unknown>)
           : {};
-      const skillDir =
-        typeof toolArgs.skill_dir === 'string' ? toolArgs.skill_dir : undefined;
-      const skillName =
-        typeof event.skillName === 'string' ? event.skillName : undefined;
-      const skillLabel = skillName || skillDir;
-      const sectionTitle =
-        typeof toolArgs.section_title === 'string'
-          ? toolArgs.section_title
-          : undefined;
-
-      if (tool === 'list_knowledge_sections') {
-        steps.push({
-          type: 'view_index',
-          timestamp,
-          title: '查看知识目录',
-          detail: skillLabel ? `范围：${skillLabel}` : '查看可用章节',
-          skillDir,
-          skillName,
-        });
-        continue;
-      }
-
-      if (tool === 'read_knowledge_section' && sectionTitle) {
-        steps.push({
-          type: 'read_section',
-          timestamp,
-          title: '查阅章节',
-          detail: skillLabel ? `${skillLabel} / ${sectionTitle}` : sectionTitle,
-          skillDir,
-          skillName,
-          sectionTitle,
-        });
-      }
+      const path =
+        typeof toolArgs.path === 'string' ? toolArgs.path : undefined;
+      steps.push({
+        type: 'read_section',
+        timestamp,
+        title: '查阅 Skill',
+        detail: path,
+        sectionTitle: path,
+      });
       continue;
     }
 
-    if (
-      event.type === 'tool_result' &&
-      typeof event.toolName === 'string' &&
-      ['interpret_xuanxue', 'final_reply'].includes(event.toolName)
-    ) {
+    if (event.type === 'pi_turn_end') {
       steps.push({
         type: 'completed',
         timestamp,
-        title:
-          event.toolName === 'interpret_xuanxue'
-            ? '解读材料已准备'
-            : '完成解读',
+        title: '完成回复',
       });
       continue;
     }

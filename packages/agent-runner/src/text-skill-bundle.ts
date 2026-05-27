@@ -2,10 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 
-const BUNDLE_MARKDOWN_DIRS = ['docs', 'examples', 'notes'];
-const MAX_BUNDLE_FILES = 80;
-const MAX_BUNDLE_CHARS = 240_000;
-
 function isPathInside(target: string, root: string): boolean {
   const relative = path.relative(root, target);
   return (
@@ -57,42 +53,6 @@ export function resolveTextSkillBundleDir(
   return absolute;
 }
 
-function collectMarkdownFiles(dir: string): string[] {
-  const files: string[] = [];
-  const pushIfFile = (filePath: string) => {
-    if (
-      files.length < MAX_BUNDLE_FILES &&
-      fs.existsSync(filePath) &&
-      fs.statSync(filePath).isFile() &&
-      path.extname(filePath).toLowerCase() === '.md'
-    ) {
-      files.push(filePath);
-    }
-  };
-
-  pushIfFile(path.join(dir, 'SKILL.md'));
-  pushIfFile(path.join(dir, 'index.md'));
-
-  const walk = (root: string) => {
-    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return;
-    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-      if (files.length >= MAX_BUNDLE_FILES) return;
-      const fullPath = path.join(root, entry.name);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
-        files.push(fullPath);
-      }
-    }
-  };
-
-  for (const subdir of BUNDLE_MARKDOWN_DIRS) {
-    walk(path.join(dir, subdir));
-  }
-
-  return files;
-}
-
 export function getTextSkillBundleSkillFile(
   bundleUri: string | null | undefined,
 ): { baseDir: string; filePath: string } | null {
@@ -102,29 +62,4 @@ export function getTextSkillBundleSkillFile(
     baseDir,
     filePath: path.join(baseDir, 'SKILL.md'),
   };
-}
-
-export function readTextSkillBundleMarkdown(
-  bundleUri: string | null | undefined,
-): string {
-  const baseDir = resolveTextSkillBundleDir(bundleUri);
-  if (!baseDir) return '';
-
-  const chunks: string[] = [];
-  let totalChars = 0;
-  for (const filePath of collectMarkdownFiles(baseDir)) {
-    if (totalChars >= MAX_BUNDLE_CHARS) break;
-    const relative = path.relative(baseDir, filePath);
-    const content = fs.readFileSync(filePath, 'utf-8').trim();
-    if (!content) continue;
-    const remaining = MAX_BUNDLE_CHARS - totalChars;
-    const body =
-      content.length > remaining
-        ? `${content.slice(0, remaining)}\n\n[已截断：Text Skill Bundle 超过 ${MAX_BUNDLE_CHARS} 字符]`
-        : content;
-    chunks.push(`<!-- ${relative} -->\n${body}`);
-    totalChars += body.length;
-  }
-
-  return chunks.join('\n\n');
 }

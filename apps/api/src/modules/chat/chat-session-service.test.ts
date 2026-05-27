@@ -160,7 +160,7 @@ describe('chat-session-service selected board context', () => {
     });
   });
 
-  it('appends the selected board as the latest synthetic assistant history item', async () => {
+  it('passes selected board through activeBoardContext without DB history injection', async () => {
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
       selectedBoardMessageId: 'board-msg-1',
@@ -181,24 +181,9 @@ describe('chat-session-service selected board context', () => {
           artifactTitle: undefined,
           artifactData: { bazi: true },
         },
-        history: [
-          expect.objectContaining({
-            content: '之前的普通上下文',
-          }),
-          expect.objectContaining({
-            content: expect.stringContaining('用户本次明确指定的盘面'),
-            toolContext: [
-              expect.objectContaining({
-                skill: 'bazi-paipan',
-              }),
-            ],
-          }),
-        ],
+        history: [],
       }),
     );
-    expect(
-      mockDispatchAiChatPrompt.mock.calls[0][0].history[1].content,
-    ).toContain('{"bazi":true}');
   });
 
   it('keeps placeholder titles unified without auto-generating a summary title', async () => {

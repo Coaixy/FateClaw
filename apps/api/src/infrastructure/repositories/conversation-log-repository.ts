@@ -1,4 +1,3 @@
-import { buildConversationCapabilityLedger } from '../../modules/conversation-log/capability-ledger.js';
 import { getDbPool } from '../db-pool.js';
 
 export interface ConversationLogRow {
@@ -71,7 +70,6 @@ export async function storeConversationLog(log: {
       : null;
   const transcript = log.transcript ?? [];
   const traceEvents = log.traceEvents ?? [];
-  const capabilityLedger = buildConversationCapabilityLedger(traceEvents);
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
@@ -94,7 +92,7 @@ export async function storeConversationLog(log: {
         countToolUseEvents(transcript),
         traceEvents.length,
         graphSummary ? JSON.stringify(graphSummary) : null,
-        capabilityLedger ? JSON.stringify(capabilityLedger) : null,
+        null,
       ],
     );
     await client.query(

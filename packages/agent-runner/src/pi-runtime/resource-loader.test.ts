@@ -28,39 +28,6 @@ const containerInput: ContainerInput = {
   history: [],
 };
 
-function createOfficialSkillFixture(): string {
-  const skillsDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'fateclaw-pi-skills-'),
-  );
-  const baziDir = path.join(skillsDir, 'bazi-paipan');
-  fs.mkdirSync(baziDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(baziDir, 'legacy-manifest.json'),
-    JSON.stringify(
-      {
-        name: '旧八字 manifest 名称',
-        description: 'Pi runtime 不应读取旧 JSON manifest',
-      },
-      null,
-      2,
-    ),
-  );
-  fs.writeFileSync(
-    path.join(baziDir, 'SKILL.md'),
-    [
-      '---',
-      'name: bazi-paipan',
-      'description: 八字排盘',
-      '---',
-      '',
-      '# 八字排盘',
-      '',
-      '调用 bazi_paipan 完成排盘。',
-    ].join('\n'),
-  );
-  return skillsDir;
-}
-
 function createTextSkillBundleFixture(): string {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'fateclaw-private-skill-'),
@@ -109,44 +76,21 @@ function createDeps(): AgentRuntimeDeps {
   return {
     memoryStore: {
       read: vi.fn(),
-      write: vi.fn(),
     },
     skillCatalog: {
-      listOfficialSkillMetadata: vi.fn(() => {
-        throw new Error('Pi resource loader 不应读取旧 JSON metadata');
-      }),
-      loadOfficialSkillContent: vi.fn(() => null),
-      listEnabledSkillNames: vi.fn(async () => ['八字排盘']),
       listEffectiveUserSkills: vi.fn(async () => [privateSkill]),
-      readTextSkillBundle: vi.fn(async () => ''),
-      toggleUserSkill: vi.fn(),
-    },
-    taskStore: {
-      list: vi.fn(),
-    },
-    messageBus: {
-      pushOutbox: vi.fn(),
-      pushTask: vi.fn(),
-    },
-    historyStore: {
-      listRecent: vi.fn(),
-    },
-    skillExecutor: {
-      execute: vi.fn(),
     },
   };
 }
 
 describe('createPiResourceLoader', () => {
   it('exposes only request-scoped skill metadata and keeps private content out of Pi skill files', async () => {
-    const skillsDir = createOfficialSkillFixture();
     const deps = createDeps();
     const loader = await createPiResourceLoader({
       deps,
       userId: 'user-1',
       requestScope: createRequestScope(),
       containerInput,
-      skillsDir,
     });
 
     const before = loader.getSkills().skills;
@@ -165,16 +109,7 @@ describe('createPiResourceLoader', () => {
     const after = loader.getSkills().skills;
 
     expect(after).toEqual(before);
-    expect(before.map((skill) => skill.name)).toEqual([
-      'bazi-paipan',
-      'private-bazi',
-    ]);
-    expect(before.find((skill) => skill.name === 'bazi-paipan')?.filePath).toBe(
-      path.join(skillsDir, 'bazi-paipan', 'SKILL.md'),
-    );
-    expect(before.find((skill) => skill.name === 'bazi-paipan')?.baseDir).toBe(
-      path.join(skillsDir, 'bazi-paipan'),
-    );
+    expect(before.map((skill) => skill.name)).toEqual(['private-bazi']);
     expect(
       before.find((skill) => skill.name === 'private-bazi')
         ?.disableModelInvocation,
@@ -188,21 +123,24 @@ describe('createPiResourceLoader', () => {
     expect(loader.getAppendSystemPrompt().join('\n')).toContain(
       'private-bazi',
     );
+    expect(loader.getSystemPrompt()).toContain('不要调用或假设存在专用解读工具/解读 Skill');
     expect(JSON.stringify(before)).not.toContain(
       '不能暴露到 Skill metadata 的私有正文',
     );
     expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
       '不能暴露到 Skill metadata 的私有正文',
     );
-    expect(before.every((skill) => !skill.filePath.includes('.pi/skills'))).toBe(
-      true,
+    const privateSkills = before.filter(
+      (skill) => skill.sourceInfo.source === 'fateclaw-request-knowledge',
     );
-    expect(before.every((skill) => !skill.filePath.includes('.pi/agent'))).toBe(
-      true,
-    );
+    expect(
+      privateSkills.every((skill) => !skill.filePath.includes('.pi/skills')),
+    ).toBe(true);
+    expect(
+      privateSkills.every((skill) => !skill.filePath.includes('.pi/agent')),
+    ).toBe(true);
     expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
       'user-1',
     );
-    expect(deps.skillCatalog.listOfficialSkillMetadata).not.toHaveBeenCalled();
   });
 });

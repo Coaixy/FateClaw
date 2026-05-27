@@ -4,7 +4,16 @@ const { mockCreateAgentSession, mockSessionManager, mockSettingsManager } =
   vi.hoisted(() => ({
     mockCreateAgentSession: vi.fn(),
     mockSessionManager: {
-      inMemory: vi.fn(() => ({ kind: 'session-manager' })),
+      create: vi.fn(() => ({
+        kind: 'session-manager',
+        newSession: vi.fn(),
+        setSessionFile: vi.fn(),
+        isPersisted: vi.fn(() => true),
+      })),
+      open: vi.fn(() => ({
+        kind: 'opened-session-manager',
+        isPersisted: vi.fn(() => true),
+      })),
     },
     mockSettingsManager: {
       inMemory: vi.fn(() => ({ kind: 'settings-manager' })),
@@ -45,27 +54,9 @@ function createDeps(): AgentRuntimeDeps {
   return {
     memoryStore: {
       read: vi.fn(async () => ''),
-      write: vi.fn(async () => undefined),
     },
     skillCatalog: {
-      listOfficialSkillMetadata: vi.fn(() => []),
-      loadOfficialSkillContent: vi.fn(() => null),
-      listEnabledSkillNames: vi.fn(async () => ['八字排盘']),
       listEffectiveUserSkills: vi.fn(async () => []),
-      toggleUserSkill: vi.fn(async () => undefined),
-    },
-    taskStore: {
-      list: vi.fn(async () => []),
-    },
-    messageBus: {
-      pushOutbox: vi.fn(async () => undefined),
-      pushTask: vi.fn(async () => undefined),
-    },
-    historyStore: {
-      listRecent: vi.fn(async () => []),
-    },
-    skillExecutor: {
-      execute: vi.fn(async () => ({ stdout: '{}', stderr: '' })),
     },
   };
 }
@@ -105,7 +96,8 @@ function createInput(): ContainerInput {
 describe('runPiSession', () => {
   beforeEach(() => {
     mockCreateAgentSession.mockReset();
-    mockSessionManager.inMemory.mockClear();
+    mockSessionManager.create.mockClear();
+    mockSessionManager.open.mockClear();
     mockSettingsManager.inMemory.mockClear();
   });
 
@@ -135,6 +127,7 @@ describe('runPiSession', () => {
       resourceLoader?: {
         getSkills(): { skills: Array<{ name: string; filePath: string }> };
         getAppendSystemPrompt(): string[];
+        getSystemPrompt(): string;
       };
     } = {};
 
@@ -162,12 +155,6 @@ describe('runPiSession', () => {
               },
               toolResults: [],
             });
-            const finalReply = createArgs.customTools?.find(
-              (tool) => tool.name === 'final_reply',
-            );
-            await finalReply?.execute('final-call', {
-              text: 'Pi session 最终回复',
-            });
           },
           dispose: vi.fn(),
         },
@@ -183,40 +170,34 @@ describe('runPiSession', () => {
       requestScope,
     });
 
-    expect(result.text).toBe('Pi session 最终回复');
+    expect(result.text).toBe('assistant fallback');
     expect(result.usage).toEqual({
       promptTokens: 3,
       completionTokens: 2,
       totalTokens: 5,
     });
     expect(mockCreateAgentSession).toHaveBeenCalledTimes(1);
+    expect(mockSessionManager.create).toHaveBeenCalledTimes(1);
+    expect(mockSessionManager.open).not.toHaveBeenCalled();
     expect(createArgs.noTools).toBe('all');
-    expect(createArgs.tools).toEqual(
-      expect.arrayContaining([
-        'bazi_paipan',
-        'prepare_xuanxue_interpretation',
-        'read_memory',
-        'final_reply',
-      ]),
-    );
+    expect(createArgs.tools).toEqual([]);
+    expect(createArgs.tools).not.toEqual(expect.arrayContaining(['bazi_paipan']));
+    expect(createArgs.tools).not.toEqual(expect.arrayContaining(['read_memory']));
     expect(createArgs.customTools?.map((tool) => tool.name)).toEqual(
       createArgs.tools,
     );
     const visibleSkills = createArgs.resourceLoader?.getSkills().skills ?? [];
-    expect(visibleSkills.map((skill) => skill.name)).toEqual(['bazi-paipan']);
-    expect(visibleSkills.every((skill) => !skill.filePath.includes('.pi'))).toBe(
-      true,
-    );
-    expect(deps.skillCatalog.listEnabledSkillNames).toHaveBeenCalledWith(
-      'user-1',
+    expect(visibleSkills.map((skill) => skill.name)).toEqual([]);
+    expect(createArgs.resourceLoader?.getSystemPrompt()).toContain(
+      '不要调用或假设存在专用解读工具/解读 Skill',
     );
     expect(capturedPrompt).toBe('基于这个盘继续看事业');
     const appendedContext =
       createArgs.resourceLoader?.getAppendSystemPrompt().join('\n') ?? '';
     expect(appendedContext).toContain('<fateclaw_pi_context>');
     expect(appendedContext).toContain('id="context_provenance"');
-    expect(appendedContext).toContain('id="session_history"');
-    expect(appendedContext).toContain('历史八字盘面');
+    expect(appendedContext).not.toContain('id="session_history"');
+    expect(appendedContext).not.toContain('历史八字盘面');
     expect(appendedContext).toContain('id="active_board_context"');
     expect(appendedContext).toContain('当前选中八字盘面');
     expect(appendedContext).toContain('id="pasted_board"');
@@ -238,10 +219,6 @@ describe('runPiSession', () => {
         expect.objectContaining({
           type: 'pi_turn_end',
           toolResultCount: 0,
-        }),
-        expect.objectContaining({
-          type: 'pi_final_reply',
-          textLength: 15,
         }),
       ]),
     );

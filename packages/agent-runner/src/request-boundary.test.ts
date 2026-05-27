@@ -69,12 +69,7 @@ describe('executeContainerInput user pasted board persistence', () => {
         completionTokens: 1,
         totalTokens: 2,
       },
-      skillContext: [
-        {
-          skill: 'xuanxue-jiedu',
-          output: '解读结果',
-        },
-      ],
+      skillContext: [],
       agentGraph: {
         version: 1,
         requestId: 'request-1',
@@ -123,11 +118,6 @@ describe('executeContainerInput user pasted board persistence', () => {
         }),
       }),
     );
-    expect(result.skillContext).toEqual([
-      expect.objectContaining({
-        skill: 'xuanxue-jiedu',
-        output: '解读结果',
-      }),
-    ]);
+    expect(result.skillContext).toBeUndefined();
   });
 });

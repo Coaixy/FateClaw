@@ -20,6 +20,10 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiBase() {
+  return API_BASE;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

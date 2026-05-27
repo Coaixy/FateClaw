@@ -1,15 +1,9 @@
-import { resolveEvidenceCategoryBySkill } from '../evidence-policy.js';
 import { createAgentGraphBuilder } from '../agent-graph.js';
 import { getRequestId } from '../request-scope.js';
-import type {
-  Artifact,
-  SkillContextEntry,
-  TokenUsage,
-} from '../types.js';
+import type { SkillContextEntry, TokenUsage } from '../types.js';
 import { traceEvent } from '../trace.js';
 import { runPiSession } from './session.js';
 import { mergePiPersistedSkillContext } from './context-layer.js';
-import { PI_INTERPRET_TOOL_NAME } from './interpret-tool-catalog.js';
 import type {
   PiRuntimeInput,
   PiRuntimeResult,
@@ -39,24 +33,6 @@ function mergeSkillContext(records: PiToolExecutionRecord[]): SkillContextEntry[
   return entries;
 }
 
-function isInterpretTool(toolName: string): boolean {
-  return toolName === PI_INTERPRET_TOOL_NAME;
-}
-
-function isBoardTool(record: PiToolExecutionRecord): boolean {
-  const skill = record.skillContextEntry?.skill;
-  if (!skill) return false;
-  return Boolean(resolveEvidenceCategoryBySkill(skill));
-}
-
-function artifactsForSkill(args: {
-  artifacts: Artifact[];
-  skill: string | undefined;
-}): Artifact[] {
-  if (!args.skill) return [];
-  return args.artifacts.filter((artifact) => artifact.producer === args.skill);
-}
-
 export async function executePiRuntime(
   args: PiRuntimeInput,
 ): Promise<PiRuntimeResult> {
@@ -83,30 +59,22 @@ export async function executePiRuntime(
   });
 
   for (const record of result.records) {
-    if (record.invocation.toolName === 'final_reply') continue;
-    if (!record.skillContextEntry && !isInterpretTool(record.invocation.toolName)) {
+    if (!record.skillContextEntry) {
       continue;
     }
-    const specialist = isInterpretTool(record.invocation.toolName)
-      ? 'xuanxue-interpret-agent'
-      : isBoardTool(record)
-        ? 'xuanxue-board-agent'
-        : 'general-assistant';
     const skill = record.skillContextEntry?.skill;
     graphBuilder.addSpecialistTask({
-      specialist,
+      specialist: 'general-assistant',
       source: 'supervisor',
       goal: record.invocation.toolName,
-      category: skill ? resolveEvidenceCategoryBySkill(skill) ?? undefined : undefined,
       outputPreview: record.modelOutput ?? record.output,
-      artifacts: artifactsForSkill({
-        artifacts: args.requestScope.artifacts,
-        skill,
-      }),
+      artifacts: args.requestScope.artifacts.filter(
+        (artifact) => artifact.producer === skill,
+      ),
     });
   }
 
-  graphBuilder.addFinalReply(result.text);
+  graphBuilder.addAssistantReply(result.text);
   traceEvent(
     {
       type: 'pi_runtime_completed',

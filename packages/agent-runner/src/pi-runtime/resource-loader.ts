@@ -1,7 +1,6 @@
 import {
   createExtensionRuntime,
   createSyntheticSourceInfo,
-  loadSkillsFromDir,
   type LoadExtensionsResult,
   type ResourceDiagnostic,
   type ResourceLoader,
@@ -9,13 +8,10 @@ import {
 } from '@earendil-works/pi-coding-agent';
 
 import type { AgentRuntimeDeps } from '../deps.js';
-import { SKILLS_DIR } from '../paths.js';
 import { traceEvent } from '../trace.js';
 import type { RequestScope } from '../request-scope.js';
 import type { ContainerInput } from '../types.js';
 import { getTextSkillBundleSkillFile } from '../text-skill-bundle.js';
-import { PI_DETERMINISTIC_SCRIPT_TOOLS } from './deterministic-tool-catalog.js';
-import { PI_INTERPRET_TOOL_NAME } from './interpret-tool-catalog.js';
 
 export interface CreatePiResourceLoaderOptions {
   deps: AgentRuntimeDeps;
@@ -23,7 +19,6 @@ export interface CreatePiResourceLoaderOptions {
   requestScope: RequestScope;
   containerInput: ContainerInput;
   piContextPrompt?: string;
-  skillsDir?: string;
 }
 
 function createSkill(args: {
@@ -54,36 +49,6 @@ interface RequestKnowledgeEntry {
   source: string;
 }
 
-const PI_OFFICIAL_SKILL_ALIASES = [
-  ...PI_DETERMINISTIC_SCRIPT_TOOLS.map((tool) => ({
-    skillName: tool.skillName,
-    aliases: [tool.skillName, tool.displayName, tool.toolName],
-  })),
-  {
-    skillName: 'xuanxue-jiedu',
-    aliases: ['xuanxue-jiedu', '玄学解读', '通枢解读', PI_INTERPRET_TOOL_NAME],
-  },
-];
-
-function resolveEnabledPiOfficialSkillNames(
-  enabledSkillNames: readonly string[],
-): Set<string> {
-  const enabled = new Set(enabledSkillNames);
-  const resolved = new Set<string>();
-
-  for (const item of PI_OFFICIAL_SKILL_ALIASES) {
-    if (item.aliases.some((alias) => enabled.has(alias))) {
-      resolved.add(item.skillName);
-    }
-  }
-
-  for (const name of enabledSkillNames) {
-    resolved.add(name);
-  }
-
-  return resolved;
-}
-
 async function loadRequestScopedSkills(
   options: CreatePiResourceLoaderOptions,
 ): Promise<{
@@ -91,20 +56,6 @@ async function loadRequestScopedSkills(
   diagnostics: ResourceDiagnostic[];
   privateKnowledgeEntries: RequestKnowledgeEntry[];
 }> {
-  const skillsDir = options.skillsDir ?? SKILLS_DIR;
-  const officialSkillNames = await options.deps.skillCatalog.listEnabledSkillNames(
-    options.userId,
-  );
-  const enabledOfficialSkills =
-    resolveEnabledPiOfficialSkillNames(officialSkillNames);
-  const loadedOfficialSkills = loadSkillsFromDir({
-    dir: skillsDir,
-    source: 'fateclaw-official',
-  });
-  const officialSkills = loadedOfficialSkills.skills.filter((skill) =>
-    enabledOfficialSkills.has(skill.name),
-  );
-
   const effectivePrivateKnowledge = options.userId
     ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
     : [];
@@ -126,6 +77,7 @@ async function loadRequestScopedSkills(
           skill.description || skill.trigger || skill.name,
           `category=${skill.category || '通用'}`,
           `source=${skill.source}`,
+          `usageMode=${skill.usage_mode}`,
           'request-scoped Text Skill Bundle，可按需读取 SKILL.md/index.md/docs/examples/notes。',
         ].join(' | '),
       filePath: bundle.filePath,
@@ -138,7 +90,6 @@ async function loadRequestScopedSkills(
   traceEvent(
     {
       type: 'pi_resource_loader_prepared',
-      officialSkillCount: officialSkills.length,
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
       isolation: 'request_scoped',
     },
@@ -146,8 +97,8 @@ async function loadRequestScopedSkills(
   );
 
   return {
-    skills: [...officialSkills, ...privateKnowledgeSkills],
-    diagnostics: loadedOfficialSkills.diagnostics,
+    skills: privateKnowledgeSkills,
+    diagnostics: [],
     privateKnowledgeEntries,
   };
 }
@@ -201,7 +152,7 @@ function buildAppendSystemPrompt(
     prompts.push(
       [
         '本轮可见的用户私有知识库入口如下。',
-        '这些入口不是本地 Pi Skill，不能直接 /skill 调用；如需正文，必须通过本轮授权知识库工具按需读取。',
+        '这些入口是请求授权的 Markdown Skill 资源；如需正文，请先用 read 读取对应 SKILL.md，再按 SKILL.md/index.md 指引读取 docs/examples/notes 中的相关 Markdown 文件。',
         ...privateKnowledgeEntries.map((entry) =>
           [
             `- ${entry.name}`,
@@ -221,12 +172,12 @@ function buildPiSystemPrompt(containerInput: ContainerInput): string {
   return [
     persona ? `${persona}\n\n---` : '',
     '你是 FateClaw 的 Pi-backed Agent Runtime。',
-    '你必须通过可用工具完成需要确定性数据、排盘、知识库读取、记忆或时间换算的任务。',
-    '排盘、解读、知识库和记忆都只允许调用本次 session 暴露的 custom tools；不要声称访问未列出的能力。',
-    '用户私有知识库只通过本次请求的授权工具读取，不能假设存在全局本地 Skill。',
-    '完成用户请求后，调用 final_reply 返回最终答复；不要在普通 assistant 文本中结束任务。',
-    `玄学专业解读必须先调用 ${PI_INTERPRET_TOOL_NAME} 准备权威盘面和知识库材料，再基于工具返回内容作答。`,
-    '如果缺少关键参数，调用 final_reply 明确说明需要补充哪些信息。',
+    '你负责 AI session、上下文连续性、用户问题理解和最终推理。',
+    '排盘是 Web/API 侧已经完成的确定性业务能力；不要自行调用或声称拥有排盘工具。',
+    '涉及玄学问题时，直接在 Pi 循环内基于 Pi context 中的盘面 artifact、自贴盘面或追问上下文推理；不要调用或假设存在专用解读工具/解读 Skill。',
+    '知识只通过本次请求授权的普通 Markdown Skill 读取，不能假设存在全局本地 Skill。',
+    '完成用户请求后，直接用 assistant 回复最终答复。',
+    '如果缺少关键参数，直接说明需要补充哪些信息。',
   ]
     .filter(Boolean)
     .join('\n\n');

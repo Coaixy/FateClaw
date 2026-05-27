@@ -16,20 +16,15 @@ const OFFICIAL_SKILLS_DIR = path.resolve(
 );
 
 describe('official skill visibility', () => {
-  it('keeps xuanxue-jiedu available internally but hides it from user-facing lists', () => {
+  it('exposes all official skills that remain in the catalog', () => {
     const catalog = loadOfficialSkillCatalog(OFFICIAL_SKILLS_DIR);
-
-    expect(catalog.some((skill) => skill.dir === 'xuanxue-jiedu')).toBe(true);
-    expect(catalog.find((skill) => skill.dir === 'xuanxue-jiedu')?.name).toBe(
-      '通枢解读',
-    );
 
     const visibleSkills =
       loadUserVisibleOfficialSkillCatalog(OFFICIAL_SKILLS_DIR);
 
     expect(visibleSkills.every(isUserVisibleOfficialSkill)).toBe(true);
-    expect(visibleSkills.some((skill) => skill.dir === 'xuanxue-jiedu')).toBe(
-      false,
+    expect(visibleSkills.map((skill) => skill.dir)).toEqual(
+      catalog.map((skill) => skill.dir),
     );
   });
 });

@@ -115,7 +115,7 @@ export type { OfficialSkillCatalogEntry };
 export const MAX_USER_SKILLS = 30;
 export const MAX_CONTENT_LENGTH = 30000;
 
-const INTERNAL_OFFICIAL_SKILL_DIRS = new Set(['xuanxue-jiedu']);
+const INTERNAL_OFFICIAL_SKILL_DIRS = new Set<string>();
 
 export function isUserVisibleOfficialSkill(
   skill: OfficialSkillCatalogEntry,

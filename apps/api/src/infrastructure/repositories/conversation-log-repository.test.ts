@@ -56,17 +56,7 @@ describe('conversation log repository', () => {
 
   it('stores summary metadata and payload rows in one transaction', async () => {
     const { clientCalls, client } = createMockPool();
-    const traceEvents = [
-      {
-        type: 'contract_requirement_registered',
-        runId: 'run-1',
-        attemptId: 'attempt-1',
-        requirementId: 'req-1',
-        provider: 'openai-compatible',
-        model: 'test-model',
-        payload: { capability: 'knowledge', targets: [] },
-      },
-    ];
+    const traceEvents = [{ type: 'pi_context_loaded' }];
 
     await storeConversationLog({
       id: 'log-1',
@@ -94,7 +84,7 @@ describe('conversation log repository', () => {
       1,
     ]);
     expect(clientCalls[1]?.params?.[9]).toBe(JSON.stringify({ nodes: 1 }));
-    expect(clientCalls[1]?.params?.[10]).toEqual(expect.any(String));
+    expect(clientCalls[1]?.params?.[10]).toBeNull();
     expect(clientCalls[2]?.sql).toContain(
       'INSERT INTO conversation_log_payloads',
     );

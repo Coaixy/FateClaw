@@ -55,7 +55,7 @@ export interface AgentGraphBuilder {
     outputPreview?: string | null;
     artifacts?: Artifact[];
   }): void;
-  addFinalReply(text: string | null): void;
+  addAssistantReply(text: string | null): void;
   build(): AgentTaskGraph;
 }
 
@@ -118,11 +118,11 @@ export function createAgentGraphBuilder(args: {
         edges.push(makeEdge(taskId, node.id, 'produces'));
       }
     },
-    addFinalReply(text) {
+    addAssistantReply(text) {
       if (!text) return;
       const node: AgentEvidenceNode = {
-        id: `final-reply-${args.requestId}`,
-        source: 'final_reply',
+        id: `assistant-reply-${args.requestId}`,
+        source: 'assistant_reply',
         title: '最终回复',
         contentPreview: text.slice(0, 240),
         createdAt: new Date().toISOString(),

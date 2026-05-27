@@ -41,10 +41,6 @@ export function normalizeTranscript(value: unknown): TranscriptEvent[] {
             id: toText(event.invocation.id),
             toolName: toText(event.invocation.toolName) || 'unknown_tool',
             args: isRecord(event.invocation.args) ? event.invocation.args : {},
-            displayTitle:
-              event.invocation.displayTitle === undefined
-                ? undefined
-                : toText(event.invocation.displayTitle),
           }
         : undefined,
     } as TranscriptEvent];
@@ -81,7 +77,7 @@ export function normalizeAgentGraph(value: unknown): AgentTaskGraph | null {
         source:
           item.source === 'history' ||
           item.source === 'artifact' ||
-          item.source === 'final_reply'
+          item.source === 'assistant_reply'
             ? item.source
             : 'artifact',
         category: item.category === undefined ? undefined : toText(item.category),

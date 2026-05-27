@@ -3,7 +3,7 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
 import type { RequestScope } from '../request-scope.js';
-import type { TokenUsage } from '../types.js';
+import type { AiChatStreamEvent, TokenUsage } from '../types.js';
 
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -66,17 +66,46 @@ export function createPiEventCollector(args: {
   requestScope: RequestScope;
   usage: TokenUsage;
   setLastAssistantText(text: string): void;
+  publishStreamEvent?: (event: AiChatStreamEvent) => void;
 }): (event: AgentSessionEvent) => void {
+  let lastAssistantSnapshot = '';
+
+  function publish(event: AiChatStreamEvent): void {
+    args.publishStreamEvent?.(event);
+  }
+
   return (event) => {
     switch (event.type) {
       case 'agent_start':
         traceEvent({ type: 'pi_agent_start' }, args.requestScope);
+        publish({ type: 'agent_start' });
         break;
       case 'turn_start':
         traceEvent(
           { type: 'pi_turn_start', turnIndex: readTurnIndex(event) },
           args.requestScope,
         );
+        lastAssistantSnapshot = '';
+        publish({
+          type: 'turn_start',
+          turnIndex: readTurnIndex(event),
+        });
+        break;
+      case 'message_update':
+        if (isAssistantMessage(event.message)) {
+          const snapshot = textFromContent(event.message.content);
+          const delta = snapshot.startsWith(lastAssistantSnapshot)
+            ? snapshot.slice(lastAssistantSnapshot.length)
+            : snapshot;
+          lastAssistantSnapshot = snapshot;
+          if (delta) {
+            publish({
+              type: 'assistant_delta',
+              delta,
+              snapshot,
+            });
+          }
+        }
         break;
       case 'turn_end':
         if (isAssistantMessage(event.message)) {
@@ -99,6 +128,21 @@ export function createPiEventCollector(args: {
             },
             args.requestScope,
           );
+          if (text.trim()) {
+            publish({
+              type: 'assistant_message',
+              text,
+              turnIndex: readTurnIndex(event),
+            });
+          }
+          publish({
+            type: 'usage',
+            usage: {
+              promptTokens: args.usage.promptTokens,
+              completionTokens: args.usage.completionTokens,
+              totalTokens: args.usage.totalTokens,
+            },
+          });
         }
         break;
       case 'tool_execution_start':
@@ -111,6 +155,21 @@ export function createPiEventCollector(args: {
           },
           args.requestScope,
         );
+        publish({
+          type: 'tool_start',
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        });
+        break;
+      case 'tool_execution_update':
+        publish({
+          type: 'tool_update',
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+          partialResult: event.partialResult,
+        });
         break;
       case 'tool_execution_end':
         traceEvent(
@@ -122,6 +181,13 @@ export function createPiEventCollector(args: {
           },
           args.requestScope,
         );
+        publish({
+          type: 'tool_end',
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          result: event.result,
+          isError: event.isError,
+        });
         break;
       case 'agent_end':
         traceEvent(
@@ -132,6 +198,11 @@ export function createPiEventCollector(args: {
           },
           args.requestScope,
         );
+        publish({
+          type: 'agent_end',
+          messageCount: event.messages.length,
+          willRetry: event.willRetry,
+        });
         break;
       case 'auto_retry_start':
       case 'auto_retry_end':

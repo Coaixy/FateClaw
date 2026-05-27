@@ -11,16 +11,16 @@ description: 六爻纳甲排盘：返回本卦、变卦、互卦、六亲、六�
 
 1. 确认用户想用六爻占卜
 2. 确认起卦方式（默认大衍随机）
-3. 调用 Pi custom tool `iching_paipan`
-4. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
+3. Web/API 侧排盘运行时执行本 Skill 的脚本 entry
+4. 如果用户要求解读，排盘成功后的盘面进入 Pi 上下文，由解读类 Markdown Skill 继续完成分析
 
-## 调用方式
+## 入参示例
 
-```js
-iching_paipan({
-  method: "dayan",
-  question: "近期工作运势"
-})
+```json
+{
+  "method": "dayan",
+  "question": "近期工作运势"
+}
 ```
 
 ## 参数说明
