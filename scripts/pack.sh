@@ -52,7 +52,7 @@ while [ "$#" -gt 0 ]; do
     shift
   fi
 done
-OUTFILE="${OUTFILE:-nanoclaw-v${VERSION}.tar.gz}"
+OUTFILE="${OUTFILE:-fateclaw-v${VERSION}.tar.gz}"
 
 if [ -n "$OBFUSCATE_JOBS" ] && ! [[ "$OBFUSCATE_JOBS" =~ ^[1-9][0-9]*$ ]]; then
   echo "❌ --jobs 需要正整数，当前值: $OBFUSCATE_JOBS"
@@ -99,7 +99,7 @@ STEP_START=$SECONDS
 echo "🧹 清理 agent-runner dist ..."
 rm -rf packages/agent-runner/dist
 echo "🔨 编译 agent-runner ..."
-pnpm --filter nanoclaw-agent-runner run build
+pnpm --filter fateclaw-agent-runner run build
 log_duration "编译 agent-runner" "$STEP_START"
 
 # ── 3. 构建前端静态文件 ──
@@ -126,7 +126,7 @@ fi
 
 # ── 5. 打包（排除所有源码）──
 STEP_START=$SECONDS
-echo "📦 打包 nanoclaw v${VERSION} ..."
+echo "📦 打包 fateclaw v${VERSION} ..."
 
 TMP_OUT="/tmp/$OUTFILE"
 
@@ -143,7 +143,7 @@ tar czf "$TMP_OUT" \
   --exclude='.DS_Store' \
   --exclude='.idea' \
   --exclude='.vscode' \
-  --exclude='.nanoclaw' \
+  --exclude='.fateclaw' \
   --exclude='*.tsbuildinfo' \
   --exclude='.tmp-*' \
   --exclude='*.tar.gz' \
@@ -169,5 +169,5 @@ log_duration "总耗时" "$SCRIPT_START"
 echo ""
 echo "部署步骤:"
 echo "  1. scp $OUTFILE user@server:~/"
-echo "  2. tar xzf $OUTFILE && cd nanoclaw"
+echo "  2. tar xzf $OUTFILE && cd fateclaw"
 echo "  3. pnpm install --frozen-lockfile && pnpm start"

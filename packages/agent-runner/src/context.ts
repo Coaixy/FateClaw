@@ -31,10 +31,10 @@ function requireEnv(key: string): string {
  */
 export function initContext(): AgentContext {
   _ctx = {
-    accountId: requireEnv('HUSHBAY_ACCOUNT_ID'),
-    userId: process.env.HUSHBAY_USER_ID?.trim() || '',
+    accountId: requireEnv('FATECLAW_ACCOUNT_ID'),
+    userId: process.env.FATECLAW_USER_ID?.trim() || '',
     timezone:
-      process.env.HUSHBAY_TIMEZONE || process.env.TZ || 'Asia/Shanghai',
+      process.env.FATECLAW_TIMEZONE || process.env.TZ || 'Asia/Shanghai',
     skillApiBase:
       process.env.SKILL_API_BASE || 'https://skill.lookfate.com/api/v1',
   };

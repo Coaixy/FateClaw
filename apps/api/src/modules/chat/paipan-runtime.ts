@@ -1,7 +1,7 @@
 import type {
   PaipanCatalogItemDto,
   SkillContextEntryDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 import { getResolvedEnabledOfficialSkillNames } from '../../infrastructure/db.js';
 import { resolveOfficialSkillsDir } from '../../infrastructure/official-skills-path.js';

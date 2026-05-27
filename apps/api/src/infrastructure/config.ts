@@ -50,7 +50,7 @@ export const ALIYUN_SMS_ENDPOINT =
 // JWT 密钥——必须由 .env 或环境变量提供，且不得等于历史默认值
 const RAW_JWT_SECRET = process.env.JWT_SECRET || envConfig.JWT_SECRET || '';
 const FORBIDDEN_SECRETS = new Set([
-  'hushbay-dev-secret-change-me',
+  'fateclaw-dev-secret-change-me',
   'change-me',
   'secret',
   'changeme',

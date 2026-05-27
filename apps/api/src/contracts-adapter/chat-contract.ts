@@ -4,7 +4,7 @@ import type {
   QueryProcessResponseDto,
   QueryProcessStepDto,
   SessionMessageListResponseDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 import type { ChatSession, NewMessage } from '../shared/types.js';
 import { normalizeOwnedChatSessionTitle } from '../shared/chat-session-title-policy.js';

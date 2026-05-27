@@ -9,8 +9,8 @@ import type {
   ChatSessionDto,
   ChatSessionSendResponseDto,
   SessionMessageListResponseDto,
-} from '@nanoclaw/contracts/chat';
-import type { SuccessResponse } from '@nanoclaw/contracts/common';
+} from '@fateclaw/contracts/chat';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
   createChatSession,

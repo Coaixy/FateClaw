@@ -6,7 +6,7 @@ import type {
   CreatorWithdrawalDto,
   WithdrawalBalanceDto,
   WithdrawalRequestResponseDto,
-} from '@nanoclaw/contracts/skills';
+} from '@fateclaw/contracts/skills';
 
 import {
   createSkillBundle,

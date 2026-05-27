@@ -1,7 +1,7 @@
 import type {
   ChatInputKindDto,
   UserPastedBoardInputDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 const PASTED_BOARD_PROMPT_MIN_CHARS = 200;
 const PASTED_BOARD_PROMPT_MIN_LINES = 3;

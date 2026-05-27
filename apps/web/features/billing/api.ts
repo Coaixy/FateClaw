@@ -7,8 +7,8 @@ import type {
   RechargeStatsDto,
   UsageStatsDto,
   WalletTransactionDto,
-} from '@nanoclaw/contracts/billing';
-import type { SuccessResponse } from '@nanoclaw/contracts/common';
+} from '@fateclaw/contracts/billing';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { requestJson } from '@/lib/http/client';
 

@@ -5,7 +5,7 @@
  * 让消息 HTTP 路由保持轻量。
  */
 
-import type { MessageDto } from '@nanoclaw/contracts/chat';
+import type { MessageDto } from '@fateclaw/contracts/chat';
 
 import {
   getAccountsByUserId,

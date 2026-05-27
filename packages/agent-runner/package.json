@@ -1,5 +1,5 @@
 {
-  "name": "nanoclaw-agent-runner",
+  "name": "fateclaw-agent-runner",
   "version": "1.0.0",
   "type": "module",
   "description": "Account-scoped agent runner for FateClaw (OpenAI-compatible)",

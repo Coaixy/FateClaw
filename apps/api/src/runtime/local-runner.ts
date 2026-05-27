@@ -134,8 +134,8 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
       entry: daemonEntry,
       mode,
       envKeys: Object.keys(env),
-      hasAccountId: 'HUSHBAY_ACCOUNT_ID' in env,
-      accountIdValue: env.HUSHBAY_ACCOUNT_ID?.slice(0, 8) + '…',
+      hasAccountId: 'FATECLAW_ACCOUNT_ID' in env,
+      accountIdValue: env.FATECLAW_ACCOUNT_ID?.slice(0, 8) + '…',
     },
     '启动本地 agent 进程',
   );

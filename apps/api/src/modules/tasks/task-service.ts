@@ -2,7 +2,7 @@
  * 定时任务 HTTP 场景服务层。
  */
 
-import type { TaskDto } from '@nanoclaw/contracts/tasks';
+import type { TaskDto } from '@fateclaw/contracts/tasks';
 
 import {
   getAccountsByUserId,

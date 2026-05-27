@@ -7,7 +7,7 @@ import { resolveProjectRoot } from '../../infrastructure/project-root.js';
 
 const TEXT_SKILL_ROOT =
   process.env.FATECLAW_TEXT_SKILLS_DIR ||
-  path.join(resolveProjectRoot(), '.nanoclaw', 'text-skills');
+  path.join(resolveProjectRoot(), '.fateclaw', 'text-skills');
 
 function sanitizeSegment(value: string): string {
   return value

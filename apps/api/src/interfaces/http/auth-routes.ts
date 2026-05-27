@@ -4,7 +4,7 @@ import type {
   AuthResponseDto,
   CaptchaChallengeDto,
   UserDto,
-} from '@nanoclaw/contracts/auth';
+} from '@fateclaw/contracts/auth';
 
 import {
   registerUser,

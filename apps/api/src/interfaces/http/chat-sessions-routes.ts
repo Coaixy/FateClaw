@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import type {
   ChatSessionSendRequestDto,
   QueryProcessStepDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 import {
   createChatSessionForOwnedUser,

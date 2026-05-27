@@ -23,7 +23,7 @@ import type {
   UserSkillsResponseDto,
   WithdrawalBalanceDto,
   WithdrawalRequestResponseDto,
-} from '@nanoclaw/contracts/skills';
+} from '@fateclaw/contracts/skills';
 
 import { requestJson } from '@/lib/http/client';
 

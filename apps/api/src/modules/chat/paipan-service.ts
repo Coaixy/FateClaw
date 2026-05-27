@@ -7,7 +7,7 @@ import type {
   PaipanCommitResponseDto,
   PaipanPreviewResponseDto,
   SkillContextEntryDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 import {
   createChatSession,

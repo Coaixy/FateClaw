@@ -105,14 +105,14 @@ export const JIA_LIUYI_MAP: Record<string, string> = {
   甲午: '辛', 甲辰: '壬', 甲寅: '癸',
 };
 
-// 八神名字规范化（nanoclaw 单字 → 原版两字）
+// 八神名字规范化（fateclaw 单字 → 原版两字）
 export const SHEN_FULL_NAME: Record<string, string> = {
   符: '值符', 蛇: '腾蛇', 阴: '太阴', 合: '六合',
   勾: '勾陈', 雀: '朱雀',
   虎: '白虎', 地: '九地', 天: '九天', 玄: '玄武',
 };
 
-// 九星名字规范化：nanoclaw 单字 "蓬" → "天蓬"
+// 九星名字规范化：fateclaw 单字 "蓬" → "天蓬"
 export function fullStarName(s?: string): string {
   if (!s) return '';
   if (s.startsWith('天')) return s;

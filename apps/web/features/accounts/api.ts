@@ -3,8 +3,8 @@ import type {
   AccountSoulDto,
   QrCodeResultDto,
   QrCodeStatusResultDto,
-} from '@nanoclaw/contracts/account';
-import type { SuccessResponse } from '@nanoclaw/contracts/common';
+} from '@fateclaw/contracts/account';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { requestJson } from '@/lib/http/client';
 

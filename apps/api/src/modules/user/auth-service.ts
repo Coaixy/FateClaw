@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 import bcrypt from 'bcryptjs';
-import type { UserDto } from '@nanoclaw/contracts/auth';
+import type { UserDto } from '@fateclaw/contracts/auth';
 
 import {
   createUser,

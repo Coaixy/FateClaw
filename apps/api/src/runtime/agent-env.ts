@@ -25,12 +25,12 @@ import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.
  */
 export interface AgentEnv {
   // --- 身份 ---
-  HUSHBAY_ACCOUNT_ID: string;
-  HUSHBAY_USER_ID: string;
+  FATECLAW_ACCOUNT_ID: string;
+  FATECLAW_USER_ID: string;
 
   // --- 运行时 ---
   TZ: string;
-  HUSHBAY_TIMEZONE: string;
+  FATECLAW_TIMEZONE: string;
 
   // --- 连接 ---
   SKILL_API_BASE: string;
@@ -68,12 +68,12 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
   const env: AgentEnv = {
     ...systemEnv,
     // 身份
-    HUSHBAY_ACCOUNT_ID: accountId,
-    HUSHBAY_USER_ID: user?.id ?? '',
+    FATECLAW_ACCOUNT_ID: accountId,
+    FATECLAW_USER_ID: user?.id ?? '',
 
     // 运行时
     TZ: TIMEZONE,
-    HUSHBAY_TIMEZONE: TIMEZONE,
+    FATECLAW_TIMEZONE: TIMEZONE,
 
     // 连接
     SKILL_API_BASE,

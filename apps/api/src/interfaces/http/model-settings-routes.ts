@@ -17,7 +17,7 @@ import type {
   ModelSettingsOverviewDto,
   OfficialModelDto,
   UserCustomModelConfigDto,
-} from '@nanoclaw/contracts/model-settings';
+} from '@fateclaw/contracts/model-settings';
 
 const AuthModeSchema = z
   .enum([

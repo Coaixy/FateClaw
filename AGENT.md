@@ -114,11 +114,7 @@ Web 负责：
 - 实际数据库表
 - API/agent 的调用链
 
-### 4. 文档里可能混有旧名 `HushBay` / `NanoClaw`
-
-仓库当前命名为 `FateClaw`，但旧日志、注释、变量和文档里仍然可能出现 `HushBay` 或 `NanoClaw`。遇到时按同一系统理解，不要误判成另一个项目。
-
-### 5. 模型配置是请求级快照
+### 4. 模型配置是请求级快照
 
 模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runner 子进程环境只承载身份、Redis/PostgreSQL、`SKILLS_DIR` 等运行时依赖，不应依赖进程级模型密钥。
 

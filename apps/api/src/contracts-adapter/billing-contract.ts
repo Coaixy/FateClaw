@@ -5,7 +5,7 @@ import type {
   RechargeStatsDto,
   UsageStatsDto,
   WalletTransactionDto,
-} from '@nanoclaw/contracts/billing';
+} from '@fateclaw/contracts/billing';
 
 import type {
   RechargeOrderRow,

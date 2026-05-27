@@ -1,4 +1,4 @@
-import type { ApiErrorResponse } from '@nanoclaw/contracts/common';
+import type { ApiErrorResponse } from '@fateclaw/contracts/common';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 const DEFAULT_SERVER_ERROR_MESSAGE = '服务暂时不可用，请稍后重试';

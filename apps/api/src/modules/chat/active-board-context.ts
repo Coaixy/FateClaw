@@ -1,4 +1,4 @@
-import type { SkillContextEntryDto } from '@nanoclaw/contracts/chat';
+import type { SkillContextEntryDto } from '@fateclaw/contracts/chat';
 
 import { isDirectPaipanSkill } from './paipan-runtime.js';
 

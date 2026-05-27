@@ -2,7 +2,7 @@ import type {
   ChatInputKindDto,
   ChatSessionSendRequestDto,
   UserPastedBoardInputDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 export type ChatInputKind = ChatInputKindDto;
 export type UserPastedBoardInput = UserPastedBoardInputDto;

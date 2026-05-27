@@ -10,7 +10,7 @@ import type {
   UserCustomSkillDto,
   WithdrawalBalanceDto,
   WithdrawalRequestResponseDto,
-} from '@nanoclaw/contracts/skills';
+} from '@fateclaw/contracts/skills';
 
 import type {
   CreatorEarningsMonthly,

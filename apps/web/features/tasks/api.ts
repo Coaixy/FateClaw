@@ -1,5 +1,5 @@
-import type { SuccessResponse } from '@nanoclaw/contracts/common';
-import type { TaskDto } from '@nanoclaw/contracts/tasks';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
+import type { TaskDto } from '@fateclaw/contracts/tasks';
 
 import { requestJson } from '@/lib/http/client';
 

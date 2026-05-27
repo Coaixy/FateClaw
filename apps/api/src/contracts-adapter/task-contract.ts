@@ -1,4 +1,4 @@
-import type { TaskDto } from '@nanoclaw/contracts/tasks';
+import type { TaskDto } from '@fateclaw/contracts/tasks';
 
 import type { ScheduledTask } from '../shared/types.js';
 

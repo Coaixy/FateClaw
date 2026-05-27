@@ -1,4 +1,4 @@
--- NanoClaw PostgreSQL schema
+-- FateClaw PostgreSQL schema
 -- 常规启动由 API 的 initDatabase() 自动建表和补列；此脚本仅作为 schema 参考/兼容入口。
 
 CREATE TABLE IF NOT EXISTS users (

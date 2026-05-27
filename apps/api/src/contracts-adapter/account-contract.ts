@@ -3,7 +3,7 @@ import type {
   AccountSoulDto,
   QrCodeResultDto,
   QrCodeStatusResultDto,
-} from '@nanoclaw/contracts/account';
+} from '@fateclaw/contracts/account';
 
 import type { Account } from '../shared/types.js';
 

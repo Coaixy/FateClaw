@@ -4,7 +4,7 @@ import type {
   PaipanCommitResponseDto,
   PaipanPreviewResponseDto,
   SkillParametersSchemaDto,
-} from '@nanoclaw/contracts/chat';
+} from '@fateclaw/contracts/chat';
 
 import { requestJson } from '@/lib/http/client';
 

@@ -440,7 +440,7 @@ export async function sendMessage(
   let lastClientId = '';
 
   for (let i = 0; i < chunks.length; i++) {
-    const clientId = `hushbay-${crypto.randomUUID()}`;
+    const clientId = `fateclaw-${crypto.randomUUID()}`;
 
     if (i > 0) {
       await new Promise((r) => setTimeout(r, CHUNK_SEND_DELAY_MS));

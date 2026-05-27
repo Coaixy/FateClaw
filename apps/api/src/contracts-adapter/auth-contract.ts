@@ -1,4 +1,4 @@
-import type { UserDto } from '@nanoclaw/contracts/auth';
+import type { UserDto } from '@fateclaw/contracts/auth';
 
 import type { User } from '../shared/types.js';
 

@@ -61,9 +61,9 @@ function createDeps(args: {
 
 describe('executePiDeterministicScript', () => {
   beforeAll(() => {
-    process.env.HUSHBAY_ACCOUNT_ID = 'test-account';
-    process.env.HUSHBAY_USER_ID = 'test-user';
-    process.env.HUSHBAY_TIMEZONE = 'Asia/Shanghai';
+    process.env.FATECLAW_ACCOUNT_ID = 'test-account';
+    process.env.FATECLAW_USER_ID = 'test-user';
+    process.env.FATECLAW_TIMEZONE = 'Asia/Shanghai';
     initContext();
   });
 

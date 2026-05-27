@@ -4,7 +4,7 @@ import type {
   ModelSettingsOverviewDto,
   OfficialModelDto,
   UserModelSelectionDto,
-} from '@nanoclaw/contracts/model-settings';
+} from '@fateclaw/contracts/model-settings';
 
 import { requestJson } from '@/lib/http/client';
 

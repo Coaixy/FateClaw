@@ -21,9 +21,9 @@ export function buildSkillEnv(
   const env: Record<string, string | undefined> = {
     ...pickSystemEnv(),
     // 身份上下文
-    HUSHBAY_ACCOUNT_ID: ctx.accountId,
-    HUSHBAY_USER_ID: ctx.userId || undefined,
-    HUSHBAY_TIMEZONE: ctx.timezone,
+    FATECLAW_ACCOUNT_ID: ctx.accountId,
+    FATECLAW_USER_ID: ctx.userId || undefined,
+    FATECLAW_TIMEZONE: ctx.timezone,
 
     // Skill 元数据
     SKILL_NAME: _skillName,

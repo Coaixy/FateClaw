@@ -31,7 +31,7 @@ function buildSessionId(sessionId?: string): string {
     return sessionId;
   }
 
-  return `hushbay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `fateclaw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function extractLatestFollowupInterpretation(

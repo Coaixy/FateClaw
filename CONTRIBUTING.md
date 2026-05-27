@@ -53,8 +53,8 @@ pnpm test
 可按范围缩小命令：
 
 ```bash
-pnpm --filter @nanoclaw/api typecheck
-pnpm --filter nanoclaw-agent-runner exec tsc --noEmit
+pnpm --filter @fateclaw/api typecheck
+pnpm --filter fateclaw-agent-runner exec tsc --noEmit
 pnpm --filter fateclaw-web exec tsc --noEmit
 pnpm --filter fateclaw-web build
 ```

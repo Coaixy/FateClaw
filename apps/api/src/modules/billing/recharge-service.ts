@@ -4,7 +4,7 @@ import type {
   CreateRechargeOrderResponseDto,
   RechargeOrderDto,
   RechargeStatsDto,
-} from '@nanoclaw/contracts/billing';
+} from '@fateclaw/contracts/billing';
 
 import { POINTS_PER_YUAN } from '../../infrastructure/config.js';
 import {

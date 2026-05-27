@@ -19,8 +19,8 @@
       }
     ],
     "paths": {
-      "@nanoclaw/contracts": ["../../packages/contracts/src/index.d.ts"],
-      "@nanoclaw/contracts/*": ["../../packages/contracts/src/*/index.d.ts"],
+      "@fateclaw/contracts": ["../../packages/contracts/src/index.d.ts"],
+      "@fateclaw/contracts/*": ["../../packages/contracts/src/*/index.d.ts"],
       "@/*": ["./*"]
     }
   },

@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'hushbay',
+      name: 'fateclaw',
       script: 'apps/api/dist/app/index.js',
       cwd: __dirname,
       env_file: '.env.production',

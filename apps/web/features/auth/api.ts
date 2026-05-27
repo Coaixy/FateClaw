@@ -5,8 +5,8 @@ import type {
   ResetPasswordRequestDto,
   SendSMSCaptchaResponseDto,
   UserDto,
-} from '@nanoclaw/contracts/auth';
-import type { SuccessResponse } from '@nanoclaw/contracts/common';
+} from '@fateclaw/contracts/auth';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { requestJson } from '@/lib/http/client';
 

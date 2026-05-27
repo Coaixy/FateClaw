@@ -60,7 +60,7 @@ Pi SDK 模型 loop / custom tools / Skill 文件读取
 | 类型 | 文件来源 | 暴露方式 | DB 存储 |
 | --- | --- | --- | --- |
 | 官方排盘/解读 Skill | `skills/official/<dir>/SKILL.md` | Pi ResourceLoader 按用户启用状态过滤后暴露 | `skill_global_config` 和用户启用状态 |
-| 用户 Text Skill Bundle | `.nanoclaw/text-skills/<owner>/<dir>-<id>/` | 每次请求按权限注入 ResourceLoader | metadata、权限、版本、`bundle_uri`、checksum |
+| 用户 Text Skill Bundle | `.fateclaw/text-skills/<owner>/<dir>-<id>/` | 每次请求按权限注入 ResourceLoader | metadata、权限、版本、`bundle_uri`、checksum |
 
 用户 Text Skill Bundle 的典型结构：
 

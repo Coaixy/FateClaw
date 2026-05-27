@@ -165,8 +165,6 @@ FateClaw/
 └── .env.example             # 环境变量示例
 ```
 
-源码中仍能看到旧名 `NanoClaw` / `HushBay`，它们是历史命名遗留，当前项目统一对外称为 `FateClaw`。
-
 ## 快速开始
 
 ### 前置依赖
@@ -264,7 +262,7 @@ AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密钥
 
 部署时如果官方 Skill 不在默认仓库结构下，可通过 `SKILLS_DIR` 指向 `skills/official` 目录本身。
 
-用户知识库由 Web 控台创建为 `.nanoclaw/text-skills/<owner>/<dir>-<id>/` 下的 Text Skill Bundle，包含 `SKILL.md`、`index.md`、`docs/`、`examples/` 和 `notes/`。数据库只保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时每次请求只把当前用户有权访问的 Bundle 注入 Pi ResourceLoader，模型再按需读取 Markdown 文件或知识章节。
+用户知识库由 Web 控台创建为 `.fateclaw/text-skills/<owner>/<dir>-<id>/` 下的 Text Skill Bundle，包含 `SKILL.md`、`index.md`、`docs/`、`examples/` 和 `notes/`。数据库只保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时每次请求只把当前用户有权访问的 Bundle 注入 Pi ResourceLoader，模型再按需读取 Markdown 文件或知识章节。
 
 ## 微信 OpenClaw/iLink 对接状态
 
