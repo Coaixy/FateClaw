@@ -314,35 +314,3 @@ export async function deleteUsersWithoutValidPhone(
   await deleteInvalidPhoneUserMessageData(client);
   await deleteInvalidPhoneUserCoreData(client);
 }
-
-export async function enforcePhoneOnlyUsers(
-  client: pg.PoolClient,
-): Promise<void> {
-  await client.query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'users'
-      ) THEN
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
-        ALTER TABLE users
-          ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT false;
-
-        ALTER TABLE users DROP COLUMN IF EXISTS email;
-
-        UPDATE users
-        SET phone_verified = true
-        WHERE phone_verified = false;
-
-        ALTER TABLE users ALTER COLUMN phone SET NOT NULL;
-        ALTER TABLE users ALTER COLUMN phone_verified SET DEFAULT true;
-      END IF;
-    END $$;
-  `);
-  await client.query(`DROP INDEX IF EXISTS idx_users_email_unique`);
-  await client.query(
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone)`,
-  );
-}
