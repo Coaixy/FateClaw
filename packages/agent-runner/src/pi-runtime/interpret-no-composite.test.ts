@@ -93,7 +93,7 @@ describe('executePiInterpretTool without legacy composite runtime', () => {
     const result = await executePiInterpretTool({
       invocation: {
         id: 'call-interpret',
-        toolName: 'interpret_xuanxue',
+        toolName: 'prepare_xuanxue_interpretation',
         args: {
           category: '六爻',
           question: '看事业',
@@ -119,7 +119,7 @@ describe('executePiInterpretTool without legacy composite runtime', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'tool_call',
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           piDirectExecutor: true,
         }),
         expect.objectContaining({

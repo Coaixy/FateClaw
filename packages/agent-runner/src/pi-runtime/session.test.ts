@@ -134,6 +134,7 @@ describe('runPiSession', () => {
       }>;
       resourceLoader?: {
         getSkills(): { skills: Array<{ name: string; filePath: string }> };
+        getAppendSystemPrompt(): string[];
       };
     } = {};
 
@@ -193,7 +194,7 @@ describe('runPiSession', () => {
     expect(createArgs.tools).toEqual(
       expect.arrayContaining([
         'bazi_paipan',
-        'interpret_xuanxue',
+        'prepare_xuanxue_interpretation',
         'read_memory',
         'final_reply',
       ]),
@@ -209,14 +210,25 @@ describe('runPiSession', () => {
     expect(deps.skillCatalog.listEnabledSkillNames).toHaveBeenCalledWith(
       'user-1',
     );
-    expect(capturedPrompt).toContain('[最近对话]');
-    expect(capturedPrompt).toContain('历史八字盘面');
-    expect(capturedPrompt).toContain('[当前选中盘面]');
-    expect(capturedPrompt).toContain('当前选中八字盘面');
-    expect(capturedPrompt).toContain('[用户自贴盘面入口]');
-    expect(capturedPrompt).toContain('用户自贴八字盘面');
-    expect(capturedPrompt).toContain('[本轮用户消息]');
-    expect(capturedPrompt).toContain('基于这个盘继续看事业');
+    expect(capturedPrompt).toBe('基于这个盘继续看事业');
+    const appendedContext =
+      createArgs.resourceLoader?.getAppendSystemPrompt().join('\n') ?? '';
+    expect(appendedContext).toContain('<fateclaw_pi_context>');
+    expect(appendedContext).toContain('id="context_provenance"');
+    expect(appendedContext).toContain('id="session_history"');
+    expect(appendedContext).toContain('历史八字盘面');
+    expect(appendedContext).toContain('id="active_board_context"');
+    expect(appendedContext).toContain('当前选中八字盘面');
+    expect(appendedContext).toContain('id="pasted_board"');
+    expect(appendedContext).toContain('用户自贴八字盘面');
+    expect(appendedContext).toContain('id="current_request_metadata"');
+    expect(appendedContext).not.toContain('基于这个盘继续看事业');
+    expect(result.persistedSkillContext).toEqual([
+      expect.objectContaining({
+        skill: 'user-pasted-board::八字',
+        output: '用户自贴八字盘面',
+      }),
+    ]);
     expect(requestScope.traceEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

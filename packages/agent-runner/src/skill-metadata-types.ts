@@ -121,24 +121,3 @@ export interface SkillRuntimeGuidancePayload {
     | { type: 'knowledge_only' };
   notes: string[];
 }
-
-export interface SystemPromptOptions {
-  userName?: string;
-  assistantName?: string;
-  /** 运行时基础设施依赖，用于 prompt 动态段读取。 */
-  deps?: import('../deps.js').AgentRuntimeDeps;
-  /** 上下文预算信息，用于在 prompt 中提示模型控制回复长度。 */
-  budgetInfo?: { estimatedTokens: number; contextWindow: number };
-  /** 当前对话中已执行过的 skill 目录名列表（从 history.toolContext 提取）。 */
-  executedSkills?: string[];
-}
-
-/**
- * System prompt 分片结构。
- * cached 部分内容稳定，适合 Anthropic cache_control / OpenAI 前缀缓存。
- * uncached 部分包含时间、提醒列表等频繁变化的动态内容。
- */
-export interface SystemPromptParts {
-  cached: string;
-  uncached: string;
-}

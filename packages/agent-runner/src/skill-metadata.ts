@@ -1,9 +1,9 @@
-import type { AgentRuntimeDeps } from '../deps.js';
-import { getDefaultAgentRuntimeDeps } from '../deps.js';
-import { SKILLS_DIR } from '../paths.js';
-import { getContext } from '../context.js';
-import { log } from '../io.js';
-import type { SkillMetadata } from './types.js';
+import type { AgentRuntimeDeps } from './deps.js';
+import { getDefaultAgentRuntimeDeps } from './deps.js';
+import { SKILLS_DIR } from './paths.js';
+import { getContext } from './context.js';
+import { log } from './io.js';
+import type { SkillMetadata } from './skill-metadata-types.js';
 
 export function loadOfficialSkillMetadataList(
   skillsDir: string = SKILLS_DIR,

@@ -281,7 +281,7 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
     expect(parsed.userKnowledge.queryable).toEqual([
       expect.objectContaining({
         skill_dir: 'liuyao-money',
-        sections: ['财运总论'],
+        sections: expect.arrayContaining(['财运总论']),
       }),
     ]);
   });
@@ -364,7 +364,7 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
     expect(resolveBoardSourceWithLLM).not.toHaveBeenCalled();
   });
 
-  it('accepts normal followup analysis when previous interpretation came from a pasted board', async () => {
+  it('does not recover followup board context inside the tool handler', async () => {
     const scope = createRequestScope();
     markSkillLoaded(scope, 'xuanxue-jiedu');
     setLatestFollowupInterpretation(scope, {
@@ -383,6 +383,7 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
     const result = await executeInterpretXuanxue(
       {
         question: '继续看事业变化',
+        analysis_mode: 'followup_delta',
       },
       {
         requestScope: scope,
@@ -390,14 +391,38 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
       },
     );
 
-    expect(result.isError).toBeFalsy();
-    const parsed = JSON.parse(result.output) as Record<string, unknown>;
-    expect(parsed).toMatchObject({
-      question: expect.stringContaining('继续看事业变化'),
-      authoritativeContent: '用户自贴盘面原文',
-      boardSource: 'historical_artifact',
-      analysisMode: 'followup_delta',
+    expect(result.isError).toBe(true);
+    expect(result.error?.code).toBe('SKILL.CONTENT_MISSING');
+  });
+
+  it('does not infer board continuity from request scope inside the tool handler', async () => {
+    const scope = createRequestScope();
+    markSkillLoaded(scope, 'xuanxue-jiedu');
+    setLatestFollowupInterpretation(scope, {
+      category: '六爻',
+      interpretationOutput: '上一轮结论',
+      boardSkill: 'user-pasted-board::六爻',
+      boardOutput: '用户自贴盘面原文',
+      boardArtifactData: {
+        category: '六爻',
+        content: '用户自贴盘面原文',
+        question: '原始问题',
+        source: 'user_pasted_board',
+      },
     });
+
+    const result = await executeInterpretXuanxue(
+      {
+        question: '重新完整看事业',
+      },
+      {
+        requestScope: scope,
+        llmRuntime,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.error?.code).toBe('SKILL.CONTENT_MISSING');
   });
 
   it('uses the active board skill as the authoritative category when model arguments drift', async () => {

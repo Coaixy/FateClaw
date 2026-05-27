@@ -22,6 +22,7 @@ export interface CreatePiResourceLoaderOptions {
   userId?: string;
   requestScope: RequestScope;
   containerInput: ContainerInput;
+  piContextPrompt?: string;
   skillsDir?: string;
 }
 
@@ -166,7 +167,10 @@ export async function createPiResourceLoader(
     await loadRequestScopedSkills(options);
   const extensions = createEmptyExtensionsResult();
   const systemPrompt = buildPiSystemPrompt(options.containerInput);
-  const appendSystemPrompt = buildAppendSystemPrompt(privateKnowledgeEntries);
+  const appendSystemPrompt = buildAppendSystemPrompt(
+    privateKnowledgeEntries,
+    options.piContextPrompt,
+  );
 
   return {
     getExtensions: () => extensions,
@@ -187,22 +191,29 @@ export async function createPiResourceLoader(
 
 function buildAppendSystemPrompt(
   privateKnowledgeEntries: RequestKnowledgeEntry[],
+  piContextPrompt?: string,
 ): string[] {
-  if (privateKnowledgeEntries.length === 0) return [];
-  return [
-    [
-      '本轮可见的用户私有知识库入口如下。',
-      '这些入口不是本地 Pi Skill，不能直接 /skill 调用；如需正文，必须通过本轮授权知识库工具按需读取。',
-      ...privateKnowledgeEntries.map((entry) =>
-        [
-          `- ${entry.name}`,
-          `category=${entry.category}`,
-          `source=${entry.source}`,
-          `description=${entry.description}`,
-        ].join(' | '),
-      ),
-    ].join('\n'),
-  ];
+  const prompts: string[] = [];
+  if (piContextPrompt?.trim()) {
+    prompts.push(piContextPrompt);
+  }
+  if (privateKnowledgeEntries.length > 0) {
+    prompts.push(
+      [
+        '本轮可见的用户私有知识库入口如下。',
+        '这些入口不是本地 Pi Skill，不能直接 /skill 调用；如需正文，必须通过本轮授权知识库工具按需读取。',
+        ...privateKnowledgeEntries.map((entry) =>
+          [
+            `- ${entry.name}`,
+            `category=${entry.category}`,
+            `source=${entry.source}`,
+            `description=${entry.description}`,
+          ].join(' | '),
+        ),
+      ].join('\n'),
+    );
+  }
+  return prompts;
 }
 
 function buildPiSystemPrompt(containerInput: ContainerInput): string {
@@ -214,7 +225,7 @@ function buildPiSystemPrompt(containerInput: ContainerInput): string {
     '排盘、解读、知识库和记忆都只允许调用本次 session 暴露的 custom tools；不要声称访问未列出的能力。',
     '用户私有知识库只通过本次请求的授权工具读取，不能假设存在全局本地 Skill。',
     '完成用户请求后，调用 final_reply 返回最终答复；不要在普通 assistant 文本中结束任务。',
-    '玄学专业解读必须先调用 interpret_xuanxue 准备权威盘面和知识库材料，再基于工具返回内容作答。',
+    `玄学专业解读必须先调用 ${PI_INTERPRET_TOOL_NAME} 准备权威盘面和知识库材料，再基于工具返回内容作答。`,
     '如果缺少关键参数，调用 final_reply 明确说明需要补充哪些信息。',
   ]
     .filter(Boolean)

@@ -13,14 +13,12 @@ export const PASTED_BOARD_GUIDANCE =
 interface ValidateBoardDataInput {
   upstreamArtifact: UpstreamSkillRaw | null;
   boardSource: BoardSource;
-  contentSource: 'skill' | 'user';
+  contentSource: 'skill' | 'user' | 'pi_context';
   inputKind?: ChatInputKind;
 }
 
 export interface OfficialBoardEvidenceInput {
   currentRequestUpstreamSkillRaw: UpstreamSkillRaw | null;
-  historicalUpstreamSkillRaw: UpstreamSkillRaw | null;
-  historicalBoardContent: string | null;
 }
 
 /**
@@ -44,6 +42,8 @@ export function validateBoardDataPresence(
         `普通聊天消息不能直接使用用户原文作为盘面依据解读。${PASTED_BOARD_GUIDANCE}`,
     };
   }
+
+  if (input.contentSource === 'pi_context') return { valid: true };
 
   if (input.upstreamArtifact) return { valid: true };
 
@@ -90,9 +90,5 @@ export function isValidPastedBoardInput(
 export function hasOfficialBoardEvidence(
   input: OfficialBoardEvidenceInput,
 ): boolean {
-  return Boolean(
-    input.currentRequestUpstreamSkillRaw ||
-      input.historicalUpstreamSkillRaw ||
-      input.historicalBoardContent,
-  );
+  return Boolean(input.currentRequestUpstreamSkillRaw);
 }

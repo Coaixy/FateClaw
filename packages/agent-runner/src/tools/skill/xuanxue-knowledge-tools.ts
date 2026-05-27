@@ -100,7 +100,7 @@ function createKnowledgeToolSpec(
     definition,
     prompt:
       definition.function.name === 'list_knowledge_sections'
-        ? '列出本轮玄学解读可查询的用户知识库章节。仅在 interpret_xuanxue 提示有 queryable 知识时使用。'
+        ? '列出本轮玄学解读可查询的用户知识库章节。仅在玄学解读准备工具提示有 queryable 知识时使用。'
         : '读取本轮玄学解读可查询的用户知识库章节。参数必须来自目录中的 skill_dir 与 section_title。',
     executionMode: 'serial',
     async execute(args, options): Promise<ToolResult> {

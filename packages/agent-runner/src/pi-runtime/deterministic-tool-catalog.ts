@@ -1,4 +1,4 @@
-import type { SkillParametersSchema } from '../prompt/types.js';
+import type { SkillParametersSchema } from '../skill-metadata-types.js';
 import type { ToolDefinition, ToolExecutionMode } from '../types.js';
 
 export interface PiDeterministicScriptToolSpec {

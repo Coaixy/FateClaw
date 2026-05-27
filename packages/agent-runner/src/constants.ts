@@ -25,7 +25,7 @@ export const SUPERVISOR_LOOP_TIMEOUT = 600_000;
 
 /**
  * 委派类工具超时（毫秒）。delegate_to_specialist 会执行完整 specialist loop，
- * interpret_xuanxue 会完成盘面校验和知识库规划，需大于 AGENT_LOOP_TIMEOUT
+ * 玄学解读准备工具会完成盘面校验和知识库规划，需大于 AGENT_LOOP_TIMEOUT
  * 但小于 SUPERVISOR_LOOP_TIMEOUT。
  */
 export const DELEGATE_TOOL_TIMEOUT = 300_000;

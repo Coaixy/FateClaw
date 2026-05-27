@@ -8,6 +8,8 @@ import type {
 } from '../types.js';
 import { traceEvent } from '../trace.js';
 import { runPiSession } from './session.js';
+import { mergePiPersistedSkillContext } from './context-layer.js';
+import { PI_INTERPRET_TOOL_NAME } from './interpret-tool-catalog.js';
 import type {
   PiRuntimeInput,
   PiRuntimeResult,
@@ -38,7 +40,7 @@ function mergeSkillContext(records: PiToolExecutionRecord[]): SkillContextEntry[
 }
 
 function isInterpretTool(toolName: string): boolean {
-  return toolName === 'interpret_xuanxue';
+  return toolName === PI_INTERPRET_TOOL_NAME;
 }
 
 function isBoardTool(record: PiToolExecutionRecord): boolean {
@@ -74,7 +76,11 @@ export async function executePiRuntime(
     runtime: args.runtime,
     requestScope: args.requestScope,
   });
-  const skillContext = mergeSkillContext(result.records);
+  const runtimeSkillContext = mergeSkillContext(result.records);
+  const skillContext = mergePiPersistedSkillContext({
+    persistedSkillContext: result.persistedSkillContext ?? [],
+    runtimeSkillContext,
+  });
 
   for (const record of result.records) {
     if (record.invocation.toolName === 'final_reply') continue;

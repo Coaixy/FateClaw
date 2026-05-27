@@ -1,5 +1,3 @@
-import OpenAI from 'openai';
-
 /** 对话历史中的单条消息。 */
 export interface HistoryMessage {
   role: 'user' | 'assistant';
@@ -293,14 +291,11 @@ export interface OutboxResponse {
   metadata?: unknown;
 }
 
-/** OpenAI Chat Completions 消息类型别名。 */
-export type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
-
 // ---------------------------------------------------------------------------
 // Tool 类型定义
 // ---------------------------------------------------------------------------
 
-/** OpenAI function calling 工具定义 schema。 */
+/** Pi custom tool 定义 schema。 */
 export interface ToolDefinition {
   type: 'function';
   function: {
@@ -413,7 +408,7 @@ export interface ToolExecutionOptions {
   runtimeDeps?: import('./deps.js').AgentRuntimeDeps;
   /**
    * Supervisor 委派给 specialist 时的原始 goal 文本。
-   * 用于 interpret_xuanxue 等工具在用户自贴场景下获取完整的原始信息。
+   * 用于玄学解读准备等工具在用户自贴场景下获取完整的原始信息。
    */
   delegationGoal?: string;
   /** 当前 agent-loop 使用的 provider。 */
@@ -437,7 +432,7 @@ export interface ToolExecutionOptions {
  * 每个工具文件导出一个 ToolSpec 实例。
  */
 export interface ToolSpec {
-  /** OpenAI function calling schema。 */
+  /** Pi custom tool schema。 */
   definition: ToolDefinition;
   /** 注入 system prompt 的富文本说明。 */
   prompt: string;

@@ -150,7 +150,7 @@ describe('createPiCustomTools', () => {
       setFinalReply: vi.fn(),
     });
     await tools
-      .find((tool) => tool.name === 'interpret_xuanxue')!
+      .find((tool) => tool.name === 'prepare_xuanxue_interpretation')!
       .execute('call-1', {}, undefined, undefined, undefined as never);
     await tools
       .find((tool) => tool.name === 'read_memory')!
@@ -274,7 +274,7 @@ describe('createPiCustomTools', () => {
     });
   });
 
-  it('routes interpret_xuanxue through the Pi direct executor instead of the legacy registry bridge', async () => {
+  it('routes prepare_xuanxue_interpretation through the Pi direct executor instead of the legacy registry bridge', async () => {
     const requestScope = createRequestScope();
     setRequestId(requestScope, 'request-interpret');
     mockExecutePiInterpretTool.mockResolvedValue({
@@ -291,7 +291,7 @@ describe('createPiCustomTools', () => {
       setFinalReply: vi.fn(),
     });
     await tools
-      .find((tool) => tool.name === 'interpret_xuanxue')!
+      .find((tool) => tool.name === 'prepare_xuanxue_interpretation')!
       .execute(
         'call-interpret',
         { question: '看事业' },
@@ -304,7 +304,7 @@ describe('createPiCustomTools', () => {
       expect.objectContaining({
         invocation: expect.objectContaining({
           id: 'call-interpret',
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           args: { question: '看事业' },
         }),
         options: expect.objectContaining({
@@ -324,7 +324,7 @@ describe('createPiCustomTools', () => {
     });
 
     expect(tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['interpret_xuanxue', 'final_reply']),
+      expect.arrayContaining(['prepare_xuanxue_interpretation', 'final_reply']),
     );
   });
 
@@ -339,7 +339,7 @@ describe('createPiCustomTools', () => {
 
     expect(tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
-        'interpret_xuanxue',
+        'prepare_xuanxue_interpretation',
         'list_knowledge_sections',
         'read_knowledge_section',
         'read_memory',
@@ -363,7 +363,7 @@ describe('createPiCustomTools', () => {
 
     expect(tools.map((tool) => tool.name).slice(0, 1)).toEqual(['read']);
     expect(tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['interpret_xuanxue', 'final_reply']),
+      expect.arrayContaining(['prepare_xuanxue_interpretation', 'final_reply']),
     );
 
     const readTool = tools.find((tool) => tool.name === 'read')!;

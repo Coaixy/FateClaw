@@ -199,7 +199,7 @@ describe('executePiRuntime core workflow graph reconstruction', () => {
           skillContextEntry: boardContextEntry(),
         }),
         record({
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           output: interpretation.output,
           modelOutput: '解读准备材料',
           skillContextEntry: interpretation,
@@ -234,7 +234,7 @@ describe('executePiRuntime core workflow graph reconstruction', () => {
       input,
       records: [
         record({
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           output: interpretation.output,
           modelOutput: '自贴盘面解读准备材料',
           skillContextEntry: interpretation,
@@ -255,6 +255,68 @@ describe('executePiRuntime core workflow graph reconstruction', () => {
         }),
       }),
     );
+  });
+
+  it('persists Pi context pasted board reference together with interpretation output', async () => {
+    const requestScope = createRequestScope();
+    setRequestId(requestScope, 'request-1');
+    const input = createInput({
+      inputKind: 'user_pasted_board',
+      pastedBoard: {
+        category: '六爻',
+        content: '用户自贴六爻盘面',
+        question: '看感情',
+      },
+      userMessage: '看感情',
+    });
+    const interpretation = interpretContextEntry(
+      '{"authoritativeContent":"自贴盘面解读材料"}',
+    );
+    mockRunPiSession.mockResolvedValueOnce({
+      text: '自贴盘面解读',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+      },
+      records: [
+        record({
+          toolName: 'prepare_xuanxue_interpretation',
+          output: interpretation.output,
+          modelOutput: '自贴盘面解读准备材料',
+          skillContextEntry: interpretation,
+        }),
+      ],
+      persistedSkillContext: [
+        {
+          skill: 'user-pasted-board::六爻',
+          output: '用户自贴六爻盘面',
+          artifactType: 'skill.user-pasted-board::六爻',
+          artifactTitle: '自贴盘面: 六爻',
+          artifactData: {
+            category: '六爻',
+            content: '用户自贴六爻盘面',
+            question: '看感情',
+            source: 'user_pasted_board',
+          },
+        },
+      ],
+    });
+
+    const result = await executePiRuntime({
+      containerInput: input,
+      llmRuntime,
+      runtime,
+      requestScope,
+    });
+
+    expect(result.skillContext).toEqual([
+      expect.objectContaining({
+        skill: 'user-pasted-board::六爻',
+        output: '用户自贴六爻盘面',
+      }),
+      interpretation,
+    ]);
   });
 
   it('uses historical board context as graph evidence for follow-up interpretation', async () => {
@@ -280,7 +342,7 @@ describe('executePiRuntime core workflow graph reconstruction', () => {
       input,
       records: [
         record({
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           output: interpretation.output,
           modelOutput: '历史盘面追问准备材料',
           skillContextEntry: interpretation,

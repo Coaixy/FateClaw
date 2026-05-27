@@ -1,5 +1,5 @@
 /**
- * interpret_xuanxue Pi custom tool handler。
+ * prepare_xuanxue_interpretation 的内部实现。
  *
  * 负责校验盘面、规划用户知识库，并把解读材料交回主 loop。
  */
@@ -10,10 +10,7 @@ import { getContext } from '../../context.js';
 import { getDefaultAgentRuntimeDeps } from '../../deps.js';
 import type { AgentRuntimeDeps } from '../../deps.js';
 import { log } from '../../io.js';
-import {
-  getLatestFollowupInterpretation,
-  getRequestId,
-} from '../../request-scope.js';
+import { getRequestId } from '../../request-scope.js';
 import type { RequestScope } from '../../request-scope.js';
 import { traceEvent } from '../../trace.js';
 import type { ToolExecutionOptions, ToolResult } from '../../types.js';
@@ -22,8 +19,6 @@ import {
   type BoardSource,
   inferCategoryFromProducer,
   resolveAuthoritativeBoardPayload,
-  resolveHistoricalBoardContent,
-  resolveHistoricalUpstreamSkillRaw,
   resolveUpstreamSkillRaw,
   summarizeUpstreamArtifact,
   type ResolvedBoardPayload,
@@ -37,7 +32,6 @@ import {
   PASTED_BOARD_GUIDANCE,
   validateBoardDataPresence,
 } from './interpret-xuanxue-validation.js';
-import { isUserPastedBoardSkill } from '../../pasted-board-context.js';
 import {
   formatForceInjected,
   partitionUserSkills,
@@ -53,35 +47,10 @@ import { setXuanxueKnowledgeToolState } from './xuanxue-knowledge-tools.js';
 export { interpretXuanxuePrompt };
 
 type PastedBoardInput = NonNullable<ToolExecutionOptions['pastedBoard']>;
-type ContentSource = 'skill' | 'user';
+type ContentSource = 'skill' | 'user' | 'pi_context';
+type AnalysisMode = 'followup_delta' | 'full';
 type KnowledgePlan = ReturnType<typeof planKnowledgeContext>;
 const KNOWLEDGE_QUERY_PREVIEW_MAX_CHARS = 80;
-
-function buildFollowupDeltaExtraContext(
-  previous: NonNullable<ReturnType<typeof getLatestFollowupInterpretation>>,
-): string {
-  const parts = [
-    '【上一轮解读结论】',
-    previous.interpretationOutput,
-  ];
-  if (previous.boardSkill && previous.boardOutput) {
-    const boardOutput = hasBoardFormatter(previous.boardSkill)
-      ? formatBoardForAi({
-          skill: previous.boardSkill,
-          output: previous.boardOutput,
-          artifactData: previous.boardArtifactData,
-        })
-      : previous.boardOutput;
-    parts.push(
-      `【上一轮对应原盘来源】${previous.boardSkill}`,
-      boardOutput,
-    );
-  }
-  parts.push(
-    '【本轮任务要求】这是对上一轮解读的追问或补充条件分析。请在上一轮结论基础上，重点说明新增条件带来的变化，不要把整盘从头完整重解一遍。',
-  );
-  return parts.join('\n\n');
-}
 
 function rejectMissingBoardData(args: {
   reason: string;
@@ -90,7 +59,7 @@ function rejectMissingBoardData(args: {
   requestScope?: RequestScope;
   hasUpstreamArtifact: boolean;
 }): ToolResult {
-  log(`interpret_xuanxue | 数据校验失败: ${args.reason}`);
+  log(`prepare_xuanxue_interpretation | 数据校验失败: ${args.reason}`);
   traceEvent({
     type: 'xuanxue_validation_rejected',
     reason: args.reason,
@@ -131,7 +100,7 @@ async function loadEffectiveUserSkills(
     return hydrated;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log(`interpret_xuanxue | listEffectiveUserSkills 失败: ${msg}`);
+    log(`prepare_xuanxue_interpretation | listEffectiveUserSkills 失败: ${msg}`);
     return [];
   }
 }
@@ -148,7 +117,7 @@ function resolvePastedBoard(
 function buildMergedQuestion(args: {
   rawQuestion?: string;
   pastedBoard?: PastedBoardInput;
-  analysisMode: 'followup_delta' | 'full';
+  analysisMode: AnalysisMode;
 }): string | undefined {
   if (args.pastedBoard) return args.pastedBoard.question;
   if (args.analysisMode !== 'followup_delta') return args.rawQuestion;
@@ -220,15 +189,10 @@ function resolveActiveBoardPayload(
 function buildMergedExtraContext(args: {
   externalExtraContext?: string;
   modelPreparedContentNote: string | null;
-  analysisMode: 'followup_delta' | 'full';
-  latestFollowupInterpretation: ReturnType<typeof getLatestFollowupInterpretation>;
 }): string {
   return [
     args.externalExtraContext,
     args.modelPreparedContentNote,
-    args.analysisMode === 'followup_delta' && args.latestFollowupInterpretation
-      ? buildFollowupDeltaExtraContext(args.latestFollowupInterpretation)
-      : null,
   ]
     .filter((item): item is string => Boolean(item && item.trim()))
     .join('\n\n');
@@ -264,7 +228,7 @@ function emitInterpretationPreparedTrace(args: {
   currentCategory: string | undefined;
   contentSource: ContentSource;
   boardPayload: ResolvedBoardPayload;
-  analysisMode: 'followup_delta' | 'full';
+  analysisMode: AnalysisMode;
   queryText?: string;
   upstreamSummary: ReturnType<typeof summarizeUpstreamArtifact>;
   authoritativeContent: string;
@@ -277,7 +241,7 @@ function emitInterpretationPreparedTrace(args: {
   const upstreamSkillRaw = args.boardPayload.upstreamSkillRaw;
   const queryText = summarizeKnowledgeQuery(args.queryText);
   log(
-    `interpret_xuanxue | category=${args.currentCategory || '未指定'} | query=${queryText || '未提供'} | contentSource=${args.contentSource} | boardSource=${args.boardPayload.boardSource} | analysisMode=${args.analysisMode} | upstream=${upstreamSkillRaw?.skill || '无'} | resolver=${args.boardPayload.boardResolverUsed ? 'yes' : 'no'} | force=${args.forceInjected.length}[${args.forceInjected.map((item) => item.skill_dir).join(',')}] queryable=${args.queryable.length}[${args.queryable.map((item) => item.skill_dir).join(',')}] topicFacets=[${args.knowledgePlan.topicFacets.join(',')}] actionFacets=[${args.knowledgePlan.actionFacets.join(',')}] | upstreamRaw=${args.upstreamSummary.line}`,
+    `prepare_xuanxue_interpretation | category=${args.currentCategory || '未指定'} | query=${queryText || '未提供'} | contentSource=${args.contentSource} | boardSource=${args.boardPayload.boardSource} | analysisMode=${args.analysisMode} | upstream=${upstreamSkillRaw?.skill || '无'} | resolver=${args.boardPayload.boardResolverUsed ? 'yes' : 'no'} | force=${args.forceInjected.length}[${args.forceInjected.map((item) => item.skill_dir).join(',')}] queryable=${args.queryable.length}[${args.queryable.map((item) => item.skill_dir).join(',')}] topicFacets=[${args.knowledgePlan.topicFacets.join(',')}] actionFacets=[${args.knowledgePlan.actionFacets.join(',')}] | upstreamRaw=${args.upstreamSummary.line}`,
   );
   traceEvent({
     type: 'xuanxue_interpretation_started',
@@ -365,7 +329,7 @@ function buildKnowledgeSummary(args: {
   boardPayload: ResolvedBoardPayload;
   forceInjected: KnowledgePlan['forceInjected'];
   queryable: KnowledgePlan['queryable'];
-  analysisMode: 'followup_delta' | 'full';
+  analysisMode: AnalysisMode;
   actionContract?: XuanxueActionContractRun;
 }): string {
   return JSON.stringify(
@@ -430,7 +394,7 @@ function emitInterpretationPromptTrace(args: {
       : 0,
     forceSkillDirs: args.forceInjected.map((item) => item.skill_dir),
     queryableSkillDirs: args.queryable.map((item) => item.skill_dir),
-    // interpret_xuanxue 不启动独立子模型；这个 output 是工具结果，
+    // 玄学解读准备工具不启动独立子模型；这个 output 是工具结果，
     // 会作为下一轮模型输入注入当前 specialist loop。
     runtimePrompt: args.output,
     runtimePromptChunks: chunkTraceText(args.output),
@@ -446,13 +410,24 @@ function chunkTraceText(text: string): string[] {
   return chunks.length > 0 ? chunks : [''];
 }
 
+function resolveAnalysisMode(args: {
+  requestedMode: unknown;
+  pastedBoard?: PastedBoardInput;
+}): AnalysisMode {
+  if (args.pastedBoard) return 'full';
+  if (args.requestedMode === 'followup_delta') {
+    return 'followup_delta';
+  }
+  return 'full';
+}
+
 export async function executeInterpretXuanxue(
   args: Record<string, unknown>,
   options?: ToolExecutionOptions,
 ): Promise<ToolResult> {
   if (!options?.llmRuntime) {
     return {
-      output: 'interpret_xuanxue 缺少请求级 llmRuntime。',
+      output: 'prepare_xuanxue_interpretation 缺少请求级 llmRuntime。',
       isError: true,
     };
   }
@@ -466,9 +441,6 @@ export async function executeInterpretXuanxue(
     );
   }
 
-  const latestFollowupInterpretation = options?.requestScope
-    ? getLatestFollowupInterpretation(options.requestScope)
-    : null;
   const rawArgCategory =
     pastedBoard?.category ||
     inferCategoryFromProducer(activeBoardPayload?.upstreamSkillRaw?.skill) ||
@@ -485,6 +457,8 @@ export async function executeInterpretXuanxue(
   const contentSource: ContentSource =
     pastedBoard || (args.content_source as string | undefined) === 'user'
       ? 'user'
+      : (args.content_source as string | undefined) === 'pi_context'
+        ? 'pi_context'
       : 'skill';
 
   if (contentSource === 'user' && !pastedBoard) {
@@ -499,10 +473,10 @@ export async function executeInterpretXuanxue(
   }
 
   const requestedCategory = argCategory;
-  const hasPreviousInterpretation = Boolean(
-    !pastedBoard && latestFollowupInterpretation?.interpretationOutput.trim(),
-  );
-  const analysisMode = hasPreviousInterpretation ? 'followup_delta' : 'full';
+  const analysisMode = resolveAnalysisMode({
+    requestedMode: args.analysis_mode ?? args.analysisMode,
+    pastedBoard,
+  });
   const earlyArtifact = options?.requestScope
     ? latestSkillArtifactExcluding(options.requestScope, ['xuanxue-jiedu'])
     : null;
@@ -512,20 +486,6 @@ export async function executeInterpretXuanxue(
     currentCategory: requestedCategory,
     requestScope: options?.requestScope,
   });
-  const historicalUpstreamSkillRaw = currentRequestUpstreamSkillRaw
-    ? null
-    : resolveHistoricalUpstreamSkillRaw(
-        latestFollowupInterpretation,
-        requestedCategory,
-      );
-  const historicalBoardContent = resolveHistoricalBoardContent(
-    latestFollowupInterpretation,
-    requestedCategory,
-  );
-  const hasHistoricalPastedBoardEvidence = Boolean(
-    historicalUpstreamSkillRaw &&
-      isUserPastedBoardSkill(historicalUpstreamSkillRaw.skill),
-  );
   const mergedQuestion = buildMergedQuestion({
     rawQuestion: args.question as string | undefined,
     pastedBoard,
@@ -537,10 +497,8 @@ export async function executeInterpretXuanxue(
     !activeBoardPayload &&
     !hasOfficialBoardEvidence({
       currentRequestUpstreamSkillRaw,
-      historicalUpstreamSkillRaw,
-      historicalBoardContent,
     }) &&
-    !hasHistoricalPastedBoardEvidence
+    !rawArgContent.trim()
   ) {
     return rejectMissingBoardData({
       reason: `未找到官方排盘 skill 的原始产出。${PASTED_BOARD_GUIDANCE}`,
@@ -560,10 +518,10 @@ export async function executeInterpretXuanxue(
         currentUserMessage: mergedQuestion || rawArgContent || '',
         question: mergedQuestion,
         contextHints: null,
-        latestFollowupInterpretation,
+        historicalInterpretationOutput: null,
         currentRequestUpstreamSkillRaw,
-        historicalUpstreamSkillRaw,
-        historicalBoardContent,
+        historicalUpstreamSkillRaw: null,
+        historicalBoardContent: null,
         requestScope: options?.requestScope,
         delegationGoal: options?.delegationGoal,
         llmRuntime: options.llmRuntime,
@@ -591,8 +549,6 @@ export async function executeInterpretXuanxue(
     ? inferCategoryFromProducer(
         upstreamSkillRaw?.skill ||
           currentRequestUpstreamSkillRaw?.skill ||
-          historicalUpstreamSkillRaw?.skill ||
-          latestFollowupInterpretation?.boardSkill ||
           earlyArtifact?.producer,
       )
     : undefined;
@@ -604,8 +560,6 @@ export async function executeInterpretXuanxue(
   const mergedExtraContext = buildMergedExtraContext({
     externalExtraContext,
     modelPreparedContentNote,
-    analysisMode,
-    latestFollowupInterpretation,
   });
   const buckets = partitionUserSkills(userSkills, null, effectiveCategory);
   const knowledgePlan = planKnowledgeContext(buckets);

@@ -73,7 +73,7 @@ function buildCandidatePreview(content: string, maxChars = 1500): string {
 function buildSystemPromptText(): string {
   return [
     '你是盘面来源选择器。',
-    '你的任务不是解读，而是从给定候选中选出本轮 interpret_xuanxue 应该使用的盘面来源。',
+    '你的任务不是解读，而是从给定候选中选出本轮玄学解读准备应该使用的盘面来源。',
     '必须只输出 JSON，不要输出任何额外文字。',
     '输出字段：selectedSource, reason, confidence。',
     'selectedSource 只能取：',

@@ -8,7 +8,10 @@
 
 import type { AgentRuntimeDeps } from './deps.js';
 import { getDefaultAgentRuntimeDeps } from './deps.js';
-import { loadEnabledSkillNames, loadSkillMetadataList } from './prompt/index.js';
+import {
+  loadEnabledSkillNames,
+  loadSkillMetadataList,
+} from './skill-metadata.js';
 
 export interface CommandResult {
   text: string;

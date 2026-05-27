@@ -5,10 +5,7 @@ import {
   isUserPastedBoardSkill,
   type UserPastedBoardArtifactData,
 } from '../../pasted-board-context.js';
-import type {
-  getLatestFollowupInterpretation,
-  RequestScope,
-} from '../../request-scope.js';
+import type { RequestScope } from '../../request-scope.js';
 import { traceEvent } from '../../trace.js';
 import {
   resolveBoardSourceWithLLM,
@@ -32,7 +29,7 @@ export interface UpstreamSkillRaw {
 
 /**
  * 起卦/排盘类官方 skill → 对应的术数类别关键字。
- * 用于 interpret_xuanxue 做"上游 artifact 与当前类别"一致性校验。
+ * 用于玄学解读准备工具做"上游 artifact 与当前类别"一致性校验。
  */
 const SKILL_CATEGORY_HINT: Record<string, string[]> = {
   'bazi-paipan': ['八字', '命理', '四柱'],
@@ -42,19 +39,17 @@ const SKILL_CATEGORY_HINT: Record<string, string[]> = {
   'qimen-paipan': ['奇门', '遁甲'],
 };
 
-type LatestFollowupInterpretation =
-  ReturnType<typeof getLatestFollowupInterpretation>;
-
 export interface BoardResolutionInput {
   rawArgContent: string;
-  argContentSource: 'skill' | 'user';
+  argContentSource: 'skill' | 'user' | 'pi_context';
   currentUserMessage: string;
   question?: string;
   contextHints: null;
-  latestFollowupInterpretation: LatestFollowupInterpretation;
+  historicalInterpretationOutput: string | null;
   currentRequestUpstreamSkillRaw: UpstreamSkillRaw | null;
   historicalUpstreamSkillRaw: UpstreamSkillRaw | null;
   historicalBoardContent: string | null;
+  historicalBoardSkill?: string;
   requestScope?: RequestScope;
   delegationGoal?: string;
   llmRuntime: LlmRuntimeSnapshot;
@@ -121,57 +116,11 @@ export function boardSkillMatchesCategory(
   return hints.some((hint) => categoryLabelsMatch(hint, category));
 }
 
-function historicalContextMatchesCategory(
-  previous: NonNullable<LatestFollowupInterpretation>,
-  category: string | undefined,
-): boolean {
-  if (!category) return true;
-  if (
-    previous.boardSkill &&
-    boardSkillMatchesCategory(previous.boardSkill, category)
-  ) {
-    return true;
-  }
-  return categoryLabelsMatch(previous.category, category);
-}
-
-export function resolveHistoricalUpstreamSkillRaw(
-  previous: NonNullable<LatestFollowupInterpretation> | null,
-  category: string | undefined,
-): UpstreamSkillRaw | null {
-  if (!previous?.boardSkill) return null;
-  if (!historicalContextMatchesCategory(previous, category)) return null;
-
-  const hasArtifactData = previous.boardArtifactData !== undefined;
-  if (!previous.boardOutput && !hasArtifactData) return null;
-
-  return {
-    skill: previous.boardSkill,
-    rawOutput:
-      previous.boardOutput ??
-      stringifyPayloadSafe(previous.boardArtifactData),
-    payload: hasArtifactData
-      ? previous.boardArtifactData
-      : previous.boardOutput ?? '',
-  };
-}
-
-export function resolveHistoricalBoardContent(
-  previous: NonNullable<LatestFollowupInterpretation> | null,
-  category: string | undefined,
-): string | null {
-  if (!previous?.boardOutput) return null;
-  if (historicalContextMatchesCategory(previous, category)) {
-    return previous.boardOutput;
-  }
-  return null;
-}
-
 export async function resolveAuthoritativeBoardPayload(
   input: BoardResolutionInput,
 ): Promise<ResolvedBoardPayload> {
   log(
-    `interpret_xuanxue | 快速路径判断: argContentSource=${input.argContentSource} hasUpstreamArtifact=${Boolean(input.currentRequestUpstreamSkillRaw)}`,
+    `prepare_xuanxue_interpretation | 快速路径判断: argContentSource=${input.argContentSource} hasUpstreamArtifact=${Boolean(input.currentRequestUpstreamSkillRaw)}`,
   );
 
   const fastPathPayload = resolveCurrentRequestArtifactFastPath(input);
@@ -212,7 +161,7 @@ export async function resolveAuthoritativeBoardPayload(
     delegationGoalContext: input.delegationGoal,
     candidates,
     historicalInterpretationOutput:
-      input.latestFollowupInterpretation?.interpretationOutput,
+      input.historicalInterpretationOutput ?? undefined,
   }, input.llmRuntime);
 
   return resolveSelectedBoardSource(input, resolved, modelPreparedContentNote);
@@ -269,17 +218,17 @@ export function summarizeUpstreamArtifact(raw: UpstreamSkillRaw | null): {
 }
 
 export function resolveUpstreamSkillRaw(opts: {
-  contentSource: 'skill' | 'user';
+  contentSource: 'skill' | 'user' | 'pi_context';
   currentCategory: string | undefined;
   requestScope?: RequestScope;
 }): UpstreamSkillRaw | null {
   if (opts.contentSource === 'user') {
-    log('interpret_xuanxue | upstream 跳过: content_source=user');
+    log('prepare_xuanxue_interpretation | upstream 跳过: content_source=user');
     return null;
   }
 
   if (!opts.requestScope) {
-    log('interpret_xuanxue | upstream 跳过: 缺少 requestScope');
+    log('prepare_xuanxue_interpretation | upstream 跳过: 缺少 requestScope');
     return null;
   }
 
@@ -288,7 +237,7 @@ export function resolveUpstreamSkillRaw(opts: {
     ['xuanxue-jiedu'],
   );
   if (!artifact) {
-    log('interpret_xuanxue | upstream 跳过: 本次请求无可用 skill artifact');
+    log('prepare_xuanxue_interpretation | upstream 跳过: 本次请求无可用 skill artifact');
     return null;
   }
 
@@ -301,7 +250,7 @@ export function resolveUpstreamSkillRaw(opts: {
   if (!categoryMatches) {
     const hints = SKILL_CATEGORY_HINT[artifact.producer];
     log(
-      `interpret_xuanxue | upstream category 不匹配，跳过注入: artifactSkill=${artifact.producer} hints=${hints?.join('/')} currentCategory=${currentCategory}`,
+      `prepare_xuanxue_interpretation | upstream category 不匹配，跳过注入: artifactSkill=${artifact.producer} hints=${hints?.join('/')} currentCategory=${currentCategory}`,
     );
     traceEvent({
       type: 'xuanxue_upstream_rejected',
@@ -323,12 +272,12 @@ export function resolveUpstreamSkillRaw(opts: {
 function resolveCurrentRequestArtifactFastPath(
   input: BoardResolutionInput,
 ): ResolvedBoardPayload | null {
-  if (input.argContentSource !== 'skill' || !input.currentRequestUpstreamSkillRaw) {
+  if (input.argContentSource === 'user' || !input.currentRequestUpstreamSkillRaw) {
     return null;
   }
 
   log(
-    `interpret_xuanxue | 快速路径生效: 使用 artifact (${input.currentRequestUpstreamSkillRaw.skill})`,
+    `prepare_xuanxue_interpretation | 快速路径生效: 使用 artifact (${input.currentRequestUpstreamSkillRaw.skill})`,
   );
   return {
     boardSource: 'current_request_artifact',
@@ -373,11 +322,11 @@ function buildBoardCandidates(input: BoardResolutionInput): BoardCandidate[] {
 
     if (!isDuplicateHistoricalPastedBoard) {
       candidates.push({
-        source: 'historical_board_output',
-        content: input.historicalBoardContent,
-        skillName: input.latestFollowupInterpretation?.boardSkill,
-      });
-    }
+      source: 'historical_board_output',
+      content: input.historicalBoardContent,
+      skillName: input.historicalBoardSkill,
+    });
+  }
   }
   if (input.rawArgContent.trim()) {
     candidates.push({
@@ -423,7 +372,11 @@ function resolveSingleCandidate(
     modelPreparedContentNote,
     'single_model_candidate',
     false,
-    input.argContentSource === 'user' ? 'explicit_user_board' : undefined,
+    input.argContentSource === 'user'
+      ? 'explicit_user_board'
+      : input.argContentSource === 'pi_context'
+        ? 'historical_artifact'
+        : undefined,
   );
 }
 
@@ -469,7 +422,7 @@ function resolvePolishedContentCandidate(
   }
 
   log(
-    `interpret_xuanxue | 检测到润色文本，强制使用 artifact: artifactSkill=${artifactCandidate.skillName}`,
+    `prepare_xuanxue_interpretation | 检测到润色文本，强制使用 artifact: artifactSkill=${artifactCandidate.skillName}`,
   );
   traceEvent({
     type: 'xuanxue_polished_content_detected',

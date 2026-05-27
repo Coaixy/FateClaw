@@ -1,23 +1,50 @@
-import { latestSkillArtifactExcluding } from './artifact-store.js';
-import { resolveEvidenceCategoryBySkill } from './evidence-policy.js';
+import { latestSkillArtifactExcluding } from '../artifact-store.js';
+import { resolveEvidenceCategoryBySkill } from '../evidence-policy.js';
 import {
   boardSkillMatchesCategory,
-} from './tools/skill/interpret-xuanxue-board.js';
+} from '../tools/skill/interpret-xuanxue-board.js';
 import {
   formatBoardForAi,
   hasBoardFormatter,
-} from './tools/skill/board-formatters/index.js';
+} from '../tools/skill/board-formatters/index.js';
 import {
   getLatestFollowupInterpretation,
   type RequestScope,
-} from './request-scope.js';
-import { traceEvent } from './trace.js';
-import type { ToolExecutionOptions, ToolInvocation } from './types.js';
+} from '../request-scope.js';
+import { traceEvent } from '../trace.js';
+import type { ToolExecutionOptions, ToolInvocation } from '../types.js';
+import { PI_INTERPRET_TOOL_NAME } from './interpret-tool-catalog.js';
 
 interface InterpretContentCandidate {
   content: string;
   boardSkill?: string;
   source: 'current_artifact' | 'history_tool_context';
+}
+
+function buildFollowupDeltaExtraContext(
+  followup: NonNullable<ReturnType<typeof getLatestFollowupInterpretation>>,
+): string {
+  const parts = [
+    '【上一轮解读结论】',
+    followup.interpretationOutput,
+  ];
+  if (followup.boardSkill && followup.boardOutput) {
+    const boardOutput = hasBoardFormatter(followup.boardSkill)
+      ? formatSkillContextForAi({
+          skill: followup.boardSkill,
+          output: followup.boardOutput,
+          artifactData: followup.boardArtifactData,
+        })
+      : followup.boardOutput;
+    parts.push(
+      `【上一轮对应原盘来源】${followup.boardSkill}`,
+      boardOutput,
+    );
+  }
+  parts.push(
+    '【本轮任务要求】这是对上一轮解读的追问或补充条件分析。请在上一轮结论基础上，重点说明新增条件带来的变化，不要把整盘从头完整重解一遍。',
+  );
+  return parts.join('\n\n');
 }
 
 function stringifyToolContent(value: unknown): string | null {
@@ -113,12 +140,44 @@ function resolveInterpretContentCandidate(
   };
 }
 
-export function withExplicitInterpretContent(
+function withFollowupExtraContext(
+  invocation: ToolInvocation,
+  requestScope: RequestScope,
+): ToolInvocation {
+  if (invocation.args.analysis_mode !== 'followup_delta') {
+    return invocation;
+  }
+  const followup = getLatestFollowupInterpretation(requestScope);
+  if (!followup?.interpretationOutput.trim()) return invocation;
+
+  const extraContext = [
+    typeof invocation.args.extra_context === 'string'
+      ? invocation.args.extra_context
+      : '',
+    buildFollowupDeltaExtraContext(followup),
+  ]
+    .filter((item) => item.trim().length > 0)
+    .join('\n\n');
+
+  return {
+    ...invocation,
+    args: {
+      ...invocation.args,
+      extra_context: extraContext,
+    },
+  };
+}
+
+export function withPiInterpretContent(
   invocation: ToolInvocation,
   requestScope: RequestScope,
   options: ToolExecutionOptions,
 ): ToolInvocation {
-  if (invocation.toolName !== 'interpret_xuanxue') return invocation;
+  if (invocation.toolName !== PI_INTERPRET_TOOL_NAME) return invocation;
+  const invocationWithFollowup = withFollowupExtraContext(
+    invocation,
+    requestScope,
+  );
   const activeBoard = options.activeBoardContext;
   if (
     activeBoard &&
@@ -128,9 +187,9 @@ export function withExplicitInterpretContent(
   ) {
     const category = resolveEvidenceCategoryBySkill(activeBoard.skill);
     const repairedInvocation: ToolInvocation = {
-      ...invocation,
+      ...invocationWithFollowup,
       args: {
-        ...invocation.args,
+        ...invocationWithFollowup.args,
         content: formatSkillContextForAi(activeBoard),
         content_source: 'skill',
         ...(category ? { category } : {}),
@@ -146,39 +205,39 @@ export function withExplicitInterpretContent(
         'utf8',
       ),
       sourceMessageId: activeBoard.sourceMessageId,
-      originalArgKeys: Object.keys(invocation.args),
+      originalArgKeys: Object.keys(invocationWithFollowup.args),
     }, requestScope);
 
     return repairedInvocation;
   }
   if (
-    typeof invocation.args.content === 'string' &&
-    invocation.args.content.trim().length > 0
+    typeof invocationWithFollowup.args.content === 'string' &&
+    invocationWithFollowup.args.content.trim().length > 0
   ) {
-    return invocation;
+    return invocationWithFollowup;
   }
-  if (invocation.args.content_source === 'user') {
-    return invocation;
+  if (invocationWithFollowup.args.content_source === 'user') {
+    return invocationWithFollowup;
   }
 
   const requestedCategory =
-    typeof invocation.args.category === 'string'
-      ? invocation.args.category
+    typeof invocationWithFollowup.args.category === 'string'
+      ? invocationWithFollowup.args.category
       : undefined;
   const candidate = resolveInterpretContentCandidate(
     requestScope,
     requestedCategory,
   );
-  if (!candidate) return invocation;
+  if (!candidate) return invocationWithFollowup;
 
   // 排盘后的解读要求 tool_call 本身携带模型可读盘面。
-  // 这里在执行前补齐可观测入参，避免只靠 interpret_xuanxue 内部再查上下文。
+  // 这里在执行前补齐可观测入参，避免只靠准备工具内部再查上下文。
   const repairedInvocation: ToolInvocation = {
-    ...invocation,
+    ...invocationWithFollowup,
     args: {
-      ...invocation.args,
+      ...invocationWithFollowup.args,
       content: candidate.content,
-      content_source: 'skill',
+      content_source: 'pi_context',
     },
   };
 
@@ -187,7 +246,7 @@ export function withExplicitInterpretContent(
     boardSkill: candidate.boardSkill,
     source: candidate.source,
     contentBytes: Buffer.byteLength(candidate.content, 'utf8'),
-    originalArgKeys: Object.keys(invocation.args),
+    originalArgKeys: Object.keys(invocationWithFollowup.args),
   }, requestScope);
 
   return repairedInvocation;

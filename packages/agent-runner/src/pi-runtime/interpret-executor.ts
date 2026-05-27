@@ -1,4 +1,3 @@
-import { withExplicitInterpretContent } from '../interpret-content-injection.js';
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
 import { executeInterpretXuanxue } from '../tools/skill/interpret-xuanxue.js';
@@ -8,6 +7,7 @@ import type {
   ToolInvocation,
   ToolResult,
 } from '../types.js';
+import { withPiInterpretContent } from './interpret-context.js';
 import type { PiToolRunResult } from './types.js';
 
 const INTERPRET_SKILL = 'xuanxue-jiedu';
@@ -71,7 +71,7 @@ export async function executePiInterpretTool(args: {
     throw new Error('executePiInterpretTool 缺少 requestScope');
   }
 
-  const invocation = withExplicitInterpretContent(
+  const invocation = withPiInterpretContent(
     args.invocation,
     args.options.requestScope,
     args.options,

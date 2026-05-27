@@ -1,7 +1,7 @@
 import { closeAgentDb } from './agent-db.js';
 import { getContext, initContext } from './context.js';
 import { getDefaultAgentRuntimeDeps, type AgentRuntimeDeps } from './deps.js';
-import { executeContainerInput } from './engine.js';
+import { executeContainerInput } from './request-boundary.js';
 import { log } from './io.js';
 import {
   createRequestScope,
@@ -196,7 +196,7 @@ async function processInboxMessage(
     // 若已解析出 requestId，推送错误响应，避免宿主机无限等待
     if (request?.requestId) {
       try {
-        // 兜底取 trace 缓冲：engine 之外的异常（例如 parseInboxRequest 后紧跟
+        // 兜底取 trace 缓冲：request boundary 之外的异常（例如 parseInboxRequest 后紧跟
         // 的其他错误）可能已有部分 trace 产生；此时 request-state 还没被下一个
         // 请求 reset，数据是安全的。取不到也无妨（undefined 会被宿主端跳过）。
         const traceEvents = listScopedTraceEvents(requestScope);

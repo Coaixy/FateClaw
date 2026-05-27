@@ -8,7 +8,10 @@ vi.mock('../tools/skill/interpret-xuanxue.js', () => ({
   executeInterpretXuanxue: mockExecuteInterpretXuanxue,
 }));
 
-import { createRequestScope } from '../request-scope.js';
+import {
+  createRequestScope,
+  setLatestFollowupInterpretation,
+} from '../request-scope.js';
 import type { LlmRuntimeSnapshot } from '../types.js';
 import { executePiInterpretTool } from './interpret-executor.js';
 
@@ -42,7 +45,7 @@ describe('executePiInterpretTool', () => {
     const result = await executePiInterpretTool({
       invocation: {
         id: 'call-interpret',
-        toolName: 'interpret_xuanxue',
+        toolName: 'prepare_xuanxue_interpretation',
         args: { question: '看事业', category: '六爻' },
         source: 'model',
       },
@@ -75,7 +78,7 @@ describe('executePiInterpretTool', () => {
       expect.objectContaining({
         type: 'tool_use',
         invocation: expect.objectContaining({
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
         }),
       }),
       expect.objectContaining({
@@ -89,15 +92,71 @@ describe('executePiInterpretTool', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'tool_call',
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           piDirectExecutor: true,
         }),
         expect.objectContaining({
           type: 'tool_result',
-          toolName: 'interpret_xuanxue',
+          toolName: 'prepare_xuanxue_interpretation',
           modelOutputPreview: '模型可读解读材料',
         }),
       ]),
+    );
+  });
+
+  it('injects followup board and delta context before the interpret tool handler', async () => {
+    const requestScope = createRequestScope();
+    setLatestFollowupInterpretation(requestScope, {
+      category: '六爻',
+      interpretationOutput: '上一轮结论',
+      boardSkill: 'user-pasted-board::六爻',
+      boardOutput: '用户自贴盘面原文',
+      boardArtifactData: {
+        category: '六爻',
+        content: '用户自贴盘面原文',
+        question: '原始问题',
+        source: 'user_pasted_board',
+      },
+    });
+    const output = JSON.stringify({
+      authoritativeContent: '用户自贴盘面原文',
+      userKnowledge: { queryable: [] },
+    });
+    mockExecuteInterpretXuanxue.mockResolvedValue({
+      output,
+      modelOutput: '追问材料',
+    });
+
+    await executePiInterpretTool({
+      invocation: {
+        id: 'call-followup',
+        toolName: 'prepare_xuanxue_interpretation',
+        args: {
+          question: '继续看事业变化',
+          analysis_mode: 'followup_delta',
+        },
+        source: 'model',
+      },
+      options: {
+        requestScope,
+        llmRuntime,
+        provider: 'pi-sdk',
+        model: llmRuntime.model,
+        loopRunId: 'pi-request-followup',
+      },
+    });
+
+    expect(mockExecuteInterpretXuanxue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: '继续看事业变化',
+        analysis_mode: 'followup_delta',
+        content: expect.stringContaining('用户自贴盘面原文'),
+        content_source: 'pi_context',
+        extra_context: expect.stringContaining('上一轮结论'),
+      }),
+      expect.objectContaining({
+        requestScope,
+      }),
     );
   });
 });

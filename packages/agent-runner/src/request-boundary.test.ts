@@ -1,23 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockQueryLatestFollowupWorkflowContext,
   mockTryExecuteCommand,
   mockCreateRequestRuntime,
   mockExecutePiRuntime,
   mockListTranscriptEvents,
   mockListScopedTraceEvents,
 } = vi.hoisted(() => ({
-  mockQueryLatestFollowupWorkflowContext: vi.fn(),
   mockTryExecuteCommand: vi.fn(),
   mockCreateRequestRuntime: vi.fn(),
   mockExecutePiRuntime: vi.fn(),
   mockListTranscriptEvents: vi.fn(),
   mockListScopedTraceEvents: vi.fn(),
-}));
-
-vi.mock('./agent-db.js', () => ({
-  queryLatestFollowupWorkflowContext: mockQueryLatestFollowupWorkflowContext,
 }));
 
 vi.mock('./commands.js', () => ({
@@ -47,7 +41,7 @@ vi.mock('./request-scope.js', async () => {
 });
 
 import { createRequestScope } from './request-scope.js';
-import { executeContainerInput } from './engine.js';
+import { executeContainerInput } from './request-boundary.js';
 import type { LlmRuntimeSnapshot } from './types.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
@@ -64,7 +58,6 @@ const llmRuntime: LlmRuntimeSnapshot = {
 describe('executeContainerInput user pasted board persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockQueryLatestFollowupWorkflowContext.mockResolvedValue(null);
     mockTryExecuteCommand.mockResolvedValue(null);
     mockCreateRequestRuntime.mockReturnValue({ deps: {} });
     mockListTranscriptEvents.mockReturnValue([]);
@@ -101,7 +94,7 @@ describe('executeContainerInput user pasted board persistence', () => {
     });
   });
 
-  it('stores pasted board context together with xuanxue interpretation output', async () => {
+  it('keeps request boundary out of Pi context persistence decisions', async () => {
     const result = await executeContainerInput(
       {
         accountId: 'web:user-1',
@@ -122,19 +115,15 @@ describe('executeContainerInput user pasted board persistence', () => {
     expect(result.status).toBe('success');
     expect(mockCreateRequestRuntime).toHaveBeenCalledTimes(1);
     expect(mockExecutePiRuntime).toHaveBeenCalledTimes(1);
-    expect(result.skillContext).toEqual([
+    expect(mockExecutePiRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
-        skill: 'user-pasted-board::六爻',
-        output: '用户自贴盘面原文',
-        artifactType: 'skill.user-pasted-board::六爻',
-        artifactTitle: '自贴盘面: 六爻',
-        artifactData: {
-          category: '六爻',
-          content: '用户自贴盘面原文',
-          question: '看看事业',
-          source: 'user_pasted_board',
-        },
+        containerInput: expect.objectContaining({
+          inputKind: 'user_pasted_board',
+          pastedBoard: expect.objectContaining({ category: '六爻' }),
+        }),
       }),
+    );
+    expect(result.skillContext).toEqual([
       expect.objectContaining({
         skill: 'xuanxue-jiedu',
         output: '解读结果',

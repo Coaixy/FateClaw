@@ -11,7 +11,7 @@ import type {
   SkillParamProperty,
   SkillParamType,
   SkillConditionalRequirement,
-} from './prompt/types.js';
+} from './skill-metadata-types.js';
 
 export interface ValidationResult {
   /** 验证是否通过。 */

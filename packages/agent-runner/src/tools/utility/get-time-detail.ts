@@ -173,7 +173,7 @@ export const getTimeDetail: ToolSpec = {
 
 ### 关键注意
 - 本工具是**技术型历法查询**：它只做干支/历法换算，**不做命理解读**。
-- 用户看自己的八字/命盘/大运/流年 → 必须走 \`bazi-paipan\` + \`interpret_xuanxue\`，不能只靠本工具。`,
+- 用户看自己的八字/命盘/大运/流年 → 必须走 \`bazi-paipan\` + \`prepare_xuanxue_interpretation\`，不能只靠本工具。`,
 
   execute: async (args: Record<string, unknown>) => {
     const timezone = getContext().timezone;

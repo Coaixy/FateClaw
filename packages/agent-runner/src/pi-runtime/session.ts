@@ -12,57 +12,19 @@ import type { RequestScope } from '../request-scope.js';
 import { createPiResourceLoader } from './resource-loader.js';
 import { createPiProviderRuntime } from './provider.js';
 import { createPiCustomTools } from './tools.js';
+import { createPiSessionContext } from './context-layer.js';
 import {
   createPiEventCollector,
   extractAssistantTextFromMessages,
 } from './events.js';
 import type { PiToolExecutionRecord } from './types.js';
+import type { SkillContextEntry } from '../types.js';
 
 export interface PiSessionRunResult {
   text: string | null;
   usage: TokenUsage;
   records: PiToolExecutionRecord[];
-}
-
-function buildPrompt(input: ContainerInput): string {
-  const historyText = input.history
-    .slice(-12)
-    .map((message) => {
-      const toolContext = message.toolContext?.length
-        ? `\n[关联工具产物]\n${message.toolContext
-            .map((entry) => `${entry.skill}: ${entry.output}`)
-            .join('\n\n')}`
-        : '';
-      return `${message.role}: ${message.content}${toolContext}`;
-    })
-    .join('\n\n');
-
-  const boardContext = input.activeBoardContext
-    ? [
-        '[当前选中盘面]',
-        `sourceMessageId=${input.activeBoardContext.sourceMessageId}`,
-        `skill=${input.activeBoardContext.skill}`,
-        input.activeBoardContext.output,
-      ].join('\n')
-    : '';
-
-  const pastedBoard = input.pastedBoard
-    ? [
-        '[用户自贴盘面入口]',
-        `category=${input.pastedBoard.category}`,
-        `question=${input.pastedBoard.question}`,
-        input.pastedBoard.content,
-      ].join('\n')
-    : '';
-
-  return [
-    historyText ? `[最近对话]\n${historyText}` : '',
-    boardContext,
-    pastedBoard,
-    `[本轮用户消息]\n${input.userMessage}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  persistedSkillContext: SkillContextEntry[];
 }
 
 function resolveUserId(input: ContainerInput): string | undefined {
@@ -93,11 +55,18 @@ export async function runPiSession(args: {
 
   const providerRuntime = createPiProviderRuntime(args.containerInput.llmRuntime);
   const userId = resolveUserId(args.containerInput);
+  const sessionContext = await createPiSessionContext({
+    containerInput: args.containerInput,
+    runtime: args.runtime,
+    requestScope: args.requestScope,
+    userId,
+  });
   const resourceLoader = await createPiResourceLoader({
     deps: args.runtime.deps,
     userId,
     requestScope: args.requestScope,
     containerInput: args.containerInput,
+    piContextPrompt: sessionContext.prompt,
   });
   const readableSkills = resourceLoader
     .getSkills()
@@ -165,7 +134,7 @@ export async function runPiSession(args: {
       },
       args.requestScope,
     );
-    await session.prompt(buildPrompt(args.containerInput), {
+    await session.prompt(args.containerInput.userMessage, {
       source: 'extension',
     });
     return {
@@ -175,6 +144,7 @@ export async function runPiSession(args: {
         lastAssistantText,
       usage,
       records,
+      persistedSkillContext: sessionContext.persistedSkillContext,
     };
   } finally {
     unsubscribe();

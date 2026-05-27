@@ -7,15 +7,17 @@ import { loadSkillsFromDir } from '@earendil-works/pi-coding-agent';
 import {
   queryEffectiveUserSkills,
   queryEnabledSkillNames,
+  queryLatestFollowupWorkflowContext,
   querySoulContent,
   queryTasksForAccount,
   toggleUserSkill,
   updateSoulContentDb,
   type EffectiveUserSkill,
+  type FollowupWorkflowContext,
   type TaskSnapshot,
 } from './agent-db.js';
 import { SKILLS_DIR } from './paths.js';
-import type { SkillMetadata } from './prompt/types.js';
+import type { SkillMetadata } from './skill-metadata-types.js';
 import { getRedis } from './redis.js';
 import { readTextSkillBundleMarkdown } from './text-skill-bundle.js';
 
@@ -50,6 +52,14 @@ export interface HistoryStore {
   listRecent(accountId: string, limit: number): Promise<string[]>;
 }
 
+export interface WorkflowContextStore {
+  latestFollowupContext(args: {
+    accountId: string;
+    category?: string;
+    sessionId?: string;
+  }): Promise<FollowupWorkflowContext | null>;
+}
+
 export interface SkillExecutionRequest {
   interpreter: string;
   scriptPath: string;
@@ -79,6 +89,7 @@ export interface AgentRuntimeDeps {
   taskStore: TaskStore;
   messageBus: MessageBus;
   historyStore: HistoryStore;
+  workflowContextStore?: WorkflowContextStore;
   skillExecutor: SkillExecutor;
 }
 
@@ -173,6 +184,12 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   historyStore: {
     listRecent(accountId, limit) {
       return getRedis().lrange(`history:${accountId}`, 0, limit - 1);
+    },
+  },
+
+  workflowContextStore: {
+    latestFollowupContext(args) {
+      return queryLatestFollowupWorkflowContext(args);
     },
   },
 
