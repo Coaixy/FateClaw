@@ -1,56 +1,61 @@
-#!/usr/bin/env node
-
-/**
- * 周易六爻排盘脚本（基于 iching-shifa，本地计算）
- *
- * stdin:  JSON { method?, yao?, numbers?, datetime?, question? }
- * stdout: JSON 排盘结果
- */
-
 import {
+  calcXunKong,
   dayan,
+  decodePan,
   lueshifa,
   manualQiGua,
-  threeNumberQiGua,
   numberArrayQiGua,
-  timeQiGua,
-  decodePan,
   solarToLunar,
-  calcXunKong,
+  threeNumberQiGua,
+  timeQiGua,
+  type FuShenData,
+  type GuaPan,
+  type LiuQin,
+  type PanResult,
+  type WuXing,
+  type WuXingRelation,
+  type YaoData,
+  type YaoString,
 } from 'iching-shifa';
-import { isDirectCliRun } from '../_shared/cli-entry.js';
 
-const METHODS = ['dayan', 'lueshifa', 'manual', 'three', 'array', 'time'];
-const WUXING_RELATION_TO_LIUQIN = {
+const METHODS = [
+  'dayan',
+  'lueshifa',
+  'manual',
+  'three',
+  'array',
+  'time',
+] as const;
+const WUXING_RELATION_TO_LIUQIN: Record<WuXingRelation, string> = {
   比和: '兄弟',
   生我: '父母',
   我生: '子孙',
   尅我: '官鬼',
   我尅: '妻财',
 };
-const WUXING_GENERATES = {
+const WUXING_GENERATES: Record<WuXing, WuXing> = {
   木: '火',
   火: '土',
   土: '金',
   金: '水',
   水: '木',
 };
-const WUXING_CONTROLS = {
+const WUXING_CONTROLS: Record<WuXing, WuXing> = {
   木: '土',
   土: '水',
   水: '火',
   火: '金',
   金: '木',
 };
-const TRADITIONAL_LIUSHOU = {
+const TRADITIONAL_LIUSHOU: Record<string, string> = {
   腾蛇: '螣蛇',
 };
-const TRADITIONAL_GUA_NAME_MAP = {
+const TRADITIONAL_GUA_NAME_MAP: Record<string, string> = {
   剝: '剥',
   漸: '渐',
 };
 const LINES_PER_TRIGRAM = 3;
-const TRIGRAM_BY_LINES = {
+const TRIGRAM_BY_LINES: Record<string, { name: string; image: string }> = {
   111: { name: '乾', image: '天' },
   '000': { name: '坤', image: '地' },
   100: { name: '震', image: '雷' },
@@ -60,7 +65,20 @@ const TRIGRAM_BY_LINES = {
   '001': { name: '艮', image: '山' },
   110: { name: '兑', image: '泽' },
 };
-const SHENSHA_MAPS = {
+const SHENSHA_MAPS: Record<
+  | 'yiMa'
+  | 'tianXi'
+  | 'wenChang'
+  | 'zaiSha'
+  | 'jieSha'
+  | 'mouXing'
+  | 'tianYi'
+  | 'luMa'
+  | 'yangRen'
+  | 'huaGai'
+  | 'jiangXing',
+  Record<string, string>
+> = {
   yiMa: {
     子: '寅',
     丑: '亥',
@@ -211,27 +229,67 @@ const SHENSHA_MAPS = {
   },
 };
 
-async function readStdin() {
-  let text = '';
-  for await (const chunk of process.stdin) {
-    text += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
-  }
-  return JSON.parse(text);
+type IchingMethod = (typeof METHODS)[number];
+
+interface IchingInput {
+  method?: IchingMethod;
+  yao?: string;
+  numbers?: number[];
+  datetime?: string;
+  question?: string;
 }
 
-function parseDatetime(s) {
-  if (!s) return new Date();
-  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T'));
-  if (isNaN(d.getTime())) throw new Error(`非法 datetime: ${s}`);
-  return d;
+type PatchedYaoData = Omit<YaoData, 'liuQin' | 'liuShou'> & {
+  liuQin: string;
+  liuShou: string;
+};
+
+type PatchedGuaPan = Omit<GuaPan, 'yaoList'> & {
+  yaoList: PatchedYaoData[];
+};
+
+interface PatchedPanResult extends Omit<
+  PanResult,
+  'benGua' | 'zhiGua' | 'huGua' | 'shenSha'
+> {
+  yearKong: string;
+  monthKong: string;
+  shenSha: Record<string, string>;
+  benGua: PatchedGuaPan;
+  zhiGua: PatchedGuaPan;
+  huGua: PatchedGuaPan;
 }
 
-function hourToZhiIndex(hour) {
+type StrippedGua = Omit<PatchedGuaPan, 'guaCi' | 'yaoCi' | 'tuanCi'>;
+
+export type IchingPaipanResult = Omit<
+  PatchedPanResult,
+  'benGua' | 'zhiGua' | 'huGua'
+> & {
+  method: IchingMethod;
+  question?: string;
+  benGua: StrippedGua;
+  zhiGua: StrippedGua;
+  huGua: StrippedGua;
+};
+
+function parseDatetime(value: string | undefined): Date {
+  if (!value) return new Date();
+  const date = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) throw new Error(`非法 datetime: ${value}`);
+  return date;
+}
+
+function hourToZhiIndex(hour: number): number {
   if (hour === 23 || hour === 0) return 1;
   return Math.floor((hour + 1) / 2) + 1;
 }
 
-function generateYao(method, input, when) {
+function generateYao(
+  method: IchingMethod,
+  input: IchingInput,
+  when: Date,
+): YaoString {
   const { yao, numbers } = input;
   switch (method) {
     case 'dayan':
@@ -239,13 +297,18 @@ function generateYao(method, input, when) {
     case 'lueshifa':
       return lueshifa();
     case 'manual':
-      if (!yao) throw new Error('method=manual 需要 yao（6位爻字符串，如 "789678"）');
+      if (!yao)
+        throw new Error('method=manual 需要 yao（6位爻字符串，如 "789678"）');
       return manualQiGua(yao);
     case 'three':
       if (!Array.isArray(numbers) || numbers.length !== 3) {
         throw new Error('method=three 需要 numbers 长度为 3');
       }
-      return threeNumberQiGua(numbers[0], numbers[1], numbers[2]);
+      return threeNumberQiGua(
+        numbers[0] ?? 0,
+        numbers[1] ?? 0,
+        numbers[2] ?? 0,
+      );
     case 'array': {
       if (!Array.isArray(numbers) || numbers.length < 2) {
         throw new Error('method=array 需要 numbers 长度 >= 2');
@@ -270,12 +333,10 @@ function generateYao(method, input, when) {
         lunar.hourGanZhi.di,
       );
     }
-    default:
-      throw new Error(`非法 method: ${method}`);
   }
 }
 
-function getWuXingRelation(source, target) {
+function getWuXingRelation(source: WuXing, target: WuXing): WuXingRelation {
   if (source === target) return '比和';
   if (WUXING_GENERATES[source] === target) return '生我';
   if (WUXING_GENERATES[target] === source) return '我生';
@@ -284,19 +345,26 @@ function getWuXingRelation(source, target) {
   throw new Error(`无法识别五行生克关系: ${source}/${target}`);
 }
 
-function liuQinByPalace(yaoWuXing, palaceWuXing) {
-  return WUXING_RELATION_TO_LIUQIN[getWuXingRelation(yaoWuXing, palaceWuXing)];
+function liuQinByPalace(yaoWuXing: WuXing, palaceWuXing: WuXing): LiuQin {
+  return WUXING_RELATION_TO_LIUQIN[
+    getWuXingRelation(yaoWuXing, palaceWuXing)
+  ] as LiuQin;
 }
 
-function normalizeLiuShou(value) {
+function normalizeLiuShou(value: string): string {
   return TRADITIONAL_LIUSHOU[value] ?? value;
 }
 
-function normalizeGuaNameText(name) {
-  return [...name].map((char) => TRADITIONAL_GUA_NAME_MAP[char] ?? char).join('');
+function normalizeGuaNameText(name: string): string {
+  return [...name]
+    .map((char) => TRADITIONAL_GUA_NAME_MAP[char] ?? char)
+    .join('');
 }
 
-function getTrigramByYao(yaoList, startIndex) {
+function getTrigramByYao(
+  yaoList: Array<Pick<YaoData, 'yaoValue'>>,
+  startIndex: number,
+): { name: string; image: string } {
   const lines = yaoList
     .slice(startIndex, startIndex + LINES_PER_TRIGRAM)
     .map((yao) => (Number(yao.yaoValue) % 2 === 1 ? '1' : '0'))
@@ -306,7 +374,7 @@ function getTrigramByYao(yaoList, startIndex) {
   return trigram;
 }
 
-function normalizeGuaName(name, yaoList) {
+function normalizeGuaName(name: string, yaoList: YaoData[]): string {
   if (!Array.isArray(yaoList) || yaoList.length < LINES_PER_TRIGRAM * 2) {
     throw new Error(`无法补全卦名，爻列表不足: ${name}`);
   }
@@ -318,8 +386,12 @@ function normalizeGuaName(name, yaoList) {
   return `${upper.image}${lower.image}${normalizeGuaNameText(name)}`;
 }
 
-function patchGuaForReference(gua, palaceWuXing) {
-  if (!gua) return gua;
+function patchGuaForReference(
+  gua: GuaPan | undefined,
+  palaceWuXing: WuXing | undefined,
+): PatchedGuaPan {
+  if (!gua) return gua as unknown as PatchedGuaPan;
+  if (!palaceWuXing) return gua as PatchedGuaPan;
   return {
     ...gua,
     guaName: normalizeGuaName(gua.guaName, gua.yaoList),
@@ -331,11 +403,11 @@ function patchGuaForReference(gua, palaceWuXing) {
   };
 }
 
-function patchFuShenForReference(benGua) {
+function patchFuShenForReference(benGua: PatchedGuaPan): PatchedGuaPan {
   if (!Array.isArray(benGua?.fuShen)) return benGua;
   return {
     ...benGua,
-    fuShen: benGua.fuShen.map((fu) => {
+    fuShen: benGua.fuShen.map((fu): FuShenData => {
       // 伏神索引直接保留 0 基；这里只把它换算成 1 基爻位去补宿主信息。
       const hostYaoIndex = Number(fu.hostYaoIndex);
       const hostYao = benGua.yaoList.find(
@@ -345,13 +417,20 @@ function patchFuShenForReference(benGua) {
         ...fu,
         hostYaoIndex,
         hostNaJia: hostYao?.naJia ?? fu.hostNaJia,
-        relation: getWuXingRelation(fu.fuWuXing, hostYao?.wuXing ?? fu.feiWuXing),
+        relation: getWuXingRelation(
+          fu.fuWuXing,
+          hostYao?.wuXing ?? fu.feiWuXing,
+        ),
       };
     }),
   };
 }
 
-function pairShenShaByBranch(map, primary, branches) {
+function pairShenShaByBranch(
+  map: Record<string, string>,
+  primary: string,
+  branches: string[],
+): string {
   for (const branch of branches) {
     const value = map[`${primary}${branch}`];
     if (value) return value;
@@ -359,7 +438,9 @@ function pairShenShaByBranch(map, primary, branches) {
   return '';
 }
 
-function buildReferenceShenSha(rest) {
+function buildReferenceShenSha(
+  rest: Omit<PanResult, 'benGua' | 'zhiGua' | 'huGua'>,
+): Record<string, string> {
   const year = rest.ganZhiYear?.di ?? '';
   const month = rest.ganZhiMonth?.di ?? '';
   const dayGan = rest.ganZhiDay?.tian ?? '';
@@ -370,27 +451,32 @@ function buildReferenceShenSha(rest) {
   return {
     文昌: SHENSHA_MAPS.wenChang[dayGan] ?? '',
     驿马: SHENSHA_MAPS.yiMa[day] ?? '',
-    将星: pairShenShaByBranch(SHENSHA_MAPS.jiangXing, year, [month, day, hour])
-      || pairShenShaByBranch(SHENSHA_MAPS.jiangXing, day, [year, month, hour]),
-    桃花: {
-      子: '酉',
-      丑: '午',
-      寅: '卯',
-      卯: '子',
-      辰: '酉',
-      巳: '午',
-      午: '卯',
-      未: '子',
-      申: '酉',
-      酉: '午',
-      戌: '卯',
-      亥: '子',
-    }[day] ?? '',
+    将星:
+      pairShenShaByBranch(SHENSHA_MAPS.jiangXing, year, [month, day, hour]) ||
+      pairShenShaByBranch(SHENSHA_MAPS.jiangXing, day, [year, month, hour]),
+    桃花:
+      (
+        {
+          子: '酉',
+          丑: '午',
+          寅: '卯',
+          卯: '子',
+          辰: '酉',
+          巳: '午',
+          午: '卯',
+          未: '子',
+          申: '酉',
+          酉: '午',
+          戌: '卯',
+          亥: '子',
+        } as Record<string, string>
+      )[day] ?? '',
     天喜: SHENSHA_MAPS.tianXi[month] ?? '',
     天医: SHENSHA_MAPS.tianYi[month] ?? '',
     谋星: SHENSHA_MAPS.mouXing[day] ?? '',
-    华盖: pairShenShaByBranch(SHENSHA_MAPS.huaGai, year, [month, day, hour])
-      || pairShenShaByBranch(SHENSHA_MAPS.huaGai, day, [year, month, hour]),
+    华盖:
+      pairShenShaByBranch(SHENSHA_MAPS.huaGai, year, [month, day, hour]) ||
+      pairShenShaByBranch(SHENSHA_MAPS.huaGai, day, [year, month, hour]),
     灾煞: SHENSHA_MAPS.zaiSha[day] ?? '',
     劫煞: SHENSHA_MAPS.jieSha[day] ?? '',
     禄神: SHENSHA_MAPS.luMa[dayGan] ?? '',
@@ -398,7 +484,7 @@ function buildReferenceShenSha(rest) {
   };
 }
 
-function patchPanForReference(pan) {
+function patchPanForReference(pan: PanResult): PatchedPanResult {
   const { benGua, zhiGua, huGua, ...rest } = pan;
   const patchedBenGua = patchFuShenForReference(
     patchGuaForReference(benGua, benGua.palaceWuXing),
@@ -414,32 +500,35 @@ function patchPanForReference(pan) {
   };
 }
 
-export async function runPaipan(input) {
-  const { method = 'dayan', question, datetime } = input;
+function stripScripture(gua: PatchedGuaPan): StrippedGua {
+  const { guaCi: _guaCi, yaoCi: _yaoCi, tuanCi: _tuanCi, ...rest } = gua;
+  return rest;
+}
+
+export async function runIchingPaipan(
+  input: Record<string, unknown>,
+): Promise<IchingPaipanResult> {
+  const { method = 'dayan', question, datetime } = input as IchingInput;
 
   if (!METHODS.includes(method)) {
     throw new Error(`method 必须是 ${METHODS.join('/')} 之一`);
   }
 
   const when = parseDatetime(datetime);
-  const yaoString = generateYao(method, input, when);
+  const yaoString = generateYao(method, input as IchingInput, when);
 
-  const pan = patchPanForReference(decodePan(yaoString, {
-    year: when.getFullYear(),
-    month: when.getMonth() + 1,
-    day: when.getDate(),
-    hour: when.getHours(),
-    minute: when.getMinutes(),
-  }));
-
-  function stripScripture(gua) {
-    if (!gua) return gua;
-    const { guaCi, yaoCi, tuanCi, ...rest } = gua;
-    return rest;
-  }
+  const pan = patchPanForReference(
+    decodePan(yaoString, {
+      year: when.getFullYear(),
+      month: when.getMonth() + 1,
+      day: when.getDate(),
+      hour: when.getHours(),
+      minute: when.getMinutes(),
+    }),
+  );
 
   const { benGua, zhiGua, huGua, ...rest } = pan;
-  const result = {
+  return {
     method,
     question,
     ...rest,
@@ -447,23 +536,4 @@ export async function runPaipan(input) {
     zhiGua: stripScripture(zhiGua),
     huGua: stripScripture(huGua),
   };
-  return result;
-}
-
-async function mainFromCli() {
-  const input = await readStdin();
-  const result = await runPaipan(input);
-  console.log(JSON.stringify(result));
-}
-
-function isDirectRun() {
-  // 浏览器/移动端 import 时没有 process；这里只让 Node CLI 兼容旧后端脚本执行方式。
-  return isDirectCliRun(import.meta.url);
-}
-
-if (isDirectRun()) {
-  mainFromCli().catch((err) => {
-    console.error(JSON.stringify({ error: err.message }));
-    process.exit(1);
-  });
 }

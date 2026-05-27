@@ -9,7 +9,7 @@
 - 宿主在 `apps/api/src/`
 - agent-runner 在 `packages/agent-runner/`
 - 前端在 `apps/web/`
-- Skill 仓库在 `skills/official/`
+- 系统排盘实现内置在 `apps/api/src/modules/chat/paipan-runners/`
 
 ## 建议阅读顺序
 
@@ -71,8 +71,8 @@ agent-runner 负责：
 - 为单个账号常驻监听 inbox
 - 创建 request-scoped Pi Runtime
 - 通过 Pi SDK 调用模型 provider
-- 暴露本轮允许访问的官方 Skill 和用户 Text Skill Bundle
-- 执行 Pi custom tools，并回传 artifact、usage、transcript、trace
+- 暴露本轮允许访问的用户 Text Skill Bundle
+- 回传 usage、transcript、trace 和 agent graph
 - 返回 transcript、usage、routing、trace 等结构化结果
 
 优先入口：
@@ -116,7 +116,7 @@ Web 负责：
 
 ### 4. 模型配置是请求级快照
 
-模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runner 子进程环境只承载身份、Redis/PostgreSQL、`SKILLS_DIR` 等运行时依赖，不应依赖进程级模型密钥。
+模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runner 子进程环境只承载身份、Redis/PostgreSQL 等运行时依赖，不应依赖进程级模型密钥。
 
 实际注入 agent-runner 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
 
@@ -138,12 +138,13 @@ Web 负责：
 ## 目录速查
 
 - `apps/api/src/interfaces/http/`: Fastify API
-- `apps/api/src/modules/skills/`: Text Skill Bundle 写入、官方 Skill 目录和技能 HTTP 服务
+- `apps/api/src/modules/skills/`: Text Skill Bundle 写入和技能 HTTP 服务
+- `apps/api/src/modules/chat/paipan-registry.ts`: 系统排盘目录清单、参数 schema 和 runner 绑定
+- `apps/api/src/modules/chat/paipan-runners/`: 系统排盘 TypeScript 确定性实现
 - `packages/agent-runner/src/prompt/`: system prompt 组装
 - `packages/agent-runner/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
 - `packages/agent-runner/src/tools/skill/`: 玄学解读、用户知识组合和参数校验辅助
 - `apps/web/app/admin/`: 管理后台
-- `skills/official/`: 官方 `SKILL.md`、说明和确定性脚本
 - `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
 ## 常见误区
@@ -151,11 +152,11 @@ Web 负责：
 - 不要假设 trace 只写日志。`conversation_logs.trace_events` 当前会落库
 - 不要把 `store/` 当主存储层；那是旧版本地 SQLite 遗留路径，当前正式运行链路已不再使用
 - 不要只看 `.env.example` 就断定宿主变量名，宿主实际读取逻辑在 `apps/api/src/infrastructure/config.ts` 和 `apps/api/src/runtime/agent-env.ts`
-- 不要只根据 `skills/official/` 判断 Skill 是否生效，还要结合 `skill_global_config` 和用户订阅/启用状态
+- 不要只根据 `paipan-registry.ts` 判断系统排盘是否对用户生效，还要结合 `skill_global_config` 和用户启用状态
 - 不要把用户私有知识写到 `.pi/skills`、`~/.pi/agent/skills` 或任何全局扫描目录；私有知识必须是 request-scoped Text Skill Bundle
 - 不要把 `dev:api-only` 和正式启动混为一谈，它明确跳过轮询、IPC worker、调度和 runtime 激活
 - 不要在 agent-runner 里找 one-shot/stdin 入口或 Dockerfile，它们已移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
-- 官方 Skill 目录以 `SKILL.md` 为入口；用户知识正文在文件系统 Text Skill Bundle 中，DB 只保存 metadata 和 bundle 地址
+- 系统排盘不再依赖旧版说明文件或独立脚本目录；用户知识正文在文件系统 Text Skill Bundle 中，DB 只保存 metadata 和 bundle 地址
 
 ## 模块文档
 

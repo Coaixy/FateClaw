@@ -12,7 +12,6 @@ import {
   TIMEZONE,
 } from '../infrastructure/config.js';
 import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
-import { resolveOfficialSkillsDir } from '../infrastructure/official-skills-path.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 
@@ -36,7 +35,6 @@ export interface AgentEnv {
   SKILL_API_BASE: string;
   REDIS_URL?: string;
   DATABASE_URL?: string;
-  SKILLS_DIR: string;
 
   // --- 系统 ---
   PATH?: string;
@@ -79,7 +77,6 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     SKILL_API_BASE,
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,
     DATABASE_URL: DATABASE_URL || process.env.DATABASE_URL || undefined,
-    SKILLS_DIR: resolveOfficialSkillsDir(),
 
     // 系统
     NODE_ENV: process.env.NODE_ENV,

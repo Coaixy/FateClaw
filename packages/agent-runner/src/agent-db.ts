@@ -38,12 +38,12 @@ export async function closeAgentDb(): Promise<void> {
 // ── Skills ──
 
 /**
- * 查询用户可用的官方 Skill 名称列表。
+ * 查询用户可用的系统排盘名称列表。
  * 当提供 userId 时，结合 user_skills 偏好和 default_enabled 决定：
  *   - 用户显式启用 → 启用
  *   - 用户显式禁用 → 禁用
  *   - 无用户偏好 → 取 default_enabled
- * 全局禁用的 skill 始终不返回。
+ * 全局禁用的排盘始终不返回。
  * 无 userId 时回退到全局 default_enabled 行为。
  */
 export async function queryEnabledSkillNames(userId?: string): Promise<string[]> {
@@ -132,7 +132,7 @@ export async function queryEffectiveUserSkills(
 }
 
 /**
- * 启用或禁用官方 Skill（per-user）。
+ * 启用或禁用系统排盘（per-user）。
  */
 export async function toggleUserSkill(
   userId: string,

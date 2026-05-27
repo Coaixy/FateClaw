@@ -126,7 +126,7 @@ export function createPiSkillReadTool(
       const readResult = filePath
         ? readSkillFile(filePath)
         : {
-            output: `读取被拒绝：${params.path || '(空路径)'} 不属于本轮可见官方 Pi Skill 目录。`,
+            output: `读取被拒绝：${params.path || '(空路径)'} 不属于本轮可见 Pi Skill 目录。`,
             isError: true,
           };
       const isError = readResult.isError;

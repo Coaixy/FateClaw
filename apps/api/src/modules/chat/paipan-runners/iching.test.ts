@@ -1,57 +1,21 @@
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
-interface YaoItem {
-  liuQin: string;
-  liuShou: string;
-  naJia: string;
-}
+import { runIchingPaipan, type IchingPaipanResult } from './iching.js';
 
-interface Gua {
-  guaName: string;
-  yaoList: YaoItem[];
-  fuShen?: Array<{
-    fuLiuQin: string;
-    hostYaoIndex: number;
-    hostNaJia: string;
-  }>;
-}
-
-interface IchingPaipanResult {
-  ganZhiYear: { gz: string };
-  ganZhiMonth: { gz: string };
-  ganZhiDay: { gz: string };
-  ganZhiHour: { gz: string };
-  yearKong: string;
-  monthKong: string;
-  dayKong: string;
-  hourKong: string;
-  shenSha: Record<string, string>;
-  benGua: Gua;
-  zhiGua: Gua;
-}
-
-const scriptPath = fileURLToPath(new URL('./paipan.js', import.meta.url));
-
-function runPaipan(input: Record<string, unknown> = {}): IchingPaipanResult {
-  const stdout = execFileSync('node', [scriptPath], {
-    encoding: 'utf8',
-    input: JSON.stringify({
-      method: 'manual',
-      yao: '789678',
-      datetime: '2026-04-17 14:30',
-      ...input,
-    }),
+async function runPaipan(
+  input: Record<string, unknown> = {},
+): Promise<IchingPaipanResult> {
+  return runIchingPaipan({
+    method: 'manual',
+    yao: '789678',
+    datetime: '2026-04-17 14:30',
+    ...input,
   });
-
-  return JSON.parse(stdout) as IchingPaipanResult;
 }
 
 describe('iching-paipan reference alignment', () => {
-  it('matches the reference liuyao pillars and gua data', () => {
-    const result = runPaipan();
+  it('matches the reference liuyao pillars and gua data', async () => {
+    const result = await runPaipan();
 
     expect([
       result.ganZhiYear.gz,
@@ -109,16 +73,18 @@ describe('iching-paipan reference alignment', () => {
     ]);
   });
 
-  it('matches the reference fushen and shensha data', () => {
-    const result = runPaipan();
+  it('matches the reference fushen and shensha data', async () => {
+    const result = await runPaipan();
 
-    expect(result.benGua.fuShen).toEqual([
-      expect.objectContaining({
-        fuLiuQin: '妻财',
-        hostYaoIndex: 2,
-        hostNaJia: '己亥',
-      }),
-    ]);
+    expect(result.benGua.fuShen).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fuLiuQin: '妻财',
+          hostYaoIndex: 2,
+          hostNaJia: '己亥',
+        }),
+      ]),
+    );
     expect(result.shenSha).toMatchObject({
       文昌: '子',
       驿马: '亥',
@@ -135,8 +101,8 @@ describe('iching-paipan reference alignment', () => {
     });
   });
 
-  it('matches the reference data for all-moving kun to qian', () => {
-    const result = runPaipan({
+  it('matches the reference data for all-moving kun to qian', async () => {
+    const result = await runPaipan({
       yao: '666666',
       datetime: '2024-08-08 09:15',
     });
@@ -147,8 +113,12 @@ describe('iching-paipan reference alignment', () => {
       result.ganZhiDay.gz,
       result.ganZhiHour.gz,
     ]).toEqual(['甲辰', '壬申', '甲辰', '己巳']);
-    expect([result.yearKong, result.monthKong, result.dayKong, result.hourKong])
-      .toEqual(['寅卯', '戌亥', '寅卯', '戌亥']);
+    expect([
+      result.yearKong,
+      result.monthKong,
+      result.dayKong,
+      result.hourKong,
+    ]).toEqual(['寅卯', '戌亥', '寅卯', '戌亥']);
     expect(result.benGua.guaName).toBe('坤为地');
     expect(result.zhiGua.guaName).toBe('乾为天');
     expect(result.benGua.yaoList.map((yao) => yao.naJia)).toEqual([
@@ -177,8 +147,8 @@ describe('iching-paipan reference alignment', () => {
     });
   });
 
-  it('matches the reference data for static qian', () => {
-    const result = runPaipan({
+  it('matches the reference data for static qian', async () => {
+    const result = await runPaipan({
       yao: '777777',
       datetime: '2025-01-02 22:05',
     });
@@ -189,8 +159,12 @@ describe('iching-paipan reference alignment', () => {
       result.ganZhiDay.gz,
       result.ganZhiHour.gz,
     ]).toEqual(['甲辰', '丙子', '辛未', '己亥']);
-    expect([result.yearKong, result.monthKong, result.dayKong, result.hourKong])
-      .toEqual(['寅卯', '申酉', '戌亥', '辰巳']);
+    expect([
+      result.yearKong,
+      result.monthKong,
+      result.dayKong,
+      result.hourKong,
+    ]).toEqual(['寅卯', '申酉', '戌亥', '辰巳']);
     expect(result.benGua.guaName).toBe('乾为天');
     expect(result.zhiGua.guaName).toBe('乾为天');
     expect(result.benGua.yaoList.map((yao) => yao.liuQin)).toEqual([

@@ -67,7 +67,7 @@ export function PaipanSkillRail({
       <div className="mt-2.5">
         {isEmpty ? (
           <div className="rounded-2xl border border-dashed border-hairline bg-surface-card/35 px-3 py-3 text-[10px] sm:text-[11px] leading-5 text-muted">
-            当前还没有可用的官方排盘术数。
+            当前还没有可用的系统排盘术数。
           </div>
         ) : (
           <div className="-mx-1 px-1">

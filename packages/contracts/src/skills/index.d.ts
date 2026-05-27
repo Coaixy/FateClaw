@@ -4,17 +4,6 @@
 
 import type { OkResponse } from '../common/api.js';
 
-export type SkillEntryDto =
-  | {
-      type: 'script';
-      file: string;
-    }
-  | {
-      type: 'tool';
-      tool: string;
-      fallbackScript?: string;
-    };
-
 export interface SkillDto {
   dir?: string;
   name: string;
@@ -25,10 +14,6 @@ export interface SkillDto {
   defaultEnabled?: boolean;
   official?: boolean;
   userControllable?: boolean;
-  manifestSource?: string;
-  manifestVersion?: number;
-  requiresLoad?: boolean;
-  entry?: SkillEntryDto;
 }
 
 export interface SkillMetaDto {
@@ -36,10 +21,6 @@ export interface SkillMetaDto {
   name: string;
   description: string;
   trigger: string;
-  entry?: SkillEntryDto;
-  manifestSource?: 'SKILL.md';
-  manifestVersion?: number;
-  requiresLoad?: boolean;
 }
 
 export type SkillUsageModeDto =

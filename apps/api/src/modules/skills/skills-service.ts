@@ -1,7 +1,7 @@
 /**
  * 技能 HTTP 场景服务层。
  *
- * 当前先作为技能域统一门面，集中承接数据库与官方目录访问，
+ * 当前先作为技能域统一门面，集中承接数据库与系统排盘注册表访问，
  * 后续再继续把 route 中的验证与流程编排下沉进来。
  */
 
@@ -57,9 +57,9 @@ import {
 } from '../../infrastructure/db.js';
 import { normalizeCategory } from './category-map.js';
 import {
-  loadOfficialSkillCatalog,
-  type OfficialSkillCatalogEntry,
-} from './skill-manifest.js';
+  listPaipanRegistry,
+  type PaipanRegistryEntry,
+} from '../chat/paipan-registry.js';
 
 export {
   createSkillBundle,
@@ -80,7 +80,7 @@ export {
   getUserCustomSkillCount,
   getUserCustomSkills,
   getUserSkills,
-  loadOfficialSkillCatalog,
+  listPaipanRegistry,
   listCreatorSharedSkills,
   listMarketBundles,
   listMarketSkills,
@@ -110,7 +110,7 @@ export {
   upsertCreatorBundleConfig,
 };
 
-export type { OfficialSkillCatalogEntry };
+export type { PaipanRegistryEntry };
 
 export const MAX_USER_SKILLS = 30;
 export const MAX_CONTENT_LENGTH = 30000;
@@ -118,26 +118,22 @@ export const MAX_CONTENT_LENGTH = 30000;
 const INTERNAL_OFFICIAL_SKILL_DIRS = new Set<string>();
 
 export function isUserVisibleOfficialSkill(
-  skill: OfficialSkillCatalogEntry,
+  skill: PaipanRegistryEntry,
 ): boolean {
   return !INTERNAL_OFFICIAL_SKILL_DIRS.has(skill.dir);
 }
 
-export function loadUserVisibleOfficialSkillCatalog(
-  skillsDir?: string,
-): OfficialSkillCatalogEntry[] {
-  return loadOfficialSkillCatalog(skillsDir).filter(isUserVisibleOfficialSkill);
+export function loadUserVisibleOfficialSkillCatalog(): PaipanRegistryEntry[] {
+  return listPaipanRegistry().filter(isUserVisibleOfficialSkill);
 }
 
 /**
- * 读取官方 Skill 清单，并确保数据库中已补齐对应记录。
+ * 读取系统排盘注册表，并确保数据库中已补齐对应开关记录。
  */
-export async function getOfficialSkills(): Promise<
-  OfficialSkillCatalogEntry[]
-> {
-  const skills = loadOfficialSkillCatalog();
-  await seedOfficialSkills(skills.map((skill) => skill.name));
-  return skills.filter(isUserVisibleOfficialSkill);
+export async function getOfficialSkills(): Promise<PaipanRegistryEntry[]> {
+  const boards = listPaipanRegistry();
+  await seedOfficialSkills(boards.map((board) => board.name));
+  return boards.filter(isUserVisibleOfficialSkill);
 }
 
 /**

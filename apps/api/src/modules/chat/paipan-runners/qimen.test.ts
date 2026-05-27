@@ -1,43 +1,21 @@
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
-interface QimenPaipanResult {
-  干支: string;
-  旬首: string;
-  旬空: Record<string, string>;
-  排局: string;
-  值符值使: {
-    值符星宫: string[];
-    值使门宫: string[];
-  };
-  天盘: Record<string, string>;
-  地盘: Record<string, string>;
-  门: Record<string, string>;
-  星: Record<string, string>;
-  神: Record<string, string>;
-}
+import { runQimenPaipan, type QimenPaipanResult } from './qimen.js';
 
-const scriptPath = fileURLToPath(new URL('./paipan.js', import.meta.url));
-
-function runPaipan(input: Record<string, unknown> = {}): QimenPaipanResult {
-  const stdout = execFileSync('node', [scriptPath], {
-    encoding: 'utf8',
-    input: JSON.stringify({
-      solarDate: '2026-04-17',
-      hour: 14,
-      minute: 30,
-      ...input,
-    }),
+async function runPaipan(
+  input: Record<string, unknown> = {},
+): Promise<QimenPaipanResult> {
+  return runQimenPaipan({
+    solarDate: '2026-04-17',
+    hour: 14,
+    minute: 30,
+    ...input,
   });
-
-  return JSON.parse(stdout) as QimenPaipanResult;
 }
 
 describe('qimen-paipan reference alignment', () => {
-  it('matches the reference qimen core pan data', () => {
-    const result = runPaipan();
+  it('matches the reference qimen core pan data', async () => {
+    const result = await runPaipan();
 
     expect(result.干支).toBe('丙午年壬辰月辛酉日乙未时');
     expect(result.旬首).toBe('甲午');
@@ -52,14 +30,20 @@ describe('qimen-paipan reference alignment', () => {
       值符星宫: ['蓬', '乾'],
       值使门宫: ['休', '坤'],
     });
-    expect(['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'].map((gong) => result.天盘[gong]))
-      .toEqual(['己', '戊', '丁', '庚', '丙', '辛', '乙', '癸', '壬']);
-    expect(['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'].map((gong) => result.地盘[gong]))
-      .toEqual(['辛', '壬', '癸', '丁', '丙', '乙', '戊', '己', '庚']);
+    expect(
+      ['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'].map(
+        (gong) => result.天盘[gong],
+      ),
+    ).toEqual(['己', '戊', '丁', '庚', '丙', '辛', '乙', '癸', '壬']);
+    expect(
+      ['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'].map(
+        (gong) => result.地盘[gong],
+      ),
+    ).toEqual(['辛', '壬', '癸', '丁', '丙', '乙', '戊', '己', '庚']);
   });
 
-  it('matches the reference qimen door star and god pan data', () => {
-    const result = runPaipan();
+  it('matches the reference qimen door star and god pan data', async () => {
+    const result = await runPaipan();
     const palaceOrder = ['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'];
 
     expect(palaceOrder.map((gong) => result.门[gong] ?? '')).toEqual([
@@ -97,8 +81,8 @@ describe('qimen-paipan reference alignment', () => {
     ]);
   });
 
-  it('matches the reference qimen yin seven pan data', () => {
-    const result = runPaipan({
+  it('matches the reference qimen yin seven pan data', async () => {
+    const result = await runPaipan({
       solarDate: '2026-12-21',
       hour: 23,
       minute: 30,
@@ -142,8 +126,8 @@ describe('qimen-paipan reference alignment', () => {
     ]);
   });
 
-  it('matches the reference qimen yin five pan data', () => {
-    const result = runPaipan({
+  it('matches the reference qimen yin five pan data', async () => {
+    const result = await runPaipan({
       solarDate: '2025-07-07',
       hour: 6,
       minute: 0,

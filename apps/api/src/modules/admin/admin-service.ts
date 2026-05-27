@@ -55,7 +55,7 @@ import {
   getAdminRechargePaymentConfig,
   updateAdminRechargePaymentConfig,
 } from '../billing/recharge-service.js';
-import { loadOfficialSkillCatalog } from '../skills/skill-manifest.js';
+import { listPaipanRegistry } from '../chat/paipan-registry.js';
 
 export {
   adjustUserPurchasedPoints,
@@ -262,12 +262,12 @@ export async function getAdminWithdrawalIdNumber(
 }
 
 /**
- * 聚合官方 Skill 全局状态列表。
+ * 聚合系统排盘全局状态列表。
  */
 export async function listAdminGlobalSkills() {
   const [configs, catalog] = await Promise.all([
     getAllSkillGlobalConfigs(),
-    Promise.resolve(loadOfficialSkillCatalog()),
+    Promise.resolve(listPaipanRegistry()),
   ]);
   const configMap = new Map(
     configs.map((config) => [config.skill_name, config]),
@@ -282,17 +282,13 @@ export async function listAdminGlobalSkills() {
       dir: skill.dir,
       description: skill.description,
       trigger: skill.trigger,
-      manifestSource: skill.manifestSource,
-      manifestVersion: skill.manifestVersion,
-      requiresLoad: skill.requiresLoad,
-      entry: skill.entry,
     };
   });
 }
 
 /**
- * 判断官方 Skill 是否存在。
+ * 判断系统排盘是否存在。
  */
 export function hasOfficialSkill(name: string): boolean {
-  return loadOfficialSkillCatalog().some((skill) => skill.name === name);
+  return listPaipanRegistry().some((skill) => skill.name === name);
 }

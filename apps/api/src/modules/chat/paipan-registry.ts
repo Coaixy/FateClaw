@@ -1,9 +1,8 @@
-import fs from 'fs';
-import path from 'path';
-
-import { parse as parseYaml } from 'yaml';
-
-import { resolveOfficialSkillsDir } from '../../infrastructure/official-skills-path.js';
+import { runBaziPaipan } from './paipan-runners/bazi.js';
+import { runIchingPaipan } from './paipan-runners/iching.js';
+import { runJingzhanPaipan } from './paipan-runners/jingzhan.js';
+import { runQimenPaipan } from './paipan-runners/qimen.js';
+import { runZiweiPaipan } from './paipan-runners/ziwei.js';
 
 export type SkillParamType =
   | 'string'
@@ -52,41 +51,23 @@ export interface SkillParametersSchema {
   examples?: SkillExamplePayload[];
 }
 
-export type SkillEntry =
-  | {
-      type: 'script';
-      file: string;
-    }
-  | {
-      type: 'tool';
-      tool: string;
-      fallbackScript?: string;
-    };
+export type PaipanRunner = (input: Record<string, unknown>) => Promise<unknown>;
 
-export interface OfficialSkillCatalogEntry {
+export interface PaipanRegistryEntry {
   dir: string;
   name: string;
   description: string;
   trigger: string;
-  entry?: SkillEntry;
+  runner: PaipanRunner;
   parameters?: SkillParametersSchema;
-  manifestSource: 'SKILL.md';
-  manifestVersion?: number;
-  requiresLoad?: boolean;
 }
 
-interface OfficialSkillRuntimeConfig {
+interface PaipanRegistryConfig {
   displayName: string;
+  description: string;
   trigger: string;
-  entry?: SkillEntry;
+  runner: PaipanRunner;
   parameters?: SkillParametersSchema;
-  manifestVersion?: number;
-  requiresLoad?: boolean;
-}
-
-interface SkillMarkdownDescriptor {
-  frontmatter: Record<string, unknown>;
-  title?: string;
 }
 
 const ichingLikeParameters: SkillParametersSchema = {
@@ -119,16 +100,13 @@ const ichingLikeParameters: SkillParametersSchema = {
   },
 };
 
-const OFFICIAL_SKILL_RUNTIME_CONFIG: Record<
-  string,
-  OfficialSkillRuntimeConfig
-> = {
+const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
   'bazi-paipan': {
     displayName: '八字排盘',
+    description:
+      '八字排盘：四柱、大运、完整流年、格局，基于 bazi-ts-lib 本地确定性算法计算。',
     trigger: '用户询问八字、四柱、大运、流年、格局等命理相关问题',
-    entry: { type: 'script', file: 'paipan.js' },
-    manifestVersion: 2,
-    requiresLoad: false,
+    runner: runBaziPaipan,
     parameters: {
       type: 'object',
       properties: {
@@ -180,29 +158,29 @@ const OFFICIAL_SKILL_RUNTIME_CONFIG: Record<
   },
   'iching-paipan': {
     displayName: '六爻排盘',
+    description:
+      '六爻纳甲排盘：返回本卦、变卦、互卦、六亲、六兽、世应、伏神、旬空、月建等确定性数据。',
     trigger:
       '用户询问六爻、纳甲、六亲、世应、伏神、动爻、用神、飞伏等六爻占卜相关问题',
-    entry: { type: 'script', file: 'paipan.js' },
-    manifestVersion: 2,
-    requiresLoad: false,
+    runner: runIchingPaipan,
     parameters: ichingLikeParameters,
   },
   'jingzhan-paipan': {
     displayName: '经占排盘',
+    description:
+      '周易经占排盘：按大衍筮法、略筮法或指定卦爻生成卦象与取辞数据。',
     trigger:
       '用户询问周易、易经、占卜、起卦、大衍筮法、略筮法、卦辞、爻辞等经占排盘相关问题',
-    entry: { type: 'script', file: 'paipan.js' },
-    manifestVersion: 2,
-    requiresLoad: false,
+    runner: runJingzhanPaipan,
     parameters: ichingLikeParameters,
   },
   'qimen-paipan': {
     displayName: '奇门遁甲排盘',
+    description:
+      '奇门遁甲排盘：按指定时间或当前时间生成时家奇门拆补盘与九宫数据。',
     trigger:
       '用户询问奇门遁甲、时家奇门、值符值使、八门九星、天地盘相关问题，或需要按指定时间起奇门局',
-    entry: { type: 'script', file: 'paipan.js' },
-    manifestVersion: 2,
-    requiresLoad: false,
+    runner: runQimenPaipan,
     parameters: {
       type: 'object',
       properties: {
@@ -243,10 +221,9 @@ const OFFICIAL_SKILL_RUNTIME_CONFIG: Record<
   },
   'ziwei-paipan': {
     displayName: '紫微斗数排盘',
+    description: '紫微斗数排盘：根据阳历出生时间和性别生成十二宫星盘。',
     trigger: '用户询问紫微斗数、紫微排盘、命宫身宫、大限流年等相关问题',
-    entry: { type: 'script', file: 'paipan.js' },
-    manifestVersion: 2,
-    requiresLoad: false,
+    runner: runZiweiPaipan,
     parameters: {
       type: 'object',
       properties: {
@@ -309,113 +286,28 @@ const OFFICIAL_SKILL_RUNTIME_CONFIG: Record<
   },
 };
 
-function asString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+export function listPaipanRegistry(): PaipanRegistryEntry[] {
+  return Object.entries(PAIPAN_REGISTRY_CONFIG).map(([dir, config]) => ({
+    dir,
+    name: config.displayName,
+    description: config.description,
+    trigger: config.trigger,
+    runner: config.runner,
+    parameters: config.parameters,
+  }));
 }
 
-function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
-function asBoolean(value: unknown): boolean | undefined {
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function parseFrontmatter(raw: string): {
-  frontmatter: Record<string, unknown>;
-  body: string;
-} {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) {
-    return { frontmatter: {}, body: raw };
-  }
-  const parsed = parseYaml(match[1] ?? '');
-  const frontmatter =
-    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  return {
-    frontmatter,
-    body: raw.slice(match[0].length),
-  };
-}
-
-function readSkillMarkdownDescriptor(
-  filePath: string,
-): SkillMarkdownDescriptor | null {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const { frontmatter, body } = parseFrontmatter(raw);
-    const title = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
-    return { frontmatter, title };
-  } catch {
-    return null;
-  }
-}
-
-function loadOfficialSkillDescriptor(
+export function getPaipanRegistryEntry(
   skillDir: string,
-  skillPath: string,
-): OfficialSkillCatalogEntry | null {
-  const skillMarkdownPath = path.join(skillPath, 'SKILL.md');
-  if (!fs.existsSync(skillMarkdownPath)) {
-    return null;
-  }
-
-  const markdown = readSkillMarkdownDescriptor(skillMarkdownPath);
-  if (!markdown) {
-    return null;
-  }
-
-  const config = OFFICIAL_SKILL_RUNTIME_CONFIG[skillDir];
-  const name =
-    config?.displayName ??
-    asString(markdown.frontmatter.title) ??
-    markdown.title ??
-    asString(markdown.frontmatter.name) ??
-    skillDir;
-  const description =
-    asString(markdown.frontmatter.description) ?? markdown.title ?? '';
-  const trigger =
-    asString(markdown.frontmatter.trigger) ?? config?.trigger ?? description;
-
+): PaipanRegistryEntry | undefined {
+  const config = PAIPAN_REGISTRY_CONFIG[skillDir];
+  if (!config) return undefined;
   return {
     dir: skillDir,
-    name,
-    description,
-    trigger,
-    entry: config?.entry,
-    parameters: config?.parameters,
-    manifestSource: 'SKILL.md',
-    manifestVersion:
-      asNumber(markdown.frontmatter.manifestVersion) ?? config?.manifestVersion,
-    requiresLoad:
-      asBoolean(markdown.frontmatter.requiresLoad) ??
-      config?.requiresLoad ??
-      false,
+    name: config.displayName,
+    description: config.description,
+    trigger: config.trigger,
+    runner: config.runner,
+    parameters: config.parameters,
   };
-}
-
-export function loadOfficialSkillCatalog(
-  skillsDir: string = resolveOfficialSkillsDir(),
-): OfficialSkillCatalogEntry[] {
-  if (!fs.existsSync(skillsDir)) return [];
-
-  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-  const skills: OfficialSkillCatalogEntry[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
-    const skill = loadOfficialSkillDescriptor(
-      entry.name,
-      path.join(skillsDir, entry.name),
-    );
-    if (skill) {
-      skills.push(skill);
-    }
-  }
-
-  return skills;
 }

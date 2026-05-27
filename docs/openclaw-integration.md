@@ -5,7 +5,7 @@ FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径，但当前默
 ## 当前状态
 
 - 站内 AI Chat 是当前默认可运行主链路。
-- `apps/api/src/app/index.ts` 初始化 DB、官方 Skill、Redis、IPC worker、retention worker 和 Fastify API。
+- `apps/api/src/app/index.ts` 初始化 DB、系统排盘开关、Redis、IPC worker、retention worker 和 Fastify API。
 - `activateAccount()` 当前只记录“微信设备运行入口暂时关闭”，不会热激活轮询。
 - Web 侧设备绑定页面也会提示微信设备暂时关闭。
 

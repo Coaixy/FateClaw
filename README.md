@@ -8,10 +8,10 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 
 ## 项目亮点
 
-- **本地确定性排盘**：八字、紫微、奇门、六爻、经占等官方 Skill 以本地脚本执行，先生成结构化盘面，再交给 Agent 承接。
+- **本地确定性排盘**：八字、紫微、奇门、六爻、经占等系统排盘脚本本地执行，先生成结构化盘面，再交给 Agent 承接。
 - **用户知识库检索**：创作者可以把流派规则、案例边界、固定口径拆成章节，解读 Agent 按需读取，不把整本资料塞进上下文。
 - **常驻 Agent Runtime**：宿主通过 Redis IPC 调度账号级 `agent-runner` 常驻进程，避免每条消息重新初始化完整运行环境。
-- **Pi Runtime 编排**：模型 loop、工具选择、Skill 文件读取和最终回复都由 Pi SDK 承接，FateClaw 只保留领域 custom tools。
+- **Pi Runtime 编排**：模型 loop、用户知识读取和最终回复都由 Pi SDK 承接，FateClaw 只保留排盘等确定性业务能力。
 - **请求级模型配置**：模型 Provider、密钥、价格和上下文窗口由宿主解析成 `llmRuntime` 快照随请求下发，不依赖 agent 进程全局模型环境变量。
 - **可观测对话链路**：每次请求返回 transcript、trace events、agent graph 和 token usage，后台可回看工具调用、知识命中和模型链路。
 - **OpenClaw/iLink 预留接入**：微信账号、消息转换、轮询和发送路径仍在仓库内，适合在站内主链路稳定后恢复外部渠道。
@@ -43,12 +43,12 @@ flowchart LR
   subgraph Agent["packages/agent-runner 常驻进程"]
     Daemon["daemon BRPOP"]
     Kernel["Pi Runtime"]
-    Tools["Pi Custom Tools / Skill Resources"]
+    Tools["业务运行资源 / Skill Resources"]
   end
 
   subgraph Data["数据与能力"]
     PG[("PostgreSQL<br/>用户 / 会话 / 知识库 / 日志 / 账务")]
-    OfficialSkills["skills/official<br/>本地排盘 Skill"]
+    PaipanRuntime["apps/api paipan runners<br/>系统排盘实现"]
     LLM["模型 Provider<br/>OpenAI / Anthropic / Gemini / Compatible"]
   end
 
@@ -63,7 +63,7 @@ flowchart LR
   Inbox --> Daemon
   Daemon --> Kernel
   Kernel --> Tools
-  Tools --> OfficialSkills
+  Tools --> PaipanRuntime
   Tools --> PG
   Kernel --> LLM
   Daemon --> Outbox
@@ -79,14 +79,14 @@ flowchart LR
 
 ## Pi Runtime
 
-FateClaw 的 Agent 执行已统一到 Pi SDK：宿主只负责请求、账务、权限和日志，agent-runner 每次请求创建 request-scoped Pi Runtime，把当前用户有权访问的官方 Skill 与 Text Skill Bundle 暴露给 Pi ResourceLoader。
+FateClaw 的 Agent 执行已统一到 Pi SDK：宿主只负责请求、账务、权限和日志，agent-runner 每次请求创建 request-scoped Pi Runtime，并只把当前用户有权访问的 Text Skill Bundle 暴露给 Pi ResourceLoader。系统排盘由 Web/API 侧的确定性运行包完成，再把盘面 artifact 交给 Agent 推理。
 
 ```mermaid
 flowchart TD
   UserMsg["用户消息 / 手动排盘 / 自贴盘面"] --> Runtime["createRequestRuntime"]
-  Runtime --> Loader["Pi ResourceLoader<br/>官方 SKILL.md + request-scoped Text Skill Bundle"]
-  Loader --> Session["Pi Session<br/>模型自主选择工具和读取 Skill 文件"]
-  Session --> Board["确定性排盘工具<br/>bazi_paipan / iching_paipan / ..."]
+  Runtime --> Loader["Pi ResourceLoader<br/>request-scoped Text Skill Bundle"]
+  Loader --> Session["Pi Session<br/>模型读取授权 Skill 文件"]
+  UserMsg --> Board["API 内部确定性排盘 runner"]
   Session --> ReadSkill["read_skill_file<br/>读取 SKILL.md / index.md / docs / examples / notes"]
   Session --> Interpret["interpret_xuanxue<br/>结合盘面、问题和授权知识解读"]
   Board --> Artifact["结构化盘面 artifact"]
@@ -115,10 +115,10 @@ sequenceDiagram
   H->>R: LPUSH ipc:{runtimeId}:inbox
   A->>R: BRPOP inbox
   A->>A: 创建 request-scoped Pi Runtime
-  A->>S: 暴露官方 Skill 与授权 Text Skill Bundle
+  A->>S: 暴露授权 Text Skill Bundle
   A->>M: AI 请求通过 Pi SDK 调用模型和工具
   M-->>A: tool call / final reply
-  A->>S: 手动排盘通过 Pi deterministic tool 执行
+  H->>S: 手动排盘调用系统排盘脚本
   A->>R: LPUSH ai-chat outbox
   H->>R: 监听 outbox
   H->>DB: 写入回复、trace、agentGraph、usage、账务记录
@@ -130,10 +130,10 @@ sequenceDiagram
 
 | 能力 | 当前实现 |
 | --- | --- |
-| 排盘 | Pi custom tools 调用 `skills/official/*-paipan/paipan.js`，返回结构化 artifact |
-| 解读 | Pi custom tool `interpret_xuanxue`，自动注入当前盘面和授权用户知识 |
+| 排盘 | Web/API 调用 `apps/api/src/modules/chat/paipan-runners/*.ts`，返回结构化 artifact |
+| 解读 | Pi Runtime 基于当前盘面、问题和授权用户知识直接回复 |
 | 用户知识库 | Web 创建 Text Skill Bundle，DB 只存 metadata、权限、版本和 `bundle_uri` |
-| Agent 调度 | `packages/agent-runner/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop、工具调用和 Skill 文件读取 |
+| Agent 调度 | `packages/agent-runner/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop 和授权 Skill 文件读取 |
 | IPC | Redis list 队列：inbox、outbox、ai-chat outbox、tasks |
 | 模型 | AI 请求使用请求级 `llmRuntime` 快照，由 Pi Runtime 适配 OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
 | 可观测性 | `conversation_logs` 保存 transcript、traceEvents、agentGraph、usage |
@@ -158,8 +158,7 @@ FateClaw/
 │   ├── agent-runner/        # 常驻 Agent 执行进程、模型循环、工具和 Skill 调用
 │   └── contracts/           # 前后端共享 DTO 类型
 ├── skills/
-│   ├── official/            # 官方排盘和解读 Skill
-│   └── _template/           # Skill 模板
+│   └── _template/           # 用户 Text Skill 模板
 ├── docs/                    # API、Agent 架构、OpenClaw 对接等文档
 ├── scripts/                 # 初始化、清理和打包脚本
 └── .env.example             # 环境变量示例
@@ -207,7 +206,6 @@ ALLOWED_ORIGINS=http://localhost:3001
 说明：
 
 - `JWT_SECRET` 和 `MANAGER_KEY` 必须使用强随机值，可用 `openssl rand -hex 32` 生成。
-- `SKILLS_DIR` 可选，用于显式指定官方 Skill 根目录，例如 Windows 服务部署可设为 `C:\apps\FateClaw\skills\official`，避免服务启动目录变化时误报排盘脚本不存在。
 - 注册和找回密码依赖阿里云短信验证码；本地开发如不接短信服务，可先通过数据库插入测试用户或临时接入自己的短信配置。
 - 模型 Provider 主要通过管理后台写入数据库配置。
 - `DATABASE_URL` 需要指向一个已存在且可连接的 PostgreSQL 库；API 首次启动会自动创建和补齐所需表结构，无需手动执行 `scripts/init-pg.sql`。
@@ -249,18 +247,17 @@ pnpm run build:all     # 构建 API、agent-runner 和 Web
 
 AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密钥不依赖 agent 进程级环境变量；手动排盘请求不需要模型 runtime，只通过 Pi deterministic tool 执行。
 
-## Skill 与知识库
+## 排盘与知识库
 
-官方 Skill 位于 [skills/official](skills/official)：
+系统排盘实现内置在 API：
 
 - `bazi-paipan`：八字排盘
 - `ziwei-paipan`：紫微斗数排盘
 - `qimen-paipan`：奇门遁甲排盘
 - `iching-paipan`：六爻纳甲排盘
 - `jingzhan-paipan`：周易经占排盘
-- `xuanxue-jiedu`：玄学解读入口工具
 
-部署时如果官方 Skill 不在默认仓库结构下，可通过 `SKILLS_DIR` 指向 `skills/official` 目录本身。
+目录清单和参数 schema 在 `apps/api/src/modules/chat/paipan-registry.ts` 维护，确定性实现位于 `apps/api/src/modules/chat/paipan-runners/`。部署时不再需要额外挂载排盘脚本目录。
 
 用户知识库由 Web 控台创建为 `.fateclaw/text-skills/<owner>/<dir>-<id>/` 下的 Text Skill Bundle，包含 `SKILL.md`、`index.md`、`docs/`、`examples/` 和 `notes/`。数据库只保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时每次请求只把当前用户有权访问的 Bundle 注入 Pi ResourceLoader，模型再按需读取 Markdown 文件或知识章节。
 

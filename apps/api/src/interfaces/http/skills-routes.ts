@@ -76,12 +76,12 @@ import type { SkillPriceTier, CreatorBundleTier } from '../../shared/types.js';
 import type { UserCustomSkill } from '../../shared/types.js';
 
 export async function skillsRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/skills/catalog — 公开官方 Skill 目录（无需认证）
+  // GET /api/skills/catalog — 公开系统排盘兼容目录（无需认证）
   app.get('/catalog', async () => {
     return getOfficialSkills();
   });
 
-  // GET /api/skills — 官方 Skill 列表，合并全局状态 + 默认值 + 用户偏好
+  // GET /api/skills — 系统排盘兼容列表，合并全局状态 + 默认值 + 用户偏好
   app.get('/', async (request) => {
     await request.requireAuth();
     const userId = request.user.userId;
@@ -113,13 +113,13 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // PATCH /api/skills/:name/toggle — 用户切换某官方 Skill 的启用/禁用
+  // PATCH /api/skills/:name/toggle — 用户切换某系统排盘的启用/禁用
   app.patch('/:name/toggle', async (request, reply) => {
     await request.requireAuth();
     const userId = request.user.userId;
     const { name } = request.params as { name: string };
 
-    // 以文件系统为主，检查 skill 是否存在
+    // 以文件系统为主，检查系统排盘是否存在
     const catalog = loadUserVisibleOfficialSkillCatalog();
     if (!catalog.some((s) => s.name === name)) {
       return reply.code(404).send({ error: '该技能不存在' });

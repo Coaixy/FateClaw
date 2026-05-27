@@ -293,12 +293,6 @@ export interface AdminSkillGlobalConfig {
   dir?: string;
   description?: string;
   trigger?: string;
-  manifestSource?: string;
-  manifestVersion?: number;
-  requiresLoad?: boolean;
-  entry?:
-    | { type: 'script'; file: string }
-    | { type: 'tool'; tool: string; fallbackScript?: string };
 }
 
 export interface AdminSkill {

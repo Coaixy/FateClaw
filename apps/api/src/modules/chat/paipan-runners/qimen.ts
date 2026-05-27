@@ -1,17 +1,12 @@
-#!/usr/bin/env node
+import {
+  Qimen,
+  type Gong,
+  type HourChabuPan,
+  type QimenDateInput,
+} from 'kinqimen';
+import { calcXunKong, solarToLunar } from 'iching-shifa';
 
-/**
- * 奇门遁甲排盘脚本（时家拆补法，基于 kinqimen）
- *
- * stdin:  JSON { solarDate?, hour?, minute? }
- * stdout: JSON 时家拆补盘
- */
-
-import { Qimen } from 'kinqimen';
-import { solarToLunar, calcXunKong } from 'iching-shifa';
-import { isDirectCliRun } from '../_shared/cli-entry.js';
-
-const SHORT_GOD_MAP = {
+const SHORT_GOD_MAP: Record<string, string> = {
   值符: '符',
   螣蛇: '蛇',
   腾蛇: '蛇',
@@ -22,8 +17,18 @@ const SHORT_GOD_MAP = {
   九地: '地',
   九天: '天',
 };
-const GONG_BY_NUMBER = ['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'];
-const GONG_NUMBER = {
+const GONG_BY_NUMBER = [
+  '坎',
+  '坤',
+  '震',
+  '巽',
+  '中',
+  '乾',
+  '兑',
+  '艮',
+  '离',
+] as const;
+const GONG_NUMBER: Record<string, number> = {
   坎: 1,
   坤: 2,
   震: 3,
@@ -34,7 +39,7 @@ const GONG_NUMBER = {
   艮: 8,
   离: 9,
 };
-const GOD_PAN_YANG = {
+const GOD_PAN_YANG: Record<number, string[]> = {
   1: ['符', '玄', '阴', '合', '', '天', '地', '蛇', '虎'],
   2: ['合', '符', '玄', '地', '', '阴', '蛇', '虎', '天'],
   3: ['地', '合', '符', '蛇', '', '玄', '虎', '天', '阴'],
@@ -45,7 +50,7 @@ const GOD_PAN_YANG = {
   8: ['天', '虎', '蛇', '阴', '', '地', '玄', '符', '合'],
   9: ['虎', '蛇', '地', '天', '', '合', '阴', '玄', '符'],
 };
-const GOD_PAN_YIN = {
+const GOD_PAN_YIN: Record<number, string[]> = {
   1: ['符', '合', '地', '玄', '', '蛇', '阴', '天', '虎'],
   2: ['玄', '符', '合', '阴', '', '地', '天', '虎', '蛇'],
   3: ['阴', '玄', '符', '天', '', '合', '虎', '蛇', '地'],
@@ -57,20 +62,30 @@ const GOD_PAN_YIN = {
   9: ['虎', '天', '阴', '蛇', '', '玄', '地', '合', '符'],
 };
 
-async function readStdin() {
-  let text = '';
-  for await (const chunk of process.stdin) {
-    text += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
-  }
-  text = text.trim();
-  return text ? JSON.parse(text) : {};
+interface QimenInput {
+  solarDate?: string;
+  hour?: number;
+  minute?: number;
 }
 
-function resolveDateInput(input) {
+export type QimenPaipanResult = Omit<HourChabuPan, '旬空' | '星' | '神'> & {
+  旬空: HourChabuPan['旬空'] & Record<'年空' | '月空', string>;
+  星: Record<string, string>;
+  神: Record<string, string>;
+};
+
+function resolveDateInput(input: QimenInput): QimenDateInput {
   if (input.solarDate && input.hour !== undefined) {
-    const [y, m, d] = input.solarDate.split('-').map(Number);
-    if (!y || !m || !d) throw new Error(`非法 solarDate: ${input.solarDate}`);
-    return { year: y, month: m, day: d, hour: input.hour, minute: input.minute ?? 0 };
+    const [year, month, day] = input.solarDate.split('-').map(Number);
+    if (!year || !month || !day)
+      throw new Error(`非法 solarDate: ${input.solarDate}`);
+    return {
+      year,
+      month,
+      day,
+      hour: input.hour,
+      minute: input.minute ?? 0,
+    };
   }
   if (input.solarDate || input.hour !== undefined) {
     throw new Error('solarDate 和 hour 必须同时传入，或都不传（使用当前时间）');
@@ -85,7 +100,9 @@ function resolveDateInput(input) {
   };
 }
 
-function buildFourPillarKong(dateInput) {
+function buildFourPillarKong(
+  dateInput: QimenDateInput,
+): QimenPaipanResult['旬空'] {
   const lunar = solarToLunar(
     dateInput.year,
     dateInput.month,
@@ -100,11 +117,17 @@ function buildFourPillarKong(dateInput) {
   };
 }
 
-function referenceShenPan(yinYangDun, zhifuStarGong) {
+function referenceShenPan(
+  yinYangDun: string | undefined,
+  zhifuStarGong: readonly string[],
+): Record<string, string> {
   const [, palace] = zhifuStarGong;
-  const palaceNumber = GONG_NUMBER[palace];
-  const values = (yinYangDun === '阳' ? GOD_PAN_YANG : GOD_PAN_YIN)[palaceNumber];
-  if (!values) throw new Error(`无法识别值符落宫: ${palace}`);
+  const palaceNumber = palace ? GONG_NUMBER[palace] : undefined;
+  const values =
+    palaceNumber === undefined
+      ? undefined
+      : (yinYangDun === '阳' ? GOD_PAN_YANG : GOD_PAN_YIN)[palaceNumber];
+  if (!values) throw new Error(`无法识别值符落宫: ${palace ?? ''}`);
 
   return Object.fromEntries(
     values
@@ -113,9 +136,12 @@ function referenceShenPan(yinYangDun, zhifuStarGong) {
   );
 }
 
-function normalizeQimenPan(pan, dateInput) {
+function normalizeQimenPan(
+  pan: HourChabuPan,
+  dateInput: QimenDateInput,
+): QimenPaipanResult {
   const zhifuStarGong = pan.值符值使?.值符星宫;
-  const normalized = {
+  const normalized: QimenPaipanResult = {
     ...pan,
     旬空: buildFourPillarKong(dateInput),
     星: Object.fromEntries(
@@ -127,7 +153,7 @@ function normalizeQimenPan(pan, dateInput) {
     神: Object.fromEntries(
       Object.entries(pan.神 ?? {}).map(([palace, god]) => [
         palace,
-        SHORT_GOD_MAP[god] ?? god,
+        SHORT_GOD_MAP[String(god)] ?? String(god),
       ]),
     ),
   };
@@ -140,25 +166,9 @@ function normalizeQimenPan(pan, dateInput) {
   return normalized;
 }
 
-export async function runPaipan(input) {
-  const dateInput = resolveDateInput(input);
+export async function runQimenPaipan(
+  input: Record<string, unknown>,
+): Promise<QimenPaipanResult> {
+  const dateInput = resolveDateInput(input as QimenInput);
   return normalizeQimenPan(new Qimen(dateInput).pan(), dateInput);
-}
-
-async function mainFromCli() {
-  const input = await readStdin();
-  const result = await runPaipan(input);
-  console.log(JSON.stringify(result));
-}
-
-function isDirectRun() {
-  // 浏览器/移动端 import 时没有 process；这里只让 Node CLI 兼容旧后端脚本执行方式。
-  return isDirectCliRun(import.meta.url);
-}
-
-if (isDirectRun()) {
-  mainFromCli().catch((err) => {
-    console.error(JSON.stringify({ error: err.message }));
-    process.exit(1);
-  });
 }

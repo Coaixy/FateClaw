@@ -1,47 +1,74 @@
-#!/usr/bin/env node
-
-/**
- * 八字排盘脚本（基于 bazi-ts-lib，本地计算）
- *
- * stdin:  JSON { solarDate, hour, minute?, gender, zishiMode?, childLimitMode?, include? }
- * stdout: JSON 八字排盘结果
- */
-
 import {
   getAnnualFortuneRange,
   getBaZi,
   getBaZiBySiZhu,
   getFortune,
   getPattern,
+  type BaZiConfig,
+  type BaZiResult,
+  type DecadeFortuneInfo,
+  type FortuneResult,
+  type Gender,
 } from 'bazi-ts-lib';
 import { solarToLunar } from 'iching-shifa';
-import { isDirectCliRun } from '../_shared/cli-entry.js';
 
-const SECTIONS = ['bazi', 'fortune', 'pattern'];
+const SECTIONS = ['bazi', 'fortune', 'pattern'] as const;
 const DEFAULT_DECADE_COUNT = 11;
 
-async function readStdin() {
-  let text = '';
-  for await (const chunk of process.stdin) {
-    text += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
-  }
-  return JSON.parse(text);
+type BaziSection = (typeof SECTIONS)[number];
+
+interface BaziInput {
+  solarDate?: string;
+  hour?: number;
+  minute?: number;
+  gender?: string;
+  zishiMode?: BaZiConfig['zishiMode'];
+  childLimitMode?: BaZiConfig['childLimitMode'];
+  decadeCount?: number;
+  include?: BaziSection[];
 }
 
-function normalizeGender(g) {
-  if (g === 'male') return '男';
-  if (g === 'female') return '女';
-  if (g === '男' || g === '女') return g;
-  throw new Error(`非法 gender: ${g}`);
+type ChildhoodFortune = Omit<DecadeFortuneInfo, 'tenStar' | 'element'> & {
+  tenStar: string;
+  element: string;
+  label: string;
+};
+
+type BaziFortuneOutput = {
+  childLimit: FortuneResult['childLimit'];
+  decades: Array<DecadeFortuneInfo | ChildhoodFortune>;
+  annuals: ReturnType<typeof getAnnualFortuneRange>;
+  annualStartYear: number;
+  annualEndYear: number;
+  currentAnnualYear: number;
+  childhood?: ChildhoodFortune;
+};
+
+export interface BaziPaipanResult {
+  bazi?: BaZiResult;
+  fortune?: BaziFortuneOutput;
+  pattern?: ReturnType<typeof getPattern>;
 }
 
-function buildBirthDate(solarDate, hour, minute) {
-  const [y, m, d] = solarDate.split('-').map(Number);
-  if (!y || !m || !d) throw new Error(`非法 solarDate: ${solarDate}`);
-  return new Date(y, m - 1, d, hour, minute, 0);
+function normalizeGender(gender: string | undefined): Gender {
+  if (gender === 'male') return '男';
+  if (gender === 'female') return '女';
+  if (gender === '男' || gender === '女') return gender;
+  throw new Error(`非法 gender: ${gender}`);
 }
 
-function buildFortuneSection(bazi, fortuneSource, birthDate, config) {
+function buildBirthDate(solarDate: string, hour: number, minute: number): Date {
+  const [year, month, day] = solarDate.split('-').map(Number);
+  if (!year || !month || !day) throw new Error(`非法 solarDate: ${solarDate}`);
+  return new Date(year, month - 1, day, hour, minute, 0);
+}
+
+function buildFortuneSection(
+  bazi: BaZiResult,
+  fortuneSource: FortuneResult,
+  birthDate: Date,
+  config: Partial<BaZiConfig>,
+): BaziFortuneOutput {
   const birthYear = birthDate.getFullYear();
   const currentAnnualYear = fortuneSource.currentAnnual?.year ?? birthYear;
   const lastDecadeEndYear =
@@ -56,7 +83,7 @@ function buildFortuneSection(bazi, fortuneSource, birthDate, config) {
     config,
   );
 
-  const fortune = {
+  return {
     childLimit: fortuneSource.childLimit,
     decades: fortuneSource.decades,
     annuals,
@@ -64,11 +91,9 @@ function buildFortuneSection(bazi, fortuneSource, birthDate, config) {
     annualEndYear: lastDecadeEndYear,
     currentAnnualYear,
   };
-
-  return fortune;
 }
 
-function buildChildhoodFortune(birthDate) {
+function buildChildhoodFortune(birthDate: Date): ChildhoodFortune {
   const birthYear = birthDate.getFullYear();
   return {
     index: -1,
@@ -77,9 +102,9 @@ function buildChildhoodFortune(birthDate) {
     earthBranch: '',
     sound: '',
     startAge: 1,
-    endAge: undefined,
+    endAge: undefined as unknown as number,
     startYear: birthYear,
-    endYear: undefined,
+    endYear: undefined as unknown as number,
     tenStar: '',
     terrain: '',
     element: '',
@@ -87,7 +112,10 @@ function buildChildhoodFortune(birthDate) {
   };
 }
 
-function withReferenceDecadeShape(fortune, birthDate) {
+function withReferenceDecadeShape(
+  fortune: BaziFortuneOutput,
+  birthDate: Date,
+): BaziFortuneOutput {
   const firstDecade = fortune.decades[0];
   if (!firstDecade) return fortune;
 
@@ -104,7 +132,7 @@ function withReferenceDecadeShape(fortune, birthDate) {
   };
 }
 
-function getReferenceYearPillar(birthDate) {
+function getReferenceYearPillar(birthDate: Date): string {
   return solarToLunar(
     birthDate.getFullYear(),
     birthDate.getMonth() + 1,
@@ -113,7 +141,12 @@ function getReferenceYearPillar(birthDate) {
   ).yearGanZhi.gz;
 }
 
-function withReferenceYearPillar(bazi, birthDate, gender, config) {
+function withReferenceYearPillar(
+  bazi: BaZiResult,
+  birthDate: Date,
+  gender: Gender,
+  config: Partial<BaZiConfig>,
+): BaZiResult {
   const referenceYearPillar = getReferenceYearPillar(birthDate);
   if (bazi.pillars.year.sixtyCycle === referenceYearPillar) return bazi;
 
@@ -131,7 +164,9 @@ function withReferenceYearPillar(bazi, birthDate, gender, config) {
   };
 }
 
-export async function runPaipan(input) {
+export async function runBaziPaipan(
+  input: Record<string, unknown>,
+): Promise<BaziPaipanResult> {
   const {
     solarDate,
     hour,
@@ -141,14 +176,14 @@ export async function runPaipan(input) {
     childLimitMode = 'default',
     decadeCount = DEFAULT_DECADE_COUNT,
     include,
-  } = input;
+  } = input as BaziInput;
 
   if (!solarDate || hour === undefined || !gender) {
     throw new Error('缺少必填参数: solarDate, hour, gender');
   }
 
   const sections = include ?? SECTIONS;
-  const invalid = sections.filter((s) => !SECTIONS.includes(s));
+  const invalid = sections.filter((section) => !SECTIONS.includes(section));
   if (invalid.length) throw new Error(`非法 include: ${invalid.join(',')}`);
 
   const birthDate = buildBirthDate(solarDate, hour, minute);
@@ -161,7 +196,7 @@ export async function runPaipan(input) {
     config,
   );
 
-  const result = {};
+  const result: BaziPaipanResult = {};
   for (const section of sections) {
     if (section === 'bazi') {
       result.bazi = bazi;
@@ -182,22 +217,4 @@ export async function runPaipan(input) {
   }
 
   return result;
-}
-
-async function mainFromCli() {
-  const input = await readStdin();
-  const result = await runPaipan(input);
-  console.log(JSON.stringify(result));
-}
-
-function isDirectRun() {
-  // 浏览器/移动端 import 时没有 process；这里只让 Node CLI 兼容旧后端脚本执行方式。
-  return isDirectCliRun(import.meta.url);
-}
-
-if (isDirectRun()) {
-  mainFromCli().catch((err) => {
-    console.error(JSON.stringify({ error: err.message }));
-    process.exit(1);
-  });
 }

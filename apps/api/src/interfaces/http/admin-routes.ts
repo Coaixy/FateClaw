@@ -779,19 +779,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return updated;
   });
 
-  // GET /api/admin/skills/global — 查看所有官方 Skill 的全局开关状态
+  // GET /api/admin/skills/global — 查看所有系统排盘的全局开关状态
   // 以文件系统为主，数据库配置为辅
   app.get('/skills/global', async () => {
     return listAdminGlobalSkills();
   });
 
-  // POST /api/admin/skills/global/:name/enable — 全局开启一个官方 Skill
+  // POST /api/admin/skills/global/:name/enable — 全局开启一个系统排盘
   app.post<{ Params: { name: string } }>(
     '/skills/global/:name/enable',
     async (request, reply) => {
       const { name } = request.params;
       if (!hasOfficialSkill(name)) {
-        return reply.code(404).send({ error: `官方 Skill "${name}" 不存在` });
+        return reply.code(404).send({ error: `系统排盘 "${name}" 不存在` });
       }
       await setSkillGlobalEnabled(name, true);
 
@@ -799,13 +799,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/admin/skills/global/:name/disable — 全局关闭一个官方 Skill
+  // POST /api/admin/skills/global/:name/disable — 全局关闭一个系统排盘
   app.post<{ Params: { name: string } }>(
     '/skills/global/:name/disable',
     async (request, reply) => {
       const { name } = request.params;
       if (!hasOfficialSkill(name)) {
-        return reply.code(404).send({ error: `官方 Skill "${name}" 不存在` });
+        return reply.code(404).send({ error: `系统排盘 "${name}" 不存在` });
       }
       await setSkillGlobalEnabled(name, false);
 
@@ -813,7 +813,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/admin/skills/global/:name/set-default — 设置官方 Skill 的默认启用状态
+  // POST /api/admin/skills/global/:name/set-default — 设置系统排盘的默认启用状态
   app.post<{ Params: { name: string }; Body: { default_enabled: boolean } }>(
     '/skills/global/:name/set-default',
     async (request, reply) => {
@@ -823,7 +823,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'default_enabled 必须为布尔值' });
       }
       if (!hasOfficialSkill(name)) {
-        return reply.code(404).send({ error: `官方 Skill "${name}" 不存在` });
+        return reply.code(404).send({ error: `系统排盘 "${name}" 不存在` });
       }
       await setSkillDefaultEnabled(name, default_enabled);
 

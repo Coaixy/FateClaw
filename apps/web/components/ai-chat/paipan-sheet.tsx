@@ -1939,7 +1939,7 @@ export function PaipanSheet({
           </div>
         ) : catalog.length === 0 ? (
           <div className="rounded-2xl border border-hairline bg-surface-card/60 px-4 py-4 text-[13px] text-muted">
-            当前没有可用的官方排盘 Skill。
+            当前没有可用的系统排盘。
           </div>
         ) : (
           <>

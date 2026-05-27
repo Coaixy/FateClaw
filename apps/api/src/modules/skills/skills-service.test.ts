@@ -1,26 +1,16 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
 import {
   isUserVisibleOfficialSkill,
   loadUserVisibleOfficialSkillCatalog,
 } from './skills-service.js';
-import { loadOfficialSkillCatalog } from './skill-manifest.js';
+import { listPaipanRegistry } from '../chat/paipan-registry.js';
 
-const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
-const OFFICIAL_SKILLS_DIR = path.resolve(
-  TEST_DIR,
-  '../../../../../skills/official',
-);
+describe('system paipan visibility', () => {
+  it('exposes all registered system paipan boards', () => {
+    const catalog = listPaipanRegistry();
 
-describe('official skill visibility', () => {
-  it('exposes all official skills that remain in the catalog', () => {
-    const catalog = loadOfficialSkillCatalog(OFFICIAL_SKILLS_DIR);
-
-    const visibleSkills =
-      loadUserVisibleOfficialSkillCatalog(OFFICIAL_SKILLS_DIR);
+    const visibleSkills = loadUserVisibleOfficialSkillCatalog();
 
     expect(visibleSkills.every(isUserVisibleOfficialSkill)).toBe(true);
     expect(visibleSkills.map((skill) => skill.dir)).toEqual(

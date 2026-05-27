@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   owner_id TEXT REFERENCES users(id)
 );
 
--- 官方 Skill 全局配置：后台控制的全局开关 + 默认启用状态
+-- 系统排盘全局配置：后台控制的全局开关 + 默认启用状态
 CREATE TABLE IF NOT EXISTS skill_global_config (
   skill_name TEXT PRIMARY KEY,
   globally_enabled BOOLEAN NOT NULL DEFAULT true,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS skill_global_config (
   updated_by TEXT DEFAULT NULL
 );
 
--- 兼容保留：用于未来非官方 Skill 的用户级开关
+-- 兼容保留：用于系统能力的用户级开关
 CREATE TABLE IF NOT EXISTS user_skills (
   user_id TEXT NOT NULL REFERENCES users(id),
   skill_name TEXT NOT NULL,

@@ -19,8 +19,6 @@ import {
   Share2,
   ToggleLeft,
   ToggleRight,
-  Wrench,
-  Route,
   Zap,
   BookOpen,
   Hash,
@@ -466,16 +464,6 @@ function GlobalSkillRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-medium">{config.skill_name}</span>
-            {config.entry?.type === 'script' && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
-                {config.entry.file}
-              </span>
-            )}
-            {config.entry?.type === 'tool' && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 font-mono">
-                {config.entry.tool}
-              </span>
-            )}
           </div>
           {config.description && (
             <div className="text-[12px] text-muted mt-0.5 truncate">
@@ -546,23 +534,6 @@ function GlobalSkillRow({
             </div>
           )}
 
-          {config.entry && (
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted mb-1.5 flex items-center gap-1.5">
-                {config.entry.type === 'tool' ? (
-                  <Route size={11} />
-                ) : (
-                  <Wrench size={11} />
-                )}
-                公开入口
-              </div>
-              <div className="text-[12px] text-ink font-mono">
-                {config.entry.type === 'tool'
-                  ? `tool=${config.entry.tool}${config.entry.fallbackScript ? ` fallback=${config.entry.fallbackScript}` : ''}`
-                  : `script=${config.entry.file}`}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -694,7 +665,7 @@ function AdminSkillsContent() {
         </div>
       ) : (
         <>
-          {/* 官方 Skill 全局配置 */}
+          {/* 系统排盘全局配置 */}
           {globalConfigs.length > 0 && (
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-3">
@@ -702,13 +673,13 @@ function AdminSkillsContent() {
                   size={16}
                   className="text-muted shrink-0"
                 />
-                <h2 className="text-lg font-semibold shrink-0">官方技能配置</h2>
+                <h2 className="text-lg font-semibold shrink-0">系统排盘配置</h2>
                 <span className="text-[12px] text-muted shrink-0">
                   ({globalConfigs.length})
                 </span>
               </div>
               <p className="text-[12px] text-muted mb-3">
-                「全局」控制技能是否可用；「默认」控制新用户是否自动启用（用户可自行覆盖）
+                「全局」控制排盘是否可用；「默认」控制新用户是否自动启用（用户可自行覆盖）
               </p>
               <div className="space-y-2">
                 {globalConfigs.map((config) => (

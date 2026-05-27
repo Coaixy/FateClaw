@@ -37,7 +37,7 @@ export interface SkillGlobalConfig {
   updated_by: string | null;
 }
 
-/** 返回所有后台全局开启的官方 Skill 名称列表 */
+/** 返回所有后台全局开启的系统排盘名称列表 */
 export async function getGloballyEnabledSkillNames(): Promise<string[]> {
   const { rows } = await getDbPool().query(
     'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true ORDER BY skill_name',
@@ -45,7 +45,7 @@ export async function getGloballyEnabledSkillNames(): Promise<string[]> {
   return (rows as { skill_name: string }[]).map((r) => r.skill_name);
 }
 
-/** 获取所有官方 Skill 的全局配置（含开关状态和默认启用状态） */
+/** 获取所有系统排盘的全局配置（含开关状态和默认启用状态） */
 export async function getAllSkillGlobalConfigs(): Promise<SkillGlobalConfig[]> {
   const { rows } = await getDbPool().query(
     'SELECT skill_name, globally_enabled, default_enabled, updated_at, updated_by FROM skill_global_config ORDER BY skill_name',
@@ -53,7 +53,7 @@ export async function getAllSkillGlobalConfigs(): Promise<SkillGlobalConfig[]> {
   return rows as SkillGlobalConfig[];
 }
 
-/** 后台设置官方 Skill 的全局开关 */
+/** 后台设置系统排盘的全局开关 */
 export async function setSkillGlobalEnabled(
   skillName: string,
   enabled: boolean,
@@ -64,7 +64,7 @@ export async function setSkillGlobalEnabled(
   );
 }
 
-/** 后台设置官方 Skill 的默认启用状态（新用户的默认值） */
+/** 后台设置系统排盘的默认启用状态（新用户的默认值） */
 export async function setSkillDefaultEnabled(
   skillName: string,
   defaultEnabled: boolean,
@@ -76,9 +76,9 @@ export async function setSkillDefaultEnabled(
 }
 
 /**
- * 将官方 Skill 列表同步到 skill_global_config 表。
+ * 将系统排盘列表同步到 skill_global_config 表。
  * 使用 ON CONFLICT DO NOTHING，已有的条目（含开关状态）不会被覆盖。
- * 在读取 skill catalog 或后台管理接口时调用，确保新增的官方 Skill 自动入库。
+ * 在读取兼容 catalog 或后台管理接口时调用，确保新增系统排盘自动入库。
  */
 export async function seedOfficialSkills(skillNames: string[]): Promise<void> {
   if (skillNames.length === 0) return;
@@ -128,7 +128,7 @@ export async function getEnabledSkillNames(userId: string): Promise<string[]> {
 }
 
 /**
- * 解析用户当前可用的官方 Skill 名称列表。
+ * 解析用户当前可用的系统排盘名称列表。
  * 规则与 agent-runner 保持一致：先看全局开关，再叠加用户显式开关，
  * 用户未设置时回退到 default_enabled。
  */

@@ -2,7 +2,7 @@
 ## Type of Change
 
 - [ ] **Feature** - adds or changes product behavior
-- [ ] **Official Skill** - adds or changes files under `skills/official/`
+- [ ] **System paipan runtime** - adds or changes API paipan registry/runners
 - [ ] **User knowledge / Skill runtime** - changes knowledge retrieval, Skill loading, or Skill execution
 - [ ] **OpenClaw/iLink integration** - changes WeChat account, polling, or message delivery behavior
 - [ ] **Fix** - bug fix or security fix to source code
@@ -23,3 +23,8 @@
 - [ ] Script code is kept in separate files; `SKILL.md` contains usage instructions
 - [ ] SKILL.md is under 500 lines
 - [ ] I tested this Skill on a fresh clone or documented why it was not tested
+
+## For System Paipan Runtime
+
+- [ ] Registry schema/metadata and runner code are both updated when behavior changes
+- [ ] I ran the affected `apps/api/src/modules/chat/paipan-runners/**/*.test.ts` tests

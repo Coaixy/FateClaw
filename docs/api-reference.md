@@ -312,11 +312,11 @@ Authorization: Bearer <token>
 
 以下接口均需认证。
 
-纯排盘接口不在 API 进程中直接执行脚本。API 会把请求通过 Redis IPC 交给对应 `agent-runner`，由 Pi deterministic tool 调用官方 `*-paipan` Skill 脚本并返回结构化 `skillContext`。预览请求不写入会话，也不需要模型 `llmRuntime`。
+纯排盘接口由 API 进程调用内部 TypeScript runner 并返回结构化 `skillContext`。预览请求不写入会话，也不需要模型 `llmRuntime`。
 
 | 方法 | 路径                  | 说明                                               |
 | ---- | --------------------- | -------------------------------------------------- |
-| GET  | `/api/paipan/catalog` | 列出当前用户可直接排盘的官方 Skill                 |
+| GET  | `/api/paipan/catalog` | 列出当前用户可直接排盘的系统排盘项                 |
 | POST | `/api/paipan/preview` | 传 `skill` 和 `input` 执行预览，不写入会话         |
 | POST | `/api/paipan/commit`  | 把预览或即时排盘结果提交到 AI Chat                |
 
@@ -387,11 +387,11 @@ Authorization: Bearer <token>
 
 ### GET /api/skills/catalog
 
-公开官方 Skill 目录。无需认证。
+公开系统排盘兼容目录。无需认证。
 
 ### GET /api/skills
 
-获取所有官方 Skill 列表，合并全局状态、默认值和当前用户启用状态。需认证。
+获取所有系统排盘兼容列表，合并全局状态、默认值和当前用户启用状态。需认证。
 
 **Response 200**
 
@@ -410,13 +410,13 @@ Authorization: Bearer <token>
 
 ### PATCH /api/skills/:name/toggle
 
-切换某个官方 Skill 的启用状态。需认证。
+切换某个系统排盘的启用状态。需认证。
 
 **Path Params**
 
 | 参数 | 说明       |
 | ---- | ---------- |
-| name | Skill 名称 |
+| name | 系统排盘名称 |
 
 **Request Body**
 

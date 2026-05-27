@@ -4,9 +4,7 @@ import {
   ChevronDown,
   Lock,
   MessageSquare,
-  Route,
   Sparkles,
-  Wrench,
 } from 'lucide-react';
 
 import type { Skill } from '@/features/skills/api';
@@ -98,21 +96,6 @@ export function SystemSkillsCard({
             {skill.description}
           </p>
 
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            {skill.entry?.type === 'script' && (
-              <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] bg-amber-500/10 text-amber-400 font-mono">
-                <Wrench size={10} />
-                {skill.entry.file}
-              </span>
-            )}
-            {skill.entry?.type === 'tool' && (
-              <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] bg-purple-500/10 text-purple-400 font-mono">
-                <Route size={10} />
-                {skill.entry.tool}
-              </span>
-            )}
-          </div>
-
           {skill.defaultEnabled === false && (
             <p className="text-[11px] text-muted mb-3 opacity-60">
               此技能默认关闭，需手动开启
@@ -131,23 +114,6 @@ export function SystemSkillsCard({
             </div>
           )}
 
-          {skill.entry && (
-            <div className="mt-3 px-4 py-3 rounded-xl bg-[color-mix(in_srgb,var(--color-canvas)_60%,var(--color-surface-card))] border border-hairline/30">
-              <div className="text-[11px] uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
-                {skill.entry.type === 'tool' ? (
-                  <Route size={11} />
-                ) : (
-                  <Wrench size={11} />
-                )}
-                公开入口
-              </div>
-              <div className="text-[12px] text-muted font-mono">
-                {skill.entry.type === 'tool'
-                  ? `${skill.entry.tool}${skill.entry.fallbackScript ? ` · fallback=${skill.entry.fallbackScript}` : ''}`
-                  : skill.entry.file}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

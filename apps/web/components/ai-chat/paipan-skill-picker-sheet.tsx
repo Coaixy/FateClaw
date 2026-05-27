@@ -92,7 +92,7 @@ export function PaipanSkillPickerSheet({
           </div>
         ) : catalog.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-hairline bg-surface-card/35 px-3 py-4 text-[10px] sm:text-[11px] leading-5 text-muted">
-            当前没有可用的官方排盘术数。
+            当前没有可用的系统排盘术数。
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">

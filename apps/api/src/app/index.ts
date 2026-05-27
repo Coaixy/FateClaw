@@ -22,7 +22,7 @@ import {
   stopRetentionWorker,
 } from '../runtime/retention.js';
 import { logger } from '../infrastructure/logger.js';
-import { seedOfficialSkillsFromDir } from '../infrastructure/paths.js';
+import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
 
 // Re-export for CLI and external consumers
 export {
@@ -50,7 +50,7 @@ export async function main(): Promise<void> {
   await initDatabase();
   logger.info('数据库已初始化（PostgreSQL）');
 
-  await seedOfficialSkillsFromDir();
+  await seedOfficialSkillsFromRegistry();
 
   await connectRedis();
   logger.info('Redis 已连接');
