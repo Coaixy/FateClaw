@@ -377,6 +377,10 @@ const AI_CHAT_REQUEST_TIMEOUT = parseInt(
   process.env.AI_CHAT_REQUEST_TIMEOUT || '1800000',
   10,
 );
+const PAIPAN_REQUEST_TIMEOUT = parseInt(
+  process.env.PAIPAN_REQUEST_TIMEOUT || '120000',
+  10,
+);
 
 /**
  * AI Chat 专属的入队函数。
@@ -519,6 +523,88 @@ export function submitAiChatInboxRequest(input: {
           err instanceof Error
             ? err
             : new Error(`写入 Redis 收件箱失败: ${String(err)}`),
+        );
+      }
+    })();
+  });
+}
+
+/**
+ * 纯排盘请求只走 agent-runner 的 Pi 确定性工具，不触发模型调用和计费预扣。
+ * 响应复用 AI Chat outbox，避免 web:{userId} 运行时被普通 outbox 当作微信账号投递。
+ */
+export function submitPiPaipanRequest(input: {
+  accountId: string;
+  userId: string;
+  skillDir: string;
+  skillInput: Record<string, unknown>;
+  displayTitle?: string;
+}): Promise<InboxRequestResult> {
+  const requestId = `paipan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const outboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
+
+  return new Promise<InboxRequestResult>((resolve, reject) => {
+    void (async () => {
+      let timeout: NodeJS.Timeout | null = null;
+
+      try {
+        timeout = setTimeout(() => {
+          pendingAiChatRequests.delete(requestId);
+          logger.error(
+            {
+              accountId: input.accountId,
+              requestId,
+              skillDir: input.skillDir,
+            },
+            'Pi 排盘请求超时',
+          );
+          reject(new Error(`Pi 排盘请求超时: ${requestId}`));
+        }, PAIPAN_REQUEST_TIMEOUT);
+
+        pendingAiChatRequests.set(requestId, {
+          accountId: input.accountId,
+          ownerUserId: input.userId,
+          toUserId: undefined,
+          contextToken: undefined,
+          autoDeliver: false,
+          llmRuntime: undefined,
+          billingReservation: null,
+          resolve,
+          reject,
+          timeout,
+        });
+
+        const payload = JSON.stringify({
+          type: 'paipan',
+          requestId,
+          accountId: input.accountId,
+          userId: input.userId,
+          skillDir: input.skillDir,
+          input: input.skillInput,
+          displayTitle: input.displayTitle,
+          timestamp: new Date().toISOString(),
+          outboxQueue,
+        });
+
+        await getRedis().lpush(`ipc:${input.accountId}:inbox`, payload);
+        logger.info(
+          {
+            accountId: input.accountId,
+            requestId,
+            skillDir: input.skillDir,
+            outboxQueue,
+          },
+          'Pi 排盘请求已提交到 Redis',
+        );
+      } catch (err) {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        pendingAiChatRequests.delete(requestId);
+        reject(
+          err instanceof Error
+            ? err
+            : new Error(`写入 Redis 排盘请求失败: ${String(err)}`),
         );
       }
     })();

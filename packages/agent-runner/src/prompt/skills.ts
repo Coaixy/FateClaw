@@ -25,11 +25,7 @@ export function findOfficialCompositeSkillByTool(
   );
 }
 
-/**
- * 扫描 skills 目录，加载每个 skill 的 skill.json。
- * 只读取轻量元数据，不加载完整 SKILL.md 内容。
- * 传入 accountId 时，会同时合并该账号的用户自定义知识 Skill（从 DB 查询）。
- */
+/** 扫描 Pi Skill 目录，只读取 SKILL.md frontmatter 轻量元数据。 */
 export async function loadSkillMetadataList(
   skillsDir: string = SKILLS_DIR,
   accountId?: string,
@@ -94,8 +90,7 @@ export async function loadUserSkillsList(
       trigger: item.trigger || '',
       type: 'user' as const,
       manifestSource: 'user-skill' as const,
-      requiresLoad: true,
-      content: item.content || '',
+      requiresLoad: false,
       source: (item.source as 'self' | 'subscribed') || 'self',
       category: item.category || '通用',
       usageMode: item.usage_mode ?? 'reference_only',

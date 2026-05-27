@@ -92,7 +92,7 @@ export async function buildSkillsIndexSection(
   const lines: string[] = [];
   lines.push('', '## 当前可用官方 Skill');
   lines.push(
-    '以下是当前账号可用的官方能力。详细参数与执行方式必须通过 load_skill 获取，不要自行猜测脚本入口或参数格式。',
+    '以下是当前账号可用的官方能力。实际可执行入口必须以本轮 tools schema 为准，不要自行猜测脚本入口或参数格式。',
   );
   for (const skill of officialSkills) {
     lines.push(buildOfficialSkillSummaryLine(skill));

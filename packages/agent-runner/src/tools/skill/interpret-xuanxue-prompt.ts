@@ -26,7 +26,7 @@ export const interpretXuanxuePrompt = `## interpret_xuanxue — 专业玄学解�
 ### 前置条件（必须在调用本工具前满足）
 
 **1. content_source='skill'：必须已调用排盘 skill 并获得完整结果。**
-- 先通过 load_skill + run_skill_script 执行排盘
+- 先通过对应的 Pi 排盘工具执行排盘，例如 bazi_paipan、iching_paipan、qimen_paipan、ziwei_paipan
 - 不要把大段原始 JSON 或盘面文本复制进 content；运行时会注入排盘结果对应的确定性 AI 摘要
 - 原始 JSON 不直接传给解读模型，运行时会通过 artifact/toolContext 保留原始结构化数据
 
@@ -43,7 +43,7 @@ export const interpretXuanxuePrompt = `## interpret_xuanxue — 专业玄学解�
 **一刀切规则**：content 是你自己刚用起卦/排盘 skill（如 iching-paipan、bazi-paipan）算出来的，或来自官方 toolContext 盘面？→ 传 'skill' 或省略。普通聊天里的用户贴盘面、概念题、术数闲聊都不要用本工具的 'user' source。
 
 **详细判断**：
-- **主流程**（最常见）：你调用 run_skill_script 起卦/排盘 → 运行时把工具结果转成确定性 AI 摘要 → 调用 interpret_xuanxue 时只传 question/category/content_source，content 通常省略。此时 **'skill' 或省略**。
+- **主流程**（最常见）：你调用对应的 Pi 排盘工具起卦/排盘 → 运行时把工具结果转成确定性 AI 摘要 → 调用 interpret_xuanxue 时只传 question/category/content_source，content 通常省略。此时 **'skill' 或省略**。
 - **手动排盘后继续解读**：对话历史 toolContext 里已有排盘结果 → 运行时从 toolContext.output/artifactData 生成确定性 AI 摘要。此时 **'skill' 或省略**。
 - **专用自贴盘面入口**：仅当上游协议明确给出 inputKind=user_pasted_board 时，才传 'user'，并且工具会直接使用协议里的 pastedBoard。
 - **普通聊天里的用户贴盘面**：不要调用本工具的 'user' source；引导用户使用“自贴盘面”入口，或使用“手动排盘”生成官方盘面。

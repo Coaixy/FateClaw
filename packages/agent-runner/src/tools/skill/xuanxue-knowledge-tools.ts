@@ -68,10 +68,29 @@ async function pushKnowledgeReadProgress(args: {
   }
 }
 
-function resolveBundles(options?: ToolExecutionOptions): KnowledgeSkillBundle[] {
+export function resolveXuanxueKnowledgeToolBundles(
+  options?: ToolExecutionOptions,
+): KnowledgeSkillBundle[] {
   const key = keyFromOptions(options);
   if (!key) return [];
   return stateByLoopRun.get(key)?.queryable ?? [];
+}
+
+export async function executeXuanxueKnowledgeTool(
+  toolName: 'list_knowledge_sections' | 'read_knowledge_section',
+  args: Record<string, unknown>,
+  options?: ToolExecutionOptions,
+): Promise<ToolResult> {
+  const bundles = resolveXuanxueKnowledgeToolBundles(options);
+  const result = executeKnowledgeTool(toolName, args, bundles);
+  if (toolName === 'read_knowledge_section') {
+    await pushKnowledgeReadProgress({ options, bundles, toolArgs: args });
+  }
+  return {
+    output: result.output,
+    isError: result.isError,
+    passthroughSafe: true,
+  };
 }
 
 function createKnowledgeToolSpec(
@@ -85,20 +104,15 @@ function createKnowledgeToolSpec(
         : '读取本轮玄学解读可查询的用户知识库章节。参数必须来自目录中的 skill_dir 与 section_title。',
     executionMode: 'serial',
     async execute(args, options): Promise<ToolResult> {
-      const bundles = resolveBundles(options);
-      const result = executeKnowledgeTool(
-        definition.function.name,
+      const toolName =
+        definition.function.name === 'read_knowledge_section'
+          ? 'read_knowledge_section'
+          : 'list_knowledge_sections';
+      return executeXuanxueKnowledgeTool(
+        toolName,
         args,
-        bundles,
+        options,
       );
-      if (definition.function.name === 'read_knowledge_section') {
-        await pushKnowledgeReadProgress({ options, bundles, toolArgs: args });
-      }
-      return {
-        output: result.output,
-        isError: result.isError,
-        passthroughSafe: true,
-      };
     },
   };
 }

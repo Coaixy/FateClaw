@@ -1,3 +1,8 @@
+---
+name: jingzhan-paipan
+description: 周易经占排盘：按大衍筮法、略筮法或指定卦爻生成卦象与取辞数据。
+---
+
 # 周易经占排盘
 
 本地计算（基于 `iching-shifa`）。经占排盘产出卦象数据及古法取辞规则。
@@ -6,20 +11,15 @@
 
 1. 确认用户想用经占（周易古法）
 2. 确认起卦方式（推荐大衍筮法或略筮法）
-3. 调用 `load_skill` 加载本 skill
-4. 用 `run_skill_script` 执行 `paipan.js`
+3. 调用 Pi custom tool `jingzhan_paipan`
+4. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
 
 ## 调用方式
 
-```text
-load_skill({ skill_name: "jingzhan-paipan" })
-```
-
-```text
-run_skill_script({
-  skill_name: "jingzhan-paipan",
-  script: "paipan.js",
-  stdin: JSON.stringify({ method: "dayan", question: "近期运势" })
+```js
+jingzhan_paipan({
+  method: "dayan",
+  question: "近期运势"
 })
 ```
 

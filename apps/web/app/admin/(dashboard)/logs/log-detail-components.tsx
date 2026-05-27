@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 import { ConversationLog, TraceEventEntry, TranscriptEvent } from '@/lib/admin-api';
-import { parseSkillRuntimeProtocol } from '@/lib/skill-runtime-protocol';
 
 import {
   isRecord,
@@ -155,10 +154,6 @@ export function TranscriptEventView({ event }: { event: TranscriptEvent }) {
   if (event.type === 'tool_result') {
     const output = toText(event.output);
     const modelOutput = toText(event.modelOutput);
-    const parsedProtocol = output
-      ? parseSkillRuntimeProtocol(output)
-      : null;
-    const visibleOutput = parsedProtocol?.remainingBody ?? output;
     const isLong = output.length > 200;
     const hasModelOutput =
       modelOutput.trim().length > 0 && modelOutput !== output;
@@ -181,19 +176,10 @@ export function TranscriptEventView({ event }: { event: TranscriptEvent }) {
               {event.artifactId}
             </span>
           )}
-          {parsedProtocol?.runtime && (
-            <span className="flex items-center gap-1 text-[11px] text-cyan-400 font-mono bg-cyan-500/10 px-1.5 py-0.5 rounded">
-              <Sparkles size={10} />
-              v{parsedProtocol.runtime.protocol_version}
-            </span>
-          )}
           {isLong && (
             <Chevron size={12} className="text-muted" />
           )}
         </button>
-        {parsedProtocol?.runtime && (
-          <SkillRuntimeProtocolCard parsed={parsedProtocol} />
-        )}
         {hasModelOutput && (
           <div className="mt-1 ml-5">
             <button
@@ -221,7 +207,7 @@ export function TranscriptEventView({ event }: { event: TranscriptEvent }) {
         )}
         {(expanded || !isLong) && (
           <pre className="mt-1 ml-5 text-[12px] text-muted bg-canvas rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all max-h-80 overflow-y-auto">
-            {visibleOutput}
+            {output}
           </pre>
         )}
       </div>
@@ -229,64 +215,4 @@ export function TranscriptEventView({ event }: { event: TranscriptEvent }) {
   }
 
   return null;
-}
-
-function SkillRuntimeProtocolCard({
-  parsed,
-}: {
-  parsed: NonNullable<ReturnType<typeof parseSkillRuntimeProtocol>>;
-}) {
-  const runtime = parsed.runtime;
-  const guidance = parsed.guidance;
-  if (!runtime) return null;
-
-  return (
-    <div className="mt-2 ml-5 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-        <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono">
-          skill-runtime v{runtime.protocol_version}
-        </span>
-        <span className="px-1.5 py-0.5 rounded bg-surface-cream-strong text-ink">
-          {runtime.display_name || runtime.skill_name}
-        </span>
-        {runtime.entry?.type === 'script' && (
-          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-mono">
-            script={runtime.entry.file}
-          </span>
-        )}
-        {runtime.entry?.type === 'tool' && (
-          <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 font-mono">
-            tool={runtime.entry.tool}
-          </span>
-        )}
-      </div>
-
-      {guidance && (
-        <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wider text-muted">
-            推荐入口
-          </div>
-          <div className="text-[12px] text-ink">
-            {guidance.recommended_entry.type === 'script' &&
-              `run_skill_script("${guidance.recommended_entry.file}")`}
-            {guidance.recommended_entry.type === 'tool' &&
-              guidance.recommended_entry.tool}
-            {guidance.recommended_entry.type === 'knowledge_only' &&
-              'knowledge_only'}
-          </div>
-          {guidance.notes.length > 0 && (
-            <div className="text-[11px] text-muted whitespace-pre-wrap break-words">
-              {guidance.notes.join(' ')}
-            </div>
-          )}
-        </div>
-      )}
-
-      {parsed.guidanceText && (
-        <div className="text-[11px] text-muted whitespace-pre-wrap break-words bg-canvas rounded px-2 py-1.5">
-          {parsed.guidanceText}
-        </div>
-      )}
-    </div>
-  );
 }

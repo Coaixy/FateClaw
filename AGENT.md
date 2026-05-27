@@ -4,7 +4,7 @@
 
 ## 一句话理解
 
-这是一个“宿主编排 + 账号级常驻 agent + Web 控台”的多账号微信私聊 AI 系统。
+这是一个“宿主编排 + 账号级常驻 agent-runner + Web 控台”的玄学 AI Chat、手动排盘和 Text Skill Bundle 系统。
 
 - 宿主在 `apps/api/src/`
 - agent-runner 在 `packages/agent-runner/`
@@ -24,8 +24,9 @@
 7. `apps/api/src/runtime/ipc-worker.ts`
 8. `packages/agent-runner/src/daemon.ts`
 9. `packages/agent-runner/src/engine.ts`
-10. `packages/agent-runner/src/base-loop.ts`
-11. `apps/api/src/infrastructure/db.ts`
+10. `packages/agent-runner/src/pi-runtime/index.ts`
+11. `packages/agent-runner/src/pi-runtime/resource-loader.ts`
+12. `apps/api/src/infrastructure/db.ts`
 
 如果任务是前端改动，再补读：
 
@@ -68,22 +69,21 @@ agent-runner 负责：
 
 - 读取宿主注入的环境变量
 - 为单个账号常驻监听 inbox
-- 构建 prompt
-- 调用模型 provider
-- 执行 tool loop
-- 加载和执行 Skill
-- 通过 `agent-kernel/` 做 supervisor / specialist 图式调度与能力选择
+- 创建 request-scoped Pi Runtime
+- 通过 Pi SDK 调用模型 provider
+- 暴露本轮允许访问的官方 Skill 和用户 Text Skill Bundle
+- 执行 Pi custom tools，并回传 artifact、usage、transcript、trace
 - 返回 transcript、usage、routing、trace 等结构化结果
 
 优先入口：
 
 - `packages/agent-runner/src/daemon.ts`
 - `packages/agent-runner/src/engine.ts`
-- `packages/agent-runner/src/base-loop.ts`
-- `packages/agent-runner/src/agent-kernel/index.ts`
-- `packages/agent-runner/src/agent-kernel/graph.ts`
-- `packages/agent-runner/src/run-tool-use.ts`
-- `packages/agent-runner/src/tools/registry.ts`
+- `packages/agent-runner/src/pi-runtime/index.ts`
+- `packages/agent-runner/src/pi-runtime/session.ts`
+- `packages/agent-runner/src/pi-runtime/resource-loader.ts`
+- `packages/agent-runner/src/pi-runtime/tools.ts`
+- `packages/agent-runner/src/text-skill-bundle.ts`
 
 ### Web `apps/web/`
 
@@ -118,22 +118,22 @@ Web 负责：
 
 仓库当前命名为 `FateClaw`，但旧日志、注释、变量和文档里仍然可能出现 `HushBay` 或 `NanoClaw`。遇到时按同一系统理解，不要误判成另一个项目。
 
-### 5. 环境变量有“宿主名”和“agent 名”两层
+### 5. 模型配置是请求级快照
 
-- 宿主读取：`APP_OPENAI_*` / `APP_ANTHROPIC_*`
-- agent-runner 使用：`OPENAI_*` / `ANTHROPIC_*`
+模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runner 子进程环境只承载身份、Redis/PostgreSQL、`SKILLS_DIR` 等运行时依赖，不应依赖进程级模型密钥。
 
-管理后台也可以把 provider 配置写入数据库。实际注入 agent-runner 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时要同时看宿主、数据库 provider 配置和子进程视角。
+实际注入 agent-runner 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
 
-### 6. 当前不保留测试源文件
+### 6. 测试按改动范围聚焦运行
 
-仓库中的 `*.test.*` / `*.spec.*` 测试源文件已删除。验证改动时优先使用：
+仓库保留了 Vitest 测试源文件。验证改动时优先运行对应范围的测试，再补类型检查和构建：
 
 - `pnpm run typecheck`
 - `pnpm run lint`
 - 对应 workspace 的 build 命令
+- 相关 `pnpm test <files...>` 焦点测试
 
-根级 `pnpm test` 和 API package 的 test script 仍保留 `--passWithNoTests` 兼容入口，但它们当前不代表有效测试覆盖。
+根级 `pnpm test` 使用 Vitest；大改动不要只依赖 `--passWithNoTests` 的空覆盖结果。
 
 ### 7. 当前启动入口暂时关闭微信设备运行
 
@@ -142,12 +142,12 @@ Web 负责：
 ## 目录速查
 
 - `apps/api/src/interfaces/http/`: Fastify API
-- `apps/api/src/modules/skills/`: user skill 进入 prompt 前的筛选逻辑
+- `apps/api/src/modules/skills/`: Text Skill Bundle 写入、官方 Skill 目录和技能 HTTP 服务
 - `packages/agent-runner/src/prompt/`: system prompt 组装
-- `packages/agent-runner/src/agent-kernel/`: supervisor / specialist 调度图
-- `packages/agent-runner/src/tools/skill/`: Skill 装载与执行
+- `packages/agent-runner/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
+- `packages/agent-runner/src/tools/skill/`: 玄学解读、用户知识组合和参数校验辅助
 - `apps/web/app/admin/`: 管理后台
-- `skills/official/`: 官方 Skill 元数据和说明
+- `skills/official/`: 官方 `SKILL.md`、说明和确定性脚本
 - `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
 ## 常见误区
@@ -156,9 +156,10 @@ Web 负责：
 - 不要把 `store/` 当主存储层；那是旧版本地 SQLite 遗留路径，当前正式运行链路已不再使用
 - 不要只看 `.env.example` 就断定宿主变量名，宿主实际读取逻辑在 `apps/api/src/infrastructure/config.ts` 和 `apps/api/src/runtime/agent-env.ts`
 - 不要只根据 `skills/official/` 判断 Skill 是否生效，还要结合 `skill_global_config` 和用户订阅/启用状态
+- 不要把用户私有知识写到 `.pi/skills`、`~/.pi/agent/skills` 或任何全局扫描目录；私有知识必须是 request-scoped Text Skill Bundle
 - 不要把 `dev:api-only` 和正式启动混为一谈，它明确跳过轮询、IPC worker、调度和 runtime 激活
-- 不要在 agent-runner 里找 one-shot/stdin 入口或 Dockerfile，它们已在 2026-04-21 移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
-- skill 元数据只读 `skill.json`，旧的 `metadata.json` 回退分支已移除
+- 不要在 agent-runner 里找 one-shot/stdin 入口或 Dockerfile，它们已移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
+- 官方 Skill 目录以 `SKILL.md` 为入口；用户知识正文在文件系统 Text Skill Bundle 中，DB 只保存 metadata 和 bundle 地址
 
 ## 模块文档
 

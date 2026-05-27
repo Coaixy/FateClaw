@@ -11,11 +11,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.81.0",
+    "@earendil-works/pi-ai": "^0.75.5",
+    "@earendil-works/pi-coding-agent": "^0.75.5",
     "cron-parser": "^5.0.0",
     "ioredis": "^5.10.1",
     "openai": "^4.80.0",
     "pg": "^8.20.0",
-    "tyme4ts": "^1.4.5"
+    "tyme4ts": "^1.4.5",
+    "typebox": "^1.1.38"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

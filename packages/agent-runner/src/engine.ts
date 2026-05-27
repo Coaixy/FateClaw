@@ -9,7 +9,7 @@ import { mapContainerErrorToPublicError } from './public-error.js';
 import { listTranscriptEvents } from './transcript-store.js';
 import { createRequestRuntime } from './runtime.js';
 import type { AgentRuntimeDeps } from './deps.js';
-import { executeAgentKernel } from './agent-kernel/index.js';
+import { executePiRuntime } from './pi-runtime/index.js';
 import {
   createRequestScope,
   setLatestFollowupInterpretation,
@@ -260,7 +260,7 @@ export async function executeContainerInput(
   );
 
   try {
-    const kernelResult = await executeAgentKernel({
+    const kernelResult = await executePiRuntime({
       containerInput,
       llmRuntime,
       runtime,

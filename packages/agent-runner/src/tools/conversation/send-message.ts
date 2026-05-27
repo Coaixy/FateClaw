@@ -49,7 +49,7 @@ export const sendMessage: ToolSpec = {
 - 检索大量历史消息前
 
 ### 不需要发送的场景
-- 单个工具调用（如 get_time_detail、read_memory、load_skill）
+- 单个工具调用（如 get_time_detail、read_memory、read_skill_file）
 - 工具链中间的每个步骤（排盘完成后不需要再发"正在解读"）
 - 用户的闲聊回复（直接回复即可）
 

@@ -1,3 +1,8 @@
+---
+name: iching-paipan
+description: 六爻纳甲排盘：返回本卦、变卦、互卦、六亲、六兽、世应、伏神、旬空、月建等确定性数据。
+---
+
 # 六爻纳甲排盘
 
 本地计算（基于 `iching-shifa`）。返回本卦、变卦、互卦的完整纳甲装卦，含六亲、六兽、世应、伏神、旬空、月建、节气。
@@ -6,20 +11,15 @@
 
 1. 确认用户想用六爻占卜
 2. 确认起卦方式（默认大衍随机）
-3. 调用 `load_skill` 加载本 skill
-4. 用 `run_skill_script` 执行 `paipan.js`
+3. 调用 Pi custom tool `iching_paipan`
+4. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
 
 ## 调用方式
 
-```text
-load_skill({ skill_name: "iching-paipan" })
-```
-
-```text
-run_skill_script({
-  skill_name: "iching-paipan",
-  script: "paipan.js",
-  stdin: JSON.stringify({ method: "dayan", question: "近期工作运势" })
+```js
+iching_paipan({
+  method: "dayan",
+  question: "近期工作运势"
 })
 ```
 

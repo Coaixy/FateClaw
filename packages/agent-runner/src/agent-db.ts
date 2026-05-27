@@ -66,11 +66,15 @@ export async function queryEnabledSkillNames(userId?: string): Promise<string[]>
 }
 
 export interface EffectiveUserSkill {
+  id: string;
   dir: string;
   name: string;
   description: string;
   trigger: string;
-  content: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
+  visibility: 'private' | 'link_shared' | 'shared';
   category: string;
   category_normalized: string | null;
   match_keywords: string[];
@@ -89,35 +93,35 @@ export async function queryEffectiveUserSkills(
 ): Promise<EffectiveUserSkill[]> {
   if (!userId) return [];
   const { rows } = await getPool().query(
-    `SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(s.category, '通用') as category, s.category_normalized,
             s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'self' as source
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
-     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL
+     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(s.category, '通用') as category, s.category_normalized,
             s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(s.category, '通用') as category, s.category_normalized,
             s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM creator_bundle_subscriptions bs
      JOIN user_custom_skills s ON s.user_id = bs.creator_id
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE bs.subscriber_id = $1 AND bs.status = 'active'
        AND (bs.expires_at IS NULL OR bs.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
        AND NOT EXISTS (
          SELECT 1 FROM user_skill_subscriptions sub2
          WHERE sub2.subscriber_id = $1 AND sub2.skill_id = s.id

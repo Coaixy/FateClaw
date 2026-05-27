@@ -1,5 +1,5 @@
 /**
- * interpret_xuanxue composite handler。
+ * interpret_xuanxue Pi custom tool handler。
  *
  * 负责校验盘面、规划用户知识库，并把解读材料交回主 loop。
  */
@@ -8,7 +8,7 @@ import { latestSkillArtifactExcluding } from '../../artifact-store.js';
 import { normalizeCategoryName } from '../../category-normalize.js';
 import { getContext } from '../../context.js';
 import { getDefaultAgentRuntimeDeps } from '../../deps.js';
-import type { AgentRuntimeDeps, EffectiveUserSkill } from '../../deps.js';
+import type { AgentRuntimeDeps } from '../../deps.js';
 import { log } from '../../io.js';
 import {
   getLatestFollowupInterpretation,
@@ -17,7 +17,6 @@ import {
 import type { RequestScope } from '../../request-scope.js';
 import { traceEvent } from '../../trace.js';
 import type { ToolExecutionOptions, ToolResult } from '../../types.js';
-import { ensureCompositeSkillReady } from './composite-runtime.js';
 import {
   buildUpstreamSkillRawFromContext,
   type BoardSource,
@@ -43,6 +42,7 @@ import {
   formatForceInjected,
   partitionUserSkills,
   planKnowledgeContext,
+  type RuntimeKnowledgeSkill,
 } from './xuanxue-knowledge.js';
 import {
   createXuanxueActionContract,
@@ -51,8 +51,6 @@ import {
 import { setXuanxueKnowledgeToolState } from './xuanxue-knowledge-tools.js';
 
 export { interpretXuanxuePrompt };
-
-const INTERPRET_XUANXUE_TOOL_NAME = 'interpret_xuanxue';
 
 type PastedBoardInput = NonNullable<ToolExecutionOptions['pastedBoard']>;
 type ContentSource = 'skill' | 'user';
@@ -106,10 +104,31 @@ function rejectMissingBoardData(args: {
 async function loadEffectiveUserSkills(
   userId: string | undefined,
   deps: AgentRuntimeDeps,
-): Promise<EffectiveUserSkill[]> {
+): Promise<RuntimeKnowledgeSkill[]> {
   if (!userId) return [];
   try {
-    return await deps.skillCatalog.listEffectiveUserSkills(userId);
+    const skills = await deps.skillCatalog.listEffectiveUserSkills(userId);
+    const hydrated: RuntimeKnowledgeSkill[] = [];
+    for (const skill of skills) {
+      const content = await deps.skillCatalog.readTextSkillBundle?.(skill);
+      if (!content?.trim()) continue;
+      hydrated.push({
+        dir: skill.dir,
+        name: skill.name,
+        description: skill.description,
+        trigger: skill.trigger,
+        content,
+        category: skill.category,
+        category_normalized: skill.category_normalized,
+        match_keywords: skill.match_keywords,
+        match_patterns: skill.match_patterns,
+        example_queries: skill.example_queries,
+        priority: skill.priority,
+        usage_mode: skill.usage_mode,
+        source: skill.source,
+      });
+    }
+    return hydrated;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`interpret_xuanxue | listEffectiveUserSkills 失败: ${msg}`);
@@ -431,11 +450,6 @@ export async function executeInterpretXuanxue(
   args: Record<string, unknown>,
   options?: ToolExecutionOptions,
 ): Promise<ToolResult> {
-  const compositeGuard = ensureCompositeSkillReady(
-    INTERPRET_XUANXUE_TOOL_NAME,
-    options,
-  );
-  if (!compositeGuard.ok) return compositeGuard.result;
   if (!options?.llmRuntime) {
     return {
       output: 'interpret_xuanxue 缺少请求级 llmRuntime。',

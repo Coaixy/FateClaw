@@ -9,7 +9,6 @@
  * 不做关键词路由——知识选择权由主 loop 的解读 specialist 决定。
  */
 
-import type { EffectiveUserSkill } from '../../deps.js';
 import type { ToolDefinition } from '../../types.js';
 import { XUANXUE_SECTION_MAX_BYTES } from '../../constants.js';
 
@@ -48,6 +47,22 @@ export interface KnowledgeSkillBundle {
   omittedSectionTitles?: string[];
   relevanceScore?: number;
   matchedFacets?: string[];
+}
+
+export interface RuntimeKnowledgeSkill {
+  dir: string;
+  name: string;
+  description: string;
+  trigger: string;
+  content: string;
+  category: string;
+  category_normalized: string | null;
+  match_keywords: string[];
+  match_patterns: string[];
+  example_queries: string[];
+  priority: number;
+  usage_mode: 'force_injected' | 'reference_only';
+  source: 'self' | 'subscribed';
 }
 
 export interface PartitionResult {
@@ -207,7 +222,7 @@ function toUtf8Bytes(text: string): number {
   return Buffer.byteLength(text, 'utf8');
 }
 
-function toBundle(skill: EffectiveUserSkill): KnowledgeSkillBundle {
+function toBundle(skill: RuntimeKnowledgeSkill): KnowledgeSkillBundle {
   return {
     skill_dir: skill.dir,
     skill_name: skill.name,
@@ -232,7 +247,7 @@ function toBundle(skill: EffectiveUserSkill): KnowledgeSkillBundle {
  * - queryable：reference_only 且命中 category 或属于"通用"类（只注入目录）
  */
 export function partitionUserSkills(
-  userSkills: EffectiveUserSkill[],
+  userSkills: RuntimeKnowledgeSkill[],
   _routing: RoutingPartitionContext | null,
   argCategory: string | undefined,
 ): PartitionResult {
@@ -254,7 +269,7 @@ export function partitionUserSkills(
 }
 
 function skillCategoryMatches(
-  skill: EffectiveUserSkill,
+  skill: RuntimeKnowledgeSkill,
   argCategory: string | undefined,
 ): boolean {
   const normalizedSkillCategory =

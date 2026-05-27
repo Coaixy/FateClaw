@@ -124,6 +124,13 @@ export interface UserCustomSkill {
   dir_name: string;
   description: string;
   trigger_hint: string;
+  version: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
+  acl: Record<string, unknown>;
+  billing_policy: Record<string, unknown>;
+  audit_metadata: Record<string, unknown>;
   content: string;
   category: string;
   category_normalized: string | null;
@@ -189,11 +196,15 @@ export interface CreatorBundleSubscription {
 
 /** IPC 同步到容器的用户 skill 条目（合并自有 + 订阅） */
 export interface EffectiveUserSkill {
+  id: string;
   dir: string;
   name: string;
   description: string;
   trigger: string;
-  content: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
+  visibility: 'private' | 'link_shared' | 'shared';
   category: string;
   category_normalized: string | null;
   match_keywords: string[];

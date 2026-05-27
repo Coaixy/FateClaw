@@ -4,14 +4,14 @@ const {
   mockQueryLatestFollowupWorkflowContext,
   mockTryExecuteCommand,
   mockCreateRequestRuntime,
-  mockExecuteAgentKernel,
+  mockExecutePiRuntime,
   mockListTranscriptEvents,
   mockListScopedTraceEvents,
 } = vi.hoisted(() => ({
   mockQueryLatestFollowupWorkflowContext: vi.fn(),
   mockTryExecuteCommand: vi.fn(),
   mockCreateRequestRuntime: vi.fn(),
-  mockExecuteAgentKernel: vi.fn(),
+  mockExecutePiRuntime: vi.fn(),
   mockListTranscriptEvents: vi.fn(),
   mockListScopedTraceEvents: vi.fn(),
 }));
@@ -28,8 +28,8 @@ vi.mock('./runtime.js', () => ({
   createRequestRuntime: mockCreateRequestRuntime,
 }));
 
-vi.mock('./agent-kernel/index.js', () => ({
-  executeAgentKernel: mockExecuteAgentKernel,
+vi.mock('./pi-runtime/index.js', () => ({
+  executePiRuntime: mockExecutePiRuntime,
 }));
 
 vi.mock('./transcript-store.js', () => ({
@@ -69,7 +69,7 @@ describe('executeContainerInput user pasted board persistence', () => {
     mockCreateRequestRuntime.mockReturnValue({ deps: {} });
     mockListTranscriptEvents.mockReturnValue([]);
     mockListScopedTraceEvents.mockReturnValue([]);
-    mockExecuteAgentKernel.mockResolvedValue({
+    mockExecutePiRuntime.mockResolvedValue({
       text: '解读结果',
       usage: {
         promptTokens: 1,
@@ -120,6 +120,8 @@ describe('executeContainerInput user pasted board persistence', () => {
     );
 
     expect(result.status).toBe('success');
+    expect(mockCreateRequestRuntime).toHaveBeenCalledTimes(1);
+    expect(mockExecutePiRuntime).toHaveBeenCalledTimes(1);
     expect(result.skillContext).toEqual([
       expect.objectContaining({
         skill: 'user-pasted-board::六爻',

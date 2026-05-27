@@ -7,7 +7,7 @@
 请先阅读：
 
 - [README.md](README.md)：项目定位、快速开始和运行边界。
-- [docs/agent-architecture.md](docs/agent-architecture.md)：Agent、Redis IPC、tool loop 和 Skill 运行架构。
+- [docs/agent-architecture.md](docs/agent-architecture.md)：Agent、Redis IPC、Pi Runtime 和 request-scoped Skill 资源。
 - [docs/api-reference.md](docs/api-reference.md)：HTTP API 参考。
 - [docs/openclaw-integration.md](docs/openclaw-integration.md)：微信 OpenClaw/iLink 对接现状。
 - [AGENT.md](AGENT.md)：面向协作者和 AI Agent 的仓库入口说明。
@@ -36,7 +36,7 @@ pnpm run dev
 
 - 优先复用现有模块和风格，避免为一次性需求增加抽象。
 - 修改 API 契约时，同步检查 `packages/contracts`、前端 API client 和 `docs/api-reference.md`。
-- 修改 Agent 能力时，同步检查 `packages/agent-runner/src/agent-kernel/`、工具注册、Skill manifest 和相关测试。
+- 修改 Agent 能力时，同步检查 `packages/agent-runner/src/pi-runtime/`、官方 `SKILL.md`、Text Skill Bundle 读取逻辑和相关测试。
 - 修改排盘 Skill 时，保留本地确定性计算，不把排盘基础结果改成纯模型生成。
 - 修改微信 OpenClaw/iLink 相关代码时，必须说明当前入口是否仍保持关闭，以及需要的部署前置条件。
 

@@ -178,6 +178,13 @@ CREATE TABLE IF NOT EXISTS user_custom_skills (
   dir_name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   trigger_hint TEXT NOT NULL DEFAULT '',
+  version TEXT NOT NULL DEFAULT '1.0.0',
+  bundle_uri TEXT NOT NULL DEFAULT '',
+  checksum TEXT DEFAULT NULL,
+  install_status TEXT NOT NULL DEFAULT 'missing',
+  acl JSONB NOT NULL DEFAULT '{}'::jsonb,
+  billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+  audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   category TEXT NOT NULL DEFAULT '通用',
   visibility TEXT NOT NULL DEFAULT 'private',
   share_token TEXT UNIQUE,
@@ -186,13 +193,15 @@ CREATE TABLE IF NOT EXISTS user_custom_skills (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ DEFAULT NULL
 );
-CREATE TABLE IF NOT EXISTS user_custom_skill_contents (
-  skill_id TEXT PRIMARY KEY REFERENCES user_custom_skills(id) ON DELETE CASCADE,
-  content TEXT NOT NULL DEFAULT '',
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 -- 增量迁移：为已存在的表添加 category 列
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '通用';
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS version TEXT NOT NULL DEFAULT '1.0.0';
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS bundle_uri TEXT NOT NULL DEFAULT '';
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS checksum TEXT DEFAULT NULL;
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS install_status TEXT NOT NULL DEFAULT 'missing';
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS acl JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category_normalized TEXT;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_keywords JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_patterns JSONB NOT NULL DEFAULT '[]';
@@ -208,20 +217,9 @@ CREATE INDEX IF NOT EXISTS idx_ucs_share_token ON user_custom_skills(share_token
 ALTER TABLE user_custom_skills DROP CONSTRAINT IF EXISTS user_custom_skills_user_id_dir_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ucs_user_dir_active
   ON user_custom_skills(user_id, dir_name) WHERE deleted_at IS NULL;
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'user_custom_skills' AND column_name = 'content'
-  ) THEN
-    INSERT INTO user_custom_skill_contents (skill_id, content, updated_at)
-    SELECT id, COALESCE(content, ''), NOW()
-    FROM user_custom_skills
-    ON CONFLICT (skill_id) DO UPDATE SET
-      content = EXCLUDED.content,
-      updated_at = NOW();
-  END IF;
-END $$;
+-- 旧知识正文迁移到文件系统 Text Skill Bundle 由 initDatabase() 完成；
+-- 纯 SQL 脚本只保留新控制平面 schema，不负责写入 bundle 文件。
+DROP TABLE IF EXISTS user_custom_skill_contents;
 
 -- 用户 Skill 订阅关系（引用订阅模式）
 CREATE TABLE IF NOT EXISTS user_skill_subscriptions (

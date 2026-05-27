@@ -60,7 +60,7 @@ export function estimateTokens(text: string): number {
 
 /**
  * 预算设计原则：
- * - 按典型场景分配，不按极端情况。容器侧 context-trimmer 会兜底截断。
+ * - 按典型场景分配，不按极端情况。容器侧 Pi Runtime 会按模型窗口裁剪上下文。
  * - 聊天场景通常回复短、tool 调用少，但长上下文模型可以保留更大的输出空间。
  * - 大窗口模型下，大部分空间仍给 history + skill context，提升上下文连贯性。
  */
@@ -103,7 +103,7 @@ export interface TokenAllocation {
  *
  * 分配策略：
  *   1. 输出预留 — 来自请求级模型配置；未配置时按上下文窗口自动计算
- *   2. 工具循环预留 — 窗口的 10%（容器侧 context-trimmer 会兜底）
+ *   2. 工具循环预留 — 窗口的 10%（容器侧 Pi Runtime 会按模型窗口兜底）
  *   3. 固定开销 — system prompt + 当前消息
  *   4. 剩余空间按优先级分配：skill context → soul → history
  */
@@ -125,7 +125,7 @@ export function computeTokenBudget(
   const outputReserve = maxOutputTokens;
 
   // 工具循环预留：窗口的 10%。典型场景用 2-3 轮（~6k），
-  // 极端场景容器侧 context-trimmer 会截断兜底。
+  // 极端场景容器侧 Pi Runtime 会按模型窗口裁剪兜底。
   const toolLoopReserve = Math.floor(contextWindow * 0.1);
 
   const currentMessageTokens = estimateTokens(currentMessage);

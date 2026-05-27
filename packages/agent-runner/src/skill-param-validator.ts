@@ -1,7 +1,7 @@
 /**
  * Skill 参数验证器。
  *
- * 在执行 run_skill_script 前对 stdin JSON 进行强类型验证，
+ * 在执行 Pi 确定性工具前对模型传入参数进行强类型验证，
  * 包括必填校验、类型校验、枚举约束、数值范围、数组长度，
  * 并自动将 schema 中定义的 default 值填充到缺失的可选字段。
  */
@@ -105,8 +105,8 @@ function checkType(
 /**
  * 验证并清洗 skill stdin 参数。
  *
- * @param stdin  run_skill_script 传入的 stdin 字符串（JSON 格式）。
- * @param schema skill manifest 中定义的 parameters schema。
+ * @param stdin  Pi 确定性工具收到的 JSON 参数字符串。
+ * @param schema 工具定义中的 parameters schema。
  * @returns      ValidationResult — valid=true 时 data 字段包含已填充默认值的对象。
  */
 export function validateSkillInput(
@@ -334,7 +334,7 @@ export function validateSkillInput(
 
 /**
  * 将 SkillParametersSchema 转为 AI 可读的紧凑参数签名。
- * 用于 system prompt 中的 skill 索引条目，让 AI 无需 load_skill 也能知道参数结构。
+ * 用于 system prompt 中的 skill 索引条目，让模型先看到确定性工具的参数结构。
  *
  * 示例输出:
  *   `time`(number,必填) `gender`(0|1,必填) `zaoWan`(boolean=false)

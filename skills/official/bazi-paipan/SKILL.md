@@ -1,3 +1,8 @@
+---
+name: bazi-paipan
+description: 八字排盘：四柱、大运、完整流年、格局，基于 bazi-ts-lib 本地确定性算法计算。
+---
+
 # 八字排盘
 
 根据用户的阳历出生时间和性别生成四柱八字，含大运、完整流年列表、格局。基于 `bazi-ts-lib`（底层 tyme4ts），本地计算，无网络依赖。
@@ -5,29 +10,19 @@
 ## 使用流程
 
 1. 从用户消息中提取：阳历出生日期、出生时间（精确到分钟更好）、性别
-2. 调用 `load_skill` 加载本 skill
-3. 用 `run_skill_script` 执行 `paipan.js`，通过 stdin 传入 JSON 参数
+2. 调用 Pi custom tool `bazi_paipan`，直接传入 JSON 参数
+3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
 
 ## 调用方式
 
-加载：
-
-```text
-load_skill({ skill_name: "bazi-paipan" })
-```
-
 执行：
 
-```text
-run_skill_script({
-  skill_name: "bazi-paipan",
-  script: "paipan.js",
-  stdin: JSON.stringify({
-    solarDate: "1990-05-15",
-    hour: 10,
-    minute: 30,
-    gender: "男"
-  })
+```js
+bazi_paipan({
+  solarDate: "1990-05-15",
+  hour: 10,
+  minute: 30,
+  gender: "男"
 })
 ```
 

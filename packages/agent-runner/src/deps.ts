@@ -2,6 +2,8 @@ import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+import { loadSkillsFromDir } from '@earendil-works/pi-coding-agent';
+
 import {
   queryEffectiveUserSkills,
   queryEnabledSkillNames,
@@ -13,11 +15,9 @@ import {
   type TaskSnapshot,
 } from './agent-db.js';
 import { SKILLS_DIR } from './paths.js';
-import { loadOfficialSkillMetadata } from './prompt/skill-manifest.js';
 import type { SkillMetadata } from './prompt/types.js';
 import { getRedis } from './redis.js';
-
-const ALLOWED_SKILL_SCRIPT_EXTENSIONS = new Set(['.sh', '.py', '.js']);
+import { readTextSkillBundleMarkdown } from './text-skill-bundle.js';
 
 export interface MemoryStore {
   read(accountId: string): Promise<string>;
@@ -29,6 +29,7 @@ export interface SkillCatalog {
   loadOfficialSkillContent(skillDir: string, skillsDir?: string): string | null;
   listEnabledSkillNames(userId?: string): Promise<string[]>;
   listEffectiveUserSkills(userId: string): Promise<EffectiveUserSkill[]>;
+  readTextSkillBundle?(skill: EffectiveUserSkill): Promise<string>;
   toggleUserSkill(
     userId: string,
     skillName: string,
@@ -81,23 +82,6 @@ export interface AgentRuntimeDeps {
   skillExecutor: SkillExecutor;
 }
 
-function listSkillScripts(skillPath: string): string[] {
-  try {
-    return fs
-      .readdirSync(skillPath)
-      .filter((entry) => {
-        const fullPath = path.join(skillPath, entry);
-        return (
-          fs.statSync(fullPath).isFile() &&
-          ALLOWED_SKILL_SCRIPT_EXTENSIONS.has(path.extname(entry).toLowerCase())
-        );
-      })
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
 function listOfficialSkillMetadata(
   skillsDir: string = SKILLS_DIR,
 ): SkillMetadata[] {
@@ -106,24 +90,18 @@ function listOfficialSkillMetadata(
   }
 
   try {
-    return fs
-      .readdirSync(skillsDir)
-      .sort()
-      .flatMap((entry) => {
-        if (entry.startsWith('_')) return [];
-        const skillPath = path.join(skillsDir, entry);
-        if (!fs.statSync(skillPath).isDirectory()) {
-          return [];
-        }
-
-        try {
-          const skillScripts = listSkillScripts(skillPath);
-          const skill = loadOfficialSkillMetadata(entry, skillPath, skillScripts);
-          return skill ? [skill] : [];
-        } catch {
-          return [];
-        }
-      });
+    return loadSkillsFromDir({
+      dir: skillsDir,
+      source: 'fateclaw-official',
+    }).skills.map((skill) => ({
+      dir: path.basename(skill.baseDir),
+      name: skill.name,
+      description: skill.description,
+      trigger: skill.description,
+      type: 'official' as const,
+      manifestSource: 'SKILL.md' as const,
+      requiresLoad: false,
+    }));
   } catch {
     return [];
   }
@@ -168,6 +146,9 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
     },
     listEffectiveUserSkills(userId) {
       return queryEffectiveUserSkills(userId);
+    },
+    async readTextSkillBundle(skill) {
+      return readTextSkillBundleMarkdown(skill.bundle_uri);
     },
     toggleUserSkill(userId, skillName, action) {
       return toggleUserSkill(userId, skillName, action);

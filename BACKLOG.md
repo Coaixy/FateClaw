@@ -129,7 +129,7 @@ P0（上线阻断）和 P1（一周内补）已完成；本文件追踪 P2（3 �
 - **A 安全**：JWT 强密钥校验、CORS 白名单、captcha 独立密钥、限流迁 Redis、bot_token 脱敏、admin_key 改 sessionStorage
 - **B 删除链路**：deleteAccount 补全引用清理、API 串接 stop polling/listener/agent、poller 支持 stop、local-runner 并发锁
 - **C 进程生命周期**：统一 shutdown、daemon graceful drain、生产 logger JSON
-- **D Agent Runner**：run_skill_script 超时、AbortSignal.any、XUAN_API_KEY 条件注入、JSON.parse 守护
+- **D Agent Runner**：Pi 确定性工具超时、AbortSignal.any、XUAN_API_KEY 条件注入、JSON.parse 守护
 - **E 前端**：dashboard pollStatus abort/超时、ai-chat fetchVersion、skills 异步 catch、统一 api.ts、markdown 防 XSS
-- **F P1**：advisory_xact_lock 计费串行、purgeExpiredTraceEvents 分批、列表分页、conversation_log metrics、未绑定账号 reject、toolRegistry 缓存、specialist 截断 history、context-trimmer 配对清理 tool_call、dashboard 预设校验、admin 部署文档、hasLoadedOnceRef 时序、全局 ErrorBoundary
+- **F P1**：advisory_xact_lock 计费串行、purgeExpiredTraceEvents 分批、列表分页、conversation_log metrics、未绑定账号 reject、工具目录缓存、dashboard 预设校验、admin 部署文档、hasLoadedOnceRef 时序、全局 ErrorBoundary
 - **G P2 短改**：模型 ID 集中、`/api/ready` 探针、captcha nonces 迁 Redis

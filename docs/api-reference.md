@@ -308,9 +308,11 @@ Authorization: Bearer <token>
 
 ---
 
-## Paipan 直排盘
+## Paipan 纯排盘
 
 以下接口均需认证。
+
+纯排盘接口不在 API 进程中直接执行脚本。API 会把请求通过 Redis IPC 交给对应 `agent-runner`，由 Pi deterministic tool 调用官方 `*-paipan` Skill 脚本并返回结构化 `skillContext`。预览请求不写入会话，也不需要模型 `llmRuntime`。
 
 | 方法 | 路径                  | 说明                                               |
 | ---- | --------------------- | -------------------------------------------------- |
@@ -754,4 +756,4 @@ Authorization: Bearer <token>
 | `PLATFORM_CUT_PERCENT`      | `30`                    | 创作者订阅收入平台抽成百分比       |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_logs.trace_events` 保留天数 |
 
-模型 Provider 当前主要通过管理后台 `/api/admin/system-config` 写入数据库；Agent 每次请求消费宿主下发的 `llmRuntime`，不依赖进程级模型密钥。
+模型 Provider 当前主要通过管理后台 `/api/admin/system-config` 写入数据库；AI 请求消费宿主下发的 `llmRuntime`，不依赖进程级模型密钥。

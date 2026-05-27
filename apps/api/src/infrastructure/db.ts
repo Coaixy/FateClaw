@@ -37,6 +37,10 @@ import {
   UserSkillSubscription,
 } from '../shared/types.js';
 import {
+  readTextSkillBundleContent,
+  writeTextSkillBundle,
+} from '../modules/skills/text-skill-bundle-store.js';
+import {
   assertSufficientSpendablePoints,
   calculateAvailableSpendablePoints,
 } from '../shared/point-balance.js';
@@ -79,7 +83,13 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.dir_name,
   s.description,
   s.trigger_hint,
-  COALESCE(sc.content, '') AS content,
+  s.version,
+  s.bundle_uri,
+  s.checksum,
+  s.install_status,
+  s.acl,
+  s.billing_policy,
+  s.audit_metadata,
   s.category,
   s.category_normalized,
   s.match_keywords,
@@ -97,6 +107,131 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.updated_at,
   s.deleted_at
 `;
+
+function hydrateUserCustomSkillContent<T extends Partial<UserCustomSkill>>(
+  skill: T,
+): T {
+  return {
+    ...skill,
+    content: readTextSkillBundleContent(skill.bundle_uri),
+  };
+}
+
+function hydrateUserCustomSkillRows<T extends Partial<UserCustomSkill>>(
+  rows: T[],
+): T[] {
+  return rows.map(hydrateUserCustomSkillContent);
+}
+
+async function tableExists(
+  client: pg.PoolClient,
+  tableName: string,
+): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = $1
+     ) AS exists`,
+    [tableName],
+  );
+  return rows[0]?.exists ?? false;
+}
+
+async function columnExists(
+  client: pg.PoolClient,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+     ) AS exists`,
+    [tableName, columnName],
+  );
+  return rows[0]?.exists ?? false;
+}
+
+async function migrateLegacyUserCustomSkillContentToBundles(
+  client: pg.PoolClient,
+): Promise<void> {
+  const hasInlineContent = await columnExists(
+    client,
+    'user_custom_skills',
+    'content',
+  );
+  const hasContentTable = await tableExists(
+    client,
+    'user_custom_skill_contents',
+  );
+  if (!hasInlineContent && !hasContentTable) return;
+
+  const contentExpr =
+    hasInlineContent && hasContentTable
+      ? `COALESCE(sc.content, s.content, '')`
+      : hasContentTable
+        ? `COALESCE(sc.content, '')`
+        : `COALESCE(s.content, '')`;
+  const contentJoin = hasContentTable
+    ? `LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id`
+    : '';
+  const { rows } = await client.query<{
+    id: string;
+    user_id: string;
+    skill_name: string;
+    dir_name: string;
+    description: string;
+    trigger_hint: string;
+    content: string;
+  }>(
+    `SELECT s.id, s.user_id, s.skill_name, s.dir_name, s.description,
+            s.trigger_hint, ${contentExpr} AS content
+     FROM user_custom_skills s
+     ${contentJoin}
+     WHERE s.deleted_at IS NULL
+       AND (
+         s.bundle_uri IS NULL
+         OR s.bundle_uri = ''
+         OR s.install_status <> 'installed'
+       )`,
+  );
+
+  for (const row of rows) {
+    const bundle = writeTextSkillBundle({
+      skillId: row.id,
+      ownerId: row.user_id,
+      dirName: row.dir_name,
+      skillName: row.skill_name,
+      description: row.description,
+      triggerHint: row.trigger_hint,
+      content: row.content ?? '',
+    });
+    await client.query(
+      `UPDATE user_custom_skills
+       SET bundle_uri = $1,
+           checksum = $2,
+           install_status = 'installed',
+           audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $3::jsonb,
+           updated_at = NOW()
+       WHERE id = $4`,
+      [
+        bundle.bundleUri,
+        bundle.checksum,
+        JSON.stringify({
+          legacy_content_migrated_at: new Date().toISOString(),
+          legacy_content_source: hasContentTable
+            ? 'user_custom_skill_contents'
+            : 'user_custom_skills.content',
+        }),
+        row.id,
+      ],
+    );
+  }
+}
 
 const SKILL_BUNDLE_SELECT_COLUMNS = `
   b.id,
@@ -484,6 +619,13 @@ export async function initDatabase(): Promise<void> {
         dir_name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         trigger_hint TEXT NOT NULL DEFAULT '',
+        version TEXT NOT NULL DEFAULT '1.0.0',
+        bundle_uri TEXT NOT NULL DEFAULT '',
+        checksum TEXT DEFAULT NULL,
+        install_status TEXT NOT NULL DEFAULT 'missing',
+        acl JSONB NOT NULL DEFAULT '{}'::jsonb,
+        billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+        audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
         category TEXT NOT NULL DEFAULT '通用',
         visibility TEXT NOT NULL DEFAULT 'private',
         share_token TEXT UNIQUE,
@@ -494,16 +636,30 @@ export async function initDatabase(): Promise<void> {
         UNIQUE(user_id, dir_name)
       )
     `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_custom_skill_contents (
-        skill_id TEXT PRIMARY KEY REFERENCES user_custom_skills(id) ON DELETE CASCADE,
-        content TEXT NOT NULL DEFAULT '',
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
     // 增量迁移：为已存在的表添加 category 列
     await client.query(
       `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '通用'`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS version TEXT NOT NULL DEFAULT '1.0.0'`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS bundle_uri TEXT NOT NULL DEFAULT ''`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS checksum TEXT DEFAULT NULL`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS install_status TEXT NOT NULL DEFAULT 'missing'`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS acl JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    );
+    await client.query(
+      `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`,
     );
     await client.query(
       `ALTER TABLE conversation_logs ADD COLUMN IF NOT EXISTS transcript_event_count INTEGER NOT NULL DEFAULT 0`,
@@ -657,20 +813,8 @@ export async function initDatabase(): Promise<void> {
        ON user_custom_skills(user_id, dir_name)
        WHERE deleted_at IS NULL`,
     );
-    await client.query(`DO $$
-      BEGIN
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_custom_skills' AND column_name = 'content'
-        ) THEN
-          INSERT INTO user_custom_skill_contents (skill_id, content, updated_at)
-          SELECT id, COALESCE(content, ''), NOW()
-          FROM user_custom_skills
-          ON CONFLICT (skill_id) DO UPDATE SET
-            content = EXCLUDED.content,
-            updated_at = NOW();
-        END IF;
-      END $$;`);
+    await migrateLegacyUserCustomSkillContentToBundles(client);
+    await client.query(`DROP TABLE IF EXISTS user_custom_skill_contents`);
     // 用户 Skill 订阅关系
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_skill_subscriptions (
@@ -5037,6 +5181,9 @@ export interface AdminCustomSkillRow {
   description: string;
   trigger_hint: string;
   content: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
   category: string;
   match_keywords: string[];
   usage_mode: 'force_injected' | 'reference_only';
@@ -5061,18 +5208,20 @@ export async function getCustomSkillsForAdmin(opts: {
 
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.trigger_hint, COALESCE(sc.content, '') AS content, s.category, s.match_keywords,
+            s.trigger_hint, s.bundle_uri, s.checksum, s.install_status, s.category, s.match_keywords,
             s.usage_mode, s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      JOIN users u ON u.id = s.user_id
      ${whereClause}
      ORDER BY s.created_at DESC`,
     params,
   );
 
-  return rows as AdminCustomSkillRow[];
+  return (rows as AdminCustomSkillRow[]).map((row) => ({
+    ...row,
+    content: readTextSkillBundleContent(row.bundle_uri),
+  }));
 }
 
 export async function getCustomSkillForAdmin(
@@ -5080,16 +5229,22 @@ export async function getCustomSkillForAdmin(
 ): Promise<AdminCustomSkillRow | undefined> {
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.trigger_hint, COALESCE(sc.content, '') AS content, s.category, s.match_keywords,
+            s.trigger_hint, s.bundle_uri, s.checksum, s.install_status, s.category, s.match_keywords,
             s.usage_mode, s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      JOIN users u ON u.id = s.user_id
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
-  return rows[0] as AdminCustomSkillRow | undefined;
+  return rows[0]
+    ? {
+        ...(rows[0] as AdminCustomSkillRow),
+        content: readTextSkillBundleContent(
+          (rows[0] as AdminCustomSkillRow).bundle_uri,
+        ),
+      }
+    : undefined;
 }
 
 function dateOnlyFromOffset(baseDate: Date, offsetDays: number): string {
@@ -5371,14 +5526,25 @@ export async function createUserCustomSkill(
       >
     >,
 ): Promise<UserCustomSkill> {
+  const bundle = writeTextSkillBundle({
+    skillId: skill.id,
+    ownerId: skill.user_id,
+    dirName: skill.dir_name,
+    skillName: skill.skill_name,
+    description: skill.description,
+    triggerHint: skill.trigger_hint,
+    content: skill.content,
+  });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO user_custom_skills
-         (id, user_id, skill_name, dir_name, description, trigger_hint, category,
-          category_normalized, match_keywords, match_patterns, example_queries, priority, usage_mode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+         (id, user_id, skill_name, dir_name, description, trigger_hint,
+          version, bundle_uri, checksum, install_status, acl, billing_policy, audit_metadata,
+          category, category_normalized, match_keywords, match_patterns, example_queries, priority, usage_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, '1.0.0', $7, $8, 'installed',
+               '{}'::jsonb, '{}'::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)`,
       [
         skill.id,
         skill.user_id,
@@ -5386,6 +5552,12 @@ export async function createUserCustomSkill(
         skill.dir_name,
         skill.description,
         skill.trigger_hint,
+        bundle.bundleUri,
+        bundle.checksum,
+        JSON.stringify({
+          source: 'api',
+          created_at: new Date().toISOString(),
+        }),
         skill.category || '通用',
         skill.category_normalized ?? null,
         JSON.stringify(skill.match_keywords ?? []),
@@ -5394,11 +5566,6 @@ export async function createUserCustomSkill(
         skill.priority ?? 0,
         skill.usage_mode ?? 'reference_only',
       ],
-    );
-    await client.query(
-      `INSERT INTO user_custom_skill_contents (skill_id, content, updated_at)
-       VALUES ($1, $2, NOW())`,
-      [skill.id, skill.content],
     );
     await client.query('COMMIT');
   } catch (err) {
@@ -5416,12 +5583,11 @@ export async function getUserCustomSkills(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE s.user_id = $1 AND s.deleted_at IS NULL
      ORDER BY s.created_at DESC`,
     [userId],
   );
-  return rows as UserCustomSkill[];
+  return hydrateUserCustomSkillRows(rows as UserCustomSkill[]);
 }
 
 export async function getUserCustomSkill(
@@ -5431,11 +5597,12 @@ export async function getUserCustomSkill(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL`,
     [id, userId],
   );
-  return rows[0] as UserCustomSkill | undefined;
+  return rows[0]
+    ? hydrateUserCustomSkillContent(rows[0] as UserCustomSkill)
+    : undefined;
 }
 
 export async function getUserCustomSkillById(
@@ -5444,11 +5611,12 @@ export async function getUserCustomSkillById(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
-  return rows[0] as UserCustomSkill | undefined;
+  return rows[0]
+    ? hydrateUserCustomSkillContent(rows[0] as UserCustomSkill)
+    : undefined;
 }
 
 export async function updateUserCustomSkill(
@@ -5515,35 +5683,69 @@ export async function updateUserCustomSkill(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    let affected = false;
+    const { rows: currentRows } = await client.query<UserCustomSkill>(
+      `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
+       FROM user_custom_skills s
+       WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL
+       FOR UPDATE`,
+      [id, userId],
+    );
+    const current = currentRows[0];
+    if (!current) {
+      await client.query('ROLLBACK');
+      return undefined;
+    }
+
     if (skillFields.length > 0) {
       skillFields.push(`updated_at = NOW()`);
       values.push(id, userId);
-      const result = await client.query(
+      await client.query(
         `UPDATE user_custom_skills SET ${skillFields.join(', ')}
          WHERE id = $${paramIdx++} AND user_id = $${paramIdx} AND deleted_at IS NULL`,
         values,
       );
-      affected = (result.rowCount ?? 0) > 0;
-    } else {
-      const { rowCount } = await client.query(
-        'SELECT 1 FROM user_custom_skills WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
-        [id, userId],
-      );
-      affected = (rowCount ?? 0) > 0;
-    }
-    if (!affected) {
-      await client.query('ROLLBACK');
-      return undefined;
     }
     if (contentValue !== undefined) {
+      const updatedName =
+        typeof updates.skill_name === 'string'
+          ? updates.skill_name
+          : current.skill_name;
+      const updatedDir =
+        typeof updates.dir_name === 'string'
+          ? updates.dir_name
+          : current.dir_name;
+      const updatedDescription =
+        typeof updates.description === 'string'
+          ? updates.description
+          : current.description;
+      const updatedTrigger =
+        typeof updates.trigger_hint === 'string'
+          ? updates.trigger_hint
+          : current.trigger_hint;
+      const bundle = writeTextSkillBundle({
+        skillId: id,
+        ownerId: userId,
+        dirName: updatedDir,
+        skillName: updatedName,
+        description: updatedDescription,
+        triggerHint: updatedTrigger,
+        content: contentValue,
+      });
       await client.query(
-        `INSERT INTO user_custom_skill_contents (skill_id, content, updated_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (skill_id) DO UPDATE SET
-           content = EXCLUDED.content,
-           updated_at = NOW()`,
-        [id, contentValue],
+        `UPDATE user_custom_skills
+         SET bundle_uri = $1,
+             checksum = $2,
+             install_status = 'installed',
+             audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $3::jsonb,
+             updated_at = NOW()
+         WHERE id = $4 AND user_id = $5 AND deleted_at IS NULL`,
+        [
+          bundle.bundleUri,
+          bundle.checksum,
+          JSON.stringify({ updated_bundle_at: new Date().toISOString() }),
+          id,
+          userId,
+        ],
       );
     }
     await client.query('COMMIT');
@@ -5715,11 +5917,12 @@ export async function getSkillByShareToken(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
       WHERE s.share_token = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')`,
     [token],
   );
-  return rows[0] as UserCustomSkill | undefined;
+  return rows[0]
+    ? hydrateUserCustomSkillContent(rows[0] as UserCustomSkill)
+    : undefined;
 }
 
 // --- Subscription ---
@@ -5815,7 +6018,6 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
             ) AS source_bundles
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE sub.subscriber_id = $1
        AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
@@ -5823,12 +6025,14 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
        AND s.visibility IN ('link_shared', 'shared')`,
     [subscriberId],
   );
-  return rows as (UserCustomSkill & {
-    subscription_id: string;
-    subscription_enabled: boolean;
-    has_direct_source: boolean;
-    source_bundles: Array<{ id: string; name: string }>;
-  })[];
+  return hydrateUserCustomSkillRows(
+    rows as (UserCustomSkill & {
+      subscription_id: string;
+      subscription_enabled: boolean;
+      has_direct_source: boolean;
+      source_bundles: Array<{ id: string; name: string }>;
+    })[],
+  );
 }
 
 /** 获取订阅某个 skill 的所有用户 ID */
@@ -5870,12 +6074,13 @@ export async function subscribeToSkillPaid(
     const { rows: skillRows } = await client.query(
       `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
        FROM user_custom_skills s
-       LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
        WHERE s.id = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
        FOR UPDATE OF s`,
       [input.skillId],
     );
-    const skill = skillRows[0] as UserCustomSkill | undefined;
+    const skill = skillRows[0]
+      ? hydrateUserCustomSkillContent(skillRows[0] as UserCustomSkill)
+      : undefined;
     if (!skill) throw new Error('Skill 不存在或未公开');
     if (skill.user_id === input.subscriberId)
       throw new Error('不能订阅自己的 Skill');
@@ -6455,9 +6660,8 @@ export async function getBundleByToken(
     };
   }
   const { rows: skillRows } = await pool.query(
-    `SELECT s.id, s.skill_name, s.description, s.category, COALESCE(sc.content, '') AS content
+    `SELECT s.id, s.skill_name, s.description, s.category, s.bundle_uri
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE s.id = ANY($1) AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')`,
     [bundle.skill_ids],
   );
@@ -6476,7 +6680,7 @@ export async function getBundleByToken(
       skill_name: r.skill_name as string,
       description: r.description as string,
       category: r.category as string,
-      content_length: (r.content as string).length,
+      content_length: readTextSkillBundleContent(r.bundle_uri as string).length,
     }));
   return {
     bundle,
@@ -6630,35 +6834,35 @@ export async function getEffectiveUserSkills(
   userId: string,
 ): Promise<EffectiveUserSkill[]> {
   const { rows } = await pool.query(
-    `SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(category, '通用') as category, category_normalized,
             match_keywords, match_patterns, example_queries, priority, usage_mode,
             'self' as source
      FROM user_custom_skills s
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
-     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL
+     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(s.category, '通用') as category, s.category_normalized,
             s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger, COALESCE(sc.content, '') AS content,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+            s.bundle_uri, s.checksum, s.install_status, s.visibility,
             COALESCE(s.category, '通用') as category, s.category_normalized,
             s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM creator_bundle_subscriptions bs
      JOIN user_custom_skills s ON s.user_id = bs.creator_id
-     LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id
      WHERE bs.subscriber_id = $1 AND bs.status = 'active'
        AND (bs.expires_at IS NULL OR bs.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
        AND NOT EXISTS (
          SELECT 1 FROM user_skill_subscriptions sub2
          WHERE sub2.subscriber_id = $1 AND sub2.skill_id = s.id

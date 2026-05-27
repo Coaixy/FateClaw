@@ -70,7 +70,7 @@ export interface SkillManifest {
   name?: string;
   description?: string;
   trigger?: string;
-  /** 是否要求模型先调用 load_skill。默认 true。 */
+  /** Pi Runtime 直接暴露工具或 Skill 资源。 */
   requiresLoad?: boolean;
   /** 唯一公开入口。 */
   entry?: SkillEntry;
@@ -87,14 +87,12 @@ export interface SkillMetadata {
   parameters?: SkillParametersSchema;
   /** Skill 类型：official = 官方（默认），user = 用户自定义知识 Skill */
   type?: 'official' | 'user';
-  /** 官方 skill 元数据来源。 */
-  manifestSource?: 'skill.json' | 'user-skill';
-  /** 官方 skill manifest 版本。 */
+  /** Skill 元数据来源。 */
+  manifestSource?: 'SKILL.md' | 'user-skill';
+  /** 保留给历史 DTO 的版本字段；Pi 文本 Skill 不使用它作为运行时真源。 */
   manifestVersion?: number;
-  /** 是否要求先 load_skill。 */
+  /** Pi Runtime 直接暴露工具或 Skill 资源。 */
   requiresLoad?: boolean;
-  /** 用户 Skill 的内联知识内容（仅 type='user'） */
-  content?: string;
   /** 用户 Skill 来源：self = 自建，subscribed = 订阅他人 */
   source?: 'self' | 'subscribed';
   /** 用户 Skill 的类别（知识类别，如 '通用'、'八字'） */
@@ -108,7 +106,7 @@ export interface SkillRuntimePayload {
   skill_name: string;
   display_name: string;
   requires_load: boolean;
-  manifest_source: 'skill.json' | 'user-skill';
+  manifest_source: 'SKILL.md' | 'user-skill';
   entry?: SkillEntry;
   parameter_signature?: string;
   parameters_schema?: SkillParametersSchema;

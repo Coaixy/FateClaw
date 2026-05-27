@@ -9,7 +9,13 @@ import {
   setRequestId,
 } from './request-scope.js';
 import { connectRedis, disconnectRedis, getRedis } from './redis.js';
-import { InboxRequest, LlmRuntimeSnapshot, OutboxResponse } from './types.js';
+import { executePiPaipanRequest } from './pi-runtime/paipan-request.js';
+import {
+  InboxRequest,
+  LlmRuntimeSnapshot,
+  OutboxResponse,
+  PaipanInboxRequest,
+} from './types.js';
 
 function isLlmRuntimeSnapshot(
   value: unknown,
@@ -49,6 +55,21 @@ function isLlmRuntimeSnapshot(
 
 function parseInboxRequest(raw: string): InboxRequest {
   const parsed = JSON.parse(raw) as Partial<InboxRequest>;
+
+  if (parsed.type === 'paipan') {
+    if (
+      !parsed.requestId ||
+      !parsed.accountId ||
+      typeof (parsed as Partial<PaipanInboxRequest>).userId !== 'string' ||
+      typeof (parsed as Partial<PaipanInboxRequest>).skillDir !== 'string' ||
+      !(parsed as Partial<PaipanInboxRequest>).input ||
+      typeof (parsed as Partial<PaipanInboxRequest>).input !== 'object' ||
+      Array.isArray((parsed as Partial<PaipanInboxRequest>).input)
+    ) {
+      throw new Error('无效的 paipan inbox 请求');
+    }
+    return parsed as PaipanInboxRequest;
+  }
 
   if (
     (parsed.type !== 'chat' && parsed.type !== 'task') ||
@@ -105,23 +126,34 @@ async function processInboxMessage(
       ? createCustomDeps(request.outboxQueue)
       : undefined;
 
-    const output = await executeContainerInput(
-      {
-        accountId,
-        sessionId: request.sessionId,
-        llmRuntime: request.llmRuntime,
-        userMessage: request.userMessage,
-        inputKind: request.inputKind,
-        pastedBoard: request.pastedBoard,
-        activeBoardContext: request.activeBoardContext,
-        history: request.history ?? [],
-        userName: request.userName,
-        assistantName: request.assistantName,
-        personaPrompt: request.personaPrompt,
-      },
-      requestScope,
-      customDeps,
-    );
+    const output =
+      request.type === 'paipan'
+        ? await executePiPaipanRequest({
+            accountId,
+            userId: request.userId,
+            skillDir: request.skillDir,
+            input: request.input,
+            displayTitle: request.displayTitle,
+            requestScope,
+            deps: customDeps ?? getDefaultAgentRuntimeDeps(),
+          })
+        : await executeContainerInput(
+            {
+              accountId,
+              sessionId: request.sessionId,
+              llmRuntime: request.llmRuntime,
+              userMessage: request.userMessage,
+              inputKind: request.inputKind,
+              pastedBoard: request.pastedBoard,
+              activeBoardContext: request.activeBoardContext,
+              history: request.history ?? [],
+              userName: request.userName,
+              assistantName: request.assistantName,
+              personaPrompt: request.personaPrompt,
+            },
+            requestScope,
+            customDeps,
+          );
 
     const response: OutboxResponse = {
       type: 'response',

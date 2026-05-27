@@ -37,7 +37,7 @@ export interface SkillMetaDto {
   description: string;
   trigger: string;
   entry?: SkillEntryDto;
-  manifestSource?: 'skill.json' | 'metadata.json';
+  manifestSource?: 'SKILL.md';
   manifestVersion?: number;
   requiresLoad?: boolean;
 }
@@ -61,6 +61,13 @@ export interface UserCustomSkillDto {
   dir_name: string;
   description: string;
   trigger_hint: string;
+  version: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
+  acl: Record<string, unknown>;
+  billing_policy: Record<string, unknown>;
+  audit_metadata: Record<string, unknown>;
   content: string;
   category: string;
   category_normalized: string | null;

@@ -1,3 +1,8 @@
+---
+name: qimen-paipan
+description: 奇门遁甲排盘：按指定时间或当前时间生成时家奇门拆补盘与九宫数据。
+---
+
 # 奇门遁甲排盘
 
 按指定时间生成时家奇门拆补盘，返回排局、值符值使、天地盘、八门九星八神、马星、旬空、门迫击刑、长生运。基于 `kinqimen`（底层 tyme4ts），本地计算，无网络依赖。
@@ -5,34 +10,24 @@
 ## 使用流程
 
 1. 从用户消息中提取时间（默认当前时间）
-2. 调用 `load_skill` 加载本 skill
-3. 用 `run_skill_script` 执行 `paipan.js`
+2. 调用 Pi custom tool `qimen_paipan`
+3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
 
 ## 调用方式
 
-加载：
-
-```text
-load_skill({ skill_name: "qimen-paipan" })
-```
-
 当前时间起盘：
 
-```text
-run_skill_script({
-  skill_name: "qimen-paipan",
-  script: "paipan.js",
-  stdin: "{}"
-})
+```js
+qimen_paipan({})
 ```
 
 指定时间起盘：
 
-```text
-run_skill_script({
-  skill_name: "qimen-paipan",
-  script: "paipan.js",
-  stdin: JSON.stringify({ solarDate: "2026-04-17", hour: 14, minute: 30 })
+```js
+qimen_paipan({
+  solarDate: "2026-04-17",
+  hour: 14,
+  minute: 30
 })
 ```
 

@@ -1,3 +1,8 @@
+---
+name: ziwei-paipan
+description: 紫微斗数排盘：根据阳历出生时间和性别生成十二宫星盘。
+---
+
 # 紫微斗数排盘
 
 根据用户的阳历出生时间和性别生成紫微斗数十二宫星盘。基于 `iztro` 库本地计算，无网络依赖。
@@ -5,29 +10,19 @@
 ## 使用流程
 
 1. 从用户消息中提取：阳历出生日期、出生时间（小时精确即可）、性别
-2. 调用 `load_skill` 加载本 skill
-3. 用 `run_skill_script` 执行 `paipan.js`，通过 stdin 传入 JSON 参数
+2. 调用 Pi custom tool `ziwei_paipan`，直接传入 JSON 参数
+3. 如果用户要求解读，排盘成功后继续调用 `interpret_xuanxue`
 
 ## 调用方式
 
-加载：
-
-```text
-load_skill({ skill_name: "ziwei-paipan" })
-```
-
 执行：
 
-```text
-run_skill_script({
-  skill_name: "ziwei-paipan",
-  script: "paipan.js",
-  stdin: JSON.stringify({
-    solarDate: "2000-08-16",
-    hour: 4,
-    minute: 0,
-    gender: "male"
-  })
+```js
+ziwei_paipan({
+  solarDate: "2000-08-16",
+  hour: 4,
+  minute: 0,
+  gender: "male"
 })
 ```
 

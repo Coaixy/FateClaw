@@ -1,3 +1,8 @@
+---
+name: my-skill
+description: 简要说明此 skill 的用途和适用场景。
+---
+
 # Skill 名称
 
 简要说明此 skill 的用途和适用场景。
@@ -5,27 +10,17 @@
 ## 使用流程
 
 1. 从用户消息中提取关键信息
-2. 先调用 `load_skill` 加载本 skill 说明
-3. 按 `skill.json` 中唯一公开入口和本说明中的约定执行
-4. 将结果以自然语言回复用户
+2. 按本 `SKILL.md` 的说明判断是否需要读取 `index.md`、`docs/`、`examples/` 或 `notes/`
+3. 如果本轮 tools schema 暴露了相关确定性工具，按参数说明调用
+4. 结合工具结果和 Skill 文档内容回复用户
 
 ## 调用方式
 
-先加载：
+示例工具调用：
 
 ```text
-load_skill({
-  skill_name: "my-skill"
-})
-```
-
-再执行：
-
-```text
-run_skill_script({
-  skill_name: "my-skill",
-  script: "example.sh",
-  stdin: JSON.stringify({})
+my_skill_tool({
+  input: "..."
 })
 ```
 

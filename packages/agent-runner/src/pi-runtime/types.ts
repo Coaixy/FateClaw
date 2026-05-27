@@ -1,0 +1,45 @@
+import type {
+  AgentTaskGraph,
+  Artifact,
+  ContainerInput,
+  LlmRuntimeSnapshot,
+  SkillContextEntry,
+  TokenUsage,
+  ToolResult,
+} from '../types.js';
+import type { RequestScope } from '../request-scope.js';
+import type { RequestRuntime } from '../runtime.js';
+
+export interface PiRuntimeResult {
+  text: string | null;
+  usage: TokenUsage;
+  skillContext: SkillContextEntry[];
+  agentGraph: AgentTaskGraph;
+}
+
+export interface PiRuntimeInput {
+  containerInput: ContainerInput;
+  llmRuntime: LlmRuntimeSnapshot;
+  runtime: RequestRuntime;
+  requestScope: RequestScope;
+}
+
+export interface PiInvocation {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+export interface PiToolExecutionRecord {
+  invocation: PiInvocation;
+  output: string;
+  modelOutput?: string;
+  isError: boolean;
+  skillContextEntry?: SkillContextEntry;
+}
+
+export interface PiToolRunResult {
+  result: ToolResult;
+  artifact?: Artifact;
+  skillContextEntry?: SkillContextEntry;
+}

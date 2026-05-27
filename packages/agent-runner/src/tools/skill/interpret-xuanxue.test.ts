@@ -1,18 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 vi.mock('../../agent-db.js', () => ({
   queryEnabledSkillNames: vi.fn(async () => ['玄学解读']),
   queryEffectiveUserSkills: vi.fn(async () => []),
-}));
-
-vi.mock('./composite-runtime.js', () => ({
-  ensureCompositeSkillReady: vi.fn(() => ({
-    ok: true,
-    skill: {
-      dir: 'xuanxue-jiedu',
-      name: '玄学解读',
-    },
-  })),
 }));
 
 vi.mock('./board-resolver.js', () => ({
@@ -34,6 +27,25 @@ import {
 import type { LlmRuntimeSnapshot } from '../../types.js';
 import { resolveBoardSourceWithLLM } from './board-resolver.js';
 import { executeInterpretXuanxue } from './interpret-xuanxue.js';
+
+function createTextSkillBundle(dirName: string, content: string): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fateclaw-text-skill-'));
+  const bundleDir = path.join(root, dirName);
+  fs.mkdirSync(path.join(bundleDir, 'docs'), { recursive: true });
+  fs.writeFileSync(
+    path.join(bundleDir, 'SKILL.md'),
+    [
+      '---',
+      `name: ${dirName}`,
+      `description: ${dirName}`,
+      '---',
+      '',
+      `# ${dirName}`,
+    ].join('\n'),
+  );
+  fs.writeFileSync(path.join(bundleDir, 'docs', 'knowledge.md'), content);
+  return bundleDir;
+}
 
 function makeLiuyao(position: number, yaoValue: number, isMoving = false) {
   return {
@@ -186,13 +198,25 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
   });
 
   it('returns force-injected user knowledge content to the main specialist loop', async () => {
+    const flowBundle = createTextSkillBundle(
+      'liuyao-flow',
+      '## 输出格式\n必须使用【结论】【依据】【建议】三段输出。\n\n## 流程\n先定用神。',
+    );
+    const moneyBundle = createTextSkillBundle(
+      'liuyao-money',
+      '## 财运总论\n看财爻。',
+    );
     vi.mocked(queryEffectiveUserSkills).mockResolvedValueOnce([
       {
+        id: 'skill-flow',
         dir: 'liuyao-flow',
         name: '六爻解卦流程',
         description: '六爻基础流程',
         trigger: '',
-        content: '## 输出格式\n必须使用【结论】【依据】【建议】三段输出。\n\n## 流程\n先定用神。',
+        bundle_uri: flowBundle,
+        checksum: null,
+        install_status: 'installed',
+        visibility: 'private',
         category: '六爻',
         category_normalized: '六爻',
         match_keywords: ['六爻'],
@@ -203,11 +227,15 @@ describe('executeInterpretXuanxue main-loop preparation', () => {
         source: 'self',
       },
       {
+        id: 'skill-money',
         dir: 'liuyao-money',
         name: '六爻财运专题',
         description: '六爻财运判断',
         trigger: '',
-        content: '## 财运总论\n看财爻。',
+        bundle_uri: moneyBundle,
+        checksum: null,
+        install_status: 'installed',
+        visibility: 'private',
         category: '六爻',
         category_normalized: '六爻',
         match_keywords: ['财运'],

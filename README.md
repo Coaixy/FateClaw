@@ -1,6 +1,6 @@
 # FateClaw（命枢）
 
-FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + 用户知识库检索 + 多 Agent 解读”。它不是把大模型套在一个聊天框里，而是把术数排盘、知识沉淀、模型调用、工具执行、对话留痕和微信 OpenClaw/iLink 接入拆成清晰的运行时边界。
+FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + 用户知识库检索 + Pi Runtime 解读”。它不是把大模型套在一个聊天框里，而是把术数排盘、知识沉淀、模型调用、工具执行、对话留痕和微信 OpenClaw/iLink 接入拆成清晰的运行时边界。
 
 当前可用主链路是站内 AI Chat、手动排盘和用户知识库检索。微信 OpenClaw/iLink Bot 对接代码仍保留，但默认启动入口暂时关闭微信设备 listener/poller，恢复接入前需要重新确认外部平台协议和部署安全边界。
 
@@ -11,7 +11,7 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 - **本地确定性排盘**：八字、紫微、奇门、六爻、经占等官方 Skill 以本地脚本执行，先生成结构化盘面，再交给 Agent 承接。
 - **用户知识库检索**：创作者可以把流派规则、案例边界、固定口径拆成章节，解读 Agent 按需读取，不把整本资料塞进上下文。
 - **常驻 Agent Runtime**：宿主通过 Redis IPC 调度账号级 `agent-runner` 常驻进程，避免每条消息重新初始化完整运行环境。
-- **Supervisor / Specialist 编排**：一个 supervisor 负责意图判断和任务拆解，排盘、解读、通用对话由不同 specialist 执行。
+- **Pi Runtime 编排**：模型 loop、工具选择、Skill 文件读取和最终回复都由 Pi SDK 承接，FateClaw 只保留领域 custom tools。
 - **请求级模型配置**：模型 Provider、密钥、价格和上下文窗口由宿主解析成 `llmRuntime` 快照随请求下发，不依赖 agent 进程全局模型环境变量。
 - **可观测对话链路**：每次请求返回 transcript、trace events、agent graph 和 token usage，后台可回看工具调用、知识命中和模型链路。
 - **OpenClaw/iLink 预留接入**：微信账号、消息转换、轮询和发送路径仍在仓库内，适合在站内主链路稳定后恢复外部渠道。
@@ -42,8 +42,8 @@ flowchart LR
 
   subgraph Agent["packages/agent-runner 常驻进程"]
     Daemon["daemon BRPOP"]
-    Kernel["Agent Kernel"]
-    Tools["Tools / Skill Runtime"]
+    Kernel["Pi Runtime"]
+    Tools["Pi Custom Tools / Skill Resources"]
   end
 
   subgraph Data["数据与能力"]
@@ -75,38 +75,24 @@ flowchart LR
   Fastify --> Web
 ```
 
-图中的虚线表示代码路径保留但默认入口未启用；当前稳定主链路是 Web AI Chat。
+当前稳定主链路是 Web AI Chat。微信接入相关代码路径仍保留，但默认入口未启用。
 
-## Agent Kernel
+## Pi Runtime
 
-FateClaw 的核心不在单个超长 prompt，而在“意图路由 + 专家执行 + 证据回传”的 kernel。Supervisor 只做判断和委派；领域工作必须交给 specialist，避免一个模型上下文里混入过多职责。
+FateClaw 的 Agent 执行已统一到 Pi SDK：宿主只负责请求、账务、权限和日志，agent-runner 每次请求创建 request-scoped Pi Runtime，把当前用户有权访问的官方 Skill 与 Text Skill Bundle 暴露给 Pi ResourceLoader。
 
 ```mermaid
 flowchart TD
-  UserMsg["用户消息 / 手动排盘 / 自贴盘面"] --> Precheck{"确定性快路径?"}
-
-  Precheck -->|选中盘面 / 自贴盘面| Interpret["xuanxue-interpret-agent<br/>解读 specialist"]
-  Precheck -->|普通请求| Supervisor["Supervisor<br/>判断意图 / 拆任务 / 追问"]
-
-  Supervisor --> AskUser["ask_user<br/>缺参数时追问"]
-  Supervisor --> Board["xuanxue-board-agent<br/>排盘 specialist"]
-  Supervisor --> Interpret
-  Supervisor --> General["general-assistant<br/>通用对话 / 记忆 / 工具"]
-  Supervisor --> Final["emit_final"]
-
-  Board --> LoadSkill["load_skill"]
-  Board --> RunSkill["run_skill_script<br/>本地排盘脚本"]
-  RunSkill --> Artifact["结构化盘面 artifact"]
+  UserMsg["用户消息 / 手动排盘 / 自贴盘面"] --> Runtime["createRequestRuntime"]
+  Runtime --> Loader["Pi ResourceLoader<br/>官方 SKILL.md + request-scoped Text Skill Bundle"]
+  Loader --> Session["Pi Session<br/>模型自主选择工具和读取 Skill 文件"]
+  Session --> Board["确定性排盘工具<br/>bazi_paipan / iching_paipan / ..."]
+  Session --> ReadSkill["read_skill_file<br/>读取 SKILL.md / index.md / docs / examples / notes"]
+  Session --> Interpret["interpret_xuanxue<br/>结合盘面、问题和授权知识解读"]
+  Board --> Artifact["结构化盘面 artifact"]
   Artifact --> Interpret
-
-  Interpret --> Knowledge["list/read knowledge sections<br/>用户知识库章节检索"]
-  Knowledge --> Interpretation["结合盘面 + 知识 + 问题生成解读"]
-
-  General --> Final
-  Interpretation --> Final
-  AskUser --> Final
-
-  Final --> Trace["transcript / traceEvents / agentGraph / usage"]
+  Interpret --> Trace["transcript / traceEvents / agentGraph / usage"]
+  ReadSkill --> Interpret
 ```
 
 ## 一次请求如何完成
@@ -125,13 +111,14 @@ sequenceDiagram
   U->>W: 发送问题或提交排盘
   W->>H: POST /api/chat-sessions 或 /api/paipan
   H->>DB: 写入用户消息 / 会话状态
-  H->>H: 解析用户模型配置为 llmRuntime
+  H->>H: AI 请求解析 llmRuntime；手动排盘只构造 Pi paipan IPC
   H->>R: LPUSH ipc:{runtimeId}:inbox
   A->>R: BRPOP inbox
-  A->>A: supervisor / specialist 编排
-  A->>S: 执行本地排盘 Skill 或读取知识章节
-  A->>M: 带工具协议调用模型
+  A->>A: 创建 request-scoped Pi Runtime
+  A->>S: 暴露官方 Skill 与授权 Text Skill Bundle
+  A->>M: AI 请求通过 Pi SDK 调用模型和工具
   M-->>A: tool call / final reply
+  A->>S: 手动排盘通过 Pi deterministic tool 执行
   A->>R: LPUSH ai-chat outbox
   H->>R: 监听 outbox
   H->>DB: 写入回复、trace、agentGraph、usage、账务记录
@@ -143,12 +130,12 @@ sequenceDiagram
 
 | 能力 | 当前实现 |
 | --- | --- |
-| 排盘 | `skills/official/*-paipan` 本地脚本，返回结构化 artifact |
-| 解读 | `xuanxue-jiedu` 入口工具 + `xuanxue-interpret-agent` specialist |
-| 用户知识库 | Web 创建知识技能，PostgreSQL 存储，按章节检索读取 |
-| Agent 调度 | `packages/agent-runner/src/agent-kernel/` supervisor / specialist 图式调度 |
+| 排盘 | Pi custom tools 调用 `skills/official/*-paipan/paipan.js`，返回结构化 artifact |
+| 解读 | Pi custom tool `interpret_xuanxue`，自动注入当前盘面和授权用户知识 |
+| 用户知识库 | Web 创建 Text Skill Bundle，DB 只存 metadata、权限、版本和 `bundle_uri` |
+| Agent 调度 | `packages/agent-runner/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop、工具调用和 Skill 文件读取 |
 | IPC | Redis list 队列：inbox、outbox、ai-chat outbox、tasks |
-| 模型 | OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
+| 模型 | AI 请求使用请求级 `llmRuntime` 快照，由 Pi Runtime 适配 OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
 | 可观测性 | `conversation_logs` 保存 transcript、traceEvents、agentGraph、usage |
 | 微信接入 | OpenClaw/iLink 代码路径保留，默认入口暂时关闭 |
 
@@ -156,7 +143,7 @@ sequenceDiagram
 
 - Monorepo: pnpm workspace
 - API: Fastify + PostgreSQL + Redis
-- Agent Runner: TypeScript daemon + Redis IPC + tool loop
+- Agent Runner: TypeScript daemon + Redis IPC + Pi SDK Runtime
 - Web: Next.js 16 App Router + React 19
 - 测试与质量：Vitest、TypeScript、ESLint、Prettier
 
@@ -262,7 +249,7 @@ pnpm run build:all     # 构建 API、agent-runner 和 Web
 4. 在系统配置中新增模型 Provider，填写协议、Base URL、模型名和 API Key。
 5. 普通用户在设置页选择官方模型或保存自配模型。
 
-Agent 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密钥不依赖 agent 进程级环境变量。
+AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密钥不依赖 agent 进程级环境变量；手动排盘请求不需要模型 runtime，只通过 Pi deterministic tool 执行。
 
 ## Skill 与知识库
 
@@ -277,7 +264,7 @@ Agent 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密
 
 部署时如果官方 Skill 不在默认仓库结构下，可通过 `SKILLS_DIR` 指向 `skills/official` 目录本身。
 
-用户知识库由 Web 控台创建，核心字段包括用途描述、触发提示、强规则内容、参考知识章节和可见性。解读 Agent 会通过 `list_knowledge_sections` / `read_knowledge_section` 读取相关章节，避免把长知识一次性塞入上下文。
+用户知识库由 Web 控台创建为 `.nanoclaw/text-skills/<owner>/<dir>-<id>/` 下的 Text Skill Bundle，包含 `SKILL.md`、`index.md`、`docs/`、`examples/` 和 `notes/`。数据库只保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时每次请求只把当前用户有权访问的 Bundle 注入 Pi ResourceLoader，模型再按需读取 Markdown 文件或知识章节。
 
 ## 微信 OpenClaw/iLink 对接状态
 
@@ -291,7 +278,7 @@ Agent 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密
 
 ## 文档索引
 
-- [docs/agent-architecture.md](docs/agent-architecture.md)：Agent 运行架构、Redis IPC、supervisor/specialist 和 tool loop。
+- [docs/agent-architecture.md](docs/agent-architecture.md)：Agent 运行架构、Redis IPC、Pi Runtime 和 request-scoped Skill 资源。
 - [docs/api-reference.md](docs/api-reference.md)：HTTP API 参考。
 - [docs/openclaw-integration.md](docs/openclaw-integration.md)：微信 OpenClaw/iLink 对接边界。
 - [DESIGN.md](DESIGN.md)：产品和设计上下文。

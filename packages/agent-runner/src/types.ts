@@ -65,7 +65,7 @@ export interface ActiveBoardContext extends SkillContextEntry {
   sourceMessageId: string;
 }
 
-export interface InboxRequest {
+export interface ChatTaskInboxRequest {
   type: 'chat' | 'task';
   requestId: string;
   accountId: string;
@@ -85,6 +85,21 @@ export interface InboxRequest {
   /** 指定响应写入的 outbox 队列（不指定则用默认队列） */
   outboxQueue?: string;
 }
+
+export interface PaipanInboxRequest {
+  type: 'paipan';
+  requestId: string;
+  accountId: string;
+  timestamp: string;
+  userId: string;
+  skillDir: string;
+  input: Record<string, unknown>;
+  displayTitle?: string;
+  /** 指定响应写入的 outbox 队列（不指定则用默认队列） */
+  outboxQueue?: string;
+}
+
+export type InboxRequest = ChatTaskInboxRequest | PaipanInboxRequest;
 
 /** API 返回的真实 token 用量（多轮累加后的总和）。 */
 export interface TokenUsage {
@@ -233,7 +248,7 @@ export interface ContainerOutput {
   publicErrorText?: string;
   publicReasonCode?: string;
   usage?: TokenUsage;
-  /** 本次请求中 run_skill_script 的结果，宿主机应存储以供后续请求使用。 */
+  /** 本次请求中确定性工具与解读工具产生的结构化结果，宿主机应存储以供后续请求使用。 */
   skillContext?: SkillContextEntry[];
   /** 若为 true，宿主机应清除该账号的对话历史。 */
   clearHistory?: boolean;
@@ -303,7 +318,6 @@ export interface ToolDefinition {
 export type ToolErrorCode =
   | 'SKILL.PARAM_MISSING'
   | 'SKILL.PARAM_INVALID'
-  | 'SKILL.LOAD_REQUIRED'
   | 'SKILL.DUPLICATE_SAME_LOOP'
   | 'SKILL.NOT_FOUND'
   | 'SKILL.NOT_ENABLED'
@@ -312,10 +326,7 @@ export type ToolErrorCode =
   | 'SKILL.SCRIPT_TIMEOUT'
   | 'SKILL.SCRIPT_CRASH'
   | 'SKILL.INVALID_NAME'
-  | 'SKILL.KNOWLEDGE_ONLY'
-  | 'SKILL.ENTRY_MISMATCH'
   | 'SKILL.REQUEST_SCOPE_MISSING'
-  | 'SKILL.COMPOSITE_NOT_FOUND'
   | 'SKILL.CONTENT_MISSING'
   | 'SYSTEM.EMPTY_OUTPUT'
   | 'SYSTEM.PROTOCOL'
@@ -336,7 +347,6 @@ export type ToolErrorKind =
 export type ToolErrorNextAction =
   | 'ask_user'
   | 'fix_arguments'
-  | 'load_skill'
   | 'retry'
   | 'retry_next_turn'
   | 'stop';
@@ -391,18 +401,6 @@ export interface ToolResult {
 
 export type ToolExecutionMode = 'parallel' | 'serial' | 'exclusive';
 
-export interface ToolRegistrySnapshot {
-  toolDefinitions: ToolDefinition[];
-  buildToolPrompts(): string;
-  executeTool(
-    name: string,
-    args: Record<string, unknown>,
-    options?: ToolExecutionOptions,
-  ): Promise<ToolResult>;
-  getExecutionMode(name: string): ToolExecutionMode;
-  getProtectedToolNames(): Set<string>;
-}
-
 export interface ToolExecutionOptions {
   signal?: AbortSignal;
   requestScope?: import('./request-scope.js').RequestScope;
@@ -412,7 +410,6 @@ export interface ToolExecutionOptions {
   loopRunId?: string;
   /** 测试/fixture 场景下覆盖 skill 根目录，生产路径不传。 */
   skillsDirOverride?: string;
-  toolRegistry?: ToolRegistrySnapshot;
   runtimeDeps?: import('./deps.js').AgentRuntimeDeps;
   /**
    * Supervisor 委派给 specialist 时的原始 goal 文本。
@@ -431,6 +428,8 @@ export interface ToolExecutionOptions {
   pastedBoard?: UserPastedBoardInput;
   /** 当前请求中用户显式选中的官方盘面。 */
   activeBoardContext?: ActiveBoardContext;
+  /** 当前请求归属用户，用于 Pi custom tool 执行层做二次鉴权。 */
+  userId?: string;
 }
 
 /**
