@@ -16,7 +16,6 @@ import type {
   EffectiveUserSkill,
   SkillBundle,
   UserCustomSkill,
-  UserSkill,
   UserSkillSubscription,
 } from '../../shared/types.js';
 
@@ -32,7 +31,6 @@ const pool = {
 export interface SkillGlobalConfig {
   skill_name: string;
   globally_enabled: boolean;
-  default_enabled: boolean;
   updated_at: string;
   updated_by: string | null;
 }
@@ -45,10 +43,10 @@ export async function getGloballyEnabledSkillNames(): Promise<string[]> {
   return (rows as { skill_name: string }[]).map((r) => r.skill_name);
 }
 
-/** 获取所有系统排盘的全局配置（含开关状态和默认启用状态） */
+/** 获取所有系统排盘的全局配置。 */
 export async function getAllSkillGlobalConfigs(): Promise<SkillGlobalConfig[]> {
   const { rows } = await getDbPool().query(
-    'SELECT skill_name, globally_enabled, default_enabled, updated_at, updated_by FROM skill_global_config ORDER BY skill_name',
+    'SELECT skill_name, globally_enabled, updated_at, updated_by FROM skill_global_config ORDER BY skill_name',
   );
   return rows as SkillGlobalConfig[];
 }
@@ -61,17 +59,6 @@ export async function setSkillGlobalEnabled(
   await getDbPool().query(
     'UPDATE skill_global_config SET globally_enabled = $1, updated_at = NOW() WHERE skill_name = $2',
     [enabled, skillName],
-  );
-}
-
-/** 后台设置系统排盘的默认启用状态（新用户的默认值） */
-export async function setSkillDefaultEnabled(
-  skillName: string,
-  defaultEnabled: boolean,
-): Promise<void> {
-  await getDbPool().query(
-    'UPDATE skill_global_config SET default_enabled = $1, updated_at = NOW() WHERE skill_name = $2',
-    [defaultEnabled, skillName],
   );
 }
 
@@ -95,10 +82,6 @@ export async function seedOfficialSkills(skillNames: string[]): Promise<void> {
     }
     const placeholders = skillNames.map((_, i) => `$${i + 1}`).join(',');
     await client.query(
-      `DELETE FROM user_skills WHERE skill_name NOT IN (${placeholders})`,
-      skillNames,
-    );
-    await client.query(
       `DELETE FROM skill_global_config WHERE skill_name NOT IN (${placeholders})`,
       skillNames,
     );
@@ -111,118 +94,19 @@ export async function seedOfficialSkills(skillNames: string[]): Promise<void> {
   }
 }
 
-export async function getUserSkills(userId: string): Promise<UserSkill[]> {
-  const { rows } = await getDbPool().query(
-    'SELECT * FROM user_skills WHERE user_id = $1 AND deleted_at IS NULL',
-    [userId],
-  );
-  return rows as UserSkill[];
-}
-
-export async function getEnabledSkillNames(userId: string): Promise<string[]> {
-  const { rows } = await getDbPool().query(
-    'SELECT skill_name FROM user_skills WHERE user_id = $1 AND enabled = true AND deleted_at IS NULL',
-    [userId],
-  );
-  return (rows as { skill_name: string }[]).map((r) => r.skill_name);
-}
-
 /**
  * 解析用户当前可用的系统排盘名称列表。
- * 规则与 agent-runner 保持一致：先看全局开关，再叠加用户显式开关，
- * 用户未设置时回退到 default_enabled。
+ * 用户侧不再单独覆盖，始终跟随后台全局开关。
  */
 export async function getResolvedEnabledOfficialSkillNames(
-  userId?: string,
+  _userId?: string,
 ): Promise<string[]> {
-  if (userId) {
-    const { rows } = await getDbPool().query(
-      `SELECT sgc.skill_name FROM skill_global_config sgc
-       LEFT JOIN user_skills us
-         ON us.skill_name = sgc.skill_name
-        AND us.user_id = $1
-        AND us.deleted_at IS NULL
-       WHERE sgc.globally_enabled = true
-         AND COALESCE(us.enabled, sgc.default_enabled) = true
-       ORDER BY sgc.skill_name`,
-      [userId],
-    );
-    return (rows as { skill_name: string }[]).map((row) => row.skill_name);
-  }
-
   const { rows } = await getDbPool().query(
     `SELECT skill_name FROM skill_global_config
      WHERE globally_enabled = true
-       AND default_enabled = true
      ORDER BY skill_name`,
   );
   return (rows as { skill_name: string }[]).map((row) => row.skill_name);
-}
-
-export async function enableUserSkill(
-  userId: string,
-  skillName: string,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await getDbPool().query(
-    `INSERT INTO user_skills (user_id, skill_name, enabled, enabled_at)
-     VALUES ($1, $2, true, $3)
-     ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = true, enabled_at = $3, deleted_at = NULL`,
-    [userId, skillName, now],
-  );
-}
-
-export async function disableUserSkill(
-  userId: string,
-  skillName: string,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await getDbPool().query(
-    `INSERT INTO user_skills (user_id, skill_name, enabled, enabled_at)
-     VALUES ($1, $2, false, $3)
-     ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = false, deleted_at = NULL`,
-    [userId, skillName, now],
-  );
-}
-
-export async function enableAllUserSkills(
-  userId: string,
-  skillNames: string[],
-): Promise<void> {
-  const now = new Date().toISOString();
-  const client = await getDbPool().connect();
-  try {
-    await client.query('BEGIN');
-    for (const name of skillNames) {
-      await client.query(
-        `INSERT INTO user_skills (user_id, skill_name, enabled, enabled_at)
-         VALUES ($1, $2, true, $3)
-         ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = true, enabled_at = $3, deleted_at = NULL`,
-        [userId, name, now],
-      );
-    }
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export async function disableAllUserSkills(userId: string): Promise<void> {
-  await getDbPool().query(
-    'UPDATE user_skills SET enabled = false WHERE user_id = $1 AND deleted_at IS NULL',
-    [userId],
-  );
-}
-
-export async function resetUserSkills(userId: string): Promise<void> {
-  const now = new Date().toISOString();
-  await getDbPool().query(
-    'UPDATE user_skills SET deleted_at = $1 WHERE user_id = $2 AND deleted_at IS NULL',
-    [now, userId],
-  );
 }
 
 /**

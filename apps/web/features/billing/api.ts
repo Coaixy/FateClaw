@@ -83,7 +83,7 @@ export const billingApi = {
       `/api/billing/recharge/orders/${encodeURIComponent(tradeId)}/sync`,
       { method: 'POST' },
     ).finally(clearBillingCache),
-  reset: (scope?: 'all' | 'messages' | 'memories' | 'tasks' | 'skills') =>
+  reset: (scope?: 'all' | 'messages' | 'memories' | 'tasks') =>
     requestJson<SuccessResponse>('/api/billing/reset', {
       method: 'POST',
       body: JSON.stringify({ scope: scope || 'all' }),

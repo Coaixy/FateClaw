@@ -14,25 +14,20 @@ import {
   createWithdrawalRequest,
   deleteSkillBundle,
   deleteUserCustomSkill,
-  disableUserSkill,
-  enableUserSkill,
   getBundleByToken,
   getCreatorBundleConfig,
   getCreatorEarnings,
-  getOfficialSkills,
   getSkillByShareToken,
   getSubscribedSkills,
   getUserById,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
-  getUserSkills,
   listCreatorSharedSkills,
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
   listWithdrawalsForCreator,
-  loadUserVisibleOfficialSkillCatalog,
   publishSkillBundle,
   publishUserCustomSkill,
   MAX_CONTENT_LENGTH,
@@ -57,7 +52,6 @@ import {
   updateSkillBundle,
   updateUserCustomSkill,
   upsertCreatorBundleConfig,
-  getAllSkillGlobalConfigs,
 } from '../../modules/skills/skills-service.js';
 
 const VALID_SKILL_USAGE_MODES = ['force_injected', 'reference_only'] as const;
@@ -76,76 +70,6 @@ import type { SkillPriceTier, CreatorBundleTier } from '../../shared/types.js';
 import type { UserCustomSkill } from '../../shared/types.js';
 
 export async function skillsRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/skills/catalog — 公开系统排盘兼容目录（无需认证）
-  app.get('/catalog', async () => {
-    return getOfficialSkills();
-  });
-
-  // GET /api/skills — 系统排盘兼容列表，合并全局状态 + 默认值 + 用户偏好
-  app.get('/', async (request) => {
-    await request.requireAuth();
-    const userId = request.user.userId;
-
-    const skills = await getOfficialSkills();
-    const globalConfigs = await getAllSkillGlobalConfigs();
-    const configMap = new Map(globalConfigs.map((c) => [c.skill_name, c]));
-
-    const userSkillRows = await getUserSkills(userId);
-    const userPrefMap = new Map(
-      userSkillRows.map((us) => [us.skill_name, us.enabled]),
-    );
-
-    return skills.map((skill) => {
-      const config = configMap.get(skill.name);
-      const globallyEnabled = config?.globally_enabled ?? false;
-      const defaultEnabled = config?.default_enabled ?? true;
-      const userPref = userPrefMap.get(skill.name);
-      // 用户显式设置优先，否则取 default_enabled
-      const enabled = globallyEnabled && (userPref ?? defaultEnabled);
-
-      return {
-        ...skill,
-        globallyEnabled,
-        defaultEnabled,
-        enabled,
-        userControllable: globallyEnabled,
-      };
-    });
-  });
-
-  // PATCH /api/skills/:name/toggle — 用户切换某系统排盘的启用/禁用
-  app.patch('/:name/toggle', async (request, reply) => {
-    await request.requireAuth();
-    const userId = request.user.userId;
-    const { name } = request.params as { name: string };
-
-    // 以文件系统为主，检查系统排盘是否存在
-    const catalog = loadUserVisibleOfficialSkillCatalog();
-    if (!catalog.some((s) => s.name === name)) {
-      return reply.code(404).send({ error: '该技能不存在' });
-    }
-
-    // 检查数据库中的全局启用状态
-    const globalConfigs = await getAllSkillGlobalConfigs();
-    const config = globalConfigs.find((c) => c.skill_name === name);
-    if (!config?.globally_enabled) {
-      return reply.code(400).send({ error: '该技能已被管理员禁用' });
-    }
-
-    const userSkillRows = await getUserSkills(userId);
-    const current = userSkillRows.find((us) => us.skill_name === name);
-    // 无用户偏好时取 default_enabled
-    const currentlyEnabled = current ? current.enabled : config.default_enabled;
-
-    if (currentlyEnabled) {
-      await disableUserSkill(userId, name);
-    } else {
-      await enableUserSkill(userId, name);
-    }
-
-    return { name, enabled: !currentlyEnabled };
-  });
-
   // =====================
   // --- User custom skill CRUD ---
   // =====================

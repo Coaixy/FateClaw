@@ -29,7 +29,6 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getPointBatchesByUserId,
-  getSkillsForAdmin,
   getTasksForAdmin,
   getUserById,
   getUserByPhone,
@@ -42,7 +41,6 @@ import {
   maskIdNumber,
   reconcileStaleBillingReservations,
   rejectWithdrawal,
-  setSkillDefaultEnabled,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
 } from '../../infrastructure/db.js';
@@ -89,7 +87,6 @@ export {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getPointBatchesByUserId,
-  getSkillsForAdmin,
   getSystemConfigOverview,
   getTasksForAdmin,
   getUserById,
@@ -102,7 +99,6 @@ export {
   removeOfficialModel,
   rejectWithdrawal,
   setOfficialModelSecret,
-  setSkillDefaultEnabled,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateOfficialModel,
@@ -362,10 +358,7 @@ export async function listAdminGlobalSkills() {
     return {
       skill_name: skill.name,
       globally_enabled: config?.globally_enabled ?? false,
-      default_enabled: config?.default_enabled ?? true,
       dir: skill.dir,
-      description: skill.description,
-      trigger: skill.trigger,
     };
   });
 }

@@ -425,61 +425,29 @@ function SkillRow({
 function GlobalSkillRow({
   config,
   onToggleGlobal,
-  onToggleDefault,
 }: {
   config: AdminSkillGlobalConfig;
   onToggleGlobal: (name: string, enabled: boolean) => void;
-  onToggleDefault: (name: string, defaultEnabled: boolean) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const toggleExpanded = useCallback(() => {
-    setExpanded((v) => !v);
-  }, []);
-
   return (
     <div className="border border-hairline rounded-lg overflow-hidden">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={toggleExpanded}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleExpanded();
-          }
-        }}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-cream-strong transition-colors cursor-pointer text-left"
-      >
-        {expanded ? (
-          <ChevronDown
-            size={14}
-            className="text-muted shrink-0"
-          />
-        ) : (
-          <ChevronRight
-            size={14}
-            className="text-muted shrink-0"
-          />
-        )}
+      <div className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-medium">{config.skill_name}</span>
           </div>
-          {config.description && (
+          {config.dir && (
             <div className="text-[12px] text-muted mt-0.5 truncate">
-              {config.description}
+              {config.dir}
             </div>
           )}
         </div>
-        <div className="flex items-center gap-4 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <label className="flex items-center gap-1.5 cursor-pointer text-[12px] text-muted">
             <span>全局</span>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleGlobal(config.skill_name, !config.globally_enabled);
-              }}
+              onClick={() => onToggleGlobal(config.skill_name, !config.globally_enabled)}
               className="cursor-pointer"
             >
               {config.globally_enabled ? (
@@ -492,50 +460,8 @@ function GlobalSkillRow({
               )}
             </button>
           </label>
-          <label className="flex items-center gap-1.5 cursor-pointer text-[12px] text-muted">
-            <span>默认</span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleDefault(config.skill_name, !config.default_enabled);
-              }}
-              className="cursor-pointer"
-              disabled={!config.globally_enabled}
-            >
-              {config.default_enabled && config.globally_enabled ? (
-                <ToggleRight
-                  size={22}
-                  className="text-primary"
-                />
-              ) : (
-                <ToggleLeft
-                  size={22}
-                  className={
-                    config.globally_enabled
-                      ? 'text-muted'
-                      : 'text-muted opacity-30'
-                  }
-                />
-              )}
-            </button>
-          </label>
         </div>
       </div>
-
-      {expanded && (
-        <div className="px-4 py-4 border-t border-hairline bg-surface-card space-y-3">
-          {config.trigger && (
-            <div className="text-[12px] text-muted">
-              <span className="uppercase tracking-wider text-[10px] mr-2">
-                触发
-              </span>
-              {config.trigger}
-            </div>
-          )}
-
-        </div>
-      )}
     </div>
   );
 }
@@ -588,20 +514,6 @@ function AdminSkillsContent() {
       setGlobalConfigs((prev) =>
         prev.map((c) =>
           c.skill_name === name ? { ...c, globally_enabled: enabled } : c,
-        ),
-      );
-    } catch (err) {
-      if (err instanceof Error) return;
-      throw err;
-    }
-  };
-
-  const handleToggleDefault = async (name: string, defaultEnabled: boolean) => {
-    try {
-      await admin.setSkillDefaultEnabled(name, defaultEnabled);
-      setGlobalConfigs((prev) =>
-        prev.map((c) =>
-          c.skill_name === name ? { ...c, default_enabled: defaultEnabled } : c,
         ),
       );
     } catch (err) {
@@ -679,7 +591,7 @@ function AdminSkillsContent() {
                 </span>
               </div>
               <p className="text-[12px] text-muted mb-3">
-                「全局」控制排盘是否可用；「默认」控制新用户是否自动启用（用户可自行覆盖）
+                全局控制排盘是否可用，用户侧不再单独覆盖。
               </p>
               <div className="space-y-2">
                 {globalConfigs.map((config) => (
@@ -687,7 +599,6 @@ function AdminSkillsContent() {
                     key={config.skill_name}
                     config={config}
                     onToggleGlobal={handleToggleGlobal}
-                    onToggleDefault={handleToggleDefault}
                   />
                 ))}
               </div>

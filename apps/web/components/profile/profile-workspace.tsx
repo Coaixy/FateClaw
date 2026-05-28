@@ -34,7 +34,7 @@ export function ProfileWorkspace() {
               <Settings2 size={14} className="text-muted" />
               <div>
                 <p className="text-[12px] font-medium">高级设置</p>
-                <p className="text-[10px] text-muted">系统技能、数据管理与更深层配置</p>
+                <p className="text-[10px] text-muted">模型、数据管理与更深层配置</p>
               </div>
             </div>
           </div>
@@ -47,7 +47,7 @@ export function ProfileWorkspace() {
                 </div>
                 <div className="text-left">
                   <p className="text-[11px] font-medium">进入高级设置</p>
-                  <p className="text-[10px] text-muted">继续查看系统技能、数据管理与更底层能力</p>
+                  <p className="text-[10px] text-muted">继续查看模型、数据管理与更底层能力</p>
                 </div>
               </div>
               <div className="flex h-7 w-7 items-center justify-center rounded-full border border-hairline bg-surface-card/70 transition-colors group-hover:border-primary/35 group-hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]">

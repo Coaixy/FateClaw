@@ -4,25 +4,6 @@
 
 import type { OkResponse } from '../common/api.js';
 
-export interface SkillDto {
-  dir?: string;
-  name: string;
-  description: string;
-  trigger: string;
-  enabled: boolean;
-  globallyEnabled?: boolean;
-  defaultEnabled?: boolean;
-  official?: boolean;
-  userControllable?: boolean;
-}
-
-export interface SkillMetaDto {
-  dir: string;
-  name: string;
-  description: string;
-  trigger: string;
-}
-
 export type SkillUsageModeDto =
   | 'force_injected'
   | 'reference_only';

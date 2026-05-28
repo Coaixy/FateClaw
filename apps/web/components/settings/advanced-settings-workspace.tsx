@@ -6,7 +6,6 @@ import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { ModelSettingsPanel } from '@/components/settings/model-settings-panel';
 import { TabData } from '@/components/settings/tab-data';
-import { TabSystemSkills } from '@/components/settings/tab-system-skills';
 
 export function AdvancedSettingsWorkspace() {
   return (
@@ -26,14 +25,6 @@ export function AdvancedSettingsWorkspace() {
         <SettingsBlock title="模型设置">
           <ModelSettingsPanel />
         </SettingsBlock>
-
-        <div className="border-t border-hairline" />
-
-        <SettingsBlock title="系统技能">
-          <TabSystemSkills />
-        </SettingsBlock>
-
-        <div className="border-t border-hairline" />
 
         <SettingsBlock title="数据管理">
           <TabData />

@@ -39,28 +39,11 @@ export async function closeAgentDb(): Promise<void> {
 
 /**
  * 查询用户可用的系统排盘名称列表。
- * 当提供 userId 时，结合 user_skills 偏好和 default_enabled 决定：
- *   - 用户显式启用 → 启用
- *   - 用户显式禁用 → 禁用
- *   - 无用户偏好 → 取 default_enabled
- * 全局禁用的排盘始终不返回。
- * 无 userId 时回退到全局 default_enabled 行为。
+ * 用户侧不再单独覆盖，始终跟随后台全局开关。
  */
-export async function queryEnabledSkillNames(userId?: string): Promise<string[]> {
-  if (userId) {
-    const { rows } = await getPool().query(
-      `SELECT sgc.skill_name FROM skill_global_config sgc
-       LEFT JOIN user_skills us
-         ON us.skill_name = sgc.skill_name AND us.user_id = $1 AND us.deleted_at IS NULL
-       WHERE sgc.globally_enabled = true
-         AND COALESCE(us.enabled, sgc.default_enabled) = true
-       ORDER BY sgc.skill_name`,
-      [userId],
-    );
-    return (rows as { skill_name: string }[]).map((r) => r.skill_name);
-  }
+export async function queryEnabledSkillNames(_userId?: string): Promise<string[]> {
   const { rows } = await getPool().query(
-    'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true AND default_enabled = true ORDER BY skill_name',
+    'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true ORDER BY skill_name',
   );
   return (rows as { skill_name: string }[]).map((r) => r.skill_name);
 }
@@ -129,33 +112,6 @@ export async function queryEffectiveUserSkills(
     [userId],
   );
   return rows as EffectiveUserSkill[];
-}
-
-/**
- * 启用或禁用系统排盘（per-user）。
- */
-export async function toggleUserSkill(
-  userId: string,
-  skillName: string,
-  action: 'enable' | 'disable',
-): Promise<void> {
-  if (action === 'enable') {
-    const now = new Date().toISOString();
-    await getPool().query(
-      `INSERT INTO user_skills (user_id, skill_name, enabled, enabled_at)
-       VALUES ($1, $2, true, $3)
-       ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = true, enabled_at = $3, deleted_at = NULL`,
-      [userId, skillName, now],
-    );
-  } else {
-    const now = new Date().toISOString();
-    await getPool().query(
-      `INSERT INTO user_skills (user_id, skill_name, enabled, enabled_at)
-       VALUES ($1, $2, false, $3)
-       ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = false, deleted_at = NULL`,
-      [userId, skillName, now],
-    );
-  }
 }
 
 // ── Soul / Memory ──

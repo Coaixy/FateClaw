@@ -11,8 +11,6 @@ import type {
   SharedSkillPreviewDto,
   SkillBundleDto,
   SkillDeleteResponseDto,
-  SkillDto,
-  SkillMetaDto,
   SkillPriceTierDto,
   SkillShareResponseDto,
   SkillSubscriptionCreateResponseDto,
@@ -27,8 +25,6 @@ import type {
 
 import { requestJson } from '@/lib/http/client';
 
-export type Skill = SkillDto;
-export type SkillMeta = SkillMetaDto;
 export type SkillUsageMode = SkillUsageModeDto;
 export type SkillPriceTier = SkillPriceTierDto;
 export type UserCustomSkill = UserCustomSkillDto;
@@ -81,13 +77,6 @@ export const SYSTEM_PAIPAN_CATEGORIES: readonly string[] = [
 ] as const;
 
 export const skillsApi = {
-  catalog: () => requestJson<SkillMeta[]>('/api/skills/catalog'),
-  list: () => requestJson<Skill[]>('/api/skills'),
-  toggle: (name: string) =>
-    requestJson<{ name: string; enabled: boolean }>(
-      `/api/skills/${encodeURIComponent(name)}/toggle`,
-      { method: 'PATCH' },
-    ),
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
   userCreate: (data: {
     skill_name: string;

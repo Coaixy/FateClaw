@@ -65,6 +65,13 @@ describe('runDatabaseMigrations', () => {
         '迁移模型配置 provider 字段到 Pi API schema',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0006_remove_user_system_skill_preferences',
+        '移除用户级系统排盘开关和默认启用配置',
+      ],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -94,6 +101,7 @@ describe('runDatabaseMigrations', () => {
       '0003_application_schema_expansion',
       '0004_phone_only_user_schema',
       '0005_model_pi_api_schema',
+      '0006_remove_user_system_skill_preferences',
     ]);
 
     await runDatabaseMigrations(client as never);

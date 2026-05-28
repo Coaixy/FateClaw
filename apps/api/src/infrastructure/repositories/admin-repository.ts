@@ -246,38 +246,6 @@ export async function getTasksForAdmin(opts: {
   return rows as AdminTaskRow[];
 }
 
-export interface AdminSkillRow {
-  user_id: string;
-  phone: string;
-  skill_name: string;
-  enabled: boolean;
-  enabled_at: string;
-}
-
-export async function getSkillsForAdmin(opts: {
-  userId?: string;
-}): Promise<AdminSkillRow[]> {
-  let whereClause = 'WHERE s.deleted_at IS NULL';
-  const params: unknown[] = [];
-  let paramIdx = 1;
-
-  if (opts.userId) {
-    whereClause += ` AND s.user_id = $${paramIdx++}`;
-    params.push(opts.userId);
-  }
-
-  const { rows } = await pool.query(
-    `SELECT s.user_id, u.phone, s.skill_name, s.enabled, s.enabled_at
-     FROM user_skills s
-     JOIN users u ON u.id = s.user_id
-     ${whereClause}
-     ORDER BY s.enabled_at DESC`,
-    params,
-  );
-
-  return rows as AdminSkillRow[];
-}
-
 export interface AdminCustomSkillRow {
   id: string;
   user_id: string;

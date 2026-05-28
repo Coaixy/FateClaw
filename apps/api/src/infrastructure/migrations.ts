@@ -219,16 +219,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         )
       `);
       await client.query(`
-        CREATE TABLE IF NOT EXISTS user_skills (
-          user_id TEXT NOT NULL REFERENCES users(id),
-          skill_name TEXT NOT NULL,
-          enabled BOOLEAN DEFAULT true,
-          enabled_at TIMESTAMPTZ NOT NULL,
-          deleted_at TIMESTAMPTZ DEFAULT NULL,
-          PRIMARY KEY (user_id, skill_name)
-        )
-      `);
-      await client.query(`
         CREATE TABLE IF NOT EXISTS messages (
           id TEXT,
           account_id TEXT NOT NULL,
@@ -305,13 +295,9 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         CREATE TABLE IF NOT EXISTS skill_global_config (
           skill_name TEXT PRIMARY KEY,
           globally_enabled BOOLEAN NOT NULL DEFAULT true,
-          default_enabled BOOLEAN NOT NULL DEFAULT true,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_by TEXT DEFAULT NULL
         )
-      `);
-      await client.query(`
-        ALTER TABLE skill_global_config ADD COLUMN IF NOT EXISTS default_enabled BOOLEAN NOT NULL DEFAULT true
       `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS system_secrets (
@@ -2055,6 +2041,17 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      SET pi_api = 'openai-completions'
                      WHERE pi_api NOT IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
       });
+    },
+  },
+  {
+    id: '0006_remove_user_system_skill_preferences',
+    description: '移除用户级系统排盘开关和默认启用配置',
+    async up(client) {
+      await client.query(`DROP TABLE IF EXISTS user_skills`);
+      await client.query(`
+        ALTER TABLE skill_global_config
+          DROP COLUMN IF EXISTS default_enabled
+      `);
     },
   },
 ];

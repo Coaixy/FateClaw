@@ -25,7 +25,6 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getSkillsForAdmin,
   getTasksForAdmin,
 } from './repositories/admin-repository.js';
 import type {
@@ -35,7 +34,6 @@ import type {
   AdminMessageRow,
   AdminRechargePeriodStats,
   AdminRechargeStatsRange,
-  AdminSkillRow,
   AdminTaskRow,
 } from './repositories/admin-repository.js';
 import {
@@ -160,16 +158,11 @@ import {
   createUserCustomSkill,
   deleteSkillBundle,
   deleteUserCustomSkill,
-  disableAllUserSkills,
-  disableUserSkill,
-  enableAllUserSkills,
-  enableUserSkill,
   getAllSkillGlobalConfigs,
   getBundleByToken,
   getCreatorBundleConfig,
   getCreatorEarnings,
   getEffectiveUserSkills,
-  getEnabledSkillNames,
   getGloballyEnabledSkillNames,
   getResolvedEnabledOfficialSkillNames,
   getSkillByShareToken,
@@ -179,17 +172,14 @@ import {
   getUserCustomSkillById,
   getUserCustomSkillCount,
   getUserCustomSkills,
-  getUserSkills,
   listCreatorSharedSkills,
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
   publishSkillBundle,
   publishUserCustomSkill,
-  resetUserSkills,
   seedOfficialSkills,
   setUserCustomSkillAdminState,
-  setSkillDefaultEnabled,
   setSkillGlobalEnabled,
   shareSkillBundle,
   shareUserCustomSkill,
@@ -242,10 +232,6 @@ export {
   deleteSkillBundle,
   deleteTask,
   deleteUserCustomSkill,
-  disableAllUserSkills,
-  disableUserSkill,
-  enableAllUserSkills,
-  enableUserSkill,
   encryptSensitive,
   expireBonusPoints,
   extendTaskRunLock,
@@ -274,7 +260,6 @@ export {
   getCreatorEarnings,
   getEffectiveUserSkills,
   getEnabledAccounts,
-  getEnabledSkillNames,
   getGloballyEnabledSkillNames,
   getMonthlyModelChargePoints,
   getMessagesForAdmin,
@@ -290,7 +275,6 @@ export {
   getSessionMessageById,
   getSessionMessagesWithToolContext,
   getSkillByShareToken,
-  getSkillsForAdmin,
   getSoulContent,
   getSubscribedSkills,
   getSubscriberIds,
@@ -307,7 +291,6 @@ export {
   getUserCustomSkills,
   getUserModelConfig,
   getUserModelSelection,
-  getUserSkills,
   getVisibleWalletTransactionsByUserId,
   getWalletTransactionsByUserId,
   getWithdrawalById,
@@ -336,11 +319,9 @@ export {
   rejectWithdrawal,
   releaseUserReservation,
   resetUserMessages,
-  resetUserSkills,
   resetUserTasks,
   reserveUserPoints,
   seedOfficialSkills,
-  setSkillDefaultEnabled,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   shareSkillBundle,
@@ -385,7 +366,6 @@ export type {
   AdminMessageRow,
   AdminRechargePeriodStats,
   AdminRechargeStatsRange,
-  AdminSkillRow,
   AdminTaskRow,
   BillingRequestReservationRow,
   BundleByTokenResult,
@@ -527,7 +507,6 @@ export async function deleteUser(userId: string): Promise<void> {
       [userId],
     );
     await client.query('DELETE FROM daily_usage WHERE user_id = $1', [userId]);
-    await client.query('DELETE FROM user_skills WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM accounts WHERE owner_id = $1', [userId]);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
     await client.query('COMMIT');
@@ -540,7 +519,7 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 /**
- * 重置用户的所有数据：消息、定时任务（含运行日志）、技能配置。
+ * 重置用户的所有数据：消息、定时任务（含运行日志）。
  * 使用软删除（标记 deleted_at）而非物理删除，以满足审查要求。
  */
 export async function resetUserData(userId: string): Promise<string[]> {
@@ -567,11 +546,6 @@ export async function resetUserData(userId: string): Promise<string[]> {
         [now, accountId],
       );
     }
-
-    await client.query(
-      'UPDATE user_skills SET deleted_at = $1 WHERE user_id = $2 AND deleted_at IS NULL',
-      [now, userId],
-    );
 
     await client.query('COMMIT');
   } catch (err) {

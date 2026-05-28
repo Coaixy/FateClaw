@@ -288,20 +288,9 @@ export interface AdminTask {
 export interface AdminSkillGlobalConfig {
   skill_name: string;
   globally_enabled: boolean;
-  default_enabled: boolean;
   updated_at: string;
   updated_by: string | null;
   dir?: string;
-  description?: string;
-  trigger?: string;
-}
-
-export interface AdminSkill {
-  user_id: string;
-  phone: string | null;
-  skill_name: string;
-  enabled: boolean;
-  enabled_at: string;
 }
 
 export type SkillUsageMode = 'force_injected' | 'reference_only';
@@ -560,23 +549,12 @@ export const admin = {
     const qs = params.toString();
     return adminRequest<AdminTask[]>(`/api/admin/tasks${qs ? `?${qs}` : ''}`);
   },
-  skills: (opts?: { user_id?: string }) => {
-    const params = new URLSearchParams();
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    const qs = params.toString();
-    return adminRequest<AdminSkill[]>(`/api/admin/skills${qs ? `?${qs}` : ''}`);
-  },
   globalSkills: () =>
     adminRequest<AdminSkillGlobalConfig[]>('/api/admin/skills/global'),
   setSkillGlobalEnabled: (name: string, enabled: boolean) =>
     adminRequest<{ success: boolean }>(
       `/api/admin/skills/global/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`,
       { method: 'POST' },
-    ),
-  setSkillDefaultEnabled: (name: string, default_enabled: boolean) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/skills/global/${encodeURIComponent(name)}/set-default`,
-      { method: 'POST', body: JSON.stringify({ default_enabled }) },
     ),
   customSkills: (opts?: { user_id?: string }) => {
     const params = new URLSearchParams();

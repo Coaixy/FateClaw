@@ -21,13 +21,11 @@ vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
 
 import {
   createUserCustomSkill,
-  enableAllUserSkills,
   getBundleByToken,
   getEffectiveUserSkills,
   getResolvedEnabledOfficialSkillNames,
   listMarketBundles,
   listMarketSkills,
-  resetUserSkills,
   seedOfficialSkills,
   upsertCreatorBundleConfig,
 } from './skills-repository.js';
@@ -85,7 +83,7 @@ describe('skills repository official skill settings', () => {
     });
   });
 
-  it('seeds official skills and removes stale skill rows transactionally', async () => {
+  it('seeds official skills and removes stale global config rows transactionally', async () => {
     const { clientCalls, client } = createMockPool();
 
     await seedOfficialSkills(['bazi', 'ziwei']);
@@ -95,13 +93,10 @@ describe('skills repository official skill settings', () => {
     expect(clientCalls[1]?.params).toEqual(['bazi']);
     expect(clientCalls[2]?.params).toEqual(['ziwei']);
     expect(clientCalls[3]?.sql).toContain(
-      'DELETE FROM user_skills WHERE skill_name NOT IN ($1,$2)',
-    );
-    expect(clientCalls[3]?.params).toEqual(['bazi', 'ziwei']);
-    expect(clientCalls[4]?.sql).toContain(
       'DELETE FROM skill_global_config WHERE skill_name NOT IN ($1,$2)',
     );
-    expect(clientCalls[5]?.sql).toBe('COMMIT');
+    expect(clientCalls[3]?.params).toEqual(['bazi', 'ziwei']);
+    expect(clientCalls[4]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 
@@ -114,53 +109,28 @@ describe('skills repository official skill settings', () => {
     expect(clientCalls).toEqual([]);
   });
 
-  it('resolves user-specific official skill enablement with defaults', async () => {
+  it('resolves official skill enablement from global switches', async () => {
     const { calls } = createMockPool([{ skill_name: 'bazi' }]);
 
     await expect(
       getResolvedEnabledOfficialSkillNames('user-1'),
     ).resolves.toEqual(['bazi']);
 
-    expect(calls[0]?.sql).toContain('LEFT JOIN user_skills us');
-    expect(calls[0]?.sql).toContain(
-      'COALESCE(us.enabled, sgc.default_enabled) = true',
-    );
-    expect(calls[0]?.params).toEqual(['user-1']);
+    expect(calls[0]?.sql).toContain('globally_enabled = true');
+    expect(calls[0]?.sql).not.toContain('user_skills');
+    expect(calls[0]?.params).toBeUndefined();
   });
 
-  it('resolves anonymous official skill enablement from global defaults', async () => {
+  it('resolves anonymous official skill enablement from global switches', async () => {
     const { calls } = createMockPool([{ skill_name: 'ziwei' }]);
 
     await expect(getResolvedEnabledOfficialSkillNames()).resolves.toEqual([
       'ziwei',
     ]);
 
-    expect(calls[0]?.sql).toContain('default_enabled = true');
+    expect(calls[0]?.sql).toContain('globally_enabled = true');
+    expect(calls[0]?.sql).not.toContain('default_enabled');
     expect(calls[0]?.params).toBeUndefined();
-  });
-
-  it('enables all user skills in one transaction', async () => {
-    const { clientCalls, client } = createMockPool();
-
-    await enableAllUserSkills('user-1', ['bazi', 'ziwei']);
-
-    expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(clientCalls[1]?.sql).toContain('INSERT INTO user_skills');
-    expect(clientCalls[1]?.params?.slice(0, 2)).toEqual(['user-1', 'bazi']);
-    expect(clientCalls[2]?.params?.slice(0, 2)).toEqual(['user-1', 'ziwei']);
-    expect(clientCalls[3]?.sql).toBe('COMMIT');
-    expect(client.release).toHaveBeenCalledOnce();
-  });
-
-  it('soft deletes a user official skill settings set', async () => {
-    const { calls } = createMockPool();
-
-    await resetUserSkills('user-1');
-
-    expect(calls[0]?.sql).toBe(
-      'UPDATE user_skills SET deleted_at = $1 WHERE user_id = $2 AND deleted_at IS NULL',
-    );
-    expect(calls[0]?.params?.[1]).toBe('user-1');
   });
 
   it('reads effective custom skills from self and subscription sources', async () => {

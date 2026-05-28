@@ -23,7 +23,6 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getPointBatchesByUserId,
-  getSkillsForAdmin,
   getSystemConfigOverview,
   getTasksForAdmin,
   getUserById,
@@ -41,7 +40,6 @@ import {
   removeOfficialModel,
   rejectWithdrawal,
   setOfficialModelSecret,
-  setSkillDefaultEnabled,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateOfficialModel,
@@ -733,16 +731,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // GET /api/admin/skills — 查询所有用户技能（支持按用户筛选）
-  app.get('/skills', async (request) => {
-    const query = request.query as {
-      user_id?: string;
-    };
-    return getSkillsForAdmin({
-      userId: query.user_id,
-    });
-  });
-
   // GET /api/admin/skills/custom — 查看所有用户自定义知识技能
   app.get('/skills/custom', async (request) => {
     const query = request.query as {
@@ -839,24 +827,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: `系统排盘 "${name}" 不存在` });
       }
       await setSkillGlobalEnabled(name, false);
-
-      return { success: true };
-    },
-  );
-
-  // POST /api/admin/skills/global/:name/set-default — 设置系统排盘的默认启用状态
-  app.post<{ Params: { name: string }; Body: { default_enabled: boolean } }>(
-    '/skills/global/:name/set-default',
-    async (request, reply) => {
-      const { name } = request.params;
-      const { default_enabled } = request.body as { default_enabled: boolean };
-      if (typeof default_enabled !== 'boolean') {
-        return reply.code(400).send({ error: 'default_enabled 必须为布尔值' });
-      }
-      if (!hasOfficialSkill(name)) {
-        return reply.code(404).send({ error: `系统排盘 "${name}" 不存在` });
-      }
-      await setSkillDefaultEnabled(name, default_enabled);
 
       return { success: true };
     },

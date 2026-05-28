@@ -9,7 +9,6 @@ const LEGACY_TAB_REDIRECT: Record<string, string> = {
   appearance: '/profile',
   wallet: '/wallet',
   tasks: '/tasks',
-  'system-skills': '/settings/advanced',
   data: '/settings/advanced',
 };
 
