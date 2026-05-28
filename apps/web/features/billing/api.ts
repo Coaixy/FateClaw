@@ -34,9 +34,31 @@ export interface PointBatch {
   updated_at: string;
 }
 
+let billingStatusRequest: Promise<BillingStatus> | null = null;
+let usageRequest: Promise<UsageStats> | null = null;
+
+export function clearBillingCache() {
+  billingStatusRequest = null;
+  usageRequest = null;
+}
+
 export const billingApi = {
-  status: () => requestJson<BillingStatus>('/api/billing'),
-  usage: () => requestJson<UsageStats>('/api/billing/usage'),
+  status: () => {
+    billingStatusRequest ??= requestJson<BillingStatus>('/api/billing').finally(
+      () => {
+        billingStatusRequest = null;
+      },
+    );
+    return billingStatusRequest;
+  },
+  usage: () => {
+    usageRequest ??= requestJson<UsageStats>('/api/billing/usage').finally(
+      () => {
+        usageRequest = null;
+      },
+    );
+    return usageRequest;
+  },
   dailyUsage: () =>
     requestJson<DailyUsageRow[]>('/api/billing/usage/daily'),
   transactions: () =>
@@ -55,15 +77,15 @@ export const billingApi = {
         method: 'POST',
         body: JSON.stringify(data),
       },
-    ),
+    ).finally(clearBillingCache),
   syncRechargeOrder: (tradeId: string) =>
     requestJson<RechargeOrder>(
       `/api/billing/recharge/orders/${encodeURIComponent(tradeId)}/sync`,
       { method: 'POST' },
-    ),
+    ).finally(clearBillingCache),
   reset: (scope?: 'all' | 'messages' | 'memories' | 'tasks' | 'skills') =>
     requestJson<SuccessResponse>('/api/billing/reset', {
       method: 'POST',
       body: JSON.stringify({ scope: scope || 'all' }),
-    }),
+    }).finally(clearBillingCache),
 };

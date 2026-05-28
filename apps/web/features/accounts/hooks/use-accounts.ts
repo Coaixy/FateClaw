@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { accountsApi, type Account } from '@/features/accounts/api';
-import { billingApi, type BillingStatus } from '@/features/billing/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export function useAccounts() {
   const { user } = useAuth();
   const [accountList, setAccountList] = useState<Account[]>([]);
-  const [billingInfo, setBillingInfo] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -17,19 +15,14 @@ export function useAccounts() {
   const load = useCallback(async () => {
     if (!user) {
       setAccountList([]);
-      setBillingInfo(null);
       setLoadError(null);
       setLoading(false);
       return false;
     }
 
     try {
-      const [nextAccounts, nextBilling] = await Promise.all([
-        accountsApi.list(),
-        billingApi.status(),
-      ]);
+      const nextAccounts = await accountsApi.list();
       setAccountList(nextAccounts);
-      setBillingInfo(nextBilling);
       setLoadError(null);
       return true;
     } catch (err) {
@@ -52,5 +45,5 @@ export function useAccounts() {
     void load();
   }, [load]);
 
-  return { accountList, billingInfo, loading, refreshing, loadError, load, refresh };
+  return { accountList, loading, refreshing, loadError, load, refresh };
 }

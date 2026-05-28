@@ -126,13 +126,26 @@ export const messagesApi = {
     ),
 };
 
+let chatSessionListRequest: Promise<ChatSession[]> | null = null;
+
+export function clearChatSessionsCache() {
+  chatSessionListRequest = null;
+}
+
 export const chatSessionsApi = {
-  list: () => requestJson<ChatSession[]>('/api/chat-sessions'),
+  list: () => {
+    chatSessionListRequest ??= requestJson<ChatSession[]>(
+      '/api/chat-sessions',
+    ).finally(() => {
+      chatSessionListRequest = null;
+    });
+    return chatSessionListRequest;
+  },
   create: (title?: string) =>
     requestJson<ChatSession>('/api/chat-sessions', {
       method: 'POST',
       body: JSON.stringify({ title }),
-    }),
+    }).finally(clearChatSessionsCache),
   update: (sessionId: string, title: string) =>
     requestJson<SuccessResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
@@ -142,7 +155,7 @@ export const chatSessionsApi = {
     requestJson<SuccessResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
       { method: 'DELETE' },
-    ),
+    ).finally(clearChatSessionsCache),
   messages: (sessionId: string, limit = 50, before?: string) =>
     requestJson<SessionMessageListResponseDto>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,

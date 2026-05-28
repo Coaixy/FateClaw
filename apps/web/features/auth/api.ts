@@ -15,6 +15,12 @@ export type User = UserDto;
 export type CaptchaChallenge = CaptchaChallengeDto;
 export type SendSMSCaptchaResponse = SendSMSCaptchaResponseDto;
 
+let meRequest: Promise<User> | null = null;
+
+export function clearAuthCache() {
+  meRequest = null;
+}
+
 export const authApi = {
   captcha: () => requestJson<CaptchaChallenge>('/api/auth/captcha'),
   sendSMSCaptcha: (
@@ -77,5 +83,10 @@ export const authApi = {
         smsCaptchaCode,
       } satisfies ResetPasswordRequestDto),
     }),
-  me: () => requestJson<User>('/api/auth/me'),
+  me: () => {
+    meRequest ??= requestJson<User>('/api/auth/me').finally(() => {
+      meRequest = null;
+    });
+    return meRequest;
+  },
 };

@@ -95,7 +95,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
       </div>
       {!compact && (
         <div className="flex flex-col">
-          <span className="text-[15px] font-bold tracking-tight text-ink" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <span className="text-[15px] font-bold tracking-tight text-ink">
             命枢
           </span>
           <span className="text-[9px] text-primary/70 tracking-[0.2em] font-medium">

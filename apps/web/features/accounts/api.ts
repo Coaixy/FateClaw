@@ -13,8 +13,21 @@ export type AccountSoul = AccountSoulDto;
 export type QrCodeResult = QrCodeResultDto;
 export type QrCodeStatusResult = QrCodeStatusResultDto;
 
+let accountListRequest: Promise<Account[]> | null = null;
+
+export function clearAccountsCache() {
+  accountListRequest = null;
+}
+
 export const accountsApi = {
-  list: () => requestJson<Account[]>('/api/account'),
+  list: () => {
+    accountListRequest ??= requestJson<Account[]>('/api/account').finally(
+      () => {
+        accountListRequest = null;
+      },
+    );
+    return accountListRequest;
+  },
   get: (id: string) =>
     requestJson<Account>(`/api/account/${encodeURIComponent(id)}`),
   bind: (id: string) =>
@@ -25,9 +38,12 @@ export const accountsApi = {
       },
     ),
   remove: (id: string) =>
-    requestJson<SuccessResponse>(`/api/account/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    }),
+    requestJson<SuccessResponse>(
+      `/api/account/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+      },
+    ).finally(clearAccountsCache),
   getSoul: (id: string) =>
     requestJson<AccountSoul>(`/api/account/${encodeURIComponent(id)}/soul`),
   updateSoul: (id: string, content: string) =>
