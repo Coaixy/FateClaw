@@ -30,6 +30,7 @@ import {
   getWalletTransactionsByUserId,
   grantBonusPoints,
   hasOfficialSkill,
+  createAdminUser,
   listAdminGlobalSkills,
   listAdminUsersWithStats,
   listAdminWithdrawalsMasked,
@@ -72,6 +73,13 @@ const AdjustPurchasedPointsSchema = z.object({
     .int()
     .refine((v) => v !== 0, '调整积分不能为 0'),
   note: z.string().max(200).optional(),
+});
+
+const AdminCreateUserSchema = z.object({
+  phone: z.string().trim().min(1, '手机号不能为空').max(32),
+  password: z.string().min(8, '密码至少 8 位').max(128),
+  role: z.enum(['consumer', 'creator', 'both', 'admin']).default('consumer'),
+  phone_verified: z.boolean().default(true),
 });
 
 const DateOnlySchema = z
@@ -439,6 +447,24 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/admin/users — 获取所有用户（附带用量和账号数）
   app.get('/users', async () => {
     return listAdminUsersWithStats();
+  });
+
+  // POST /api/admin/users — 管理员直接创建用户，不走短信验证码
+  app.post('/users', async (request, reply) => {
+    const body = AdminCreateUserSchema.parse(request.body);
+    try {
+      const result = await createAdminUser({
+        phone: body.phone,
+        password: body.password,
+        role: body.role,
+        phoneVerified: body.phone_verified,
+      });
+      return reply.code(201).send({ success: true, id: result.id });
+    } catch (err) {
+      return reply.code(400).send({
+        error: err instanceof Error ? err.message : '创建用户失败',
+      });
+    }
   });
 
   // GET /api/admin/users/:id — 获取用户详情（含账号和用量）

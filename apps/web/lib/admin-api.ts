@@ -133,6 +133,7 @@ export interface AdminUser {
   id: string;
   phone: string;
   phone_verified: boolean;
+  role: 'consumer' | 'creator' | 'both' | 'admin';
   created_at: string;
   account_count: number;
   active_tasks: number;
@@ -486,6 +487,16 @@ export const admin = {
       },
     ),
   users: () => adminRequest<AdminUser[]>('/api/admin/users'),
+  createUser: (data: {
+    phone: string;
+    password: string;
+    role: AdminUser['role'];
+    phone_verified: boolean;
+  }) =>
+    adminRequest<{ success: boolean; id: string }>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   userDetail: (id: string) =>
     adminRequest<UserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
   adjustPurchasedPoints: (

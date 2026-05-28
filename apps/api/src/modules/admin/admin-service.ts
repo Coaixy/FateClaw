@@ -5,9 +5,14 @@
  * 数据库、系统配置与套餐模块的细节。
  */
 
+import crypto from 'node:crypto';
+
+import bcrypt from 'bcryptjs';
+
 import {
   adjustUserPurchasedPoints,
   approveWithdrawal,
+  createUser,
   decryptSensitive,
   deleteUser,
   getAccountsByUserId,
@@ -26,6 +31,7 @@ import {
   getSkillsForAdmin,
   getTasksForAdmin,
   getUserById,
+  getUserByPhone,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
   grantBonusPoints,
@@ -56,6 +62,14 @@ import {
   updateAdminRechargePaymentConfig,
 } from '../billing/recharge-service.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
+import {
+  isValidMainlandChinaPhone,
+  normalizePhoneNumber,
+} from '../user/phone.js';
+import type { User, UserRole } from '../../shared/types.js';
+
+const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
+const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 
 export {
   adjustUserPurchasedPoints,
@@ -91,6 +105,59 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
 };
+
+export async function createAdminUser(input: {
+  phone: string;
+  password: string;
+  role: UserRole;
+  phoneVerified: boolean;
+}): Promise<{ id: string }> {
+  const normalizedPhone = normalizePhoneNumber(input.phone);
+  if (!isValidMainlandChinaPhone(normalizedPhone)) {
+    throw new Error('手机号格式不正确');
+  }
+  if (input.password.length < ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH) {
+    throw new Error(`密码至少 ${ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH} 位`);
+  }
+  const existing = await getUserByPhone(normalizedPhone);
+  if (existing) {
+    throw new Error('该手机号已存在');
+  }
+
+  const now = new Date().toISOString();
+  const user: User = {
+    id: crypto.randomUUID(),
+    phone: normalizedPhone,
+    phone_verified: input.phoneVerified,
+    password_hash: await bcrypt.hash(
+      input.password,
+      ADMIN_CREATE_USER_SALT_ROUNDS,
+    ),
+    role: input.role,
+    purchased_points: 0,
+    bonus_points: 0,
+    earned_points: 0,
+    reserved_points: 0,
+    pending_withdrawal_points: 0,
+    created_at: now,
+  };
+
+  try {
+    await createUser(user);
+  } catch (err) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      err.code === '23505'
+    ) {
+      throw new Error('该手机号已存在');
+    }
+    throw err;
+  }
+
+  return { id: user.id };
+}
 
 /**
  * 聚合用户列表页需要的统计信息。

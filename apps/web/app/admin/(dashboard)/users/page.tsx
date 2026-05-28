@@ -17,6 +17,7 @@ import {
   Coins,
   Loader2,
   MessageSquare,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -66,6 +67,13 @@ function displayUser(user: AdminUser) {
 function totalTokens(user: AdminUser) {
   return user.usage.total_input_tokens + user.usage.total_output_tokens;
 }
+
+const USER_ROLE_OPTIONS: Array<{ value: AdminUser['role']; label: string }> = [
+  { value: 'consumer', label: '消费者' },
+  { value: 'creator', label: '创作者' },
+  { value: 'both', label: '消费者 + 创作者' },
+  { value: 'admin', label: '管理员' },
+];
 
 // ─── 小组件 ───
 
@@ -120,6 +128,132 @@ function UsageMetric({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] text-muted">{label}</div>
       <div className="mt-0.5 text-[13px] font-medium tabular-nums">{value}</div>
     </div>
+  );
+}
+
+function CreateUserPanel({
+  onCreated,
+}: {
+  onCreated: () => void | Promise<void>;
+}) {
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<AdminUser['role']>('consumer');
+  const [phoneVerified, setPhoneVerified] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleSubmit = async () => {
+    setMessage('');
+    const normalizedPhone = phone.trim();
+    if (!normalizedPhone) {
+      setMessage('请输入手机号');
+      return;
+    }
+    if (password.length < 8) {
+      setMessage('密码至少 8 位');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await admin.createUser({
+        phone: normalizedPhone,
+        password,
+        role,
+        phone_verified: phoneVerified,
+      });
+      setPhone('');
+      setPassword('');
+      setRole('consumer');
+      setPhoneVerified(true);
+      setMessage('用户已创建');
+      await onCreated();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : '创建用户失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="mb-4 rounded-xl border border-hairline bg-surface-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Plus size={14} className="text-muted" />
+        <h3 className="text-[14px] font-semibold">添加用户</h3>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[180px_180px_180px_auto_auto] lg:items-end">
+        <label className="min-w-0">
+          <span className="mb-1 block text-[12px] text-muted">手机号</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="13800138000"
+            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+          />
+        </label>
+
+        <label className="min-w-0">
+          <span className="mb-1 block text-[12px] text-muted">初始密码</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="至少 8 位"
+            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+          />
+        </label>
+
+        <label className="min-w-0">
+          <span className="mb-1 block text-[12px] text-muted">角色</span>
+          <select
+            value={role}
+            onChange={(event) =>
+              setRole(event.target.value as AdminUser['role'])
+            }
+            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+          >
+            {USER_ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="inline-flex h-9 cursor-pointer items-center gap-2 text-[13px] text-muted">
+          <input
+            type="checkbox"
+            checked={phoneVerified}
+            onChange={(event) => setPhoneVerified(event.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          手机号已验证
+        </label>
+
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={submitting}
+          className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {submitting ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Plus size={12} />
+          )}
+          添加用户
+        </button>
+      </div>
+
+      {message && (
+        <div className="mt-3 rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
+          {message}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -675,6 +809,8 @@ export default function AdminUsersPage() {
           />
         </div>
       </div>
+
+      <CreateUserPanel onCreated={fetchUsers} />
 
       <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <SummaryCard
