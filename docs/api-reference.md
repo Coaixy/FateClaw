@@ -516,7 +516,8 @@ Authorization: Bearer <token>
     "msg_count": 12,
     "input_tokens": 24000,
     "output_tokens": 6200,
-    "total_tokens": 30200
+    "total_tokens": 30200,
+    "official_model_charge_points": 36
   }
 ]
 ```

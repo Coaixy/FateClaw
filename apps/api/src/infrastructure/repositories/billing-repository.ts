@@ -560,6 +560,7 @@ export async function getVisibleWalletTransactionsByUserId(
     `SELECT * FROM wallet_transactions
      WHERE user_id = $1
        AND amount_points <> 0
+       AND kind <> 'overage_charge'
      ORDER BY created_at DESC
      LIMIT $2`,
     [userId, limit],

@@ -6,6 +6,7 @@ export interface DailyUsageRow {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  official_model_charge_points: number;
 }
 
 export interface UsageStats {
@@ -116,14 +117,39 @@ export async function getDailyUsageRows(
   userId: string,
 ): Promise<DailyUsageRow[]> {
   const { rows } = await getDbPool().query(
-    `SELECT date,
-            COALESCE(msg_count, 0) AS msg_count,
-            COALESCE(input_tokens, 0) AS input_tokens,
-            COALESCE(output_tokens, 0) AS output_tokens,
-            COALESCE(input_tokens + output_tokens, 0) AS total_tokens
-     FROM daily_usage
-     WHERE user_id = $1
-     ORDER BY date DESC`,
+    `WITH usage_rows AS (
+       SELECT date,
+              COALESCE(msg_count, 0) AS msg_count,
+              COALESCE(input_tokens, 0) AS input_tokens,
+              COALESCE(output_tokens, 0) AS output_tokens,
+              COALESCE(input_tokens + output_tokens, 0) AS total_tokens
+       FROM daily_usage
+       WHERE user_id = $1
+     ),
+     charge_rows AS (
+       SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+              COALESCE(SUM(-amount_points), 0) AS official_model_charge_points
+       FROM wallet_transactions
+       WHERE user_id = $1
+         AND kind = 'overage_charge'
+         AND amount_points < 0
+       GROUP BY 1
+     ),
+     daily_dates AS (
+       SELECT date FROM usage_rows
+       UNION
+       SELECT date FROM charge_rows
+     )
+     SELECT daily_dates.date,
+            COALESCE(usage_rows.msg_count, 0) AS msg_count,
+            COALESCE(usage_rows.input_tokens, 0) AS input_tokens,
+            COALESCE(usage_rows.output_tokens, 0) AS output_tokens,
+            COALESCE(usage_rows.total_tokens, 0) AS total_tokens,
+            COALESCE(charge_rows.official_model_charge_points, 0) AS official_model_charge_points
+     FROM daily_dates
+     LEFT JOIN usage_rows ON usage_rows.date = daily_dates.date
+     LEFT JOIN charge_rows ON charge_rows.date = daily_dates.date
+     ORDER BY daily_dates.date DESC`,
     [userId],
   );
 
@@ -134,6 +160,7 @@ export async function getDailyUsageRows(
       input_tokens: string | number;
       output_tokens: string | number;
       total_tokens: string | number;
+      official_model_charge_points: string | number;
     };
     return {
       date: item.date,
@@ -141,6 +168,7 @@ export async function getDailyUsageRows(
       input_tokens: Number(item.input_tokens),
       output_tokens: Number(item.output_tokens),
       total_tokens: Number(item.total_tokens),
+      official_model_charge_points: Number(item.official_model_charge_points),
     };
   });
 }

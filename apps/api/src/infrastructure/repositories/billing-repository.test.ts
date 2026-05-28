@@ -30,6 +30,7 @@ vi.mock('../config.js', () => ({
 
 import {
   deductPoints,
+  getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
   reserveUserPoints,
@@ -146,6 +147,17 @@ describe('billing repository', () => {
     expect(clientCalls[4]?.sql).toContain('UPDATE recharge_orders');
     expect(clientCalls[5]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('excludes official model token charges from visible wallet flow', async () => {
+    const { calls } = createMockPool();
+
+    await expect(
+      getVisibleWalletTransactionsByUserId('user-1', 20),
+    ).resolves.toEqual([]);
+
+    expect(calls[0]?.sql).toContain("kind <> 'overage_charge'");
+    expect(calls[0]?.params).toEqual(['user-1', 20]);
   });
 
   it('caps billing reservation list filters and keeps params ordered', async () => {

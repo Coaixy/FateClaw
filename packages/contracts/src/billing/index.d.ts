@@ -17,6 +17,7 @@ export interface DailyUsageRowDto {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  official_model_charge_points: number;
 }
 
 export interface WalletTransactionDto {

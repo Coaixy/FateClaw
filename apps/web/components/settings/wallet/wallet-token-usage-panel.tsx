@@ -4,6 +4,10 @@ function formatTokenCount(value: number): string {
   return value.toLocaleString();
 }
 
+function formatPointCount(value: number): string {
+  return `${value.toLocaleString()} 积分`;
+}
+
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -41,7 +45,7 @@ export function WalletTokenUsagePanel({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left">
+          <table className="w-full min-w-[680px] text-left">
             <thead>
               <tr className="border-b border-hairline/50 text-[10px] uppercase tracking-wider text-muted">
                 <th className="px-4 py-2.5 font-semibold">日期</th>
@@ -52,17 +56,13 @@ export function WalletTokenUsagePanel({
                 <th className="px-3 py-2.5 font-semibold text-right">
                   输出 Token
                 </th>
-                <th className="px-4 py-2.5 font-semibold text-right">
-                  合计
-                </th>
+                <th className="px-4 py-2.5 font-semibold text-right">合计</th>
+                <th className="px-4 py-2.5 font-semibold text-right">价格</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline/50">
               {dailyUsage.map((row) => (
-                <tr
-                  key={row.date}
-                  className="text-[12px] text-ink"
-                >
+                <tr key={row.date} className="text-[12px] text-ink">
                   <td className="px-4 py-3 font-medium whitespace-nowrap">
                     {formatDate(row.date)}
                   </td>
@@ -77,6 +77,9 @@ export function WalletTokenUsagePanel({
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
                     {formatTokenCount(row.total_tokens)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                    {formatPointCount(row.official_model_charge_points)}
                   </td>
                 </tr>
               ))}
