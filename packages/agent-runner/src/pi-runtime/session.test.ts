@@ -193,6 +193,23 @@ describe('runPiSession', () => {
       completionTokens: 2,
       totalTokens: 5,
     });
+    expect(result.piSession).toMatchObject({
+      id: 'session-1',
+      persisted: true,
+      provider: 'openai-compatible',
+      model: 'gpt-4o',
+      userPrompt: '基于这个盘继续看事业',
+      systemPrompt: expect.stringContaining('FateClaw 的 Pi-backed Agent Runtime'),
+      allowedTools: [],
+      readableSkills: [],
+      messageCount: 0,
+    });
+    expect(result.piSession?.appendSystemPrompt.join('\n')).toContain(
+      '<fateclaw_pi_context>',
+    );
+    expect(result.piSession?.appendSystemPrompt.join('\n')).toContain(
+      '当前选中八字盘面',
+    );
     expect(mockCreateAgentSession).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.create).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.open).not.toHaveBeenCalled();

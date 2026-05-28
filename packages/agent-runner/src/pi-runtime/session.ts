@@ -42,12 +42,29 @@ function buildPiSessionSnapshot(args: {
   id?: string;
   file?: string;
   persisted: boolean;
+  provider: string;
+  model: string;
+  userPrompt: string;
+  systemPrompt: string;
+  appendSystemPrompt: string[];
+  allowedTools: string[];
+  readableSkills: Array<{
+    name: string;
+    description?: string;
+  }>;
   messages: unknown[];
 }): PiSessionSnapshot {
   return {
     id: args.id,
     file: args.file,
     persisted: args.persisted,
+    provider: args.provider,
+    model: args.model,
+    userPrompt: args.userPrompt,
+    systemPrompt: args.systemPrompt,
+    appendSystemPrompt: args.appendSystemPrompt,
+    allowedTools: args.allowedTools,
+    readableSkills: args.readableSkills,
     messageCount: args.messages.length,
     messages: args.messages,
   };
@@ -95,6 +112,8 @@ export async function runPiSession(args: {
   const readableSkills = resourceLoader
     .getSkills()
     .skills.filter((skill) => !skill.disableModelInvocation);
+  const systemPrompt = resourceLoader.getSystemPrompt() ?? '';
+  const appendSystemPrompt = resourceLoader.getAppendSystemPrompt();
   const customTools = createPiCustomTools({
     requestScope: args.requestScope,
     readableSkills,
@@ -183,6 +202,16 @@ export async function runPiSession(args: {
         id: piSession.piSessionId,
         file: piSession.sessionFile,
         persisted: piSession.persisted,
+        provider: args.containerInput.llmRuntime.provider,
+        model: args.containerInput.llmRuntime.model,
+        userPrompt: args.containerInput.userMessage,
+        systemPrompt,
+        appendSystemPrompt,
+        allowedTools: allowedToolNames,
+        readableSkills: readableSkills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+        })),
         messages: session.state.messages,
       }),
     };

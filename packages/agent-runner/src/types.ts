@@ -328,6 +328,16 @@ export interface PiSessionSnapshot {
   id?: string;
   file?: string;
   persisted: boolean;
+  provider: string;
+  model: string;
+  userPrompt: string;
+  systemPrompt: string;
+  appendSystemPrompt: string[];
+  allowedTools: string[];
+  readableSkills: Array<{
+    name: string;
+    description?: string;
+  }>;
   messageCount: number;
   messages: unknown[];
 }

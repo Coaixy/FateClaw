@@ -198,6 +198,25 @@ function fieldRecordList(
   return value.filter(isRecord);
 }
 
+function recordStringList(
+  record: Record<string, unknown> | null,
+  key: string,
+): string[] {
+  const value = record?.[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function recordValueText(
+  record: Record<string, unknown> | null,
+  key: string,
+): string {
+  const value = record?.[key];
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
 function shortPreview(text: string, maxLength = 180): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) return normalized;
@@ -465,19 +484,51 @@ function ReadableTraceDetail({
 
   if (event.type === 'pi_session_snapshot') {
     const session = isRecord(event.session) ? event.session : null;
+    const appendSystemPrompt = recordStringList(session, 'appendSystemPrompt');
+    const allowedTools = recordStringList(session, 'allowedTools');
     return (
       <TraceDetailCard tone="blue">
         <TraceMetricChips
           items={[
-            { label: 'id', value: toDisplayText(session?.id) },
-            { label: 'persisted', value: toDisplayText(session?.persisted) },
-            { label: 'messages', value: toDisplayText(session?.messageCount) },
+            { label: 'id', value: recordValueText(session, 'id') },
+            { label: 'provider', value: recordValueText(session, 'provider') },
+            { label: 'model', value: recordValueText(session, 'model') },
+            { label: 'persisted', value: recordValueText(session, 'persisted') },
+            { label: 'messages', value: recordValueText(session, 'messageCount') },
+            { label: 'tools', value: String(allowedTools.length) },
           ]}
         />
-        {toDisplayText(session?.file) && (
+        {recordValueText(session, 'file') && (
           <pre className="mt-2 whitespace-pre-wrap break-all rounded-md border border-hairline bg-canvas px-2 py-1.5 text-[11px] text-muted">
-            {toDisplayText(session?.file)}
+            {recordValueText(session, 'file')}
           </pre>
+        )}
+        {recordValueText(session, 'systemPrompt') && (
+          <div className="mt-2">
+            <CollapsibleTraceText
+              label="system prompt"
+              text={recordValueText(session, 'systemPrompt')}
+              tone="blue"
+              defaultExpanded
+            />
+          </div>
+        )}
+        {appendSystemPrompt.map((prompt, index) => (
+          <div className="mt-2" key={`append-system-${index}`}>
+            <CollapsibleTraceText
+              label={`append system #${index + 1}`}
+              text={prompt}
+              tone="purple"
+            />
+          </div>
+        ))}
+        {recordValueText(session, 'userPrompt') && (
+          <div className="mt-2">
+            <CollapsibleTraceText
+              label="user prompt"
+              text={recordValueText(session, 'userPrompt')}
+            />
+          </div>
         )}
       </TraceDetailCard>
     );
@@ -654,11 +705,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function toDisplayText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return '';
-}
 
 export function TraceTimeline({
   events,
