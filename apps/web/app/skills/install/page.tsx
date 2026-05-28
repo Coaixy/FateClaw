@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   User,
   FileText,
-  MessageSquare,
 } from 'lucide-react';
 
 export default function SkillInstallPage() {
@@ -117,24 +116,6 @@ function SkillInstallContent() {
                   </p>
                 </div>
               </div>
-              {install.preview.trigger_hint && (
-                <div className="flex items-start gap-3 text-[13px]">
-                  <div className="w-7 h-7 rounded-lg bg-surface-cream-strong flex items-center justify-center shrink-0">
-                    <MessageSquare
-                      size={13}
-                      className="text-muted"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-muted">
-                      触发条件
-                    </p>
-                    <p className="text-[13px] leading-relaxed">
-                      {install.preview.trigger_hint}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Action */}

@@ -64,8 +64,4 @@ export interface SkillMetadata {
   type?: 'official' | 'user';
   /** 用户 Skill 来源：self = 自建，subscribed = 订阅他人 */
   source?: 'self' | 'subscribed';
-  /** 用户 Skill 的类别（知识类别，如 '通用'、'八字'） */
-  category?: string;
-  /** 用户 Skill 的路由模式 */
-  usageMode?: 'force_injected' | 'reference_only';
 }

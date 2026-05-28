@@ -81,34 +81,6 @@ export interface UserSkill {
   enabled_at: string;
 }
 
-/** 用户知识类别建议列表：实际已支持的术数领域，用户也可自由输入。 */
-export const USER_SKILL_CATEGORIES: readonly string[] = [
-  '通用',
-  '八字',
-  '紫微',
-  '六爻',
-  '奇门',
-  '梅花',
-  '大六壬',
-  '小六壬',
-  '风水',
-  '周易',
-  '测字',
-  '择日',
-  '铁板神数',
-  '玄空',
-  '相术',
-  '手相',
-  '姓名学',
-  '占星',
-  '塔罗',
-  '生命灵数',
-  '人类图',
-  '数字能量',
-] as const;
-
-export type SkillUsageMode = 'force_injected' | 'reference_only';
-
 export interface SkillPriceTier {
   key: string;
   label: string;
@@ -117,13 +89,17 @@ export interface SkillPriceTier {
   description?: string;
 }
 
+export interface TextSkillBundleFile {
+  path: string;
+  content: string;
+}
+
 export interface UserCustomSkill {
   id: string;
   user_id: string;
   skill_name: string;
   dir_name: string;
   description: string;
-  trigger_hint: string;
   version: string;
   bundle_uri: string;
   checksum: string | null;
@@ -131,14 +107,8 @@ export interface UserCustomSkill {
   acl: Record<string, unknown>;
   billing_policy: Record<string, unknown>;
   audit_metadata: Record<string, unknown>;
-  content: string;
-  category: string;
-  category_normalized: string | null;
-  match_keywords: string[];
-  match_patterns: string[];
-  example_queries: string[];
-  priority: number;
-  usage_mode: SkillUsageMode;
+  files: TextSkillBundleFile[];
+  content_length: number;
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;
@@ -200,18 +170,10 @@ export interface EffectiveUserSkill {
   dir: string;
   name: string;
   description: string;
-  trigger: string;
   bundle_uri: string;
   checksum: string | null;
   install_status: 'installed' | 'missing' | 'error';
   visibility: 'private' | 'link_shared' | 'shared';
-  category: string;
-  category_normalized: string | null;
-  match_keywords: string[];
-  match_patterns: string[];
-  example_queries: string[];
-  priority: number;
-  usage_mode: SkillUsageMode;
   source: 'self' | 'subscribed';
 }
 

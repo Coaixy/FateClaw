@@ -1,0 +1,580 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
+import {
+  AlertCircle,
+  ChevronDown,
+  Code2,
+  Eye,
+  FileText,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
+
+import { useConfirm } from '@/lib/use-confirm';
+import type {
+  TextSkillBundleFile,
+  UserCustomSkill,
+} from '@/features/skills/api';
+
+export type SkillBundleEditorData = {
+  skill_name: string;
+  files: TextSkillBundleFile[];
+};
+
+type SkillFrontmatter = {
+  name: string;
+  description: string;
+  body: string;
+};
+
+const DEFAULT_SKILL_NAME = '我的 Skill';
+const REQUIRED_FILE_PATHS = new Set(['SKILL.md', 'index.md', 'docs/knowledge.md']);
+
+function toYamlScalar(value: string): string {
+  return JSON.stringify(value);
+}
+
+function parseSkillMarkdown(content: string): SkillFrontmatter {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  const metadata: Record<string, string> = {};
+
+  if (match) {
+    for (const line of match[1].split(/\r?\n/)) {
+      const item = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+      if (!item) continue;
+      const raw = item[2].trim();
+      if (
+        (raw.startsWith('"') && raw.endsWith('"')) ||
+        (raw.startsWith("'") && raw.endsWith("'"))
+      ) {
+        try {
+          metadata[item[1]] = JSON.parse(raw);
+        } catch {
+          metadata[item[1]] = raw.slice(1, -1);
+        }
+      } else {
+        metadata[item[1]] = raw;
+      }
+    }
+  }
+
+  return {
+    name: metadata.name || '',
+    description: metadata.description || '',
+    body: match ? content.slice(match[0].length) : content,
+  };
+}
+
+function serializeSkillMarkdown(frontmatter: SkillFrontmatter): string {
+  return [
+    '---',
+    `name: ${toYamlScalar(frontmatter.name.trim() || DEFAULT_SKILL_NAME)}`,
+    `description: ${toYamlScalar(frontmatter.description.trim())}`,
+    '---',
+    '',
+    frontmatter.body.trimStart(),
+  ].join('\n');
+}
+
+function createSkillMarkdown(name: string): string {
+  return serializeSkillMarkdown({
+    name,
+    description: '',
+    body: [
+      `# ${name}`,
+      '',
+      '## 入口说明',
+      '',
+      '说明这个 Skill 适合什么问题、何时应该读取。',
+      '',
+      '## 推荐读取顺序',
+      '',
+      '- `index.md`',
+      '- `docs/knowledge.md`',
+    ].join('\n'),
+  });
+}
+
+function createDefaultFiles(name = DEFAULT_SKILL_NAME): TextSkillBundleFile[] {
+  return [
+    {
+      path: 'SKILL.md',
+      content: createSkillMarkdown(name),
+    },
+    {
+      path: 'index.md',
+      content: [
+        `# ${name} 文件索引`,
+        '',
+        '- `SKILL.md`：入口说明和读取边界',
+        '- `docs/knowledge.md`：主要知识正文',
+      ].join('\n'),
+    },
+    {
+      path: 'docs/knowledge.md',
+      content: [
+        `# ${name} 知识正文`,
+        '',
+        '## 适用场景',
+        '',
+        '- 这里写这个 Skill 适合处理的问题。',
+        '',
+        '## 核心规则',
+        '',
+        '- 这里写判断流程、边界和示例。',
+      ].join('\n'),
+    },
+  ];
+}
+
+export function createDefaultSkillBundleFiles(
+  name = DEFAULT_SKILL_NAME,
+): TextSkillBundleFile[] {
+  return createDefaultFiles(name);
+}
+
+function normalizeFiles(files?: TextSkillBundleFile[]): TextSkillBundleFile[] {
+  const incoming = files && files.length > 0 ? files : createDefaultFiles();
+  const byPath = new Map<string, TextSkillBundleFile>();
+  for (const file of incoming) {
+    byPath.set(file.path, { path: file.path, content: file.content ?? '' });
+  }
+  if (!byPath.has('SKILL.md')) {
+    byPath.set('SKILL.md', {
+      path: 'SKILL.md',
+      content: createSkillMarkdown(DEFAULT_SKILL_NAME),
+    });
+  }
+  if (!byPath.has('index.md')) {
+    byPath.set('index.md', {
+      path: 'index.md',
+      content: createDefaultFiles()[1].content,
+    });
+  }
+  if (!byPath.has('docs/knowledge.md')) {
+    byPath.set('docs/knowledge.md', {
+      path: 'docs/knowledge.md',
+      content: '',
+    });
+  }
+  return Array.from(byPath.values()).sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+}
+
+function validateRelativeMarkdownPath(rawPath: string): string {
+  const value = rawPath.trim();
+  if (!value) throw new Error('请输入文件路径');
+  if (value.includes('\\')) throw new Error('路径不能包含反斜杠');
+  if (value.startsWith('/') || value.includes('//')) throw new Error('路径格式不合法');
+  const segments = value.split('/');
+  if (
+    segments.some(
+      (segment) =>
+        !segment || segment === '.' || segment === '..' || segment.startsWith('.'),
+    )
+  ) {
+    throw new Error('路径不能包含隐藏目录、空目录或 ..');
+  }
+  if (!value.endsWith('.md')) throw new Error('只能创建 Markdown 文件');
+  if (value === 'SKILL.md' || value === 'index.md') return value;
+  if (!['docs', 'examples', 'notes'].includes(segments[0])) {
+    throw new Error('文件只能放在 docs、examples 或 notes 目录下');
+  }
+  return value;
+}
+
+function getDefaultNewFilePath(files: TextSkillBundleFile[]): string {
+  for (let index = 1; index < 1000; index += 1) {
+    const path = index === 1 ? 'docs/new.md' : `docs/new-${index}.md`;
+    if (!files.some((file) => file.path === path)) return path;
+  }
+  return 'docs/new.md';
+}
+
+function MarkdownBundlePreview({
+  content,
+  className = '',
+}: {
+  content: string;
+  className?: string;
+}) {
+  if (!content.trim()) {
+    return (
+      <div
+        className={`flex min-h-[360px] items-center justify-center rounded-xl border border-dashed border-hairline bg-canvas/45 px-6 py-10 text-center text-[13px] leading-relaxed text-muted ${className}`}
+      >
+        当前文件还没有内容。
+      </div>
+    );
+  }
+
+  const components: Components = {
+    h1: ({ children }) => (
+      <h1 className="mb-3 text-[22px] font-semibold tracking-tight text-ink">
+        {children}
+      </h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className="mb-2 mt-5 text-[17px] font-semibold tracking-tight text-ink first:mt-0">
+        {children}
+      </h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="mb-2 mt-4 text-[15px] font-semibold text-ink first:mt-0">
+        {children}
+      </h3>
+    ),
+    p: ({ children }) => (
+      <p className="mb-3 whitespace-pre-wrap break-words text-[14px] leading-7 text-muted last:mb-0">
+        {children}
+      </p>
+    ),
+    ul: ({ children }) => (
+      <ul className="mb-3 list-disc space-y-1.5 pl-5 text-[14px] leading-7 text-muted">
+        {children}
+      </ul>
+    ),
+    ol: ({ children }) => (
+      <ol className="mb-3 list-decimal space-y-1.5 pl-5 text-[14px] leading-7 text-muted">
+        {children}
+      </ol>
+    ),
+    li: ({ children }) => <li className="pl-1">{children}</li>,
+    code: ({ children, className }) => {
+      const isBlock = className?.includes('language-');
+      if (isBlock) return <code className={className}>{children}</code>;
+      return (
+        <code className="rounded-md bg-surface-card px-1.5 py-0.5 font-mono text-[12px] text-primary">
+          {children}
+        </code>
+      );
+    },
+    pre: ({ children }) => (
+      <pre className="mb-4 overflow-x-auto rounded-xl border border-hairline bg-surface-card px-4 py-3 font-mono text-[12px] leading-relaxed text-muted">
+        {children}
+      </pre>
+    ),
+    blockquote: ({ children }) => (
+      <blockquote className="mb-4 border-l-2 border-primary/50 pl-4 text-muted">
+        {children}
+      </blockquote>
+    ),
+    table: ({ children }) => (
+      <div className="mb-4 overflow-x-auto">
+        <table className="w-full border-collapse text-[13px] text-muted">
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ children }) => (
+      <th className="border border-hairline bg-surface-card px-3 py-2 text-left font-medium text-ink">
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="border border-hairline px-3 py-2">{children}</td>
+    ),
+    a: ({ href, children }) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary underline underline-offset-2"
+      >
+        {children}
+      </a>
+    ),
+    hr: () => <hr className="my-5 border-hairline" />,
+  };
+
+  return (
+    <div
+      className={`min-h-[360px] overflow-auto rounded-xl border border-hairline bg-canvas/45 px-5 py-4 ${className}`}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+export function SkillBundleEditor({
+  initial,
+  onSave,
+}: {
+  initial?: UserCustomSkill;
+  onSave: (data: SkillBundleEditorData) => Promise<void>;
+  onCancel?: () => void;
+}) {
+  const { confirm: confirmDialog } = useConfirm();
+  const [files, setFiles] = useState<TextSkillBundleFile[]>(
+    normalizeFiles(initial?.files),
+  );
+  const [selectedPath, setSelectedPath] = useState('SKILL.md');
+  const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [pathError, setPathError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const selectedFile = files.find((file) => file.path === selectedPath) ?? files[0];
+  const skillFile = files.find((file) => file.path === 'SKILL.md');
+  const skillDraft = useMemo(
+    () => parseSkillMarkdown(skillFile?.content ?? ''),
+    [skillFile?.content],
+  );
+  const displayName = skillDraft.name || initial?.skill_name || DEFAULT_SKILL_NAME;
+
+  const selectedRequired = selectedFile
+    ? REQUIRED_FILE_PATHS.has(selectedFile.path)
+    : false;
+
+  const updateFile = (path: string, content: string) => {
+    setFiles((prev) =>
+      prev.map((file) => (file.path === path ? { ...file, content } : file)),
+    );
+  };
+
+  const updateSkillDraft = (patch: Partial<SkillFrontmatter>) => {
+    const next = serializeSkillMarkdown({ ...skillDraft, ...patch });
+    updateFile('SKILL.md', next);
+  };
+
+  const handleAddFile = (rawPath?: string) => {
+    const desiredPath = rawPath ?? getDefaultNewFilePath(files);
+    setPathError('');
+    try {
+      const path = validateRelativeMarkdownPath(desiredPath);
+      if (files.some((file) => file.path === path)) {
+        setPathError('同名文件已存在');
+        return;
+      }
+      setError('');
+      setPathError('');
+      setFiles((prev) =>
+        [...prev, { path, content: `# ${path.split('/').pop()?.replace(/\.md$/, '') || '新文件'}\n` }].sort(
+          (left, right) => left.path.localeCompare(right.path),
+        ),
+      );
+      setSelectedPath(path);
+      setActiveTab('edit');
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : '文件路径不合法');
+    }
+  };
+
+  const handleDeleteFile = async () => {
+    if (!selectedFile || REQUIRED_FILE_PATHS.has(selectedFile.path)) {
+      return;
+    }
+    const ok = await confirmDialog({
+      title: '删除文件',
+      message: `确定删除 ${selectedFile.path}？`,
+      confirmLabel: '删除',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setFiles((prev) => prev.filter((file) => file.path !== selectedFile.path));
+    setSelectedPath('SKILL.md');
+  };
+
+  const handleSubmit = async () => {
+    const hasSkill = files.some((file) => file.path === 'SKILL.md');
+    if (!hasSkill) {
+      setError('Bundle 必须包含 SKILL.md');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave({
+        skill_name: displayName.trim() || DEFAULT_SKILL_NAME,
+        files,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass =
+    'w-full rounded-xl border border-hairline bg-canvas px-3.5 py-3 text-[14px] leading-relaxed placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-all';
+  const textareaClass =
+    'w-full resize-y rounded-xl border border-hairline bg-canvas px-4 py-4 font-mono text-[14px] leading-7 placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-all';
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-hairline bg-surface-card shadow-sm">
+      <div className="space-y-3 border-b border-hairline bg-canvas/35 p-3 sm:p-4">
+        <div className="relative">
+          <FileText
+            size={17}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <select
+            aria-label="选择文件"
+            value={selectedFile?.path ?? ''}
+            onChange={(event) => {
+              setSelectedPath(event.currentTarget.value);
+              setPathError('');
+              setActiveTab('edit');
+            }}
+            className="h-12 w-full appearance-none rounded-lg border border-hairline bg-surface-card py-0 pl-11 pr-11 text-[15px] font-medium text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+          >
+            {files.map((file) => (
+              <option key={file.path} value={file.path}>
+                {file.path}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={17}
+            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => handleAddFile()}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong sm:gap-2 sm:text-[14px]"
+          >
+            <Plus size={17} />
+            新建
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong disabled:opacity-50 sm:gap-2 sm:text-[14px]"
+          >
+            {saving ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
+            保存
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteFile}
+            disabled={selectedRequired}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-error transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 sm:gap-2 sm:text-[14px]"
+            title={selectedRequired ? '核心文件不能删除' : '删除文件'}
+          >
+            <Trash2 size={17} />
+            删除
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 rounded-lg border border-hairline bg-surface-card">
+          <button
+            type="button"
+            onClick={() => setActiveTab('edit')}
+            aria-pressed={activeTab === 'edit'}
+            className={`relative inline-flex h-12 items-center justify-center gap-2 text-[14px] font-semibold transition-colors ${
+              activeTab === 'edit' ? 'text-primary' : 'text-muted hover:text-ink'
+            }`}
+          >
+            <Code2 size={16} />
+            文本编辑
+            {activeTab === 'edit' ? (
+              <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('preview')}
+            aria-pressed={activeTab === 'preview'}
+            className={`relative inline-flex h-12 items-center justify-center gap-2 border-l border-hairline text-[14px] font-semibold transition-colors ${
+              activeTab === 'preview' ? 'text-primary' : 'text-muted hover:text-ink'
+            }`}
+          >
+            <Eye size={16} />
+            预览
+            {activeTab === 'preview' ? (
+              <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />
+            ) : null}
+          </button>
+        </div>
+
+        {pathError ? (
+          <p className="text-[12px] leading-relaxed text-red-300">
+            {pathError}
+          </p>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="flex items-start gap-2 border-b border-red-500/20 bg-red-500/10 px-5 py-3 text-[13px] leading-relaxed text-red-200 sm:px-6">
+          <AlertCircle size={15} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {selectedFile ? (
+        <main className="min-w-0 bg-surface-card p-3 sm:p-4 lg:p-5">
+          {activeTab === 'edit' ? (
+            selectedFile.path === 'SKILL.md' ? (
+              <div className="space-y-4 rounded-xl border border-hairline bg-canvas/35 p-3 sm:p-4">
+                <label className="block space-y-2">
+                  <span className="text-[13px] font-medium text-ink">
+                    name
+                  </span>
+                  <input
+                    value={skillDraft.name}
+                    onChange={(event) =>
+                      updateSkillDraft({ name: event.target.value })
+                    }
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-[13px] font-medium text-ink">
+                    description
+                  </span>
+                  <textarea
+                    value={skillDraft.description}
+                    onChange={(event) =>
+                      updateSkillDraft({ description: event.target.value })
+                    }
+                    rows={5}
+                    className={`${inputClass} min-h-[132px] resize-y`}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-[13px] font-medium text-ink">
+                    入口说明 / 推荐读取顺序
+                  </span>
+                  <textarea
+                    value={skillDraft.body}
+                    onChange={(event) =>
+                      updateSkillDraft({ body: event.target.value })
+                    }
+                    rows={18}
+                    className={`${textareaClass} min-h-[460px]`}
+                  />
+                </label>
+              </div>
+            ) : (
+              <textarea
+                value={selectedFile.content}
+                onChange={(event) =>
+                  updateFile(selectedFile.path, event.target.value)
+                }
+                className={`${textareaClass} min-h-[680px]`}
+              />
+            )
+          ) : (
+            <MarkdownBundlePreview
+              content={selectedFile.content}
+              className="min-h-[680px]"
+            />
+          )}
+        </main>
+      ) : null}
+    </div>
+  );
+}

@@ -3,10 +3,13 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, BookOpen, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, FileText, FolderTree, Loader2 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { SkillForm, SkillFormData } from '@/components/skills/skill-form';
+import {
+  SkillBundleEditor,
+  SkillBundleEditorData,
+} from '@/components/skills/skill-bundle-editor';
 import { SkillSkeleton } from '@/components/skills/skill-skeleton';
 import { skillsApi, UserCustomSkill } from '@/features/skills/api';
 import { useToast } from '@/lib/use-toast';
@@ -48,16 +51,16 @@ function EditStudioSkillPageContent() {
     [skills, skillId],
   );
 
-  const handleUpdate = async (data: SkillFormData) => {
+  const handleUpdate = async (data: SkillBundleEditorData) => {
     if (!skillId) return;
     await skillsApi.userUpdate(skillId, data);
-    toast('success', '术数技能已更新');
+    toast('success', 'Skill Bundle 已更新');
     router.push('/studio');
   };
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div className="space-y-3">
           <Link
             href="/studio"
@@ -66,35 +69,35 @@ function EditStudioSkillPageContent() {
             <ArrowLeft size={13} />
             返回术数开发
           </Link>
-          <div className="flex flex-col gap-4 rounded-[28px] border border-hairline bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_12%,transparent),transparent_45%),var(--color-surface-card)] p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 rounded-[24px] border border-hairline bg-surface-card p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">
-                Skill Editor
+                Bundle Editor
               </p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight">
-                编辑术数技能
+                编辑 Markdown Skill Bundle
               </h1>
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted sm:text-sm">
-                调整技能描述、路由策略和正文内容。保存后会立即影响后续调用与分享效果。
+                调整 SKILL.md、索引和知识文件。保存后会立即更新 bundle_uri/checksum 对应的文件内容。
               </p>
             </div>
             <div className="grid gap-2 text-[12px] text-muted sm:grid-cols-2">
-              <div className="rounded-2xl border border-hairline bg-canvas/50 px-3 py-2.5">
+              <div className="rounded-xl border border-hairline bg-canvas/50 px-3 py-2.5">
                 <div className="flex items-center gap-2 font-medium text-ink">
-                  <BookOpen size={14} className="text-primary" />
-                  编辑建议
+                  <FolderTree size={14} className="text-primary" />
+                  文件树
                 </div>
                 <p className="mt-1 leading-relaxed">
-                  优先修改关键词、使用方式和内容结构，避免只堆积长文本。
+                  左侧管理 bundle 内的 Markdown 文件。
                 </p>
               </div>
-              <div className="rounded-2xl border border-hairline bg-canvas/50 px-3 py-2.5">
+              <div className="rounded-xl border border-hairline bg-canvas/50 px-3 py-2.5">
                 <div className="flex items-center gap-2 font-medium text-ink">
-                  <Sparkles size={14} className="text-primary" />
-                  生效范围
+                  <FileText size={14} className="text-primary" />
+                  SKILL.md
                 </div>
                 <p className="mt-1 leading-relaxed">
-                  保存后会回到术数开发，可继续分享、启用或加入捆绑包。
+                  name 和 description 从 frontmatter 同步到列表展示。
                 </p>
               </div>
             </div>
@@ -122,11 +125,9 @@ function EditStudioSkillPageContent() {
             没找到这个技能，可能已被删除或你没有访问权限。
           </div>
         ) : (
-          <SkillForm
-            variant="page"
+          <SkillBundleEditor
             initial={skill}
             onSave={handleUpdate}
-            onCancel={() => router.push('/studio')}
           />
         )}
       </div>

@@ -7,14 +7,17 @@ import { getDbPool } from '../db-pool.js';
 import { deductPoints, insertWalletTransaction } from './billing-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import {
-  readTextSkillBundleContent,
-  writeTextSkillBundle,
+  getSkillMarkdownMetadata,
+  getTextSkillBundleContentLength,
+  readTextSkillBundleFiles,
+  writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
 import { calculateAvailableSpendablePoints } from '../../shared/point-balance.js';
 import type {
   CreatorEarningsMonthly,
   EffectiveUserSkill,
   SkillBundle,
+  TextSkillBundleFile,
   UserCustomSkill,
   UserSkillSubscription,
 } from '../../shared/types.js';
@@ -116,18 +119,14 @@ export async function getEffectiveUserSkills(
   userId: string,
 ): Promise<EffectiveUserSkill[]> {
   const { rows } = await getDbPool().query(
-    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            COALESCE(category, '通用') as category, category_normalized,
-            match_keywords, match_patterns, example_queries, priority, usage_mode,
             'self' as source
      FROM user_custom_skills s
      WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            COALESCE(s.category, '通用') as category, s.category_normalized,
-            s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
@@ -135,10 +134,8 @@ export async function getEffectiveUserSkills(
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
        AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
      UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description, s.trigger_hint as trigger,
+    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            COALESCE(s.category, '通用') as category, s.category_normalized,
-            s.match_keywords, s.match_patterns, s.example_queries, s.priority, s.usage_mode,
             'subscribed' as source
      FROM creator_bundle_subscriptions bs
      JOIN user_custom_skills s ON s.user_id = bs.creator_id
@@ -158,28 +155,22 @@ export interface MarketSkillListRow {
   id: string;
   skill_name: string;
   description: string;
-  category: string;
   price_tiers: UserCustomSkill['price_tiers'];
   stat_subscriber_count: number;
   share_token: string | null;
 }
 
 export async function listMarketSkills(opts: {
-  category?: string;
   limit?: number;
   offset?: number;
 }): Promise<MarketSkillListRow[]> {
   const conditions = ['s.deleted_at IS NULL', "s.visibility = 'shared'"];
   const params: unknown[] = [];
-  if (opts.category) {
-    params.push(opts.category);
-    conditions.push(`s.category = $${params.length}`);
-  }
   const lim = Math.min(opts.limit ?? 50, 100);
   const off = opts.offset ?? 0;
   params.push(lim, off);
   const { rows } = await getDbPool().query(
-    `SELECT s.id, s.skill_name, s.description, s.category, s.price_tiers,
+    `SELECT s.id, s.skill_name, s.description, s.price_tiers,
             s.stat_subscriber_count,
             s.stat_view_count, s.share_token
      FROM user_custom_skills s
@@ -200,7 +191,6 @@ export interface MarketBundleListRow {
 }
 
 export async function listMarketBundles(opts: {
-  category?: string;
   limit?: number;
   offset?: number;
 }): Promise<MarketBundleListRow[]> {
@@ -210,21 +200,6 @@ export async function listMarketBundles(opts: {
     'b.bundle_token IS NOT NULL',
   ];
   const params: unknown[] = [];
-
-  if (opts.category) {
-    params.push(opts.category);
-    conditions.push(`
-      EXISTS (
-        SELECT 1
-        FROM skill_bundle_items sbi2
-        JOIN user_custom_skills s2 ON s2.id = sbi2.skill_id
-        WHERE sbi2.bundle_id = b.id
-          AND s2.deleted_at IS NULL
-          AND s2.visibility IN ('link_shared', 'shared')
-          AND s2.category = $${params.length}
-      )
-    `);
-  }
 
   const lim = Math.min(opts.limit ?? 20, 50);
   const off = opts.offset ?? 0;
@@ -280,7 +255,7 @@ export async function listCreatorSharedSkills(
   creatorId: string,
 ): Promise<unknown[]> {
   const { rows } = await getDbPool().query(
-    `SELECT id, skill_name, description, category, price_tiers
+    `SELECT id, skill_name, description, price_tiers
      FROM user_custom_skills
      WHERE user_id = $1 AND visibility = 'shared' AND deleted_at IS NULL`,
     [creatorId],
@@ -308,7 +283,6 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.skill_name,
   s.dir_name,
   s.description,
-  s.trigger_hint,
   s.version,
   s.bundle_uri,
   s.checksum,
@@ -316,13 +290,6 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.acl,
   s.billing_policy,
   s.audit_metadata,
-  s.category,
-  s.category_normalized,
-  s.match_keywords,
-  s.match_patterns,
-  s.example_queries,
-  s.priority,
-  s.usage_mode,
   s.visibility,
   s.share_token,
   s.enabled,
@@ -337,9 +304,11 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
 function hydrateUserCustomSkillContent<T extends Partial<UserCustomSkill>>(
   skill: T,
 ): T {
+  const files = readTextSkillBundleFiles(skill.bundle_uri);
   return {
     ...skill,
-    content: readTextSkillBundleContent(skill.bundle_uri),
+    files,
+    content_length: files.reduce((sum, file) => sum + file.content.length, 0),
   };
 }
 
@@ -391,69 +360,52 @@ async function getActiveUserSkillSubscriptionIdUsing(
 // --- User custom skill accessors ---
 // =====================
 
+export interface CreateUserCustomSkillInput {
+  id: string;
+  user_id: string;
+  skill_name: string;
+  dir_name: string;
+  files: TextSkillBundleFile[];
+}
+
 export async function createUserCustomSkill(
-  skill: Pick<
-    UserCustomSkill,
-    | 'id'
-    | 'user_id'
-    | 'skill_name'
-    | 'dir_name'
-    | 'description'
-    | 'trigger_hint'
-    | 'content'
-    | 'category'
-  > &
-    Partial<
-      Pick<
-        UserCustomSkill,
-        | 'category_normalized'
-        | 'match_keywords'
-        | 'match_patterns'
-        | 'example_queries'
-        | 'priority'
-        | 'usage_mode'
-      >
-    >,
+  skill: CreateUserCustomSkillInput,
 ): Promise<UserCustomSkill> {
-  const bundle = writeTextSkillBundle({
+  const skillFile = skill.files.find((file) => file.path === 'SKILL.md');
+  const metadata = getSkillMarkdownMetadata(
+    skillFile?.content ?? '',
+    skill.skill_name,
+  );
+  const displayName = metadata.name || skill.skill_name;
+  const bundle = writeTextSkillBundleFiles({
     skillId: skill.id,
     ownerId: skill.user_id,
     dirName: skill.dir_name,
-    skillName: skill.skill_name,
-    description: skill.description,
-    triggerHint: skill.trigger_hint,
-    content: skill.content,
+    fallbackSkillName: displayName,
+    files: skill.files,
   });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO user_custom_skills
-         (id, user_id, skill_name, dir_name, description, trigger_hint,
+         (id, user_id, skill_name, dir_name, description,
           version, bundle_uri, checksum, install_status, acl, billing_policy, audit_metadata,
-          category, category_normalized, match_keywords, match_patterns, example_queries, priority, usage_mode)
-       VALUES ($1, $2, $3, $4, $5, $6, '1.0.0', $7, $8, 'installed',
-               '{}'::jsonb, '{}'::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)`,
+          visibility)
+       VALUES ($1, $2, $3, $4, $5, '1.0.0', $6, $7, 'installed',
+               '{}'::jsonb, '{}'::jsonb, $8::jsonb, 'private')`,
       [
         skill.id,
         skill.user_id,
-        skill.skill_name,
+        displayName,
         skill.dir_name,
-        skill.description,
-        skill.trigger_hint,
+        metadata.description,
         bundle.bundleUri,
         bundle.checksum,
         JSON.stringify({
           source: 'api',
           created_at: new Date().toISOString(),
         }),
-        skill.category || '通用',
-        skill.category_normalized ?? null,
-        JSON.stringify(skill.match_keywords ?? []),
-        JSON.stringify(skill.match_patterns ?? []),
-        JSON.stringify(skill.example_queries ?? []),
-        skill.priority ?? 0,
-        skill.usage_mode ?? 'reference_only',
       ],
     );
     await client.query('COMMIT');
@@ -516,56 +468,26 @@ export async function updateUserCustomSkill(
       UserCustomSkill,
       | 'skill_name'
       | 'dir_name'
-      | 'description'
-      | 'trigger_hint'
-      | 'content'
-      | 'category'
-      | 'category_normalized'
-      | 'match_keywords'
-      | 'match_patterns'
-      | 'example_queries'
-      | 'priority'
-      | 'usage_mode'
+      | 'files'
     >
   >,
 ): Promise<UserCustomSkill | undefined> {
   const skillFields: string[] = [];
   const values: unknown[] = [];
   let paramIdx = 1;
-  let contentValue: string | undefined;
-
-  // JSONB 字段需要 JSON.stringify
-  const jsonbFields = new Set([
-    'match_keywords',
-    'match_patterns',
-    'example_queries',
-  ]);
 
   const allowed = [
     'skill_name',
     'dir_name',
-    'description',
-    'trigger_hint',
-    'category',
-    'category_normalized',
-    'match_keywords',
-    'match_patterns',
-    'example_queries',
-    'priority',
-    'usage_mode',
   ] as const;
   for (const key of allowed) {
     if (updates[key] !== undefined) {
       skillFields.push(`${key} = $${paramIdx++}`);
-      values.push(
-        jsonbFields.has(key) ? JSON.stringify(updates[key]) : updates[key],
-      );
+      values.push(updates[key]);
     }
   }
-  if (updates.content !== undefined) {
-    contentValue = updates.content;
-  }
-  if (skillFields.length === 0 && contentValue === undefined) {
+  const fileValue = updates.files;
+  if (skillFields.length === 0 && fileValue === undefined) {
     return getUserCustomSkill(id, userId);
   }
 
@@ -594,41 +516,41 @@ export async function updateUserCustomSkill(
         values,
       );
     }
-    if (contentValue !== undefined) {
-      const updatedName =
-        typeof updates.skill_name === 'string'
-          ? updates.skill_name
-          : current.skill_name;
+    if (fileValue !== undefined) {
       const updatedDir =
         typeof updates.dir_name === 'string'
           ? updates.dir_name
           : current.dir_name;
-      const updatedDescription =
-        typeof updates.description === 'string'
-          ? updates.description
-          : current.description;
-      const updatedTrigger =
-        typeof updates.trigger_hint === 'string'
-          ? updates.trigger_hint
-          : current.trigger_hint;
-      const bundle = writeTextSkillBundle({
+      const fallbackName =
+        typeof updates.skill_name === 'string'
+          ? updates.skill_name
+          : current.skill_name;
+      const skillFile = fileValue.find((file) => file.path === 'SKILL.md');
+      const metadata = getSkillMarkdownMetadata(
+        skillFile?.content ?? '',
+        fallbackName,
+      );
+      const displayName = metadata.name || fallbackName;
+      const bundle = writeTextSkillBundleFiles({
         skillId: id,
         ownerId: userId,
         dirName: updatedDir,
-        skillName: updatedName,
-        description: updatedDescription,
-        triggerHint: updatedTrigger,
-        content: contentValue,
+        fallbackSkillName: displayName,
+        files: fileValue,
       });
       await client.query(
         `UPDATE user_custom_skills
-         SET bundle_uri = $1,
-             checksum = $2,
+         SET skill_name = $1,
+             description = $2,
+             bundle_uri = $3,
+             checksum = $4,
              install_status = 'installed',
-             audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $3::jsonb,
+             audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $5::jsonb,
              updated_at = NOW()
-         WHERE id = $4 AND user_id = $5 AND deleted_at IS NULL`,
+         WHERE id = $6 AND user_id = $7 AND deleted_at IS NULL`,
         [
+          displayName,
+          metadata.description,
           bundle.bundleUri,
           bundle.checksum,
           JSON.stringify({ updated_bundle_at: new Date().toISOString() }),
@@ -1525,7 +1447,6 @@ export interface BundleByTokenResult {
     id: string;
     skill_name: string;
     description: string;
-    category: string;
     content_length: number;
   }>;
 }
@@ -1549,7 +1470,7 @@ export async function getBundleByToken(
     };
   }
   const { rows: skillRows } = await pool.query(
-    `SELECT s.id, s.skill_name, s.description, s.category, s.bundle_uri
+    `SELECT s.id, s.skill_name, s.description, s.bundle_uri
      FROM user_custom_skills s
      WHERE s.id = ANY($1) AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')`,
     [bundle.skill_ids],
@@ -1568,8 +1489,7 @@ export async function getBundleByToken(
       id: r.id as string,
       skill_name: r.skill_name as string,
       description: r.description as string,
-      category: r.category as string,
-      content_length: readTextSkillBundleContent(r.bundle_uri as string).length,
+      content_length: getTextSkillBundleContentLength(r.bundle_uri as string),
     }));
   return {
     bundle,

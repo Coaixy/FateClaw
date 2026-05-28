@@ -19,9 +19,7 @@ import {
   Share2,
   ToggleLeft,
   ToggleRight,
-  Zap,
   BookOpen,
-  Hash,
 } from 'lucide-react';
 
 function formatDate(iso: string | null) {
@@ -33,11 +31,6 @@ function formatDate(iso: string | null) {
     minute: '2-digit',
   });
 }
-
-const USAGE_MODE_LABELS: Record<string, { label: string; color: string }> = {
-  force_injected: { label: '强规则', color: 'red' },
-  reference_only: { label: '参考知识', color: 'emerald' },
-};
 
 const VISIBILITY_LABELS: Record<AdminCustomSkill['visibility'], string> = {
   private: '私有',
@@ -91,10 +84,6 @@ function SkillRow({
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
-  const usageMode = USAGE_MODE_LABELS[skill.usage_mode] || {
-    label: skill.usage_mode,
-    color: 'gray',
-  };
   const visibilityTone =
     skill.visibility === 'shared'
       ? 'amber'
@@ -149,7 +138,7 @@ function SkillRow({
                   {skill.skill_name}
                 </span>
                 <span className="shrink-0 text-[11px] text-muted tabular-nums">
-                  {skill.content.length.toLocaleString()} 字
+                  {skill.content_length.toLocaleString()} 字
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
@@ -157,9 +146,7 @@ function SkillRow({
                   {skill.phone || '未绑定手机号'}
                 </span>
                 <span className="text-hairline">•</span>
-                <span>{skill.category || '通用'}</span>
-                <span className="text-hairline">•</span>
-                <span>{skill.match_keywords?.length ?? 0} 关键词</span>
+                <span>{skill.files.length} 个文件</span>
               </div>
               {skill.description ? (
                 <div className="mt-1 text-[11px] text-muted line-clamp-2 break-words leading-relaxed">
@@ -173,10 +160,6 @@ function SkillRow({
                 <MetaPill tone={visibilityTone}>
                   <Share2 size={10} />
                   {VISIBILITY_LABELS[skill.visibility]}
-                </MetaPill>
-                <MetaPill tone="neutral">
-                  <Zap size={10} />
-                  {usageMode.label}
                 </MetaPill>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted">
@@ -218,9 +201,7 @@ function SkillRow({
                   {skill.phone || '未绑定手机号'}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-                  <span>{skill.category || '通用'}</span>
-                  <span className="text-hairline">•</span>
-                  <span>{skill.match_keywords?.length ?? 0} 关键词</span>
+                  <span>{skill.files.length} 个文件</span>
                 </div>
               </div>
 
@@ -236,10 +217,6 @@ function SkillRow({
                     <Share2 size={10} />
                     {VISIBILITY_LABELS[skill.visibility]}
                   </MetaPill>
-                  <MetaPill tone="neutral">
-                    <Zap size={10} />
-                    {usageMode.label}
-                  </MetaPill>
                   {skill.share_token ? (
                     <MetaPill tone="neutral">有分享令牌</MetaPill>
                   ) : null}
@@ -251,7 +228,7 @@ function SkillRow({
                   统计
                 </div>
                 <div className="mt-1 text-[12px] font-medium text-ink tabular-nums">
-                  {skill.content.length.toLocaleString()} 字
+                  {skill.content_length.toLocaleString()} 字
                 </div>
                 <div className="mt-1 text-[11px] text-muted leading-relaxed">
                   <div>更 {formatDate(skill.updated_at)}</div>
@@ -281,10 +258,8 @@ function SkillRow({
                 ['用户标识', skill.phone || '未绑定手机号'],
                 ['状态', skill.enabled ? '已启用' : '未启用'],
                 ['可见性', VISIBILITY_LABELS[skill.visibility]],
-                ['内容长度', `${skill.content.length.toLocaleString()} 字`],
-                ['绑定类别', skill.category || '通用'],
-                ['路由模式', usageMode.label],
-                ['关键词数', String(skill.match_keywords?.length ?? 0)],
+                ['内容长度', `${skill.content_length.toLocaleString()} 字`],
+                ['文件数', String(skill.files.length)],
               ] as const
             ).map(([label, value]) => (
               <div
@@ -300,25 +275,6 @@ function SkillRow({
               </div>
             ))}
           </div>
-
-          {/* Match keywords */}
-          {skill.match_keywords && skill.match_keywords.length > 0 && (
-            <div>
-              <div className="text-[11px] text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                <Hash size={11} /> 匹配关键词
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {skill.match_keywords.map((kw, i) => (
-                  <span
-                    key={i}
-                    className="text-[12px] px-2 py-1 rounded-md bg-canvas border border-hairline text-muted"
-                  >
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div className="rounded-lg border border-hairline bg-canvas p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -395,25 +351,25 @@ function SkillRow({
             ) : null}
           </div>
 
-          {/* Trigger hint */}
-          {skill.trigger_hint && (
-            <div>
-              <div className="text-[11px] text-muted uppercase tracking-wider mb-1">
-                触发条件
-              </div>
-              <div className="text-[13px] p-3 rounded-md bg-canvas border border-hairline">
-                {skill.trigger_hint}
-              </div>
-            </div>
-          )}
-
           {/* Content preview */}
           <div>
             <div className="text-[11px] text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-              <BookOpen size={11} /> 知识内容
+              <BookOpen size={11} /> Bundle 文件
             </div>
-            <div className="text-[13px] whitespace-pre-wrap break-words p-3 rounded-md bg-canvas border border-hairline max-h-60 overflow-y-auto font-mono leading-relaxed">
-              {skill.content || '(空)'}
+            <div className="space-y-2">
+              {skill.files.map((file) => (
+                <div
+                  key={file.path}
+                  className="rounded-md border border-hairline bg-canvas p-3"
+                >
+                  <div className="mb-2 text-[11px] font-medium text-muted">
+                    {file.path}
+                  </div>
+                  <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">
+                    {file.content || '(空)'}
+                  </pre>
+                </div>
+              ))}
             </div>
           </div>
         </div>

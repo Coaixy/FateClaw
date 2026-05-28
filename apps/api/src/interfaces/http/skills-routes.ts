@@ -32,7 +32,6 @@ import {
   publishUserCustomSkill,
   MAX_CONTENT_LENGTH,
   MAX_USER_SKILLS,
-  normalizeCategory,
   promoteUserToCreator,
   shareSkillBundle,
   shareUserCustomSkill,
@@ -54,7 +53,6 @@ import {
   upsertCreatorBundleConfig,
 } from '../../modules/skills/skills-service.js';
 
-const VALID_SKILL_USAGE_MODES = ['force_injected', 'reference_only'] as const;
 import {
   toCreatorEarningsMonthlyDtos,
   toCreatorWithdrawalDto,
@@ -66,8 +64,33 @@ import {
   toWithdrawalBalanceDto,
   toWithdrawalRequestResponseDto,
 } from '../../contracts-adapter/skills-contract.js';
-import type { SkillPriceTier, CreatorBundleTier } from '../../shared/types.js';
-import type { UserCustomSkill } from '../../shared/types.js';
+import type {
+  CreatorBundleTier,
+  SkillPriceTier,
+  TextSkillBundleFile,
+} from '../../shared/types.js';
+
+function parseBundleFilesPayload(
+  files: unknown,
+): TextSkillBundleFile[] | null {
+  if (!Array.isArray(files)) return null;
+  const parsed: TextSkillBundleFile[] = [];
+  let totalLength = 0;
+
+  for (const file of files) {
+    if (!file || typeof file !== 'object') return null;
+    const { path, content } = file as { path?: unknown; content?: unknown };
+    if (typeof path !== 'string' || typeof content !== 'string') return null;
+    totalLength += content.length;
+    parsed.push({ path, content });
+  }
+
+  if (totalLength > MAX_CONTENT_LENGTH) {
+    throw new Error(`Bundle Markdown 总内容不超过 ${MAX_CONTENT_LENGTH} 字`);
+  }
+
+  return parsed;
+}
 
 export async function skillsRoutes(app: FastifyInstance): Promise<void> {
   // =====================
@@ -91,39 +114,24 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.userId;
     const body = request.body as {
       skill_name?: string;
-      description?: string;
-      trigger_hint?: string;
-      content?: string;
-      category?: string;
-      category_normalized?: string;
-      match_keywords?: string[];
-      match_patterns?: string[];
-      example_queries?: string[];
-      priority?: number;
-      usage_mode?: string;
+      dir_name?: string;
+      files?: unknown;
     };
 
-    if (!body.skill_name || body.skill_name.length > 50) {
+    const skillName = body.skill_name?.trim() ?? '';
+    if (!skillName || skillName.length > 50) {
       return reply.code(400).send({ error: '技能名称必填且不超过 50 字' });
     }
-    if (body.content && body.content.length > MAX_CONTENT_LENGTH) {
-      return reply
-        .code(400)
-        .send({ error: `知识内容不超过 ${MAX_CONTENT_LENGTH} 字` });
+    let files: TextSkillBundleFile[] | null;
+    try {
+      files = parseBundleFilesPayload(body.files);
+    } catch (err) {
+      return reply.code(400).send({
+        error: err instanceof Error ? err.message : 'Bundle 文件内容过长',
+      });
     }
-    if (
-      body.usage_mode &&
-      !VALID_SKILL_USAGE_MODES.includes(
-        body.usage_mode as (typeof VALID_SKILL_USAGE_MODES)[number],
-      )
-    ) {
-      return reply.code(400).send({ error: 'usage_mode 值无效' });
-    }
-    if (body.match_keywords && body.match_keywords.length > 30) {
-      return reply.code(400).send({ error: 'match_keywords 最多 30 个' });
-    }
-    if (body.match_patterns && body.match_patterns.length > 10) {
-      return reply.code(400).send({ error: 'match_patterns 最多 10 个' });
+    if (!files) {
+      return reply.code(400).send({ error: 'files 必须是 Markdown 文件数组' });
     }
 
     const count = await getUserCustomSkillCount(userId);
@@ -133,31 +141,21 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: `自定义技能数量已达上限（${MAX_USER_SKILLS}）` });
     }
 
-    // 自动归一化：若未显式提供 category_normalized，从 category 推断
-    const effectiveCategory = body.category || '通用';
-    const autoNormalized =
-      body.category_normalized ??
-      normalizeCategory(effectiveCategory) ??
-      effectiveCategory;
+    try {
+      const skill = await createUserCustomSkill({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        skill_name: skillName,
+        dir_name: slugifySkillName(body.dir_name || skillName),
+        files,
+      });
 
-    const skill = await createUserCustomSkill({
-      id: crypto.randomUUID(),
-      user_id: userId,
-      skill_name: body.skill_name,
-      dir_name: slugifySkillName(body.skill_name),
-      description: body.description || '',
-      trigger_hint: body.trigger_hint || '',
-      content: body.content || '',
-      category: effectiveCategory,
-      category_normalized: autoNormalized,
-      match_keywords: body.match_keywords,
-      match_patterns: body.match_patterns,
-      example_queries: body.example_queries,
-      priority: body.priority,
-      usage_mode: body.usage_mode as UserCustomSkill['usage_mode'],
-    });
-
-    return skill;
+      return skill;
+    } catch (err) {
+      return reply
+        .code(400)
+        .send({ error: err instanceof Error ? err.message : '创建失败' });
+    }
   });
 
   // GET /api/skills/user/:id — 详情
@@ -176,70 +174,50 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string };
     const body = request.body as {
       skill_name?: string;
-      description?: string;
-      trigger_hint?: string;
-      content?: string;
-      category?: string;
-      category_normalized?: string;
-      match_keywords?: string[];
-      match_patterns?: string[];
-      example_queries?: string[];
-      priority?: number;
-      usage_mode?: string;
+      files?: unknown;
     };
 
-    if (body.skill_name !== undefined && body.skill_name.length > 50) {
+    if (
+      body.skill_name !== undefined &&
+      body.skill_name.trim().length > 50
+    ) {
       return reply.code(400).send({ error: '技能名称不超过 50 字' });
     }
-    if (body.content && body.content.length > MAX_CONTENT_LENGTH) {
-      return reply
-        .code(400)
-        .send({ error: `知识内容不超过 ${MAX_CONTENT_LENGTH} 字` });
-    }
-    if (
-      body.usage_mode &&
-      !VALID_SKILL_USAGE_MODES.includes(
-        body.usage_mode as (typeof VALID_SKILL_USAGE_MODES)[number],
-      )
-    ) {
-      return reply.code(400).send({ error: 'usage_mode 值无效' });
-    }
-    if (body.match_keywords && body.match_keywords.length > 30) {
-      return reply.code(400).send({ error: 'match_keywords 最多 30 个' });
-    }
-    if (body.match_patterns && body.match_patterns.length > 10) {
-      return reply.code(400).send({ error: 'match_patterns 最多 10 个' });
-    }
 
-    const updates: Record<string, unknown> = {};
-    if (body.skill_name !== undefined) {
-      updates.skill_name = body.skill_name;
-      updates.dir_name = slugifySkillName(body.skill_name);
-    }
-    if (body.description !== undefined) updates.description = body.description;
-    if (body.trigger_hint !== undefined)
-      updates.trigger_hint = body.trigger_hint;
-    if (body.content !== undefined) updates.content = body.content;
-    if (body.category !== undefined) {
-      updates.category = body.category;
-      // 自动归一化：category 变更时联动更新 category_normalized
-      if (body.category_normalized === undefined) {
-        updates.category_normalized =
-          normalizeCategory(body.category) ?? body.category;
+    let files: TextSkillBundleFile[] | undefined;
+    if (body.files !== undefined) {
+      try {
+        const parsed = parseBundleFilesPayload(body.files);
+        if (!parsed) {
+          return reply
+            .code(400)
+            .send({ error: 'files 必须是 Markdown 文件数组' });
+        }
+        files = parsed;
+      } catch (err) {
+        return reply.code(400).send({
+          error: err instanceof Error ? err.message : 'Bundle 文件内容过长',
+        });
       }
     }
-    if (body.category_normalized !== undefined)
-      updates.category_normalized = body.category_normalized;
-    if (body.match_keywords !== undefined)
-      updates.match_keywords = body.match_keywords;
-    if (body.match_patterns !== undefined)
-      updates.match_patterns = body.match_patterns;
-    if (body.example_queries !== undefined)
-      updates.example_queries = body.example_queries;
-    if (body.priority !== undefined) updates.priority = body.priority;
-    if (body.usage_mode !== undefined) updates.usage_mode = body.usage_mode;
 
-    const skill = await updateUserCustomSkill(id, userId, updates);
+    const updates: {
+      skill_name?: string;
+      files?: TextSkillBundleFile[];
+    } = {};
+    if (body.skill_name !== undefined) {
+      updates.skill_name = body.skill_name.trim();
+    }
+    if (files !== undefined) updates.files = files;
+
+    let skill;
+    try {
+      skill = await updateUserCustomSkill(id, userId, updates);
+    } catch (err) {
+      return reply
+        .code(400)
+        .send({ error: err instanceof Error ? err.message : '更新失败' });
+    }
     if (!skill) return reply.code(404).send({ error: '技能不存在' });
 
     return skill;
@@ -558,14 +536,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/skills/market — 公开 Skill 市场
   app.get('/market', async (request) => {
-    const { category, limit, offset } = request.query as {
-      category?: string;
+    const { limit, offset } = request.query as {
       limit?: string;
       offset?: string;
     };
     return toMarketSkillDtos(
       await listMarketSkills({
-        category,
         limit: parseInt(limit || '50', 10) || 50,
         offset: parseInt(offset || '0', 10) || 0,
       }),
@@ -574,14 +550,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/skills/bundles/market — 公开 Bundle 市场
   app.get('/bundles/market', async (request) => {
-    const { category, limit, offset } = request.query as {
-      category?: string;
+    const { limit, offset } = request.query as {
       limit?: string;
       offset?: string;
     };
     return toMarketBundleDtos(
       await listMarketBundles({
-        category,
         limit: parseInt(limit || '20', 10) || 20,
         offset: parseInt(offset || '0', 10) || 0,
       }),

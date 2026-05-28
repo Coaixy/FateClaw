@@ -59,19 +59,11 @@ function createDeps(): AgentRuntimeDeps {
     dir: 'private-bazi',
     name: '私有八字知识',
     description: '私有八字入口',
-    trigger: '八字知识',
     bundle_uri: bundleUri,
     checksum: null,
     install_status: 'installed',
     visibility: 'private',
     source: 'self',
-    category: '八字',
-    category_normalized: 'bazi',
-    match_keywords: [],
-    match_patterns: [],
-    example_queries: [],
-    priority: 0,
-    usage_mode: 'reference_only',
   };
   return {
     memoryStore: {

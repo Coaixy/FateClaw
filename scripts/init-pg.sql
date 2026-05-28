@@ -166,7 +166,6 @@ CREATE TABLE IF NOT EXISTS user_custom_skills (
   skill_name TEXT NOT NULL,
   dir_name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  trigger_hint TEXT NOT NULL DEFAULT '',
   version TEXT NOT NULL DEFAULT '1.0.0',
   bundle_uri TEXT NOT NULL DEFAULT '',
   checksum TEXT DEFAULT NULL,
@@ -174,7 +173,6 @@ CREATE TABLE IF NOT EXISTS user_custom_skills (
   acl JSONB NOT NULL DEFAULT '{}'::jsonb,
   billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
   audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  category TEXT NOT NULL DEFAULT '通用',
   visibility TEXT NOT NULL DEFAULT 'private',
   share_token TEXT UNIQUE,
   enabled BOOLEAN NOT NULL DEFAULT true,
@@ -182,8 +180,6 @@ CREATE TABLE IF NOT EXISTS user_custom_skills (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ DEFAULT NULL
 );
--- 增量迁移：为已存在的表添加 category 列
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '通用';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS version TEXT NOT NULL DEFAULT '1.0.0';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS bundle_uri TEXT NOT NULL DEFAULT '';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS checksum TEXT DEFAULT NULL;
@@ -191,15 +187,17 @@ ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS install_status TEXT NOT 
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS acl JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category_normalized TEXT;
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_keywords JSONB NOT NULL DEFAULT '[]';
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_patterns JSONB NOT NULL DEFAULT '[]';
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS example_queries JSONB NOT NULL DEFAULT '[]';
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS usage_mode TEXT NOT NULL DEFAULT 'reference_only';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS price_tiers JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS stat_subscriber_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS stat_view_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS trigger_hint;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS category;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS category_normalized;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS match_keywords;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS match_patterns;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS example_queries;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS priority;
+ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS usage_mode;
 CREATE INDEX IF NOT EXISTS idx_ucs_user ON user_custom_skills(user_id);
 CREATE INDEX IF NOT EXISTS idx_ucs_share_token ON user_custom_skills(share_token);
 -- 修复：唯一约束排除软删除行，避免同名 skill 删除后无法重建
@@ -333,9 +331,7 @@ ALTER TABLE user_skill_subscriptions DROP COLUMN IF EXISTS source_bundle_id;
 CREATE INDEX IF NOT EXISTS idx_ucs_market_listing
   ON user_custom_skills(stat_subscriber_count DESC, created_at DESC)
   WHERE deleted_at IS NULL AND visibility = 'shared';
-CREATE INDEX IF NOT EXISTS idx_ucs_market_category_listing
-  ON user_custom_skills(category, stat_subscriber_count DESC, created_at DESC)
-  WHERE deleted_at IS NULL AND visibility = 'shared';
+DROP INDEX IF EXISTS idx_ucs_market_category_listing;
 
 -- 对话日志：完整 transcript（工具调用链 + 参数 + 输出），用于 debug
 CREATE TABLE IF NOT EXISTS conversation_logs (
@@ -733,37 +729,6 @@ BEGIN
     ALTER TABLE user_custom_skills
       ADD CONSTRAINT chk_user_custom_skills_visibility_valid
       CHECK (visibility IN ('private', 'link_shared', 'shared'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_custom_skills_usage_mode_valid') THEN
-    ALTER TABLE user_custom_skills
-      DROP CONSTRAINT chk_user_custom_skills_usage_mode_valid;
-  END IF;
-  UPDATE user_custom_skills
-  SET usage_mode = CASE
-    WHEN usage_mode IN ('routing_override', 'interpretation_rule') THEN 'force_injected'
-    WHEN usage_mode NOT IN ('force_injected', 'reference_only') THEN 'reference_only'
-    ELSE usage_mode
-  END
-  WHERE usage_mode IN ('routing_override', 'interpretation_rule')
-     OR usage_mode NOT IN ('force_injected', 'reference_only');
-  ALTER TABLE user_custom_skills
-    ADD CONSTRAINT chk_user_custom_skills_usage_mode_valid
-    CHECK (usage_mode IN ('force_injected', 'reference_only'));
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_custom_skills_priority_nonnegative') THEN
-    UPDATE user_custom_skills
-    SET priority = 0
-    WHERE priority < 0;
-    ALTER TABLE user_custom_skills
-      ADD CONSTRAINT chk_user_custom_skills_priority_nonnegative
-      CHECK (priority >= 0);
   END IF;
 END $$;
 

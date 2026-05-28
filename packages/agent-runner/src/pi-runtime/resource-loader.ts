@@ -45,8 +45,6 @@ function createSkill(args: {
 interface RequestKnowledgeEntry {
   name: string;
   description: string;
-  category: string;
-  source: string;
 }
 
 async function loadRequestScopedSkills(
@@ -63,9 +61,7 @@ async function loadRequestScopedSkills(
     .filter((skill) => getTextSkillBundleSkillFile(skill.bundle_uri))
     .map((skill) => ({
       name: skill.dir,
-      description: skill.description || skill.trigger || skill.name,
-      category: skill.category || '通用',
-      source: skill.source,
+      description: skill.description || skill.name,
     }));
   const privateKnowledgeSkills = effectivePrivateKnowledge.flatMap((skill) => {
     const bundle = getTextSkillBundleSkillFile(skill.bundle_uri);
@@ -74,10 +70,7 @@ async function loadRequestScopedSkills(
       name: skill.dir,
       description:
         [
-          skill.description || skill.trigger || skill.name,
-          `category=${skill.category || '通用'}`,
-          `source=${skill.source}`,
-          `usageMode=${skill.usage_mode}`,
+          skill.description || skill.name,
           'request-scoped Text Skill Bundle，可按需读取 SKILL.md/index.md/docs/examples/notes。',
         ].join(' | '),
       filePath: bundle.filePath,
@@ -156,8 +149,6 @@ function buildAppendSystemPrompt(
         ...privateKnowledgeEntries.map((entry) =>
           [
             `- ${entry.name}`,
-            `category=${entry.category}`,
-            `source=${entry.source}`,
             `description=${entry.description}`,
           ].join(' | '),
         ),

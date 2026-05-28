@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetDbPool, mockReadTextSkillBundleContent } = vi.hoisted(() => ({
+const { mockGetDbPool, mockReadTextSkillBundleFiles } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
-  mockReadTextSkillBundleContent: vi.fn(),
+  mockReadTextSkillBundleFiles: vi.fn(),
 }));
 
 vi.mock('../db-pool.js', () => ({
@@ -10,7 +10,7 @@ vi.mock('../db-pool.js', () => ({
 }));
 
 vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
-  readTextSkillBundleContent: mockReadTextSkillBundleContent,
+  readTextSkillBundleFiles: mockReadTextSkillBundleFiles,
 }));
 
 import {
@@ -81,8 +81,11 @@ describe('admin repository', () => {
     expect(calls[0]?.params).toEqual(['user-1', 'active', 2000]);
   });
 
-  it('hydrates custom skill content from bundle storage for admin reads', async () => {
-    mockReadTextSkillBundleContent.mockReturnValue('bundle content');
+  it('hydrates custom skill files from bundle storage for admin reads', async () => {
+    mockReadTextSkillBundleFiles.mockReturnValue([
+      { path: 'SKILL.md', content: 'skill md' },
+      { path: 'docs/knowledge.md', content: 'bundle content' },
+    ]);
     createMockPool([
       [
         {
@@ -98,11 +101,15 @@ describe('admin repository', () => {
       {
         id: 'skill-1',
         bundle_uri: 'text-skill://skill-1',
-        content: 'bundle content',
+        files: [
+          { path: 'SKILL.md', content: 'skill md' },
+          { path: 'docs/knowledge.md', content: 'bundle content' },
+        ],
+        content_length: 22,
       },
     ]);
 
-    expect(mockReadTextSkillBundleContent).toHaveBeenCalledWith(
+    expect(mockReadTextSkillBundleFiles).toHaveBeenCalledWith(
       'text-skill://skill-1',
     );
   });

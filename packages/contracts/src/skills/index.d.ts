@@ -4,10 +4,6 @@
 
 import type { OkResponse } from '../common/api.js';
 
-export type SkillUsageModeDto =
-  | 'force_injected'
-  | 'reference_only';
-
 export interface SkillPriceTierDto {
   key: string;
   label: string;
@@ -16,13 +12,28 @@ export interface SkillPriceTierDto {
   description?: string;
 }
 
+export interface TextSkillBundleFileDto {
+  path: string;
+  content: string;
+}
+
+export interface CreateUserSkillRequestDto {
+  skill_name: string;
+  dir_name?: string;
+  files: TextSkillBundleFileDto[];
+}
+
+export interface UpdateUserSkillRequestDto {
+  skill_name?: string;
+  files?: TextSkillBundleFileDto[];
+}
+
 export interface UserCustomSkillDto {
   id: string;
   user_id: string;
   skill_name: string;
   dir_name: string;
   description: string;
-  trigger_hint: string;
   version: string;
   bundle_uri: string;
   checksum: string | null;
@@ -30,14 +41,8 @@ export interface UserCustomSkillDto {
   acl: Record<string, unknown>;
   billing_policy: Record<string, unknown>;
   audit_metadata: Record<string, unknown>;
-  content: string;
-  category: string;
-  category_normalized: string | null;
-  match_keywords: string[];
-  match_patterns: string[];
-  example_queries: string[];
-  priority: number;
-  usage_mode: SkillUsageModeDto;
+  files: TextSkillBundleFileDto[];
+  content_length: number;
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;
@@ -70,8 +75,6 @@ export interface SharedSkillPreviewDto {
   id: string;
   skill_name: string;
   description: string;
-  trigger_hint: string;
-  category: string;
   content_length: number;
   price_tiers: SkillPriceTierDto[];
   author_label: string;
@@ -94,7 +97,6 @@ export interface MarketSkillDto {
   id: string;
   skill_name: string;
   description: string;
-  category: string;
   price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_points'>>;
   stat_subscriber_count: number;
   share_token: string | null;
@@ -126,7 +128,6 @@ export interface BundleSkillPreviewDto {
   id: string;
   skill_name: string;
   description: string;
-  category: string;
   content_length: number;
 }
 

@@ -41,15 +41,14 @@ export function useSkillMarket(
 ) {
   const [bundles, setBundles] = useState<MarketBundle[]>([]);
   const [skills, setSkills] = useState<MarketSkill[]>([]);
-  const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      skillsApi.marketBundles({ category: category || undefined, limit: 20 }),
-      skillsApi.market({ category: category || undefined, limit: 50 }),
+      skillsApi.marketBundles({ limit: 20 }),
+      skillsApi.market({ limit: 50 }),
     ])
       .then(([bundleData, skillData]) => {
         setBundles(
@@ -66,7 +65,7 @@ export function useSkillMarket(
         );
       })
       .finally(() => setLoading(false));
-  }, [category, notify]);
+  }, [notify]);
 
   const filteredBundles = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -99,8 +98,6 @@ export function useSkillMarket(
     filteredBundles,
     skills,
     filteredSkills,
-    category,
-    setCategory,
     search,
     setSearch,
     loading,

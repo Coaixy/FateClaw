@@ -102,20 +102,10 @@ export function OwnSkillCard({
                   : 'bg-surface-cream-strong text-muted'
               }`}
             >
-              {sk.enabled ? '已启用' : '未启用'}
+            {sk.enabled ? '已启用' : '未启用'}
             </span>
-            {sk.category && sk.category !== '通用' && (
-              <span className="shrink-0 inline-flex items-center h-6 px-2 rounded-md text-[11px] bg-amber-500/10 text-amber-400">
-                {sk.category}
-              </span>
-            )}
-            {sk.usage_mode === 'force_injected' && (
-              <span className="shrink-0 inline-flex items-center h-6 px-2 rounded-md text-[11px] bg-red-500/10 text-red-400">
-                强规则
-              </span>
-            )}
             <span className="shrink-0 inline-flex items-center h-6 px-2 rounded-md text-[11px] bg-surface-cream-strong text-muted tabular-nums">
-              {sk.content.length.toLocaleString()} 字
+              {sk.content_length.toLocaleString()} 字
             </span>
             {isShared && (
               <span

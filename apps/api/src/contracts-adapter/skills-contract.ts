@@ -101,7 +101,6 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     skill_name: skill.skill_name,
     dir_name: skill.dir_name,
     description: skill.description,
-    trigger_hint: skill.trigger_hint,
     version: skill.version,
     bundle_uri: skill.bundle_uri,
     checksum: skill.checksum,
@@ -109,14 +108,8 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     acl: skill.acl,
     billing_policy: skill.billing_policy,
     audit_metadata: skill.audit_metadata,
-    content: skill.content,
-    category: skill.category,
-    category_normalized: skill.category_normalized,
-    match_keywords: skill.match_keywords,
-    match_patterns: skill.match_patterns,
-    example_queries: skill.example_queries,
-    priority: skill.priority,
-    usage_mode: skill.usage_mode,
+    files: skill.files,
+    content_length: skill.content_length,
     visibility: skill.visibility,
     share_token: skill.share_token,
     enabled: skill.enabled,
@@ -135,9 +128,7 @@ export function toSharedSkillPreviewDto(
     id: skill.id,
     skill_name: skill.skill_name,
     description: skill.description,
-    trigger_hint: skill.trigger_hint,
-    category: skill.category,
-    content_length: skill.content.length,
+    content_length: skill.content_length,
     price_tiers: skill.price_tiers,
     author_label: PUBLIC_AUTHOR_LABEL,
   };
@@ -190,7 +181,6 @@ type MarketSkillSource = {
   id: string;
   skill_name: string;
   description: string;
-  category: string;
   price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_points'>>;
   stat_subscriber_count: number;
   share_token: string | null;
@@ -201,7 +191,6 @@ export function toMarketSkillDto(skill: MarketSkillSource): MarketSkillDto {
     id: skill.id,
     skill_name: skill.skill_name,
     description: skill.description,
-    category: skill.category,
     price_tiers: skill.price_tiers,
     stat_subscriber_count: skill.stat_subscriber_count,
     share_token: skill.share_token,

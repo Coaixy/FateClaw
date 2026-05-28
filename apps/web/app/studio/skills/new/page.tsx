@@ -2,62 +2,63 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ListChecks } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { SkillForm, SkillFormData } from '@/components/skills/skill-form';
 import {
-  skillsApi,
-  SYSTEM_PAIPAN_CATEGORIES,
-} from '@/features/skills/api';
+  SkillBundleEditor,
+  SkillBundleEditorData,
+  createDefaultSkillBundleFiles,
+} from '@/components/skills/skill-bundle-editor';
+import { skillsApi } from '@/features/skills/api';
 import { useToast } from '@/lib/use-toast';
 
 export default function NewStudioSkillPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleCreate = async (data: SkillFormData) => {
+  const handleCreate = async (data: SkillBundleEditorData) => {
     await skillsApi.userCreate(data);
-    toast('success', '术数技能已创建');
+    toast('success', 'Skill Bundle 已创建');
     router.push('/studio');
   };
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-6xl space-y-5">
-        <div className="space-y-3">
-          <Link
-            href="/studio"
-            className="inline-flex items-center gap-1.5 text-[12px] text-muted transition-colors hover:text-ink"
-          >
-            <ArrowLeft size={13} />
-            返回术数开发
-          </Link>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">
-                Skill Composer
-              </p>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight">
-                分步开发术数技能
-              </h1>
-              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted sm:text-sm">
-                按基础信息、匹配与使用、知识内容和发布检查推进，把规则沉淀成可复用技能。
-              </p>
-            </div>
-            <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-hairline bg-surface-card px-3 py-2 text-[12px] font-medium text-muted">
-              <ListChecks size={14} className="text-primary" />
-              4 步完成创建
-            </div>
-          </div>
-        </div>
-
-        <SkillForm
-          variant="page"
-          flow="stepped"
-          categorySuggestions={SYSTEM_PAIPAN_CATEGORIES}
+    <AppShell wide>
+      <div className="space-y-4">
+        <Link
+          href="/studio"
+          className="inline-flex min-h-10 items-center gap-1.5 text-[12px] text-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeft size={13} />
+          返回术数开发
+        </Link>
+        <SkillBundleEditor
+          initial={{
+            id: '',
+            user_id: '',
+            skill_name: '我的 Skill',
+            dir_name: '',
+            description: '',
+            version: '1.0.0',
+            bundle_uri: '',
+            checksum: null,
+            install_status: 'missing',
+            acl: {},
+            billing_policy: {},
+            audit_metadata: {},
+            files: createDefaultSkillBundleFiles('我的 Skill'),
+            content_length: 0,
+            visibility: 'private',
+            share_token: null,
+            enabled: true,
+            price_tiers: [],
+            stat_subscriber_count: 0,
+            stat_view_count: 0,
+            created_at: '',
+            updated_at: '',
+          }}
           onSave={handleCreate}
-          onCancel={() => router.push('/studio')}
         />
       </div>
     </AppShell>

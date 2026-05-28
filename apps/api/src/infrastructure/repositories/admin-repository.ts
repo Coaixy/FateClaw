@@ -1,4 +1,4 @@
-import { readTextSkillBundleContent } from '../../modules/skills/text-skill-bundle-store.js';
+import { readTextSkillBundleFiles } from '../../modules/skills/text-skill-bundle-store.js';
 import { getDbPool } from '../db-pool.js';
 
 const pool = {
@@ -252,19 +252,25 @@ export interface AdminCustomSkillRow {
   phone: string;
   skill_name: string;
   description: string;
-  trigger_hint: string;
-  content: string;
   bundle_uri: string;
   checksum: string | null;
   install_status: 'installed' | 'missing' | 'error';
-  category: string;
-  match_keywords: string[];
-  usage_mode: 'force_injected' | 'reference_only';
+  files: Array<{ path: string; content: string }>;
+  content_length: number;
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
+}
+
+function hydrateAdminCustomSkillRow(row: AdminCustomSkillRow): AdminCustomSkillRow {
+  const files = readTextSkillBundleFiles(row.bundle_uri);
+  return {
+    ...row,
+    files,
+    content_length: files.reduce((sum, file) => sum + file.content.length, 0),
+  };
 }
 
 export async function getCustomSkillsForAdmin(opts: {
@@ -281,8 +287,8 @@ export async function getCustomSkillsForAdmin(opts: {
 
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.trigger_hint, s.bundle_uri, s.checksum, s.install_status, s.category, s.match_keywords,
-            s.usage_mode, s.visibility, s.share_token, s.enabled,
+            s.bundle_uri, s.checksum, s.install_status,
+            s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
      JOIN users u ON u.id = s.user_id
@@ -291,10 +297,7 @@ export async function getCustomSkillsForAdmin(opts: {
     params,
   );
 
-  return (rows as AdminCustomSkillRow[]).map((row) => ({
-    ...row,
-    content: readTextSkillBundleContent(row.bundle_uri),
-  }));
+  return (rows as AdminCustomSkillRow[]).map(hydrateAdminCustomSkillRow);
 }
 
 export async function getCustomSkillForAdmin(
@@ -302,8 +305,8 @@ export async function getCustomSkillForAdmin(
 ): Promise<AdminCustomSkillRow | undefined> {
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.trigger_hint, s.bundle_uri, s.checksum, s.install_status, s.category, s.match_keywords,
-            s.usage_mode, s.visibility, s.share_token, s.enabled,
+            s.bundle_uri, s.checksum, s.install_status,
+            s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
      JOIN users u ON u.id = s.user_id
@@ -311,12 +314,7 @@ export async function getCustomSkillForAdmin(
     [id],
   );
   return rows[0]
-    ? {
-        ...(rows[0] as AdminCustomSkillRow),
-        content: readTextSkillBundleContent(
-          (rows[0] as AdminCustomSkillRow).bundle_uri,
-        ),
-      }
+    ? hydrateAdminCustomSkillRow(rows[0] as AdminCustomSkillRow)
     : undefined;
 }
 

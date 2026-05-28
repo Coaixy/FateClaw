@@ -256,13 +256,8 @@ export function BundleForm({
                       </p>
                     )}
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      {sk.category && sk.category !== '通用' && (
-                        <span className="inline-flex items-center h-5 px-1.5 rounded text-[10px] bg-amber-500/10 text-amber-400">
-                          {sk.category}
-                        </span>
-                      )}
                       <span className="inline-flex items-center h-5 px-1.5 rounded text-[10px] bg-surface-cream-strong text-muted tabular-nums">
-                        {sk.content.length.toLocaleString()} 字
+                        {sk.content_length.toLocaleString()} 字
                       </span>
                     </div>
                   </div>

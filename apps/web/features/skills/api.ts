@@ -15,8 +15,8 @@ import type {
   SkillShareResponseDto,
   SkillSubscriptionCreateResponseDto,
   SkillSubscriptionToggleResponseDto,
-  SkillUsageModeDto,
   SubscribedSkillDto,
+  TextSkillBundleFileDto,
   UserCustomSkillDto,
   UserSkillsResponseDto,
   WithdrawalBalanceDto,
@@ -25,8 +25,8 @@ import type {
 
 import { requestJson } from '@/lib/http/client';
 
-export type SkillUsageMode = SkillUsageModeDto;
 export type SkillPriceTier = SkillPriceTierDto;
+export type TextSkillBundleFile = TextSkillBundleFileDto;
 export type UserCustomSkill = UserCustomSkillDto;
 export type SubscribedSkill = SubscribedSkillDto;
 export type UserSkillsResponse = UserSkillsResponseDto;
@@ -42,52 +42,12 @@ export type CreatorWithdrawal = CreatorWithdrawalDto;
 export type WithdrawalBalance = WithdrawalBalanceDto;
 export type CreatorEarningsMonthly = CreatorEarningsMonthlyDto;
 
-export const USER_SKILL_CATEGORIES: readonly string[] = [
-  '通用',
-  '八字',
-  '紫微',
-  '六爻',
-  '奇门',
-  '梅花',
-  '大六壬',
-  '小六壬',
-  '风水',
-  '周易',
-  '测字',
-  '择日',
-  '铁板神数',
-  '玄空',
-  '相术',
-  '手相',
-  '姓名学',
-  '占星',
-  '塔罗',
-  '生命灵数',
-  '人类图',
-  '数字能量',
-] as const;
-
-// 只保留当前系统能直接排盘/承接的术数建议；其他类别保留给用户手动输入。
-export const SYSTEM_PAIPAN_CATEGORIES: readonly string[] = [
-  '八字',
-  '紫微',
-  '六爻',
-  '经占',
-  '奇门',
-] as const;
-
 export const skillsApi = {
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
   userCreate: (data: {
     skill_name: string;
-    description?: string;
-    trigger_hint?: string;
-    content?: string;
-    category?: string;
-    match_keywords?: string[];
-    match_patterns?: string[];
-    priority?: number;
-    usage_mode?: SkillUsageMode;
+    dir_name?: string;
+    files: TextSkillBundleFile[];
   }) =>
     requestJson<UserCustomSkill>('/api/skills/user', {
       method: 'POST',
@@ -97,14 +57,7 @@ export const skillsApi = {
     id: string,
     data: {
       skill_name?: string;
-      description?: string;
-      trigger_hint?: string;
-      content?: string;
-      category?: string;
-      match_keywords?: string[];
-      match_patterns?: string[];
-      priority?: number;
-      usage_mode?: SkillUsageMode;
+      files?: TextSkillBundleFile[];
     },
   ) =>
     requestJson<UserCustomSkill>(`/api/skills/user/${id}`, {
@@ -202,21 +155,18 @@ export const skillsApi = {
       { method: 'DELETE' },
     ),
   marketBundles: (params: {
-    category?: string;
     limit?: number;
     offset?: number;
   }) => {
     const qs = new URLSearchParams();
-    if (params.category) qs.set('category', params.category);
     if (params.limit != null) qs.set('limit', String(params.limit));
     if (params.offset != null) qs.set('offset', String(params.offset));
     return requestJson<MarketBundle[]>(
       `/api/skills/bundles/market?${qs.toString()}`,
     );
   },
-  market: (params: { category?: string; limit?: number; offset?: number }) => {
+  market: (params: { limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
-    if (params.category) qs.set('category', params.category);
     if (params.limit != null) qs.set('limit', String(params.limit));
     if (params.offset != null) qs.set('offset', String(params.offset));
     return requestJson<MarketSkill[]>(`/api/skills/market?${qs.toString()}`);

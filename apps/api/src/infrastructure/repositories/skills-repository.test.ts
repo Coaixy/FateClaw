@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGetDbPool,
-  mockReadTextSkillBundleContent,
-  mockWriteTextSkillBundle,
+  mockGetSkillMarkdownMetadata,
+  mockGetTextSkillBundleContentLength,
+  mockReadTextSkillBundleFiles,
+  mockWriteTextSkillBundleFiles,
 } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
-  mockReadTextSkillBundleContent: vi.fn(),
-  mockWriteTextSkillBundle: vi.fn(),
+  mockGetSkillMarkdownMetadata: vi.fn(),
+  mockGetTextSkillBundleContentLength: vi.fn(),
+  mockReadTextSkillBundleFiles: vi.fn(),
+  mockWriteTextSkillBundleFiles: vi.fn(),
 }));
 
 vi.mock('../db-pool.js', () => ({
@@ -15,8 +19,10 @@ vi.mock('../db-pool.js', () => ({
 }));
 
 vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
-  readTextSkillBundleContent: mockReadTextSkillBundleContent,
-  writeTextSkillBundle: mockWriteTextSkillBundle,
+  getSkillMarkdownMetadata: mockGetSkillMarkdownMetadata,
+  getTextSkillBundleContentLength: mockGetTextSkillBundleContentLength,
+  readTextSkillBundleFiles: mockReadTextSkillBundleFiles,
+  writeTextSkillBundleFiles: mockWriteTextSkillBundleFiles,
 }));
 
 import {
@@ -76,8 +82,16 @@ function createSequencedMockPool(poolRows: unknown[][]) {
 describe('skills repository official skill settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockReadTextSkillBundleContent.mockReturnValue('stored content');
-    mockWriteTextSkillBundle.mockReturnValue({
+    mockGetSkillMarkdownMetadata.mockReturnValue({
+      name: 'My Skill',
+      description: 'desc',
+    });
+    mockReadTextSkillBundleFiles.mockReturnValue([
+      { path: 'SKILL.md', content: 'skill md' },
+      { path: 'docs/knowledge.md', content: 'stored content' },
+    ]);
+    mockGetTextSkillBundleContentLength.mockReturnValue(14);
+    mockWriteTextSkillBundleFiles.mockReturnValue({
       bundleUri: 'text-skill://skill-1',
       checksum: 'checksum-1',
     });
@@ -148,23 +162,23 @@ describe('skills repository official skill settings', () => {
   it('builds marketplace skill filters and caps list size', async () => {
     const { calls } = createMockPool();
 
-    await listMarketSkills({ category: '命理', limit: 500, offset: 30 });
+    await listMarketSkills({ limit: 500, offset: 30 });
 
     expect(calls[0]?.sql).toContain("s.visibility = 'shared'");
-    expect(calls[0]?.sql).toContain('s.category = $1');
-    expect(calls[0]?.sql).toContain('LIMIT $2 OFFSET $3');
-    expect(calls[0]?.params).toEqual(['命理', 100, 30]);
+    expect(calls[0]?.sql).not.toContain('s.category');
+    expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
+    expect(calls[0]?.params).toEqual([100, 30]);
   });
 
   it('builds marketplace bundle filters and caps list size', async () => {
     const { calls } = createMockPool();
 
-    await listMarketBundles({ category: '命理', limit: 500, offset: 10 });
+    await listMarketBundles({ limit: 500, offset: 10 });
 
     expect(calls[0]?.sql).toContain("b.visibility = 'shared'");
-    expect(calls[0]?.sql).toContain('s2.category = $1');
-    expect(calls[0]?.sql).toContain('LIMIT $2 OFFSET $3');
-    expect(calls[0]?.params).toEqual(['命理', 50, 10]);
+    expect(calls[0]?.sql).not.toContain('s2.category');
+    expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
+    expect(calls[0]?.params).toEqual([50, 10]);
   });
 
   it('serializes creator bundle tiers when upserting config', async () => {
@@ -193,35 +207,45 @@ describe('skills repository official skill settings', () => {
         user_id: 'user-1',
         skill_name: 'My Skill',
         dir_name: 'my-skill',
-        description: 'desc',
-        trigger_hint: 'hint',
-        content: 'content',
-        category: '通用',
+        files: [
+          {
+            path: 'SKILL.md',
+            content: '---\nname: My Skill\ndescription: desc\n---\n',
+          },
+          { path: 'index.md', content: '# index' },
+          { path: 'docs/knowledge.md', content: 'content' },
+        ],
       }),
     ).resolves.toEqual({
       id: 'skill-1',
       bundle_uri: 'text-skill://skill-1',
-      content: 'stored content',
+      files: [
+        { path: 'SKILL.md', content: 'skill md' },
+        { path: 'docs/knowledge.md', content: 'stored content' },
+      ],
+      content_length: 22,
     });
 
-    expect(mockWriteTextSkillBundle).toHaveBeenCalledWith(
+    expect(mockWriteTextSkillBundleFiles).toHaveBeenCalledWith(
       expect.objectContaining({
         skillId: 'skill-1',
         ownerId: 'user-1',
-        content: 'content',
+        files: expect.arrayContaining([
+          { path: 'docs/knowledge.md', content: 'content' },
+        ]),
       }),
     );
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('INSERT INTO user_custom_skills');
-    expect(clientCalls[1]?.params?.slice(0, 8)).toEqual([
+    expect(clientCalls[1]?.params).toEqual([
       'skill-1',
       'user-1',
       'My Skill',
       'my-skill',
       'desc',
-      'hint',
       'text-skill://skill-1',
       'checksum-1',
+      expect.any(String),
     ]);
     expect(clientCalls[2]?.sql).toBe('COMMIT');
     expect(calls[0]?.sql).toContain('WHERE s.id = $1');
@@ -229,8 +253,8 @@ describe('skills repository official skill settings', () => {
   });
 
   it('loads shared bundle skills in bundle order with content lengths', async () => {
-    mockReadTextSkillBundleContent.mockImplementation((uri: string) =>
-      uri === 'text-skill://skill-2' ? '12345' : '12',
+    mockGetTextSkillBundleContentLength.mockImplementation((uri: string) =>
+      uri === 'text-skill://skill-2' ? 5 : 2,
     );
     createSequencedMockPool([
       [
@@ -245,14 +269,12 @@ describe('skills repository official skill settings', () => {
           id: 'skill-1',
           skill_name: 'One',
           description: 'first',
-          category: '通用',
           bundle_uri: 'text-skill://skill-1',
         },
         {
           id: 'skill-2',
           skill_name: 'Two',
           description: 'second',
-          category: '命理',
           bundle_uri: 'text-skill://skill-2',
         },
       ],

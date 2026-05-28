@@ -441,9 +441,9 @@ Authorization: Bearer <token>
 ### 用户自定义 Skill
 
 - `GET /api/skills/user`：列出自有与已订阅 Skill
-- `POST /api/skills/user`：创建自定义 Skill
+- `POST /api/skills/user`：创建 Markdown Skill Bundle
 - `GET /api/skills/user/:id`：查看详情
-- `PUT /api/skills/user/:id`：更新
+- `PUT /api/skills/user/:id`：更新 Markdown Skill Bundle
 - `DELETE /api/skills/user/:id`：软删除
 - `PATCH /api/skills/user/:id/toggle`：启用或禁用
 - `POST /api/skills/user/:id/share` / `DELETE /api/skills/user/:id/share`：开启或关闭私密分享
@@ -453,6 +453,44 @@ Authorization: Bearer <token>
 - `POST /api/skills/subscribe/:token/paid`：付费订阅单个 Skill
 - `PATCH /api/skills/subscribe/:id/toggle`：启用或禁用订阅
 - `DELETE /api/skills/subscribe/:id`：取消订阅
+
+`POST /api/skills/user` 请求体：
+
+```json
+{
+  "skill_name": "六爻财运判断",
+  "dir_name": "liuyao-money",
+  "files": [
+    {
+      "path": "SKILL.md",
+      "content": "---\nname: \"六爻财运判断\"\ndescription: \"六爻财运问题的读取入口\"\n---\n\n# 六爻财运判断\n\n## 推荐读取顺序\n\n- `index.md`\n- `docs/knowledge.md`\n"
+    },
+    {
+      "path": "index.md",
+      "content": "# 文件索引\n\n- `docs/knowledge.md`：主要知识正文\n"
+    },
+    {
+      "path": "docs/knowledge.md",
+      "content": "# 知识正文\n\n## 适用场景\n\n- 求财、合作、项目回款。\n"
+    }
+  ]
+}
+```
+
+`PUT /api/skills/user/:id` 请求体：
+
+```json
+{
+  "skill_name": "六爻财运判断",
+  "files": [
+    { "path": "SKILL.md", "content": "---\nname: \"六爻财运判断\"\ndescription: \"更新后的说明\"\n---\n\n# 六爻财运判断\n" },
+    { "path": "index.md", "content": "# 文件索引\n" },
+    { "path": "docs/knowledge.md", "content": "# 知识正文\n" }
+  ]
+}
+```
+
+`files` 只能包含安全相对路径下的 `.md` 文件，允许根文件 `SKILL.md`、`index.md`，以及 `docs/`、`examples/`、`notes/` 目录；必须包含 `SKILL.md`。响应中的 `skill_name` 与 `description` 从 `SKILL.md` frontmatter 同步。
 
 ### Bundle 与市场
 

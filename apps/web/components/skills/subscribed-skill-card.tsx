@@ -76,7 +76,7 @@ export function SubscribedSkillCard({
               {sk.author_label}
             </span>
             <span className="shrink-0 inline-flex items-center h-6 px-2 rounded-md text-[11px] bg-surface-cream-strong text-muted tabular-nums">
-              {sk.content.length.toLocaleString()} 字
+              {sk.content_length.toLocaleString()} 字
             </span>
           </div>
 

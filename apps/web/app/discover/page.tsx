@@ -2,10 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import { Layers, Puzzle, Users, Search, ChevronDown } from 'lucide-react';
+import { Layers, Puzzle, Users, Search } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { USER_SKILL_CATEGORIES } from '@/features/skills/api';
 import { useSkillMarket } from '@/features/skills/hooks/use-skill-market';
 import { useToast } from '@/lib/use-toast';
 
@@ -23,7 +22,6 @@ function getRankBadgeClass(rank: number): string {
 }
 
 export default function DiscoverPage() {
-  const [showCategories, setShowCategories] = useState(false);
   const { toast } = useToast();
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
@@ -49,7 +47,7 @@ export default function DiscoverPage() {
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted"
             />
-            <input
+          <input
               type="text"
               value={market.search}
               onChange={(e) => market.setSearch(e.target.value)}
@@ -57,55 +55,7 @@ export default function DiscoverPage() {
               className="w-full h-10 pl-9 pr-3 rounded-xl border border-hairline bg-surface-card text-[13px] placeholder:text-foreground-muted focus:border-primary focus:outline-none transition-all"
             />
           </div>
-          <button
-            onClick={() => setShowCategories((v) => !v)}
-            className={`shrink-0 h-10 px-3 rounded-xl border text-[13px] font-medium flex items-center gap-1.5 transition-all ${
-              market.category
-                ? 'border-primary text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]'
-                : 'border-hairline text-foreground-muted'
-            }`}
-          >
-            {market.category || '分类'}
-            <ChevronDown
-              size={14}
-              className={`transition-transform ${showCategories ? 'rotate-180' : ''}`}
-            />
-          </button>
         </div>
-
-        {showCategories && (
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => {
-                market.setCategory('');
-                setShowCategories(false);
-              }}
-              className={`px-2.5 py-1 rounded-lg text-[12px] border transition ${
-                !market.category
-                  ? 'border-primary text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]'
-                  : 'border-hairline text-foreground-muted'
-              }`}
-            >
-              全部
-            </button>
-            {USER_SKILL_CATEGORIES.filter((c) => c !== '通用').map((c) => (
-              <button
-                key={c}
-                onClick={() => {
-                  market.setCategory(c);
-                  setShowCategories(false);
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[12px] border transition ${
-                  market.category === c
-                    ? 'border-primary text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]'
-                    : 'border-hairline text-foreground-muted'
-                }`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-        )}
 
         {market.loading ? (
           <div className="py-16 text-center text-sm text-foreground-muted">
@@ -248,7 +198,7 @@ export default function DiscoverPage() {
                             {s.skill_name}
                           </h3>
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] leading-tight text-primary">
-                            {s.category}
+                            Skill
                           </span>
                           <span className="shrink-0 text-[10px] font-medium text-foreground-muted">
                             TOP {rank}

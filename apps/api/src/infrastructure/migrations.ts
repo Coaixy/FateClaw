@@ -1,5 +1,8 @@
 import type pg from 'pg';
-import { writeTextSkillBundle } from '../modules/skills/text-skill-bundle-store.js';
+import {
+  appendLegacyTriggerHintToSkillBundle,
+  writeTextSkillBundle,
+} from '../modules/skills/text-skill-bundle-store.js';
 import { deleteUsersWithoutValidPhone } from './phone-only-user-migration.js';
 
 export interface DatabaseMigration {
@@ -53,14 +56,24 @@ async function migrateLegacyUserCustomSkillContentToBundles(
     client,
     'user_custom_skill_contents',
   );
-  if (!hasInlineContent && !hasContentTable) return;
+  const hasTriggerHint = await columnExists(
+    client,
+    'user_custom_skills',
+    'trigger_hint',
+  );
+  if (!hasInlineContent && !hasContentTable && !hasTriggerHint) return;
 
   const contentExpr =
     hasInlineContent && hasContentTable
       ? `COALESCE(sc.content, s.content, '')`
       : hasContentTable
         ? `COALESCE(sc.content, '')`
-        : `COALESCE(s.content, '')`;
+        : hasInlineContent
+          ? `COALESCE(s.content, '')`
+          : `''`;
+  const triggerHintExpr = hasTriggerHint
+    ? `COALESCE(s.trigger_hint, '')`
+    : `''`;
   const contentJoin = hasContentTable
     ? `LEFT JOIN user_custom_skill_contents sc ON sc.skill_id = s.id`
     : '';
@@ -74,7 +87,7 @@ async function migrateLegacyUserCustomSkillContentToBundles(
     content: string;
   }>(
     `SELECT s.id, s.user_id, s.skill_name, s.dir_name, s.description,
-            s.trigger_hint, ${contentExpr} AS content
+            ${triggerHintExpr} AS trigger_hint, ${contentExpr} AS content
      FROM user_custom_skills s
      ${contentJoin}
      WHERE s.deleted_at IS NULL
@@ -116,6 +129,99 @@ async function migrateLegacyUserCustomSkillContentToBundles(
       ],
     );
   }
+}
+
+async function migrateLegacyUserCustomSkillRoutingToBundles(
+  client: pg.PoolClient,
+): Promise<void> {
+  const hasTriggerHint = await columnExists(
+    client,
+    'user_custom_skills',
+    'trigger_hint',
+  );
+  if (!hasTriggerHint) return;
+
+  const { rows } = await client.query<{
+    id: string;
+    bundle_uri: string;
+    trigger_hint: string;
+  }>(
+    `SELECT id, bundle_uri, trigger_hint
+     FROM user_custom_skills
+     WHERE deleted_at IS NULL
+       AND COALESCE(trigger_hint, '') <> ''
+       AND COALESCE(bundle_uri, '') <> ''`,
+  );
+
+  for (const row of rows) {
+    const checksum = appendLegacyTriggerHintToSkillBundle(
+      row.bundle_uri,
+      row.trigger_hint,
+    );
+    if (!checksum) continue;
+    await client.query(
+      `UPDATE user_custom_skills
+       SET checksum = $1,
+           audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $2::jsonb,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [
+        checksum,
+        JSON.stringify({
+          legacy_trigger_hint_migrated_at: new Date().toISOString(),
+        }),
+        row.id,
+      ],
+    );
+  }
+}
+
+async function dropLegacyUserCustomSkillRoutingColumns(
+  client: pg.PoolClient,
+): Promise<void> {
+  await client.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_user_custom_skills_usage_mode_valid'
+      ) THEN
+        ALTER TABLE user_custom_skills
+          DROP CONSTRAINT chk_user_custom_skills_usage_mode_valid;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_user_custom_skills_priority_nonnegative'
+      ) THEN
+        ALTER TABLE user_custom_skills
+          DROP CONSTRAINT chk_user_custom_skills_priority_nonnegative;
+      END IF;
+    END $$;
+  `);
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS trigger_hint`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS category`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS category_normalized`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS match_keywords`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS match_patterns`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS example_queries`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS priority`,
+  );
+  await client.query(
+    `ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS usage_mode`,
+  );
 }
 
 async function ensureForeignKey(
@@ -630,7 +736,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           skill_name TEXT NOT NULL,
           dir_name TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
-          trigger_hint TEXT NOT NULL DEFAULT '',
           version TEXT NOT NULL DEFAULT '1.0.0',
           bundle_uri TEXT NOT NULL DEFAULT '',
           checksum TEXT DEFAULT NULL,
@@ -638,7 +743,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           acl JSONB NOT NULL DEFAULT '{}'::jsonb,
           billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
           audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-          category TEXT NOT NULL DEFAULT '通用',
           visibility TEXT NOT NULL DEFAULT 'private',
           share_token TEXT UNIQUE,
           enabled BOOLEAN NOT NULL DEFAULT true,
@@ -648,10 +752,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           UNIQUE(user_id, dir_name)
         )
       `);
-      // 增量迁移：为已存在的表添加 category 列
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '通用'`,
-      );
       await client.query(
         `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS version TEXT NOT NULL DEFAULT '1.0.0'`,
       );
@@ -794,24 +894,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           )
       `);
       await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS category_normalized TEXT`,
-      );
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_keywords JSONB NOT NULL DEFAULT '[]'`,
-      );
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS match_patterns JSONB NOT NULL DEFAULT '[]'`,
-      );
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS example_queries JSONB NOT NULL DEFAULT '[]'`,
-      );
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0`,
-      );
-      await client.query(
-        `ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS usage_mode TEXT NOT NULL DEFAULT 'reference_only'`,
-      );
-      await client.query(
         `CREATE INDEX IF NOT EXISTS idx_ucs_user ON user_custom_skills(user_id)`,
       );
       await client.query(
@@ -826,6 +908,8 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
          WHERE deleted_at IS NULL`,
       );
       await migrateLegacyUserCustomSkillContentToBundles(client);
+      await migrateLegacyUserCustomSkillRoutingToBundles(client);
+      await dropLegacyUserCustomSkillRoutingColumns(client);
       await client.query(`DROP TABLE IF EXISTS user_custom_skill_contents`);
       // 用户 Skill 订阅关系
       await client.query(`
@@ -860,9 +944,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
          WHERE deleted_at IS NULL AND visibility = 'shared'`,
       );
       await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_ucs_market_category_listing
-         ON user_custom_skills(category, stat_subscriber_count DESC, created_at DESC)
-         WHERE deleted_at IS NULL AND visibility = 'shared'`,
+        `DROP INDEX IF EXISTS idx_ucs_market_category_listing`,
       );
       await client.query(
         `ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS tier_key TEXT DEFAULT NULL`,
@@ -1514,42 +1596,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      SET visibility = 'private',
                          share_token = NULL
                      WHERE visibility NOT IN ('private', 'link_shared', 'shared')`,
-      });
-      // usage_mode 已从三档收敛为两档，需要先移除旧约束再清洗历史数据。
-      await client.query(`
-        DO $$
-        BEGIN
-          IF EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'chk_user_custom_skills_usage_mode_valid'
-          ) THEN
-            ALTER TABLE user_custom_skills
-              DROP CONSTRAINT chk_user_custom_skills_usage_mode_valid;
-          END IF;
-        END $$;
-      `);
-      await ensureCheckConstraint(client, {
-        constraintName: 'chk_user_custom_skills_usage_mode_valid',
-        tableName: 'user_custom_skills',
-        expression: `usage_mode IN ('force_injected', 'reference_only')`,
-        cleanupSql: `UPDATE user_custom_skills
-                     SET usage_mode = CASE
-                       WHEN usage_mode IN ('routing_override', 'interpretation_rule')
-                         THEN 'force_injected'
-                       WHEN usage_mode NOT IN ('force_injected', 'reference_only')
-                         THEN 'reference_only'
-                       ELSE usage_mode
-                     END
-                     WHERE usage_mode IN ('routing_override', 'interpretation_rule')
-                        OR usage_mode NOT IN ('force_injected', 'reference_only')`,
-      });
-      await ensureCheckConstraint(client, {
-        constraintName: 'chk_user_custom_skills_priority_nonnegative',
-        tableName: 'user_custom_skills',
-        expression: 'priority >= 0',
-        cleanupSql: `UPDATE user_custom_skills
-                     SET priority = 0
-                     WHERE priority < 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_skill_bundles_visibility_valid',

@@ -293,7 +293,10 @@ export interface AdminSkillGlobalConfig {
   dir?: string;
 }
 
-export type SkillUsageMode = 'force_injected' | 'reference_only';
+export interface AdminTextSkillBundleFile {
+  path: string;
+  content: string;
+}
 
 export interface AdminCustomSkill {
   id: string;
@@ -301,11 +304,11 @@ export interface AdminCustomSkill {
   phone: string | null;
   skill_name: string;
   description: string;
-  trigger_hint: string;
-  content: string;
-  category: string;
-  match_keywords: string[];
-  usage_mode: SkillUsageMode;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: 'installed' | 'missing' | 'error';
+  files: AdminTextSkillBundleFile[];
+  content_length: number;
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;

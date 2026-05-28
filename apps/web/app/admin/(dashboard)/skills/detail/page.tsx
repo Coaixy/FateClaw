@@ -10,12 +10,10 @@ import {
   Calendar,
   Clock3,
   FileText,
-  Hash,
   Loader2,
   RefreshCw,
   Share2,
   User,
-  Zap,
 } from 'lucide-react';
 
 function formatDate(iso: string | null) {
@@ -28,26 +26,6 @@ function formatDate(iso: string | null) {
     minute: '2-digit',
   });
 }
-
-const USAGE_MODE_META: Record<
-  AdminCustomSkill['usage_mode'],
-  {
-    label: string;
-    description: string;
-    tone: 'neutral' | 'accent' | 'blue' | 'amber' | 'danger' | 'success';
-  }
-> = {
-  force_injected: {
-    label: '强规则',
-    description: '命中后全文注入解读上下文，适合必须被体现的规则与口径。',
-    tone: 'danger',
-  },
-  reference_only: {
-    label: '参考知识',
-    description: '作为补充背景知识使用，不强制覆盖默认路由。',
-    tone: 'success',
-  },
-};
 
 const VISIBILITY_META: Record<
   AdminCustomSkill['visibility'],
@@ -295,7 +273,6 @@ function AdminSkillDetailContent() {
     );
   }
 
-  const usageMode = USAGE_MODE_META[skill.usage_mode];
   const visibility = VISIBILITY_META[skill.visibility];
 
   return (
@@ -330,10 +307,6 @@ function AdminSkillDetailContent() {
                 <Share2 size={10} />
                 {visibility.label}
               </MetaPill>
-              <MetaPill tone={usageMode.tone}>
-                <Zap size={10} />
-                {usageMode.label}
-              </MetaPill>
             </div>
 
             <h1 className="mt-3 text-2xl font-semibold tracking-tight break-words">
@@ -363,13 +336,9 @@ function AdminSkillDetailContent() {
           <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-[320px]">
             <StatTile
               label="内容长度"
-              value={`${skill.content.length.toLocaleString()} 字`}
+              value={`${skill.content_length.toLocaleString()} 字`}
             />
-            <StatTile
-              label="关键词"
-              value={String(skill.match_keywords?.length ?? 0)}
-            />
-            <StatTile label="分类" value={skill.category || '通用'} />
+            <StatTile label="文件数" value={String(skill.files.length)} />
             <StatTile
               label="分享令牌"
               value={skill.share_token ? '已生成' : '未生成'}
@@ -456,11 +425,15 @@ function AdminSkillDetailContent() {
               <InfoRow label="技能 ID" value={skill.id} mono />
               <InfoRow label="用户 ID" value={skill.user_id} mono />
               <InfoRow label="用户标识" value={skill.phone || '未绑定手机号'} />
-              <InfoRow label="绑定类别" value={skill.category || '通用'} />
               <InfoRow
-                label="路由模式"
-                value={usageMode.label}
-                hint={usageMode.description}
+                label="Bundle URI"
+                value={skill.bundle_uri || '未写入'}
+                mono
+              />
+              <InfoRow
+                label="Checksum"
+                value={skill.checksum || '未生成'}
+                mono
               />
               <InfoRow
                 label="可见性"
@@ -470,29 +443,6 @@ function AdminSkillDetailContent() {
               <InfoRow label="创建时间" value={formatDate(skill.created_at)} />
               <InfoRow label="更新时间" value={formatDate(skill.updated_at)} />
             </div>
-          </SectionCard>
-
-          <SectionCard
-            title="匹配关键词"
-            hint="管理员可快速判断该技能会在什么问题上下文中被命中。"
-            icon={Hash}
-          >
-            {skill.match_keywords && skill.match_keywords.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {skill.match_keywords.map((kw, index) => (
-                  <span
-                    key={`${kw}-${index}`}
-                    className="inline-flex items-center rounded-md border border-hairline bg-canvas px-2 py-1 text-[12px] text-muted"
-                  >
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[12px] text-muted">
-                当前未配置匹配关键词。
-              </p>
-            )}
           </SectionCard>
         </div>
 
@@ -507,25 +457,25 @@ function AdminSkillDetailContent() {
             </div>
           </SectionCard>
 
-          {skill.trigger_hint ? (
-            <SectionCard
-              title="触发条件"
-              hint="这是用户为该技能设置的触发提示文案。"
-              icon={Zap}
-            >
-              <div className="rounded-lg border border-hairline bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink">
-                {skill.trigger_hint}
-              </div>
-            </SectionCard>
-          ) : null}
-
           <SectionCard
-            title="完整内容"
-            hint="展示技能实际知识正文，便于完整审阅。"
+            title="Bundle 文件"
+            hint="展示该用户 Skill 的 Markdown Bundle 文件。"
             icon={BookOpen}
           >
-            <div className="max-h-[70dvh] min-h-[360px] overflow-y-auto rounded-lg border border-hairline bg-canvas px-4 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words text-ink">
-              {skill.content || '(空)'}
+            <div className="space-y-3">
+              {skill.files.map((file) => (
+                <section
+                  key={file.path}
+                  className="rounded-lg border border-hairline bg-canvas"
+                >
+                  <div className="border-b border-hairline px-3 py-2 text-[12px] font-medium text-muted">
+                    {file.path}
+                  </div>
+                  <pre className="max-h-[50dvh] overflow-y-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[13px] leading-relaxed text-ink">
+                    {file.content || '(空)'}
+                  </pre>
+                </section>
+              ))}
             </div>
           </SectionCard>
         </div>

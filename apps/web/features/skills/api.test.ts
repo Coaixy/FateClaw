@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { skillsApi, SYSTEM_PAIPAN_CATEGORIES } from './api';
+import { skillsApi } from './api';
 
 import { requestJson } from '@/lib/http/client';
 
@@ -14,16 +14,6 @@ describe('skillsApi bundle subscriptions', () => {
   beforeEach(() => {
     requestJsonMock.mockReset();
     requestJsonMock.mockResolvedValue({ unsubscribed_count: 2 });
-  });
-
-  it('keeps the guided paipan category list limited to system-supported types', () => {
-    expect(SYSTEM_PAIPAN_CATEGORIES).toEqual([
-      '八字',
-      '紫微',
-      '六爻',
-      '经占',
-      '奇门',
-    ]);
   });
 
   it('unsubscribes a bundle subscription by bundle id', async () => {
