@@ -18,6 +18,7 @@ import {
 } from '../api';
 import {
   areMessagesEqual,
+  hasFinalAssistantAfterLatestUser,
   isNearBottom,
 } from '../utils/display';
 
@@ -27,6 +28,24 @@ const CHAT_POLL_INTERVAL_MS = 1200;
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
 type ChatSessionSender = typeof chatSessionsApi.send;
+
+function appendActiveStreamingMessage(
+  nextMessages: Message[],
+  previousMessages: Message[],
+  activeStreamingMessageId: string | null,
+) {
+  if (
+    !activeStreamingMessageId ||
+    nextMessages.some((message) => message.id === activeStreamingMessageId)
+  ) {
+    return nextMessages;
+  }
+
+  const streamingMessage = previousMessages.find(
+    (message) => message.id === activeStreamingMessageId,
+  );
+  return streamingMessage ? [...nextMessages, streamingMessage] : nextMessages;
+}
 
 export async function sendChatSessionMessageWithOptions(
   sender: ChatSessionSender,
@@ -92,21 +111,47 @@ export function useChatMessages(options: {
         if (activeSessionRef.current !== sessionId) return true;
 
         const nextMessages = data.messages.reverse();
+        const activeStreamingMessageId = streamingMessageIdRef.current;
+        const streamingResolved =
+          isBackground &&
+          Boolean(activeStreamingMessageId) &&
+          hasFinalAssistantAfterLatestUser(nextMessages);
+        if (
+          streamingResolved &&
+          streamingMessageIdRef.current === activeStreamingMessageId
+        ) {
+          streamingMessageIdRef.current = null;
+        }
         const canFollow =
           !isBackground ||
           !scrollRef.current ||
           shouldAutoScrollRef.current ||
           isNearBottom(scrollRef.current);
 
-        setMessages((previous) =>
-          isBackground && nextMessages.length === 0 && previous.length > 0
+        setMessages((previous) => {
+          const visibleMessages =
+            isBackground && !streamingResolved
+              ? appendActiveStreamingMessage(
+                  nextMessages,
+                  previous,
+                  activeStreamingMessageId,
+                )
+              : nextMessages;
+
+          return isBackground &&
+            visibleMessages.length === 0 &&
+            previous.length > 0
             ? previous
-            : areMessagesEqual(previous, nextMessages)
+            : areMessagesEqual(previous, visibleMessages)
               ? previous
-              : ((shouldAutoScrollRef.current = canFollow), nextMessages),
-        );
+              : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
+        });
         setProcessing(data.processing);
-        setAwaitingRefresh(false);
+        setAwaitingRefresh(
+          isBackground &&
+            Boolean(activeStreamingMessageId) &&
+            !streamingResolved,
+        );
         return true;
       } catch {
         if (activeSessionRef.current === sessionId && !isBackground) {
@@ -286,11 +331,28 @@ export function useChatMessages(options: {
         return;
       }
 
-      if (payload.type === 'final' || payload.type === 'error') {
-        streamingMessageIdRef.current = null;
+      if (payload.type === 'final') {
+        if (payload.text.trim()) {
+          upsertStreamingAssistantMessage(sessionId, payload.text);
+        }
         setProcessing(false);
         setAwaitingRefresh(true);
         void loadMessages(sessionId, { background: true });
+        return;
+      }
+
+      if (payload.type === 'error') {
+        const activeStreamingMessageId = streamingMessageIdRef.current;
+        streamingMessageIdRef.current = null;
+        if (activeStreamingMessageId) {
+          setMessages((previous) =>
+            previous.filter(
+              (message) => message.id !== activeStreamingMessageId,
+            ),
+          );
+        }
+        setProcessing(false);
+        setAwaitingRefresh(false);
       }
     };
 

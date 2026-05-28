@@ -5,7 +5,11 @@ import {
 
 import { getContext } from '../context.js';
 import { traceEvent } from '../trace.js';
-import type { ContainerInput, TokenUsage } from '../types.js';
+import type {
+  ContainerInput,
+  PiSessionSnapshot,
+  TokenUsage,
+} from '../types.js';
 import type { RequestRuntime } from '../runtime.js';
 import type { RequestScope } from '../request-scope.js';
 import { createPiResourceLoader } from './resource-loader.js';
@@ -31,6 +35,22 @@ export interface PiSessionRunResult {
   usage: TokenUsage;
   records: PiToolExecutionRecord[];
   persistedSkillContext: SkillContextEntry[];
+  piSession?: PiSessionSnapshot;
+}
+
+function buildPiSessionSnapshot(args: {
+  id?: string;
+  file?: string;
+  persisted: boolean;
+  messages: unknown[];
+}): PiSessionSnapshot {
+  return {
+    id: args.id,
+    file: args.file,
+    persisted: args.persisted,
+    messageCount: args.messages.length,
+    messages: args.messages,
+  };
 }
 
 function resolveUserId(input: ContainerInput): string | undefined {
@@ -159,6 +179,12 @@ export async function runPiSession(args: {
       usage,
       records,
       persistedSkillContext: sessionContext.persistedSkillContext,
+      piSession: buildPiSessionSnapshot({
+        id: piSession.piSessionId,
+        file: piSession.sessionFile,
+        persisted: piSession.persisted,
+        messages: session.state.messages,
+      }),
     };
   } finally {
     unsubscribe();

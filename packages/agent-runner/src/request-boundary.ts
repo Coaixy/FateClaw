@@ -103,6 +103,7 @@ export async function executeContainerInput(
       provider,
       traceEvents: traceEvents.length > 0 ? traceEvents : undefined,
       agentGraph: kernelResult.agentGraph,
+      piSession: kernelResult.piSession,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

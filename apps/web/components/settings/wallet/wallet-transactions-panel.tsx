@@ -2,12 +2,49 @@ import type { WalletTransaction } from '@/features/billing/api';
 
 import { walletTransactionBadgeLabel } from './wallet-transaction-labels';
 
+export function mergeOfficialModelCharges(
+  transactions: WalletTransaction[],
+): WalletTransaction[] {
+  const merged = new Map<string, WalletTransaction>();
+  const result: WalletTransaction[] = [];
+
+  for (const transaction of transactions) {
+    const key =
+      transaction.kind === 'overage_charge' && transaction.request_id
+        ? transaction.request_id
+        : null;
+    if (!key) {
+      result.push(transaction);
+      continue;
+    }
+
+    const existing = merged.get(key);
+    if (!existing) {
+      const copy = { ...transaction };
+      merged.set(key, copy);
+      result.push(copy);
+      continue;
+    }
+
+    existing.amount_points += transaction.amount_points;
+    existing.reserved_delta_points += transaction.reserved_delta_points;
+    existing.point_source =
+      existing.point_source === transaction.point_source
+        ? existing.point_source
+        : 'mixed';
+    existing.point_batch_id = null;
+    existing.note = '官方模型 Token 扣费';
+  }
+
+  return result;
+}
+
 export function WalletTransactionsPanel({
   transactions,
 }: {
   transactions: WalletTransaction[];
 }) {
-  const visibleTransactions = transactions.filter(
+  const visibleTransactions = mergeOfficialModelCharges(transactions).filter(
     (transaction) => transaction.amount_points !== 0,
   );
 

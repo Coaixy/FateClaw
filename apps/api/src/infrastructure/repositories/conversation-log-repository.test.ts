@@ -98,6 +98,45 @@ describe('conversation log repository', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
+  it('stores only the pi session snapshot when provided', async () => {
+    const { clientCalls } = createMockPool();
+
+    await storeConversationLog({
+      id: 'log-1',
+      accountId: 'web:user-1',
+      requestId: 'request-1',
+      transcript: [],
+      traceEvents: [{ type: 'pi_turn_start' }, { type: 'pi_turn_end' }],
+      piSession: {
+        id: 'session-1',
+        file: '/tmp/session.json',
+        persisted: true,
+        messageCount: 2,
+        messages: [{ role: 'user', content: 'hi' }],
+      },
+    });
+
+    expect(clientCalls[1]?.params?.[6]).toBe(0);
+    expect(clientCalls[1]?.params?.[7]).toBe(0);
+    expect(clientCalls[1]?.params?.[8]).toBe(1);
+    expect(clientCalls[2]?.params?.[1]).toBe(JSON.stringify([]));
+    const storedTraceEvents = JSON.parse(clientCalls[2]?.params?.[2] as string);
+    expect(storedTraceEvents).toEqual([
+      {
+        type: 'pi_session_snapshot',
+        timestamp: expect.any(String),
+        session: {
+          id: 'session-1',
+          file: '/tmp/session.json',
+          persisted: true,
+          messageCount: 2,
+          messages: [{ role: 'user', content: 'hi' }],
+        },
+      },
+    ]);
+    expect(clientCalls[2]?.params?.[3]).toBeNull();
+  });
+
   it('builds summary pagination filters without selecting payload columns', async () => {
     const { calls } = createMockPool();
 

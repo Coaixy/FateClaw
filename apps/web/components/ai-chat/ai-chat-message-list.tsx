@@ -11,6 +11,7 @@ import {
   PAIPAN_SKILLS,
   formatChatTime,
   isKnowledgeTrajectoryMessage,
+  isStreamingAssistantMessage,
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
@@ -60,6 +61,9 @@ export function AiChatMessageList({
     return <ChatLoadingState count={3} />;
   }
 
+  const showThinkingIndicator =
+    sending && !messages.some(isStreamingAssistantMessage);
+
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
       {messages.map((message, index) => (
@@ -71,7 +75,7 @@ export function AiChatMessageList({
         />
       ))}
 
-      {sending && (
+      {showThinkingIndicator && (
         <div className="max-w-2xl mx-auto">
           <ThinkingIndicator progressLabel={progressLabel} />
         </div>

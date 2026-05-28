@@ -135,6 +135,8 @@ export interface ResponseIpcPayload {
   traceEvents?: unknown[];
   /** 持久化 task/evidence graph。 */
   agentGraph?: unknown;
+  /** Pi session 持久化状态与本轮完成后的消息快照。 */
+  piSession?: unknown;
   /** 结构化响应标识，例如最终回复完成标记。 */
   metadata?: unknown;
 }

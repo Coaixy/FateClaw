@@ -232,6 +232,7 @@ async function processOutboxResponse(
         model: payload.model,
         provider: payload.provider,
         traceEvents: payload.traceEvents,
+        piSession: payload.piSession,
         agentGraph: payload.agentGraph,
       }).then(
         () => recordConversationLogSuccess(),

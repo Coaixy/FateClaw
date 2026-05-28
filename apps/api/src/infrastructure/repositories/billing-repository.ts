@@ -1592,42 +1592,22 @@ export async function settleUserModelChargePoints(
     }
 
     if (actualChargePoints > 0) {
-      // 每个命中的赠送批次写一行流水（批次级溯源）
-      for (const bd of deduction.batchDeductions) {
-        await insertWalletTransaction(client, {
-          userId: reservation.user_id,
-          kind: 'overage_charge',
-          amountPoints: -bd.points,
-          pointSource: 'bonus',
-          pointBatchId: bd.batchId,
-          requestId,
-          note: '官方模型 Token 扣费（赠送积分批次）',
-          metadata: {
-            yearMonth: reservation.year_month,
-            batchId: bd.batchId,
-            requestTokens,
-            requestCostPoints,
-          },
-        });
-      }
-      // 从 purchased 兜底扣的部分写一条汇总流水
-      if (deduction.purchasedDeducted > 0) {
-        await insertWalletTransaction(client, {
-          userId: reservation.user_id,
-          kind: 'overage_charge',
-          amountPoints: -deduction.purchasedDeducted,
-          pointSource: 'purchased',
-          requestId,
-          note: '官方模型 Token 扣费',
-          metadata: {
-            yearMonth: reservation.year_month,
-            requestTokens,
-            requestCostPoints,
-            bonusDeducted: deduction.bonusDeducted,
-            purchasedDeducted: deduction.purchasedDeducted,
-          },
-        });
-      }
+      await insertWalletTransaction(client, {
+        userId: reservation.user_id,
+        kind: 'overage_charge',
+        amountPoints: -actualChargePoints,
+        pointSource: deduction.pointSource,
+        requestId,
+        note: '官方模型 Token 扣费',
+        metadata: {
+          yearMonth: reservation.year_month,
+          requestTokens,
+          requestCostPoints,
+          bonusDeducted: deduction.bonusDeducted,
+          purchasedDeducted: deduction.purchasedDeducted,
+          batchDeductions: deduction.batchDeductions,
+        },
+      });
     }
 
     await client.query('COMMIT');

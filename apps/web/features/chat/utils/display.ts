@@ -67,6 +67,36 @@ export function groupMessagesByDate(messages: Message[]): MessageGroup[] {
   return groups;
 }
 
+function getMessageKind(message: Message) {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const kind = (metadata as Record<string, unknown>).kind;
+  return typeof kind === 'string' ? kind : null;
+}
+
+export function isStreamingAssistantMessage(message: Message) {
+  return (
+    Boolean(message.is_bot_message) && getMessageKind(message) === 'streaming'
+  );
+}
+
+export function isFinalAssistantMessage(message: Message) {
+  return Boolean(message.is_bot_message) && getMessageKind(message) === 'final';
+}
+
+export function hasFinalAssistantAfterLatestUser(messages: Message[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (!messages[index].is_bot_message) {
+      return messages.slice(index + 1).some(isFinalAssistantMessage);
+    }
+  }
+
+  return messages.some(isFinalAssistantMessage);
+}
+
 export function isProgressMessage(
   message: Message,
 ): message is ProgressMessage {

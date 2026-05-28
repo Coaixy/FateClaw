@@ -114,6 +114,7 @@ function storeAiChatConversationLog(args: {
     model: args.payload.model,
     provider: args.payload.provider,
     traceEvents: args.payload.traceEvents,
+    piSession: args.payload.piSession,
     agentGraph: args.payload.agentGraph,
   }).then(
     () => recordConversationLogSuccess(),

@@ -2,6 +2,7 @@ import type {
   AgentTaskGraph,
   ContainerInput,
   LlmRuntimeSnapshot,
+  PiSessionSnapshot,
   SkillContextEntry,
   TokenUsage,
 } from '../types.js';
@@ -13,6 +14,7 @@ export interface PiRuntimeResult {
   usage: TokenUsage;
   skillContext: SkillContextEntry[];
   agentGraph: AgentTaskGraph;
+  piSession?: PiSessionSnapshot;
 }
 
 export interface PiRuntimeInput {

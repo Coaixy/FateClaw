@@ -37,6 +37,23 @@ export interface ConversationLogSummaryRow {
   trace_event_count: number;
 }
 
+function buildTraceEventsForStorage(log: {
+  traceEvents?: unknown[];
+  piSession?: unknown;
+}): unknown[] {
+  if (!log.piSession) {
+    return log.traceEvents ?? [];
+  }
+
+  return [
+    {
+      type: 'pi_session_snapshot',
+      timestamp: new Date().toISOString(),
+      session: log.piSession,
+    },
+  ];
+}
+
 function countToolUseEvents(transcript: unknown[]): number {
   return transcript.reduce<number>((count, event) => {
     if (
@@ -60,16 +77,19 @@ export async function storeConversationLog(log: {
   model?: string | null;
   provider?: string | null;
   traceEvents?: unknown[];
+  piSession?: unknown;
   agentGraph?: unknown;
 }): Promise<void> {
+  const usesPiSession = Boolean(log.piSession);
+  const agentGraph = usesPiSession ? undefined : log.agentGraph;
   const graphSummary =
-    log.agentGraph &&
-    typeof log.agentGraph === 'object' &&
-    'summary' in (log.agentGraph as Record<string, unknown>)
-      ? (log.agentGraph as Record<string, unknown>).summary
+    agentGraph &&
+    typeof agentGraph === 'object' &&
+    'summary' in (agentGraph as Record<string, unknown>)
+      ? (agentGraph as Record<string, unknown>).summary
       : null;
-  const transcript = log.transcript ?? [];
-  const traceEvents = log.traceEvents ?? [];
+  const transcript = usesPiSession ? [] : (log.transcript ?? []);
+  const traceEvents = buildTraceEventsForStorage(log);
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
@@ -103,7 +123,7 @@ export async function storeConversationLog(log: {
         log.id,
         JSON.stringify(transcript),
         traceEvents.length > 0 ? JSON.stringify(traceEvents) : null,
-        log.agentGraph ? JSON.stringify(log.agentGraph) : null,
+        agentGraph ? JSON.stringify(agentGraph) : null,
       ],
     );
     await client.query('COMMIT');

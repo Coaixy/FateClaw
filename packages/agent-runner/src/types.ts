@@ -324,6 +324,14 @@ export type TraceEventEntry = Record<string, unknown> & {
   accountId?: string;
 };
 
+export interface PiSessionSnapshot {
+  id?: string;
+  file?: string;
+  persisted: boolean;
+  messageCount: number;
+  messages: unknown[];
+}
+
 /**
  * 容器运行结束后回传给宿主机的结构。
  */
@@ -349,6 +357,8 @@ export interface ContainerOutput {
   traceEvents?: TraceEventEntry[];
   /** 本次请求的持久化 task/evidence graph。 */
   agentGraph?: AgentTaskGraph;
+  /** Pi session 持久化状态与本轮完成后的消息快照。 */
+  piSession?: PiSessionSnapshot;
 }
 
 export interface OutboxResponse {
@@ -376,6 +386,8 @@ export interface OutboxResponse {
   traceEvents?: TraceEventEntry[];
   /** 持久化 task/evidence graph。 */
   agentGraph?: AgentTaskGraph;
+  /** Pi session 持久化状态与本轮完成后的消息快照。 */
+  piSession?: PiSessionSnapshot;
   /** 结构化响应标识，例如最终回复完成标记。 */
   metadata?: unknown;
 }

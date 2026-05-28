@@ -90,5 +90,6 @@ export async function executePiRuntime(
     usage: result.usage ?? emptyUsage(),
     skillContext,
     agentGraph: graphBuilder.build(),
+    piSession: result.piSession,
   };
 }

@@ -126,6 +126,7 @@ async function processInboxMessage(
       provider: output.provider,
       traceEvents: output.traceEvents,
       agentGraph: output.agentGraph,
+      piSession: output.piSession,
       metadata: {
         kind: 'final',
         turn_complete: true,

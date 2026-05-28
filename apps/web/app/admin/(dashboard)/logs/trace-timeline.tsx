@@ -154,6 +154,12 @@ const TRACE_EVENT_META: Record<
     label: 'Trace 截断',
     category: 'error',
   },
+  pi_session_snapshot: {
+    icon: FileText,
+    colorClass: 'text-cyan-300',
+    label: 'Pi Session',
+    category: 'summary',
+  },
 };
 
 const TRACE_HIDDEN_FIELDS = new Set([
@@ -457,6 +463,26 @@ function ReadableTraceDetail({
     );
   }
 
+  if (event.type === 'pi_session_snapshot') {
+    const session = isRecord(event.session) ? event.session : null;
+    return (
+      <TraceDetailCard tone="blue">
+        <TraceMetricChips
+          items={[
+            { label: 'id', value: toDisplayText(session?.id) },
+            { label: 'persisted', value: toDisplayText(session?.persisted) },
+            { label: 'messages', value: toDisplayText(session?.messageCount) },
+          ]}
+        />
+        {toDisplayText(session?.file) && (
+          <pre className="mt-2 whitespace-pre-wrap break-all rounded-md border border-hairline bg-canvas px-2 py-1.5 text-[11px] text-muted">
+            {toDisplayText(session?.file)}
+          </pre>
+        )}
+      </TraceDetailCard>
+    );
+  }
+
   if (event.type === 'tool_result') {
     const modelOutputPreview = fieldText(event, 'modelOutputPreview');
     if (!modelOutputPreview) return null;
@@ -609,6 +635,12 @@ function buildInlinePreview(event: TraceEventEntry): string {
   const provider = get('provider');
   const model = get('model');
   if (provider && model) pieces.push(`${provider}/${model}`);
+  if (event.type === 'pi_session_snapshot' && isRecord(event.session)) {
+    const messageCount = event.session.messageCount;
+    if (typeof messageCount === 'number') pieces.push(`${messageCount} messages`);
+    const id = event.session.id;
+    if (typeof id === 'string') pieces.push(id);
+  }
   const modelOutputBytes = get('modelOutputBytes');
   if (modelOutputBytes) pieces.push(`${modelOutputBytes}b`);
   const error = get('error');
@@ -620,6 +652,12 @@ function buildInlinePreview(event: TraceEventEntry): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function toDisplayText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
 }
 
 export function TraceTimeline({
