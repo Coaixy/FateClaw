@@ -237,6 +237,17 @@ export interface ActiveBoardContext extends SkillContextEntry {
   sourceMessageId: string;
 }
 
+export interface SessionBoardContext {
+  sourceMessageId: string;
+  source: 'official_paipan' | 'user_pasted_board';
+  skill: string;
+  artifactTitle?: string;
+  promptText: string;
+  artifactData?: unknown;
+  createdAt?: string;
+  isCurrent?: boolean;
+}
+
 export interface HistoryMessage {
   role: 'user' | 'assistant';
   content: string;

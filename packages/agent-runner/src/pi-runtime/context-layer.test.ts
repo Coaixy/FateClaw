@@ -74,6 +74,33 @@ function createInput(): ContainerInput {
         ],
       },
     ],
+    sessionBoardContexts: [
+      {
+        sourceMessageId: 'message-1',
+        source: 'official_paipan',
+        skill: 'bazi-paipan',
+        artifactTitle: '当前选中盘面',
+        promptText: '当前选中八字盘面',
+        artifactData: { bazi: '当前选中八字盘面 JSON' },
+        createdAt: '2026-05-25T00:00:00.000Z',
+        isCurrent: true,
+      },
+      {
+        sourceMessageId: 'message-2',
+        source: 'user_pasted_board',
+        skill: 'user-pasted-board::八字',
+        artifactTitle: '自贴盘面: 八字',
+        promptText: '用户自贴八字盘面',
+        artifactData: {
+          category: '八字',
+          content: '用户自贴八字盘面',
+          question: '看事业',
+          source: 'user_pasted_board',
+        },
+        createdAt: '2026-05-25T00:01:00.000Z',
+        isCurrent: false,
+      },
+    ],
   };
 }
 
@@ -95,12 +122,23 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).not.toContain('历史八字盘面');
     expect(context.prompt).not.toContain('id="historical_artifacts"');
     expect(context.prompt).not.toContain('历史八字盘面 JSON');
-    expect(context.prompt).toContain('id="active_board_context"');
+    expect(context.prompt).not.toContain('id="active_board_context"');
+    expect(context.prompt).toContain('id="session_board_context"');
+    expect(context.prompt).toContain('本会话包含 2 个盘面');
+    expect(context.prompt).toContain(
+      '<board index="1" current="true" source="official_paipan"',
+    );
     expect(context.prompt).toContain('当前选中八字盘面');
-    expect(context.prompt).toContain('id="pasted_board"');
+    expect(context.prompt).not.toContain('id="pasted_board"');
+    expect(context.prompt).toContain(
+      '<board index="2" current="false" source="user_pasted_board"',
+    );
     expect(context.prompt).toContain('用户自贴八字盘面');
+    expect(context.prompt).toContain('用户提供的数据材料');
+    expect(context.prompt).not.toContain('当前选中八字盘面 JSON');
     expect(context.prompt).toContain('id="followup_context"');
-    expect(context.prompt).toContain('数据库里的连续性盘面');
+    expect(context.prompt).not.toContain('数据库里的连续性盘面');
+    expect(context.prompt).not.toContain('数据库里的盘面 JSON');
     expect(context.prompt).toContain('id="long_term_memory"');
     expect(context.prompt).toContain('用户长期记忆');
     expect(context.prompt).not.toContain('id="recent_history_store"');
@@ -111,8 +149,7 @@ describe('createPiSessionContext', () => {
     expect(context.provenance.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         'current_request_metadata',
-        'active_board_context',
-        'pasted_board',
+        'session_board_context',
         'followup_context',
         'long_term_memory',
       ]),
@@ -131,5 +168,39 @@ describe('createPiSessionContext', () => {
       boardSkill: 'bazi-paipan',
       interpretationOutput: '数据库里的上一轮解读',
     });
+  });
+
+  it('does not inject raw JSON from legacy activeBoardContext fallback', async () => {
+    const requestScope = createRequestScope();
+    const context = await createPiSessionContext({
+      containerInput: {
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        llmRuntime,
+        userMessage: '继续看',
+        activeBoardContext: {
+          sourceMessageId: 'legacy-board',
+          skill: 'bazi-paipan',
+          output: '{"bazi":"raw json"}',
+          artifactData: { bazi: 'raw json' },
+        },
+        history: [],
+      },
+      runtime: {
+        deps: {
+          memoryStore: {
+            read: vi.fn(async () => ''),
+          },
+          skillCatalog: {
+            listEffectiveUserSkills: vi.fn(async () => []),
+          },
+        },
+      },
+      requestScope,
+    });
+
+    expect(context.prompt).not.toContain('id="session_board_context"');
+    expect(context.prompt).not.toContain('{"bazi":"raw json"}');
+    expect(context.prompt).not.toContain('raw json');
   });
 });

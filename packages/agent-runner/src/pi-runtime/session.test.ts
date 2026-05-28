@@ -90,6 +90,23 @@ function createInput(): ContainerInput {
       content: '用户自贴八字盘面',
       question: '看事业',
     },
+    sessionBoardContexts: [
+      {
+        sourceMessageId: 'message-1',
+        source: 'official_paipan',
+        skill: 'bazi-paipan',
+        promptText: '当前选中八字盘面',
+        isCurrent: true,
+      },
+      {
+        sourceMessageId: 'message-2',
+        source: 'user_pasted_board',
+        skill: 'user-pasted-board::八字',
+        artifactTitle: '自贴盘面: 八字',
+        promptText: '用户自贴八字盘面',
+        isCurrent: false,
+      },
+    ],
   };
 }
 
@@ -198,9 +215,11 @@ describe('runPiSession', () => {
     expect(appendedContext).toContain('id="context_provenance"');
     expect(appendedContext).not.toContain('id="session_history"');
     expect(appendedContext).not.toContain('历史八字盘面');
-    expect(appendedContext).toContain('id="active_board_context"');
+    expect(appendedContext).not.toContain('id="active_board_context"');
+    expect(appendedContext).toContain('id="session_board_context"');
+    expect(appendedContext).toContain('本会话包含 2 个盘面');
     expect(appendedContext).toContain('当前选中八字盘面');
-    expect(appendedContext).toContain('id="pasted_board"');
+    expect(appendedContext).not.toContain('id="pasted_board"');
     expect(appendedContext).toContain('用户自贴八字盘面');
     expect(appendedContext).toContain('id="current_request_metadata"');
     expect(appendedContext).not.toContain('基于这个盘继续看事业');

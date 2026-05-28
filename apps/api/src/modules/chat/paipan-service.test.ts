@@ -86,7 +86,7 @@ describe('commitDirectPaipanForOwnedUser', () => {
         sessionTitle: '六爻排盘',
         skillContextEntry: {
           skill: 'iching-paipan',
-          output: '{"ok":true}',
+          output: '六爻排盘（系统排盘结果）\nok：true',
           artifactType: 'skill.iching-paipan',
           artifactTitle: '六爻排盘',
           artifactData: { ok: true },

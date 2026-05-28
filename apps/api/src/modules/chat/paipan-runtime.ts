@@ -12,6 +12,7 @@ import {
   type SkillParamType,
   type SkillParametersSchema,
 } from './paipan-registry.js';
+import { formatOfficialPaipan } from './paipan-formatters.js';
 
 const PAIPAN_SKILL_DIRS = new Set(
   listPaipanRegistry().map((skill) => skill.dir),
@@ -350,7 +351,7 @@ export async function executeDirectPaipan(args: {
     skill,
     input: args.input,
   });
-  const output = JSON.stringify(artifactData);
+  const output = formatOfficialPaipan(skill.dir, artifactData);
 
   return {
     skill,

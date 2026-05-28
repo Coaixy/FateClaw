@@ -111,6 +111,22 @@ export async function getSessionMessageById(
   return rows[0] as NewMessage | undefined;
 }
 
+export async function getSessionMessagesWithToolContext(
+  accountId: string,
+  sessionId: string,
+): Promise<NewMessage[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM messages
+     WHERE account_id = $1
+       AND session_id = $2
+       AND tool_context IS NOT NULL
+       AND deleted_at IS NULL
+     ORDER BY timestamp DESC`,
+    [accountId, sessionId],
+  );
+  return rows as NewMessage[];
+}
+
 export async function getMessagesSince(
   accountId: string,
   sinceTimestamp: string,

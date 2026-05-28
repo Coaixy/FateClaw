@@ -21,6 +21,7 @@ import {
   getConversationLogByRequestId,
   getRecentMessages,
   getSessionMessageById,
+  getSessionMessagesWithToolContext,
   getUserById,
   storeMessage,
   touchChatSession,
@@ -42,7 +43,7 @@ import {
 } from '../../contracts-adapter/chat-contract.js';
 import {
   buildActiveBoardContext,
-  type ActiveBoardContextDto,
+  buildSessionBoardContexts,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './message-handler.js';
 import { resolveUserLlmRuntime } from '../system/system-config.js';
@@ -85,17 +86,9 @@ async function releaseChatSessionProcessing(sessionId: string): Promise<void> {
   await getRedis().del(sessionProcessingKey(sessionId));
 }
 
-function buildSelectedBoardContext(message: NewMessage): {
-  activeBoardContext: ActiveBoardContextDto;
-} | null {
+function buildSelectedBoardContext(message: NewMessage): boolean {
   const activeBoardContext = buildActiveBoardContext(message);
-  if (!activeBoardContext) {
-    return null;
-  }
-
-  return {
-    activeBoardContext,
-  };
+  return Boolean(activeBoardContext);
 }
 
 async function getOwnedSession(
@@ -278,11 +271,10 @@ export async function sendOwnedChatSessionMessage(
         if (!selectedBoardMessage) {
           return fail(404, '指定的盘面消息不存在');
         }
-        const boardContext = buildSelectedBoardContext(selectedBoardMessage);
-        if (!boardContext) {
+        if (!buildSelectedBoardContext(selectedBoardMessage)) {
           return fail(400, '指定的消息不包含可用盘面');
         }
-        return ok(boardContext);
+        return ok(true);
       })()
     : null;
   if (selectedBoardContext && !selectedBoardContext.ok) {
@@ -316,6 +308,21 @@ export async function sendOwnedChatSessionMessage(
       session_id: session.id,
     };
     await storeMessage(userMessage);
+    const boardMessages = await getSessionMessagesWithToolContext(
+      session.account_id,
+      session.id,
+    );
+    const sessionBoardContexts = buildSessionBoardContexts(boardMessages, {
+      selectedBoardMessageId,
+      currentPastedBoard:
+        input.inputKind === 'user_pasted_board' && input.pastedBoard
+          ? {
+              sourceMessageId: msgId,
+              pastedBoard: input.pastedBoard,
+              createdAt: userMessage.timestamp,
+            }
+          : undefined,
+    });
 
     const structured = await buildStructuredInputForSession(
       {
@@ -335,9 +342,7 @@ export async function sendOwnedChatSessionMessage(
       inputKind: input.inputKind,
       pastedBoard: input.pastedBoard,
       history: [],
-      activeBoardContext: selectedBoardContext?.ok
-        ? selectedBoardContext.data.activeBoardContext
-        : undefined,
+      sessionBoardContexts,
       userName: structured.userName,
       assistantName: structured.assistantName,
       sessionId: session.id,

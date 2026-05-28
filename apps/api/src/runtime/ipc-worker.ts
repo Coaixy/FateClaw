@@ -37,6 +37,7 @@ import type { User } from '../shared/types.js';
 import type {
   ActiveBoardContext,
   HistoryMessage,
+  SessionBoardContext,
 } from '../shared/token-budget.js';
 
 type ChatInputKind = 'normal' | 'user_pasted_board';
@@ -389,6 +390,7 @@ export function submitAiChatInboxRequest(input: {
   pastedBoard?: UserPastedBoardInput;
   history: HistoryMessage[];
   activeBoardContext?: ActiveBoardContext;
+  sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
   userName?: string;
   assistantName?: string;
@@ -471,6 +473,7 @@ export function submitAiChatInboxRequest(input: {
           pastedBoard: input.pastedBoard,
           history: input.history,
           activeBoardContext: input.activeBoardContext,
+          sessionBoardContexts: input.sessionBoardContexts,
           sessionId: input.sessionId,
           userName: input.userName,
           assistantName: input.assistantName,

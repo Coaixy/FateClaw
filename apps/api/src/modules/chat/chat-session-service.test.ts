@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockGetChatSession,
   mockGetSessionMessageById,
+  mockGetSessionMessagesWithToolContext,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockIncrementDailyMessageCount,
@@ -14,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
   mockGetSessionMessageById: vi.fn(),
+  mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockIncrementDailyMessageCount: vi.fn(),
@@ -27,6 +29,7 @@ const {
 vi.mock('../../infrastructure/db.js', () => ({
   getChatSession: mockGetChatSession,
   getSessionMessageById: mockGetSessionMessageById,
+  getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   storeMessage: mockStoreMessage,
@@ -147,11 +150,33 @@ describe('chat-session-service selected board context', () => {
       tool_context: JSON.stringify([
         {
           skill: 'bazi-paipan',
-          output: '{"bazi":true}',
+          output: '八字排盘（系统排盘结果）\nbazi：true',
           artifactData: { bazi: true },
         },
       ]),
     });
+    mockGetSessionMessagesWithToolContext.mockResolvedValue([
+      {
+        id: 'board-msg-1',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content: '这是一张八字盘',
+        timestamp: '2026-04-26T09:30:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        tool_context: JSON.stringify([
+          {
+            skill: 'bazi-paipan',
+            output: '八字排盘（系统排盘结果）\nbazi：true',
+            artifactTitle: '八字排盘',
+            artifactData: { bazi: true },
+          },
+        ]),
+      },
+    ]);
     mockDispatchAiChatPrompt.mockResolvedValue({
       status: 'success',
       text: '好的，我来解读',
@@ -160,7 +185,7 @@ describe('chat-session-service selected board context', () => {
     });
   });
 
-  it('passes selected board through activeBoardContext without DB history injection', async () => {
+  it('passes all session boards and only uses selected id for current marking', async () => {
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
       selectedBoardMessageId: 'board-msg-1',
@@ -173,14 +198,18 @@ describe('chat-session-service selected board context', () => {
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 'web:user-1',
-        activeBoardContext: {
-          sourceMessageId: 'board-msg-1',
-          skill: 'bazi-paipan',
-          output: '{"bazi":true}',
-          artifactType: undefined,
-          artifactTitle: undefined,
-          artifactData: { bazi: true },
-        },
+        sessionBoardContexts: [
+          {
+            sourceMessageId: 'board-msg-1',
+            source: 'official_paipan',
+            skill: 'bazi-paipan',
+            artifactTitle: '八字排盘',
+            promptText: '八字排盘（系统排盘结果）\nbazi：true',
+            artifactData: { bazi: true },
+            createdAt: '2026-04-26T09:30:00.000Z',
+            isCurrent: true,
+          },
+        ],
         history: [],
       }),
     );
@@ -229,6 +258,74 @@ describe('chat-session-service selected board context', () => {
       'session-1',
       'gpt-4.1',
       128_000,
+    );
+  });
+
+  it('defaults the current board to the newest valid board when no board is selected', async () => {
+    mockGetSessionMessagesWithToolContext.mockResolvedValueOnce([
+      {
+        id: 'older-board',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content: '旧盘',
+        timestamp: '2026-04-26T09:30:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        tool_context: JSON.stringify([
+          {
+            skill: 'bazi-paipan',
+            output: '八字排盘（系统排盘结果）\n旧盘',
+            artifactTitle: '八字排盘',
+            artifactData: { oldBoard: true },
+          },
+        ]),
+      },
+      {
+        id: 'newer-board',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content: '新盘',
+        timestamp: '2026-04-26T10:30:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        tool_context: JSON.stringify([
+          {
+            skill: 'bazi-paipan',
+            output: '八字排盘（系统排盘结果）\n新盘',
+            artifactTitle: '八字排盘',
+            artifactData: { newerBoard: true },
+          },
+        ]),
+      },
+    ]);
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续分析',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionBoardContexts: [
+          expect.objectContaining({
+            sourceMessageId: 'newer-board',
+            isCurrent: true,
+          }),
+          expect.objectContaining({
+            sourceMessageId: 'older-board',
+            isCurrent: false,
+          }),
+        ],
+      }),
     );
   });
 });

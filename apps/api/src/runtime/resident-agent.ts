@@ -8,6 +8,7 @@ import { ensureLocalAgentRunning } from './local-runner.js';
 import {
   type ActiveBoardContext,
   type HistoryMessage,
+  type SessionBoardContext,
 } from '../shared/token-budget.js';
 import type { EffectiveLlmRuntimeConfig } from '../modules/system/system-config.js';
 
@@ -30,6 +31,7 @@ export async function dispatchAiChatPrompt(input: {
   pastedBoard?: UserPastedBoardInput;
   history: HistoryMessage[];
   activeBoardContext?: ActiveBoardContext;
+  sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
   userName?: string;
   assistantName?: string;
@@ -46,6 +48,7 @@ export async function dispatchAiChatPrompt(input: {
     pastedBoard: input.pastedBoard,
     history: input.history,
     activeBoardContext: input.activeBoardContext,
+    sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
     userName: input.userName,
     assistantName: input.assistantName,
