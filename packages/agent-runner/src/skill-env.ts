@@ -28,7 +28,6 @@ export function buildSkillEnv(
     // Skill 元数据
     SKILL_NAME: _skillName,
     SKILL_DIR: skillDir,
-    SKILL_API_BASE: ctx.skillApiBase,
 
     // 系统必需
     TZ: ctx.timezone,

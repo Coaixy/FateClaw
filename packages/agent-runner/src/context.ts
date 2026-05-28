@@ -12,8 +12,6 @@ export interface AgentContext {
   userId: string;
   /** 用户时区。 */
   timezone: string;
-  /** Skill API 基础地址。 */
-  skillApiBase: string;
 }
 
 let _ctx: AgentContext | null = null;
@@ -35,8 +33,6 @@ export function initContext(): AgentContext {
     userId: process.env.FATECLAW_USER_ID?.trim() || '',
     timezone:
       process.env.FATECLAW_TIMEZONE || process.env.TZ || 'Asia/Shanghai',
-    skillApiBase:
-      process.env.SKILL_API_BASE || 'https://skill.lookfate.com/api/v1',
   };
   return _ctx;
 }

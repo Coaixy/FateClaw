@@ -15,7 +15,6 @@ const envConfig = readEnvFile([
   'REDIS_URL',
   'JWT_SECRET',
   'MANAGER_KEY',
-  'SKILL_API_BASE',
   'WITHDRAWAL_ENCRYPTION_KEY',
 ]);
 
@@ -117,12 +116,6 @@ export const TRIGGER_PATTERN = new RegExp(
 // 定时任务使用的时区
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-// Skill API 基础地址
-export const SKILL_API_BASE =
-  process.env.SKILL_API_BASE ||
-  envConfig.SKILL_API_BASE ||
-  'https://skill.letfate.com/v1';
 
 // conversation_logs.trace_events 的保留天数。超过此天数的 trace_events 列
 // 会被定时任务置 NULL（transcript 等业务数据保留不变）。trace 是纯调试数据，

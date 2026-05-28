@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { SKILL_API_BASE } from '../../infrastructure/config.js';
 import {
   createConfigAuditLog,
   createOfficialModelConfig,
@@ -59,7 +58,6 @@ export interface EffectiveLlmRuntimeConfig {
   model: string;
   contextWindowTokens: number;
   maxOutputTokens: number;
-  skillApiBase: string;
   inputTokenPricePerMillionPoints: number;
   outputTokenPricePerMillionPoints: number;
 }
@@ -218,7 +216,6 @@ async function resolveOfficialRuntime(
     contextWindowTokens,
     // 输出上限不再从后台配置读取，避免把“上下文窗口”误传成供应商 API 的 max_tokens。
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    skillApiBase: SKILL_API_BASE,
     inputTokenPricePerMillionPoints: model.input_token_price_per_million_points,
     outputTokenPricePerMillionPoints:
       model.output_token_price_per_million_points,
@@ -262,7 +259,6 @@ async function resolveCustomRuntime(
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    skillApiBase: SKILL_API_BASE,
     inputTokenPricePerMillionPoints: 0,
     outputTokenPricePerMillionPoints: 0,
   };

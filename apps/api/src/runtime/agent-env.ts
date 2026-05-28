@@ -5,12 +5,7 @@
  * 新增 env 字段只需改这一个文件。
  */
 
-import {
-  DATABASE_URL,
-  REDIS_URL,
-  SKILL_API_BASE,
-  TIMEZONE,
-} from '../infrastructure/config.js';
+import { DATABASE_URL, REDIS_URL, TIMEZONE } from '../infrastructure/config.js';
 import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
@@ -32,7 +27,6 @@ export interface AgentEnv {
   FATECLAW_TIMEZONE: string;
 
   // --- 连接 ---
-  SKILL_API_BASE: string;
   REDIS_URL?: string;
   DATABASE_URL?: string;
 
@@ -74,7 +68,6 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     FATECLAW_TIMEZONE: TIMEZONE,
 
     // 连接
-    SKILL_API_BASE,
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,
     DATABASE_URL: DATABASE_URL || process.env.DATABASE_URL || undefined,
 
