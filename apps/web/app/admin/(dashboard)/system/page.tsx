@@ -30,6 +30,7 @@ export default function AdminSystemConfigPage() {
   const [busyId, setBusyId] = useState('');
   const [newProvider, setNewProvider] =
     useState<ProviderDraft>(createEmptyDraft);
+  const [newProviderSecret, setNewProviderSecret] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +128,9 @@ export default function AdminSystemConfigPage() {
       <ProviderCreatePanel
         draft={newProvider}
         busy={busyId === 'create-provider'}
+        secret={newProviderSecret}
         onChange={setNewProvider}
+        onSecretChange={setNewProviderSecret}
         onCreate={async () =>
           withBusy('create-provider', async () => {
             await admin.createOfficialModel({
@@ -135,8 +138,10 @@ export default function AdminSystemConfigPage() {
               model_key:
                 newProvider.model_key || buildSuggestedProviderKey(newProvider),
               base_url: newProvider.base_url || null,
+              api_key: newProviderSecret.trim() || undefined,
             });
             setNewProvider(createEmptyDraft());
+            setNewProviderSecret('');
           })
         }
       />
@@ -157,9 +162,9 @@ export default function AdminSystemConfigPage() {
         {overview.providers.length > 0 ? (
           <div className="space-y-3">
             <div className="hidden gap-3 px-4 text-[10px] uppercase tracking-[0.14em] text-muted xl:grid xl:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="grid grid-cols-[minmax(160px,1.2fr)_92px_minmax(140px,1fr)_minmax(96px,0.75fr)_16px] gap-3">
+              <div className="grid grid-cols-[minmax(160px,1.2fr)_minmax(140px,0.8fr)_minmax(140px,1fr)_minmax(96px,0.75fr)_16px] gap-3">
                 <div>模型</div>
-                <div>类型</div>
+                <div>协议类型</div>
                 <div>模型</div>
                 <div>Base URL</div>
                 <div />
@@ -182,11 +187,10 @@ export default function AdminSystemConfigPage() {
                     });
                   })
                 }
-                onSaveSecret={async (id, secret, authMode) =>
+                onSaveSecret={async (id, secret) =>
                   withBusy(id, async () => {
                     await admin.setOfficialModelSecret(id, {
                       api_key: secret,
-                      auth_mode: authMode,
                     });
                   })
                 }

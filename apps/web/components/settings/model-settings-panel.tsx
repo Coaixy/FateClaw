@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Check,
-  KeyRound,
   Loader2,
   RefreshCw,
   Save,
@@ -12,52 +11,25 @@ import {
 
 import {
   modelSettingsApi,
-  type ModelAuthMode,
-  type ModelProtocol,
+  type ModelPiApi,
   type ModelSettingsOverview,
   type OfficialModel,
 } from '@/features/model-settings/api';
+import {
+  PI_API_OPTIONS,
+  protocolTypeLabel,
+} from '../../features/model-settings/pi-api-options';
 import { officialModelPriceLabel } from '@/components/settings/model-pricing';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none focus:border-hairline';
 
 type CustomDraft = {
-  protocol: ModelProtocol;
+  pi_api: ModelPiApi;
   base_url: string;
   model_name: string;
   context_window_tokens: number;
-  auth_mode: ModelAuthMode;
 };
-
-function protocolLabel(protocol: ModelProtocol): string {
-  if (protocol === 'openai-compatible') return 'OpenAI-compatible';
-  if (protocol === 'openai-response') return 'OpenAI-response';
-  if (protocol === 'anthropic') return 'Anthropic';
-  return 'Gemini';
-}
-
-function defaultAuthMode(protocol: ModelProtocol): ModelAuthMode {
-  if (protocol === 'gemini') return 'gemini_api_key';
-  if (protocol === 'anthropic') return 'anthropic_api_key';
-  return 'openai_api_key';
-}
-
-function authOptions(protocol: ModelProtocol): Array<{
-  value: ModelAuthMode;
-  label: string;
-}> {
-  if (protocol === 'gemini') {
-    return [{ value: 'gemini_api_key', label: 'Gemini API Key' }];
-  }
-  if (protocol === 'anthropic') {
-    return [
-      { value: 'anthropic_api_key', label: 'Anthropic API Key' },
-      { value: 'claude_code_oauth_token', label: 'Claude Code OAuth' },
-    ];
-  }
-  return [{ value: 'openai_api_key', label: 'OpenAI API Key' }];
-}
 
 export function ModelSettingsPanel() {
   const [overview, setOverview] = useState<ModelSettingsOverview | null>(null);
@@ -65,11 +37,10 @@ export function ModelSettingsPanel() {
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [custom, setCustom] = useState<CustomDraft>({
-    protocol: 'openai-compatible',
+    pi_api: 'openai-completions',
     base_url: '',
     model_name: '',
     context_window_tokens: 0,
-    auth_mode: 'openai_api_key',
   });
   const [secret, setSecret] = useState('');
 
@@ -80,11 +51,10 @@ export function ModelSettingsPanel() {
       const data = await modelSettingsApi.overview();
       setOverview(data);
       setCustom({
-        protocol: data.custom?.protocol ?? 'openai-compatible',
+        pi_api: data.custom?.pi_api ?? 'openai-completions',
         base_url: data.custom?.base_url ?? '',
         model_name: data.custom?.model_name ?? '',
         context_window_tokens: data.custom?.context_window_tokens ?? 0,
-        auth_mode: data.custom?.auth_mode ?? 'openai_api_key',
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '加载模型设置失败');
@@ -100,36 +70,20 @@ export function ModelSettingsPanel() {
   const saveCustom = async () => {
     setBusy('custom');
     setMessage('');
+    const nextSecret = secret.trim();
     try {
       await modelSettingsApi.saveCustom({
-        protocol: custom.protocol,
+        pi_api: custom.pi_api,
         base_url: custom.base_url.trim() || null,
         model_name: custom.model_name.trim(),
         context_window_tokens: custom.context_window_tokens || null,
-        auth_mode: custom.auth_mode,
+        api_key: nextSecret || undefined,
       });
-      setMessage('自配模型配置已保存');
+      setSecret('');
+      setMessage('自配模型已保存');
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存失败');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const saveSecret = async () => {
-    setBusy('secret');
-    setMessage('');
-    try {
-      await modelSettingsApi.saveCustomSecret({
-        api_key: secret,
-        auth_mode: custom.auth_mode,
-      });
-      setSecret('');
-      setMessage('自配模型密钥已保存');
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存密钥失败');
     } finally {
       setBusy('');
     }
@@ -210,7 +164,6 @@ export function ModelSettingsPanel() {
         setCustom={setCustom}
         setSecret={setSecret}
         onSaveCustom={saveCustom}
-        onSaveSecret={saveSecret}
         onSelectCustom={selectCustom}
       />
 
@@ -233,7 +186,6 @@ function CustomModelSection({
   setCustom,
   setSecret,
   onSaveCustom,
-  onSaveSecret,
   onSelectCustom,
 }: {
   busy: string;
@@ -244,23 +196,8 @@ function CustomModelSection({
   setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
   setSecret: (value: string) => void;
   onSaveCustom: () => Promise<void>;
-  onSaveSecret: () => Promise<void>;
   onSelectCustom: () => Promise<void>;
 }) {
-  const options = useMemo(
-    () => authOptions(custom.protocol),
-    [custom.protocol],
-  );
-
-  useEffect(() => {
-    if (!options.some((option) => option.value === custom.auth_mode)) {
-      setCustom((prev) => ({
-        ...prev,
-        auth_mode: defaultAuthMode(prev.protocol),
-      }));
-    }
-  }, [custom.auth_mode, options, setCustom]);
-
   return (
     <section className="rounded-lg border border-hairline bg-surface-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -274,30 +211,28 @@ function CustomModelSection({
       </div>
       <CustomModelFields
         custom={custom}
-        options={options}
         setCustom={setCustom}
       />
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
           type="password"
           value={secret}
           onChange={(event) => setSecret(event.target.value)}
-          placeholder="输入 API Key / OAuth Token"
+          placeholder={
+            hasSecret
+              ? '留空则继续使用已保存密钥'
+              : '输入 API Key'
+          }
           className={CONTROL}
         />
         <button
           type="button"
-          onClick={() => void onSaveSecret()}
-          disabled={busy === 'secret' || !secret}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-hairline px-4 text-sm disabled:opacity-40"
-        >
-          <KeyRound size={14} />
-          保存密钥
-        </button>
-        <button
-          type="button"
           onClick={() => void onSaveCustom()}
-          disabled={busy === 'custom' || !custom.model_name.trim()}
+          disabled={
+            busy === 'custom' ||
+            !custom.model_name.trim() ||
+            (!hasSecret && !secret.trim())
+          }
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
         >
           {busy === 'custom' ? (
@@ -305,7 +240,7 @@ function CustomModelSection({
           ) : (
             <Save size={14} />
           )}
-          保存配置
+          保存模型
         </button>
       </div>
       <button
@@ -327,34 +262,32 @@ function CustomModelSection({
 
 function CustomModelFields({
   custom,
-  options,
   setCustom,
 }: {
   custom: CustomDraft;
-  options: Array<{ value: ModelAuthMode; label: string }>;
   setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="space-y-1.5">
         <span className="text-[12px] font-medium text-muted">
-          协议
+          协议类型
         </span>
         <select
-          value={custom.protocol}
+          value={custom.pi_api}
           onChange={(event) =>
             setCustom((prev) => ({
               ...prev,
-              protocol: event.target.value as ModelProtocol,
-              auth_mode: defaultAuthMode(event.target.value as ModelProtocol),
+              pi_api: event.target.value as ModelPiApi,
             }))
           }
           className={CONTROL}
         >
-          <option value="openai-compatible">OpenAI-compatible</option>
-          <option value="openai-response">OpenAI-response</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="gemini">Gemini</option>
+          {PI_API_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
       <TextField
@@ -382,27 +315,6 @@ function CustomModelFields({
           setCustom((prev) => ({ ...prev, base_url: value }))
         }
       />
-      <label className="space-y-1.5">
-        <span className="text-[12px] font-medium text-muted">
-          鉴权方式
-        </span>
-        <select
-          value={custom.auth_mode}
-          onChange={(event) =>
-            setCustom((prev) => ({
-              ...prev,
-              auth_mode: event.target.value as ModelAuthMode,
-            }))
-          }
-          className={CONTROL}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }
@@ -471,6 +383,9 @@ function OfficialModelOption({
       }`}
     >
       <div className="font-medium text-sm">{model.display_name}</div>
+      <div className="mt-1 text-[11px] leading-5 text-muted">
+        {protocolTypeLabel(model.pi_api)} · {model.model_name}
+      </div>
       <div className="mt-1 text-[11px] leading-5 text-muted">
         {officialModelPriceLabel(model)}
       </div>

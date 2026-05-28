@@ -324,16 +324,16 @@ export interface AdminCustomSkill {
   updated_at: string;
 }
 
-export type AdminModelProviderType =
-  | 'openai-compatible'
-  | 'openai-response'
-  | 'anthropic'
-  | 'gemini';
+export type AdminModelPiApi =
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'anthropic-messages'
+  | 'google-generative-ai';
 
 export interface AdminModelProvider {
   id: string;
   model_key: string;
-  protocol: AdminModelProviderType;
+  pi_api: AdminModelPiApi;
   display_name: string;
   enabled: boolean;
   priority: number;
@@ -425,7 +425,7 @@ export const admin = {
     }),
   createOfficialModel: (data: {
     model_key: string;
-    protocol: AdminModelProviderType;
+    pi_api: AdminModelPiApi;
     display_name: string;
     enabled: boolean;
     priority: number;
@@ -434,6 +434,7 @@ export const admin = {
     context_window_tokens?: number | null;
     input_token_price_per_million_points: number;
     output_token_price_per_million_points: number;
+    api_key?: string;
   }) =>
     adminRequest<AdminModelProvider>('/api/admin/system-config/providers', {
       method: 'POST',
@@ -443,7 +444,7 @@ export const admin = {
     id: string,
     data: {
       model_key: string;
-      protocol: AdminModelProviderType;
+      pi_api: AdminModelPiApi;
       display_name: string;
       enabled: boolean;
       priority: number;
@@ -465,11 +466,6 @@ export const admin = {
     id: string,
     data: {
       api_key: string;
-      auth_mode?:
-        | 'openai_api_key'
-        | 'anthropic_api_key'
-        | 'claude_code_oauth_token'
-        | 'gemini_api_key';
     },
   ) =>
     adminRequest<{ success: boolean }>(

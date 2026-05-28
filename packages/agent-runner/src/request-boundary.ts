@@ -64,7 +64,7 @@ export async function executeContainerInput(
   }
 
   const llmRuntime = containerInput.llmRuntime;
-  const provider = llmRuntime.provider;
+  const provider = llmRuntime.piApi;
   const model = llmRuntime.model;
 
   traceEvent({

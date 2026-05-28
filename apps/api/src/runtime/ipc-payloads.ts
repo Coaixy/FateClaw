@@ -32,7 +32,11 @@ export interface LlmRuntimeSnapshot {
   source: 'custom' | 'official';
   billingMode: 'none' | 'metered';
   modelConfigId: string;
-  provider: 'openai-compatible' | 'openai-response' | 'anthropic' | 'gemini';
+  piApi:
+    | 'openai-completions'
+    | 'openai-responses'
+    | 'anthropic-messages'
+    | 'google-generative-ai';
   model: string;
   contextWindowTokens?: number;
   maxOutputTokens?: number;

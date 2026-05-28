@@ -2,11 +2,11 @@
  * 模型设置跨端契约。
  */
 
-export type ModelProtocolDto =
-  | 'openai-compatible'
-  | 'openai-response'
-  | 'anthropic'
-  | 'gemini';
+export type ModelPiApiDto =
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'anthropic-messages'
+  | 'google-generative-ai';
 
 export type ModelAuthModeDto =
   | 'openai_api_key'
@@ -19,7 +19,7 @@ export type UserModelSelectionSourceDto = 'custom' | 'official';
 export interface OfficialModelDto {
   id: string;
   model_key: string;
-  protocol: ModelProtocolDto;
+  pi_api: ModelPiApiDto;
   display_name: string;
   enabled: boolean;
   priority: number;
@@ -34,7 +34,7 @@ export interface OfficialModelDto {
 
 export interface UserCustomModelConfigDto {
   user_id: string;
-  protocol: ModelProtocolDto;
+  pi_api: ModelPiApiDto;
   base_url: string | null;
   model_name: string;
   context_window_tokens: number | null;

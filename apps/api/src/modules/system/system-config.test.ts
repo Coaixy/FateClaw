@@ -53,7 +53,7 @@ function official(
   return {
     id: 'official-1',
     model_key: 'openai-main',
-    protocol: 'openai-compatible',
+    pi_api: 'openai-completions',
     display_name: 'OpenAI Main',
     enabled: true,
     priority: 0,
@@ -72,7 +72,7 @@ function official(
 function custom(overrides: Partial<UserModelConfig> = {}): UserModelConfig {
   return {
     user_id: 'user-1',
-    protocol: 'anthropic',
+    pi_api: 'anthropic-messages',
     base_url: null,
     model_name: 'claude-sonnet-4-20250514',
     api_key_secret_key: 'secret-key',
@@ -110,7 +110,7 @@ describe('resolveUserLlmRuntime', () => {
       billingMode: 'metered',
       modelConfigId: 'official-1',
       providerKey: 'openai-main',
-      providerType: 'openai-compatible',
+      piApi: 'openai-completions',
       model: 'gpt-4.1',
       contextWindowTokens: 128000,
       maxOutputTokens: 10240,
@@ -150,7 +150,7 @@ describe('resolveUserLlmRuntime', () => {
       source: 'custom',
       billingMode: 'none',
       providerKey: 'custom:user-1',
-      providerType: 'anthropic',
+      piApi: 'anthropic-messages',
       model: 'claude-sonnet-4-20250514',
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
@@ -177,23 +177,6 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
-  it('treats legacy max_output_tokens as context window for existing configs', async () => {
-    mockGetUserModelSelection.mockResolvedValue({
-      user_id: 'user-1',
-      source: 'official',
-      official_model_id: 'official-1',
-      created_at: '2026-05-04T00:00:00.000Z',
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
-    mockGetOfficialModelConfig.mockResolvedValue(
-      official({ extra_json: { max_output_tokens: 899998 } }),
-    );
-
-    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
-      contextWindowTokens: 899998,
-      maxOutputTokens: 32768,
-    });
-  });
 });
 
 describe('setOfficialModelSecret', () => {

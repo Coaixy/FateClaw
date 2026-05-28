@@ -7,7 +7,7 @@ import { ProviderRow } from './model-provider-panels';
 
 const draft: ProviderDraft = {
   model_key: 'anthropic-main',
-  protocol: 'anthropic',
+  pi_api: 'anthropic-messages',
   display_name: 'Claude Main',
   enabled: false,
   priority: 10,
@@ -32,7 +32,7 @@ describe('provider draft helpers', () => {
         provider: {
           id: 'provider-1',
           model_key: 'anthropic-main',
-          protocol: 'anthropic',
+          pi_api: 'anthropic-messages',
           display_name: 'Claude Main',
           enabled: true,
           priority: 10,

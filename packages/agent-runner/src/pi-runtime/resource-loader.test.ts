@@ -13,7 +13,7 @@ const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
   billingMode: 'none',
   modelConfigId: 'user-1',
-  provider: 'openai-compatible',
+  piApi: 'openai-completions',
   model: 'gpt-4o',
   apiKey: 'test-key',
   authMode: 'openai_api_key',

@@ -43,7 +43,7 @@ const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
   billingMode: 'none',
   modelConfigId: 'user-1',
-  provider: 'openai-compatible',
+  piApi: 'openai-completions',
   model: 'gpt-4o',
   apiKey: 'request-scoped-key',
   authMode: 'openai_api_key',
@@ -196,7 +196,7 @@ describe('runPiSession', () => {
     expect(result.piSession).toMatchObject({
       id: 'session-1',
       persisted: true,
-      provider: 'openai-compatible',
+      provider: 'openai-completions',
       model: 'gpt-4o',
       userPrompt: '基于这个盘继续看事业',
       systemPrompt: expect.stringContaining('FateClaw 的 Pi-backed Agent Runtime'),

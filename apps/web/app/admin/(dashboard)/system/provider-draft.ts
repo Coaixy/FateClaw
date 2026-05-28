@@ -1,14 +1,8 @@
-import type { AdminModelProviderType } from '@/lib/admin-api';
-
-export type AuthMode =
-  | 'openai_api_key'
-  | 'anthropic_api_key'
-  | 'claude_code_oauth_token'
-  | 'gemini_api_key';
+import type { AdminModelPiApi } from '@/lib/admin-api';
 
 export type ProviderDraft = {
   model_key: string;
-  protocol: AdminModelProviderType;
+  pi_api: AdminModelPiApi;
   display_name: string;
   enabled: boolean;
   priority: number;
@@ -22,7 +16,7 @@ export type ProviderDraft = {
 export function createEmptyDraft(): ProviderDraft {
   return {
     model_key: '',
-    protocol: 'openai-compatible',
+    pi_api: 'openai-completions',
     display_name: '',
     enabled: true,
     priority: 0,
@@ -44,7 +38,7 @@ function slugifyKeyPart(value: string): string {
 }
 
 export function buildSuggestedProviderKey(draft: ProviderDraft): string {
-  return `${draft.protocol}-${slugifyKeyPart(draft.display_name)}`;
+  return `${draft.pi_api}-${slugifyKeyPart(draft.display_name)}`;
 }
 
 export function setProviderDraftEnabled(

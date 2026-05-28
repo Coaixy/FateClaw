@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { MarkdownContent } from '@/components/chat/markdown-content';
 
-const PAGE_SIZE = 50;
 const SESSION_MESSAGE_PAGE_SIZE = 200;
 const SESSION_FETCH_LIMIT = 200;
 
@@ -96,12 +95,10 @@ function MessageTimeline({
   messages,
   searchText,
   emptyText,
-  showSessionMeta = false,
 }: {
   messages: AdminMessage[];
   searchText: string;
   emptyText: string;
-  showSessionMeta?: boolean;
 }) {
   const filtered = searchText
     ? messages.filter(
@@ -166,19 +163,7 @@ function MessageTimeline({
                         {msg.sender_name || msg.sender}
                       </p>
                     )}
-                    {showSessionMeta && msg.session_id && (
-                      <div
-                        className={`mb-1 px-1 flex items-center gap-1.5 ${
-                          isBot ? 'justify-start' : 'justify-end'
-                        }`}
-                      >
-                        <p className="text-[10px] text-muted">
-                          网页会话 · {msg.session_title || msg.session_id}
-                        </p>
-                        {isDeleted ? <DeletedBadge /> : null}
-                      </div>
-                    )}
-                    {!showSessionMeta && isDeleted ? (
+                    {isDeleted ? (
                       <div
                         className={`mb-1 px-1 flex ${
                           isBot ? 'justify-start' : 'justify-end'
@@ -226,8 +211,6 @@ function AdminMessagesContent() {
   const searchParams = useSearchParams();
   const initialAccountId = searchParams.get('account_id') || '';
   const initialSessionId = searchParams.get('session_id') || '';
-  const initialView =
-    searchParams.get('view') === 'sessions' ? 'sessions' : 'messages';
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
@@ -244,9 +227,6 @@ function AdminMessagesContent() {
   );
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionId);
-  const [viewMode, setViewMode] = useState<'messages' | 'sessions'>(
-    initialView,
-  );
   const [accounts, setAccounts] = useState<
     { id: string; name: string; enabled: boolean }[]
   >([]);
@@ -293,16 +273,15 @@ function AdminMessagesContent() {
   }, []);
 
   const loadMessages = useCallback(
-    async (sessionId?: string) => {
+    async (sessionId: string) => {
       setMsgLoading(true);
       try {
-        const pageSize = sessionId ? SESSION_MESSAGE_PAGE_SIZE : PAGE_SIZE;
         const result = await admin.messages({
           user_id: selectedUserId || undefined,
           account_id: selectedAccountId || undefined,
           session_id: sessionId,
-          limit: pageSize,
-          offset: page * pageSize,
+          limit: SESSION_MESSAGE_PAGE_SIZE,
+          offset: page * SESSION_MESSAGE_PAGE_SIZE,
         });
         setMessages(result.messages);
         setTotal(result.total);
@@ -378,31 +357,22 @@ function AdminMessagesContent() {
   }, [selectedAccountId]);
 
   useEffect(() => {
-    setPage(0);
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (loading || viewMode !== 'messages') return;
-    void loadMessages();
-  }, [loadMessages, loading, viewMode]);
-
-  useEffect(() => {
-    if (loading || viewMode !== 'sessions') return;
+    if (loading) return;
     void loadSessions();
-  }, [loadSessions, loading, viewMode]);
+  }, [loadSessions, loading]);
 
   useEffect(() => {
-    if (loading || viewMode !== 'sessions') return;
+    if (loading) return;
     if (!selectedSessionId) {
       setMessages([]);
       setTotal(0);
       return;
     }
     void loadMessages(selectedSessionId);
-  }, [loadMessages, loading, selectedSessionId, viewMode]);
+  }, [loadMessages, loading, selectedSessionId]);
 
   const filteredSessions =
-    viewMode === 'sessions' && searchText
+    searchText
       ? sessions.filter(
           (session) =>
             session.title.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -416,22 +386,14 @@ function AdminMessagesContent() {
         )
       : sessions;
 
-  const pageSize =
-    viewMode === 'sessions' && selectedSessionId
-      ? SESSION_MESSAGE_PAGE_SIZE
-      : PAGE_SIZE;
-  const totalPages = Math.ceil(total / pageSize);
+  const totalPages = Math.ceil(total / SESSION_MESSAGE_PAGE_SIZE);
 
   const handleRefresh = useCallback(() => {
-    if (viewMode === 'sessions') {
-      void loadSessions();
-      if (selectedSessionId) {
-        void loadMessages(selectedSessionId);
-      }
-      return;
+    void loadSessions();
+    if (selectedSessionId) {
+      void loadMessages(selectedSessionId);
     }
-    void loadMessages();
-  }, [loadMessages, loadSessions, selectedSessionId, viewMode]);
+  }, [loadMessages, loadSessions, selectedSessionId]);
 
   return (
     <>
@@ -457,12 +419,7 @@ function AdminMessagesContent() {
                 />
                 <h2 className="text-lg font-semibold shrink-0">对话查看</h2>
                 <span className="text-[12px] text-muted shrink-0">
-                  (
-                  {(viewMode === 'sessions'
-                    ? sessionsTotal
-                    : total
-                  ).toLocaleString()}
-                  )
+                  ({sessionsTotal.toLocaleString()})
                 </span>
                 <button
                   onClick={handleRefresh}
@@ -470,29 +427,6 @@ function AdminMessagesContent() {
                   title="刷新"
                 >
                   <RefreshCw size={13} />
-                </button>
-              </div>
-
-              <div className="inline-flex rounded-lg border border-hairline p-1 bg-surface-card">
-                <button
-                  onClick={() => setViewMode('messages')}
-                  className={`px-3 py-1.5 rounded-md text-[13px] cursor-pointer transition-colors ${
-                    viewMode === 'messages'
-                      ? 'bg-primary text-on-primary'
-                      : 'text-muted hover:text-ink'
-                  }`}
-                >
-                  全部消息
-                </button>
-                <button
-                  onClick={() => setViewMode('sessions')}
-                  className={`px-3 py-1.5 rounded-md text-[13px] cursor-pointer transition-colors ${
-                    viewMode === 'sessions'
-                      ? 'bg-primary text-on-primary'
-                      : 'text-muted hover:text-ink'
-                  }`}
-                >
-                  网页会话
                 </button>
               </div>
             </div>
@@ -527,12 +461,10 @@ function AdminMessagesContent() {
                   </select>
                 )}
 
-                {viewMode === 'sessions' && (
-                  <div className="flex items-center gap-1.5 text-[12px] text-muted">
-                    <MonitorSmartphone size={14} />
-                    <span>仅显示网页产生的对话窗口</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 text-[12px] text-muted">
+                  <MonitorSmartphone size={14} />
+                  <span>仅显示网页产生的对话窗口</span>
+                </div>
               </div>
 
               <div className="relative">
@@ -544,219 +476,190 @@ function AdminMessagesContent() {
                   type="text"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  placeholder={
-                    viewMode === 'sessions'
-                      ? '搜索会话或内容...'
-                      : '搜索消息内容...'
-                  }
+                  placeholder="搜索会话或内容..."
                   className="h-8 w-44 pl-7 pr-2 rounded-md border border-hairline bg-canvas text-[13px] placeholder:text-muted focus:outline-none"
                 />
               </div>
             </div>
           </div>
 
-          {viewMode === 'messages' ? (
-            <>
-              {msgLoading ? (
-                <div className="flex justify-center py-16">
+          <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="rounded-2xl border border-hairline bg-surface-card p-3">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div>
+                  <p className="text-[13px] font-medium">网页对话窗口</p>
+                  <p className="text-[11px] text-muted">
+                    最近 {Math.min(sessionsTotal, SESSION_FETCH_LIMIT)} /{' '}
+                    {sessionsTotal}
+                  </p>
+                </div>
+              </div>
+
+              {sessionsLoading ? (
+                <div className="flex justify-center py-10">
                   <Loader2
                     size={16}
                     className="animate-spin text-muted"
                   />
                 </div>
-              ) : (
-                <MessageTimeline
-                  messages={messages}
-                  searchText={searchText}
-                  emptyText={searchText ? '无匹配消息' : '暂无消息'}
-                  showSessionMeta
-                />
-              )}
-            </>
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="rounded-2xl border border-hairline bg-surface-card p-3">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div>
-                    <p className="text-[13px] font-medium">网页对话窗口</p>
-                    <p className="text-[11px] text-muted">
-                      最近 {Math.min(sessionsTotal, SESSION_FETCH_LIMIT)} /{' '}
-                      {sessionsTotal}
-                    </p>
-                  </div>
+              ) : filteredSessions.length === 0 ? (
+                <div className="text-center py-10">
+                  <MonitorSmartphone
+                    size={20}
+                    className="mx-auto mb-2 text-muted"
+                  />
+                  <p className="text-[12px] text-muted">
+                    {searchText ? '无匹配会话' : '暂无网页会话'}
+                  </p>
                 </div>
-
-                {sessionsLoading ? (
-                  <div className="flex justify-center py-10">
-                    <Loader2
-                      size={16}
-                      className="animate-spin text-muted"
-                    />
-                  </div>
-                ) : filteredSessions.length === 0 ? (
-                  <div className="text-center py-10">
-                    <MonitorSmartphone
-                      size={20}
-                      className="mx-auto mb-2 text-muted"
-                    />
-                    <p className="text-[12px] text-muted">
-                      {searchText ? '无匹配会话' : '暂无网页会话'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[72vh] overflow-y-auto pr-1">
-                    {filteredSessions.map((session) => {
-                      const active = session.id === selectedSessionId;
-                      return (
-                        <button
-                          key={session.id}
-                          onClick={() => {
-                            setSelectedSessionId(session.id);
-                            setPage(0);
-                          }}
-                          className={`w-full text-left rounded-xl border p-3 transition-colors cursor-pointer ${
-                            active
-                              ? 'border-primary bg-primary/8'
-                              : 'border-hairline hover:border-primary/40 hover:bg-canvas'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <p className="text-[13px] font-medium truncate">
-                                  {session.title || '未命名会话'}
-                                </p>
-                                {session.deleted_at ? <DeletedBadge /> : null}
-                              </div>
-                              <p className="text-[11px] text-muted mt-0.5 truncate">
-                                {session.account_name}
-                                {session.owner_phone
-                                  ? ` · ${session.owner_phone}`
-                                  : ''}
+              ) : (
+                <div className="space-y-2 max-h-[72vh] overflow-y-auto pr-1">
+                  {filteredSessions.map((session) => {
+                    const active = session.id === selectedSessionId;
+                    return (
+                      <button
+                        key={session.id}
+                        onClick={() => {
+                          setSelectedSessionId(session.id);
+                          setPage(0);
+                        }}
+                        className={`w-full text-left rounded-xl border p-3 transition-colors cursor-pointer ${
+                          active
+                            ? 'border-primary bg-primary/8'
+                            : 'border-hairline hover:border-primary/40 hover:bg-canvas'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <p className="text-[13px] font-medium truncate">
+                                {session.title || '未命名会话'}
                               </p>
+                              {session.deleted_at ? <DeletedBadge /> : null}
                             </div>
-                            <span className="text-[10px] text-muted shrink-0">
-                              {session.message_count} 条
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted mt-2 line-clamp-2 min-h-[2rem]">
-                            {session.last_message_preview || '暂无消息'}
-                          </p>
-                          <p className="text-[10px] text-muted mt-2">
-                            更新于{' '}
-                            {formatDateTime(
-                              session.last_message_at || session.updated_at,
-                            )}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-hairline bg-surface-card p-4">
-                {!selectedSession ? (
-                  <div className="text-center py-16">
-                    <MonitorSmartphone
-                      size={26}
-                      className="mx-auto mb-3 text-muted"
-                    />
-                    <p className="text-[13px] text-muted">
-                      选择左侧会话后可查看完整对话窗口
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="rounded-xl border border-hairline bg-canvas/60 px-4 py-3 mb-4">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <h3 className="text-[15px] font-semibold truncate">
-                              {selectedSession.title || '未命名会话'}
-                            </h3>
-                            {selectedSession.deleted_at ? (
-                              <DeletedBadge />
-                            ) : null}
-                          </div>
-                          <p className="text-[12px] text-muted mt-1">
-                            {selectedSession.account_name}
-                            {selectedSession.owner_phone
-                              ? ` · ${selectedSession.owner_phone}`
-                              : ''}
-                          </p>
-                        </div>
-                        <div className="text-[11px] text-muted md:text-right">
-                          <p>{selectedSession.message_count} 条消息</p>
-                          <p>
-                            最近更新{' '}
-                            {formatDateTime(
-                              selectedSession.last_message_at ||
-                                selectedSession.updated_at,
-                            )}
-                          </p>
-                          {selectedSession.deleted_at ? (
-                            <p>
-                              删除时间{' '}
-                              {formatDateTime(selectedSession.deleted_at)}
+                            <p className="text-[11px] text-muted mt-0.5 truncate">
+                              {session.account_name}
+                              {session.owner_phone
+                                ? ` · ${session.owner_phone}`
+                                : ''}
                             </p>
+                          </div>
+                          <span className="text-[10px] text-muted shrink-0">
+                            {session.message_count} 条
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted mt-2 line-clamp-2 min-h-[2rem]">
+                          {session.last_message_preview || '暂无消息'}
+                        </p>
+                        <p className="text-[10px] text-muted mt-2">
+                          更新于{' '}
+                          {formatDateTime(
+                            session.last_message_at || session.updated_at,
+                          )}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-hairline bg-surface-card p-4">
+              {!selectedSession ? (
+                <div className="text-center py-16">
+                  <MonitorSmartphone
+                    size={26}
+                    className="mx-auto mb-3 text-muted"
+                  />
+                  <p className="text-[13px] text-muted">
+                    选择左侧会话后可查看完整对话窗口
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-xl border border-hairline bg-canvas/60 px-4 py-3 mb-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className="text-[15px] font-semibold truncate">
+                            {selectedSession.title || '未命名会话'}
+                          </h3>
+                          {selectedSession.deleted_at ? (
+                            <DeletedBadge />
                           ) : null}
                         </div>
+                        <p className="text-[12px] text-muted mt-1">
+                          {selectedSession.account_name}
+                          {selectedSession.owner_phone
+                            ? ` · ${selectedSession.owner_phone}`
+                            : ''}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-muted mt-2 font-mono break-all">
-                        session: {selectedSession.id}
-                      </p>
+                      <div className="text-[11px] text-muted md:text-right">
+                        <p>{selectedSession.message_count} 条消息</p>
+                        <p>
+                          最近更新{' '}
+                          {formatDateTime(
+                            selectedSession.last_message_at ||
+                              selectedSession.updated_at,
+                          )}
+                        </p>
+                        {selectedSession.deleted_at ? (
+                          <p>
+                            删除时间 {formatDateTime(selectedSession.deleted_at)}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
+                    <p className="text-[11px] text-muted mt-2 font-mono break-all">
+                      session: {selectedSession.id}
+                    </p>
+                  </div>
 
-                    {msgLoading ? (
-                      <div className="flex justify-center py-16">
-                        <Loader2
-                          size={16}
-                          className="animate-spin text-muted"
-                        />
-                      </div>
-                    ) : (
-                      <MessageTimeline
-                        messages={messages}
-                        searchText={searchText}
-                        emptyText={
-                          searchText ? '当前会话无匹配消息' : '当前会话暂无消息'
-                        }
+                  {msgLoading ? (
+                    <div className="flex justify-center py-16">
+                      <Loader2
+                        size={16}
+                        className="animate-spin text-muted"
                       />
-                    )}
-                  </>
-                )}
-              </div>
+                    </div>
+                  ) : (
+                    <MessageTimeline
+                      messages={messages}
+                      searchText={searchText}
+                      emptyText={
+                        searchText ? '当前会话无匹配消息' : '当前会话暂无消息'
+                      }
+                    />
+                  )}
+                </>
+              )}
             </div>
-          )}
+          </div>
 
-          {selectedSession || viewMode === 'messages'
-            ? totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 mt-6">
-                  <button
-                    onClick={() =>
-                      setPage((p) => Math.min(totalPages - 1, p + 1))
-                    }
-                    disabled={page >= totalPages - 1}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-hairline text-[13px] text-muted hover:text-ink disabled:opacity-30 cursor-pointer transition-colors"
-                  >
-                    <ChevronLeft size={14} />
-                    <span>更早</span>
-                  </button>
-                  <span className="text-[13px] text-muted">
-                    {page + 1} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-hairline text-[13px] text-muted hover:text-ink disabled:opacity-30 cursor-pointer transition-colors"
-                  >
-                    <span>更近</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              )
-            : null}
+          {selectedSession && totalPages > 1 ? (
+            <div className="flex items-center justify-center gap-3 mt-6">
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-hairline text-[13px] text-muted hover:text-ink disabled:opacity-30 cursor-pointer transition-colors"
+              >
+                <ChevronLeft size={14} />
+                <span>更早</span>
+              </button>
+              <span className="text-[13px] text-muted">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-hairline text-[13px] text-muted hover:text-ink disabled:opacity-30 cursor-pointer transition-colors"
+              >
+                <span>更近</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </>

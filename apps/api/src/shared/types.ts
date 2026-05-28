@@ -270,10 +270,10 @@ export interface ChatSession {
 }
 
 export type ModelProviderType =
-  | 'openai-compatible'
-  | 'openai-response'
-  | 'anthropic'
-  | 'gemini';
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'anthropic-messages'
+  | 'google-generative-ai';
 
 export type UserModelSelectionSource = 'custom' | 'official';
 
@@ -287,7 +287,7 @@ export interface SystemSecretRow {
 export interface OfficialModelConfig {
   id: string;
   model_key: string;
-  protocol: ModelProviderType;
+  pi_api: ModelProviderType;
   display_name: string;
   enabled: boolean;
   priority: number;
@@ -303,7 +303,7 @@ export interface OfficialModelConfig {
 
 export interface UserModelConfig {
   user_id: string;
-  protocol: ModelProviderType;
+  pi_api: ModelProviderType;
   base_url: string | null;
   model_name: string;
   api_key_secret_key: string | null;

@@ -86,7 +86,7 @@ export async function getOfficialModelConfig(
 export async function createOfficialModelConfig(input: {
   id: string;
   modelKey: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   displayName: string;
   enabled?: boolean;
   priority?: number;
@@ -100,7 +100,7 @@ export async function createOfficialModelConfig(input: {
   const { rows } = await getDbPool().query(
     `INSERT INTO official_model_configs
        (
-         id, model_key, protocol, display_name, enabled, priority,
+         id, model_key, pi_api, display_name, enabled, priority,
          base_url, model_name, api_key_secret_key,
          input_token_price_per_million_points,
          output_token_price_per_million_points,
@@ -112,7 +112,7 @@ export async function createOfficialModelConfig(input: {
     [
       input.id,
       input.modelKey,
-      input.protocol,
+      input.piApi,
       input.displayName,
       input.enabled ?? true,
       input.priority ?? 0,
@@ -130,7 +130,7 @@ export async function createOfficialModelConfig(input: {
 export async function updateOfficialModelConfig(input: {
   id: string;
   modelKey: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   displayName: string;
   enabled: boolean;
   priority: number;
@@ -144,7 +144,7 @@ export async function updateOfficialModelConfig(input: {
   const { rows } = await getDbPool().query(
     `UPDATE official_model_configs
      SET model_key = $2,
-         protocol = $3,
+         pi_api = $3,
          display_name = $4,
          enabled = $5,
          priority = $6,
@@ -160,7 +160,7 @@ export async function updateOfficialModelConfig(input: {
     [
       input.id,
       input.modelKey,
-      input.protocol,
+      input.piApi,
       input.displayName,
       input.enabled,
       input.priority,
@@ -193,7 +193,7 @@ export async function getUserModelConfig(
 
 export async function upsertUserModelConfig(input: {
   userId: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   baseUrl?: string | null;
   modelName: string;
   apiKeySecretKey?: string | null;
@@ -201,11 +201,11 @@ export async function upsertUserModelConfig(input: {
 }): Promise<UserModelConfig> {
   const { rows } = await getDbPool().query(
     `INSERT INTO user_model_configs
-       (user_id, protocol, base_url, model_name, api_key_secret_key,
+       (user_id, pi_api, base_url, model_name, api_key_secret_key,
         extra_json, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
      ON CONFLICT (user_id) DO UPDATE SET
-       protocol = EXCLUDED.protocol,
+       pi_api = EXCLUDED.pi_api,
        base_url = EXCLUDED.base_url,
        model_name = EXCLUDED.model_name,
        api_key_secret_key = EXCLUDED.api_key_secret_key,
@@ -214,7 +214,7 @@ export async function upsertUserModelConfig(input: {
      RETURNING *`,
     [
       input.userId,
-      input.protocol,
+      input.piApi,
       input.baseUrl ?? null,
       input.modelName,
       input.apiKeySecretKey ?? null,

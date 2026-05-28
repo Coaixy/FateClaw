@@ -17,31 +17,22 @@ export interface PiProviderRuntime {
 }
 
 function resolvePiApi(runtime: LlmRuntimeSnapshot): Api {
-  switch (runtime.provider) {
-    case 'openai-compatible':
-      return 'openai-completions';
-    case 'openai-response':
-      return 'openai-responses';
-    case 'anthropic':
-      return 'anthropic-messages';
-    case 'gemini':
-      return 'google-generative-ai';
-  }
+  return runtime.piApi;
 }
 
 function resolvePiProvider(runtime: LlmRuntimeSnapshot): string {
-  return `fateclaw-${runtime.provider}-${runtime.providerKey}`;
+  return `fateclaw-${runtime.piApi}-${runtime.providerKey}`;
 }
 
 function resolveBaseUrl(runtime: LlmRuntimeSnapshot): string {
   if (runtime.baseUrl) return runtime.baseUrl;
-  switch (runtime.provider) {
-    case 'anthropic':
+  switch (runtime.piApi) {
+    case 'anthropic-messages':
       return 'https://api.anthropic.com';
-    case 'gemini':
+    case 'google-generative-ai':
       return 'https://generativelanguage.googleapis.com';
-    case 'openai-compatible':
-    case 'openai-response':
+    case 'openai-completions':
+    case 'openai-responses':
       return 'https://api.openai.com/v1';
   }
 }
@@ -49,7 +40,7 @@ function resolveBaseUrl(runtime: LlmRuntimeSnapshot): string {
 function resolveOpenAiCompat(
   runtime: LlmRuntimeSnapshot,
 ): OpenAICompletionsCompat | undefined {
-  if (runtime.provider !== 'openai-compatible') return undefined;
+  if (runtime.piApi !== 'openai-completions') return undefined;
   return {
     supportsStrictMode: false,
     supportsDeveloperRole: false,

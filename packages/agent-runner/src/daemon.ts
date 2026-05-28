@@ -20,10 +20,10 @@ function isLlmRuntimeSnapshot(
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<LlmRuntimeSnapshot>;
   return (
-    (record.provider === 'openai-compatible' ||
-      record.provider === 'openai-response' ||
-      record.provider === 'anthropic' ||
-      record.provider === 'gemini') &&
+    (record.piApi === 'openai-completions' ||
+      record.piApi === 'openai-responses' ||
+      record.piApi === 'anthropic-messages' ||
+      record.piApi === 'google-generative-ai') &&
     (record.source === 'custom' || record.source === 'official') &&
     (record.billingMode === 'none' || record.billingMode === 'metered') &&
     typeof record.modelConfigId === 'string' &&

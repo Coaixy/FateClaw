@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   AdminModelProvider,
-  AdminModelProviderType,
+  AdminModelPiApi,
   AdminSystemConfigOverview,
 } from '@/lib/admin-api';
 import {
@@ -17,8 +17,11 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  PI_API_OPTIONS,
+  protocolTypeLabel,
+} from '../../../../features/model-settings/pi-api-options';
+import {
   setProviderDraftEnabled,
-  type AuthMode,
   type ProviderDraft,
 } from './provider-draft';
 
@@ -28,7 +31,7 @@ const CONTROL =
 function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
   return {
     model_key: model.model_key,
-    protocol: model.protocol,
+    pi_api: model.pi_api,
     display_name: model.display_name,
     enabled: model.enabled,
     priority: model.priority,
@@ -40,19 +43,6 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
     output_token_price_per_million_points:
       model.output_token_price_per_million_points,
   };
-}
-
-function defaultAuthMode(protocol: AdminModelProviderType): AuthMode {
-  if (protocol === 'gemini') return 'gemini_api_key';
-  if (protocol === 'anthropic') return 'anthropic_api_key';
-  return 'openai_api_key';
-}
-
-export function getProviderTypeLabel(type: AdminModelProviderType): string {
-  if (type === 'openai-compatible') return 'OpenAI-compatible';
-  if (type === 'openai-response') return 'OpenAI-response';
-  if (type === 'anthropic') return 'Anthropic';
-  return 'Gemini';
 }
 
 function getSecretSourceLabel(
@@ -68,22 +58,6 @@ export function resolveRuntimeProvider(
     overview?.providers.find((model) => model.enabled && model.has_secret) ??
     null
   );
-}
-
-function authOptions(protocol: AdminModelProviderType): Array<{
-  value: AuthMode;
-  label: string;
-}> {
-  if (protocol === 'gemini') {
-    return [{ value: 'gemini_api_key', label: 'Gemini API Key' }];
-  }
-  if (protocol === 'anthropic') {
-    return [
-      { value: 'anthropic_api_key', label: 'Anthropic API Key' },
-      { value: 'claude_code_oauth_token', label: 'Claude Code OAuth' },
-    ];
-  }
-  return [{ value: 'openai_api_key', label: 'OpenAI API Key' }];
 }
 
 export function RuntimeSummary({
@@ -126,7 +100,6 @@ export function ProviderRow({
   onSaveSecret: (
     id: string,
     secret: string,
-    authMode?: AuthMode,
   ) => Promise<void>;
   onSetDefault: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -135,21 +108,11 @@ export function ProviderRow({
     providerDraftFrom(provider),
   );
   const [secret, setSecret] = useState('');
-  const [secretAuthMode, setSecretAuthMode] = useState(provider.auth_mode);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setDraft(providerDraftFrom(provider));
-    setSecretAuthMode(provider.auth_mode);
   }, [provider]);
-
-  const options = useMemo(() => authOptions(draft.protocol), [draft.protocol]);
-
-  useEffect(() => {
-    if (!options.some((option) => option.value === secretAuthMode)) {
-      setSecretAuthMode(defaultAuthMode(draft.protocol));
-    }
-  }, [draft.protocol, options, secretAuthMode]);
 
   const sourceLabel = getSecretSourceLabel(provider.secret_source);
   const toggledDraft = setProviderDraftEnabled(draft, !provider.enabled);
@@ -163,14 +126,14 @@ export function ProviderRow({
           className="flex min-w-0 cursor-pointer items-start gap-3 text-left"
         >
           <div className="min-w-0 flex-1">
-            <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(160px,1.2fr)_92px_minmax(140px,1fr)_minmax(96px,0.75fr)] xl:items-center xl:gap-3">
+            <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(160px,1.2fr)_minmax(140px,0.8fr)_minmax(140px,1fr)_minmax(96px,0.75fr)] xl:items-center xl:gap-3">
               <div className="min-w-0">
                 <div className="truncate text-[14px] font-semibold">
                   {provider.display_name}
                 </div>
               </div>
               <div className="text-[12px] text-muted">
-                {getProviderTypeLabel(provider.protocol)}
+                {protocolTypeLabel(provider.pi_api)}
               </div>
               <div className="truncate text-[12px] font-medium">
                 {provider.model_name || '未配置'}
@@ -224,16 +187,13 @@ export function ProviderRow({
         <>
           <ProviderBasicFields draft={draft} setDraft={setDraft} />
           <ProviderSecretFields
-            authModeOptions={options}
             busy={busy}
             onSaveSecret={async () => {
-              await onSaveSecret(provider.id, secret, secretAuthMode);
+              await onSaveSecret(provider.id, secret);
               setSecret('');
             }}
             secret={secret}
-            secretAuthMode={secretAuthMode}
             setSecret={setSecret}
-            setSecretAuthMode={setSecretAuthMode}
             sourceLabel={sourceLabel}
           />
           <div className="mt-5 flex flex-wrap gap-2 border-t border-hairline/70 pt-4">
@@ -287,22 +247,23 @@ function ProviderBasicFields({
       />
       <label className="space-y-1.5">
         <div className="text-[12px] font-medium text-muted">
-          协议
+          协议类型
         </div>
         <select
-          value={draft.protocol}
+          value={draft.pi_api}
           onChange={(event) =>
             setDraft((prev) => ({
               ...prev,
-              protocol: event.target.value as AdminModelProviderType,
+              pi_api: event.target.value as AdminModelPiApi,
             }))
           }
           className={CONTROL}
         >
-          <option value="openai-compatible">OpenAI-compatible</option>
-          <option value="openai-response">OpenAI-response</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="gemini">Gemini</option>
+          {PI_API_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
       <TextField
@@ -346,22 +307,16 @@ function ProviderBasicFields({
 }
 
 function ProviderSecretFields({
-  authModeOptions,
   busy,
   onSaveSecret,
   secret,
-  secretAuthMode,
   setSecret,
-  setSecretAuthMode,
   sourceLabel,
 }: {
-  authModeOptions: Array<{ value: AuthMode; label: string }>;
   busy: boolean;
   onSaveSecret: () => Promise<void>;
   secret: string;
-  secretAuthMode: AuthMode;
   setSecret: (value: string) => void;
-  setSecretAuthMode: (value: AuthMode) => void;
   sourceLabel: string;
 }) {
   return (
@@ -375,28 +330,14 @@ function ProviderSecretFields({
           当前状态：{sourceLabel}
         </div>
       </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_220px_auto]">
+      <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_auto]">
         <input
           type="password"
           value={secret}
           onChange={(event) => setSecret(event.target.value)}
-          placeholder="输入新的 API Key / OAuth Token"
+          placeholder="输入新的 API Key"
           className={CONTROL}
         />
-        <select
-          value={secretAuthMode}
-          onChange={(event) =>
-            setSecretAuthMode(event.target.value as AuthMode)
-          }
-          disabled={busy}
-          className={CONTROL}
-        >
-          {authModeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
         <button
           onClick={() => void onSaveSecret()}
           disabled={busy || !secret}
@@ -412,23 +353,29 @@ function ProviderSecretFields({
 export function ProviderCreatePanel({
   draft,
   busy,
+  secret,
   onChange,
   onCreate,
+  onSecretChange,
 }: {
   draft: ProviderDraft;
   busy: boolean;
+  secret: string;
   onChange: (draft: ProviderDraft) => void;
   onCreate: () => Promise<void>;
+  onSecretChange: (value: string) => void;
 }) {
   const canCreate =
-    Boolean(draft.display_name.trim()) && Boolean(draft.model_name.trim());
+    Boolean(draft.display_name.trim()) &&
+    Boolean(draft.model_name.trim()) &&
+    Boolean(secret.trim());
 
   return (
     <div className="rounded-lg border border-dashed border-hairline bg-surface-card p-4 sm:p-5">
       <div>
         <div className="text-sm font-semibold">新增官方模型</div>
         <div className="mt-1 text-[13px] text-muted">
-          OpenAI-compatible 走 Chat Completions 兼容协议；OpenAI-response 走 Responses API。
+          协议类型决定请求格式，例如 Chat Completions、Responses、Anthropic Messages 或 Google Generative AI。
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -440,22 +387,23 @@ export function ProviderCreatePanel({
         />
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
-            协议
+            协议类型
           </div>
           <select
-            value={draft.protocol}
+            value={draft.pi_api}
             onChange={(event) =>
               onChange({
                 ...draft,
-                protocol: event.target.value as AdminModelProviderType,
+                pi_api: event.target.value as AdminModelPiApi,
               })
             }
             className={CONTROL}
           >
-            <option value="openai-compatible">OpenAI-compatible</option>
-            <option value="openai-response">OpenAI-response</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="gemini">Gemini</option>
+            {PI_API_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
         <TextField
@@ -469,6 +417,13 @@ export function ProviderCreatePanel({
           value={draft.base_url}
           placeholder="可选"
           onChange={(value) => onChange({ ...draft, base_url: value })}
+        />
+        <TextField
+          label="API Key"
+          value={secret}
+          placeholder="创建时一并保存"
+          type="password"
+          onChange={onSecretChange}
         />
         <NumberField
           label="上下文窗口 Token（0 为自动）"
@@ -511,7 +466,7 @@ export function ProviderCreatePanel({
           ) : (
             <Save size={14} />
           )}
-          新增
+          保存模型
         </button>
       </div>
       <div className="mt-3 flex flex-wrap gap-4 text-[13px] text-muted">
@@ -536,11 +491,13 @@ function TextField({
   value,
   onChange,
   placeholder,
+  type = 'text',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  type?: string;
 }) {
   return (
     <label className="space-y-1.5">
@@ -548,6 +505,7 @@ function TextField({
         {label}
       </div>
       <input
+        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

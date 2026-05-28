@@ -7,7 +7,7 @@ const customRuntime = {
   source: 'custom',
   billingMode: 'none',
   modelConfigId: 'user-1',
-  provider: 'openai-compatible',
+  piApi: 'openai-completions',
   model: 'gpt-4o',
   apiKey: 'sk-user-custom-secret',
   baseUrl: 'https://models.example.com/v1',
@@ -24,7 +24,7 @@ describe('mapContainerErrorToPublicError', () => {
 
     expect(result.publicReasonCode).toBe('custom_model_error');
     expect(result.publicErrorText).toContain('自配模型调用失败');
-    expect(result.publicErrorText).toContain('协议：openai-compatible');
+    expect(result.publicErrorText).toContain('协议类型：openai-completions');
     expect(result.publicErrorText).toContain('模型名：gpt-4o');
     expect(result.publicErrorText).toContain(
       'Base URL：https://models.example.com/v1',

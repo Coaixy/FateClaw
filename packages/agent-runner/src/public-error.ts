@@ -17,10 +17,10 @@ function inferCustomModelFailureCause(error: string): string {
     return '优先检查 API Key 权限、账户额度、项目权限或供应商控制台限制。';
   }
   if (/404|not found|model.*not.*exist|model.*not.*found|does not exist/i.test(error)) {
-    return '优先检查模型名是否存在，Base URL 是否带错路径，或该端点是否支持当前协议。';
+    return '优先检查模型名是否存在，Base URL 是否带错路径，或该端点是否支持当前协议类型。';
   }
   if (/400|bad request|invalid request|schema|tool|tool_choice|function/i.test(error)) {
-    return '优先检查模型是否兼容当前协议、工具调用参数，以及 Base URL 是否指向兼容接口。';
+    return '优先检查模型是否兼容当前协议类型、工具调用参数，以及 Base URL 是否指向兼容接口。';
   }
   if (/timeout|timed out|econnreset|socket|network|fetch failed|enotfound|econnrefused/i.test(error)) {
     return '优先检查 Base URL 网络连通性、网关地址、代理、防火墙或供应商服务状态。';
@@ -38,7 +38,7 @@ function formatCustomModelError(
   const providerError = normalizeWhitespace(error);
   return [
     '自配模型调用失败，当前使用的配置如下：',
-    `协议：${runtime.provider}`,
+    `协议类型：${runtime.piApi}`,
     `模型名：${formatConfiguredValue(runtime.model)}`,
     `Base URL：${formatConfiguredValue(runtime.baseUrl)}`,
     `认证方式：${runtime.authMode}`,

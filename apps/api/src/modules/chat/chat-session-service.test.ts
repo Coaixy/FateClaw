@@ -79,7 +79,7 @@ vi.mock('../system/system-config.js', () => ({
     billingMode: 'none',
     modelConfigId: 'user-1',
     providerKey: 'custom:user-1',
-    providerType: 'openai-compatible',
+    piApi: 'openai-completions',
     displayName: '自配模型',
     authMode: 'openai_api_key',
     secret: 'secret',

@@ -149,6 +149,15 @@ const WithdrawalPaidSchema = z.object({
   payment_proof: z.string().min(1).max(500),
 });
 
+const OfficialModelAuthModeSchema = z
+  .enum([
+    'openai_api_key',
+    'anthropic_api_key',
+    'claude_code_oauth_token',
+    'gemini_api_key',
+  ])
+  .optional();
+
 const OfficialModelSchema = z.object({
   model_key: z
     .string()
@@ -156,11 +165,11 @@ const OfficialModelSchema = z.object({
     .min(1)
     .max(80)
     .regex(/^[a-z0-9][a-z0-9-_]*$/i, 'model_key 格式不合法'),
-  protocol: z.enum([
-    'openai-compatible',
-    'openai-response',
-    'anthropic',
-    'gemini',
+  pi_api: z.enum([
+    'openai-completions',
+    'openai-responses',
+    'anthropic-messages',
+    'google-generative-ai',
   ]),
   display_name: z.string().trim().min(1).max(80),
   enabled: z.boolean().default(true),
@@ -178,32 +187,18 @@ const OfficialModelSchema = z.object({
     )
     .nullable()
     .optional(),
-  // 兼容旧前端字段名：历史上这里实际被当成“上下文窗口”填写。
-  max_output_tokens: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS)
-    .refine(
-      (value) => value === 0 || value >= MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
-      `context_window_tokens 必须为 0，或不小于 ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
-    )
-    .nullable()
-    .optional(),
   input_token_price_per_million_points: z.number().int().min(0).default(0),
   output_token_price_per_million_points: z.number().int().min(0).default(0),
 });
 
+const OfficialModelCreateSchema = OfficialModelSchema.extend({
+  api_key: z.string().trim().min(1).max(2000).optional(),
+  auth_mode: OfficialModelAuthModeSchema,
+});
+
 const OfficialModelSecretSchema = z.object({
   api_key: z.string().trim().min(1).max(2000),
-  auth_mode: z
-    .enum([
-      'openai_api_key',
-      'anthropic_api_key',
-      'claude_code_oauth_token',
-      'gemini_api_key',
-    ])
-    .optional(),
+  auth_mode: OfficialModelAuthModeSchema,
 });
 
 function toConfiguredContextWindowTokens(
@@ -342,7 +337,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/admin/system-config/providers — 新建官方模型
   app.post('/system-config/providers', async (request, reply) => {
-    const parsed = OfficialModelSchema.safeParse(request.body);
+    const parsed = OfficialModelCreateSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply
         .code(400)
@@ -350,21 +345,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     const provider = await createOfficialModel({
       modelKey: parsed.data.model_key,
-      protocol: parsed.data.protocol,
+      piApi: parsed.data.pi_api,
       displayName: parsed.data.display_name,
       enabled: parsed.data.enabled,
       priority: parsed.data.priority,
       baseUrl: parsed.data.base_url?.trim() || null,
       modelName: parsed.data.model_name,
       contextWindowTokens: toConfiguredContextWindowTokens(
-        parsed.data.context_window_tokens !== undefined
-          ? parsed.data.context_window_tokens
-          : parsed.data.max_output_tokens,
+        parsed.data.context_window_tokens,
       ),
       inputTokenPricePerMillionPoints:
         parsed.data.input_token_price_per_million_points,
       outputTokenPricePerMillionPoints:
         parsed.data.output_token_price_per_million_points,
+      secretValue: parsed.data.api_key,
+      authMode: parsed.data.auth_mode,
       actor: 'manager',
     });
     return provider;
@@ -382,16 +377,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const provider = await updateOfficialModel({
         id: (request.params as { id: string }).id,
         modelKey: parsed.data.model_key,
-        protocol: parsed.data.protocol,
+        piApi: parsed.data.pi_api,
         displayName: parsed.data.display_name,
         enabled: parsed.data.enabled,
         priority: parsed.data.priority,
         baseUrl: parsed.data.base_url?.trim() || null,
         modelName: parsed.data.model_name,
         contextWindowTokens: toConfiguredContextWindowTokens(
-          parsed.data.context_window_tokens !== undefined
-            ? parsed.data.context_window_tokens
-            : parsed.data.max_output_tokens,
+          parsed.data.context_window_tokens,
         ),
         inputTokenPricePerMillionPoints:
           parsed.data.input_token_price_per_million_points,

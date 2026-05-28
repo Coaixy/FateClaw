@@ -178,7 +178,7 @@ export async function runPiSession(args: {
     traceEvent(
       {
         type: 'pi_session_started',
-        provider: args.containerInput.llmRuntime.provider,
+        provider: args.containerInput.llmRuntime.piApi,
         model: args.containerInput.llmRuntime.model,
         customToolCount: customTools.length,
         builtinToolsDisabled: true,
@@ -202,7 +202,7 @@ export async function runPiSession(args: {
         id: piSession.piSessionId,
         file: piSession.sessionFile,
         persisted: piSession.persisted,
-        provider: args.containerInput.llmRuntime.provider,
+        provider: args.containerInput.llmRuntime.piApi,
         model: args.containerInput.llmRuntime.model,
         userPrompt: args.containerInput.userMessage,
         systemPrompt,

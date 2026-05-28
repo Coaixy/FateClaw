@@ -64,7 +64,7 @@ function llmRuntimeToSnapshot(
     source: runtime.source,
     billingMode: runtime.billingMode,
     modelConfigId: runtime.modelConfigId,
-    provider: runtime.providerType,
+    piApi: runtime.piApi,
     model: runtime.model,
     contextWindowTokens: runtime.contextWindowTokens,
     maxOutputTokens: runtime.maxOutputTokens,

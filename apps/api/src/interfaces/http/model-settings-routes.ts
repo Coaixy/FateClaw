@@ -29,11 +29,11 @@ const AuthModeSchema = z
   .optional();
 
 const CustomModelSchema = z.object({
-  protocol: z.enum([
-    'openai-compatible',
-    'openai-response',
-    'anthropic',
-    'gemini',
+  pi_api: z.enum([
+    'openai-completions',
+    'openai-responses',
+    'anthropic-messages',
+    'google-generative-ai',
   ]),
   base_url: z.string().trim().max(500).nullable().optional(),
   model_name: z.string().trim().min(1).max(120),
@@ -48,19 +48,8 @@ const CustomModelSchema = z.object({
     )
     .nullable()
     .optional(),
-  // 兼容旧前端字段名：历史上这里实际被当成“上下文窗口”填写。
-  max_output_tokens: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS)
-    .refine(
-      (value) => value === 0 || value >= MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
-      `context_window_tokens 必须为 0，或不小于 ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
-    )
-    .nullable()
-    .optional(),
   auth_mode: AuthModeSchema,
+  api_key: z.string().trim().min(1).max(2000).optional(),
 });
 
 const CustomSecretSchema = z.object({
@@ -84,7 +73,7 @@ function toOfficialModelDto(model: AdminOfficialModelView): OfficialModelDto {
   return {
     id: model.id,
     model_key: model.model_key,
-    protocol: model.protocol,
+    pi_api: model.pi_api,
     display_name: model.display_name,
     enabled: model.enabled,
     priority: model.priority,
@@ -106,7 +95,7 @@ function toCustomModelDto(
   if (!custom) return null;
   return {
     user_id: custom.user_id,
-    protocol: custom.protocol,
+    pi_api: custom.pi_api,
     base_url: custom.base_url,
     model_name: custom.model_name,
     context_window_tokens: custom.context_window_tokens,
@@ -151,15 +140,14 @@ export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
     }
     return saveUserCustomModelConfig({
       userId: request.user.userId,
-      protocol: parsed.data.protocol,
+      piApi: parsed.data.pi_api,
       baseUrl: parsed.data.base_url?.trim() || null,
       modelName: parsed.data.model_name,
       contextWindowTokens: toConfiguredContextWindowTokens(
-        parsed.data.context_window_tokens !== undefined
-          ? parsed.data.context_window_tokens
-          : parsed.data.max_output_tokens,
+        parsed.data.context_window_tokens,
       ),
       authMode: parsed.data.auth_mode,
+      secretValue: parsed.data.api_key,
     });
   });
 

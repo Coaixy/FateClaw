@@ -344,7 +344,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         CREATE TABLE IF NOT EXISTS official_model_configs (
           id TEXT PRIMARY KEY,
           model_key TEXT NOT NULL UNIQUE,
-          protocol TEXT NOT NULL,
+          pi_api TEXT NOT NULL,
           display_name TEXT NOT NULL,
           enabled BOOLEAN NOT NULL DEFAULT true,
           priority INTEGER NOT NULL DEFAULT 0,
@@ -361,7 +361,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await client.query(`
         CREATE TABLE IF NOT EXISTS user_model_configs (
           user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          protocol TEXT NOT NULL,
+          pi_api TEXT NOT NULL,
           base_url TEXT DEFAULT NULL,
           model_name TEXT NOT NULL,
           api_key_secret_key TEXT DEFAULT NULL,
@@ -393,11 +393,93 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       `);
       await client.query(`
         ALTER TABLE official_model_configs
+        DROP CONSTRAINT IF EXISTS chk_official_model_configs_pi_api_valid
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        DROP CONSTRAINT IF EXISTS chk_user_model_configs_pi_api_valid
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
         DROP CONSTRAINT IF EXISTS chk_official_model_configs_protocol_valid
       `);
       await client.query(`
         ALTER TABLE user_model_configs
         DROP CONSTRAINT IF EXISTS chk_user_model_configs_protocol_valid
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        ADD COLUMN IF NOT EXISTS pi_api TEXT
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        ADD COLUMN IF NOT EXISTS pi_api TEXT
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'official_model_configs'
+              AND column_name = 'protocol'
+          ) THEN
+            UPDATE official_model_configs
+            SET pi_api = CASE
+              WHEN COALESCE(pi_api, protocol) IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN COALESCE(pi_api, protocol) IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN COALESCE(pi_api, protocol) IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN COALESCE(pi_api, protocol) IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          ELSE
+            UPDATE official_model_configs
+            SET pi_api = CASE
+              WHEN pi_api IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN pi_api IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN pi_api IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN pi_api IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'user_model_configs'
+              AND column_name = 'protocol'
+          ) THEN
+            UPDATE user_model_configs
+            SET pi_api = CASE
+              WHEN COALESCE(pi_api, protocol) IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN COALESCE(pi_api, protocol) IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN COALESCE(pi_api, protocol) IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN COALESCE(pi_api, protocol) IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          ELSE
+            UPDATE user_model_configs
+            SET pi_api = CASE
+              WHEN pi_api IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN pi_api IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN pi_api IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN pi_api IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        ALTER COLUMN pi_api SET NOT NULL
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        ALTER COLUMN pi_api SET NOT NULL
       `);
       await client.query(`DO $$
         BEGIN
@@ -411,14 +493,20 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
 
             INSERT INTO official_model_configs
               (
-                id, model_key, protocol, display_name, enabled, priority,
+                id, model_key, pi_api, display_name, enabled, priority,
                 base_url, model_name, api_key_secret_key, extra_json,
                 created_at, updated_at
               )
             SELECT
               id,
               provider_key,
-              provider_type,
+              CASE
+                WHEN provider_type IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+                WHEN provider_type IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+                WHEN provider_type IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+                WHEN provider_type IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+                ELSE 'openai-completions'
+              END,
               display_name,
               enabled,
               priority,
@@ -434,13 +522,13 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         END $$;`);
       await client.query(`
         UPDATE official_model_configs
-        SET protocol = 'openai-compatible'
-        WHERE protocol = 'openai'
+        SET pi_api = 'openai-completions'
+        WHERE pi_api IN ('openai', 'openai_compatible', 'openai-compatible')
       `);
       await client.query(`
         UPDATE user_model_configs
-        SET protocol = 'openai-compatible'
-        WHERE protocol = 'openai'
+        SET pi_api = 'openai-completions'
+        WHERE pi_api IN ('openai', 'openai_compatible', 'openai-compatible')
       `);
       await client.query(
         `CREATE INDEX IF NOT EXISTS idx_official_model_configs_enabled_priority
@@ -452,26 +540,34 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
          WHERE official_model_id IS NOT NULL`,
       );
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_official_model_configs_protocol_valid',
+        constraintName: 'chk_official_model_configs_pi_api_valid',
         tableName: 'official_model_configs',
-        expression: `protocol IN ('openai-compatible', 'openai-response', 'anthropic', 'gemini')`,
+        expression: `pi_api IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
         cleanupSql: `UPDATE official_model_configs
-                     SET protocol = 'openai-compatible'
-                     WHERE protocol = 'openai';
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api IN ('openai', 'openai_compatible', 'openai-compatible');
                      UPDATE official_model_configs
-                     SET protocol = 'openai-compatible'
-                     WHERE protocol NOT IN ('openai-compatible', 'openai-response', 'anthropic', 'gemini')`,
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api NOT IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
       });
+      await client.query(`
+        ALTER TABLE official_model_configs
+        DROP COLUMN IF EXISTS protocol
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        DROP COLUMN IF EXISTS protocol
+      `);
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_user_model_configs_protocol_valid',
+        constraintName: 'chk_user_model_configs_pi_api_valid',
         tableName: 'user_model_configs',
-        expression: `protocol IN ('openai-compatible', 'openai-response', 'anthropic', 'gemini')`,
+        expression: `pi_api IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
         cleanupSql: `UPDATE user_model_configs
-                     SET protocol = 'openai-compatible'
-                     WHERE protocol = 'openai';
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api IN ('openai', 'openai_compatible', 'openai-compatible');
                      UPDATE user_model_configs
-                     SET protocol = 'openai-compatible'
-                     WHERE protocol NOT IN ('openai-compatible', 'openai-response', 'anthropic', 'gemini')`,
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api NOT IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_user_model_selections_source_valid',
@@ -1839,6 +1935,126 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone)`,
       );
+    },
+  },
+  {
+    id: '0005_model_pi_api_schema',
+    description: '迁移模型配置 provider 字段到 Pi API schema',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE official_model_configs
+        DROP CONSTRAINT IF EXISTS chk_official_model_configs_protocol_valid
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        DROP CONSTRAINT IF EXISTS chk_user_model_configs_protocol_valid
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        DROP CONSTRAINT IF EXISTS chk_official_model_configs_pi_api_valid
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        DROP CONSTRAINT IF EXISTS chk_user_model_configs_pi_api_valid
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        ADD COLUMN IF NOT EXISTS pi_api TEXT
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        ADD COLUMN IF NOT EXISTS pi_api TEXT
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'official_model_configs'
+              AND column_name = 'protocol'
+          ) THEN
+            UPDATE official_model_configs
+            SET pi_api = CASE
+              WHEN COALESCE(pi_api, protocol) IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN COALESCE(pi_api, protocol) IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN COALESCE(pi_api, protocol) IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN COALESCE(pi_api, protocol) IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          ELSE
+            UPDATE official_model_configs
+            SET pi_api = CASE
+              WHEN pi_api IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN pi_api IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN pi_api IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN pi_api IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'user_model_configs'
+              AND column_name = 'protocol'
+          ) THEN
+            UPDATE user_model_configs
+            SET pi_api = CASE
+              WHEN COALESCE(pi_api, protocol) IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN COALESCE(pi_api, protocol) IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN COALESCE(pi_api, protocol) IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN COALESCE(pi_api, protocol) IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          ELSE
+            UPDATE user_model_configs
+            SET pi_api = CASE
+              WHEN pi_api IN ('openai', 'openai_compatible', 'openai-compatible', 'openai-completions') THEN 'openai-completions'
+              WHEN pi_api IN ('openai-response', 'openai_responses', 'openai-responses') THEN 'openai-responses'
+              WHEN pi_api IN ('anthropic', 'anthropic-messages') THEN 'anthropic-messages'
+              WHEN pi_api IN ('gemini', 'google-generative-ai') THEN 'google-generative-ai'
+              ELSE 'openai-completions'
+            END;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        ALTER COLUMN pi_api SET NOT NULL
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        ALTER COLUMN pi_api SET NOT NULL
+      `);
+      await client.query(`
+        ALTER TABLE official_model_configs
+        DROP COLUMN IF EXISTS protocol
+      `);
+      await client.query(`
+        ALTER TABLE user_model_configs
+        DROP COLUMN IF EXISTS protocol
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_official_model_configs_pi_api_valid',
+        tableName: 'official_model_configs',
+        expression: `pi_api IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
+        cleanupSql: `UPDATE official_model_configs
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api NOT IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_model_configs_pi_api_valid',
+        tableName: 'user_model_configs',
+        expression: `pi_api IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
+        cleanupSql: `UPDATE user_model_configs
+                     SET pi_api = 'openai-completions'
+                     WHERE pi_api NOT IN ('openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai')`,
+      });
     },
   },
 ];

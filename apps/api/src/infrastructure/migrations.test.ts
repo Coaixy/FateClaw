@@ -58,6 +58,13 @@ describe('runDatabaseMigrations', () => {
         '迁移用户表到手机号唯一登录 schema',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0005_model_pi_api_schema',
+        '迁移模型配置 provider 字段到 Pi API schema',
+      ],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -65,7 +72,7 @@ describe('runDatabaseMigrations', () => {
     ).toBe(true);
     expect(
       calls.some((call) =>
-        call.sql.includes('chk_official_model_configs_protocol_valid'),
+        call.sql.includes('chk_official_model_configs_pi_api_valid'),
       ),
     ).toBe(true);
     expect(
@@ -86,6 +93,7 @@ describe('runDatabaseMigrations', () => {
       '0002_config_and_model_schema',
       '0003_application_schema_expansion',
       '0004_phone_only_user_schema',
+      '0005_model_pi_api_schema',
     ]);
 
     await runDatabaseMigrations(client as never);

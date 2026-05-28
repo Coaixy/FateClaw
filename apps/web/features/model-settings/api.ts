@@ -1,6 +1,5 @@
 import type {
-  ModelAuthModeDto,
-  ModelProtocolDto,
+  ModelPiApiDto,
   ModelSettingsOverviewDto,
   OfficialModelDto,
   UserModelSelectionDto,
@@ -8,8 +7,7 @@ import type {
 
 import { requestJson } from '@/lib/http/client';
 
-export type ModelProtocol = ModelProtocolDto;
-export type ModelAuthMode = ModelAuthModeDto;
+export type ModelPiApi = ModelPiApiDto;
 export type OfficialModel = OfficialModelDto;
 export type ModelSettingsOverview = ModelSettingsOverviewDto;
 export type UserModelSelection = UserModelSelectionDto;
@@ -19,17 +17,17 @@ export const modelSettingsApi = {
   officialModels: () =>
     requestJson<OfficialModel[]>('/api/model-settings/official-models'),
   saveCustom: (data: {
-    protocol: ModelProtocol;
+    pi_api: ModelPiApi;
     base_url?: string | null;
     model_name: string;
     context_window_tokens?: number | null;
-    auth_mode?: ModelAuthMode;
+    api_key?: string;
   }) =>
     requestJson<ModelSettingsOverview['custom']>('/api/model-settings/custom', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  saveCustomSecret: (data: { api_key: string; auth_mode?: ModelAuthMode }) =>
+  saveCustomSecret: (data: { api_key: string }) =>
     requestJson<{ success: boolean }>('/api/model-settings/custom/secret', {
       method: 'POST',
       body: JSON.stringify(data),

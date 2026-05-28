@@ -17,7 +17,6 @@ import {
 } from '../../infrastructure/db.js';
 import { getDefaultMaxOutputTokens } from '../../shared/output-token-policy.js';
 import {
-  MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
   normalizeConfiguredContextWindowTokens,
   resolveContextWindow,
 } from '../../shared/model-context-window.js';
@@ -49,7 +48,7 @@ export interface EffectiveLlmRuntimeConfig {
   billingMode: LlmBillingMode;
   modelConfigId: string;
   providerKey: string;
-  providerType: ModelProviderType;
+  piApi: ModelProviderType;
   displayName: string;
   authMode: ProviderAuthMode;
   secret: string;
@@ -83,14 +82,14 @@ export interface UserModelSettingsOverview {
   official_models: AdminOfficialModelView[];
 }
 
-function defaultAuthMode(providerType: ModelProviderType): ProviderAuthMode {
-  if (providerType === 'gemini') return 'gemini_api_key';
-  if (providerType === 'anthropic') return 'anthropic_api_key';
+function defaultAuthMode(piApi: ModelProviderType): ProviderAuthMode {
+  if (piApi === 'google-generative-ai') return 'gemini_api_key';
+  if (piApi === 'anthropic-messages') return 'anthropic_api_key';
   return 'openai_api_key';
 }
 
 function normalizeAuthMode(
-  providerType: ModelProviderType,
+  piApi: ModelProviderType,
   value: unknown,
 ): ProviderAuthMode {
   if (
@@ -101,33 +100,17 @@ function normalizeAuthMode(
   ) {
     return value;
   }
-  return defaultAuthMode(providerType);
+  return defaultAuthMode(piApi);
 }
 
 function normalizeModelContextWindowTokens(
   extraJson: Record<string, unknown> | null | undefined,
   label: string,
 ): number | null {
-  if (extraJson?.context_window_tokens !== undefined) {
-    return normalizeConfiguredContextWindowTokens(
-      extraJson.context_window_tokens,
-      label,
-    );
-  }
-  // 兼容旧库：历史 UI 文案叫 max_output_tokens，但实际常被当成模型上下文长度填写。
-  // 只有数值达到上下文窗口下限时才迁移语义；较小的旧“输出上限”配置直接忽略。
-  const legacyValue = extraJson?.max_output_tokens;
-  if (
-    legacyValue === undefined ||
-    legacyValue === null ||
-    legacyValue === 0 ||
-    (typeof legacyValue === 'number' &&
-      legacyValue < MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS)
-  ) {
-    return null;
-  }
-  // 新保存统一写 context_window_tokens，避免再误传为 API max_tokens。
-  return normalizeConfiguredContextWindowTokens(legacyValue, label);
+  return normalizeConfiguredContextWindowTokens(
+    extraJson?.context_window_tokens,
+    label,
+  );
 }
 
 function withModelContextWindowTokens(
@@ -140,21 +123,19 @@ function withModelContextWindowTokens(
   }
   if (contextWindowTokens === null) {
     delete next.context_window_tokens;
-    delete next.max_output_tokens;
   } else {
     next.context_window_tokens = contextWindowTokens;
-    delete next.max_output_tokens;
   }
   return next;
 }
 
 async function resolveSecret(input: {
   secretKey: string | null;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   extraJson?: Record<string, unknown> | null;
 }): Promise<ResolvedProviderSecret> {
   const authMode = normalizeAuthMode(
-    input.protocol,
+    input.piApi,
     input.extraJson?.auth_mode,
   );
   if (!input.secretKey) {
@@ -187,7 +168,7 @@ async function resolveOfficialRuntime(
   }
   const secret = await resolveSecret({
     secretKey: model.api_key_secret_key,
-    protocol: model.protocol,
+    piApi: model.pi_api,
     extraJson: model.extra_json,
   });
   if (!secret.value) {
@@ -206,7 +187,7 @@ async function resolveOfficialRuntime(
     billingMode: 'metered',
     modelConfigId: model.id,
     providerKey: model.model_key,
-    providerType: model.protocol,
+    piApi: model.pi_api,
     displayName: model.display_name,
     authMode: secret.authMode,
     secret: secret.value,
@@ -231,7 +212,7 @@ async function resolveCustomRuntime(
   }
   const secret = await resolveSecret({
     secretKey: config.api_key_secret_key,
-    protocol: config.protocol,
+    piApi: config.pi_api,
     extraJson: config.extra_json,
   });
   if (!secret.value) {
@@ -250,7 +231,7 @@ async function resolveCustomRuntime(
     billingMode: 'none',
     modelConfigId: userId,
     providerKey: `custom:${userId}`,
-    providerType: config.protocol,
+    piApi: config.pi_api,
     displayName: '自配模型',
     authMode: secret.authMode,
     secret: secret.value,
@@ -299,7 +280,7 @@ export async function listOfficialModelViews(): Promise<
     models.map(async (model) => {
       const secret = await resolveSecret({
         secretKey: model.api_key_secret_key,
-        protocol: model.protocol,
+        piApi: model.pi_api,
         extraJson: model.extra_json,
       });
       return {
@@ -355,7 +336,7 @@ export async function setOfficialModelSecret(args: {
   await updateOfficialModelConfig({
     id: model.id,
     modelKey: model.model_key,
-    protocol: model.protocol,
+    piApi: model.pi_api,
     displayName: model.display_name,
     enabled: model.enabled,
     priority: model.priority,
@@ -367,7 +348,7 @@ export async function setOfficialModelSecret(args: {
       model.output_token_price_per_million_points,
     extraJson: {
       ...(model.extra_json ?? {}),
-      auth_mode: args.authMode ?? defaultAuthMode(model.protocol),
+      auth_mode: args.authMode ?? defaultAuthMode(model.pi_api),
     },
   });
   await createConfigAuditLog({
@@ -383,7 +364,7 @@ export async function setOfficialModelSecret(args: {
 
 export async function createOfficialModel(args: {
   modelKey: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   displayName: string;
   enabled?: boolean;
   priority?: number;
@@ -392,22 +373,42 @@ export async function createOfficialModel(args: {
   inputTokenPricePerMillionPoints?: number;
   outputTokenPricePerMillionPoints?: number;
   contextWindowTokens?: number | null;
+  secretValue?: string;
+  authMode?: ProviderAuthMode;
   actor?: string;
 }): Promise<OfficialModelConfig> {
   const actor = args.actor ?? 'admin';
+  const id = `official-model-${randomUUID()}`;
+  const secretKey = args.secretValue
+    ? `official-model:${id}:secret`
+    : null;
+  if (args.secretValue && secretKey) {
+    await upsertSystemSecret({
+      key: secretKey,
+      secretValue: args.secretValue,
+      updatedBy: actor,
+    });
+  }
+  const extraJson = withModelContextWindowTokens(
+    args.authMode || args.secretValue
+      ? { auth_mode: args.authMode ?? defaultAuthMode(args.piApi) }
+      : {},
+    args.contextWindowTokens,
+  );
   const created = await createOfficialModelConfig({
-    id: `official-model-${randomUUID()}`,
+    id,
     modelKey: args.modelKey,
-    protocol: args.protocol,
+    piApi: args.piApi,
     displayName: args.displayName,
     enabled: args.enabled ?? true,
     priority: args.priority ?? 0,
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
+    apiKeySecretKey: secretKey,
     inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints ?? 0,
     outputTokenPricePerMillionPoints:
       args.outputTokenPricePerMillionPoints ?? 0,
-    extraJson: withModelContextWindowTokens({}, args.contextWindowTokens),
+    extraJson,
   });
   await createConfigAuditLog({
     id: `cfg-audit-${randomUUID()}`,
@@ -423,7 +424,7 @@ export async function createOfficialModel(args: {
 export async function updateOfficialModel(args: {
   id: string;
   modelKey: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   displayName: string;
   enabled: boolean;
   priority: number;
@@ -442,7 +443,7 @@ export async function updateOfficialModel(args: {
   const updated = await updateOfficialModelConfig({
     id: args.id,
     modelKey: args.modelKey,
-    protocol: args.protocol,
+    piApi: args.piApi,
     displayName: args.displayName,
     enabled: args.enabled,
     priority: args.priority,
@@ -501,7 +502,7 @@ export async function getUserModelSettingsOverview(
   const customSecret = custom
     ? await resolveSecret({
         secretKey: custom.api_key_secret_key,
-        protocol: custom.protocol,
+        piApi: custom.pi_api,
         extraJson: custom.extra_json,
       })
     : null;
@@ -510,7 +511,7 @@ export async function getUserModelSettingsOverview(
       ? {
           ...custom,
           has_secret: Boolean(customSecret?.value),
-          auth_mode: customSecret?.authMode ?? defaultAuthMode(custom.protocol),
+          auth_mode: customSecret?.authMode ?? defaultAuthMode(custom.pi_api),
           context_window_tokens: normalizeModelContextWindowTokens(
             custom.extra_json,
             '自配模型',
@@ -524,25 +525,36 @@ export async function getUserModelSettingsOverview(
 
 export async function saveUserCustomModelConfig(args: {
   userId: string;
-  protocol: ModelProviderType;
+  piApi: ModelProviderType;
   baseUrl?: string | null;
   modelName: string;
   authMode?: ProviderAuthMode;
   contextWindowTokens?: number | null;
+  secretValue?: string;
 }): Promise<UserModelConfig> {
   const existing = await getUserModelConfig(args.userId);
+  const secretKey = args.secretValue
+    ? existing?.api_key_secret_key ?? `user-model:${args.userId}:secret`
+    : existing?.api_key_secret_key ?? null;
+  if (args.secretValue && secretKey) {
+    await upsertSystemSecret({
+      key: secretKey,
+      secretValue: args.secretValue,
+      updatedBy: args.userId,
+    });
+  }
   return upsertUserModelConfig({
     userId: args.userId,
-    protocol: args.protocol,
+    piApi: args.piApi,
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
-    apiKeySecretKey: existing?.api_key_secret_key ?? null,
+    apiKeySecretKey: secretKey,
     extraJson: {
       ...withModelContextWindowTokens(
         existing?.extra_json,
         args.contextWindowTokens,
       ),
-      auth_mode: args.authMode ?? defaultAuthMode(args.protocol),
+      auth_mode: args.authMode ?? defaultAuthMode(args.piApi),
     },
   });
 }
@@ -565,13 +577,13 @@ export async function setUserCustomModelSecret(args: {
   });
   await upsertUserModelConfig({
     userId: args.userId,
-    protocol: config.protocol,
+    piApi: config.pi_api,
     baseUrl: config.base_url,
     modelName: config.model_name,
     apiKeySecretKey: secretKey,
     extraJson: {
       ...(config.extra_json ?? {}),
-      auth_mode: args.authMode ?? defaultAuthMode(config.protocol),
+      auth_mode: args.authMode ?? defaultAuthMode(config.pi_api),
     },
   });
 }
