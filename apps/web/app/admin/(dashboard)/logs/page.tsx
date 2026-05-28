@@ -20,10 +20,13 @@ import {
   RefreshCw,
   ScrollText,
   Search,
+  Trash2,
   Wrench,
   X,
 } from 'lucide-react';
 
+import { useConfirm } from '@/lib/use-confirm';
+import { useToast } from '@/lib/use-toast';
 import {
   FinalOutputCard,
   TranscriptEventView,
@@ -224,6 +227,8 @@ function LogCard({
 }
 
 export default function AdminLogsPage() {
+  const { confirm } = useConfirm();
+  const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -239,6 +244,7 @@ export default function AdminLogsPage() {
   const [requestIdQuery, setRequestIdQuery] = useState('');
   const [searchMode, setSearchMode] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [clearingLogs, setClearingLogs] = useState(false);
 
   useEffect(() => {
     admin
@@ -371,6 +377,41 @@ export default function AdminLogsPage() {
     }
   };
 
+  const handleClearSelectedUserLogs = async () => {
+    const userId = selectedUserId;
+    if (!userId || clearingLogs) return;
+    const userLabel =
+      users.find((user) => user.id === userId)?.phone ?? userId;
+    const ok = await confirm({
+      title: '清空对话日志',
+      message: `确定要清空用户「${userLabel}」的所有对话日志吗？\n\n包括站内 AI Chat 和该用户所有绑定账号的日志，删除后无法恢复。`,
+      confirmLabel: '清空',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    setClearingLogs(true);
+    try {
+      const result = await adminLogs.clearUser(userId);
+      setLogList([]);
+      setPreloadedFull(null);
+      setRequestIdQuery('');
+      setSearchMode(false);
+      setSearchError('');
+      setHasMore(false);
+      toast(
+        'success',
+        result.deleted_count > 0
+          ? `已清空 ${result.deleted_count} 条日志`
+          : '没有可清空的日志',
+      );
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '清空日志失败');
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -436,6 +477,21 @@ export default function AdminLogsPage() {
               ))}
             </select>
           )}
+
+          <button
+            type="button"
+            onClick={handleClearSelectedUserLogs}
+            disabled={!selectedUserId || logsLoading || clearingLogs}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-500/20 px-2.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+            title="清空当前用户日志"
+          >
+            {clearingLogs ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Trash2 size={12} />
+            )}
+            清空用户日志
+          </button>
         </div>
 
         <div className="flex-1" />

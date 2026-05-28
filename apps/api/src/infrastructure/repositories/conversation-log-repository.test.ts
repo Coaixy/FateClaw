@@ -9,6 +9,7 @@ vi.mock('../db-pool.js', () => ({
 }));
 
 import {
+  deleteConversationLogsByAccountIds,
   getConversationLogSummaries,
   purgeExpiredTraceEvents,
   storeConversationLog,
@@ -154,6 +155,27 @@ describe('conversation log repository', () => {
       20,
       '2026-05-27T00:00:00.000Z',
     ]);
+  });
+
+  it('deletes logs for multiple runtime accounts in one statement', async () => {
+    const { calls } = createMockPool({ rowCounts: [5] });
+
+    await expect(
+      deleteConversationLogsByAccountIds(['web:user-1', 'account-1']),
+    ).resolves.toBe(5);
+
+    expect(calls[0]?.sql).toBe(
+      'DELETE FROM conversation_logs WHERE account_id = ANY($1::text[])',
+    );
+    expect(calls[0]?.params).toEqual([['web:user-1', 'account-1']]);
+  });
+
+  it('skips the database when deleting logs for an empty account set', async () => {
+    const { calls } = createMockPool();
+
+    await expect(deleteConversationLogsByAccountIds([])).resolves.toBe(0);
+
+    expect(calls).toHaveLength(0);
   });
 
   it('purges trace events in batches until the last partial batch', async () => {

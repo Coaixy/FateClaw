@@ -117,6 +117,7 @@ import {
   upsertUserModelSelection,
 } from './repositories/config-repository.js';
 import {
+  deleteConversationLogsByAccountIds,
   getConversationLogById,
   getConversationLogByRequestId,
   getConversationLogSummaries,
@@ -236,6 +237,7 @@ export {
   decryptSensitive,
   deleteAccount,
   deleteChatSession,
+  deleteConversationLogsByAccountIds,
   deleteOfficialModelConfig,
   deleteSkillBundle,
   deleteTask,

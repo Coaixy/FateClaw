@@ -1,19 +1,20 @@
-import {
-  getAnnualFortuneRange,
-  getBaZi,
-  getBaZiBySiZhu,
-  getFortune,
-  getPattern,
-  type BaZiConfig,
-  type BaZiResult,
-  type DecadeFortuneInfo,
-  type FortuneResult,
-  type Gender,
+import type {
+  BaZiConfig,
+  BaZiResult,
+  DecadeFortuneInfo,
+  FortuneResult,
+  Gender,
 } from 'bazi-ts-lib';
 import { solarToLunar } from 'iching-shifa';
 
 const SECTIONS = ['bazi', 'fortune', 'pattern'] as const;
 const DEFAULT_DECADE_COUNT = 11;
+
+type BaziLib = typeof import('bazi-ts-lib');
+type AnnualFortuneRange = ReturnType<BaziLib['getAnnualFortuneRange']>;
+type BaziPattern = ReturnType<BaziLib['getPattern']>;
+
+let baziLibPromise: Promise<BaziLib> | null = null;
 
 type BaziSection = (typeof SECTIONS)[number];
 
@@ -37,7 +38,7 @@ type ChildhoodFortune = Omit<DecadeFortuneInfo, 'tenStar' | 'element'> & {
 type BaziFortuneOutput = {
   childLimit: FortuneResult['childLimit'];
   decades: Array<DecadeFortuneInfo | ChildhoodFortune>;
-  annuals: ReturnType<typeof getAnnualFortuneRange>;
+  annuals: AnnualFortuneRange;
   annualStartYear: number;
   annualEndYear: number;
   currentAnnualYear: number;
@@ -47,7 +48,30 @@ type BaziFortuneOutput = {
 export interface BaziPaipanResult {
   bazi?: BaZiResult;
   fortune?: BaziFortuneOutput;
-  pattern?: ReturnType<typeof getPattern>;
+  pattern?: BaziPattern;
+}
+
+async function loadBaziLib(): Promise<BaziLib> {
+  if (!baziLibPromise) {
+    baziLibPromise = importBaziLibWithoutDemoOutput();
+  }
+  return baziLibPromise;
+}
+
+async function importBaziLibWithoutDemoOutput(): Promise<BaziLib> {
+  const originalArgv1 = process.argv[1];
+  if (originalArgv1?.includes('index.ts')) {
+    // bazi-ts-lib 1.0.1 在入口里用 process.argv[1] 判断并打印 demo。
+    process.argv[1] = originalArgv1.replaceAll('index.ts', 'app-entry.ts');
+  }
+
+  try {
+    return await import('bazi-ts-lib');
+  } finally {
+    if (originalArgv1 !== undefined) {
+      process.argv[1] = originalArgv1;
+    }
+  }
 }
 
 function normalizeGender(gender: string | undefined): Gender {
@@ -68,6 +92,7 @@ function buildFortuneSection(
   fortuneSource: FortuneResult,
   birthDate: Date,
   config: Partial<BaZiConfig>,
+  baziLib: BaziLib,
 ): BaziFortuneOutput {
   const birthYear = birthDate.getFullYear();
   const currentAnnualYear = fortuneSource.currentAnnual?.year ?? birthYear;
@@ -75,7 +100,7 @@ function buildFortuneSection(
     fortuneSource.decades.at(-1)?.endYear ?? currentAnnualYear;
 
   // 流年必须全量返回，避免只给窗口时让下游误判年份范围或遗漏上下文。
-  const annuals = getAnnualFortuneRange(
+  const annuals = baziLib.getAnnualFortuneRange(
     bazi,
     birthDate,
     birthYear,
@@ -146,11 +171,12 @@ function withReferenceYearPillar(
   birthDate: Date,
   gender: Gender,
   config: Partial<BaZiConfig>,
+  baziLib: BaziLib,
 ): BaZiResult {
   const referenceYearPillar = getReferenceYearPillar(birthDate);
   if (bazi.pillars.year.sixtyCycle === referenceYearPillar) return bazi;
 
-  const referenceBazi = getBaZiBySiZhu(
+  const referenceBazi = baziLib.getBaZiBySiZhu(
     referenceYearPillar,
     bazi.pillars.month.sixtyCycle,
     bazi.pillars.day.sixtyCycle,
@@ -189,11 +215,13 @@ export async function runBaziPaipan(
   const birthDate = buildBirthDate(solarDate, hour, minute);
   const config = { zishiMode, childLimitMode, decadeCount };
   const normalizedGender = normalizeGender(gender);
+  const baziLib = await loadBaziLib();
   const bazi = withReferenceYearPillar(
-    getBaZi(birthDate, normalizedGender, config),
+    baziLib.getBaZi(birthDate, normalizedGender, config),
     birthDate,
     normalizedGender,
     config,
+    baziLib,
   );
 
   const result: BaziPaipanResult = {};
@@ -203,15 +231,15 @@ export async function runBaziPaipan(
       continue;
     }
     if (section === 'fortune') {
-      const fortune = getFortune(bazi, birthDate, config);
+      const fortune = baziLib.getFortune(bazi, birthDate, config);
       result.fortune = withReferenceDecadeShape(
-        buildFortuneSection(bazi, fortune, birthDate, config),
+        buildFortuneSection(bazi, fortune, birthDate, config, baziLib),
         birthDate,
       );
       continue;
     }
     if (section === 'pattern') {
-      result.pattern = getPattern(bazi);
+      result.pattern = baziLib.getPattern(bazi);
       continue;
     }
   }

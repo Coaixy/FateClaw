@@ -824,6 +824,11 @@ export const adminLogs = {
     adminRequest<ConversationLog>(
       `/api/admin/logs/${encodeURIComponent(logId)}`,
     ),
+  clearUser: (userId: string) =>
+    adminRequest<{ success: boolean; deleted_count: number }>(
+      `/api/admin/users/${encodeURIComponent(userId)}/logs`,
+      { method: 'DELETE' },
+    ),
   getByRequestId: (requestId: string) =>
     adminRequest<ConversationLog>(
       `/api/admin/logs/by-request/${encodeURIComponent(requestId)}`,

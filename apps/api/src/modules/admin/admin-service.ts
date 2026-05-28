@@ -14,6 +14,7 @@ import {
   approveWithdrawal,
   createUser,
   decryptSensitive,
+  deleteConversationLogsByAccountIds,
   deleteUser,
   getAccountsByUserId,
   getActiveTaskCountForUser,
@@ -62,6 +63,7 @@ import {
   updateAdminRechargePaymentConfig,
 } from '../billing/recharge-service.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
+import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
 import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
@@ -75,6 +77,7 @@ export {
   adjustUserPurchasedPoints,
   approveWithdrawal,
   createOfficialModel,
+  deleteConversationLogsByAccountIds,
   deleteUser,
   getAdminGlobalStats,
   getAdminRechargePaymentConfig,
@@ -105,6 +108,20 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
 };
+
+/**
+ * 管理后台按用户清空日志：同时覆盖站内 AI Chat runtime 和用户绑定账号。
+ */
+export async function deleteConversationLogsForAdminUser(
+  userId: string,
+): Promise<number> {
+  const accounts = await getAccountsByUserId(userId);
+  const accountIds = new Set<string>([getWebChatRuntimeId(userId)]);
+  for (const account of accounts) {
+    accountIds.add(account.id);
+  }
+  return deleteConversationLogsByAccountIds([...accountIds]);
+}
 
 export async function createAdminUser(input: {
   phone: string;

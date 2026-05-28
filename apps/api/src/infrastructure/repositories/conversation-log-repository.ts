@@ -199,6 +199,20 @@ export async function getConversationLogSummaries(
   return rows as ConversationLogSummaryRow[];
 }
 
+/**
+ * 清空多个运行账号下的对话日志，用于 admin 按用户批量清理。
+ */
+export async function deleteConversationLogsByAccountIds(
+  accountIds: string[],
+): Promise<number> {
+  if (accountIds.length === 0) return 0;
+  const result = await getDbPool().query(
+    'DELETE FROM conversation_logs WHERE account_id = ANY($1::text[])',
+    [accountIds],
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function getConversationLogById(
   id: string,
 ): Promise<ConversationLogRow | undefined> {

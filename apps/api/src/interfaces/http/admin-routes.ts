@@ -11,6 +11,7 @@ import {
   adjustUserPurchasedPoints,
   approveWithdrawal,
   createOfficialModel,
+  deleteConversationLogsForAdminUser,
   deleteUser,
   getAdminGlobalStats,
   getAdminRechargePaymentConfig,
@@ -669,6 +670,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     );
     const staleBeforeIso = new Date(Date.now() - staleMs).toISOString();
     return reconcileStaleBillingReservations(staleBeforeIso, body.limit ?? 100);
+  });
+
+  // DELETE /api/admin/users/:id/logs — 清空某个用户的全部对话日志
+  app.delete('/users/:id/logs', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = await getUserById(id);
+    if (!user) {
+      return reply.code(404).send({ error: '用户不存在' });
+    }
+    const deletedCount = await deleteConversationLogsForAdminUser(id);
+    return { success: true, deleted_count: deletedCount };
   });
 
   // DELETE /api/admin/users/:id — 删除用户及其所有数据
