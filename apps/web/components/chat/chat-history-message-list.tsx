@@ -209,14 +209,6 @@ function ChatHistoryMessageRow({
             <CollapsibleMessage
               content={displayContent}
               isBot={isBot}
-              collapsedOverlayClassName={`absolute inset-x-0 bottom-0 h-8 pointer-events-none ${
-                isBot
-                  ? 'bg-[linear-gradient(transparent,var(--color-surface-card))]'
-                  : 'bg-[linear-gradient(transparent,var(--color-primary))]'
-              }`}
-              toggleClassName={`flex items-center gap-0.5 mt-1.5 text-[10px] hover:underline cursor-pointer ${
-                isBot ? 'text-primary' : 'text-on-primary/70'
-              }`}
             />
           </div>
 

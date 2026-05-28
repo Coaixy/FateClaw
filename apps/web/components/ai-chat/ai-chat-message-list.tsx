@@ -178,12 +178,6 @@ function AiChatMessageRow({
             <CollapsibleMessage
               content={displayContent}
               isBot={isBot}
-              collapsedOverlayClassName={`absolute inset-x-0 bottom-0 h-12 pointer-events-none ${
-                isBot
-                  ? 'bg-[linear-gradient(transparent,var(--color-surface-card))]'
-                  : 'bg-[linear-gradient(transparent,var(--color-surface-dark))]'
-              }`}
-              toggleClassName="flex items-center gap-0.5 mt-1 text-[9px] text-primary hover:underline cursor-pointer"
             />
           </div>
 

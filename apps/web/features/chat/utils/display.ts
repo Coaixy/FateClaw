@@ -1,7 +1,5 @@
 import type { Message } from '@/features/chat/api';
 
-export const COLLAPSE_CHAR_LIMIT = 600;
-export const COLLAPSE_LINE_LIMIT = 15;
 export const AUTO_SCROLL_THRESHOLD = 80;
 
 export const PAIPAN_SKILLS = new Set([
@@ -67,13 +65,6 @@ export function groupMessagesByDate(messages: Message[]): MessageGroup[] {
   }
 
   return groups;
-}
-
-export function shouldCollapseMessage(content: string) {
-  return (
-    content.length > COLLAPSE_CHAR_LIMIT ||
-    content.split('\n').length > COLLAPSE_LINE_LIMIT
-  );
 }
 
 export function isProgressMessage(
