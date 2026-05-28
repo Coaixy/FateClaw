@@ -99,6 +99,126 @@ describe('createPiCustomTools', () => {
     );
   });
 
+  it('supports Pi-style offset continuation for large skill files', async () => {
+    const readableSkill = createReadableSkillFixture();
+    fs.writeFileSync(
+      readableSkill.filePath,
+      ['line 1', 'line 2', 'line 3', 'line 4'].join('\n'),
+    );
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const readTool = tools.find((tool) => tool.name === 'read')!;
+
+    const firstPage = await readTool.execute(
+      'read-page-1',
+      { path: readableSkill.filePath, limit: 2 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const secondPage = await readTool.execute(
+      'read-page-2',
+      { path: readableSkill.filePath, offset: 3, limit: 2 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const outOfRange = await readTool.execute(
+      'read-page-3',
+      { path: readableSkill.filePath, offset: 99 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(firstPage.content[0]).toEqual({
+      type: 'text',
+      text: [
+        'line 1',
+        'line 2',
+        '',
+        '[Showing lines 1-2 of 4. Use offset=3 to continue.]',
+      ].join('\n'),
+    });
+    expect(firstPage.details).toMatchObject({
+      isError: false,
+      offset: 1,
+      limit: 2,
+      totalLines: 4,
+      nextOffset: 3,
+    });
+    expect(secondPage.content[0]).toEqual({
+      type: 'text',
+      text: ['line 3', 'line 4'].join('\n'),
+    });
+    expect(secondPage.details).toMatchObject({
+      isError: false,
+      offset: 3,
+      limit: 2,
+      totalLines: 4,
+    });
+    expect(outOfRange.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('offset=99 超出文件末尾'),
+    });
+  });
+
+  it('reads any markdown file inside a visible skill bundle by relative path', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const docsDir = path.join(readableSkill.baseDir, 'docs');
+    fs.mkdirSync(docsDir);
+    fs.writeFileSync(path.join(docsDir, 'knowledge.md'), '知识正文');
+    fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), '非 Markdown');
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const readTool = tools.find((tool) => tool.name === 'read')!;
+
+    const markdown = await readTool.execute(
+      'read-md',
+      { path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const nonMarkdown = await readTool.execute(
+      'read-txt',
+      { path: 'secret.txt' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const outside = await readTool.execute(
+      'read-outside',
+      { path: '../outside.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(markdown.content[0]).toEqual({
+      type: 'text',
+      text: '知识正文',
+    });
+    expect(markdown.details).toMatchObject({
+      isError: false,
+      path: path.join(docsDir, 'knowledge.md'),
+    });
+    expect(nonMarkdown.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('不是授权 Skill 内的 Markdown 文件'),
+    });
+    expect(outside.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('不属于本轮可见 Skill 目录'),
+    });
+  });
+
   it('does not expose FateClaw deterministic or legacy domain-specific tools as Pi custom tools', () => {
     const tools = createPiCustomTools({
       requestScope: createRequestScope(),
