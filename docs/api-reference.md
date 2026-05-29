@@ -639,9 +639,9 @@ Authorization: Bearer <token>
 
 易支付异步通知入口。免登录，验签成功且金额一致后幂等入账，成功返回纯文本 `success`。
 
-充值开关、金额范围、易支付网关、商户号、密钥和回调地址均保存在数据库表
-`recharge_payment_config`，不通过环境变量读取。管理端可通过 `/api/admin/recharge-config`
-修改。
+充值开关、金额范围、易支付网关、商户号和密钥保存在数据库表
+`recharge_payment_config`。异步通知地址和支付完成返回地址由服务端按
+`PUBLIC_BASE_URL` 或当前请求域名生成，下单时自动传给易支付。
 
 ---
 
@@ -685,11 +685,11 @@ Authorization: Bearer <token>
 
 ### GET /api/admin/recharge-config
 
-读取充值配置。
+读取充值配置。响应中的 `notify_url` / `return_url` 是服务端生成的展示值。
 
 ### PUT /api/admin/recharge-config
 
-更新充值配置。所有字段保存在数据库。
+更新充值配置。回调地址由服务端生成，不需要提交。
 
 **Request Body**
 
@@ -702,9 +702,7 @@ Authorization: Bearer <token>
   "epay_platform_id": 1001,
   "epay_merchant_private_key": "-----BEGIN PRIVATE KEY-----...",
   "epay_platform_public_key": "-----BEGIN PUBLIC KEY-----...",
-  "epay_merchant_key": "query-secret",
-  "notify_url": "https://your-domain.com/api/billing/recharge/notify",
-  "return_url": "https://your-domain.com/wallet"
+  "epay_merchant_key": "query-secret"
 }
 ```
 
@@ -784,6 +782,7 @@ Authorization: Bearer <token>
 | --------------------------- | ----------------------- | ---------------------------------- |
 | `API_PORT`                  | 3000                    | API 监听端口                       |
 | `API_HOST`                  | 0.0.0.0                 | API 监听地址                       |
+| `PUBLIC_BASE_URL`           | -                       | 公开访问地址，用于生成支付回调 URL |
 | `DATABASE_URL`              | -                       | PostgreSQL 连接地址                |
 | `REDIS_URL`                 | -                       | Redis 连接地址                     |
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |

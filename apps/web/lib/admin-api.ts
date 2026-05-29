@@ -373,6 +373,14 @@ export interface AdminRechargePaymentConfig {
   updated_at: string;
 }
 
+/**
+ * 管理后台提交的充值配置；支付回调地址由后端生成。
+ */
+export type AdminRechargePaymentConfigUpdate = Omit<
+  AdminRechargePaymentConfig,
+  'notify_url' | 'return_url' | 'updated_at'
+>;
+
 export interface AdminSystemConfigOverview {
   providers: AdminModelProvider[];
   official_models: AdminModelProvider[];
@@ -409,9 +417,7 @@ export const admin = {
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
   rechargeConfig: () =>
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config'),
-  updateRechargeConfig: (
-    data: Omit<AdminRechargePaymentConfig, 'updated_at'>,
-  ) =>
+  updateRechargeConfig: (data: AdminRechargePaymentConfigUpdate) =>
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config', {
       method: 'PUT',
       body: JSON.stringify(data),

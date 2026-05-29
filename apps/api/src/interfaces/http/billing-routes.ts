@@ -14,6 +14,7 @@ import {
   listRechargeOrdersForUser,
   syncRechargeOrderForUser,
 } from '../../modules/billing/recharge-service.js';
+import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/billing — subscription status
@@ -88,6 +89,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
       amountYuan: body.amount_yuan,
       payType: body.pay_type,
       clientIp: request.ip,
+      callbackUrls: resolvePaymentCallbackUrls(request),
     });
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

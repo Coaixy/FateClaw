@@ -56,6 +56,7 @@ import {
   MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS,
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
+import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 const GrantBonusPointsSchema = z.object({
   amount_points: z.number().int().positive('赠送积分必须为正整数'),
@@ -224,8 +225,8 @@ const RechargePaymentConfigSchema = z
     epay_merchant_private_key: z.string().max(8000),
     epay_platform_public_key: z.string().max(8000),
     epay_merchant_key: z.string().trim().max(1000),
-    notify_url: z.string().trim().max(500),
-    return_url: z.string().trim().max(500),
+    notify_url: z.string().trim().max(500).optional(),
+    return_url: z.string().trim().max(500).optional(),
   })
   .superRefine((value, ctx) => {
     if (Number(value.max_yuan) < Number(value.min_yuan)) {
@@ -242,8 +243,6 @@ const RechargePaymentConfigSchema = z
       ['epay_merchant_private_key', '商户私钥不能为空'],
       ['epay_platform_public_key', '平台公钥不能为空'],
       ['epay_merchant_key', '商户查询密钥不能为空'],
-      ['notify_url', '异步通知地址不能为空'],
-      ['return_url', '支付完成返回地址不能为空'],
     ];
     for (const [key, message] of requiredFields) {
       if (!value[key]) {
@@ -319,8 +318,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/admin/recharge-config — 读取数据库中的充值配置
-  app.get('/recharge-config', async () => {
-    return getAdminRechargePaymentConfig();
+  app.get('/recharge-config', async (request) => {
+    return getAdminRechargePaymentConfig(resolvePaymentCallbackUrls(request));
   });
 
   // PUT /api/admin/recharge-config — 更新易支付充值配置
@@ -331,7 +330,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: parsed.error.issues[0]?.message || '参数错误' });
     }
-    return updateAdminRechargePaymentConfig(parsed.data);
+    return updateAdminRechargePaymentConfig(
+      parsed.data,
+      resolvePaymentCallbackUrls(request),
+    );
   });
 
   // POST /api/admin/system-config/providers — 新建官方模型

@@ -15,6 +15,7 @@ const envConfig = readEnvFile([
   'REDIS_URL',
   'JWT_SECRET',
   'MANAGER_KEY',
+  'PUBLIC_BASE_URL',
   'WITHDRAWAL_ENCRYPTION_KEY',
 ]);
 
@@ -76,6 +77,19 @@ if (RAW_MANAGER_KEY) {
   assertStrongSecret('MANAGER_KEY', RAW_MANAGER_KEY);
 }
 export const MANAGER_KEY = RAW_MANAGER_KEY;
+
+function normalizePublicBaseUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (!URL.canParse(trimmed)) return '';
+  const url = new URL(trimmed);
+  return `${url.protocol}//${url.host}`;
+}
+
+// 公开访问地址用于生成第三方支付回调 URL。未配置时由请求 Host 自动推断。
+export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
+  process.env.PUBLIC_BASE_URL || envConfig.PUBLIC_BASE_URL || '',
+);
 
 // 积分体系：1 元人民币 = 100 积分
 export const POINTS_PER_YUAN = 100;

@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AdminRechargePaymentConfig } from '@/lib/admin-api';
-import { CreditCard, Loader2, Save } from 'lucide-react';
+import type {
+  AdminRechargePaymentConfig,
+  AdminRechargePaymentConfigUpdate,
+} from '@/lib/admin-api';
+import { Copy, CreditCard, Loader2, Save } from 'lucide-react';
 
-type RechargeDraft = Omit<AdminRechargePaymentConfig, 'updated_at'>;
+type RechargeDraft = AdminRechargePaymentConfigUpdate;
 
 function draftFromConfig(
   config: AdminRechargePaymentConfig | null,
@@ -19,8 +22,6 @@ function draftFromConfig(
         epay_merchant_private_key: config.epay_merchant_private_key,
         epay_platform_public_key: config.epay_platform_public_key,
         epay_merchant_key: config.epay_merchant_key,
-        notify_url: config.notify_url,
-        return_url: config.return_url,
       }
     : {
         enabled: false,
@@ -31,11 +32,44 @@ function draftFromConfig(
         epay_merchant_private_key: '',
         epay_platform_public_key: '',
         epay_merchant_key: '',
-        notify_url: '',
-        return_url: '',
       };
 }
 
+function CallbackUrlPreview({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="space-y-1.5 lg:col-span-2">
+      <div className="text-[12px] font-medium text-muted">{label}</div>
+      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 py-2">
+        <code className="min-w-0 flex-1 break-all text-[12px] leading-5 text-ink">
+          {value}
+        </code>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-card hover:text-ink"
+          title={copied ? '已复制' : `复制${label}`}
+          aria-label={copied ? '已复制' : `复制${label}`}
+        >
+          <Copy size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 管理后台充值配置面板。
+ */
 export function RechargeConfigPanel({
   config,
   busy,
@@ -48,6 +82,7 @@ export function RechargeConfigPanel({
   const [draft, setDraft] = useState<RechargeDraft>(() =>
     draftFromConfig(config),
   );
+  const [copiedKey, setCopiedKey] = useState<'notify' | 'return' | ''>('');
 
   useEffect(() => {
     if (!config) return;
@@ -69,6 +104,18 @@ export function RechargeConfigPanel({
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
 
+  const copyCallbackUrl = (key: 'notify' | 'return', value: string) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard || !value) {
+      return;
+    }
+    void navigator.clipboard.writeText(value).then(() => {
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((current) => (current === key ? '' : current));
+      }, 1200);
+    });
+  };
+
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -78,7 +125,7 @@ export function RechargeConfigPanel({
             充值配置
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            易支付参数保存在数据库，钱包充值下单和回调都读取这里的配置。
+            易支付密钥保存在数据库，回调地址由服务端按当前站点生成。
           </div>
         </div>
         <label className="inline-flex items-center gap-2 text-[13px] text-muted">
@@ -159,28 +206,18 @@ export function RechargeConfigPanel({
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>
-        <label className="space-y-1.5 lg:col-span-2">
-          <div className="text-[12px] font-medium text-muted">
-            异步通知地址
-          </div>
-          <input
-            value={draft.notify_url}
-            onChange={(event) => updateDraft('notify_url', event.target.value)}
-            placeholder="https://your-domain.com/api/billing/recharge/notify"
-            className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-          />
-        </label>
-        <label className="space-y-1.5 lg:col-span-2">
-          <div className="text-[12px] font-medium text-muted">
-            支付完成返回地址
-          </div>
-          <input
-            value={draft.return_url}
-            onChange={(event) => updateDraft('return_url', event.target.value)}
-            placeholder="https://your-domain.com/wallet"
-            className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-          />
-        </label>
+        <CallbackUrlPreview
+          label="异步通知地址"
+          value={config.notify_url}
+          copied={copiedKey === 'notify'}
+          onCopy={() => copyCallbackUrl('notify', config.notify_url)}
+        />
+        <CallbackUrlPreview
+          label="支付完成返回地址"
+          value={config.return_url}
+          copied={copiedKey === 'return'}
+          onCopy={() => copyCallbackUrl('return', config.return_url)}
+        />
         <label className="space-y-1.5 lg:col-span-2">
           <div className="text-[12px] font-medium text-muted">
             商户私钥

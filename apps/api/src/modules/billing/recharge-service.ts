@@ -37,6 +37,9 @@ import {
   type EpayConfig,
 } from './epay-client.js';
 
+/**
+ * 管理后台展示的充值支付配置。
+ */
 export interface AdminRechargePaymentConfigDto {
   enabled: boolean;
   min_yuan: string;
@@ -51,20 +54,41 @@ export interface AdminRechargePaymentConfigDto {
   updated_at: string;
 }
 
+/**
+ * 管理后台提交的充值支付配置；回调地址由服务端生成，不要求客户端提交。
+ */
 export type AdminRechargePaymentConfigInput = Omit<
   AdminRechargePaymentConfigDto,
-  'updated_at'
->;
+  'updated_at' | 'notify_url' | 'return_url'
+> &
+  Partial<Pick<AdminRechargePaymentConfigDto, 'notify_url' | 'return_url'>>;
+
+/**
+ * 当前请求上下文推导出的充值回调地址。
+ */
+export interface RechargeCallbackUrls {
+  notifyUrl: string;
+  returnUrl: string;
+}
 
 interface ParsedRechargeAmount {
   amountYuan: string;
   amountPoints: number;
 }
 
-// 充值开关和支付密钥统一走数据库配置，业务层只关心是否能形成完整易支付配置。
-function resolveEpayConfig(
+type EpayBaseConfig = Pick<
+  EpayConfig,
+  | 'urlPrefix'
+  | 'platformId'
+  | 'merchantPrivateKey'
+  | 'platformPublicKey'
+  | 'merchantKey'
+>;
+
+// 充值开关和支付密钥统一走数据库配置；回调地址由请求域名动态生成，不再人工维护。
+function resolveEpayBaseConfig(
   paymentConfig: RechargePaymentConfigRow,
-): EpayConfig | null {
+): EpayBaseConfig | null {
   if (
     !paymentConfig.enabled ||
     !paymentConfig.epay_url_prefix.trim() ||
@@ -72,9 +96,7 @@ function resolveEpayConfig(
     paymentConfig.epay_platform_id <= 0 ||
     !paymentConfig.epay_merchant_private_key.trim() ||
     !paymentConfig.epay_platform_public_key.trim() ||
-    !paymentConfig.epay_merchant_key.trim() ||
-    !paymentConfig.notify_url.trim() ||
-    !paymentConfig.return_url.trim()
+    !paymentConfig.epay_merchant_key.trim()
   ) {
     return null;
   }
@@ -85,8 +107,32 @@ function resolveEpayConfig(
     merchantPrivateKey: paymentConfig.epay_merchant_private_key,
     platformPublicKey: paymentConfig.epay_platform_public_key,
     merchantKey: paymentConfig.epay_merchant_key,
-    notifyUrl: paymentConfig.notify_url.trim(),
-    returnUrl: paymentConfig.return_url.trim(),
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return url.protocol === 'http:' || url.protocol === 'https:';
+}
+
+function resolveEpayConfig(
+  paymentConfig: RechargePaymentConfigRow,
+  callbackUrls: RechargeCallbackUrls,
+): EpayConfig | null {
+  const baseConfig = resolveEpayBaseConfig(paymentConfig);
+  if (
+    !baseConfig ||
+    !isHttpUrl(callbackUrls.notifyUrl) ||
+    !isHttpUrl(callbackUrls.returnUrl)
+  ) {
+    return null;
+  }
+
+  return {
+    ...baseConfig,
+    notifyUrl: callbackUrls.notifyUrl,
+    returnUrl: callbackUrls.returnUrl,
   };
 }
 
@@ -167,8 +213,12 @@ function validateProviderAmount(
   return ok(null);
 }
 
+/**
+ * 将数据库充值配置转换为管理端 DTO。
+ */
 export function toAdminRechargePaymentConfigDto(
   row: RechargePaymentConfigRow,
+  callbackUrls: RechargeCallbackUrls,
 ): AdminRechargePaymentConfigDto {
   return {
     enabled: row.enabled,
@@ -179,18 +229,30 @@ export function toAdminRechargePaymentConfigDto(
     epay_merchant_private_key: row.epay_merchant_private_key,
     epay_platform_public_key: row.epay_platform_public_key,
     epay_merchant_key: row.epay_merchant_key,
-    notify_url: row.notify_url,
-    return_url: row.return_url,
+    notify_url: callbackUrls.notifyUrl,
+    return_url: callbackUrls.returnUrl,
     updated_at: row.updated_at,
   };
 }
 
-export async function getAdminRechargePaymentConfig(): Promise<AdminRechargePaymentConfigDto> {
-  return toAdminRechargePaymentConfigDto(await getRechargePaymentConfig());
+/**
+ * 读取管理端充值配置，并附带服务端生成的回调地址。
+ */
+export async function getAdminRechargePaymentConfig(
+  callbackUrls: RechargeCallbackUrls,
+): Promise<AdminRechargePaymentConfigDto> {
+  return toAdminRechargePaymentConfigDto(
+    await getRechargePaymentConfig(),
+    callbackUrls,
+  );
 }
 
+/**
+ * 更新管理端充值配置；回调地址由服务端生成后写入数据库用于兼容旧字段。
+ */
 export async function updateAdminRechargePaymentConfig(
   input: AdminRechargePaymentConfigInput,
+  callbackUrls: RechargeCallbackUrls,
 ): Promise<AdminRechargePaymentConfigDto> {
   const saved = await updateRechargePaymentConfig({
     enabled: input.enabled,
@@ -201,20 +263,24 @@ export async function updateAdminRechargePaymentConfig(
     epayMerchantPrivateKey: input.epay_merchant_private_key,
     epayPlatformPublicKey: input.epay_platform_public_key,
     epayMerchantKey: input.epay_merchant_key.trim(),
-    notifyUrl: input.notify_url.trim(),
-    returnUrl: input.return_url.trim(),
+    notifyUrl: callbackUrls.notifyUrl,
+    returnUrl: callbackUrls.returnUrl,
   });
-  return toAdminRechargePaymentConfigDto(saved);
+  return toAdminRechargePaymentConfigDto(saved, callbackUrls);
 }
 
+/**
+ * 为当前用户创建充值单，并向易支付创建支付会话。
+ */
 export async function createRechargeOrderForUser(input: {
   userId: string;
   amountYuan: unknown;
   payType: unknown;
   clientIp: string;
+  callbackUrls: RechargeCallbackUrls;
 }): Promise<ServiceResult<CreateRechargeOrderResponseDto>> {
   const paymentConfig = await getRechargePaymentConfig();
-  const config = resolveEpayConfig(paymentConfig);
+  const config = resolveEpayConfig(paymentConfig, input.callbackUrls);
   if (!config) {
     return fail(503, '充值暂未开放，请联系管理员配置支付');
   }
@@ -288,6 +354,9 @@ export async function createRechargeOrderForUser(input: {
   }
 }
 
+/**
+ * 查询用户最近的充值订单。
+ */
 export async function listRechargeOrdersForUser(
   userId: string,
 ): Promise<ServiceResult<RechargeOrderDto[]>> {
@@ -298,6 +367,9 @@ export async function listRechargeOrdersForUser(
   return ok(toRechargeOrdersDto(await listRechargeOrdersByUserId(user.id, 20)));
 }
 
+/**
+ * 查询用户充值统计汇总。
+ */
 export async function getRechargeStatsForUser(
   userId: string,
 ): Promise<ServiceResult<RechargeStatsDto>> {
@@ -308,12 +380,15 @@ export async function getRechargeStatsForUser(
   return ok(toRechargeStatsDto(await getRechargeStatsByUserId(user.id)));
 }
 
+/**
+ * 用户支付完成后主动查询平台状态，并在已支付时补偿入账。
+ */
 export async function syncRechargeOrderForUser(input: {
   userId: string;
   tradeId: string;
 }): Promise<ServiceResult<RechargeOrderDto>> {
   const paymentConfig = await getRechargePaymentConfig();
-  const config = resolveEpayConfig(paymentConfig);
+  const config = resolveEpayBaseConfig(paymentConfig);
   if (!config) {
     return fail(503, '充值暂未开放，请联系管理员配置支付');
   }
@@ -360,11 +435,14 @@ export async function syncRechargeOrderForUser(input: {
   }
 }
 
+/**
+ * 处理易支付异步通知，验签、校验金额并幂等入账。
+ */
 export async function handleRechargeNotification(
   rawPayload: unknown,
 ): Promise<ServiceResult<RechargeOrderDto>> {
   const paymentConfig = await getRechargePaymentConfig();
-  const config = resolveEpayConfig(paymentConfig);
+  const config = resolveEpayBaseConfig(paymentConfig);
   if (!config) {
     return fail(503, '充值暂未开放');
   }
