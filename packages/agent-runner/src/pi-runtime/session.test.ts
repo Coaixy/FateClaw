@@ -200,7 +200,11 @@ describe('runPiSession', () => {
       model: 'gpt-4o',
       userPrompt: '基于这个盘继续看事业',
       systemPrompt: expect.stringContaining('FateClaw 的 Pi-backed Agent Runtime'),
-      allowedTools: [],
+      allowedTools: [
+        'get_current_time',
+        'get_ganzhi_by_datetime',
+        'reverse_ganzhi',
+      ],
       readableSkills: [],
       messageCount: 0,
     });
@@ -214,7 +218,11 @@ describe('runPiSession', () => {
     expect(mockSessionManager.create).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.open).not.toHaveBeenCalled();
     expect(createArgs.noTools).toBe('all');
-    expect(createArgs.tools).toEqual([]);
+    expect(createArgs.tools).toEqual([
+      'get_current_time',
+      'get_ganzhi_by_datetime',
+      'reverse_ganzhi',
+    ]);
     expect(createArgs.tools).not.toEqual(expect.arrayContaining(['bazi_paipan']));
     expect(createArgs.tools).not.toEqual(expect.arrayContaining(['read_memory']));
     expect(createArgs.customTools?.map((tool) => tool.name)).toEqual(

@@ -7,6 +7,12 @@ import { createSyntheticSourceInfo, type Skill } from '@earendil-works/pi-coding
 import { createRequestScope } from '../request-scope.js';
 import { createPiCustomTools } from './tools.js';
 
+const DEFAULT_PI_TOOL_NAMES = [
+  'get_current_time',
+  'get_ganzhi_by_datetime',
+  'reverse_ganzhi',
+];
+
 function createReadableSkillFixture(): Skill {
   const skillDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'fateclaw-readable-skill-'),
@@ -39,13 +45,115 @@ function createReadableSkillFixture(): Skill {
 }
 
 describe('createPiCustomTools', () => {
-  it('exposes no custom tools when no readable skills are present', () => {
+  it('exposes deterministic time tools when no readable skills are present', () => {
     const tools = createPiCustomTools({
       requestScope: createRequestScope(),
       recordExecution: vi.fn(),
     });
 
-    expect(tools.map((tool) => tool.name)).toEqual([]);
+    expect(tools.map((tool) => tool.name)).toEqual(DEFAULT_PI_TOOL_NAMES);
+  });
+
+  it('returns current time in the requested timezone', async () => {
+    const recordExecution = vi.fn();
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      recordExecution,
+      now: () => new Date('2026-04-25T06:00:00.000Z'),
+    });
+    const timeTool = tools.find((tool) => tool.name === 'get_current_time')!;
+
+    const result = await timeTool.execute(
+      'time-1',
+      { timezone: 'Asia/Shanghai' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      timezone: 'Asia/Shanghai',
+      iso: '2026-04-25T06:00:00.000Z',
+      unixMs: 1777096800000,
+      local: '2026-04-25 14:00:00',
+    });
+    expect(recordExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({ toolName: 'get_current_time' }),
+        isError: false,
+      }),
+    );
+  });
+
+  it('calculates ganzhi pillars for a Gregorian datetime', async () => {
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      recordExecution: vi.fn(),
+    });
+    const ganzhiTool = tools.find(
+      (tool) => tool.name === 'get_ganzhi_by_datetime',
+    )!;
+
+    const result = await ganzhiTool.execute(
+      'ganzhi-1',
+      { year: 2026, month: 4, day: 25, hour: 14 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      solar: '2026年4月25日 14:00:00',
+      lunar: '农历丙午年三月初九辛未时',
+      ganzhi: {
+        year: '丙午',
+        month: '壬辰',
+        day: '己巳',
+        hour: '辛未',
+        eightChar: '丙午 壬辰 己巳 辛未',
+      },
+    });
+  });
+
+  it('reverses four-pillar ganzhi to matching Gregorian datetimes', async () => {
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      recordExecution: vi.fn(),
+    });
+    const reverseTool = tools.find((tool) => tool.name === 'reverse_ganzhi')!;
+
+    const result = await reverseTool.execute(
+      'reverse-1',
+      {
+        year: '丙午',
+        month: '壬辰',
+        day: '己巳',
+        hour: '辛未',
+        startYear: 2026,
+        endYear: 2026,
+      },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      mode: 'eight_char',
+      total: 1,
+      truncated: false,
+      matches: [
+        {
+          solar: '2026年4月25日 14:00:00',
+          year: 2026,
+          month: 4,
+          day: 25,
+          hour: 14,
+        },
+      ],
+    });
   });
 
   it('adds a scoped read tool for visible request skill resources only', async () => {
@@ -57,7 +165,10 @@ describe('createPiCustomTools', () => {
       recordExecution,
     });
 
-    expect(tools.map((tool) => tool.name)).toEqual(['read']);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...DEFAULT_PI_TOOL_NAMES,
+      'read',
+    ]);
 
     const readTool = tools.find((tool) => tool.name === 'read')!;
     const ok = await readTool.execute(

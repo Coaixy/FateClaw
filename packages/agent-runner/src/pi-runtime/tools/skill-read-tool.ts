@@ -9,10 +9,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type, type Static } from 'typebox';
 
-import { appendTranscriptEvent } from '../transcript-store.js';
-import { traceEvent } from '../trace.js';
-import type { RequestScope } from '../request-scope.js';
-import type { PiToolExecutionRecord } from './types.js';
+import { completePiToolExecution, type PiToolRuntimeOptions } from './tool-execution.js';
 
 const MAX_SKILL_READ_LINES = 2_000;
 const MAX_SKILL_READ_BYTES = 50 * 1024;
@@ -46,10 +43,18 @@ interface PiSkillReadDetails {
   nextOffset?: number;
 }
 
-export interface CreatePiSkillReadToolOptions {
-  requestScope: RequestScope;
+/**
+ * 创建 Skill read 工具所需的依赖。
+ *
+ * 参数：
+ * - requestScope：当前请求作用域。
+ * - readableSkills：本轮请求授权给 Pi 读取的 Skill 清单。
+ * - recordExecution：工具执行记录回调。
+ *
+ * 注意：read 只能读取授权 Skill 目录内的 Markdown 文件。
+ */
+export interface CreatePiSkillReadToolOptions extends PiToolRuntimeOptions {
   readableSkills: Skill[];
-  recordExecution(record: PiToolExecutionRecord): void;
 }
 
 function isPathInside(target: string, root: string): boolean {
@@ -96,29 +101,6 @@ function resolveReadablePath(
 
   return {
     error: `读取被拒绝：${rawPath} 不属于本轮可见 Skill 目录。`,
-  };
-}
-
-function toAgentToolResult(args: {
-  output: string;
-  path?: string;
-  isError?: boolean;
-  offset?: number;
-  limit?: number;
-  totalLines?: number;
-  nextOffset?: number;
-}): AgentToolResult<PiSkillReadDetails> {
-  return {
-    content: [{ type: 'text', text: args.output }],
-    details: {
-      output: args.output,
-      path: args.path,
-      isError: Boolean(args.isError),
-      offset: args.offset,
-      limit: args.limit,
-      totalLines: args.totalLines,
-      nextOffset: args.nextOffset,
-    },
   };
 }
 
@@ -247,6 +229,13 @@ function readSkillFile(
   };
 }
 
+/**
+ * 创建 Pi 的授权 Skill Markdown 读取工具。
+ *
+ * 参数：CreatePiSkillReadToolOptions。
+ * 返回：可注册到 Pi customTools 的 read 工具定义。
+ * 注意：该工具会拒绝读取未授权路径和非 Markdown 文件。
+ */
 export function createPiSkillReadTool(
   options: CreatePiSkillReadToolOptions,
 ): PiToolDefinition {
@@ -289,48 +278,27 @@ export function createPiSkillReadTool(
       const isError = readResult.isError;
       const output = readResult.output;
 
-      options.recordExecution({
-        invocation: {
-          id: toolCallId,
-          toolName: 'read',
-          args: params,
-        },
+      return completePiToolExecution({
+        options,
+        toolCallId,
+        toolName: 'read',
+        params: params as Record<string, unknown>,
         output,
         isError,
-      });
-      appendTranscriptEvent(options.requestScope, {
-        type: 'tool_use',
-        invocation: {
-          id: toolCallId,
-          toolName: 'read',
-          args: params,
-          source: 'model',
-        },
-      });
-      appendTranscriptEvent(options.requestScope, {
-        type: 'tool_result',
-        invocationId: toolCallId,
-        ok: !isError,
-        output,
-      });
-      traceEvent(
-        {
-          type: 'pi_skill_read_completed',
+        traceType: 'pi_skill_read_completed',
+        startedAt,
+        traceFields: {
           path: filePath ?? params.path,
-          elapsedMs: Date.now() - startedAt,
-          isError,
         },
-        options.requestScope,
-      );
-
-      return toAgentToolResult({
-        output,
-        path: filePath ?? params.path,
-        isError,
-        offset: readResult.offset,
-        limit: readResult.limit,
-        totalLines: readResult.totalLines,
-        nextOffset: readResult.nextOffset,
+        details: {
+          output,
+          path: filePath ?? params.path,
+          isError,
+          offset: readResult.offset,
+          limit: readResult.limit,
+          totalLines: readResult.totalLines,
+          nextOffset: readResult.nextOffset,
+        },
       });
     },
   });
