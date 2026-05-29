@@ -82,6 +82,51 @@ function resolveAiChatResponseText(payload: ResponseIpcPayload): string {
   ).trim();
 }
 
+function extractTranscriptAssistantMessages(transcript: unknown): string[] {
+  if (!Array.isArray(transcript)) return [];
+  return transcript.flatMap((event) => {
+    if (!event || typeof event !== 'object' || Array.isArray(event)) {
+      return [];
+    }
+    const record = event as Record<string, unknown>;
+    if (record.type !== 'assistant' || typeof record.text !== 'string') {
+      return [];
+    }
+    const text = record.text.trim();
+    return text ? [text] : [];
+  });
+}
+
+function buildAssistantMessagesForResponse(args: {
+  payload: ResponseIpcPayload;
+  responseText: string;
+  finalText: string;
+}): string[] {
+  const transcriptMessages = extractTranscriptAssistantMessages(
+    args.payload.transcript,
+  );
+  if (transcriptMessages.length === 0) {
+    return args.finalText ? [args.finalText] : [];
+  }
+
+  if (!args.finalText) {
+    return transcriptMessages;
+  }
+
+  const messages = [...transcriptMessages];
+  const lastIndex = messages.length - 1;
+  if (args.responseText && messages[lastIndex] === args.responseText) {
+    messages[lastIndex] = args.finalText;
+    return messages;
+  }
+
+  if (messages[lastIndex] === args.finalText) {
+    return messages;
+  }
+
+  return [...messages, args.finalText];
+}
+
 function buildFinalMetadata(
   payload: ResponseIpcPayload,
 ): Record<string, unknown> {
@@ -189,6 +234,7 @@ async function resolvePendingAiChatResponse(args: {
   pendingRequests: Map<string, PendingInboxRequest>;
   payload: ResponseIpcPayload;
   finalText: string;
+  assistantMessages: string[];
   finalMetadata: Record<string, unknown>;
 }): Promise<void> {
   if (!args.pending) return;
@@ -213,6 +259,7 @@ async function resolvePendingAiChatResponse(args: {
     requestId: args.payload.requestId!,
     status: args.payload.status || 'success',
     text: args.finalText,
+    assistantMessages: args.assistantMessages,
     error: args.payload.error,
     publicErrorText: args.payload.publicErrorText,
     publicReasonCode: args.payload.publicReasonCode,
@@ -292,6 +339,11 @@ async function processAiChatResponse(
     }
 
     const finalText = text ? appendFinalTurnMarker(text, payload.usage) : '';
+    const assistantMessages = buildAssistantMessagesForResponse({
+      payload,
+      responseText: text,
+      finalText,
+    });
     const finalMetadata = buildFinalMetadata(payload);
 
     await publishAiChatStreamEvent({
@@ -331,6 +383,7 @@ async function processAiChatResponse(
       pendingRequests,
       payload,
       finalText,
+      assistantMessages,
       finalMetadata,
     });
   } catch (error) {

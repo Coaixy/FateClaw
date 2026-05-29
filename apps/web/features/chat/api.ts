@@ -36,17 +36,27 @@ export type ChatSessionSendOptions =
 export type ChatSessionStreamEvent =
   | { type: 'connected'; timestamp?: string; sessionId?: string }
   | {
+      type: 'agent_start' | 'agent_end' | 'turn_start';
+      timestamp?: string;
+      sessionId?: string;
+      turnIndex?: number;
+      willRetry?: boolean;
+      messageCount?: number;
+    }
+  | {
       type: 'assistant_delta';
       timestamp?: string;
       sessionId?: string;
       delta: string;
       snapshot: string;
+      turnIndex?: number;
     }
   | {
       type: 'assistant_message';
       timestamp?: string;
       sessionId?: string;
       text: string;
+      turnIndex?: number;
     }
   | {
       type: 'tool_start' | 'tool_update' | 'tool_end';

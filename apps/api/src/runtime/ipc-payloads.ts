@@ -15,6 +15,7 @@ export interface InboxRequestResult {
   requestId: string;
   status: 'success' | 'error';
   text: string;
+  assistantMessages?: string[];
   error?: string;
   publicErrorText?: string;
   publicReasonCode?: string;
@@ -109,6 +110,7 @@ export interface ResponseIpcPayload {
   accountId?: string;
   requestId?: string;
   text?: string;
+  assistantMessages?: string[];
   status?: 'success' | 'error';
   error?: string;
   publicErrorText?: string;

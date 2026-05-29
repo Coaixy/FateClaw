@@ -32,19 +32,24 @@ type ChatSessionSender = typeof chatSessionsApi.send;
 function appendActiveStreamingMessage(
   nextMessages: Message[],
   previousMessages: Message[],
-  activeStreamingMessageId: string | null,
+  activeStreamingMessageIds: string[],
 ) {
-  if (
-    !activeStreamingMessageId ||
-    nextMessages.some((message) => message.id === activeStreamingMessageId)
-  ) {
+  if (activeStreamingMessageIds.length === 0) {
     return nextMessages;
   }
 
-  const streamingMessage = previousMessages.find(
-    (message) => message.id === activeStreamingMessageId,
-  );
-  return streamingMessage ? [...nextMessages, streamingMessage] : nextMessages;
+  const existingIds = new Set(nextMessages.map((message) => message.id));
+  const streamingMessages = activeStreamingMessageIds.flatMap((id) => {
+    if (existingIds.has(id)) return [];
+    const streamingMessage = previousMessages.find(
+      (message) => message.id === id,
+    );
+    return streamingMessage ? [streamingMessage] : [];
+  });
+
+  return streamingMessages.length > 0
+    ? [...nextMessages, ...streamingMessages]
+    : nextMessages;
 }
 
 export async function sendChatSessionMessageWithOptions(
@@ -78,8 +83,31 @@ export function useChatMessages(options: {
   const shouldAutoScrollRef = useRef(true);
   const creatingRef = useRef(false);
   const streamSocketRef = useRef<WebSocket | null>(null);
-  const streamingMessageIdRef = useRef<string | null>(null);
+  const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
+    [],
+  );
+  const latestStreamingMessageKeyRef = useRef<string | null>(null);
+  const streamingSequenceRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
+
+  const getActiveStreamingMessageIds = useCallback(
+    () => streamingMessageEntriesRef.current.map((entry) => entry.id),
+    [],
+  );
+
+  const resetStreamingMessageRefs = useCallback(() => {
+    streamingMessageEntriesRef.current = [];
+    latestStreamingMessageKeyRef.current = null;
+  }, []);
+
+  const beginStreamingAssistantTurn = useCallback((turnIndex?: number) => {
+    const key =
+      typeof turnIndex === 'number'
+        ? `turn-${turnIndex}`
+        : `turn-${streamingSequenceRef.current}`;
+    latestStreamingMessageKeyRef.current = key;
+    return key;
+  }, []);
 
   useEffect(() => {
     sendingRef.current = sending;
@@ -111,16 +139,13 @@ export function useChatMessages(options: {
         if (activeSessionRef.current !== sessionId) return true;
 
         const nextMessages = data.messages.reverse();
-        const activeStreamingMessageId = streamingMessageIdRef.current;
+        const activeStreamingMessageIds = getActiveStreamingMessageIds();
         const streamingResolved =
           isBackground &&
-          Boolean(activeStreamingMessageId) &&
+          activeStreamingMessageIds.length > 0 &&
           hasFinalAssistantAfterLatestUser(nextMessages);
-        if (
-          streamingResolved &&
-          streamingMessageIdRef.current === activeStreamingMessageId
-        ) {
-          streamingMessageIdRef.current = null;
+        if (streamingResolved) {
+          resetStreamingMessageRefs();
         }
         const canFollow =
           !isBackground ||
@@ -134,7 +159,7 @@ export function useChatMessages(options: {
               ? appendActiveStreamingMessage(
                   nextMessages,
                   previous,
-                  activeStreamingMessageId,
+                  activeStreamingMessageIds,
                 )
               : nextMessages;
 
@@ -149,7 +174,7 @@ export function useChatMessages(options: {
         setProcessing(data.processing);
         setAwaitingRefresh(
           isBackground &&
-            Boolean(activeStreamingMessageId) &&
+            activeStreamingMessageIds.length > 0 &&
             !streamingResolved,
         );
         return true;
@@ -164,7 +189,7 @@ export function useChatMessages(options: {
         }
       }
     },
-    [],
+    [getActiveStreamingMessageIds, resetStreamingMessageRefs],
   );
 
   useEffect(() => {
@@ -240,34 +265,48 @@ export function useChatMessages(options: {
   }, [options.selectedSession, pollMessages]);
 
   const upsertStreamingAssistantMessage = useCallback(
-    (sessionId: string, content: string) => {
-      const existingId = streamingMessageIdRef.current;
+    (sessionId: string, content: string, streamKey?: string | null) => {
+      const key =
+        streamKey ??
+        latestStreamingMessageKeyRef.current ??
+        `message-${streamingSequenceRef.current}`;
+      let entry = streamingMessageEntriesRef.current.find(
+        (item) => item.key === key,
+      );
+      if (!entry) {
+        entry = {
+          key,
+          id: `stream-bot-${Date.now()}-${streamingSequenceRef.current}`,
+        };
+        streamingSequenceRef.current += 1;
+        streamingMessageEntriesRef.current = [
+          ...streamingMessageEntriesRef.current,
+          entry,
+        ];
+      }
+      latestStreamingMessageKeyRef.current = key;
       const accountId =
         options.sessions.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
 
       setMessages((previous) => {
-        if (existingId) {
-          const existingIndex = previous.findIndex(
-            (message) => message.id === existingId,
-          );
-          if (existingIndex >= 0) {
-            const next = [...previous];
-            next[existingIndex] = {
-              ...next[existingIndex],
-              content,
-              timestamp: new Date().toISOString(),
-            };
-            return next;
-          }
+        const existingIndex = previous.findIndex(
+          (message) => message.id === entry.id,
+        );
+        if (existingIndex >= 0) {
+          const next = [...previous];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            content,
+            timestamp: new Date().toISOString(),
+          };
+          return next;
         }
 
-        const id = `stream-bot-${Date.now()}`;
-        streamingMessageIdRef.current = id;
         return [
           ...previous,
           {
-            id,
+            id: entry.id,
             account_id: accountId,
             sender: '',
             sender_name: '',
@@ -285,10 +324,21 @@ export function useChatMessages(options: {
     [options.sessions],
   );
 
+  const upsertLatestStreamingAssistantMessage = useCallback(
+    (sessionId: string, content: string) => {
+      upsertStreamingAssistantMessage(
+        sessionId,
+        content,
+        latestStreamingMessageKeyRef.current,
+      );
+    },
+    [upsertStreamingAssistantMessage],
+  );
+
   useEffect(() => {
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
-    streamingMessageIdRef.current = null;
+    resetStreamingMessageRefs();
 
     const sessionId = options.selectedSession;
     if (!sessionId || typeof window === 'undefined') return;
@@ -315,14 +365,41 @@ export function useChatMessages(options: {
         return;
       }
 
+      if (payload.type === 'turn_start') {
+        beginStreamingAssistantTurn(payload.turnIndex);
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'agent_start') {
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'agent_end') {
+        return;
+      }
+
       if (payload.type === 'assistant_delta') {
-        upsertStreamingAssistantMessage(sessionId, payload.snapshot);
+        upsertStreamingAssistantMessage(
+          sessionId,
+          payload.snapshot,
+          typeof payload.turnIndex === 'number'
+            ? `turn-${payload.turnIndex}`
+            : latestStreamingMessageKeyRef.current,
+        );
         setProcessing(true);
         return;
       }
 
       if (payload.type === 'assistant_message' && payload.text.trim()) {
-        upsertStreamingAssistantMessage(sessionId, payload.text);
+        upsertStreamingAssistantMessage(
+          sessionId,
+          payload.text,
+          typeof payload.turnIndex === 'number'
+            ? `turn-${payload.turnIndex}`
+            : latestStreamingMessageKeyRef.current,
+        );
         return;
       }
 
@@ -333,7 +410,7 @@ export function useChatMessages(options: {
 
       if (payload.type === 'final') {
         if (payload.text.trim()) {
-          upsertStreamingAssistantMessage(sessionId, payload.text);
+          upsertLatestStreamingAssistantMessage(sessionId, payload.text);
         }
         setProcessing(false);
         setAwaitingRefresh(true);
@@ -342,12 +419,13 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'error') {
-        const activeStreamingMessageId = streamingMessageIdRef.current;
-        streamingMessageIdRef.current = null;
-        if (activeStreamingMessageId) {
+        const activeStreamingMessageIds = getActiveStreamingMessageIds();
+        resetStreamingMessageRefs();
+        if (activeStreamingMessageIds.length > 0) {
+          const activeStreamingMessageIdSet = new Set(activeStreamingMessageIds);
           setMessages((previous) =>
             previous.filter(
-              (message) => message.id !== activeStreamingMessageId,
+              (message) => !activeStreamingMessageIdSet.has(message.id),
             ),
           );
         }
@@ -374,11 +452,15 @@ export function useChatMessages(options: {
       if (streamSocketRef.current === socket) {
         streamSocketRef.current = null;
       }
-      streamingMessageIdRef.current = null;
+      resetStreamingMessageRefs();
     };
   }, [
+    beginStreamingAssistantTurn,
+    getActiveStreamingMessageIds,
     loadMessages,
     options.selectedSession,
+    resetStreamingMessageRefs,
+    upsertLatestStreamingAssistantMessage,
     upsertStreamingAssistantMessage,
   ]);
 

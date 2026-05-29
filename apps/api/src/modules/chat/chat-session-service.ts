@@ -91,6 +91,40 @@ function buildSelectedBoardContext(message: NewMessage): boolean {
   return Boolean(activeBoardContext);
 }
 
+function normalizeAssistantReplyTexts(output: {
+  text?: string;
+  assistantMessages?: string[];
+}): string[] {
+  const assistantMessages = Array.isArray(output.assistantMessages)
+    ? output.assistantMessages.map((message) => message.trim()).filter(Boolean)
+    : [];
+  if (assistantMessages.length > 0) {
+    return assistantMessages;
+  }
+  const fallback = output.text?.trim();
+  return fallback ? [fallback] : [];
+}
+
+function buildFinalReplyMetadata(output: {
+  metadata?: unknown;
+  requestId?: string;
+}): Record<string, unknown> {
+  return output.metadata &&
+    typeof output.metadata === 'object' &&
+    !Array.isArray(output.metadata)
+    ? {
+        ...output.metadata,
+        kind: 'final',
+        turn_complete: true,
+        request_id: output.requestId,
+      }
+    : {
+        kind: 'final',
+        turn_complete: true,
+        request_id: output.requestId,
+      };
+}
+
 async function getOwnedSession(
   userId: string,
   sessionId: string,
@@ -367,40 +401,38 @@ export async function sendOwnedChatSessionMessage(
     }
 
     const replyText = output.text || '';
+    const replyTexts = normalizeAssistantReplyTexts(output);
     const sessionTitle = normalizeOwnedChatSessionTitle(session.title);
+    const replyTimestampBase = Date.now();
 
-    // 响应文本非空才落库（空文本说明内容已通过中间消息投递）
-    if (replyText) {
+    // 多轮 runtime 可能返回多条 assistant 文本，逐条落库才能让网页最终态完整呈现。
+    for (let index = 0; index < replyTexts.length; index += 1) {
+      const isFinalReply = index === replyTexts.length - 1;
       await storeMessage({
-        id: `${msgId}_reply`,
+        id:
+          replyTexts.length === 1
+            ? `${msgId}_reply`
+            : `${msgId}_reply_${index + 1}`,
         account_id: session.account_id,
         user_id: userId,
         sender: session.account_id,
         sender_name: WEB_CHAT_ASSISTANT_NAME,
-        content: replyText,
-        timestamp: new Date().toISOString(),
+        content: replyTexts[index],
+        timestamp: new Date(replyTimestampBase + index).toISOString(),
         is_from_me: true,
         is_bot_message: true,
         session_id: session.id,
         tool_context:
+          isFinalReply &&
           output.skillContext && output.skillContext.length > 0
             ? JSON.stringify(output.skillContext)
             : null,
-        metadata:
-          output.metadata &&
-          typeof output.metadata === 'object' &&
-          !Array.isArray(output.metadata)
-            ? {
-                ...output.metadata,
-                kind: 'final',
-                turn_complete: true,
-                request_id: output.requestId,
-              }
-            : {
-                kind: 'final',
-                turn_complete: true,
-                request_id: output.requestId,
-              },
+        metadata: isFinalReply
+          ? buildFinalReplyMetadata(output)
+          : {
+              kind: 'assistant',
+              request_id: output.requestId,
+            },
       });
     }
 

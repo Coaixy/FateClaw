@@ -6,12 +6,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
   Activity,
   Bell,
   Brain,
+  CheckCircle2,
   ChevronRight,
   HelpCircle,
   Loader2,
@@ -124,6 +126,8 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceText, setPasteChoiceText] = useState('');
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
+  const [replyCompleted, setReplyCompleted] = useState(false);
+  const wasSendingRef = useRef(false);
 
   const chatMessages = useChatMessages({
     chatAvailable,
@@ -365,6 +369,38 @@ function AiChatWorkspaceContent() {
       !chatMessages.sending &&
       displayMessages.length === 0);
 
+  useEffect(() => {
+    if (chatMessages.sending) {
+      wasSendingRef.current = true;
+      setReplyCompleted(false);
+      return;
+    }
+
+    if (wasSendingRef.current) {
+      wasSendingRef.current = false;
+      setReplyCompleted(true);
+    }
+  }, [chatMessages.sending]);
+
+  useEffect(() => {
+    if (!chatMessages.sending) {
+      wasSendingRef.current = false;
+      setReplyCompleted(false);
+    }
+  }, [chatMessages.sending, selectedSession]);
+
+  useEffect(() => {
+    if (!replyCompleted) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setReplyCompleted(false);
+    }, 2400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [replyCompleted]);
+
   const handlePaipanCommitted = useCallback(
     async (result: PaipanCommitResponse) => {
       touchSession(result.session.id, result.session);
@@ -476,7 +512,7 @@ function AiChatWorkspaceContent() {
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
       <div
         ref={chatMessages.scrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 scroll-smooth"
+        className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 scroll-smooth"
       >
         <AiChatMessageList
           messages={displayMessages}
@@ -487,6 +523,13 @@ function AiChatWorkspaceContent() {
           showCenteredComposer={showCenteredComposer}
           composer={showCenteredComposer ? centeredComposer : composer}
         />
+        {!showCenteredComposer && (
+          <AiChatFloatingStatus
+            sending={chatMessages.sending}
+            completed={replyCompleted}
+            progressLabel={progressLabel}
+          />
+        )}
       </div>
 
       {!showCenteredComposer && (
@@ -536,6 +579,45 @@ function AiChatWorkspaceContent() {
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
       />
+    </div>
+  );
+}
+
+function AiChatFloatingStatus({
+  sending,
+  completed,
+  progressLabel,
+}: {
+  sending: boolean;
+  completed: boolean;
+  progressLabel: string | null;
+}) {
+  const statusLabel = sending
+    ? progressLabel
+      ? `${progressLabel}中...`
+      : 'AI 正在回复...'
+    : completed
+      ? '回答完成'
+      : null;
+
+  if (!statusLabel) return null;
+
+  return (
+    <div className="pointer-events-none sticky bottom-2 z-10 mt-2 flex justify-center px-3">
+      <span
+        className={`inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] shadow-sm backdrop-blur transition-colors ${
+          sending
+            ? 'border-primary/25 bg-surface-card/95 text-primary'
+            : 'border-hairline bg-surface-card/95 text-muted'
+        }`}
+      >
+        {sending ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <CheckCircle2 size={12} />
+        )}
+        <span>{statusLabel}</span>
+      </span>
     </div>
   );
 }
