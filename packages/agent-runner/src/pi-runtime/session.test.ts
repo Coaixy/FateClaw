@@ -125,7 +125,13 @@ describe('runPiSession', () => {
           message: {
             role: 'assistant';
             content: string;
-            usage: { input: number; output: number };
+            usage: {
+              input: number;
+              output: number;
+              cacheRead?: number;
+              cacheWrite?: number;
+              totalTokens?: number;
+            };
           };
           toolResults: unknown[];
         }) => void)
@@ -168,7 +174,13 @@ describe('runPiSession', () => {
               message: {
                 role: 'assistant',
                 content: 'assistant fallback',
-                usage: { input: 3, output: 2 },
+                usage: {
+                  input: 3,
+                  output: 2,
+                  cacheRead: 7,
+                  cacheWrite: 11,
+                  totalTokens: 23,
+                },
               },
               toolResults: [],
             });
@@ -189,9 +201,9 @@ describe('runPiSession', () => {
 
     expect(result.text).toBe('assistant fallback');
     expect(result.usage).toEqual({
-      promptTokens: 3,
+      promptTokens: 21,
       completionTokens: 2,
-      totalTokens: 5,
+      totalTokens: 23,
     });
     expect(result.piSession).toMatchObject({
       id: 'session-1',

@@ -35,6 +35,8 @@ function isAssistantMessage(
   usage?: {
     input?: number;
     output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
     totalTokens?: number;
   };
   stopReason?: string;
@@ -49,10 +51,23 @@ function isAssistantMessage(
 
 function mergeAssistantUsage(
   usage: TokenUsage,
-  message: { usage?: { input?: number; output?: number; totalTokens?: number } },
+  message: {
+    usage?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      totalTokens?: number;
+    };
+  },
 ): void {
   if (!message.usage) return;
-  const promptTokens = message.usage.input ?? 0;
+  const cacheReadTokens = message.usage.cacheRead ?? 0;
+  const cacheWriteTokens = message.usage.cacheWrite ?? 0;
+  // 底层 provider 会把 prompt cache 单独拆成 cacheRead/cacheWrite。
+  // FateClaw 当前只有输入/输出两档价格，缓存 token 按输入 token 口径计入，避免低估实际消耗。
+  const promptTokens =
+    (message.usage.input ?? 0) + cacheReadTokens + cacheWriteTokens;
   const completionTokens = message.usage.output ?? 0;
   usage.promptTokens += promptTokens;
   usage.completionTokens += completionTokens;
