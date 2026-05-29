@@ -62,9 +62,13 @@ export function AiChatMessageList({
     return <ChatLoadingState count={3} />;
   }
 
-  const showThinkingIndicator =
-    sending && !messages.some(isStreamingAssistantMessage);
   const { rows, pendingToolTraces } = buildDisplayRows(messages);
+  const hasStreamingAssistantMessage = messages.some(
+    isStreamingAssistantMessage,
+  );
+  const showThinkingIndicator =
+    sending &&
+    (!hasStreamingAssistantMessage || pendingToolTraces.length > 0);
 
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
@@ -79,12 +83,10 @@ export function AiChatMessageList({
       ))}
 
       {showThinkingIndicator && (
-        <div className="max-w-2xl mx-auto">
-          <ThinkingIndicator
-            progressLabel={progressLabel}
-            toolTraces={pendingToolTraces}
-          />
-        </div>
+        <ThinkingIndicator
+          progressLabel={progressLabel}
+          toolTraces={pendingToolTraces}
+        />
       )}
     </div>
   );
@@ -317,26 +319,26 @@ function ThinkingIndicator({
   progressLabel: string | null;
   toolTraces: Message[];
 }) {
+  const statusLabel = progressLabel ? `${progressLabel}中...` : 'AI 正在回复...';
+
   return (
-    <div className="flex animate-message-in">
-      <div className="rounded-xl px-3 py-2 bg-surface-card border border-hairline shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {[0, 1, 2].map((index) => (
-              <div
-                key={index}
-                className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
-                style={{ animationDelay: `${index * 0.2}s` }}
-              />
-            ))}
+    <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+        <div className="max-w-full rounded-xl px-3 py-2 bg-surface-card border border-hairline shadow-sm">
+          <div className="flex items-center gap-2 text-[10px] leading-5 text-muted">
+            <div className="flex items-center gap-1" aria-hidden="true">
+              {[0, 1, 2].map((index) => (
+                <div
+                  key={index}
+                  className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
+                  style={{ animationDelay: `${index * 0.2}s` }}
+                />
+              ))}
+            </div>
+            <span>{statusLabel}</span>
           </div>
-          {progressLabel && (
-            <span className="text-[10px] text-muted">
-              {progressLabel}中...
-            </span>
-          )}
+          {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
         </div>
-        {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
       </div>
     </div>
   );

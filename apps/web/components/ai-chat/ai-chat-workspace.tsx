@@ -437,11 +437,9 @@ function AiChatWorkspaceContent() {
           showCenteredComposer={showCenteredComposer}
           composer={showCenteredComposer ? centeredComposer : composer}
         />
-        {!showCenteredComposer && (
+        {!showCenteredComposer && replyCompleted && (
           <AiChatFloatingStatus
-            sending={chatMessages.sending}
             completed={replyCompleted}
-            progressLabel={progressLabel}
           />
         )}
       </div>
@@ -498,38 +496,18 @@ function AiChatWorkspaceContent() {
 }
 
 function AiChatFloatingStatus({
-  sending,
   completed,
-  progressLabel,
 }: {
-  sending: boolean;
   completed: boolean;
-  progressLabel: string | null;
 }) {
-  const statusLabel = sending
-    ? progressLabel
-      ? `${progressLabel}中...`
-      : 'AI 正在回复...'
-    : completed
-      ? '回答完成'
-      : null;
+  const statusLabel = completed ? '回答完成' : null;
 
   if (!statusLabel) return null;
 
   return (
     <div className="pointer-events-none sticky bottom-2 z-10 mt-2 flex justify-center px-3">
-      <span
-        className={`inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] shadow-sm backdrop-blur transition-colors ${
-          sending
-            ? 'border-primary/25 bg-surface-card/95 text-primary'
-            : 'border-hairline bg-surface-card/95 text-muted'
-        }`}
-      >
-        {sending ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : (
-          <CheckCircle2 size={12} />
-        )}
+      <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/95 px-2.5 text-[10px] text-muted shadow-sm backdrop-blur transition-colors">
+        <CheckCircle2 size={12} />
         <span>{statusLabel}</span>
       </span>
     </div>
