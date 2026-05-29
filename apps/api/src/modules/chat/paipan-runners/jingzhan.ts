@@ -7,7 +7,6 @@ import {
   solarToLunar,
   threeNumberQiGua,
   timeQiGua,
-  type GuaPan,
   type PanResult,
   type YaoString,
 } from 'iching-shifa';
@@ -31,33 +30,9 @@ interface JingzhanInput {
   question?: string;
 }
 
-type StrippedYao = Omit<
-  GuaPan['yaoList'][number],
-  'liuQin' | 'liuShou' | 'tianGan' | 'diZhi' | 'wuXing' | 'naJia' | 'shiYing'
->;
-type StrippedGua = Omit<GuaPan, 'fuShen' | 'yaoList'> & {
-  yaoList: StrippedYao[];
-};
-
-export type JingzhanPaipanResult = Omit<
-  PanResult,
-  | 'benGua'
-  | 'zhiGua'
-  | 'huGua'
-  | 'ganZhiYear'
-  | 'ganZhiMonth'
-  | 'ganZhiDay'
-  | 'ganZhiHour'
-  | 'solarTerm'
-  | 'dayKong'
-  | 'hourKong'
-  | 'monthJian'
-> & {
+export type JingzhanPaipanResult = PanResult & {
   method: JingzhanMethod;
   question?: string;
-  benGua: StrippedGua;
-  zhiGua: StrippedGua;
-  huGua: StrippedGua;
 };
 
 function parseDatetime(value: string | undefined): Date {
@@ -123,27 +98,7 @@ function generateYao(
   }
 }
 
-function stripLiuyaoFromYao({
-  liuQin: _liuQin,
-  liuShou: _liuShou,
-  tianGan: _tianGan,
-  diZhi: _diZhi,
-  wuXing: _wuXing,
-  naJia: _naJia,
-  shiYing: _shiYing,
-  ...rest
-}: GuaPan['yaoList'][number]): StrippedYao {
-  return rest;
-}
-
-function stripLiuyao(gua: GuaPan): StrippedGua {
-  const { fuShen: _fuShen, ...rest } = gua;
-  return {
-    ...rest,
-    yaoList: rest.yaoList.map(stripLiuyaoFromYao),
-  };
-}
-
+/** 执行经占排盘，直接透传 iching-shifa 1.4 的结构化盘面。 */
 export async function runJingzhanPaipan(
   input: Record<string, unknown>,
 ): Promise<JingzhanPaipanResult> {
@@ -164,26 +119,9 @@ export async function runJingzhanPaipan(
     minute: when.getMinutes(),
   });
 
-  const {
-    benGua,
-    zhiGua,
-    huGua,
-    ganZhiYear: _ganZhiYear,
-    ganZhiMonth: _ganZhiMonth,
-    ganZhiDay: _ganZhiDay,
-    ganZhiHour: _ganZhiHour,
-    solarTerm: _solarTerm,
-    dayKong: _dayKong,
-    hourKong: _hourKong,
-    monthJian: _monthJian,
-    ...rest
-  } = pan;
   return {
     method,
     question,
-    ...rest,
-    benGua: stripLiuyao(benGua),
-    zhiGua: stripLiuyao(zhiGua),
-    huGua: stripLiuyao(huGua),
+    ...pan,
   };
 }

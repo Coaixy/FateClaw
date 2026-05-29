@@ -5,26 +5,26 @@ export interface IchingYao {
   position: number; // 1=初 .. 6=上
   yaoValue: YaoValue;
   isMoving: boolean;
-  tianGan: string;
-  diZhi: string;
   naJia?: string;
   naYin?: string;
   wuXing: string;
   liuQin: string;
   liuShou: string;
-  shiYing: string; // '世' | '應' | '初' | '二' | '三' | '四' | '五' | '六'
+  shiYing: string; // '世' | '应' | '初' | '二' | '三' | '四' | '五' | '六'
+  suiXian?: {
+    startAge: number;
+    endAge: number;
+  };
   xingXiu?: string;
 }
 
 export interface IchingFuShen {
   fuLiuQin: string;
   fuNaJia: string;
+  fuNaYin?: string;
   fuWuXing: string;
-  // 伏神索引统一按 0 基保存，和 yaoList 下标一致。
-  hostYaoIndex: number;
-  hostNaJia?: string; // 仅作辅助展示，不参与定位。
-  feiWuXing?: string;
-  relation?: string;
+  // 新版 iching-shifa 使用 1 基爻位，和 yao.position 保持一致。
+  hostPosition: number;
 }
 
 export interface IchingGua {

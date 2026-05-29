@@ -29,9 +29,11 @@ describe('executeDirectPaipan', () => {
     expect(result.skillContextEntry.output).toContain(
       '八字排盘（系统排盘结果）',
     );
+    expect(result.skillContextEntry.output).toContain('【命盘概要】');
     expect(result.skillContextEntry.output).toContain(
-      'baziString：庚午 辛巳 庚辰 辛巳',
+      '四柱：庚午 辛巳 庚辰 辛巳',
     );
+    expect(result.skillContextEntry.output).toContain('【四柱明细】');
     expect(result.skillContextEntry.output.trim().startsWith('{')).toBe(false);
   });
 });

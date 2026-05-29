@@ -23,14 +23,11 @@ describe('iching-paipan reference alignment', () => {
       result.ganZhiDay.gz,
       result.ganZhiHour.gz,
     ]).toEqual(['丙午', '壬辰', '辛酉', '乙未']);
-    expect(result.yearKong).toBe('寅卯');
-    expect(result.monthKong).toBe('午未');
     expect(result.dayKong).toBe('子丑');
     expect(result.hourKong).toBe('辰巳');
 
-    expect(result.benGua.guaName).toBe('水火既济');
-    expect(result.zhiGua.guaName).toBe('泽雷随');
-    expect(result.zhiGua.guaName).not.toBe('随为随');
+    expect(result.benGua.guaName).toBe('既济');
+    expect(result.zhiGua.guaName).toBe('随');
     expect(result.benGua.yaoList.map((yao) => yao.naJia)).toEqual([
       '己卯',
       '己丑',
@@ -53,7 +50,7 @@ describe('iching-paipan reference alignment', () => {
       '青龙',
       '朱雀',
       '勾陈',
-      '螣蛇',
+      '腾蛇',
     ]);
     expect(result.zhiGua.yaoList.map((yao) => yao.naJia)).toEqual([
       '庚子',
@@ -64,44 +61,46 @@ describe('iching-paipan reference alignment', () => {
       '丁未',
     ]);
     expect(result.zhiGua.yaoList.map((yao) => yao.liuQin)).toEqual([
+      '父母',
       '兄弟',
-      '子孙',
-      '官鬼',
-      '兄弟',
+      '妻财',
       '父母',
       '官鬼',
+      '妻财',
     ]);
+    expect(result.benGua.yaoList[0]?.suiXian).toEqual({
+      startAge: 20,
+      endAge: 24,
+    });
   });
 
-  it('matches the reference fushen and shensha data', async () => {
+  it('matches the iching-shifa 1.4 fushen and shensha data', async () => {
     const result = await runPaipan();
 
     expect(result.benGua.fuShen).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           fuLiuQin: '妻财',
-          hostYaoIndex: 2,
-          hostNaJia: '己亥',
+          fuNaJia: '戊午',
+          fuNaYin: '天上火',
+          hostPosition: 3,
         }),
       ]),
     );
     expect(result.shenSha).toMatchObject({
-      文昌: '子',
-      驿马: '亥',
-      将星: '',
-      桃花: '午',
-      天喜: '戌',
-      天医: '卯',
-      谋星: '未',
-      华盖: '',
-      灾煞: '卯',
-      劫煞: '寅',
-      禄神: '酉',
-      阳刃: '申',
+      文昌: ['子'],
+      驿马: ['亥'],
+      桃花: ['午'],
+      天喜: ['戌'],
+      天医: ['卯'],
+      天马: ['戌'],
+      华盖: ['丑'],
+      禄神: ['酉'],
+      天乙贵人: ['午', '寅'],
     });
   });
 
-  it('matches the reference data for all-moving kun to qian', async () => {
+  it('matches the iching-shifa 1.4 data for all-moving kun to qian', async () => {
     const result = await runPaipan({
       yao: '666666',
       datetime: '2024-08-08 09:15',
@@ -113,14 +112,9 @@ describe('iching-paipan reference alignment', () => {
       result.ganZhiDay.gz,
       result.ganZhiHour.gz,
     ]).toEqual(['甲辰', '壬申', '甲辰', '己巳']);
-    expect([
-      result.yearKong,
-      result.monthKong,
-      result.dayKong,
-      result.hourKong,
-    ]).toEqual(['寅卯', '戌亥', '寅卯', '戌亥']);
-    expect(result.benGua.guaName).toBe('坤为地');
-    expect(result.zhiGua.guaName).toBe('乾为天');
+    expect([result.dayKong, result.hourKong]).toEqual(['寅卯', '戌亥']);
+    expect(result.benGua.guaName).toBe('坤');
+    expect(result.zhiGua.guaName).toBe('乾');
     expect(result.benGua.yaoList.map((yao) => yao.naJia)).toEqual([
       '乙未',
       '乙巳',
@@ -130,24 +124,28 @@ describe('iching-paipan reference alignment', () => {
       '癸酉',
     ]);
     expect(result.zhiGua.yaoList.map((yao) => yao.liuQin)).toEqual([
+      '子孙',
       '妻财',
+      '父母',
       '官鬼',
       '兄弟',
       '父母',
-      '子孙',
-      '兄弟',
     ]);
     expect(result.shenSha).toMatchObject({
-      文昌: '巳',
-      驿马: '寅',
-      桃花: '酉',
-      华盖: '辰',
-      禄神: '寅',
-      阳刃: '卯',
+      文昌: ['巳'],
+      驿马: ['寅'],
+      桃花: ['酉'],
+      华盖: ['辰'],
+      禄神: ['寅'],
+      天乙贵人: ['丑', '未'],
+    });
+    expect(result.benGua.yaoList[0]?.suiXian).toEqual({
+      startAge: 29,
+      endAge: 33,
     });
   });
 
-  it('matches the reference data for static qian', async () => {
+  it('matches the iching-shifa 1.4 data for static qian', async () => {
     const result = await runPaipan({
       yao: '777777',
       datetime: '2025-01-02 22:05',
@@ -159,14 +157,9 @@ describe('iching-paipan reference alignment', () => {
       result.ganZhiDay.gz,
       result.ganZhiHour.gz,
     ]).toEqual(['甲辰', '丙子', '辛未', '己亥']);
-    expect([
-      result.yearKong,
-      result.monthKong,
-      result.dayKong,
-      result.hourKong,
-    ]).toEqual(['寅卯', '申酉', '戌亥', '辰巳']);
-    expect(result.benGua.guaName).toBe('乾为天');
-    expect(result.zhiGua.guaName).toBe('乾为天');
+    expect([result.dayKong, result.hourKong]).toEqual(['戌亥', '辰巳']);
+    expect(result.benGua.guaName).toBe('乾');
+    expect(result.zhiGua.guaName).toBe('乾');
     expect(result.benGua.yaoList.map((yao) => yao.liuQin)).toEqual([
       '子孙',
       '妻财',
@@ -176,12 +169,12 @@ describe('iching-paipan reference alignment', () => {
       '父母',
     ]);
     expect(result.shenSha).toMatchObject({
-      文昌: '子',
-      驿马: '巳',
-      将星: '子',
-      桃花: '子',
-      天医: '亥',
-      劫煞: '申',
+      文昌: ['子'],
+      驿马: ['巳'],
+      桃花: ['子'],
+      天医: ['亥'],
+      天马: ['寅'],
+      天乙贵人: ['午', '寅'],
     });
   });
 });

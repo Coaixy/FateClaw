@@ -31,24 +31,13 @@ interface LiuyaoData {
   explanation?: string;
 }
 
-interface ShenShaMatch {
-  guaKey?: string;
-  position?: number;
-  diZhi?: string;
-  naJia?: string;
-}
-
-interface ShenShaResult {
-  targetDiZhi?: string[];
-  matches?: ShenShaMatch[];
-}
-
-type ShenShaData = Record<string, string | ShenShaResult | undefined>;
+type ShenShaData = Record<string, string[] | undefined>;
 
 interface FuShenDisplay {
   kind: '伏' | '旁';
   liuQin: string;
   naJiaWuXing: string;
+  naYin?: string;
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -66,13 +55,6 @@ function formatMethod(method?: string): string {
   return METHOD_LABEL[method] ?? method;
 }
 
-const YAO_POS_SHORT = ['初', '二', '三', '四', '五', '上'] as const;
-const SHENSHA_GUA_LABEL: Record<string, string> = {
-  benGua: '本',
-  zhiGua: '变',
-  huGua: '互',
-};
-
 function formatFuShenNaJia(
   fu: NonNullable<IchingGua['fuShen']>[number],
 ): string {
@@ -82,11 +64,15 @@ function formatFuShenNaJia(
 function resolveFuShenHostIndex(
   fu: NonNullable<IchingGua['fuShen']>[number],
 ): number | null {
-  const rawIndex = Number(fu.hostYaoIndex);
-  if (!Number.isInteger(rawIndex) || rawIndex < 0 || rawIndex > 5) {
+  const hostPosition = Number(fu.hostPosition);
+  if (
+    !Number.isInteger(hostPosition) ||
+    hostPosition < 1 ||
+    hostPosition > 6
+  ) {
     return null;
   }
-  return rawIndex;
+  return hostPosition - 1;
 }
 
 function buildFuShenByHost(
@@ -111,6 +97,7 @@ function buildFuShenByHost(
           kind,
           liuQin: fu.fuLiuQin,
           naJiaWuXing: formatFuShenNaJia(fu),
+          naYin: fu.fuNaYin,
         },
       ];
     });
@@ -121,39 +108,15 @@ function buildFuShenByHost(
   return map;
 }
 
-function formatShenShaMatch(match: ShenShaMatch): string {
-  const gua = match.guaKey
-    ? (SHENSHA_GUA_LABEL[match.guaKey] ?? match.guaKey)
-    : '';
-  const position =
-    typeof match.position === 'number'
-      ? (YAO_POS_SHORT[match.position - 1] ?? `${match.position}`)
-      : '';
-  return `${gua}${position}${match.naJia ?? match.diZhi ?? ''}`;
-}
-
 function formatShenShaItems(shenSha?: ShenShaData) {
   if (!shenSha) return [];
 
   return Object.entries(shenSha)
     .map(([name, value]) => {
-      if (typeof value === 'string') {
-        return value.trim()
-          ? { name, target: value.trim(), matches: '' }
-          : null;
-      }
-      if (!value || typeof value !== 'object' || Array.isArray(value))
-        return null;
-
-      const target = (value.targetDiZhi ?? []).filter(Boolean).join('·');
-      const matches = (value.matches ?? [])
-        .map(formatShenShaMatch)
-        .filter(Boolean)
-        .join('、');
-      if (!target && !matches) return null;
-      return { name, target, matches };
+      const target = value?.filter(Boolean).join('·') ?? '';
+      return target ? { name, target } : null;
     })
-    .filter((item): item is { name: string; target: string; matches: string } =>
+    .filter((item): item is { name: string; target: string } =>
       Boolean(item),
     );
 }
@@ -172,6 +135,11 @@ function YaoBar({ isYang: yang }: { isYang: boolean }) {
   );
 }
 
+function formatSuiXian(yao: IchingYao): string | null {
+  if (!yao.suiXian) return null;
+  return `岁限 ${yao.suiXian.startAge}-${yao.suiXian.endAge}`;
+}
+
 function YaoRow({
   benYao,
   bianYao,
@@ -185,6 +153,8 @@ function YaoRow({
   const benIsYang = benYao.yaoValue === 7 || benYao.yaoValue === 9;
   const bianIsYang = bianYao.yaoValue === 7 || bianYao.yaoValue === 9;
   const fuShenRows = fuShen ?? [];
+  const benSuiXian = formatSuiXian(benYao);
+  const bianSuiXian = formatSuiXian(bianYao);
 
   return (
     <div className="flex items-center justify-between py-1.5 sm:py-2.5 border-b border-hairline-soft last:border-0 hover:bg-chart-highlight">
@@ -195,32 +165,29 @@ function YaoRow({
           {benYao.liuShou}
         </span>
 
-        {/* 六亲 + 地支五行 + 天干 */}
-        <div className="grid grid-cols-[auto_auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:gap-x-1.5 whitespace-nowrap min-w-[3.5rem] sm:min-w-[4.5rem]">
+        {/* 六亲 + 纳甲五行 */}
+        <div className="grid grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:gap-x-1.5 whitespace-nowrap min-w-[3.5rem] sm:min-w-[4.5rem]">
           <span className="text-[10px] sm:text-base text-ink font-medium">
             {benYao.liuQin}
           </span>
           <span className="text-[10px] sm:text-base text-ink font-medium">
-            {benYao.diZhi}
+            {benYao.naJia}
             {benYao.wuXing}
           </span>
-          <span
-            className={cn('scale-75 sm:scale-100 origin-left', CHART.mutedSoft)}
-          >
-            {benYao.tianGan}
-          </span>
-          {benYao.naYin && (
+          {(benYao.naYin || benSuiXian) && (
             <span
               className={cn(
-                'col-span-3 justify-self-end text-[8px] sm:text-[10px] leading-none',
+                'col-span-2 justify-self-end text-[8px] sm:text-[10px] leading-none',
                 CHART.mutedSoft,
               )}
             >
-              纳音 {benYao.naYin}
+              {[benYao.naYin ? `纳音 ${benYao.naYin}` : null, benSuiXian]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )}
           {fuShenRows.length > 0 && (
-            <div className="col-span-3 mt-0.5 flex flex-col items-end gap-0.5 sm:gap-1 leading-none">
+            <div className="col-span-2 mt-0.5 flex flex-col items-end gap-0.5 sm:gap-1 leading-none">
               {fuShenRows.map((item, index) => (
                 <div
                   key={`${item.kind}-${index}-${item.naJiaWuXing}`}
@@ -234,6 +201,7 @@ function YaoRow({
                   </span>
                   <span className={cn('text-[9px] sm:text-xs font-medium', CHART.primary)}>
                     {item.naJiaWuXing}
+                    {item.naYin ? ` ${item.naYin}` : ''}
                   </span>
                 </div>
               ))}
@@ -297,26 +265,20 @@ function YaoRow({
           <div className="flex items-center gap-0.5 sm:gap-1.5 text-[10px] sm:text-base text-body font-medium whitespace-nowrap">
             <span>{bianYao.liuQin}</span>
             <span>
-              {bianYao.diZhi}
+              {bianYao.naJia}
               {bianYao.wuXing}
             </span>
-            <span
-              className={cn(
-                'scale-75 sm:scale-100 origin-left',
-                CHART.mutedSoft,
-              )}
-            >
-              {bianYao.tianGan}
-            </span>
           </div>
-          {bianYao.naYin && (
+          {(bianYao.naYin || bianSuiXian) && (
             <div
               className={cn(
                 'text-[8px] sm:text-[10px] leading-none whitespace-nowrap',
                 CHART.mutedSoft,
               )}
             >
-              纳音 {bianYao.naYin}
+              {[bianYao.naYin ? `纳音 ${bianYao.naYin}` : null, bianSuiXian]
+                .filter(Boolean)
+                .join(' · ')}
             </div>
           )}
         </div>
@@ -422,7 +384,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
         </div>
       )}
 
-      {/* 1. 干支 / 空亡 表 */}
+      {/* 1. 干支 / 空亡 / 神煞 表 */}
       {hasSizhu && (
         <div className="border-b border-hairline">
           <div className="flex divide-x divide-hairline border-b border-hairline text-xs sm:text-sm text-center">
@@ -445,6 +407,30 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
               </div>
             ))}
           </div>
+          {shenShaItems.length > 0 && (
+            <div className="flex divide-x divide-hairline border-t border-hairline text-xs sm:text-sm bg-canvas">
+              <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
+                神煞
+              </div>
+              <div className="flex-1 px-1.5 sm:px-2 py-1.5">
+                <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-xs">
+                  {shenShaItems.map((item) => (
+                    <span
+                      key={item.name}
+                      className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1.5 py-0.5"
+                    >
+                      <span className="text-chart-earth font-medium">
+                        {item.name}
+                      </span>
+                      <span className="text-ink font-semibold">
+                        {item.target}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -485,7 +471,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
                 key={i}
                 benYao={benYao}
                 bianYao={bianYao}
-                // 伏神 hostYaoIndex 是 0 基索引；爻位 position 是 1 基，取值时必须减 1，否则上爻会丢失且其余爻错位。
+                // 伏神按新版 hostPosition 存为 1 基爻位；这里用当前爻位换算到数组索引取对应伏神。
                 fuShen={fuShenByHost[benYao.position - 1]}
               />
             );
@@ -517,32 +503,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
         </div>
       )}
 
-      {/* 6. 神煞：新版依赖会给命中卦位，旧版字符串结构仍按目标地支展示。 */}
-      {shenShaItems.length > 0 && (
-        <div className="px-2 sm:px-5 py-2 border-t border-hairline bg-canvas">
-          <div className="flex flex-wrap items-start gap-1.5 text-[10px] sm:text-xs">
-            <span className="text-muted shrink-0 py-0.5">神煞</span>
-            {shenShaItems.map((item) => (
-              <span
-                key={item.name}
-                className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1.5 py-0.5"
-              >
-                <span className="text-chart-earth font-medium">
-                  {item.name}
-                </span>
-                {item.target && (
-                  <span className="text-ink font-semibold">{item.target}</span>
-                )}
-                {item.matches && (
-                  <span className="text-muted break-words">{item.matches}</span>
-                )}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 7. 经文（爻辞 / 彖辞）可折叠 */}
+      {/* 6. 经文（爻辞 / 彖辞）可折叠 */}
       {hasScripture && (
         <div className="border-t border-hairline bg-canvas">
           <button
