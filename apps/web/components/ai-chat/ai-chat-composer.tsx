@@ -83,7 +83,7 @@ export function AiChatComposer({
         className={`flex items-end gap-0 rounded-xl border bg-surface-card transition-all duration-200 touch-manipulation ${
           sending
             ? 'border-primary/40 shadow-lg shadow-primary/5'
-            : 'border-hairline focus-within:border-primary focus-within:shadow-lg focus-within:shadow-primary/10'
+            : 'border-hairline focus-within:shadow-lg focus-within:shadow-primary/10'
         }`}
       >
         <button
