@@ -189,11 +189,7 @@ export function SkillContentEditor({
               </button>
             </div>
 
-            {draft.sections.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-hairline bg-surface-card/55 px-4 py-5 text-[11px] leading-relaxed text-muted">
-                还没有章节。可以先写开场说明，也可以直接新增章节，把“适用场景 / 判断流程 / 常见追问”拆开填写。
-              </div>
-            ) : (
+            {draft.sections.length > 0 ? (
               draft.sections.map((section, index) => (
                 <section
                   key={`${section.title}-${index}`}
@@ -270,7 +266,7 @@ export function SkillContentEditor({
                   </div>
                 </section>
               ))
-            )}
+            ) : null}
           </div>
         </div>
       ) : (

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, FileText, FolderTree, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import {
@@ -69,39 +69,6 @@ function EditStudioSkillPageContent() {
             <ArrowLeft size={13} />
             返回术数开发
           </Link>
-          <div className="flex flex-col gap-4 rounded-[24px] border border-hairline bg-surface-card p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">
-                Bundle Editor
-              </p>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight">
-                编辑 Markdown Skill Bundle
-              </h1>
-              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted sm:text-sm">
-                调整 SKILL.md、索引和知识文件。保存后会立即更新 bundle_uri/checksum 对应的文件内容。
-              </p>
-            </div>
-            <div className="grid gap-2 text-[12px] text-muted sm:grid-cols-2">
-              <div className="rounded-xl border border-hairline bg-canvas/50 px-3 py-2.5">
-                <div className="flex items-center gap-2 font-medium text-ink">
-                  <FolderTree size={14} className="text-primary" />
-                  文件树
-                </div>
-                <p className="mt-1 leading-relaxed">
-                  左侧管理 bundle 内的 Markdown 文件。
-                </p>
-              </div>
-              <div className="rounded-xl border border-hairline bg-canvas/50 px-3 py-2.5">
-                <div className="flex items-center gap-2 font-medium text-ink">
-                  <FileText size={14} className="text-primary" />
-                  SKILL.md
-                </div>
-                <p className="mt-1 leading-relaxed">
-                  name 和 description 从 frontmatter 同步到列表展示。
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {loading ? (

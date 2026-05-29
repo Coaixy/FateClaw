@@ -273,20 +273,6 @@ export function BundleForm({
   if (variant === 'page') {
     return (
       <div className="overflow-hidden rounded-[28px] border border-hairline bg-surface-card shadow-[0_24px_80px_color-mix(in_srgb,var(--color-ink)_10%,transparent)]">
-        <div className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-5 sm:px-6">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-muted">
-              Bundle Builder
-            </p>
-            <h2 className="mt-2 text-lg font-semibold tracking-tight">
-              {initial ? '编辑捆绑包' : '创建捆绑包'}
-            </h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-muted">
-              组合多个技能，统一生成分享入口，管理起来更清晰。
-            </p>
-          </div>
-          {titleExtra}
-        </div>
         {body}
         <div className="border-t border-hairline bg-[color-mix(in_srgb,var(--color-surface-card)_70%,var(--color-canvas))]">
           {footer}

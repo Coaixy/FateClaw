@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Layers, Loader2, Link2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { BundleForm, BundleFormData } from '@/components/skills/bundle-form';
@@ -57,39 +57,6 @@ export default function NewStudioBundlePage() {
             <ArrowLeft size={13} />
             返回术数开发
           </Link>
-          <div className="flex flex-col gap-4 rounded-[28px] border border-hairline bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_10%,transparent),transparent_45%),var(--color-surface-card)] p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">
-                Bundle Builder
-              </p>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight">
-                创建技能捆绑包
-              </h1>
-              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted sm:text-sm">
-                把多个技能打包成一个分享入口。适合做系列课程、主题合集或新人入门包，用户订阅一次即可批量获得。
-              </p>
-            </div>
-            <div className="grid gap-2 text-[12px] text-muted sm:grid-cols-2">
-              <div className="rounded-2xl border border-hairline bg-canvas/50 px-3 py-2.5">
-                <div className="flex items-center gap-2 font-medium text-ink">
-                  <Layers size={14} className="text-primary" />
-                  组合建议
-                </div>
-                <p className="mt-1 leading-relaxed">
-                  把主题相近、使用链路连续的技能放在一起。
-                </p>
-              </div>
-              <div className="rounded-2xl border border-hairline bg-canvas/50 px-3 py-2.5">
-                <div className="flex items-center gap-2 font-medium text-ink">
-                  <Link2 size={14} className="text-primary" />
-                  分享方式
-                </div>
-                <p className="mt-1 leading-relaxed">
-                  创建后可在术数开发中生成统一的订阅链接。
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {loading ? (

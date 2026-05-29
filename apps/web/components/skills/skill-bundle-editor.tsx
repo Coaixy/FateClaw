@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   Code2,
   Eye,
@@ -190,14 +191,6 @@ function validateRelativeMarkdownPath(rawPath: string): string {
   return value;
 }
 
-function getDefaultNewFilePath(files: TextSkillBundleFile[]): string {
-  for (let index = 1; index < 1000; index += 1) {
-    const path = index === 1 ? 'docs/new.md' : `docs/new-${index}.md`;
-    if (!files.some((file) => file.path === path)) return path;
-  }
-  return 'docs/new.md';
-}
-
 function MarkdownBundlePreview({
   content,
   className = '',
@@ -319,9 +312,14 @@ export function SkillBundleEditor({
   );
   const [selectedPath, setSelectedPath] = useState('SKILL.md');
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [addingFile, setAddingFile] = useState(false);
+  const [newFilePath, setNewFilePath] = useState('');
   const [pathError, setPathError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const fileMenuRef = useRef<HTMLDivElement>(null);
+  const newFilePathInputRef = useRef<HTMLInputElement>(null);
 
   const selectedFile = files.find((file) => file.path === selectedPath) ?? files[0];
   const skillFile = files.find((file) => file.path === 'SKILL.md');
@@ -335,6 +333,27 @@ export function SkillBundleEditor({
     ? REQUIRED_FILE_PATHS.has(selectedFile.path)
     : false;
 
+  useEffect(() => {
+    if (!fileMenuOpen) return;
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      if (fileMenuRef.current?.contains(event.target as Node)) return;
+      setFileMenuOpen(false);
+    };
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFileMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocumentMouseDown);
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocumentMouseDown);
+      document.removeEventListener('keydown', onDocumentKeyDown);
+    };
+  }, [fileMenuOpen]);
+
+  useEffect(() => {
+    if (addingFile) newFilePathInputRef.current?.focus();
+  }, [addingFile]);
+
   const updateFile = (path: string, content: string) => {
     setFiles((prev) =>
       prev.map((file) => (file.path === path ? { ...file, content } : file)),
@@ -346,14 +365,33 @@ export function SkillBundleEditor({
     updateFile('SKILL.md', next);
   };
 
-  const handleAddFile = (rawPath?: string) => {
-    const desiredPath = rawPath ?? getDefaultNewFilePath(files);
+  const selectFile = (path: string) => {
+    setSelectedPath(path);
+    setPathError('');
+    setActiveTab('edit');
+    setFileMenuOpen(false);
+  };
+
+  const startAddFile = () => {
+    setAddingFile(true);
+    setNewFilePath('');
+    setPathError('');
+    setFileMenuOpen(false);
+  };
+
+  const cancelAddFile = () => {
+    setAddingFile(false);
+    setNewFilePath('');
+    setPathError('');
+  };
+
+  const handleAddFile = (rawPath: string) => {
     setPathError('');
     try {
-      const path = validateRelativeMarkdownPath(desiredPath);
+      const path = validateRelativeMarkdownPath(rawPath);
       if (files.some((file) => file.path === path)) {
         setPathError('同名文件已存在');
-        return;
+        return false;
       }
       setError('');
       setPathError('');
@@ -364,8 +402,12 @@ export function SkillBundleEditor({
       );
       setSelectedPath(path);
       setActiveTab('edit');
+      setAddingFile(false);
+      setNewFilePath('');
+      return true;
     } catch (err) {
       setPathError(err instanceof Error ? err.message : '文件路径不合法');
+      return false;
     }
   };
 
@@ -412,37 +454,88 @@ export function SkillBundleEditor({
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-surface-card shadow-sm">
       <div className="space-y-3 border-b border-hairline bg-canvas/35 p-3 sm:p-4">
-        <div className="relative">
-          <FileText
-            size={17}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
-          />
-          <select
-            aria-label="选择文件"
-            value={selectedFile?.path ?? ''}
-            onChange={(event) => {
-              setSelectedPath(event.currentTarget.value);
-              setPathError('');
-              setActiveTab('edit');
-            }}
-            className="h-12 w-full appearance-none rounded-lg border border-hairline bg-surface-card py-0 pl-11 pr-11 text-[15px] font-medium text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+        <div ref={fileMenuRef} className="relative">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={fileMenuOpen}
+            onClick={() => setFileMenuOpen((open) => !open)}
+            className={`group flex min-h-14 w-full items-center gap-3 rounded-xl border bg-surface-card px-3.5 py-2.5 text-left shadow-sm transition-all hover:border-primary/40 hover:bg-surface-cream-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 ${
+              fileMenuOpen ? 'border-primary/50 bg-surface-cream-strong' : 'border-hairline'
+            }`}
           >
-            {files.map((file) => (
-              <option key={file.path} value={file.path}>
-                {file.path}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={17}
-            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
-          />
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary transition-colors group-hover:border-primary/30">
+              <FileText size={17} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-medium text-muted">
+                当前文件
+              </span>
+              <span className="mt-0.5 block truncate font-mono text-[14px] font-semibold text-ink sm:text-[15px]">
+                {selectedFile?.path ?? '未选择文件'}
+              </span>
+            </span>
+            <span className="hidden shrink-0 rounded-md border border-hairline bg-canvas px-2 py-1 text-[11px] font-medium text-muted sm:inline-flex">
+              {files.length} 个文件
+            </span>
+            <ChevronDown
+              size={18}
+              className={`shrink-0 text-muted transition-transform ${fileMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {fileMenuOpen ? (
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-xl animate-scale-in">
+              <div
+                role="listbox"
+                aria-label="选择文件"
+                className="max-h-72 space-y-1 overflow-y-auto p-1.5"
+              >
+                {files.map((file) => {
+                  const selected = file.path === selectedFile?.path;
+                  const required = REQUIRED_FILE_PATHS.has(file.path);
+                  return (
+                    <button
+                      key={file.path}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => selectFile(file.path)}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                        selected
+                          ? 'bg-primary/10 text-ink'
+                          : 'text-muted hover:bg-surface-cream-strong hover:text-ink'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+                          selected
+                            ? 'border-primary/30 bg-primary/10 text-primary'
+                            : 'border-hairline bg-canvas text-muted'
+                        }`}
+                      >
+                        {selected ? <Check size={15} /> : <FileText size={15} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-[13px] font-semibold">
+                          {file.path}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-muted">
+                          {required ? '核心文件' : '自定义文件'}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <button
             type="button"
-            onClick={() => handleAddFile()}
+            onClick={startAddFile}
             className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong sm:gap-2 sm:text-[14px]"
           >
             <Plus size={17} />
@@ -468,6 +561,42 @@ export function SkillBundleEditor({
             删除
           </button>
         </div>
+
+        {addingFile ? (
+          <form
+            className="grid gap-2 rounded-xl border border-hairline bg-surface-card p-2 sm:grid-cols-[1fr_auto_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddFile(newFilePath);
+            }}
+          >
+            <label className="sr-only" htmlFor="new-skill-bundle-file-path">
+              新文件路径
+            </label>
+            <input
+              ref={newFilePathInputRef}
+              id="new-skill-bundle-file-path"
+              value={newFilePath}
+              onChange={(event) => setNewFilePath(event.currentTarget.value)}
+              placeholder="docs/example.md"
+              className="h-10 min-w-0 rounded-lg border border-hairline bg-canvas px-3 font-mono text-[13px] text-ink placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+            />
+            <button
+              type="submit"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-primary px-3 text-[13px] font-semibold text-white transition-colors hover:bg-primary/90"
+            >
+              <Plus size={15} />
+              创建
+            </button>
+            <button
+              type="button"
+              onClick={cancelAddFile}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-hairline bg-canvas px-3 text-[13px] font-semibold text-muted transition-colors hover:text-ink"
+            >
+              取消
+            </button>
+          </form>
+        ) : null}
 
         <div className="grid grid-cols-2 rounded-lg border border-hairline bg-surface-card">
           <button

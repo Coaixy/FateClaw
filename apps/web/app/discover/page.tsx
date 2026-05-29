@@ -28,8 +28,6 @@ export default function DiscoverPage() {
     [toast],
   );
   const market = useSkillMarket(notify);
-  const totalEntries =
-    market.filteredBundles.length + market.filteredSkills.length;
 
   return (
     <AppShell>
@@ -61,31 +59,12 @@ export default function DiscoverPage() {
           <div className="py-16 text-center text-sm text-foreground-muted">
             加载中…
           </div>
-        ) : totalEntries === 0 ? (
+        ) : market.filteredBundles.length + market.filteredSkills.length === 0 ? (
           <div className="py-16 text-center text-sm text-foreground-muted">
             暂无公开内容
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-end justify-between gap-3 rounded-2xl border border-hairline bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_8%,transparent),transparent_65%)] px-4 py-3">
-              <div>
-                <p className="text-[13px] font-semibold text-ink">
-                  技能市场
-                </p>
-                <p className="mt-1 text-[11px] text-foreground-muted">
-                  市场会优先展示公开捆绑包，其次再展示单技能热度榜
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[18px] font-bold tracking-tight text-ink">
-                  {totalEntries}
-                </p>
-                <p className="text-[10px] text-foreground-muted">
-                  个市场条目
-                </p>
-              </div>
-            </div>
-
             {market.filteredBundles.length > 0 && (
               <div className="space-y-2.5">
                 <div className="flex items-end justify-between gap-3 px-1">
