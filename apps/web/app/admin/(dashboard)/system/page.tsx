@@ -135,6 +135,7 @@ export default function AdminSystemConfigPage() {
           withBusy('create-provider', async () => {
             await admin.createOfficialModel({
               ...newProvider,
+              description: newProvider.description.trim(),
               model_key:
                 newProvider.model_key || buildSuggestedProviderKey(newProvider),
               base_url: newProvider.base_url || null,
@@ -181,6 +182,7 @@ export default function AdminSystemConfigPage() {
                   withBusy(id, async () => {
                     await admin.updateOfficialModel(id, {
                       ...draft,
+                      description: draft.description.trim(),
                       model_key:
                         draft.model_key || buildSuggestedProviderKey(draft),
                       base_url: draft.base_url || null,

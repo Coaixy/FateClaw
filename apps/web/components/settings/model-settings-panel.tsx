@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Check,
   Loader2,
+  MessageSquareText,
   RefreshCw,
   Save,
   ServerCog,
+  Sparkles,
 } from 'lucide-react';
 
 import {
@@ -16,7 +18,7 @@ import {
   type OfficialModel,
 } from '@/features/model-settings/api';
 import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
-import { officialModelPriceLabel } from '@/components/settings/model-pricing';
+import { OfficialModelPriceTags } from './official-model-price-tags';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none focus:border-hairline';
@@ -328,9 +330,15 @@ function OfficialModelsSection({
   onSelectOfficial: (modelId: string) => Promise<void>;
 }) {
   return (
-    <section className="space-y-2">
-      <div className="text-[12px] font-medium text-muted">
-        官方模型
+    <section className="space-y-3">
+      <div>
+        <div className="flex items-center gap-2 text-[12px] font-medium text-muted">
+          <Sparkles size={13} className="text-primary" />
+          官方模型
+        </div>
+        <div className="mt-1 text-[12px] leading-5 text-muted">
+          由平台统一维护密钥和扣费价格，适合不想自行配置供应商账号的用户。
+        </div>
       </div>
       {models.length === 0 ? (
         <div className="rounded-lg border border-hairline bg-surface-card px-4 py-6 text-[13px] text-muted">
@@ -368,6 +376,9 @@ function OfficialModelOption({
   onSelect: () => Promise<void>;
 }) {
   const available = model.enabled && model.has_secret;
+  const description =
+    model.description ||
+    '管理员尚未填写说明，可根据展示名称和价格选择。';
   return (
     <button
       type="button"
@@ -375,13 +386,34 @@ function OfficialModelOption({
       disabled={!available || busy}
       className={`rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         selected
-          ? 'border-primary bg-primary/10'
-          : 'border-hairline bg-surface-card hover:bg-surface-cream-strong'
+          ? 'border-primary bg-primary/10 shadow-[0_8px_18px_rgba(0,0,0,0.06)]'
+          : 'border-hairline bg-surface-card hover:border-primary/35 hover:bg-surface-cream-strong'
       }`}
     >
-      <div className="font-medium text-sm">{model.display_name}</div>
-      <div className="mt-1 text-[11px] leading-5 text-muted">
-        {officialModelPriceLabel(model)}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">
+              {model.display_name}
+            </span>
+            {selected && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
+                <Check size={11} />
+                当前
+              </span>
+            )}
+            {!available && (
+              <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] text-muted">
+                暂不可用
+              </span>
+            )}
+          </div>
+        </div>
+        <OfficialModelPriceTags model={model} />
+      </div>
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
+        <MessageSquareText size={13} className="mt-0.5 shrink-0 text-muted" />
+        <span>{description}</span>
       </div>
     </button>
   );

@@ -9,6 +9,7 @@ import type {
 import {
   ChevronDown,
   ChevronUp,
+  MessageSquareText,
   KeyRound,
   Loader2,
   Power,
@@ -20,6 +21,7 @@ import {
   PI_API_OPTIONS,
   protocolTypeLabel,
 } from '../../../../features/model-settings/pi-api-options';
+import { OfficialModelPriceTags } from '../../../../components/settings/official-model-price-tags';
 import {
   setProviderDraftEnabled,
   type ProviderDraft,
@@ -33,6 +35,7 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
     model_key: model.model_key,
     pi_api: model.pi_api,
     display_name: model.display_name,
+    description: model.description || '',
     enabled: model.enabled,
     priority: model.priority,
     base_url: model.base_url || '',
@@ -116,6 +119,8 @@ export function ProviderRow({
 
   const sourceLabel = getSecretSourceLabel(provider.secret_source);
   const toggledDraft = setProviderDraftEnabled(draft, !provider.enabled);
+  const description =
+    provider.description || '未填写说明，用户侧会显示默认提示。';
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
@@ -131,6 +136,13 @@ export function ProviderRow({
                 <div className="truncate text-[14px] font-semibold">
                   {provider.display_name}
                 </div>
+                <div className="mt-1 flex items-start gap-1.5 text-[11px] leading-4 text-muted xl:hidden">
+                  <MessageSquareText
+                    size={12}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span className="line-clamp-2">{description}</span>
+                </div>
               </div>
               <div className="text-[12px] text-muted">
                 {protocolTypeLabel(provider.pi_api)}
@@ -141,6 +153,16 @@ export function ProviderRow({
               <div className="truncate text-[12px] text-muted">
                 {provider.base_url || '默认'}
               </div>
+            </div>
+            <div className="mt-3 hidden items-start gap-1.5 rounded-lg border border-hairline/70 bg-canvas/50 px-3 py-2 text-[11px] leading-5 text-muted xl:flex">
+              <MessageSquareText
+                size={12}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="line-clamp-2">{description}</span>
+            </div>
+            <div className="mt-3">
+              <OfficialModelPriceTags model={provider} compact />
             </div>
           </div>
           {expanded ? (
@@ -243,6 +265,14 @@ function ProviderBasicFields({
         value={draft.model_name}
         onChange={(value) =>
           setDraft((prev) => ({ ...prev, model_name: value }))
+        }
+      />
+      <TextAreaField
+        label="模型说明"
+        value={draft.description}
+        placeholder="例如：适合日常聊天、复杂推理或低成本批量任务"
+        onChange={(value) =>
+          setDraft((prev) => ({ ...prev, description: value }))
         }
       />
       <label className="space-y-1.5">
@@ -413,6 +443,12 @@ export function ProviderCreatePanel({
           onChange={(value) => onChange({ ...draft, model_name: value })}
         />
         <TextField
+          label="模型说明"
+          value={draft.description}
+          placeholder="例如：适合高质量问答和复杂推理"
+          onChange={(value) => onChange({ ...draft, description: value })}
+        />
+        <TextField
           label="Base URL"
           value={draft.base_url}
           placeholder="可选"
@@ -511,6 +547,37 @@ function TextField({
         placeholder={placeholder}
         className={CONTROL}
       />
+    </label>
+  );
+}
+
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="space-y-1.5 sm:col-span-2">
+      <div className="text-[12px] font-medium text-muted">
+        {label}
+      </div>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        maxLength={240}
+        className="min-h-24 w-full resize-y rounded-lg border border-hairline bg-canvas px-3 py-2.5 text-sm leading-6 focus:border-hairline focus:outline-none"
+      />
+      <div className="text-[11px] text-muted">
+        {value.trim().length}/240
+      </div>
     </label>
   );
 }

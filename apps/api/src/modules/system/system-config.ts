@@ -68,6 +68,7 @@ export interface AdminOfficialModelView extends OfficialModelConfig {
   secret_source: RuntimeSecretSource;
   auth_mode: ProviderAuthMode;
   context_window_tokens: number | null;
+  description: string;
 }
 
 export interface UserModelSettingsOverview {
@@ -125,6 +126,32 @@ function withModelContextWindowTokens(
     delete next.context_window_tokens;
   } else {
     next.context_window_tokens = contextWindowTokens;
+  }
+  return next;
+}
+
+/** 从扩展配置里读取供用户理解模型用途的说明文案。 */
+function normalizeModelDescription(
+  extraJson: Record<string, unknown> | null | undefined,
+): string {
+  const value = extraJson?.description;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** 将官方模型说明写入扩展配置；空字符串表示清除说明。 */
+function withModelDescription(
+  extraJson: Record<string, unknown> | null | undefined,
+  description: string | undefined,
+): Record<string, unknown> {
+  const next = { ...(extraJson ?? {}) };
+  if (description === undefined) {
+    return next;
+  }
+  const value = description.trim();
+  if (value) {
+    next.description = value;
+  } else {
+    delete next.description;
   }
   return next;
 }
@@ -292,6 +319,7 @@ export async function listOfficialModelViews(): Promise<
           model.extra_json,
           model.display_name,
         ),
+        description: normalizeModelDescription(model.extra_json),
       };
     }),
   );
@@ -373,6 +401,7 @@ export async function createOfficialModel(args: {
   inputTokenPricePerMillionPoints?: number;
   outputTokenPricePerMillionPoints?: number;
   contextWindowTokens?: number | null;
+  description?: string;
   secretValue?: string;
   authMode?: ProviderAuthMode;
   actor?: string;
@@ -389,11 +418,14 @@ export async function createOfficialModel(args: {
       updatedBy: actor,
     });
   }
-  const extraJson = withModelContextWindowTokens(
-    args.authMode || args.secretValue
-      ? { auth_mode: args.authMode ?? defaultAuthMode(args.piApi) }
-      : {},
-    args.contextWindowTokens,
+  const extraJson = withModelDescription(
+    withModelContextWindowTokens(
+      args.authMode || args.secretValue
+        ? { auth_mode: args.authMode ?? defaultAuthMode(args.piApi) }
+        : {},
+      args.contextWindowTokens,
+    ),
+    args.description,
   );
   const created = await createOfficialModelConfig({
     id,
@@ -433,6 +465,7 @@ export async function updateOfficialModel(args: {
   inputTokenPricePerMillionPoints: number;
   outputTokenPricePerMillionPoints: number;
   contextWindowTokens?: number | null;
+  description?: string;
   actor?: string;
 }): Promise<OfficialModelConfig> {
   const actor = args.actor ?? 'admin';
@@ -452,9 +485,12 @@ export async function updateOfficialModel(args: {
     apiKeySecretKey: before.api_key_secret_key,
     inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints,
     outputTokenPricePerMillionPoints: args.outputTokenPricePerMillionPoints,
-    extraJson: withModelContextWindowTokens(
-      before.extra_json,
-      args.contextWindowTokens,
+    extraJson: withModelDescription(
+      withModelContextWindowTokens(
+        before.extra_json,
+        args.contextWindowTokens,
+      ),
+      args.description,
     ),
   });
   if (!updated) {

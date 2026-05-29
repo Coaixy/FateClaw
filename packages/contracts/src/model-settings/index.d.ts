@@ -21,6 +21,7 @@ export interface OfficialModelDto {
   model_key: string;
   pi_api: ModelPiApiDto;
   display_name: string;
+  description: string;
   enabled: boolean;
   priority: number;
   base_url: string | null;

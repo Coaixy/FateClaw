@@ -327,6 +327,7 @@ export interface AdminModelProvider {
   model_key: string;
   pi_api: AdminModelPiApi;
   display_name: string;
+  description: string;
   enabled: boolean;
   priority: number;
   base_url: string | null;
@@ -419,6 +420,7 @@ export const admin = {
     model_key: string;
     pi_api: AdminModelPiApi;
     display_name: string;
+    description?: string;
     enabled: boolean;
     priority: number;
     base_url?: string | null;
@@ -438,6 +440,7 @@ export const admin = {
       model_key: string;
       pi_api: AdminModelPiApi;
       display_name: string;
+      description?: string;
       enabled: boolean;
       priority: number;
       base_url?: string | null;

@@ -75,6 +75,7 @@ function toOfficialModelDto(model: AdminOfficialModelView): OfficialModelDto {
     model_key: model.model_key,
     pi_api: model.pi_api,
     display_name: model.display_name,
+    description: model.description,
     enabled: model.enabled,
     priority: model.priority,
     base_url: model.base_url,

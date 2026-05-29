@@ -4,6 +4,7 @@ export type ProviderDraft = {
   model_key: string;
   pi_api: AdminModelPiApi;
   display_name: string;
+  description: string;
   enabled: boolean;
   priority: number;
   base_url: string;
@@ -18,6 +19,7 @@ export function createEmptyDraft(): ProviderDraft {
     model_key: '',
     pi_api: 'openai-completions',
     display_name: '',
+    description: '',
     enabled: true,
     priority: 0,
     base_url: '',
