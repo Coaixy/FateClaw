@@ -97,7 +97,8 @@ export {
 };
 
 export const MAX_USER_SKILLS = 30;
-export const MAX_CONTENT_LENGTH = 30000;
+export const MAX_SKILL_BUNDLE_FILES = 30;
+export const MAX_SKILL_BUNDLE_FILE_LENGTH = 100_000;
 
 /**
  * 将技能名称转换为稳定目录名，避免路由层重复实现。

@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Check,
+  Download,
   Globe2,
   Link2,
   Pencil,
@@ -24,6 +25,7 @@ export function OwnSkillCard({
   onPublish,
   onUnpublish,
   onEdit,
+  onExport,
   onDelete,
 }: {
   sk: UserCustomSkill;
@@ -34,6 +36,7 @@ export function OwnSkillCard({
   onPublish: (id: string) => void;
   onUnpublish: (id: string) => void;
   onEdit: (sk: UserCustomSkill) => void;
+  onExport: (sk: UserCustomSkill) => void;
   onDelete: (id: string) => void;
 }) {
   const isPublic = sk.visibility === 'shared';
@@ -192,6 +195,14 @@ export function OwnSkillCard({
             </div>
 
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => onExport(sk)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-surface-cream-strong transition-all cursor-pointer"
+                title="导出 ZIP"
+                aria-label="导出 ZIP"
+              >
+                <Download size={13} />
+              </button>
               <button
                 onClick={() => onEdit(sk)}
                 className="h-8 w-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-surface-cream-strong transition-all cursor-pointer"

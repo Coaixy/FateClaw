@@ -49,7 +49,39 @@ function yamlScalar(value: string): string {
   return JSON.stringify(value);
 }
 
-const ALLOWED_BUNDLE_ROOTS = new Set(['docs', 'examples', 'notes']);
+const ALLOWED_TEXT_FILE_EXTENSIONS = new Set([
+  '.md',
+  '.mdx',
+  '.json',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.sh',
+  '.py',
+  '.txt',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.ini',
+  '.conf',
+  '.csv',
+  '.tsv',
+  '.xml',
+  '.html',
+  '.css',
+  '.sql',
+]);
+const BLOCKED_BUNDLE_DIRECTORIES = new Set([
+  '__MACOSX',
+  '__pycache__',
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+]);
 export interface TextSkillBundleFile {
   path: string;
   content: string;
@@ -116,10 +148,6 @@ export function normalizeTextSkillBundlePath(rawPath: string): string {
   if (normalized !== input || normalized.startsWith('../')) {
     throw new Error('文件路径不能包含 .. 或重复分隔符');
   }
-  if (!normalized.endsWith('.md')) {
-    throw new Error('Skill Bundle 只支持 Markdown 文件');
-  }
-
   const segments = normalized.split('/');
   if (
     segments.some(
@@ -130,11 +158,13 @@ export function normalizeTextSkillBundlePath(rawPath: string): string {
     throw new Error('文件路径不能包含隐藏或危险目录');
   }
 
-  if (normalized === 'SKILL.md' || normalized === 'index.md') {
-    return normalized;
+  if (segments.some((segment) => BLOCKED_BUNDLE_DIRECTORIES.has(segment))) {
+    throw new Error('文件路径不能包含依赖、构建产物或缓存目录');
   }
-  if (!ALLOWED_BUNDLE_ROOTS.has(segments[0])) {
-    throw new Error('文件只能放在 docs、examples 或 notes 目录下');
+
+  const extension = path.posix.extname(normalized).toLowerCase();
+  if (!ALLOWED_TEXT_FILE_EXTENSIONS.has(extension)) {
+    throw new Error('Skill Bundle 只支持安全文本文件');
   }
 
   return normalized;
@@ -180,7 +210,6 @@ function createDefaultIndexMarkdown(skillName: string): string {
 
 function normalizeTextSkillBundleFiles(
   files: TextSkillBundleFile[],
-  fallbackSkillName: string,
 ): TextSkillBundleFile[] {
   const byPath = new Map<string, string>();
 
@@ -194,12 +223,6 @@ function normalizeTextSkillBundleFiles(
 
   if (!byPath.has('SKILL.md')) {
     throw new Error('Skill Bundle 必须包含 SKILL.md');
-  }
-  if (!byPath.has('index.md')) {
-    byPath.set('index.md', createDefaultIndexMarkdown(fallbackSkillName));
-  }
-  if (!byPath.has('docs/knowledge.md')) {
-    byPath.set('docs/knowledge.md', '');
   }
 
   return Array.from(byPath.entries())
@@ -296,10 +319,7 @@ export function writeTextSkillBundleFiles(
     skillId: input.skillId,
     dirName: input.dirName,
   });
-  const files = normalizeTextSkillBundleFiles(
-    input.files,
-    input.fallbackSkillName || input.dirName,
-  );
+  const files = normalizeTextSkillBundleFiles(input.files);
   const checksum = writeFilesToBundleDir(bundleDir, files);
 
   return {
@@ -341,7 +361,7 @@ export function writeTextSkillBundle(
   });
 }
 
-function readAllowedMarkdownFilesFromDir(bundleDir: string): TextSkillBundleFile[] {
+function readAllowedTextFilesFromDir(bundleDir: string): TextSkillBundleFile[] {
   const files: TextSkillBundleFile[] = [];
 
   function pushFile(relativePath: string): void {
@@ -353,30 +373,29 @@ function readAllowedMarkdownFilesFromDir(bundleDir: string): TextSkillBundleFile
     });
   }
 
-  for (const fileName of ['SKILL.md', 'index.md']) {
-    const absolutePath = path.join(bundleDir, fileName);
-    if (fs.existsSync(absolutePath)) pushFile(fileName);
-  }
-
-  for (const root of ALLOWED_BUNDLE_ROOTS) {
-    const rootDir = path.join(bundleDir, root);
-    if (!fs.existsSync(rootDir)) continue;
-    const walk = (currentDir: string) => {
-      for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
-        if (entry.name.startsWith('.')) continue;
-        const entryPath = path.join(currentDir, entry.name);
-        const relativePath = path.relative(bundleDir, entryPath).split(path.sep).join('/');
-        if (entry.isDirectory()) {
-          walk(entryPath);
-          continue;
-        }
-        if (entry.isFile() && entry.name.endsWith('.md')) {
-          pushFile(relativePath);
-        }
+  const walk = (currentDir: string) => {
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      if (
+        entry.name.startsWith('.') ||
+        BLOCKED_BUNDLE_DIRECTORIES.has(entry.name)
+      ) {
+        continue;
       }
-    };
-    walk(rootDir);
-  }
+      const entryPath = path.join(currentDir, entry.name);
+      const relativePath = path.relative(bundleDir, entryPath).split(path.sep).join('/');
+      if (entry.isDirectory()) {
+        walk(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        pushFile(relativePath);
+      } catch {
+        // 跳过运行期或历史版本留下的非文本/不支持文件，避免整个 Skill 列表读取失败。
+      }
+    }
+  };
+  walk(bundleDir);
 
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }
@@ -387,7 +406,7 @@ export function readTextSkillBundleFiles(
   const bundleDir = resolveBundleUri(bundleUri);
   if (!bundleDir) return [];
   try {
-    return readAllowedMarkdownFilesFromDir(bundleDir);
+    return readAllowedTextFilesFromDir(bundleDir);
   } catch {
     return [];
   }

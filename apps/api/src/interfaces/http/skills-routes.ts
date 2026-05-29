@@ -30,7 +30,8 @@ import {
   listWithdrawalsForCreator,
   publishSkillBundle,
   publishUserCustomSkill,
-  MAX_CONTENT_LENGTH,
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
   MAX_USER_SKILLS,
   promoteUserToCreator,
   shareSkillBundle,
@@ -75,18 +76,21 @@ function parseBundleFilesPayload(
 ): TextSkillBundleFile[] | null {
   if (!Array.isArray(files)) return null;
   const parsed: TextSkillBundleFile[] = [];
-  let totalLength = 0;
+
+  if (files.length > MAX_SKILL_BUNDLE_FILES) {
+    throw new Error(`Bundle 文件数不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+  }
 
   for (const file of files) {
     if (!file || typeof file !== 'object') return null;
     const { path, content } = file as { path?: unknown; content?: unknown };
     if (typeof path !== 'string' || typeof content !== 'string') return null;
-    totalLength += content.length;
+    if (content.length > MAX_SKILL_BUNDLE_FILE_LENGTH) {
+      throw new Error(
+        `单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`,
+      );
+    }
     parsed.push({ path, content });
-  }
-
-  if (totalLength > MAX_CONTENT_LENGTH) {
-    throw new Error(`Bundle Markdown 总内容不超过 ${MAX_CONTENT_LENGTH} 字`);
   }
 
   return parsed;
@@ -127,11 +131,11 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       files = parseBundleFilesPayload(body.files);
     } catch (err) {
       return reply.code(400).send({
-        error: err instanceof Error ? err.message : 'Bundle 文件内容过长',
+        error: err instanceof Error ? err.message : 'Bundle 文件不符合限制',
       });
     }
     if (!files) {
-      return reply.code(400).send({ error: 'files 必须是 Markdown 文件数组' });
+      return reply.code(400).send({ error: 'files 必须是文本文件数组' });
     }
 
     const count = await getUserCustomSkillCount(userId);
@@ -191,12 +195,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
         if (!parsed) {
           return reply
             .code(400)
-            .send({ error: 'files 必须是 Markdown 文件数组' });
+            .send({ error: 'files 必须是文本文件数组' });
         }
         files = parsed;
       } catch (err) {
         return reply.code(400).send({
-          error: err instanceof Error ? err.message : 'Bundle 文件内容过长',
+          error: err instanceof Error ? err.message : 'Bundle 文件不符合限制',
         });
       }
     }

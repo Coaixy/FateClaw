@@ -9,12 +9,14 @@ import {
   Check,
   ChevronDown,
   Code2,
+  Download,
   Eye,
   FileText,
   Loader2,
   Plus,
   Save,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
 import { useConfirm } from '@/lib/use-confirm';
@@ -22,6 +24,10 @@ import type {
   TextSkillBundleFile,
   UserCustomSkill,
 } from '@/features/skills/api';
+import {
+  downloadSkillBundleZip,
+  importSkillBundleFromZip,
+} from '@/features/skills/skill-zip';
 
 export type SkillBundleEditorData = {
   skill_name: string;
@@ -35,7 +41,42 @@ type SkillFrontmatter = {
 };
 
 const DEFAULT_SKILL_NAME = '我的 Skill';
-const REQUIRED_FILE_PATHS = new Set(['SKILL.md', 'index.md', 'docs/knowledge.md']);
+const REQUIRED_FILE_PATHS = new Set(['SKILL.md']);
+const ALLOWED_TEXT_FILE_EXTENSIONS = new Set([
+  '.md',
+  '.mdx',
+  '.json',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.sh',
+  '.py',
+  '.txt',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.ini',
+  '.conf',
+  '.csv',
+  '.tsv',
+  '.xml',
+  '.html',
+  '.css',
+  '.sql',
+]);
+const BLOCKED_FILE_SEGMENTS = new Set([
+  '__MACOSX',
+  '__pycache__',
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+]);
+const MAX_SKILL_BUNDLE_FILES = 30;
+const MAX_SKILL_BUNDLE_FILE_LENGTH = 100_000;
 
 function toYamlScalar(value: string): string {
   return JSON.stringify(value);
@@ -152,24 +193,12 @@ function normalizeFiles(files?: TextSkillBundleFile[]): TextSkillBundleFile[] {
       content: createSkillMarkdown(DEFAULT_SKILL_NAME),
     });
   }
-  if (!byPath.has('index.md')) {
-    byPath.set('index.md', {
-      path: 'index.md',
-      content: createDefaultFiles()[1].content,
-    });
-  }
-  if (!byPath.has('docs/knowledge.md')) {
-    byPath.set('docs/knowledge.md', {
-      path: 'docs/knowledge.md',
-      content: '',
-    });
-  }
   return Array.from(byPath.values()).sort((left, right) =>
     left.path.localeCompare(right.path),
   );
 }
 
-function validateRelativeMarkdownPath(rawPath: string): string {
+function validateRelativeTextPath(rawPath: string): string {
   const value = rawPath.trim();
   if (!value) throw new Error('请输入文件路径');
   if (value.includes('\\')) throw new Error('路径不能包含反斜杠');
@@ -183,10 +212,15 @@ function validateRelativeMarkdownPath(rawPath: string): string {
   ) {
     throw new Error('路径不能包含隐藏目录、空目录或 ..');
   }
-  if (!value.endsWith('.md')) throw new Error('只能创建 Markdown 文件');
-  if (value === 'SKILL.md' || value === 'index.md') return value;
-  if (!['docs', 'examples', 'notes'].includes(segments[0])) {
-    throw new Error('文件只能放在 docs、examples 或 notes 目录下');
+  if (segments.some((segment) => BLOCKED_FILE_SEGMENTS.has(segment))) {
+    throw new Error('路径不能包含依赖、构建产物或缓存目录');
+  }
+  const fileName = segments[segments.length - 1] ?? '';
+  const extensionIndex = fileName.lastIndexOf('.');
+  const extension =
+    extensionIndex >= 0 ? fileName.slice(extensionIndex).toLowerCase() : '';
+  if (!ALLOWED_TEXT_FILE_EXTENSIONS.has(extension)) {
+    throw new Error('只能创建安全文本文件');
   }
   return value;
 }
@@ -317,8 +351,10 @@ export function SkillBundleEditor({
   const [newFilePath, setNewFilePath] = useState('');
   const [pathError, setPathError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const fileMenuRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const newFilePathInputRef = useRef<HTMLInputElement>(null);
 
   const selectedFile = files.find((file) => file.path === selectedPath) ?? files[0];
@@ -388,7 +424,7 @@ export function SkillBundleEditor({
   const handleAddFile = (rawPath: string) => {
     setPathError('');
     try {
-      const path = validateRelativeMarkdownPath(rawPath);
+      const path = validateRelativeTextPath(rawPath);
       if (files.some((file) => file.path === path)) {
         setPathError('同名文件已存在');
         return false;
@@ -432,6 +468,19 @@ export function SkillBundleEditor({
       setError('Bundle 必须包含 SKILL.md');
       return;
     }
+    if (files.length > MAX_SKILL_BUNDLE_FILES) {
+      setError(`Bundle 文件数不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+      return;
+    }
+    const oversizedFile = files.find(
+      (file) => file.content.length > MAX_SKILL_BUNDLE_FILE_LENGTH,
+    );
+    if (oversizedFile) {
+      setError(
+        `${oversizedFile.path} 内容不能超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH.toLocaleString()} 字`,
+      );
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -443,6 +492,41 @@ export function SkillBundleEditor({
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleImportZip = async (file: File | undefined) => {
+    if (!file) return;
+    const ok = await confirmDialog({
+      title: '导入 ZIP',
+      message: '导入后会用压缩包内容替换当前草稿，是否继续？',
+      confirmLabel: '导入',
+    });
+    if (!ok) return;
+
+    setImporting(true);
+    setError('');
+    setPathError('');
+    try {
+      const imported = await importSkillBundleFromZip(file);
+      setFiles(imported.files);
+      setSelectedPath('SKILL.md');
+      setActiveTab('edit');
+      setAddingFile(false);
+      setFileMenuOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入 ZIP 失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleExportZip = () => {
+    setError('');
+    try {
+      downloadSkillBundleZip(displayName, files);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导出 ZIP 失败');
     }
   };
 
@@ -532,7 +616,19 @@ export function SkillBundleEditor({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            void handleImportZip(file);
+          }}
+        />
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
           <button
             type="button"
             onClick={startAddFile}
@@ -540,6 +636,23 @@ export function SkillBundleEditor({
           >
             <Plus size={17} />
             新建
+          </button>
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong disabled:opacity-50 sm:gap-2 sm:text-[14px]"
+          >
+            {importing ? <Loader2 size={17} className="animate-spin" /> : <Upload size={17} />}
+            导入
+          </button>
+          <button
+            type="button"
+            onClick={handleExportZip}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong sm:gap-2 sm:text-[14px]"
+          >
+            <Download size={17} />
+            导出
           </button>
           <button
             type="button"

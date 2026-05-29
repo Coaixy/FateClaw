@@ -19,7 +19,7 @@ describe('text skill bundle store', () => {
     fs.rmSync(rootDir, { recursive: true, force: true });
   });
 
-  it('writes and reads complete Markdown bundle files with stable checksum', async () => {
+  it('writes and reads complete text bundle files with stable checksum', async () => {
     const {
       readTextSkillBundleFiles,
       writeTextSkillBundleFiles,
@@ -37,6 +37,8 @@ describe('text skill bundle store', () => {
         { path: 'index.md', content: '# Index' },
         { path: 'docs/knowledge.md', content: 'Knowledge' },
         { path: 'examples/case.md', content: 'Case' },
+        { path: 'skill.json', content: '{"name":"My Skill"}' },
+        { path: 'example.sh', content: 'echo ok\n' },
       ],
     });
     const second = writeTextSkillBundleFiles({
@@ -45,6 +47,8 @@ describe('text skill bundle store', () => {
       dirName: 'my-skill',
       files: [
         { path: 'examples/case.md', content: 'Case' },
+        { path: 'example.sh', content: 'echo ok\n' },
+        { path: 'skill.json', content: '{"name":"My Skill"}' },
         { path: 'docs/knowledge.md', content: 'Knowledge' },
         { path: 'index.md', content: '# Index' },
         {
@@ -57,8 +61,10 @@ describe('text skill bundle store', () => {
     expect(second.checksum).toBe(first.checksum);
     expect(readTextSkillBundleFiles(first.bundleUri)).toEqual([
       { path: 'docs/knowledge.md', content: 'Knowledge' },
+      { path: 'example.sh', content: 'echo ok\n' },
       { path: 'examples/case.md', content: 'Case' },
       { path: 'index.md', content: '# Index' },
+      { path: 'skill.json', content: '{"name":"My Skill"}' },
       {
         path: 'SKILL.md',
         content: '---\nname: My Skill\ndescription: Desc\n---\n',
@@ -66,7 +72,7 @@ describe('text skill bundle store', () => {
     ]);
   });
 
-  it('rejects unsafe or non-Markdown bundle paths', async () => {
+  it('rejects unsafe or unsupported bundle paths', async () => {
     const { writeTextSkillBundleFiles } = await import(
       './text-skill-bundle-store.js'
     );
@@ -90,9 +96,9 @@ describe('text skill bundle store', () => {
         dirName: 'bad',
         files: [
           { path: 'SKILL.md', content: '' },
-          { path: 'docs/script.js', content: '' },
+          { path: 'assets/image.png', content: '' },
         ],
       }),
-    ).toThrow(/Markdown/);
+    ).toThrow(/文本/);
   });
 });

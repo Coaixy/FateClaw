@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import {
   BookOpen,
   Layers,
+  Loader2,
   Plus,
   Puzzle,
   Share2,
   TrendingUp,
+  Upload,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -24,12 +26,17 @@ import { SubscribedSkillCard } from '@/components/skills/subscribed-skill-card';
 import {
   CreatorEarningsMonthly,
   SkillBundle,
+  UserCustomSkill,
   skillsApi,
 } from '@/features/skills/api';
 import { useBundles } from '@/features/skills/hooks/use-bundles';
 import { useCreatorEarnings } from '@/features/skills/hooks/use-creator-earnings';
 import { useUserSkills } from '@/features/skills/hooks/use-user-skills';
 import { groupSubscribedSkills } from '@/features/skills/subscription-groups';
+import {
+  downloadSkillBundleZip,
+  importSkillBundleFromZip,
+} from '@/features/skills/skill-zip';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useConfirm } from '@/lib/use-confirm';
 import { useToast } from '@/lib/use-toast';
@@ -48,6 +55,7 @@ export default function StudioPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingBundle, setEditingBundle] = useState<SkillBundle | null>(null);
   const [copiedBundleId, setCopiedBundleId] = useState<string | null>(null);
+  const [importingSkill, setImportingSkill] = useState(false);
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
@@ -132,6 +140,29 @@ export default function StudioPage() {
       await loadUserSkills();
     }, '删除失败');
     if (success) toast('success', '已删除');
+  };
+
+  const handleImportSkillZip = async (file: File | undefined) => {
+    if (!file) return;
+    setImportingSkill(true);
+    await runWithToast(async () => {
+      const imported = await importSkillBundleFromZip(file);
+      await skillsApi.userCreate({
+        skill_name: imported.skillName,
+        files: imported.files,
+      });
+      await loadUserSkills();
+      toast('success', 'Skill ZIP 已导入');
+    }, '导入 Skill ZIP 失败');
+    setImportingSkill(false);
+  };
+
+  const handleExportSkillZip = (skill: UserCustomSkill) => {
+    try {
+      downloadSkillBundleZip(skill.skill_name, skill.files);
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '导出 Skill ZIP 失败');
+    }
   };
 
   const handleToggle = async (id: string) => {
@@ -299,6 +330,31 @@ export default function StudioPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <label
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-hairline bg-surface-card text-sm font-medium text-ink transition-colors ${
+                importingSkill
+                  ? 'cursor-not-allowed opacity-60'
+                  : 'cursor-pointer hover:bg-surface-cream-strong'
+              }`}
+            >
+              {importingSkill ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              导入 Skill
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                className="hidden"
+                disabled={importingSkill}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  void handleImportSkillZip(file);
+                }}
+              />
+            </label>
             <Link
               href="/studio/bundles/new"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-hairline bg-surface-card text-sm font-medium text-ink transition-colors hover:bg-surface-cream-strong"
@@ -358,10 +414,7 @@ export default function StudioPage() {
                 <SkillSkeleton />
               </>
             ) : ownSkills.length === 0 ? (
-              <Link
-                href="/studio/skills/new"
-                className="group block w-full relative py-14 rounded-2xl border border-dashed border-hairline hover:border-[color-mix(in_srgb,var(--color-primary)_50%,var(--color-hairline))] overflow-hidden transition-all duration-300"
-              >
+              <div className="group relative overflow-hidden rounded-2xl border border-dashed border-hairline py-14 transition-all duration-300 hover:border-[color-mix(in_srgb,var(--color-primary)_50%,var(--color-hairline))]">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
                 <div className="relative flex flex-col items-center text-center">
                   <div className="w-14 h-14 rounded-2xl bg-surface-card border border-hairline flex items-center justify-center mx-auto mb-4 group-hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-primary)_10%,transparent)] transition-shadow">
@@ -376,8 +429,42 @@ export default function StudioPage() {
                   <p className="mt-1.5 max-w-[22rem] text-[12px] text-muted opacity-60">
                     把排盘经验、解读规则和流派方法封装起来
                   </p>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                    <Link
+                      href="/studio/skills/new"
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                      <Plus size={13} />
+                      新建 Skill
+                    </Link>
+                    <label
+                      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[12px] font-semibold text-ink transition-colors ${
+                        importingSkill
+                          ? 'cursor-not-allowed opacity-60'
+                          : 'cursor-pointer hover:bg-surface-cream-strong'
+                      }`}
+                    >
+                      {importingSkill ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Upload size={13} />
+                      )}
+                      上传 ZIP
+                      <input
+                        type="file"
+                        accept=".zip,application/zip"
+                        className="hidden"
+                        disabled={importingSkill}
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          event.currentTarget.value = '';
+                          void handleImportSkillZip(file);
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
-              </Link>
+              </div>
             ) : (
               ownSkills.map((sk) => (
                 <OwnSkillCard
@@ -394,6 +481,7 @@ export default function StudioPage() {
                       `/studio/skills/edit?skillId=${encodeURIComponent(skill.id)}`,
                     )
                   }
+                  onExport={handleExportSkillZip}
                   onDelete={handleDelete}
                 />
               ))
