@@ -14,6 +14,11 @@ import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import {
+  resolvePaipanFlow,
+  type PaipanFlowFieldKit,
+  type PaipanFlowHelpers,
+} from '@/components/ai-chat/paipan-flows';
+import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
   type PaipanPreviewResponse,
@@ -127,14 +132,23 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
   },
 };
 
-const ICHING_METHOD_OPTIONS = [
-  { value: 'dayan', label: '大衍筮法', hint: '以古法大衍流程起卦', recommended: true },
-  { value: 'lueshifa', label: '略筮法', hint: '以简化筮法快速起卦' },
-  { value: 'time', label: '时间起卦', hint: '用当前时间或指定时间' },
-  { value: 'three', label: '三数起卦', hint: '输入 3 个数字' },
-  { value: 'array', label: '数字起卦', hint: '输入 2 个以上数字' },
-  { value: 'manual', label: '手动输入六爻', hint: '适合已经知道卦象的人' },
-] as const;
+const PAIPAN_FLOW_FIELD_KIT: PaipanFlowFieldKit = {
+  DateField,
+  TimeField,
+  DateTimeField,
+  ChoiceGrid,
+  FieldTextInput,
+  FieldTextarea,
+};
+
+const PAIPAN_FLOW_HELPERS: PaipanFlowHelpers = {
+  getValueAtPath,
+  normalizeGenderValue,
+  getCurrentLocalDateParts,
+  fromDateTimeLocalValue,
+  formatArrayInputValue,
+  parseDelimitedArrayInput,
+};
 
 function buildDefaultValuesFromSchema(
   schema?: PaipanSchema,
@@ -1176,236 +1190,6 @@ function ChoiceGrid({
   );
 }
 
-function SimplePaipanFields({
-  skillDir,
-  draft,
-  onChange,
-  onManyChanges,
-}: {
-  skillDir: string;
-  draft: Record<string, unknown>;
-  onChange: (path: string[], value: unknown) => void;
-  onManyChanges: (changes: Array<{ path: string[]; value: unknown }>) => void;
-}) {
-  const method =
-    typeof getValueAtPath(draft, ['method']) === 'string'
-      ? String(getValueAtPath(draft, ['method']))
-      : 'dayan';
-  const gender = normalizeGenderValue(getValueAtPath(draft, ['gender']));
-  const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
-
-  if (skillDir === 'bazi-paipan' || skillDir === 'ziwei-paipan') {
-    return (
-      <div className="space-y-4">
-        <DateField
-          title="出生日期"
-          required
-          value={typeof getValueAtPath(draft, ['solarDate']) === 'string'
-            ? String(getValueAtPath(draft, ['solarDate']))
-            : ''}
-          onChange={(value) => onChange(['solarDate'], value)}
-        />
-
-        <TimeField
-          title="出生时间"
-          required
-          description="如果只知道大概时段，先选最接近的整点即可。"
-          hour={getValueAtPath(draft, ['hour'])}
-          minute={getValueAtPath(draft, ['minute'])}
-          onChange={(next) =>
-            onManyChanges([
-              { path: ['hour'], value: next.hour },
-              { path: ['minute'], value: next.minute ?? 0 },
-            ])
-          }
-        />
-
-        <ChoiceGrid
-          title="性别"
-          required
-          value={gender}
-          options={[
-            { value: '男', label: '男' },
-            { value: '女', label: '女' },
-          ]}
-          onChange={(value) => onChange(['gender'], value)}
-        />
-      </div>
-    );
-  }
-
-  if (skillDir === 'qimen-paipan') {
-    return (
-      <div className="space-y-4">
-        <ChoiceGrid
-          title="起盘时间"
-          value={useCurrentTime ? 'now' : 'custom'}
-          options={[
-            { value: 'now', label: '当前时间', hint: '最省事，适合直接起局', recommended: true },
-            { value: 'custom', label: '指定时间', hint: '想回看某个时刻再选这个' },
-          ]}
-          onChange={(value) => {
-            if (value === 'now') {
-              onManyChanges([
-                { path: ['$useCurrentTime'], value: true },
-                { path: ['solarDate'], value: undefined },
-                { path: ['hour'], value: undefined },
-                { path: ['minute'], value: undefined },
-              ]);
-              return;
-            }
-            const now = getCurrentLocalDateParts();
-            onManyChanges([
-              { path: ['$useCurrentTime'], value: false },
-              {
-                path: ['solarDate'],
-                value:
-                  typeof getValueAtPath(draft, ['solarDate']) === 'string'
-                    ? getValueAtPath(draft, ['solarDate'])
-                    : now.date,
-              },
-              {
-                path: ['hour'],
-                value:
-                  typeof getValueAtPath(draft, ['hour']) === 'number'
-                    ? getValueAtPath(draft, ['hour'])
-                    : now.hour,
-              },
-              {
-                path: ['minute'],
-                value:
-                  typeof getValueAtPath(draft, ['minute']) === 'number'
-                    ? getValueAtPath(draft, ['minute'])
-                    : now.minute,
-              },
-            ]);
-          }}
-        />
-
-        {!useCurrentTime && (
-          <>
-            <DateField
-              title="起盘日期"
-              required
-              value={typeof getValueAtPath(draft, ['solarDate']) === 'string'
-                ? String(getValueAtPath(draft, ['solarDate']))
-                : ''}
-              onChange={(value) => onChange(['solarDate'], value)}
-            />
-
-            <TimeField
-              title="起盘时间"
-              required
-              hour={getValueAtPath(draft, ['hour'])}
-              minute={getValueAtPath(draft, ['minute'])}
-              onChange={(next) =>
-                onManyChanges([
-                  { path: ['hour'], value: next.hour },
-                  { path: ['minute'], value: next.minute ?? 0 },
-                ])
-              }
-            />
-          </>
-        )}
-      </div>
-    );
-  }
-
-  if (skillDir === 'iching-paipan' || skillDir === 'jingzhan-paipan') {
-    return (
-      <div className="space-y-4">
-        <ChoiceGrid
-          title="起卦方式"
-          value={method}
-          options={[...ICHING_METHOD_OPTIONS]}
-          onChange={(value) => onChange(['method'], value)}
-        />
-
-        <ChoiceGrid
-          title="起卦时间"
-          value={useCurrentTime ? 'now' : 'custom'}
-          options={[
-            { value: 'now', label: '当前时间', hint: '适合直接起卦', recommended: true },
-            { value: 'custom', label: '指定时间', hint: '手动六爻和数字起卦也能指定时刻' },
-          ]}
-          onChange={(value) => {
-            if (value === 'now') {
-              onManyChanges([
-                { path: ['$useCurrentTime'], value: true },
-                { path: ['datetime'], value: undefined },
-              ]);
-              return;
-            }
-            const now = getCurrentLocalDateParts();
-            onManyChanges([
-              { path: ['$useCurrentTime'], value: false },
-              {
-                path: ['datetime'],
-                value:
-                  typeof getValueAtPath(draft, ['datetime']) === 'string'
-                    ? getValueAtPath(draft, ['datetime'])
-                    : fromDateTimeLocalValue(now.dateTime),
-              },
-            ]);
-          }}
-        />
-
-        {!useCurrentTime && (
-          <DateTimeField
-            title="指定起卦时刻"
-            required
-            description="无论是手动六爻、数字起卦还是按时间起卦，都可以指定这里的时刻。"
-            value={getValueAtPath(draft, ['datetime'])}
-            onChange={(value) => onChange(['datetime'], value)}
-          />
-        )}
-
-        {(method === 'three' || method === 'array') && (
-          <FieldTextInput
-            title={method === 'three' ? '三个数字' : '数字列表'}
-            required
-            description={
-              method === 'three'
-                ? '请输入 3 个数字，多个数字用逗号分隔。'
-                : '请输入 2 个以上数字，多个数字用逗号分隔。'
-            }
-            value={formatArrayInputValue(getValueAtPath(draft, ['numbers']))}
-            placeholder={method === 'three' ? '例如 3, 8, 5' : '例如 7, 2, 9, 4'}
-            onChange={(value) =>
-              onChange(['numbers'], parseDelimitedArrayInput(value ?? '', 'integer'))
-            }
-          />
-        )}
-
-        {method === 'manual' && (
-          <FieldTextInput
-            title="六爻卦象"
-            required
-            description="从下往上输入 6 位数字，每位只能是 6、7、8、9。"
-            value={typeof getValueAtPath(draft, ['yao']) === 'string'
-              ? String(getValueAtPath(draft, ['yao']))
-              : ''}
-            placeholder="例如 789678"
-            onChange={(value) => onChange(['yao'], value)}
-          />
-        )}
-
-        <FieldTextarea
-          title="想问什么"
-          description="这项不参与排盘计算，只会随排盘请求原样记录。"
-          value={typeof getValueAtPath(draft, ['question']) === 'string'
-            ? String(getValueAtPath(draft, ['question']))
-            : ''}
-          placeholder="例如：我最近适合换工作吗？"
-          onChange={(value) => onChange(['question'], value)}
-        />
-      </div>
-    );
-  }
-
-  return null;
-}
-
 function SchemaFields({
   schema,
   draft,
@@ -1666,7 +1450,6 @@ export function PaipanSheet({
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [previewResult, setPreviewResult] = useState<PaipanPreviewResponse | null>(null);
   const [previewSkillName, setPreviewSkillName] = useState('');
-  const [previewSkillDir, setPreviewSkillDir] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [displayNote, setDisplayNote] = useState('');
@@ -1675,6 +1458,10 @@ export function PaipanSheet({
     () => catalog.find((item) => item.skill === selectedSkill) ?? null,
     [catalog, selectedSkill],
   );
+  const selectedFlow = selectedCatalogItem
+    ? resolvePaipanFlow(selectedCatalogItem.skill)
+    : null;
+  const SelectedFlow = selectedFlow;
 
   const hiddenPaths = useMemo(
     () =>
@@ -1722,7 +1509,6 @@ export function PaipanSheet({
     setDraft(buildInitialDraftForSkill(selectedCatalogItem.skill, selectedCatalogItem.parameters));
     setPreviewResult(null);
     setPreviewSkillName('');
-    setPreviewSkillDir('');
     setDisplayNote('');
     setAdvancedOpen(false);
   }, [selectedCatalogItem]);
@@ -1732,7 +1518,6 @@ export function PaipanSheet({
       setSelectedSkill('');
       setPreviewResult(null);
       setPreviewSkillName('');
-      setPreviewSkillDir('');
       setDisplayNote('');
       setSubmitting(false);
       setAdvancedOpen(false);
@@ -1741,7 +1526,6 @@ export function PaipanSheet({
 
   const resetPreviewState = () => {
     setPreviewResult(null);
-    setPreviewSkillDir('');
     setPreviewSkillName('');
   };
 
@@ -1796,7 +1580,6 @@ export function PaipanSheet({
       });
       setPreviewResult(result);
       setPreviewSkillName(selectedCatalogItem.name);
-      setPreviewSkillDir(selectedCatalogItem.skill);
     } catch (error) {
       toast('error', error instanceof Error ? error.message : '排盘预览失败');
     } finally {
@@ -1854,68 +1637,80 @@ export function PaipanSheet({
     }
   };
 
-  const footer =
+  const flowFinalAction =
+    <Button
+      onClick={() => void handlePreview()}
+      loading={submitting}
+      icon={<Sparkles size={14} />}
+      className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
+    >
+      生成盘面预览
+    </Button>;
+  const flowResultAction =
     mode === 'pre-chat' ? (
-      <div className="flex flex-col-reverse gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-3">
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={submitting}
-          className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-        >
-          关闭
-        </Button>
-        {!previewResult ? (
-          <Button
-            onClick={() => void handlePreview()}
-            loading={submitting}
-            icon={<Sparkles size={14} />}
-            className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-          >
-            生成盘面预览
-          </Button>
-        ) : (
-          <Button
-            onClick={() => void handleStartChatFromPreview()}
-            loading={submitting}
-            icon={<MessageCircle size={14} />}
-            className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-          >
-            基于此盘开始对话
-          </Button>
-        )}
-      </div>
+      <Button
+        onClick={() => void handleStartChatFromPreview()}
+        loading={submitting}
+        icon={<MessageCircle size={14} />}
+        className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
+      >
+        基于此盘开始对话
+      </Button>
     ) : (
-      <div className="flex flex-col-reverse gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-3">
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={submitting}
-          className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-        >
-          取消
-        </Button>
-        {!previewResult ? (
-          <Button
-            onClick={() => void handlePreview()}
-            loading={submitting}
-            icon={<Sparkles size={14} />}
-            className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-          >
-            生成盘面预览
-          </Button>
-        ) : (
-          <Button
-            onClick={() => void handleCommitIntoCurrentSession()}
-            loading={submitting}
-            icon={<Sparkles size={14} />}
-            className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
-          >
-            插入到当前对话
-          </Button>
-        )}
-      </div>
+      <Button
+        onClick={() => void handleCommitIntoCurrentSession()}
+        loading={submitting}
+        icon={<Sparkles size={14} />}
+        className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
+      >
+        插入到当前对话
+      </Button>
     );
+  const flowFinalContent = selectedCatalogItem ? (
+    <div>
+      <FieldLabel title="想问方向 / 备注" />
+      <input
+        type="text"
+        value={displayNote}
+        maxLength={40}
+        onChange={(event) => setDisplayNote(event.currentTarget.value)}
+        placeholder="例如：感情、事业、应期"
+        className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
+      />
+      <p className="mt-1.5 text-[11px] leading-5 text-muted">
+        用来标记这张盘的用途；保存后会显示为“{selectedCatalogItem.name} · 备注”，留空则只显示术数名称。
+      </p>
+    </div>
+  ) : null;
+  const flowResultContent = previewResult ? (
+    <div className="rounded-[30px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 sm:p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+          <Sparkles size={15} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[12px] sm:text-[13px] font-medium text-ink">
+            已生成预览盘面
+          </p>
+          <p className="text-[11px] text-muted">
+            {previewSkillName || '已生成盘面'}
+          </p>
+        </div>
+      </div>
+
+      <ArtifactRenderer
+        entries={[
+          {
+            skill: previewResult.skillContextEntry.skill,
+            output: previewResult.skillContextEntry.output,
+            artifactType: previewResult.skillContextEntry.artifactType,
+            artifactTitle: previewResult.skillContextEntry.artifactTitle,
+            artifactData: previewResult.skillContextEntry.artifactData,
+          },
+        ]}
+      />
+    </div>
+  ) : null;
 
   return (
     <BottomSheet
@@ -1929,7 +1724,6 @@ export function PaipanSheet({
           {mode === 'pre-chat' ? '可选入口' : '当前会话'}
         </span>
       }
-      footer={footer}
     >
       <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-5">
         {catalogLoading ? (
@@ -1978,12 +1772,23 @@ export function PaipanSheet({
 
             {selectedCatalogItem ? (
               <div className="space-y-4">
-                <SimplePaipanFields
-                  skillDir={selectedCatalogItem.skill}
-                  draft={draft}
-                  onChange={handleChange}
-                  onManyChanges={handleManyChanges}
-                />
+                {SelectedFlow ? (
+                  <SelectedFlow
+                    draft={draft}
+                    fieldKit={PAIPAN_FLOW_FIELD_KIT}
+                    helpers={PAIPAN_FLOW_HELPERS}
+                    onChange={handleChange}
+                    onManyChanges={handleManyChanges}
+                    finalContent={flowFinalContent}
+                    finalAction={flowFinalAction}
+                    resultContent={flowResultContent}
+                    resultAction={flowResultAction}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-hairline bg-surface-card/35 px-4 py-3 text-[12px] leading-5 text-muted">
+                    当前术数暂未配置引导式填写，请使用下方高级设置填写参数。
+                  </div>
+                )}
 
                 {hasAdvancedFields && (
                   <div className="rounded-[26px] border border-hairline bg-surface-card/35">
@@ -2022,53 +1827,6 @@ export function PaipanSheet({
                 )}
               </div>
             ) : null}
-
-            {selectedCatalogItem ? (
-              <div>
-                <FieldLabel title="想问方向 / 备注" />
-                <input
-                  type="text"
-                  value={displayNote}
-                  maxLength={40}
-                  onChange={(event) => setDisplayNote(event.currentTarget.value)}
-                  placeholder="例如：感情、事业、应期"
-                  className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
-                />
-                <p className="mt-1.5 text-[11px] leading-5 text-muted">
-                  用来标记这张盘的用途；保存后会显示为“{selectedCatalogItem.name} · 备注”，留空则只显示术数名称。
-                </p>
-              </div>
-            ) : null}
-
-            {previewResult && (
-              <div className="rounded-[30px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 sm:p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                    <Sparkles size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[12px] sm:text-[13px] font-medium text-ink">
-                      已生成预览盘面
-                    </p>
-                    <p className="text-[11px] text-muted">
-                      {previewSkillName || previewSkillDir}
-                    </p>
-                  </div>
-                </div>
-
-                <ArtifactRenderer
-                  entries={[
-                    {
-                      skill: previewResult.skillContextEntry.skill,
-                      output: previewResult.skillContextEntry.output,
-                      artifactType: previewResult.skillContextEntry.artifactType,
-                      artifactTitle: previewResult.skillContextEntry.artifactTitle,
-                      artifactData: previewResult.skillContextEntry.artifactData,
-                    },
-                  ]}
-                />
-              </div>
-            )}
           </>
         )}
       </div>
