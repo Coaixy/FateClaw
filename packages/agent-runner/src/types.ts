@@ -359,8 +359,6 @@ export interface ContainerOutput {
   usage?: TokenUsage;
   /** 本次请求中确定性工具与解读工具产生的结构化结果，宿主机应存储以供后续请求使用。 */
   skillContext?: SkillContextEntry[];
-  /** 若为 true，宿主机应清除该账号的对话历史。 */
-  clearHistory?: boolean;
   /** 本次请求的完整 transcript 日志（所有工具调用 + 结果），用于 debug。 */
   transcript?: TranscriptEvent[];
   /** 本次请求使用的模型名。 */
@@ -388,8 +386,6 @@ export interface OutboxResponse {
   usage?: TokenUsage;
   /** skill 执行结果，宿主机存储后注入后续请求的 history。 */
   skillContext?: SkillContextEntry[];
-  /** 若为 true，宿主机应清除该账号的对话历史。 */
-  clearHistory?: boolean;
   /** 完整 transcript 日志。 */
   transcript?: TranscriptEvent[];
   /** 模型名。 */

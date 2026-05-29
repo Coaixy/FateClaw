@@ -129,8 +129,6 @@ export interface ResponseIpcPayload {
     artifactTitle?: string;
     artifactData?: unknown;
   }>;
-  /** 容器请求清除该账号的对话历史。 */
-  clearHistory?: boolean;
   /** 完整 transcript 日志（工具调用 + 结果），用于 debug。 */
   transcript?: unknown[];
   /** 模型名。 */

@@ -244,18 +244,6 @@ async function processOutboxResponse(
       );
     }
 
-    // 容器请求清除上下文（/new 指令）：设置边界时间戳，不删除消息
-    if (payload.clearHistory) {
-      await getRedis().set(
-        `context_boundary:${accountId}`,
-        new Date().toISOString(),
-      );
-      logger.info(
-        { accountId, requestId: payload.requestId },
-        '已设置上下文边界',
-      );
-    }
-
     // 使用 API 返回的真实 token 用量
     if (hasRealUsage) {
       const owner = await getUserByAccountId(accountId);

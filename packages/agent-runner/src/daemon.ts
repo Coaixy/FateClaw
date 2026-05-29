@@ -120,7 +120,6 @@ async function processInboxMessage(
       timestamp: new Date().toISOString(),
       usage: output.usage,
       skillContext: output.skillContext,
-      clearHistory: output.clearHistory,
       transcript: output.transcript,
       model: output.model,
       provider: output.provider,

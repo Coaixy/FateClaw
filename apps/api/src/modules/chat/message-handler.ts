@@ -15,7 +15,6 @@ import {
 } from '../../infrastructure/ilink.js';
 import { logger } from '../../infrastructure/logger.js';
 import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
-import { getRedis } from '../../infrastructure/redis.js';
 import { getSoulContent } from '../../infrastructure/db.js';
 import { dispatchResidentPrompt } from '../../runtime/resident-agent.js';
 import {
@@ -197,13 +196,10 @@ export async function buildStructuredInput(
     10,
     Math.ceil((historyBudget / 200) * 1.2),
   );
-  // 读取上下文边界：/new 指令设置的时间戳，只加载边界之后的消息
-  const boundary = await getRedis().get(`context_boundary:${account.id}`);
   const recentMsgs = await getRecentMessages(
     account.id,
     estimatedMsgCount,
     undefined,
-    boundary ?? undefined,
   );
   const { history } = buildHistoryViews({
     recentMsgs,

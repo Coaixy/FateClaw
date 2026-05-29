@@ -1,4 +1,3 @@
-import { tryExecuteCommand } from './commands.js';
 import { log } from './io.js';
 import { mapContainerErrorToPublicError } from './public-error.js';
 import { listTranscriptEvents } from './transcript-store.js';
@@ -35,32 +34,6 @@ export async function executeContainerInput(
   const runtime = createRequestRuntime({ deps: depsOverride });
   if (!getRequestId(requestScope)) {
     setRequestId(requestScope, sessionId);
-  }
-
-  // 固定指令拦截：以 "/" 开头的消息
-  const commandResult = await tryExecuteCommand(
-    containerInput.accountId,
-    containerInput.userMessage,
-    runtime.deps,
-  );
-  if (commandResult) {
-    if (commandResult.rewrite) {
-      // 改写模式：替换用户消息后继续走 AI
-      log(`指令改写: ${containerInput.userMessage.trim().split(' ')[0]} -> AI`);
-      containerInput = {
-        ...containerInput,
-        userMessage: commandResult.rewrite,
-      };
-    } else {
-      // 直接返回模式
-      log(`固定指令已处理: ${containerInput.userMessage.trim().split(' ')[0]}`);
-      return {
-        status: 'success',
-        result: commandResult.text,
-        newSessionId: sessionId,
-        clearHistory: commandResult.clearHistory,
-      };
-    }
   }
 
   const llmRuntime = containerInput.llmRuntime;

@@ -10,7 +10,7 @@
 - `apps/api/src/runtime/ipc-worker.ts`
 - `apps/api/src/runtime/local-runner.ts`
 - `packages/agent-runner/src/daemon.ts`
-- `packages/agent-runner/src/engine.ts`
+- `packages/agent-runner/src/request-boundary.ts`
 - `packages/agent-runner/src/pi-runtime/`
 - `packages/agent-runner/src/text-skill-bundle.ts`
 
@@ -37,7 +37,7 @@ Redis IPC
         ▼
 账号级 agent-runner 常驻进程
   - daemon BRPOP inbox
-  - engine 处理单次请求
+  - request-boundary 处理单次请求
   - 创建 request-scoped Pi Runtime
   - Pi ResourceLoader 暴露本轮授权 Text Skill Bundle
         │
@@ -101,10 +101,8 @@ notes/
 6. AI 请求调 `executeContainerInput()`。
 7. 把 `ContainerOutput` 包装为 `OutboxResponse` 并 `LPUSH` 到 outbox。
 
-`engine.ts` 负责单次请求的外围逻辑：
+`request-boundary.ts` 负责单次请求的外围逻辑：
 
-- 查询最近一次玄学追问上下文，补齐后续解读需要的盘面/解读材料。
-- 拦截固定指令；需要 AI 的指令会改写为普通用户消息继续执行。
 - 创建 `createRequestRuntime()`，并把请求交给 `executePiRuntime()`。
 - 合并本轮 skill context、transcript、traceEvents、agentGraph、usage 后返回。
 - 出错时把内部错误映射为用户可见错误，并保留已有 trace/transcript 便于排障。

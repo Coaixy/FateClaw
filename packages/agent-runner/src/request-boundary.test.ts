@@ -1,21 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockTryExecuteCommand,
   mockCreateRequestRuntime,
   mockExecutePiRuntime,
   mockListTranscriptEvents,
   mockListScopedTraceEvents,
 } = vi.hoisted(() => ({
-  mockTryExecuteCommand: vi.fn(),
   mockCreateRequestRuntime: vi.fn(),
   mockExecutePiRuntime: vi.fn(),
   mockListTranscriptEvents: vi.fn(),
   mockListScopedTraceEvents: vi.fn(),
-}));
-
-vi.mock('./commands.js', () => ({
-  tryExecuteCommand: mockTryExecuteCommand,
 }));
 
 vi.mock('./runtime.js', () => ({
@@ -58,7 +52,6 @@ const llmRuntime: LlmRuntimeSnapshot = {
 describe('executeContainerInput user pasted board persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockTryExecuteCommand.mockResolvedValue(null);
     mockCreateRequestRuntime.mockReturnValue({ deps: {} });
     mockListTranscriptEvents.mockReturnValue([]);
     mockListScopedTraceEvents.mockReturnValue([]);

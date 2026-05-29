@@ -5,26 +5,18 @@ import {
   type ClipboardEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
 import {
-  Activity,
-  Bell,
-  Brain,
   CheckCircle2,
   ChevronRight,
-  HelpCircle,
   Loader2,
   Sparkles,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import {
-  AiChatComposer,
-  type SlashCommand,
-} from '@/components/ai-chat/ai-chat-composer';
+import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { PaipanSheet } from '@/components/ai-chat/paipan-sheet';
 import { PaipanSkillPickerSheet } from '@/components/ai-chat/paipan-skill-picker-sheet';
@@ -48,14 +40,6 @@ import {
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
 import { useToast } from '@/lib/use-toast';
-
-const SLASH_COMMANDS: readonly SlashCommand[] = [
-  { name: 'memory', description: '总结长期记忆', icon: Brain },
-  { name: 'skills', description: '查看 Skills 状态', icon: Sparkles },
-  { name: 'reminders', description: '查看已设置的提醒', icon: Bell },
-  { name: 'status', description: '查看 agent 状态', icon: Activity },
-  { name: 'help', description: '显示指令列表', icon: HelpCircle },
-];
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
 type SelectedBoardDraft = {
@@ -106,9 +90,6 @@ function AiChatWorkspaceContent() {
   } = useChatSessions();
 
   const [input, setInput] = useState('');
-  const [showCommands, setShowCommands] = useState(false);
-  const [commandFilter, setCommandFilter] = useState('');
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [selectedBoardDraft, setSelectedBoardDraft] =
     useState<SelectedBoardDraft | null>(null);
   const [paipanSheetMode, setPaipanSheetMode] =
@@ -136,13 +117,6 @@ function AiChatWorkspaceContent() {
     createSession,
     touchSession,
   });
-
-  const filteredCommands = useMemo(() => {
-    if (!commandFilter) return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter((command) =>
-      command.name.startsWith(commandFilter.toLowerCase()),
-    );
-  }, [commandFilter]);
 
   useEffect(() => {
     if (!chatAvailable) {
@@ -218,63 +192,11 @@ function AiChatWorkspaceContent() {
     [chatMessages, input, selectedBoardDraft],
   );
 
-  const executeCommand = useCallback(
-    (commandName: string) => {
-      setShowCommands(false);
-      setCommandFilter('');
-      setInput('');
-      setSelectedBoardDraft(null);
-      void handleSend(`/${commandName}`);
-    },
-    [handleSend],
-  );
-
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = event.target.value;
-    setInput(value);
-
-    if (value.startsWith('/') && !value.includes(' ')) {
-      setShowCommands(true);
-      setCommandFilter(value.slice(1));
-      setSelectedCommandIndex(0);
-      return;
-    }
-
-    setShowCommands(false);
+    setInput(event.target.value);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showCommands && filteredCommands.length > 0) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setSelectedCommandIndex(
-          (index) => (index + 1) % filteredCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setSelectedCommandIndex(
-          (index) =>
-            (index - 1 + filteredCommands.length) % filteredCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        event.preventDefault();
-        executeCommand(filteredCommands[selectedCommandIndex].name);
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setShowCommands(false);
-        return;
-      }
-    }
-
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void handleSend();
@@ -309,7 +231,6 @@ function AiChatWorkspaceContent() {
         end: event.currentTarget.selectionEnd,
       });
       setPasteChoiceText(text);
-      setShowCommands(false);
     },
     [chatAvailable, chatMessages.sending],
   );
@@ -339,7 +260,6 @@ function AiChatWorkspaceContent() {
     });
     setPasteChoiceText('');
     setPasteChoiceSelection(null);
-    setShowCommands(false);
   }, [pasteChoiceSelection, pasteChoiceText]);
 
   const handlePastedBoardSubmit = useCallback(
@@ -464,17 +384,11 @@ function AiChatWorkspaceContent() {
       selectedBoardLabel={selectedBoardDraft?.label ?? null}
       pasteChoiceOpen={Boolean(pasteChoiceText)}
       pasteChoicePreview={pasteChoiceText}
-      showCommands={showCommands}
-      filteredCommands={filteredCommands}
-      selectedCommandIndex={selectedCommandIndex}
       onInputChange={handleInputChange}
       onPaste={handleComposerPaste}
       onKeyDown={handleKeyDown}
       onOpenPastedBoard={() => openPastedBoardSheet(input, 'composer')}
       onClearSelectedBoard={() => setSelectedBoardDraft(null)}
-      onHideCommands={() => setShowCommands(false)}
-      onHighlightCommand={setSelectedCommandIndex}
-      onSelectCommand={executeCommand}
       onUsePasteAsBoard={handleUsePasteAsBoard}
       onKeepPasteAsMessage={handleKeepPasteAsMessage}
       onDismissPasteChoice={() => {
@@ -546,7 +460,7 @@ function AiChatWorkspaceContent() {
             </div>
             {composer}
             <p className="block text-[9px] text-muted/40 text-center mt-1.5 select-none">
-              Enter 发送 · Shift+Enter 换行 · / 指令
+              Enter 发送 · Shift+Enter 换行
             </p>
           </div>
         </div>
