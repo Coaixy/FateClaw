@@ -11,6 +11,7 @@ import {
 import {
   CheckCircle2,
   ChevronRight,
+  ClipboardPaste,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -374,6 +375,11 @@ function AiChatWorkspaceContent() {
     openPreChatPaipan(skill);
   }, [openPreChatPaipan]);
 
+  const handleOpenComposerPastedBoard = useCallback(() => {
+    openPastedBoardSheet(input, 'composer');
+  }, [input, openPastedBoardSheet]);
+  const pastedBoardDisabled = !chatAvailable || chatMessages.sending;
+
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
@@ -387,7 +393,6 @@ function AiChatWorkspaceContent() {
       onInputChange={handleInputChange}
       onPaste={handleComposerPaste}
       onKeyDown={handleKeyDown}
-      onOpenPastedBoard={() => openPastedBoardSheet(input, 'composer')}
       onClearSelectedBoard={() => setSelectedBoardDraft(null)}
       onUsePasteAsBoard={handleUsePasteAsBoard}
       onKeepPasteAsMessage={handleKeepPasteAsMessage}
@@ -409,14 +414,18 @@ function AiChatWorkspaceContent() {
           disabled={!chatAvailable}
           onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
           onOpenAll={() => openCurrentSessionPaipan()}
+          onOpenPastedBoard={handleOpenComposerPastedBoard}
+          pastedBoardDisabled={pastedBoardDisabled}
         />
       ) : (
         <PaipanSkillRail
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
           disabled={!chatAvailable}
+          pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
           onOpenAll={openPaipanSkillPicker}
+          onOpenPastedBoard={handleOpenComposerPastedBoard}
         />
       )}
     </div>
@@ -454,6 +463,8 @@ function AiChatWorkspaceContent() {
                 disabled={!chatAvailable || !selectedSession}
                 onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
                 onOpenAll={() => openCurrentSessionPaipan()}
+                onOpenPastedBoard={handleOpenComposerPastedBoard}
+                pastedBoardDisabled={pastedBoardDisabled}
               />
             </div>
             {composer}
@@ -520,34 +531,52 @@ function PaipanSkillStrip({
   disabled,
   onSelectSkill,
   onOpenAll,
+  onOpenPastedBoard,
+  pastedBoardDisabled,
 }: {
   catalog: PaipanCatalogItem[];
   loading: boolean;
   disabled?: boolean;
   onSelectSkill: (skill: string) => void;
   onOpenAll: () => void;
+  onOpenPastedBoard: () => void;
+  pastedBoardDisabled?: boolean;
 }) {
   const isEmpty = !loading && catalog.length === 0;
+  const pastedBoardButton = (
+    <button
+      type="button"
+      onClick={onOpenPastedBoard}
+      disabled={pastedBoardDisabled}
+      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-hairline bg-surface-card px-2 text-[10px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+      aria-label="自贴盘面"
+    >
+      <ClipboardPaste size={11} />
+      自贴盘面
+    </button>
+  );
 
   if (loading) {
     return (
       <div className="flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-2.5 text-[10px] text-muted">
-        <Loader2 size={12} className="animate-spin" />
-        正在加载术数...
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Loader2 size={12} className="shrink-0 animate-spin" />
+          <span className="truncate">正在加载术数...</span>
+        </span>
+        {pastedBoardButton}
       </div>
     );
   }
 
   if (isEmpty) {
     return (
-      <button
-        type="button"
-        disabled
-        className="flex h-8 w-full items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface-card/35 px-2.5 text-left text-[10px] text-muted disabled:opacity-60"
-      >
-        <Sparkles size={12} />
-        当前暂无可用术数
-      </button>
+      <div className="flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface-card/35 px-2.5 text-[10px] text-muted">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Sparkles size={12} className="shrink-0" />
+          <span className="truncate">当前暂无可用术数</span>
+        </span>
+        {pastedBoardButton}
+      </div>
     );
   }
 
@@ -557,6 +586,8 @@ function PaipanSkillStrip({
         <Sparkles size={11} />
         术数
       </span>
+      {pastedBoardButton}
+      <span className="h-4 w-px shrink-0 bg-hairline/70" />
       {catalog.map((item) => (
         <button
           key={item.skill}

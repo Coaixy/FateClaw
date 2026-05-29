@@ -27,7 +27,6 @@ export function AiChatComposer({
   onInputChange,
   onPaste,
   onKeyDown,
-  onOpenPastedBoard,
   onClearSelectedBoard,
   onUsePasteAsBoard,
   onKeepPasteAsMessage,
@@ -45,7 +44,6 @@ export function AiChatComposer({
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onOpenPastedBoard: () => void;
   onClearSelectedBoard: () => void;
   onUsePasteAsBoard: () => void;
   onKeepPasteAsMessage: () => void;
@@ -86,15 +84,6 @@ export function AiChatComposer({
             : 'border-hairline focus-within:shadow-lg focus-within:shadow-primary/10'
         }`}
       >
-        <button
-          type="button"
-          onClick={onOpenPastedBoard}
-          disabled={sending || !chatAvailable}
-          className="mb-1 ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-cream-strong hover:text-ink active:scale-90 disabled:cursor-not-allowed disabled:opacity-20"
-          aria-label="自贴盘面"
-        >
-          <ClipboardPaste size={14} />
-        </button>
         <textarea
           ref={inputRef}
           value={input}

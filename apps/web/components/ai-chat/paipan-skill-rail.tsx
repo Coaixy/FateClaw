@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Loader2, Sparkles } from 'lucide-react';
+import { ChevronRight, ClipboardPaste, Loader2, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
@@ -9,8 +9,10 @@ interface PaipanSkillRailProps {
   catalog: PaipanCatalogItem[];
   loading: boolean;
   disabled?: boolean;
+  pastedBoardDisabled?: boolean;
   onSelectSkill: (skill: string) => void;
   onOpenAll: () => void;
+  onOpenPastedBoard: () => void;
 }
 
 function LoadingCard() {
@@ -29,8 +31,10 @@ export function PaipanSkillRail({
   catalog,
   loading,
   disabled = false,
+  pastedBoardDisabled,
   onSelectSkill,
   onOpenAll,
+  onOpenPastedBoard,
 }: PaipanSkillRailProps) {
   const isEmpty = !loading && catalog.length === 0;
 
@@ -53,15 +57,27 @@ export function PaipanSkillRail({
           </div>
         </div>
 
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={onOpenAll}
-          disabled={disabled || loading || isEmpty}
-          className="h-8 shrink-0 rounded-lg px-3"
-        >
-          更多术数
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onOpenPastedBoard}
+            disabled={pastedBoardDisabled ?? disabled}
+            icon={<ClipboardPaste size={13} />}
+            className="h-8 rounded-lg px-2.5"
+          >
+            自贴盘面
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onOpenAll}
+            disabled={disabled || loading || isEmpty}
+            className="h-8 rounded-lg px-3"
+          >
+            更多术数
+          </Button>
+        </div>
       </div>
 
       <div className="mt-2.5">
