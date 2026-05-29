@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import type { BillingStatus, UsageStats } from '@/features/billing/api';
+import { formatCents } from '@/lib/money';
 
 function formatTokens(value: number): string {
   if (value < 1000) return `${value}`;
@@ -55,7 +56,7 @@ export function UsagePanel({
               </span>
             </div>
             <div className="text-[10px] text-muted mt-0.5">
-              自配模型不扣积分；官方模型按用量扣费
+              自配模型不扣余额；官方模型按用量扣费
             </div>
           </div>
           <button
@@ -79,8 +80,7 @@ export function UsagePanel({
           </span>
         </div>
         <div className="text-[10px] text-muted">
-          官方模型本月已扣 {status.estimated_monthly_total_points.toLocaleString()}{' '}
-          积分
+          官方模型本月已扣 {formatCents(status.estimated_monthly_total_cents)}
         </div>
       </div>
 
@@ -105,16 +105,16 @@ export function UsagePanel({
       <div className="px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">
-            积分余额
+            账户余额
           </span>
           <span className="text-[14px] font-semibold tabular-nums text-ink">
-            {status.available_points.toLocaleString()}
+            {formatCents(status.available_cents)}
           </span>
         </div>
         <div className="grid grid-cols-3 gap-1.5 text-center">
-          <PointChip label="充值" value={status.purchased_points} />
-          <PointChip label="赠送" value={status.bonus_points} />
-          <PointChip label="收益" value={status.earned_points} />
+          <BalanceChip label="充值" value={status.purchased_cents} />
+          <BalanceChip label="赠送" value={status.bonus_cents} />
+          <BalanceChip label="收益" value={status.earned_cents} />
         </div>
       </div>
 
@@ -162,12 +162,12 @@ function StatBox({
   );
 }
 
-function PointChip({ label, value }: { label: string; value: number }) {
+function BalanceChip({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md bg-surface-card/50 border border-hairline/30 py-1.5">
       <div className="text-[9px] text-muted">{label}</div>
       <div className="text-[11px] font-medium tabular-nums text-ink mt-0.5">
-        {value.toLocaleString()}
+        {formatCents(value)}
       </div>
     </div>
   );

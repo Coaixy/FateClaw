@@ -15,7 +15,7 @@ describe('daily usage repository', () => {
     vi.clearAllMocks();
   });
 
-  it('returns daily token usage with official model charge points', async () => {
+  it('returns daily token usage with official model charge cents', async () => {
     const query = vi.fn().mockResolvedValue({
       rows: [
         {
@@ -24,7 +24,7 @@ describe('daily usage repository', () => {
           input_tokens: '1200',
           output_tokens: '800',
           total_tokens: '2000',
-          official_model_charge_points: '36',
+          official_model_charge_cents: '36',
         },
       ],
     });
@@ -37,7 +37,7 @@ describe('daily usage repository', () => {
         input_tokens: 1200,
         output_tokens: 800,
         total_tokens: 2000,
-        official_model_charge_points: 36,
+        official_model_charge_cents: 36,
       },
     ]);
 

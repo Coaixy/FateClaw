@@ -2,8 +2,8 @@ import { officialModelPriceParts } from './model-pricing';
 
 type OfficialModelPriceTagsProps = {
   model: {
-    input_token_price_per_million_points: number;
-    output_token_price_per_million_points: number;
+    input_token_price_per_million_cents: number;
+    output_token_price_per_million_cents: number;
   };
   compact?: boolean;
 };
@@ -28,7 +28,7 @@ export function OfficialModelPriceTags({
           </span>
           {!compact && (
             <span className="tabular-nums text-primary/70">
-              {part.points} 积分
+              {part.cents} 分
             </span>
           )}
         </span>

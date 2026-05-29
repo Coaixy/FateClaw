@@ -35,11 +35,11 @@ describe('createAdminUser', () => {
         phone: '13800138000',
         phone_verified: true,
         role: 'creator',
-        purchased_points: 0,
-        bonus_points: 0,
-        earned_points: 0,
-        reserved_points: 0,
-        pending_withdrawal_points: 0,
+        purchased_cents: 0,
+        bonus_cents: 0,
+        earned_cents: 0,
+        reserved_cents: 0,
+        pending_withdrawal_cents: 0,
       }),
     );
     const created = mockCreateUser.mock.calls[0]?.[0];

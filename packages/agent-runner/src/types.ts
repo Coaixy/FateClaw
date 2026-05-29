@@ -35,8 +35,8 @@ export interface LlmRuntimeSnapshot {
     | 'claude_code_oauth_token'
     | 'gemini_api_key';
   providerKey: string;
-  inputTokenPricePerMillionPoints?: number;
-  outputTokenPricePerMillionPoints?: number;
+  inputTokenPricePerMillionCents?: number;
+  outputTokenPricePerMillionCents?: number;
 }
 
 /** 宿主机通过 stdin 传给容器的输入。 */

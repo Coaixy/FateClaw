@@ -93,8 +93,8 @@ export async function createOfficialModelConfig(input: {
   baseUrl?: string | null;
   modelName: string;
   apiKeySecretKey?: string | null;
-  inputTokenPricePerMillionPoints?: number;
-  outputTokenPricePerMillionPoints?: number;
+  inputTokenPricePerMillionCents?: number;
+  outputTokenPricePerMillionCents?: number;
   extraJson?: Record<string, unknown> | null;
 }): Promise<OfficialModelConfig> {
   const { rows } = await getDbPool().query(
@@ -102,8 +102,8 @@ export async function createOfficialModelConfig(input: {
        (
          id, model_key, pi_api, display_name, enabled, priority,
          base_url, model_name, api_key_secret_key,
-         input_token_price_per_million_points,
-         output_token_price_per_million_points,
+         input_token_price_per_million_cents,
+         output_token_price_per_million_cents,
          extra_json, created_at, updated_at
        )
      VALUES
@@ -119,8 +119,8 @@ export async function createOfficialModelConfig(input: {
       input.baseUrl ?? null,
       input.modelName,
       input.apiKeySecretKey ?? null,
-      input.inputTokenPricePerMillionPoints ?? 0,
-      input.outputTokenPricePerMillionPoints ?? 0,
+      input.inputTokenPricePerMillionCents ?? 0,
+      input.outputTokenPricePerMillionCents ?? 0,
       JSON.stringify(input.extraJson ?? {}),
     ],
   );
@@ -137,8 +137,8 @@ export async function updateOfficialModelConfig(input: {
   baseUrl?: string | null;
   modelName: string;
   apiKeySecretKey?: string | null;
-  inputTokenPricePerMillionPoints: number;
-  outputTokenPricePerMillionPoints: number;
+  inputTokenPricePerMillionCents: number;
+  outputTokenPricePerMillionCents: number;
   extraJson?: Record<string, unknown> | null;
 }): Promise<OfficialModelConfig | undefined> {
   const { rows } = await getDbPool().query(
@@ -151,8 +151,8 @@ export async function updateOfficialModelConfig(input: {
          base_url = $7,
          model_name = $8,
          api_key_secret_key = $9,
-         input_token_price_per_million_points = $10,
-         output_token_price_per_million_points = $11,
+         input_token_price_per_million_cents = $10,
+         output_token_price_per_million_cents = $11,
          extra_json = $12,
          updated_at = NOW()
      WHERE id = $1
@@ -167,8 +167,8 @@ export async function updateOfficialModelConfig(input: {
       input.baseUrl ?? null,
       input.modelName,
       input.apiKeySecretKey ?? null,
-      input.inputTokenPricePerMillionPoints,
-      input.outputTokenPricePerMillionPoints,
+      input.inputTokenPricePerMillionCents,
+      input.outputTokenPricePerMillionCents,
       JSON.stringify(input.extraJson ?? {}),
     ],
   );

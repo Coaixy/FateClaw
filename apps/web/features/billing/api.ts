@@ -20,13 +20,13 @@ export type RechargePayType = RechargePayTypeDto;
 export type RechargeOrder = RechargeOrderDto;
 export type RechargeStats = RechargeStatsDto;
 
-export interface PointBatch {
+export interface BalanceGrant {
   id: string;
   user_id: string;
   source: string;
   granted_by: string | null;
-  amount_points: number;
-  remaining_points: number;
+  amount_cents: number;
+  remaining_cents: number;
   note: string | null;
   expires_at: string | null;
   status: 'active' | 'exhausted' | 'expired' | 'revoked';

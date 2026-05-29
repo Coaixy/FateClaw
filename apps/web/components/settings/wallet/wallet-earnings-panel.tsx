@@ -8,6 +8,7 @@ import {
 
 import type { CreatorEarningsMonthly } from '@/features/skills/api';
 import { WalletStatCard } from '@/components/settings/wallet/wallet-stat-card';
+import { formatCents } from '@/lib/money';
 
 type EarningsTotals = {
   gross: number;
@@ -15,10 +16,6 @@ type EarningsTotals = {
   net: number;
   withdrawn: number;
 };
-
-function formatPoints(points: number): string {
-  return `${points.toLocaleString()} 积分`;
-}
 
 function formatYearMonth(yearMonth: string): string {
   const [year, month] = yearMonth.split('-');
@@ -42,20 +39,20 @@ export function WalletEarningsPanel({
         <WalletStatCard
           icon={<TrendingUp size={14} className="text-primary" />}
           label="累计毛收入"
-          value={formatPoints(totals.gross)}
+          value={formatCents(totals.gross)}
         />
         <WalletStatCard
           icon={
             <ArrowDownLeft size={14} className="text-muted" />
           }
           label="平台抽成"
-          value={formatPoints(totals.platformCut)}
+          value={formatCents(totals.platformCut)}
           muted
         />
         <WalletStatCard
           icon={<Wallet size={14} className="text-primary" />}
           label="净收入"
-          value={formatPoints(totals.net)}
+          value={formatCents(totals.net)}
           accent
         />
         <WalletStatCard
@@ -63,7 +60,7 @@ export function WalletEarningsPanel({
             <ArrowUpRight size={14} className="text-muted" />
           }
           label="已提现"
-          value={formatPoints(totals.withdrawn)}
+          value={formatCents(totals.withdrawn)}
         />
       </div>
 
@@ -95,10 +92,10 @@ export function WalletEarningsPanel({
                   </span>
                   <div className="flex items-center gap-4 text-[12px] tabular-nums">
                     <span className="text-muted">
-                      毛 {formatPoints(row.gross_points)}
+                      毛 {formatCents(row.gross_cents)}
                     </span>
                     <span className="font-bold text-primary">
-                      {formatPoints(row.net_points)}
+                      {formatCents(row.net_cents)}
                     </span>
                   </div>
                 </div>

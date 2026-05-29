@@ -39,7 +39,7 @@ export function toCreatorWithdrawalDto(
 ): CreatorWithdrawalDto {
   return {
     id: row.id,
-    amount_points: row.amount_points,
+    amount_cents: row.amount_cents,
     amount_yuan: row.amount_yuan,
     status: row.status,
     bank_name: row.bank_name,
@@ -49,7 +49,7 @@ export function toCreatorWithdrawalDto(
       ? maskIdNumber(safeDecryptSkillSensitiveValue(row.id_number))
       : null,
     tax_type: row.tax_type,
-    platform_fee_points: row.platform_fee_points,
+    platform_fee_cents: row.platform_fee_cents,
     tax_amount_yuan: row.tax_amount_yuan,
     net_amount_yuan: row.net_amount_yuan,
     review_note: row.review_note,
@@ -68,13 +68,13 @@ export function toCreatorEarningsMonthlyDtos(
 export function toWithdrawalBalanceDto(user: User): WithdrawalBalanceDto {
   const withdrawable = Math.max(
     0,
-    user.earned_points - user.pending_withdrawal_points,
+    user.earned_cents - user.pending_withdrawal_cents,
   );
 
   return {
-    earned_points: user.earned_points,
-    pending_withdrawal_points: user.pending_withdrawal_points,
-    withdrawable_points: withdrawable,
+    earned_cents: user.earned_cents,
+    pending_withdrawal_cents: user.pending_withdrawal_cents,
+    withdrawable_cents: withdrawable,
     withdrawable_yuan: (withdrawable / 100).toFixed(2),
   };
 }
@@ -82,12 +82,12 @@ export function toWithdrawalBalanceDto(user: User): WithdrawalBalanceDto {
 export function toWithdrawalRequestResponseDto(
   row: Pick<
     CreatorWithdrawal,
-    'id' | 'amount_points' | 'amount_yuan' | 'status' | 'created_at'
+    'id' | 'amount_cents' | 'amount_yuan' | 'status' | 'created_at'
   >,
 ): WithdrawalRequestResponseDto {
   return {
     id: row.id,
-    amount_points: row.amount_points,
+    amount_cents: row.amount_cents,
     amount_yuan: row.amount_yuan,
     status: row.status,
     created_at: row.created_at,
@@ -181,7 +181,7 @@ type MarketSkillSource = {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_points'>>;
+  price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_cents'>>;
   stat_subscriber_count: number;
   share_token: string | null;
 };

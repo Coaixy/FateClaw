@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { walletTransactionBadgeLabel } from './wallet-transaction-labels';
-import { isWalletTransactionVisible } from './wallet-transactions-panel';
+import {
+  isWalletTransactionVisible,
+  walletTransactionBadgeLabel,
+} from './wallet-transaction-labels';
 
 describe('walletTransactionBadgeLabel', () => {
   it('labels official model token charges as deductions, not recharge', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'overage_charge',
-        amount_points: -12,
-        point_source: 'purchased',
+        amount_cents: -12,
+        balance_source: 'purchased',
       }),
     ).toBe('扣费');
   });
@@ -18,8 +20,8 @@ describe('walletTransactionBadgeLabel', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'recharge_topup',
-        amount_points: 100,
-        point_source: 'purchased',
+        amount_cents: 100,
+        balance_source: 'purchased',
       }),
     ).toBe('充值');
   });
@@ -32,12 +34,12 @@ describe('isWalletTransactionVisible', () => {
         id: 'wtx-1',
         user_id: 'user-1',
         kind: 'overage_charge',
-        amount_points: -3,
-        reserved_delta_points: 0,
-        point_source: 'bonus',
-        point_batch_id: 'batch-1',
+        amount_cents: -3,
+        reserved_delta_cents: 0,
+        balance_source: 'bonus',
+        balance_grant_id: 'batch-1',
         request_id: 'request-1',
-        note: '官方模型 Token 扣费（赠送积分批次）',
+        note: '官方模型 Token 扣费（赠送余额批次）',
         metadata: null,
         created_at: '2026-05-28T00:00:01.000Z',
       }),
@@ -50,10 +52,10 @@ describe('isWalletTransactionVisible', () => {
         id: 'wtx-2',
         user_id: 'user-1',
         kind: 'recharge_topup',
-        amount_points: 100,
-        reserved_delta_points: 0,
-        point_source: 'purchased',
-        point_batch_id: null,
+        amount_cents: 100,
+        reserved_delta_cents: 0,
+        balance_source: 'purchased',
+        balance_grant_id: null,
         request_id: null,
         note: '充值到账',
         metadata: null,

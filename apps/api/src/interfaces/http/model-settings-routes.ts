@@ -81,10 +81,10 @@ function toOfficialModelDto(model: AdminOfficialModelView): OfficialModelDto {
     base_url: model.base_url,
     model_name: model.model_name,
     context_window_tokens: model.context_window_tokens,
-    input_token_price_per_million_points:
-      model.input_token_price_per_million_points,
-    output_token_price_per_million_points:
-      model.output_token_price_per_million_points,
+    input_token_price_per_million_cents:
+      model.input_token_price_per_million_cents,
+    output_token_price_per_million_cents:
+      model.output_token_price_per_million_cents,
     has_secret: model.has_secret,
     auth_mode: model.auth_mode,
   };

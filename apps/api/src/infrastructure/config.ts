@@ -91,8 +91,8 @@ export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
   process.env.PUBLIC_BASE_URL || envConfig.PUBLIC_BASE_URL || '',
 );
 
-// 积分体系：1 元人民币 = 100 积分
-export const POINTS_PER_YUAN = 100;
+// 余额体系：软妹币 1.00 = 100 分
+export const CENTS_PER_YUAN = 100;
 
 // 提现身份证号/银行账户加密密钥（32 字节 hex = 64 字符）。
 // 未配置时开发环境走 fallback（会在日志中警告），生产环境必须配置。

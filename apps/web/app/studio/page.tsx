@@ -39,11 +39,8 @@ import {
 } from '@/features/skills/skill-zip';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useConfirm } from '@/lib/use-confirm';
+import { formatCents } from '@/lib/money';
 import { useToast } from '@/lib/use-toast';
-
-function formatPoints(points: number): string {
-  return `${points.toLocaleString()} 积分`;
-}
 
 export default function StudioPage() {
   const router = useRouter();
@@ -376,13 +373,13 @@ export default function StudioPage() {
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard
             label="本月净收入"
-            value={formatPoints(stats.thisMonthNet)}
+            value={formatCents(stats.thisMonthNet)}
             Icon={Wallet}
             hint="扣除平台分成后"
           />
           <StatCard
             label="累计净收入"
-            value={formatPoints(stats.lifetimeNet)}
+            value={formatCents(stats.lifetimeNet)}
             Icon={TrendingUp}
           />
           <StatCard

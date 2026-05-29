@@ -355,7 +355,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       subscriberId: request.user.userId,
       skillId: skill.id,
       tierKey: tier_key,
-      pricePoints: tier.price_points,
+      priceCents: tier.price_cents,
       durationDays: tier.duration_days,
     });
     return result;
@@ -624,7 +624,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       subscriberId: request.user.userId,
       creatorId,
       tierKey: tier_key,
-      pricePoints: tier.price_points,
+      priceCents: tier.price_cents,
       durationDays: tier.duration_days,
     });
     return result;
@@ -632,7 +632,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/skills/creator/withdrawal/request — 创作者发起提现申请
   const WithdrawalRequestSchema = z.object({
-    amount_points: z.number().int().positive(),
+    amount_cents: z.number().int().positive(),
     bank_name: z.string().max(80).optional(),
     bank_account: z.string().max(40).optional(),
     account_name: z.string().max(80).optional(),
@@ -647,7 +647,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     try {
       const wd = await createWithdrawalRequest({
         creatorId: request.user.userId,
-        amountPoints: body.amount_points,
+        amountCents: body.amount_cents,
         bankName: body.bank_name ?? null,
         bankAccount: body.bank_account ?? null,
         accountName: body.account_name ?? null,
@@ -671,7 +671,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     return rows.map((r) => toCreatorWithdrawalDto(r)) as CreatorWithdrawalDto[];
   });
 
-  // GET /api/skills/creator/withdrawal/balance — 查询可提现积分汇总
+  // GET /api/skills/creator/withdrawal/balance — 查询可提现金额汇总
   app.get('/creator/withdrawal/balance', async (request, reply) => {
     await request.requireAuth();
     const user = await getUserById(request.user.userId);

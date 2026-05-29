@@ -88,8 +88,8 @@ vi.mock('../system/system-config.js', () => ({
     model: 'gpt-4.1',
     contextWindowTokens: 128_000,
     maxOutputTokens: 12_000,
-    inputTokenPricePerMillionPoints: 0,
-    outputTokenPricePerMillionPoints: 0,
+    inputTokenPricePerMillionCents: 0,
+    outputTokenPricePerMillionCents: 0,
   })),
 }));
 

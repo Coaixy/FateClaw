@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
 import {
-  adjustUserPurchasedPoints,
+  adjustUserPurchasedBalance,
   approveWithdrawal,
   createUser,
   decryptSensitive,
@@ -28,13 +28,13 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getPointBatchesByUserId,
+  getBalanceGrantsByUserId,
   getTasksForAdmin,
   getUserById,
   getUserByPhone,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
-  grantBonusPoints,
+  grantBonusBalance,
   listAllWithdrawals,
   listBillingRequestReservations,
   markWithdrawalPaid,
@@ -72,7 +72,7 @@ const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
 const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 
 export {
-  adjustUserPurchasedPoints,
+  adjustUserPurchasedBalance,
   approveWithdrawal,
   createOfficialModel,
   deleteConversationLogsByAccountIds,
@@ -86,13 +86,13 @@ export {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getPointBatchesByUserId,
+  getBalanceGrantsByUserId,
   getSystemConfigOverview,
   getTasksForAdmin,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
-  grantBonusPoints,
+  grantBonusBalance,
   listBillingRequestReservations,
   markWithdrawalPaid,
   reconcileStaleBillingReservations,
@@ -147,11 +147,11 @@ export async function createAdminUser(input: {
       ADMIN_CREATE_USER_SALT_ROUNDS,
     ),
     role: input.role,
-    purchased_points: 0,
-    bonus_points: 0,
-    earned_points: 0,
-    reserved_points: 0,
-    pending_withdrawal_points: 0,
+    purchased_cents: 0,
+    bonus_cents: 0,
+    earned_cents: 0,
+    reserved_cents: 0,
+    pending_withdrawal_cents: 0,
     created_at: now,
   };
 
@@ -182,12 +182,12 @@ export async function listAdminUsersWithStats(): Promise<
       active_tasks: number;
       usage: Awaited<ReturnType<typeof getUsageStats>>;
       monthly_tokens_used: number;
-      estimated_monthly_total_points: number;
-      purchased_points: number;
-      bonus_points: number;
-      earned_points: number;
-      reserved_points: number;
-      available_points: number;
+      estimated_monthly_total_cents: number;
+      purchased_cents: number;
+      bonus_cents: number;
+      earned_cents: number;
+      reserved_cents: number;
+      available_cents: number;
     }
   >
 > {
@@ -208,12 +208,12 @@ export async function listAdminUsersWithStats(): Promise<
         active_tasks: activeTasks,
         usage,
         monthly_tokens_used: monthlyBilling.usedTokens,
-        estimated_monthly_total_points: monthlyBilling.chargedPoints,
-        purchased_points: wallet.purchasedPoints,
-        bonus_points: wallet.bonusPoints,
-        earned_points: wallet.earnedPoints,
-        reserved_points: wallet.reservedPoints,
-        available_points: wallet.availablePoints,
+        estimated_monthly_total_cents: monthlyBilling.chargedCents,
+        purchased_cents: wallet.purchasedCents,
+        bonus_cents: wallet.bonusCents,
+        earned_cents: wallet.earnedCents,
+        reserved_cents: wallet.reservedCents,
+        available_cents: wallet.availableCents,
       };
     }),
   );
@@ -231,12 +231,12 @@ export async function getAdminUserDetail(userId: string): Promise<{
     active_tasks: number;
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
-    estimated_monthly_total_points: number;
-    purchased_points: number;
-    bonus_points: number;
-    earned_points: number;
-    reserved_points: number;
-    available_points: number;
+    estimated_monthly_total_cents: number;
+    purchased_cents: number;
+    bonus_cents: number;
+    earned_cents: number;
+    reserved_cents: number;
+    available_cents: number;
   };
   accounts: Array<Record<string, unknown>>;
   usage: Awaited<ReturnType<typeof getUsageStats>>;
@@ -264,12 +264,12 @@ export async function getAdminUserDetail(userId: string): Promise<{
       active_tasks: activeTasks,
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
-      estimated_monthly_total_points: monthlyBilling.chargedPoints,
-      purchased_points: wallet.purchasedPoints,
-      bonus_points: wallet.bonusPoints,
-      earned_points: wallet.earnedPoints,
-      reserved_points: wallet.reservedPoints,
-      available_points: wallet.availablePoints,
+      estimated_monthly_total_cents: monthlyBilling.chargedCents,
+      purchased_cents: wallet.purchasedCents,
+      bonus_cents: wallet.bonusCents,
+      earned_cents: wallet.earnedCents,
+      reserved_cents: wallet.reservedCents,
+      available_cents: wallet.availableCents,
     },
     accounts: accounts.map(({ bot_token: _botToken, ...rest }) => rest),
     usage,
@@ -294,7 +294,7 @@ export async function listAdminWithdrawalsMasked(input: {
   return rows.map((row) => ({
     id: row.id,
     creator_id: row.creator_id,
-    amount_points: row.amount_points,
+    amount_cents: row.amount_cents,
     amount_yuan: row.amount_yuan,
     status: row.status,
     bank_name: row.bank_name,
@@ -312,7 +312,7 @@ export async function listAdminWithdrawalsMasked(input: {
     tax_type: row.tax_type,
     company_name: row.company_name,
     tax_id: row.tax_id,
-    platform_fee_points: row.platform_fee_points,
+    platform_fee_cents: row.platform_fee_cents,
     tax_amount_yuan: row.tax_amount_yuan,
     net_amount_yuan: row.net_amount_yuan,
     reviewed_by: row.reviewed_by,

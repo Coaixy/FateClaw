@@ -7,12 +7,11 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
+import { formatCents } from '@/lib/money';
 
-function formatPointsShort(points: number): string {
-  if (points < 1000) return `${points}`;
-  if (points < 10000)
-    return `${(points / 1000).toFixed(1).replace(/\.0$/, '')}k`;
-  return `${Math.round(points / 1000)}k`;
+function formatBalanceShort(cents: number): string {
+  if (cents < 100_000) return formatCents(cents);
+  return `软妹币 ${Math.round(cents / 100).toLocaleString()}`;
 }
 
 function formatTokens(n: number): string {
@@ -60,7 +59,7 @@ export function TopBar({
 
   if (!user) return null;
 
-  const points = status?.available_points ?? null;
+  const balanceCents = status?.available_cents ?? null;
   const dotColor = 'bg-primary';
   const todayTokens = usage
     ? formatTokens(
@@ -70,19 +69,19 @@ export function TopBar({
   const todayTokensLabel = compact
     ? `今 ${todayTokens}`
     : `今日 ${todayTokens}`;
-  const pointsLabel =
-    points === null
+  const balanceLabel =
+    balanceCents === null
       ? '—'
       : compact
-        ? formatPointsShort(points)
-        : `${points.toLocaleString()} 积分`;
+        ? formatBalanceShort(balanceCents)
+        : formatCents(balanceCents);
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
-      {/* 计费胶囊：积分 + 今日 token */}
+      {/* 计费胶囊：余额 + 今日 token */}
       <div className="relative min-w-0">
         <button
           onClick={() => {
@@ -90,11 +89,11 @@ export function TopBar({
             setMenuOpen(false);
           }}
           className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
-          aria-label={`${points === null ? '积分加载中' : `${points.toLocaleString()} 积分`}，今日 ${todayTokens}`}
+          aria-label={`${balanceCents === null ? '余额加载中' : `${formatCents(balanceCents)} 可用`}，今日 ${todayTokens}`}
           aria-expanded={usageOpen}
         >
           <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-          <span className="tabular-nums font-medium">{pointsLabel}</span>
+          <span className="tabular-nums font-medium">{balanceLabel}</span>
           <span className="text-muted/60">·</span>
           <span className="inline-flex items-center gap-1 text-muted whitespace-nowrap">
             <BadgeDollarSign
@@ -134,10 +133,10 @@ export function TopBar({
         {menuOpen && (
           <UserMenuDropdown
             user={{ phone: user.phone }}
-            pointsLabel={
-              points === null
+            balanceLabel={
+              balanceCents === null
                 ? '加载中…'
-                : `${points.toLocaleString()} 积分可用`
+                : `${formatCents(balanceCents)} 可用`
             }
             avatar={<AvatarBadge />}
             onNavigate={() => setMenuOpen(false)}

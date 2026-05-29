@@ -53,13 +53,13 @@ export async function getBillingOverview(
   return ok(
     toBillingStatusDto({
       monthly_tokens_used: billing.usedTokens,
-      estimated_monthly_total_points: billing.chargedPoints,
-      purchased_points: wallet.purchasedPoints,
-      bonus_points: wallet.bonusPoints,
-      earned_points: wallet.earnedPoints,
-      reserved_points: wallet.reservedPoints,
-      available_points: wallet.availablePoints,
-      pending_withdrawal_points: wallet.pendingWithdrawalPoints,
+      estimated_monthly_total_cents: billing.chargedCents,
+      purchased_cents: wallet.purchasedCents,
+      bonus_cents: wallet.bonusCents,
+      earned_cents: wallet.earnedCents,
+      reserved_cents: wallet.reservedCents,
+      available_cents: wallet.availableCents,
+      pending_withdrawal_cents: wallet.pendingWithdrawalCents,
     }),
   );
 }

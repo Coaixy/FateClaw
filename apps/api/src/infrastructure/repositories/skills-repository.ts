@@ -4,7 +4,7 @@ import pg from 'pg';
 import { PLATFORM_CUT_PERCENT } from '../config.js';
 import type { DbQueryable } from '../db-pool.js';
 import { getDbPool } from '../db-pool.js';
-import { deductPoints, insertWalletTransaction } from './billing-repository.js';
+import { deductBalanceCents, insertWalletTransaction } from './billing-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import {
   getSkillMarkdownMetadata,
@@ -12,7 +12,7 @@ import {
   readTextSkillBundleFiles,
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
-import { calculateAvailableSpendablePoints } from '../../shared/point-balance.js';
+import { calculateAvailableSpendableCents } from '../../shared/balance-cents.js';
 import type {
   CreatorEarningsMonthly,
   EffectiveUserSkill,
@@ -864,15 +864,15 @@ export interface SubscribeToSkillPaidInput {
   subscriberId: string;
   skillId: string;
   tierKey: string;
-  pricePoints: number;
+  priceCents: number;
   durationDays: number | null;
 }
 
 export interface SubscribeToSkillPaidResult {
   subscription: UserSkillSubscription;
-  chargedPoints: number;
-  platformCutPoints: number;
-  creatorNetPoints: number;
+  chargedCents: number;
+  platformCutCents: number;
+  creatorNetCents: number;
 }
 
 export async function subscribeToSkillPaid(
@@ -896,38 +896,38 @@ export async function subscribeToSkillPaid(
     if (skill.user_id === input.subscriberId)
       throw new Error('不能订阅自己的 Skill');
 
-    let chargedPoints = 0;
-    let platformCutPoints = 0;
-    let creatorNetPoints = 0;
+    let chargedCents = 0;
+    let platformCutCents = 0;
+    let creatorNetCents = 0;
 
-    if (input.pricePoints > 0) {
+    if (input.priceCents > 0) {
       const subscriber = await getUserByIdUsing(client, input.subscriberId, {
         forUpdate: true,
       });
       if (!subscriber) throw new Error('账号不存在');
 
-      // 可用积分 = (purchased + bonus) - reserved
-      const availablePoints = calculateAvailableSpendablePoints(subscriber);
-      if (availablePoints < input.pricePoints)
-        throw new Error('积分不足，请先充值');
+      // 可用余额 = (purchased + bonus) - reserved
+      const availableCents = calculateAvailableSpendableCents(subscriber);
+      if (availableCents < input.priceCents)
+        throw new Error('余额不足，请先充值');
 
-      chargedPoints = input.pricePoints;
-      platformCutPoints = Math.round(
-        (chargedPoints * PLATFORM_CUT_PERCENT) / 100,
+      chargedCents = input.priceCents;
+      platformCutCents = Math.round(
+        (chargedCents * PLATFORM_CUT_PERCENT) / 100,
       );
-      creatorNetPoints = chargedPoints - platformCutPoints;
+      creatorNetCents = chargedCents - platformCutCents;
 
       // bonus → purchased 优先级扣减
-      const deduction = await deductPoints(client, subscriber, chargedPoints);
+      const deduction = await deductBalanceCents(client, subscriber, chargedCents);
 
-      for (const bd of deduction.batchDeductions) {
+      for (const bd of deduction.grantDeductions) {
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'skill_subscription',
-          amountPoints: -bd.points,
-          pointSource: 'bonus',
-          pointBatchId: bd.batchId,
-          note: `订阅技能: ${skill.skill_name}（赠送积分批次）`,
+          amountCents: -bd.cents,
+          balanceSource: 'bonus',
+          balanceGrantId: bd.grantId,
+          note: `订阅技能: ${skill.skill_name}（赠送余额批次）`,
           metadata: { skill_id: input.skillId, tier_key: input.tierKey },
         });
       }
@@ -935,8 +935,8 @@ export async function subscribeToSkillPaid(
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'skill_subscription',
-          amountPoints: -deduction.purchasedDeducted,
-          pointSource: deduction.pointSource ?? 'purchased',
+          amountCents: -deduction.purchasedDeducted,
+          balanceSource: deduction.balanceSource ?? 'purchased',
           note: `订阅技能: ${skill.skill_name}`,
           metadata: {
             skill_id: input.skillId,
@@ -947,23 +947,23 @@ export async function subscribeToSkillPaid(
         });
       }
 
-      // 创作者收益进 earned_points
+      // 创作者收益进 earned_cents
       await client.query(
-        `UPDATE users SET earned_points = earned_points + $1 WHERE id = $2`,
-        [creatorNetPoints, skill.user_id],
+        `UPDATE users SET earned_cents = earned_cents + $1 WHERE id = $2`,
+        [creatorNetCents, skill.user_id],
       );
       await insertWalletTransaction(client, {
         userId: skill.user_id,
         kind: 'creator_revenue',
-        amountPoints: creatorNetPoints,
-        pointSource: 'earned',
+        amountCents: creatorNetCents,
+        balanceSource: 'earned',
         note: `技能订阅收入: ${skill.skill_name}`,
         metadata: {
           skill_id: input.skillId,
           subscriber_id: input.subscriberId,
           tier_key: input.tierKey,
-          gross_points: chargedPoints,
-          platform_cut_points: platformCutPoints,
+          gross_cents: chargedCents,
+          platform_cut_cents: platformCutCents,
         },
       });
 
@@ -971,20 +971,20 @@ export async function subscribeToSkillPaid(
       await client.query(
         `INSERT INTO creator_earnings_monthly
            (creator_id, year_month,
-            gross_points, platform_cut_points, net_points,
+            gross_cents, platform_cut_cents, net_cents,
             updated_at)
          VALUES ($1, $2, $3, $4, $5, NOW())
          ON CONFLICT (creator_id, year_month) DO UPDATE SET
-           gross_points = creator_earnings_monthly.gross_points + EXCLUDED.gross_points,
-           platform_cut_points = creator_earnings_monthly.platform_cut_points + EXCLUDED.platform_cut_points,
-           net_points = creator_earnings_monthly.net_points + EXCLUDED.net_points,
+           gross_cents = creator_earnings_monthly.gross_cents + EXCLUDED.gross_cents,
+           platform_cut_cents = creator_earnings_monthly.platform_cut_cents + EXCLUDED.platform_cut_cents,
+           net_cents = creator_earnings_monthly.net_cents + EXCLUDED.net_cents,
            updated_at = NOW()`,
         [
           skill.user_id,
           yearMonth,
-          chargedPoints,
-          platformCutPoints,
-          creatorNetPoints,
+          chargedCents,
+          platformCutCents,
+          creatorNetCents,
         ],
       );
     }
@@ -1024,9 +1024,9 @@ export async function subscribeToSkillPaid(
     await client.query('COMMIT');
     return {
       subscription: subRows[0] as UserSkillSubscription,
-      chargedPoints,
-      platformCutPoints,
-      creatorNetPoints,
+      chargedCents,
+      platformCutCents,
+      creatorNetCents,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1040,13 +1040,13 @@ export interface SubscribeToCreatorBundleInput {
   subscriberId: string;
   creatorId: string;
   tierKey: string;
-  pricePoints: number;
+  priceCents: number;
   durationDays: number | null;
 }
 
 export async function subscribeToCreatorBundle(
   input: SubscribeToCreatorBundleInput,
-): Promise<{ chargedPoints: number }> {
+): Promise<{ chargedCents: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1058,33 +1058,33 @@ export async function subscribeToCreatorBundle(
     if (!creatorRows[0]) throw new Error('创作者不存在');
     if (input.creatorId === input.subscriberId) throw new Error('不能订阅自己');
 
-    let chargedPoints = 0;
-    if (input.pricePoints > 0) {
+    let chargedCents = 0;
+    if (input.priceCents > 0) {
       const subscriber = await getUserByIdUsing(client, input.subscriberId, {
         forUpdate: true,
       });
       if (!subscriber) throw new Error('账号不存在');
 
-      const availablePoints = calculateAvailableSpendablePoints(subscriber);
-      if (availablePoints < input.pricePoints)
-        throw new Error('积分不足，请先充值');
+      const availableCents = calculateAvailableSpendableCents(subscriber);
+      if (availableCents < input.priceCents)
+        throw new Error('余额不足，请先充值');
 
-      chargedPoints = input.pricePoints;
-      const platformCutPoints = Math.round(
-        (chargedPoints * PLATFORM_CUT_PERCENT) / 100,
+      chargedCents = input.priceCents;
+      const platformCutCents = Math.round(
+        (chargedCents * PLATFORM_CUT_PERCENT) / 100,
       );
-      const creatorNetPoints = chargedPoints - platformCutPoints;
+      const creatorNetCents = chargedCents - platformCutCents;
 
-      const deduction = await deductPoints(client, subscriber, chargedPoints);
+      const deduction = await deductBalanceCents(client, subscriber, chargedCents);
 
-      for (const bd of deduction.batchDeductions) {
+      for (const bd of deduction.grantDeductions) {
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'bundle_subscription',
-          amountPoints: -bd.points,
-          pointSource: 'bonus',
-          pointBatchId: bd.batchId,
-          note: `订阅创作者整包（赠送积分批次）`,
+          amountCents: -bd.cents,
+          balanceSource: 'bonus',
+          balanceGrantId: bd.grantId,
+          note: `订阅创作者整包（赠送余额批次）`,
           metadata: { creator_id: input.creatorId, tier_key: input.tierKey },
         });
       }
@@ -1092,8 +1092,8 @@ export async function subscribeToCreatorBundle(
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'bundle_subscription',
-          amountPoints: -deduction.purchasedDeducted,
-          pointSource: deduction.pointSource ?? 'purchased',
+          amountCents: -deduction.purchasedDeducted,
+          balanceSource: deduction.balanceSource ?? 'purchased',
           note: `订阅创作者整包`,
           metadata: {
             creator_id: input.creatorId,
@@ -1105,20 +1105,20 @@ export async function subscribeToCreatorBundle(
       }
 
       await client.query(
-        `UPDATE users SET earned_points = earned_points + $1 WHERE id = $2`,
-        [creatorNetPoints, input.creatorId],
+        `UPDATE users SET earned_cents = earned_cents + $1 WHERE id = $2`,
+        [creatorNetCents, input.creatorId],
       );
       await insertWalletTransaction(client, {
         userId: input.creatorId,
         kind: 'creator_revenue',
-        amountPoints: creatorNetPoints,
-        pointSource: 'earned',
+        amountCents: creatorNetCents,
+        balanceSource: 'earned',
         note: `整包订阅收入`,
         metadata: {
           subscriber_id: input.subscriberId,
           tier_key: input.tierKey,
-          gross_points: chargedPoints,
-          platform_cut_points: platformCutPoints,
+          gross_cents: chargedCents,
+          platform_cut_cents: platformCutCents,
         },
       });
 
@@ -1126,20 +1126,20 @@ export async function subscribeToCreatorBundle(
       await client.query(
         `INSERT INTO creator_earnings_monthly
            (creator_id, year_month,
-            gross_points, platform_cut_points, net_points,
+            gross_cents, platform_cut_cents, net_cents,
             updated_at)
          VALUES ($1, $2, $3, $4, $5, NOW())
          ON CONFLICT (creator_id, year_month) DO UPDATE SET
-           gross_points = creator_earnings_monthly.gross_points + EXCLUDED.gross_points,
-           platform_cut_points = creator_earnings_monthly.platform_cut_points + EXCLUDED.platform_cut_points,
-           net_points = creator_earnings_monthly.net_points + EXCLUDED.net_points,
+           gross_cents = creator_earnings_monthly.gross_cents + EXCLUDED.gross_cents,
+           platform_cut_cents = creator_earnings_monthly.platform_cut_cents + EXCLUDED.platform_cut_cents,
+           net_cents = creator_earnings_monthly.net_cents + EXCLUDED.net_cents,
            updated_at = NOW()`,
         [
           input.creatorId,
           yearMonth,
-          chargedPoints,
-          platformCutPoints,
-          creatorNetPoints,
+          chargedCents,
+          platformCutCents,
+          creatorNetCents,
         ],
       );
     }
@@ -1168,7 +1168,7 @@ export async function subscribeToCreatorBundle(
     );
 
     await client.query('COMMIT');
-    return { chargedPoints };
+    return { chargedCents };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

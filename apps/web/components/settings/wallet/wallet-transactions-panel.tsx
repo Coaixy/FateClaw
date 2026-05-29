@@ -1,14 +1,10 @@
 import type { WalletTransaction } from '@/features/billing/api';
+import { formatSignedCents, formatCents } from '@/lib/money';
 
-import { walletTransactionBadgeLabel } from './wallet-transaction-labels';
-
-export function isWalletTransactionVisible(
-  transaction: WalletTransaction,
-): boolean {
-  return (
-    transaction.kind !== 'overage_charge' && transaction.amount_points !== 0
-  );
-}
+import {
+  isWalletTransactionVisible,
+  walletTransactionBadgeLabel,
+} from './wallet-transaction-labels';
 
 export function WalletTransactionsPanel({
   transactions,
@@ -27,14 +23,14 @@ export function WalletTransactionsPanel({
         <div className="divide-y divide-hairline/50">
           {visibleTransactions.map((transaction) => {
             const badgeLabel = walletTransactionBadgeLabel(transaction);
-            const points = transaction.amount_points;
+            const amountCents = transaction.amount_cents;
             const amountText =
-              points !== 0
-                ? `${points > 0 ? '+' : ''}${points.toLocaleString()} 积分`
-                : transaction.reserved_delta_points > 0
-                  ? `预留 ${transaction.reserved_delta_points.toLocaleString()} 积分`
-                  : transaction.reserved_delta_points < 0
-                    ? `释放 ${Math.abs(transaction.reserved_delta_points).toLocaleString()} 积分`
+              amountCents !== 0
+                ? formatSignedCents(amountCents)
+                : transaction.reserved_delta_cents > 0
+                  ? `预留 ${formatCents(transaction.reserved_delta_cents)}`
+                  : transaction.reserved_delta_cents < 0
+                    ? `释放 ${formatCents(Math.abs(transaction.reserved_delta_cents))}`
                     : '';
 
             return (
@@ -62,7 +58,7 @@ export function WalletTransactionsPanel({
                 </div>
                 <div
                   className={`shrink-0 text-[13px] font-bold tabular-nums ${
-                    points > 0 ? 'text-success' : ''
+                    amountCents > 0 ? 'text-success' : ''
                   }`}
                 >
                   {amountText}

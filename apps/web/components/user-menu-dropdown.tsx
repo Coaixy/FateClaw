@@ -19,13 +19,13 @@ type UserInfo = {
 
 export function UserMenuDropdown({
   user,
-  pointsLabel,
+  balanceLabel,
   onNavigate,
   onLogout,
   avatar,
 }: {
   user: UserInfo;
-  pointsLabel: string;
+  balanceLabel: string;
   onNavigate: () => void;
   onLogout: () => void;
   avatar: React.ReactNode;
@@ -40,7 +40,7 @@ export function UserMenuDropdown({
               {getUserIdentityLabel(user)}
             </div>
             <div className="text-[10px] text-muted tabular-nums mt-0.5">
-              {pointsLabel}
+              {balanceLabel}
             </div>
           </div>
         </div>

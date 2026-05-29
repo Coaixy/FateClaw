@@ -2,11 +2,11 @@ import type { WalletTransaction } from '@/features/billing/api';
 
 type WalletTransactionBadgeInput = Pick<
   WalletTransaction,
-  'kind' | 'amount_points' | 'point_source'
+  'kind' | 'amount_cents' | 'balance_source'
 >;
 
-function positivePointSourceLabel(
-  source: WalletTransaction['point_source'],
+function positiveBalanceSourceLabel(
+  source: WalletTransaction['balance_source'],
 ): string | null {
   switch (source) {
     case 'purchased':
@@ -41,9 +41,17 @@ function negativeTransactionLabel(kind: string): string {
 export function walletTransactionBadgeLabel(
   transaction: WalletTransactionBadgeInput,
 ): string | null {
-  if (transaction.amount_points < 0) {
+  if (transaction.amount_cents < 0) {
     return negativeTransactionLabel(transaction.kind);
   }
 
-  return positivePointSourceLabel(transaction.point_source);
+  return positiveBalanceSourceLabel(transaction.balance_source);
+}
+
+export function isWalletTransactionVisible(
+  transaction: WalletTransaction,
+): boolean {
+  return (
+    transaction.kind !== 'overage_charge' && transaction.amount_cents !== 0
+  );
 }

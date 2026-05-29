@@ -1,4 +1,5 @@
 import type { CreatorWithdrawal } from '@/features/skills/api';
+import { formatCents } from '@/lib/money';
 
 function statusBadge(status: CreatorWithdrawal['status']) {
   switch (status) {
@@ -44,10 +45,7 @@ export function WithdrawalHistory({
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="text-[13px] font-bold tabular-nums">
-                      {record.amount_points.toLocaleString()} 积分
-                    </span>
-                    <span className="text-[11px] text-muted">
-                      ¥{record.amount_yuan}
+                      {formatCents(record.amount_cents)}
                     </span>
                   </div>
                   <span

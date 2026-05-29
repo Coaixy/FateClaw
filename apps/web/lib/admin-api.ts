@@ -139,22 +139,22 @@ export interface AdminUser {
   active_tasks: number;
   usage: UsageStats;
   monthly_tokens_used: number;
-  estimated_monthly_total_points: number;
-  purchased_points: number;
-  bonus_points: number;
-  earned_points: number;
-  reserved_points: number;
-  available_points: number;
+  estimated_monthly_total_cents: number;
+  purchased_cents: number;
+  bonus_cents: number;
+  earned_cents: number;
+  reserved_cents: number;
+  available_cents: number;
 }
 
 export interface WalletTransaction {
   id: string;
   user_id: string;
   kind: string;
-  amount_points: number;
-  reserved_delta_points: number;
-  point_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
-  point_batch_id: string | null;
+  amount_cents: number;
+  reserved_delta_cents: number;
+  balance_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+  balance_grant_id: string | null;
   request_id: string | null;
   note: string | null;
   metadata: unknown;
@@ -194,7 +194,7 @@ export interface AdminRechargePeriodStats {
   start_date: string | null;
   end_date: string | null;
   paid_orders: number;
-  total_recharge_points: number;
+  total_recharge_cents: number;
   total_recharge_yuan: string;
 }
 
@@ -212,9 +212,9 @@ export interface GlobalStats {
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
-  total_recharge_points: number;
+  total_recharge_cents: number;
   total_recharge_yuan: string;
-  today_recharge_points: number;
+  today_recharge_cents: number;
   today_recharge_yuan: string;
   total_accounts: number;
   enabled_accounts: number;
@@ -334,8 +334,8 @@ export interface AdminModelProvider {
   model_name: string;
   context_window_tokens: number | null;
   api_key_secret_key: string | null;
-  input_token_price_per_million_points: number;
-  output_token_price_per_million_points: number;
+  input_token_price_per_million_cents: number;
+  output_token_price_per_million_cents: number;
   extra_json: Record<string, unknown> | null;
   has_secret: boolean;
   secret_source: 'database' | 'missing';
@@ -432,8 +432,8 @@ export const admin = {
     base_url?: string | null;
     model_name: string;
     context_window_tokens?: number | null;
-    input_token_price_per_million_points: number;
-    output_token_price_per_million_points: number;
+    input_token_price_per_million_cents: number;
+    output_token_price_per_million_cents: number;
     api_key?: string;
   }) =>
     adminRequest<AdminModelProvider>('/api/admin/system-config/providers', {
@@ -452,8 +452,8 @@ export const admin = {
       base_url?: string | null;
       model_name: string;
       context_window_tokens?: number | null;
-      input_token_price_per_million_points: number;
-      output_token_price_per_million_points: number;
+      input_token_price_per_million_cents: number;
+      output_token_price_per_million_cents: number;
     },
   ) =>
     adminRequest<AdminModelProvider>(
@@ -496,18 +496,18 @@ export const admin = {
     }),
   userDetail: (id: string) =>
     adminRequest<UserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
-  adjustPurchasedPoints: (
+  adjustPurchasedBalance: (
     id: string,
-    data: { amount_points: number; note?: string },
+    data: { amount_cents: number; note?: string },
   ) =>
     adminRequest<{
       success: boolean;
-      purchased_points: number;
-      bonus_points: number;
-      earned_points: number;
-      reserved_points: number;
-      available_points: number;
-    }>(`/api/admin/users/${encodeURIComponent(id)}/points/adjust`, {
+      purchased_cents: number;
+      bonus_cents: number;
+      earned_cents: number;
+      reserved_cents: number;
+      available_cents: number;
+    }>(`/api/admin/users/${encodeURIComponent(id)}/balance/adjust`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -591,10 +591,10 @@ export const admin = {
       `/api/admin/skills/custom/${encodeURIComponent(id)}/state`,
       { method: 'PATCH', body: JSON.stringify(data) },
     ),
-  grantBonusPoints: (
+  grantBonusBalance: (
     id: string,
     data: {
-      amount_points: number;
+      amount_cents: number;
       source?: 'new_user_gift' | 'sign_in' | 'admin_grant' | 'promotion';
       note?: string;
       expires_at?: string | null;
@@ -602,9 +602,9 @@ export const admin = {
   ) =>
     adminRequest<{
       success: boolean;
-      batch_id: string;
-      bonus_points: number;
-    }>(`/api/admin/users/${encodeURIComponent(id)}/points/grant`, {
+      grant_id: string;
+      bonus_cents: number;
+    }>(`/api/admin/users/${encodeURIComponent(id)}/balance/grant`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -627,7 +627,7 @@ export const admin = {
     data?: {
       tax_amount_yuan?: string;
       net_amount_yuan?: string;
-      platform_fee_points?: number;
+      platform_fee_cents?: number;
       note?: string;
     },
   ) =>
@@ -650,7 +650,7 @@ export const admin = {
 export interface AdminWithdrawal {
   id: string;
   creator_id: string;
-  amount_points: number;
+  amount_cents: number;
   amount_yuan: string;
   status: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
   bank_name: string | null;
@@ -660,7 +660,7 @@ export interface AdminWithdrawal {
   tax_type: 'personal' | 'company' | null;
   company_name: string | null;
   tax_id: string | null;
-  platform_fee_points: number;
+  platform_fee_cents: number;
   tax_amount_yuan: string;
   net_amount_yuan: string;
   reviewed_by: string | null;

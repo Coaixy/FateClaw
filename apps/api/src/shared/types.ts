@@ -8,35 +8,35 @@ export interface User {
   phone_verified: boolean;
   password_hash: string;
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
-  purchased_points: number; // 充值积分（不过期，可消费）
-  bonus_points: number; // 赠送积分（可过期，消费优先扣）
-  earned_points: number; // 创作者收益（仅通过提现通道流出）
-  reserved_points: number; // 请求级预扣
-  pending_withdrawal_points: number; // 已申请提现中冻结的 earned_points
+  purchased_cents: number; // 充值余额（不过期，可消费）
+  bonus_cents: number; // 赠送余额（可过期，消费优先扣）
+  earned_cents: number; // 创作者收益（仅通过提现通道流出）
+  reserved_cents: number; // 请求级预扣
+  pending_withdrawal_cents: number; // 已申请提现中冻结的 earned_cents
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   created_at: string;
 }
 
-export type PointSource = 'purchased' | 'bonus' | 'earned' | 'mixed';
+export type BalanceSource = 'purchased' | 'bonus' | 'earned' | 'mixed';
 
-export type PointBatchSource =
+export type BalanceGrantSource =
   | 'new_user_gift'
   | 'sign_in'
   | 'admin_grant'
   | 'promotion';
 
-export type PointBatchStatus = 'active' | 'exhausted' | 'expired' | 'revoked';
+export type BalanceGrantStatus = 'active' | 'exhausted' | 'expired' | 'revoked';
 
-export interface PointBatch {
+export interface BalanceGrant {
   id: string;
   user_id: string;
-  source: PointBatchSource | string;
+  source: BalanceGrantSource | string;
   granted_by: string | null;
-  amount_points: number;
-  remaining_points: number;
+  amount_cents: number;
+  remaining_cents: number;
   note: string | null;
   expires_at: string | null;
-  status: PointBatchStatus;
+  status: BalanceGrantStatus;
   created_at: string;
   updated_at: string;
 }
@@ -53,7 +53,7 @@ export type WithdrawalTaxType = 'personal' | 'company';
 export interface CreatorWithdrawal {
   id: string;
   creator_id: string;
-  amount_points: number;
+  amount_cents: number;
   amount_yuan: string; // NUMERIC -> string
   status: WithdrawalStatus;
   bank_name: string | null;
@@ -63,7 +63,7 @@ export interface CreatorWithdrawal {
   tax_type: WithdrawalTaxType | null;
   company_name: string | null;
   tax_id: string | null;
-  platform_fee_points: number;
+  platform_fee_cents: number;
   tax_amount_yuan: string;
   net_amount_yuan: string;
   reviewed_by: string | null;
@@ -85,7 +85,7 @@ export interface UserSkill {
 export interface SkillPriceTier {
   key: string;
   label: string;
-  price_points: number; // 积分定价（1 元 = 100 积分）
+  price_cents: number; // 余额定价（1 元 = 100 分）
   duration_days: number | null;
   description?: string;
 }
@@ -150,7 +150,7 @@ export interface SkillBundle {
 export interface CreatorBundleTier {
   key: string;
   label: string;
-  price_points: number;
+  price_cents: number;
   duration_days: number | null;
   description?: string;
 }
@@ -193,10 +193,10 @@ export interface Account {
 export interface CreatorEarningsMonthly {
   creator_id: string;
   year_month: string;
-  gross_points: number;
-  platform_cut_points: number;
-  net_points: number;
-  withdrawn_points: number;
+  gross_cents: number;
+  platform_cut_cents: number;
+  net_cents: number;
+  withdrawn_cents: number;
   updated_at: string;
 }
 
@@ -257,8 +257,8 @@ export interface OfficialModelConfig {
   base_url: string | null;
   model_name: string;
   api_key_secret_key: string | null;
-  input_token_price_per_million_points: number;
-  output_token_price_per_million_points: number;
+  input_token_price_per_million_cents: number;
+  output_token_price_per_million_cents: number;
   extra_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

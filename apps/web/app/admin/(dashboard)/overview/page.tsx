@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { admin, type GlobalStats } from '@/lib/admin-api';
+import { formatCents } from '@/lib/money';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -34,8 +35,8 @@ function fmt(n: number) {
 
 function fmtYuan(value: string | number) {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return '¥0.00';
-  return `¥${amount.toLocaleString('zh-CN', {
+  if (!Number.isFinite(amount)) return '软妹币 0.00';
+  return `软妹币 ${amount.toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -75,9 +76,9 @@ function isSameDateRange(a: DateRange, b: DateRange) {
 }
 
 function avgOrderYuan(totalYuan: string, orders: number) {
-  if (orders <= 0) return '¥0.00';
+  if (orders <= 0) return '软妹币 0.00';
   const total = Number(totalYuan);
-  if (!Number.isFinite(total)) return '¥0.00';
+  if (!Number.isFinite(total)) return '软妹币 0.00';
   return fmtYuan(total / orders);
 }
 
@@ -347,9 +348,9 @@ export default function AdminOverviewPage() {
             />
             <RevenueMetric
               icon={Coins}
-              label="入账积分"
-              value={fmt(rechargePeriod.total_recharge_points)}
-              sub={`累计入账 ${fmt(stats.total_recharge_points)} 积分`}
+              label="入账余额"
+              value={formatCents(rechargePeriod.total_recharge_cents)}
+              sub={`累计入账 ${formatCents(stats.total_recharge_cents)}`}
             />
             <RevenueMetric
               icon={Calculator}

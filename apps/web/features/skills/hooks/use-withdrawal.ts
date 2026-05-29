@@ -10,7 +10,7 @@ import {
 import type { WithdrawalFormState } from '@/components/withdrawal/withdrawal-form';
 
 export const INITIAL_WITHDRAWAL_FORM: WithdrawalFormState = {
-  amountPoints: '',
+  amountCents: '',
   bankName: '',
   bankAccount: '',
   accountName: '',
@@ -64,13 +64,13 @@ export function useWithdrawal() {
       setError(null);
       setSuccess(null);
 
-      const points = Number(form.amountPoints);
-      if (!Number.isInteger(points) || points <= 0) {
-        setError('请输入合法的积分数量');
+      const amountCents = Number(form.amountCents);
+      if (!Number.isInteger(amountCents) || amountCents <= 0) {
+        setError('请输入合法的提现金额');
         return;
       }
-      if (!balance || points > balance.withdrawable_points) {
-        setError('可提现积分不足');
+      if (!balance || amountCents > balance.withdrawable_cents) {
+        setError('可提现余额不足');
         return;
       }
       if (!form.bankName || !form.bankAccount || !form.accountName) {
@@ -89,7 +89,7 @@ export function useWithdrawal() {
       setSubmitting(true);
       try {
         await withdrawalApi.create({
-          amount_points: points,
+          amount_cents: amountCents,
           bank_name: form.bankName,
           bank_account: form.bankAccount,
           account_name: form.accountName,

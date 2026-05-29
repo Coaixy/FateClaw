@@ -1,22 +1,22 @@
-const POINTS_PER_YUAN = 100;
+const CENTS_PER_YUAN = 100;
 
 export type OfficialModelPricingInput = {
-  input_token_price_per_million_points: number;
-  output_token_price_per_million_points: number;
+  input_token_price_per_million_cents: number;
+  output_token_price_per_million_cents: number;
 };
 
 export type OfficialModelPricePart = {
   label: string;
   yuan: string;
-  points: string;
+  cents: string;
 };
 
-export function officialModelYuanLabel(points: number): string {
-  return `¥${(points / POINTS_PER_YUAN).toFixed(2)}`;
+export function officialModelYuanLabel(cents: number): string {
+  return `软妹币 ${(cents / CENTS_PER_YUAN).toFixed(2)}`;
 }
 
-function tokenPricePart(label: string, points: number): string {
-  return `${label} ${officialModelYuanLabel(points)} / 百万 Token（${points.toLocaleString()} 积分）`;
+function tokenPricePart(label: string, cents: number): string {
+  return `${label} ${officialModelYuanLabel(cents)} / 百万 Token`;
 }
 
 export function officialModelPriceParts(
@@ -26,18 +26,18 @@ export function officialModelPriceParts(
     {
       label: '输入',
       yuan: officialModelYuanLabel(
-        input.input_token_price_per_million_points,
+        input.input_token_price_per_million_cents,
       ),
-      points:
-        input.input_token_price_per_million_points.toLocaleString(),
+      cents:
+        input.input_token_price_per_million_cents.toLocaleString(),
     },
     {
       label: '输出',
       yuan: officialModelYuanLabel(
-        input.output_token_price_per_million_points,
+        input.output_token_price_per_million_cents,
       ),
-      points:
-        input.output_token_price_per_million_points.toLocaleString(),
+      cents:
+        input.output_token_price_per_million_cents.toLocaleString(),
     },
   ];
 }
@@ -46,7 +46,7 @@ export function officialModelPriceLabel(
   input: OfficialModelPricingInput,
 ): string {
   return [
-    tokenPricePart('输入', input.input_token_price_per_million_points),
-    tokenPricePart('输出', input.output_token_price_per_million_points),
+    tokenPricePart('输入', input.input_token_price_per_million_cents),
+    tokenPricePart('输出', input.output_token_price_per_million_cents),
   ].join(' · ');
 }

@@ -292,11 +292,11 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           phone_verified BOOLEAN NOT NULL DEFAULT true,
           password_hash TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'consumer',
-          purchased_points INTEGER NOT NULL DEFAULT 0,
-          bonus_points INTEGER NOT NULL DEFAULT 0,
-          earned_points INTEGER NOT NULL DEFAULT 0,
-          reserved_points INTEGER NOT NULL DEFAULT 0,
-          pending_withdrawal_points INTEGER NOT NULL DEFAULT 0,
+          purchased_cents INTEGER NOT NULL DEFAULT 0,
+          bonus_cents INTEGER NOT NULL DEFAULT 0,
+          earned_cents INTEGER NOT NULL DEFAULT 0,
+          reserved_cents INTEGER NOT NULL DEFAULT 0,
+          pending_withdrawal_cents INTEGER NOT NULL DEFAULT 0,
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
@@ -443,8 +443,8 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           base_url TEXT DEFAULT NULL,
           model_name TEXT NOT NULL,
           api_key_secret_key TEXT DEFAULT NULL,
-          input_token_price_per_million_points INTEGER NOT NULL DEFAULT 0,
-          output_token_price_per_million_points INTEGER NOT NULL DEFAULT 0,
+          input_token_price_per_million_cents INTEGER NOT NULL DEFAULT 0,
+          output_token_price_per_million_cents INTEGER NOT NULL DEFAULT 0,
           extra_json JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1121,10 +1121,10 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL REFERENCES users(id),
           kind TEXT NOT NULL,
-          amount_points INTEGER NOT NULL DEFAULT 0,
-          reserved_delta_points INTEGER NOT NULL DEFAULT 0,
-          point_source TEXT DEFAULT NULL,
-          point_batch_id TEXT DEFAULT NULL,
+          amount_cents INTEGER NOT NULL DEFAULT 0,
+          reserved_delta_cents INTEGER NOT NULL DEFAULT 0,
+          balance_source TEXT DEFAULT NULL,
+          balance_grant_id TEXT DEFAULT NULL,
           request_id TEXT DEFAULT NULL,
           note TEXT DEFAULT NULL,
           metadata JSONB DEFAULT NULL,
@@ -1164,7 +1164,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           provider_trade_id TEXT DEFAULT NULL,
           pay_type TEXT NOT NULL,
           amount_yuan NUMERIC(12,2) NOT NULL,
-          amount_points INTEGER NOT NULL,
+          amount_cents INTEGER NOT NULL,
           pay_url TEXT DEFAULT NULL,
           status TEXT NOT NULL DEFAULT 'pending',
           paid_at TIMESTAMPTZ DEFAULT NULL,
@@ -1192,7 +1192,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           user_id TEXT NOT NULL REFERENCES users(id),
           year_month TEXT NOT NULL,
           billed_overage_tokens INTEGER NOT NULL DEFAULT 0,
-          billed_overage_cost_points INTEGER NOT NULL DEFAULT 0,
+          billed_overage_cost_cents INTEGER NOT NULL DEFAULT 0,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (user_id, year_month)
         )
@@ -1203,12 +1203,12 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           user_id TEXT NOT NULL REFERENCES users(id),
           model_config_id TEXT DEFAULT NULL,
           year_month TEXT NOT NULL,
-          reserved_points INTEGER NOT NULL DEFAULT 0,
+          reserved_cents INTEGER NOT NULL DEFAULT 0,
           hold_state TEXT NOT NULL DEFAULT 'none',
           charge_state TEXT NOT NULL DEFAULT 'pending',
-          actual_charge_points INTEGER NOT NULL DEFAULT 0,
+          actual_charge_cents INTEGER NOT NULL DEFAULT 0,
           total_overage_tokens INTEGER NOT NULL DEFAULT 0,
-          total_overage_cost_points INTEGER NOT NULL DEFAULT 0,
+          total_overage_cost_cents INTEGER NOT NULL DEFAULT 0,
           note TEXT DEFAULT NULL,
           metadata JSONB DEFAULT NULL,
           released_at TIMESTAMPTZ DEFAULT NULL,
@@ -1367,51 +1367,51 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         CREATE TABLE IF NOT EXISTS creator_earnings_monthly (
           creator_id TEXT NOT NULL REFERENCES users(id),
           year_month TEXT NOT NULL,
-          gross_points INTEGER NOT NULL DEFAULT 0,
-          platform_cut_points INTEGER NOT NULL DEFAULT 0,
-          net_points INTEGER NOT NULL DEFAULT 0,
-          withdrawn_points INTEGER NOT NULL DEFAULT 0,
+          gross_cents INTEGER NOT NULL DEFAULT 0,
+          platform_cut_cents INTEGER NOT NULL DEFAULT 0,
+          net_cents INTEGER NOT NULL DEFAULT 0,
+          withdrawn_cents INTEGER NOT NULL DEFAULT 0,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (creator_id, year_month)
         )
       `);
 
-      // ─── 为老库补齐积分相关列 ────────────────────────────────
+      // ─── 为老库补齐余额相关列 ────────────────────────────────
       // CREATE TABLE IF NOT EXISTS 对已存在的表是 no-op，所以依赖 ALTER ADD COLUMN
       // IF NOT EXISTS 把新列补到历史表上。新环境这些语句全部 no-op。
 
-      // users 三段式积分 + 提现冻结
+      // users 三段式余额 + 提现冻结
       await client.query(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS purchased_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS purchased_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS earned_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS earned_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_withdrawal_points INTEGER NOT NULL DEFAULT 0`,
-      );
-
-      // wallet_transactions 积分字段
-      await client.query(
-        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS amount_points INTEGER NOT NULL DEFAULT 0`,
-      );
-      await client.query(
-        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS reserved_delta_points INTEGER NOT NULL DEFAULT 0`,
-      );
-      await client.query(
-        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS point_source TEXT DEFAULT NULL`,
-      );
-      await client.query(
-        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS point_batch_id TEXT DEFAULT NULL`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_withdrawal_cents INTEGER NOT NULL DEFAULT 0`,
       );
 
-      // billing_request_reservations 积分字段
+      // wallet_transactions 余额字段
+      await client.query(
+        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS amount_cents INTEGER NOT NULL DEFAULT 0`,
+      );
+      await client.query(
+        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS reserved_delta_cents INTEGER NOT NULL DEFAULT 0`,
+      );
+      await client.query(
+        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS balance_source TEXT DEFAULT NULL`,
+      );
+      await client.query(
+        `ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS balance_grant_id TEXT DEFAULT NULL`,
+      );
+
+      // billing_request_reservations 余额字段
       await client.query(`DO $$
         BEGIN
           IF EXISTS (
@@ -1431,43 +1431,43 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS model_config_id TEXT DEFAULT NULL`,
       );
       await client.query(
-        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS reserved_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS reserved_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS actual_charge_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS actual_charge_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS total_overage_cost_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE billing_request_reservations ADD COLUMN IF NOT EXISTS total_overage_cost_cents INTEGER NOT NULL DEFAULT 0`,
       );
 
-      // monthly_billing_state 积分版防重扣
+      // monthly_billing_state 余额版防重扣
       await client.query(
-        `ALTER TABLE monthly_billing_state ADD COLUMN IF NOT EXISTS billed_overage_cost_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE monthly_billing_state ADD COLUMN IF NOT EXISTS billed_overage_cost_cents INTEGER NOT NULL DEFAULT 0`,
       );
 
-      // creator_earnings_monthly 积分版
+      // creator_earnings_monthly 余额版
       await client.query(
-        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS gross_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS gross_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS platform_cut_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS platform_cut_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS net_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS net_cents INTEGER NOT NULL DEFAULT 0`,
       );
       await client.query(
-        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS withdrawn_points INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE creator_earnings_monthly ADD COLUMN IF NOT EXISTS withdrawn_cents INTEGER NOT NULL DEFAULT 0`,
       );
 
-      // point_batches：赠送积分批次（FIFO 扣减 + 过期管理）
+      // balance_grants：赠送余额批次（FIFO 扣减 + 过期管理）
       await client.query(`
-        CREATE TABLE IF NOT EXISTS point_batches (
+        CREATE TABLE IF NOT EXISTS balance_grants (
           id               TEXT PRIMARY KEY,
           user_id          TEXT NOT NULL REFERENCES users(id),
           source           TEXT NOT NULL,
           granted_by       TEXT DEFAULT NULL,
-          amount_points    INTEGER NOT NULL CHECK (amount_points > 0),
-          remaining_points INTEGER NOT NULL,
+          amount_cents    INTEGER NOT NULL CHECK (amount_cents > 0),
+          remaining_cents INTEGER NOT NULL,
           note             TEXT DEFAULT NULL,
           expires_at       TIMESTAMPTZ DEFAULT NULL,
           status           TEXT NOT NULL DEFAULT 'active',
@@ -1476,13 +1476,13 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         )
       `);
       await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_point_batches_user_active
-         ON point_batches(user_id, expires_at, remaining_points)
+        `CREATE INDEX IF NOT EXISTS idx_balance_grants_user_active
+         ON balance_grants(user_id, expires_at, remaining_cents)
          WHERE status = 'active'`,
       );
       await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_point_batches_expiry_scan
-         ON point_batches(expires_at)
+        `CREATE INDEX IF NOT EXISTS idx_balance_grants_expiry_scan
+         ON balance_grants(expires_at)
          WHERE status = 'active' AND expires_at IS NOT NULL`,
       );
 
@@ -1491,7 +1491,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         CREATE TABLE IF NOT EXISTS creator_withdrawals (
           id                   TEXT PRIMARY KEY,
           creator_id           TEXT NOT NULL REFERENCES users(id),
-          amount_points        INTEGER NOT NULL CHECK (amount_points > 0),
+          amount_cents        INTEGER NOT NULL CHECK (amount_cents > 0),
           amount_yuan          NUMERIC(12,2) NOT NULL,
           status               TEXT NOT NULL DEFAULT 'pending',
           bank_name            TEXT DEFAULT NULL,
@@ -1501,7 +1501,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           tax_type             TEXT DEFAULT NULL,
           company_name         TEXT DEFAULT NULL,
           tax_id               TEXT DEFAULT NULL,
-          platform_fee_points  INTEGER NOT NULL DEFAULT 0,
+          platform_fee_cents  INTEGER NOT NULL DEFAULT 0,
           tax_amount_yuan      NUMERIC(12,2) NOT NULL DEFAULT 0,
           net_amount_yuan      NUMERIC(12,2) NOT NULL DEFAULT 0,
           reviewed_by          TEXT DEFAULT NULL,
@@ -1656,21 +1656,21 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
       await ensureCheckConstraint(client, {
         constraintName:
-          'chk_billing_request_reservations_reserved_points_nonnegative',
+          'chk_billing_request_reservations_reserved_cents_nonnegative',
         tableName: 'billing_request_reservations',
-        expression: 'reserved_points >= 0',
+        expression: 'reserved_cents >= 0',
         cleanupSql: `UPDATE billing_request_reservations
-                     SET reserved_points = 0
-                     WHERE reserved_points < 0`,
+                     SET reserved_cents = 0
+                     WHERE reserved_cents < 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName:
-          'chk_billing_request_reservations_actual_charge_points_nonnegative',
+          'chk_billing_request_reservations_actual_charge_cents_nonnegative',
         tableName: 'billing_request_reservations',
-        expression: 'actual_charge_points >= 0',
+        expression: 'actual_charge_cents >= 0',
         cleanupSql: `UPDATE billing_request_reservations
-                     SET actual_charge_points = 0
-                     WHERE actual_charge_points < 0`,
+                     SET actual_charge_cents = 0
+                     WHERE actual_charge_cents < 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName:
@@ -1683,12 +1683,12 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
       await ensureCheckConstraint(client, {
         constraintName:
-          'chk_billing_request_reservations_total_overage_cost_points_nonnegative',
+          'chk_billing_request_reservations_total_overage_cost_cents_nonnegative',
         tableName: 'billing_request_reservations',
-        expression: 'total_overage_cost_points >= 0',
+        expression: 'total_overage_cost_cents >= 0',
         cleanupSql: `UPDATE billing_request_reservations
-                     SET total_overage_cost_points = 0
-                     WHERE total_overage_cost_points < 0`,
+                     SET total_overage_cost_cents = 0
+                     WHERE total_overage_cost_cents < 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_recharge_payment_config_min_yuan_positive',
@@ -1732,12 +1732,12 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      WHERE status NOT IN ('pending', 'paid', 'failed')`,
       });
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_recharge_orders_amount_points_positive',
+        constraintName: 'chk_recharge_orders_amount_cents_positive',
         tableName: 'recharge_orders',
-        expression: 'amount_points > 0',
+        expression: 'amount_cents > 0',
         cleanupSql: `UPDATE recharge_orders
-                     SET amount_points = 1
-                     WHERE amount_points <= 0`,
+                     SET amount_cents = 1
+                     WHERE amount_cents <= 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_recharge_orders_amount_yuan_positive',
@@ -1748,21 +1748,21 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      WHERE amount_yuan <= 0`,
       });
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_point_batches_status_valid',
-        tableName: 'point_batches',
+        constraintName: 'chk_balance_grants_status_valid',
+        tableName: 'balance_grants',
         expression: `status IN ('active', 'exhausted', 'expired', 'revoked')`,
-        cleanupSql: `UPDATE point_batches
+        cleanupSql: `UPDATE balance_grants
                      SET status = 'active'
                      WHERE status NOT IN ('active', 'exhausted', 'expired', 'revoked')`,
       });
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_point_batches_remaining_points_range',
-        tableName: 'point_batches',
+        constraintName: 'chk_balance_grants_remaining_cents_range',
+        tableName: 'balance_grants',
         expression:
-          'remaining_points >= 0 AND remaining_points <= amount_points',
-        cleanupSql: `UPDATE point_batches
-                     SET remaining_points = LEAST(amount_points, GREATEST(remaining_points, 0))
-                     WHERE remaining_points < 0 OR remaining_points > amount_points`,
+          'remaining_cents >= 0 AND remaining_cents <= amount_cents',
+        cleanupSql: `UPDATE balance_grants
+                     SET remaining_cents = LEAST(amount_cents, GREATEST(remaining_cents, 0))
+                     WHERE remaining_cents < 0 OR remaining_cents > amount_cents`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_creator_withdrawals_status_valid',
@@ -1783,12 +1783,12 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
       await ensureCheckConstraint(client, {
         constraintName:
-          'chk_creator_withdrawals_platform_fee_points_nonnegative',
+          'chk_creator_withdrawals_platform_fee_cents_nonnegative',
         tableName: 'creator_withdrawals',
-        expression: 'platform_fee_points >= 0',
+        expression: 'platform_fee_cents >= 0',
         cleanupSql: `UPDATE creator_withdrawals
-                     SET platform_fee_points = 0
-                     WHERE platform_fee_points < 0`,
+                     SET platform_fee_cents = 0
+                     WHERE platform_fee_cents < 0`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_creator_withdrawals_tax_amount_yuan_nonnegative',
@@ -1807,9 +1807,8 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      WHERE net_amount_yuan < 0`,
       });
 
-      // ─── 历史迁移：把旧 *_cents 列的值搬到 *_points（幂等） ─────
-      // 仅在 *_cents 列还存在且 *_points 未初始化时执行，用 to_regclass 兜底防止
-      // 列不存在报错。这段代码在下方 DROP COLUMN 之前必须成功。
+      // ─── 历史迁移：保留早期分余额列的值（幂等） ─────
+      // 早期版本已经用 *_cents 存储金额；后续余额版本会由 0008 统一改回 cents。
       await client.query(`DO $$
         BEGIN
           IF EXISTS (
@@ -1817,89 +1816,19 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
             WHERE table_name = 'users' AND column_name = 'balance_cents'
           ) THEN
             UPDATE users
-              SET purchased_points = balance_cents,
-                  reserved_points  = reserved_balance_cents
-            WHERE purchased_points = 0
-              AND reserved_points = 0
+              SET purchased_cents = balance_cents,
+                  reserved_cents  = reserved_balance_cents
+            WHERE purchased_cents = 0
+              AND reserved_cents = 0
               AND (balance_cents > 0 OR reserved_balance_cents > 0);
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'wallet_transactions' AND column_name = 'amount_cents'
-          ) THEN
-            UPDATE wallet_transactions
-              SET amount_points = amount_cents,
-                  reserved_delta_points = reserved_delta_cents
-            WHERE amount_points = 0
-              AND reserved_delta_points = 0
-              AND (amount_cents <> 0 OR reserved_delta_cents <> 0);
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'billing_request_reservations' AND column_name = 'reserved_cents'
-          ) THEN
-            UPDATE billing_request_reservations
-              SET reserved_points = reserved_cents,
-                  actual_charge_points = actual_charge_cents,
-                  total_overage_cost_points = total_overage_cost_cents
-            WHERE reserved_points = 0
-              AND actual_charge_points = 0
-              AND total_overage_cost_points = 0
-              AND (reserved_cents > 0 OR actual_charge_cents > 0 OR total_overage_cost_cents > 0);
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'monthly_billing_state' AND column_name = 'billed_overage_cost_cents'
-          ) THEN
-            UPDATE monthly_billing_state
-              SET billed_overage_cost_points = billed_overage_cost_cents
-            WHERE billed_overage_cost_points = 0
-              AND billed_overage_cost_cents > 0;
-          END IF;
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'creator_earnings_monthly' AND column_name = 'gross_cents'
-          ) THEN
-            UPDATE creator_earnings_monthly
-              SET gross_points = gross_cents,
-                  platform_cut_points = platform_cut_cents,
-                  net_points = net_cents,
-                  withdrawn_points = withdrawn_cents
-            WHERE gross_points = 0
-              AND platform_cut_points = 0
-              AND net_points = 0
-              AND withdrawn_points = 0
-              AND (gross_cents > 0 OR platform_cut_cents > 0 OR net_cents > 0 OR withdrawn_cents > 0);
           END IF;
         END $$;`);
 
-      // ─── 清理：DROP 旧 *_cents 列（幂等） ─────────────────────
+      // ─── 清理：DROP 早期余额别名列（幂等） ───────────────────
       await client.query(
         `ALTER TABLE users
            DROP COLUMN IF EXISTS balance_cents,
            DROP COLUMN IF EXISTS reserved_balance_cents`,
-      );
-      await client.query(
-        `ALTER TABLE wallet_transactions
-           DROP COLUMN IF EXISTS amount_cents,
-           DROP COLUMN IF EXISTS reserved_delta_cents`,
-      );
-      await client.query(
-        `ALTER TABLE billing_request_reservations
-           DROP COLUMN IF EXISTS reserved_cents,
-           DROP COLUMN IF EXISTS actual_charge_cents,
-           DROP COLUMN IF EXISTS total_overage_cost_cents`,
-      );
-      await client.query(
-        `ALTER TABLE monthly_billing_state
-           DROP COLUMN IF EXISTS billed_overage_cost_cents`,
-      );
-      await client.query(
-        `ALTER TABLE creator_earnings_monthly
-           DROP COLUMN IF EXISTS gross_cents,
-           DROP COLUMN IF EXISTS platform_cut_cents,
-           DROP COLUMN IF EXISTS net_cents,
-           DROP COLUMN IF EXISTS withdrawn_cents`,
       );
       await client.query(
         `ALTER TABLE conversation_logs
@@ -2108,6 +2037,152 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         ALTER TABLE users
           ADD COLUMN IF NOT EXISTS soul_content TEXT NOT NULL DEFAULT ''
       `);
+    },
+  },
+  {
+    id: '0008_balance_cents_schema',
+    description: '将历史 point 列按分余额语义保留',
+    async up(client) {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'purchased_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'purchased_cents') THEN
+            ALTER TABLE users RENAME COLUMN purchased_points TO purchased_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'bonus_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'bonus_cents') THEN
+            ALTER TABLE users RENAME COLUMN bonus_points TO bonus_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'earned_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'earned_cents') THEN
+            ALTER TABLE users RENAME COLUMN earned_points TO earned_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'reserved_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'reserved_cents') THEN
+            ALTER TABLE users RENAME COLUMN reserved_points TO reserved_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pending_withdrawal_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pending_withdrawal_cents') THEN
+            ALTER TABLE users RENAME COLUMN pending_withdrawal_points TO pending_withdrawal_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'amount_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'amount_cents') THEN
+            ALTER TABLE wallet_transactions RENAME COLUMN amount_points TO amount_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'reserved_delta_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'reserved_delta_cents') THEN
+            ALTER TABLE wallet_transactions RENAME COLUMN reserved_delta_points TO reserved_delta_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'point_source')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'balance_source') THEN
+            ALTER TABLE wallet_transactions RENAME COLUMN point_source TO balance_source;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'point_batch_id')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wallet_transactions' AND column_name = 'balance_grant_id') THEN
+            ALTER TABLE wallet_transactions RENAME COLUMN point_batch_id TO balance_grant_id;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'recharge_orders' AND column_name = 'amount_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'recharge_orders' AND column_name = 'amount_cents') THEN
+            ALTER TABLE recharge_orders RENAME COLUMN amount_points TO amount_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_billing_state' AND column_name = 'billed_overage_cost_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'monthly_billing_state' AND column_name = 'billed_overage_cost_cents') THEN
+            ALTER TABLE monthly_billing_state RENAME COLUMN billed_overage_cost_points TO billed_overage_cost_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'reserved_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'reserved_cents') THEN
+            ALTER TABLE billing_request_reservations RENAME COLUMN reserved_points TO reserved_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'actual_charge_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'actual_charge_cents') THEN
+            ALTER TABLE billing_request_reservations RENAME COLUMN actual_charge_points TO actual_charge_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'total_overage_cost_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'billing_request_reservations' AND column_name = 'total_overage_cost_cents') THEN
+            ALTER TABLE billing_request_reservations RENAME COLUMN total_overage_cost_points TO total_overage_cost_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'gross_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'gross_cents') THEN
+            ALTER TABLE creator_earnings_monthly RENAME COLUMN gross_points TO gross_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'platform_cut_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'platform_cut_cents') THEN
+            ALTER TABLE creator_earnings_monthly RENAME COLUMN platform_cut_points TO platform_cut_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'net_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'net_cents') THEN
+            ALTER TABLE creator_earnings_monthly RENAME COLUMN net_points TO net_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'withdrawn_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_earnings_monthly' AND column_name = 'withdrawn_cents') THEN
+            ALTER TABLE creator_earnings_monthly RENAME COLUMN withdrawn_points TO withdrawn_cents;
+          END IF;
+
+          IF to_regclass('public.point_batches') IS NOT NULL
+             AND to_regclass('public.balance_grants') IS NULL THEN
+            ALTER TABLE point_batches RENAME TO balance_grants;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'balance_grants' AND column_name = 'amount_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'balance_grants' AND column_name = 'amount_cents') THEN
+            ALTER TABLE balance_grants RENAME COLUMN amount_points TO amount_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'balance_grants' AND column_name = 'remaining_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'balance_grants' AND column_name = 'remaining_cents') THEN
+            ALTER TABLE balance_grants RENAME COLUMN remaining_points TO remaining_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_withdrawals' AND column_name = 'amount_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_withdrawals' AND column_name = 'amount_cents') THEN
+            ALTER TABLE creator_withdrawals RENAME COLUMN amount_points TO amount_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_withdrawals' AND column_name = 'platform_fee_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'creator_withdrawals' AND column_name = 'platform_fee_cents') THEN
+            ALTER TABLE creator_withdrawals RENAME COLUMN platform_fee_points TO platform_fee_cents;
+          END IF;
+
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'official_model_configs' AND column_name = 'input_token_price_per_million_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'official_model_configs' AND column_name = 'input_token_price_per_million_cents') THEN
+            ALTER TABLE official_model_configs RENAME COLUMN input_token_price_per_million_points TO input_token_price_per_million_cents;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'official_model_configs' AND column_name = 'output_token_price_per_million_points')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'official_model_configs' AND column_name = 'output_token_price_per_million_cents') THEN
+            ALTER TABLE official_model_configs RENAME COLUMN output_token_price_per_million_points TO output_token_price_per_million_cents;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS purchased_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS bonus_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS earned_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS reserved_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS pending_withdrawal_cents INTEGER NOT NULL DEFAULT 0
+      `);
+      await client.query(`
+        ALTER TABLE wallet_transactions
+          ADD COLUMN IF NOT EXISTS amount_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS reserved_delta_cents INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS balance_source TEXT DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS balance_grant_id TEXT DEFAULT NULL
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_balance_grants_user_active
+         ON balance_grants(user_id, expires_at, remaining_cents)
+         WHERE status = 'active'`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_balance_grants_expiry_scan
+         ON balance_grants(expires_at)
+         WHERE status = 'active' AND expires_at IS NOT NULL`,
+      );
+      await client.query(`DROP INDEX IF EXISTS idx_point_batches_user_active`);
+      await client.query(`DROP INDEX IF EXISTS idx_point_batches_expiry_scan`);
     },
   },
 ];

@@ -15,8 +15,8 @@ const draft: ProviderDraft = {
   base_url: 'https://api.anthropic.com',
   model_name: 'claude-sonnet-4-5',
   context_window_tokens: 0,
-  input_token_price_per_million_points: 1000,
-  output_token_price_per_million_points: 5000,
+  input_token_price_per_million_cents: 1000,
+  output_token_price_per_million_cents: 5000,
 };
 
 describe('provider draft helpers', () => {
@@ -42,8 +42,8 @@ describe('provider draft helpers', () => {
           model_name: 'claude-sonnet-4-5',
           context_window_tokens: null,
           api_key_secret_key: 'official-model:provider-1:secret',
-          input_token_price_per_million_points: 1000,
-          output_token_price_per_million_points: 5000,
+          input_token_price_per_million_cents: 1000,
+          output_token_price_per_million_cents: 5000,
           auth_mode: 'anthropic_api_key',
           has_secret: true,
           secret_source: 'database',

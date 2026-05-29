@@ -6,6 +6,7 @@ import { Layers, Puzzle, Users, Search } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { useSkillMarket } from '@/features/skills/hooks/use-skill-market';
+import { formatCents } from '@/lib/money';
 import { useToast } from '@/lib/use-toast';
 
 function getRankBadgeClass(rank: number): string {
@@ -147,7 +148,7 @@ export default function DiscoverPage() {
                 {market.filteredSkills.map((s, index) => {
                   const minPrice =
                     s.price_tiers.length > 0
-                      ? Math.min(...s.price_tiers.map((t) => t.price_points))
+                      ? Math.min(...s.price_tiers.map((t) => t.price_cents))
                       : 0;
                   const rank = index + 1;
 
@@ -190,7 +191,7 @@ export default function DiscoverPage() {
                       <div className="shrink-0 text-right">
                         <span className="block text-[13px] font-bold text-ink">
                           {minPrice > 0
-                            ? `${minPrice.toLocaleString()} 积分`
+                            ? formatCents(minPrice)
                             : '免费'}
                         </span>
                         <span className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] text-foreground-muted">

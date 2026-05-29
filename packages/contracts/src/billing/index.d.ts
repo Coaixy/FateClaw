@@ -17,17 +17,17 @@ export interface DailyUsageRowDto {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  official_model_charge_points: number;
+  official_model_charge_cents: number;
 }
 
 export interface WalletTransactionDto {
   id: string;
   user_id: string;
   kind: string;
-  amount_points: number;
-  reserved_delta_points: number;
-  point_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
-  point_batch_id: string | null;
+  amount_cents: number;
+  reserved_delta_cents: number;
+  balance_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+  balance_grant_id: string | null;
   request_id: string | null;
   note: string | null;
   metadata: unknown;
@@ -36,13 +36,13 @@ export interface WalletTransactionDto {
 
 export interface BillingStatusDto {
   monthly_tokens_used: number;
-  estimated_monthly_total_points: number;
-  purchased_points: number;
-  bonus_points: number;
-  earned_points: number;
-  reserved_points: number;
-  available_points: number;
-  pending_withdrawal_points: number;
+  estimated_monthly_total_cents: number;
+  purchased_cents: number;
+  bonus_cents: number;
+  earned_cents: number;
+  reserved_cents: number;
+  available_cents: number;
+  pending_withdrawal_cents: number;
 }
 
 export type RechargePayTypeDto = 'alipay' | 'wechat';
@@ -56,7 +56,7 @@ export interface RechargeOrderDto {
   provider_trade_id: string | null;
   pay_type: RechargePayTypeDto;
   amount_yuan: string;
-  amount_points: number;
+  amount_cents: number;
   pay_url: string | null;
   status: RechargeOrderStatusDto;
   paid_at: string | null;
@@ -72,7 +72,7 @@ export interface CreateRechargeOrderResponseDto {
 
 export interface RechargeStatsDto {
   total_paid_orders: number;
-  total_recharge_points: number;
+  total_recharge_cents: number;
   total_recharge_yuan: string;
   last_paid_at: string | null;
 }

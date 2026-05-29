@@ -509,7 +509,7 @@ Authorization: Bearer <token>
 - `POST /api/skills/creator/:creatorId/bundle/subscribe`：订阅创作者整包
 - `POST /api/skills/creator/withdrawal/request`：发起提现申请
 - `GET /api/skills/creator/withdrawal/list`：提现记录
-- `GET /api/skills/creator/withdrawal/balance`：可提现积分汇总
+- `GET /api/skills/creator/withdrawal/balance`：可提现金额汇总
 
 ---
 
@@ -527,9 +527,9 @@ Authorization: Bearer <token>
   "is_active": true,
   "subscribed_at": "2026-03-01T00:00:00.000Z",
   "expires_at": "2026-04-01T00:00:00.000Z",
-  "available_points": 12000,
-  "purchased_points": 10000,
-  "bonus_points": 2000
+  "available_cents": 12000,
+  "purchased_cents": 10000,
+  "bonus_cents": 2000
 }
 ```
 
@@ -555,7 +555,7 @@ Authorization: Bearer <token>
     "input_tokens": 24000,
     "output_tokens": 6200,
     "total_tokens": 30200,
-    "official_model_charge_points": 36
+    "official_model_charge_cents": 36
   }
 ]
 ```
@@ -564,7 +564,7 @@ Authorization: Bearer <token>
 
 ### POST /api/billing/activate
 
-订阅激活入口当前暂停开放，套餐消费应先通过钱包充值积分后由后续订阅流程扣费。需认证。
+订阅激活入口当前暂停开放，套餐消费应先通过钱包充值余额后由后续订阅流程扣费。需认证。
 
 **Response 403**
 
@@ -598,7 +598,7 @@ Authorization: Bearer <token>
     "trade_id": "rc1770000000000123456",
     "pay_type": "alipay",
     "amount_yuan": "50.00",
-    "amount_points": 5000,
+    "amount_cents": 5000,
     "status": "pending"
   }
 }
@@ -621,7 +621,7 @@ Authorization: Bearer <token>
 ```json
 {
   "total_paid_orders": 3,
-  "total_recharge_points": 15000,
+  "total_recharge_cents": 15000,
   "total_recharge_yuan": "150.00",
   "last_paid_at": "2026-04-27T10:00:00.000Z"
 }

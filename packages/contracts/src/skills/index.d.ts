@@ -7,7 +7,7 @@ import type { OkResponse } from '../common/api.js';
 export interface SkillPriceTierDto {
   key: string;
   label: string;
-  price_points: number;
+  price_cents: number;
   duration_days: number | null;
   description?: string;
 }
@@ -97,7 +97,7 @@ export interface MarketSkillDto {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_points'>>;
+  price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_cents'>>;
   stat_subscriber_count: number;
   share_token: string | null;
   author_label: string;
@@ -157,7 +157,7 @@ export interface BundleUnsubscribeResultDto {
 export interface CreatorBundleTierDto {
   key: string;
   label: string;
-  price_points: number;
+  price_cents: number;
   duration_days: number | null;
   description?: string;
 }
@@ -165,15 +165,15 @@ export interface CreatorBundleTierDto {
 export interface CreatorEarningsMonthlyDto {
   creator_id: string;
   year_month: string;
-  gross_points: number;
-  platform_cut_points: number;
-  net_points: number;
-  withdrawn_points: number;
+  gross_cents: number;
+  platform_cut_cents: number;
+  net_cents: number;
+  withdrawn_cents: number;
 }
 
 export interface CreatorWithdrawalDto {
   id: string;
-  amount_points: number;
+  amount_cents: number;
   amount_yuan: string;
   status: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
   bank_name?: string | null;
@@ -181,7 +181,7 @@ export interface CreatorWithdrawalDto {
   account_name?: string | null;
   id_number_masked?: string | null;
   tax_type?: 'personal' | 'company' | null;
-  platform_fee_points?: number;
+  platform_fee_cents?: number;
   tax_amount_yuan?: string;
   net_amount_yuan?: string;
   review_note?: string | null;
@@ -191,15 +191,15 @@ export interface CreatorWithdrawalDto {
 }
 
 export interface WithdrawalBalanceDto {
-  earned_points: number;
-  pending_withdrawal_points: number;
-  withdrawable_points: number;
+  earned_cents: number;
+  pending_withdrawal_cents: number;
+  withdrawable_cents: number;
   withdrawable_yuan: string;
 }
 
 export interface WithdrawalRequestResponseDto {
   id: string;
-  amount_points: number;
+  amount_cents: number;
   amount_yuan: string;
   status: string;
   created_at: string;

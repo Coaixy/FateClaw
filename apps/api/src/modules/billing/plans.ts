@@ -1,10 +1,10 @@
 import {
   getBillingRequestReservationByRequestId,
-  getMonthlyModelChargePoints,
+  getMonthlyModelChargeCents,
   getUserById,
-  releaseUserReservation,
-  reserveUserPoints,
-  settleUserModelChargePoints,
+  releaseUserBalanceReservation,
+  reserveUserBalanceCents,
+  settleUserModelChargeCents,
 } from '../../infrastructure/db.js';
 import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
 import { resolveContextWindow } from '../../shared/model-context-window.js';
@@ -13,7 +13,7 @@ import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 export interface BillingReservation {
   userId: string;
   requestId: string;
-  reservedPoints: number;
+  reservedCents: number;
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
   modelConfigId: string;
@@ -21,17 +21,17 @@ export interface BillingReservation {
 }
 
 export interface WalletBalanceSummary {
-  purchasedPoints: number;
-  bonusPoints: number;
-  earnedPoints: number;
-  reservedPoints: number;
-  availablePoints: number;
-  pendingWithdrawalPoints: number;
+  purchasedCents: number;
+  bonusCents: number;
+  earnedCents: number;
+  reservedCents: number;
+  availableCents: number;
+  pendingWithdrawalCents: number;
 }
 
 export interface MonthlyMeteredBillingSummary {
   usedTokens: number;
-  chargedPoints: number;
+  chargedCents: number;
 }
 
 const REQUEST_RESERVE_INPUT_RATIO = 0.75;
@@ -40,16 +40,16 @@ function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-function calculateTokenCostPoints(input: {
+function calculateTokenCostCents(input: {
   promptTokens: number;
   completionTokens: number;
-  inputTokenPricePerMillionPoints: number;
-  outputTokenPricePerMillionPoints: number;
+  inputTokenPricePerMillionCents: number;
+  outputTokenPricePerMillionCents: number;
 }): number {
   const inputCost =
-    (input.promptTokens * input.inputTokenPricePerMillionPoints) / 1_000_000;
+    (input.promptTokens * input.inputTokenPricePerMillionCents) / 1_000_000;
   const outputCost =
-    (input.completionTokens * input.outputTokenPricePerMillionPoints) /
+    (input.completionTokens * input.outputTokenPricePerMillionCents) /
     1_000_000;
   return Math.ceil(inputCost + outputCost);
 }
@@ -57,7 +57,7 @@ function calculateTokenCostPoints(input: {
 function estimateRequestReserve(runtime: LlmRuntimeSnapshot): {
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
-  estimatedCostPoints: number;
+  estimatedCostCents: number;
 } {
   const contextWindow = resolveContextWindow({
     model: runtime.model,
@@ -73,13 +73,13 @@ function estimateRequestReserve(runtime: LlmRuntimeSnapshot): {
   return {
     estimatedInputTokens,
     estimatedOutputTokens,
-    estimatedCostPoints: calculateTokenCostPoints({
+    estimatedCostCents: calculateTokenCostCents({
       promptTokens: estimatedInputTokens,
       completionTokens: estimatedOutputTokens,
-      inputTokenPricePerMillionPoints:
-        runtime.inputTokenPricePerMillionPoints ?? 0,
-      outputTokenPricePerMillionPoints:
-        runtime.outputTokenPricePerMillionPoints ?? 0,
+      inputTokenPricePerMillionCents:
+        runtime.inputTokenPricePerMillionCents ?? 0,
+      outputTokenPricePerMillionCents:
+        runtime.outputTokenPricePerMillionCents ?? 0,
     }),
   };
 }
@@ -94,9 +94,9 @@ export async function reserveBillingForRequest(input: {
   }
   const reserve = estimateRequestReserve(input.runtime);
   const yearMonth = currentYearMonth();
-  const reservation = await reserveUserPoints({
+  const reservation = await reserveUserBalanceCents({
     userId: input.userId,
-    amountPoints: reserve.estimatedCostPoints,
+    amountCents: reserve.estimatedCostCents,
     requestId: input.requestId,
     yearMonth,
     modelConfigId: input.runtime.modelConfigId,
@@ -114,7 +114,7 @@ export async function reserveBillingForRequest(input: {
   return {
     userId: input.userId,
     requestId: input.requestId,
-    reservedPoints: reservation.reservedPoints,
+    reservedCents: reservation.reservedCents,
     estimatedInputTokens: reserve.estimatedInputTokens,
     estimatedOutputTokens: reserve.estimatedOutputTokens,
     modelConfigId: input.runtime.modelConfigId,
@@ -127,7 +127,7 @@ export async function releaseBillingReservation(
   note: string,
 ): Promise<void> {
   if (!reservation) return;
-  await releaseUserReservation(reservation.requestId, note);
+  await releaseUserBalanceReservation(reservation.requestId, note);
 }
 
 export async function settleBillingReservation(input: {
@@ -144,30 +144,30 @@ export async function settleBillingReservation(input: {
   );
   if (!reservation) return 0;
   const totalTokens = input.promptTokens + input.completionTokens;
-  const costPoints = calculateTokenCostPoints({
+  const costCents = calculateTokenCostCents({
     promptTokens: input.promptTokens,
     completionTokens: input.completionTokens,
-    inputTokenPricePerMillionPoints:
-      input.runtime.inputTokenPricePerMillionPoints ?? 0,
-    outputTokenPricePerMillionPoints:
-      input.runtime.outputTokenPricePerMillionPoints ?? 0,
+    inputTokenPricePerMillionCents:
+      input.runtime.inputTokenPricePerMillionCents ?? 0,
+    outputTokenPricePerMillionCents:
+      input.runtime.outputTokenPricePerMillionCents ?? 0,
   });
-  const result = await settleUserModelChargePoints(
+  const result = await settleUserModelChargeCents(
     input.requestId,
     totalTokens,
-    costPoints,
+    costCents,
   );
-  return result.actualChargePoints;
+  return result.actualChargeCents;
 }
 
 export async function getMonthlyMeteredBillingSummary(
   userId: string,
 ): Promise<MonthlyMeteredBillingSummary> {
-  const [usedTokens, chargedPoints] = await Promise.all([
+  const [usedTokens, chargedCents] = await Promise.all([
     getMonthlyTokenUsage(userId),
-    getMonthlyModelChargePoints(userId),
+    getMonthlyModelChargeCents(userId),
   ]);
-  return { usedTokens, chargedPoints };
+  return { usedTokens, chargedCents };
 }
 
 export async function getWalletBalanceSummary(
@@ -176,23 +176,23 @@ export async function getWalletBalanceSummary(
   const user = await getUserById(userId);
   if (!user) {
     return {
-      purchasedPoints: 0,
-      bonusPoints: 0,
-      earnedPoints: 0,
-      reservedPoints: 0,
-      availablePoints: 0,
-      pendingWithdrawalPoints: 0,
+      purchasedCents: 0,
+      bonusCents: 0,
+      earnedCents: 0,
+      reservedCents: 0,
+      availableCents: 0,
+      pendingWithdrawalCents: 0,
     };
   }
   return {
-    purchasedPoints: user.purchased_points,
-    bonusPoints: user.bonus_points,
-    earnedPoints: user.earned_points,
-    reservedPoints: user.reserved_points,
-    availablePoints: Math.max(
+    purchasedCents: user.purchased_cents,
+    bonusCents: user.bonus_cents,
+    earnedCents: user.earned_cents,
+    reservedCents: user.reserved_cents,
+    availableCents: Math.max(
       0,
-      user.purchased_points + user.bonus_points - user.reserved_points,
+      user.purchased_cents + user.bonus_cents - user.reserved_cents,
     ),
-    pendingWithdrawalPoints: user.pending_withdrawal_points,
+    pendingWithdrawalCents: user.pending_withdrawal_cents,
   };
 }

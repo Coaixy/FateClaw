@@ -57,8 +57,8 @@ export interface EffectiveLlmRuntimeConfig {
   model: string;
   contextWindowTokens: number;
   maxOutputTokens: number;
-  inputTokenPricePerMillionPoints: number;
-  outputTokenPricePerMillionPoints: number;
+  inputTokenPricePerMillionCents: number;
+  outputTokenPricePerMillionCents: number;
 }
 
 export type EffectiveAgentRuntimeConfig = EffectiveLlmRuntimeConfig;
@@ -224,9 +224,9 @@ async function resolveOfficialRuntime(
     contextWindowTokens,
     // 输出上限不再从后台配置读取，避免把“上下文窗口”误传成供应商 API 的 max_tokens。
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    inputTokenPricePerMillionPoints: model.input_token_price_per_million_points,
-    outputTokenPricePerMillionPoints:
-      model.output_token_price_per_million_points,
+    inputTokenPricePerMillionCents: model.input_token_price_per_million_cents,
+    outputTokenPricePerMillionCents:
+      model.output_token_price_per_million_cents,
   };
 }
 
@@ -267,8 +267,8 @@ async function resolveCustomRuntime(
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    inputTokenPricePerMillionPoints: 0,
-    outputTokenPricePerMillionPoints: 0,
+    inputTokenPricePerMillionCents: 0,
+    outputTokenPricePerMillionCents: 0,
   };
 }
 
@@ -371,9 +371,9 @@ export async function setOfficialModelSecret(args: {
     baseUrl: model.base_url,
     modelName: model.model_name,
     apiKeySecretKey: secretKey,
-    inputTokenPricePerMillionPoints: model.input_token_price_per_million_points,
-    outputTokenPricePerMillionPoints:
-      model.output_token_price_per_million_points,
+    inputTokenPricePerMillionCents: model.input_token_price_per_million_cents,
+    outputTokenPricePerMillionCents:
+      model.output_token_price_per_million_cents,
     extraJson: {
       ...(model.extra_json ?? {}),
       auth_mode: args.authMode ?? defaultAuthMode(model.pi_api),
@@ -398,8 +398,8 @@ export async function createOfficialModel(args: {
   priority?: number;
   baseUrl?: string | null;
   modelName: string;
-  inputTokenPricePerMillionPoints?: number;
-  outputTokenPricePerMillionPoints?: number;
+  inputTokenPricePerMillionCents?: number;
+  outputTokenPricePerMillionCents?: number;
   contextWindowTokens?: number | null;
   description?: string;
   secretValue?: string;
@@ -437,9 +437,9 @@ export async function createOfficialModel(args: {
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
     apiKeySecretKey: secretKey,
-    inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints ?? 0,
-    outputTokenPricePerMillionPoints:
-      args.outputTokenPricePerMillionPoints ?? 0,
+    inputTokenPricePerMillionCents: args.inputTokenPricePerMillionCents ?? 0,
+    outputTokenPricePerMillionCents:
+      args.outputTokenPricePerMillionCents ?? 0,
     extraJson,
   });
   await createConfigAuditLog({
@@ -462,8 +462,8 @@ export async function updateOfficialModel(args: {
   priority: number;
   baseUrl?: string | null;
   modelName: string;
-  inputTokenPricePerMillionPoints: number;
-  outputTokenPricePerMillionPoints: number;
+  inputTokenPricePerMillionCents: number;
+  outputTokenPricePerMillionCents: number;
   contextWindowTokens?: number | null;
   description?: string;
   actor?: string;
@@ -483,8 +483,8 @@ export async function updateOfficialModel(args: {
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
     apiKeySecretKey: before.api_key_secret_key,
-    inputTokenPricePerMillionPoints: args.inputTokenPricePerMillionPoints,
-    outputTokenPricePerMillionPoints: args.outputTokenPricePerMillionPoints,
+    inputTokenPricePerMillionCents: args.inputTokenPricePerMillionCents,
+    outputTokenPricePerMillionCents: args.outputTokenPricePerMillionCents,
     extraJson: withModelDescription(
       withModelContextWindowTokens(
         before.extra_json,

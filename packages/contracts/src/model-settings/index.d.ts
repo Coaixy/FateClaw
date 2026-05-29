@@ -27,8 +27,8 @@ export interface OfficialModelDto {
   base_url: string | null;
   model_name: string;
   context_window_tokens: number | null;
-  input_token_price_per_million_points: number;
-  output_token_price_per_million_points: number;
+  input_token_price_per_million_cents: number;
+  output_token_price_per_million_cents: number;
   has_secret: boolean;
   auth_mode: ModelAuthModeDto;
 }

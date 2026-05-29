@@ -9,11 +9,11 @@ const USER_SELECT_COLUMNS = `
   u.phone_verified,
   u.password_hash,
   u.role,
-  u.purchased_points,
-  u.bonus_points,
-  u.earned_points,
-  u.reserved_points,
-  u.pending_withdrawal_points,
+  u.purchased_cents,
+  u.bonus_cents,
+  u.earned_cents,
+  u.reserved_cents,
+  u.pending_withdrawal_cents,
   u.soul_content,
   u.created_at
 `;
@@ -50,7 +50,7 @@ export async function createUser(user: User): Promise<void> {
   await getDbPool().query(
     `INSERT INTO users
        (id, phone, phone_verified, password_hash, role,
-        purchased_points, bonus_points, earned_points, reserved_points, pending_withdrawal_points,
+        purchased_cents, bonus_cents, earned_cents, reserved_cents, pending_withdrawal_cents,
         created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
@@ -59,11 +59,11 @@ export async function createUser(user: User): Promise<void> {
       user.phone_verified,
       user.password_hash,
       user.role,
-      user.purchased_points,
-      user.bonus_points,
-      user.earned_points,
-      user.reserved_points,
-      user.pending_withdrawal_points,
+      user.purchased_cents,
+      user.bonus_cents,
+      user.earned_cents,
+      user.reserved_cents,
+      user.pending_withdrawal_cents,
       user.created_at,
     ],
   );

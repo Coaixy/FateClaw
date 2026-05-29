@@ -26,7 +26,7 @@ export function WithdrawalWorkspace() {
         </Link>
         <h2 className="text-base font-semibold tracking-tight">创作者提现</h2>
         <p className="text-[12px] text-muted leading-relaxed break-words">
-          100 积分 = 1 元人民币。申请后平台将于 3–5
+          提现金额按软妹币余额结算。申请后平台将于 3–5
           个工作日内完成税务核验和打款。
         </p>
       </div>

@@ -8,6 +8,7 @@ import {
   type WalletTransaction,
 } from '@/lib/admin-api';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
+import { formatCents, formatSignedCents } from '@/lib/money';
 import {
   Activity,
   AlertTriangle,
@@ -34,10 +35,6 @@ function fmt(n: number) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toLocaleString();
-}
-
-function fmtPoints(points: number) {
-  return `${points.toLocaleString()} 积分`;
 }
 
 function formatDate(iso: string | null) {
@@ -319,30 +316,30 @@ function UserRow({
   const handleAdjustBalance = async () => {
     const amount = parseInt(balanceDelta, 10);
     if (!amount) {
-      setMsg('请输入有效的调整积分数量');
+      setMsg('请输入有效的调整金额（分）');
       return;
     }
     setAdjustingBalance(true);
     setMsg('');
     try {
-      await admin.adjustPurchasedPoints(user.id, {
-        amount_points: amount,
+      await admin.adjustPurchasedBalance(user.id, {
+        amount_cents: amount,
         note: balanceNote || undefined,
       });
       setBalanceDelta('');
       setBalanceNote('');
-      setMsg('积分已更新');
+      setMsg('余额已更新');
       void onRefresh();
       void loadDetail();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '积分调整失败');
+      setMsg(err instanceof Error ? err.message : '余额调整失败');
     } finally {
       setAdjustingBalance(false);
     }
   };
 
   const meaningfulTransactions = transactions
-    .filter((tx) => tx.amount_points !== 0)
+    .filter((tx) => tx.amount_cents !== 0)
     .slice(0, 8);
 
   return (
@@ -368,14 +365,14 @@ function UserRow({
               <span>ID {user.id.slice(0, 8)}</span>
               <span className="md:hidden">{user.account_count} 个账号</span>
               <span className="md:hidden">
-                可用 {fmtPoints(user.available_points)}
+                可用 {formatCents(user.available_cents)}
               </span>
             </div>
           </div>
         </div>
 
         <DataCell label="账号" value={`${user.account_count} 个`} />
-        <DataCell label="可用积分" value={fmtPoints(user.available_points)} />
+        <DataCell label="可用余额" value={formatCents(user.available_cents)} />
         <DataCell label="总 Token" value={fmt(totalTokens(user))} />
 
         <div className="hidden justify-end md:flex">
@@ -411,7 +408,7 @@ function UserRow({
                       <span>本月 Token {fmt(user.monthly_tokens_used)}</span>
                       <span>
                         官方模型扣费{' '}
-                        {fmtPoints(user.estimated_monthly_total_points)}
+                        {formatCents(user.estimated_monthly_total_cents)}
                       </span>
                     </div>
                   </section>
@@ -422,31 +419,31 @@ function UserRow({
                         size={14}
                         className="text-muted"
                       />
-                      <h4 className="text-[13px] font-semibold">积分余额</h4>
+                      <h4 className="text-[13px] font-semibold">账户余额</h4>
                     </div>
                     <div className="mb-3 grid overflow-hidden rounded-lg border border-hairline bg-hairline [gap:1px] sm:grid-cols-4">
                       <WalletMetric
                         label="充值"
-                        value={detail.user.purchased_points.toLocaleString()}
+                        value={formatCents(detail.user.purchased_cents)}
                       />
                       <WalletMetric
                         label="赠送"
-                        value={detail.user.bonus_points.toLocaleString()}
+                        value={formatCents(detail.user.bonus_cents)}
                       />
                       <WalletMetric
                         label="冻结"
-                        value={detail.user.reserved_points.toLocaleString()}
+                        value={formatCents(detail.user.reserved_cents)}
                       />
                       <WalletMetric
                         label="可用"
-                        value={detail.user.available_points.toLocaleString()}
+                        value={formatCents(detail.user.available_cents)}
                       />
                     </div>
 
                     <div className="grid gap-2 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
                       <label className="min-w-0">
                         <span className="mb-1 block text-[12px] text-muted">
-                          调整积分数量
+                          调整金额（分）
                         </span>
                         <input
                           type="number"
@@ -464,7 +461,7 @@ function UserRow({
                           type="text"
                           value={balanceNote}
                           onChange={(e) => setBalanceNote(e.target.value)}
-                          placeholder="例如：人工充值 10000 积分"
+                          placeholder="例如：人工充值 10000 分"
                           className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
                         />
                       </label>
@@ -477,7 +474,7 @@ function UserRow({
                         {adjustingBalance && (
                           <Loader2 size={12} className="animate-spin" />
                         )}
-                        调整积分
+                        调整余额
                       </button>
                     </div>
                   </section>
@@ -540,13 +537,12 @@ function UserRow({
                             </div>
                             <div
                               className={`font-mono tabular-nums sm:text-right ${
-                                tx.amount_points > 0
+                                tx.amount_cents > 0
                                   ? 'text-success'
                                   : 'text-error'
                               }`}
                             >
-                              {tx.amount_points > 0 ? '+' : ''}
-                              {tx.amount_points.toLocaleString()} 积分
+                              {formatSignedCents(tx.amount_cents)}
                             </div>
                           </div>
                         ))}
@@ -724,8 +720,8 @@ export default function AdminUsersPage() {
 
   const summary = useMemo(() => {
     const totalAccounts = users.reduce((sum, u) => sum + u.account_count, 0);
-    const totalAvailablePoints = users.reduce(
-      (sum, u) => sum + u.available_points,
+    const totalAvailableCents = users.reduce(
+      (sum, u) => sum + u.available_cents,
       0,
     );
     const todayMessages = users.reduce(
@@ -735,10 +731,10 @@ export default function AdminUsersPage() {
 
     return {
       totalAccounts,
-      totalAvailablePoints,
+      totalAvailableCents,
       todayMessages,
-      chargedPoints: users.reduce(
-        (sum, u) => sum + u.estimated_monthly_total_points,
+      chargedCents: users.reduce(
+        (sum, u) => sum + u.estimated_monthly_total_cents,
         0,
       ),
     };
@@ -791,7 +787,7 @@ export default function AdminUsersPage() {
             </button>
           </div>
           <p className="mt-1 text-[12px] text-muted">
-            管理积分余额、绑定账号和用户级操作
+            管理账户余额、绑定账号和用户级操作
           </p>
         </div>
 
@@ -822,8 +818,8 @@ export default function AdminUsersPage() {
         <SummaryCard
           icon={Coins}
           label="官方扣费"
-          value={fmt(summary.chargedPoints)}
-          sub="本月官方模型积分"
+          value={formatCents(summary.chargedCents)}
+          sub="本月官方模型扣费"
         />
         <SummaryCard
           icon={Smartphone}
@@ -833,8 +829,8 @@ export default function AdminUsersPage() {
         />
         <SummaryCard
           icon={WalletCards}
-          label="可用积分"
-          value={fmt(summary.totalAvailablePoints)}
+          label="可用余额"
+          value={formatCents(summary.totalAvailableCents)}
           sub={`今日消息 ${fmt(summary.todayMessages)}`}
         />
       </div>

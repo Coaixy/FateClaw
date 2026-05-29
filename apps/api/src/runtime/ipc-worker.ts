@@ -72,8 +72,8 @@ function llmRuntimeToSnapshot(
     baseUrl: runtime.baseUrl || undefined,
     authMode: runtime.authMode,
     providerKey: runtime.providerKey,
-    inputTokenPricePerMillionPoints: runtime.inputTokenPricePerMillionPoints,
-    outputTokenPricePerMillionPoints: runtime.outputTokenPricePerMillionPoints,
+    inputTokenPricePerMillionCents: runtime.inputTokenPricePerMillionCents,
+    outputTokenPricePerMillionCents: runtime.outputTokenPricePerMillionCents,
   };
 }
 
@@ -290,7 +290,7 @@ export function submitInboxRequest(input: {
             type: input.type,
             autoDeliver: input.autoDeliver ?? true,
             toUserId: input.toUserId,
-            reservedPoints: billingReservation?.reservedPoints ?? 0,
+            reservedCents: billingReservation?.reservedCents ?? 0,
           },
           '已提交收件箱请求到 Redis',
         );
@@ -498,7 +498,7 @@ export function submitAiChatInboxRequest(input: {
             requestId,
             sessionId: input.sessionId,
             outboxQueue: aiChatOutboxQueue,
-            reservedPoints: billingReservation?.reservedPoints ?? 0,
+            reservedCents: billingReservation?.reservedCents ?? 0,
           },
           'AI Chat 请求已提交到 Redis',
         );

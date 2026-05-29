@@ -6,7 +6,7 @@ import type {
   RechargeStatsDto,
 } from '@fateclaw/contracts/billing';
 
-import { POINTS_PER_YUAN } from '../../infrastructure/config.js';
+import { CENTS_PER_YUAN } from '../../infrastructure/config.js';
 import {
   getRechargePaymentConfig,
   getRechargeOrderByTradeId,
@@ -73,7 +73,7 @@ export interface RechargeCallbackUrls {
 
 interface ParsedRechargeAmount {
   amountYuan: string;
-  amountPoints: number;
+  amountCents: number;
 }
 
 type EpayBaseConfig = Pick<
@@ -154,23 +154,23 @@ function parseRechargeAmount(
   const [yuanPart, centPart = ''] = source.split('.');
   const yuan = Number.parseInt(yuanPart, 10);
   const cents = Number.parseInt(centPart.padEnd(2, '0') || '0', 10);
-  const amountPoints = yuan * POINTS_PER_YUAN + cents;
+  const amountCents = yuan * CENTS_PER_YUAN + cents;
   const min = Number(paymentConfig.min_yuan);
   const max = Number(paymentConfig.max_yuan);
-  const minPoints = Math.round(min * POINTS_PER_YUAN);
-  const maxPoints = Math.round(max * POINTS_PER_YUAN);
+  const minCents = Math.round(min * CENTS_PER_YUAN);
+  const maxCents = Math.round(max * CENTS_PER_YUAN);
 
   // 用户创建订单时校验充值区间；支付平台回查金额只做格式和一致性校验。
   if (
     opts.enforceRange !== false &&
-    (amountPoints < minPoints || amountPoints > maxPoints)
+    (amountCents < minCents || amountCents > maxCents)
   ) {
-    return `充值金额仅支持 ¥${paymentConfig.min_yuan} - ¥${paymentConfig.max_yuan}`;
+    return `充值金额仅支持软妹币 ${paymentConfig.min_yuan} - ${paymentConfig.max_yuan}`;
   }
 
   return {
-    amountYuan: (amountPoints / POINTS_PER_YUAN).toFixed(2),
-    amountPoints,
+    amountYuan: (amountCents / CENTS_PER_YUAN).toFixed(2),
+    amountCents,
   };
 }
 
@@ -207,7 +207,7 @@ function validateProviderAmount(
   if (typeof parsed === 'string') {
     return fail(400, '支付平台返回的金额格式异常');
   }
-  if (parsed.amountPoints !== order.amount_points) {
+  if (parsed.amountCents !== order.amount_cents) {
     return fail(409, '支付金额和充值单不一致，请联系管理员处理');
   }
   return ok(null);
@@ -307,7 +307,7 @@ export async function createRechargeOrderForUser(input: {
     tradeId,
     payType,
     amountYuan: parsedAmount.amountYuan,
-    amountPoints: parsedAmount.amountPoints,
+    amountCents: parsedAmount.amountCents,
     metadata: {
       client_ip: input.clientIp,
     },

@@ -105,14 +105,14 @@ export function useWalletOverview() {
   }, []);
 
   const earningsTotals = useMemo(() => {
-    const gross = earningsRows.reduce((sum, row) => sum + row.gross_points, 0);
+    const gross = earningsRows.reduce((sum, row) => sum + row.gross_cents, 0);
     const platformCut = earningsRows.reduce(
-      (sum, row) => sum + row.platform_cut_points,
+      (sum, row) => sum + row.platform_cut_cents,
       0,
     );
-    const net = earningsRows.reduce((sum, row) => sum + row.net_points, 0);
+    const net = earningsRows.reduce((sum, row) => sum + row.net_cents, 0);
     const withdrawn = earningsRows.reduce(
-      (sum, row) => sum + row.withdrawn_points,
+      (sum, row) => sum + row.withdrawn_cents,
       0,
     );
     return { gross, platformCut, net, withdrawn };

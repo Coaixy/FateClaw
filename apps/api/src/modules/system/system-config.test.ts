@@ -60,8 +60,8 @@ function official(
     base_url: 'https://openai.example/v1',
     model_name: 'gpt-4.1',
     api_key_secret_key: 'secret-key',
-    input_token_price_per_million_points: 1000,
-    output_token_price_per_million_points: 5000,
+    input_token_price_per_million_cents: 1000,
+    output_token_price_per_million_cents: 5000,
     extra_json: {},
     created_at: '2026-05-04T00:00:00.000Z',
     updated_at: '2026-05-04T00:00:00.000Z',
@@ -114,8 +114,8 @@ describe('resolveUserLlmRuntime', () => {
       model: 'gpt-4.1',
       contextWindowTokens: 128000,
       maxOutputTokens: 10240,
-      inputTokenPricePerMillionPoints: 1000,
-      outputTokenPricePerMillionPoints: 5000,
+      inputTokenPricePerMillionCents: 1000,
+      outputTokenPricePerMillionCents: 5000,
     });
   });
 
@@ -154,8 +154,8 @@ describe('resolveUserLlmRuntime', () => {
       model: 'claude-sonnet-4-20250514',
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
-      inputTokenPricePerMillionPoints: 0,
-      outputTokenPricePerMillionPoints: 0,
+      inputTokenPricePerMillionCents: 0,
+      outputTokenPricePerMillionCents: 0,
     });
   });
 

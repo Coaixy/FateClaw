@@ -15,9 +15,9 @@ export interface AdminGlobalStats {
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
-  total_recharge_points: number;
+  total_recharge_cents: number;
   total_recharge_yuan: string;
-  today_recharge_points: number;
+  today_recharge_cents: number;
   today_recharge_yuan: string;
   total_accounts: number;
   enabled_accounts: number;
@@ -46,7 +46,7 @@ export interface AdminRechargePeriodStats {
   start_date: string | null;
   end_date: string | null;
   paid_orders: number;
-  total_recharge_points: number;
+  total_recharge_cents: number;
   total_recharge_yuan: string;
 }
 
@@ -477,13 +477,13 @@ export async function getAdminGlobalStats(
          COUNT(*)::int AS total_orders,
          COUNT(*) FILTER (WHERE status = 'paid')::int AS paid_orders,
          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_orders,
-         COALESCE(SUM(amount_points) FILTER (WHERE status = 'paid'), 0)::int
-           AS total_points,
+         COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::int
+           AS total_cents,
          COALESCE(SUM(amount_yuan) FILTER (WHERE status = 'paid'), 0)::text
            AS total_yuan,
-         COALESCE(SUM(amount_points) FILTER (
+         COALESCE(SUM(amount_cents) FILTER (
            WHERE status = 'paid' AND paid_at >= $1::date
-         ), 0)::int AS today_points,
+         ), 0)::int AS today_cents,
          COALESCE(SUM(amount_yuan) FILTER (
            WHERE status = 'paid'
              AND paid_at >= $1::date
@@ -494,11 +494,11 @@ export async function getAdminGlobalStats(
              AND ($2::date IS NULL OR paid_at >= $2::date)
              AND ($3::date IS NULL OR paid_at < $3::date)
          )::int AS period_paid_orders,
-         COALESCE(SUM(amount_points) FILTER (
+         COALESCE(SUM(amount_cents) FILTER (
            WHERE status = 'paid'
              AND ($2::date IS NULL OR paid_at >= $2::date)
              AND ($3::date IS NULL OR paid_at < $3::date)
-         ), 0)::int AS period_points,
+         ), 0)::int AS period_cents,
          COALESCE(SUM(amount_yuan) FILTER (
            WHERE status = 'paid'
              AND ($2::date IS NULL OR paid_at >= $2::date)
@@ -516,12 +516,12 @@ export async function getAdminGlobalStats(
     total_orders: number;
     paid_orders: number;
     pending_orders: number;
-    total_points: number;
+    total_cents: number;
     total_yuan: string;
-    today_points: number;
+    today_cents: number;
     today_yuan: string;
     period_paid_orders: number;
-    period_points: number;
+    period_cents: number;
     period_yuan: string;
   };
 
@@ -543,9 +543,9 @@ export async function getAdminGlobalStats(
     total_recharge_orders: Number(rs.total_orders),
     paid_recharge_orders: Number(rs.paid_orders),
     pending_recharge_orders: Number(rs.pending_orders),
-    total_recharge_points: Number(rs.total_points),
+    total_recharge_cents: Number(rs.total_cents),
     total_recharge_yuan: rs.total_yuan,
-    today_recharge_points: Number(rs.today_points),
+    today_recharge_cents: Number(rs.today_cents),
     today_recharge_yuan: rs.today_yuan,
     recharge_period: {
       range: rechargePeriod.range,
@@ -553,7 +553,7 @@ export async function getAdminGlobalStats(
       start_date: rechargePeriod.startDate,
       end_date: rechargePeriod.endDate,
       paid_orders: Number(rs.period_paid_orders),
-      total_recharge_points: Number(rs.period_points),
+      total_recharge_cents: Number(rs.period_cents),
       total_recharge_yuan: rs.period_yuan,
     },
     total_accounts: Number(acc.total),

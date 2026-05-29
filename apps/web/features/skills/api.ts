@@ -181,7 +181,7 @@ export const withdrawalApi = {
   list: () =>
     requestJson<CreatorWithdrawal[]>('/api/skills/creator/withdrawal/list'),
   create: (data: {
-    amount_points: number;
+    amount_cents: number;
     bank_name?: string;
     bank_account?: string;
     account_name?: string;

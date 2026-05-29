@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, FileText } from 'lucide-react';
 
 import { admin, type AdminWithdrawal } from '@/lib/admin-api';
+import { formatCents } from '@/lib/money';
 
 type StatusFilter =
   | 'pending'
@@ -122,7 +123,7 @@ function WithdrawalCard({
   const [approveForm, setApproveForm] = useState({
     tax_amount_yuan: '0',
     net_amount_yuan: wd.amount_yuan,
-    platform_fee_points: 0,
+    platform_fee_cents: 0,
     note: '',
   });
   const [rejectNote, setRejectNote] = useState('');
@@ -136,7 +137,7 @@ function WithdrawalCard({
       await admin.approveWithdrawal(wd.id, {
         tax_amount_yuan: approveForm.tax_amount_yuan || '0',
         net_amount_yuan: approveForm.net_amount_yuan,
-        platform_fee_points: Number(approveForm.platform_fee_points) || 0,
+        platform_fee_cents: Number(approveForm.platform_fee_cents) || 0,
         note: approveForm.note || undefined,
       });
       onChanged();
@@ -187,10 +188,7 @@ function WithdrawalCard({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-[14px] font-bold tabular-nums">
-              {wd.amount_points.toLocaleString()} 积分
-            </span>
-            <span className="text-[12px] text-muted">
-              ¥{wd.amount_yuan}
+              {formatCents(wd.amount_cents)}
             </span>
             <span
               className={`shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase ${statusColor(
@@ -247,26 +245,26 @@ function WithdrawalCard({
           </div>
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput
-              label="税费 (元)"
+              label="税费（软妹币）"
               value={approveForm.tax_amount_yuan}
               onChange={(v) =>
                 setApproveForm({ ...approveForm, tax_amount_yuan: v })
               }
             />
             <LabeledInput
-              label="实付 (元)"
+              label="实付（软妹币）"
               value={approveForm.net_amount_yuan}
               onChange={(v) =>
                 setApproveForm({ ...approveForm, net_amount_yuan: v })
               }
             />
             <LabeledInput
-              label="手续费 (积分)"
-              value={String(approveForm.platform_fee_points)}
+              label="手续费（分）"
+              value={String(approveForm.platform_fee_cents)}
               onChange={(v) =>
                 setApproveForm({
                   ...approveForm,
-                  platform_fee_points: Number(v) || 0,
+                  platform_fee_cents: Number(v) || 0,
                 })
               }
             />
@@ -283,7 +281,7 @@ function WithdrawalCard({
               className="flex-1 h-9 rounded-lg bg-success text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               <CheckCircle2 size={14} />
-              通过并扣减积分
+              通过并扣减余额
             </button>
           </div>
 
@@ -302,7 +300,7 @@ function WithdrawalCard({
               className="mt-2 w-full h-9 rounded-lg border border-red-500/40 text-red-400 text-[12px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               <XCircle size={14} />
-              驳回并解冻积分
+              驳回并解冻余额
             </button>
           </div>
         </div>

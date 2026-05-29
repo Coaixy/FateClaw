@@ -9,11 +9,11 @@ export interface UserDto {
   phone: string;
   phone_verified: boolean;
   role: UserRole;
-  purchased_points: number;
-  bonus_points: number;
-  earned_points: number;
-  reserved_points: number;
-  pending_withdrawal_points: number;
+  purchased_cents: number;
+  bonus_cents: number;
+  earned_cents: number;
+  reserved_cents: number;
+  pending_withdrawal_cents: number;
   created_at: string;
 }
 

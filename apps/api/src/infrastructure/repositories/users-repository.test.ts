@@ -29,11 +29,11 @@ function user(overrides: Partial<User> = {}): User {
     phone_verified: true,
     password_hash: 'hash',
     role: 'consumer',
-    purchased_points: 0,
-    bonus_points: 0,
-    earned_points: 0,
-    reserved_points: 0,
-    pending_withdrawal_points: 0,
+    purchased_cents: 0,
+    bonus_cents: 0,
+    earned_cents: 0,
+    reserved_cents: 0,
+    pending_withdrawal_cents: 0,
     created_at: '2026-05-27T00:00:00.000Z',
     ...overrides,
   };
@@ -59,9 +59,9 @@ describe('users repository', () => {
     vi.clearAllMocks();
   });
 
-  it('inserts all persisted user point columns', async () => {
+  it('inserts all persisted user balance columns', async () => {
     const { calls } = createMockPool();
-    const input = user({ purchased_points: 100, bonus_points: 20 });
+    const input = user({ purchased_cents: 100, bonus_cents: 20 });
 
     await createUser(input);
 
@@ -72,11 +72,11 @@ describe('users repository', () => {
       input.phone_verified,
       input.password_hash,
       input.role,
-      input.purchased_points,
-      input.bonus_points,
-      input.earned_points,
-      input.reserved_points,
-      input.pending_withdrawal_points,
+      input.purchased_cents,
+      input.bonus_cents,
+      input.earned_cents,
+      input.reserved_cents,
+      input.pending_withdrawal_cents,
       input.created_at,
     ]);
   });

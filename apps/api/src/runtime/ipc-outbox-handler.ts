@@ -268,7 +268,7 @@ async function processOutboxResponse(
     }
 
     if (payload.requestId && pending?.llmRuntime?.billingMode === 'metered') {
-      const actualChargePoints = await settleBillingReservation({
+      const actualChargeCents = await settleBillingReservation({
         requestId: payload.requestId,
         runtime: pending.llmRuntime,
         promptTokens: payload.usage?.promptTokens ?? 0,
@@ -279,7 +279,7 @@ async function processOutboxResponse(
         {
           accountId,
           requestId: payload.requestId,
-          actualChargePoints,
+          actualChargeCents,
         },
         '已完成超额预扣结算',
       );

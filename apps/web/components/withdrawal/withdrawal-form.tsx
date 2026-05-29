@@ -1,9 +1,11 @@
 import { Loader2 } from 'lucide-react';
 
+import { formatCents } from '@/lib/money';
+
 type TaxType = 'personal' | 'company';
 
 export type WithdrawalFormState = {
-  amountPoints: string;
+  amountCents: string;
   bankName: string;
   bankAccount: string;
   accountName: string;
@@ -35,18 +37,18 @@ export function WithdrawalForm({
     <section className="rounded-2xl border border-hairline bg-surface-card p-5">
       <h3 className="text-[13px] font-semibold mb-4">发起提现申请</h3>
       <form onSubmit={onSubmit} className="space-y-3">
-        <Field label="提现积分数量">
+        <Field label="提现金额（分）">
           <input
             type="number"
-            value={values.amountPoints}
-            onChange={(event) => onChange('amountPoints', event.target.value)}
-            placeholder="至少 100 积分 = 1 元"
+            value={values.amountCents}
+            onChange={(event) => onChange('amountCents', event.target.value)}
+            placeholder="至少 100 分"
             className="w-full h-10 px-3 rounded-lg border border-hairline bg-canvas text-sm placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             min={100}
           />
-          {values.amountPoints && (
+          {values.amountCents && (
             <div className="text-[10px] text-muted mt-0.5">
-              ≈ ¥{(Number(values.amountPoints || 0) / 100).toFixed(2)}
+              {formatCents(Number(values.amountCents || 0))}
             </div>
           )}
         </Field>

@@ -29,11 +29,11 @@ vi.mock('../config.js', () => ({
 }));
 
 import {
-  deductPoints,
+  deductBalanceCents,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
-  reserveUserPoints,
+  reserveUserBalanceCents,
   settleRechargeOrderPaid,
 } from './billing-repository.js';
 
@@ -95,7 +95,7 @@ describe('billing repository', () => {
         tradeId: 'trade-1',
         payType: 'alipay',
         amountYuan: '9.90',
-        amountPoints: 990,
+        amountCents: 990,
         metadata: { plan: 'basic' },
       }),
     ).resolves.toEqual({ id: 'order-1' });
@@ -121,7 +121,7 @@ describe('billing repository', () => {
       provider_trade_id: null,
       pay_type: 'alipay',
       amount_yuan: '9.90',
-      amount_points: 990,
+      amount_cents: 990,
       status: 'pending',
     };
     const updated = { ...order, status: 'paid' };
@@ -140,7 +140,7 @@ describe('billing repository', () => {
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('FOR UPDATE');
-    expect(clientCalls[2]?.sql).toContain('SET purchased_points');
+    expect(clientCalls[2]?.sql).toContain('SET purchased_cents');
     expect(clientCalls[3]?.sql).toContain('INSERT INTO wallet_transactions');
     expect(clientCalls[3]?.params?.[1]).toBe('user-1');
     expect(clientCalls[3]?.params?.[3]).toBe(990);
@@ -177,14 +177,14 @@ describe('billing repository', () => {
     expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200]);
   });
 
-  it('reserves only currently spendable points', async () => {
+  it('reserves only currently spendable balance', async () => {
     const user = {
       id: 'user-1',
-      purchased_points: 10,
-      bonus_points: 2,
-      reserved_points: 3,
+      purchased_cents: 10,
+      bonus_cents: 2,
+      reserved_cents: 3,
     };
-    const updated = { ...user, reserved_points: 12 };
+    const updated = { ...user, reserved_cents: 12 };
     mockGetUserByIdUsing.mockResolvedValue(user);
     const { clientCalls, client } = createMockPool(
       [],
@@ -192,22 +192,22 @@ describe('billing repository', () => {
     );
 
     await expect(
-      reserveUserPoints({
+      reserveUserBalanceCents({
         userId: 'user-1',
-        amountPoints: 20,
+        amountCents: 20,
         requestId: 'request-1',
         yearMonth: '2026-05',
       }),
     ).resolves.toEqual({
       user: updated,
-      reservedPoints: 9,
+      reservedCents: 9,
     });
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1', {
       forUpdate: true,
     });
-    expect(clientCalls[2]?.sql).toContain('SET reserved_points');
+    expect(clientCalls[2]?.sql).toContain('SET reserved_cents');
     expect(clientCalls[2]?.params).toEqual([9, 'user-1']);
     expect(clientCalls[3]?.sql).toContain(
       'INSERT INTO billing_request_reservations',
@@ -224,15 +224,15 @@ describe('billing repository', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('deducts bonus batches before purchased points', async () => {
+  it('deducts bonus grants before purchased balance', async () => {
     const clientCalls: QueryCall[] = [];
     const client = {
       async query(sql: string, params?: unknown[]) {
         clientCalls.push({ sql, params });
-        if (sql.includes('FROM point_batches')) {
+        if (sql.includes('FROM balance_grants')) {
           return normalizeResult([
-            { id: 'batch-1', remaining_points: 3 },
-            { id: 'batch-2', remaining_points: 10 },
+            { id: 'batch-1', remaining_cents: 3 },
+            { id: 'batch-2', remaining_cents: 10 },
           ]);
         }
         return normalizeResult([]);
@@ -240,30 +240,30 @@ describe('billing repository', () => {
     };
 
     await expect(
-      deductPoints(
+      deductBalanceCents(
         client as never,
         {
           id: 'user-1',
-          purchased_points: 5,
-          bonus_points: 10,
-          reserved_points: 0,
+          purchased_cents: 5,
+          bonus_cents: 10,
+          reserved_cents: 0,
         } as never,
         8,
       ),
     ).resolves.toEqual({
       bonusDeducted: 8,
       purchasedDeducted: 0,
-      batchDeductions: [
-        { batchId: 'batch-1', points: 3 },
-        { batchId: 'batch-2', points: 5 },
+      grantDeductions: [
+        { grantId: 'batch-1', cents: 3 },
+        { grantId: 'batch-2', cents: 5 },
       ],
-      pointSource: 'bonus',
+      balanceSource: 'bonus',
     });
 
-    expect(clientCalls[1]?.sql).toContain('UPDATE point_batches');
+    expect(clientCalls[1]?.sql).toContain('UPDATE balance_grants');
     expect(clientCalls[1]?.params).toEqual([3, 'batch-1']);
     expect(clientCalls[2]?.params).toEqual([5, 'batch-2']);
-    expect(clientCalls[3]?.sql).toContain('SET bonus_points');
+    expect(clientCalls[3]?.sql).toContain('SET bonus_cents');
     expect(clientCalls[3]?.params).toEqual([8, 0, 'user-1']);
   });
 });

@@ -8,7 +8,7 @@ import {
   MANAGER_KEY,
 } from '../../infrastructure/config.js';
 import {
-  adjustUserPurchasedPoints,
+  adjustUserPurchasedBalance,
   approveWithdrawal,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
@@ -22,13 +22,13 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getPointBatchesByUserId,
+  getBalanceGrantsByUserId,
   getSystemConfigOverview,
   getTasksForAdmin,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
-  grantBonusPoints,
+  grantBonusBalance,
   hasOfficialSkill,
   createAdminUser,
   listAdminGlobalSkills,
@@ -58,8 +58,8 @@ import {
 } from '../../shared/model-context-window.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
-const GrantBonusPointsSchema = z.object({
-  amount_points: z.number().int().positive('赠送积分必须为正整数'),
+const GrantBonusBalanceSchema = z.object({
+  amount_cents: z.number().int().positive('赠送余额必须为正整数分'),
   source: z
     .enum(['new_user_gift', 'sign_in', 'admin_grant', 'promotion'])
     .default('admin_grant'),
@@ -67,11 +67,11 @@ const GrantBonusPointsSchema = z.object({
   expires_at: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
-const AdjustPurchasedPointsSchema = z.object({
-  amount_points: z
+const AdjustPurchasedBalanceSchema = z.object({
+  amount_cents: z
     .number()
     .int()
-    .refine((v) => v !== 0, '调整积分不能为 0'),
+    .refine((v) => v !== 0, '调整余额不能为 0'),
   note: z.string().max(200).optional(),
 });
 
@@ -136,7 +136,7 @@ const AdminStatsQuerySchema = z
 const WithdrawalApproveSchema = z.object({
   tax_amount_yuan: z.string().optional(),
   net_amount_yuan: z.string().optional(),
-  platform_fee_points: z.number().int().min(0).optional(),
+  platform_fee_cents: z.number().int().min(0).optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -187,8 +187,8 @@ const OfficialModelSchema = z.object({
     )
     .nullable()
     .optional(),
-  input_token_price_per_million_points: z.number().int().min(0).default(0),
-  output_token_price_per_million_points: z.number().int().min(0).default(0),
+  input_token_price_per_million_cents: z.number().int().min(0).default(0),
+  output_token_price_per_million_cents: z.number().int().min(0).default(0),
 });
 
 const OfficialModelCreateSchema = OfficialModelSchema.extend({
@@ -356,10 +356,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       contextWindowTokens: toConfiguredContextWindowTokens(
         parsed.data.context_window_tokens,
       ),
-      inputTokenPricePerMillionPoints:
-        parsed.data.input_token_price_per_million_points,
-      outputTokenPricePerMillionPoints:
-        parsed.data.output_token_price_per_million_points,
+      inputTokenPricePerMillionCents:
+        parsed.data.input_token_price_per_million_cents,
+      outputTokenPricePerMillionCents:
+        parsed.data.output_token_price_per_million_cents,
       secretValue: parsed.data.api_key,
       authMode: parsed.data.auth_mode,
       actor: 'manager',
@@ -389,10 +389,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         contextWindowTokens: toConfiguredContextWindowTokens(
           parsed.data.context_window_tokens,
         ),
-        inputTokenPricePerMillionPoints:
-          parsed.data.input_token_price_per_million_points,
-        outputTokenPricePerMillionPoints:
-          parsed.data.output_token_price_per_million_points,
+        inputTokenPricePerMillionCents:
+          parsed.data.input_token_price_per_million_cents,
+        outputTokenPricePerMillionCents:
+          parsed.data.output_token_price_per_million_cents,
         actor: 'manager',
       });
       return provider;
@@ -484,62 +484,62 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return getWalletTransactionsByUserId(id, 50);
   });
 
-  // POST /api/admin/users/:id/points/grant — 管理员发放赠送积分（带过期时间）
-  app.post('/users/:id/points/grant', async (request, reply) => {
+  // POST /api/admin/users/:id/balance/grant — 管理员发放赠送余额（带过期时间）
+  app.post('/users/:id/balance/grant', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = GrantBonusPointsSchema.parse(request.body);
+    const body = GrantBonusBalanceSchema.parse(request.body);
     const user = await getUserById(id);
     if (!user) {
       return reply.code(404).send({ error: '用户不存在' });
     }
-    const { user: updated, batchId } = await grantBonusPoints({
+    const { user: updated, grantId } = await grantBonusBalance({
       userId: id,
       source: body.source,
-      amountPoints: body.amount_points,
+      amountCents: body.amount_cents,
       expiresAt: body.expires_at ?? null,
       note: body.note ?? null,
       grantedBy: request.user?.userId ?? 'admin',
     });
     return {
       success: true,
-      batch_id: batchId,
-      bonus_points: updated.bonus_points,
-      purchased_points: updated.purchased_points,
-      earned_points: updated.earned_points,
-      reserved_points: updated.reserved_points,
+      grant_id: grantId,
+      bonus_cents: updated.bonus_cents,
+      purchased_cents: updated.purchased_cents,
+      earned_cents: updated.earned_cents,
+      reserved_cents: updated.reserved_cents,
     };
   });
 
-  // POST /api/admin/users/:id/points/adjust — 管理员调整用户充值积分（正数=充值，负数=扣减）
-  app.post('/users/:id/points/adjust', async (request, reply) => {
+  // POST /api/admin/users/:id/balance/adjust — 管理员调整用户充值余额（正数=充值，负数=扣减）
+  app.post('/users/:id/balance/adjust', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = AdjustPurchasedPointsSchema.parse(request.body);
+    const body = AdjustPurchasedBalanceSchema.parse(request.body);
     const user = await getUserById(id);
     if (!user) {
       return reply.code(404).send({ error: '用户不存在' });
     }
-    const updated = await adjustUserPurchasedPoints(
+    const updated = await adjustUserPurchasedBalance(
       id,
-      body.amount_points,
+      body.amount_cents,
       body.note,
     );
     return {
       success: true,
-      purchased_points: updated.purchased_points,
-      bonus_points: updated.bonus_points,
-      earned_points: updated.earned_points,
-      reserved_points: updated.reserved_points,
-      available_points: Math.max(
+      purchased_cents: updated.purchased_cents,
+      bonus_cents: updated.bonus_cents,
+      earned_cents: updated.earned_cents,
+      reserved_cents: updated.reserved_cents,
+      available_cents: Math.max(
         0,
-        updated.purchased_points +
-          updated.bonus_points -
-          updated.reserved_points,
+        updated.purchased_cents +
+          updated.bonus_cents -
+          updated.reserved_cents,
       ),
     };
   });
 
-  // GET /api/admin/users/:id/points/batches — 查看用户赠送积分批次
-  app.get('/users/:id/points/batches', async (request, reply) => {
+  // GET /api/admin/users/:id/balance/grants — 查看用户赠送余额批次
+  app.get('/users/:id/balance/grants', async (request, reply) => {
     const { id } = request.params as { id: string };
     const query = request.query as {
       include_exhausted?: string;
@@ -549,7 +549,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!user) {
       return reply.code(404).send({ error: '用户不存在' });
     }
-    return getPointBatchesByUserId(id, {
+    return getBalanceGrantsByUserId(id, {
       includeExhausted: query.include_exhausted === 'true',
       limit: query.limit ? Number(query.limit) : undefined,
     });
@@ -585,7 +585,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/admin/withdrawals/:id/approve — 审核通过（扣 earned_points）
+  // POST /api/admin/withdrawals/:id/approve — 审核通过（扣 earned_cents）
   app.post('/withdrawals/:id/approve', async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = WithdrawalApproveSchema.parse(request.body);
@@ -595,7 +595,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         reviewedBy: request.user?.userId ?? 'admin',
         taxAmountYuan: body.tax_amount_yuan,
         netAmountYuan: body.net_amount_yuan,
-        platformFeePoints: body.platform_fee_points,
+        platformFeeCents: body.platform_fee_cents,
         note: body.note ?? null,
       });
       return { success: true, withdrawal: wd };

@@ -16,12 +16,17 @@ import {
   type RechargePayType,
   type RechargeStats,
 } from '@/features/billing/api';
+import { formatCents } from '@/lib/money';
 
 const AMOUNT_PRESETS = ['10', '30', '50', '100', '300', '500'];
 
 function formatYuan(value: string | null | undefined): string {
   const amount = Number(value || 0);
   return Number.isFinite(amount) ? amount.toFixed(2) : '0.00';
+}
+
+function formatYuanLabel(value: string | null | undefined): string {
+  return `软妹币 ${formatYuan(value)}`;
 }
 
 function statusLabel(status: RechargeOrder['status']): string {
@@ -105,8 +110,7 @@ export function WalletRechargePanel({
           <div>
             <div className="text-[13px] font-semibold">账户充值</div>
             <div className="text-[10px] text-muted">
-              累计 ¥{formatYuan(stats?.total_recharge_yuan)} ·{' '}
-              {(stats?.total_recharge_points ?? 0).toLocaleString()} 积分
+              累计 {formatCents(stats?.total_recharge_cents ?? 0)}
             </div>
           </div>
         </div>
@@ -133,9 +137,9 @@ export function WalletRechargePanel({
                   amountYuan === preset
                     ? 'border-primary bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] text-primary'
                     : 'border-hairline text-muted hover:text-ink'
-                }`}
+                  }`}
               >
-                ¥{preset}
+                {formatYuanLabel(preset)}
               </button>
             ))}
           </div>
@@ -143,7 +147,7 @@ export function WalletRechargePanel({
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <label className="block">
               <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted">
-                自定义金额
+                自定义金额（软妹币）
               </span>
               <input
                 value={amountYuan}
@@ -211,7 +215,7 @@ export function WalletRechargePanel({
               {activeOrder.trade_id}
             </div>
             <div className="text-[10px] text-muted">
-              ¥{formatYuan(activeOrder.amount_yuan)} ·{' '}
+              {formatYuanLabel(activeOrder.amount_yuan)} ·{' '}
               {statusLabel(activeOrder.status)}
             </div>
           </div>
@@ -254,7 +258,7 @@ export function WalletRechargePanel({
                 <div className="flex items-center gap-1.5">
                   {statusIcon(order.status)}
                   <span className="truncate text-[12px] font-medium">
-                    ¥{formatYuan(order.amount_yuan)}
+                    {formatYuanLabel(order.amount_yuan)}
                   </span>
                   <span className="text-[10px] text-muted">
                     {statusLabel(order.status)}

@@ -49,8 +49,8 @@ export interface LlmRuntimeSnapshot {
     | 'claude_code_oauth_token'
     | 'gemini_api_key';
   providerKey: string;
-  inputTokenPricePerMillionPoints?: number;
-  outputTokenPricePerMillionPoints?: number;
+  inputTokenPricePerMillionCents?: number;
+  outputTokenPricePerMillionCents?: number;
 }
 
 export interface PendingInboxRequest {

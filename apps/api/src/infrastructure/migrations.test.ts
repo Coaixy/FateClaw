@@ -72,6 +72,13 @@ describe('runDatabaseMigrations', () => {
         '移除用户级系统排盘开关和默认启用配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0008_balance_cents_schema',
+        '将历史 point 列按分余额语义保留',
+      ],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -102,6 +109,8 @@ describe('runDatabaseMigrations', () => {
       '0004_phone_only_user_schema',
       '0005_model_pi_api_schema',
       '0006_remove_user_system_skill_preferences',
+      '0007_user_soul_content',
+      '0008_balance_cents_schema',
     ]);
 
     await runDatabaseMigrations(client as never);

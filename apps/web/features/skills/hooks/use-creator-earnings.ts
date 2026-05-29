@@ -13,8 +13,8 @@ export function useCreatorEarnings() {
 
   const stats = useMemo(() => {
     const thisMonth = earnings.find((row) => row.year_month === currentYearMonth());
-    const thisMonthNet = thisMonth?.net_points ?? 0;
-    const lifetimeNet = earnings.reduce((sum, row) => sum + row.net_points, 0);
+    const thisMonthNet = thisMonth?.net_cents ?? 0;
+    const lifetimeNet = earnings.reduce((sum, row) => sum + row.net_cents, 0);
     return { thisMonthNet, lifetimeNet };
   }, [earnings]);
 

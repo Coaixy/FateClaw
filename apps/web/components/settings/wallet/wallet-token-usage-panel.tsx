@@ -1,11 +1,8 @@
 import type { DailyUsageRow } from '@/features/billing/api';
+import { formatCents } from '@/lib/money';
 
 function formatTokenCount(value: number): string {
   return value.toLocaleString();
-}
-
-function formatPointCount(value: number): string {
-  return `${value.toLocaleString()} 积分`;
 }
 
 function formatDate(date: string): string {
@@ -79,7 +76,7 @@ export function WalletTokenUsagePanel({
                     {formatTokenCount(row.total_tokens)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                    {formatPointCount(row.official_model_charge_points)}
+                    {formatCents(row.official_model_charge_cents)}
                   </td>
                 </tr>
               ))}
