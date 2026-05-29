@@ -108,6 +108,15 @@ export async function queryEffectiveUserSkills(
 export async function querySoulContent(accountId: string): Promise<string> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
   if (webUserId) {
+    const userSoul = await getPool().query(
+      'SELECT soul_content FROM users WHERE id = $1',
+      [webUserId],
+    );
+    const userContent =
+      (userSoul.rows[0] as { soul_content: string } | undefined)
+        ?.soul_content || '';
+    if (userContent.trim()) return userContent;
+
     const { rows } = await getPool().query(
       `SELECT soul_content
        FROM accounts
@@ -121,11 +130,22 @@ export async function querySoulContent(accountId: string): Promise<string> {
   }
 
   const { rows } = await getPool().query(
-    'SELECT soul_content FROM accounts WHERE id = $1',
+    `SELECT
+       a.soul_content AS account_soul_content,
+       u.soul_content AS user_soul_content
+     FROM accounts a
+     LEFT JOIN users u ON u.id = a.owner_id
+     WHERE a.id = $1`,
     [accountId],
   );
   if (rows.length === 0) return '';
-  return (rows[0] as { soul_content: string }).soul_content || '';
+  const row = rows[0] as {
+    account_soul_content: string | null;
+    user_soul_content: string | null;
+  };
+  return row.user_soul_content?.trim()
+    ? row.user_soul_content
+    : row.account_soul_content || '';
 }
 
 /**
@@ -138,19 +158,23 @@ export async function updateSoulContentDb(
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
   if (webUserId) {
     await getPool().query(
-      `UPDATE accounts
-       SET soul_content = $2
-       WHERE id = (
-         SELECT id
-         FROM accounts
-         WHERE owner_id = $1
-         ORDER BY enabled DESC, created_at ASC
-         LIMIT 1
-       )`,
+      'UPDATE users SET soul_content = $2 WHERE id = $1',
       [webUserId, content],
     );
     return;
   }
+
+  const userUpdate = await getPool().query(
+    `UPDATE users
+     SET soul_content = $2
+     WHERE id = (
+       SELECT owner_id
+       FROM accounts
+       WHERE id = $1 AND owner_id IS NOT NULL
+     )`,
+    [accountId, content],
+  );
+  if ((userUpdate.rowCount ?? 0) > 0) return;
 
   await getPool().query(
     'UPDATE accounts SET soul_content = $2 WHERE id = $1',

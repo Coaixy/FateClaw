@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Settings2 } from 'lucide-react';
+import { ChevronRight, ServerCog } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { TabAccount } from '@/components/settings/tab-account';
@@ -31,10 +31,10 @@ export function ProfileWorkspace() {
         >
           <div className="border-b border-hairline px-4 py-2.5">
             <div className="flex items-center gap-2.5">
-              <Settings2 size={14} className="text-muted" />
+              <ServerCog size={14} className="text-muted" />
               <div>
-                <p className="text-[12px] font-medium">高级设置</p>
-                <p className="text-[10px] text-muted">模型、数据管理与更深层配置</p>
+                <p className="text-[12px] font-medium">模型设置</p>
+                <p className="text-[10px] text-muted">模型 Provider、密钥和默认模型</p>
               </div>
             </div>
           </div>
@@ -43,11 +43,11 @@ export function ProfileWorkspace() {
             <div className="flex items-center justify-between rounded-xl border border-hairline bg-canvas/36 px-3.5 py-3 transition-colors group-hover:bg-surface-cream-strong/70">
               <div className="flex items-center gap-3">
                 <div className="flex h-[28px] w-[28px] items-center justify-center rounded-lg bg-surface-card/90">
-                  <Settings2 size={13} className="text-muted" />
+                  <ServerCog size={13} className="text-muted" />
                 </div>
                 <div className="text-left">
-                  <p className="text-[11px] font-medium">进入高级设置</p>
-                  <p className="text-[10px] text-muted">继续查看模型、数据管理与更底层能力</p>
+                  <p className="text-[11px] font-medium">进入模型设置</p>
+                  <p className="text-[10px] text-muted">继续配置模型调用</p>
                 </div>
               </div>
               <div className="flex h-7 w-7 items-center justify-center rounded-full border border-hairline bg-surface-card/70 transition-colors group-hover:border-primary/35 group-hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]">

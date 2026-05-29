@@ -15,10 +15,7 @@ import {
   type ModelSettingsOverview,
   type OfficialModel,
 } from '@/features/model-settings/api';
-import {
-  PI_API_OPTIONS,
-  protocolTypeLabel,
-} from '../../features/model-settings/pi-api-options';
+import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
 import { officialModelPriceLabel } from '@/components/settings/model-pricing';
 
 const CONTROL =
@@ -383,9 +380,6 @@ function OfficialModelOption({
       }`}
     >
       <div className="font-medium text-sm">{model.display_name}</div>
-      <div className="mt-1 text-[11px] leading-5 text-muted">
-        {protocolTypeLabel(model.pi_api)} · {model.model_name}
-      </div>
       <div className="mt-1 text-[11px] leading-5 text-muted">
         {officialModelPriceLabel(model)}
       </div>

@@ -21,6 +21,7 @@ import {
   resetUserMessages,
   resetUserTasks,
   updateSoulContent,
+  updateUserSoulContent,
 } from '../../infrastructure/db.js';
 import {
   getDailyUsageRows,
@@ -108,6 +109,7 @@ export async function resetBillingScope(
   }
 
   const clearSoul = async () => {
+    await updateUserSoulContent(user.id, '');
     const accountIds = (await getAccountsByUserId(user.id)).map((a) => a.id);
     for (const accountId of accountIds) {
       await updateSoulContent(accountId, '');
@@ -127,6 +129,7 @@ export async function resetBillingScope(
     case 'all':
     default: {
       const accountIds = await resetUserData(user.id);
+      await updateUserSoulContent(user.id, '');
       for (const accountId of accountIds) {
         await updateSoulContent(accountId, '');
       }

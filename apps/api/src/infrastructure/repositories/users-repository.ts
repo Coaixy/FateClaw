@@ -14,6 +14,7 @@ const USER_SELECT_COLUMNS = `
   u.earned_points,
   u.reserved_points,
   u.pending_withdrawal_points,
+  u.soul_content,
   u.created_at
 `;
 
@@ -98,6 +99,35 @@ export async function updateUserPasswordHash(
     throw new Error('用户不存在');
   }
   return user;
+}
+
+/**
+ * 读取用户级 Soul 自定义人格。
+ *
+ * 用户级 Soul 独立于微信账号，主要服务站内 AI Chat 的 web runtime。
+ */
+export async function getUserSoulContent(userId: string): Promise<string> {
+  const row = await queryOne<{ soul_content: string | null }>(
+    getDbPool(),
+    'SELECT soul_content FROM users WHERE id = $1',
+    [userId],
+  );
+  return row?.soul_content ?? '';
+}
+
+/**
+ * 更新用户级 Soul 自定义人格。
+ *
+ * 调用方必须已完成用户身份校验，避免跨用户写入运行时人格。
+ */
+export async function updateUserSoulContent(
+  userId: string,
+  content: string,
+): Promise<void> {
+  await getDbPool().query('UPDATE users SET soul_content = $1 WHERE id = $2', [
+    content,
+    userId,
+  ]);
 }
 
 export async function getUserByAccountId(

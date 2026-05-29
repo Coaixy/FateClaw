@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { accountsApi, type Account } from '@/features/accounts/api';
-import { useAccountSoul } from '@/features/accounts/hooks/use-account-soul';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useDeviceBinding } from '@/features/accounts/hooks/use-device-binding';
 import { useToast } from '@/lib/use-toast';
@@ -14,10 +13,8 @@ import {
   RefreshCw,
   Lock,
 } from 'lucide-react';
-import { soulPresets, SoulPreset } from '@/lib/soul-presets';
 import { DeviceCard } from '@/components/workspace/device-card';
 import { DeviceBindSheet } from '@/components/workspace/device-bind-sheet';
-import { SoulPresetSheet } from '@/components/workspace/soul-preset-sheet';
 import { EmptyState } from '@/components/ui/empty-state';
 
 function sortAccounts(list: Account[]): Account[] {
@@ -27,7 +24,6 @@ function sortAccounts(list: Account[]): Account[] {
 export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const { confirm } = useConfirm();
-  const [previewPreset, setPreviewPreset] = useState<SoulPreset | null>(null);
 
   const notify = useCallback(
     (type: 'success' | 'error', text: string) => toast(type, text),
@@ -36,21 +32,19 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const { accountList, loading, refreshing, loadError, load, refresh } =
     useAccounts();
   const binding = useDeviceBinding(load);
-  const soul = useAccountSoul(notify);
   const deviceAccounts = accountList;
   const canBindWeixin = false;
 
   const removeAccount = async (acc: Account) => {
     const ok = await confirm({
       title: '解除绑定',
-      message: `确定要解除「${acc.name}」的绑定吗？\n\n所有对话消息、灵魂记忆和相关的定时任务将被立即且永久删除。`,
+      message: `确定要解除「${acc.name}」的绑定吗？\n\n该设备的对话消息和相关定时任务将被立即且永久删除。`,
       confirmLabel: '解除绑定',
       variant: 'danger',
     });
     if (!ok) return;
     try {
       await accountsApi.remove(acc.id);
-      soul.collapseIfExpanded(acc.id);
       await load();
       notify('success', `「${acc.name}」已解除绑定`);
     } catch (err) {
@@ -80,7 +74,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             </h2>
             <p className="text-[12px] text-muted font-medium mt-0.5">
               {deviceAccounts.length}
-              台接入 · 配置灵魂记忆与 System Prompt
+              台接入 · 微信绑定暂时关闭
             </p>
           </div>
         )}
@@ -134,17 +128,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             <DeviceCard
               key={acc.id}
               account={acc}
-              expanded={soul.expandedSoul === acc.id}
-              soulContent={soul.expandedSoul === acc.id ? soul.soulContent : ''}
-              soulLoading={soul.expandedSoul === acc.id && soul.soulLoading}
-              soulSaving={soul.expandedSoul === acc.id && soul.soulSaving}
-              soulDirty={soul.expandedSoul === acc.id && soul.soulDirty}
-              soulPresets={soulPresets}
-              onToggle={() => void soul.toggleSoul(acc.id)}
               onRemove={() => void removeAccount(acc)}
-              onOpenPreset={setPreviewPreset}
-              onSoulChange={soul.setSoulContent}
-              onSaveSoul={() => void soul.saveSoul()}
             />
           ))}
         </div>
@@ -181,21 +165,6 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
         bindError={binding.bindError}
         onClose={binding.stop}
         onRetry={() => void binding.start()}
-      />
-
-      <SoulPresetSheet
-        preset={previewPreset}
-        onClose={() => setPreviewPreset(null)}
-        onApply={() => {
-          if (!previewPreset) return;
-          if (!soul.expandedSoul) {
-            notify('error', '请先展开一个账号的灵魂记忆面板再载入');
-            return;
-          }
-          soul.setSoulContent(previewPreset.content);
-          setPreviewPreset(null);
-          notify('success', `已载入「${previewPreset.name}」配置片段`);
-        }}
       />
     </>
   );

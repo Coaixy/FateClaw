@@ -2100,6 +2100,16 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0007_user_soul_content',
+    description: '增加用户级 Soul 自定义人格配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS soul_content TEXT NOT NULL DEFAULT ''
+      `);
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

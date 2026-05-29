@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
   Compass,
   LogOut,
-  Settings as SettingsIcon,
   ServerCog,
   Sparkle,
   User as UserIcon,
@@ -87,12 +87,6 @@ export function UserMenuDropdown({
             label="模型设置"
             onNavigate={onNavigate}
           />
-          <MenuItem
-            href="/settings/advanced"
-            icon={SettingsIcon}
-            label="高级设置"
-            onNavigate={onNavigate}
-          />
         </MenuSection>
       </div>
       <div className="border-t border-hairline/40 p-1.5">
@@ -132,7 +126,7 @@ function MenuItem({
   onNavigate,
 }: {
   href: string;
-  icon: typeof SettingsIcon;
+  icon: LucideIcon;
   label: string;
   onNavigate: () => void;
 }) {

@@ -1,8 +1,10 @@
 'use client';
 
 import { AppShell } from '@/components/app-shell';
+import { TabData } from '@/components/settings/tab-data';
 import { TabTasks } from '@/components/settings/tab-tasks';
 import { DevicesPanel } from '@/components/workspace/devices-panel';
+import { UserSoulCard } from '@/components/workspace/user-soul-card';
 
 export function WorkspaceDashboard() {
   return (
@@ -10,8 +12,15 @@ export function WorkspaceDashboard() {
       <div className="max-w-6xl mx-auto w-full">
         <div className="space-y-5 lg:space-y-6">
           <DashboardSection
+            title="自定义人格"
+            description="维护统一注入 Pi Runtime 的 Soul。"
+          >
+            <UserSoulCard />
+          </DashboardSection>
+
+          <DashboardSection
             title="宿主设备"
-            description="查看接入状态、扫码新增设备，并按账号维护灵魂记忆。"
+            description="查看微信接入状态。"
           >
             <DevicesPanel embedded />
           </DashboardSection>
@@ -21,6 +30,13 @@ export function WorkspaceDashboard() {
             description="统一查看任务状态、下次执行时间和删除操作。"
           >
             <TabTasks />
+          </DashboardSection>
+
+          <DashboardSection
+            title="数据管理"
+            description="清理微信账号体系下的数据和当前用户 Soul。"
+          >
+            <TabData />
           </DashboardSection>
         </div>
       </div>

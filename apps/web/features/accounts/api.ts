@@ -54,6 +54,12 @@ export const accountsApi = {
         body: JSON.stringify({ content }),
       },
     ),
+  getUserSoul: () => requestJson<AccountSoul>('/api/account/me/soul'),
+  updateUserSoul: (content: string) =>
+    requestJson<SuccessResponse>('/api/account/me/soul', {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
   getQrCode: () =>
     requestJson<QrCodeResult>('/api/account/qrcode', { method: 'POST' }),
   pollQrStatus: (qrcode: string) =>

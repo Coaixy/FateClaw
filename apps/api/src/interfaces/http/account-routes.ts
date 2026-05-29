@@ -5,10 +5,12 @@ import {
   deleteOwnedAccountAndRuntime,
   getAccountBindingQrCodeStatus,
   getOwnedSoulContent,
+  getOwnedUserSoulContent,
   getSafeOwnedAccount,
   listSafeAccountsForUser,
   requestAccountBindingQrCode,
   updateOwnedSoulContent,
+  updateOwnedUserSoulContent,
 } from '../../modules/account/account-http-service.js';
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
@@ -16,6 +18,33 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', async (request) => {
     await request.requireAuth();
     return listSafeAccountsForUser(request.user.userId);
+  });
+
+  // GET /api/account/me/soul — 读取当前用户级 Soul 自定义人格
+  app.get('/me/soul', async (request, reply) => {
+    await request.requireAuth();
+    const result = await getOwnedUserSoulContent(request.user.userId);
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // PUT /api/account/me/soul — 更新当前用户级 Soul 自定义人格
+  app.put<{ Body: { content: string } }>('/me/soul', async (request, reply) => {
+    await request.requireAuth();
+    const { content } = request.body as { content: string };
+    if (typeof content !== 'string') {
+      return reply.code(400).send({ error: '缺少 content 字段' });
+    }
+    const result = await updateOwnedUserSoulContent(
+      request.user.userId,
+      content,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
   });
 
   // GET /api/account/:id — get single account detail

@@ -135,9 +135,11 @@ import {
   getUserById,
   getUserByPhone,
   getUserByPhoneUsing,
+  getUserSoulContent,
   promoteUserToCreator,
   updateUserPasswordHash,
   updateUserRole,
+  updateUserSoulContent,
 } from './repositories/users-repository.js';
 import {
   claimDueTasks,
@@ -285,6 +287,7 @@ export {
   getUserByAccountId,
   getUserById,
   getUserByPhone,
+  getUserSoulContent,
   getUserCustomSkill,
   getUserCustomSkillById,
   getUserCustomSkillCount,
@@ -348,6 +351,7 @@ export {
   updateUserCustomSkill,
   updateUserPasswordHash,
   updateUserRole,
+  updateUserSoulContent,
   unpublishSkillBundle,
   unpublishUserCustomSkill,
   unsubscribeFromBundle,

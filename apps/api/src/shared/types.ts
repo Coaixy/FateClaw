@@ -13,6 +13,7 @@ export interface User {
   earned_points: number; // 创作者收益（仅通过提现通道流出）
   reserved_points: number; // 请求级预扣
   pending_withdrawal_points: number; // 已申请提现中冻结的 earned_points
+  soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   created_at: string;
 }
 

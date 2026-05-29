@@ -17,7 +17,9 @@ import {
   getAccountsByUserId,
   getSoulContent,
   getUserById,
+  getUserSoulContent,
   updateSoulContent,
+  updateUserSoulContent,
 } from '../../infrastructure/db.js';
 import { WECHAT_DEVICE_BINDING_DISABLED_MESSAGE } from './account-service.js';
 import { removeAccountListener } from '../../runtime/ipc-worker.js';
@@ -67,6 +69,22 @@ export async function getOwnedSoulContent(
   return ok(toAccountSoulDto(content));
 }
 
+/**
+ * 读取当前用户的用户级 Soul 自定义人格。
+ *
+ * 这份配置不依赖微信账号，站内 AI Chat 会优先注入它。
+ */
+export async function getOwnedUserSoulContent(
+  userId: string,
+): Promise<ServiceResult<AccountSoulDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  const content = await getUserSoulContent(user.id);
+  return ok(toAccountSoulDto(content));
+}
+
 export async function updateOwnedSoulContent(
   userId: string,
   accountId: string,
@@ -77,6 +95,23 @@ export async function updateOwnedSoulContent(
     return fail(404, '账号不存在');
   }
   await updateSoulContent(account.id, content);
+  return ok({ success: true });
+}
+
+/**
+ * 更新当前用户的用户级 Soul 自定义人格。
+ *
+ * 保存后新的站内 AI Chat 请求会通过 Pi Runtime context 注入这份内容。
+ */
+export async function updateOwnedUserSoulContent(
+  userId: string,
+  content: string,
+): Promise<ServiceResult<{ success: true }>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  await updateUserSoulContent(user.id, content);
   return ok({ success: true });
 }
 
