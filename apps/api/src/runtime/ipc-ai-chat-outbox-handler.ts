@@ -283,6 +283,32 @@ async function resolveOwnerUserId(args: {
   return user?.id ?? null;
 }
 
+function normalizeMessageIdPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 96) || 'unknown';
+}
+
+function buildProgressMessageId(payload: ProgressIpcPayload): string {
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object'
+      ? payload.metadata
+      : {};
+  const isToolTrace = metadata.kind === 'tool_trace';
+  const toolCallId =
+    typeof metadata.tool_call_id === 'string'
+      ? metadata.tool_call_id
+      : undefined;
+
+  if (isToolTrace && payload.requestId && toolCallId) {
+    return [
+      'aichat-tool',
+      normalizeMessageIdPart(payload.requestId),
+      normalizeMessageIdPart(toolCallId),
+    ].join('-');
+  }
+
+  return `aichat-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /**
  * AI Chat 专属 outbox handler 主入口。
  * 消息永远不发微信，直接落库到 session。
@@ -547,12 +573,19 @@ async function processAiChatProgress(
   });
 
   const stage = (payload.metadata as Record<string, unknown>)?.stage;
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object'
+      ? payload.metadata
+      : {};
+  const kind =
+    typeof (metadata as { kind?: unknown }).kind === 'string'
+      ? (metadata as { kind: string }).kind
+      : 'progress';
   const text = payload.text?.trim() || '处理中';
 
   const ownerUserId = await resolveOwnerUserId({ accountId, pending });
-  const msgId = `aichat-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await storeMessage({
-    id: msgId,
+    id: buildProgressMessageId(payload),
     account_id: accountId,
     user_id: ownerUserId,
     sender: accountId,
@@ -563,7 +596,8 @@ async function processAiChatProgress(
     is_bot_message: true,
     session_id: pending.sessionId,
     metadata: {
-      kind: 'progress',
+      ...metadata,
+      kind,
       stage,
     },
   });

@@ -101,6 +101,7 @@ async function processInboxMessage(
         userName: request.userName,
         assistantName: request.assistantName,
         personaPrompt: request.personaPrompt,
+        outboxQueue: request.outboxQueue,
       },
       requestScope,
     );

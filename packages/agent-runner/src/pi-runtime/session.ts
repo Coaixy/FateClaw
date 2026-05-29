@@ -23,6 +23,7 @@ import {
 import {
   enrichAiChatStreamEvent,
   publishAiChatStreamEvent,
+  pushAiChatOutboxMessage,
 } from '../ai-chat-stream.js';
 import { log } from '../io.js';
 import { createFateClawPiSessionManager } from './session-manager.js';
@@ -153,6 +154,8 @@ export async function runPiSession(args: {
     createPiEventCollector({
       requestScope: args.requestScope,
       usage,
+      accountId: args.containerInput.accountId,
+      requestId: getRequestId(args.requestScope),
       setLastAssistantText(text) {
         lastAssistantText = text;
       },
@@ -168,6 +171,16 @@ export async function runPiSession(args: {
         }).catch((err) => {
           log(
             `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      },
+      pushOutboxProgress(message) {
+        void pushAiChatOutboxMessage({
+          outboxQueue: args.containerInput.outboxQueue,
+          message,
+        }).catch((err) => {
+          log(
+            `AI Chat tool progress 入队失败: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
       },

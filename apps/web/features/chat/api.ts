@@ -64,6 +64,9 @@ export type ChatSessionStreamEvent =
       sessionId?: string;
       toolCallId: string;
       toolName: string;
+      args?: unknown;
+      result?: unknown;
+      partialResult?: unknown;
       isError?: boolean;
     }
   | {
@@ -73,6 +76,7 @@ export type ChatSessionStreamEvent =
       text: string;
       stage?: string;
       workflow?: string;
+      metadata?: unknown;
     }
   | {
       type: 'final';

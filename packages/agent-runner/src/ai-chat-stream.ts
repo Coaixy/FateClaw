@@ -30,3 +30,11 @@ export async function publishAiChatStreamEvent(args: {
     JSON.stringify(args.event),
   );
 }
+
+export async function pushAiChatOutboxMessage(args: {
+  outboxQueue?: string;
+  message: unknown;
+}): Promise<void> {
+  if (!args.outboxQueue) return;
+  await getRedis().lpush(args.outboxQueue, JSON.stringify(args.message));
+}

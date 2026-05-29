@@ -21,6 +21,7 @@ import {
   hasFinalAssistantAfterLatestUser,
   isNearBottom,
 } from '../utils/display';
+import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
 const CHAT_POLL_INTERVAL_MS = 1200;
@@ -50,6 +51,35 @@ function appendActiveStreamingMessage(
   return streamingMessages.length > 0
     ? [...nextMessages, ...streamingMessages]
     : nextMessages;
+}
+
+function readToolPath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const path = (value as { path?: unknown }).path;
+  return typeof path === 'string' && path.trim()
+    ? sanitizeToolPath(path)
+    : undefined;
+}
+
+function getToolLabel(toolName: string): string {
+  return toolName;
+}
+
+function buildToolTraceContent(args: {
+  toolName: string;
+  status: 'running' | 'completed' | 'failed';
+  path?: string;
+}) {
+  const label = getToolLabel(args.toolName);
+  const suffix =
+    args.status === 'running'
+      ? '中'
+      : args.status === 'failed'
+        ? '失败'
+        : '完成';
+  return args.path ? `${label}: ${args.path} ${suffix}` : `${label}${suffix}`;
 }
 
 export async function sendChatSessionMessageWithOptions(
@@ -86,8 +116,12 @@ export function useChatMessages(options: {
   const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
     [],
   );
+  const toolTraceMessageEntriesRef = useRef<
+    Array<{ key: string; id: string; args?: unknown }>
+  >([]);
   const latestStreamingMessageKeyRef = useRef<string | null>(null);
   const streamingSequenceRef = useRef(0);
+  const toolTraceSequenceRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
 
   const getActiveStreamingMessageIds = useCallback(
@@ -98,6 +132,7 @@ export function useChatMessages(options: {
   const resetStreamingMessageRefs = useCallback(() => {
     streamingMessageEntriesRef.current = [];
     latestStreamingMessageKeyRef.current = null;
+    toolTraceMessageEntriesRef.current = [];
   }, []);
 
   const beginStreamingAssistantTurn = useCallback((turnIndex?: number) => {
@@ -335,6 +370,77 @@ export function useChatMessages(options: {
     [upsertStreamingAssistantMessage],
   );
 
+  const upsertToolTraceMessage = useCallback(
+    (
+      sessionId: string,
+      content: string,
+      traceOptions: {
+        key: string;
+        toolName: string;
+        status: 'running' | 'completed' | 'failed';
+        path?: string;
+        args?: unknown;
+      },
+    ) => {
+      let entry = toolTraceMessageEntriesRef.current.find(
+        (item) => item.key === traceOptions.key,
+      );
+      if (!entry) {
+        entry = {
+          key: traceOptions.key,
+          id: `tool-trace-${Date.now()}-${toolTraceSequenceRef.current}`,
+          args: traceOptions.args,
+        };
+        toolTraceSequenceRef.current += 1;
+        toolTraceMessageEntriesRef.current = [
+          ...toolTraceMessageEntriesRef.current,
+          entry,
+        ];
+      } else if (traceOptions.args !== undefined) {
+        entry.args = traceOptions.args;
+      }
+
+      const accountId =
+        options.sessions.find((session) => session.id === sessionId)
+          ?.account_id ?? 'web';
+
+      setMessages((previous) => {
+        const existingIndex = previous.findIndex(
+          (message) => message.id === entry.id,
+        );
+        const nextMessage: Message = {
+          id: entry.id,
+          account_id: accountId,
+          sender: '',
+          sender_name: '',
+          content,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+          metadata: {
+            kind: 'tool_trace',
+            stage: `tool_${traceOptions.status}`,
+            workflow: 'pi_runtime',
+            tool_call_id: traceOptions.key,
+            tool_name: traceOptions.toolName,
+            tool_label: getToolLabel(traceOptions.toolName),
+            tool_status: traceOptions.status,
+            tool_path: traceOptions.path,
+          },
+        };
+
+        if (existingIndex >= 0) {
+          const next = [...previous];
+          next[existingIndex] = nextMessage;
+          return next;
+        }
+
+        return [...previous, nextMessage];
+      });
+    },
+    [options.sessions],
+  );
+
   useEffect(() => {
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
@@ -404,6 +510,105 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'progress') {
+        const metadata =
+          payload.metadata &&
+          typeof payload.metadata === 'object' &&
+          !Array.isArray(payload.metadata)
+            ? (payload.metadata as Record<string, unknown>)
+            : null;
+        if (metadata?.kind === 'tool_trace') {
+          const toolCallId =
+            typeof metadata.tool_call_id === 'string'
+              ? metadata.tool_call_id
+              : `progress-${payload.timestamp ?? Date.now()}`;
+          const toolName =
+            typeof metadata.tool_name === 'string'
+              ? metadata.tool_name
+              : 'tool';
+          const status =
+            metadata.tool_status === 'completed' ||
+            metadata.tool_status === 'failed' ||
+            metadata.tool_status === 'running'
+              ? metadata.tool_status
+              : 'running';
+          upsertToolTraceMessage(sessionId, payload.text, {
+            key: toolCallId,
+            toolName,
+            status,
+            path:
+              typeof metadata.tool_path === 'string'
+                ? sanitizeToolPath(metadata.tool_path)
+                : undefined,
+          });
+          setProcessing(true);
+          return;
+        }
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'tool_start') {
+        const path = readToolPath(payload.args);
+        upsertToolTraceMessage(
+          sessionId,
+          buildToolTraceContent({
+            toolName: payload.toolName,
+            status: 'running',
+            path,
+          }),
+          {
+            key: payload.toolCallId,
+            toolName: payload.toolName,
+            status: 'running',
+            path,
+            args: payload.args,
+          },
+        );
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'tool_update') {
+        const path = readToolPath(payload.args);
+        upsertToolTraceMessage(
+          sessionId,
+          buildToolTraceContent({
+            toolName: payload.toolName,
+            status: 'running',
+            path,
+          }),
+          {
+            key: payload.toolCallId,
+            toolName: payload.toolName,
+            status: 'running',
+            path,
+            args: payload.args,
+          },
+        );
+        setProcessing(true);
+        return;
+      }
+
+      if (payload.type === 'tool_end') {
+        const existing = toolTraceMessageEntriesRef.current.find(
+          (entry) => entry.key === payload.toolCallId,
+        );
+        const path = readToolPath(existing?.args);
+        const status = payload.isError ? 'failed' : 'completed';
+        upsertToolTraceMessage(
+          sessionId,
+          buildToolTraceContent({
+            toolName: payload.toolName,
+            status,
+            path,
+          }),
+          {
+            key: payload.toolCallId,
+            toolName: payload.toolName,
+            status,
+            path,
+          },
+        );
         setProcessing(true);
         return;
       }
@@ -462,6 +667,7 @@ export function useChatMessages(options: {
     resetStreamingMessageRefs,
     upsertLatestStreamingAssistantMessage,
     upsertStreamingAssistantMessage,
+    upsertToolTraceMessage,
   ]);
 
   useEffect(() => {

@@ -71,6 +71,7 @@ export type AiChatStreamEvent =
       text: string;
       stage?: string;
       workflow?: string;
+      metadata?: unknown;
     }
   | {
       type: 'message';
@@ -184,6 +185,7 @@ export function streamEventFromProgressPayload(args: {
       text: args.payload.text?.trim() || '处理中',
       stage: args.payload.metadata?.stage,
       workflow: args.payload.metadata?.workflow,
+      metadata: args.payload.metadata,
     },
     requestId: args.payload.requestId,
     accountId: args.accountId,

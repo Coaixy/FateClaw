@@ -34,6 +34,7 @@ describe('AI Chat stream event helpers', () => {
       text: '查阅知识库',
       stage: 'knowledge_section',
       workflow: 'xuanxue',
+      metadata: { stage: 'knowledge_section', workflow: 'xuanxue' },
     });
     expect(event.timestamp).toEqual(expect.any(String));
   });

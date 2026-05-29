@@ -10,6 +10,11 @@ export interface MessageMetadataDto {
   workflow?: string;
   board_skill?: string;
   query_text?: string;
+  tool_call_id?: string;
+  tool_name?: string;
+  tool_label?: string;
+  tool_status?: 'running' | 'completed' | 'failed';
+  tool_path?: string;
   turn_complete?: boolean;
   request_id?: string;
 }

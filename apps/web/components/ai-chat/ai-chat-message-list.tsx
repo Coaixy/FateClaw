@@ -1,17 +1,18 @@
 'use client';
 
-import { Bot, User } from 'lucide-react';
-
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
 import { Message } from '@/features/chat/api';
+import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
   formatChatTime,
   isKnowledgeTrajectoryMessage,
+  isProgressMessage,
   isStreamingAssistantMessage,
+  isToolTraceMessage,
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
@@ -63,13 +64,15 @@ export function AiChatMessageList({
 
   const showThinkingIndicator =
     sending && !messages.some(isStreamingAssistantMessage);
+  const { rows, pendingToolTraces } = buildDisplayRows(messages);
 
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
-      {messages.map((message, index) => (
+      {rows.map(({ message, toolTraces }, index) => (
         <AiChatMessageRow
           key={message.id}
           message={message}
+          toolTraces={toolTraces}
           animationIndex={index}
           selectedSession={selectedSession}
         />
@@ -77,19 +80,48 @@ export function AiChatMessageList({
 
       {showThinkingIndicator && (
         <div className="max-w-2xl mx-auto">
-          <ThinkingIndicator progressLabel={progressLabel} />
+          <ThinkingIndicator
+            progressLabel={progressLabel}
+            toolTraces={pendingToolTraces}
+          />
         </div>
       )}
     </div>
   );
 }
 
+function buildDisplayRows(messages: Message[]) {
+  const rows: Array<{ message: Message; toolTraces: Message[] }> = [];
+  let pendingToolTraces: Message[] = [];
+
+  for (const message of messages) {
+    if (message.is_bot_message && isToolTraceMessage(message)) {
+      pendingToolTraces = [...pendingToolTraces, message];
+      continue;
+    }
+
+    const canAttachToolTraces =
+      message.is_bot_message && !isProgressMessage(message);
+    rows.push({
+      message,
+      toolTraces: canAttachToolTraces ? pendingToolTraces : [],
+    });
+    if (canAttachToolTraces) {
+      pendingToolTraces = [];
+    }
+  }
+
+  return { rows, pendingToolTraces };
+}
+
 function AiChatMessageRow({
   message,
+  toolTraces,
   animationIndex,
   selectedSession,
 }: {
   message: Message;
+  toolTraces: Message[];
   animationIndex: number;
   selectedSession: string;
 }) {
@@ -114,7 +146,7 @@ function AiChatMessageRow({
     const isSectionRead = stage === 'knowledge_section';
     return (
       <div
-        className="max-w-2xl mx-auto flex items-center gap-2 pl-9 animate-message-in"
+        className="max-w-2xl mx-auto flex items-center gap-2 animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 30, 120)}ms` }}
       >
         <div
@@ -153,30 +185,22 @@ function AiChatMessageRow({
 
   return (
     <div
-      className={`max-w-2xl mx-auto flex items-end gap-2 animate-message-in ${
-        isBot ? '' : 'flex-row-reverse'
+      className={`max-w-2xl mx-auto flex animate-message-in ${
+        isBot ? 'justify-start' : 'justify-end'
       }`}
       style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
     >
       <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${
-          isBot
-            ? 'bg-primary/15 text-primary'
-            : 'bg-surface-dark text-on-dark'
+        className={`flex min-w-0 max-w-[88%] flex-col ${
+          isBot ? 'items-start sm:max-w-[78%]' : 'items-end sm:max-w-[74%]'
         }`}
       >
-        {isBot ? <Bot size={13} /> : <User size={13} />}
-      </div>
-
-      <div
-        className={`flex-1 min-w-0 flex flex-col ${isBot ? 'items-start' : 'items-end'}`}
-      >
-        <div className="max-w-[88%] sm:max-w-[78%] group relative">
+        <div className="group relative max-w-full">
           <div
             className={`rounded-xl px-3 py-2 text-[12px] leading-6 transition-shadow duration-200 ${
               isBot
-                ? 'bg-surface-card border border-hairline rounded-bl-sm shadow-sm hover:shadow-md'
-                : 'bg-surface-dark text-on-dark rounded-br-sm shadow-sm'
+                ? 'bg-surface-card border border-hairline shadow-sm hover:shadow-md'
+                : 'bg-surface-dark text-on-dark shadow-sm'
             }`}
           >
             <CollapsibleMessage
@@ -211,22 +235,91 @@ function AiChatMessageRow({
           </div>
         )}
 
+        {isBot && toolTraces.length > 0 && (
+          <ToolTraceList messages={toolTraces} />
+        )}
+
       </div>
     </div>
   );
 }
 
-function ThinkingIndicator({
-  progressLabel,
+function ToolTraceList({ messages }: { messages: Message[] }) {
+  return (
+    <div className="mt-1 flex max-w-full flex-col gap-1">
+      {messages.map((message) => {
+        const metadata =
+          message.metadata &&
+          typeof message.metadata === 'object' &&
+          !Array.isArray(message.metadata)
+            ? message.metadata
+            : null;
+        const status = metadata?.tool_status as
+          | 'running'
+          | 'completed'
+          | 'failed'
+          | undefined;
+        const path =
+          typeof metadata?.tool_path === 'string'
+            ? sanitizeToolPath(metadata.tool_path)
+            : undefined;
+        const label =
+          (metadata?.tool_name as string | undefined) ||
+          (metadata?.tool_label as string | undefined) ||
+          'tool';
+        const statusLabel = status ?? 'unknown';
+
+        return (
+          <div key={message.id} className="flex min-w-0">
+            <div className="min-w-0 flex flex-wrap items-center gap-1.5 text-[10px]">
+              <ToolTraceLabel label="Tool" value={label} />
+              <ToolTraceLabel label="Status" value={statusLabel} />
+              {path && (
+                <ToolTraceLabel
+                  label="Path"
+                  value={path}
+                  valueClassName="font-mono text-[9px]"
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ToolTraceLabel({
+  label,
+  value,
+  valueClassName = '',
 }: {
-  progressLabel: string | null;
+  label: string;
+  value: string;
+  valueClassName?: string;
 }) {
   return (
-    <div className="flex items-end gap-2 animate-message-in">
-      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-primary/15 text-primary">
-        <Bot size={13} />
-      </div>
-      <div className="rounded-xl px-3 py-2 bg-surface-card border border-hairline rounded-bl-sm shadow-sm">
+    <span className="inline-flex max-w-full min-w-0 overflow-hidden rounded border border-hairline bg-surface-card text-muted shadow-sm">
+      <span className="shrink-0 border-r border-hairline bg-surface-soft px-1.5 py-0.5 text-muted-soft">
+        {label}
+      </span>
+      <span className={`min-w-0 truncate px-1.5 py-0.5 ${valueClassName}`}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
+function ThinkingIndicator({
+  progressLabel,
+  toolTraces,
+}: {
+  progressLabel: string | null;
+  toolTraces: Message[];
+}) {
+  return (
+    <div className="flex animate-message-in">
+      <div className="rounded-xl px-3 py-2 bg-surface-card border border-hairline shadow-sm">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             {[0, 1, 2].map((index) => (
@@ -243,6 +336,7 @@ function ThinkingIndicator({
             </span>
           )}
         </div>
+        {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
       </div>
     </div>
   );
@@ -292,13 +386,6 @@ function BaguaPattern() {
           />
         ))}
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Bot
-          size={16}
-          strokeWidth={1.5}
-          className="text-primary/60"
-        />
-      </div>
     </div>
   );
 }

@@ -3,7 +3,11 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
 import type { RequestScope } from '../request-scope.js';
-import type { AiChatStreamEvent, TokenUsage } from '../types.js';
+import type {
+  AiChatProgressOutboxMessage,
+  AiChatStreamEvent,
+  TokenUsage,
+} from '../types.js';
 
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -62,13 +66,104 @@ function readTurnIndex(event: AgentSessionEvent): number | undefined {
     : undefined;
 }
 
+function getToolLabel(toolName: string): string {
+  return toolName;
+}
+
+function readToolPath(args: unknown): string | undefined {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) {
+    return undefined;
+  }
+  const path = (args as { path?: unknown }).path;
+  return typeof path === 'string' && path.trim() ? path.trim() : undefined;
+}
+
+function normalizeSkillDir(value: string): string {
+  const withoutOwner = value.startsWith('user-') ? value.slice(5) : value;
+  return withoutOwner
+    .replace(
+      /-?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      '',
+    )
+    .replace(/-?[0-9a-f]{24,}$/i, '');
+}
+
+function sanitizeToolPath(rawPath?: string): string | undefined {
+  if (!rawPath) return undefined;
+  const normalized = rawPath.trim().replace(/\\/g, '/');
+  const parts = normalized.split('/').filter(Boolean);
+  const skillFileIndex = (() => {
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      if (parts[index] === 'SKILL.md') return index;
+    }
+    return -1;
+  })();
+  if (skillFileIndex > 0) {
+    return [
+      normalizeSkillDir(parts[skillFileIndex - 1]),
+      ...parts.slice(skillFileIndex),
+    ].join('/');
+  }
+  const textSkillsIndex = parts.findIndex((part) => part === 'text-skills');
+  if (textSkillsIndex >= 0 && textSkillsIndex + 2 < parts.length) {
+    return [
+      normalizeSkillDir(parts[textSkillsIndex + 2]),
+      ...parts.slice(textSkillsIndex + 3),
+    ].join('/');
+  }
+  if (parts.length > 2) {
+    return parts.slice(-2).join('/');
+  }
+  return parts.join('/') || undefined;
+}
+
+function buildToolProgressMessage(args: {
+  accountId: string;
+  requestId?: string;
+  toolCallId: string;
+  toolName: string;
+  toolArgs?: unknown;
+  status: 'running' | 'completed' | 'failed';
+}): AiChatProgressOutboxMessage {
+  const label = getToolLabel(args.toolName);
+  const path = sanitizeToolPath(readToolPath(args.toolArgs));
+  const suffix =
+    args.status === 'running'
+      ? '中'
+      : args.status === 'failed'
+        ? '失败'
+        : '完成';
+
+  return {
+    type: 'progress',
+    accountId: args.accountId,
+    requestId: args.requestId,
+    text: path ? `${label}: ${path} ${suffix}` : `${label}${suffix}`,
+    timestamp: new Date().toISOString(),
+    metadata: {
+      kind: 'tool_trace',
+      stage: `tool_${args.status}`,
+      workflow: 'pi_runtime',
+      tool_call_id: args.toolCallId,
+      tool_name: args.toolName,
+      tool_label: label,
+      tool_status: args.status,
+      tool_path: path,
+    },
+  };
+}
+
 export function createPiEventCollector(args: {
   requestScope: RequestScope;
   usage: TokenUsage;
+  accountId: string;
+  requestId?: string;
   setLastAssistantText(text: string): void;
   publishStreamEvent?: (event: AiChatStreamEvent) => void;
+  pushOutboxProgress?: (message: AiChatProgressOutboxMessage) => void;
 }): (event: AgentSessionEvent) => void {
   let lastAssistantSnapshot = '';
+  const toolArgsById = new Map<string, unknown>();
 
   function publish(event: AiChatStreamEvent): void {
     args.publishStreamEvent?.(event);
@@ -146,6 +241,7 @@ export function createPiEventCollector(args: {
         }
         break;
       case 'tool_execution_start':
+        toolArgsById.set(event.toolCallId, event.args);
         traceEvent(
           {
             type: 'pi_tool_execution_start',
@@ -161,8 +257,19 @@ export function createPiEventCollector(args: {
           toolName: event.toolName,
           args: event.args,
         });
+        args.pushOutboxProgress?.(
+          buildToolProgressMessage({
+            accountId: args.accountId,
+            requestId: args.requestId,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            toolArgs: event.args,
+            status: 'running',
+          }),
+        );
         break;
       case 'tool_execution_update':
+        toolArgsById.set(event.toolCallId, event.args);
         publish({
           type: 'tool_update',
           toolCallId: event.toolCallId,
@@ -172,22 +279,36 @@ export function createPiEventCollector(args: {
         });
         break;
       case 'tool_execution_end':
-        traceEvent(
-          {
-            type: 'pi_tool_execution_end',
+        {
+          const toolArgs = toolArgsById.get(event.toolCallId);
+          toolArgsById.delete(event.toolCallId);
+          traceEvent(
+            {
+              type: 'pi_tool_execution_end',
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              isError: event.isError,
+            },
+            args.requestScope,
+          );
+          publish({
+            type: 'tool_end',
             toolCallId: event.toolCallId,
             toolName: event.toolName,
+            result: event.result,
             isError: event.isError,
-          },
-          args.requestScope,
-        );
-        publish({
-          type: 'tool_end',
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          result: event.result,
-          isError: event.isError,
-        });
+          });
+          args.pushOutboxProgress?.(
+            buildToolProgressMessage({
+              accountId: args.accountId,
+              requestId: args.requestId,
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              toolArgs,
+              status: event.isError ? 'failed' : 'completed',
+            }),
+          );
+        }
         break;
       case 'agent_end':
         traceEvent(

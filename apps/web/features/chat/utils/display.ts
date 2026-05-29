@@ -18,10 +18,15 @@ export type MessageGroup = {
 
 export type ProgressMessage = Message & {
   metadata: {
-    kind: 'progress';
+    kind: 'progress' | 'tool_trace';
     stage?: string;
     workflow?: string;
     query_text?: string;
+    tool_call_id?: string;
+    tool_name?: string;
+    tool_label?: string;
+    tool_status?: 'running' | 'completed' | 'failed';
+    tool_path?: string;
   };
 };
 
@@ -100,11 +105,15 @@ export function hasFinalAssistantAfterLatestUser(messages: Message[]) {
 export function isProgressMessage(
   message: Message,
 ): message is ProgressMessage {
-  return message.metadata?.kind === 'progress';
+  return (
+    message.metadata?.kind === 'progress' ||
+    message.metadata?.kind === 'tool_trace'
+  );
 }
 
 export function getProgressStageLabel(stage?: string) {
   if (!stage) return '处理中';
+  if (stage.startsWith('tool_')) return '查阅';
   if (stage === 'knowledge_hit') return '命中知识库';
   if (stage === 'knowledge_retrieving') return '开始解读';
   if (stage === 'knowledge_section') return '检索章节';
@@ -131,9 +140,16 @@ export function isKnowledgeTrajectoryMessage(message: Message): boolean {
   );
 }
 
+export function isToolTraceMessage(message: Message): boolean {
+  return message.metadata?.kind === 'tool_trace';
+}
+
 export function filterProgressMessages(messages: Message[]) {
   return messages.filter(
-    (message) => !isProgressMessage(message) || isKnowledgeTrajectoryMessage(message),
+    (message) =>
+      !isProgressMessage(message) ||
+      isKnowledgeTrajectoryMessage(message) ||
+      isToolTraceMessage(message),
   );
 }
 

@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@/features/chat/api';
 
 import {
+  filterProgressMessages,
   hasFinalAssistantAfterLatestUser,
   isStreamingAssistantMessage,
+  isToolTraceMessage,
 } from './display';
+import { sanitizeToolPath } from './tool-path';
 
 describe('chat display message state helpers', () => {
   it('detects streaming assistant messages', () => {
@@ -59,6 +62,38 @@ describe('chat display message state helpers', () => {
         }),
       ]),
     ).toBe(true);
+  });
+
+  it('keeps tool trace progress messages visible', () => {
+    const hiddenProgress = createMessage({
+      id: 'progress',
+      isBot: true,
+      metadata: { kind: 'progress', stage: 'general_running' },
+    });
+    const toolTrace = createMessage({
+      id: 'tool-trace',
+      isBot: true,
+      metadata: {
+        kind: 'tool_trace',
+        stage: 'tool_completed',
+        tool_call_id: 'call-1',
+        tool_name: 'read',
+        tool_status: 'completed',
+      },
+    });
+
+    expect(isToolTraceMessage(toolTrace)).toBe(true);
+    expect(filterProgressMessages([hiddenProgress, toolTrace])).toEqual([
+      toolTrace,
+    ]);
+  });
+
+  it('hides local text skill paths in tool traces', () => {
+    expect(
+      sanitizeToolPath(
+        '/Users/coaixy/Documents/Code/FateClaw/.fateclaw/text-skills/a3f5d6c9-b68b-421d-8c2b-5fcc4e7455af/user-我的-skill-89edafe8-fe9a-4afc-889d-4796ccb40a73/SKILL.md',
+      ),
+    ).toBe('我的-skill/SKILL.md');
   });
 });
 

@@ -102,6 +102,11 @@ export interface ProgressIpcPayload {
     kind?: string;
     stage?: string;
     workflow?: string;
+    tool_call_id?: string;
+    tool_name?: string;
+    tool_label?: string;
+    tool_status?: 'running' | 'completed' | 'failed';
+    tool_path?: string;
   };
 }
 

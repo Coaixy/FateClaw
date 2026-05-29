@@ -63,6 +63,8 @@ export interface ContainerInput {
   assistantName?: string;
   /** Persona 人格覆盖层：由创作者定义，会追加到 system prompt 头部。 */
   personaPrompt?: string;
+  /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
+  outboxQueue?: string;
 }
 
 export interface ActiveBoardContext extends SkillContextEntry {
@@ -237,6 +239,7 @@ export type AiChatStreamEvent =
       text: string;
       stage?: string;
       workflow?: string;
+      metadata?: unknown;
     }
   | {
       type: 'final';
@@ -267,6 +270,24 @@ export type AiChatStreamEvent =
       sessionId?: string;
       usage: AiChatStreamUsage;
     };
+
+export interface AiChatProgressOutboxMessage {
+  type: 'progress';
+  accountId?: string;
+  requestId?: string;
+  text: string;
+  timestamp?: string;
+  metadata?: {
+    kind?: string;
+    stage?: string;
+    workflow?: string;
+    tool_call_id?: string;
+    tool_name?: string;
+    tool_label?: string;
+    tool_status?: 'running' | 'completed' | 'failed';
+    tool_path?: string;
+  };
+}
 
 export interface AgentTaskGraph {
   version: 1;
