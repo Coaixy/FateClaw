@@ -5,23 +5,108 @@ import { CHART, WUXING_TEXT } from './chart-theme';
 
 // ============ 浅色纸盘五行配色 ============
 const STEM_WUXING: Record<string, string> = {
-  甲: '木', 乙: '木',
-  丙: '火', 丁: '火',
-  戊: '土', 己: '土',
-  庚: '金', 辛: '金',
-  壬: '水', 癸: '水',
+  甲: '木',
+  乙: '木',
+  丙: '火',
+  丁: '火',
+  戊: '土',
+  己: '土',
+  庚: '金',
+  辛: '金',
+  壬: '水',
+  癸: '水',
 };
 
 const BRANCH_WUXING: Record<string, string> = {
-  子: '水', 丑: '土', 寅: '木', 卯: '木',
-  辰: '土', 巳: '火', 午: '火', 未: '土',
-  申: '金', 酉: '金', 戌: '土', 亥: '水',
+  子: '水',
+  丑: '土',
+  寅: '木',
+  卯: '木',
+  辰: '土',
+  巳: '火',
+  午: '火',
+  未: '土',
+  申: '金',
+  酉: '金',
+  戌: '土',
+  亥: '水',
+};
+
+const STEM_POLARITY: Record<string, '阳' | '阴'> = {
+  甲: '阳',
+  乙: '阴',
+  丙: '阳',
+  丁: '阴',
+  戊: '阳',
+  己: '阴',
+  庚: '阳',
+  辛: '阴',
+  壬: '阳',
+  癸: '阴',
+};
+
+const BRANCH_MAIN_STEM: Record<string, string> = {
+  子: '癸',
+  丑: '己',
+  寅: '甲',
+  卯: '乙',
+  辰: '戊',
+  巳: '丙',
+  午: '丁',
+  未: '己',
+  申: '庚',
+  酉: '辛',
+  戌: '戊',
+  亥: '壬',
+};
+
+const GENERATES: Record<string, string> = {
+  木: '火',
+  火: '土',
+  土: '金',
+  金: '水',
+  水: '木',
+};
+
+const CONTROLS: Record<string, string> = {
+  木: '土',
+  土: '水',
+  水: '火',
+  火: '金',
+  金: '木',
 };
 
 function wuxingColor(char?: string): string {
   if (!char) return CHART.body;
   const wuxing = STEM_WUXING[char] ?? BRANCH_WUXING[char];
   return wuxing ? WUXING_TEXT[wuxing] : CHART.body;
+}
+
+// 大运和流年只给天干十神时，地支十神按地支本气与日干关系补齐。
+function resolveTenStar(dayStem?: string, targetStem?: string): string {
+  if (!dayStem || !targetStem) return '';
+  const dayElement = STEM_WUXING[dayStem];
+  const targetElement = STEM_WUXING[targetStem];
+  const dayPolarity = STEM_POLARITY[dayStem];
+  const targetPolarity = STEM_POLARITY[targetStem];
+  if (!dayElement || !targetElement || !dayPolarity || !targetPolarity)
+    return '';
+
+  const samePolarity = dayPolarity === targetPolarity;
+  if (dayElement === targetElement) return samePolarity ? '比肩' : '劫财';
+  if (GENERATES[dayElement] === targetElement)
+    return samePolarity ? '食神' : '伤官';
+  if (GENERATES[targetElement] === dayElement)
+    return samePolarity ? '偏印' : '正印';
+  if (CONTROLS[dayElement] === targetElement)
+    return samePolarity ? '偏财' : '正财';
+  if (CONTROLS[targetElement] === dayElement)
+    return samePolarity ? '七杀' : '正官';
+  return '';
+}
+
+function resolveBranchTenStar(dayStem?: string, branch?: string): string {
+  return resolveTenStar(dayStem, branch ? BRANCH_MAIN_STEM[branch] : undefined);
 }
 
 function classNames(...parts: Array<string | false | null | undefined>) {
@@ -47,6 +132,7 @@ interface Pillar {
   sound?: string;
   tenStar?: string | null;
   terrain?: string;
+  wangXiang?: string;
 }
 
 interface Decade {
@@ -123,7 +209,9 @@ function findDecadeIndexByYear(
   const matchedIndex = decades.findIndex((decade, index) => {
     if (decade.startYear === undefined) return false;
     const endYear = getResolvedDecadeEndYear(decades, index, fallbackEndYear);
-    return year >= decade.startYear && (endYear === undefined || year <= endYear);
+    return (
+      year >= decade.startYear && (endYear === undefined || year <= endYear)
+    );
   });
 
   return matchedIndex === -1 ? null : matchedIndex;
@@ -141,11 +229,15 @@ function getAnnualsForDecade(
   if (!decade || decade.startYear === undefined) return annuals;
 
   const startYear = decade.startYear;
-  const endYear = getResolvedDecadeEndYear(decades, decadeIndex, fallbackEndYear);
-  const matchedAnnuals = annuals.filter((item) => (
-    item.year >= startYear &&
-    (endYear === undefined || item.year <= endYear)
-  ));
+  const endYear = getResolvedDecadeEndYear(
+    decades,
+    decadeIndex,
+    fallbackEndYear,
+  );
+  const matchedAnnuals = annuals.filter(
+    (item) =>
+      item.year >= startYear && (endYear === undefined || item.year <= endYear),
+  );
 
   return matchedAnnuals.length > 0 ? matchedAnnuals : annuals;
 }
@@ -158,10 +250,12 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
   const decades = data?.fortune?.decades ?? [];
   const annuals = data?.fortune?.annuals ?? [];
   const annualStartYear = data?.fortune?.annualStartYear ?? annuals[0]?.year;
-  const annualEndYear = data?.fortune?.annualEndYear ?? annuals[annuals.length - 1]?.year;
+  const annualEndYear =
+    data?.fortune?.annualEndYear ?? annuals[annuals.length - 1]?.year;
   const specialSigns = bazi?.specialSigns;
   const kongWang = specialSigns?.kongWang ?? [];
-  const defaultSelectedAnnualYear = data?.fortune?.currentAnnualYear ?? annuals[0]?.year;
+  const defaultSelectedAnnualYear =
+    data?.fortune?.currentAnnualYear ?? annuals[0]?.year;
   const defaultSelectedDecadeIndex =
     findDecadeIndexByYear(defaultSelectedAnnualYear, decades, annualEndYear) ??
     (decades.length > 0 ? 0 : null);
@@ -180,9 +274,9 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
   const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number | null>(
     defaultSelectedDecadeIndex,
   );
-  const [selectedAnnualYear, setSelectedAnnualYear] = useState<number | undefined>(
-    defaultSelectedAnnualYear,
-  );
+  const [selectedAnnualYear, setSelectedAnnualYear] = useState<
+    number | undefined
+  >(defaultSelectedAnnualYear);
 
   useEffect(() => {
     setSelectedDecadeIndex(defaultSelectedDecadeIndex);
@@ -194,8 +288,10 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
     stem: string;
     branch: string;
     tenStarTop: string;
+    branchTenStar: string;
     hiddenStems: { stem: string; star: string }[];
     terrain: string;
+    selfSitting: string;
     sound: string;
     isDay?: boolean;
     isHighlight?: boolean;
@@ -218,15 +314,23 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
     findDecadeIndexByYear(activeYear, decades, annualEndYear);
   const currentDecade =
     matchedDecadeIndex !== null ? decades[matchedDecadeIndex] : undefined;
+  const dayStem =
+    pillars.day?.heavenStem?.name ?? pillars.day?.sixtyCycle?.[0] ?? '';
   const visibleAnnualStartYear = visibleAnnuals[0]?.year ?? annualStartYear;
   const visibleAnnualEndYear =
     visibleAnnuals[visibleAnnuals.length - 1]?.year ?? annualEndYear;
 
   function handleDecadeSelect(index: number) {
-    const decadeAnnuals = getAnnualsForDecade(annuals, decades, index, annualEndYear);
+    const decadeAnnuals = getAnnualsForDecade(
+      annuals,
+      decades,
+      index,
+      annualEndYear,
+    );
     const nextAnnualYear =
       decadeAnnuals.find((item) => item.year === selectedAnnualYear)?.year ??
-      decadeAnnuals.find((item) => item.year === defaultSelectedAnnualYear)?.year ??
+      decadeAnnuals.find((item) => item.year === defaultSelectedAnnualYear)
+        ?.year ??
       decadeAnnuals[0]?.year;
 
     setSelectedDecadeIndex(index);
@@ -251,11 +355,16 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       stem: currentAnnual.heavenStem ?? currentAnnual.sixtyCycle[0] ?? '',
       branch: currentAnnual.earthBranch ?? currentAnnual.sixtyCycle[1] ?? '',
       tenStarTop: currentAnnual.tenStar ?? '',
+      branchTenStar: resolveBranchTenStar(
+        dayStem,
+        currentAnnual.earthBranch ?? currentAnnual.sixtyCycle[1] ?? '',
+      ),
       hiddenStems: [],
-      terrain: currentAnnual.terrain ?? '',
+      terrain: '',
+      selfSitting: '',
       sound: currentAnnual.sound ?? '',
       isDay: false,
-      isHighlight: true
+      isHighlight: true,
     });
   }
 
@@ -266,11 +375,16 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       stem: currentDecade.heavenStem ?? currentDecade.sixtyCycle?.[0] ?? '',
       branch: currentDecade.earthBranch ?? currentDecade.sixtyCycle?.[1] ?? '',
       tenStarTop: currentDecade.tenStar ?? '',
+      branchTenStar: resolveBranchTenStar(
+        dayStem,
+        currentDecade.earthBranch ?? currentDecade.sixtyCycle?.[1] ?? '',
+      ),
       hiddenStems: [],
       terrain: '',
+      selfSitting: '',
       sound: '',
       isDay: false,
-      isHighlight: true
+      isHighlight: true,
     });
   }
 
@@ -283,9 +397,15 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
     if (!p) {
       columnsData.push({
         label: PILLAR_NAMES[idx],
-        stem: '', branch: '', tenStarTop: '',
-        hiddenStems: [], terrain: '', sound: '',
-        isDay: key === 'day'
+        stem: '',
+        branch: '',
+        tenStarTop: '',
+        branchTenStar: '',
+        hiddenStems: [],
+        terrain: '',
+        selfSitting: '',
+        sound: '',
+        isDay: key === 'day',
       });
       return;
     }
@@ -299,10 +419,12 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       stem,
       branch,
       tenStarTop: p.tenStar ?? '',
-      hiddenStems: hidden.map(h => ({ stem: h.name, star: h.type ?? '' })),
+      branchTenStar: '',
+      hiddenStems: hidden.map((h) => ({ stem: h.name, star: h.type ?? '' })),
       terrain: p.terrain ?? '',
+      selfSitting: p.wangXiang ?? '',
       sound: p.sound ?? '',
-      isDay: key === 'day'
+      isDay: key === 'day',
     });
   });
 
@@ -311,7 +433,9 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       {/* 顶部基础信息区 */}
       {(bazi?.birthTime || bazi?.baziString) && (
         <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] sm:text-xs">
-          {bazi?.birthTime && <span className={CHART.body}>{bazi.birthTime}</span>}
+          {bazi?.birthTime && (
+            <span className={CHART.body}>{bazi.birthTime}</span>
+          )}
           {bazi?.gender && <span className={CHART.muted}>{bazi.gender}</span>}
           {bazi?.baziString && (
             <span className="text-ink font-medium tracking-wider ml-auto">
@@ -330,10 +454,13 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                 日期
               </th>
               {columnsData.map((col, idx) => (
-                <th key={idx} className={classNames(
-                  "py-1.5 px-0.5 text-muted font-medium text-[10px] sm:text-[11px] border-r border-hairline-soft last:border-r-0",
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
+                <th
+                  key={idx}
+                  className={classNames(
+                    'py-1.5 px-0.5 text-muted font-medium text-[10px] sm:text-[11px] border-r border-hairline-soft last:border-r-0',
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
                   {col.label}
                 </th>
               ))}
@@ -342,82 +469,164 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
           <tbody className="text-[11px] sm:text-xs">
             {/* 主星 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">主星</td>
+              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                主星
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  "py-1 px-0.5 border-r border-hairline-soft last:border-r-0",
-                  col.isDay ? CHART.body + ' font-semibold' : CHART.muted,
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
-                  {col.isDay ? (bazi?.gender === '女' ? '元女' : '元男') : col.tenStarTop || <span className="text-transparent">-</span>}
+                <td
+                  key={idx}
+                  className={classNames(
+                    'py-1 px-0.5 border-r border-hairline-soft last:border-r-0',
+                    col.isDay ? CHART.body + ' font-semibold' : CHART.muted,
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
+                  {col.isDay
+                    ? bazi?.gender === '女'
+                      ? '元女'
+                      : '元男'
+                    : col.tenStarTop || (
+                        <span className="text-transparent">-</span>
+                      )}
                 </td>
               ))}
             </tr>
             {/* 天干 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">天干</td>
+              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                天干
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.stem)}`,
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
+                <td
+                  key={idx}
+                  className={classNames(
+                    `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.stem)}`,
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
                   {col.stem || <span className="text-transparent">-</span>}
                 </td>
               ))}
             </tr>
             {/* 地支 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">地支</td>
+              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                地支
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.branch)}`,
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
-                  {col.branch || <span className="text-transparent">-</span>}
+                <td
+                  key={idx}
+                  className={classNames(
+                    `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.branch)}`,
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
+                  {col.branch ? (
+                    <div className="flex flex-col items-center leading-none">
+                      <span>{col.branch}</span>
+                      {col.branchTenStar && (
+                        <span
+                          className={
+                            CHART.mutedSoft +
+                            ' mt-1 text-[9px] sm:text-[10px] font-medium'
+                          }
+                        >
+                          {col.branchTenStar}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-transparent">-</span>
+                  )}
                 </td>
               ))}
             </tr>
             {/* 藏干 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft align-top">藏干</td>
+              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft align-top">
+                藏干
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  "py-1 px-0.5 align-top border-r border-hairline-soft last:border-r-0",
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
+                <td
+                  key={idx}
+                  className={classNames(
+                    'py-1 px-0.5 align-top border-r border-hairline-soft last:border-r-0',
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
                   {col.hiddenStems.length > 0 ? (
                     <div className="flex flex-col gap-0.5 items-center">
                       {col.hiddenStems.map((h, hIdx) => (
-                        <div key={hIdx} className="flex items-center gap-[2px] text-[9px] sm:text-[10px] leading-none">
-                          <span className={`${wuxingColor(h.stem)} font-medium`}>{h.stem}</span>
-                          <span className={CHART.mutedSoft + ' scale-90'}>{h.star}</span>
+                        <div
+                          key={hIdx}
+                          className="flex items-center gap-[2px] text-[9px] sm:text-[10px] leading-none"
+                        >
+                          <span
+                            className={`${wuxingColor(h.stem)} font-medium`}
+                          >
+                            {h.stem}
+                          </span>
+                          <span className={CHART.mutedSoft + ' scale-90'}>
+                            {h.star}
+                          </span>
                         </div>
                       ))}
                     </div>
-                  ) : <span className="text-transparent">-</span>}
+                  ) : (
+                    <span className="text-transparent">-</span>
+                  )}
                 </td>
               ))}
             </tr>
             {/* 星运 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">星运</td>
+              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                星运
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  "py-1 px-0.5 text-body border-r border-hairline-soft last:border-r-0",
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
+                <td
+                  key={idx}
+                  className={classNames(
+                    'py-1 px-0.5 text-body border-r border-hairline-soft last:border-r-0',
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
                   {col.terrain || <span className="text-transparent">-</span>}
+                </td>
+              ))}
+            </tr>
+            {/* 自坐 */}
+            <tr className="border-b border-hairline-soft">
+              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                自坐
+              </td>
+              {columnsData.map((col, idx) => (
+                <td
+                  key={idx}
+                  className={classNames(
+                    'py-1 px-0.5 text-body border-r border-hairline-soft last:border-r-0',
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
+                  {col.selfSitting || (
+                    <span className="text-transparent">-</span>
+                  )}
                 </td>
               ))}
             </tr>
             {/* 纳音 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">纳音</td>
+              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+                纳音
+              </td>
               {columnsData.map((col, idx) => (
-                <td key={idx} className={classNames(
-                  "py-1 px-0.5 text-muted text-[9px] sm:text-[10px] leading-tight border-r border-hairline-soft last:border-r-0",
-                  col.isHighlight && "bg-chart-highlight"
-                )}>
+                <td
+                  key={idx}
+                  className={classNames(
+                    'py-1 px-0.5 text-muted text-[9px] sm:text-[10px] leading-tight border-r border-hairline-soft last:border-r-0',
+                    col.isHighlight && 'bg-chart-highlight',
+                  )}
+                >
                   {col.sound || <span className="text-transparent">-</span>}
                 </td>
               ))}
@@ -427,24 +636,32 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       </div>
 
       {/* 补充信息：空亡、命宫等 */}
-      {(kongWang.length > 0 || specialSigns?.ownSign || specialSigns?.bodySign) && (
+      {(kongWang.length > 0 ||
+        specialSigns?.ownSign ||
+        specialSigns?.bodySign) && (
         <div className="px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline-soft flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] sm:text-xs">
           {specialSigns?.ownSign && (
             <span>
               <span className={CHART.mutedSoft + ' mr-1.5'}>命宫</span>
-              <span className={CHART.body + ' font-medium'}>{specialSigns.ownSign}</span>
+              <span className={CHART.body + ' font-medium'}>
+                {specialSigns.ownSign}
+              </span>
             </span>
           )}
           {specialSigns?.bodySign && (
             <span>
               <span className={CHART.mutedSoft + ' mr-1.5'}>身宫</span>
-              <span className={CHART.body + ' font-medium'}>{specialSigns.bodySign}</span>
+              <span className={CHART.body + ' font-medium'}>
+                {specialSigns.bodySign}
+              </span>
             </span>
           )}
           {kongWang.length > 0 && (
             <span>
               <span className={CHART.mutedSoft + ' mr-1.5'}>空亡</span>
-              <span className={CHART.body + ' font-medium tabular-nums'}>{kongWang.join(' · ')}</span>
+              <span className={CHART.body + ' font-medium tabular-nums'}>
+                {kongWang.join(' · ')}
+              </span>
             </span>
           )}
         </div>
@@ -457,7 +674,8 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             <div className="flex items-center justify-between gap-2 border-b border-hairline-soft bg-surface-soft px-3 py-1.5 text-[10px] sm:text-[11px] text-muted">
               <span className="font-medium text-body">大运流年</span>
               <span className="tabular-nums">
-                流年 {visibleAnnualStartYear}-{visibleAnnualEndYear} · {visibleAnnuals.length} 条
+                流年 {visibleAnnualStartYear}-{visibleAnnualEndYear} ·{' '}
+                {visibleAnnuals.length} 条
               </span>
             </div>
           )}
@@ -465,12 +683,18 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
           {decades.length > 0 && (
             <div className="flex border-b border-hairline-soft">
               <div className="w-8 sm:w-10 flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
-                <span className={CHART.muted + ' font-medium'} style={{ writingMode: 'vertical-lr' }}>大运</span>
+                <span
+                  className={CHART.muted + ' font-medium'}
+                  style={{ writingMode: 'vertical-lr' }}
+                >
+                  大运
+                </span>
               </div>
               <div className="flex-1 overflow-x-auto flex scrollbar-hide snap-x">
                 {decades.map((d, i) => {
                   const stem = d.heavenStem ?? d.sixtyCycle?.[0] ?? '';
                   const branch = d.earthBranch ?? d.sixtyCycle?.[1] ?? '';
+                  const branchTenStar = resolveBranchTenStar(dayStem, branch);
                   const isSelected = i === selectedDecadeIndex;
                   return (
                     <button
@@ -480,20 +704,51 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       aria-pressed={isSelected}
                       className={classNames(
                         'snap-start flex-none w-[44px] sm:w-[50px] flex flex-col items-center py-2 border-r border-hairline-soft last:border-r-0 transition-colors',
-                        isSelected ? 'bg-surface-cream-strong' : 'hover:bg-chart-highlight',
+                        isSelected
+                          ? 'bg-surface-cream-strong'
+                          : 'hover:bg-chart-highlight',
                       )}
                     >
-                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">{d.startYear ?? '-'}</span>
-                      <span className={CHART.mutedSoft + ' mt-1 leading-none'}>{d.startAge}岁</span>
+                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">
+                        {d.startYear ?? '-'}
+                      </span>
+                      <span className={CHART.mutedSoft + ' mt-1 leading-none'}>
+                        {d.startAge}岁
+                      </span>
                       <div className="flex items-end gap-[1px] mt-1.5">
-                        <span className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}>{stem}</span>
-                        {d.tenStar && <span className={CHART.mutedSoft + ' leading-none mb-[1px]'}>{d.tenStar}</span>}
+                        <span
+                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}
+                        >
+                          {stem}
+                        </span>
+                        {d.tenStar && (
+                          <span
+                            className={
+                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                            }
+                          >
+                            {d.tenStar}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-end gap-[1px] mt-0.5">
-                        <span className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}>{branch}</span>
+                        <span
+                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}
+                        >
+                          {branch}
+                        </span>
+                        {branchTenStar && (
+                          <span
+                            className={
+                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                            }
+                          >
+                            {branchTenStar}
+                          </span>
+                        )}
                       </div>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -502,12 +757,18 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
           {annuals.length > 0 && (
             <div className="flex">
               <div className="w-8 sm:w-10 flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
-                <span className={CHART.muted + ' font-medium'} style={{ writingMode: 'vertical-lr' }}>流年</span>
+                <span
+                  className={CHART.muted + ' font-medium'}
+                  style={{ writingMode: 'vertical-lr' }}
+                >
+                  流年
+                </span>
               </div>
               <div className="flex-1 overflow-x-auto flex scrollbar-hide snap-x">
                 {visibleAnnuals.map((a, i) => {
                   const stem = a.heavenStem ?? a.sixtyCycle[0] ?? '';
                   const branch = a.earthBranch ?? a.sixtyCycle[1] ?? '';
+                  const branchTenStar = resolveBranchTenStar(dayStem, branch);
                   const isSelected = a.year === activeYear;
                   return (
                     <button
@@ -517,26 +778,64 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       aria-pressed={isSelected}
                       className={classNames(
                         'snap-start flex-none w-[58px] sm:w-[64px] flex flex-col items-center py-2 border-r border-hairline-soft last:border-r-0 transition-colors',
-                        isSelected ? 'bg-surface-cream-strong' : 'hover:bg-chart-highlight',
+                        isSelected
+                          ? 'bg-surface-cream-strong'
+                          : 'hover:bg-chart-highlight',
                       )}
                     >
-                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">{a.year}</span>
+                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">
+                        {a.year}
+                      </span>
                       {a.age !== undefined && (
-                        <span className={CHART.mutedSoft + ' mt-1 leading-none'}>{a.age}岁</span>
+                        <span
+                          className={CHART.mutedSoft + ' mt-1 leading-none'}
+                        >
+                          {a.age}岁
+                        </span>
                       )}
                       <div className="flex items-end gap-[1px] mt-1.5">
-                        <span className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}>{stem}</span>
-                        {a.tenStar && <span className={CHART.mutedSoft + ' leading-none mb-[1px]'}>{a.tenStar}</span>}
+                        <span
+                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}
+                        >
+                          {stem}
+                        </span>
+                        {a.tenStar && (
+                          <span
+                            className={
+                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                            }
+                          >
+                            {a.tenStar}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-end gap-[1px] mt-0.5">
-                        <span className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}>{branch}</span>
-                        {a.terrain && <span className={CHART.mutedSoft + ' leading-none mb-[1px]'}>{a.terrain}</span>}
+                        <span
+                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}
+                        >
+                          {branch}
+                        </span>
+                        {branchTenStar && (
+                          <span
+                            className={
+                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                            }
+                          >
+                            {branchTenStar}
+                          </span>
+                        )}
                       </div>
                       {a.sound && (
-                        <span className={CHART.mutedSoft + ' mt-1 text-[8px] leading-none'}>{a.sound}</span>
+                        <span
+                          className={
+                            CHART.mutedSoft + ' mt-1 text-[8px] leading-none'
+                          }
+                        >
+                          {a.sound}
+                        </span>
                       )}
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -552,7 +851,9 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
               格局
             </span>
             {data.pattern?.name && (
-              <span className="text-ink font-semibold">{data.pattern.name}</span>
+              <span className="text-ink font-semibold">
+                {data.pattern.name}
+              </span>
             )}
             {data.pattern?.reliability && (
               <span className="text-[10px] text-muted-soft">

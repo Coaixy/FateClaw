@@ -8,6 +8,18 @@ interface ArtifactDebugProps {
   entries: SkillContextEntry[];
 }
 
+function formatDebugJson(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * 仅在开发环境展示 artifact 的 formatter 文本和结构化数据，便于核对模型实际可见内容。
+ */
 export function ArtifactDebug({ entries }: ArtifactDebugProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -29,10 +41,32 @@ export function ArtifactDebug({ entries }: ArtifactDebugProps) {
         {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
       {expanded && (
-        <div className="border-t border-dashed border-amber-500/30">
-          <pre className="text-[10px] text-amber-700 p-3 overflow-auto max-h-80 whitespace-pre-wrap break-words">
-            {JSON.stringify(entries, null, 2)}
-          </pre>
+        <div className="border-t border-dashed border-amber-500/30 divide-y divide-dashed divide-amber-500/20">
+          {entries.map((entry, index) => (
+            <div key={`${entry.skill}-${index}`} className="p-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-amber-700">
+                <span>#{index + 1}</span>
+                <span>{entry.artifactTitle ?? entry.skill}</span>
+                <span className="text-amber-700/60">{entry.skill}</span>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-medium text-amber-700/80">
+                  formatter result / 模型可见文本
+                </div>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-amber-500/20 bg-amber-50/50 p-2 text-[10px] leading-relaxed text-amber-800">
+                  {entry.output || '（空）'}
+                </pre>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-medium text-amber-700/80">
+                  artifactData / 原始结构化数据
+                </div>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-amber-500/20 bg-amber-50/50 p-2 text-[10px] leading-relaxed text-amber-800">
+                  {formatDebugJson(entry.artifactData)}
+                </pre>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
