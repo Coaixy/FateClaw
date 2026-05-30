@@ -22,13 +22,11 @@ export function AiChatComposer({
   disabled,
   disabledMessage,
   selectedSession,
-  selectedBoardLabel,
   pasteChoiceOpen,
   pasteChoicePreview,
   onInputChange,
   onPaste,
   onKeyDown,
-  onClearSelectedBoard,
   onUsePasteAsBoard,
   onKeepPasteAsMessage,
   onDismissPasteChoice,
@@ -40,13 +38,11 @@ export function AiChatComposer({
   disabled?: boolean;
   disabledMessage?: string;
   selectedSession: string;
-  selectedBoardLabel?: string | null;
   pasteChoiceOpen: boolean;
   pasteChoicePreview?: string;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onClearSelectedBoard: () => void;
   onUsePasteAsBoard: () => void;
   onKeepPasteAsMessage: () => void;
   onDismissPasteChoice: () => void;
@@ -62,22 +58,6 @@ export function AiChatComposer({
           onKeepPasteAsMessage={onKeepPasteAsMessage}
           onDismissPasteChoice={onDismissPasteChoice}
         />
-      )}
-
-      {selectedBoardLabel && (
-        <div className="mb-1.5 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-1.5 text-[11px] text-ink">
-          <span className="min-w-0 flex-1 truncate">
-            当前将围绕这张盘提问：{selectedBoardLabel}
-          </span>
-          <button
-            type="button"
-            onClick={onClearSelectedBoard}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
-            aria-label="清除选中的盘面"
-          >
-            <X size={12} />
-          </button>
-        </div>
       )}
 
       {disabledMessage && (

@@ -24,7 +24,6 @@ import { PaipanSheet } from '@/components/ai-chat/paipan-sheet';
 import { PaipanSkillPickerSheet } from '@/components/ai-chat/paipan-skill-picker-sheet';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
 import { PastedBoardSheet } from '@/components/ai-chat/pasted-board-sheet';
-import { parseToolContext } from '@/features/chat/api';
 import {
   shouldPromptForPastedBoard,
   type UserPastedBoardInput,
@@ -46,11 +45,6 @@ import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
-type SelectedBoardDraft = {
-  messageId: string;
-  label: string;
-  sessionId: string;
-};
 type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
@@ -97,8 +91,6 @@ function AiChatWorkspaceContent() {
   } = useChatSessions();
 
   const [input, setInput] = useState('');
-  const [selectedBoardDraft, setSelectedBoardDraft] =
-    useState<SelectedBoardDraft | null>(null);
   const [paipanSheetMode, setPaipanSheetMode] =
     useState<PaipanSheetMode | null>(null);
   const [paipanSkillPickerOpen, setPaipanSkillPickerOpen] = useState(false);
@@ -157,18 +149,6 @@ function AiChatWorkspaceContent() {
   }, [chatAvailable]);
 
   useEffect(() => {
-    if (!chatAvailable) {
-      setSelectedBoardDraft(null);
-      return;
-    }
-
-    setSelectedBoardDraft((previous) => {
-      if (!previous) return null;
-      return previous.sessionId === selectedSession ? previous : null;
-    });
-  }, [chatAvailable, selectedSession]);
-
-  useEffect(() => {
     setPaipanSkillPickerOpen(false);
   }, [chatAvailable]);
 
@@ -204,10 +184,7 @@ function AiChatWorkspaceContent() {
   }, [toast]);
 
   const handleSend = useCallback(
-    async (
-      overrideText?: string,
-      options?: { selectedBoardMessageId?: string },
-    ) => {
+    async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
       if (!text || chatMessages.sending) return;
       if (chatMessages.continuationBlocked) return;
@@ -217,19 +194,11 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      const selectedBoardMessageId =
-        options?.selectedBoardMessageId ??
-        (selectedBoardDraft?.sessionId === selectedSession
-          ? selectedBoardDraft.messageId
-          : undefined);
-
       if (!overrideText) {
         setInput('');
       }
 
-      await chatMessages.sendMessageWithOptions(text, {
-        selectedBoardMessageId,
-      });
+      await chatMessages.sendMessageWithOptions(text);
     },
     [
       chatAvailable,
@@ -237,8 +206,6 @@ function AiChatWorkspaceContent() {
       authLoading,
       input,
       requestLogin,
-      selectedBoardDraft,
-      selectedSession,
     ],
   );
 
@@ -342,7 +309,6 @@ function AiChatWorkspaceContent() {
         pastedBoard,
         sendMessage: chatMessages.sendMessageWithOptions,
         closeSheet: () => setPastedBoardSheetOpen(false),
-        clearSelectedBoard: () => setSelectedBoardDraft(null),
         clearComposerInput:
           pastedBoardDraftSource === 'composer'
             ? () => setInput('')
@@ -410,14 +376,6 @@ function AiChatWorkspaceContent() {
   const handlePaipanCommitted = useCallback(
     async (result: PaipanCommitResponse) => {
       touchSession(result.session.id, result.session);
-      const boardEntry = parseToolContext(result.resultMessage.tool_context)[0];
-      if (boardEntry) {
-        setSelectedBoardDraft({
-          messageId: result.resultMessage.id,
-          label: boardEntry.artifactTitle || boardEntry.skill,
-          sessionId: result.session.id,
-        });
-      }
       if (result.session.id === selectedSession) {
         await chatMessages.refreshMessages();
         return;
@@ -525,13 +483,11 @@ function AiChatWorkspaceContent() {
       disabled={chatMessages.continuationBlocked}
       disabledMessage={continuationBlockedMessage}
       selectedSession={selectedSession}
-      selectedBoardLabel={selectedBoardDraft?.label ?? null}
       pasteChoiceOpen={Boolean(pasteChoiceText)}
       pasteChoicePreview={pasteChoiceText}
       onInputChange={handleInputChange}
       onPaste={handleComposerPaste}
       onKeyDown={handleKeyDown}
-      onClearSelectedBoard={() => setSelectedBoardDraft(null)}
       onUsePasteAsBoard={handleUsePasteAsBoard}
       onKeepPasteAsMessage={handleKeepPasteAsMessage}
       onDismissPasteChoice={() => {

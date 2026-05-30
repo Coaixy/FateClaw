@@ -31,7 +31,6 @@ describe('startUserPastedBoardSubmission', () => {
     startUserPastedBoardSubmission({
       pastedBoard,
       sendMessage,
-      clearSelectedBoard: () => events.push('clear-board'),
       closeSheet: () => events.push('close-sheet'),
       clearComposerInput: () => events.push('clear-input'),
       onSendFailure: () => events.push('send-failure'),
@@ -47,12 +46,7 @@ describe('startUserPastedBoardSubmission', () => {
     await sendResult.promise;
     await Promise.resolve();
 
-    expect(events).toEqual([
-      'send',
-      'close-sheet',
-      'clear-board',
-      'clear-input',
-    ]);
+    expect(events).toEqual(['send', 'close-sheet', 'clear-input']);
   });
 
   it('reports send failures explicitly', async () => {
@@ -63,7 +57,6 @@ describe('startUserPastedBoardSubmission', () => {
     startUserPastedBoardSubmission({
       pastedBoard,
       sendMessage: () => sendResult.promise,
-      clearSelectedBoard: vi.fn(),
       closeSheet: vi.fn(),
       onSendFailure,
     });
@@ -83,7 +76,6 @@ describe('startUserPastedBoardSubmission', () => {
     startUserPastedBoardSubmission({
       pastedBoard,
       sendMessage: () => sendResult.promise,
-      clearSelectedBoard: vi.fn(),
       closeSheet: vi.fn(),
       onSendFailure,
     });

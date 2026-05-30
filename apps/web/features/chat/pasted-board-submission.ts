@@ -13,7 +13,6 @@ interface StartUserPastedBoardSubmissionOptions {
   pastedBoard: UserPastedBoardInput;
   sendMessage: SendUserPastedBoardMessage;
   closeSheet: () => void;
-  clearSelectedBoard: () => void;
   clearComposerInput?: () => void;
   onSendFailure: (error?: unknown) => void;
 }
@@ -22,7 +21,6 @@ export function startUserPastedBoardSubmission({
   pastedBoard,
   sendMessage,
   closeSheet,
-  clearSelectedBoard,
   clearComposerInput,
   onSendFailure,
 }: StartUserPastedBoardSubmissionOptions): void {
@@ -39,7 +37,6 @@ export function startUserPastedBoardSubmission({
       if (!sent) {
         return;
       }
-      clearSelectedBoard();
       clearComposerInput?.();
     })
     .catch(onSendFailure);
