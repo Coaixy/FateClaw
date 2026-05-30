@@ -71,6 +71,7 @@ describe('processAiChatOutboxPayload', () => {
           ownerUserId: 'user-1',
           autoDeliver: false,
           sessionId: 'session-1',
+          startedAtMs: Date.now() - 1234,
           resolve: mockResolve,
           reject: mockReject,
           timeout,
@@ -104,6 +105,10 @@ describe('processAiChatOutboxPayload', () => {
           'first reply',
           'second reply\n\n📥 3 · 📤 5 Finished',
         ],
+        metadata: expect.objectContaining({
+          kind: 'final',
+          duration_ms: expect.any(Number),
+        }),
       }),
     );
     expect(pendingRequests.has('req-1')).toBe(false);

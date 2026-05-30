@@ -17,6 +17,8 @@ export interface MessageMetadataDto {
   tool_path?: string;
   turn_complete?: boolean;
   request_id?: string;
+  /** 本轮 AI 回复从提交到最终响应的耗时，单位毫秒。 */
+  duration_ms?: number;
 }
 
 export interface MessageDto {

@@ -63,6 +63,12 @@ function readToolPath(value: unknown): string | undefined {
     : undefined;
 }
 
+function normalizeMessageMetadata(value: unknown): Message['metadata'] {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Message['metadata'])
+    : null;
+}
+
 function getToolLabel(toolName: string): string {
   return toolName;
 }
@@ -310,7 +316,12 @@ export function useChatMessages(options: {
   }, [options.selectedSession, pollMessages]);
 
   const upsertStreamingAssistantMessage = useCallback(
-    (sessionId: string, content: string, streamKey?: string | null) => {
+    (
+      sessionId: string,
+      content: string,
+      streamKey?: string | null,
+      metadata?: Message['metadata'],
+    ) => {
       const key =
         streamKey ??
         latestStreamingMessageKeyRef.current ??
@@ -343,6 +354,7 @@ export function useChatMessages(options: {
           next[existingIndex] = {
             ...next[existingIndex],
             content,
+            metadata: metadata ?? next[existingIndex].metadata,
             timestamp: new Date().toISOString(),
           };
           return next;
@@ -359,7 +371,7 @@ export function useChatMessages(options: {
             timestamp: new Date().toISOString(),
             is_from_me: true,
             is_bot_message: true,
-            metadata: {
+            metadata: metadata ?? {
               kind: 'streaming',
             },
           },
@@ -370,11 +382,16 @@ export function useChatMessages(options: {
   );
 
   const upsertLatestStreamingAssistantMessage = useCallback(
-    (sessionId: string, content: string) => {
+    (
+      sessionId: string,
+      content: string,
+      metadata?: Message['metadata'],
+    ) => {
       upsertStreamingAssistantMessage(
         sessionId,
         content,
         latestStreamingMessageKeyRef.current,
+        metadata,
       );
     },
     [upsertStreamingAssistantMessage],
@@ -697,7 +714,14 @@ export function useChatMessages(options: {
 
       if (payload.type === 'final') {
         if (payload.text.trim()) {
-          upsertLatestStreamingAssistantMessage(sessionId, payload.text);
+          upsertLatestStreamingAssistantMessage(
+            sessionId,
+            payload.text,
+            normalizeMessageMetadata(payload.metadata) ?? {
+              kind: 'final',
+              turn_complete: true,
+            },
+          );
         }
         setProcessing(false);
         setAwaitingRefresh(true);

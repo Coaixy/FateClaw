@@ -8,7 +8,7 @@ import { Message } from '@/features/chat/api';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
-  formatChatTime,
+  formatChatDuration,
   isKnowledgeTrajectoryMessage,
   isProgressMessage,
   isStreamingAssistantMessage,
@@ -143,6 +143,9 @@ function AiChatMessageRow({
   const { body: displayContent, marker: finalMarker } = isBot
     ? splitFinalTurnMarker(message.content)
     : { body: message.content, marker: null };
+  const durationLabel = isBot
+    ? formatChatDuration(messageMetadata?.duration_ms)
+    : null;
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
@@ -225,23 +228,26 @@ function AiChatMessageRow({
             />
           </div>
 
-          {finalMarker && (
-            <div className="mt-1 px-1">
-              <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-muted shadow-sm">
-                {finalMarker}
-              </span>
+          {(finalMarker || durationLabel) && (
+            <div
+              className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
+                isBot
+                  ? 'justify-start text-left'
+                  : 'justify-end text-right'
+              }`}
+            >
+              {finalMarker && (
+                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
+                  {finalMarker}
+                </span>
+              )}
+              {durationLabel && (
+                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
+                  {durationLabel}
+                </span>
+              )}
             </div>
           )}
-
-          <p
-            className={`text-[9px] mt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 tabular-nums ${
-              isBot
-                ? 'text-muted text-left'
-                : 'text-muted text-right'
-            }`}
-          >
-            {formatChatTime(message.timestamp)}
-          </p>
         </div>
 
         {isBot && !isFinalMessage && toolContext.length > 0 && (

@@ -4,6 +4,7 @@ import type { Message } from '@/features/chat/api';
 
 import {
   filterProgressMessages,
+  formatChatDuration,
   hasFinalAssistantAfterLatestUser,
   isStreamingAssistantMessage,
   isToolTraceMessage,
@@ -94,6 +95,14 @@ describe('chat display message state helpers', () => {
         '/Users/coaixy/Documents/Code/FateClaw/.fateclaw/text-skills/a3f5d6c9-b68b-421d-8c2b-5fcc4e7455af/user-我的-skill-89edafe8-fe9a-4afc-889d-4796ccb40a73/SKILL.md',
       ),
     ).toBe('我的-skill/SKILL.md');
+  });
+
+  it('formats assistant response duration labels', () => {
+    expect(formatChatDuration(900)).toBe('耗时 0.9s');
+    expect(formatChatDuration(1234)).toBe('耗时 1.2s');
+    expect(formatChatDuration(12_300)).toBe('耗时 12s');
+    expect(formatChatDuration(65_000)).toBe('耗时 1m 5s');
+    expect(formatChatDuration(-1)).toBeNull();
   });
 });
 

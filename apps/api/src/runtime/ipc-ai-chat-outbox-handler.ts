@@ -125,17 +125,30 @@ function buildAssistantMessagesForResponse(args: {
   return [...messages, args.finalText];
 }
 
-function buildFinalMetadata(
-  payload: ResponseIpcPayload,
-): Record<string, unknown> {
+function resolvePendingDurationMs(
+  pending?: PendingInboxRequest,
+): number | undefined {
+  if (typeof pending?.startedAtMs !== 'number') return undefined;
+  const durationMs = Date.now() - pending.startedAtMs;
+  if (!Number.isFinite(durationMs) || durationMs < 0) return undefined;
+  return Math.round(durationMs);
+}
+
+function buildFinalMetadata(args: {
+  payload: ResponseIpcPayload;
+  durationMs?: number;
+}): Record<string, unknown> {
   return {
-    ...(payload.metadata &&
-    typeof payload.metadata === 'object' &&
-    !Array.isArray(payload.metadata)
-      ? payload.metadata
+    ...(args.payload.metadata &&
+    typeof args.payload.metadata === 'object' &&
+    !Array.isArray(args.payload.metadata)
+      ? args.payload.metadata
       : {}),
     kind: 'final',
     turn_complete: true,
+    ...(typeof args.durationMs === 'number'
+      ? { duration_ms: args.durationMs }
+      : {}),
   };
 }
 
@@ -377,7 +390,11 @@ async function processAiChatResponse(
       responseText: text,
       finalText,
     });
-    const finalMetadata = buildFinalMetadata(payloadForUsage);
+    const durationMs = resolvePendingDurationMs(pending);
+    const finalMetadata = buildFinalMetadata({
+      payload: payloadForUsage,
+      durationMs,
+    });
 
     await publishAiChatStreamEvent({
       sessionId: pending?.sessionId,
@@ -447,8 +464,10 @@ async function processAiChatResponse(
         publicErrorText: publicError.publicMessage,
         publicReasonCode: publicError.publicReasonCode,
         metadata: {
-          kind: 'final',
-          turn_complete: true,
+          ...buildFinalMetadata({
+            payload,
+            durationMs: resolvePendingDurationMs(pending),
+          }),
         },
       });
     }

@@ -37,6 +37,41 @@ export function formatChatTime(ts: string) {
   });
 }
 
+/**
+ * 将 AI 回复耗时格式化为聊天气泡下方的紧凑标签。
+ *
+ * @param value 后端写入 metadata.duration_ms 的毫秒数。
+ * @returns 可直接展示的中文耗时标签；非法或缺失时返回 null。
+ */
+export function formatChatDuration(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  if (value < 10_000) {
+    return `耗时 ${(value / 1000).toFixed(1)}s`;
+  }
+
+  const seconds = Math.round(value / 1000);
+  if (seconds < 60) {
+    return `耗时 ${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0
+      ? `耗时 ${minutes}m ${remainingSeconds}s`
+      : `耗时 ${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0
+    ? `耗时 ${hours}h ${remainingMinutes}m`
+    : `耗时 ${hours}h`;
+}
+
 export function formatRelativeDateLabel(ts: string) {
   const date = new Date(ts);
   const now = new Date();

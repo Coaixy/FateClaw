@@ -376,6 +376,7 @@ export function submitAiChatInboxRequest(input: {
   llmRuntime?: EffectiveLlmRuntimeConfig;
 }): Promise<InboxRequestResult> {
   const requestId = `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAtMs = Date.now();
   const aiChatOutboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
 
   return new Promise<InboxRequestResult>((resolve, reject) => {
@@ -429,6 +430,7 @@ export function submitAiChatInboxRequest(input: {
           sessionId: input.sessionId,
           llmRuntime,
           billingReservation,
+          startedAtMs,
           resolve,
           reject,
           timeout,

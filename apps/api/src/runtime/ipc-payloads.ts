@@ -68,6 +68,8 @@ export interface PendingInboxRequest {
   sessionId?: string;
   llmRuntime?: LlmRuntimeSnapshot;
   billingReservation?: BillingReservation | null;
+  /** 请求提交到本机运行时的毫秒时间戳，用于计算最终回复耗时。 */
+  startedAtMs?: number;
   resolve: (result: InboxRequestResult) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;

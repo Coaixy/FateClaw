@@ -92,6 +92,7 @@ export type ChatSessionStreamEvent =
       sessionId?: string;
       text: string;
       status: 'success' | 'error';
+      metadata?: unknown;
     }
   | {
       type: 'error';
