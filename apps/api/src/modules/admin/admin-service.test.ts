@@ -1,22 +1,47 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCreateUser, mockGetUserByPhone } = vi.hoisted(() => ({
+const {
+  mockCreateUser,
+  mockGetDailySignInConfig,
+  mockGetUserByPhone,
+  mockUpdateDailySignInConfig,
+} = vi.hoisted(() => ({
   mockCreateUser: vi.fn(),
+  mockGetDailySignInConfig: vi.fn(),
   mockGetUserByPhone: vi.fn(),
+  mockUpdateDailySignInConfig: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
   createUser: mockCreateUser,
+  getDailySignInConfig: mockGetDailySignInConfig,
   getUserByPhone: mockGetUserByPhone,
+  updateDailySignInConfig: mockUpdateDailySignInConfig,
 }));
 
-import { createAdminUser } from './admin-service.js';
+import {
+  createAdminUser,
+  getAdminRewardConfig,
+  updateAdminRewardConfig,
+} from './admin-service.js';
 
 describe('createAdminUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserByPhone.mockResolvedValue(undefined);
     mockCreateUser.mockResolvedValue(undefined);
+    mockGetDailySignInConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      reward_cents: 20,
+      updated_at: '2026-05-30T00:00:00.000Z',
+    });
+    mockUpdateDailySignInConfig.mockResolvedValue({
+      id: 'default',
+      enabled: false,
+      reward_cents: 10,
+      updated_at: '2026-05-30T01:00:00.000Z',
+    });
   });
 
   it('normalizes phone and persists a hashed admin-created user', async () => {
@@ -58,5 +83,57 @@ describe('createAdminUser', () => {
     ).rejects.toThrow('该手机号已存在');
 
     expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('admin reward config', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads daily sign-in reward config', async () => {
+    mockGetDailySignInConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      reward_cents: 20,
+      updated_at: '2026-05-30T00:00:00.000Z',
+    });
+
+    await expect(getAdminRewardConfig()).resolves.toEqual({
+      daily_sign_in: {
+        enabled: true,
+        reward_cents: 20,
+        updated_at: '2026-05-30T00:00:00.000Z',
+      },
+    });
+  });
+
+  it('updates daily sign-in reward config', async () => {
+    mockUpdateDailySignInConfig.mockResolvedValue({
+      id: 'default',
+      enabled: false,
+      reward_cents: 10,
+      updated_at: '2026-05-30T01:00:00.000Z',
+    });
+
+    await expect(
+      updateAdminRewardConfig({
+        dailySignIn: {
+          enabled: false,
+          rewardCents: 10,
+        },
+      }),
+    ).resolves.toEqual({
+      daily_sign_in: {
+        enabled: false,
+        reward_cents: 10,
+        updated_at: '2026-05-30T01:00:00.000Z',
+      },
+    });
+
+    expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
+      enabled: false,
+      rewardCents: 10,
+    });
   });
 });

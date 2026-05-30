@@ -58,6 +58,20 @@ export interface BillingStatusDto {
   available_cents: number;
 }
 
+export interface DailySignInStatusDto {
+  enabled: boolean;
+  reward_cents: number;
+  sign_in_date: string;
+  signed_in_today: boolean;
+  signed_in_at: string | null;
+}
+
+export interface DailySignInResultDto extends DailySignInStatusDto {
+  received_cents: number;
+  bonus_cents: number;
+  available_cents: number;
+}
+
 export type RechargePayTypeDto = 'alipay' | 'wechat';
 export type RechargeOrderStatusDto = 'pending' | 'paid' | 'failed';
 

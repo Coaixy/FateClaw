@@ -22,6 +22,7 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
+  getAdminRewardConfig,
   getSystemConfigOverview,
   getTasksForAdmin,
   getUserById,
@@ -40,6 +41,7 @@ import {
   setUserCustomSkillAdminState,
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
+  updateAdminRewardConfig,
   getAdminUserDetail,
 } from '../../modules/admin/admin-service.js';
 import {
@@ -231,6 +233,13 @@ const RechargePaymentConfigSchema = z
     }
   });
 
+const RewardConfigSchema = z.object({
+  daily_sign_in: z.object({
+    enabled: z.boolean(),
+    reward_cents: z.number().int().min(0).max(1_000_000),
+  }),
+});
+
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // 所有 admin 路由需要验证 MANAGER_KEY；登录端点（/verify）额外加指数退避限流
   app.addHook('onRequest', async (request, reply) => {
@@ -314,6 +323,27 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       parsed.data,
       resolvePaymentCallbackUrls(request),
     );
+  });
+
+  // GET /api/admin/reward-config — 读取软妹币奖励配置
+  app.get('/reward-config', async () => {
+    return getAdminRewardConfig();
+  });
+
+  // PUT /api/admin/reward-config — 更新软妹币奖励配置
+  app.put('/reward-config', async (request, reply) => {
+    const parsed = RewardConfigSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return updateAdminRewardConfig({
+      dailySignIn: {
+        enabled: parsed.data.daily_sign_in.enabled,
+        rewardCents: parsed.data.daily_sign_in.reward_cents,
+      },
+    });
   });
 
   // POST /api/admin/system-config/providers — 新建官方模型

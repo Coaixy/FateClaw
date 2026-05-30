@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
 
 import {
+  claimDailySignInReward,
   getBillingDailyUsage,
   getBillingOverview,
   getBillingTransactions,
   getBillingUsage,
+  getDailySignInStatus,
   getPublicStatusOverview,
   resetBillingScope,
 } from '../../modules/billing/billing-service.js';
@@ -62,6 +64,26 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/transactions', async (request, reply) => {
     await request.requireAuth();
     const result = await getBillingTransactions(request.user.userId, 20);
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // GET /api/billing/daily-sign-in — 当前用户每日签到状态
+  app.get('/daily-sign-in', async (request, reply) => {
+    await request.requireAuth();
+    const result = await getDailySignInStatus(request.user.userId);
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/billing/daily-sign-in — 领取每日签到软妹币奖励
+  app.post('/daily-sign-in', async (request, reply) => {
+    await request.requireAuth();
+    const result = await claimDailySignInReward(request.user.userId);
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

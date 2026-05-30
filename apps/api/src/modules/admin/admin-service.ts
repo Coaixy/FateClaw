@@ -27,6 +27,7 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
+  getDailySignInConfig,
   getTasksForAdmin,
   getUserById,
   getUserByPhone,
@@ -37,6 +38,7 @@ import {
   reconcileStaleBillingReservations,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  updateDailySignInConfig,
 } from '../../infrastructure/db.js';
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
 import {
@@ -95,6 +97,51 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
 };
+
+/** 管理后台软妹币奖励配置视图。 */
+export interface AdminRewardConfigView {
+  daily_sign_in: {
+    enabled: boolean;
+    reward_cents: number;
+    updated_at: string;
+  };
+}
+
+/**
+ * 读取后台软妹币奖励配置。
+ */
+export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
+  const dailySignIn = await getDailySignInConfig();
+  return {
+    daily_sign_in: {
+      enabled: dailySignIn.enabled,
+      reward_cents: dailySignIn.reward_cents,
+      updated_at: dailySignIn.updated_at,
+    },
+  };
+}
+
+/**
+ * 更新后台软妹币奖励配置。
+ */
+export async function updateAdminRewardConfig(input: {
+  dailySignIn: {
+    enabled: boolean;
+    rewardCents: number;
+  };
+}): Promise<AdminRewardConfigView> {
+  const dailySignIn = await updateDailySignInConfig({
+    enabled: input.dailySignIn.enabled,
+    rewardCents: input.dailySignIn.rewardCents,
+  });
+  return {
+    daily_sign_in: {
+      enabled: dailySignIn.enabled,
+      reward_cents: dailySignIn.reward_cents,
+      updated_at: dailySignIn.updated_at,
+    },
+  };
+}
 
 /**
  * 管理后台按用户清空日志：同时覆盖站内 AI Chat runtime 和用户绑定账号。
@@ -171,11 +218,11 @@ export async function listAdminUsersWithStats(): Promise<
       active_tasks: number;
       usage: Awaited<ReturnType<typeof getUsageStats>>;
       monthly_tokens_used: number;
-    estimated_monthly_total_cents: number;
-    purchased_cents: number;
-    bonus_cents: number;
-    reserved_cents: number;
-    available_cents: number;
+      estimated_monthly_total_cents: number;
+      purchased_cents: number;
+      bonus_cents: number;
+      reserved_cents: number;
+      available_cents: number;
     }
   >
 > {

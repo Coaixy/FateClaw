@@ -23,6 +23,7 @@ vi.mock('../logger.js', () => ({
 }));
 
 import {
+  createDailySignInReward,
   deductBalanceCents,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
@@ -169,6 +170,91 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('charge_state = $3');
     expect(calls[0]?.sql).toContain('LIMIT $4');
     expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200]);
+  });
+
+  it('creates daily sign-in rewards transactionally', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_cents: 100,
+      bonus_cents: 10,
+      reserved_cents: 0,
+    };
+    const record = {
+      id: 'signin-1',
+      user_id: 'user-1',
+      sign_in_date: '2026-05-30',
+      reward_cents: 20,
+      balance_grant_id: 'bg-1',
+      created_at: '2026-05-30T00:00:00.000Z',
+    };
+    const updated = { ...user, bonus_cents: 30 };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [record], [], [updated], [], []],
+    );
+
+    await expect(
+      createDailySignInReward({
+        userId: 'user-1',
+        signInDate: '2026-05-30',
+        rewardCents: 20,
+      }),
+    ).resolves.toEqual({
+      user: updated,
+      record,
+      created: true,
+    });
+
+    expect(clientCalls[0]?.sql).toBe('BEGIN');
+    expect(clientCalls[1]?.sql).toContain('INSERT INTO daily_sign_in_records');
+    expect(clientCalls[2]?.sql).toContain('INSERT INTO balance_grants');
+    expect(clientCalls[3]?.sql).toContain('SET bonus_cents');
+    expect(clientCalls[4]?.sql).toContain('INSERT INTO wallet_transactions');
+    expect(clientCalls[5]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('does not grant twice when daily sign-in record already exists', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_cents: 100,
+      bonus_cents: 10,
+      reserved_cents: 0,
+    };
+    const existingRecord = {
+      id: 'signin-existing',
+      user_id: 'user-1',
+      sign_in_date: '2026-05-30',
+      reward_cents: 20,
+      balance_grant_id: 'bg-existing',
+      created_at: '2026-05-30T00:00:00.000Z',
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [], [existingRecord], []],
+    );
+
+    await expect(
+      createDailySignInReward({
+        userId: 'user-1',
+        signInDate: '2026-05-30',
+        rewardCents: 20,
+      }),
+    ).resolves.toEqual({
+      user,
+      record: existingRecord,
+      created: false,
+    });
+
+    expect(clientCalls[1]?.sql).toContain('INSERT INTO daily_sign_in_records');
+    expect(clientCalls[2]?.sql).toContain('FROM daily_sign_in_records');
+    expect(
+      clientCalls.some((call) => call.sql.includes('SET bonus_cents')),
+    ).toBe(false);
+    expect(clientCalls[3]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
   });
 
   it('reserves only currently spendable balance', async () => {

@@ -124,6 +124,75 @@ export interface RechargePaymentConfigRow {
   updated_at: string;
 }
 
+/** 每日签到软妹币奖励的全局配置行。 */
+export interface DailySignInConfigRow {
+  id: 'default' | string;
+  enabled: boolean;
+  reward_cents: number;
+  updated_at: string;
+}
+
+/** 用户每日签到记录，依靠 user_id + sign_in_date 保证每日幂等。 */
+export interface DailySignInRecordRow {
+  id: string;
+  user_id: string;
+  sign_in_date: string;
+  reward_cents: number;
+  balance_grant_id: string | null;
+  created_at: string;
+}
+
+/**
+ * 读取全局每日签到配置；首次访问时补齐默认配置行。
+ */
+export async function getDailySignInConfig(): Promise<DailySignInConfigRow> {
+  const { rows } = await pool.query(
+    `INSERT INTO daily_sign_in_config (id)
+     VALUES ('default')
+     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     RETURNING *`,
+  );
+  return rows[0] as DailySignInConfigRow;
+}
+
+/**
+ * 更新每日签到开关和每次奖励的软妹币分值。
+ */
+export async function updateDailySignInConfig(input: {
+  enabled: boolean;
+  rewardCents: number;
+}): Promise<DailySignInConfigRow> {
+  const { rows } = await pool.query(
+    `INSERT INTO daily_sign_in_config (
+       id, enabled, reward_cents, updated_at
+     )
+     VALUES ('default', $1, $2, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       enabled = EXCLUDED.enabled,
+       reward_cents = EXCLUDED.reward_cents,
+       updated_at = NOW()
+     RETURNING *`,
+    [input.enabled, input.rewardCents],
+  );
+  return rows[0] as DailySignInConfigRow;
+}
+
+/**
+ * 查询用户某个自然日是否已经签到。
+ */
+export async function getDailySignInRecordByDate(
+  userId: string,
+  signInDate: string,
+): Promise<DailySignInRecordRow | undefined> {
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM daily_sign_in_records
+     WHERE user_id = $1 AND sign_in_date = $2`,
+    [userId, signInDate],
+  );
+  return rows[0] as DailySignInRecordRow | undefined;
+}
+
 export async function insertWalletTransaction(
   client: pg.PoolClient,
   input: {
@@ -224,6 +293,100 @@ export async function updateRechargePaymentConfig(input: {
     ],
   );
   return rows[0] as RechargePaymentConfigRow;
+}
+
+/**
+ * 为用户创建每日签到奖励。
+ *
+ * 该函数在同一事务内创建签到记录、赠送余额批次、用户余额和钱包流水；
+ * 如果当天已经签到，直接返回已有记录而不重复发放软妹币。
+ */
+export async function createDailySignInReward(input: {
+  userId: string;
+  signInDate: string;
+  rewardCents: number;
+  note?: string | null;
+}): Promise<{ user: User; record: DailySignInRecordRow; created: boolean }> {
+  if (input.rewardCents <= 0) {
+    throw new Error('签到奖励必须大于 0');
+  }
+  const recordId = `signin-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const grantId = `bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await getUserByIdUsing(client, input.userId, {
+      forUpdate: true,
+    });
+    if (!user) throw new Error('用户不存在');
+
+    const { rows: insertedRows } = await client.query(
+      `INSERT INTO daily_sign_in_records
+         (id, user_id, sign_in_date, reward_cents, balance_grant_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (user_id, sign_in_date) DO NOTHING
+       RETURNING *`,
+      [recordId, input.userId, input.signInDate, input.rewardCents, grantId],
+    );
+    const inserted = insertedRows[0] as DailySignInRecordRow | undefined;
+    if (!inserted) {
+      const { rows: existingRows } = await client.query(
+        `SELECT *
+         FROM daily_sign_in_records
+         WHERE user_id = $1 AND sign_in_date = $2`,
+        [input.userId, input.signInDate],
+      );
+      await client.query('COMMIT');
+      return {
+        user,
+        record: existingRows[0] as DailySignInRecordRow,
+        created: false,
+      };
+    }
+
+    await client.query(
+      `INSERT INTO balance_grants
+         (id, user_id, source, granted_by, amount_cents, remaining_cents,
+          note, expires_at, status, created_at, updated_at)
+       VALUES ($1, $2, 'sign_in', NULL, $3, $3, $4, NULL, 'active', NOW(), NOW())`,
+      [grantId, input.userId, input.rewardCents, input.note ?? null],
+    );
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE users
+       SET bonus_cents = bonus_cents + $1
+       WHERE id = $2
+       RETURNING *`,
+      [input.rewardCents, input.userId],
+    );
+
+    await insertWalletTransaction(client, {
+      userId: input.userId,
+      kind: 'bonus_grant',
+      amountCents: input.rewardCents,
+      balanceSource: 'bonus',
+      balanceGrantId: grantId,
+      note: input.note ?? `每日签到奖励（${input.signInDate}）`,
+      metadata: {
+        source: 'sign_in',
+        signInDate: input.signInDate,
+      },
+    });
+
+    await client.query('COMMIT');
+    return {
+      user: updatedRows[0] as User,
+      record: inserted,
+      created: true,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function insertRechargeOrder(input: {

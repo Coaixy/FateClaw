@@ -8,6 +8,8 @@
 import type {
   BillingStatusDto,
   DailyUsageRowDto,
+  DailySignInResultDto,
+  DailySignInStatusDto,
   PublicStatusStatsDto,
   UsageStatsDto,
   WalletTransactionDto,
@@ -15,7 +17,10 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
+  createDailySignInReward,
   getAccountsByUserId,
+  getDailySignInConfig,
+  getDailySignInRecordByDate,
   getUserById,
   getVisibleWalletTransactionsByUserId,
   resetUserData,
@@ -40,6 +45,10 @@ import {
   toWalletTransactionsDto,
   toUsageStatsDto,
 } from '../../contracts-adapter/billing-contract.js';
+
+function todaySignInDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export async function getBillingOverview(
   userId: string,
@@ -103,6 +112,86 @@ export async function getBillingTransactions(
       await getVisibleWalletTransactionsByUserId(user.id, limit),
     ),
   );
+}
+
+/**
+ * 获取当前用户每日签到状态。
+ *
+ * 返回后台开关、奖励金额、当天日期和用户是否已签到；日期按现有用量统计的 UTC 日期口径计算。
+ */
+export async function getDailySignInStatus(
+  userId: string,
+): Promise<ServiceResult<DailySignInStatusDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+
+  const signInDate = todaySignInDate();
+  const [config, record] = await Promise.all([
+    getDailySignInConfig(),
+    getDailySignInRecordByDate(user.id, signInDate),
+  ]);
+
+  return ok({
+    enabled: config.enabled,
+    reward_cents: config.reward_cents,
+    sign_in_date: signInDate,
+    signed_in_today: Boolean(record),
+    signed_in_at: record?.created_at ?? null,
+  });
+}
+
+/**
+ * 领取每日签到软妹币奖励。
+ *
+ * 奖励以赠送余额入账；同一用户同一日期只允许成功领取一次。
+ */
+export async function claimDailySignInReward(
+  userId: string,
+): Promise<ServiceResult<DailySignInResultDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+
+  const config = await getDailySignInConfig();
+  if (!config.enabled) {
+    return fail(403, '每日签到暂未开启');
+  }
+  if (config.reward_cents <= 0) {
+    return fail(400, '每日签到奖励未配置');
+  }
+
+  const signInDate = todaySignInDate();
+  const existing = await getDailySignInRecordByDate(user.id, signInDate);
+  if (existing) {
+    return fail(409, '今日已签到');
+  }
+
+  const { user: updated, record, created } = await createDailySignInReward({
+    userId: user.id,
+    signInDate,
+    rewardCents: config.reward_cents,
+    note: `每日签到奖励（${signInDate}）`,
+  });
+  if (!created) {
+    return fail(409, '今日已签到');
+  }
+
+  return ok({
+    enabled: config.enabled,
+    reward_cents: config.reward_cents,
+    sign_in_date: signInDate,
+    signed_in_today: true,
+    signed_in_at: record.created_at,
+    received_cents: record.reward_cents,
+    bonus_cents: updated.bonus_cents,
+    available_cents: Math.max(
+      0,
+      updated.purchased_cents + updated.bonus_cents - updated.reserved_cents,
+    ),
+  });
 }
 
 export async function resetBillingScope(

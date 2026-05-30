@@ -372,6 +372,14 @@ export interface AdminRechargePaymentConfig {
   updated_at: string;
 }
 
+export interface AdminRewardConfig {
+  daily_sign_in: {
+    enabled: boolean;
+    reward_cents: number;
+    updated_at: string;
+  };
+}
+
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -418,6 +426,18 @@ export const admin = {
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config'),
   updateRechargeConfig: (data: AdminRechargePaymentConfigUpdate) =>
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  rewardConfig: () =>
+    adminRequest<AdminRewardConfig>('/api/admin/reward-config'),
+  updateRewardConfig: (data: {
+    daily_sign_in: {
+      enabled: boolean;
+      reward_cents: number;
+    };
+  }) =>
+    adminRequest<AdminRewardConfig>('/api/admin/reward-config', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),

@@ -25,6 +25,16 @@ describe('walletTransactionBadgeLabel', () => {
       }),
     ).toBe('充值');
   });
+
+  it('labels bonus grants as rewards', () => {
+    expect(
+      walletTransactionBadgeLabel({
+        kind: 'bonus_grant',
+        amount_cents: 20,
+        balance_source: 'bonus',
+      }),
+    ).toBe('奖励');
+  });
 });
 
 describe('isWalletTransactionVisible', () => {

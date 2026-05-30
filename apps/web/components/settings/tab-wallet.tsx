@@ -10,6 +10,7 @@ import {
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
 import { formatCents } from '@/lib/money';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
+import { WalletDailySignInPanel } from '@/components/settings/wallet/wallet-daily-sign-in-panel';
 import { WalletRechargePanel } from '@/components/settings/wallet/wallet-recharge-panel';
 import { WalletStatCard } from '@/components/settings/wallet/wallet-stat-card';
 import { WalletTokenUsagePanel } from '@/components/settings/wallet/wallet-token-usage-panel';
@@ -21,6 +22,7 @@ export function TabWallet() {
   const {
     billingInfo,
     dailyUsage,
+    dailySignIn,
     transactions,
     rechargeOrders,
     rechargeStats,
@@ -58,6 +60,12 @@ export function TabWallet() {
         purchasedCents={purchasedCents}
         bonusCents={bonusCents}
         reservedCents={reservedCents}
+      />
+
+      <WalletDailySignInPanel
+        status={dailySignIn}
+        refreshing={refreshing}
+        onChanged={refresh}
       />
 
       <WalletRechargePanel

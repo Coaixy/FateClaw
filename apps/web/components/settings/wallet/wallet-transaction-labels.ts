@@ -7,7 +7,11 @@ type WalletTransactionBadgeInput = Pick<
 
 function positiveBalanceSourceLabel(
   source: WalletTransaction['balance_source'],
+  kind?: string,
 ): string | null {
+  if (kind === 'bonus_grant') {
+    return '奖励';
+  }
   switch (source) {
     case 'purchased':
       return '充值';
@@ -41,7 +45,10 @@ export function walletTransactionBadgeLabel(
     return negativeTransactionLabel(transaction.kind);
   }
 
-  return positiveBalanceSourceLabel(transaction.balance_source);
+  return positiveBalanceSourceLabel(
+    transaction.balance_source,
+    transaction.kind,
+  );
 }
 
 export function isWalletTransactionVisible(

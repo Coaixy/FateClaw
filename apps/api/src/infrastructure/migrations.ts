@@ -2207,6 +2207,56 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0010_daily_sign_in_reward_config',
+    description: '增加每日签到软妹币奖励配置和签到记录',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS daily_sign_in_config (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          reward_cents INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO daily_sign_in_config (id)
+        VALUES ('default')
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS daily_sign_in_records (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          sign_in_date TEXT NOT NULL,
+          reward_cents INTEGER NOT NULL DEFAULT 0,
+          balance_grant_id TEXT DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(user_id, sign_in_date)
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_daily_sign_in_records_user_created_at
+         ON daily_sign_in_records(user_id, created_at DESC)`,
+      );
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_daily_sign_in_config_reward_cents_nonnegative',
+        tableName: 'daily_sign_in_config',
+        expression: 'reward_cents >= 0',
+        cleanupSql: `UPDATE daily_sign_in_config
+                     SET reward_cents = 0
+                     WHERE reward_cents < 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_daily_sign_in_records_reward_cents_nonnegative',
+        tableName: 'daily_sign_in_records',
+        expression: 'reward_cents >= 0',
+        cleanupSql: `UPDATE daily_sign_in_records
+                     SET reward_cents = 0
+                     WHERE reward_cents < 0`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

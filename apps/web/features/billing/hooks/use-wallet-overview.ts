@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   billingApi,
   type BillingStatus,
   type DailyUsageRow,
+  type DailySignInStatus,
   type RechargeOrder,
   type RechargeStats,
   type WalletTransaction,
@@ -16,6 +17,7 @@ async function fetchWalletOverviewSnapshot() {
     billingApi.status(),
     billingApi.dailyUsage(),
     billingApi.transactions(),
+    billingApi.dailySignInStatus(),
     billingApi.rechargeOrders(),
     billingApi.rechargeStats(),
   ]);
@@ -24,6 +26,9 @@ async function fetchWalletOverviewSnapshot() {
 export function useWalletOverview() {
   const [billingInfo, setBillingInfo] = useState<BillingStatus | null>(null);
   const [dailyUsage, setDailyUsage] = useState<DailyUsageRow[]>([]);
+  const [dailySignIn, setDailySignIn] = useState<DailySignInStatus | null>(
+    null,
+  );
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [rechargeOrders, setRechargeOrders] = useState<RechargeOrder[]>([]);
   const [rechargeStats, setRechargeStats] = useState<RechargeStats | null>(
@@ -42,12 +47,14 @@ export function useWalletOverview() {
         nextBilling,
         nextDailyUsage,
         nextTransactions,
+        nextDailySignIn,
         nextRechargeOrders,
         nextRechargeStats,
       ] = await fetchWalletOverviewSnapshot();
       setBillingInfo(nextBilling);
       setDailyUsage(nextDailyUsage);
       setTransactions(nextTransactions);
+      setDailySignIn(nextDailySignIn);
       setRechargeOrders(nextRechargeOrders);
       setRechargeStats(nextRechargeStats);
     } catch (err) {
@@ -69,6 +76,7 @@ export function useWalletOverview() {
           nextBilling,
           nextDailyUsage,
           nextTransactions,
+          nextDailySignIn,
           nextRechargeOrders,
           nextRechargeStats,
         ] = await fetchWalletOverviewSnapshot();
@@ -76,6 +84,7 @@ export function useWalletOverview() {
         setBillingInfo(nextBilling);
         setDailyUsage(nextDailyUsage);
         setTransactions(nextTransactions);
+        setDailySignIn(nextDailySignIn);
         setRechargeOrders(nextRechargeOrders);
         setRechargeStats(nextRechargeStats);
       } catch (err) {
@@ -98,6 +107,7 @@ export function useWalletOverview() {
   return {
     billingInfo,
     dailyUsage,
+    dailySignIn,
     transactions,
     rechargeOrders,
     rechargeStats,
