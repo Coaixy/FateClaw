@@ -10,7 +10,7 @@ export interface User {
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
   purchased_coins: number; // 充值余额（不过期，可消费）
   bonus_coins: number; // 赠送余额（可过期，消费优先扣）
-  reserved_coins: number; // 请求级预扣
+  reserved_coins: number; // 历史冻结余额字段，当前模型扣费不再使用
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   created_at: string;
 }
@@ -49,7 +49,7 @@ export interface UserSkill {
 export interface SkillPriceTier {
   key: string;
   label: string;
-  price_coins: number; // 软妹币整数定价
+  price_coins: number; // 软妹币定价
   duration_days: number | null;
   description?: string;
 }

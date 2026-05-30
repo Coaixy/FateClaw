@@ -35,7 +35,6 @@ export function TabWallet() {
 
   const purchasedCoins = billingInfo?.purchased_coins ?? 0;
   const bonusCoins = billingInfo?.bonus_coins ?? 0;
-  const reservedCoins = billingInfo?.reserved_coins ?? 0;
   const availableCoins = billingInfo?.available_coins ?? 0;
 
   const subTabs: { key: SubTab; label: string }[] = [
@@ -59,7 +58,6 @@ export function TabWallet() {
         availableCoins={availableCoins}
         purchasedCoins={purchasedCoins}
         bonusCoins={bonusCoins}
-        reservedCoins={reservedCoins}
       />
 
       <WalletDailySignInPanel

@@ -25,7 +25,7 @@ const PENDING_ORDER_VISIBLE_MS = 30 * 60 * 1000;
 
 function formatRechargeCoins(value: string | number | null | undefined): string {
   const amount = Number(value || 0);
-  return formatCoins(Number.isFinite(amount) ? Math.trunc(amount) : 0);
+  return formatCoins(Number.isFinite(amount) ? amount : 0);
 }
 
 function formatCoinsLabel(value: string | number | null | undefined): string {
@@ -194,7 +194,7 @@ export function WalletRechargePanel({
               <input
                 value={amountCoins}
                 onChange={(event) => setAmountCoins(event.target.value)}
-                inputMode="numeric"
+                inputMode="decimal"
                 className="h-full min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums outline-none"
                 placeholder="输入其他金额"
               />

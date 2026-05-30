@@ -474,13 +474,13 @@ export async function getAdminGlobalStats(
          COUNT(*)::int AS total_orders,
          COUNT(*) FILTER (WHERE status = 'paid')::int AS paid_orders,
          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_orders,
-         COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::int
+         COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::float8
            AS total_coins,
          COALESCE(SUM(amount_coins) FILTER (
            WHERE status = 'paid'
              AND paid_at >= $1::date
              AND paid_at < ($1::date + INTERVAL '1 day')
-         ), 0)::int AS today_coins,
+         ), 0)::float8 AS today_coins,
          COUNT(*) FILTER (
            WHERE status = 'paid'
              AND ($2::date IS NULL OR paid_at >= $2::date)
@@ -490,7 +490,7 @@ export async function getAdminGlobalStats(
            WHERE status = 'paid'
              AND ($2::date IS NULL OR paid_at >= $2::date)
              AND ($3::date IS NULL OR paid_at < $3::date)
-         ), 0)::int AS period_coins
+         ), 0)::float8 AS period_coins
        FROM recharge_orders`,
       rechargeStatsParams,
     ),

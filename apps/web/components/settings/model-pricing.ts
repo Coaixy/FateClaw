@@ -13,7 +13,7 @@ export type OfficialModelPricePart = {
 };
 
 /**
- * 将模型计费单价格式化为和钱包一致的软妹币整数展示。
+ * 将模型计费单价格式化为和钱包一致的软妹币展示。
  */
 export function officialModelCoinsLabel(coins: number): string {
   return formatCoins(coins);

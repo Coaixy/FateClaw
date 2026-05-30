@@ -115,6 +115,11 @@ function isHttpUrl(value: string): boolean {
   return url.protocol === 'http:' || url.protocol === 'https:';
 }
 
+function roundCoinsToCents(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Object.is(value, -0) ? 0 : Math.round(value * 100) / 100;
+}
+
 function resolveEpayConfig(
   paymentConfig: RechargePaymentConfigRow,
   callbackUrls: RechargeCallbackUrls,
@@ -147,16 +152,16 @@ function parseRechargeAmount(
         ? raw.trim()
         : '';
   if (!/^\d+(\.\d{1,2})?$/.test(source)) {
-    return '充值金额必须是正整数软妹币';
+    return '充值金额必须是正数软妹币，最多 2 位小数';
   }
 
   const numericAmount = Number(source);
-  const amountCoins = Math.round(numericAmount);
-  if (!Number.isInteger(numericAmount) || amountCoins <= 0) {
-    return '充值金额必须是正整数软妹币';
+  const amountCoins = roundCoinsToCents(numericAmount);
+  if (amountCoins <= 0) {
+    return '充值金额必须是正数软妹币，最多 2 位小数';
   }
-  const minCoins = Number.parseInt(String(paymentConfig.min_coins), 10);
-  const maxCoins = Number.parseInt(String(paymentConfig.max_coins), 10);
+  const minCoins = Number(paymentConfig.min_coins);
+  const maxCoins = Number(paymentConfig.max_coins);
 
   // 用户创建订单时校验充值区间；支付平台回查金额只做格式和一致性校验。
   if (
@@ -206,7 +211,7 @@ function validateProviderAmount(
   if (typeof parsed === 'string') {
     return fail(400, '支付平台返回的金额格式异常');
   }
-  if (parsed.amountCoins !== order.amount_coins) {
+  if (parsed.amountCoins !== roundCoinsToCents(order.amount_coins)) {
     return fail(409, '支付金额和充值单不一致，请联系管理员处理');
   }
   return ok(null);

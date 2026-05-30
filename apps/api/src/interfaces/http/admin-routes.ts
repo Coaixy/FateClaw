@@ -56,8 +56,27 @@ import {
 } from '../../shared/model-context-window.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
+function roundCoinsToCents(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Object.is(value, -0) ? 0 : Math.round(value * 100) / 100;
+}
+
+function hasAtMostTwoDecimalPlaces(value: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  return Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
+}
+
+const SoftCurrencyNumberSchema = z
+  .number()
+  .refine(Number.isFinite, '金额格式不正确')
+  .refine(hasAtMostTwoDecimalPlaces, '金额最多支持 2 位小数')
+  .transform(roundCoinsToCents);
+
 const GrantBonusBalanceSchema = z.object({
-  amount_coins: z.number().int().positive('赠送余额必须为正整数软妹币'),
+  amount_coins: SoftCurrencyNumberSchema.refine(
+    (value) => value > 0,
+    '赠送余额必须为正数软妹币',
+  ),
   source: z
     .enum(['new_user_gift', 'sign_in', 'admin_grant', 'promotion'])
     .default('admin_grant'),
@@ -66,10 +85,10 @@ const GrantBonusBalanceSchema = z.object({
 });
 
 const AdjustPurchasedBalanceSchema = z.object({
-  amount_coins: z
-    .number()
-    .int()
-    .refine((v) => v !== 0, '调整余额不能为 0'),
+  amount_coins: SoftCurrencyNumberSchema.refine(
+    (value) => value !== 0,
+    '调整余额不能为 0',
+  ),
   note: z.string().max(200).optional(),
 });
 
@@ -213,9 +232,9 @@ function isOfficialModelKeyConflict(error: unknown): boolean {
 const RechargeMoneySchema = z
   .string()
   .trim()
-  .regex(/^\d+$/, '金额必须是正整数软妹币')
+  .regex(/^\d+(\.\d{1,2})?$/, '金额最多支持 2 位小数')
   .refine((value) => Number(value) > 0, '金额必须大于 0')
-  .transform((value) => String(Number.parseInt(value, 10)));
+  .transform((value) => roundCoinsToCents(Number(value)).toFixed(2));
 
 const RechargePaymentConfigSchema = z
   .object({
@@ -256,7 +275,10 @@ const RechargePaymentConfigSchema = z
 const RewardConfigSchema = z.object({
   daily_sign_in: z.object({
     enabled: z.boolean(),
-    reward_coins: z.number().int().min(0).max(1_000_000),
+    reward_coins: SoftCurrencyNumberSchema.refine(
+      (value) => value >= 0 && value <= 1_000_000,
+      '签到奖励必须在 0 到 1000000 之间',
+    ),
   }),
 });
 
@@ -586,12 +608,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       purchased_coins: updated.purchased_coins,
       bonus_coins: updated.bonus_coins,
       reserved_coins: updated.reserved_coins,
-      available_coins: Math.max(
-        0,
-        updated.purchased_coins +
-          updated.bonus_coins -
-          updated.reserved_coins,
-      ),
+      available_coins: updated.purchased_coins + updated.bonus_coins,
     };
   });
 

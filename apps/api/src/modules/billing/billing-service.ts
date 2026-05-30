@@ -187,10 +187,7 @@ export async function claimDailySignInReward(
     signed_in_at: record.created_at,
     received_coins: record.reward_coins,
     bonus_coins: updated.bonus_coins,
-    available_coins: Math.max(
-      0,
-      updated.purchased_coins + updated.bonus_coins - updated.reserved_coins,
-    ),
+    available_coins: updated.purchased_coins + updated.bonus_coins,
   });
 }
 

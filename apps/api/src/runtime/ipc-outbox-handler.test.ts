@@ -50,7 +50,6 @@ vi.mock('../infrastructure/logger.js', () => ({
 }));
 
 vi.mock('../modules/billing/plans.js', () => ({
-  releaseBillingReservation: vi.fn(),
   settleBillingReservation: mockSettleBillingReservation,
 }));
 

@@ -23,10 +23,7 @@ export function calculateAvailableSpendableCoins(
     state.reserved_coins - releasedReservedCoins,
   );
 
-  return Math.max(
-    0,
-    state.purchased_coins + state.bonus_coins - effectiveReservedCoins,
-  );
+  return state.purchased_coins + state.bonus_coins - effectiveReservedCoins;
 }
 
 export function assertSufficientSpendableCoins(

@@ -54,7 +54,7 @@ export function WalletTokenUsagePanel({
                   输出 Token
                 </th>
                 <th className="px-4 py-2.5 font-semibold text-right">合计</th>
-                <th className="px-4 py-2.5 font-semibold text-right">价格</th>
+                <th className="px-4 py-2.5 font-semibold text-right">扣费</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline/50">

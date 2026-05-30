@@ -33,4 +33,14 @@ describe('balance coins guards', () => {
 
     expect(availableCoins).toBe(100);
   });
+
+  it('returns negative spendable balance for arrears', () => {
+    expect(
+      calculateAvailableSpendableCoins({
+        purchased_coins: -3,
+        bonus_coins: 0,
+        reserved_coins: 0,
+      }),
+    ).toBe(-3);
+  });
 });

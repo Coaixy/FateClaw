@@ -4,10 +4,7 @@ import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type { BalanceGrantSource, User } from '../../shared/types.js';
-import {
-  assertSufficientSpendableCoins,
-  calculateAvailableSpendableCoins,
-} from '../../shared/balance-coins.js';
+import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
 
 const pool = {
   query(sql: string, params?: unknown[]) {
@@ -17,6 +14,97 @@ const pool = {
     return getDbPool().connect();
   },
 };
+
+const COIN_CENTS = 100;
+
+function toCoins(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function roundCoinsToCents(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * COIN_CENTS) / COIN_CENTS;
+}
+
+function normalizeUserCoins(row: User): User {
+  return {
+    ...row,
+    purchased_coins: toCoins(row.purchased_coins),
+    bonus_coins: toCoins(row.bonus_coins),
+    reserved_coins: toCoins(row.reserved_coins),
+  };
+}
+
+function normalizeWalletTransactionRow(
+  row: WalletTransactionRow,
+): WalletTransactionRow {
+  return {
+    ...row,
+    amount_coins: toCoins(row.amount_coins),
+    reserved_delta_coins: toCoins(row.reserved_delta_coins),
+  };
+}
+
+function normalizeDailySignInConfigRow(
+  row: DailySignInConfigRow,
+): DailySignInConfigRow {
+  return {
+    ...row,
+    reward_coins: toCoins(row.reward_coins),
+  };
+}
+
+function normalizeDailySignInRecordRow(
+  row: DailySignInRecordRow,
+): DailySignInRecordRow {
+  return {
+    ...row,
+    reward_coins: toCoins(row.reward_coins),
+  };
+}
+
+function normalizeRechargeOrderRow(row: RechargeOrderRow): RechargeOrderRow {
+  return {
+    ...row,
+    amount_coins: toCoins(row.amount_coins),
+  };
+}
+
+function normalizeRechargeStatsRow(row: RechargeStatsRow): RechargeStatsRow {
+  return {
+    ...row,
+    total_recharge_coins: toCoins(row.total_recharge_coins),
+  };
+}
+
+function normalizeBillingRequestReservationRow(
+  row: BillingRequestReservationRow,
+): BillingRequestReservationRow {
+  return {
+    ...row,
+    reserved_coins: toCoins(row.reserved_coins),
+    actual_charge_coins: toCoins(row.actual_charge_coins),
+    total_overage_cost_coins: toCoins(row.total_overage_cost_coins),
+  };
+}
+
+function normalizeBalanceGrantRow(row: BalanceGrantRow): BalanceGrantRow {
+  return {
+    ...row,
+    amount_coins: toCoins(row.amount_coins),
+    remaining_coins: toCoins(row.remaining_coins),
+  };
+}
+
+function normalizeMonthlyBillingStateRow(
+  row: MonthlyBillingStateRow,
+): MonthlyBillingStateRow {
+  return {
+    ...row,
+    billed_overage_cost_coins: toCoins(row.billed_overage_cost_coins),
+  };
+}
 
 export interface WalletTransactionRow {
   id: string;
@@ -150,7 +238,7 @@ export async function getDailySignInConfig(): Promise<DailySignInConfigRow> {
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
   );
-  return rows[0] as DailySignInConfigRow;
+  return normalizeDailySignInConfigRow(rows[0] as DailySignInConfigRow);
 }
 
 /**
@@ -172,7 +260,7 @@ export async function updateDailySignInConfig(input: {
      RETURNING *`,
     [input.enabled, input.rewardCoins],
   );
-  return rows[0] as DailySignInConfigRow;
+  return normalizeDailySignInConfigRow(rows[0] as DailySignInConfigRow);
 }
 
 /**
@@ -188,7 +276,8 @@ export async function getDailySignInRecordByDate(
      WHERE user_id = $1 AND sign_in_date = $2`,
     [userId, signInDate],
   );
-  return rows[0] as DailySignInRecordRow | undefined;
+  const row = rows[0] as DailySignInRecordRow | undefined;
+  return row ? normalizeDailySignInRecordRow(row) : undefined;
 }
 
 export async function insertWalletTransaction(
@@ -205,8 +294,8 @@ export async function insertWalletTransaction(
     metadata?: unknown;
   },
 ): Promise<void> {
-  const amountCoins = input.amountCoins ?? 0;
-  const reservedDeltaCoins = input.reservedDeltaCoins ?? 0;
+  const amountCoins = roundCoinsToCents(input.amountCoins ?? 0);
+  const reservedDeltaCoins = roundCoinsToCents(input.reservedDeltaCoins ?? 0);
   const balanceSource =
     input.balanceSource !== undefined
       ? input.balanceSource
@@ -337,7 +426,9 @@ export async function createDailySignInReward(input: {
       await client.query('COMMIT');
       return {
         user,
-        record: existingRows[0] as DailySignInRecordRow,
+        record: normalizeDailySignInRecordRow(
+          existingRows[0] as DailySignInRecordRow,
+        ),
         created: false,
       };
     }
@@ -373,8 +464,8 @@ export async function createDailySignInReward(input: {
 
     await client.query('COMMIT');
     return {
-      user: updatedRows[0] as User,
-      record: inserted,
+      user: normalizeUserCoins(updatedRows[0] as User),
+      record: normalizeDailySignInRecordRow(inserted),
       created: true,
     };
   } catch (err) {
@@ -408,7 +499,7 @@ export async function insertRechargeOrder(input: {
       input.metadata ? JSON.stringify(input.metadata) : null,
     ],
   );
-  return rows[0] as RechargeOrderRow;
+  return normalizeRechargeOrderRow(rows[0] as RechargeOrderRow);
 }
 
 export async function markRechargeOrderPaymentCreated(input: {
@@ -435,7 +526,7 @@ export async function markRechargeOrderPaymentCreated(input: {
   if (rows.length === 0) {
     throw new Error('充值单不存在');
   }
-  return rows[0] as RechargeOrderRow;
+  return normalizeRechargeOrderRow(rows[0] as RechargeOrderRow);
 }
 
 export async function markRechargeOrderFailed(
@@ -459,7 +550,8 @@ export async function getRechargeOrderByTradeId(
     `SELECT * FROM recharge_orders WHERE trade_id = $1`,
     [tradeId],
   );
-  return rows[0] as RechargeOrderRow | undefined;
+  const row = rows[0] as RechargeOrderRow | undefined;
+  return row ? normalizeRechargeOrderRow(row) : undefined;
 }
 
 export async function getRechargeOrderByTradeIdForUser(
@@ -471,7 +563,8 @@ export async function getRechargeOrderByTradeIdForUser(
      WHERE user_id = $1 AND trade_id = $2`,
     [userId, tradeId],
   );
-  return rows[0] as RechargeOrderRow | undefined;
+  const row = rows[0] as RechargeOrderRow | undefined;
+  return row ? normalizeRechargeOrderRow(row) : undefined;
 }
 
 export async function listRechargeOrdersByUserId(
@@ -485,7 +578,7 @@ export async function listRechargeOrdersByUserId(
      LIMIT $2`,
     [userId, Math.min(Math.max(limit, 1), 100)],
   );
-  return rows as RechargeOrderRow[];
+  return (rows as RechargeOrderRow[]).map(normalizeRechargeOrderRow);
 }
 
 export async function getRechargeStatsByUserId(
@@ -494,14 +587,14 @@ export async function getRechargeStatsByUserId(
   const { rows } = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE status = 'paid')::int AS total_paid_orders,
-       COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::int
+       COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::float8
          AS total_recharge_coins,
        MAX(paid_at) FILTER (WHERE status = 'paid') AS last_paid_at
      FROM recharge_orders
      WHERE user_id = $1`,
     [userId],
   );
-  return rows[0] as RechargeStatsRow;
+  return normalizeRechargeStatsRow(rows[0] as RechargeStatsRow);
 }
 
 export async function settleRechargeOrderPaid(input: {
@@ -520,7 +613,9 @@ export async function settleRechargeOrderPaid(input: {
        FOR UPDATE`,
       [input.tradeId],
     );
-    const order = orderRows[0] as RechargeOrderRow | undefined;
+    const order = orderRows[0]
+      ? normalizeRechargeOrderRow(orderRows[0] as RechargeOrderRow)
+      : undefined;
     if (!order) {
       throw new Error('充值单不存在');
     }
@@ -528,7 +623,7 @@ export async function settleRechargeOrderPaid(input: {
     // 支付平台通知可能重复到达，已入账订单直接返回，保证幂等。
     if (order.status === 'paid') {
       await client.query('COMMIT');
-      return order;
+      return normalizeRechargeOrderRow(order);
     }
     if (order.status !== 'pending') {
       throw new Error('充值单状态不可入账');
@@ -577,7 +672,7 @@ export async function settleRechargeOrderPaid(input: {
     );
 
     await client.query('COMMIT');
-    return updatedRows[0] as RechargeOrderRow;
+    return normalizeRechargeOrderRow(updatedRows[0] as RechargeOrderRow);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -625,7 +720,8 @@ export async function getBillingRequestReservationByRequestId(
     'SELECT * FROM billing_request_reservations WHERE request_id = $1',
     [requestId],
   );
-  return rows[0] as BillingRequestReservationRow | undefined;
+  const row = rows[0] as BillingRequestReservationRow | undefined;
+  return row ? normalizeBillingRequestReservationRow(row) : undefined;
 }
 
 export async function listBillingRequestReservations(opts?: {
@@ -658,7 +754,9 @@ export async function listBillingRequestReservations(opts?: {
      LIMIT $${idx}`,
     values,
   );
-  return rows as BillingRequestReservationRow[];
+  return (rows as BillingRequestReservationRow[]).map(
+    normalizeBillingRequestReservationRow,
+  );
 }
 
 export async function reconcileStaleBillingReservations(
@@ -694,13 +792,25 @@ export async function getWalletTransactionsByUserId(
   limit = 20,
 ): Promise<WalletTransactionRow[]> {
   const { rows } = await pool.query(
-    `SELECT * FROM wallet_transactions
+    `SELECT
+       id,
+       user_id,
+       kind,
+       amount_coins::float8 AS amount_coins,
+       reserved_delta_coins::float8 AS reserved_delta_coins,
+       balance_source,
+       balance_grant_id,
+       request_id,
+       note,
+       metadata,
+       created_at
+     FROM wallet_transactions
      WHERE user_id = $1
      ORDER BY created_at DESC
      LIMIT $2`,
     [userId, limit],
   );
-  return rows as WalletTransactionRow[];
+  return (rows as WalletTransactionRow[]).map(normalizeWalletTransactionRow);
 }
 
 export async function getVisibleWalletTransactionsByUserId(
@@ -708,7 +818,19 @@ export async function getVisibleWalletTransactionsByUserId(
   limit = 20,
 ): Promise<WalletTransactionRow[]> {
   const { rows } = await pool.query(
-    `SELECT * FROM wallet_transactions
+    `SELECT
+       id,
+       user_id,
+       kind,
+       amount_coins::float8 AS amount_coins,
+       reserved_delta_coins::float8 AS reserved_delta_coins,
+       balance_source,
+       balance_grant_id,
+       request_id,
+       note,
+       metadata,
+       created_at
+     FROM wallet_transactions
      WHERE user_id = $1
        AND amount_coins <> 0
        AND kind <> 'overage_charge'
@@ -716,7 +838,7 @@ export async function getVisibleWalletTransactionsByUserId(
      LIMIT $2`,
     [userId, limit],
   );
-  return rows as WalletTransactionRow[];
+  return (rows as WalletTransactionRow[]).map(normalizeWalletTransactionRow);
 }
 
 // =====================
@@ -758,7 +880,7 @@ async function getAvailableBonusBatches(
      FOR UPDATE`,
     [userId],
   );
-  return rows as BalanceGrantRow[];
+  return (rows as BalanceGrantRow[]).map(normalizeBalanceGrantRow);
 }
 
 export interface DeductBalanceResult {
@@ -766,6 +888,44 @@ export interface DeductBalanceResult {
   purchasedDeducted: number;
   grantDeductions: Array<{ grantId: string; coins: number }>;
   balanceSource: 'purchased' | 'bonus' | 'mixed' | null;
+}
+
+async function deductBonusGrantsBestEffort(
+  client: pg.PoolClient,
+  userId: string,
+  chargeCoins: number,
+): Promise<{
+  bonusDeducted: number;
+  remainingChargeCoins: number;
+  grantDeductions: Array<{ grantId: string; coins: number }>;
+}> {
+  let bonusLeft = roundCoinsToCents(Math.max(0, chargeCoins));
+  const grantDeductions: Array<{ grantId: string; coins: number }> = [];
+
+  const batches = await getAvailableBonusBatches(client, userId);
+  for (const batch of batches) {
+    if (bonusLeft <= 0) break;
+    const toDeduct = roundCoinsToCents(
+      Math.min(batch.remaining_coins, bonusLeft),
+    );
+    if (toDeduct <= 0) continue;
+    await client.query(
+      `UPDATE balance_grants
+       SET remaining_coins = remaining_coins - $1,
+           status = CASE WHEN remaining_coins - $1 <= 0 THEN 'exhausted' ELSE status END,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [toDeduct, batch.id],
+    );
+    grantDeductions.push({ grantId: batch.id, coins: toDeduct });
+    bonusLeft = roundCoinsToCents(bonusLeft - toDeduct);
+  }
+
+  return {
+    bonusDeducted: roundCoinsToCents(Math.max(0, chargeCoins) - bonusLeft),
+    remainingChargeCoins: bonusLeft,
+    grantDeductions,
+  };
 }
 
 /**
@@ -789,28 +949,9 @@ export async function deductBalanceCoins(
   }
   assertSufficientSpendableCoins(user, chargeCoins, options);
 
-  let bonusLeft = chargeCoins;
-  const grantDeductions: Array<{ grantId: string; coins: number }> = [];
-
-  const batches = await getAvailableBonusBatches(client, user.id);
-  for (const batch of batches) {
-    if (bonusLeft <= 0) break;
-    const toDeduct = Math.min(batch.remaining_coins, bonusLeft);
-    if (toDeduct <= 0) continue;
-    await client.query(
-      `UPDATE balance_grants
-       SET remaining_coins = remaining_coins - $1,
-           status = CASE WHEN remaining_coins - $1 <= 0 THEN 'exhausted' ELSE status END,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [toDeduct, batch.id],
-    );
-    grantDeductions.push({ grantId: batch.id, coins: toDeduct });
-    bonusLeft -= toDeduct;
-  }
-
-  const bonusDeducted = chargeCoins - bonusLeft;
-  const purchasedDeducted = bonusLeft;
+  const { bonusDeducted, remainingChargeCoins, grantDeductions } =
+    await deductBonusGrantsBestEffort(client, user.id, chargeCoins);
+  const purchasedDeducted = remainingChargeCoins;
   if (
     user.bonus_coins < bonusDeducted ||
     user.purchased_coins < purchasedDeducted
@@ -838,6 +979,53 @@ export async function deductBalanceCoins(
     purchasedDeducted,
     grantDeductions,
     balanceSource,
+  };
+}
+
+/**
+ * 模型请求结束后扣费，允许充值余额被扣成负数。
+ * 只有后续请求入口会因为欠费被拦截，当前请求的实际 Token 成本仍完整入账。
+ */
+export async function deductModelChargeCoinsAllowDebt(
+  client: pg.PoolClient,
+  user: User,
+  chargeCoins: number,
+): Promise<DeductBalanceResult & { user: User }> {
+  if (chargeCoins <= 0) {
+    return {
+      bonusDeducted: 0,
+      purchasedDeducted: 0,
+      grantDeductions: [],
+      balanceSource: null,
+      user,
+    };
+  }
+
+  const { bonusDeducted, remainingChargeCoins, grantDeductions } =
+    await deductBonusGrantsBestEffort(client, user.id, chargeCoins);
+  const purchasedDeducted = remainingChargeCoins;
+
+  const { rows: updatedRows } = await client.query(
+    `UPDATE users
+     SET bonus_coins = GREATEST(0, bonus_coins - $1),
+         purchased_coins = purchased_coins - $2
+     WHERE id = $3
+     RETURNING *`,
+    [bonusDeducted, purchasedDeducted, user.id],
+  );
+
+  let balanceSource: DeductBalanceResult['balanceSource'];
+  if (bonusDeducted > 0 && purchasedDeducted > 0) balanceSource = 'mixed';
+  else if (bonusDeducted > 0) balanceSource = 'bonus';
+  else if (purchasedDeducted > 0) balanceSource = 'purchased';
+  else balanceSource = null;
+
+  return {
+    bonusDeducted,
+    purchasedDeducted,
+    grantDeductions,
+    balanceSource,
+    user: normalizeUserCoins(updatedRows[0] as User),
   };
 }
 
@@ -905,7 +1093,7 @@ export async function grantBonusBalance(input: {
 
     await client.query('COMMIT');
     return {
-      user: updatedRows[0] as User,
+      user: normalizeUserCoins(updatedRows[0] as User),
       grantId,
     };
   } catch (err) {
@@ -953,7 +1141,9 @@ export async function expireBonusBalance(
          FOR UPDATE SKIP LOCKED`,
         [grantId, beforeIso],
       );
-      const batch = rows[0] as BalanceGrantRow | undefined;
+      const batch = rows[0]
+        ? normalizeBalanceGrantRow(rows[0] as BalanceGrantRow)
+        : undefined;
       if (!batch) {
         await client.query('COMMIT');
         continue;
@@ -1021,12 +1211,11 @@ export async function getBalanceGrantsByUserId(
      LIMIT $2`,
     [userId, Math.min(opts?.limit ?? 50, 200)],
   );
-  return rows as BalanceGrantRow[];
+  return (rows as BalanceGrantRow[]).map(normalizeBalanceGrantRow);
 }
 
 /**
  * 管理员调整用户的充值余额（purchased_coins）。
- * 负数时会被 reserved_coins 兜底拦截，避免把可用余额打成负。
  */
 export async function adjustUserPurchasedBalance(
   userId: string,
@@ -1043,14 +1232,7 @@ export async function adjustUserPurchasedBalance(
       throw new Error('用户不存在');
     }
 
-    const nextPurchased = user.purchased_coins + amountCoins;
-    if (nextPurchased < 0) {
-      throw new Error('余额不足，无法完成本次调整');
-    }
-    const spendable = nextPurchased + user.bonus_coins;
-    if (spendable < user.reserved_coins) {
-      throw new Error('可用余额不足以覆盖已预扣，无法完成调整');
-    }
+    const nextPurchased = roundCoinsToCents(user.purchased_coins + amountCoins);
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
@@ -1070,7 +1252,7 @@ export async function adjustUserPurchasedBalance(
     });
 
     await client.query('COMMIT');
-    return updatedRows[0] as User;
+    return normalizeUserCoins(updatedRows[0] as User);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1080,9 +1262,9 @@ export async function adjustUserPurchasedBalance(
 }
 
 /**
- * 请求级预扣：锁定用户余额避免并发超额。
- * 可用余额（purchased + bonus - reserved）决定本次预扣上限。
- * 幂等：同一 requestId 已存在时直接返回现有预留。
+ * 登记一次模型请求的待结算记录。
+ *
+ * 现在请求开始不再冻结余额；该记录只负责给响应结算提供幂等键和归属月份。
  */
 export async function reserveUserBalanceCoins(input: {
   userId: string;
@@ -1100,9 +1282,11 @@ export async function reserveUserBalanceCoins(input: {
       'SELECT * FROM billing_request_reservations WHERE request_id = $1 FOR UPDATE',
       [input.requestId],
     );
-    const existing = existingRows[0] as
-      | BillingRequestReservationRow
-      | undefined;
+    const existing = existingRows[0]
+      ? normalizeBillingRequestReservationRow(
+          existingRows[0] as BillingRequestReservationRow,
+        )
+      : undefined;
     if (existing) {
       const existingUser = await getUserByIdUsing(client, existing.user_id, {
         forUpdate: true,
@@ -1112,7 +1296,7 @@ export async function reserveUserBalanceCoins(input: {
       }
       await client.query('COMMIT');
       return {
-        user: existingUser,
+        user: normalizeUserCoins(existingUser),
         reservedCoins: existing.reserved_coins,
       };
     }
@@ -1124,41 +1308,21 @@ export async function reserveUserBalanceCoins(input: {
       throw new Error('用户不存在');
     }
 
-    const reservableHeadroom = calculateAvailableSpendableCoins(user);
-    if (input.amountCoins > 0 && reservableHeadroom <= 0) {
-      throw new Error('余额不足，请充值后继续使用');
-    }
-
-    const actualReservedCoins = Math.min(
-      Math.max(0, input.amountCoins),
-      reservableHeadroom,
-    );
-    const holdState: BillingRequestReservationRow['hold_state'] =
-      actualReservedCoins > 0 ? 'held' : 'none';
-
-    const { rows: updatedRows } = await client.query(
-      `UPDATE users
-       SET reserved_coins = reserved_coins + $1
-       WHERE id = $2
-       RETURNING *`,
-      [actualReservedCoins, input.userId],
-    );
-
     await insertBillingRequestReservation(client, {
       requestId: input.requestId,
       userId: input.userId,
       modelConfigId: input.modelConfigId ?? null,
       yearMonth: input.yearMonth,
-      reservedCoins: actualReservedCoins,
-      holdState,
+      reservedCoins: 0,
+      holdState: 'none',
       note: input.note ?? null,
       metadata: input.metadata,
     });
 
     await client.query('COMMIT');
     return {
-      user: updatedRows[0] as User,
-      reservedCoins: actualReservedCoins,
+      user: normalizeUserCoins(user),
+      reservedCoins: 0,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1182,9 +1346,11 @@ export async function releaseUserBalanceReservation(
        FOR UPDATE`,
       [requestId],
     );
-    const reservation = reservationRows[0] as
-      | BillingRequestReservationRow
-      | undefined;
+    const reservation = reservationRows[0]
+      ? normalizeBillingRequestReservationRow(
+          reservationRows[0] as BillingRequestReservationRow,
+        )
+      : undefined;
     if (!reservation) {
       throw new Error('预留记录不存在');
     }
@@ -1220,7 +1386,7 @@ export async function releaseUserBalanceReservation(
     // 不再插入释放流水记录，只有实际扣费才记录到 wallet_transactions
 
     await client.query('COMMIT');
-    return updatedRows[0] as User;
+    return normalizeUserCoins(updatedRows[0] as User);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1243,9 +1409,11 @@ export async function settleUserModelChargeCoins(
        FOR UPDATE`,
       [requestId],
     );
-    const reservation = reservationRows[0] as
-      | BillingRequestReservationRow
-      | undefined;
+    const reservation = reservationRows[0]
+      ? normalizeBillingRequestReservationRow(
+          reservationRows[0] as BillingRequestReservationRow,
+        )
+      : undefined;
     if (!reservation) {
       throw new Error('预留记录不存在');
     }
@@ -1259,7 +1427,7 @@ export async function settleUserModelChargeCoins(
       await client.query('COMMIT');
       return {
         actualChargeCoins: reservation.actual_charge_coins,
-        user: existingUser,
+        user: normalizeUserCoins(existingUser),
       };
     }
 
@@ -1278,46 +1446,43 @@ export async function settleUserModelChargeCoins(
       throw new Error('用户不存在');
     }
 
-    await client.query(
+    const { rows: monthlyRows } = await client.query(
       `INSERT INTO monthly_billing_state
-        (user_id, year_month, billed_overage_tokens, billed_overage_cost_coins, updated_at)
+        (user_id, year_month, billed_overage_tokens, billed_overage_cost_coins,
+         updated_at)
        VALUES ($1, $2, 0, 0, NOW())
        ON CONFLICT (user_id, year_month)
        DO UPDATE SET updated_at = monthly_billing_state.updated_at
        RETURNING *`,
       [reservation.user_id, reservation.year_month],
     );
-
-    const actualChargeCoins = Math.max(0, requestCostCoins);
-    const releasedReservedCoins =
-      reservation.hold_state === 'held' ? reservation.reserved_coins : 0;
-    const nextReservedCoins = Math.max(
-      0,
-      user.reserved_coins - releasedReservedCoins,
+    const monthlyState = normalizeMonthlyBillingStateRow(
+      monthlyRows[0] as MonthlyBillingStateRow,
+    );
+    const previousChargeCoins = toCoins(
+      monthlyState.billed_overage_cost_coins,
+    );
+    const actualChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
+    const nextChargeCoins = roundCoinsToCents(
+      previousChargeCoins + actualChargeCoins,
     );
 
-    // bonus → purchased 优先级扣减（内部更新 bonus_coins / purchased_coins）
-    const deduction = await deductBalanceCoins(client, user, actualChargeCoins, {
-      releasedReservedCoins,
-    });
-
-    const { rows: updatedRows } = await client.query(
-      `UPDATE users
-       SET reserved_coins = $1
-       WHERE id = $2
-       RETURNING *`,
-      [nextReservedCoins, reservation.user_id],
+    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值余额扣成负数。
+    const deduction = await deductModelChargeCoinsAllowDebt(
+      client,
+      normalizeUserCoins(user),
+      actualChargeCoins,
     );
 
     await client.query(
       `UPDATE monthly_billing_state
        SET billed_overage_tokens = billed_overage_tokens + $1,
-           billed_overage_cost_coins = billed_overage_cost_coins + $2,
+           billed_overage_cost_coins = $2,
            updated_at = NOW()
        WHERE user_id = $3 AND year_month = $4`,
       [
         requestTokens,
-        actualChargeCoins,
+        nextChargeCoins,
         reservation.user_id,
         reservation.year_month,
       ],
@@ -1334,18 +1499,13 @@ export async function settleUserModelChargeCoins(
            charged_at = NOW(),
            updated_at = NOW()
        WHERE request_id = $1`,
-      [requestId, actualChargeCoins, requestTokens, actualChargeCoins],
-    );
-
-    if (reservation.hold_state === 'held' && reservation.reserved_coins > 0) {
-      await insertWalletTransaction(client, {
-        userId: reservation.user_id,
-        kind: 'reservation_release',
-        reservedDeltaCoins: -reservation.reserved_coins,
+      [
         requestId,
-        note: '请求完成，释放预扣额度',
-      });
-    }
+        actualChargeCoins,
+        requestTokens,
+        actualChargeCoins,
+      ],
+    );
 
     if (actualChargeCoins > 0) {
       await insertWalletTransaction(client, {
@@ -1358,7 +1518,9 @@ export async function settleUserModelChargeCoins(
         metadata: {
           yearMonth: reservation.year_month,
           requestTokens,
-          requestCostCoins,
+          requestCostCoins: actualChargeCoins,
+          previousChargeCoins,
+          nextChargeCoins,
           bonusDeducted: deduction.bonusDeducted,
           purchasedDeducted: deduction.purchasedDeducted,
           grantDeductions: deduction.grantDeductions,
@@ -1369,7 +1531,7 @@ export async function settleUserModelChargeCoins(
     await client.query('COMMIT');
     return {
       actualChargeCoins,
-      user: updatedRows[0] as User,
+      user: deduction.user,
     };
   } catch (err) {
     await client.query('ROLLBACK');

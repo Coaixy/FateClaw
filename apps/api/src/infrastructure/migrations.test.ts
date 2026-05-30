@@ -104,6 +104,10 @@ describe('runDatabaseMigrations', () => {
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
       params: ['0012_model_billing_config', '增加模型平台服务费配置'],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0013_soft_currency_decimal_scale', '软妹币金额字段支持两位小数'],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -150,6 +154,7 @@ describe('runDatabaseMigrations', () => {
       '0010_daily_sign_in_reward_config',
       '0011_soft_currency_coins_schema',
       '0012_model_billing_config',
+      '0013_soft_currency_decimal_scale',
     ]);
 
     await runDatabaseMigrations(client as never);

@@ -314,9 +314,14 @@ function UserRow({
   };
 
   const handleAdjustBalance = async () => {
-    const amount = parseInt(balanceDelta, 10);
+    const normalizedDelta = balanceDelta.trim();
+    if (!/^-?\d+(\.\d{1,2})?$/.test(normalizedDelta)) {
+      setMsg('请输入有效的调整金额（最多 2 位小数）');
+      return;
+    }
+    const amount = Math.round(Number(normalizedDelta) * 100) / 100;
     if (!amount) {
-      setMsg('请输入有效的调整金额（软妹币）');
+      setMsg('调整金额不能为 0');
       return;
     }
     setAdjustingBalance(true);
@@ -421,7 +426,7 @@ function UserRow({
                       />
                       <h4 className="text-[13px] font-semibold">账户余额</h4>
                     </div>
-                    <div className="mb-3 grid overflow-hidden rounded-lg border border-hairline bg-hairline [gap:1px] sm:grid-cols-4">
+                    <div className="mb-3 grid overflow-hidden rounded-lg border border-hairline bg-hairline [gap:1px] sm:grid-cols-3">
                       <WalletMetric
                         label="充值"
                         value={formatCoins(detail.user.purchased_coins)}
@@ -429,10 +434,6 @@ function UserRow({
                       <WalletMetric
                         label="赠送"
                         value={formatCoins(detail.user.bonus_coins)}
-                      />
-                      <WalletMetric
-                        label="冻结"
-                        value={formatCoins(detail.user.reserved_coins)}
                       />
                       <WalletMetric
                         label="可用"
@@ -447,6 +448,7 @@ function UserRow({
                         </span>
                         <input
                           type="number"
+                          step="0.01"
                           value={balanceDelta}
                           onChange={(e) => setBalanceDelta(e.target.value)}
                           placeholder="正数增加，负数扣减"

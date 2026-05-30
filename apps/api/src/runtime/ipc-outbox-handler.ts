@@ -28,10 +28,7 @@ import {
   recordConversationLogSuccess,
 } from '../shared/conversation-log-metrics.js';
 import { mapInternalErrorToPublicError } from '../shared/public-error.js';
-import {
-  releaseBillingReservation,
-  settleBillingReservation,
-} from '../modules/billing/plans.js';
+import { settleBillingReservation } from '../modules/billing/plans.js';
 import { estimateTokens } from '../shared/token-budget.js';
 
 function formatTokens(n: number): string {
@@ -157,8 +154,6 @@ async function processOutboxResponse(
   const pending = payload.requestId
     ? pendingRequests.get(payload.requestId)
     : undefined;
-  let reservationSettled = false;
-
   try {
     const accountId = await resolveAccountId(
       payload.accountId,
@@ -277,14 +272,13 @@ async function processOutboxResponse(
         promptTokens: normalizedPayloadUsage.promptTokens,
         completionTokens: normalizedPayloadUsage.completionTokens,
       });
-      reservationSettled = true;
       logger.info(
         {
           accountId,
           requestId: payload.requestId,
           actualChargeCoins,
         },
-        '已完成超额预扣结算',
+        '已完成模型 Token 扣费结算',
       );
     }
 
@@ -317,19 +311,6 @@ async function processOutboxResponse(
       });
     }
   } catch (error) {
-    if (pending?.billingReservation && !reservationSettled) {
-      try {
-        await releaseBillingReservation(
-          pending.billingReservation,
-          '响应异常，释放预扣额度',
-        );
-      } catch (releaseErr) {
-        logger.error(
-          { requestId: payload.requestId, err: releaseErr },
-          '响应异常后释放预扣额度失败',
-        );
-      }
-    }
     // 即使投递失败也必须 resolve pending，否则 submitInboxRequest 会挂起直到 30 分钟超时
     if (pending) {
       clearTimeout(pending.timeout);

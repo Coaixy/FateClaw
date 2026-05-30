@@ -116,6 +116,7 @@ export async function processWeixinMessage(
     const errorMessage = err instanceof Error ? err.message : String(err);
     if (
       errorMessage.includes('余额不足') ||
+      errorMessage.includes('欠费') ||
       errorMessage.includes('免费对话额度')
     ) {
       await ilinkSendMessage(

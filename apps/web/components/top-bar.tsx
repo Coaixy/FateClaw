@@ -10,8 +10,7 @@ import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapsho
 import { formatCoins } from '@/lib/soft-currency';
 
 function formatBalanceShort(coins: number): string {
-  if (coins < 100_000) return formatCoins(coins);
-  return `软妹币 ${Math.round(coins / 100).toLocaleString()}`;
+  return formatCoins(coins);
 }
 
 function formatTokens(n: number): string {

@@ -2,20 +2,16 @@ import {
   getBillingRequestReservationByRequestId,
   getMonthlyModelChargeCoins,
   getUserById,
-  releaseUserBalanceReservation,
   reserveUserBalanceCoins,
   settleUserModelChargeCoins,
 } from '../../infrastructure/db.js';
 import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
-import { resolveContextWindow } from '../../shared/model-context-window.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 
 export interface BillingReservation {
   userId: string;
   requestId: string;
-  reservedCoins: number;
-  estimatedInputTokens: number;
-  estimatedOutputTokens: number;
+  reservedCoins: 0;
   modelConfigId: string;
   yearMonth: string;
 }
@@ -32,10 +28,17 @@ export interface MonthlyMeteredBillingSummary {
   chargedCoins: number;
 }
 
-const REQUEST_RESERVE_INPUT_RATIO = 0.75;
+const TOKEN_PRICE_DENOMINATOR = 1_000_000;
+const COIN_CENTS = 100;
+export const BILLING_ARREARS_MESSAGE = '余额已欠费，请充值后继续使用';
 
 function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
+}
+
+function roundCoinsToCents(coins: number): number {
+  if (!Number.isFinite(coins) || coins <= 0) return 0;
+  return Math.round(coins * COIN_CENTS) / COIN_CENTS;
 }
 
 function calculateTokenCostCoins(input: {
@@ -45,41 +48,12 @@ function calculateTokenCostCoins(input: {
   outputTokenPricePerMillionCoins: number;
 }): number {
   const inputCost =
-    (input.promptTokens * input.inputTokenPricePerMillionCoins) / 1_000_000;
+    (input.promptTokens * input.inputTokenPricePerMillionCoins) /
+    TOKEN_PRICE_DENOMINATOR;
   const outputCost =
     (input.completionTokens * input.outputTokenPricePerMillionCoins) /
-    1_000_000;
-  return Math.ceil(inputCost + outputCost);
-}
-
-function estimateRequestReserve(runtime: LlmRuntimeSnapshot): {
-  estimatedInputTokens: number;
-  estimatedOutputTokens: number;
-  estimatedCostCoins: number;
-} {
-  const contextWindow = resolveContextWindow({
-    model: runtime.model,
-    configured: runtime.contextWindowTokens,
-  });
-  const estimatedInputTokens = Math.ceil(
-    contextWindow * REQUEST_RESERVE_INPUT_RATIO,
-  );
-  const estimatedOutputTokens = Math.max(
-    0,
-    contextWindow - estimatedInputTokens,
-  );
-  return {
-    estimatedInputTokens,
-    estimatedOutputTokens,
-    estimatedCostCoins: calculateTokenCostCoins({
-      promptTokens: estimatedInputTokens,
-      completionTokens: estimatedOutputTokens,
-      inputTokenPricePerMillionCoins:
-        runtime.inputTokenPricePerMillionCoins ?? 0,
-      outputTokenPricePerMillionCoins:
-        runtime.outputTokenPricePerMillionCoins ?? 0,
-    }),
-  };
+    TOKEN_PRICE_DENOMINATOR;
+  return roundCoinsToCents(inputCost + outputCost);
 }
 
 export async function reserveBillingForRequest(input: {
@@ -90,42 +64,36 @@ export async function reserveBillingForRequest(input: {
   if (input.runtime.billingMode !== 'metered') {
     return null;
   }
-  const reserve = estimateRequestReserve(input.runtime);
+  const user = await getUserById(input.userId);
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+  if (user.purchased_coins + user.bonus_coins < 0) {
+    throw new Error(BILLING_ARREARS_MESSAGE);
+  }
   const yearMonth = currentYearMonth();
   const reservation = await reserveUserBalanceCoins({
     userId: input.userId,
-    amountCoins: reserve.estimatedCostCoins,
+    amountCoins: 0,
     requestId: input.requestId,
     yearMonth,
     modelConfigId: input.runtime.modelConfigId,
-    note: '模型请求开始，预扣 Token 费用',
+    note: '模型请求开始，登记待结算 Token 费用',
     metadata: {
       source: input.runtime.source,
       billingMode: input.runtime.billingMode,
       modelConfigId: input.runtime.modelConfigId,
       model: input.runtime.model,
-      estimatedInputTokens: reserve.estimatedInputTokens,
-      estimatedOutputTokens: reserve.estimatedOutputTokens,
     },
   });
 
   return {
     userId: input.userId,
     requestId: input.requestId,
-    reservedCoins: reservation.reservedCoins,
-    estimatedInputTokens: reserve.estimatedInputTokens,
-    estimatedOutputTokens: reserve.estimatedOutputTokens,
+    reservedCoins: 0,
     modelConfigId: input.runtime.modelConfigId,
     yearMonth,
   };
-}
-
-export async function releaseBillingReservation(
-  reservation: BillingReservation | null | undefined,
-  note: string,
-): Promise<void> {
-  if (!reservation) return;
-  await releaseUserBalanceReservation(reservation.requestId, note);
 }
 
 export async function settleBillingReservation(input: {
@@ -184,9 +152,6 @@ export async function getWalletBalanceSummary(
     purchasedCoins: user.purchased_coins,
     bonusCoins: user.bonus_coins,
     reservedCoins: user.reserved_coins,
-    availableCoins: Math.max(
-      0,
-      user.purchased_coins + user.bonus_coins - user.reserved_coins,
-    ),
+    availableCoins: user.purchased_coins + user.bonus_coins,
   };
 }

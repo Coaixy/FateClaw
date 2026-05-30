@@ -147,7 +147,7 @@ export function RechargeConfigPanel({
           <input
             value={draft.min_coins}
             onChange={(event) => updateDraft('min_coins', event.target.value)}
-            inputMode="numeric"
+            inputMode="decimal"
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>
@@ -158,7 +158,7 @@ export function RechargeConfigPanel({
           <input
             value={draft.max_coins}
             onChange={(event) => updateDraft('max_coins', event.target.value)}
-            inputMode="numeric"
+            inputMode="decimal"
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>

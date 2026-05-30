@@ -2261,7 +2261,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
     id: '0011_soft_currency_coins_schema',
     description: '迁移余额与充值 schema 到软妹币整数单位',
     async up(client) {
-      // 旧 schema 用 cents/yuan 表达金额；本迁移把最终运行时 schema 收敛为整数软妹币。
+      // 旧 schema 用 cents/yuan 表达金额；本迁移先收敛为整数软妹币，后续迁移再扩展到两位小数。
       await client.query(`
         CREATE OR REPLACE FUNCTION pg_temp.to_soft_currency_coins(value INTEGER)
         RETURNS INTEGER
@@ -2699,6 +2699,57 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         cleanupSql: `UPDATE model_billing_config
                      SET custom_model_platform_price_per_million_coins = 0
                      WHERE custom_model_platform_price_per_million_coins < 0`,
+      });
+    },
+  },
+  {
+    id: '0013_soft_currency_decimal_scale',
+    description: '软妹币金额字段支持两位小数',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE monthly_billing_state
+          DROP CONSTRAINT IF EXISTS chk_monthly_billing_state_billed_overage_cost_microcoins_nonnegative;
+        ALTER TABLE billing_request_reservations
+          DROP CONSTRAINT IF EXISTS chk_billing_request_reservations_total_overage_cost_microcoins_nonnegative;
+        ALTER TABLE monthly_billing_state
+          DROP COLUMN IF EXISTS billed_overage_cost_microcoins;
+        ALTER TABLE billing_request_reservations
+          DROP COLUMN IF EXISTS total_overage_cost_microcoins;
+      `);
+      await client.query(`
+        ALTER TABLE users
+          ALTER COLUMN purchased_coins TYPE NUMERIC(14,2) USING ROUND(purchased_coins::numeric, 2),
+          ALTER COLUMN bonus_coins TYPE NUMERIC(14,2) USING ROUND(bonus_coins::numeric, 2),
+          ALTER COLUMN reserved_coins TYPE NUMERIC(14,2) USING ROUND(reserved_coins::numeric, 2);
+        ALTER TABLE wallet_transactions
+          ALTER COLUMN amount_coins TYPE NUMERIC(14,2) USING ROUND(amount_coins::numeric, 2),
+          ALTER COLUMN reserved_delta_coins TYPE NUMERIC(14,2) USING ROUND(reserved_delta_coins::numeric, 2);
+        ALTER TABLE recharge_payment_config
+          ALTER COLUMN min_coins TYPE NUMERIC(14,2) USING ROUND(min_coins::numeric, 2),
+          ALTER COLUMN max_coins TYPE NUMERIC(14,2) USING ROUND(max_coins::numeric, 2);
+        ALTER TABLE recharge_orders
+          ALTER COLUMN amount_coins TYPE NUMERIC(14,2) USING ROUND(amount_coins::numeric, 2);
+        ALTER TABLE monthly_billing_state
+          ALTER COLUMN billed_overage_cost_coins TYPE NUMERIC(14,2) USING ROUND(billed_overage_cost_coins::numeric, 2);
+        ALTER TABLE billing_request_reservations
+          ALTER COLUMN reserved_coins TYPE NUMERIC(14,2) USING ROUND(reserved_coins::numeric, 2),
+          ALTER COLUMN actual_charge_coins TYPE NUMERIC(14,2) USING ROUND(actual_charge_coins::numeric, 2),
+          ALTER COLUMN total_overage_cost_coins TYPE NUMERIC(14,2) USING ROUND(total_overage_cost_coins::numeric, 2);
+        ALTER TABLE balance_grants
+          ALTER COLUMN amount_coins TYPE NUMERIC(14,2) USING ROUND(amount_coins::numeric, 2),
+          ALTER COLUMN remaining_coins TYPE NUMERIC(14,2) USING ROUND(remaining_coins::numeric, 2);
+        ALTER TABLE daily_sign_in_config
+          ALTER COLUMN reward_coins TYPE NUMERIC(14,2) USING ROUND(reward_coins::numeric, 2);
+        ALTER TABLE daily_sign_in_records
+          ALTER COLUMN reward_coins TYPE NUMERIC(14,2) USING ROUND(reward_coins::numeric, 2);
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_users_reserved_coins_nonnegative',
+        tableName: 'users',
+        expression: 'reserved_coins >= 0',
+        cleanupSql: `UPDATE users
+                     SET reserved_coins = 0
+                     WHERE reserved_coins < 0`,
       });
     },
   },

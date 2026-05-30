@@ -1,8 +1,12 @@
 /**
- * 将内部软妹币整数格式化为统一展示文案。
+ * 将内部软妹币金额格式化为统一展示文案。
  */
 export function formatCoins(coins: number): string {
-  return `软妹币 ${Math.trunc(coins).toLocaleString('zh-CN')}`;
+  const amount = Number.isFinite(coins) ? coins : 0;
+  return `软妹币 ${amount.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /**

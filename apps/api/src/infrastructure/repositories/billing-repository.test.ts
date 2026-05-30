@@ -25,6 +25,7 @@ vi.mock('../logger.js', () => ({
 import {
   createDailySignInReward,
   deductBalanceCoins,
+  deductModelChargeCoinsAllowDebt,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
@@ -81,7 +82,7 @@ describe('billing repository', () => {
   });
 
   it('inserts recharge orders and serializes metadata', async () => {
-    const { calls } = createMockPool([[{ id: 'order-1' }]]);
+    const { calls } = createMockPool([[{ id: 'order-1', amount_coins: 10 }]]);
 
     await expect(
       insertRechargeOrder({
@@ -92,7 +93,7 @@ describe('billing repository', () => {
         amountCoins: 10,
         metadata: { plan: 'basic' },
       }),
-    ).resolves.toEqual({ id: 'order-1' });
+    ).resolves.toEqual({ id: 'order-1', amount_coins: 10 });
 
     expect(calls[0]?.sql).toContain('INSERT INTO recharge_orders');
     expect(calls[0]?.params).toEqual([
@@ -254,19 +255,15 @@ describe('billing repository', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('reserves only currently spendable balance', async () => {
+  it('records metered requests without reserving balance', async () => {
     const user = {
       id: 'user-1',
       purchased_coins: 10,
       bonus_coins: 2,
       reserved_coins: 3,
     };
-    const updated = { ...user, reserved_coins: 12 };
     mockGetUserByIdUsing.mockResolvedValue(user);
-    const { clientCalls, client } = createMockPool(
-      [],
-      [[], [], [updated], [], []],
-    );
+    const { clientCalls, client } = createMockPool([], [[], [], []]);
 
     await expect(
       reserveUserBalanceCoins({
@@ -276,28 +273,26 @@ describe('billing repository', () => {
         yearMonth: '2026-05',
       }),
     ).resolves.toEqual({
-      user: updated,
-      reservedCoins: 9,
+      user,
+      reservedCoins: 0,
     });
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1', {
       forUpdate: true,
     });
-    expect(clientCalls[2]?.sql).toContain('SET reserved_coins');
-    expect(clientCalls[2]?.params).toEqual([9, 'user-1']);
-    expect(clientCalls[3]?.sql).toContain(
+    expect(clientCalls[2]?.sql).toContain(
       'INSERT INTO billing_request_reservations',
     );
-    expect(clientCalls[3]?.params?.slice(0, 6)).toEqual([
+    expect(clientCalls[2]?.params?.slice(0, 6)).toEqual([
       'request-1',
       'user-1',
       null,
       '2026-05',
-      9,
-      'held',
+      0,
+      'none',
     ]);
-    expect(clientCalls[4]?.sql).toBe('COMMIT');
+    expect(clientCalls[3]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 
@@ -342,5 +337,118 @@ describe('billing repository', () => {
     expect(clientCalls[2]?.params).toEqual([5, 'batch-2']);
     expect(clientCalls[3]?.sql).toContain('SET bonus_coins');
     expect(clientCalls[3]?.params).toEqual([8, 0, 'user-1']);
+  });
+
+  it('allows official model settlement to put purchased balance in debt', async () => {
+    const clientCalls: QueryCall[] = [];
+    const updated = {
+      id: 'user-1',
+      purchased_coins: -5,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const client = {
+      async query(sql: string, params?: unknown[]) {
+        clientCalls.push({ sql, params });
+        if (sql.includes('FROM balance_grants')) {
+          return normalizeResult([]);
+        }
+        if (sql.includes('UPDATE users')) {
+          return normalizeResult([updated]);
+        }
+        return normalizeResult([]);
+      },
+    };
+
+    await expect(
+      deductModelChargeCoinsAllowDebt(
+        client as never,
+        {
+          id: 'user-1',
+          purchased_coins: 0,
+          bonus_coins: 0,
+          reserved_coins: 0,
+        } as never,
+        5,
+      ),
+    ).resolves.toEqual({
+      bonusDeducted: 0,
+      purchasedDeducted: 5,
+      grantDeductions: [],
+      balanceSource: 'purchased',
+      user: updated,
+    });
+
+    expect(clientCalls[1]?.sql).toContain('SET bonus_coins');
+    expect(clientCalls[1]?.params).toEqual([0, 5, 'user-1']);
+  });
+
+  it('charges the rounded per-request model cost directly', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 10,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const reservation = {
+      request_id: 'request-1',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0,
+      hold_state: 'none',
+      charge_state: 'pending',
+      actual_charge_coins: 0,
+      total_overage_tokens: 0,
+      total_overage_cost_coins: 0,
+    };
+    const monthlyState = {
+      user_id: 'user-1',
+      year_month: '2026-05',
+      billed_overage_tokens: 100,
+      billed_overage_cost_coins: 2.4,
+    };
+    const updated = {
+      ...user,
+      purchased_coins: 9.37,
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [reservation], [], [monthlyState], [], [updated], [], [], []],
+    );
+
+    const { settleUserModelChargeCoins } = await import(
+      './billing-repository.js'
+    );
+
+    await expect(
+      settleUserModelChargeCoins('request-1', 141_873, 0.63),
+    ).resolves.toEqual({
+      actualChargeCoins: 0.63,
+      user: updated,
+    });
+
+    expect(clientCalls[3]?.sql).toContain('billed_overage_cost_coins');
+    expect(clientCalls[6]?.params).toEqual([
+      141_873,
+      3.03,
+      'user-1',
+      '2026-05',
+    ]);
+    expect(
+      clientCalls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO wallet_transactions') &&
+          call.params?.[2] === 'overage_charge',
+      ),
+    ).toBe(true);
+    const chargeTransaction = clientCalls.find(
+      (call) =>
+        call.sql.includes('INSERT INTO wallet_transactions') &&
+        call.params?.[2] === 'overage_charge',
+    );
+    expect(chargeTransaction?.params?.[3]).toBe(-0.63);
+    expect(client.release).toHaveBeenCalledOnce();
   });
 });

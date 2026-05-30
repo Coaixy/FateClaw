@@ -35,7 +35,7 @@ function fmt(n: number) {
 
 function fmtCoins(value: number) {
   const amount = Number(value);
-  return formatCoins(Number.isFinite(amount) ? Math.trunc(amount) : 0);
+  return formatCoins(Number.isFinite(amount) ? amount : 0);
 }
 
 function modelSelectionLabel(source: string | null) {
@@ -75,7 +75,7 @@ function avgOrderCoins(totalCoins: number, orders: number) {
   if (orders <= 0) return formatCoins(0);
   const total = Number(totalCoins);
   if (!Number.isFinite(total)) return formatCoins(0);
-  return formatCoins(Math.round(total / orders));
+  return formatCoins(total / orders);
 }
 
 // ─── 组件 ───

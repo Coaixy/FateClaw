@@ -37,10 +37,7 @@ import {
   recordConversationLogSuccess,
 } from '../shared/conversation-log-metrics.js';
 import { mapInternalErrorToPublicError } from '../shared/public-error.js';
-import {
-  releaseBillingReservation,
-  settleBillingReservation,
-} from '../modules/billing/plans.js';
+import { settleBillingReservation } from '../modules/billing/plans.js';
 import {
   getUserIdFromWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -226,7 +223,7 @@ async function settleAiChatBilling(args: {
       requestId: args.payload.requestId,
       actualChargeCoins,
     },
-    'AI Chat: 已完成超额预扣结算',
+    'AI Chat: 已完成模型 Token 扣费结算',
   );
   return true;
 }
@@ -351,8 +348,6 @@ async function processAiChatResponse(
   const pending = payload.requestId
     ? pendingRequests.get(payload.requestId)
     : undefined;
-  let reservationSettled = false;
-
   try {
     const accountId = await resolveAccountId(
       payload.accountId,
@@ -413,7 +408,7 @@ async function processAiChatResponse(
       pending,
       payload: payloadForUsage,
     });
-    reservationSettled = await settleAiChatBilling({
+    await settleAiChatBilling({
       accountId,
       pending,
       payload: payloadForUsage,
@@ -428,19 +423,6 @@ async function processAiChatResponse(
       finalMetadata,
     });
   } catch (error) {
-    if (pending?.billingReservation && !reservationSettled) {
-      try {
-        await releaseBillingReservation(
-          pending.billingReservation,
-          'AI Chat 响应异常，释放预扣额度',
-        );
-      } catch (releaseErr) {
-        logger.error(
-          { requestId: payload.requestId, err: releaseErr },
-          'AI Chat: 响应异常后释放预扣额度失败',
-        );
-      }
-    }
     // 即使处理失败也必须 resolve pending
     if (pending) {
       clearTimeout(pending.timeout);

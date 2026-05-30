@@ -6,10 +6,17 @@ import { CalendarCheck, Loader2, Save } from 'lucide-react';
 import type { AdminRewardConfig } from '@/lib/admin-api';
 import { formatCoins } from '@/lib/soft-currency';
 
-type RewardDraft = {
+type RewardConfigPayload = {
   daily_sign_in: {
     enabled: boolean;
     reward_coins: number;
+  };
+};
+
+type RewardDraft = {
+  daily_sign_in: {
+    enabled: boolean;
+    reward_coins: string;
   };
 };
 
@@ -17,7 +24,7 @@ function draftFromConfig(config: AdminRewardConfig | null): RewardDraft {
   return {
     daily_sign_in: {
       enabled: config?.daily_sign_in.enabled ?? false,
-      reward_coins: config?.daily_sign_in.reward_coins ?? 0,
+      reward_coins: String(config?.daily_sign_in.reward_coins ?? 0),
     },
   };
 }
@@ -32,7 +39,7 @@ export function RewardConfigPanel({
 }: {
   config: AdminRewardConfig | null;
   busy: boolean;
-  onSave: (draft: RewardDraft) => Promise<void>;
+  onSave: (draft: RewardConfigPayload) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<RewardDraft>(() =>
     draftFromConfig(config),
@@ -95,13 +102,10 @@ export function RewardConfigPanel({
             value={draft.daily_sign_in.reward_coins}
             onChange={(event) =>
               updateDailySignIn({
-                reward_coins: Math.max(
-                  0,
-                  Number.parseInt(event.target.value, 10) || 0,
-                ),
+                reward_coins: event.target.value,
               })
             }
-            inputMode="numeric"
+            inputMode="decimal"
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>
@@ -109,7 +113,7 @@ export function RewardConfigPanel({
           <div className="min-h-11 w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
             当前设置：
             <span className="font-medium text-ink">
-              {formatCoins(draft.daily_sign_in.reward_coins)}
+              {formatCoins(Number(draft.daily_sign_in.reward_coins) || 0)}
             </span>
           </div>
         </div>
@@ -124,7 +128,16 @@ export function RewardConfigPanel({
         </div>
         <button
           type="button"
-          onClick={() => void onSave(draft)}
+          onClick={() =>
+            void onSave({
+              daily_sign_in: {
+                ...draft.daily_sign_in,
+                reward_coins:
+                  Math.round(Number(draft.daily_sign_in.reward_coins || 0) * 100) /
+                  100,
+              },
+            })
+          }
           disabled={busy}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
         >

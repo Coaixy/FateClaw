@@ -22,10 +22,7 @@ import {
 import { processTaskPayload } from './ipc-task-handler.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import {
-  releaseBillingReservation,
-  reserveBillingForRequest,
-} from '../modules/billing/plans.js';
+import { reserveBillingForRequest } from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   resolveUserLlmRuntime,
@@ -234,14 +231,6 @@ export function submitInboxRequest(input: {
             { accountId: input.accountId, requestId, type: input.type },
             '收件箱请求超时',
           );
-          try {
-            await releaseBillingReservation(
-              billingReservation,
-              '请求超时，释放预扣额度',
-            );
-          } catch (err) {
-            logger.error({ requestId, err }, '超时后释放预扣额度失败');
-          }
           reject(new Error(`收件箱请求超时: ${requestId}`));
         }, AGENT_REQUEST_TIMEOUT);
 
@@ -290,7 +279,7 @@ export function submitInboxRequest(input: {
             type: input.type,
             autoDeliver: input.autoDeliver ?? true,
             toUserId: input.toUserId,
-            reservedCoins: billingReservation?.reservedCoins ?? 0,
+            billingRecorded: Boolean(billingReservation),
           },
           '已提交收件箱请求到 Redis',
         );
@@ -299,17 +288,6 @@ export function submitInboxRequest(input: {
           clearTimeout(timeout);
         }
         pendingInboxRequests.delete(requestId);
-        try {
-          await releaseBillingReservation(
-            billingReservation,
-            '请求未成功入队，释放预扣额度',
-          );
-        } catch (releaseErr) {
-          logger.error(
-            { requestId, err: releaseErr },
-            '入队失败后释放预扣额度失败',
-          );
-        }
         reject(
           err instanceof Error
             ? err
@@ -439,14 +417,6 @@ export function submitAiChatInboxRequest(input: {
             },
             'AI Chat 请求超时',
           );
-          try {
-            await releaseBillingReservation(
-              billingReservation,
-              '请求超时，释放预扣额度',
-            );
-          } catch (err) {
-            logger.error({ requestId, err }, '超时后释放预扣额度失败');
-          }
           reject(new Error(`AI Chat 请求超时: ${requestId}`));
         }, AI_CHAT_REQUEST_TIMEOUT);
 
@@ -498,7 +468,7 @@ export function submitAiChatInboxRequest(input: {
             requestId,
             sessionId: input.sessionId,
             outboxQueue: aiChatOutboxQueue,
-            reservedCoins: billingReservation?.reservedCoins ?? 0,
+            billingRecorded: Boolean(billingReservation),
           },
           'AI Chat 请求已提交到 Redis',
         );
@@ -507,17 +477,6 @@ export function submitAiChatInboxRequest(input: {
           clearTimeout(timeout);
         }
         pendingAiChatRequests.delete(requestId);
-        try {
-          await releaseBillingReservation(
-            billingReservation,
-            '请求未成功入队，释放预扣额度',
-          );
-        } catch (releaseErr) {
-          logger.error(
-            { requestId, err: releaseErr },
-            '入队失败后释放预扣额度失败',
-          );
-        }
         reject(
           err instanceof Error
             ? err

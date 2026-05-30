@@ -214,6 +214,28 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
+  it('blocks sending when the user is already in arrears', async () => {
+    mockGetUserById.mockResolvedValueOnce({
+      id: 'user-1',
+      purchased_coins: -1,
+      bonus_coins: 0,
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续分析',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 402,
+      error: '余额已欠费，请充值后继续使用',
+    });
+    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+  });
+
   it('keeps placeholder titles unified without auto-generating a summary title', async () => {
     mockGetChatSession.mockResolvedValueOnce({
       id: 'session-2',

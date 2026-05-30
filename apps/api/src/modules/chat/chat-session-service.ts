@@ -53,13 +53,16 @@ import {
   WEB_CHAT_USER_NAME,
 } from './web-chat-runtime.js';
 import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js';
+import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
 
 const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
 
 function isPaymentRequiredError(errorMessage: string): boolean {
   return (
-    errorMessage.includes('余额不足') || errorMessage.includes('免费对话额度')
+    errorMessage.includes('余额不足') ||
+    errorMessage.includes('免费对话额度') ||
+    errorMessage.includes('欠费')
   );
 }
 
@@ -293,6 +296,9 @@ export async function sendOwnedChatSessionMessage(
   const session = sessionResult.data;
   const owner = await getUserById(userId);
   const shouldCountMessage = Boolean(owner);
+  if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
+    return fail(402, BILLING_ARREARS_MESSAGE);
+  }
   const msgId = `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const selectedBoardMessageId = input.selectedBoardMessageId;
   const selectedBoardContext = selectedBoardMessageId

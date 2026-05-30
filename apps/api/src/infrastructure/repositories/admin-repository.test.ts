@@ -115,7 +115,7 @@ describe('admin repository', () => {
     );
   });
 
-  it('builds recharge stats SQL with integer soft currency columns', async () => {
+  it('builds recharge stats SQL with decimal soft currency columns', async () => {
     const { calls } = createMockPool([
       [{ cnt: '3' }],
       [{ model_source: 'official', count: '2' }],

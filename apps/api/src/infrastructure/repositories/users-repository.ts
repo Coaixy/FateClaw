@@ -9,9 +9,9 @@ const USER_SELECT_COLUMNS = `
   u.phone_verified,
   u.password_hash,
   u.role,
-  u.purchased_coins,
-  u.bonus_coins,
-  u.reserved_coins,
+  u.purchased_coins::float8 AS purchased_coins,
+  u.bonus_coins::float8 AS bonus_coins,
+  u.reserved_coins::float8 AS reserved_coins,
   u.soul_content,
   u.created_at
 `;
