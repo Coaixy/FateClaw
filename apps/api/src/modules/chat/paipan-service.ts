@@ -38,7 +38,7 @@ const PAIPAN_PREVIEW_TTL_MS = 30 * 60 * 1000;
 
 interface DirectPaipanPreviewRecord {
   previewId: string;
-  userId: string;
+  userId: string | null;
   runtimeId: string;
   skill: string;
   requestSummary: string;
@@ -152,7 +152,7 @@ async function loadDirectPaipanPreviewRecord(
     const parsed = JSON.parse(raw) as DirectPaipanPreviewRecord;
     if (
       typeof parsed.previewId !== 'string' ||
-      typeof parsed.userId !== 'string' ||
+      (parsed.userId !== null && typeof parsed.userId !== 'string') ||
       typeof parsed.runtimeId !== 'string' ||
       typeof parsed.skill !== 'string' ||
       typeof parsed.requestSummary !== 'string' ||
@@ -239,6 +239,10 @@ async function appendBoardMessagesToExistingSession(args: {
   };
 }
 
+/**
+ * 获取当前可用的直接排盘目录。
+ * userId 为空时只返回公共排盘能力；传入用户时可包含用户可见的扩展能力。
+ */
 export async function listDirectPaipanCatalogForOwnedUser(
   userId?: string,
 ): Promise<ServiceResult<PaipanCatalogItemDto[]>> {
@@ -246,6 +250,10 @@ export async function listDirectPaipanCatalogForOwnedUser(
   return ok(catalog);
 }
 
+/**
+ * 执行直接排盘预览，并把预览结果写入短期缓存。
+ * userId 为空时按游客预览保存，后续提交会凭不可猜测的 previewId 绑定到登录用户。
+ */
 export async function previewDirectPaipanForOwnedUser(args: {
   userId?: string;
   skill: string;
@@ -268,19 +276,17 @@ export async function previewDirectPaipanForOwnedUser(args: {
       Date.now() + PAIPAN_PREVIEW_TTL_MS,
     ).toISOString();
 
-    if (args.userId) {
-      await storeDirectPaipanPreviewRecord({
-        previewId,
-        userId: args.userId,
-        runtimeId,
-        skill: execution.skill.dir,
-        requestSummary: execution.requestSummary,
-        sessionTitle: execution.sessionTitle,
-        skillContextEntry: execution.skillContextEntry,
-        createdAt,
-        expiresAt,
-      });
-    }
+    await storeDirectPaipanPreviewRecord({
+      previewId,
+      userId: args.userId ?? null,
+      runtimeId,
+      skill: execution.skill.dir,
+      requestSummary: execution.requestSummary,
+      sessionTitle: execution.sessionTitle,
+      skillContextEntry: execution.skillContextEntry,
+      createdAt,
+      expiresAt,
+    });
 
     logger.info(
       {
@@ -302,6 +308,10 @@ export async function previewDirectPaipanForOwnedUser(args: {
   }
 }
 
+/**
+ * 将直接排盘结果写入用户会话。
+ * 从预览提交时会校验已绑定预览的归属；游客预览则在提交时归属到当前登录用户。
+ */
 export async function commitDirectPaipanForOwnedUser(
   userId: string,
   request: PaipanCommitRequestDto,
@@ -315,13 +325,16 @@ export async function commitDirectPaipanForOwnedUser(
     if (!preview) {
       return fail(410, '预览结果已失效，请重新排盘');
     }
-    if (preview.userId !== userId) {
+    if (preview.userId && preview.userId !== userId) {
       return fail(403, '无权提交该预览结果');
     }
+    const runtimeId = preview.userId
+      ? preview.runtimeId
+      : getWebChatRuntimeId(userId);
 
     const created = await createSessionWithBoardMessages({
       userId,
-      runtimeId: preview.runtimeId,
+      runtimeId,
       sessionTitle: preview.sessionTitle,
       requestSummary: preview.requestSummary,
       skillContextEntry: preview.skillContextEntry,
@@ -331,7 +344,7 @@ export async function commitDirectPaipanForOwnedUser(
     logger.info(
       {
         userId,
-        accountId: preview.runtimeId,
+        accountId: runtimeId,
         sessionId: created.session.id,
         skill: preview.skill,
         workflow: 'direct_paipan_commit',

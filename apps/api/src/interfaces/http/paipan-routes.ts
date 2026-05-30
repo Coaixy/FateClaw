@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 
 import {
   commitDirectPaipanForOwnedUser,
@@ -6,6 +6,40 @@ import {
   previewDirectPaipanForOwnedUser,
 } from '../../modules/chat/paipan-service.js';
 
+function isJwtVerificationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return (
+    typeof code === 'string' &&
+    (code.startsWith('FST_JWT') || code.startsWith('FAST_JWT'))
+  );
+}
+
+async function resolveOptionalUserId(
+  request: FastifyRequest,
+): Promise<string | undefined> {
+  if (!request.headers.authorization) {
+    return undefined;
+  }
+
+  try {
+    // 预览仍允许游客使用；只有请求携带有效 token 时，才把预览绑定到用户。
+    await request.jwtVerify();
+    return request.user.userId;
+  } catch (error) {
+    if (isJwtVerificationError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
+ * 注册排盘 HTTP 路由。
+ * catalog 和 preview 保持公共访问；commit 必须登录后才能写入会话。
+ */
 export async function paipanRoutes(app: FastifyInstance): Promise<void> {
   app.get('/catalog', async (_request, reply) => {
     const result = await listDirectPaipanCatalogForOwnedUser();
@@ -31,7 +65,9 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: '缺少有效的 input' });
     }
 
+    const userId = await resolveOptionalUserId(request);
     const result = await previewDirectPaipanForOwnedUser({
+      userId,
       skill,
       input,
     });
