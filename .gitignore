@@ -15,6 +15,7 @@ package-lock.json
 store/
 data/
 logs/
+backups/
 !apps/web/app/admin/(dashboard)/logs/
 
 # Groups - only track base structure and specific CLAUDE.md files

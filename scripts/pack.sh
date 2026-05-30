@@ -139,6 +139,9 @@ tar czf "$TMP_OUT" \
   --exclude="$(basename "$ROOT_DIR")/store" \
   --exclude="$(basename "$ROOT_DIR")/data" \
   --exclude="$(basename "$ROOT_DIR")/logs" \
+  --exclude="$(basename "$ROOT_DIR")/backups" \
+  --exclude="$(basename "$ROOT_DIR")/docs" \
+  --exclude="$(basename "$ROOT_DIR")/skills" \
   --exclude='*.keys.json' \
   --exclude='.DS_Store' \
   --exclude='.idea' \
