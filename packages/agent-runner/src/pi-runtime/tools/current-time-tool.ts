@@ -3,12 +3,20 @@ import {
   type AgentToolResult,
   type ToolDefinition as PiToolDefinition,
 } from '@earendil-works/pi-coding-agent';
+import { SolarTime } from 'tyme4ts';
 import { Type, type Static } from 'typebox';
 
 import {
   completePiToolExecution,
   type PiToolRuntimeOptions,
 } from './tool-execution.js';
+import {
+  buildCalendarDetailsFromSolarTime,
+  isValidIanaTimeZone,
+  normalizeEightCharProvider,
+  type PiCalendarDetails,
+  type PiEightCharProvider,
+} from './calendar-details.js';
 
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 
@@ -17,6 +25,18 @@ const currentTimeParamsSchema = Type.Object({
     Type.String({
       description:
         'IANA 时区名称，例如 Asia/Shanghai、America/New_York；不传时默认 Asia/Shanghai。',
+    }),
+  ),
+  includeCalendar: Type.Optional(
+    Type.Boolean({
+      description:
+        '是否返回当前时刻对应的农历、节气和干支详情；默认 false。',
+    }),
+  ),
+  eightCharProvider: Type.Optional(
+    Type.String({
+      description:
+        '八字流派：default 使用 tyme4ts 默认流派；lunar_sect2 使用 LunarSect2EightCharProvider。',
     }),
   ),
 });
@@ -42,6 +62,9 @@ interface PiCurrentTimeDetails {
   unixMs: number;
   local?: string;
   parts?: ZonedDateTimeParts;
+  includeCalendar?: boolean;
+  eightCharProvider?: PiEightCharProvider;
+  calendar?: PiCalendarDetails;
   error?: string;
 }
 
@@ -66,21 +89,21 @@ function readStringParam(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function readBooleanParam(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
 function normalizeParams(args: unknown): CurrentTimeParams {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return {};
   const raw = args as Record<string, unknown>;
   return {
     timezone: readStringParam(raw.timezone),
+    includeCalendar: readBooleanParam(raw.includeCalendar),
+    eightCharProvider: normalizeEightCharProvider(raw.eightCharProvider),
   };
-}
-
-function isValidTimeZone(timezone: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function pad2(value: number): string {
@@ -144,12 +167,13 @@ export function createPiCurrentTimeTool(
     name: 'get_current_time',
     label: 'get_current_time',
     description:
-      '获取当前服务器时间，并按指定 IANA 时区输出本地时间、ISO 时间和 Unix 毫秒时间戳。',
+      '获取当前服务器时间，并按指定 IANA 时区输出本地时间、ISO 时间、Unix 毫秒时间戳；可选返回当前农历、节气和干支。',
     promptSnippet:
       'Use get_current_time when the answer depends on the real current time.',
     promptGuidelines: [
       '需要“现在”“当前时间”“今天此刻”等真实时间时先调用本工具。',
       'timezone 必须是 IANA 时区名称；不确定用户时区时使用默认 Asia/Shanghai。',
+      '需要当前农历、节气、今日干支或当前八字时，设置 includeCalendar=true。',
     ],
     parameters: currentTimeParamsSchema,
     executionMode: 'sequential',
@@ -161,15 +185,19 @@ export function createPiCurrentTimeTool(
       const startedAt = Date.now();
       const timezone =
         params.timezone ?? options.defaultTimeZone ?? DEFAULT_TIME_ZONE;
+      const includeCalendar = params.includeCalendar ?? false;
+      const provider = normalizeEightCharProvider(params.eightCharProvider);
       const date = options.now ? options.now() : new Date();
 
-      if (!isValidTimeZone(timezone)) {
+      if (!isValidIanaTimeZone(timezone)) {
         const details: PiCurrentTimeDetails = {
           output: '',
           isError: true,
           timezone,
           iso: date.toISOString(),
           unixMs: date.getTime(),
+          includeCalendar,
+          eightCharProvider: provider,
           error: `无效时区：${timezone}`,
         };
         details.output = buildOutput(details);
@@ -188,6 +216,19 @@ export function createPiCurrentTimeTool(
       }
 
       const parts = getZonedParts(date, timezone);
+      const calendar = includeCalendar
+        ? buildCalendarDetailsFromSolarTime(
+            SolarTime.fromYmdHms(
+              parts.year,
+              parts.month,
+              parts.day,
+              parts.hour,
+              parts.minute,
+              parts.second,
+            ),
+            provider,
+          )
+        : undefined;
       const details: PiCurrentTimeDetails = {
         output: '',
         isError: false,
@@ -196,6 +237,9 @@ export function createPiCurrentTimeTool(
         unixMs: date.getTime(),
         local: formatLocal(parts),
         parts,
+        includeCalendar,
+        eightCharProvider: provider,
+        calendar,
       };
       details.output = buildOutput(details);
 
