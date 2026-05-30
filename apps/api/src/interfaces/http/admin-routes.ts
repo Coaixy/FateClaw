@@ -39,6 +39,7 @@ import {
   setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  updateModelBillingSettings,
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updateAdminRewardConfig,
@@ -174,7 +175,7 @@ const OfficialModelSchema = z.object({
 });
 
 const OfficialModelCreateSchema = OfficialModelSchema.extend({
-  api_key: z.string().trim().min(1).max(2000).optional(),
+  api_key: z.string().trim().min(1).max(2000),
   auth_mode: OfficialModelAuthModeSchema,
 });
 
@@ -183,11 +184,30 @@ const OfficialModelSecretSchema = z.object({
   auth_mode: OfficialModelAuthModeSchema,
 });
 
+const ModelBillingSchema = z.object({
+  custom_model_platform_price_per_million_coins: z
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000),
+});
+
 function toConfiguredContextWindowTokens(
   value: number | null | undefined,
 ): number | null | undefined {
   if (value === undefined) return undefined;
   return value && value > 0 ? value : null;
+}
+
+function isOfficialModelKeyConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  // PostgreSQL 唯一约束冲突时返回 23505；这里转成前端可读的模型标识错误。
+  return (
+    record.code === '23505' &&
+    (record.constraint === 'official_model_configs_model_key_key' ||
+      String(record.detail ?? '').includes('model_key'))
+  );
 }
 
 const RechargeMoneySchema = z
@@ -306,6 +326,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return getSystemConfigOverview();
   });
 
+  // PUT /api/admin/system-config/model-billing — 更新自配模型平台服务费
+  app.put('/system-config/model-billing', async (request, reply) => {
+    const parsed = ModelBillingSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return updateModelBillingSettings({
+      customModelPlatformPricePerMillionCoins:
+        parsed.data.custom_model_platform_price_per_million_coins,
+      actor: 'manager',
+    });
+  });
+
   // GET /api/admin/recharge-config — 读取数据库中的充值配置
   app.get('/recharge-config', async (request) => {
     return getAdminRechargePaymentConfig(resolvePaymentCallbackUrls(request));
@@ -354,27 +389,36 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: parsed.error.issues[0]?.message || '参数错误' });
     }
-    const provider = await createOfficialModel({
-      modelKey: parsed.data.model_key,
-      piApi: parsed.data.pi_api,
-      displayName: parsed.data.display_name,
-      description: parsed.data.description ?? '',
-      enabled: parsed.data.enabled,
-      priority: parsed.data.priority,
-      baseUrl: parsed.data.base_url?.trim() || null,
-      modelName: parsed.data.model_name,
-      contextWindowTokens: toConfiguredContextWindowTokens(
-        parsed.data.context_window_tokens,
-      ),
-      inputTokenPricePerMillionCoins:
-        parsed.data.input_token_price_per_million_coins,
-      outputTokenPricePerMillionCoins:
-        parsed.data.output_token_price_per_million_coins,
-      secretValue: parsed.data.api_key,
-      authMode: parsed.data.auth_mode,
-      actor: 'manager',
-    });
-    return provider;
+    try {
+      const provider = await createOfficialModel({
+        modelKey: parsed.data.model_key,
+        piApi: parsed.data.pi_api,
+        displayName: parsed.data.display_name,
+        description: parsed.data.description ?? '',
+        enabled: parsed.data.enabled,
+        priority: parsed.data.priority,
+        baseUrl: parsed.data.base_url?.trim() || null,
+        modelName: parsed.data.model_name,
+        contextWindowTokens: toConfiguredContextWindowTokens(
+          parsed.data.context_window_tokens,
+        ),
+        inputTokenPricePerMillionCoins:
+          parsed.data.input_token_price_per_million_coins,
+        outputTokenPricePerMillionCoins:
+          parsed.data.output_token_price_per_million_coins,
+        secretValue: parsed.data.api_key,
+        authMode: parsed.data.auth_mode,
+        actor: 'manager',
+      });
+      return provider;
+    } catch (error) {
+      if (isOfficialModelKeyConflict(error)) {
+        return reply
+          .code(409)
+          .send({ error: '模型标识已存在，请换一个模型标识' });
+      }
+      throw error;
+    }
   });
 
   // PATCH /api/admin/system-config/providers/:id — 更新官方模型
@@ -407,6 +451,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       });
       return provider;
     } catch (error) {
+      if (isOfficialModelKeyConflict(error)) {
+        return reply
+          .code(409)
+          .send({ error: '模型标识已存在，请换一个模型标识' });
+      }
       return reply
         .code(404)
         .send({ error: error instanceof Error ? error.message : '更新失败' });

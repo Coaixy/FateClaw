@@ -100,6 +100,10 @@ describe('runDatabaseMigrations', () => {
         '迁移余额与充值 schema 到软妹币整数单位',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0012_model_billing_config', '增加模型平台服务费配置'],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -108,6 +112,11 @@ describe('runDatabaseMigrations', () => {
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS daily_sign_in_config'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS model_billing_config'),
       ),
     ).toBe(true);
     expect(
@@ -140,6 +149,7 @@ describe('runDatabaseMigrations', () => {
       '0009_remove_creator_earnings_schema',
       '0010_daily_sign_in_reward_config',
       '0011_soft_currency_coins_schema',
+      '0012_model_billing_config',
     ]);
 
     await runDatabaseMigrations(client as never);

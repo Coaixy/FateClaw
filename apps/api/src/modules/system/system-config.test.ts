@@ -2,22 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGetOfficialModelConfig,
+  mockGetModelBillingConfig,
   mockGetSystemSecret,
   mockGetUserModelConfig,
   mockGetUserModelSelection,
   mockUpdateOfficialModelConfig,
+  mockUpdateModelBillingConfig,
   mockUpsertSystemSecret,
 } = vi.hoisted(() => ({
   mockGetOfficialModelConfig: vi.fn(),
+  mockGetModelBillingConfig: vi.fn(),
   mockGetSystemSecret: vi.fn(),
   mockGetUserModelConfig: vi.fn(),
   mockGetUserModelSelection: vi.fn(),
   mockUpdateOfficialModelConfig: vi.fn(),
+  mockUpdateModelBillingConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
   createConfigAuditLog: vi.fn(),
+  createOfficialModelConfig: vi.fn(),
+  deleteOfficialModelConfig: vi.fn(),
+  getModelBillingConfig: mockGetModelBillingConfig,
   getOfficialModelConfig: mockGetOfficialModelConfig,
   getSystemSecret: mockGetSystemSecret,
   getUserModelConfig: mockGetUserModelConfig,
@@ -25,7 +32,10 @@ vi.mock('../../infrastructure/db.js', () => ({
   listConfigAuditLogs: vi.fn(async () => []),
   listOfficialModelConfigs: vi.fn(async () => []),
   updateOfficialModelConfig: mockUpdateOfficialModelConfig,
+  updateModelBillingConfig: mockUpdateModelBillingConfig,
   upsertSystemSecret: mockUpsertSystemSecret,
+  upsertUserModelConfig: vi.fn(),
+  upsertUserModelSelection: vi.fn(),
 }));
 
 import {
@@ -87,6 +97,11 @@ describe('resolveUserLlmRuntime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetSystemSecret.mockResolvedValue(secret());
+    mockGetModelBillingConfig.mockResolvedValue({
+      id: 'default',
+      custom_model_platform_price_per_million_coins: 2,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
   });
 
   it('rejects when the user has no explicit selection', async () => {
@@ -156,6 +171,27 @@ describe('resolveUserLlmRuntime', () => {
       maxOutputTokens: 32768,
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 2,
+    });
+  });
+
+  it('uses configured platform price for selected custom model billing', async () => {
+    mockGetModelBillingConfig.mockResolvedValue({
+      id: 'default',
+      custom_model_platform_price_per_million_coins: 9,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserModelSelection.mockResolvedValue({
+      user_id: 'user-1',
+      source: 'custom',
+      official_model_id: null,
+      created_at: '2026-05-04T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserModelConfig.mockResolvedValue(custom());
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      inputTokenPricePerMillionCoins: 9,
+      outputTokenPricePerMillionCoins: 9,
     });
   });
 

@@ -5,12 +5,14 @@ import {
   createOfficialModelConfig,
   deleteOfficialModelConfig,
   getOfficialModelConfig,
+  getModelBillingConfig,
   getSystemSecret,
   getUserModelConfig,
   getUserModelSelection,
   listConfigAuditLogs,
   listOfficialModelConfigs,
   updateOfficialModelConfig,
+  updateModelBillingConfig,
   upsertSystemSecret,
   upsertUserModelConfig,
   upsertUserModelSelection,
@@ -42,7 +44,7 @@ export interface ResolvedProviderSecret {
 
 export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
-const CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
+export const DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -82,6 +84,7 @@ export interface UserModelSettingsOverview {
     | null;
   selection: UserModelSelection | null;
   official_models: AdminOfficialModelView[];
+  custom_model_platform_price_per_million_coins: number;
 }
 
 function defaultAuthMode(piApi: ModelProviderType): ProviderAuthMode {
@@ -247,6 +250,7 @@ async function resolveCustomRuntime(
     throw new Error('当前选择了自配模型，但尚未保存 API Key');
   }
   const modelName = requireModelName(config.model_name, '自配模型');
+  const billingConfig = await getModelBillingConfig();
   const contextWindowTokens = resolveContextWindow({
     model: modelName,
     configured: normalizeModelContextWindowTokens(
@@ -269,9 +273,9 @@ async function resolveCustomRuntime(
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
     inputTokenPricePerMillionCoins:
-      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
+      billingConfig.custom_model_platform_price_per_million_coins,
     outputTokenPricePerMillionCoins:
-      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
+      billingConfig.custom_model_platform_price_per_million_coins,
   };
 }
 
@@ -331,18 +335,60 @@ export async function listOfficialModelViews(): Promise<
 export async function getSystemConfigOverview(): Promise<{
   official_models: AdminOfficialModelView[];
   providers: AdminOfficialModelView[];
+  model_billing: {
+    custom_model_platform_price_per_million_coins: number;
+    updated_at: string;
+  };
   runtime: null;
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
 }> {
-  const [models, auditLogs] = await Promise.all([
+  const [models, auditLogs, modelBilling] = await Promise.all([
     listOfficialModelViews(),
     listConfigAuditLogs(50),
+    getModelBillingConfig(),
   ]);
   return {
     official_models: models,
     providers: models,
+    model_billing: {
+      custom_model_platform_price_per_million_coins:
+        modelBilling.custom_model_platform_price_per_million_coins,
+      updated_at: modelBilling.updated_at,
+    },
     runtime: null,
     audit_logs: auditLogs,
+  };
+}
+
+/**
+ * 更新自配模型平台 Token 服务费。
+ */
+export async function updateModelBillingSettings(args: {
+  customModelPlatformPricePerMillionCoins: number;
+  actor?: string;
+}): Promise<{
+  custom_model_platform_price_per_million_coins: number;
+  updated_at: string;
+}> {
+  const actor = args.actor ?? 'admin';
+  const before = await getModelBillingConfig();
+  const updated = await updateModelBillingConfig({
+    customModelPlatformPricePerMillionCoins:
+      args.customModelPlatformPricePerMillionCoins,
+  });
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'model_billing.updated',
+    targetType: 'model_billing',
+    targetKey: updated.id,
+    before,
+    after: updated,
+  });
+  return {
+    custom_model_platform_price_per_million_coins:
+      updated.custom_model_platform_price_per_million_coins,
+    updated_at: updated.updated_at,
   };
 }
 
@@ -533,10 +579,11 @@ export async function removeOfficialModel(
 export async function getUserModelSettingsOverview(
   userId: string,
 ): Promise<UserModelSettingsOverview> {
-  const [custom, selection, officialModels] = await Promise.all([
+  const [custom, selection, officialModels, modelBilling] = await Promise.all([
     getUserModelConfig(userId),
     getUserModelSelection(userId),
     listOfficialModelViews(),
+    getModelBillingConfig(),
   ]);
   const customSecret = custom
     ? await resolveSecret({
@@ -559,6 +606,8 @@ export async function getUserModelSettingsOverview(
       : null,
     selection: selection ?? null,
     official_models: officialModels,
+    custom_model_platform_price_per_million_coins:
+      modelBilling.custom_model_platform_price_per_million_coins,
   };
 }
 

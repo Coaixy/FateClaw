@@ -24,6 +24,7 @@ import {
   validateProgressPayload,
   validateResponsePayload,
 } from './ipc-payloads.js';
+import { normalizeRuntimeTokenUsage } from './token-usage.js';
 import { logger } from '../infrastructure/logger.js';
 import {
   publishAiChatStreamEvent,
@@ -176,8 +177,8 @@ async function recordAiChatTokenUsage(args: {
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
 }): Promise<void> {
-  const usage = args.payload.usage;
-  if (!usage || (!usage.promptTokens && !usage.completionTokens)) return;
+  const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
+  if (normalizedUsage.totalTokens <= 0) return;
 
   const ownerUserId = await resolveOwnerUserId({
     accountId: args.accountId,
@@ -189,15 +190,16 @@ async function recordAiChatTokenUsage(args: {
   await incrementDailyTokens(
     ownerUserId,
     today,
-    usage.promptTokens ?? 0,
-    usage.completionTokens ?? 0,
+    normalizedUsage.promptTokens,
+    normalizedUsage.completionTokens,
   );
   logger.info(
     {
       accountId: args.accountId,
       requestId: args.payload.requestId,
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
+      promptTokens: normalizedUsage.promptTokens,
+      completionTokens: normalizedUsage.completionTokens,
+      totalTokens: normalizedUsage.totalTokens,
     },
     'AI Chat: 已记录 API 真实 token 用量',
   );
@@ -210,12 +212,13 @@ async function settleAiChatBilling(args: {
 }): Promise<boolean> {
   if (!args.payload.requestId) return false;
   if (args.pending?.llmRuntime?.billingMode !== 'metered') return false;
+  const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
 
   const actualChargeCoins = await settleBillingReservation({
     requestId: args.payload.requestId,
     runtime: args.pending.llmRuntime,
-    promptTokens: args.payload.usage?.promptTokens ?? 0,
-    completionTokens: args.payload.usage?.completionTokens ?? 0,
+    promptTokens: normalizedUsage.promptTokens,
+    completionTokens: normalizedUsage.completionTokens,
   });
   logger.info(
     {
@@ -359,23 +362,31 @@ async function processAiChatResponse(
       throw new Error('无法为 AI Chat response 解析 accountId');
     }
 
+    const normalizedPayloadUsage = normalizeRuntimeTokenUsage(payload.usage);
+    const hasRealUsage = normalizedPayloadUsage.totalTokens > 0;
+    const payloadForUsage = hasRealUsage
+      ? { ...payload, usage: normalizedPayloadUsage }
+      : payload;
+
     const text = resolveAiChatResponseText(payload);
     if (!text && payload.status === 'error') {
       throw new Error('AI Chat response 文本为空');
     }
 
-    const finalText = text ? appendFinalTurnMarker(text, payload.usage) : '';
+    const finalText = text
+      ? appendFinalTurnMarker(text, payloadForUsage.usage)
+      : '';
     const assistantMessages = buildAssistantMessagesForResponse({
-      payload,
+      payload: payloadForUsage,
       responseText: text,
       finalText,
     });
-    const finalMetadata = buildFinalMetadata(payload);
+    const finalMetadata = buildFinalMetadata(payloadForUsage);
 
     await publishAiChatStreamEvent({
       sessionId: pending?.sessionId,
       event: streamEventFromResponsePayload({
-        payload,
+        payload: payloadForUsage,
         accountId,
         sessionId: pending?.sessionId,
         text: finalText || text,
@@ -396,18 +407,22 @@ async function processAiChatResponse(
     // 注意：最终响应的落库由 chat-sessions.ts 负责，这里不重复存储
     // 只处理 conversation log、token 用量、billing 结算
 
-    storeAiChatConversationLog({ accountId, payload });
-    await recordAiChatTokenUsage({ accountId, pending, payload });
+    storeAiChatConversationLog({ accountId, payload: payloadForUsage });
+    await recordAiChatTokenUsage({
+      accountId,
+      pending,
+      payload: payloadForUsage,
+    });
     reservationSettled = await settleAiChatBilling({
       accountId,
       pending,
-      payload,
+      payload: payloadForUsage,
     });
     await resolvePendingAiChatResponse({
       accountId,
       pending,
       pendingRequests,
-      payload,
+      payload: payloadForUsage,
       finalText,
       assistantMessages,
       finalMetadata,

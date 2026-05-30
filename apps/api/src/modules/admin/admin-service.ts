@@ -46,6 +46,7 @@ import {
   getSystemConfigOverview,
   removeOfficialModel,
   setOfficialModelSecret,
+  updateModelBillingSettings,
   updateOfficialModel,
 } from '../system/system-config.js';
 import {
@@ -94,6 +95,7 @@ export {
   setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  updateModelBillingSettings,
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
 };

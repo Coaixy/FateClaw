@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { admin, type AdminSystemConfigOverview } from '@/lib/admin-api';
 import { Bot, RefreshCw } from 'lucide-react';
 import {
+  ModelBillingPanel,
   ProviderCreatePanel,
   ProviderRow,
   RuntimeSummary,
 } from '../model-provider-panels';
 import {
   buildSuggestedProviderKey,
+  buildUniqueSuggestedProviderKey,
   createEmptyDraft,
   type ProviderDraft,
 } from '../provider-draft';
@@ -107,6 +109,18 @@ export default function AdminModelConfigPage() {
 
       <RuntimeSummary overview={overview} provider={null} />
 
+      <ModelBillingPanel
+        billing={overview.model_billing}
+        busy={busyId === 'model-billing'}
+        onSave={async (coins) =>
+          withBusy('model-billing', async () => {
+            await admin.updateModelBilling({
+              custom_model_platform_price_per_million_coins: coins,
+            });
+          })
+        }
+      />
+
       <ProviderCreatePanel
         draft={newProvider}
         busy={busyId === 'create-provider'}
@@ -119,9 +133,13 @@ export default function AdminModelConfigPage() {
               ...newProvider,
               description: newProvider.description.trim(),
               model_key:
-                newProvider.model_key || buildSuggestedProviderKey(newProvider),
+                newProvider.model_key.trim() ||
+                buildUniqueSuggestedProviderKey(
+                  newProvider,
+                  overview.providers.map((provider) => provider.model_key),
+                ),
               base_url: newProvider.base_url || null,
-              api_key: newProviderSecret.trim() || undefined,
+              api_key: newProviderSecret.trim(),
             });
             setNewProvider(createEmptyDraft());
             setNewProviderSecret('');
@@ -166,7 +184,8 @@ export default function AdminModelConfigPage() {
                       ...draft,
                       description: draft.description.trim(),
                       model_key:
-                        draft.model_key || buildSuggestedProviderKey(draft),
+                        draft.model_key.trim() ||
+                        buildSuggestedProviderKey(draft),
                       base_url: draft.base_url || null,
                     });
                   })

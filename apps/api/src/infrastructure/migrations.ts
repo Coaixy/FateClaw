@@ -2673,6 +2673,35 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0012_model_billing_config',
+    description: '增加模型平台服务费配置',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS model_billing_config (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          custom_model_platform_price_per_million_coins INTEGER NOT NULL DEFAULT 2,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO model_billing_config (
+          id, custom_model_platform_price_per_million_coins
+        )
+        VALUES ('default', 2)
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName:
+          'chk_model_billing_config_custom_platform_price_nonnegative',
+        tableName: 'model_billing_config',
+        expression: 'custom_model_platform_price_per_million_coins >= 0',
+        cleanupSql: `UPDATE model_billing_config
+                     SET custom_model_platform_price_per_million_coins = 0
+                     WHERE custom_model_platform_price_per_million_coins < 0`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

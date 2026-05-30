@@ -114,6 +114,8 @@ function toModelSettingsOverviewDto(
     custom: toCustomModelDto(overview.custom),
     selection: overview.selection,
     official_models: overview.official_models.map(toOfficialModelDto),
+    custom_model_platform_price_per_million_coins:
+      overview.custom_model_platform_price_per_million_coins,
   };
 }
 

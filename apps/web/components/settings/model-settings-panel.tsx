@@ -19,7 +19,11 @@ import {
 } from '@/features/model-settings/api';
 import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
 import { OfficialModelPriceTags } from './official-model-price-tags';
-import { customModelPlatformFeeLabel } from './model-pricing';
+import {
+  customModelPlatformFeeAmountLabel,
+  customModelPlatformFeeLabel,
+  DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
+} from './model-pricing';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none focus:border-hairline';
@@ -129,6 +133,9 @@ export function ModelSettingsPanel() {
   }
 
   const selection = overview?.selection;
+  const customModelPlatformFeeCoins =
+    overview?.custom_model_platform_price_per_million_coins ??
+    DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS;
 
   return (
     <div className="space-y-4">
@@ -158,6 +165,7 @@ export function ModelSettingsPanel() {
       <CustomModelSection
         busy={busy}
         custom={custom}
+        customModelPlatformFeeCoins={customModelPlatformFeeCoins}
         hasSecret={Boolean(overview?.custom?.has_secret)}
         secret={secret}
         selected={selection?.source === 'custom'}
@@ -180,6 +188,7 @@ export function ModelSettingsPanel() {
 function CustomModelSection({
   busy,
   custom,
+  customModelPlatformFeeCoins,
   hasSecret,
   secret,
   selected,
@@ -190,6 +199,7 @@ function CustomModelSection({
 }: {
   busy: string;
   custom: CustomDraft;
+  customModelPlatformFeeCoins: number;
   hasSecret: boolean;
   secret: string;
   selected: boolean;
@@ -207,7 +217,7 @@ function CustomModelSection({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
-            {customModelPlatformFeeLabel()}
+            {customModelPlatformFeeLabel(customModelPlatformFeeCoins)}
           </span>
           <span className="rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
             {hasSecret ? '已保存密钥' : '未保存密钥'}
@@ -216,7 +226,8 @@ function CustomModelSection({
       </div>
       <div className="mb-3 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
         模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
-        合计收取平台服务费，每百万 Token 软妹币 2.00。
+        合计收取平台服务费，每百万 Token{' '}
+        {customModelPlatformFeeAmountLabel(customModelPlatformFeeCoins)}。
       </div>
       <CustomModelFields
         custom={custom}

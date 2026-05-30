@@ -218,6 +218,17 @@ export interface OfficialModelConfig {
   updated_at: string;
 }
 
+/**
+ * 自配模型平台服务费的全局配置。
+ *
+ * @remarks 价格单位是软妹币 / 百万 Token，输入和输出 Token 使用同一价格。
+ */
+export interface ModelBillingConfig {
+  id: 'default' | string;
+  custom_model_platform_price_per_million_coins: number;
+  updated_at: string;
+}
+
 export interface UserModelConfig {
   user_id: string;
   pi_api: ModelProviderType;

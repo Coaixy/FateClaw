@@ -1,5 +1,6 @@
 import {
   ConfigAuditLog,
+  ModelBillingConfig,
   ModelProviderType,
   OfficialModelConfig,
   SystemSecretRow,
@@ -179,6 +180,40 @@ export async function deleteOfficialModelConfig(id: string): Promise<void> {
   await getDbPool().query('DELETE FROM official_model_configs WHERE id = $1', [
     id,
   ]);
+}
+
+/**
+ * 读取模型计费全局配置；缺省行不存在时自动补齐。
+ */
+export async function getModelBillingConfig(): Promise<ModelBillingConfig> {
+  const { rows } = await getDbPool().query(
+    `INSERT INTO model_billing_config (id)
+     VALUES ('default')
+     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     RETURNING *`,
+  );
+  return rows[0] as ModelBillingConfig;
+}
+
+/**
+ * 更新自配模型平台 Token 服务费。
+ */
+export async function updateModelBillingConfig(input: {
+  customModelPlatformPricePerMillionCoins: number;
+}): Promise<ModelBillingConfig> {
+  const { rows } = await getDbPool().query(
+    `INSERT INTO model_billing_config (
+       id, custom_model_platform_price_per_million_coins, updated_at
+     )
+     VALUES ('default', $1, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       custom_model_platform_price_per_million_coins =
+         EXCLUDED.custom_model_platform_price_per_million_coins,
+       updated_at = NOW()
+     RETURNING *`,
+    [input.customModelPlatformPricePerMillionCoins],
+  );
+  return rows[0] as ModelBillingConfig;
 }
 
 export async function getUserModelConfig(

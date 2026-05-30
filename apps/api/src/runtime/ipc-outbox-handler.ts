@@ -21,6 +21,7 @@ import {
   validateProgressPayload,
   validateResponsePayload,
 } from './ipc-payloads.js';
+import { normalizeRuntimeTokenUsage } from './token-usage.js';
 import { logger } from '../infrastructure/logger.js';
 import {
   recordConversationLogFailure,
@@ -177,11 +178,12 @@ async function processOutboxResponse(
     if (!text) {
       throw new Error('response 文本为空');
     }
-    const finalText = appendFinalTurnMarker(text, payload.usage);
-
-    const hasRealUsage =
-      payload.usage &&
-      (payload.usage.promptTokens || payload.usage.completionTokens);
+    const normalizedPayloadUsage = normalizeRuntimeTokenUsage(payload.usage);
+    const hasRealUsage = normalizedPayloadUsage.totalTokens > 0;
+    const payloadForUsage = hasRealUsage
+      ? { ...payload, usage: normalizedPayloadUsage }
+      : payload;
+    const finalText = appendFinalTurnMarker(text, payloadForUsage.usage);
     const finalMetadata = {
       ...(payload.metadata &&
       typeof payload.metadata === 'object' &&
@@ -228,7 +230,7 @@ async function processOutboxResponse(
         accountId,
         requestId: payload.requestId,
         transcript: payload.transcript ?? [],
-        usage: payload.usage,
+        usage: payloadForUsage.usage,
         model: payload.model,
         provider: payload.provider,
         traceEvents: payload.traceEvents,
@@ -252,15 +254,16 @@ async function processOutboxResponse(
         await incrementDailyTokens(
           owner.id,
           today,
-          payload.usage!.promptTokens ?? 0,
-          payload.usage!.completionTokens ?? 0,
+          normalizedPayloadUsage.promptTokens,
+          normalizedPayloadUsage.completionTokens,
         );
         logger.info(
           {
             accountId,
             requestId: payload.requestId,
-            promptTokens: payload.usage!.promptTokens,
-            completionTokens: payload.usage!.completionTokens,
+            promptTokens: normalizedPayloadUsage.promptTokens,
+            completionTokens: normalizedPayloadUsage.completionTokens,
+            totalTokens: normalizedPayloadUsage.totalTokens,
           },
           '已记录 API 真实 token 用量',
         );
@@ -271,8 +274,8 @@ async function processOutboxResponse(
       const actualChargeCoins = await settleBillingReservation({
         requestId: payload.requestId,
         runtime: pending.llmRuntime,
-        promptTokens: payload.usage?.promptTokens ?? 0,
-        completionTokens: payload.usage?.completionTokens ?? 0,
+        promptTokens: normalizedPayloadUsage.promptTokens,
+        completionTokens: normalizedPayloadUsage.completionTokens,
       });
       reservationSettled = true;
       logger.info(

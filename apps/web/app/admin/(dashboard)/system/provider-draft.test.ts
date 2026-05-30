@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { setProviderDraftEnabled, type ProviderDraft } from './provider-draft';
-import { ProviderRow } from './model-provider-panels';
+import {
+  buildSuggestedProviderKey,
+  buildUniqueSuggestedProviderKey,
+  setProviderDraftEnabled,
+  type ProviderDraft,
+} from './provider-draft';
+import { ProviderCreatePanel, ProviderRow } from './model-provider-panels';
 
 const draft: ProviderDraft = {
   model_key: 'anthropic-main',
@@ -25,6 +30,24 @@ describe('provider draft helpers', () => {
       ...draft,
       enabled: true,
     });
+  });
+
+  it('uses model name when display name cannot form an ASCII key', () => {
+    expect(
+      buildSuggestedProviderKey({
+        ...draft,
+        display_name: '中文模型',
+        model_name: 'gpt-4.1',
+      }),
+    ).toBe('anthropic-messages-gpt-4-1');
+  });
+
+  it('adds a suffix when generated model key already exists', () => {
+    expect(
+      buildUniqueSuggestedProviderKey(draft, [
+        'anthropic-messages-claude-main',
+      ]),
+    ).toBe('anthropic-messages-claude-main-2');
   });
 
   it('renders status badges as single-line pills', () => {
@@ -61,5 +84,42 @@ describe('provider draft helpers', () => {
     );
 
     expect(markup).toContain('whitespace-nowrap');
+  });
+
+  it('requires an API key before creating a model', () => {
+    const disabledMarkup = renderToStaticMarkup(
+      createElement(ProviderCreatePanel, {
+        draft: {
+          ...draft,
+          model_key: '',
+          display_name: 'Claude Main',
+          model_name: 'claude-sonnet-4-5',
+        },
+        busy: false,
+        secret: '',
+        onChange: () => {},
+        onCreate: async () => {},
+        onSecretChange: () => {},
+      }),
+    );
+    const enabledMarkup = renderToStaticMarkup(
+      createElement(ProviderCreatePanel, {
+        draft: {
+          ...draft,
+          model_key: '',
+          display_name: 'Claude Main',
+          model_name: 'claude-sonnet-4-5',
+        },
+        busy: false,
+        secret: 'sk-test',
+        onChange: () => {},
+        onCreate: async () => {},
+        onSecretChange: () => {},
+      }),
+    );
+
+    expect(disabledMarkup).toContain('保存模型');
+    expect(disabledMarkup).toContain('disabled=""');
+    expect(enabledMarkup).not.toContain('disabled=""');
   });
 });

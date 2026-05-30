@@ -377,6 +377,12 @@ export interface AdminRewardConfig {
   };
 }
 
+/** 后台模型计费配置视图，单位是软妹币 / 百万 Token。 */
+export interface AdminModelBillingConfig {
+  custom_model_platform_price_per_million_coins: number;
+  updated_at: string;
+}
+
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -388,6 +394,7 @@ export type AdminRechargePaymentConfigUpdate = Omit<
 export interface AdminSystemConfigOverview {
   providers: AdminModelProvider[];
   official_models: AdminModelProvider[];
+  model_billing: AdminModelBillingConfig;
   runtime: null;
   audit_logs: AdminConfigAuditLog[];
 }
@@ -438,6 +445,16 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  updateModelBilling: (data: {
+    custom_model_platform_price_per_million_coins: number;
+  }) =>
+    adminRequest<AdminModelBillingConfig>(
+      '/api/admin/system-config/model-billing',
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+    ),
   createOfficialModel: (data: {
     model_key: string;
     pi_api: AdminModelPiApi;
@@ -450,7 +467,7 @@ export const admin = {
     context_window_tokens?: number | null;
     input_token_price_per_million_coins: number;
     output_token_price_per_million_coins: number;
-    api_key?: string;
+    api_key: string;
   }) =>
     adminRequest<AdminModelProvider>('/api/admin/system-config/providers', {
       method: 'POST',

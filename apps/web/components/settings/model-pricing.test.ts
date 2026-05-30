@@ -13,15 +13,15 @@ describe('officialModelPriceLabel', () => {
         output_token_price_per_million_coins: 5000,
       }),
     ).toBe(
-      '输入 软妹币 10.00 / 百万 Token · 输出 软妹币 50.00 / 百万 Token',
+      '输入 软妹币 1,000 / 百万 Token · 输出 软妹币 5,000 / 百万 Token',
     );
   });
 });
 
 describe('customModelPlatformFeeLabel', () => {
   it('shows the platform service fee for custom models', () => {
-    expect(customModelPlatformFeeLabel()).toBe(
-      '平台 Token 服务费 软妹币 2.00 / 百万 Token',
+    expect(customModelPlatformFeeLabel(2)).toBe(
+      '平台 Token 服务费 软妹币 2 / 百万 Token',
     );
   });
 });

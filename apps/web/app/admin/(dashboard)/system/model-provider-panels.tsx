@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type {
+  AdminModelBillingConfig,
   AdminModelProvider,
   AdminModelPiApi,
   AdminSystemConfigOverview,
@@ -22,6 +23,10 @@ import {
   protocolTypeLabel,
 } from '../../../../features/model-settings/pi-api-options';
 import { OfficialModelPriceTags } from '../../../../components/settings/official-model-price-tags';
+import {
+  customModelPlatformFeeLabel,
+  officialModelCoinsLabel,
+} from '../../../../components/settings/model-pricing';
 import {
   setProviderDraftEnabled,
   type ProviderDraft,
@@ -84,6 +89,72 @@ export function RuntimeSummary({
         <div className="rounded-full bg-canvas px-2.5 py-1 text-[11px] text-muted">
           {availableCount} 个可选模型
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 后台自配模型平台服务费配置面板。
+ */
+export function ModelBillingPanel({
+  billing,
+  busy,
+  onSave,
+}: {
+  billing: AdminModelBillingConfig;
+  busy: boolean;
+  onSave: (coins: number) => Promise<void>;
+}) {
+  const [price, setPrice] = useState(
+    billing.custom_model_platform_price_per_million_coins,
+  );
+
+  useEffect(() => {
+    setPrice(billing.custom_model_platform_price_per_million_coins);
+  }, [billing.custom_model_platform_price_per_million_coins]);
+
+  return (
+    <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-sm font-semibold">平台 Token 服务费</div>
+          <div className="mt-1 text-[12px] leading-5 text-muted">
+            自配模型只收平台服务费；官方模型使用各模型自己的输入/输出单价。
+          </div>
+          <div className="mt-2 text-[12px] text-muted">
+            当前：
+            {customModelPlatformFeeLabel(
+              billing.custom_model_platform_price_per_million_coins,
+            )}
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[220px_auto]">
+          <NumberField
+            label="自配模型服务费（软妹币 / 百万 Token）"
+            value={price}
+            onChange={setPrice}
+          />
+          <button
+            type="button"
+            onClick={() => void onSave(price)}
+            disabled={
+              busy ||
+              price === billing.custom_model_platform_price_per_million_coins
+            }
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
+          >
+            {busy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Save size={14} />
+            )}
+            保存服务费
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-muted">
+        输入和输出 Token 都按 {officialModelCoinsLabel(price)} / 百万 Token 扣费。
       </div>
     </div>
   );
@@ -261,6 +332,14 @@ function ProviderBasicFields({
         }
       />
       <TextField
+        label="模型标识"
+        value={draft.model_key}
+        placeholder="留空则自动生成"
+        onChange={(value) =>
+          setDraft((prev) => ({ ...prev, model_key: value }))
+        }
+      />
+      <TextField
         label="模型名"
         value={draft.model_name}
         onChange={(value) =>
@@ -414,6 +493,12 @@ export function ProviderCreatePanel({
           value={draft.display_name}
           placeholder="例如：Claude Sonnet"
           onChange={(value) => onChange({ ...draft, display_name: value })}
+        />
+        <TextField
+          label="模型标识"
+          value={draft.model_key}
+          placeholder="留空则自动生成"
+          onChange={(value) => onChange({ ...draft, model_key: value })}
         />
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
