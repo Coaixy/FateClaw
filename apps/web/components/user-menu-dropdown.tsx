@@ -4,8 +4,8 @@ import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
+  CalendarCheck,
   Compass,
-  Activity,
   LogOut,
   ServerCog,
   Sparkle,
@@ -77,6 +77,12 @@ export function UserMenuDropdown({
             onNavigate={onNavigate}
           />
           <MenuItem
+            href="/daily-sign-in"
+            icon={CalendarCheck}
+            label="每日签到"
+            onNavigate={onNavigate}
+          />
+          <MenuItem
             href="/profile"
             icon={UserIcon}
             label="个人资料"
@@ -86,12 +92,6 @@ export function UserMenuDropdown({
             href="/settings/advanced"
             icon={ServerCog}
             label="模型设置"
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/status"
-            icon={Activity}
-            label="状态"
             onNavigate={onNavigate}
           />
         </MenuSection>

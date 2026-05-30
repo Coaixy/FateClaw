@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Bot,
-  LayoutDashboard,
+  Activity,
+  Info,
   MessageCircle,
   Trash2,
   Menu,
@@ -528,34 +528,53 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        {/* 底部：放高频管理入口，主题切换保留在个人设置页里。 */}
+        {/* 底部：放固定信息入口，主题切换保留在个人设置页里。 */}
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
-          <Link
-            href="/dashboard"
-            onClick={closeSidebar}
-            className={`group flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
-              pathname === '/dashboard'
-                ? 'bg-primary/10 text-ink'
-                : 'text-muted hover:text-ink hover:bg-surface-card'
-            }`}
-            aria-label="进入微信 BOT 工作区"
-          >
-            <div className="w-8 h-8 rounded-lg bg-surface-card flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all duration-200">
-              <Bot size={16} strokeWidth={1.8} />
-            </div>
-            <div className="min-w-0">
-              <span className="block leading-tight">微信 BOT 工作区</span>
-              <span className="mt-0.5 block truncate text-[10px] font-normal text-muted/65">
-                设备、任务与账号管理
-              </span>
-            </div>
-            <LayoutDashboard
-              size={13}
-              className="ml-auto text-muted/55 transition-colors group-hover:text-primary"
-            />
-          </Link>
+          <div className="space-y-1">
+            <Link
+              href="/status"
+              onClick={closeSidebar}
+              className={`group flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                pathname === '/status'
+                  ? 'bg-primary/10 text-ink'
+                  : 'text-muted hover:text-ink hover:bg-surface-card'
+              }`}
+              aria-label="查看平台状态"
+            >
+              <div className="w-8 h-8 rounded-lg bg-surface-card flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all duration-200">
+                <Activity size={16} strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0">
+                <span className="block leading-tight">状态</span>
+                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted/65">
+                  平台运行与 Token 趋势
+                </span>
+              </div>
+            </Link>
+
+            <Link
+              href="/about"
+              onClick={closeSidebar}
+              className={`group flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
+                pathname === '/about'
+                  ? 'bg-primary/10 text-ink'
+                  : 'text-muted hover:text-ink hover:bg-surface-card'
+              }`}
+              aria-label="查看关于我们"
+            >
+              <div className="w-8 h-8 rounded-lg bg-surface-card flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all duration-200">
+                <Info size={16} strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0">
+                <span className="block leading-tight">关于我们</span>
+                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted/65">
+                  传统文化与公益初心
+                </span>
+              </div>
+            </Link>
+          </div>
         </div>
       </aside>
     </>
