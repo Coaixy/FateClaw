@@ -6,6 +6,8 @@ const {
   mockGetSessionMessagesWithToolContext,
   mockGetUserById,
   mockGetAccountsByUserId,
+  mockHasFinalAiChatSessionReply,
+  mockReadPiSessionFileState,
   mockIncrementDailyMessageCount,
   mockStoreMessage,
   mockTouchChatSession,
@@ -18,6 +20,8 @@ const {
   mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
+  mockHasFinalAiChatSessionReply: vi.fn(),
+  mockReadPiSessionFileState: vi.fn(),
   mockIncrementDailyMessageCount: vi.fn(),
   mockStoreMessage: vi.fn(),
   mockTouchChatSession: vi.fn(),
@@ -32,6 +36,7 @@ vi.mock('../../infrastructure/db.js', () => ({
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
+  hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
   storeMessage: mockStoreMessage,
   touchChatSession: mockTouchChatSession,
   getChatSessionsByUserId: vi.fn(),
@@ -67,6 +72,10 @@ vi.mock('../../runtime/resident-agent.js', () => ({
 
 vi.mock('./message-handler.js', () => ({
   buildStructuredInputForSession: mockBuildStructuredInputForSession,
+}));
+
+vi.mock('./pi-session-files.js', () => ({
+  readPiSessionFileState: mockReadPiSessionFileState,
 }));
 
 vi.mock('./paipan-runtime.js', () => ({
@@ -124,6 +133,10 @@ describe('chat-session-service selected board context', () => {
     ]);
     mockStoreMessage.mockResolvedValue(undefined);
     mockTouchChatSession.mockResolvedValue(undefined);
+    mockHasFinalAiChatSessionReply.mockResolvedValue(false);
+    mockReadPiSessionFileState.mockResolvedValue({
+      hasSessionFile: true,
+    });
     mockBuildStructuredInputForSession.mockResolvedValue({
       userMessage: '请解读这张盘',
       history: [
@@ -236,6 +249,28 @@ describe('chat-session-service selected board context', () => {
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
+  it('blocks continuation when a real AI session lost its Pi jsonl file', async () => {
+    mockHasFinalAiChatSessionReply.mockResolvedValueOnce(true);
+    mockReadPiSessionFileState.mockResolvedValueOnce({
+      hasSessionFile: false,
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续分析',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 410,
+      error: '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。',
+    });
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+  });
+
   it('keeps placeholder titles unified without auto-generating a summary title', async () => {
     mockGetChatSession.mockResolvedValueOnce({
       id: 'session-2',
@@ -265,10 +300,7 @@ describe('chat-session-service selected board context', () => {
     mockDispatchAiChatPrompt.mockResolvedValueOnce({
       status: 'success',
       text: '第二条回复\n\n📥 3 · 📤 5 Finished',
-      assistantMessages: [
-        '第一条回复',
-        '第二条回复\n\n📥 3 · 📤 5 Finished',
-      ],
+      assistantMessages: ['第一条回复', '第二条回复\n\n📥 3 · 📤 5 Finished'],
       requestId: 'request-multi',
       metadata: { kind: 'final', turn_complete: true },
     });

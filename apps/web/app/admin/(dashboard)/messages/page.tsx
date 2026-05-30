@@ -24,9 +24,12 @@ import {
   MonitorSmartphone,
   RefreshCw,
   Search,
+  Trash2,
   User,
 } from 'lucide-react';
 import { MarkdownContent } from '@/components/chat/markdown-content';
+import { useConfirm } from '@/lib/use-confirm';
+import { useToast } from '@/lib/use-toast';
 
 const SESSION_MESSAGE_PAGE_SIZE = 200;
 const SESSION_FETCH_LIMIT = 200;
@@ -115,10 +118,7 @@ function MessageTimeline({
   if (sorted.length === 0) {
     return (
       <div className="text-center py-16">
-        <MessageSquare
-          size={24}
-          className="mx-auto mb-2 text-muted"
-        />
+        <MessageSquare size={24} className="mx-auto mb-2 text-muted" />
         <p className="text-[13px] text-muted">{emptyText}</p>
       </div>
     );
@@ -189,9 +189,7 @@ function MessageTimeline({
                     </div>
                     <p
                       className={`text-[10px] mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
-                        isBot
-                          ? 'text-muted text-left'
-                          : 'text-muted text-right'
+                        isBot ? 'text-muted text-left' : 'text-muted text-right'
                       }`}
                     >
                       {formatTime(msg.timestamp)}
@@ -209,6 +207,8 @@ function MessageTimeline({
 
 function AdminMessagesContent() {
   const searchParams = useSearchParams();
+  const { confirm } = useConfirm();
+  const { toast } = useToast();
   const initialAccountId = searchParams.get('account_id') || '';
   const initialSessionId = searchParams.get('session_id') || '';
 
@@ -232,6 +232,10 @@ function AdminMessagesContent() {
   >([]);
   const [page, setPage] = useState(0);
   const [searchText, setSearchText] = useState('');
+  const [inactiveDays, setInactiveDays] = useState('30');
+  const [cleanupLoading, setCleanupLoading] = useState<
+    'soft_deleted' | 'inactive' | null
+  >(null);
 
   const prevUserIdRef = useRef(selectedUserId);
   const prevAccountIdRef = useRef(selectedAccountId);
@@ -371,20 +375,19 @@ function AdminMessagesContent() {
     void loadMessages(selectedSessionId);
   }, [loadMessages, loading, selectedSessionId]);
 
-  const filteredSessions =
-    searchText
-      ? sessions.filter(
-          (session) =>
-            session.title.toLowerCase().includes(searchText.toLowerCase()) ||
-            session.account_name
-              .toLowerCase()
-              .includes(searchText.toLowerCase()) ||
-            (session.owner_phone || '').includes(searchText) ||
-            session.last_message_preview
-              ?.toLowerCase()
-              .includes(searchText.toLowerCase()),
-        )
-      : sessions;
+  const filteredSessions = searchText
+    ? sessions.filter(
+        (session) =>
+          session.title.toLowerCase().includes(searchText.toLowerCase()) ||
+          session.account_name
+            .toLowerCase()
+            .includes(searchText.toLowerCase()) ||
+          (session.owner_phone || '').includes(searchText) ||
+          session.last_message_preview
+            ?.toLowerCase()
+            .includes(searchText.toLowerCase()),
+      )
+    : sessions;
 
   const totalPages = Math.ceil(total / SESSION_MESSAGE_PAGE_SIZE);
 
@@ -395,14 +398,52 @@ function AdminMessagesContent() {
     }
   }, [loadMessages, loadSessions, selectedSessionId]);
 
+  const runPiSessionCleanup = useCallback(
+    async (mode: 'soft_deleted' | 'inactive') => {
+      if (cleanupLoading) return;
+      const days = Number(inactiveDays);
+      if (mode === 'inactive' && (!Number.isInteger(days) || days <= 0)) {
+        toast('error', '请输入有效的未活跃天数');
+        return;
+      }
+
+      const ok = await confirm({
+        title:
+          mode === 'soft_deleted' ? '清理已删除会话状态' : '清理超期会话状态',
+        message:
+          mode === 'soft_deleted'
+            ? '确定要删除所有软删除对话对应的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
+            : `确定要删除 ${days} 天未活跃对话对应的 Pi session 本地 jsonl/path 文件吗？这些会话后续将无法继续追问。`,
+        confirmLabel: '清理',
+        variant: 'danger',
+      });
+      if (!ok) return;
+
+      setCleanupLoading(mode);
+      try {
+        const result = await admin.cleanupPiSessions({
+          mode,
+          inactive_days: mode === 'inactive' ? days : undefined,
+        });
+        toast(
+          'success',
+          `扫描 ${result.scanned_sessions} 个会话，删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`,
+        );
+        handleRefresh();
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : '清理失败');
+      } finally {
+        setCleanupLoading(null);
+      }
+    },
+    [cleanupLoading, confirm, handleRefresh, inactiveDays, toast],
+  );
+
   return (
     <>
       {loading ? (
         <div className="flex justify-center py-20">
-          <Loader2
-            size={20}
-            className="animate-spin text-muted"
-          />
+          <Loader2 size={20} className="animate-spin text-muted" />
         </div>
       ) : error ? (
         <div className="text-center py-20">
@@ -413,10 +454,7 @@ function AdminMessagesContent() {
           <div className="flex flex-col gap-3 mb-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
-                <MessageSquare
-                  size={16}
-                  className="text-muted shrink-0"
-                />
+                <MessageSquare size={16} className="text-muted shrink-0" />
                 <h2 className="text-lg font-semibold shrink-0">对话查看</h2>
                 <span className="text-[12px] text-muted shrink-0">
                   ({sessionsTotal.toLocaleString()})
@@ -481,6 +519,55 @@ function AdminMessagesContent() {
                 />
               </div>
             </div>
+
+            <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium">Pi 会话状态清理</p>
+                <p className="text-[11px] text-muted">
+                  只删除本地
+                  jsonl/path，数据库历史保留；超期清理后的老对话不允许继续追问
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runPiSessionCleanup('soft_deleted')}
+                  disabled={cleanupLoading !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline px-2.5 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {cleanupLoading === 'soft_deleted' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                  软删除
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={inactiveDays}
+                    onChange={(event) => setInactiveDays(event.target.value)}
+                    className="h-8 w-16 rounded-md border border-hairline bg-canvas px-2 text-[12px] focus:outline-none"
+                  />
+                  <span className="text-[12px] text-muted">天未活跃</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runPiSessionCleanup('inactive')}
+                  disabled={cleanupLoading !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {cleanupLoading === 'inactive' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                  清理超期
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -497,10 +584,7 @@ function AdminMessagesContent() {
 
               {sessionsLoading ? (
                 <div className="flex justify-center py-10">
-                  <Loader2
-                    size={16}
-                    className="animate-spin text-muted"
-                  />
+                  <Loader2 size={16} className="animate-spin text-muted" />
                 </div>
               ) : filteredSessions.length === 0 ? (
                 <div className="text-center py-10">
@@ -584,9 +668,7 @@ function AdminMessagesContent() {
                           <h3 className="text-[15px] font-semibold truncate">
                             {selectedSession.title || '未命名会话'}
                           </h3>
-                          {selectedSession.deleted_at ? (
-                            <DeletedBadge />
-                          ) : null}
+                          {selectedSession.deleted_at ? <DeletedBadge /> : null}
                         </div>
                         <p className="text-[12px] text-muted mt-1">
                           {selectedSession.account_name}
@@ -606,7 +688,8 @@ function AdminMessagesContent() {
                         </p>
                         {selectedSession.deleted_at ? (
                           <p>
-                            删除时间 {formatDateTime(selectedSession.deleted_at)}
+                            删除时间{' '}
+                            {formatDateTime(selectedSession.deleted_at)}
                           </p>
                         ) : null}
                       </div>
@@ -618,10 +701,7 @@ function AdminMessagesContent() {
 
                   {msgLoading ? (
                     <div className="flex justify-center py-16">
-                      <Loader2
-                        size={16}
-                        className="animate-spin text-muted"
-                      />
+                      <Loader2 size={16} className="animate-spin text-muted" />
                     </div>
                   ) : (
                     <MessageTimeline

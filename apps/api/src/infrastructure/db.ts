@@ -21,6 +21,7 @@ import {
 } from './repositories/accounts-repository.js';
 import {
   getAdminGlobalStats,
+  getChatSessionPiCleanupCandidates,
   getChatSessionsForAdmin,
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
@@ -87,6 +88,7 @@ import {
   getChatSessionsByUserId,
   getMessagesSince,
   getRecentMessages,
+  hasFinalAiChatSessionReply,
   getSessionMessagesWithToolContext,
   getSessionMessageById,
   resetUserMessages,
@@ -241,6 +243,7 @@ export {
   getBillingRequestReservationByRequestId,
   getBundleByToken,
   getChatSession,
+  getChatSessionPiCleanupCandidates,
   getChatSessions,
   getChatSessionsByUserId,
   getChatSessionsForAdmin,
@@ -271,6 +274,7 @@ export {
   getResolvedEnabledOfficialSkillNames,
   getSessionMessageById,
   getSessionMessagesWithToolContext,
+  hasFinalAiChatSessionReply,
   getSkillByShareToken,
   getSoulContent,
   getSubscribedSkills,

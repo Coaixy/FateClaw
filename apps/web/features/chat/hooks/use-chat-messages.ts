@@ -109,6 +109,8 @@ export function useChatMessages(options: {
   const [sending, setSending] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
+  const [continuationBlocked, setContinuationBlocked] = useState(false);
+  const [continuationBlockMessage, setContinuationBlockMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollInFlightRef = useRef(false);
@@ -189,6 +191,9 @@ export function useChatMessages(options: {
         const data = await chatSessionsApi.messages(sessionId);
         if (activeSessionRef.current !== sessionId) return true;
 
+        setContinuationBlocked(Boolean(data.continuation_blocked));
+        setContinuationBlockMessage(data.continuation_block_message || '');
+
         const nextMessages = data.messages.reverse();
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
         const streamingResolved =
@@ -247,6 +252,8 @@ export function useChatMessages(options: {
     if (options.selectedSession) {
       setProcessing(false);
       setAwaitingRefresh(false);
+      setContinuationBlocked(false);
+      setContinuationBlockMessage('');
       void loadMessages(options.selectedSession, {
         background: sendingRef.current,
       });
@@ -258,6 +265,8 @@ export function useChatMessages(options: {
     setSending(false);
     setProcessing(false);
     setAwaitingRefresh(false);
+    setContinuationBlocked(false);
+    setContinuationBlockMessage('');
   }, [loadMessages, options.selectedSession]);
 
   const pollMessages = useCallback(async () => {
@@ -382,11 +391,7 @@ export function useChatMessages(options: {
   );
 
   const upsertLatestStreamingAssistantMessage = useCallback(
-    (
-      sessionId: string,
-      content: string,
-      metadata?: Message['metadata'],
-    ) => {
+    (sessionId: string, content: string, metadata?: Message['metadata']) => {
       upsertStreamingAssistantMessage(
         sessionId,
         content,
@@ -405,8 +410,8 @@ export function useChatMessages(options: {
       const key =
         typeof turnIndex === 'number'
           ? `thinking-${turnIndex}`
-          : latestThinkingMessageKeyRef.current ??
-            `thinking-${thinkingSequenceRef.current}`;
+          : (latestThinkingMessageKeyRef.current ??
+            `thinking-${thinkingSequenceRef.current}`);
       let entry = thinkingMessageEntriesRef.current.find(
         (item) => item.key === key,
       );
@@ -733,7 +738,9 @@ export function useChatMessages(options: {
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
         resetStreamingMessageRefs();
         if (activeStreamingMessageIds.length > 0) {
-          const activeStreamingMessageIdSet = new Set(activeStreamingMessageIds);
+          const activeStreamingMessageIdSet = new Set(
+            activeStreamingMessageIds,
+          );
           setMessages((previous) =>
             previous.filter(
               (message) => !activeStreamingMessageIdSet.has(message.id),
@@ -799,17 +806,16 @@ export function useChatMessages(options: {
   }, [messages]);
 
   useEffect(() => {
-    if (!isPending || !scrollRef.current || !shouldAutoScrollRef.current) return;
+    if (!isPending || !scrollRef.current || !shouldAutoScrollRef.current)
+      return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [isPending]);
 
   const sendMessageWithOptions = useCallback(
-    async (
-      text: string,
-      sendOptions?: ChatMessageSendOptions,
-    ) => {
+    async (text: string, sendOptions?: ChatMessageSendOptions) => {
       const content = text.trim();
       if (!content || isPending) return false;
+      if (continuationBlocked) return false;
       if (!options.selectedSession && !options.chatAvailable) return false;
 
       setSending(true);
@@ -917,7 +923,7 @@ export function useChatMessages(options: {
         inputRef.current?.focus();
       }
     },
-    [isPending, loadMessages, options],
+    [continuationBlocked, isPending, loadMessages, options],
   );
 
   const sendMessage = useCallback(
@@ -936,6 +942,8 @@ export function useChatMessages(options: {
     messages,
     loading,
     sending: isPending,
+    continuationBlocked,
+    continuationBlockMessage,
     scrollRef,
     inputRef,
     sendMessage,

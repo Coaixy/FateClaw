@@ -31,6 +31,7 @@ import {
   grantBonusBalance,
   hasOfficialSkill,
   createAdminUser,
+  cleanupPiSessionFilesForAdmin,
   listAdminGlobalSkills,
   listAdminUsersWithStats,
   listBillingRequestReservations,
@@ -98,6 +99,22 @@ const AdminCreateUserSchema = z.object({
   role: z.enum(['consumer', 'creator', 'both', 'admin']).default('consumer'),
   phone_verified: z.boolean().default(true),
 });
+
+const PiSessionCleanupSchema = z
+  .object({
+    mode: z.enum(['soft_deleted', 'inactive']),
+    inactive_days: z.number().int().min(1).max(3650).optional(),
+    limit: z.number().int().min(1).max(5000).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === 'inactive' && value.inactive_days === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['inactive_days'],
+        message: '未活跃天数不能为空',
+      });
+    }
+  });
 
 const DateOnlySchema = z
   .string()
@@ -709,6 +726,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       userId: query.user_id,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
+    });
+  });
+
+  // POST /api/admin/chat-sessions/pi-sessions/cleanup — 清理站内 AI Chat 的 Pi session 本地文件
+  app.post('/chat-sessions/pi-sessions/cleanup', async (request, reply) => {
+    const parsed = PiSessionCleanupSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return cleanupPiSessionFilesForAdmin({
+      mode: parsed.data.mode,
+      inactiveDays: parsed.data.inactive_days,
+      limit: parsed.data.limit,
     });
   });
 

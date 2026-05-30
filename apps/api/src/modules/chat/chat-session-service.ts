@@ -23,6 +23,7 @@ import {
   getSessionMessageById,
   getSessionMessagesWithToolContext,
   getUserById,
+  hasFinalAiChatSessionReply,
   storeMessage,
   touchChatSession,
   updateChatSessionTitle,
@@ -54,9 +55,12 @@ import {
 } from './web-chat-runtime.js';
 import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js';
 import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
+import { readPiSessionFileState } from './pi-session-files.js';
 
 const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
+const SESSION_CONTINUATION_BLOCKED_MESSAGE =
+  '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
 
 function isPaymentRequiredError(errorMessage: string): boolean {
   return (
@@ -151,6 +155,31 @@ async function resolveOwnedSoulAccountId(
   return accounts[0]?.id;
 }
 
+async function resolveSessionContinuationState(session: ChatSession): Promise<{
+  blocked: boolean;
+  reason?: 'pi_session_missing';
+  message?: string;
+}> {
+  const hasFinalReply = await hasFinalAiChatSessionReply(
+    session.account_id,
+    session.id,
+  );
+  if (!hasFinalReply) {
+    return { blocked: false };
+  }
+
+  const piSession = await readPiSessionFileState(session.id);
+  if (piSession.hasSessionFile) {
+    return { blocked: false };
+  }
+
+  return {
+    blocked: true,
+    reason: 'pi_session_missing',
+    message: SESSION_CONTINUATION_BLOCKED_MESSAGE,
+  };
+}
+
 export async function listChatSessionsForOwnedUser(
   userId: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
@@ -216,9 +245,14 @@ export async function getOwnedChatSessionMessages(
     getRecentMessages(session.account_id, limit, before, undefined, session.id),
     getRedis().get(`session:processing:${session.id}`),
   ]);
+  const continuation = await resolveSessionContinuationState(session);
 
   return ok(
-    toSessionMessageListResponseDto(messages, Boolean(processingRequestId)),
+    toSessionMessageListResponseDto(messages, Boolean(processingRequestId), {
+      continuationBlocked: continuation.blocked,
+      continuationBlockReason: continuation.reason,
+      continuationBlockMessage: continuation.message,
+    }),
   );
 }
 
@@ -294,6 +328,14 @@ export async function sendOwnedChatSessionMessage(
   }
 
   const session = sessionResult.data;
+  const continuation = await resolveSessionContinuationState(session);
+  if (continuation.blocked) {
+    return fail(
+      410,
+      continuation.message ?? SESSION_CONTINUATION_BLOCKED_MESSAGE,
+    );
+  }
+
   const owner = await getUserById(userId);
   const shouldCountMessage = Boolean(owner);
   if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
@@ -429,8 +471,7 @@ export async function sendOwnedChatSessionMessage(
         is_bot_message: true,
         session_id: session.id,
         tool_context:
-          isFinalReply &&
-          output.skillContext && output.skillContext.length > 0
+          isFinalReply && output.skillContext && output.skillContext.length > 0
             ? JSON.stringify(output.skillContext)
             : null,
         metadata: isFinalReply

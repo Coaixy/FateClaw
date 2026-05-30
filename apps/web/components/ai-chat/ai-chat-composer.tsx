@@ -19,6 +19,8 @@ export function AiChatComposer({
   inputRef,
   input,
   sending,
+  disabled,
+  disabledMessage,
   selectedSession,
   selectedBoardLabel,
   pasteChoiceOpen,
@@ -35,6 +37,8 @@ export function AiChatComposer({
   inputRef: RefObject<HTMLTextAreaElement | null>;
   input: string;
   sending: boolean;
+  disabled?: boolean;
+  disabledMessage?: string;
   selectedSession: string;
   selectedBoardLabel?: string | null;
   pasteChoiceOpen: boolean;
@@ -48,6 +52,7 @@ export function AiChatComposer({
   onDismissPasteChoice: () => void;
   onSend: () => void;
 }) {
+  const composerDisabled = sending || Boolean(disabled);
   return (
     <div className="relative">
       {pasteChoiceOpen && (
@@ -75,6 +80,12 @@ export function AiChatComposer({
         </div>
       )}
 
+      {disabledMessage && (
+        <div className="mb-1.5 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-2 text-[11px] text-warning">
+          {disabledMessage}
+        </div>
+      )}
+
       <div
         className={`flex items-end gap-0 rounded-xl border bg-surface-card transition-all duration-200 touch-manipulation ${
           sending
@@ -88,8 +99,16 @@ export function AiChatComposer({
           onChange={onInputChange}
           onPaste={onPaste}
           onKeyDown={onKeyDown}
-          placeholder={sending ? '思考中...' : selectedSession ? '输入消息...' : '有什么想问的？'}
-          disabled={sending}
+          placeholder={
+            disabled
+              ? '此对话无法继续追问'
+              : sending
+                ? '思考中...'
+                : selectedSession
+                  ? '输入消息...'
+                  : '有什么想问的？'
+          }
+          disabled={composerDisabled}
           rows={1}
           className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[14px] lg:text-[12px] leading-6 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
           onInput={(event) => {
@@ -100,7 +119,7 @@ export function AiChatComposer({
         />
         <button
           onClick={onSend}
-          disabled={!input.trim() || sending}
+          disabled={!input.trim() || composerDisabled}
           className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${
             sending ? 'scale-110' : 'hover:scale-105'
           }`}
@@ -122,13 +141,8 @@ function PasteChoicePanel({
   return (
     <div className="mb-1.5 rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-2 text-[11px] text-ink">
       <div className="flex items-start gap-2">
-        <ClipboardPaste
-          size={13}
-          className="mt-0.5 shrink-0 text-primary"
-        />
-        <p className="min-w-0 flex-1 truncate text-muted">
-          {preview}
-        </p>
+        <ClipboardPaste size={13} className="mt-0.5 shrink-0 text-primary" />
+        <p className="min-w-0 flex-1 truncate text-muted">{preview}</p>
         <button
           type="button"
           onClick={onDismissPasteChoice}

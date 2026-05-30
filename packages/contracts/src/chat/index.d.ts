@@ -37,6 +37,12 @@ export interface MessageDto {
 export interface SessionMessageListResponseDto {
   messages: MessageDto[];
   processing: boolean;
+  /** 当前会话是否因 Pi session 本地状态缺失而禁止继续追问。 */
+  continuation_blocked?: boolean;
+  /** 禁止追问的机器可读原因。 */
+  continuation_block_reason?: 'pi_session_missing';
+  /** 禁止追问时展示给用户的提示文案。 */
+  continuation_block_message?: string;
 }
 
 export interface ChatSessionDto {

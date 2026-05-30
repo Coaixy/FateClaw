@@ -269,6 +269,20 @@ export interface AdminChatSessionsResponse {
   total: number;
 }
 
+/** 管理后台 Pi session 文件清理结果。 */
+export interface AdminPiSessionCleanupResult {
+  success: boolean;
+  mode: 'soft_deleted' | 'inactive';
+  inactive_days: number | null;
+  cutoff_at: string | null;
+  scanned_sessions: number;
+  touched_sessions: number;
+  deleted_jsonl_files: number;
+  deleted_path_files: number;
+  missing_jsonl_files: number;
+  skipped_unsafe_files: string[];
+}
+
 export interface AdminTask {
   id: string;
   account_id: string;
@@ -590,6 +604,17 @@ export const admin = {
       `/api/admin/chat-sessions${qs ? `?${qs}` : ''}`,
     );
   },
+  cleanupPiSessions: (data: {
+    mode: 'soft_deleted' | 'inactive';
+    inactive_days?: number;
+  }) =>
+    adminRequest<AdminPiSessionCleanupResult>(
+      '/api/admin/chat-sessions/pi-sessions/cleanup',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
   tasks: (opts?: { user_id?: string; status?: string }) => {
     const params = new URLSearchParams();
     if (opts?.user_id) params.set('user_id', opts.user_id);

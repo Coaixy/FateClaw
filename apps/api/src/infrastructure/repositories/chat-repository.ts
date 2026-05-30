@@ -127,6 +127,34 @@ export async function getSessionMessagesWithToolContext(
   return rows as NewMessage[];
 }
 
+/**
+ * 判断站内 AI Chat 会话是否已经产生过真实 AI 回复。
+ *
+ * @param accountId - 站内运行时账号键，通常为 web:{userId}。
+ * @param sessionId - chat_sessions.id。
+ * @returns 有最终助手回复时返回 true；仅有排盘预览消息时返回 false。
+ */
+export async function hasFinalAiChatSessionReply(
+  accountId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const { rows } = await getDbPool().query(
+    `SELECT 1
+     FROM messages
+     WHERE account_id = $1
+       AND session_id = $2
+       AND is_bot_message = true
+       AND deleted_at IS NULL
+       AND (
+         metadata->>'kind' = 'final'
+         OR id LIKE 'aichat-%_reply%'
+       )
+     LIMIT 1`,
+    [accountId, sessionId],
+  );
+  return rows.length > 0;
+}
+
 export async function getMessagesSince(
   accountId: string,
   sinceTimestamp: string,

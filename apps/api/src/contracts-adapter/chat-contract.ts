@@ -48,10 +48,18 @@ export function toChatSessionDto(session: ChatSession): ChatSessionDto {
 export function toSessionMessageListResponseDto(
   messages: NewMessage[],
   processing: boolean,
+  options?: {
+    continuationBlocked?: boolean;
+    continuationBlockReason?: 'pi_session_missing';
+    continuationBlockMessage?: string;
+  },
 ): SessionMessageListResponseDto {
   return {
     messages: messages.map(toMessageDto),
     processing,
+    continuation_blocked: options?.continuationBlocked,
+    continuation_block_reason: options?.continuationBlockReason,
+    continuation_block_message: options?.continuationBlockMessage,
   };
 }
 

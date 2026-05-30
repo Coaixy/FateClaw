@@ -19,6 +19,7 @@ import {
   getAdminGlobalStats,
   getAllSkillGlobalConfigs,
   getAllUsers,
+  getChatSessionPiCleanupCandidates,
   getChatSessionsForAdmin,
   getConversationLogById,
   getConversationLogByRequestId,
@@ -59,6 +60,7 @@ import {
 } from '../billing/recharge-service.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
 import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
+import { deletePiSessionFilesForSession } from '../chat/pi-session-files.js';
 import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
@@ -157,6 +159,78 @@ export async function deleteConversationLogsForAdminUser(
     accountIds.add(account.id);
   }
   return deleteConversationLogsByAccountIds([...accountIds]);
+}
+
+/** 管理后台 Pi session 文件清理结果。 */
+export interface AdminPiSessionCleanupResult {
+  success: true;
+  mode: 'soft_deleted' | 'inactive';
+  inactive_days: number | null;
+  cutoff_at: string | null;
+  scanned_sessions: number;
+  touched_sessions: number;
+  deleted_jsonl_files: number;
+  deleted_path_files: number;
+  missing_jsonl_files: number;
+  skipped_unsafe_files: string[];
+}
+
+/**
+ * 清理站内 AI Chat 的 Pi session 本地文件。
+ *
+ * @param input - 清理模式和管理员填写的未活跃天数。
+ * @returns 清理统计，供后台确认实际影响范围。
+ */
+export async function cleanupPiSessionFilesForAdmin(input: {
+  mode: 'soft_deleted' | 'inactive';
+  inactiveDays?: number;
+  limit?: number;
+}): Promise<AdminPiSessionCleanupResult> {
+  const cutoffAt =
+    input.mode === 'inactive' && input.inactiveDays
+      ? new Date(Date.now() - input.inactiveDays * 86_400_000).toISOString()
+      : null;
+  const candidates = await getChatSessionPiCleanupCandidates({
+    softDeleted: input.mode === 'soft_deleted',
+    inactiveBefore: cutoffAt ?? undefined,
+    limit: input.limit,
+  });
+
+  let touchedSessions = 0;
+  let deletedJsonlFiles = 0;
+  let deletedPathFiles = 0;
+  let missingJsonlFiles = 0;
+  const skippedUnsafeFiles: string[] = [];
+
+  for (const candidate of candidates) {
+    const result = await deletePiSessionFilesForSession(candidate.id);
+    if (
+      result.deletedMappingFile ||
+      result.deletedSessionFiles > 0 ||
+      result.missingSessionFile ||
+      result.skippedUnsafeSessionFiles.length > 0
+    ) {
+      touchedSessions += 1;
+    }
+    deletedJsonlFiles += result.deletedSessionFiles;
+    deletedPathFiles += result.deletedMappingFile ? 1 : 0;
+    missingJsonlFiles += result.missingSessionFile ? 1 : 0;
+    skippedUnsafeFiles.push(...result.skippedUnsafeSessionFiles);
+  }
+
+  return {
+    success: true,
+    mode: input.mode,
+    inactive_days:
+      input.mode === 'inactive' ? (input.inactiveDays ?? null) : null,
+    cutoff_at: cutoffAt,
+    scanned_sessions: candidates.length,
+    touched_sessions: touchedSessions,
+    deleted_jsonl_files: deletedJsonlFiles,
+    deleted_path_files: deletedPathFiles,
+    missing_jsonl_files: missingJsonlFiles,
+    skipped_unsafe_files: skippedUnsafeFiles,
+  };
 }
 
 export async function createAdminUser(input: {

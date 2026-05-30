@@ -104,8 +104,9 @@ function AiChatWorkspaceContent() {
   const [paipanSkillPickerOpen, setPaipanSkillPickerOpen] = useState(false);
   const [paipanCatalog, setPaipanCatalog] = useState<PaipanCatalogItem[]>([]);
   const [paipanCatalogLoading, setPaipanCatalogLoading] = useState(false);
-  const [preselectedPaipanSkill, setPreselectedPaipanSkill] =
-    useState<string | null>(null);
+  const [preselectedPaipanSkill, setPreselectedPaipanSkill] = useState<
+    string | null
+  >(null);
   const [lockPaipanSkill, setLockPaipanSkill] = useState(false);
   const [pastedBoardDraft, setPastedBoardDraft] = useState('');
   const [pastedBoardSheetOpen, setPastedBoardSheetOpen] = useState(false);
@@ -124,6 +125,11 @@ function AiChatWorkspaceContent() {
     createSession,
     touchSession,
   });
+  const continuationBlockedMessage =
+    chatMessages.continuationBlocked && selectedSession
+      ? chatMessages.continuationBlockMessage ||
+        '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。'
+      : '';
 
   const requestLogin = useCallback(
     (draft?: string) => {
@@ -181,7 +187,10 @@ function AiChatWorkspaceContent() {
       .catch((error) => {
         if (cancelled) return;
         setPaipanCatalog([]);
-        toast('error', error instanceof Error ? error.message : '加载排盘术数失败');
+        toast(
+          'error',
+          error instanceof Error ? error.message : '加载排盘术数失败',
+        );
       })
       .finally(() => {
         if (!cancelled) {
@@ -201,6 +210,7 @@ function AiChatWorkspaceContent() {
     ) => {
       const text = (overrideText ?? input).trim();
       if (!text || chatMessages.sending) return;
+      if (chatMessages.continuationBlocked) return;
       if (authLoading) return;
       if (!chatAvailable) {
         requestLogin(text);
@@ -260,7 +270,13 @@ function AiChatWorkspaceContent() {
 
   const handleComposerPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (chatMessages.sending || !chatAvailable) return;
+      if (
+        chatMessages.sending ||
+        chatMessages.continuationBlocked ||
+        !chatAvailable
+      ) {
+        return;
+      }
 
       const text = event.clipboardData.getData('text');
       if (!shouldPromptForPastedBoard(text)) return;
@@ -272,7 +288,7 @@ function AiChatWorkspaceContent() {
       });
       setPasteChoiceText(text);
     },
-    [chatAvailable, chatMessages.sending],
+    [chatAvailable, chatMessages.continuationBlocked, chatMessages.sending],
   );
 
   const handleUsePasteAsBoard = useCallback(() => {
@@ -312,6 +328,10 @@ function AiChatWorkspaceContent() {
         requestLogin(pastedBoard.content);
         return;
       }
+      if (chatMessages.continuationBlocked) {
+        toast('error', continuationBlockedMessage);
+        return;
+      }
 
       if (chatMessages.sending) {
         toast('error', '上一条消息仍在处理中，请稍后再试');
@@ -324,7 +344,9 @@ function AiChatWorkspaceContent() {
         closeSheet: () => setPastedBoardSheetOpen(false),
         clearSelectedBoard: () => setSelectedBoardDraft(null),
         clearComposerInput:
-          pastedBoardDraftSource === 'composer' ? () => setInput('') : undefined,
+          pastedBoardDraftSource === 'composer'
+            ? () => setInput('')
+            : undefined,
         onSendFailure: () => {
           toast('error', '盘面发送失败，请稍后重试');
         },
@@ -333,8 +355,10 @@ function AiChatWorkspaceContent() {
     [
       authLoading,
       chatAvailable,
+      chatMessages.continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
+      continuationBlockedMessage,
       pastedBoardDraftSource,
       requestLogin,
       toast,
@@ -430,13 +454,22 @@ function AiChatWorkspaceContent() {
       if (authLoading) {
         return;
       }
+      if (chatMessages.continuationBlocked) {
+        toast('error', continuationBlockedMessage);
+        return;
+      }
 
       setPaipanSkillPickerOpen(false);
       setPreselectedPaipanSkill(skill ?? null);
       setLockPaipanSkill(Boolean(skill));
       setPaipanSheetMode('current-session');
     },
-    [authLoading],
+    [
+      authLoading,
+      chatMessages.continuationBlocked,
+      continuationBlockedMessage,
+      toast,
+    ],
   );
 
   const handleClosePaipanSheet = useCallback(() => {
@@ -449,10 +482,13 @@ function AiChatWorkspaceContent() {
     setPaipanSkillPickerOpen(false);
   }, []);
 
-  const handleSelectSkillFromPicker = useCallback((skill: string) => {
-    setPaipanSkillPickerOpen(false);
-    openPreChatPaipan(skill);
-  }, [openPreChatPaipan]);
+  const handleSelectSkillFromPicker = useCallback(
+    (skill: string) => {
+      setPaipanSkillPickerOpen(false);
+      openPreChatPaipan(skill);
+    },
+    [openPreChatPaipan],
+  );
 
   const handleOpenComposerPastedBoard = useCallback(() => {
     if (authLoading) {
@@ -463,16 +499,31 @@ function AiChatWorkspaceContent() {
       requestLogin(input);
       return;
     }
+    if (chatMessages.continuationBlocked) {
+      toast('error', continuationBlockedMessage);
+      return;
+    }
 
     openPastedBoardSheet(input, 'composer');
-  }, [authLoading, chatAvailable, input, openPastedBoardSheet, requestLogin]);
-  const pastedBoardDisabled = authLoading || chatMessages.sending;
-
+  }, [
+    authLoading,
+    chatAvailable,
+    chatMessages.continuationBlocked,
+    continuationBlockedMessage,
+    input,
+    openPastedBoardSheet,
+    requestLogin,
+    toast,
+  ]);
+  const pastedBoardDisabled =
+    authLoading || chatMessages.sending || chatMessages.continuationBlocked;
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
       input={input}
       sending={chatMessages.sending}
+      disabled={chatMessages.continuationBlocked}
+      disabledMessage={continuationBlockedMessage}
       selectedSession={selectedSession}
       selectedBoardLabel={selectedBoardDraft?.label ?? null}
       pasteChoiceOpen={Boolean(pasteChoiceText)}
@@ -498,7 +549,11 @@ function AiChatWorkspaceContent() {
         <PaipanSkillStrip
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          disabled={authLoading || chatMessages.sending}
+          disabled={
+            authLoading ||
+            chatMessages.sending ||
+            chatMessages.continuationBlocked
+          }
           onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
           onOpenAll={() => openCurrentSessionPaipan()}
           onOpenPastedBoard={handleOpenComposerPastedBoard}
@@ -534,9 +589,7 @@ function AiChatWorkspaceContent() {
           composer={showCenteredComposer ? centeredComposer : composer}
         />
         {!showCenteredComposer && replyCompleted && (
-          <AiChatFloatingStatus
-            completed={replyCompleted}
-          />
+          <AiChatFloatingStatus completed={replyCompleted} />
         )}
       </div>
 
@@ -548,7 +601,10 @@ function AiChatWorkspaceContent() {
                 catalog={paipanCatalog}
                 loading={paipanCatalogLoading}
                 disabled={
-                  authLoading || chatMessages.sending || !selectedSession
+                  authLoading ||
+                  chatMessages.sending ||
+                  chatMessages.continuationBlocked ||
+                  !selectedSession
                 }
                 onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
                 onOpenAll={() => openCurrentSessionPaipan()}
@@ -580,7 +636,11 @@ function AiChatWorkspaceContent() {
         sessionId={selectedSession || undefined}
         initialSkill={preselectedPaipanSkill}
         lockSkill={lockPaipanSkill}
-        canCommit={chatAvailable}
+        canCommit={
+          chatAvailable &&
+          (paipanSheetMode !== 'current-session' ||
+            !chatMessages.continuationBlocked)
+        }
         onClose={handleClosePaipanSheet}
         onAuthRequired={() => requestLogin(input)}
         onCommitted={handlePaipanCommitted}
@@ -597,11 +657,7 @@ function AiChatWorkspaceContent() {
   );
 }
 
-function AiChatFloatingStatus({
-  completed,
-}: {
-  completed: boolean;
-}) {
+function AiChatFloatingStatus({ completed }: { completed: boolean }) {
   const statusLabel = completed ? '回答完成' : null;
 
   if (!statusLabel) return null;

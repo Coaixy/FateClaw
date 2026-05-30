@@ -25,6 +25,8 @@ export interface AgentEnv {
   // --- 运行时 ---
   TZ: string;
   FATECLAW_TIMEZONE: string;
+  /** Pi session 本地文件目录；传给本地 agent-runner 以保持宿主清理路径一致。 */
+  FATECLAW_PI_SESSION_DIR?: string;
 
   // --- 连接 ---
   REDIS_URL?: string;
@@ -66,6 +68,7 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     // 运行时
     TZ: TIMEZONE,
     FATECLAW_TIMEZONE: TIMEZONE,
+    FATECLAW_PI_SESSION_DIR: process.env.FATECLAW_PI_SESSION_DIR || undefined,
 
     // 连接
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,

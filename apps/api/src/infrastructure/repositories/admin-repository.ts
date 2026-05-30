@@ -192,6 +192,56 @@ export async function getChatSessionsForAdmin(opts: {
   return { sessions: rows as AdminChatSessionRow[], total };
 }
 
+/** 管理后台清理 Pi session 文件时使用的会话候选行。 */
+export interface AdminChatSessionPiCleanupCandidate {
+  id: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/**
+ * 查询需要清理 Pi session 文件的网页会话。
+ *
+ * @param opts - 清理条件；softDeleted 为 true 时包含软删除会话，inactiveBefore 为未活跃截止时间。
+ * @returns 最多 limit 条候选会话。
+ */
+export async function getChatSessionPiCleanupCandidates(opts: {
+  softDeleted?: boolean;
+  inactiveBefore?: string;
+  limit?: number;
+}): Promise<AdminChatSessionPiCleanupCandidate[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
+  if (opts.softDeleted) {
+    conditions.push('deleted_at IS NOT NULL');
+  }
+
+  if (opts.inactiveBefore) {
+    conditions.push(`(deleted_at IS NULL AND updated_at < $${paramIdx++})`);
+    params.push(opts.inactiveBefore);
+  }
+
+  if (conditions.length === 0) {
+    return [];
+  }
+
+  const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
+  params.push(limit);
+
+  const { rows } = await pool.query(
+    `SELECT id, updated_at, deleted_at
+     FROM chat_sessions
+     WHERE ${conditions.map((condition) => `(${condition})`).join(' OR ')}
+     ORDER BY COALESCE(deleted_at, updated_at) ASC
+     LIMIT $${paramIdx}`,
+    params,
+  );
+
+  return rows as AdminChatSessionPiCleanupCandidate[];
+}
+
 export interface AdminTaskRow {
   id: string;
   account_id: string;
@@ -263,7 +313,9 @@ export interface AdminCustomSkillRow {
   updated_at: string;
 }
 
-function hydrateAdminCustomSkillRow(row: AdminCustomSkillRow): AdminCustomSkillRow {
+function hydrateAdminCustomSkillRow(
+  row: AdminCustomSkillRow,
+): AdminCustomSkillRow {
   const files = readTextSkillBundleFiles(row.bundle_uri);
   return {
     ...row,
