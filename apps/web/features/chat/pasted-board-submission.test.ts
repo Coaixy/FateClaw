@@ -75,4 +75,23 @@ describe('startUserPastedBoardSubmission', () => {
 
     expect(onSendFailure).toHaveBeenCalledWith(error);
   });
+
+  it('does not duplicate handled send failures', async () => {
+    const sendResult = createDeferred<boolean>();
+    const onSendFailure = vi.fn();
+
+    startUserPastedBoardSubmission({
+      pastedBoard,
+      sendMessage: () => sendResult.promise,
+      clearSelectedBoard: vi.fn(),
+      closeSheet: vi.fn(),
+      onSendFailure,
+    });
+
+    sendResult.resolve(false);
+    await sendResult.promise;
+    await Promise.resolve();
+
+    expect(onSendFailure).not.toHaveBeenCalled();
+  });
 });

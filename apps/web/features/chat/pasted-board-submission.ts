@@ -37,7 +37,6 @@ export function startUserPastedBoardSubmission({
   void sendPromise
     .then((sent) => {
       if (!sent) {
-        onSendFailure();
         return;
       }
       clearSelectedBoard();

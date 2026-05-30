@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import type { UserPastedBoardInput } from '@/features/chat/pasted-board-input';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
 
+const DEFAULT_PASTED_BOARD_QUESTION = '请基于这份自贴盘面进行解读。';
+
 interface PastedBoardSheetProps {
   open: boolean;
   initialContent: string;
@@ -29,7 +31,6 @@ export function PastedBoardSheet({
 
   const [category, setCategory] = useState(categoryOptions[0] ?? '');
   const [content, setContent] = useState(initialContent);
-  const [question, setQuestion] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const wasOpenRef = useRef(false);
 
@@ -43,17 +44,14 @@ export function PastedBoardSheet({
     wasOpenRef.current = true;
     setCategory(categoryOptions[0] ?? '');
     setContent(initialContent);
-    setQuestion('');
   }, [categoryOptions, initialContent, open]);
 
   const trimmedCategory = category.trim();
   const trimmedContent = content.trim();
-  const trimmedQuestion = question.trim();
   const busy = submitting;
   const canSubmit =
     Boolean(trimmedCategory) &&
     Boolean(trimmedContent) &&
-    Boolean(trimmedQuestion) &&
     !busy;
 
   const handleSubmit = async () => {
@@ -63,7 +61,7 @@ export function PastedBoardSheet({
       await onSubmit({
         category: trimmedCategory,
         content: trimmedContent,
-        question: trimmedQuestion,
+        question: DEFAULT_PASTED_BOARD_QUESTION,
       });
     } finally {
       setSubmitting(false);
@@ -158,23 +156,6 @@ export function PastedBoardSheet({
             disabled={busy}
             rows={10}
             className="min-h-[180px] max-h-[38dvh] w-full resize-y rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] leading-6 text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none disabled:opacity-50 sm:min-h-[220px] sm:max-h-none"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="pasted-board-question"
-            className="mb-1.5 block text-[12px] font-medium text-ink"
-          >
-            想问什么
-          </label>
-          <textarea
-            id="pasted-board-question"
-            value={question}
-            onChange={(event) => setQuestion(event.currentTarget.value)}
-            disabled={busy}
-            rows={3}
-            className="min-h-20 w-full resize-y rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] leading-6 text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none disabled:opacity-50 sm:min-h-24"
           />
         </div>
       </div>

@@ -304,6 +304,20 @@ function AiChatWorkspaceContent() {
 
   const handlePastedBoardSubmit = useCallback(
     (pastedBoard: UserPastedBoardInput) => {
+      if (authLoading) {
+        return;
+      }
+
+      if (!chatAvailable) {
+        requestLogin(pastedBoard.content);
+        return;
+      }
+
+      if (chatMessages.sending) {
+        toast('error', '上一条消息仍在处理中，请稍后再试');
+        return;
+      }
+
       startUserPastedBoardSubmission({
         pastedBoard,
         sendMessage: chatMessages.sendMessageWithOptions,
@@ -316,7 +330,15 @@ function AiChatWorkspaceContent() {
         },
       });
     },
-    [chatMessages.sendMessageWithOptions, pastedBoardDraftSource, toast],
+    [
+      authLoading,
+      chatAvailable,
+      chatMessages.sendMessageWithOptions,
+      chatMessages.sending,
+      pastedBoardDraftSource,
+      requestLogin,
+      toast,
+    ],
   );
 
   const displayMessages = filterProgressMessages(chatMessages.messages);
