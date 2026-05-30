@@ -23,6 +23,42 @@ function tokenPricePart(label: string, coins: number): string {
   return `${label} ${officialModelCoinsLabel(coins)} / 百万 Token`;
 }
 
+function officialModelTotalPriceCoins(
+  input: OfficialModelPricingInput,
+): number {
+  return (
+    input.input_token_price_per_million_coins +
+    input.output_token_price_per_million_coins
+  );
+}
+
+/**
+ * 从可用官方模型里选出默认模型。
+ *
+ * @param models 官方模型候选列表；同价时保留列表中更靠前的模型。
+ * @returns 输入和输出 Token 总单价最低的可用模型；没有可用模型时返回 null。
+ * @remarks 只选择已启用且已配置密钥的模型，避免默认到无法调用的官方模型。
+ */
+export function findLowestPricedOfficialModel<
+  T extends OfficialModelPricingInput & {
+    enabled: boolean;
+    has_secret: boolean;
+  },
+>(models: readonly T[]): T | null {
+  return models.reduce<T | null>((lowest, model) => {
+    if (!model.enabled || !model.has_secret) {
+      return lowest;
+    }
+    if (!lowest) {
+      return model;
+    }
+    return officialModelTotalPriceCoins(model) <
+      officialModelTotalPriceCoins(lowest)
+      ? model
+      : lowest;
+  }, null);
+}
+
 export function officialModelPriceParts(
   input: OfficialModelPricingInput,
 ): OfficialModelPricePart[] {

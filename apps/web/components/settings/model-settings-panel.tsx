@@ -23,6 +23,7 @@ import {
   customModelPlatformFeeAmountLabel,
   customModelPlatformFeeLabel,
   DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
+  findLowestPricedOfficialModel,
 } from './model-pricing';
 
 const CONTROL =
@@ -34,6 +35,51 @@ type CustomDraft = {
   model_name: string;
   context_window_tokens: number;
 };
+
+function customDraftFromOverview(data: ModelSettingsOverview): CustomDraft {
+  return {
+    pi_api: data.custom?.pi_api ?? 'openai-completions',
+    base_url: data.custom?.base_url ?? '',
+    model_name: data.custom?.model_name ?? '',
+    context_window_tokens: data.custom?.context_window_tokens ?? 0,
+  };
+}
+
+function hasUsableCustomModel(data: ModelSettingsOverview): boolean {
+  return Boolean(data.custom?.model_name.trim() && data.custom.has_secret);
+}
+
+function hasUsableOfficialSelection(data: ModelSettingsOverview): boolean {
+  const selectedId = data.selection?.official_model_id;
+  return Boolean(
+    selectedId &&
+      data.official_models.some(
+        (model) => model.id === selectedId && model.enabled && model.has_secret,
+      ),
+  );
+}
+
+function resolveDefaultOfficialModel(
+  data: ModelSettingsOverview,
+): OfficialModel | null {
+  const defaultOfficialModel = findLowestPricedOfficialModel(
+    data.official_models,
+  );
+  if (!defaultOfficialModel) {
+    return null;
+  }
+  if (data.selection?.source === 'custom' && hasUsableCustomModel(data)) {
+    return null;
+  }
+  if (data.selection?.source === 'official' && hasUsableOfficialSelection(data)) {
+    return null;
+  }
+  // 用户没有可用自配模型，或官方选择已失效时，才用最低价官方模型补默认值。
+  if (!hasUsableCustomModel(data) || data.selection?.source === 'official') {
+    return defaultOfficialModel;
+  }
+  return null;
+}
 
 export function ModelSettingsPanel() {
   const [overview, setOverview] = useState<ModelSettingsOverview | null>(null);
@@ -53,13 +99,29 @@ export function ModelSettingsPanel() {
     setMessage('');
     try {
       const data = await modelSettingsApi.overview();
-      setOverview(data);
-      setCustom({
-        pi_api: data.custom?.pi_api ?? 'openai-completions',
-        base_url: data.custom?.base_url ?? '',
-        model_name: data.custom?.model_name ?? '',
-        context_window_tokens: data.custom?.context_window_tokens ?? 0,
-      });
+      let nextOverview = data;
+      let defaultSelectionMessage = '';
+      const defaultOfficialModel = resolveDefaultOfficialModel(data);
+      if (defaultOfficialModel) {
+        try {
+          const selection = await modelSettingsApi.select({
+            source: 'official',
+            official_model_id: defaultOfficialModel.id,
+          });
+          nextOverview = { ...data, selection };
+          defaultSelectionMessage = `已默认选择价格最低的官方模型：${defaultOfficialModel.display_name}`;
+        } catch (error) {
+          defaultSelectionMessage =
+            error instanceof Error
+              ? error.message
+              : '默认官方模型选择失败';
+        }
+      }
+      setOverview(nextOverview);
+      setCustom(customDraftFromOverview(nextOverview));
+      if (defaultSelectionMessage) {
+        setMessage(defaultSelectionMessage);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '加载模型设置失败');
     } finally {
