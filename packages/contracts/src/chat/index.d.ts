@@ -19,6 +19,8 @@ export interface MessageMetadataDto {
   request_id?: string;
   /** 本轮 AI 回复从提交到最终响应的耗时，单位毫秒。 */
   duration_ms?: number;
+  /** 本轮 AI 回复实际结算的软妹币金额。 */
+  actual_charge_coins?: number;
 }
 
 export interface MessageDto {

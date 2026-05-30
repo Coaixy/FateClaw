@@ -1,4 +1,5 @@
 import type { Message } from '@/features/chat/api';
+import { formatCoins } from '../../../lib/soft-currency';
 
 export const AUTO_SCROLL_THRESHOLD = 80;
 
@@ -70,6 +71,20 @@ export function formatChatDuration(value: unknown): string | null {
   return remainingMinutes > 0
     ? `耗时 ${hours}h ${remainingMinutes}m`
     : `耗时 ${hours}h`;
+}
+
+/**
+ * 将 AI 回复扣费金额格式化为聊天气泡下方的紧凑标签。
+ *
+ * @param value 后端写入 metadata.actual_charge_coins 的软妹币金额。
+ * @returns 可直接展示的中文软妹币标签；非法或缺失时返回 null。
+ */
+export function formatChatCost(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return `消耗 ${formatCoins(value)}`;
 }
 
 export function formatRelativeDateLabel(ts: string) {

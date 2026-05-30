@@ -14,7 +14,7 @@ const {
   mockPublish: vi.fn(async () => 1),
   mockResolve: vi.fn(),
   mockReject: vi.fn(),
-  mockSettleBillingReservation: vi.fn(async () => 0),
+  mockSettleBillingReservation: vi.fn(async () => 1.23),
   mockStoreConversationLog: vi.fn(async () => undefined),
 }));
 
@@ -161,6 +161,9 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockResolve).toHaveBeenCalledWith(
       expect.objectContaining({
         text: 'reply\n\n📥 15 · 📤 5 Finished',
+        metadata: expect.objectContaining({
+          actual_charge_coins: 1.23,
+        }),
       }),
     );
     expect(mockIncrementDailyTokens).toHaveBeenCalledWith(
@@ -185,6 +188,10 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockPublish).toHaveBeenCalledWith(
       'ipc:ai-chat:stream:session-2',
       expect.stringContaining('"promptTokens":15'),
+    );
+    expect(mockPublish).toHaveBeenCalledWith(
+      'ipc:ai-chat:stream:session-2',
+      expect.stringContaining('"actual_charge_coins":1.23'),
     );
   });
 

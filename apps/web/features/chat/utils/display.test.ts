@@ -4,6 +4,7 @@ import type { Message } from '@/features/chat/api';
 
 import {
   filterProgressMessages,
+  formatChatCost,
   formatChatDuration,
   hasFinalAssistantAfterLatestUser,
   isStreamingAssistantMessage,
@@ -103,6 +104,12 @@ describe('chat display message state helpers', () => {
     expect(formatChatDuration(12_300)).toBe('耗时 12s');
     expect(formatChatDuration(65_000)).toBe('耗时 1m 5s');
     expect(formatChatDuration(-1)).toBeNull();
+  });
+
+  it('formats assistant response soft currency cost labels', () => {
+    expect(formatChatCost(0)).toBe('消耗 软妹币 0.00');
+    expect(formatChatCost(1.236)).toBe('消耗 软妹币 1.24');
+    expect(formatChatCost(-1)).toBeNull();
   });
 });
 

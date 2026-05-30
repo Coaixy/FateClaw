@@ -137,6 +137,7 @@ function resolvePendingDurationMs(
 function buildFinalMetadata(args: {
   payload: ResponseIpcPayload;
   durationMs?: number;
+  actualChargeCoins?: number | null;
 }): Record<string, unknown> {
   return {
     ...(args.payload.metadata &&
@@ -148,6 +149,9 @@ function buildFinalMetadata(args: {
     turn_complete: true,
     ...(typeof args.durationMs === 'number'
       ? { duration_ms: args.durationMs }
+      : {}),
+    ...(typeof args.actualChargeCoins === 'number'
+      ? { actual_charge_coins: args.actualChargeCoins }
       : {}),
   };
 }
@@ -220,9 +224,9 @@ async function settleAiChatBilling(args: {
   accountId: string;
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
-}): Promise<boolean> {
-  if (!args.payload.requestId) return false;
-  if (args.pending?.llmRuntime?.billingMode !== 'metered') return false;
+}): Promise<number | null> {
+  if (!args.payload.requestId) return null;
+  if (args.pending?.llmRuntime?.billingMode !== 'metered') return null;
   const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
 
   const actualChargeCoins = await settleBillingReservation({
@@ -239,7 +243,7 @@ async function settleAiChatBilling(args: {
     },
     'AI Chat: 已完成模型 Token 扣费结算',
   );
-  return true;
+  return actualChargeCoins;
 }
 
 async function resolvePendingAiChatResponse(args: {
@@ -391,21 +395,6 @@ async function processAiChatResponse(
       finalText,
     });
     const durationMs = resolvePendingDurationMs(pending);
-    const finalMetadata = buildFinalMetadata({
-      payload: payloadForUsage,
-      durationMs,
-    });
-
-    await publishAiChatStreamEvent({
-      sessionId: pending?.sessionId,
-      event: streamEventFromResponsePayload({
-        payload: payloadForUsage,
-        accountId,
-        sessionId: pending?.sessionId,
-        text: finalText || text,
-        metadata: finalMetadata,
-      }),
-    });
 
     logger.info(
       {
@@ -426,10 +415,26 @@ async function processAiChatResponse(
       pending,
       payload: payloadForUsage,
     });
-    await settleAiChatBilling({
+    const actualChargeCoins = await settleAiChatBilling({
       accountId,
       pending,
       payload: payloadForUsage,
+    });
+    const finalMetadata = buildFinalMetadata({
+      payload: payloadForUsage,
+      durationMs,
+      actualChargeCoins,
+    });
+
+    await publishAiChatStreamEvent({
+      sessionId: pending?.sessionId,
+      event: streamEventFromResponsePayload({
+        payload: payloadForUsage,
+        accountId,
+        sessionId: pending?.sessionId,
+        text: finalText || text,
+        metadata: finalMetadata,
+      }),
     });
     await resolvePendingAiChatResponse({
       accountId,
