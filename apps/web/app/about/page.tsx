@@ -27,7 +27,7 @@ export const metadata: Metadata = {
  */
 export default function AboutPage() {
   return (
-    <AppShell>
+    <AppShell requireAuth={false}>
       <div className="min-h-[70vh]">
         <section className="relative overflow-hidden rounded-2xl border border-hairline bg-surface-card shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
           <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_31px,color-mix(in_srgb,var(--color-hairline)_55%,transparent)_32px)] bg-[size:100%_32px] opacity-70" />

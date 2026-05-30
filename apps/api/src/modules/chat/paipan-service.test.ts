@@ -75,7 +75,7 @@ describe('commitDirectPaipanForOwnedUser', () => {
     mockRedisDel.mockResolvedValue(1);
   });
 
-  it('keeps the board type and appends the latest note when committing a preview', async () => {
+  it('keeps the board title when committing a preview', async () => {
     mockRedisGet.mockResolvedValue(
       JSON.stringify({
         previewId: 'preview-1',
@@ -99,17 +99,16 @@ describe('commitDirectPaipanForOwnedUser', () => {
     const result = await commitDirectPaipanForOwnedUser('user-1', {
       target: 'new_session_from_preview',
       previewId: 'preview-1',
-      displayNote: '  感情  ',
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.data.session.title).toBe('六爻排盘 · 感情');
-    expect(result.data.requestMessage.content).toBe('六爻排盘 · 感情');
-    expect(result.data.resultMessage.content).toBe('已生成：六爻排盘 · 感情');
+    expect(result.data.session.title).toBe('六爻排盘');
+    expect(result.data.requestMessage.content).toBe('六爻排盘');
+    expect(result.data.resultMessage.content).toBe('已生成：六爻排盘');
     expect(JSON.parse(result.data.resultMessage.tool_context || '[]')).toEqual([
       expect.objectContaining({
-        artifactTitle: '六爻排盘 · 感情',
+        artifactTitle: '六爻排盘',
       }),
     ]);
   });

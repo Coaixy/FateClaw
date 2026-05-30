@@ -7,12 +7,8 @@ import {
 } from '../../modules/chat/paipan-service.js';
 
 export async function paipanRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/catalog', async (request, reply) => {
-    await request.requireAuth();
-
-    const result = await listDirectPaipanCatalogForOwnedUser(
-      request.user.userId,
-    );
+  app.get('/catalog', async (_request, reply) => {
+    const result = await listDirectPaipanCatalogForOwnedUser();
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }
@@ -25,8 +21,6 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       input?: Record<string, unknown>;
     };
   }>('/preview', async (request, reply) => {
-    await request.requireAuth();
-
     const skill = request.body?.skill?.trim();
     const input = request.body?.input;
 
@@ -38,7 +32,6 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const result = await previewDirectPaipanForOwnedUser({
-      userId: request.user.userId,
       skill,
       input,
     });
@@ -55,7 +48,6 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       sessionId?: string;
       skill?: string;
       input?: Record<string, unknown>;
-      displayNote?: string;
     };
   }>('/commit', async (request, reply) => {
     await request.requireAuth();
@@ -71,7 +63,6 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       sessionId: request.body?.sessionId,
       skill: request.body?.skill,
       input: request.body?.input,
-      displayNote: request.body?.displayNote,
     });
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

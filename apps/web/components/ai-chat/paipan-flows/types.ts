@@ -77,13 +77,6 @@ export interface PaipanFlowFieldKit {
     placeholder?: string;
     onChange: (value: string | undefined) => void;
   }>;
-  FieldTextarea: ComponentType<{
-    title: string;
-    description?: string;
-    value: string;
-    placeholder?: string;
-    onChange: (value: string | undefined) => void;
-  }>;
 }
 
 /**

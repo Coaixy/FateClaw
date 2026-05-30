@@ -35,7 +35,6 @@ import {
 } from './web-chat-runtime.js';
 
 const PAIPAN_PREVIEW_TTL_MS = 30 * 60 * 1000;
-const DIRECT_PAIPAN_NOTE_MAX_LENGTH = 40;
 
 interface DirectPaipanPreviewRecord {
   previewId: string;
@@ -67,51 +66,6 @@ async function verifyOwnedSession(
 
 function createMessageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function normalizeDirectPaipanDisplayNote(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized) {
-    return undefined;
-  }
-  // 备注会拼到术数名后展示，限制长度避免撑坏会话列表和盘面引用提示。
-  return normalized.slice(0, DIRECT_PAIPAN_NOTE_MAX_LENGTH);
-}
-
-function appendDirectPaipanDisplayNote(args: {
-  skillContextEntry: SkillContextEntryDto;
-  requestSummary: string;
-  sessionTitle: string;
-  displayNote?: string;
-}): {
-  skillContextEntry: SkillContextEntryDto;
-  requestSummary: string;
-  sessionTitle: string;
-} {
-  if (!args.displayNote) {
-    return {
-      skillContextEntry: args.skillContextEntry,
-      requestSummary: args.requestSummary,
-      sessionTitle: args.sessionTitle,
-    };
-  }
-
-  const baseTitle =
-    args.skillContextEntry.artifactTitle ||
-    args.sessionTitle ||
-    args.requestSummary;
-  const title = `${baseTitle} · ${args.displayNote}`;
-  return {
-    requestSummary: title,
-    sessionTitle: title,
-    skillContextEntry: {
-      ...args.skillContextEntry,
-      artifactTitle: title,
-    },
-  };
 }
 
 function buildDirectPaipanMessages(args: {
@@ -286,18 +240,20 @@ async function appendBoardMessagesToExistingSession(args: {
 }
 
 export async function listDirectPaipanCatalogForOwnedUser(
-  userId: string,
+  userId?: string,
 ): Promise<ServiceResult<PaipanCatalogItemDto[]>> {
   const catalog = await listDirectPaipanCatalog(userId);
   return ok(catalog);
 }
 
 export async function previewDirectPaipanForOwnedUser(args: {
-  userId: string;
+  userId?: string;
   skill: string;
   input: Record<string, unknown>;
 }): Promise<ServiceResult<PaipanPreviewResponseDto>> {
-  const runtimeId = getWebChatRuntimeId(args.userId);
+  const runtimeId = args.userId
+    ? getWebChatRuntimeId(args.userId)
+    : getWebChatRuntimeId('public-preview');
 
   try {
     const execution = await executeDirectPaipan({
@@ -312,21 +268,23 @@ export async function previewDirectPaipanForOwnedUser(args: {
       Date.now() + PAIPAN_PREVIEW_TTL_MS,
     ).toISOString();
 
-    await storeDirectPaipanPreviewRecord({
-      previewId,
-      userId: args.userId,
-      runtimeId,
-      skill: execution.skill.dir,
-      requestSummary: execution.requestSummary,
-      sessionTitle: execution.sessionTitle,
-      skillContextEntry: execution.skillContextEntry,
-      createdAt,
-      expiresAt,
-    });
+    if (args.userId) {
+      await storeDirectPaipanPreviewRecord({
+        previewId,
+        userId: args.userId,
+        runtimeId,
+        skill: execution.skill.dir,
+        requestSummary: execution.requestSummary,
+        sessionTitle: execution.sessionTitle,
+        skillContextEntry: execution.skillContextEntry,
+        createdAt,
+        expiresAt,
+      });
+    }
 
     logger.info(
       {
-        userId: args.userId,
+        userId: args.userId ?? null,
         accountId: runtimeId,
         skill: execution.skill.dir,
         workflow: 'direct_paipan_preview',
@@ -348,8 +306,6 @@ export async function commitDirectPaipanForOwnedUser(
   userId: string,
   request: PaipanCommitRequestDto,
 ): Promise<ServiceResult<PaipanCommitResponseDto>> {
-  const displayNote = normalizeDirectPaipanDisplayNote(request.displayNote);
-
   if (request.target === 'new_session_from_preview') {
     if (!request.previewId) {
       return fail(400, '缺少 previewId');
@@ -363,19 +319,12 @@ export async function commitDirectPaipanForOwnedUser(
       return fail(403, '无权提交该预览结果');
     }
 
-    const commitPayload = appendDirectPaipanDisplayNote({
-      requestSummary: preview.requestSummary,
-      sessionTitle: preview.sessionTitle,
-      skillContextEntry: preview.skillContextEntry,
-      displayNote,
-    });
-
     const created = await createSessionWithBoardMessages({
       userId,
       runtimeId: preview.runtimeId,
-      sessionTitle: commitPayload.sessionTitle,
-      requestSummary: commitPayload.requestSummary,
-      skillContextEntry: commitPayload.skillContextEntry,
+      sessionTitle: preview.sessionTitle,
+      requestSummary: preview.requestSummary,
+      skillContextEntry: preview.skillContextEntry,
     });
     await deleteDirectPaipanPreviewRecord(request.previewId);
 
@@ -426,7 +375,6 @@ export async function commitDirectPaipanForOwnedUser(
       userId,
       skillDir: request.skill,
       input: request.input,
-      displayNote,
     });
 
     const appended = await appendBoardMessagesToExistingSession({

@@ -19,7 +19,6 @@ export function AiChatComposer({
   inputRef,
   input,
   sending,
-  chatAvailable,
   selectedSession,
   selectedBoardLabel,
   pasteChoiceOpen,
@@ -36,7 +35,6 @@ export function AiChatComposer({
   inputRef: RefObject<HTMLTextAreaElement | null>;
   input: string;
   sending: boolean;
-  chatAvailable: boolean;
   selectedSession: string;
   selectedBoardLabel?: string | null;
   pasteChoiceOpen: boolean;
@@ -91,7 +89,7 @@ export function AiChatComposer({
           onPaste={onPaste}
           onKeyDown={onKeyDown}
           placeholder={sending ? '思考中...' : selectedSession ? '输入消息...' : '有什么想问的？'}
-          disabled={sending || !chatAvailable}
+          disabled={sending}
           rows={1}
           className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[14px] lg:text-[12px] leading-6 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
           onInput={(event) => {
@@ -102,7 +100,7 @@ export function AiChatComposer({
         />
         <button
           onClick={onSend}
-          disabled={!input.trim() || sending || !chatAvailable}
+          disabled={!input.trim() || sending}
           className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${
             sending ? 'scale-110' : 'hover:scale-105'
           }`}

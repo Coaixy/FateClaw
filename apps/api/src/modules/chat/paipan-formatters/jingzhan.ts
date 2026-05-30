@@ -125,9 +125,6 @@ export const formatJingzhanPaipan: PaipanFormatter = (artifactData) => {
   const lines: string[] = [];
 
   pushSection(lines, '起卦概要', [
-    textField(root, 'question')
-      ? `问题：${textField(root, 'question')}`
-      : undefined,
     textField(root, 'method')
       ? `起卦方式：${textField(root, 'method')}`
       : undefined,

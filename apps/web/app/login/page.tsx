@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { readLoginRedirect } from '@/lib/auth-redirect';
 import { isValidMainlandChinaPhone, normalizePhoneNumber } from '@/lib/phone';
 import { Loader2, RefreshCw, Eye, EyeOff } from 'lucide-react';
 
@@ -22,7 +23,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace('/dashboard');
+      router.replace(readLoginRedirect('/dashboard'));
     }
   }, [loading, user, router]);
 
@@ -147,7 +148,7 @@ export default function LoginPage() {
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
       }
-      router.replace('/dashboard');
+      router.replace(readLoginRedirect('/dashboard'));
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作失败');
       // 登录失败或图形码失败都刷新，避免继续使用已经失效的 nonce。

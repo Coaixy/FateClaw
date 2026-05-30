@@ -204,9 +204,6 @@ export const formatIchingPaipan: PaipanFormatter = (artifactData) => {
   const lines: string[] = [];
 
   pushSection(lines, '起卦概要', [
-    textField(root, 'question')
-      ? `问题：${textField(root, 'question')}`
-      : undefined,
     formatQueryTime(recordField(root, 'queryTime'))
       ? `起卦时间：${formatQueryTime(recordField(root, 'queryTime'))}`
       : undefined,

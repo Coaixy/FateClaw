@@ -41,7 +41,7 @@ function getPaipanSkillCatalogEntry(
 }
 
 async function loadAvailablePaipanSkillCatalog(
-  userId: string,
+  userId?: string,
 ): Promise<PaipanRegistryEntry[]> {
   const enabledSkillNames = new Set(
     await getResolvedEnabledOfficialSkillNames(userId),
@@ -57,7 +57,7 @@ export function isDirectPaipanSkill(skillDir: string): boolean {
 }
 
 export async function listDirectPaipanCatalog(
-  userId: string,
+  userId?: string,
 ): Promise<PaipanCatalogItemDto[]> {
   const skills = await loadAvailablePaipanSkillCatalog(userId);
   return skills.map((skill) => ({
@@ -70,7 +70,7 @@ export async function listDirectPaipanCatalog(
 }
 
 export async function resolveDirectPaipanSkillOrThrow(args: {
-  userId: string;
+  userId?: string;
   skillDir: string;
 }): Promise<PaipanRegistryEntry> {
   if (!isDirectPaipanSkill(args.skillDir)) {
@@ -328,10 +328,9 @@ async function executeInternalPaipan(args: {
 
 export async function executeDirectPaipan(args: {
   accountId: string;
-  userId: string;
+  userId?: string;
   skillDir: string;
   input: Record<string, unknown>;
-  displayNote?: string;
 }): Promise<{
   skill: PaipanRegistryEntry;
   requestSummary: string;
@@ -342,9 +341,7 @@ export async function executeDirectPaipan(args: {
     userId: args.userId,
     skillDir: args.skillDir,
   });
-  const title = args.displayNote
-    ? `${skill.name} · ${args.displayNote}`
-    : skill.name;
+  const title = skill.name;
 
   void args.accountId;
   const artifactData = await executeInternalPaipan({

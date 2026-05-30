@@ -22,7 +22,7 @@ const ICHING_METHOD_OPTIONS: ChoiceGridOption[] = [
  * 六爻排盘的新手引导填写 flow。
  *
  * @param props 外层弹窗注入的 draft、字段组件、辅助函数和变更回调。
- * @returns 分步骤填写起卦方式、起卦时间、条件参数和问题的排盘表单。
+ * @returns 分步骤填写起卦方式、起卦时间和条件参数的排盘表单。
  */
 export function IchingFlow({
   draft,
@@ -39,7 +39,6 @@ export function IchingFlow({
     DateTimeField,
     ChoiceGrid,
     FieldTextInput,
-    FieldTextarea,
   } = fieldKit;
   const {
     getValueAtPath,
@@ -193,27 +192,6 @@ export function IchingFlow({
             )}
           </PaipanStepFrame>
         ) : null,
-    },
-    {
-      id: 'question',
-      title: '想问什么',
-      description: '问题不参与排盘计算，只会随盘面一起记录。',
-      status: 'optional',
-      content: (
-        <PaipanStepFrame title="想问什么">
-          <FieldTextarea
-            title="想问什么"
-            description="这项不参与排盘计算，只会随排盘请求原样记录。"
-            value={
-              typeof getValueAtPath(draft, ['question']) === 'string'
-                ? String(getValueAtPath(draft, ['question']))
-                : ''
-            }
-            placeholder="例如：我最近适合换工作吗？"
-            onChange={(value) => onChange(['question'], value)}
-          />
-        </PaipanStepFrame>
-      ),
     },
   ];
 

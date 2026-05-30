@@ -31,7 +31,7 @@ export default function DiscoverPage() {
   const market = useSkillMarket(notify);
 
   return (
-    <AppShell>
+    <AppShell requireAuth={false}>
       <div className="max-w-6xl mx-auto p-4 lg:p-10 space-y-4 lg:space-y-6">
         <header className="hidden lg:block">
           <h1 className="text-3xl font-bold tracking-tight">技能市场</h1>

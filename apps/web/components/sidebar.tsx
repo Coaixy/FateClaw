@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
   Info,
+  LogIn,
   MessageCircle,
   Trash2,
   Menu,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
 import { TopBar } from './top-bar';
 
@@ -109,6 +111,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
 
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -287,8 +290,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         <div className="relative px-3 shrink-0">
           <button
             onClick={goNewChat}
-            disabled={!chatAvailable}
-            className="w-full flex items-center gap-2.5 px-3.5 h-11 rounded-xl border border-hairline/60 bg-surface-card/50 text-ink text-[13px] font-medium hover:border-primary/40 hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full flex items-center gap-2.5 px-3.5 h-11 rounded-xl border border-hairline/60 bg-surface-card/50 text-ink text-[13px] font-medium hover:border-primary/40 hover:bg-primary/10 transition-all duration-200 cursor-pointer"
             aria-label="新建对话"
           >
             <SquarePen size={15} className="text-primary" />
@@ -359,7 +361,19 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-card flex items-center justify-center">
                   <MessageCircle size={16} className="text-muted/40" />
                 </div>
-                <p className="text-[11px] text-muted/60">暂无对话</p>
+                <p className="text-[11px] text-muted/60">
+                  {chatAvailable ? '暂无对话' : '登录后查看对话记录'}
+                </p>
+                {!chatAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => router.push(buildLoginHref())}
+                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[11px] font-medium text-ink transition-colors hover:border-primary/35 hover:bg-primary/10"
+                  >
+                    <LogIn size={12} className="text-primary" />
+                    登录
+                  </button>
+                )}
               </div>
             ) : filteredSessions.length === 0 ? (
               <div className="px-3 py-6 text-center">

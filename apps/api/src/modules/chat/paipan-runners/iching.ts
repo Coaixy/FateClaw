@@ -27,12 +27,10 @@ interface IchingInput {
   yao?: string;
   numbers?: number[];
   datetime?: string;
-  question?: string;
 }
 
 export type IchingPaipanResult = PanResult & {
   method: IchingMethod;
-  question?: string;
 };
 
 function parseDatetime(value: string | undefined): Date {
@@ -102,7 +100,7 @@ function generateYao(
 export async function runIchingPaipan(
   input: Record<string, unknown>,
 ): Promise<IchingPaipanResult> {
-  const { method = 'dayan', question, datetime } = input as IchingInput;
+  const { method = 'dayan', datetime } = input as IchingInput;
 
   if (!METHODS.includes(method)) {
     throw new Error(`method 必须是 ${METHODS.join('/')} 之一`);
@@ -121,7 +119,6 @@ export async function runIchingPaipan(
 
   return {
     method,
-    question,
     ...pan,
   };
 }

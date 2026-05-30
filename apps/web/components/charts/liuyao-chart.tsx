@@ -14,7 +14,6 @@ interface GanZhi {
 
 interface LiuyaoData {
   method?: string;
-  question?: string;
   benGua: IchingGua;
   zhiGua: IchingGua;
   huGua?: IchingGua;
@@ -299,7 +298,6 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
     zhiGua,
     huGua,
     method,
-    question,
     solarTerm,
     monthJian,
     dayKong,
@@ -347,14 +345,9 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
 
   return (
     <div className="w-full bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
-      {/* 问题 / 起卦副信息 */}
-      {(question || method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
+      {/* 起卦副信息 */}
+      {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
         <div className="px-2 sm:px-5 py-2 sm:py-3 border-b border-hairline bg-surface-soft">
-          {question && (
-            <p className="text-[11px] sm:text-[13px] font-medium text-ink mb-1.5">
-              {question}
-            </p>
-          )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs">
             {methodDisplay && (
               <div className="flex items-baseline gap-1 whitespace-nowrap">

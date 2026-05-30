@@ -150,7 +150,6 @@ export interface PaipanCommitRequestDto {
   sessionId?: string;
   skill?: string;
   input?: Record<string, unknown>;
-  displayNote?: string;
 }
 
 export interface PaipanCommitResponseDto {

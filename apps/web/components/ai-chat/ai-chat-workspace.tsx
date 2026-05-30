@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
   ChevronRight,
@@ -35,11 +36,13 @@ import {
 } from '@/features/chat/utils/display';
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   paipanApi,
   type PaipanCatalogItem,
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
+import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
@@ -53,6 +56,7 @@ type PasteChoiceSelection = {
   readonly end: number;
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
+const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
 
 export function AiChatWorkspace() {
   return (
@@ -71,7 +75,7 @@ export function AiChatWorkspace() {
         </div>
       }
     >
-      <AppShell wide noPadding>
+      <AppShell wide noPadding requireAuth={false}>
         <AiChatWorkspaceContent />
       </AppShell>
     </Suspense>
@@ -80,6 +84,8 @@ export function AiChatWorkspace() {
 
 function AiChatWorkspaceContent() {
   const { toast } = useToast();
+  const router = useRouter();
+  const { loading: authLoading } = useAuth();
   const {
     chatAvailable,
     sessions,
@@ -119,6 +125,31 @@ function AiChatWorkspaceContent() {
     touchSession,
   });
 
+  const requestLogin = useCallback(
+    (draft?: string) => {
+      const pendingText = draft?.trim();
+      if (pendingText && typeof window !== 'undefined') {
+        window.sessionStorage.setItem(PENDING_CHAT_INPUT_KEY, pendingText);
+      }
+      router.push(buildLoginHref());
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    if (!chatAvailable || typeof window === 'undefined') {
+      return;
+    }
+
+    const pendingText = window.sessionStorage.getItem(PENDING_CHAT_INPUT_KEY);
+    if (!pendingText) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(PENDING_CHAT_INPUT_KEY);
+    setInput((current) => current || pendingText);
+  }, [chatAvailable]);
+
   useEffect(() => {
     if (!chatAvailable) {
       setSelectedBoardDraft(null);
@@ -136,12 +167,6 @@ function AiChatWorkspaceContent() {
   }, [chatAvailable]);
 
   useEffect(() => {
-    if (!chatAvailable) {
-      setPaipanCatalog([]);
-      setPaipanCatalogLoading(false);
-      return;
-    }
-
     let cancelled = false;
     setPaipanCatalog([]);
     setPaipanCatalogLoading(true);
@@ -167,7 +192,7 @@ function AiChatWorkspaceContent() {
     return () => {
       cancelled = true;
     };
-  }, [chatAvailable, toast]);
+  }, [toast]);
 
   const handleSend = useCallback(
     async (
@@ -176,6 +201,12 @@ function AiChatWorkspaceContent() {
     ) => {
       const text = (overrideText ?? input).trim();
       if (!text || chatMessages.sending) return;
+      if (authLoading) return;
+      if (!chatAvailable) {
+        requestLogin(text);
+        return;
+      }
+
       const selectedBoardMessageId =
         options?.selectedBoardMessageId ??
         (selectedBoardDraft?.sessionId === selectedSession
@@ -190,7 +221,15 @@ function AiChatWorkspaceContent() {
         selectedBoardMessageId,
       });
     },
-    [chatMessages, input, selectedBoardDraft],
+    [
+      chatAvailable,
+      chatMessages,
+      authLoading,
+      input,
+      requestLogin,
+      selectedBoardDraft,
+      selectedSession,
+    ],
   );
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -342,23 +381,41 @@ function AiChatWorkspaceContent() {
     [chatMessages, selectedSession, setSelectedSession, touchSession],
   );
 
-  const openPreChatPaipan = useCallback((skill?: string) => {
-    setPaipanSkillPickerOpen(false);
-    setPreselectedPaipanSkill(skill ?? null);
-    setLockPaipanSkill(Boolean(skill));
-    setPaipanSheetMode('pre-chat');
-  }, []);
+  const openPreChatPaipan = useCallback(
+    (skill?: string) => {
+      if (authLoading) {
+        return;
+      }
+
+      setPaipanSkillPickerOpen(false);
+      setPreselectedPaipanSkill(skill ?? null);
+      setLockPaipanSkill(Boolean(skill));
+      setPaipanSheetMode('pre-chat');
+    },
+    [authLoading],
+  );
 
   const openPaipanSkillPicker = useCallback(() => {
-    setPaipanSkillPickerOpen(true);
-  }, []);
+    if (authLoading) {
+      return;
+    }
 
-  const openCurrentSessionPaipan = useCallback((skill?: string) => {
-    setPaipanSkillPickerOpen(false);
-    setPreselectedPaipanSkill(skill ?? null);
-    setLockPaipanSkill(Boolean(skill));
-    setPaipanSheetMode('current-session');
-  }, []);
+    setPaipanSkillPickerOpen(true);
+  }, [authLoading]);
+
+  const openCurrentSessionPaipan = useCallback(
+    (skill?: string) => {
+      if (authLoading) {
+        return;
+      }
+
+      setPaipanSkillPickerOpen(false);
+      setPreselectedPaipanSkill(skill ?? null);
+      setLockPaipanSkill(Boolean(skill));
+      setPaipanSheetMode('current-session');
+    },
+    [authLoading],
+  );
 
   const handleClosePaipanSheet = useCallback(() => {
     setPaipanSheetMode(null);
@@ -376,16 +433,24 @@ function AiChatWorkspaceContent() {
   }, [openPreChatPaipan]);
 
   const handleOpenComposerPastedBoard = useCallback(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!chatAvailable) {
+      requestLogin(input);
+      return;
+    }
+
     openPastedBoardSheet(input, 'composer');
-  }, [input, openPastedBoardSheet]);
-  const pastedBoardDisabled = !chatAvailable || chatMessages.sending;
+  }, [authLoading, chatAvailable, input, openPastedBoardSheet, requestLogin]);
+  const pastedBoardDisabled = authLoading || chatMessages.sending;
 
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
       input={input}
       sending={chatMessages.sending}
-      chatAvailable={chatAvailable}
       selectedSession={selectedSession}
       selectedBoardLabel={selectedBoardDraft?.label ?? null}
       pasteChoiceOpen={Boolean(pasteChoiceText)}
@@ -411,7 +476,7 @@ function AiChatWorkspaceContent() {
         <PaipanSkillStrip
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          disabled={!chatAvailable}
+          disabled={authLoading || chatMessages.sending}
           onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
           onOpenAll={() => openCurrentSessionPaipan()}
           onOpenPastedBoard={handleOpenComposerPastedBoard}
@@ -421,7 +486,7 @@ function AiChatWorkspaceContent() {
         <PaipanSkillRail
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          disabled={!chatAvailable}
+          disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
           onOpenAll={openPaipanSkillPicker}
@@ -460,7 +525,9 @@ function AiChatWorkspaceContent() {
               <PaipanSkillStrip
                 catalog={paipanCatalog}
                 loading={paipanCatalogLoading}
-                disabled={!chatAvailable || !selectedSession}
+                disabled={
+                  authLoading || chatMessages.sending || !selectedSession
+                }
                 onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
                 onOpenAll={() => openCurrentSessionPaipan()}
                 onOpenPastedBoard={handleOpenComposerPastedBoard}
@@ -491,7 +558,9 @@ function AiChatWorkspaceContent() {
         sessionId={selectedSession || undefined}
         initialSkill={preselectedPaipanSkill}
         lockSkill={lockPaipanSkill}
+        canCommit={chatAvailable}
         onClose={handleClosePaipanSheet}
+        onAuthRequired={() => requestLogin(input)}
         onCommitted={handlePaipanCommitted}
       />
 

@@ -48,7 +48,7 @@ export function PaipanStepper({
             {
               id: CONFIRM_STEP_ID,
               title: '确认信息',
-              description: '补充用途备注，确认无误后生成盘面预览。',
+              description: '确认无误后生成盘面预览。',
               status: 'optional' as const,
               content: finalContent,
             },
@@ -76,12 +76,12 @@ export function PaipanStepper({
   const isResultStep = activeStep?.id === RESULT_STEP_ID;
   const showFinalAction = isConfirmStep && !resultContent;
   const getStepIndicatorClassName = (step: PaipanStep, index: number) => {
-    const statusColor =
-      step.status === 'incomplete'
+    const hasReachedStep = index <= activeIndex;
+    const statusColor = !hasReachedStep
+      ? 'bg-hairline/80'
+      : step.status === 'incomplete'
         ? 'bg-rose-400/70'
-        : step.status === 'complete'
-          ? 'bg-primary/55'
-          : 'bg-hairline';
+        : 'bg-primary/55';
 
     if (index === activeIndex) {
       return `${statusColor} ring-1 ring-primary/45 ring-offset-1 ring-offset-canvas`;
@@ -136,11 +136,15 @@ export function PaipanStepper({
         <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
           <span className="inline-flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-primary/45" />
-            已填写
+            已完成
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-rose-400/60" />
-            待填写
+            需补充
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-hairline/80" />
+            未到达
           </span>
         </div>
       </div>

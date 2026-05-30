@@ -51,8 +51,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/billing/status — 全站状态页统计
-  app.get('/status', async (request, reply) => {
-    await request.requireAuth();
+  app.get('/status', async (_request, reply) => {
     const result = await getPublicStatusOverview();
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

@@ -27,12 +27,10 @@ interface JingzhanInput {
   yao?: string;
   numbers?: number[];
   datetime?: string;
-  question?: string;
 }
 
 export type JingzhanPaipanResult = PanResult & {
   method: JingzhanMethod;
-  question?: string;
 };
 
 function parseDatetime(value: string | undefined): Date {
@@ -102,7 +100,7 @@ function generateYao(
 export async function runJingzhanPaipan(
   input: Record<string, unknown>,
 ): Promise<JingzhanPaipanResult> {
-  const { method = 'dayan', question, datetime } = input as JingzhanInput;
+  const { method = 'dayan', datetime } = input as JingzhanInput;
 
   if (!METHODS.includes(method)) {
     throw new Error(`method 必须是 ${METHODS.join('/')} 之一`);
@@ -121,7 +119,6 @@ export async function runJingzhanPaipan(
 
   return {
     method,
-    question,
     ...pan,
   };
 }

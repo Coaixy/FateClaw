@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { ChatSessionsProvider } from '@/features/chat/hooks/use-chat-sessions';
+import { buildLoginHref } from '@/lib/auth-redirect';
 import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
@@ -12,21 +13,23 @@ export function AppShell({
   children,
   wide,
   noPadding,
+  requireAuth = true,
 }: {
   children: React.ReactNode;
   wide?: boolean;
   noPadding?: boolean;
+  requireAuth?: boolean;
 }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      window.location.replace('/login');
+    if (requireAuth && !loading && !user) {
+      window.location.replace(buildLoginHref());
     }
-  }, [loading, user]);
+  }, [loading, requireAuth, user]);
 
-  if (loading) {
+  if (requireAuth && loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <div className="w-4 h-4 border-2 border-muted border-t-transparent rounded-full animate-spin" />
@@ -34,7 +37,7 @@ export function AppShell({
     );
   }
 
-  if (!user) {
+  if (requireAuth && !user) {
     return (
       <div className="min-h-dvh flex items-center justify-center px-6">
         <div className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface-card px-5 py-4 text-sm text-ink shadow-sm">

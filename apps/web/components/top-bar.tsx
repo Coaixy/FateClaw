@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { User as UserIcon, BadgeDollarSign } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { User as UserIcon, BadgeDollarSign, LogIn } from 'lucide-react';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
+import { buildLoginHref } from '@/lib/auth-redirect';
 import { formatCoins } from '@/lib/soft-currency';
 
 function formatBalanceShort(coins: number): string {
@@ -39,7 +41,8 @@ export function TopBar({
   compact?: boolean;
   onLogout: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const router = useRouter();
   const { status, usage, refreshing, refresh } = useBillingSnapshot();
   const [menuOpen, setMenuOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -56,7 +59,21 @@ export function TopBar({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [menuOpen, usageOpen]);
 
-  if (!user) return null;
+  if (loading) return null;
+
+  if (!user) {
+    return (
+      <button
+        type="button"
+        onClick={() => router.push(buildLoginHref())}
+        className={`inline-flex items-center justify-center rounded-full border border-hairline bg-surface-card/80 text-ink backdrop-blur-sm transition-colors hover:border-primary/40 hover:bg-primary/10 ${compact ? 'h-8 px-2.5 gap-1.5 text-[11px]' : 'h-9 px-3.5 gap-2 text-[12px]'}`}
+        aria-label="登录"
+      >
+        <LogIn size={compact ? 13 : 14} className="text-primary" />
+        <span className="font-medium">登录</span>
+      </button>
+    );
+  }
 
   const balanceCoins = status?.available_coins ?? null;
   const dotColor = 'bg-primary';

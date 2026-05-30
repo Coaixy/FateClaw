@@ -37,7 +37,9 @@ interface PaipanSheetProps {
   sessionId?: string;
   initialSkill?: string | null;
   lockSkill?: boolean;
+  canCommit?: boolean;
   onClose: () => void;
+  onAuthRequired?: () => void;
   onCommitted: (result: PaipanCommitResponse) => Promise<void> | void;
 }
 
@@ -116,10 +118,6 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
     label: '起卦时间',
     placeholder: 'YYYY-MM-DD HH:mm',
   },
-  question: {
-    label: '想问什么',
-    placeholder: '例如：这次换工作是否合适？',
-  },
   yao: {
     label: '六爻卦象',
     description: '从下往上输入 6 位数字，每位只能是 6、7、8、9。',
@@ -138,7 +136,6 @@ const PAIPAN_FLOW_FIELD_KIT: PaipanFlowFieldKit = {
   DateTimeField,
   ChoiceGrid,
   FieldTextInput,
-  FieldTextarea,
 };
 
 const PAIPAN_FLOW_HELPERS: PaipanFlowHelpers = {
@@ -412,7 +409,6 @@ function buildInitialDraftForSkill(
       method: typeof base.method === 'string' ? base.method : 'dayan',
       $useCurrentTime: !hasPresetDatetime,
       datetime: hasPresetDatetime ? base.datetime : undefined,
-      question: typeof base.question === 'string' ? base.question : undefined,
     };
   }
 
@@ -528,12 +524,6 @@ function validateDraftForSkill(
   return null;
 }
 
-function normalizePaipanDisplayNote(value: string): string | undefined {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized) return undefined;
-  return normalized.slice(0, 40);
-}
-
 function getSimpleHiddenFieldPaths(skillDir: string): string[] {
   switch (skillDir) {
     case 'bazi-paipan':
@@ -543,7 +533,7 @@ function getSimpleHiddenFieldPaths(skillDir: string): string[] {
       return ['solarDate', 'hour', 'minute'];
     case 'iching-paipan':
     case 'jingzhan-paipan':
-      return ['method', 'datetime', 'question', 'yao', 'numbers'];
+      return ['method', 'datetime', 'yao', 'numbers'];
     default:
       return [];
   }
@@ -637,34 +627,6 @@ function FieldTextInput({
         onChange={(event) => onChange(event.currentTarget.value.trim() || undefined)}
         placeholder={placeholder}
         className="min-h-10 w-full rounded-xl border border-hairline bg-surface-card px-3 py-2 text-[13px] text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
-      />
-      <PropertyDescription text={description} />
-    </FieldCard>
-  );
-}
-
-function FieldTextarea({
-  title,
-  description,
-  value,
-  placeholder,
-  onChange,
-}: {
-  title: string;
-  description?: string;
-  value: string;
-  placeholder?: string;
-  onChange: (value: string | undefined) => void;
-}) {
-  return (
-    <FieldCard>
-      <FieldLabel title={title} />
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value.trim() || undefined)}
-        placeholder={placeholder}
-        rows={4}
-        className="w-full resize-none rounded-xl border border-hairline bg-surface-card px-3 py-2 text-[13px] leading-6 text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
       />
       <PropertyDescription text={description} />
     </FieldCard>
@@ -1442,7 +1404,9 @@ export function PaipanSheet({
   sessionId,
   initialSkill,
   lockSkill = false,
+  canCommit = true,
   onClose,
+  onAuthRequired,
   onCommitted,
 }: PaipanSheetProps) {
   const { toast } = useToast();
@@ -1452,7 +1416,6 @@ export function PaipanSheet({
   const [previewSkillName, setPreviewSkillName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [displayNote, setDisplayNote] = useState('');
 
   const selectedCatalogItem = useMemo(
     () => catalog.find((item) => item.skill === selectedSkill) ?? null,
@@ -1509,7 +1472,6 @@ export function PaipanSheet({
     setDraft(buildInitialDraftForSkill(selectedCatalogItem.skill, selectedCatalogItem.parameters));
     setPreviewResult(null);
     setPreviewSkillName('');
-    setDisplayNote('');
     setAdvancedOpen(false);
   }, [selectedCatalogItem]);
 
@@ -1518,7 +1480,6 @@ export function PaipanSheet({
       setSelectedSkill('');
       setPreviewResult(null);
       setPreviewSkillName('');
-      setDisplayNote('');
       setSubmitting(false);
       setAdvancedOpen(false);
     }
@@ -1558,9 +1519,6 @@ export function PaipanSheet({
     return buildSubmitInputForSkill(selectedCatalogItem.skill, draft);
   };
 
-  const buildCommitDisplayNote = (): string | undefined =>
-    normalizePaipanDisplayNote(displayNote);
-
   const handlePreview = async () => {
     if (!selectedCatalogItem) {
       toast('error', '请先选择排盘类型');
@@ -1588,6 +1546,11 @@ export function PaipanSheet({
   };
 
   const handleCommitIntoCurrentSession = async () => {
+    if (!canCommit) {
+      onAuthRequired?.();
+      return;
+    }
+
     if (!selectedCatalogItem || !sessionId) {
       toast('error', '当前会话不存在');
       return;
@@ -1605,7 +1568,6 @@ export function PaipanSheet({
         sessionId,
         skill: selectedCatalogItem.skill,
         input: submitInput,
-        displayNote: buildCommitDisplayNote(),
       });
       await onCommitted(result);
       onClose();
@@ -1617,6 +1579,11 @@ export function PaipanSheet({
   };
 
   const handleStartChatFromPreview = async () => {
+    if (!canCommit) {
+      onAuthRequired?.();
+      return;
+    }
+
     if (!previewResult) {
       toast('error', '请先完成排盘预览');
       return;
@@ -1626,7 +1593,6 @@ export function PaipanSheet({
       const result = await paipanApi.commit({
         target: 'new_session_from_preview',
         previewId: previewResult.previewId,
-        displayNote: buildCommitDisplayNote(),
       });
       await onCommitted(result);
       onClose();
@@ -1654,7 +1620,7 @@ export function PaipanSheet({
         icon={<MessageCircle size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
-        基于此盘开始对话
+        {canCommit ? '基于此盘开始对话' : '登录后开始对话'}
       </Button>
     ) : (
       <Button
@@ -1663,25 +1629,9 @@ export function PaipanSheet({
         icon={<Sparkles size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
-        插入到当前对话
+        {canCommit ? '插入到当前对话' : '登录后插入对话'}
       </Button>
     );
-  const flowFinalContent = selectedCatalogItem ? (
-    <div>
-      <FieldLabel title="想问方向 / 备注" />
-      <input
-        type="text"
-        value={displayNote}
-        maxLength={40}
-        onChange={(event) => setDisplayNote(event.currentTarget.value)}
-        placeholder="例如：感情、事业、应期"
-        className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
-      />
-      <p className="mt-1.5 text-[11px] leading-5 text-muted">
-        用来标记这张盘的用途；保存后会显示为“{selectedCatalogItem.name} · 备注”，留空则只显示术数名称。
-      </p>
-    </div>
-  ) : null;
   const flowResultContent = previewResult ? (
     <div className="rounded-[30px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
@@ -1779,7 +1729,6 @@ export function PaipanSheet({
                     helpers={PAIPAN_FLOW_HELPERS}
                     onChange={handleChange}
                     onManyChanges={handleManyChanges}
-                    finalContent={flowFinalContent}
                     finalAction={flowFinalAction}
                     resultContent={flowResultContent}
                     resultAction={flowResultAction}

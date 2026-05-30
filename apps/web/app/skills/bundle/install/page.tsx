@@ -4,6 +4,7 @@ import { Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useBundleInstall } from '@/features/skills/hooks/use-bundle-install';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { buildLoginHref } from '@/lib/auth-redirect';
 import {
   AlertCircle,
   ArrowLeft,
@@ -170,7 +171,7 @@ function BundleInstallContent() {
               )}
               {!user ? (
                 <button
-                  onClick={() => router.push('/login')}
+                  onClick={() => router.push(buildLoginHref())}
                   className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active transition-colors cursor-pointer"
                 >
                   登录后订阅

@@ -11,7 +11,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { chatSessionsApi, ChatSession } from '@/features/chat/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -72,11 +72,17 @@ function updateSessionTitle(
   );
 }
 
+function readSelectedSessionFromUrl() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  return new URLSearchParams(window.location.search).get('sid') || '';
+}
+
 export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSession, setSelectedSessionState] = useState('');
@@ -84,12 +90,16 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
   const latestSessionsRequestRef = useRef(0);
 
-  const urlSid = searchParams.get('sid') || '';
-
   useEffect(() => {
-    // 会话选择以 URL 为准，确保侧边栏和正文始终读取同一份当前会话。
-    setSelectedSessionState(urlSid);
-  }, [urlSid]);
+    // 首次进入和浏览器前进/后退都从地址栏同步 sid，避免依赖 useSearchParams 触发整页 CSR。
+    const syncSelectedSession = () => {
+      setSelectedSessionState(readSelectedSessionFromUrl());
+    };
+
+    syncSelectedSession();
+    window.addEventListener('popstate', syncSelectedSession);
+    return () => window.removeEventListener('popstate', syncSelectedSession);
+  }, []);
 
   const loadSessions = useCallback(async () => {
     if (!user) {

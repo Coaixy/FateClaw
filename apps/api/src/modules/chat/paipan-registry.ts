@@ -93,10 +93,6 @@ const ichingLikeParameters: SkillParametersSchema = {
       type: 'string',
       description: '排盘时间，格式 "YYYY-MM-DD HH:mm"，默认当前时间',
     },
-    question: {
-      type: 'string',
-      description: '可选：问卜主题（原样回传，不参与排盘计算）',
-    },
   },
 };
 

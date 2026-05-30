@@ -6,7 +6,6 @@ import { CHART } from './chart-theme';
 
 interface JingzhanData {
   method?: string;
-  question?: string;
   benGua: IchingGua;
   zhiGua: IchingGua;
   huGua?: IchingGua;
@@ -84,7 +83,7 @@ function SubGuaBox({ label, gua }: { label: string, gua: IchingGua }) {
 }
 
 export default function JingzhanChart({ data }: { data: JingzhanData }) {
-  const { benGua, zhiGua, huGua, zongGua, cuoGua, method, question, dongYaoCount } = data;
+  const { benGua, zhiGua, huGua, zongGua, cuoGua, method, dongYaoCount } = data;
 
   if (!benGua?.yaoList || !zhiGua?.yaoList) {
     return (
@@ -99,10 +98,9 @@ export default function JingzhanChart({ data }: { data: JingzhanData }) {
   return (
     <div className="w-full bg-surface-card border border-hairline rounded-xl overflow-hidden font-sans shadow-sm">
       {/* Header Info */}
-      {(question || method) && (
+      {method && (
         <div className="px-3 sm:px-4 py-2 border-b border-hairline-soft bg-surface-soft flex flex-col gap-0.5">
-          {question && <div className="text-[13px] sm:text-sm font-bold text-ink">{question}</div>}
-          {method && <div className="text-[11px] sm:text-xs text-muted">起卦: {method}</div>}
+          <div className="text-[11px] sm:text-xs text-muted">起卦: {method}</div>
         </div>
       )}
 

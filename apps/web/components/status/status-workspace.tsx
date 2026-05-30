@@ -48,7 +48,7 @@ export function StatusWorkspace() {
   }, [load]);
 
   return (
-    <AppShell wide>
+    <AppShell wide requireAuth={false}>
       <div className="min-h-[70vh] space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
