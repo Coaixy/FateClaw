@@ -38,10 +38,6 @@ import type {
 } from './repositories/admin-repository.js';
 import {
   adjustUserPurchasedBalance,
-  approveWithdrawal,
-  createWithdrawalRequest,
-  decryptSensitive,
-  encryptSensitive,
   expireBonusBalance,
   getBillingRequestReservationByRequestId,
   getMonthlyModelChargeCents,
@@ -52,19 +48,13 @@ import {
   getRechargeStatsByUserId,
   getVisibleWalletTransactionsByUserId,
   getWalletTransactionsByUserId,
-  getWithdrawalById,
   grantBonusBalance,
   insertRechargeOrder,
-  listAllWithdrawals,
   listBillingRequestReservations,
   listRechargeOrdersByUserId,
-  listWithdrawalsForCreator,
   markRechargeOrderFailed,
   markRechargeOrderPaymentCreated,
-  markWithdrawalPaid,
-  maskIdNumber,
   reconcileStaleBillingReservations,
-  rejectWithdrawal,
   releaseUserBalanceReservation,
   reserveUserBalanceCents,
   settleRechargeOrderPaid,
@@ -73,7 +63,6 @@ import {
 } from './repositories/billing-repository.js';
 import type {
   BillingRequestReservationRow,
-  CreatorWithdrawalRow,
   DeductBalanceResult,
   MonthlyBillingStateRow,
   BalanceGrantRow,
@@ -163,7 +152,6 @@ import {
   getAllSkillGlobalConfigs,
   getBundleByToken,
   getCreatorBundleConfig,
-  getCreatorEarnings,
   getEffectiveUserSkills,
   getGloballyEnabledSkillNames,
   getResolvedEnabledOfficialSkillNames,
@@ -214,7 +202,6 @@ import type {
 
 export {
   adjustUserPurchasedBalance,
-  approveWithdrawal,
   bindAccountToUser,
   claimDueTasks,
   createAccount,
@@ -225,8 +212,6 @@ export {
   createTask,
   createUser,
   createUserCustomSkill,
-  createWithdrawalRequest,
-  decryptSensitive,
   deleteAccount,
   deleteChatSession,
   deleteConversationLogsByAccountIds,
@@ -234,7 +219,6 @@ export {
   deleteSkillBundle,
   deleteTask,
   deleteUserCustomSkill,
-  encryptSensitive,
   expireBonusBalance,
   extendTaskRunLock,
   getAccount,
@@ -259,7 +243,6 @@ export {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getCreatorBundleConfig,
-  getCreatorEarnings,
   getEffectiveUserSkills,
   getEnabledAccounts,
   getGloballyEnabledSkillNames,
@@ -296,11 +279,9 @@ export {
   getUserModelSelection,
   getVisibleWalletTransactionsByUserId,
   getWalletTransactionsByUserId,
-  getWithdrawalById,
   grantBonusBalance,
   insertRechargeOrder,
   listCreatorSharedSkills,
-  listAllWithdrawals,
   listBillingRequestReservations,
   listConfigAuditLogs,
   listMarketBundles,
@@ -308,18 +289,14 @@ export {
   listOfficialModelConfigs,
   listRechargeOrdersByUserId,
   listUserBundles,
-  listWithdrawalsForCreator,
   logTaskRun,
   markRechargeOrderFailed,
   markRechargeOrderPaymentCreated,
-  markWithdrawalPaid,
-  maskIdNumber,
   promoteUserToCreator,
   publishSkillBundle,
   publishUserCustomSkill,
   purgeExpiredTraceEvents,
   reconcileStaleBillingReservations,
-  rejectWithdrawal,
   releaseUserBalanceReservation,
   resetUserMessages,
   resetUserTasks,
@@ -375,7 +352,6 @@ export type {
   BundleByTokenResult,
   ConversationLogRow,
   ConversationLogSummaryRow,
-  CreatorWithdrawalRow,
   DeductBalanceResult,
   MarketBundleListRow,
   MarketSkillListRow,
@@ -457,14 +433,6 @@ export async function deleteUser(userId: string): Promise<void> {
     ]);
     await client.query(
       'DELETE FROM creator_bundle_config WHERE creator_id = $1',
-      [userId],
-    );
-    await client.query(
-      'DELETE FROM creator_withdrawals WHERE creator_id = $1',
-      [userId],
-    );
-    await client.query(
-      'DELETE FROM creator_earnings_monthly WHERE creator_id = $1',
       [userId],
     );
     await client.query(

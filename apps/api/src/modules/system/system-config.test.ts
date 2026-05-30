@@ -136,7 +136,7 @@ describe('resolveUserLlmRuntime', () => {
     );
   });
 
-  it('resolves selected custom model with no billing', async () => {
+  it('resolves selected custom model with platform token billing', async () => {
     mockGetUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
       source: 'custom',
@@ -148,14 +148,14 @@ describe('resolveUserLlmRuntime', () => {
 
     await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
       source: 'custom',
-      billingMode: 'none',
+      billingMode: 'metered',
       providerKey: 'custom:user-1',
       piApi: 'anthropic-messages',
       model: 'claude-sonnet-4-20250514',
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
-      inputTokenPricePerMillionCents: 0,
-      outputTokenPricePerMillionCents: 0,
+      inputTokenPricePerMillionCents: 200,
+      outputTokenPricePerMillionCents: 200,
     });
   });
 

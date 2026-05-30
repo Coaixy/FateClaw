@@ -19,6 +19,7 @@ import {
 } from '@/features/model-settings/api';
 import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
 import { OfficialModelPriceTags } from './official-model-price-tags';
+import { customModelPlatformFeeLabel } from './model-pricing';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none focus:border-hairline';
@@ -204,9 +205,18 @@ function CustomModelSection({
           <ServerCog size={15} className="text-muted" />
           自配模型
         </div>
-        <span className="rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
-          {hasSecret ? '已保存密钥' : '未保存密钥'}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
+            {customModelPlatformFeeLabel()}
+          </span>
+          <span className="rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
+            {hasSecret ? '已保存密钥' : '未保存密钥'}
+          </span>
+        </div>
+      </div>
+      <div className="mb-3 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
+        模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
+        合计收取平台服务费，每百万 Token 软妹币 2.00。
       </div>
       <CustomModelFields
         custom={custom}

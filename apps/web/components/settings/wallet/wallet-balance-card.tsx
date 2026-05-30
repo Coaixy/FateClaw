@@ -4,7 +4,6 @@ type WalletBalanceCardProps = {
   availableCents: number;
   purchasedCents: number;
   bonusCents: number;
-  earnedCents: number;
   reservedCents: number;
 };
 
@@ -12,7 +11,6 @@ export function WalletBalanceCard({
   availableCents,
   purchasedCents,
   bonusCents,
-  earnedCents,
   reservedCents,
 }: WalletBalanceCardProps) {
   return (
@@ -40,13 +38,6 @@ export function WalletBalanceCard({
             value={formatCents(reservedCents)}
             valueClassName="text-muted"
           />
-          {earnedCents > 0 && (
-            <WalletBalanceItem
-              label="创作收益"
-              value={formatCents(earnedCents)}
-              valueClassName="text-primary"
-            />
-          )}
         </div>
       </div>
     </section>

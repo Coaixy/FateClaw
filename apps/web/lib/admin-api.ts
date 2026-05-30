@@ -142,7 +142,6 @@ export interface AdminUser {
   estimated_monthly_total_cents: number;
   purchased_cents: number;
   bonus_cents: number;
-  earned_cents: number;
   reserved_cents: number;
   available_cents: number;
 }
@@ -153,7 +152,7 @@ export interface WalletTransaction {
   kind: string;
   amount_cents: number;
   reserved_delta_cents: number;
-  balance_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+  balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
   note: string | null;
@@ -504,7 +503,6 @@ export const admin = {
       success: boolean;
       purchased_cents: number;
       bonus_cents: number;
-      earned_cents: number;
       reserved_cents: number;
       available_cents: number;
     }>(`/api/admin/users/${encodeURIComponent(id)}/balance/adjust`, {
@@ -608,68 +606,7 @@ export const admin = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  listWithdrawals: (opts?: {
-    status?: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-    creator_id?: string;
-    limit?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.status) params.set('status', opts.status);
-    if (opts?.creator_id) params.set('creator_id', opts.creator_id);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return adminRequest<AdminWithdrawal[]>(
-      `/api/admin/withdrawals${qs ? `?${qs}` : ''}`,
-    );
-  },
-  approveWithdrawal: (
-    id: string,
-    data?: {
-      tax_amount_yuan?: string;
-      net_amount_yuan?: string;
-      platform_fee_cents?: number;
-      note?: string;
-    },
-  ) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/withdrawals/${encodeURIComponent(id)}/approve`,
-      { method: 'POST', body: JSON.stringify(data ?? {}) },
-    ),
-  rejectWithdrawal: (id: string, data: { note: string }) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/withdrawals/${encodeURIComponent(id)}/reject`,
-      { method: 'POST', body: JSON.stringify(data) },
-    ),
-  markWithdrawalPaid: (id: string, data: { payment_proof: string }) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/withdrawals/${encodeURIComponent(id)}/mark-paid`,
-      { method: 'POST', body: JSON.stringify(data) },
-    ),
 };
-
-export interface AdminWithdrawal {
-  id: string;
-  creator_id: string;
-  amount_cents: number;
-  amount_yuan: string;
-  status: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-  bank_name: string | null;
-  bank_account: string | null;
-  account_name: string | null;
-  id_number_masked: string | null;
-  tax_type: 'personal' | 'company' | null;
-  company_name: string | null;
-  tax_id: string | null;
-  platform_fee_cents: number;
-  tax_amount_yuan: string;
-  net_amount_yuan: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  paid_at: string | null;
-  payment_proof: string | null;
-  created_at: string;
-}
 
 // Conversation Logs (re-use types from user API)
 export interface TranscriptEvent {

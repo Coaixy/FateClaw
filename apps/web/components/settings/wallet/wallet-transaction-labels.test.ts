@@ -6,7 +6,7 @@ import {
 } from './wallet-transaction-labels';
 
 describe('walletTransactionBadgeLabel', () => {
-  it('labels official model token charges as deductions, not recharge', () => {
+  it('labels model token charges as deductions, not recharge', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'overage_charge',
@@ -28,7 +28,7 @@ describe('walletTransactionBadgeLabel', () => {
 });
 
 describe('isWalletTransactionVisible', () => {
-  it('hides official model token charges from wallet flow', () => {
+  it('hides model token charges from wallet flow', () => {
     expect(
       isWalletTransactionVisible({
         id: 'wtx-1',
@@ -39,7 +39,7 @@ describe('isWalletTransactionVisible', () => {
         balance_source: 'bonus',
         balance_grant_id: 'batch-1',
         request_id: 'request-1',
-        note: '官方模型 Token 扣费（赠送余额批次）',
+        note: '模型 Token 扣费',
         metadata: null,
         created_at: '2026-05-28T00:00:01.000Z',
       }),

@@ -1,98 +1,23 @@
 import type {
   BundleSubscriptionSourceDto,
-  CreatorEarningsMonthlyDto,
-  CreatorWithdrawalDto,
   MarketBundleDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
   SharedSkillPreviewDto,
   SubscribedSkillDto,
   UserCustomSkillDto,
-  WithdrawalBalanceDto,
-  WithdrawalRequestResponseDto,
 } from '@fateclaw/contracts/skills';
 
 import type {
-  CreatorEarningsMonthly,
   SkillBundle,
   SkillPriceTier,
-  CreatorWithdrawal,
-  User,
   UserCustomSkill,
 } from '../shared/types.js';
-import {
-  maskIdNumber,
-  safeDecryptSkillSensitiveValue,
-} from '../modules/skills/skills-service.js';
 
 /**
  * 公开分享与订阅场景不再暴露创作者联系方式，只返回统一的安全标识。
  */
 const PUBLIC_AUTHOR_LABEL = '匿名作者';
-
-/**
- * 创作者与提现相关 DTO 映射。
- * 这里集中处理脱敏逻辑，避免 route 层重复拼装。
- */
-export function toCreatorWithdrawalDto(
-  row: CreatorWithdrawal,
-): CreatorWithdrawalDto {
-  return {
-    id: row.id,
-    amount_cents: row.amount_cents,
-    amount_yuan: row.amount_yuan,
-    status: row.status,
-    bank_name: row.bank_name,
-    bank_account: row.bank_account,
-    account_name: row.account_name,
-    id_number_masked: row.id_number
-      ? maskIdNumber(safeDecryptSkillSensitiveValue(row.id_number))
-      : null,
-    tax_type: row.tax_type,
-    platform_fee_cents: row.platform_fee_cents,
-    tax_amount_yuan: row.tax_amount_yuan,
-    net_amount_yuan: row.net_amount_yuan,
-    review_note: row.review_note,
-    reviewed_at: row.reviewed_at,
-    paid_at: row.paid_at,
-    created_at: row.created_at,
-  };
-}
-
-export function toCreatorEarningsMonthlyDtos(
-  rows: CreatorEarningsMonthly[],
-): CreatorEarningsMonthlyDto[] {
-  return rows;
-}
-
-export function toWithdrawalBalanceDto(user: User): WithdrawalBalanceDto {
-  const withdrawable = Math.max(
-    0,
-    user.earned_cents - user.pending_withdrawal_cents,
-  );
-
-  return {
-    earned_cents: user.earned_cents,
-    pending_withdrawal_cents: user.pending_withdrawal_cents,
-    withdrawable_cents: withdrawable,
-    withdrawable_yuan: (withdrawable / 100).toFixed(2),
-  };
-}
-
-export function toWithdrawalRequestResponseDto(
-  row: Pick<
-    CreatorWithdrawal,
-    'id' | 'amount_cents' | 'amount_yuan' | 'status' | 'created_at'
-  >,
-): WithdrawalRequestResponseDto {
-  return {
-    id: row.id,
-    amount_cents: row.amount_cents,
-    amount_yuan: row.amount_yuan,
-    status: row.status,
-    created_at: row.created_at,
-  };
-}
 
 function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
   return {

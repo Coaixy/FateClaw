@@ -42,6 +42,7 @@ export interface ResolvedProviderSecret {
 
 export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
+const CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS = 200;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -255,7 +256,7 @@ async function resolveCustomRuntime(
   });
   return {
     source: 'custom',
-    billingMode: 'none',
+    billingMode: 'metered',
     modelConfigId: userId,
     providerKey: `custom:${userId}`,
     piApi: config.pi_api,
@@ -267,8 +268,10 @@ async function resolveCustomRuntime(
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    inputTokenPricePerMillionCents: 0,
-    outputTokenPricePerMillionCents: 0,
+    inputTokenPricePerMillionCents:
+      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS,
+    outputTokenPricePerMillionCents:
+      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS,
   };
 }
 

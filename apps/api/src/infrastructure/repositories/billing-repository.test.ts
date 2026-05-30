@@ -22,12 +22,6 @@ vi.mock('../logger.js', () => ({
   },
 }));
 
-vi.mock('../config.js', () => ({
-  JWT_SECRET: 'test-secret',
-  WITHDRAWAL_ENCRYPTION_KEY:
-    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-}));
-
 import {
   deductBalanceCents,
   getVisibleWalletTransactionsByUserId,

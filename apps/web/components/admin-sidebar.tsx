@@ -14,7 +14,6 @@ import {
   Clock,
   Puzzle,
   ScrollText,
-  Wallet,
   Settings2,
   LogOut,
   Menu,
@@ -30,7 +29,6 @@ const navItems = [
   { href: '/admin/skills', label: '技能', icon: Puzzle },
   { href: '/admin/logs', label: '日志', icon: ScrollText },
   { href: '/admin/system', label: '系统配置', icon: Settings2 },
-  { href: '/admin/withdrawals', label: '提现审核', icon: Wallet },
 ];
 
 export function AdminSidebar() {

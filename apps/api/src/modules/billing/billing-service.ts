@@ -8,6 +8,7 @@
 import type {
   BillingStatusDto,
   DailyUsageRowDto,
+  PublicStatusStatsDto,
   UsageStatsDto,
   WalletTransactionDto,
 } from '@fateclaw/contracts/billing';
@@ -25,6 +26,7 @@ import {
 } from '../../infrastructure/db.js';
 import {
   getDailyUsageRows,
+  getPublicStatusStats,
   getUsageStats,
 } from '../../infrastructure/daily-usage.js';
 import {
@@ -56,10 +58,8 @@ export async function getBillingOverview(
       estimated_monthly_total_cents: billing.chargedCents,
       purchased_cents: wallet.purchasedCents,
       bonus_cents: wallet.bonusCents,
-      earned_cents: wallet.earnedCents,
       reserved_cents: wallet.reservedCents,
       available_cents: wallet.availableCents,
-      pending_withdrawal_cents: wallet.pendingWithdrawalCents,
     }),
   );
 }
@@ -82,6 +82,12 @@ export async function getBillingDailyUsage(
     return fail(404, '用户不存在');
   }
   return ok(toDailyUsageRowsDto(await getDailyUsageRows(user.id)));
+}
+
+export async function getPublicStatusOverview(): Promise<
+  ServiceResult<PublicStatusStatsDto>
+> {
+  return ok(await getPublicStatusStats());
 }
 
 export async function getBillingTransactions(

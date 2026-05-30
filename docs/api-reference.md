@@ -503,13 +503,9 @@ Authorization: Bearer <token>
 - `GET /api/skills/market`：公开 Skill 市场
 - `GET /api/skills/bundles/market`：公开 Bundle 市场
 - `GET /api/skills/subscriptions/mine`：我的订阅
-- `GET /api/skills/earnings/mine`：创作者收益
 - `GET /api/skills/creator/:creatorId/bundle`：创作者整包信息
 - `PUT /api/skills/creator/bundle/tiers`：设置整包档位
 - `POST /api/skills/creator/:creatorId/bundle/subscribe`：订阅创作者整包
-- `POST /api/skills/creator/withdrawal/request`：发起提现申请
-- `GET /api/skills/creator/withdrawal/list`：提现记录
-- `GET /api/skills/creator/withdrawal/balance`：可提现金额汇总
 
 ---
 
@@ -558,6 +554,22 @@ Authorization: Bearer <token>
     "official_model_charge_cents": 36
   }
 ]
+```
+
+---
+
+### GET /api/billing/status
+
+查询状态页面展示的全站今日统计。需认证。
+
+**Response 200**
+
+```json
+{
+  "today_messages": 126,
+  "registered_users": 42,
+  "today_total_tokens": 905000
+}
 ```
 
 ---
@@ -788,10 +800,8 @@ Authorization: Bearer <token>
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
 | `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
-| `WITHDRAWAL_ENCRYPTION_KEY` | -                       | 提现敏感字段加密密钥               |
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runner 入口选择：`auto` / `src` / `dist` |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
-| `PLATFORM_CUT_PERCENT`      | `30`                    | 创作者订阅收入平台抽成百分比       |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_logs.trace_events` 保留天数 |
 
 模型 Provider 当前主要通过管理后台 `/api/admin/system-config` 写入数据库；AI 请求消费宿主下发的 `llmRuntime`，不依赖进程级模型密钥。

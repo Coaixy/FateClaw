@@ -14,9 +14,7 @@ export function toUserDto(user: User): UserDto {
     role: user.role,
     purchased_cents: user.purchased_cents,
     bonus_cents: user.bonus_cents,
-    earned_cents: user.earned_cents,
     reserved_cents: user.reserved_cents,
-    pending_withdrawal_cents: user.pending_withdrawal_cents,
     created_at: user.created_at,
   };
 }

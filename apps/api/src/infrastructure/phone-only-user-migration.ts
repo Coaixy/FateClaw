@@ -92,17 +92,6 @@ async function deleteInvalidPhoneUserCommerceData(
         WHERE cfg.creator_id = doomed.id;
       END IF;
 
-      IF to_regclass('public.creator_withdrawals') IS NOT NULL THEN
-        DELETE FROM creator_withdrawals w
-        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
-        WHERE w.creator_id = doomed.id;
-      END IF;
-
-      IF to_regclass('public.creator_earnings_monthly') IS NOT NULL THEN
-        DELETE FROM creator_earnings_monthly e
-        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
-        WHERE e.creator_id = doomed.id;
-      END IF;
     END $$;
   `);
 }

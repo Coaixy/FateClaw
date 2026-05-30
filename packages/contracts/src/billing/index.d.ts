@@ -11,6 +11,12 @@ export interface UsageStatsDto {
   today_output_tokens: number;
 }
 
+export interface PublicStatusStatsDto {
+  today_messages: number;
+  registered_users: number;
+  today_total_tokens: number;
+}
+
 export interface DailyUsageRowDto {
   date: string;
   msg_count: number;
@@ -26,7 +32,7 @@ export interface WalletTransactionDto {
   kind: string;
   amount_cents: number;
   reserved_delta_cents: number;
-  balance_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+  balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
   note: string | null;
@@ -39,10 +45,8 @@ export interface BillingStatusDto {
   estimated_monthly_total_cents: number;
   purchased_cents: number;
   bonus_cents: number;
-  earned_cents: number;
   reserved_cents: number;
   available_cents: number;
-  pending_withdrawal_cents: number;
 }
 
 export type RechargePayTypeDto = 'alipay' | 'wechat';

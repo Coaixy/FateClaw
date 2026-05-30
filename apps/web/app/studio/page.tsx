@@ -10,10 +10,8 @@ import {
   Plus,
   Puzzle,
   Share2,
-  TrendingUp,
   Upload,
   Users,
-  Wallet,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -24,13 +22,11 @@ import { SkillSkeleton } from '@/components/skills/skill-skeleton';
 import { SubscribedBundleGroup } from '@/components/skills/subscribed-bundle-group';
 import { SubscribedSkillCard } from '@/components/skills/subscribed-skill-card';
 import {
-  CreatorEarningsMonthly,
   SkillBundle,
   UserCustomSkill,
   skillsApi,
 } from '@/features/skills/api';
 import { useBundles } from '@/features/skills/hooks/use-bundles';
-import { useCreatorEarnings } from '@/features/skills/hooks/use-creator-earnings';
 import { useUserSkills } from '@/features/skills/hooks/use-user-skills';
 import { groupSubscribedSkills } from '@/features/skills/subscription-groups';
 import {
@@ -39,7 +35,6 @@ import {
 } from '@/features/skills/skill-zip';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useConfirm } from '@/lib/use-confirm';
-import { formatCents } from '@/lib/money';
 import { useToast } from '@/lib/use-toast';
 
 export default function StudioPage() {
@@ -59,11 +54,9 @@ export default function StudioPage() {
   );
   const userSkills = useUserSkills(notify);
   const bundlesState = useBundles(notify);
-  const creatorEarnings = useCreatorEarnings();
   const { ownSkills, subscribedSkills, loadUserSkills, applyUserSkills } =
     userSkills;
   const { bundles, loadBundles, setBundles } = bundlesState;
-  const { setEarnings, stats: earningsStats } = creatorEarnings;
 
   useEffect(() => {
     if (!user) return;
@@ -71,13 +64,11 @@ export default function StudioPage() {
     Promise.all([
       skillsApi.userList(),
       skillsApi.bundleList().catch(() => [] as SkillBundle[]),
-      skillsApi.earningsMine().catch(() => [] as CreatorEarningsMonthly[]),
     ])
-      .then(([s, b, e]) => {
+      .then(([s, b]) => {
         if (cancelled) return;
         applyUserSkills(s);
         setBundles(Array.isArray(b) ? b : []);
-        setEarnings(Array.isArray(e) ? e : []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -92,7 +83,7 @@ export default function StudioPage() {
     return () => {
       cancelled = true;
     };
-  }, [applyUserSkills, setBundles, setEarnings, toast, user]);
+  }, [applyUserSkills, setBundles, toast, user]);
 
   const stats = useMemo(() => {
     const sharedCount = ownSkills.filter(
@@ -102,9 +93,9 @@ export default function StudioPage() {
       (sum, s) => sum + (s.stat_subscriber_count ?? 0),
       0,
     );
-    const { thisMonthNet, lifetimeNet } = earningsStats;
-    return { sharedCount, totalSubs, thisMonthNet, lifetimeNet };
-  }, [earningsStats, ownSkills]);
+    const bundleCount = bundles.length;
+    return { sharedCount, totalSubs, bundleCount };
+  }, [bundles.length, ownSkills]);
 
   const subscribedGroups = useMemo(
     () => groupSubscribedSkills(subscribedSkills),
@@ -372,26 +363,25 @@ export default function StudioPage() {
         {/* Stat cards */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard
-            label="本月净收入"
-            value={formatCents(stats.thisMonthNet)}
-            Icon={Wallet}
-            hint="扣除平台分成后"
-          />
-          <StatCard
-            label="累计净收入"
-            value={formatCents(stats.lifetimeNet)}
-            Icon={TrendingUp}
-          />
-          <StatCard
             label="已共享技能"
             value={String(stats.sharedCount)}
             Icon={Puzzle}
             hint="链接分享或公开上架"
           />
           <StatCard
+            label="技能捆绑包"
+            value={String(stats.bundleCount)}
+            Icon={Layers}
+          />
+          <StatCard
             label="总订阅人数"
             value={String(stats.totalSubs)}
             Icon={Users}
+          />
+          <StatCard
+            label="自有技能"
+            value={String(ownSkills.length)}
+            Icon={BookOpen}
           />
         </section>
 

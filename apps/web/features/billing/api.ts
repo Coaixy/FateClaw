@@ -2,6 +2,7 @@ import type {
   BillingStatusDto,
   CreateRechargeOrderResponseDto,
   DailyUsageRowDto,
+  PublicStatusStatsDto,
   RechargeOrderDto,
   RechargePayTypeDto,
   RechargeStatsDto,
@@ -16,6 +17,7 @@ export type BillingStatus = BillingStatusDto;
 export type WalletTransaction = WalletTransactionDto;
 export type UsageStats = UsageStatsDto;
 export type DailyUsageRow = DailyUsageRowDto;
+export type PublicStatusStats = PublicStatusStatsDto;
 export type RechargePayType = RechargePayTypeDto;
 export type RechargeOrder = RechargeOrderDto;
 export type RechargeStats = RechargeStatsDto;
@@ -61,6 +63,8 @@ export const billingApi = {
   },
   dailyUsage: () =>
     requestJson<DailyUsageRow[]>('/api/billing/usage/daily'),
+  publicStatus: () =>
+    requestJson<PublicStatusStats>('/api/billing/status'),
   transactions: () =>
     requestJson<WalletTransaction[]>('/api/billing/transactions'),
   rechargeOrders: () =>

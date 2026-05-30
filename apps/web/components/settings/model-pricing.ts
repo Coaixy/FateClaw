@@ -1,4 +1,5 @@
 const CENTS_PER_YUAN = 100;
+export const CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS = 200;
 
 export type OfficialModelPricingInput = {
   input_token_price_per_million_cents: number;
@@ -49,4 +50,8 @@ export function officialModelPriceLabel(
     tokenPricePart('输入', input.input_token_price_per_million_cents),
     tokenPricePart('输出', input.output_token_price_per_million_cents),
   ].join(' · ');
+}
+
+export function customModelPlatformFeeLabel(): string {
+  return `平台 Token 服务费 ${officialModelYuanLabel(CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS)} / 百万 Token`;
 }

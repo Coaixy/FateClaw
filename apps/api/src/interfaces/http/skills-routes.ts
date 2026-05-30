@@ -2,24 +2,16 @@ import crypto from 'crypto';
 
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type {
-  CreatorWithdrawalDto,
-  WithdrawalBalanceDto,
-  WithdrawalRequestResponseDto,
-} from '@fateclaw/contracts/skills';
 
 import {
   createSkillBundle,
   createUserCustomSkill,
-  createWithdrawalRequest,
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
   getCreatorBundleConfig,
-  getCreatorEarnings,
   getSkillByShareToken,
   getSubscribedSkills,
-  getUserById,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
@@ -27,7 +19,6 @@ import {
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
-  listWithdrawalsForCreator,
   publishSkillBundle,
   publishUserCustomSkill,
   MAX_SKILL_BUNDLE_FILE_LENGTH,
@@ -55,15 +46,11 @@ import {
 } from '../../modules/skills/skills-service.js';
 
 import {
-  toCreatorEarningsMonthlyDtos,
-  toCreatorWithdrawalDto,
   toMarketBundleDtos,
   toMarketSkillDtos,
   toSharedBundlePreviewDto,
   toSharedSkillPreviewDto,
   toSubscribedSkillDtos,
-  toWithdrawalBalanceDto,
-  toWithdrawalRequestResponseDto,
 } from '../../contracts-adapter/skills-contract.js';
 import type {
   CreatorBundleTier,
@@ -574,13 +561,6 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     );
   });
 
-  // GET /api/skills/earnings/mine — 创作者收益
-  app.get('/earnings/mine', async (request) => {
-    await request.requireAuth();
-    const earnings = await getCreatorEarnings(request.user.userId);
-    return toCreatorEarningsMonthlyDtos(earnings);
-  });
-
   // GET /api/skills/creator/:creatorId/bundle — 获取创作者整包信息
   app.get('/creator/:creatorId/bundle', async (request) => {
     const { creatorId } = request.params as { creatorId: string };
@@ -628,54 +608,5 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       durationDays: tier.duration_days,
     });
     return result;
-  });
-
-  // POST /api/skills/creator/withdrawal/request — 创作者发起提现申请
-  const WithdrawalRequestSchema = z.object({
-    amount_cents: z.number().int().positive(),
-    bank_name: z.string().max(80).optional(),
-    bank_account: z.string().max(40).optional(),
-    account_name: z.string().max(80).optional(),
-    id_number: z.string().max(40).optional(), // 明文，服务端加密后入库
-    tax_type: z.enum(['personal', 'company']).optional(),
-    company_name: z.string().max(120).optional(),
-    tax_id: z.string().max(40).optional(),
-  });
-  app.post('/creator/withdrawal/request', async (request, reply) => {
-    await request.requireAuth();
-    const body = WithdrawalRequestSchema.parse(request.body);
-    try {
-      const wd = await createWithdrawalRequest({
-        creatorId: request.user.userId,
-        amountCents: body.amount_cents,
-        bankName: body.bank_name ?? null,
-        bankAccount: body.bank_account ?? null,
-        accountName: body.account_name ?? null,
-        idNumber: body.id_number ?? null,
-        taxType: body.tax_type ?? null,
-        companyName: body.company_name ?? null,
-        taxId: body.tax_id ?? null,
-      });
-      return toWithdrawalRequestResponseDto(wd) as WithdrawalRequestResponseDto;
-    } catch (err) {
-      return reply
-        .code(400)
-        .send({ error: err instanceof Error ? err.message : '申请失败' });
-    }
-  });
-
-  // GET /api/skills/creator/withdrawal/list — 查询本人提现记录
-  app.get('/creator/withdrawal/list', async (request) => {
-    await request.requireAuth();
-    const rows = await listWithdrawalsForCreator(request.user.userId, 50);
-    return rows.map((r) => toCreatorWithdrawalDto(r)) as CreatorWithdrawalDto[];
-  });
-
-  // GET /api/skills/creator/withdrawal/balance — 查询可提现金额汇总
-  app.get('/creator/withdrawal/balance', async (request, reply) => {
-    await request.requireAuth();
-    const user = await getUserById(request.user.userId);
-    if (!user) return reply.code(404).send({ error: '用户不存在' });
-    return toWithdrawalBalanceDto(user) as WithdrawalBalanceDto;
   });
 }

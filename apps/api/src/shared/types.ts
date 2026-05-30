@@ -10,14 +10,12 @@ export interface User {
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
   purchased_cents: number; // 充值余额（不过期，可消费）
   bonus_cents: number; // 赠送余额（可过期，消费优先扣）
-  earned_cents: number; // 创作者收益（仅通过提现通道流出）
   reserved_cents: number; // 请求级预扣
-  pending_withdrawal_cents: number; // 已申请提现中冻结的 earned_cents
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   created_at: string;
 }
 
-export type BalanceSource = 'purchased' | 'bonus' | 'earned' | 'mixed';
+export type BalanceSource = 'purchased' | 'bonus' | 'mixed';
 
 export type BalanceGrantSource =
   | 'new_user_gift'
@@ -37,40 +35,6 @@ export interface BalanceGrant {
   note: string | null;
   expires_at: string | null;
   status: BalanceGrantStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-export type WithdrawalStatus =
-  | 'pending'
-  | 'approved'
-  | 'rejected'
-  | 'paid'
-  | 'cancelled';
-
-export type WithdrawalTaxType = 'personal' | 'company';
-
-export interface CreatorWithdrawal {
-  id: string;
-  creator_id: string;
-  amount_cents: number;
-  amount_yuan: string; // NUMERIC -> string
-  status: WithdrawalStatus;
-  bank_name: string | null;
-  bank_account: string | null;
-  account_name: string | null;
-  id_number: string | null; // AES-GCM 加密后 base64
-  tax_type: WithdrawalTaxType | null;
-  company_name: string | null;
-  tax_id: string | null;
-  platform_fee_cents: number;
-  tax_amount_yuan: string;
-  net_amount_yuan: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  paid_at: string | null;
-  payment_proof: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -188,16 +152,6 @@ export interface Account {
   enabled: boolean;
   created_at: string; // ISO timestamp
   owner_id: string | null; // references users.id
-}
-
-export interface CreatorEarningsMonthly {
-  creator_id: string;
-  year_month: string;
-  gross_cents: number;
-  platform_cut_cents: number;
-  net_cents: number;
-  withdrawn_cents: number;
-  updated_at: string;
 }
 
 export interface NewMessage {

@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
   Compass,
+  Activity,
   LogOut,
   ServerCog,
   Sparkle,
@@ -85,6 +86,12 @@ export function UserMenuDropdown({
             href="/settings/advanced"
             icon={ServerCog}
             label="模型设置"
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/status"
+            icon={Activity}
+            label="状态"
             onNavigate={onNavigate}
           />
         </MenuSection>

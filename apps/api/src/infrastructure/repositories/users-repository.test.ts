@@ -31,9 +31,7 @@ function user(overrides: Partial<User> = {}): User {
     role: 'consumer',
     purchased_cents: 0,
     bonus_cents: 0,
-    earned_cents: 0,
     reserved_cents: 0,
-    pending_withdrawal_cents: 0,
     created_at: '2026-05-27T00:00:00.000Z',
     ...overrides,
   };
@@ -74,9 +72,7 @@ describe('users repository', () => {
       input.role,
       input.purchased_cents,
       input.bonus_cents,
-      input.earned_cents,
       input.reserved_cents,
-      input.pending_withdrawal_cents,
       input.created_at,
     ]);
   });

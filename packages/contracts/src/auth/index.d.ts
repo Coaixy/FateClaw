@@ -11,9 +11,7 @@ export interface UserDto {
   role: UserRole;
   purchased_cents: number;
   bonus_cents: number;
-  earned_cents: number;
   reserved_cents: number;
-  pending_withdrawal_cents: number;
   created_at: string;
 }
 

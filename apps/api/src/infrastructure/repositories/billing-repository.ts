@@ -1,7 +1,5 @@
-import crypto from 'node:crypto';
 import pg from 'pg';
 
-import { JWT_SECRET, WITHDRAWAL_ENCRYPTION_KEY } from '../config.js';
 import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
 import { getUserByIdUsing } from './users-repository.js';
@@ -26,7 +24,7 @@ export interface WalletTransactionRow {
   kind: string;
   amount_cents: number;
   reserved_delta_cents: number;
-  balance_source: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+  balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
   note: string | null;
@@ -40,14 +38,12 @@ export interface WalletTransactionRow {
  */
 function inferBalanceSourceFromKind(
   kind: string,
-): 'purchased' | 'bonus' | 'earned' | 'mixed' | null {
+): 'purchased' | 'bonus' | 'mixed' | null {
   switch (kind) {
     case 'recharge_topup':
     case 'manual_topup':
     case 'manual_adjustment':
       return 'purchased';
-    case 'creator_revenue':
-      return 'earned';
     case 'overage_charge':
     case 'skill_subscription':
     case 'bundle_subscription':
@@ -135,7 +131,7 @@ export async function insertWalletTransaction(
     kind: string;
     amountCents?: number;
     reservedDeltaCents?: number;
-    balanceSource?: 'purchased' | 'bonus' | 'earned' | 'mixed' | null;
+    balanceSource?: 'purchased' | 'bonus' | 'mixed' | null;
     balanceGrantId?: string | null;
     requestId?: string | null;
     note?: string | null;
@@ -873,402 +869,6 @@ export async function getBalanceGrantsByUserId(
   return rows as BalanceGrantRow[];
 }
 
-// =====================
-// --- Creator withdrawals / 创作者提现通道 ---
-// =====================
-
-/**
- * 派生 AES-GCM 加密密钥。配置了 WITHDRAWAL_ENCRYPTION_KEY 时使用该值（hex 64 字符），
- * 未配置时用 JWT_SECRET 派生（仅开发环境兜底，生产必须显式配置）。
- */
-function getWithdrawalCipherKey(): Buffer {
-  if (WITHDRAWAL_ENCRYPTION_KEY && WITHDRAWAL_ENCRYPTION_KEY.length >= 64) {
-    return Buffer.from(WITHDRAWAL_ENCRYPTION_KEY.slice(0, 64), 'hex');
-  }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '生产环境必须配置 WITHDRAWAL_ENCRYPTION_KEY（64 字符 hex，可用 `openssl rand -hex 32` 生成）',
-    );
-  }
-  // 开发/测试环境：从 JWT_SECRET 派生（SHA-256 取前 32 字节），一次性警告
-  if (!derivedKeyWarned) {
-    logger.warn(
-      '未配置 WITHDRAWAL_ENCRYPTION_KEY，开发环境使用 JWT_SECRET 派生兜底密钥',
-    );
-    derivedKeyWarned = true;
-  }
-  return crypto.createHash('sha256').update(JWT_SECRET).digest();
-}
-let derivedKeyWarned = false;
-
-/** AES-256-GCM 加密。输出格式：base64(iv[12] || ciphertext || authTag[16]) */
-export function encryptSensitive(plaintext: string): string {
-  if (!plaintext) return '';
-  const key = getWithdrawalCipherKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, enc, tag]).toString('base64');
-}
-
-export function decryptSensitive(encoded: string | null | undefined): string {
-  if (!encoded) return '';
-  const buf = Buffer.from(encoded, 'base64');
-  if (buf.length < 12 + 16) throw new Error('密文格式错误');
-  const iv = buf.subarray(0, 12);
-  const tag = buf.subarray(buf.length - 16);
-  const ciphertext = buf.subarray(12, buf.length - 16);
-  const key = getWithdrawalCipherKey();
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  const dec = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return dec.toString('utf8');
-}
-
-/** 脱敏显示身份证号：只保留前 4 位和后 4 位 */
-export function maskIdNumber(id: string): string {
-  if (!id) return '';
-  if (id.length <= 8) return '*'.repeat(id.length);
-  return `${id.slice(0, 4)}${'*'.repeat(id.length - 8)}${id.slice(-4)}`;
-}
-
-export interface CreatorWithdrawalRow {
-  id: string;
-  creator_id: string;
-  amount_cents: number;
-  amount_yuan: string; // NUMERIC as string
-  status: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-  bank_name: string | null;
-  bank_account: string | null;
-  account_name: string | null;
-  id_number: string | null; // AES-GCM 密文 (base64)
-  tax_type: 'personal' | 'company' | null;
-  company_name: string | null;
-  tax_id: string | null;
-  platform_fee_cents: number;
-  tax_amount_yuan: string;
-  net_amount_yuan: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  paid_at: string | null;
-  payment_proof: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * 创作者发起提现申请。冻结 pending_withdrawal_cents（不动 earned_cents）。
- * 校验：amount_cents > 0 且 earned_cents - pending_withdrawal_cents >= amount_cents。
- */
-export async function createWithdrawalRequest(input: {
-  creatorId: string;
-  amountCents: number;
-  bankName?: string | null;
-  bankAccount?: string | null;
-  accountName?: string | null;
-  idNumber?: string | null; // 明文传入，函数内部加密
-  taxType?: 'personal' | 'company' | null;
-  companyName?: string | null;
-  taxId?: string | null;
-}): Promise<CreatorWithdrawalRow> {
-  if (input.amountCents <= 0) {
-    throw new Error('提现金额必须为正');
-  }
-  const withdrawalId = `wd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const user = await getUserByIdUsing(client, input.creatorId, {
-      forUpdate: true,
-    });
-    if (!user) throw new Error('用户不存在');
-
-    const withdrawable = user.earned_cents - user.pending_withdrawal_cents;
-    if (withdrawable < input.amountCents) {
-      throw new Error(
-        `可提现余额不足：可用 ${withdrawable} 分，申请 ${input.amountCents} 分`,
-      );
-    }
-
-    // 金额以分存储，提交给提现记录时转成元字符串。
-    const amountYuan = (input.amountCents / 100).toFixed(2);
-
-    await client.query(
-      `UPDATE users
-       SET pending_withdrawal_cents = pending_withdrawal_cents + $1
-       WHERE id = $2`,
-      [input.amountCents, input.creatorId],
-    );
-
-    const idNumberEncrypted = input.idNumber
-      ? encryptSensitive(input.idNumber)
-      : null;
-
-    const { rows } = await client.query(
-      `INSERT INTO creator_withdrawals
-        (id, creator_id, amount_cents, amount_yuan, status,
-         bank_name, bank_account, account_name, id_number,
-         tax_type, company_name, tax_id,
-         platform_fee_cents, tax_amount_yuan, net_amount_yuan,
-         created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'pending',
-               $5, $6, $7, $8,
-               $9, $10, $11,
-               0, 0, $4,
-               NOW(), NOW())
-       RETURNING *`,
-      [
-        withdrawalId,
-        input.creatorId,
-        input.amountCents,
-        amountYuan,
-        input.bankName ?? null,
-        input.bankAccount ?? null,
-        input.accountName ?? null,
-        idNumberEncrypted,
-        input.taxType ?? null,
-        input.companyName ?? null,
-        input.taxId ?? null,
-      ],
-    );
-
-    await client.query('COMMIT');
-    return rows[0] as CreatorWithdrawalRow;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export async function getWithdrawalById(
-  id: string,
-): Promise<CreatorWithdrawalRow | undefined> {
-  const { rows } = await pool.query(
-    'SELECT * FROM creator_withdrawals WHERE id = $1',
-    [id],
-  );
-  return rows[0] as CreatorWithdrawalRow | undefined;
-}
-
-export async function listWithdrawalsForCreator(
-  creatorId: string,
-  limit = 50,
-): Promise<CreatorWithdrawalRow[]> {
-  const { rows } = await pool.query(
-    `SELECT * FROM creator_withdrawals
-     WHERE creator_id = $1
-     ORDER BY created_at DESC
-     LIMIT $2`,
-    [creatorId, Math.min(limit, 200)],
-  );
-  return rows as CreatorWithdrawalRow[];
-}
-
-export async function listAllWithdrawals(opts?: {
-  status?: CreatorWithdrawalRow['status'];
-  creatorId?: string;
-  limit?: number;
-}): Promise<CreatorWithdrawalRow[]> {
-  const where: string[] = [];
-  const values: unknown[] = [];
-  let idx = 1;
-  if (opts?.status) {
-    where.push(`status = $${idx++}`);
-    values.push(opts.status);
-  }
-  if (opts?.creatorId) {
-    where.push(`creator_id = $${idx++}`);
-    values.push(opts.creatorId);
-  }
-  values.push(Math.min(opts?.limit ?? 50, 200));
-  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-  const { rows } = await pool.query(
-    `SELECT * FROM creator_withdrawals
-     ${whereClause}
-     ORDER BY created_at DESC
-     LIMIT $${idx}`,
-    values,
-  );
-  return rows as CreatorWithdrawalRow[];
-}
-
-/**
- * 审核通过：从 earned_cents 正式扣减、释放 pending、写 creator_earnings_monthly.withdrawn_cents + 流水。
- * taxAmountYuan / netAmountYuan / platformFeeCents 由管理员审核时决定。
- */
-export async function approveWithdrawal(input: {
-  withdrawalId: string;
-  reviewedBy: string;
-  taxAmountYuan?: string;
-  netAmountYuan?: string;
-  platformFeeCents?: number;
-  note?: string | null;
-}): Promise<CreatorWithdrawalRow> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows: wdRows } = await client.query(
-      'SELECT * FROM creator_withdrawals WHERE id = $1 FOR UPDATE',
-      [input.withdrawalId],
-    );
-    const wd = wdRows[0] as CreatorWithdrawalRow | undefined;
-    if (!wd) throw new Error('提现申请不存在');
-    if (wd.status !== 'pending') {
-      throw new Error(`当前状态 ${wd.status} 无法审核通过`);
-    }
-
-    const user = await getUserByIdUsing(client, wd.creator_id, {
-      forUpdate: true,
-    });
-    if (!user) throw new Error('创作者不存在');
-    if (user.earned_cents < wd.amount_cents) {
-      throw new Error('创作者可提现余额不足（earned_cents 异常）');
-    }
-
-    await client.query(
-      `UPDATE users
-       SET earned_cents = earned_cents - $1,
-           pending_withdrawal_cents = GREATEST(0, pending_withdrawal_cents - $1)
-       WHERE id = $2`,
-      [wd.amount_cents, wd.creator_id],
-    );
-
-    const taxAmountYuan = input.taxAmountYuan ?? '0';
-    const netAmountYuan = input.netAmountYuan ?? wd.amount_yuan;
-    const platformFeeCents = input.platformFeeCents ?? 0;
-
-    const { rows: updatedRows } = await client.query(
-      `UPDATE creator_withdrawals
-       SET status = 'approved',
-           reviewed_by = $1,
-           reviewed_at = NOW(),
-           review_note = $2,
-           tax_amount_yuan = $3,
-           net_amount_yuan = $4,
-           platform_fee_cents = $5,
-           updated_at = NOW()
-       WHERE id = $6
-       RETURNING *`,
-      [
-        input.reviewedBy,
-        input.note ?? null,
-        taxAmountYuan,
-        netAmountYuan,
-        platformFeeCents,
-        input.withdrawalId,
-      ],
-    );
-
-    // 更新当月 creator_earnings_monthly.withdrawn_cents
-    const yearMonth = new Date().toISOString().slice(0, 7);
-    await client.query(
-      `INSERT INTO creator_earnings_monthly
-         (creator_id, year_month,
-          gross_cents, platform_cut_cents, net_cents, withdrawn_cents,
-          updated_at)
-       VALUES ($1, $2, 0, 0, 0, $3, NOW())
-       ON CONFLICT (creator_id, year_month) DO UPDATE SET
-         withdrawn_cents = creator_earnings_monthly.withdrawn_cents + EXCLUDED.withdrawn_cents,
-         updated_at = NOW()`,
-      [wd.creator_id, yearMonth, wd.amount_cents],
-    );
-
-    await insertWalletTransaction(client, {
-      userId: wd.creator_id,
-      kind: 'withdrawal',
-      amountCents: -wd.amount_cents,
-      balanceSource: 'earned',
-      note: `提现申请批准：${wd.amount_yuan} 元`,
-      metadata: {
-        withdrawal_id: wd.id,
-        tax_amount_yuan: taxAmountYuan,
-        net_amount_yuan: netAmountYuan,
-        platform_fee_cents: platformFeeCents,
-      },
-    });
-
-    await client.query('COMMIT');
-    return updatedRows[0] as CreatorWithdrawalRow;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export async function rejectWithdrawal(input: {
-  withdrawalId: string;
-  reviewedBy: string;
-  note: string;
-}): Promise<CreatorWithdrawalRow> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows: wdRows } = await client.query(
-      'SELECT * FROM creator_withdrawals WHERE id = $1 FOR UPDATE',
-      [input.withdrawalId],
-    );
-    const wd = wdRows[0] as CreatorWithdrawalRow | undefined;
-    if (!wd) throw new Error('提现申请不存在');
-    if (wd.status !== 'pending') {
-      throw new Error(`当前状态 ${wd.status} 无法驳回`);
-    }
-
-    // 解冻 pending_withdrawal_cents
-    await client.query(
-      `UPDATE users
-       SET pending_withdrawal_cents = GREATEST(0, pending_withdrawal_cents - $1)
-       WHERE id = $2`,
-      [wd.amount_cents, wd.creator_id],
-    );
-
-    const { rows: updatedRows } = await client.query(
-      `UPDATE creator_withdrawals
-       SET status = 'rejected',
-           reviewed_by = $1,
-           reviewed_at = NOW(),
-           review_note = $2,
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
-      [input.reviewedBy, input.note, input.withdrawalId],
-    );
-
-    await client.query('COMMIT');
-    return updatedRows[0] as CreatorWithdrawalRow;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export async function markWithdrawalPaid(input: {
-  withdrawalId: string;
-  paymentProof: string;
-}): Promise<CreatorWithdrawalRow> {
-  const { rows } = await pool.query(
-    `UPDATE creator_withdrawals
-     SET status = 'paid',
-         paid_at = NOW(),
-         payment_proof = $1,
-         updated_at = NOW()
-     WHERE id = $2 AND status = 'approved'
-     RETURNING *`,
-    [input.paymentProof, input.withdrawalId],
-  );
-  if (rows.length === 0) {
-    throw new Error('提现申请不存在或状态不是已批准');
-  }
-  return rows[0] as CreatorWithdrawalRow;
-}
-
 /**
  * 管理员调整用户的充值余额（purchased_cents）。
  * 负数时会被 reserved_cents 兜底拦截，避免把可用余额打成负。
@@ -1599,7 +1199,7 @@ export async function settleUserModelChargeCents(
         amountCents: -actualChargeCents,
         balanceSource: deduction.balanceSource,
         requestId,
-        note: '官方模型 Token 扣费',
+        note: '模型 Token 扣费',
         metadata: {
           yearMonth: reservation.year_month,
           requestTokens,

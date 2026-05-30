@@ -11,9 +11,7 @@ import bcrypt from 'bcryptjs';
 
 import {
   adjustUserPurchasedBalance,
-  approveWithdrawal,
   createUser,
-  decryptSensitive,
   deleteConversationLogsByAccountIds,
   deleteUser,
   getAccountsByUserId,
@@ -35,12 +33,8 @@ import {
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
   grantBonusBalance,
-  listAllWithdrawals,
   listBillingRequestReservations,
-  markWithdrawalPaid,
-  maskIdNumber,
   reconcileStaleBillingReservations,
-  rejectWithdrawal,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
 } from '../../infrastructure/db.js';
@@ -73,7 +67,6 @@ const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 
 export {
   adjustUserPurchasedBalance,
-  approveWithdrawal,
   createOfficialModel,
   deleteConversationLogsByAccountIds,
   deleteUser,
@@ -94,10 +87,8 @@ export {
   getWalletTransactionsByUserId,
   grantBonusBalance,
   listBillingRequestReservations,
-  markWithdrawalPaid,
   reconcileStaleBillingReservations,
   removeOfficialModel,
-  rejectWithdrawal,
   setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
@@ -149,9 +140,7 @@ export async function createAdminUser(input: {
     role: input.role,
     purchased_cents: 0,
     bonus_cents: 0,
-    earned_cents: 0,
     reserved_cents: 0,
-    pending_withdrawal_cents: 0,
     created_at: now,
   };
 
@@ -182,12 +171,11 @@ export async function listAdminUsersWithStats(): Promise<
       active_tasks: number;
       usage: Awaited<ReturnType<typeof getUsageStats>>;
       monthly_tokens_used: number;
-      estimated_monthly_total_cents: number;
-      purchased_cents: number;
-      bonus_cents: number;
-      earned_cents: number;
-      reserved_cents: number;
-      available_cents: number;
+    estimated_monthly_total_cents: number;
+    purchased_cents: number;
+    bonus_cents: number;
+    reserved_cents: number;
+    available_cents: number;
     }
   >
 > {
@@ -211,7 +199,6 @@ export async function listAdminUsersWithStats(): Promise<
         estimated_monthly_total_cents: monthlyBilling.chargedCents,
         purchased_cents: wallet.purchasedCents,
         bonus_cents: wallet.bonusCents,
-        earned_cents: wallet.earnedCents,
         reserved_cents: wallet.reservedCents,
         available_cents: wallet.availableCents,
       };
@@ -234,7 +221,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     estimated_monthly_total_cents: number;
     purchased_cents: number;
     bonus_cents: number;
-    earned_cents: number;
     reserved_cents: number;
     available_cents: number;
   };
@@ -267,7 +253,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
       estimated_monthly_total_cents: monthlyBilling.chargedCents,
       purchased_cents: wallet.purchasedCents,
       bonus_cents: wallet.bonusCents,
-      earned_cents: wallet.earnedCents,
       reserved_cents: wallet.reservedCents,
       available_cents: wallet.availableCents,
     },
@@ -275,70 +260,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     usage,
     active_tasks: activeTasks,
   };
-}
-
-/**
- * 管理端提现列表统一做身份证脱敏。
- */
-export async function listAdminWithdrawalsMasked(input: {
-  status?: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-  creatorId?: string;
-  limit?: number;
-}) {
-  const rows = await listAllWithdrawals({
-    status: input.status,
-    creatorId: input.creatorId,
-    limit: input.limit,
-  });
-
-  return rows.map((row) => ({
-    id: row.id,
-    creator_id: row.creator_id,
-    amount_cents: row.amount_cents,
-    amount_yuan: row.amount_yuan,
-    status: row.status,
-    bank_name: row.bank_name,
-    bank_account: row.bank_account,
-    account_name: row.account_name,
-    id_number_masked: row.id_number
-      ? (() => {
-          try {
-            return maskIdNumber(decryptSensitive(row.id_number));
-          } catch {
-            return '解密失败';
-          }
-        })()
-      : null,
-    tax_type: row.tax_type,
-    company_name: row.company_name,
-    tax_id: row.tax_id,
-    platform_fee_cents: row.platform_fee_cents,
-    tax_amount_yuan: row.tax_amount_yuan,
-    net_amount_yuan: row.net_amount_yuan,
-    reviewed_by: row.reviewed_by,
-    reviewed_at: row.reviewed_at,
-    review_note: row.review_note,
-    paid_at: row.paid_at,
-    payment_proof: row.payment_proof,
-    created_at: row.created_at,
-  }));
-}
-
-/**
- * 管理端按申请单独查看身份证明文。
- */
-export async function getAdminWithdrawalIdNumber(
-  withdrawalId: string,
-): Promise<{ id_number: string | null } | null> {
-  const rows = await listAllWithdrawals({ limit: 1_000 });
-  const withdrawal = rows.find((row) => row.id === withdrawalId);
-  if (!withdrawal) {
-    return null;
-  }
-  if (!withdrawal.id_number) {
-    return { id_number: null };
-  }
-  return { id_number: decryptSensitive(withdrawal.id_number) };
 }
 
 /**

@@ -461,27 +461,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'consumer'
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT true;
 
--- 创作者收益月度汇总（明细仍落 wallet_transactions）
-CREATE TABLE IF NOT EXISTS creator_earnings_monthly (
-  creator_id TEXT NOT NULL REFERENCES users(id),
-  year_month TEXT NOT NULL,
-  gross_points INTEGER NOT NULL DEFAULT 0,
-  platform_cut_points INTEGER NOT NULL DEFAULT 0,
-  net_points INTEGER NOT NULL DEFAULT 0,
-  withdrawn_points INTEGER NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (creator_id, year_month)
-);
-
 -- =====================
 -- 宿主运行时扩展：会话 / 钱包 / 创作者整包
 -- =====================
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS purchased_points INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_points INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS earned_points INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_points INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_withdrawal_points INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS creator_bundle_subscriptions (
   id TEXT PRIMARY KEY,
@@ -654,36 +640,6 @@ CREATE INDEX IF NOT EXISTS idx_point_batches_user_active
 CREATE INDEX IF NOT EXISTS idx_point_batches_expiry_scan
   ON point_batches(expires_at)
   WHERE status = 'active' AND expires_at IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS creator_withdrawals (
-  id TEXT PRIMARY KEY,
-  creator_id TEXT NOT NULL REFERENCES users(id),
-  amount_points INTEGER NOT NULL CHECK (amount_points > 0),
-  amount_yuan NUMERIC(12,2) NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  bank_name TEXT DEFAULT NULL,
-  bank_account TEXT DEFAULT NULL,
-  account_name TEXT DEFAULT NULL,
-  id_number TEXT DEFAULT NULL,
-  tax_type TEXT DEFAULT NULL,
-  company_name TEXT DEFAULT NULL,
-  tax_id TEXT DEFAULT NULL,
-  platform_fee_points INTEGER NOT NULL DEFAULT 0,
-  tax_amount_yuan NUMERIC(12,2) NOT NULL DEFAULT 0,
-  net_amount_yuan NUMERIC(12,2) NOT NULL DEFAULT 0,
-  reviewed_by TEXT DEFAULT NULL,
-  reviewed_at TIMESTAMPTZ DEFAULT NULL,
-  review_note TEXT DEFAULT NULL,
-  paid_at TIMESTAMPTZ DEFAULT NULL,
-  payment_proof TEXT DEFAULT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_creator_withdrawals_creator
-  ON creator_withdrawals(creator_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_creator_withdrawals_pending
-  ON creator_withdrawals(status, created_at DESC)
-  WHERE status IN ('pending', 'approved');
 
 ALTER TABLE chat_sessions
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_owner_user_id,
@@ -970,67 +926,6 @@ BEGIN
     ALTER TABLE point_batches
       ADD CONSTRAINT chk_point_batches_remaining_points_range
       CHECK (remaining_points >= 0 AND remaining_points <= amount_points);
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_withdrawals_status_valid') THEN
-    UPDATE creator_withdrawals
-    SET status = 'pending'
-    WHERE status NOT IN ('pending', 'approved', 'rejected', 'paid', 'cancelled');
-    ALTER TABLE creator_withdrawals
-      ADD CONSTRAINT chk_creator_withdrawals_status_valid
-      CHECK (status IN ('pending', 'approved', 'rejected', 'paid', 'cancelled'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_withdrawals_tax_type_valid') THEN
-    UPDATE creator_withdrawals
-    SET tax_type = NULL
-    WHERE tax_type IS NOT NULL
-      AND tax_type NOT IN ('personal', 'company');
-    ALTER TABLE creator_withdrawals
-      ADD CONSTRAINT chk_creator_withdrawals_tax_type_valid
-      CHECK (tax_type IS NULL OR tax_type IN ('personal', 'company'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_withdrawals_platform_fee_points_nonnegative') THEN
-    UPDATE creator_withdrawals
-    SET platform_fee_points = 0
-    WHERE platform_fee_points < 0;
-    ALTER TABLE creator_withdrawals
-      ADD CONSTRAINT chk_creator_withdrawals_platform_fee_points_nonnegative
-      CHECK (platform_fee_points >= 0);
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_withdrawals_tax_amount_yuan_nonnegative') THEN
-    UPDATE creator_withdrawals
-    SET tax_amount_yuan = 0
-    WHERE tax_amount_yuan < 0;
-    ALTER TABLE creator_withdrawals
-      ADD CONSTRAINT chk_creator_withdrawals_tax_amount_yuan_nonnegative
-      CHECK (tax_amount_yuan >= 0);
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_withdrawals_net_amount_yuan_nonnegative') THEN
-    UPDATE creator_withdrawals
-    SET net_amount_yuan = 0
-    WHERE net_amount_yuan < 0;
-    ALTER TABLE creator_withdrawals
-      ADD CONSTRAINT chk_creator_withdrawals_net_amount_yuan_nonnegative
-      CHECK (net_amount_yuan >= 0);
   END IF;
 END $$;
 

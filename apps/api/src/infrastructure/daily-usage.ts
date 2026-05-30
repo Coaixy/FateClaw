@@ -18,6 +18,12 @@ export interface UsageStats {
   today_output_tokens: number;
 }
 
+export interface PublicStatusStats {
+  today_messages: number;
+  registered_users: number;
+  today_total_tokens: number;
+}
+
 export async function getDailyMessageCount(
   userId: string,
   date: string,
@@ -171,4 +177,28 @@ export async function getDailyUsageRows(
       official_model_charge_cents: Number(item.official_model_charge_cents),
     };
   });
+}
+
+export async function getPublicStatusStats(): Promise<PublicStatusStats> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [userCount, todayUsage] = await Promise.all([
+    getDbPool().query(`SELECT COUNT(*) AS cnt FROM users`),
+    getDbPool().query(
+      `SELECT COALESCE(SUM(msg_count), 0) AS today_messages,
+              COALESCE(SUM(input_tokens + output_tokens), 0) AS today_total_tokens
+       FROM daily_usage
+       WHERE date = $1`,
+      [today],
+    ),
+  ]);
+  const usage = todayUsage.rows[0] as {
+    today_messages: string | number;
+    today_total_tokens: string | number;
+  };
+
+  return {
+    today_messages: Number(usage.today_messages),
+    registered_users: Number((userCount.rows[0] as { cnt: string }).cnt),
+    today_total_tokens: Number(usage.today_total_tokens),
+  };
 }

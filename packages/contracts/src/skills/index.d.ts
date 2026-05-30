@@ -162,49 +162,6 @@ export interface CreatorBundleTierDto {
   description?: string;
 }
 
-export interface CreatorEarningsMonthlyDto {
-  creator_id: string;
-  year_month: string;
-  gross_cents: number;
-  platform_cut_cents: number;
-  net_cents: number;
-  withdrawn_cents: number;
-}
-
-export interface CreatorWithdrawalDto {
-  id: string;
-  amount_cents: number;
-  amount_yuan: string;
-  status: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-  bank_name?: string | null;
-  bank_account?: string | null;
-  account_name?: string | null;
-  id_number_masked?: string | null;
-  tax_type?: 'personal' | 'company' | null;
-  platform_fee_cents?: number;
-  tax_amount_yuan?: string;
-  net_amount_yuan?: string;
-  review_note?: string | null;
-  reviewed_at?: string | null;
-  paid_at?: string | null;
-  created_at: string;
-}
-
-export interface WithdrawalBalanceDto {
-  earned_cents: number;
-  pending_withdrawal_cents: number;
-  withdrawable_cents: number;
-  withdrawable_yuan: string;
-}
-
-export interface WithdrawalRequestResponseDto {
-  id: string;
-  amount_cents: number;
-  amount_yuan: string;
-  status: string;
-  created_at: string;
-}
-
 export interface CreatorBundleConfigResponseDto {
   bundle_tiers: CreatorBundleTierDto[];
   skills: MarketSkillDto[];

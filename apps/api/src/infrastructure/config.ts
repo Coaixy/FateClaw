@@ -16,7 +16,6 @@ const envConfig = readEnvFile([
   'JWT_SECRET',
   'MANAGER_KEY',
   'PUBLIC_BASE_URL',
-  'WITHDRAWAL_ENCRYPTION_KEY',
 ]);
 
 export const ASSISTANT_NAME =
@@ -94,25 +93,11 @@ export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
 // 余额体系：软妹币 1.00 = 100 分
 export const CENTS_PER_YUAN = 100;
 
-// 提现身份证号/银行账户加密密钥（32 字节 hex = 64 字符）。
-// 未配置时开发环境走 fallback（会在日志中警告），生产环境必须配置。
-const RAW_WITHDRAWAL_KEY =
-  process.env.WITHDRAWAL_ENCRYPTION_KEY ||
-  envConfig.WITHDRAWAL_ENCRYPTION_KEY ||
-  '';
-export const WITHDRAWAL_ENCRYPTION_KEY = RAW_WITHDRAWAL_KEY;
-
 // 超过该时长仍未完成结算的预留请求会被自动释放占用，但保留账务记录，
 // 便于晚到响应继续补结算。
 export const BILLING_RESERVATION_STALE_MS = parseInt(
   process.env.BILLING_RESERVATION_STALE_MS || '2400000',
   10,
-);
-
-// 平台从创作者订阅收入中抽成的百分比（0-100）。默认 30%，可由环境变量覆盖。
-export const PLATFORM_CUT_PERCENT = Math.min(
-  Math.max(parseInt(process.env.PLATFORM_CUT_PERCENT || '30', 10), 0),
-  100,
 );
 
 const PROJECT_ROOT = process.cwd();

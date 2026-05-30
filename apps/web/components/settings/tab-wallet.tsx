@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import {
   ArrowDownLeft,
-  ArrowUpRight,
   CreditCard,
   TrendingUp,
 } from 'lucide-react';
@@ -12,13 +10,12 @@ import {
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
 import { formatCents } from '@/lib/money';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
-import { WalletEarningsPanel } from '@/components/settings/wallet/wallet-earnings-panel';
 import { WalletRechargePanel } from '@/components/settings/wallet/wallet-recharge-panel';
 import { WalletStatCard } from '@/components/settings/wallet/wallet-stat-card';
 import { WalletTokenUsagePanel } from '@/components/settings/wallet/wallet-token-usage-panel';
 import { WalletTransactionsPanel } from '@/components/settings/wallet/wallet-transactions-panel';
 
-type SubTab = 'overview' | 'usage' | 'transactions' | 'earnings';
+type SubTab = 'overview' | 'usage' | 'transactions';
 
 export function TabWallet() {
   const {
@@ -27,19 +24,15 @@ export function TabWallet() {
     transactions,
     rechargeOrders,
     rechargeStats,
-    earningsRows,
-    earningsTotals,
     loading,
     refreshing,
     error,
     refresh,
   } = useWalletOverview();
   const [subTab, setSubTab] = useState<SubTab>('overview');
-  const [earningsOpen, setEarningsOpen] = useState(false);
 
   const purchasedCents = billingInfo?.purchased_cents ?? 0;
   const bonusCents = billingInfo?.bonus_cents ?? 0;
-  const earnedCents = billingInfo?.earned_cents ?? 0;
   const reservedCents = billingInfo?.reserved_cents ?? 0;
   const availableCents = billingInfo?.available_cents ?? 0;
 
@@ -47,7 +40,6 @@ export function TabWallet() {
     { key: 'overview', label: '概览' },
     { key: 'usage', label: 'Token 明细' },
     { key: 'transactions', label: '流水' },
-    { key: 'earnings', label: '创作收益' },
   ];
 
   if (loading) {
@@ -65,7 +57,6 @@ export function TabWallet() {
         availableCents={availableCents}
         purchasedCents={purchasedCents}
         bonusCents={bonusCents}
-        earnedCents={earnedCents}
         reservedCents={reservedCents}
       />
 
@@ -81,25 +72,6 @@ export function TabWallet() {
           {error}
         </div>
       )}
-
-      <div className="grid gap-3">
-        <Link
-          href="/settings/withdrawal"
-          className={`h-12 rounded-xl border border-hairline bg-surface-card text-[13px] font-medium flex items-center justify-center gap-2 transition-colors ${
-            earnedCents > 0
-              ? 'text-ink hover:bg-surface-cream-strong'
-              : 'text-muted opacity-60'
-          }`}
-        >
-          <ArrowUpRight size={16} />
-          提现
-          {earnedCents > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary ml-1">
-              {earnedCents.toLocaleString()} 可提
-            </span>
-          )}
-        </Link>
-      </div>
 
       {/* Sub Tabs */}
       <div className="flex rounded-xl bg-surface-card border border-hairline overflow-hidden">
@@ -140,12 +112,12 @@ export function TabWallet() {
             />
             <WalletStatCard
               icon={<ArrowDownLeft size={14} className="text-purple-400" />}
-              label="创作净收入"
-              value={formatCents(earningsTotals.net)}
+              label="充值累计"
+              value={formatCents(rechargeStats?.total_recharge_cents ?? 0)}
             />
           </div>
           <p className="text-[11px] text-muted leading-relaxed px-1">
-            创作收益可通过独立提现通道结算为软妹币。充值余额用于官方模型 Token 和技能订阅消费。
+            充值余额用于官方模型、自配模型平台 Token 服务费和技能订阅消费。
           </p>
         </section>
       )}
@@ -156,15 +128,6 @@ export function TabWallet() {
 
       {subTab === 'transactions' && (
         <WalletTransactionsPanel transactions={transactions} />
-      )}
-
-      {subTab === 'earnings' && (
-        <WalletEarningsPanel
-          totals={earningsTotals}
-          earningsRows={earningsRows}
-          open={earningsOpen}
-          onToggle={() => setEarningsOpen(!earningsOpen)}
-        />
       )}
     </div>
   );

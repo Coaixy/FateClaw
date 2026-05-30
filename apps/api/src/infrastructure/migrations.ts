@@ -2185,6 +2185,28 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await client.query(`DROP INDEX IF EXISTS idx_point_batches_expiry_scan`);
     },
   },
+  {
+    id: '0009_remove_creator_earnings_schema',
+    description: '移除创作收益与提现 schema',
+    async up(client) {
+      await client.query(`DROP TABLE IF EXISTS creator_withdrawals`);
+      await client.query(`DROP TABLE IF EXISTS creator_earnings_monthly`);
+      await client.query(`
+        ALTER TABLE users
+          DROP COLUMN IF EXISTS earned_cents,
+          DROP COLUMN IF EXISTS pending_withdrawal_cents
+      `);
+      await client.query(`
+        UPDATE wallet_transactions
+        SET balance_source = NULL
+        WHERE balance_source = 'earned'
+      `);
+      await client.query(`
+        DELETE FROM wallet_transactions
+        WHERE kind IN ('creator_revenue', 'withdrawal')
+      `);
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

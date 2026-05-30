@@ -9,7 +9,6 @@ import {
 } from '../../infrastructure/config.js';
 import {
   adjustUserPurchasedBalance,
-  approveWithdrawal,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
   deleteUser,
@@ -33,19 +32,15 @@ import {
   createAdminUser,
   listAdminGlobalSkills,
   listAdminUsersWithStats,
-  listAdminWithdrawalsMasked,
   listBillingRequestReservations,
-  markWithdrawalPaid,
   reconcileStaleBillingReservations,
   removeOfficialModel,
-  rejectWithdrawal,
   setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   getAdminUserDetail,
-  getAdminWithdrawalIdNumber,
 } from '../../modules/admin/admin-service.js';
 import {
   rateLimitCheck,
@@ -132,21 +127,6 @@ const AdminStatsQuerySchema = z
       });
     }
   });
-
-const WithdrawalApproveSchema = z.object({
-  tax_amount_yuan: z.string().optional(),
-  net_amount_yuan: z.string().optional(),
-  platform_fee_cents: z.number().int().min(0).optional(),
-  note: z.string().max(500).optional(),
-});
-
-const WithdrawalRejectSchema = z.object({
-  note: z.string().min(1).max(500),
-});
-
-const WithdrawalPaidSchema = z.object({
-  payment_proof: z.string().min(1).max(500),
-});
 
 const OfficialModelAuthModeSchema = z
   .enum([
@@ -505,7 +485,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       grant_id: grantId,
       bonus_cents: updated.bonus_cents,
       purchased_cents: updated.purchased_cents,
-      earned_cents: updated.earned_cents,
       reserved_cents: updated.reserved_cents,
     };
   });
@@ -527,7 +506,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       success: true,
       purchased_cents: updated.purchased_cents,
       bonus_cents: updated.bonus_cents,
-      earned_cents: updated.earned_cents,
       reserved_cents: updated.reserved_cents,
       available_cents: Math.max(
         0,
@@ -553,92 +531,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       includeExhausted: query.include_exhausted === 'true',
       limit: query.limit ? Number(query.limit) : undefined,
     });
-  });
-
-  // GET /api/admin/withdrawals — 查询提现申请（默认按状态过滤）
-  app.get('/withdrawals', async (request) => {
-    const query = request.query as {
-      status?: 'pending' | 'approved' | 'rejected' | 'paid' | 'cancelled';
-      creator_id?: string;
-      limit?: string;
-    };
-    return listAdminWithdrawalsMasked({
-      status: query.status,
-      creatorId: query.creator_id,
-      limit: query.limit ? Number(query.limit) : undefined,
-    });
-  });
-
-  // GET /api/admin/withdrawals/:id/id-number — 解密并返回身份证号明文
-  // 单独端点以便审计（后续可加调用日志），避免列表接口无差别泄露
-  app.get('/withdrawals/:id/id-number', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const result = await getAdminWithdrawalIdNumber(id);
-    if (!result) return reply.code(404).send({ error: '提现申请不存在' });
-    try {
-      return result;
-    } catch (err) {
-      return reply.code(500).send({
-        error: '身份证号解密失败',
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  // POST /api/admin/withdrawals/:id/approve — 审核通过（扣 earned_cents）
-  app.post('/withdrawals/:id/approve', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const body = WithdrawalApproveSchema.parse(request.body);
-    try {
-      const wd = await approveWithdrawal({
-        withdrawalId: id,
-        reviewedBy: request.user?.userId ?? 'admin',
-        taxAmountYuan: body.tax_amount_yuan,
-        netAmountYuan: body.net_amount_yuan,
-        platformFeeCents: body.platform_fee_cents,
-        note: body.note ?? null,
-      });
-      return { success: true, withdrawal: wd };
-    } catch (err) {
-      return reply
-        .code(400)
-        .send({ error: err instanceof Error ? err.message : '审核失败' });
-    }
-  });
-
-  // POST /api/admin/withdrawals/:id/reject — 驳回（解冻 pending）
-  app.post('/withdrawals/:id/reject', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const body = WithdrawalRejectSchema.parse(request.body);
-    try {
-      const wd = await rejectWithdrawal({
-        withdrawalId: id,
-        reviewedBy: request.user?.userId ?? 'admin',
-        note: body.note,
-      });
-      return { success: true, withdrawal: wd };
-    } catch (err) {
-      return reply
-        .code(400)
-        .send({ error: err instanceof Error ? err.message : '驳回失败' });
-    }
-  });
-
-  // POST /api/admin/withdrawals/:id/mark-paid — 标记已打款（记录凭证）
-  app.post('/withdrawals/:id/mark-paid', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const body = WithdrawalPaidSchema.parse(request.body);
-    try {
-      const wd = await markWithdrawalPaid({
-        withdrawalId: id,
-        paymentProof: body.payment_proof,
-      });
-      return { success: true, withdrawal: wd };
-    } catch (err) {
-      return reply
-        .code(400)
-        .send({ error: err instanceof Error ? err.message : '标记失败' });
-    }
   });
 
   // GET /api/admin/billing/reservations — 查询请求级预留记录

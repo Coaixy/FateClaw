@@ -10,7 +10,6 @@ import {
   type RechargeStats,
   type WalletTransaction,
 } from '@/features/billing/api';
-import { skillsApi, type CreatorEarningsMonthly } from '@/features/skills/api';
 
 async function fetchWalletOverviewSnapshot() {
   return Promise.all([
@@ -19,7 +18,6 @@ async function fetchWalletOverviewSnapshot() {
     billingApi.transactions(),
     billingApi.rechargeOrders(),
     billingApi.rechargeStats(),
-    skillsApi.earningsMine().catch(() => []),
   ]);
 }
 
@@ -30,9 +28,6 @@ export function useWalletOverview() {
   const [rechargeOrders, setRechargeOrders] = useState<RechargeOrder[]>([]);
   const [rechargeStats, setRechargeStats] = useState<RechargeStats | null>(
     null,
-  );
-  const [earningsRows, setEarningsRows] = useState<CreatorEarningsMonthly[]>(
-    [],
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,14 +44,12 @@ export function useWalletOverview() {
         nextTransactions,
         nextRechargeOrders,
         nextRechargeStats,
-        nextEarnings,
       ] = await fetchWalletOverviewSnapshot();
       setBillingInfo(nextBilling);
       setDailyUsage(nextDailyUsage);
       setTransactions(nextTransactions);
       setRechargeOrders(nextRechargeOrders);
       setRechargeStats(nextRechargeStats);
-      setEarningsRows(nextEarnings);
     } catch (err) {
       setError(err instanceof Error ? err.message : '钱包数据加载失败');
     } finally {
@@ -78,7 +71,6 @@ export function useWalletOverview() {
           nextTransactions,
           nextRechargeOrders,
           nextRechargeStats,
-          nextEarnings,
         ] = await fetchWalletOverviewSnapshot();
         if (cancelled) return;
         setBillingInfo(nextBilling);
@@ -86,7 +78,6 @@ export function useWalletOverview() {
         setTransactions(nextTransactions);
         setRechargeOrders(nextRechargeOrders);
         setRechargeStats(nextRechargeStats);
-        setEarningsRows(nextEarnings);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '钱包数据加载失败');
@@ -104,28 +95,12 @@ export function useWalletOverview() {
     };
   }, []);
 
-  const earningsTotals = useMemo(() => {
-    const gross = earningsRows.reduce((sum, row) => sum + row.gross_cents, 0);
-    const platformCut = earningsRows.reduce(
-      (sum, row) => sum + row.platform_cut_cents,
-      0,
-    );
-    const net = earningsRows.reduce((sum, row) => sum + row.net_cents, 0);
-    const withdrawn = earningsRows.reduce(
-      (sum, row) => sum + row.withdrawn_cents,
-      0,
-    );
-    return { gross, platformCut, net, withdrawn };
-  }, [earningsRows]);
-
   return {
     billingInfo,
     dailyUsage,
     transactions,
     rechargeOrders,
     rechargeStats,
-    earningsRows,
-    earningsTotals,
     loading,
     refreshing,
     error,

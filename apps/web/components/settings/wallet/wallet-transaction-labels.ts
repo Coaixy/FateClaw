@@ -13,8 +13,6 @@ function positiveBalanceSourceLabel(
       return '充值';
     case 'bonus':
       return '赠送';
-    case 'earned':
-      return '收益';
     case 'mixed':
       return '混合';
     default:
@@ -29,8 +27,6 @@ function negativeTransactionLabel(kind: string): string {
     case 'skill_subscription':
     case 'bundle_subscription':
       return '订阅';
-    case 'withdrawal':
-      return '提现';
     case 'manual_adjustment':
       return '扣减';
     default:

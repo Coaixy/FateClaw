@@ -3,8 +3,6 @@ import type {
   BundleSkillPreviewDto,
   BundleSubscribeResultDto,
   BundleUnsubscribeResultDto,
-  CreatorEarningsMonthlyDto,
-  CreatorWithdrawalDto,
   MarketBundleDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
@@ -19,8 +17,6 @@ import type {
   TextSkillBundleFileDto,
   UserCustomSkillDto,
   UserSkillsResponseDto,
-  WithdrawalBalanceDto,
-  WithdrawalRequestResponseDto,
 } from '@fateclaw/contracts/skills';
 
 import { requestJson } from '@/lib/http/client';
@@ -38,9 +34,6 @@ export type BundleSubscribeResult = BundleSubscribeResultDto;
 export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
 export type MarketBundle = MarketBundleDto;
 export type MarketSkill = MarketSkillDto;
-export type CreatorWithdrawal = CreatorWithdrawalDto;
-export type WithdrawalBalance = WithdrawalBalanceDto;
-export type CreatorEarningsMonthly = CreatorEarningsMonthlyDto;
 
 export const skillsApi = {
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
@@ -171,30 +164,4 @@ export const skillsApi = {
     if (params.offset != null) qs.set('offset', String(params.offset));
     return requestJson<MarketSkill[]>(`/api/skills/market?${qs.toString()}`);
   },
-  earningsMine: () =>
-    requestJson<CreatorEarningsMonthly[]>('/api/skills/earnings/mine'),
-};
-
-export const withdrawalApi = {
-  balance: () =>
-    requestJson<WithdrawalBalance>('/api/skills/creator/withdrawal/balance'),
-  list: () =>
-    requestJson<CreatorWithdrawal[]>('/api/skills/creator/withdrawal/list'),
-  create: (data: {
-    amount_cents: number;
-    bank_name?: string;
-    bank_account?: string;
-    account_name?: string;
-    id_number?: string;
-    tax_type?: 'personal' | 'company';
-    company_name?: string;
-    tax_id?: string;
-  }) =>
-    requestJson<WithdrawalRequestResponseDto>(
-      '/api/skills/creator/withdrawal/request',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ),
 };

@@ -37,9 +37,7 @@ describe('createAdminUser', () => {
         role: 'creator',
         purchased_cents: 0,
         bonus_cents: 0,
-        earned_cents: 0,
         reserved_cents: 0,
-        pending_withdrawal_cents: 0,
       }),
     );
     const created = mockCreateUser.mock.calls[0]?.[0];

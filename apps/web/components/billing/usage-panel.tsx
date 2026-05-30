@@ -56,7 +56,7 @@ export function UsagePanel({
               </span>
             </div>
             <div className="text-[10px] text-muted mt-0.5">
-              自配模型不扣余额；官方模型按用量扣费
+              官方模型与自配模型平台服务费均按用量扣费
             </div>
           </div>
           <button
@@ -80,7 +80,7 @@ export function UsagePanel({
           </span>
         </div>
         <div className="text-[10px] text-muted">
-          官方模型本月已扣 {formatCents(status.estimated_monthly_total_cents)}
+          本月已扣 {formatCents(status.estimated_monthly_total_cents)}
         </div>
       </div>
 
@@ -111,10 +111,9 @@ export function UsagePanel({
             {formatCents(status.available_cents)}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 text-center">
+        <div className="grid grid-cols-2 gap-1.5 text-center">
           <BalanceChip label="充值" value={status.purchased_cents} />
           <BalanceChip label="赠送" value={status.bonus_cents} />
-          <BalanceChip label="收益" value={status.earned_cents} />
         </div>
       </div>
 

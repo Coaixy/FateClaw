@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
 
-import { PLATFORM_CUT_PERCENT } from '../config.js';
 import type { DbQueryable } from '../db-pool.js';
 import { getDbPool } from '../db-pool.js';
 import { deductBalanceCents, insertWalletTransaction } from './billing-repository.js';
@@ -14,7 +13,6 @@ import {
 } from '../../modules/skills/text-skill-bundle-store.js';
 import { calculateAvailableSpendableCents } from '../../shared/balance-cents.js';
 import type {
-  CreatorEarningsMonthly,
   EffectiveUserSkill,
   SkillBundle,
   TextSkillBundleFile,
@@ -261,20 +259,6 @@ export async function listCreatorSharedSkills(
     [creatorId],
   );
   return rows;
-}
-
-export async function getCreatorEarnings(
-  creatorId: string,
-  limit = 12,
-): Promise<CreatorEarningsMonthly[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT * FROM creator_earnings_monthly
-     WHERE creator_id = $1
-     ORDER BY year_month DESC
-     LIMIT $2`,
-    [creatorId, limit],
-  );
-  return rows as CreatorEarningsMonthly[];
 }
 
 const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
@@ -871,8 +855,6 @@ export interface SubscribeToSkillPaidInput {
 export interface SubscribeToSkillPaidResult {
   subscription: UserSkillSubscription;
   chargedCents: number;
-  platformCutCents: number;
-  creatorNetCents: number;
 }
 
 export async function subscribeToSkillPaid(
@@ -897,8 +879,6 @@ export async function subscribeToSkillPaid(
       throw new Error('不能订阅自己的 Skill');
 
     let chargedCents = 0;
-    let platformCutCents = 0;
-    let creatorNetCents = 0;
 
     if (input.priceCents > 0) {
       const subscriber = await getUserByIdUsing(client, input.subscriberId, {
@@ -912,10 +892,6 @@ export async function subscribeToSkillPaid(
         throw new Error('余额不足，请先充值');
 
       chargedCents = input.priceCents;
-      platformCutCents = Math.round(
-        (chargedCents * PLATFORM_CUT_PERCENT) / 100,
-      );
-      creatorNetCents = chargedCents - platformCutCents;
 
       // bonus → purchased 优先级扣减
       const deduction = await deductBalanceCents(client, subscriber, chargedCents);
@@ -946,47 +922,6 @@ export async function subscribeToSkillPaid(
           },
         });
       }
-
-      // 创作者收益进 earned_cents
-      await client.query(
-        `UPDATE users SET earned_cents = earned_cents + $1 WHERE id = $2`,
-        [creatorNetCents, skill.user_id],
-      );
-      await insertWalletTransaction(client, {
-        userId: skill.user_id,
-        kind: 'creator_revenue',
-        amountCents: creatorNetCents,
-        balanceSource: 'earned',
-        note: `技能订阅收入: ${skill.skill_name}`,
-        metadata: {
-          skill_id: input.skillId,
-          subscriber_id: input.subscriberId,
-          tier_key: input.tierKey,
-          gross_cents: chargedCents,
-          platform_cut_cents: platformCutCents,
-        },
-      });
-
-      const yearMonth = new Date().toISOString().slice(0, 7);
-      await client.query(
-        `INSERT INTO creator_earnings_monthly
-           (creator_id, year_month,
-            gross_cents, platform_cut_cents, net_cents,
-            updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (creator_id, year_month) DO UPDATE SET
-           gross_cents = creator_earnings_monthly.gross_cents + EXCLUDED.gross_cents,
-           platform_cut_cents = creator_earnings_monthly.platform_cut_cents + EXCLUDED.platform_cut_cents,
-           net_cents = creator_earnings_monthly.net_cents + EXCLUDED.net_cents,
-           updated_at = NOW()`,
-        [
-          skill.user_id,
-          yearMonth,
-          chargedCents,
-          platformCutCents,
-          creatorNetCents,
-        ],
-      );
     }
 
     const now = new Date();
@@ -1025,8 +960,6 @@ export async function subscribeToSkillPaid(
     return {
       subscription: subRows[0] as UserSkillSubscription,
       chargedCents,
-      platformCutCents,
-      creatorNetCents,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1070,10 +1003,6 @@ export async function subscribeToCreatorBundle(
         throw new Error('余额不足，请先充值');
 
       chargedCents = input.priceCents;
-      const platformCutCents = Math.round(
-        (chargedCents * PLATFORM_CUT_PERCENT) / 100,
-      );
-      const creatorNetCents = chargedCents - platformCutCents;
 
       const deduction = await deductBalanceCents(client, subscriber, chargedCents);
 
@@ -1103,45 +1032,6 @@ export async function subscribeToCreatorBundle(
           },
         });
       }
-
-      await client.query(
-        `UPDATE users SET earned_cents = earned_cents + $1 WHERE id = $2`,
-        [creatorNetCents, input.creatorId],
-      );
-      await insertWalletTransaction(client, {
-        userId: input.creatorId,
-        kind: 'creator_revenue',
-        amountCents: creatorNetCents,
-        balanceSource: 'earned',
-        note: `整包订阅收入`,
-        metadata: {
-          subscriber_id: input.subscriberId,
-          tier_key: input.tierKey,
-          gross_cents: chargedCents,
-          platform_cut_cents: platformCutCents,
-        },
-      });
-
-      const yearMonth = new Date().toISOString().slice(0, 7);
-      await client.query(
-        `INSERT INTO creator_earnings_monthly
-           (creator_id, year_month,
-            gross_cents, platform_cut_cents, net_cents,
-            updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (creator_id, year_month) DO UPDATE SET
-           gross_cents = creator_earnings_monthly.gross_cents + EXCLUDED.gross_cents,
-           platform_cut_cents = creator_earnings_monthly.platform_cut_cents + EXCLUDED.platform_cut_cents,
-           net_cents = creator_earnings_monthly.net_cents + EXCLUDED.net_cents,
-           updated_at = NOW()`,
-        [
-          input.creatorId,
-          yearMonth,
-          chargedCents,
-          platformCutCents,
-          creatorNetCents,
-        ],
-      );
     }
 
     const now = new Date();

@@ -23,10 +23,8 @@ export interface BillingReservation {
 export interface WalletBalanceSummary {
   purchasedCents: number;
   bonusCents: number;
-  earnedCents: number;
   reservedCents: number;
   availableCents: number;
-  pendingWithdrawalCents: number;
 }
 
 export interface MonthlyMeteredBillingSummary {
@@ -100,7 +98,7 @@ export async function reserveBillingForRequest(input: {
     requestId: input.requestId,
     yearMonth,
     modelConfigId: input.runtime.modelConfigId,
-    note: '官方模型请求开始，预扣 Token 费用',
+    note: '模型请求开始，预扣 Token 费用',
     metadata: {
       source: input.runtime.source,
       billingMode: input.runtime.billingMode,
@@ -178,21 +176,17 @@ export async function getWalletBalanceSummary(
     return {
       purchasedCents: 0,
       bonusCents: 0,
-      earnedCents: 0,
       reservedCents: 0,
       availableCents: 0,
-      pendingWithdrawalCents: 0,
     };
   }
   return {
     purchasedCents: user.purchased_cents,
     bonusCents: user.bonus_cents,
-    earnedCents: user.earned_cents,
     reservedCents: user.reserved_cents,
     availableCents: Math.max(
       0,
       user.purchased_cents + user.bonus_cents - user.reserved_cents,
     ),
-    pendingWithdrawalCents: user.pending_withdrawal_cents,
   };
 }

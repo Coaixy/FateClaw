@@ -10,16 +10,12 @@ import crypto from 'crypto';
 import {
   createSkillBundle,
   createUserCustomSkill,
-  createWithdrawalRequest,
-  decryptSensitive,
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
   getCreatorBundleConfig,
-  getCreatorEarnings,
   getSkillByShareToken,
   getSubscribedSkills,
-  getUserById,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
@@ -27,8 +23,6 @@ import {
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
-  listWithdrawalsForCreator,
-  maskIdNumber,
   promoteUserToCreator,
   publishSkillBundle,
   publishUserCustomSkill,
@@ -55,15 +49,12 @@ import { normalizeCategory } from './category-map.js';
 export {
   createSkillBundle,
   createUserCustomSkill,
-  createWithdrawalRequest,
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
   getCreatorBundleConfig,
-  getCreatorEarnings,
   getSkillByShareToken,
   getSubscribedSkills,
-  getUserById,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
@@ -71,8 +62,6 @@ export {
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
-  listWithdrawalsForCreator,
-  maskIdNumber,
   normalizeCategory,
   promoteUserToCreator,
   publishSkillBundle,
@@ -109,15 +98,4 @@ export function slugifySkillName(name: string): string {
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
     .replace(/^-|-$/g, '');
   return `user-${slug || crypto.randomUUID().slice(0, 8)}`;
-}
-
-/**
- * 提现列表使用的安全解密函数。
- */
-export function safeDecryptSkillSensitiveValue(encoded: string): string {
-  try {
-    return decryptSensitive(encoded);
-  } catch {
-    return '';
-  }
 }

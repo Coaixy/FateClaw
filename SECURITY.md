@@ -20,12 +20,12 @@ FateClaw 会处理用户账号、聊天内容、知识库、模型密钥、支�
 - `.env`、数据库连接串、JWT 密钥、`MANAGER_KEY`。
 - OpenAI、Anthropic、Gemini 或其他模型 API Key。
 - OpenClaw/iLink Bot token、扫码登录产物、微信账号数据。
-- 阿里云短信密钥、支付网关密钥、提现敏感字段密钥。
+- 阿里云短信密钥、支付网关密钥。
 - 用户聊天记录、知识库内容、账单流水或数据库 dump。
 
 ## 生产部署最低要求
 
-- `JWT_SECRET`、`MANAGER_KEY`、`WITHDRAWAL_ENCRYPTION_KEY` 必须使用强随机值。
+- `JWT_SECRET`、`MANAGER_KEY` 必须使用强随机值。
 - 生产环境必须设置 `ALLOWED_ORIGINS`，不要使用宽松 CORS。
 - 管理后台 `/admin/*` 建议在反向代理层增加 IP 白名单、VPN 或额外认证。
 - 全站强制 HTTPS，避免 JWT、管理密钥和模型配置明文传输。
