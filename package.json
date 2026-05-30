@@ -48,20 +48,5 @@
   "engines": {
     "node": ">=20"
   },
-  "pnpm": {
-    "overrides": {
-      "fast-jwt": ">=6.2.2",
-      "vite": ">=8.0.5",
-      "picomatch": ">=4.0.4",
-      "brace-expansion@^1.0.0": "1.1.13",
-      "brace-expansion@^5.0.0": "5.0.5"
-    },
-    "packageExtensions": {
-      "@alicloud/openapi-core@1.0.7": {
-        "dependencies": {
-          "@alicloud/tea-typescript": "^1.8.0"
-        }
-      }
-    }
-  }
+  "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1"
 }

@@ -13,6 +13,8 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { billingApi, type PublicStatusStats } from '@/features/billing/api';
 
+type TokenUsagePoint = PublicStatusStats['token_usage_series'][number];
+
 function formatCompactNumber(value: number): string {
   if (value < 10000) return value.toLocaleString('zh-CN');
   if (value < 100000000) {
@@ -145,9 +147,23 @@ function formatShortDate(date: string): string {
   return `${Number(month)}.${Number(day)}`;
 }
 
+function sortTokenUsageByDate(
+  rows: TokenUsagePoint[],
+  direction: 'asc' | 'desc',
+): TokenUsagePoint[] {
+  return [...rows].sort((a, b) =>
+    direction === 'asc'
+      ? a.date.localeCompare(b.date)
+      : b.date.localeCompare(a.date),
+  );
+}
+
 function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
   const rows = stats?.token_usage_series ?? [];
-  const maxTokens = Math.max(1, ...rows.map((row) => row.total_tokens));
+  // 图表保留旧到新的趋势轴，表格按最新日期优先展示。
+  const chartRows = sortTokenUsageByDate(rows, 'asc');
+  const tableRows = sortTokenUsageByDate(rows, 'desc');
+  const maxTokens = Math.max(1, ...chartRows.map((row) => row.total_tokens));
 
   return (
     <section className="rounded-xl border border-hairline bg-surface-card p-3 shadow-[0_10px_28px_rgba(15,23,42,0.04)] md:p-4">
@@ -169,7 +185,7 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
       </div>
 
       <div className="flex h-36 items-end gap-2 rounded-lg border border-hairline bg-canvas/45 px-2 pb-7 pt-3 md:h-48 md:gap-3 md:px-4">
-        {rows.map((row) => {
+        {chartRows.map((row) => {
           const totalHeight = Math.max(
             row.total_tokens > 0 ? 6 : 2,
             Math.round((row.total_tokens / maxTokens) * 100),
@@ -177,7 +193,10 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
           const inputRatio =
             row.total_tokens > 0 ? row.input_tokens / row.total_tokens : 0;
           return (
-            <div key={row.date} className="relative flex min-w-0 flex-1 justify-center">
+            <div
+              key={row.date}
+              className="relative flex h-full min-w-0 flex-1 items-end justify-center"
+            >
               <div
                 className="flex w-full max-w-9 flex-col-reverse overflow-hidden rounded-t-md bg-hairline/70"
                 style={{ height: `${totalHeight}%` }}
@@ -208,7 +227,7 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {tableRows.map((row) => (
               <tr key={row.date} className="border-b border-hairline/50 last:border-0">
                 <td className="py-2 font-mono text-muted">{row.date}</td>
                 <td className="py-2 text-right tabular-nums">
