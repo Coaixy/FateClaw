@@ -5,6 +5,7 @@ import path from 'path';
 import { createSyntheticSourceInfo, type Skill } from '@earendil-works/pi-coding-agent';
 
 import { createRequestScope } from '../request-scope.js';
+import type { SessionBoardContext } from '../types.js';
 import { createPiCustomTools } from './tools.js';
 
 const DEFAULT_PI_TOOL_NAMES = [
@@ -42,6 +43,31 @@ function createReadableSkillFixture(): Skill {
     }),
     disableModelInvocation: false,
   };
+}
+
+function createSessionBoardFixtures(): SessionBoardContext[] {
+  return [
+    {
+      sourceMessageId: 'msg-board-1',
+      source: 'official_paipan',
+      skill: 'bazi-paipan',
+      artifactTitle: '八字排盘',
+      promptText: '当前选中八字盘面正文',
+      artifactData: { bazi: '甲子 乙丑 丙寅 丁卯' },
+      createdAt: '2026-04-25T06:00:00.000Z',
+      isCurrent: true,
+    },
+    {
+      sourceMessageId: 'msg-board-2',
+      source: 'user_pasted_board',
+      skill: 'user-pasted-board::八字',
+      artifactTitle: '自贴盘面: 八字',
+      promptText: '用户自贴盘面正文',
+      artifactData: { category: '八字', content: '用户自贴盘面正文' },
+      createdAt: '2026-04-26T06:00:00.000Z',
+      isCurrent: false,
+    },
+  ];
 }
 
 describe('createPiCustomTools', () => {
@@ -86,6 +112,36 @@ describe('createPiCustomTools', () => {
     );
   });
 
+  it('can include current calendar and ganzhi details in current time', async () => {
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      recordExecution: vi.fn(),
+      now: () => new Date('2026-04-25T06:00:00.000Z'),
+    });
+    const timeTool = tools.find((tool) => tool.name === 'get_current_time')!;
+
+    const result = await timeTool.execute(
+      'time-calendar-1',
+      { timezone: 'Asia/Shanghai', includeCalendar: true },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      local: '2026-04-25 14:00:00',
+      includeCalendar: true,
+      calendar: {
+        solar: '2026年4月25日 14:00:00',
+        lunar: '农历丙午年三月初九辛未时',
+        ganzhi: {
+          eightChar: '丙午 壬辰 己巳 辛未',
+        },
+      },
+    });
+  });
+
   it('calculates ganzhi pillars for a Gregorian datetime', async () => {
     const tools = createPiCustomTools({
       requestScope: createRequestScope(),
@@ -107,11 +163,70 @@ describe('createPiCustomTools', () => {
       isError: false,
       solar: '2026年4月25日 14:00:00',
       lunar: '农历丙午年三月初九辛未时',
+      calendar: {
+        gregorian: {
+          year: 2026,
+          month: 4,
+          day: 25,
+          hour: 14,
+        },
+        lunarDate: {
+          year: 2026,
+          month: 3,
+          day: 9,
+          isLeapMonth: false,
+        },
+      },
       ganzhi: {
         year: '丙午',
         month: '壬辰',
         day: '己巳',
         hour: '辛未',
+        eightChar: '丙午 壬辰 己巳 辛未',
+      },
+    });
+  });
+
+  it('converts a lunar datetime before calculating ganzhi pillars', async () => {
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      recordExecution: vi.fn(),
+    });
+    const ganzhiTool = tools.find(
+      (tool) => tool.name === 'get_ganzhi_by_datetime',
+    )!;
+
+    const result = await ganzhiTool.execute(
+      'ganzhi-lunar-1',
+      {
+        inputCalendar: 'lunar',
+        year: 2026,
+        month: 3,
+        day: 9,
+        hour: 14,
+      },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      input: {
+        inputCalendar: 'lunar',
+        isLeapMonth: false,
+      },
+      solar: '2026年4月25日 14:00:00',
+      lunar: '农历丙午年三月初九辛未时',
+      calendar: {
+        gregorian: {
+          year: 2026,
+          month: 4,
+          day: 25,
+          hour: 14,
+        },
+      },
+      ganzhi: {
         eightChar: '丙午 壬辰 己巳 辛未',
       },
     });
@@ -205,6 +320,96 @@ describe('createPiCustomTools', () => {
     expect(recordExecution).toHaveBeenCalledWith(
       expect.objectContaining({
         invocation: expect.objectContaining({ id: 'read-2' }),
+        isError: true,
+      }),
+    );
+  });
+
+  it('adds one session board tool for listing and reading visible boards', async () => {
+    const recordExecution = vi.fn();
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      sessionBoards: createSessionBoardFixtures(),
+      recordExecution,
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...DEFAULT_PI_TOOL_NAMES,
+      'get_session_board',
+    ]);
+
+    const boardTool = tools.find((tool) => tool.name === 'get_session_board')!;
+    const listResult = await boardTool.execute(
+      'board-list',
+      { mode: 'list' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const detailResult = await boardTool.execute(
+      'board-detail',
+      { mode: 'detail', index: 2 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const missingResult = await boardTool.execute(
+      'board-missing',
+      { mode: 'detail', sourceMessageId: 'missing' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(listResult.details).toMatchObject({
+      isError: false,
+      mode: 'list',
+      total: 2,
+      boards: [
+        {
+          index: 1,
+          sourceMessageId: 'msg-board-1',
+          skill: 'bazi-paipan',
+          isCurrent: true,
+          preview: '当前选中八字盘面正文',
+          hasArtifactData: true,
+        },
+        {
+          index: 2,
+          sourceMessageId: 'msg-board-2',
+          skill: 'user-pasted-board::八字',
+          isCurrent: false,
+          preview: '用户自贴盘面正文',
+          hasArtifactData: true,
+        },
+      ],
+    });
+    expect(detailResult.details).toMatchObject({
+      isError: false,
+      mode: 'detail',
+      board: {
+        index: 2,
+        sourceMessageId: 'msg-board-2',
+        promptText: '用户自贴盘面正文',
+        artifactData: {
+          category: '八字',
+          content: '用户自贴盘面正文',
+        },
+      },
+    });
+    expect(missingResult.details).toMatchObject({
+      isError: true,
+      error: '未找到 sourceMessageId=missing 的盘面。',
+    });
+    expect(recordExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({ toolName: 'get_session_board' }),
+        isError: false,
+      }),
+    );
+    expect(recordExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({ id: 'board-missing' }),
         isError: true,
       }),
     );

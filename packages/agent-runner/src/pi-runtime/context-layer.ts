@@ -231,6 +231,21 @@ function buildFallbackSessionBoardContexts(
   return boards;
 }
 
+/**
+ * 构建当前 Pi 请求可见的盘面集合。
+ *
+ * 参数：ContainerInput。
+ * 返回：优先返回 API 重建的会话盘面；缺失时回退到当前选中盘面或本轮自贴盘面。
+ * 注意：该函数同时供 system context 和只读工具使用，避免两处看到的盘面集合不一致。
+ */
+export function buildVisibleSessionBoardContexts(
+  input: ContainerInput,
+): SessionBoardContext[] {
+  return input.sessionBoardContexts && input.sessionBoardContexts.length > 0
+    ? input.sessionBoardContexts
+    : buildFallbackSessionBoardContexts(input);
+}
+
 function renderBoard(board: SessionBoardContext, index: number): string {
   const attrs = [
     `index="${index + 1}"`,
@@ -259,10 +274,7 @@ function renderBoard(board: SessionBoardContext, index: number): string {
 function buildSessionBoardContextSection(
   input: ContainerInput,
 ): PiContextSection | null {
-  const boards =
-    input.sessionBoardContexts && input.sessionBoardContexts.length > 0
-      ? input.sessionBoardContexts
-      : buildFallbackSessionBoardContexts(input);
+  const boards = buildVisibleSessionBoardContexts(input);
   if (boards.length === 0) return null;
 
   return createSection({

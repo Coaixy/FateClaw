@@ -220,6 +220,7 @@ describe('runPiSession', () => {
         'get_current_time',
         'get_ganzhi_by_datetime',
         'reverse_ganzhi',
+        'get_session_board',
       ],
       readableSkills: [],
       messageCount: 0,
@@ -240,6 +241,7 @@ describe('runPiSession', () => {
       'get_current_time',
       'get_ganzhi_by_datetime',
       'reverse_ganzhi',
+      'get_session_board',
     ]);
     expect(createArgs.tools).not.toEqual(expect.arrayContaining(['bazi_paipan']));
     expect(createArgs.tools).not.toEqual(expect.arrayContaining(['read_memory']));

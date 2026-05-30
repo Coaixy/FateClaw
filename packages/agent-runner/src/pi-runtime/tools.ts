@@ -6,9 +6,11 @@ import {
 import { createPiCurrentTimeTool } from './tools/current-time-tool.js';
 import { createPiGanzhiByDatetimeTool } from './tools/ganzhi-by-datetime-tool.js';
 import { createPiGanzhiReverseTool } from './tools/ganzhi-reverse-tool.js';
+import { createPiSessionBoardTool } from './tools/session-board-tool.js';
 import { createPiSkillReadTool } from './tools/skill-read-tool.js';
 import type { RequestScope } from '../request-scope.js';
 import type { PiToolExecutionRecord } from './types.js';
+import type { SessionBoardContext } from '../types.js';
 
 /**
  * 创建 Pi custom tools 所需的运行时参数。
@@ -16,6 +18,7 @@ import type { PiToolExecutionRecord } from './types.js';
  * 参数：
  * - requestScope：当前请求作用域。
  * - readableSkills：本轮授权可读取的 Skill 清单；为空时不暴露 read。
+ * - sessionBoards：本轮授权给 Pi 读取的会话盘面集合；为空时不暴露 get_session_board。
  * - recordExecution：工具执行记录回调。
  * - now：可选时钟函数，用于固定当前时间工具的测试结果。
  * - defaultTimeZone：当前时间工具默认时区。
@@ -25,6 +28,7 @@ import type { PiToolExecutionRecord } from './types.js';
 export interface CreatePiToolsOptions {
   requestScope: RequestScope;
   readableSkills?: Skill[];
+  sessionBoards?: SessionBoardContext[];
   recordExecution(record: PiToolExecutionRecord): void;
   now?: () => Date;
   defaultTimeZone?: string;
@@ -35,7 +39,7 @@ export interface CreatePiToolsOptions {
  *
  * 参数：CreatePiToolsOptions。
  * 返回：Pi coding agent 可注册的工具定义列表。
- * 注意：时间/干支工具默认可用，read 仅在存在授权 Skill 时可用。
+ * 注意：时间/干支工具默认可用，盘面和 read 工具仅在存在授权资源时可用。
  */
 export function createPiCustomTools(
   options: CreatePiToolsOptions,
@@ -61,6 +65,15 @@ export function createPiCustomTools(
       createPiSkillReadTool({
         requestScope: options.requestScope,
         readableSkills: options.readableSkills,
+        recordExecution: options.recordExecution,
+      }),
+    );
+  }
+  if (options.sessionBoards?.length) {
+    tools.push(
+      createPiSessionBoardTool({
+        requestScope: options.requestScope,
+        sessionBoards: options.sessionBoards,
         recordExecution: options.recordExecution,
       }),
     );

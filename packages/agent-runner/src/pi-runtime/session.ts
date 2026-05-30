@@ -15,7 +15,10 @@ import type { RequestScope } from '../request-scope.js';
 import { createPiResourceLoader } from './resource-loader.js';
 import { createPiProviderRuntime } from './provider.js';
 import { createPiCustomTools } from './tools.js';
-import { createPiSessionContext } from './context-layer.js';
+import {
+  buildVisibleSessionBoardContexts,
+  createPiSessionContext,
+} from './context-layer.js';
 import {
   createPiEventCollector,
   extractAssistantTextFromMessages,
@@ -118,6 +121,7 @@ export async function runPiSession(args: {
   const customTools = createPiCustomTools({
     requestScope: args.requestScope,
     readableSkills,
+    sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
     recordExecution(record) {
       records.push(record);
     },
