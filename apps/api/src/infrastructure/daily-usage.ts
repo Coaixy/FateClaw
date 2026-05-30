@@ -14,9 +14,11 @@ export interface UsageStats {
   total_messages: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_tokens: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  today_total_tokens: number;
 }
 
 export interface PublicStatusStats {
@@ -73,7 +75,8 @@ async function getPublicStatusTokenUsageSeries(
   const { rows } = await getDbPool().query(
     `SELECT date,
             COALESCE(SUM(input_tokens), 0) AS input_tokens,
-            COALESCE(SUM(output_tokens), 0) AS output_tokens
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(total_tokens), 0) AS total_tokens
      FROM daily_usage
      WHERE date = ANY($1::text[])
      GROUP BY date`,
@@ -85,12 +88,14 @@ async function getPublicStatusTokenUsageSeries(
         date: string;
         input_tokens: string | number;
         output_tokens: string | number;
+        total_tokens: string | number;
       };
       return [
         item.date,
         {
           input_tokens: Number(item.input_tokens),
           output_tokens: Number(item.output_tokens),
+          total_tokens: Number(item.total_tokens),
         },
       ];
     }),
@@ -100,12 +105,13 @@ async function getPublicStatusTokenUsageSeries(
     const usage = byDate.get(date) ?? {
       input_tokens: 0,
       output_tokens: 0,
+      total_tokens: 0,
     };
     return {
       date,
       input_tokens: usage.input_tokens,
       output_tokens: usage.output_tokens,
-      total_tokens: usage.input_tokens + usage.output_tokens,
+      total_tokens: usage.total_tokens,
     };
   });
 }
@@ -138,14 +144,16 @@ export async function incrementDailyTokens(
   date: string,
   inputTokens: number,
   outputTokens: number,
+  totalTokens = inputTokens + outputTokens,
 ): Promise<void> {
   await getDbPool().query(
-    `INSERT INTO daily_usage (user_id, date, msg_count, input_tokens, output_tokens)
-     VALUES ($1, $2, 0, $3, $4)
+    `INSERT INTO daily_usage (user_id, date, msg_count, input_tokens, output_tokens, total_tokens)
+     VALUES ($1, $2, 0, $3, $4, $5)
      ON CONFLICT (user_id, date) DO UPDATE SET
        input_tokens = daily_usage.input_tokens + $3,
-       output_tokens = daily_usage.output_tokens + $4`,
-    [userId, date, inputTokens, outputTokens],
+       output_tokens = daily_usage.output_tokens + $4,
+       total_tokens = daily_usage.total_tokens + $5`,
+    [userId, date, inputTokens, outputTokens, totalTokens],
   );
 }
 
@@ -155,7 +163,7 @@ export async function getMonthlyTokenUsage(
 ): Promise<number> {
   const ym = yearMonth ?? new Date().toISOString().slice(0, 7);
   const { rows } = await getDbPool().query(
-    `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+    `SELECT COALESCE(SUM(total_tokens), 0) AS total
      FROM daily_usage WHERE user_id = $1 AND date LIKE $2`,
     [userId, `${ym}%`],
   );
@@ -168,7 +176,8 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
   const { rows: totalRows } = await getDbPool().query(
     `SELECT COALESCE(SUM(msg_count), 0) AS total_messages,
             COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
-            COALESCE(SUM(output_tokens), 0) AS total_output_tokens
+            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+            COALESCE(SUM(total_tokens), 0) AS total_tokens
      FROM daily_usage WHERE user_id = $1`,
     [userId],
   );
@@ -177,12 +186,14 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     total_messages: string | number;
     total_input_tokens: string | number;
     total_output_tokens: string | number;
+    total_tokens: string | number;
   };
 
   const { rows: todayRows } = await getDbPool().query(
     `SELECT COALESCE(msg_count, 0) AS today_messages,
             COALESCE(input_tokens, 0) AS today_input_tokens,
-            COALESCE(output_tokens, 0) AS today_output_tokens
+            COALESCE(output_tokens, 0) AS today_output_tokens,
+            COALESCE(total_tokens, 0) AS today_total_tokens
      FROM daily_usage WHERE user_id = $1 AND date = $2`,
     [userId, today],
   );
@@ -192,6 +203,7 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
         today_messages: number;
         today_input_tokens: number;
         today_output_tokens: number;
+        today_total_tokens: number;
       }
     | undefined;
 
@@ -199,9 +211,11 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     total_messages: Number(total.total_messages),
     total_input_tokens: Number(total.total_input_tokens),
     total_output_tokens: Number(total.total_output_tokens),
+    total_tokens: Number(total.total_tokens),
     today_messages: todayRow?.today_messages ?? 0,
     today_input_tokens: todayRow?.today_input_tokens ?? 0,
     today_output_tokens: todayRow?.today_output_tokens ?? 0,
+    today_total_tokens: todayRow?.today_total_tokens ?? 0,
   };
 }
 
@@ -214,7 +228,7 @@ export async function getDailyUsageRows(
               COALESCE(msg_count, 0) AS msg_count,
               COALESCE(input_tokens, 0) AS input_tokens,
               COALESCE(output_tokens, 0) AS output_tokens,
-              COALESCE(input_tokens + output_tokens, 0) AS total_tokens
+              COALESCE(total_tokens, 0) AS total_tokens
        FROM daily_usage
        WHERE user_id = $1
      ),
@@ -272,7 +286,7 @@ export async function getPublicStatusStats(): Promise<PublicStatusStats> {
     getDbPool().query(`SELECT COUNT(*) AS cnt FROM users`),
     getDbPool().query(
       `SELECT COALESCE(SUM(msg_count), 0) AS today_messages,
-              COALESCE(SUM(input_tokens + output_tokens), 0) AS today_total_tokens
+              COALESCE(SUM(total_tokens), 0) AS today_total_tokens
        FROM daily_usage
        WHERE date = $1`,
       [today],

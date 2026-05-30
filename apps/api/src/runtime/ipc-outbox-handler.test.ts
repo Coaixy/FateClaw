@@ -127,6 +127,7 @@ describe('processOutboxPayload', () => {
       expect.any(String),
       15,
       5,
+      20,
     );
     expect(mockSettleBillingReservation).toHaveBeenCalledWith(
       expect.objectContaining({

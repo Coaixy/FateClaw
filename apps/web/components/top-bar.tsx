@@ -60,11 +60,7 @@ export function TopBar({
 
   const balanceCoins = status?.available_coins ?? null;
   const dotColor = 'bg-primary';
-  const todayTokens = usage
-    ? formatTokens(
-        (usage.today_input_tokens ?? 0) + (usage.today_output_tokens ?? 0),
-      )
-    : '—';
+  const todayTokens = usage ? formatTokens(usage.today_total_tokens ?? 0) : '—';
   const todayTokensLabel = compact
     ? `今 ${todayTokens}`
     : `今日 ${todayTokens}`;

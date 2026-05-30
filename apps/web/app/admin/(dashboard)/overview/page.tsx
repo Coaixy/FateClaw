@@ -211,8 +211,8 @@ export default function AdminOverviewPage() {
 
   if (!stats) return null;
 
-  const totalTokens = stats.total_input_tokens + stats.total_output_tokens;
-  const todayTokens = stats.today_input_tokens + stats.today_output_tokens;
+  const totalTokens = stats.total_tokens;
+  const todayTokens = stats.today_total_tokens;
   const rechargePeriod = stats.recharge_period;
 
   return (

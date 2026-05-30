@@ -251,6 +251,7 @@ async function processOutboxResponse(
           today,
           normalizedPayloadUsage.promptTokens,
           normalizedPayloadUsage.completionTokens,
+          normalizedPayloadUsage.totalTokens,
         );
         logger.info(
           {

@@ -22,9 +22,11 @@ export interface AdminGlobalStats {
   total_messages: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_tokens: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  today_total_tokens: number;
   active_tasks: number;
   recent_signups_7d: number;
   recharge_period: AdminRechargePeriodStats;
@@ -457,10 +459,10 @@ export async function getAdminGlobalStats(
        FROM accounts`,
     ),
     pool.query(
-      `SELECT COALESCE(SUM(msg_count), 0) as msgs, COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as outp FROM daily_usage`,
+      `SELECT COALESCE(SUM(msg_count), 0) as msgs, COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as outp, COALESCE(SUM(total_tokens), 0) as total FROM daily_usage`,
     ),
     pool.query(
-      `SELECT COALESCE(SUM(msg_count), 0) as msgs, COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as outp FROM daily_usage WHERE date = $1`,
+      `SELECT COALESCE(SUM(msg_count), 0) as msgs, COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as outp, COALESCE(SUM(total_tokens), 0) as total FROM daily_usage WHERE date = $1`,
       [today],
     ),
     pool.query(
@@ -497,8 +499,18 @@ export async function getAdminGlobalStats(
   ]);
 
   const acc = accountStats.rows[0] as { total: string; enabled: string };
-  const tu = totalUsage.rows[0] as { msgs: string; inp: string; outp: string };
-  const td = todayUsage.rows[0] as { msgs: string; inp: string; outp: string };
+  const tu = totalUsage.rows[0] as {
+    msgs: string;
+    inp: string;
+    outp: string;
+    total: string;
+  };
+  const td = todayUsage.rows[0] as {
+    msgs: string;
+    inp: string;
+    outp: string;
+    total: string;
+  };
   const rs = rechargeStats.rows[0] as {
     total_orders: number;
     paid_orders: number;
@@ -542,9 +554,11 @@ export async function getAdminGlobalStats(
     total_messages: Number(tu.msgs),
     total_input_tokens: Number(tu.inp),
     total_output_tokens: Number(tu.outp),
+    total_tokens: Number(tu.total),
     today_messages: Number(td.msgs),
     today_input_tokens: Number(td.inp),
     today_output_tokens: Number(td.outp),
+    today_total_tokens: Number(td.total),
     active_tasks: Number((taskCount.rows[0] as { cnt: string }).cnt),
     recent_signups_7d: Number((recentSignups.rows[0] as { cnt: string }).cnt),
   };

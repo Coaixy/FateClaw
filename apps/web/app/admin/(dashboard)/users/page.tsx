@@ -62,7 +62,7 @@ function displayUser(user: AdminUser) {
 }
 
 function totalTokens(user: AdminUser) {
-  return user.usage.total_input_tokens + user.usage.total_output_tokens;
+  return user.usage.total_tokens;
 }
 
 const USER_ROLE_OPTIONS: Array<{ value: AdminUser['role']; label: string }> = [

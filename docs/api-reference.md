@@ -533,7 +533,22 @@ Authorization: Bearer <token>
 
 ### GET /api/billing/usage
 
-查询当前用户累计与今日消息、输入 Token、输出 Token。需认证。
+查询当前用户累计与今日消息、输入 Token、输出 Token、总 Token。需认证。
+
+**Response 200**
+
+```json
+{
+  "total_messages": 126,
+  "total_input_tokens": 620000,
+  "total_output_tokens": 285000,
+  "total_tokens": 905000,
+  "today_messages": 8,
+  "today_input_tokens": 24000,
+  "today_output_tokens": 6200,
+  "today_total_tokens": 30200
+}
+```
 
 ---
 

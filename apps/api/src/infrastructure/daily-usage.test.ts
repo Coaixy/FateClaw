@@ -8,7 +8,11 @@ vi.mock('./db.js', () => ({
   getDbPool: mockGetDbPool,
 }));
 
-import { getDailyUsageRows } from './daily-usage.js';
+import {
+  getDailyUsageRows,
+  getMonthlyTokenUsage,
+  incrementDailyTokens,
+} from './daily-usage.js';
 
 describe('daily usage repository', () => {
   beforeEach(() => {
@@ -46,5 +50,38 @@ describe('daily usage repository', () => {
       ['user-1'],
     );
     expect(query.mock.calls[0]?.[0]).toContain("kind = 'overage_charge'");
+  });
+
+  it('stores Pi total tokens separately from input and output splits', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    mockGetDbPool.mockReturnValue({ query });
+
+    await incrementDailyTokens(
+      'user-1',
+      '2026-05-30',
+      500_000,
+      20_000,
+      900_000,
+    );
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('total_tokens'),
+      ['user-1', '2026-05-30', 500_000, 20_000, 900_000],
+    );
+    expect(query.mock.calls[0]?.[0]).toContain(
+      'total_tokens = daily_usage.total_tokens + $5',
+    );
+  });
+
+  it('uses stored total tokens for monthly usage summaries', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ total: '9000000' }],
+    });
+    mockGetDbPool.mockReturnValue({ query });
+
+    await expect(getMonthlyTokenUsage('user-1', '2026-05')).resolves.toBe(
+      9_000_000,
+    );
+    expect(query.mock.calls[0]?.[0]).toContain('SUM(total_tokens)');
   });
 });

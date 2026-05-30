@@ -189,6 +189,7 @@ async function recordAiChatTokenUsage(args: {
     today,
     normalizedUsage.promptTokens,
     normalizedUsage.completionTokens,
+    normalizedUsage.totalTokens,
   );
   logger.info(
     {

@@ -163,6 +163,7 @@ describe('processAiChatOutboxPayload', () => {
       expect.any(String),
       15,
       5,
+      20,
     );
     expect(mockSettleBillingReservation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -222,6 +223,7 @@ describe('processAiChatOutboxPayload', () => {
       expect.any(String),
       20,
       0,
+      20,
     );
   });
 });

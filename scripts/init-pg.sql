@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS daily_usage (
   msg_count INTEGER DEFAULT 0,
   input_tokens INTEGER DEFAULT 0,
   output_tokens INTEGER DEFAULT 0,
+  total_tokens INTEGER DEFAULT 0,
   PRIMARY KEY (user_id, date)
 );
 

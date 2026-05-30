@@ -97,7 +97,7 @@ describe('metered billing plans', () => {
     expect(mockReserveUserBalanceCoins).not.toHaveBeenCalled();
   });
 
-  it('passes the rounded per-conversation token cost to settlement', async () => {
+  it('passes prompt tokens with cache extras priced as normal input tokens to settlement', async () => {
     await expect(
       settleBillingReservation({
         requestId: 'request-1',

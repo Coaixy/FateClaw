@@ -6,9 +6,11 @@ export interface UsageStatsDto {
   total_messages: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_tokens: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  today_total_tokens: number;
 }
 
 export interface PublicStatusTokenUsagePointDto {

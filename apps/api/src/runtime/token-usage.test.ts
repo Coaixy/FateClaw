@@ -17,6 +17,20 @@ describe('normalizeRuntimeTokenUsage', () => {
     });
   });
 
+  it('charges total token gaps as normal input tokens', () => {
+    expect(
+      normalizeRuntimeTokenUsage({
+        promptTokens: 500_000,
+        completionTokens: 20_000,
+        totalTokens: 900_000,
+      }),
+    ).toEqual({
+      promptTokens: 880_000,
+      completionTokens: 20_000,
+      totalTokens: 900_000,
+    });
+  });
+
   it('treats total-only usage as input tokens', () => {
     expect(normalizeRuntimeTokenUsage({ totalTokens: 20 })).toEqual({
       promptTokens: 20,

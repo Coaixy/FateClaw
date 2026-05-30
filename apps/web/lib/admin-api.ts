@@ -174,9 +174,11 @@ export interface UsageStats {
   total_messages: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_tokens: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  today_total_tokens: number;
 }
 
 export type AdminRechargeStatsRange =
@@ -217,9 +219,11 @@ export interface GlobalStats {
   total_messages: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_tokens: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  today_total_tokens: number;
   active_tasks: number;
   recent_signups_7d: number;
   recharge_period: AdminRechargePeriodStats;

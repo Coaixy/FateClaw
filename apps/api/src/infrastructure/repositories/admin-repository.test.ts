@@ -120,8 +120,8 @@ describe('admin repository', () => {
       [{ cnt: '3' }],
       [{ model_source: 'official', count: '2' }],
       [{ total: '2', enabled: '1' }],
-      [{ msgs: '10', inp: '100', outp: '200' }],
-      [{ msgs: '1', inp: '10', outp: '20' }],
+      [{ msgs: '10', inp: '100', outp: '200', total: '300' }],
+      [{ msgs: '1', inp: '10', outp: '20', total: '30' }],
       [{ cnt: '4' }],
       [{ cnt: '1' }],
       [

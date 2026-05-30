@@ -307,6 +307,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           msg_count INTEGER DEFAULT 0,
           input_tokens INTEGER DEFAULT 0,
           output_tokens INTEGER DEFAULT 0,
+          total_tokens INTEGER DEFAULT 0,
           PRIMARY KEY (user_id, date)
         )
       `);
@@ -2750,6 +2751,64 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         cleanupSql: `UPDATE users
                      SET reserved_coins = 0
                      WHERE reserved_coins < 0`,
+      });
+    },
+  },
+  {
+    id: '0014_daily_usage_total_tokens',
+    description: '为每日用量增加 Pi total token 统计列',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE daily_usage
+          ADD COLUMN IF NOT EXISTS total_tokens INTEGER DEFAULT 0;
+
+        WITH resolved_log_usage AS (
+          SELECT COALESCE(
+                   a.owner_id,
+                   NULLIF(REGEXP_REPLACE(l.account_id, '^web:', ''), l.account_id)
+                 ) AS user_id,
+                 to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+                 COALESCE((l.usage->>'totalTokens')::integer, 0) AS total_tokens
+          FROM conversation_logs l
+          LEFT JOIN accounts a ON a.id = l.account_id
+          WHERE l.usage ? 'totalTokens'
+        ),
+        log_usage AS (
+          SELECT r.user_id, r.date, SUM(r.total_tokens) AS total_tokens
+          FROM resolved_log_usage r
+          JOIN users u ON u.id = r.user_id
+          GROUP BY r.user_id, r.date
+        )
+        INSERT INTO daily_usage (
+          user_id, date, msg_count, input_tokens, output_tokens, total_tokens
+        )
+        SELECT user_id, date, 0, 0, 0, total_tokens
+        FROM log_usage
+        WHERE total_tokens > 0
+        ON CONFLICT (user_id, date) DO UPDATE SET
+          total_tokens = GREATEST(
+            COALESCE(daily_usage.total_tokens, 0),
+            EXCLUDED.total_tokens
+          );
+
+        UPDATE daily_usage
+        SET total_tokens = GREATEST(
+          COALESCE(total_tokens, 0),
+          COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)
+        )
+        WHERE total_tokens IS NULL
+          OR COALESCE(total_tokens, 0) < COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0);
+
+        ALTER TABLE daily_usage
+          ALTER COLUMN total_tokens SET DEFAULT 0;
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_daily_usage_total_tokens_nonnegative',
+        tableName: 'daily_usage',
+        expression: 'total_tokens >= 0',
+        cleanupSql: `UPDATE daily_usage
+                     SET total_tokens = GREATEST(0, input_tokens + output_tokens)
+                     WHERE total_tokens < 0`,
       });
     },
   },

@@ -42,8 +42,7 @@ export function UsagePanel({
 
   const used = status.monthly_tokens_used;
   const todayMessages = usage?.today_messages ?? 0;
-  const todayTokens =
-    (usage?.today_input_tokens ?? 0) + (usage?.today_output_tokens ?? 0);
+  const todayTokens = usage?.today_total_tokens ?? 0;
 
   return (
     <div className="w-[300px]">

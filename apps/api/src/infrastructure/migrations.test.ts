@@ -108,6 +108,20 @@ describe('runDatabaseMigrations', () => {
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
       params: ['0013_soft_currency_decimal_scale', '软妹币金额字段支持两位小数'],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0014_daily_usage_total_tokens',
+        '为每日用量增加 Pi total token 统计列',
+      ],
+    });
+    expect(
+      calls.some(
+        (call) =>
+          call.sql.includes("l.usage->>'totalTokens'") &&
+          call.sql.includes('GREATEST('),
+      ),
+    ).toBe(true);
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -155,6 +169,7 @@ describe('runDatabaseMigrations', () => {
       '0011_soft_currency_coins_schema',
       '0012_model_billing_config',
       '0013_soft_currency_decimal_scale',
+      '0014_daily_usage_total_tokens',
     ]);
 
     await runDatabaseMigrations(client as never);
