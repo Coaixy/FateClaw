@@ -66,7 +66,7 @@ export function createPiProviderRuntime(
         id: runtime.model,
         name: runtime.model,
         api,
-        reasoning: false,
+        reasoning: true,
         input: ['text'],
         cost: {
           input: 0,

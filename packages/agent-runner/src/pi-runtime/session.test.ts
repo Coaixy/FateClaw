@@ -147,6 +147,10 @@ describe('runPiSession', () => {
           params: { text: string },
         ): Promise<unknown>;
       }>;
+      model?: {
+        reasoning?: boolean;
+      };
+      thinkingLevel?: unknown;
       resourceLoader?: {
         getSkills(): { skills: Array<{ name: string; filePath: string }> };
         getAppendSystemPrompt(): string[];
@@ -229,6 +233,8 @@ describe('runPiSession', () => {
     expect(mockCreateAgentSession).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.create).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.open).not.toHaveBeenCalled();
+    expect(createArgs.model?.reasoning).toBe(true);
+    expect(createArgs.thinkingLevel).toBe('xhigh');
     expect(createArgs.noTools).toBe('all');
     expect(createArgs.tools).toEqual([
       'get_current_time',

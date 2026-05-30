@@ -12,6 +12,7 @@ import {
   isKnowledgeTrajectoryMessage,
   isProgressMessage,
   isStreamingAssistantMessage,
+  isThinkingMessage,
   isToolTraceMessage,
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
@@ -66,9 +67,11 @@ export function AiChatMessageList({
   const hasStreamingAssistantMessage = messages.some(
     isStreamingAssistantMessage,
   );
+  const hasThinkingMessage = messages.some(isThinkingMessage);
   const showThinkingIndicator =
     sending &&
-    (!hasStreamingAssistantMessage || pendingToolTraces.length > 0);
+    ((!hasStreamingAssistantMessage && !hasThinkingMessage) ||
+      pendingToolTraces.length > 0);
 
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
@@ -103,7 +106,9 @@ function buildDisplayRows(messages: Message[]) {
     }
 
     const canAttachToolTraces =
-      message.is_bot_message && !isProgressMessage(message);
+      message.is_bot_message &&
+      !isProgressMessage(message) &&
+      !isThinkingMessage(message);
     rows.push({
       message,
       toolTraces: canAttachToolTraces ? pendingToolTraces : [],
@@ -170,6 +175,15 @@ function AiChatMessageRow({
           {displayContent}
         </span>
       </div>
+    );
+  }
+
+  if (isBot && isThinkingMessage(message)) {
+    return (
+      <ThinkingTraceRow
+        content={displayContent}
+        animationIndex={animationIndex}
+      />
     );
   }
 
@@ -241,6 +255,73 @@ function AiChatMessageRow({
           <ToolTraceList messages={toolTraces} />
         )}
 
+      </div>
+    </div>
+  );
+}
+
+function splitThinkingSentences(content: string): string[] {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  const sentences: string[] = [];
+  let rest = normalized;
+  const sentenceEnd = /([。！？!?]+)(["'”’）)]*)/;
+
+  while (rest) {
+    const match = sentenceEnd.exec(rest);
+    if (!match || match.index < 0) break;
+
+    const end = match.index + match[0].length;
+    const sentence = rest.slice(0, end).trim();
+    if (sentence) sentences.push(sentence);
+    rest = rest.slice(end).trimStart();
+  }
+
+  if (rest) sentences.push(rest);
+  return sentences;
+}
+
+function ThinkingTraceRow({
+  content,
+  animationIndex,
+}: {
+  content: string;
+  animationIndex: number;
+}) {
+  const sentences = splitThinkingSentences(content);
+  const visibleSentences = sentences.slice(-12);
+
+  return (
+    <div
+      className="max-w-2xl mx-auto flex justify-start animate-message-in"
+      style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
+    >
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+        <div className="max-w-full rounded-xl border border-hairline bg-surface-card px-3 py-2 shadow-sm">
+          <div className="mb-1 flex items-center gap-2 text-[10px] leading-5 text-muted">
+            <div className="flex items-center gap-1" aria-hidden="true">
+              {[0, 1, 2].map((index) => (
+                <div
+                  key={index}
+                  className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
+                  style={{ animationDelay: `${index * 0.2}s` }}
+                />
+              ))}
+            </div>
+            <span>思考过程</span>
+          </div>
+          <div className="max-h-44 max-w-full overflow-y-auto pr-1 text-[11px] leading-5 text-muted">
+            {visibleSentences.map((sentence, index) => (
+              <p
+                key={`${index}-${sentence.slice(0, 12)}`}
+                className="break-words"
+              >
+                {sentence}
+              </p>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

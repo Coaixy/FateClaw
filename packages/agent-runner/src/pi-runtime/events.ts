@@ -27,6 +27,23 @@ function textFromContent(content: unknown): string {
     .join('');
 }
 
+function thinkingFromContent(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((item) => {
+      if (
+        item &&
+        typeof item === 'object' &&
+        (item as { type?: unknown }).type === 'thinking' &&
+        typeof (item as { thinking?: unknown }).thinking === 'string'
+      ) {
+        return (item as { thinking: string }).thinking;
+      }
+      return '';
+    })
+    .join('');
+}
+
 function isAssistantMessage(
   value: unknown,
 ): value is {
@@ -178,6 +195,7 @@ export function createPiEventCollector(args: {
   pushOutboxProgress?: (message: AiChatProgressOutboxMessage) => void;
 }): (event: AgentSessionEvent) => void {
   let lastAssistantSnapshot = '';
+  let lastThinkingSnapshot = '';
   const toolArgsById = new Map<string, unknown>();
 
   function publish(event: AiChatStreamEvent): void {
@@ -196,6 +214,7 @@ export function createPiEventCollector(args: {
           args.requestScope,
         );
         lastAssistantSnapshot = '';
+        lastThinkingSnapshot = '';
         publish({
           type: 'turn_start',
           turnIndex: readTurnIndex(event),
@@ -203,6 +222,24 @@ export function createPiEventCollector(args: {
         break;
       case 'message_update':
         if (isAssistantMessage(event.message)) {
+          const thinkingSnapshot = thinkingFromContent(event.message.content);
+          if (thinkingSnapshot) {
+            const thinkingDelta = thinkingSnapshot.startsWith(
+              lastThinkingSnapshot,
+            )
+              ? thinkingSnapshot.slice(lastThinkingSnapshot.length)
+              : thinkingSnapshot;
+            lastThinkingSnapshot = thinkingSnapshot;
+            if (thinkingDelta) {
+              publish({
+                type: 'thinking_delta',
+                delta: thinkingDelta,
+                snapshot: thinkingSnapshot,
+                turnIndex: readTurnIndex(event),
+              });
+            }
+          }
+
           const snapshot = textFromContent(event.message.content);
           const delta = snapshot.startsWith(lastAssistantSnapshot)
             ? snapshot.slice(lastAssistantSnapshot.length)
@@ -220,6 +257,18 @@ export function createPiEventCollector(args: {
       case 'turn_end':
         if (isAssistantMessage(event.message)) {
           mergeAssistantUsage(args.usage, event.message);
+          const thinking = thinkingFromContent(event.message.content);
+          if (thinking.trim() && thinking !== lastThinkingSnapshot) {
+            publish({
+              type: 'thinking_delta',
+              delta: thinking.startsWith(lastThinkingSnapshot)
+                ? thinking.slice(lastThinkingSnapshot.length)
+                : thinking,
+              snapshot: thinking,
+              turnIndex: readTurnIndex(event),
+            });
+            lastThinkingSnapshot = thinking;
+          }
           const text = textFromContent(event.message.content);
           if (text.trim()) {
             appendTranscriptEvent(args.requestScope, {

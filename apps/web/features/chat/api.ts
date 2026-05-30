@@ -52,6 +52,14 @@ export type ChatSessionStreamEvent =
       turnIndex?: number;
     }
   | {
+      type: 'thinking_delta';
+      timestamp?: string;
+      sessionId?: string;
+      delta: string;
+      snapshot: string;
+      turnIndex?: number;
+    }
+  | {
       type: 'assistant_message';
       timestamp?: string;
       sessionId?: string;

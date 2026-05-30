@@ -139,7 +139,7 @@ export async function runPiSession(args: {
     cwd,
     agentDir: cwd,
     model: providerRuntime.model,
-    thinkingLevel: 'off',
+    thinkingLevel: 'xhigh',
     authStorage: providerRuntime.authStorage,
     modelRegistry: providerRuntime.modelRegistry,
     resourceLoader,

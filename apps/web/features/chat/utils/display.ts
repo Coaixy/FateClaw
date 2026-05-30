@@ -88,6 +88,10 @@ export function isStreamingAssistantMessage(message: Message) {
   );
 }
 
+export function isThinkingMessage(message: Message) {
+  return Boolean(message.is_bot_message) && getMessageKind(message) === 'thinking';
+}
+
 export function isFinalAssistantMessage(message: Message) {
   return Boolean(message.is_bot_message) && getMessageKind(message) === 'final';
 }

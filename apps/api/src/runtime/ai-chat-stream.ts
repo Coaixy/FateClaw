@@ -41,6 +41,16 @@ export type AiChatStreamEvent =
       turnIndex?: number;
     }
   | {
+      type: 'thinking_delta';
+      timestamp?: string;
+      requestId?: string;
+      accountId?: string;
+      sessionId?: string;
+      delta: string;
+      snapshot: string;
+      turnIndex?: number;
+    }
+  | {
       type: 'assistant_message';
       timestamp?: string;
       requestId?: string;
