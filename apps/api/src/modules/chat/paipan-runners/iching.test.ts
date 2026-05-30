@@ -61,12 +61,12 @@ describe('iching-paipan reference alignment', () => {
       '丁未',
     ]);
     expect(result.zhiGua.yaoList.map((yao) => yao.liuQin)).toEqual([
-      '父母',
       '兄弟',
-      '妻财',
+      '子孙',
+      '官鬼',
+      '兄弟',
       '父母',
       '官鬼',
-      '妻财',
     ]);
     expect(result.benGua.yaoList[0]?.suiXian).toEqual({
       startAge: 20,
@@ -74,7 +74,7 @@ describe('iching-paipan reference alignment', () => {
     });
   });
 
-  it('matches the iching-shifa 1.4 fushen and shensha data', async () => {
+  it('matches the iching-shifa fushen and shensha data', async () => {
     const result = await runPaipan();
 
     expect(result.benGua.fuShen).toEqual(
@@ -100,7 +100,7 @@ describe('iching-paipan reference alignment', () => {
     });
   });
 
-  it('matches the iching-shifa 1.4 data for all-moving kun to qian', async () => {
+  it('matches the iching-shifa data for all-moving kun to qian', async () => {
     const result = await runPaipan({
       yao: '666666',
       datetime: '2024-08-08 09:15',
@@ -124,12 +124,12 @@ describe('iching-paipan reference alignment', () => {
       '癸酉',
     ]);
     expect(result.zhiGua.yaoList.map((yao) => yao.liuQin)).toEqual([
-      '子孙',
       '妻财',
-      '父母',
       '官鬼',
       '兄弟',
       '父母',
+      '子孙',
+      '兄弟',
     ]);
     expect(result.shenSha).toMatchObject({
       文昌: ['巳'],
@@ -145,7 +145,27 @@ describe('iching-paipan reference alignment', () => {
     });
   });
 
-  it('matches the iching-shifa 1.4 data for static qian', async () => {
+  it('keeps changed gua liuqin based on the original gua palace wuxing', async () => {
+    const result = await runPaipan({
+      yao: '988897',
+      datetime: '2026-05-30 17:30',
+    });
+
+    expect(result.benGua.guaName).toBe('益');
+    expect(result.benGua.palace).toBe('巽');
+    expect(result.benGua.palaceWuXing).toBe('木');
+    expect(result.zhiGua.guaName).toBe('剥');
+    expect(result.zhiGua.yaoList.map((yao) => yao.liuQin)).toEqual([
+      '妻财',
+      '子孙',
+      '兄弟',
+      '妻财',
+      '父母',
+      '兄弟',
+    ]);
+  });
+
+  it('matches the iching-shifa data for static qian', async () => {
     const result = await runPaipan({
       yao: '777777',
       datetime: '2025-01-02 22:05',

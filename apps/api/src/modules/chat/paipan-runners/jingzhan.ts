@@ -98,7 +98,7 @@ function generateYao(
   }
 }
 
-/** 执行经占排盘，直接透传 iching-shifa 1.4 的结构化盘面。 */
+/** 执行经占排盘，直接透传 iching-shifa 的结构化盘面。 */
 export async function runJingzhanPaipan(
   input: Record<string, unknown>,
 ): Promise<JingzhanPaipanResult> {

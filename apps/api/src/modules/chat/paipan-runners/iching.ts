@@ -98,7 +98,7 @@ function generateYao(
   }
 }
 
-/** 执行六爻排盘，直接透传 iching-shifa 1.4 的结构化盘面。 */
+/** 执行六爻排盘，直接透传 iching-shifa 的结构化盘面。 */
 export async function runIchingPaipan(
   input: Record<string, unknown>,
 ): Promise<IchingPaipanResult> {
