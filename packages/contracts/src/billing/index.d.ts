@@ -11,10 +11,19 @@ export interface UsageStatsDto {
   today_output_tokens: number;
 }
 
+export interface PublicStatusTokenUsagePointDto {
+  date: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
 export interface PublicStatusStatsDto {
   today_messages: number;
   registered_users: number;
   today_total_tokens: number;
+  processing_sessions: number;
+  token_usage_series: PublicStatusTokenUsagePointDto[];
 }
 
 export interface DailyUsageRowDto {

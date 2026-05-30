@@ -568,7 +568,16 @@ Authorization: Bearer <token>
 {
   "today_messages": 126,
   "registered_users": 42,
-  "today_total_tokens": 905000
+  "today_total_tokens": 905000,
+  "processing_sessions": 3,
+  "token_usage_series": [
+    {
+      "date": "2026-05-30",
+      "input_tokens": 620000,
+      "output_tokens": 285000,
+      "total_tokens": 905000
+    }
+  ]
 }
 ```
 

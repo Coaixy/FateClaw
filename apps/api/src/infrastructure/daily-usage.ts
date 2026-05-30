@@ -1,4 +1,5 @@
 import { getDbPool } from './db.js';
+import { getRedis } from './redis.js';
 
 export interface DailyUsageRow {
   date: string;
@@ -22,6 +23,91 @@ export interface PublicStatusStats {
   today_messages: number;
   registered_users: number;
   today_total_tokens: number;
+  processing_sessions: number;
+  token_usage_series: PublicStatusTokenUsagePoint[];
+}
+
+export interface PublicStatusTokenUsagePoint {
+  date: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+const PROCESSING_SESSION_KEY_PATTERN = 'session:processing:*';
+const PUBLIC_STATUS_TOKEN_USAGE_DAYS = 7;
+
+function recentUtcDateKeys(days: number): string[] {
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - (days - index - 1));
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+async function countProcessingSessions(): Promise<number> {
+  const redis = getRedis();
+  let cursor = '0';
+  let total = 0;
+
+  do {
+    // 状态页只需要数量，使用 SCAN 分批遍历，避免 KEYS 阻塞 Redis。
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      'MATCH',
+      PROCESSING_SESSION_KEY_PATTERN,
+      'COUNT',
+      100,
+    );
+    cursor = nextCursor;
+    total += keys.length;
+  } while (cursor !== '0');
+
+  return total;
+}
+
+async function getPublicStatusTokenUsageSeries(
+  days = PUBLIC_STATUS_TOKEN_USAGE_DAYS,
+): Promise<PublicStatusTokenUsagePoint[]> {
+  const dates = recentUtcDateKeys(days);
+  const { rows } = await getDbPool().query(
+    `SELECT date,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens
+     FROM daily_usage
+     WHERE date = ANY($1::text[])
+     GROUP BY date`,
+    [dates],
+  );
+  const byDate = new Map(
+    rows.map((row) => {
+      const item = row as {
+        date: string;
+        input_tokens: string | number;
+        output_tokens: string | number;
+      };
+      return [
+        item.date,
+        {
+          input_tokens: Number(item.input_tokens),
+          output_tokens: Number(item.output_tokens),
+        },
+      ];
+    }),
+  );
+
+  return dates.map((date) => {
+    const usage = byDate.get(date) ?? {
+      input_tokens: 0,
+      output_tokens: 0,
+    };
+    return {
+      date,
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      total_tokens: usage.input_tokens + usage.output_tokens,
+    };
+  });
 }
 
 export async function getDailyMessageCount(
@@ -181,7 +267,8 @@ export async function getDailyUsageRows(
 
 export async function getPublicStatusStats(): Promise<PublicStatusStats> {
   const today = new Date().toISOString().slice(0, 10);
-  const [userCount, todayUsage] = await Promise.all([
+  const [userCount, todayUsage, processingSessions, tokenUsageSeries] =
+    await Promise.all([
     getDbPool().query(`SELECT COUNT(*) AS cnt FROM users`),
     getDbPool().query(
       `SELECT COALESCE(SUM(msg_count), 0) AS today_messages,
@@ -190,6 +277,8 @@ export async function getPublicStatusStats(): Promise<PublicStatusStats> {
        WHERE date = $1`,
       [today],
     ),
+    countProcessingSessions(),
+    getPublicStatusTokenUsageSeries(),
   ]);
   const usage = todayUsage.rows[0] as {
     today_messages: string | number;
@@ -200,5 +289,7 @@ export async function getPublicStatusStats(): Promise<PublicStatusStats> {
     today_messages: Number(usage.today_messages),
     registered_users: Number((userCount.rows[0] as { cnt: string }).cnt),
     today_total_tokens: Number(usage.today_total_tokens),
+    processing_sessions: processingSessions,
+    token_usage_series: tokenUsageSeries,
   };
 }
