@@ -33,9 +33,11 @@ export default function DiscoverPage() {
   return (
     <AppShell requireAuth={false}>
       <div className="max-w-6xl mx-auto p-4 lg:p-10 space-y-4 lg:space-y-6">
-        <header className="hidden lg:block">
-          <h1 className="text-3xl font-bold tracking-tight">技能市场</h1>
-          <p className="mt-1 text-sm text-muted">
+        <header className="px-0.5">
+          <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl lg:text-3xl">
+            技能市场
+          </h1>
+          <p className="mt-1 text-[12px] text-muted sm:text-sm">
             发现并订阅命理师发布的术数技能
           </p>
         </header>
@@ -89,7 +91,7 @@ export default function DiscoverPage() {
                     <Link
                       key={bundle.id}
                       href={`/skills/bundle/install?token=${bundle.bundle_token}`}
-                      className="group flex items-center gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200"
+                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
                         <div
@@ -102,8 +104,8 @@ export default function DiscoverPage() {
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="truncate text-[13px] font-semibold">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <h3 className="min-w-0 basis-full truncate text-[13px] font-semibold sm:basis-auto">
                             {bundle.name}
                           </h3>
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] leading-tight text-primary">
@@ -113,8 +115,15 @@ export default function DiscoverPage() {
                         <p className="mt-0.5 truncate text-[12px] text-muted">
                           {bundle.description || '整组技能打包订阅'}
                         </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
+                          <span className="font-bold text-ink">一键订阅</span>
+                          <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
+                            <Layers size={11} className="text-muted" />
+                            {bundle.skill_count} 个技能
+                          </span>
+                        </div>
                       </div>
-                      <div className="shrink-0 text-right">
+                      <div className="hidden shrink-0 text-right sm:block">
                         <span className="block text-[13px] font-bold text-ink">
                           一键订阅
                         </span>
@@ -160,7 +169,7 @@ export default function DiscoverPage() {
                           ? `/skills/install?token=${s.share_token}`
                           : '#'
                       }
-                      className="group flex min-h-[76px] items-center gap-3 rounded-2xl border border-hairline/80 bg-[color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas))] px-3.5 py-3 shadow-sm hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] hover:bg-surface-card transition-all duration-200"
+                      className="group flex min-h-[76px] items-start gap-3 rounded-2xl border border-hairline/80 bg-[color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas))] px-3.5 py-3 shadow-sm hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] hover:bg-surface-card transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
                         <div
@@ -173,8 +182,8 @@ export default function DiscoverPage() {
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="truncate text-[14px] font-semibold text-ink">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <h3 className="min-w-0 basis-full truncate text-[14px] font-semibold text-ink sm:basis-auto">
                             {s.skill_name}
                           </h3>
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-primary">
@@ -187,8 +196,19 @@ export default function DiscoverPage() {
                         <p className="mt-1 truncate text-[12px] leading-5 text-body">
                           {s.description || '暂无描述'}
                         </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
+                          <span className="font-bold text-ink">
+                            {minPrice > 0
+                              ? formatCoins(minPrice)
+                              : '免费'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
+                            <Users size={11} className="text-muted" />
+                            热度 {s.stat_subscriber_count.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                      <div className="min-w-[72px] shrink-0 text-right">
+                      <div className="hidden min-w-[72px] shrink-0 text-right sm:block">
                         <span className="block text-[14px] font-bold text-ink">
                           {minPrice > 0
                             ? formatCoins(minPrice)
