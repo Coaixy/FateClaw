@@ -140,6 +140,27 @@ body {
   outline-offset: 1px;
 }
 
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  /* iOS WebKit 会在可编辑控件字号低于 16px 时自动放大页面，触摸端统一兜底以保持输入焦点稳定。 */
+  input:not([type]),
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='email'],
+  input[type='month'],
+  input[type='number'],
+  input[type='password'],
+  input[type='search'],
+  input[type='tel'],
+  input[type='text'],
+  input[type='time'],
+  input[type='url'],
+  input[type='week'],
+  textarea[class],
+  select[class] {
+    font-size: 16px;
+  }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
