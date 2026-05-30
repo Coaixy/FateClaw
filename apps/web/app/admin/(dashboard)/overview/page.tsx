@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { admin, type GlobalStats } from '@/lib/admin-api';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -33,13 +33,9 @@ function fmt(n: number) {
   return n.toLocaleString();
 }
 
-function fmtYuan(value: string | number) {
+function fmtCoins(value: number) {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return '软妹币 0.00';
-  return `软妹币 ${amount.toLocaleString('zh-CN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatCoins(Number.isFinite(amount) ? Math.trunc(amount) : 0);
 }
 
 function modelSelectionLabel(source: string | null) {
@@ -75,11 +71,11 @@ function isSameDateRange(a: DateRange, b: DateRange) {
   return a.startDate === b.startDate && a.endDate === b.endDate;
 }
 
-function avgOrderYuan(totalYuan: string, orders: number) {
-  if (orders <= 0) return '软妹币 0.00';
-  const total = Number(totalYuan);
-  if (!Number.isFinite(total)) return '软妹币 0.00';
-  return fmtYuan(total / orders);
+function avgOrderCoins(totalCoins: number, orders: number) {
+  if (orders <= 0) return formatCoins(0);
+  const total = Number(totalCoins);
+  if (!Number.isFinite(total)) return formatCoins(0);
+  return formatCoins(Math.round(total / orders));
 }
 
 // ─── 组件 ───
@@ -337,7 +333,7 @@ export default function AdminOverviewPage() {
             <RevenueMetric
               icon={Banknote}
               label="筛选收入"
-              value={fmtYuan(rechargePeriod.total_recharge_yuan)}
+              value={fmtCoins(rechargePeriod.total_recharge_coins)}
               sub={`${rechargePeriod.start_date} 至 ${rechargePeriod.end_date}`}
             />
             <RevenueMetric
@@ -349,14 +345,14 @@ export default function AdminOverviewPage() {
             <RevenueMetric
               icon={Coins}
               label="入账余额"
-              value={formatCents(rechargePeriod.total_recharge_cents)}
-              sub={`累计入账 ${formatCents(stats.total_recharge_cents)}`}
+              value={formatCoins(rechargePeriod.total_recharge_coins)}
+              sub={`累计入账 ${formatCoins(stats.total_recharge_coins)}`}
             />
             <RevenueMetric
               icon={Calculator}
               label="平均客单价"
-              value={avgOrderYuan(
-                rechargePeriod.total_recharge_yuan,
+              value={avgOrderCoins(
+                rechargePeriod.total_recharge_coins,
                 rechargePeriod.paid_orders,
               )}
               sub="筛选收入 / 已支付订单"
@@ -366,11 +362,11 @@ export default function AdminOverviewPage() {
           <div className="grid gap-px bg-hairline md:grid-cols-3">
             <RevenueFooterItem
               label="今日收入"
-              value={fmtYuan(stats.today_recharge_yuan)}
+              value={fmtCoins(stats.today_recharge_coins)}
             />
             <RevenueFooterItem
               label="累计收入"
-              value={fmtYuan(stats.total_recharge_yuan)}
+              value={fmtCoins(stats.total_recharge_coins)}
             />
             <RevenueFooterItem
               label="待支付订单"

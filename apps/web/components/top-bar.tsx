@@ -7,11 +7,11 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
-function formatBalanceShort(cents: number): string {
-  if (cents < 100_000) return formatCents(cents);
-  return `软妹币 ${Math.round(cents / 100).toLocaleString()}`;
+function formatBalanceShort(coins: number): string {
+  if (coins < 100_000) return formatCoins(coins);
+  return `软妹币 ${Math.round(coins / 100).toLocaleString()}`;
 }
 
 function formatTokens(n: number): string {
@@ -59,7 +59,7 @@ export function TopBar({
 
   if (!user) return null;
 
-  const balanceCents = status?.available_cents ?? null;
+  const balanceCoins = status?.available_coins ?? null;
   const dotColor = 'bg-primary';
   const todayTokens = usage
     ? formatTokens(
@@ -70,11 +70,11 @@ export function TopBar({
     ? `今 ${todayTokens}`
     : `今日 ${todayTokens}`;
   const balanceLabel =
-    balanceCents === null
+    balanceCoins === null
       ? '—'
       : compact
-        ? formatBalanceShort(balanceCents)
-        : formatCents(balanceCents);
+        ? formatBalanceShort(balanceCoins)
+        : formatCoins(balanceCoins);
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
@@ -89,7 +89,7 @@ export function TopBar({
             setMenuOpen(false);
           }}
           className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
-          aria-label={`${balanceCents === null ? '余额加载中' : `${formatCents(balanceCents)} 可用`}，今日 ${todayTokens}`}
+          aria-label={`${balanceCoins === null ? '余额加载中' : `${formatCoins(balanceCoins)} 可用`}，今日 ${todayTokens}`}
           aria-expanded={usageOpen}
         >
           <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
@@ -134,9 +134,9 @@ export function TopBar({
           <UserMenuDropdown
             user={{ phone: user.phone }}
             balanceLabel={
-              balanceCents === null
+              balanceCoins === null
                 ? '加载中…'
-                : `${formatCents(balanceCents)} 可用`
+                : `${formatCoins(balanceCoins)} 可用`
             }
             avatar={<AvatarBadge />}
             onNavigate={() => setMenuOpen(false)}

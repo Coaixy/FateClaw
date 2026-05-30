@@ -42,7 +42,7 @@ export interface ResolvedProviderSecret {
 
 export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
-const CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS = 200;
+const CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -58,8 +58,8 @@ export interface EffectiveLlmRuntimeConfig {
   model: string;
   contextWindowTokens: number;
   maxOutputTokens: number;
-  inputTokenPricePerMillionCents: number;
-  outputTokenPricePerMillionCents: number;
+  inputTokenPricePerMillionCoins: number;
+  outputTokenPricePerMillionCoins: number;
 }
 
 export type EffectiveAgentRuntimeConfig = EffectiveLlmRuntimeConfig;
@@ -225,9 +225,9 @@ async function resolveOfficialRuntime(
     contextWindowTokens,
     // 输出上限不再从后台配置读取，避免把“上下文窗口”误传成供应商 API 的 max_tokens。
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    inputTokenPricePerMillionCents: model.input_token_price_per_million_cents,
-    outputTokenPricePerMillionCents:
-      model.output_token_price_per_million_cents,
+    inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
+    outputTokenPricePerMillionCoins:
+      model.output_token_price_per_million_coins,
   };
 }
 
@@ -268,10 +268,10 @@ async function resolveCustomRuntime(
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    inputTokenPricePerMillionCents:
-      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS,
-    outputTokenPricePerMillionCents:
-      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_CENTS,
+    inputTokenPricePerMillionCoins:
+      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
+    outputTokenPricePerMillionCoins:
+      CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
   };
 }
 
@@ -374,9 +374,9 @@ export async function setOfficialModelSecret(args: {
     baseUrl: model.base_url,
     modelName: model.model_name,
     apiKeySecretKey: secretKey,
-    inputTokenPricePerMillionCents: model.input_token_price_per_million_cents,
-    outputTokenPricePerMillionCents:
-      model.output_token_price_per_million_cents,
+    inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
+    outputTokenPricePerMillionCoins:
+      model.output_token_price_per_million_coins,
     extraJson: {
       ...(model.extra_json ?? {}),
       auth_mode: args.authMode ?? defaultAuthMode(model.pi_api),
@@ -401,8 +401,8 @@ export async function createOfficialModel(args: {
   priority?: number;
   baseUrl?: string | null;
   modelName: string;
-  inputTokenPricePerMillionCents?: number;
-  outputTokenPricePerMillionCents?: number;
+  inputTokenPricePerMillionCoins?: number;
+  outputTokenPricePerMillionCoins?: number;
   contextWindowTokens?: number | null;
   description?: string;
   secretValue?: string;
@@ -440,9 +440,9 @@ export async function createOfficialModel(args: {
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
     apiKeySecretKey: secretKey,
-    inputTokenPricePerMillionCents: args.inputTokenPricePerMillionCents ?? 0,
-    outputTokenPricePerMillionCents:
-      args.outputTokenPricePerMillionCents ?? 0,
+    inputTokenPricePerMillionCoins: args.inputTokenPricePerMillionCoins ?? 0,
+    outputTokenPricePerMillionCoins:
+      args.outputTokenPricePerMillionCoins ?? 0,
     extraJson,
   });
   await createConfigAuditLog({
@@ -465,8 +465,8 @@ export async function updateOfficialModel(args: {
   priority: number;
   baseUrl?: string | null;
   modelName: string;
-  inputTokenPricePerMillionCents: number;
-  outputTokenPricePerMillionCents: number;
+  inputTokenPricePerMillionCoins: number;
+  outputTokenPricePerMillionCoins: number;
   contextWindowTokens?: number | null;
   description?: string;
   actor?: string;
@@ -486,8 +486,8 @@ export async function updateOfficialModel(args: {
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
     apiKeySecretKey: before.api_key_secret_key,
-    inputTokenPricePerMillionCents: args.inputTokenPricePerMillionCents,
-    outputTokenPricePerMillionCents: args.outputTokenPricePerMillionCents,
+    inputTokenPricePerMillionCoins: args.inputTokenPricePerMillionCoins,
+    outputTokenPricePerMillionCoins: args.outputTokenPricePerMillionCoins,
     extraJson: withModelDescription(
       withModelContextWindowTokens(
         before.extra_json,

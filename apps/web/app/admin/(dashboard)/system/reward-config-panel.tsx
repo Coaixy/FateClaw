@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { CalendarCheck, Loader2, Save } from 'lucide-react';
 
 import type { AdminRewardConfig } from '@/lib/admin-api';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
 type RewardDraft = {
   daily_sign_in: {
     enabled: boolean;
-    reward_cents: number;
+    reward_coins: number;
   };
 };
 
@@ -17,7 +17,7 @@ function draftFromConfig(config: AdminRewardConfig | null): RewardDraft {
   return {
     daily_sign_in: {
       enabled: config?.daily_sign_in.enabled ?? false,
-      reward_cents: config?.daily_sign_in.reward_cents ?? 0,
+      reward_coins: config?.daily_sign_in.reward_coins ?? 0,
     },
   };
 }
@@ -89,13 +89,13 @@ export function RewardConfigPanel({
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
-            每日奖励（软妹币分）
+            每日奖励（软妹币）
           </div>
           <input
-            value={draft.daily_sign_in.reward_cents}
+            value={draft.daily_sign_in.reward_coins}
             onChange={(event) =>
               updateDailySignIn({
-                reward_cents: Math.max(
+                reward_coins: Math.max(
                   0,
                   Number.parseInt(event.target.value, 10) || 0,
                 ),
@@ -109,7 +109,7 @@ export function RewardConfigPanel({
           <div className="min-h-11 w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
             当前设置：
             <span className="font-medium text-ink">
-              {formatCents(draft.daily_sign_in.reward_cents)}
+              {formatCoins(draft.daily_sign_in.reward_coins)}
             </span>
           </div>
         </div>

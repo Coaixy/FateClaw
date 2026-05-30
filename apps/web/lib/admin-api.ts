@@ -139,19 +139,19 @@ export interface AdminUser {
   active_tasks: number;
   usage: UsageStats;
   monthly_tokens_used: number;
-  estimated_monthly_total_cents: number;
-  purchased_cents: number;
-  bonus_cents: number;
-  reserved_cents: number;
-  available_cents: number;
+  estimated_monthly_total_coins: number;
+  purchased_coins: number;
+  bonus_coins: number;
+  reserved_coins: number;
+  available_coins: number;
 }
 
 export interface WalletTransaction {
   id: string;
   user_id: string;
   kind: string;
-  amount_cents: number;
-  reserved_delta_cents: number;
+  amount_coins: number;
+  reserved_delta_coins: number;
   balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
@@ -193,8 +193,7 @@ export interface AdminRechargePeriodStats {
   start_date: string | null;
   end_date: string | null;
   paid_orders: number;
-  total_recharge_cents: number;
-  total_recharge_yuan: string;
+  total_recharge_coins: number;
 }
 
 export interface UserDetail {
@@ -211,10 +210,8 @@ export interface GlobalStats {
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
-  total_recharge_cents: number;
-  total_recharge_yuan: string;
-  today_recharge_cents: number;
-  today_recharge_yuan: string;
+  total_recharge_coins: number;
+  today_recharge_coins: number;
   total_accounts: number;
   enabled_accounts: number;
   total_messages: number;
@@ -333,8 +330,8 @@ export interface AdminModelProvider {
   model_name: string;
   context_window_tokens: number | null;
   api_key_secret_key: string | null;
-  input_token_price_per_million_cents: number;
-  output_token_price_per_million_cents: number;
+  input_token_price_per_million_coins: number;
+  output_token_price_per_million_coins: number;
   extra_json: Record<string, unknown> | null;
   has_secret: boolean;
   secret_source: 'database' | 'missing';
@@ -360,8 +357,8 @@ export interface AdminConfigAuditLog {
 
 export interface AdminRechargePaymentConfig {
   enabled: boolean;
-  min_yuan: string;
-  max_yuan: string;
+  min_coins: string;
+  max_coins: string;
   epay_url_prefix: string;
   epay_platform_id: number | null;
   epay_merchant_private_key: string;
@@ -375,7 +372,7 @@ export interface AdminRechargePaymentConfig {
 export interface AdminRewardConfig {
   daily_sign_in: {
     enabled: boolean;
-    reward_cents: number;
+    reward_coins: number;
     updated_at: string;
   };
 }
@@ -434,7 +431,7 @@ export const admin = {
   updateRewardConfig: (data: {
     daily_sign_in: {
       enabled: boolean;
-      reward_cents: number;
+      reward_coins: number;
     };
   }) =>
     adminRequest<AdminRewardConfig>('/api/admin/reward-config', {
@@ -451,8 +448,8 @@ export const admin = {
     base_url?: string | null;
     model_name: string;
     context_window_tokens?: number | null;
-    input_token_price_per_million_cents: number;
-    output_token_price_per_million_cents: number;
+    input_token_price_per_million_coins: number;
+    output_token_price_per_million_coins: number;
     api_key?: string;
   }) =>
     adminRequest<AdminModelProvider>('/api/admin/system-config/providers', {
@@ -471,8 +468,8 @@ export const admin = {
       base_url?: string | null;
       model_name: string;
       context_window_tokens?: number | null;
-      input_token_price_per_million_cents: number;
-      output_token_price_per_million_cents: number;
+      input_token_price_per_million_coins: number;
+      output_token_price_per_million_coins: number;
     },
   ) =>
     adminRequest<AdminModelProvider>(
@@ -517,14 +514,14 @@ export const admin = {
     adminRequest<UserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
   adjustPurchasedBalance: (
     id: string,
-    data: { amount_cents: number; note?: string },
+    data: { amount_coins: number; note?: string },
   ) =>
     adminRequest<{
       success: boolean;
-      purchased_cents: number;
-      bonus_cents: number;
-      reserved_cents: number;
-      available_cents: number;
+      purchased_coins: number;
+      bonus_coins: number;
+      reserved_coins: number;
+      available_coins: number;
     }>(`/api/admin/users/${encodeURIComponent(id)}/balance/adjust`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -612,7 +609,7 @@ export const admin = {
   grantBonusBalance: (
     id: string,
     data: {
-      amount_cents: number;
+      amount_coins: number;
       source?: 'new_user_gift' | 'sign_in' | 'admin_grant' | 'promotion';
       note?: string;
       expires_at?: string | null;
@@ -621,7 +618,7 @@ export const admin = {
     adminRequest<{
       success: boolean;
       grant_id: string;
-      bonus_cents: number;
+      bonus_coins: number;
     }>(`/api/admin/users/${encodeURIComponent(id)}/balance/grant`, {
       method: 'POST',
       body: JSON.stringify(data),

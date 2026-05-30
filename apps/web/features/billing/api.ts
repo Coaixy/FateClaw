@@ -31,8 +31,8 @@ export interface BalanceGrant {
   user_id: string;
   source: string;
   granted_by: string | null;
-  amount_cents: number;
-  remaining_cents: number;
+  amount_coins: number;
+  remaining_coins: number;
   note: string | null;
   expires_at: string | null;
   status: 'active' | 'exhausted' | 'expired' | 'revoked';
@@ -82,7 +82,7 @@ export const billingApi = {
   rechargeStats: () =>
     requestJson<RechargeStats>('/api/billing/recharge/stats'),
   createRechargeOrder: (data: {
-    amount_yuan: string | number;
+    amount_coins: string | number;
     pay_type: RechargePayType;
   }) =>
     requestJson<CreateRechargeOrderResponseDto>(

@@ -9,9 +9,9 @@ const USER_SELECT_COLUMNS = `
   u.phone_verified,
   u.password_hash,
   u.role,
-  u.purchased_cents,
-  u.bonus_cents,
-  u.reserved_cents,
+  u.purchased_coins,
+  u.bonus_coins,
+  u.reserved_coins,
   u.soul_content,
   u.created_at
 `;
@@ -48,7 +48,7 @@ export async function createUser(user: User): Promise<void> {
   await getDbPool().query(
     `INSERT INTO users
        (id, phone, phone_verified, password_hash, role,
-        purchased_cents, bonus_cents, reserved_cents,
+        purchased_coins, bonus_coins, reserved_coins,
         created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
@@ -57,9 +57,9 @@ export async function createUser(user: User): Promise<void> {
       user.phone_verified,
       user.password_hash,
       user.role,
-      user.purchased_cents,
-      user.bonus_cents,
-      user.reserved_cents,
+      user.purchased_coins,
+      user.bonus_coins,
+      user.reserved_coins,
       user.created_at,
     ],
   );

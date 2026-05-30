@@ -40,8 +40,7 @@ export function toRechargeOrderDto(row: RechargeOrderRow): RechargeOrderDto {
     provider: row.provider,
     provider_trade_id: row.provider_trade_id,
     pay_type: row.pay_type,
-    amount_yuan: row.amount_yuan,
-    amount_cents: row.amount_cents,
+    amount_coins: row.amount_coins,
     pay_url: row.pay_url,
     status: row.status,
     paid_at: row.paid_at,
@@ -60,8 +59,7 @@ export function toRechargeOrdersDto(
 export function toRechargeStatsDto(row: RechargeStatsRow): RechargeStatsDto {
   return {
     total_paid_orders: row.total_paid_orders,
-    total_recharge_cents: row.total_recharge_cents,
-    total_recharge_yuan: row.total_recharge_yuan,
+    total_recharge_coins: row.total_recharge_coins,
     last_paid_at: row.last_paid_at,
   };
 }

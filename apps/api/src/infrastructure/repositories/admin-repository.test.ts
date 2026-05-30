@@ -14,6 +14,7 @@ vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
 }));
 
 import {
+  getAdminGlobalStats,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getTasksForAdmin,
@@ -112,5 +113,56 @@ describe('admin repository', () => {
     expect(mockReadTextSkillBundleFiles).toHaveBeenCalledWith(
       'text-skill://skill-1',
     );
+  });
+
+  it('builds recharge stats SQL with integer soft currency columns', async () => {
+    const { calls } = createMockPool([
+      [{ cnt: '3' }],
+      [{ model_source: 'official', count: '2' }],
+      [{ total: '2', enabled: '1' }],
+      [{ msgs: '10', inp: '100', outp: '200' }],
+      [{ msgs: '1', inp: '10', outp: '20' }],
+      [{ cnt: '4' }],
+      [{ cnt: '1' }],
+      [
+        {
+          total_orders: 5,
+          paid_orders: 3,
+          pending_orders: 1,
+          total_coins: 120,
+          today_coins: 20,
+          period_paid_orders: 2,
+          period_coins: 70,
+        },
+      ],
+    ]);
+
+    await expect(
+      getAdminGlobalStats({
+        rechargeRange: 'custom',
+        rechargeStartDate: '2026-05-01',
+        rechargeEndDate: '2026-05-30',
+      }),
+    ).resolves.toMatchObject({
+      total_recharge_coins: 120,
+      today_recharge_coins: 20,
+      recharge_period: {
+        range: 'custom',
+        start_date: '2026-05-01',
+        end_date: '2026-05-30',
+        paid_orders: 2,
+        total_recharge_coins: 70,
+      },
+    });
+
+    const rechargeStatsSql = calls[7]?.sql ?? '';
+    expect(rechargeStatsSql).toContain('SUM(amount_coins)');
+    expect(rechargeStatsSql).toContain('AS period_coins\n       FROM');
+    expect(rechargeStatsSql).not.toContain('amount_cents');
+    expect(calls[7]?.params).toEqual([
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      '2026-05-01',
+      '2026-05-31',
+    ]);
   });
 });

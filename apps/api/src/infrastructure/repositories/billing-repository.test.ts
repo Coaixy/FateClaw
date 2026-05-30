@@ -24,11 +24,11 @@ vi.mock('../logger.js', () => ({
 
 import {
   createDailySignInReward,
-  deductBalanceCents,
+  deductBalanceCoins,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
-  reserveUserBalanceCents,
+  reserveUserBalanceCoins,
   settleRechargeOrderPaid,
 } from './billing-repository.js';
 
@@ -89,8 +89,7 @@ describe('billing repository', () => {
         userId: 'user-1',
         tradeId: 'trade-1',
         payType: 'alipay',
-        amountYuan: '9.90',
-        amountCents: 990,
+        amountCoins: 10,
         metadata: { plan: 'basic' },
       }),
     ).resolves.toEqual({ id: 'order-1' });
@@ -101,8 +100,7 @@ describe('billing repository', () => {
       'user-1',
       'trade-1',
       'alipay',
-      '9.90',
-      990,
+      10,
       JSON.stringify({ plan: 'basic' }),
     ]);
   });
@@ -115,8 +113,7 @@ describe('billing repository', () => {
       provider: 'epay',
       provider_trade_id: null,
       pay_type: 'alipay',
-      amount_yuan: '9.90',
-      amount_cents: 990,
+      amount_coins: 10,
       status: 'pending',
     };
     const updated = { ...order, status: 'paid' };
@@ -135,10 +132,10 @@ describe('billing repository', () => {
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('FOR UPDATE');
-    expect(clientCalls[2]?.sql).toContain('SET purchased_cents');
+    expect(clientCalls[2]?.sql).toContain('SET purchased_coins');
     expect(clientCalls[3]?.sql).toContain('INSERT INTO wallet_transactions');
     expect(clientCalls[3]?.params?.[1]).toBe('user-1');
-    expect(clientCalls[3]?.params?.[3]).toBe(990);
+    expect(clientCalls[3]?.params?.[3]).toBe(10);
     expect(clientCalls[4]?.sql).toContain('UPDATE recharge_orders');
     expect(clientCalls[5]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
@@ -175,19 +172,19 @@ describe('billing repository', () => {
   it('creates daily sign-in rewards transactionally', async () => {
     const user = {
       id: 'user-1',
-      purchased_cents: 100,
-      bonus_cents: 10,
-      reserved_cents: 0,
+      purchased_coins: 100,
+      bonus_coins: 10,
+      reserved_coins: 0,
     };
     const record = {
       id: 'signin-1',
       user_id: 'user-1',
       sign_in_date: '2026-05-30',
-      reward_cents: 20,
+      reward_coins: 20,
       balance_grant_id: 'bg-1',
       created_at: '2026-05-30T00:00:00.000Z',
     };
-    const updated = { ...user, bonus_cents: 30 };
+    const updated = { ...user, bonus_coins: 30 };
     mockGetUserByIdUsing.mockResolvedValue(user);
     const { clientCalls, client } = createMockPool(
       [],
@@ -198,7 +195,7 @@ describe('billing repository', () => {
       createDailySignInReward({
         userId: 'user-1',
         signInDate: '2026-05-30',
-        rewardCents: 20,
+        rewardCoins: 20,
       }),
     ).resolves.toEqual({
       user: updated,
@@ -209,7 +206,7 @@ describe('billing repository', () => {
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('INSERT INTO daily_sign_in_records');
     expect(clientCalls[2]?.sql).toContain('INSERT INTO balance_grants');
-    expect(clientCalls[3]?.sql).toContain('SET bonus_cents');
+    expect(clientCalls[3]?.sql).toContain('SET bonus_coins');
     expect(clientCalls[4]?.sql).toContain('INSERT INTO wallet_transactions');
     expect(clientCalls[5]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
@@ -218,15 +215,15 @@ describe('billing repository', () => {
   it('does not grant twice when daily sign-in record already exists', async () => {
     const user = {
       id: 'user-1',
-      purchased_cents: 100,
-      bonus_cents: 10,
-      reserved_cents: 0,
+      purchased_coins: 100,
+      bonus_coins: 10,
+      reserved_coins: 0,
     };
     const existingRecord = {
       id: 'signin-existing',
       user_id: 'user-1',
       sign_in_date: '2026-05-30',
-      reward_cents: 20,
+      reward_coins: 20,
       balance_grant_id: 'bg-existing',
       created_at: '2026-05-30T00:00:00.000Z',
     };
@@ -240,7 +237,7 @@ describe('billing repository', () => {
       createDailySignInReward({
         userId: 'user-1',
         signInDate: '2026-05-30',
-        rewardCents: 20,
+        rewardCoins: 20,
       }),
     ).resolves.toEqual({
       user,
@@ -251,7 +248,7 @@ describe('billing repository', () => {
     expect(clientCalls[1]?.sql).toContain('INSERT INTO daily_sign_in_records');
     expect(clientCalls[2]?.sql).toContain('FROM daily_sign_in_records');
     expect(
-      clientCalls.some((call) => call.sql.includes('SET bonus_cents')),
+      clientCalls.some((call) => call.sql.includes('SET bonus_coins')),
     ).toBe(false);
     expect(clientCalls[3]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
@@ -260,11 +257,11 @@ describe('billing repository', () => {
   it('reserves only currently spendable balance', async () => {
     const user = {
       id: 'user-1',
-      purchased_cents: 10,
-      bonus_cents: 2,
-      reserved_cents: 3,
+      purchased_coins: 10,
+      bonus_coins: 2,
+      reserved_coins: 3,
     };
-    const updated = { ...user, reserved_cents: 12 };
+    const updated = { ...user, reserved_coins: 12 };
     mockGetUserByIdUsing.mockResolvedValue(user);
     const { clientCalls, client } = createMockPool(
       [],
@@ -272,22 +269,22 @@ describe('billing repository', () => {
     );
 
     await expect(
-      reserveUserBalanceCents({
+      reserveUserBalanceCoins({
         userId: 'user-1',
-        amountCents: 20,
+        amountCoins: 20,
         requestId: 'request-1',
         yearMonth: '2026-05',
       }),
     ).resolves.toEqual({
       user: updated,
-      reservedCents: 9,
+      reservedCoins: 9,
     });
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1', {
       forUpdate: true,
     });
-    expect(clientCalls[2]?.sql).toContain('SET reserved_cents');
+    expect(clientCalls[2]?.sql).toContain('SET reserved_coins');
     expect(clientCalls[2]?.params).toEqual([9, 'user-1']);
     expect(clientCalls[3]?.sql).toContain(
       'INSERT INTO billing_request_reservations',
@@ -311,8 +308,8 @@ describe('billing repository', () => {
         clientCalls.push({ sql, params });
         if (sql.includes('FROM balance_grants')) {
           return normalizeResult([
-            { id: 'batch-1', remaining_cents: 3 },
-            { id: 'batch-2', remaining_cents: 10 },
+            { id: 'batch-1', remaining_coins: 3 },
+            { id: 'batch-2', remaining_coins: 10 },
           ]);
         }
         return normalizeResult([]);
@@ -320,13 +317,13 @@ describe('billing repository', () => {
     };
 
     await expect(
-      deductBalanceCents(
+      deductBalanceCoins(
         client as never,
         {
           id: 'user-1',
-          purchased_cents: 5,
-          bonus_cents: 10,
-          reserved_cents: 0,
+          purchased_coins: 5,
+          bonus_coins: 10,
+          reserved_coins: 0,
         } as never,
         8,
       ),
@@ -334,8 +331,8 @@ describe('billing repository', () => {
       bonusDeducted: 8,
       purchasedDeducted: 0,
       grantDeductions: [
-        { grantId: 'batch-1', cents: 3 },
-        { grantId: 'batch-2', cents: 5 },
+        { grantId: 'batch-1', coins: 3 },
+        { grantId: 'batch-2', coins: 5 },
       ],
       balanceSource: 'bonus',
     });
@@ -343,7 +340,7 @@ describe('billing repository', () => {
     expect(clientCalls[1]?.sql).toContain('UPDATE balance_grants');
     expect(clientCalls[1]?.params).toEqual([3, 'batch-1']);
     expect(clientCalls[2]?.params).toEqual([5, 'batch-2']);
-    expect(clientCalls[3]?.sql).toContain('SET bonus_cents');
+    expect(clientCalls[3]?.sql).toContain('SET bonus_coins');
     expect(clientCalls[3]?.params).toEqual([8, 0, 'user-1']);
   });
 });

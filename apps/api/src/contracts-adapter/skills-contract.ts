@@ -106,7 +106,7 @@ type MarketSkillSource = {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_cents'>>;
+  price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_coins'>>;
   stat_subscriber_count: number;
   share_token: string | null;
 };

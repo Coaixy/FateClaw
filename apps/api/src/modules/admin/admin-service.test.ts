@@ -33,13 +33,13 @@ describe('createAdminUser', () => {
     mockGetDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: true,
-      reward_cents: 20,
+      reward_coins: 20,
       updated_at: '2026-05-30T00:00:00.000Z',
     });
     mockUpdateDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: false,
-      reward_cents: 10,
+      reward_coins: 10,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
   });
@@ -60,9 +60,9 @@ describe('createAdminUser', () => {
         phone: '13800138000',
         phone_verified: true,
         role: 'creator',
-        purchased_cents: 0,
-        bonus_cents: 0,
-        reserved_cents: 0,
+        purchased_coins: 0,
+        bonus_coins: 0,
+        reserved_coins: 0,
       }),
     );
     const created = mockCreateUser.mock.calls[0]?.[0];
@@ -95,14 +95,14 @@ describe('admin reward config', () => {
     mockGetDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: true,
-      reward_cents: 20,
+      reward_coins: 20,
       updated_at: '2026-05-30T00:00:00.000Z',
     });
 
     await expect(getAdminRewardConfig()).resolves.toEqual({
       daily_sign_in: {
         enabled: true,
-        reward_cents: 20,
+        reward_coins: 20,
         updated_at: '2026-05-30T00:00:00.000Z',
       },
     });
@@ -112,7 +112,7 @@ describe('admin reward config', () => {
     mockUpdateDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: false,
-      reward_cents: 10,
+      reward_coins: 10,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
 
@@ -120,20 +120,20 @@ describe('admin reward config', () => {
       updateAdminRewardConfig({
         dailySignIn: {
           enabled: false,
-          rewardCents: 10,
+          rewardCoins: 10,
         },
       }),
     ).resolves.toEqual({
       daily_sign_in: {
         enabled: false,
-        reward_cents: 10,
+        reward_coins: 10,
         updated_at: '2026-05-30T01:00:00.000Z',
       },
     });
 
     expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
       enabled: false,
-      rewardCents: 10,
+      rewardCoins: 10,
     });
   });
 });

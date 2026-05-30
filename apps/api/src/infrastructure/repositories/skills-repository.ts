@@ -3,7 +3,7 @@ import pg from 'pg';
 
 import type { DbQueryable } from '../db-pool.js';
 import { getDbPool } from '../db-pool.js';
-import { deductBalanceCents, insertWalletTransaction } from './billing-repository.js';
+import { deductBalanceCoins, insertWalletTransaction } from './billing-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import {
   getSkillMarkdownMetadata,
@@ -11,7 +11,7 @@ import {
   readTextSkillBundleFiles,
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
-import { calculateAvailableSpendableCents } from '../../shared/balance-cents.js';
+import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import type {
   EffectiveUserSkill,
   SkillBundle,
@@ -848,13 +848,13 @@ export interface SubscribeToSkillPaidInput {
   subscriberId: string;
   skillId: string;
   tierKey: string;
-  priceCents: number;
+  priceCoins: number;
   durationDays: number | null;
 }
 
 export interface SubscribeToSkillPaidResult {
   subscription: UserSkillSubscription;
-  chargedCents: number;
+  chargedCoins: number;
 }
 
 export async function subscribeToSkillPaid(
@@ -878,29 +878,29 @@ export async function subscribeToSkillPaid(
     if (skill.user_id === input.subscriberId)
       throw new Error('不能订阅自己的 Skill');
 
-    let chargedCents = 0;
+    let chargedCoins = 0;
 
-    if (input.priceCents > 0) {
+    if (input.priceCoins > 0) {
       const subscriber = await getUserByIdUsing(client, input.subscriberId, {
         forUpdate: true,
       });
       if (!subscriber) throw new Error('账号不存在');
 
       // 可用余额 = (purchased + bonus) - reserved
-      const availableCents = calculateAvailableSpendableCents(subscriber);
-      if (availableCents < input.priceCents)
+      const availableCoins = calculateAvailableSpendableCoins(subscriber);
+      if (availableCoins < input.priceCoins)
         throw new Error('余额不足，请先充值');
 
-      chargedCents = input.priceCents;
+      chargedCoins = input.priceCoins;
 
       // bonus → purchased 优先级扣减
-      const deduction = await deductBalanceCents(client, subscriber, chargedCents);
+      const deduction = await deductBalanceCoins(client, subscriber, chargedCoins);
 
       for (const bd of deduction.grantDeductions) {
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'skill_subscription',
-          amountCents: -bd.cents,
+          amountCoins: -bd.coins,
           balanceSource: 'bonus',
           balanceGrantId: bd.grantId,
           note: `订阅技能: ${skill.skill_name}（赠送余额批次）`,
@@ -911,7 +911,7 @@ export async function subscribeToSkillPaid(
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'skill_subscription',
-          amountCents: -deduction.purchasedDeducted,
+          amountCoins: -deduction.purchasedDeducted,
           balanceSource: deduction.balanceSource ?? 'purchased',
           note: `订阅技能: ${skill.skill_name}`,
           metadata: {
@@ -959,7 +959,7 @@ export async function subscribeToSkillPaid(
     await client.query('COMMIT');
     return {
       subscription: subRows[0] as UserSkillSubscription,
-      chargedCents,
+      chargedCoins,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -973,13 +973,13 @@ export interface SubscribeToCreatorBundleInput {
   subscriberId: string;
   creatorId: string;
   tierKey: string;
-  priceCents: number;
+  priceCoins: number;
   durationDays: number | null;
 }
 
 export async function subscribeToCreatorBundle(
   input: SubscribeToCreatorBundleInput,
-): Promise<{ chargedCents: number }> {
+): Promise<{ chargedCoins: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -991,26 +991,26 @@ export async function subscribeToCreatorBundle(
     if (!creatorRows[0]) throw new Error('创作者不存在');
     if (input.creatorId === input.subscriberId) throw new Error('不能订阅自己');
 
-    let chargedCents = 0;
-    if (input.priceCents > 0) {
+    let chargedCoins = 0;
+    if (input.priceCoins > 0) {
       const subscriber = await getUserByIdUsing(client, input.subscriberId, {
         forUpdate: true,
       });
       if (!subscriber) throw new Error('账号不存在');
 
-      const availableCents = calculateAvailableSpendableCents(subscriber);
-      if (availableCents < input.priceCents)
+      const availableCoins = calculateAvailableSpendableCoins(subscriber);
+      if (availableCoins < input.priceCoins)
         throw new Error('余额不足，请先充值');
 
-      chargedCents = input.priceCents;
+      chargedCoins = input.priceCoins;
 
-      const deduction = await deductBalanceCents(client, subscriber, chargedCents);
+      const deduction = await deductBalanceCoins(client, subscriber, chargedCoins);
 
       for (const bd of deduction.grantDeductions) {
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'bundle_subscription',
-          amountCents: -bd.cents,
+          amountCoins: -bd.coins,
           balanceSource: 'bonus',
           balanceGrantId: bd.grantId,
           note: `订阅创作者整包（赠送余额批次）`,
@@ -1021,7 +1021,7 @@ export async function subscribeToCreatorBundle(
         await insertWalletTransaction(client, {
           userId: input.subscriberId,
           kind: 'bundle_subscription',
-          amountCents: -deduction.purchasedDeducted,
+          amountCoins: -deduction.purchasedDeducted,
           balanceSource: deduction.balanceSource ?? 'purchased',
           note: `订阅创作者整包`,
           metadata: {
@@ -1058,7 +1058,7 @@ export async function subscribeToCreatorBundle(
     );
 
     await client.query('COMMIT');
-    return { chargedCents };
+    return { chargedCoins };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

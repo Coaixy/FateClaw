@@ -8,9 +8,9 @@ export interface User {
   phone_verified: boolean;
   password_hash: string;
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
-  purchased_cents: number; // 充值余额（不过期，可消费）
-  bonus_cents: number; // 赠送余额（可过期，消费优先扣）
-  reserved_cents: number; // 请求级预扣
+  purchased_coins: number; // 充值余额（不过期，可消费）
+  bonus_coins: number; // 赠送余额（可过期，消费优先扣）
+  reserved_coins: number; // 请求级预扣
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   created_at: string;
 }
@@ -30,8 +30,8 @@ export interface BalanceGrant {
   user_id: string;
   source: BalanceGrantSource | string;
   granted_by: string | null;
-  amount_cents: number;
-  remaining_cents: number;
+  amount_coins: number;
+  remaining_coins: number;
   note: string | null;
   expires_at: string | null;
   status: BalanceGrantStatus;
@@ -49,7 +49,7 @@ export interface UserSkill {
 export interface SkillPriceTier {
   key: string;
   label: string;
-  price_cents: number; // 余额定价（1 元 = 100 分）
+  price_coins: number; // 软妹币整数定价
   duration_days: number | null;
   description?: string;
 }
@@ -114,7 +114,7 @@ export interface SkillBundle {
 export interface CreatorBundleTier {
   key: string;
   label: string;
-  price_cents: number;
+  price_coins: number;
   duration_days: number | null;
   description?: string;
 }
@@ -211,8 +211,8 @@ export interface OfficialModelConfig {
   base_url: string | null;
   model_name: string;
   api_key_secret_key: string | null;
-  input_token_price_per_million_cents: number;
-  output_token_price_per_million_cents: number;
+  input_token_price_per_million_coins: number;
+  output_token_price_per_million_coins: number;
   extra_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

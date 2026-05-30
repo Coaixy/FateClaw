@@ -1,5 +1,5 @@
 import type { WalletTransaction } from '@/features/billing/api';
-import { formatSignedCents, formatCents } from '@/lib/money';
+import { formatSignedCoins, formatCoins } from '@/lib/soft-currency';
 
 import {
   isWalletTransactionVisible,
@@ -23,14 +23,14 @@ export function WalletTransactionsPanel({
         <div className="divide-y divide-hairline/50">
           {visibleTransactions.map((transaction) => {
             const badgeLabel = walletTransactionBadgeLabel(transaction);
-            const amountCents = transaction.amount_cents;
+            const amountCoins = transaction.amount_coins;
             const amountText =
-              amountCents !== 0
-                ? formatSignedCents(amountCents)
-                : transaction.reserved_delta_cents > 0
-                  ? `预留 ${formatCents(transaction.reserved_delta_cents)}`
-                  : transaction.reserved_delta_cents < 0
-                    ? `释放 ${formatCents(Math.abs(transaction.reserved_delta_cents))}`
+              amountCoins !== 0
+                ? formatSignedCoins(amountCoins)
+                : transaction.reserved_delta_coins > 0
+                  ? `预留 ${formatCoins(transaction.reserved_delta_coins)}`
+                  : transaction.reserved_delta_coins < 0
+                    ? `释放 ${formatCoins(Math.abs(transaction.reserved_delta_coins))}`
                     : '';
 
             return (
@@ -58,7 +58,7 @@ export function WalletTransactionsPanel({
                 </div>
                 <div
                   className={`shrink-0 text-[13px] font-bold tabular-nums ${
-                    amountCents > 0 ? 'text-success' : ''
+                    amountCoins > 0 ? 'text-success' : ''
                   }`}
                 >
                   {amountText}

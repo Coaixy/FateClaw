@@ -1,10 +1,10 @@
 import {
   getBillingRequestReservationByRequestId,
-  getMonthlyModelChargeCents,
+  getMonthlyModelChargeCoins,
   getUserById,
   releaseUserBalanceReservation,
-  reserveUserBalanceCents,
-  settleUserModelChargeCents,
+  reserveUserBalanceCoins,
+  settleUserModelChargeCoins,
 } from '../../infrastructure/db.js';
 import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
 import { resolveContextWindow } from '../../shared/model-context-window.js';
@@ -13,7 +13,7 @@ import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 export interface BillingReservation {
   userId: string;
   requestId: string;
-  reservedCents: number;
+  reservedCoins: number;
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
   modelConfigId: string;
@@ -21,15 +21,15 @@ export interface BillingReservation {
 }
 
 export interface WalletBalanceSummary {
-  purchasedCents: number;
-  bonusCents: number;
-  reservedCents: number;
-  availableCents: number;
+  purchasedCoins: number;
+  bonusCoins: number;
+  reservedCoins: number;
+  availableCoins: number;
 }
 
 export interface MonthlyMeteredBillingSummary {
   usedTokens: number;
-  chargedCents: number;
+  chargedCoins: number;
 }
 
 const REQUEST_RESERVE_INPUT_RATIO = 0.75;
@@ -38,16 +38,16 @@ function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-function calculateTokenCostCents(input: {
+function calculateTokenCostCoins(input: {
   promptTokens: number;
   completionTokens: number;
-  inputTokenPricePerMillionCents: number;
-  outputTokenPricePerMillionCents: number;
+  inputTokenPricePerMillionCoins: number;
+  outputTokenPricePerMillionCoins: number;
 }): number {
   const inputCost =
-    (input.promptTokens * input.inputTokenPricePerMillionCents) / 1_000_000;
+    (input.promptTokens * input.inputTokenPricePerMillionCoins) / 1_000_000;
   const outputCost =
-    (input.completionTokens * input.outputTokenPricePerMillionCents) /
+    (input.completionTokens * input.outputTokenPricePerMillionCoins) /
     1_000_000;
   return Math.ceil(inputCost + outputCost);
 }
@@ -55,7 +55,7 @@ function calculateTokenCostCents(input: {
 function estimateRequestReserve(runtime: LlmRuntimeSnapshot): {
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
-  estimatedCostCents: number;
+  estimatedCostCoins: number;
 } {
   const contextWindow = resolveContextWindow({
     model: runtime.model,
@@ -71,13 +71,13 @@ function estimateRequestReserve(runtime: LlmRuntimeSnapshot): {
   return {
     estimatedInputTokens,
     estimatedOutputTokens,
-    estimatedCostCents: calculateTokenCostCents({
+    estimatedCostCoins: calculateTokenCostCoins({
       promptTokens: estimatedInputTokens,
       completionTokens: estimatedOutputTokens,
-      inputTokenPricePerMillionCents:
-        runtime.inputTokenPricePerMillionCents ?? 0,
-      outputTokenPricePerMillionCents:
-        runtime.outputTokenPricePerMillionCents ?? 0,
+      inputTokenPricePerMillionCoins:
+        runtime.inputTokenPricePerMillionCoins ?? 0,
+      outputTokenPricePerMillionCoins:
+        runtime.outputTokenPricePerMillionCoins ?? 0,
     }),
   };
 }
@@ -92,9 +92,9 @@ export async function reserveBillingForRequest(input: {
   }
   const reserve = estimateRequestReserve(input.runtime);
   const yearMonth = currentYearMonth();
-  const reservation = await reserveUserBalanceCents({
+  const reservation = await reserveUserBalanceCoins({
     userId: input.userId,
-    amountCents: reserve.estimatedCostCents,
+    amountCoins: reserve.estimatedCostCoins,
     requestId: input.requestId,
     yearMonth,
     modelConfigId: input.runtime.modelConfigId,
@@ -112,7 +112,7 @@ export async function reserveBillingForRequest(input: {
   return {
     userId: input.userId,
     requestId: input.requestId,
-    reservedCents: reservation.reservedCents,
+    reservedCoins: reservation.reservedCoins,
     estimatedInputTokens: reserve.estimatedInputTokens,
     estimatedOutputTokens: reserve.estimatedOutputTokens,
     modelConfigId: input.runtime.modelConfigId,
@@ -142,30 +142,30 @@ export async function settleBillingReservation(input: {
   );
   if (!reservation) return 0;
   const totalTokens = input.promptTokens + input.completionTokens;
-  const costCents = calculateTokenCostCents({
+  const costCoins = calculateTokenCostCoins({
     promptTokens: input.promptTokens,
     completionTokens: input.completionTokens,
-    inputTokenPricePerMillionCents:
-      input.runtime.inputTokenPricePerMillionCents ?? 0,
-    outputTokenPricePerMillionCents:
-      input.runtime.outputTokenPricePerMillionCents ?? 0,
+    inputTokenPricePerMillionCoins:
+      input.runtime.inputTokenPricePerMillionCoins ?? 0,
+    outputTokenPricePerMillionCoins:
+      input.runtime.outputTokenPricePerMillionCoins ?? 0,
   });
-  const result = await settleUserModelChargeCents(
+  const result = await settleUserModelChargeCoins(
     input.requestId,
     totalTokens,
-    costCents,
+    costCoins,
   );
-  return result.actualChargeCents;
+  return result.actualChargeCoins;
 }
 
 export async function getMonthlyMeteredBillingSummary(
   userId: string,
 ): Promise<MonthlyMeteredBillingSummary> {
-  const [usedTokens, chargedCents] = await Promise.all([
+  const [usedTokens, chargedCoins] = await Promise.all([
     getMonthlyTokenUsage(userId),
-    getMonthlyModelChargeCents(userId),
+    getMonthlyModelChargeCoins(userId),
   ]);
-  return { usedTokens, chargedCents };
+  return { usedTokens, chargedCoins };
 }
 
 export async function getWalletBalanceSummary(
@@ -174,19 +174,19 @@ export async function getWalletBalanceSummary(
   const user = await getUserById(userId);
   if (!user) {
     return {
-      purchasedCents: 0,
-      bonusCents: 0,
-      reservedCents: 0,
-      availableCents: 0,
+      purchasedCoins: 0,
+      bonusCoins: 0,
+      reservedCoins: 0,
+      availableCoins: 0,
     };
   }
   return {
-    purchasedCents: user.purchased_cents,
-    bonusCents: user.bonus_cents,
-    reservedCents: user.reserved_cents,
-    availableCents: Math.max(
+    purchasedCoins: user.purchased_coins,
+    bonusCoins: user.bonus_coins,
+    reservedCoins: user.reserved_coins,
+    availableCoins: Math.max(
       0,
-      user.purchased_cents + user.bonus_cents - user.reserved_cents,
+      user.purchased_coins + user.bonus_coins - user.reserved_coins,
     ),
   };
 }

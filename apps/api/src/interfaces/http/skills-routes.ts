@@ -342,7 +342,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       subscriberId: request.user.userId,
       skillId: skill.id,
       tierKey: tier_key,
-      priceCents: tier.price_cents,
+      priceCoins: tier.price_coins,
       durationDays: tier.duration_days,
     });
     return result;
@@ -604,7 +604,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       subscriberId: request.user.userId,
       creatorId,
       tierKey: tier_key,
-      priceCents: tier.price_cents,
+      priceCoins: tier.price_coins,
       durationDays: tier.duration_days,
     });
     return result;

@@ -15,8 +15,8 @@ function draftFromConfig(
   return config
     ? {
         enabled: config.enabled,
-        min_yuan: config.min_yuan,
-        max_yuan: config.max_yuan,
+        min_coins: config.min_coins,
+        max_coins: config.max_coins,
         epay_url_prefix: config.epay_url_prefix,
         epay_platform_id: config.epay_platform_id,
         epay_merchant_private_key: config.epay_merchant_private_key,
@@ -25,8 +25,8 @@ function draftFromConfig(
       }
     : {
         enabled: false,
-        min_yuan: '1.00',
-        max_yuan: '1000.00',
+        min_coins: '1',
+        max_coins: '1000',
         epay_url_prefix: '',
         epay_platform_id: null,
         epay_merchant_private_key: '',
@@ -142,23 +142,23 @@ export function RechargeConfigPanel({
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
-            最低金额（元）
+            最低金额（软妹币）
           </div>
           <input
-            value={draft.min_yuan}
-            onChange={(event) => updateDraft('min_yuan', event.target.value)}
-            inputMode="decimal"
+            value={draft.min_coins}
+            onChange={(event) => updateDraft('min_coins', event.target.value)}
+            inputMode="numeric"
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
-            最高金额（元）
+            最高金额（软妹币）
           </div>
           <input
-            value={draft.max_yuan}
-            onChange={(event) => updateDraft('max_yuan', event.target.value)}
-            inputMode="decimal"
+            value={draft.max_coins}
+            onChange={(event) => updateDraft('max_coins', event.target.value)}
+            inputMode="numeric"
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>

@@ -90,9 +90,6 @@ export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
   process.env.PUBLIC_BASE_URL || envConfig.PUBLIC_BASE_URL || '',
 );
 
-// 余额体系：软妹币 1.00 = 100 分
-export const CENTS_PER_YUAN = 100;
-
 // 超过该时长仍未完成结算的预留请求会被自动释放占用，但保留账务记录，
 // 便于晚到响应继续补结算。
 export const BILLING_RESERVATION_STALE_MS = parseInt(

@@ -2,8 +2,8 @@ import { officialModelPriceParts } from './model-pricing';
 
 type OfficialModelPriceTagsProps = {
   model: {
-    input_token_price_per_million_cents: number;
-    output_token_price_per_million_cents: number;
+    input_token_price_per_million_coins: number;
+    output_token_price_per_million_coins: number;
   };
   compact?: boolean;
 };
@@ -22,15 +22,10 @@ export function OfficialModelPriceTags({
           }`}
         >
           <span>{part.label}</span>
-          <span className="tabular-nums">{part.yuan}</span>
+          <span className="tabular-nums">{part.coins}</span>
           <span className="text-primary/70">
             / 百万 Token
           </span>
-          {!compact && (
-            <span className="tabular-nums text-primary/70">
-              {part.cents} 分
-            </span>
-          )}
         </span>
       ))}
     </div>

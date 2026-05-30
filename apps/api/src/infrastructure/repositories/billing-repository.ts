@@ -5,9 +5,9 @@ import { logger } from '../logger.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type { BalanceGrantSource, User } from '../../shared/types.js';
 import {
-  assertSufficientSpendableCents,
-  calculateAvailableSpendableCents,
-} from '../../shared/balance-cents.js';
+  assertSufficientSpendableCoins,
+  calculateAvailableSpendableCoins,
+} from '../../shared/balance-coins.js';
 
 const pool = {
   query(sql: string, params?: unknown[]) {
@@ -22,8 +22,8 @@ export interface WalletTransactionRow {
   id: string;
   user_id: string;
   kind: string;
-  amount_cents: number;
-  reserved_delta_cents: number;
+  amount_coins: number;
+  reserved_delta_coins: number;
   balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
@@ -58,7 +58,7 @@ export interface MonthlyBillingStateRow {
   user_id: string;
   year_month: string;
   billed_overage_tokens: number;
-  billed_overage_cost_cents: number;
+  billed_overage_cost_coins: number;
   updated_at: string;
 }
 
@@ -67,12 +67,12 @@ export interface BillingRequestReservationRow {
   user_id: string;
   model_config_id: string | null;
   year_month: string;
-  reserved_cents: number;
+  reserved_coins: number;
   hold_state: 'none' | 'held' | 'released';
   charge_state: 'pending' | 'charged';
-  actual_charge_cents: number;
+  actual_charge_coins: number;
   total_overage_tokens: number;
-  total_overage_cost_cents: number;
+  total_overage_cost_coins: number;
   note: string | null;
   metadata: unknown;
   released_at: string | null;
@@ -91,8 +91,7 @@ export interface RechargeOrderRow {
   provider: 'epay' | string;
   provider_trade_id: string | null;
   pay_type: RechargePayType;
-  amount_yuan: string;
-  amount_cents: number;
+  amount_coins: number;
   pay_url: string | null;
   status: RechargeOrderStatus;
   paid_at: string | null;
@@ -104,16 +103,15 @@ export interface RechargeOrderRow {
 
 export interface RechargeStatsRow {
   total_paid_orders: number;
-  total_recharge_cents: number;
-  total_recharge_yuan: string;
+  total_recharge_coins: number;
   last_paid_at: string | null;
 }
 
 export interface RechargePaymentConfigRow {
   id: 'default' | string;
   enabled: boolean;
-  min_yuan: string;
-  max_yuan: string;
+  min_coins: string;
+  max_coins: string;
   epay_url_prefix: string;
   epay_platform_id: number | null;
   epay_merchant_private_key: string;
@@ -128,7 +126,7 @@ export interface RechargePaymentConfigRow {
 export interface DailySignInConfigRow {
   id: 'default' | string;
   enabled: boolean;
-  reward_cents: number;
+  reward_coins: number;
   updated_at: string;
 }
 
@@ -137,7 +135,7 @@ export interface DailySignInRecordRow {
   id: string;
   user_id: string;
   sign_in_date: string;
-  reward_cents: number;
+  reward_coins: number;
   balance_grant_id: string | null;
   created_at: string;
 }
@@ -156,23 +154,23 @@ export async function getDailySignInConfig(): Promise<DailySignInConfigRow> {
 }
 
 /**
- * 更新每日签到开关和每次奖励的软妹币分值。
+ * 更新每日签到开关和每次奖励的软妹币数量。
  */
 export async function updateDailySignInConfig(input: {
   enabled: boolean;
-  rewardCents: number;
+  rewardCoins: number;
 }): Promise<DailySignInConfigRow> {
   const { rows } = await pool.query(
     `INSERT INTO daily_sign_in_config (
-       id, enabled, reward_cents, updated_at
+       id, enabled, reward_coins, updated_at
      )
      VALUES ('default', $1, $2, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
-       reward_cents = EXCLUDED.reward_cents,
+       reward_coins = EXCLUDED.reward_coins,
        updated_at = NOW()
      RETURNING *`,
-    [input.enabled, input.rewardCents],
+    [input.enabled, input.rewardCoins],
   );
   return rows[0] as DailySignInConfigRow;
 }
@@ -198,8 +196,8 @@ export async function insertWalletTransaction(
   input: {
     userId: string;
     kind: string;
-    amountCents?: number;
-    reservedDeltaCents?: number;
+    amountCoins?: number;
+    reservedDeltaCoins?: number;
     balanceSource?: 'purchased' | 'bonus' | 'mixed' | null;
     balanceGrantId?: string | null;
     requestId?: string | null;
@@ -207,27 +205,25 @@ export async function insertWalletTransaction(
     metadata?: unknown;
   },
 ): Promise<void> {
-  const amountCents = input.amountCents ?? 0;
-  const reservedDeltaCents = input.reservedDeltaCents ?? 0;
+  const amountCoins = input.amountCoins ?? 0;
+  const reservedDeltaCoins = input.reservedDeltaCoins ?? 0;
   const balanceSource =
     input.balanceSource !== undefined
       ? input.balanceSource
       : inferBalanceSourceFromKind(input.kind);
 
-  // amount_cents / reserved_delta_cents 列仍存在（未 DROP），
-  // 但不再由业务写入——DB DEFAULT 0 承接，直到 Stage 5 移除该列
   await client.query(
     `INSERT INTO wallet_transactions
       (id, user_id, kind,
-       amount_cents, reserved_delta_cents, balance_source, balance_grant_id,
+       amount_coins, reserved_delta_coins, balance_source, balance_grant_id,
        request_id, note, metadata, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
     [
       `wtx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       input.userId,
       input.kind,
-      amountCents,
-      reservedDeltaCents,
+      amountCoins,
+      reservedDeltaCoins,
       balanceSource,
       input.balanceGrantId ?? null,
       input.requestId ?? null,
@@ -249,8 +245,8 @@ export async function getRechargePaymentConfig(): Promise<RechargePaymentConfigR
 
 export async function updateRechargePaymentConfig(input: {
   enabled: boolean;
-  minYuan: string;
-  maxYuan: string;
+  minCoins: string;
+  maxCoins: string;
   epayUrlPrefix: string;
   epayPlatformId: number | null;
   epayMerchantPrivateKey: string;
@@ -261,15 +257,15 @@ export async function updateRechargePaymentConfig(input: {
 }): Promise<RechargePaymentConfigRow> {
   const { rows } = await pool.query(
     `INSERT INTO recharge_payment_config (
-       id, enabled, min_yuan, max_yuan, epay_url_prefix, epay_platform_id,
+       id, enabled, min_coins, max_coins, epay_url_prefix, epay_platform_id,
        epay_merchant_private_key, epay_platform_public_key, epay_merchant_key,
        notify_url, return_url, updated_at
      )
      VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
-       min_yuan = EXCLUDED.min_yuan,
-       max_yuan = EXCLUDED.max_yuan,
+       min_coins = EXCLUDED.min_coins,
+       max_coins = EXCLUDED.max_coins,
        epay_url_prefix = EXCLUDED.epay_url_prefix,
        epay_platform_id = EXCLUDED.epay_platform_id,
        epay_merchant_private_key = EXCLUDED.epay_merchant_private_key,
@@ -281,8 +277,8 @@ export async function updateRechargePaymentConfig(input: {
      RETURNING *`,
     [
       input.enabled,
-      input.minYuan,
-      input.maxYuan,
+      input.minCoins,
+      input.maxCoins,
       input.epayUrlPrefix,
       input.epayPlatformId,
       input.epayMerchantPrivateKey,
@@ -304,10 +300,10 @@ export async function updateRechargePaymentConfig(input: {
 export async function createDailySignInReward(input: {
   userId: string;
   signInDate: string;
-  rewardCents: number;
+  rewardCoins: number;
   note?: string | null;
 }): Promise<{ user: User; record: DailySignInRecordRow; created: boolean }> {
-  if (input.rewardCents <= 0) {
+  if (input.rewardCoins <= 0) {
     throw new Error('签到奖励必须大于 0');
   }
   const recordId = `signin-${Date.now()}-${Math.random()
@@ -324,11 +320,11 @@ export async function createDailySignInReward(input: {
 
     const { rows: insertedRows } = await client.query(
       `INSERT INTO daily_sign_in_records
-         (id, user_id, sign_in_date, reward_cents, balance_grant_id, created_at)
+         (id, user_id, sign_in_date, reward_coins, balance_grant_id, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        ON CONFLICT (user_id, sign_in_date) DO NOTHING
        RETURNING *`,
-      [recordId, input.userId, input.signInDate, input.rewardCents, grantId],
+      [recordId, input.userId, input.signInDate, input.rewardCoins, grantId],
     );
     const inserted = insertedRows[0] as DailySignInRecordRow | undefined;
     if (!inserted) {
@@ -348,24 +344,24 @@ export async function createDailySignInReward(input: {
 
     await client.query(
       `INSERT INTO balance_grants
-         (id, user_id, source, granted_by, amount_cents, remaining_cents,
+         (id, user_id, source, granted_by, amount_coins, remaining_coins,
           note, expires_at, status, created_at, updated_at)
        VALUES ($1, $2, 'sign_in', NULL, $3, $3, $4, NULL, 'active', NOW(), NOW())`,
-      [grantId, input.userId, input.rewardCents, input.note ?? null],
+      [grantId, input.userId, input.rewardCoins, input.note ?? null],
     );
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET bonus_cents = bonus_cents + $1
+       SET bonus_coins = bonus_coins + $1
        WHERE id = $2
        RETURNING *`,
-      [input.rewardCents, input.userId],
+      [input.rewardCoins, input.userId],
     );
 
     await insertWalletTransaction(client, {
       userId: input.userId,
       kind: 'bonus_grant',
-      amountCents: input.rewardCents,
+      amountCoins: input.rewardCoins,
       balanceSource: 'bonus',
       balanceGrantId: grantId,
       note: input.note ?? `每日签到奖励（${input.signInDate}）`,
@@ -394,23 +390,21 @@ export async function insertRechargeOrder(input: {
   userId: string;
   tradeId: string;
   payType: RechargePayType;
-  amountYuan: string;
-  amountCents: number;
+  amountCoins: number;
   metadata?: unknown;
 }): Promise<RechargeOrderRow> {
   const { rows } = await pool.query(
     `INSERT INTO recharge_orders
-       (id, user_id, trade_id, provider, pay_type, amount_yuan,
-        amount_cents, status, metadata, created_at, updated_at)
-     VALUES ($1, $2, $3, 'epay', $4, $5, $6, 'pending', $7, NOW(), NOW())
+       (id, user_id, trade_id, provider, pay_type, amount_coins,
+        status, metadata, created_at, updated_at)
+     VALUES ($1, $2, $3, 'epay', $4, $5, 'pending', $6, NOW(), NOW())
      RETURNING *`,
     [
       input.id,
       input.userId,
       input.tradeId,
       input.payType,
-      input.amountYuan,
-      input.amountCents,
+      input.amountCoins,
       input.metadata ? JSON.stringify(input.metadata) : null,
     ],
   );
@@ -500,10 +494,8 @@ export async function getRechargeStatsByUserId(
   const { rows } = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE status = 'paid')::int AS total_paid_orders,
-       COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::int
-         AS total_recharge_cents,
-       COALESCE(SUM(amount_yuan) FILTER (WHERE status = 'paid'), 0)::text
-         AS total_recharge_yuan,
+       COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::int
+         AS total_recharge_coins,
        MAX(paid_at) FILTER (WHERE status = 'paid') AS last_paid_at
      FROM recharge_orders
      WHERE user_id = $1`,
@@ -544,18 +536,18 @@ export async function settleRechargeOrderPaid(input: {
 
     await client.query(
       `UPDATE users
-       SET purchased_cents = purchased_cents + $1
+       SET purchased_coins = purchased_coins + $1
        WHERE id = $2`,
-      [order.amount_cents, order.user_id],
+      [order.amount_coins, order.user_id],
     );
 
     await insertWalletTransaction(client, {
       userId: order.user_id,
       kind: 'recharge_topup',
-      amountCents: order.amount_cents,
+      amountCoins: order.amount_coins,
       balanceSource: 'purchased',
       requestId: order.trade_id,
-      note: `充值到账软妹币 ${order.amount_yuan}`,
+      note: `充值到账软妹币 ${order.amount_coins}`,
       metadata: {
         trade_id: order.trade_id,
         provider: order.provider,
@@ -601,7 +593,7 @@ async function insertBillingRequestReservation(
     userId: string;
     modelConfigId?: string | null;
     yearMonth: string;
-    reservedCents: number;
+    reservedCoins: number;
     holdState: BillingRequestReservationRow['hold_state'];
     note?: string | null;
     metadata?: unknown;
@@ -609,7 +601,7 @@ async function insertBillingRequestReservation(
 ): Promise<void> {
   await client.query(
     `INSERT INTO billing_request_reservations
-      (request_id, user_id, model_config_id, year_month, reserved_cents,
+      (request_id, user_id, model_config_id, year_month, reserved_coins,
        hold_state, charge_state, note, metadata, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, NOW(), NOW())
      ON CONFLICT (request_id) DO NOTHING`,
@@ -618,7 +610,7 @@ async function insertBillingRequestReservation(
       input.userId,
       input.modelConfigId ?? null,
       input.yearMonth,
-      input.reservedCents,
+      input.reservedCoins,
       input.holdState,
       input.note ?? null,
       input.metadata ? JSON.stringify(input.metadata) : null,
@@ -718,7 +710,7 @@ export async function getVisibleWalletTransactionsByUserId(
   const { rows } = await pool.query(
     `SELECT * FROM wallet_transactions
      WHERE user_id = $1
-       AND amount_cents <> 0
+       AND amount_coins <> 0
        AND kind <> 'overage_charge'
      ORDER BY created_at DESC
      LIMIT $2`,
@@ -736,8 +728,8 @@ export interface BalanceGrantRow {
   user_id: string;
   source: string;
   granted_by: string | null;
-  amount_cents: number;
-  remaining_cents: number;
+  amount_coins: number;
+  remaining_coins: number;
   note: string | null;
   expires_at: string | null;
   status: 'active' | 'exhausted' | 'expired' | 'revoked';
@@ -760,7 +752,7 @@ async function getAvailableBonusBatches(
     `SELECT * FROM balance_grants
      WHERE user_id = $1
        AND status = 'active'
-       AND remaining_cents > 0
+       AND remaining_coins > 0
        AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY expires_at ASC NULLS LAST, created_at ASC
      FOR UPDATE`,
@@ -772,22 +764,22 @@ async function getAvailableBonusBatches(
 export interface DeductBalanceResult {
   bonusDeducted: number;
   purchasedDeducted: number;
-  grantDeductions: Array<{ grantId: string; cents: number }>;
+  grantDeductions: Array<{ grantId: string; coins: number }>;
   balanceSource: 'purchased' | 'bonus' | 'mixed' | null;
 }
 
 /**
  * 内部扣减算法：在一次事务中按 bonus → purchased 顺序扣减余额，
- * 并维护 balance_grants.remaining_cents / users.{bonus_cents,purchased_cents}。
+ * 并维护 balance_grants.remaining_coins / users.{bonus_coins,purchased_coins}。
  * 返回的 balanceSource 会作为 wallet_transactions.balance_source 写入流水。
  */
-export async function deductBalanceCents(
+export async function deductBalanceCoins(
   client: pg.PoolClient,
   user: User,
-  chargeCents: number,
-  options?: { releasedReservedCents?: number },
+  chargeCoins: number,
+  options?: { releasedReservedCoins?: number },
 ): Promise<DeductBalanceResult> {
-  if (chargeCents <= 0) {
+  if (chargeCoins <= 0) {
     return {
       bonusDeducted: 0,
       purchasedDeducted: 0,
@@ -795,33 +787,33 @@ export async function deductBalanceCents(
       balanceSource: null,
     };
   }
-  assertSufficientSpendableCents(user, chargeCents, options);
+  assertSufficientSpendableCoins(user, chargeCoins, options);
 
-  let bonusLeft = chargeCents;
-  const grantDeductions: Array<{ grantId: string; cents: number }> = [];
+  let bonusLeft = chargeCoins;
+  const grantDeductions: Array<{ grantId: string; coins: number }> = [];
 
   const batches = await getAvailableBonusBatches(client, user.id);
   for (const batch of batches) {
     if (bonusLeft <= 0) break;
-    const toDeduct = Math.min(batch.remaining_cents, bonusLeft);
+    const toDeduct = Math.min(batch.remaining_coins, bonusLeft);
     if (toDeduct <= 0) continue;
     await client.query(
       `UPDATE balance_grants
-       SET remaining_cents = remaining_cents - $1,
-           status = CASE WHEN remaining_cents - $1 <= 0 THEN 'exhausted' ELSE status END,
+       SET remaining_coins = remaining_coins - $1,
+           status = CASE WHEN remaining_coins - $1 <= 0 THEN 'exhausted' ELSE status END,
            updated_at = NOW()
        WHERE id = $2`,
       [toDeduct, batch.id],
     );
-    grantDeductions.push({ grantId: batch.id, cents: toDeduct });
+    grantDeductions.push({ grantId: batch.id, coins: toDeduct });
     bonusLeft -= toDeduct;
   }
 
-  const bonusDeducted = chargeCents - bonusLeft;
+  const bonusDeducted = chargeCoins - bonusLeft;
   const purchasedDeducted = bonusLeft;
   if (
-    user.bonus_cents < bonusDeducted ||
-    user.purchased_cents < purchasedDeducted
+    user.bonus_coins < bonusDeducted ||
+    user.purchased_coins < purchasedDeducted
   ) {
     throw new Error('余额不足，请充值后继续使用');
   }
@@ -829,8 +821,8 @@ export async function deductBalanceCents(
   // 更新 users 表的桶字段
   await client.query(
     `UPDATE users
-     SET bonus_cents = bonus_cents - $1,
-         purchased_cents = purchased_cents - $2
+     SET bonus_coins = bonus_coins - $1,
+         purchased_coins = purchased_coins - $2
      WHERE id = $3`,
     [bonusDeducted, purchasedDeducted, user.id],
   );
@@ -851,17 +843,17 @@ export async function deductBalanceCents(
 
 /**
  * 赠送余额（新用户礼包、签到奖励、活动余额、管理员手动发放）。
- * 原子操作：创建 balance_grants 行 → 更新 users.bonus_cents → 写流水。
+ * 原子操作：创建 balance_grants 行 → 更新 users.bonus_coins → 写流水。
  */
 export async function grantBonusBalance(input: {
   userId: string;
   source: BalanceGrantSource | string;
-  amountCents: number;
+  amountCoins: number;
   expiresAt?: string | null;
   note?: string | null;
   grantedBy?: string | null;
 }): Promise<{ user: User; grantId: string }> {
-  if (input.amountCents <= 0) {
+  if (input.amountCoins <= 0) {
     throw new Error('赠送余额必须为正');
   }
   const grantId = `bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -875,7 +867,7 @@ export async function grantBonusBalance(input: {
 
     await client.query(
       `INSERT INTO balance_grants
-         (id, user_id, source, granted_by, amount_cents, remaining_cents,
+         (id, user_id, source, granted_by, amount_coins, remaining_coins,
           note, expires_at, status, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, 'active', NOW(), NOW())`,
       [
@@ -883,7 +875,7 @@ export async function grantBonusBalance(input: {
         input.userId,
         input.source,
         input.grantedBy ?? null,
-        input.amountCents,
+        input.amountCoins,
         input.note ?? null,
         input.expiresAt ?? null,
       ],
@@ -891,16 +883,16 @@ export async function grantBonusBalance(input: {
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET bonus_cents = bonus_cents + $1
+       SET bonus_coins = bonus_coins + $1
        WHERE id = $2
        RETURNING *`,
-      [input.amountCents, input.userId],
+      [input.amountCoins, input.userId],
     );
 
     await insertWalletTransaction(client, {
       userId: input.userId,
       kind: 'bonus_grant',
-      amountCents: input.amountCents,
+      amountCoins: input.amountCoins,
       balanceSource: 'bonus',
       balanceGrantId: grantId,
       note: input.note ?? `赠送余额（${input.source}）`,
@@ -926,13 +918,13 @@ export async function grantBonusBalance(input: {
 
 /**
  * 定时任务入口：扫描已过期的活跃批次，批次级过期处理。
- * 每个批次在独立事务内完成：标记 expired → 扣 users.bonus_cents → 写流水。
+ * 每个批次在独立事务内完成：标记 expired → 扣 users.bonus_coins → 写流水。
  * FOR UPDATE SKIP LOCKED 保证多实例并发运行时不会重复处理同一批次。
  */
 export async function expireBonusBalance(
   beforeIso: string,
   limit = 200,
-): Promise<{ expired: number; totalCentsExpired: number }> {
+): Promise<{ expired: number; totalCoinsExpired: number }> {
   // 阶段 1：无锁快扫出候选批次（避免长事务）
   const { rows: candidates } = await pool.query(
     `SELECT id FROM balance_grants
@@ -945,7 +937,7 @@ export async function expireBonusBalance(
   );
 
   let expired = 0;
-  let totalCentsExpired = 0;
+  let totalCoinsExpired = 0;
 
   for (const { id: grantId } of candidates as { id: string }[]) {
     const client = await pool.connect();
@@ -967,11 +959,11 @@ export async function expireBonusBalance(
         continue;
       }
 
-      const remaining = batch.remaining_cents;
+      const remaining = batch.remaining_coins;
       await client.query(
         `UPDATE balance_grants
          SET status = 'expired',
-             remaining_cents = 0,
+             remaining_coins = 0,
              updated_at = NOW()
          WHERE id = $1`,
         [batch.id],
@@ -980,7 +972,7 @@ export async function expireBonusBalance(
       if (remaining > 0) {
         await client.query(
           `UPDATE users
-           SET bonus_cents = GREATEST(0, bonus_cents - $1)
+           SET bonus_coins = GREATEST(0, bonus_coins - $1)
            WHERE id = $2`,
           [remaining, batch.user_id],
         );
@@ -988,21 +980,21 @@ export async function expireBonusBalance(
         await insertWalletTransaction(client, {
           userId: batch.user_id,
           kind: 'bonus_expire',
-          amountCents: -remaining,
+          amountCoins: -remaining,
           balanceSource: 'bonus',
           balanceGrantId: batch.id,
           note: `赠送余额过期（批次 ${batch.id}）`,
           metadata: {
             batch_source: batch.source,
             expires_at: batch.expires_at,
-            original_amount: batch.amount_cents,
+            original_amount: batch.amount_coins,
           },
         });
       }
 
       await client.query('COMMIT');
       expired += 1;
-      totalCentsExpired += remaining;
+      totalCoinsExpired += remaining;
     } catch (err) {
       await client.query('ROLLBACK');
       logger.warn({ grantId, err }, '赠送余额过期处理失败');
@@ -1011,7 +1003,7 @@ export async function expireBonusBalance(
     }
   }
 
-  return { expired, totalCentsExpired };
+  return { expired, totalCoinsExpired };
 }
 
 export async function getBalanceGrantsByUserId(
@@ -1033,12 +1025,12 @@ export async function getBalanceGrantsByUserId(
 }
 
 /**
- * 管理员调整用户的充值余额（purchased_cents）。
- * 负数时会被 reserved_cents 兜底拦截，避免把可用余额打成负。
+ * 管理员调整用户的充值余额（purchased_coins）。
+ * 负数时会被 reserved_coins 兜底拦截，避免把可用余额打成负。
  */
 export async function adjustUserPurchasedBalance(
   userId: string,
-  amountCents: number,
+  amountCoins: number,
   note?: string | null,
 ): Promise<User> {
   const client = await pool.connect();
@@ -1051,18 +1043,18 @@ export async function adjustUserPurchasedBalance(
       throw new Error('用户不存在');
     }
 
-    const nextPurchased = user.purchased_cents + amountCents;
+    const nextPurchased = user.purchased_coins + amountCoins;
     if (nextPurchased < 0) {
       throw new Error('余额不足，无法完成本次调整');
     }
-    const spendable = nextPurchased + user.bonus_cents;
-    if (spendable < user.reserved_cents) {
+    const spendable = nextPurchased + user.bonus_coins;
+    if (spendable < user.reserved_coins) {
       throw new Error('可用余额不足以覆盖已预扣，无法完成调整');
     }
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET purchased_cents = $1
+       SET purchased_coins = $1
        WHERE id = $2
        RETURNING *`,
       [nextPurchased, userId],
@@ -1070,8 +1062,8 @@ export async function adjustUserPurchasedBalance(
 
     await insertWalletTransaction(client, {
       userId,
-      kind: amountCents >= 0 ? 'manual_topup' : 'manual_adjustment',
-      amountCents,
+      kind: amountCoins >= 0 ? 'manual_topup' : 'manual_adjustment',
+      amountCoins,
       balanceSource: 'purchased',
       note: note ?? null,
       metadata: { source: 'admin' },
@@ -1092,15 +1084,15 @@ export async function adjustUserPurchasedBalance(
  * 可用余额（purchased + bonus - reserved）决定本次预扣上限。
  * 幂等：同一 requestId 已存在时直接返回现有预留。
  */
-export async function reserveUserBalanceCents(input: {
+export async function reserveUserBalanceCoins(input: {
   userId: string;
-  amountCents: number;
+  amountCoins: number;
   requestId: string;
   yearMonth: string;
   modelConfigId?: string | null;
   note?: string | null;
   metadata?: unknown;
-}): Promise<{ user: User; reservedCents: number }> {
+}): Promise<{ user: User; reservedCoins: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1121,7 +1113,7 @@ export async function reserveUserBalanceCents(input: {
       await client.query('COMMIT');
       return {
         user: existingUser,
-        reservedCents: existing.reserved_cents,
+        reservedCoins: existing.reserved_coins,
       };
     }
 
@@ -1132,24 +1124,24 @@ export async function reserveUserBalanceCents(input: {
       throw new Error('用户不存在');
     }
 
-    const reservableHeadroom = calculateAvailableSpendableCents(user);
-    if (input.amountCents > 0 && reservableHeadroom <= 0) {
+    const reservableHeadroom = calculateAvailableSpendableCoins(user);
+    if (input.amountCoins > 0 && reservableHeadroom <= 0) {
       throw new Error('余额不足，请充值后继续使用');
     }
 
-    const actualReservedCents = Math.min(
-      Math.max(0, input.amountCents),
+    const actualReservedCoins = Math.min(
+      Math.max(0, input.amountCoins),
       reservableHeadroom,
     );
     const holdState: BillingRequestReservationRow['hold_state'] =
-      actualReservedCents > 0 ? 'held' : 'none';
+      actualReservedCoins > 0 ? 'held' : 'none';
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET reserved_cents = reserved_cents + $1
+       SET reserved_coins = reserved_coins + $1
        WHERE id = $2
        RETURNING *`,
-      [actualReservedCents, input.userId],
+      [actualReservedCoins, input.userId],
     );
 
     await insertBillingRequestReservation(client, {
@@ -1157,7 +1149,7 @@ export async function reserveUserBalanceCents(input: {
       userId: input.userId,
       modelConfigId: input.modelConfigId ?? null,
       yearMonth: input.yearMonth,
-      reservedCents: actualReservedCents,
+      reservedCoins: actualReservedCoins,
       holdState,
       note: input.note ?? null,
       metadata: input.metadata,
@@ -1166,7 +1158,7 @@ export async function reserveUserBalanceCents(input: {
     await client.query('COMMIT');
     return {
       user: updatedRows[0] as User,
-      reservedCents: actualReservedCents,
+      reservedCoins: actualReservedCoins,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1204,14 +1196,14 @@ export async function releaseUserBalanceReservation(
     }
 
     const releasable =
-      reservation.hold_state === 'held' ? reservation.reserved_cents : 0;
-    const nextReservedCents = Math.max(0, user.reserved_cents - releasable);
+      reservation.hold_state === 'held' ? reservation.reserved_coins : 0;
+    const nextReservedCoins = Math.max(0, user.reserved_coins - releasable);
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET reserved_cents = $1
+       SET reserved_coins = $1
        WHERE id = $2
        RETURNING *`,
-      [nextReservedCents, reservation.user_id],
+      [nextReservedCoins, reservation.user_id],
     );
 
     await client.query(
@@ -1237,11 +1229,11 @@ export async function releaseUserBalanceReservation(
   }
 }
 
-export async function settleUserModelChargeCents(
+export async function settleUserModelChargeCoins(
   requestId: string,
   requestTokens: number,
-  requestCostCents: number,
-): Promise<{ actualChargeCents: number; user: User }> {
+  requestCostCoins: number,
+): Promise<{ actualChargeCoins: number; user: User }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1266,7 +1258,7 @@ export async function settleUserModelChargeCents(
       }
       await client.query('COMMIT');
       return {
-        actualChargeCents: reservation.actual_charge_cents,
+        actualChargeCoins: reservation.actual_charge_coins,
         user: existingUser,
       };
     }
@@ -1288,7 +1280,7 @@ export async function settleUserModelChargeCents(
 
     await client.query(
       `INSERT INTO monthly_billing_state
-        (user_id, year_month, billed_overage_tokens, billed_overage_cost_cents, updated_at)
+        (user_id, year_month, billed_overage_tokens, billed_overage_cost_coins, updated_at)
        VALUES ($1, $2, 0, 0, NOW())
        ON CONFLICT (user_id, year_month)
        DO UPDATE SET updated_at = monthly_billing_state.updated_at
@@ -1296,36 +1288,36 @@ export async function settleUserModelChargeCents(
       [reservation.user_id, reservation.year_month],
     );
 
-    const actualChargeCents = Math.max(0, requestCostCents);
-    const releasedReservedCents =
-      reservation.hold_state === 'held' ? reservation.reserved_cents : 0;
-    const nextReservedCents = Math.max(
+    const actualChargeCoins = Math.max(0, requestCostCoins);
+    const releasedReservedCoins =
+      reservation.hold_state === 'held' ? reservation.reserved_coins : 0;
+    const nextReservedCoins = Math.max(
       0,
-      user.reserved_cents - releasedReservedCents,
+      user.reserved_coins - releasedReservedCoins,
     );
 
-    // bonus → purchased 优先级扣减（内部更新 bonus_cents / purchased_cents）
-    const deduction = await deductBalanceCents(client, user, actualChargeCents, {
-      releasedReservedCents,
+    // bonus → purchased 优先级扣减（内部更新 bonus_coins / purchased_coins）
+    const deduction = await deductBalanceCoins(client, user, actualChargeCoins, {
+      releasedReservedCoins,
     });
 
     const { rows: updatedRows } = await client.query(
       `UPDATE users
-       SET reserved_cents = $1
+       SET reserved_coins = $1
        WHERE id = $2
        RETURNING *`,
-      [nextReservedCents, reservation.user_id],
+      [nextReservedCoins, reservation.user_id],
     );
 
     await client.query(
       `UPDATE monthly_billing_state
        SET billed_overage_tokens = billed_overage_tokens + $1,
-           billed_overage_cost_cents = billed_overage_cost_cents + $2,
+           billed_overage_cost_coins = billed_overage_cost_coins + $2,
            updated_at = NOW()
        WHERE user_id = $3 AND year_month = $4`,
       [
         requestTokens,
-        actualChargeCents,
+        actualChargeCoins,
         reservation.user_id,
         reservation.year_month,
       ],
@@ -1335,38 +1327,38 @@ export async function settleUserModelChargeCents(
       `UPDATE billing_request_reservations
        SET hold_state = CASE WHEN hold_state = 'held' THEN 'released' ELSE hold_state END,
           charge_state = 'charged',
-           actual_charge_cents = $2,
+           actual_charge_coins = $2,
            total_overage_tokens = $3,
-           total_overage_cost_cents = $4,
+           total_overage_cost_coins = $4,
            released_at = CASE WHEN hold_state = 'held' THEN NOW() ELSE released_at END,
            charged_at = NOW(),
            updated_at = NOW()
        WHERE request_id = $1`,
-      [requestId, actualChargeCents, requestTokens, actualChargeCents],
+      [requestId, actualChargeCoins, requestTokens, actualChargeCoins],
     );
 
-    if (reservation.hold_state === 'held' && reservation.reserved_cents > 0) {
+    if (reservation.hold_state === 'held' && reservation.reserved_coins > 0) {
       await insertWalletTransaction(client, {
         userId: reservation.user_id,
         kind: 'reservation_release',
-        reservedDeltaCents: -reservation.reserved_cents,
+        reservedDeltaCoins: -reservation.reserved_coins,
         requestId,
         note: '请求完成，释放预扣额度',
       });
     }
 
-    if (actualChargeCents > 0) {
+    if (actualChargeCoins > 0) {
       await insertWalletTransaction(client, {
         userId: reservation.user_id,
         kind: 'overage_charge',
-        amountCents: -actualChargeCents,
+        amountCoins: -actualChargeCoins,
         balanceSource: deduction.balanceSource,
         requestId,
         note: '模型 Token 扣费',
         metadata: {
           yearMonth: reservation.year_month,
           requestTokens,
-          requestCostCents,
+          requestCostCoins,
           bonusDeducted: deduction.bonusDeducted,
           purchasedDeducted: deduction.purchasedDeducted,
           grantDeductions: deduction.grantDeductions,
@@ -1376,7 +1368,7 @@ export async function settleUserModelChargeCents(
 
     await client.query('COMMIT');
     return {
-      actualChargeCents,
+      actualChargeCoins,
       user: updatedRows[0] as User,
     };
   } catch (err) {
@@ -1387,13 +1379,13 @@ export async function settleUserModelChargeCents(
   }
 }
 
-export async function getMonthlyModelChargeCents(
+export async function getMonthlyModelChargeCoins(
   userId: string,
   yearMonth?: string,
 ): Promise<number> {
   const ym = yearMonth ?? new Date().toISOString().slice(0, 7);
   const { rows } = await pool.query(
-    `SELECT COALESCE(billed_overage_cost_cents, 0) AS total
+    `SELECT COALESCE(billed_overage_cost_coins, 0) AS total
      FROM monthly_billing_state
      WHERE user_id = $1 AND year_month = $2`,
     [userId, ym],

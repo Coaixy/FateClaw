@@ -1,17 +1,17 @@
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
 type WalletBalanceCardProps = {
-  availableCents: number;
-  purchasedCents: number;
-  bonusCents: number;
-  reservedCents: number;
+  availableCoins: number;
+  purchasedCoins: number;
+  bonusCoins: number;
+  reservedCoins: number;
 };
 
 export function WalletBalanceCard({
-  availableCents,
-  purchasedCents,
-  bonusCents,
-  reservedCents,
+  availableCoins,
+  purchasedCoins,
+  bonusCoins,
+  reservedCoins,
 }: WalletBalanceCardProps) {
   return (
     <section className="rounded-2xl border border-hairline bg-surface-card p-5 relative overflow-hidden">
@@ -21,21 +21,21 @@ export function WalletBalanceCard({
           可用余额
         </div>
         <div className="text-3xl font-extrabold tracking-tight mb-1">
-          {formatCents(availableCents)}
+          {formatCoins(availableCoins)}
         </div>
         <div className="text-[11px] text-muted mb-4">
           金额按软妹币余额展示
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <WalletBalanceItem label="充值余额" value={formatCents(purchasedCents)} />
+          <WalletBalanceItem label="充值余额" value={formatCoins(purchasedCoins)} />
           <WalletBalanceItem
             label="赠送余额"
-            value={formatCents(bonusCents)}
+            value={formatCoins(bonusCoins)}
             valueClassName="text-primary"
           />
           <WalletBalanceItem
             label="冻结中"
-            value={formatCents(reservedCents)}
+            value={formatCoins(reservedCoins)}
             valueClassName="text-muted"
           />
         </div>

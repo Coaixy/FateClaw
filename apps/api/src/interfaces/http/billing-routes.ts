@@ -114,12 +114,12 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/recharge/orders', async (request, reply) => {
     await request.requireAuth();
     const body = (request.body || {}) as {
-      amount_yuan?: unknown;
+      amount_coins?: unknown;
       pay_type?: unknown;
     };
     const result = await createRechargeOrderForUser({
       userId: request.user.userId,
-      amountYuan: body.amount_yuan,
+      amountCoins: body.amount_coins,
       payType: body.pay_type,
       clientIp: request.ip,
       callbackUrls: resolvePaymentCallbackUrls(request),

@@ -2,7 +2,7 @@ import type { WalletTransaction } from '@/features/billing/api';
 
 type WalletTransactionBadgeInput = Pick<
   WalletTransaction,
-  'kind' | 'amount_cents' | 'balance_source'
+  'kind' | 'amount_coins' | 'balance_source'
 >;
 
 function positiveBalanceSourceLabel(
@@ -41,7 +41,7 @@ function negativeTransactionLabel(kind: string): string {
 export function walletTransactionBadgeLabel(
   transaction: WalletTransactionBadgeInput,
 ): string | null {
-  if (transaction.amount_cents < 0) {
+  if (transaction.amount_coins < 0) {
     return negativeTransactionLabel(transaction.kind);
   }
 
@@ -55,6 +55,6 @@ export function isWalletTransactionVisible(
   transaction: WalletTransaction,
 ): boolean {
   return (
-    transaction.kind !== 'overage_charge' && transaction.amount_cents !== 0
+    transaction.kind !== 'overage_charge' && transaction.amount_coins !== 0
   );
 }

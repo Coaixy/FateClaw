@@ -2257,6 +2257,422 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0011_soft_currency_coins_schema',
+    description: '迁移余额与充值 schema 到软妹币整数单位',
+    async up(client) {
+      // 旧 schema 用 cents/yuan 表达金额；本迁移把最终运行时 schema 收敛为整数软妹币。
+      await client.query(`
+        CREATE OR REPLACE FUNCTION pg_temp.to_soft_currency_coins(value INTEGER)
+        RETURNS INTEGER
+        LANGUAGE SQL
+        IMMUTABLE
+        AS $fn$
+          SELECT CASE
+            WHEN value >= 0 THEN CEIL(value::numeric / 100)::int
+            ELSE FLOOR(value::numeric / 100)::int
+          END
+        $fn$;
+      `);
+      await client.query(
+        `DROP INDEX IF EXISTS idx_balance_grants_user_active`,
+      );
+      await client.query(`
+        ALTER TABLE billing_request_reservations
+          DROP CONSTRAINT IF EXISTS chk_billing_request_reservations_reserved_cents_nonnegative,
+          DROP CONSTRAINT IF EXISTS chk_billing_request_reservations_actual_charge_cents_nonnegative,
+          DROP CONSTRAINT IF EXISTS chk_billing_request_reservations_total_overage_cost_cents_nonnegative;
+        ALTER TABLE recharge_payment_config
+          DROP CONSTRAINT IF EXISTS chk_recharge_payment_config_min_yuan_positive,
+          DROP CONSTRAINT IF EXISTS chk_recharge_payment_config_max_yuan_valid;
+        ALTER TABLE recharge_orders
+          DROP CONSTRAINT IF EXISTS chk_recharge_orders_amount_cents_positive,
+          DROP CONSTRAINT IF EXISTS chk_recharge_orders_amount_yuan_positive;
+        ALTER TABLE balance_grants
+          DROP CONSTRAINT IF EXISTS chk_balance_grants_remaining_cents_range;
+        ALTER TABLE daily_sign_in_config
+          DROP CONSTRAINT IF EXISTS chk_daily_sign_in_config_reward_cents_nonnegative;
+        ALTER TABLE daily_sign_in_records
+          DROP CONSTRAINT IF EXISTS chk_daily_sign_in_records_reward_cents_nonnegative;
+      `);
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS purchased_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS bonus_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS reserved_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE wallet_transactions
+          ADD COLUMN IF NOT EXISTS amount_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS reserved_delta_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE recharge_payment_config
+          ADD COLUMN IF NOT EXISTS min_coins NUMERIC(12,0) NOT NULL DEFAULT 1,
+          ADD COLUMN IF NOT EXISTS max_coins NUMERIC(12,0) NOT NULL DEFAULT 1000;
+        ALTER TABLE recharge_orders
+          ADD COLUMN IF NOT EXISTS amount_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE monthly_billing_state
+          ADD COLUMN IF NOT EXISTS billed_overage_cost_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE billing_request_reservations
+          ADD COLUMN IF NOT EXISTS reserved_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS actual_charge_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS total_overage_cost_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE balance_grants
+          ADD COLUMN IF NOT EXISTS amount_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS remaining_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE official_model_configs
+          ADD COLUMN IF NOT EXISTS input_token_price_per_million_coins INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS output_token_price_per_million_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE daily_sign_in_config
+          ADD COLUMN IF NOT EXISTS reward_coins INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE daily_sign_in_records
+          ADD COLUMN IF NOT EXISTS reward_coins INTEGER NOT NULL DEFAULT 0;
+      `);
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'purchased_cents'
+          ) THEN
+            UPDATE users
+            SET purchased_coins = pg_temp.to_soft_currency_coins(purchased_cents)
+            WHERE purchased_coins = 0 AND purchased_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'bonus_cents'
+          ) THEN
+            UPDATE users
+            SET bonus_coins = pg_temp.to_soft_currency_coins(bonus_cents)
+            WHERE bonus_coins = 0 AND bonus_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'reserved_cents'
+          ) THEN
+            UPDATE users
+            SET reserved_coins = pg_temp.to_soft_currency_coins(reserved_cents)
+            WHERE reserved_coins = 0 AND reserved_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'wallet_transactions'
+              AND column_name = 'amount_cents'
+          ) THEN
+            UPDATE wallet_transactions
+            SET amount_coins = pg_temp.to_soft_currency_coins(amount_cents)
+            WHERE amount_coins = 0 AND amount_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'wallet_transactions'
+              AND column_name = 'reserved_delta_cents'
+          ) THEN
+            UPDATE wallet_transactions
+            SET reserved_delta_coins = pg_temp.to_soft_currency_coins(reserved_delta_cents)
+            WHERE reserved_delta_coins = 0 AND reserved_delta_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'recharge_payment_config'
+              AND column_name = 'min_yuan'
+          ) THEN
+            UPDATE recharge_payment_config
+            SET min_coins = GREATEST(1, CEIL(min_yuan)::int)
+            WHERE min_coins = 1 AND min_yuan <> 1;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'recharge_payment_config'
+              AND column_name = 'max_yuan'
+          ) THEN
+            UPDATE recharge_payment_config
+            SET max_coins = GREATEST(1, CEIL(max_yuan)::int)
+            WHERE max_coins = 1000 AND max_yuan <> 1000;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'recharge_orders'
+              AND column_name = 'amount_cents'
+          ) THEN
+            UPDATE recharge_orders
+            SET amount_coins = pg_temp.to_soft_currency_coins(amount_cents)
+            WHERE amount_coins = 0 AND amount_cents <> 0;
+          ELSIF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'recharge_orders'
+              AND column_name = 'amount_yuan'
+          ) THEN
+            UPDATE recharge_orders
+            SET amount_coins = GREATEST(1, CEIL(amount_yuan)::int)
+            WHERE amount_coins = 0 AND amount_yuan > 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'monthly_billing_state'
+              AND column_name = 'billed_overage_cost_cents'
+          ) THEN
+            UPDATE monthly_billing_state
+            SET billed_overage_cost_coins = pg_temp.to_soft_currency_coins(billed_overage_cost_cents)
+            WHERE billed_overage_cost_coins = 0
+              AND billed_overage_cost_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'billing_request_reservations'
+              AND column_name = 'reserved_cents'
+          ) THEN
+            UPDATE billing_request_reservations
+            SET reserved_coins = pg_temp.to_soft_currency_coins(reserved_cents)
+            WHERE reserved_coins = 0 AND reserved_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'billing_request_reservations'
+              AND column_name = 'actual_charge_cents'
+          ) THEN
+            UPDATE billing_request_reservations
+            SET actual_charge_coins = pg_temp.to_soft_currency_coins(actual_charge_cents)
+            WHERE actual_charge_coins = 0 AND actual_charge_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'billing_request_reservations'
+              AND column_name = 'total_overage_cost_cents'
+          ) THEN
+            UPDATE billing_request_reservations
+            SET total_overage_cost_coins = pg_temp.to_soft_currency_coins(total_overage_cost_cents)
+            WHERE total_overage_cost_coins = 0
+              AND total_overage_cost_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'balance_grants'
+              AND column_name = 'amount_cents'
+          ) THEN
+            UPDATE balance_grants
+            SET amount_coins = pg_temp.to_soft_currency_coins(amount_cents)
+            WHERE amount_coins = 0 AND amount_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'balance_grants'
+              AND column_name = 'remaining_cents'
+          ) THEN
+            UPDATE balance_grants
+            SET remaining_coins = pg_temp.to_soft_currency_coins(remaining_cents)
+            WHERE remaining_coins = 0 AND remaining_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'official_model_configs'
+              AND column_name = 'input_token_price_per_million_cents'
+          ) THEN
+            UPDATE official_model_configs
+            SET input_token_price_per_million_coins =
+              pg_temp.to_soft_currency_coins(input_token_price_per_million_cents)
+            WHERE input_token_price_per_million_coins = 0
+              AND input_token_price_per_million_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'official_model_configs'
+              AND column_name = 'output_token_price_per_million_cents'
+          ) THEN
+            UPDATE official_model_configs
+            SET output_token_price_per_million_coins =
+              pg_temp.to_soft_currency_coins(output_token_price_per_million_cents)
+            WHERE output_token_price_per_million_coins = 0
+              AND output_token_price_per_million_cents <> 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'daily_sign_in_config'
+              AND column_name = 'reward_cents'
+          ) THEN
+            UPDATE daily_sign_in_config
+            SET reward_coins = pg_temp.to_soft_currency_coins(reward_cents)
+            WHERE reward_coins = 0 AND reward_cents <> 0;
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'daily_sign_in_records'
+              AND column_name = 'reward_cents'
+          ) THEN
+            UPDATE daily_sign_in_records
+            SET reward_coins = pg_temp.to_soft_currency_coins(reward_cents)
+            WHERE reward_coins = 0 AND reward_cents <> 0;
+          END IF;
+        END $$;
+      `);
+      await client.query(`
+        UPDATE recharge_payment_config
+        SET min_coins = GREATEST(1, min_coins),
+            max_coins = GREATEST(GREATEST(1, min_coins), max_coins);
+        UPDATE recharge_orders
+        SET amount_coins = GREATEST(1, amount_coins)
+        WHERE amount_coins <= 0;
+        UPDATE balance_grants
+        SET amount_coins = GREATEST(1, amount_coins),
+            remaining_coins = LEAST(
+              GREATEST(0, remaining_coins),
+              GREATEST(1, amount_coins)
+            );
+        UPDATE billing_request_reservations
+        SET reserved_coins = GREATEST(0, reserved_coins),
+            actual_charge_coins = GREATEST(0, actual_charge_coins),
+            total_overage_cost_coins = GREATEST(0, total_overage_cost_coins);
+        UPDATE daily_sign_in_config
+        SET reward_coins = GREATEST(0, reward_coins);
+        UPDATE daily_sign_in_records
+        SET reward_coins = GREATEST(0, reward_coins);
+      `);
+      await client.query(`
+        ALTER TABLE users
+          DROP COLUMN IF EXISTS purchased_cents,
+          DROP COLUMN IF EXISTS bonus_cents,
+          DROP COLUMN IF EXISTS earned_cents,
+          DROP COLUMN IF EXISTS reserved_cents,
+          DROP COLUMN IF EXISTS pending_withdrawal_cents;
+        ALTER TABLE wallet_transactions
+          DROP COLUMN IF EXISTS amount_cents,
+          DROP COLUMN IF EXISTS reserved_delta_cents;
+        ALTER TABLE recharge_payment_config
+          DROP COLUMN IF EXISTS min_yuan,
+          DROP COLUMN IF EXISTS max_yuan;
+        ALTER TABLE recharge_orders
+          DROP COLUMN IF EXISTS amount_yuan,
+          DROP COLUMN IF EXISTS amount_cents;
+        ALTER TABLE monthly_billing_state
+          DROP COLUMN IF EXISTS billed_overage_cost_cents;
+        ALTER TABLE billing_request_reservations
+          DROP COLUMN IF EXISTS reserved_cents,
+          DROP COLUMN IF EXISTS actual_charge_cents,
+          DROP COLUMN IF EXISTS total_overage_cost_cents;
+        ALTER TABLE balance_grants
+          DROP COLUMN IF EXISTS amount_cents,
+          DROP COLUMN IF EXISTS remaining_cents;
+        ALTER TABLE official_model_configs
+          DROP COLUMN IF EXISTS input_token_price_per_million_cents,
+          DROP COLUMN IF EXISTS output_token_price_per_million_cents;
+        ALTER TABLE daily_sign_in_config
+          DROP COLUMN IF EXISTS reward_cents;
+        ALTER TABLE daily_sign_in_records
+          DROP COLUMN IF EXISTS reward_cents;
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_balance_grants_user_active
+         ON balance_grants(user_id, expires_at, remaining_coins)
+         WHERE status = 'active'`,
+      );
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_recharge_payment_config_min_coins_positive',
+        tableName: 'recharge_payment_config',
+        expression: 'min_coins > 0',
+        cleanupSql: `UPDATE recharge_payment_config
+                     SET min_coins = 1
+                     WHERE min_coins <= 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_recharge_payment_config_max_coins_valid',
+        tableName: 'recharge_payment_config',
+        expression: 'max_coins >= min_coins',
+        cleanupSql: `UPDATE recharge_payment_config
+                     SET max_coins = GREATEST(min_coins, 1000)
+                     WHERE max_coins < min_coins`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_recharge_orders_amount_coins_positive',
+        tableName: 'recharge_orders',
+        expression: 'amount_coins > 0',
+        cleanupSql: `UPDATE recharge_orders
+                     SET amount_coins = 1
+                     WHERE amount_coins <= 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_billing_request_reservations_reserved_coins_nonnegative',
+        tableName: 'billing_request_reservations',
+        expression: 'reserved_coins >= 0',
+        cleanupSql: `UPDATE billing_request_reservations
+                     SET reserved_coins = 0
+                     WHERE reserved_coins < 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName:
+          'chk_billing_request_reservations_actual_charge_coins_nonnegative',
+        tableName: 'billing_request_reservations',
+        expression: 'actual_charge_coins >= 0',
+        cleanupSql: `UPDATE billing_request_reservations
+                     SET actual_charge_coins = 0
+                     WHERE actual_charge_coins < 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName:
+          'chk_billing_request_reservations_total_overage_cost_coins_nonnegative',
+        tableName: 'billing_request_reservations',
+        expression: 'total_overage_cost_coins >= 0',
+        cleanupSql: `UPDATE billing_request_reservations
+                     SET total_overage_cost_coins = 0
+                     WHERE total_overage_cost_coins < 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_balance_grants_remaining_coins_range',
+        tableName: 'balance_grants',
+        expression:
+          'amount_coins > 0 AND remaining_coins >= 0 AND remaining_coins <= amount_coins',
+        cleanupSql: `UPDATE balance_grants
+                     SET amount_coins = GREATEST(1, amount_coins),
+                         remaining_coins = LEAST(GREATEST(1, amount_coins), GREATEST(remaining_coins, 0))
+                     WHERE amount_coins <= 0
+                        OR remaining_coins < 0
+                        OR remaining_coins > amount_coins`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_daily_sign_in_config_reward_coins_nonnegative',
+        tableName: 'daily_sign_in_config',
+        expression: 'reward_coins >= 0',
+        cleanupSql: `UPDATE daily_sign_in_config
+                     SET reward_coins = 0
+                     WHERE reward_coins < 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_daily_sign_in_records_reward_coins_nonnegative',
+        tableName: 'daily_sign_in_records',
+        expression: 'reward_coins >= 0',
+        cleanupSql: `UPDATE daily_sign_in_records
+                     SET reward_coins = 0
+                     WHERE reward_coins < 0`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

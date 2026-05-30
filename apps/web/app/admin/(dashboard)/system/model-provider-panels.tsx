@@ -41,10 +41,10 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
     base_url: model.base_url || '',
     model_name: model.model_name,
     context_window_tokens: model.context_window_tokens ?? 0,
-    input_token_price_per_million_cents:
-      model.input_token_price_per_million_cents,
-    output_token_price_per_million_cents:
-      model.output_token_price_per_million_cents,
+    input_token_price_per_million_coins:
+      model.input_token_price_per_million_coins,
+    output_token_price_per_million_coins:
+      model.output_token_price_per_million_coins,
   };
 }
 
@@ -313,22 +313,22 @@ function ProviderBasicFields({
         }
       />
       <NumberField
-        label="输入单价（分 / 百万 Token）"
-        value={draft.input_token_price_per_million_cents}
+        label="输入单价（软妹币 / 百万 Token）"
+        value={draft.input_token_price_per_million_coins}
         onChange={(value) =>
           setDraft((prev) => ({
             ...prev,
-            input_token_price_per_million_cents: value,
+            input_token_price_per_million_coins: value,
           }))
         }
       />
       <NumberField
-        label="输出单价（分 / 百万 Token）"
-        value={draft.output_token_price_per_million_cents}
+        label="输出单价（软妹币 / 百万 Token）"
+        value={draft.output_token_price_per_million_coins}
         onChange={(value) =>
           setDraft((prev) => ({
             ...prev,
-            output_token_price_per_million_cents: value,
+            output_token_price_per_million_coins: value,
           }))
         }
       />
@@ -472,22 +472,22 @@ export function ProviderCreatePanel({
           }
         />
         <NumberField
-          label="输入单价（分 / 百万 Token）"
-          value={draft.input_token_price_per_million_cents}
+          label="输入单价（软妹币 / 百万 Token）"
+          value={draft.input_token_price_per_million_coins}
           onChange={(value) =>
             onChange({
               ...draft,
-              input_token_price_per_million_cents: value,
+              input_token_price_per_million_coins: value,
             })
           }
         />
         <NumberField
-          label="输出单价（分 / 百万 Token）"
-          value={draft.output_token_price_per_million_cents}
+          label="输出单价（软妹币 / 百万 Token）"
+          value={draft.output_token_price_per_million_coins}
           onChange={(value) =>
             onChange({
               ...draft,
-              output_token_price_per_million_cents: value,
+              output_token_price_per_million_coins: value,
             })
           }
         />

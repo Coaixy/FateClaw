@@ -9,9 +9,9 @@ export interface UserDto {
   phone: string;
   phone_verified: boolean;
   role: UserRole;
-  purchased_cents: number;
-  bonus_cents: number;
-  reserved_cents: number;
+  purchased_coins: number;
+  bonus_coins: number;
+  reserved_coins: number;
   created_at: string;
 }
 

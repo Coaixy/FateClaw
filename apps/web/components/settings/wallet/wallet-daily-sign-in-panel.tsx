@@ -8,7 +8,7 @@ import {
   type DailySignInStatus,
 } from '@/features/billing/api';
 import { useToast } from '@/lib/use-toast';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
 export function WalletDailySignInPanel({
   status,
@@ -24,14 +24,14 @@ export function WalletDailySignInPanel({
 
   const enabled = Boolean(status?.enabled);
   const signedIn = Boolean(status?.signed_in_today);
-  const rewardCents = status?.reward_cents ?? 0;
-  const canClaim = enabled && !signedIn && rewardCents > 0;
+  const rewardCoins = status?.reward_coins ?? 0;
+  const canClaim = enabled && !signedIn && rewardCoins > 0;
 
   const claim = async () => {
     setBusy(true);
     try {
       const result = await billingApi.claimDailySignIn();
-      toast('success', `已领取 ${formatCents(result.received_cents)}`);
+      toast('success', `已领取 ${formatCoins(result.received_coins)}`);
       await onChanged();
     } catch (err) {
       toast('error', err instanceof Error ? err.message : '签到失败');
@@ -45,8 +45,8 @@ export function WalletDailySignInPanel({
     ? '暂未开启'
     : signedIn
       ? '今日已签到'
-      : rewardCents > 0
-        ? `今日可领 ${formatCents(rewardCents)}`
+      : rewardCoins > 0
+        ? `今日可领 ${formatCoins(rewardCoins)}`
         : '奖励未配置';
 
   return (

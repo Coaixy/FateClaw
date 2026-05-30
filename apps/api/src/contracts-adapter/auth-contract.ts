@@ -12,9 +12,9 @@ export function toUserDto(user: User): UserDto {
     phone: user.phone,
     phone_verified: user.phone_verified,
     role: user.role,
-    purchased_cents: user.purchased_cents,
-    bonus_cents: user.bonus_cents,
-    reserved_cents: user.reserved_cents,
+    purchased_coins: user.purchased_coins,
+    bonus_coins: user.bonus_coins,
+    reserved_coins: user.reserved_coins,
     created_at: user.created_at,
   };
 }

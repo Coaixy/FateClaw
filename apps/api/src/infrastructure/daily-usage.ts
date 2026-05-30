@@ -7,7 +7,7 @@ export interface DailyUsageRow {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  official_model_charge_cents: number;
+  official_model_charge_coins: number;
 }
 
 export interface UsageStats {
@@ -220,11 +220,11 @@ export async function getDailyUsageRows(
      ),
      charge_rows AS (
        SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
-              COALESCE(SUM(-amount_cents), 0) AS official_model_charge_cents
+              COALESCE(SUM(-amount_coins), 0) AS official_model_charge_coins
        FROM wallet_transactions
        WHERE user_id = $1
          AND kind = 'overage_charge'
-         AND amount_cents < 0
+         AND amount_coins < 0
        GROUP BY 1
      ),
      daily_dates AS (
@@ -237,7 +237,7 @@ export async function getDailyUsageRows(
             COALESCE(usage_rows.input_tokens, 0) AS input_tokens,
             COALESCE(usage_rows.output_tokens, 0) AS output_tokens,
             COALESCE(usage_rows.total_tokens, 0) AS total_tokens,
-            COALESCE(charge_rows.official_model_charge_cents, 0) AS official_model_charge_cents
+            COALESCE(charge_rows.official_model_charge_coins, 0) AS official_model_charge_coins
      FROM daily_dates
      LEFT JOIN usage_rows ON usage_rows.date = daily_dates.date
      LEFT JOIN charge_rows ON charge_rows.date = daily_dates.date
@@ -252,7 +252,7 @@ export async function getDailyUsageRows(
       input_tokens: string | number;
       output_tokens: string | number;
       total_tokens: string | number;
-      official_model_charge_cents: string | number;
+      official_model_charge_coins: string | number;
     };
     return {
       date: item.date,
@@ -260,7 +260,7 @@ export async function getDailyUsageRows(
       input_tokens: Number(item.input_tokens),
       output_tokens: Number(item.output_tokens),
       total_tokens: Number(item.total_tokens),
-      official_model_charge_cents: Number(item.official_model_charge_cents),
+      official_model_charge_coins: Number(item.official_model_charge_coins),
     };
   });
 }

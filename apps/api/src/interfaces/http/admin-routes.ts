@@ -56,7 +56,7 @@ import {
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 const GrantBonusBalanceSchema = z.object({
-  amount_cents: z.number().int().positive('赠送余额必须为正整数分'),
+  amount_coins: z.number().int().positive('赠送余额必须为正整数软妹币'),
   source: z
     .enum(['new_user_gift', 'sign_in', 'admin_grant', 'promotion'])
     .default('admin_grant'),
@@ -65,7 +65,7 @@ const GrantBonusBalanceSchema = z.object({
 });
 
 const AdjustPurchasedBalanceSchema = z.object({
-  amount_cents: z
+  amount_coins: z
     .number()
     .int()
     .refine((v) => v !== 0, '调整余额不能为 0'),
@@ -169,8 +169,8 @@ const OfficialModelSchema = z.object({
     )
     .nullable()
     .optional(),
-  input_token_price_per_million_cents: z.number().int().min(0).default(0),
-  output_token_price_per_million_cents: z.number().int().min(0).default(0),
+  input_token_price_per_million_coins: z.number().int().min(0).default(0),
+  output_token_price_per_million_coins: z.number().int().min(0).default(0),
 });
 
 const OfficialModelCreateSchema = OfficialModelSchema.extend({
@@ -193,15 +193,15 @@ function toConfiguredContextWindowTokens(
 const RechargeMoneySchema = z
   .string()
   .trim()
-  .regex(/^\d+(\.\d{1,2})?$/, '金额必须是最多两位小数的正数')
+  .regex(/^\d+$/, '金额必须是正整数软妹币')
   .refine((value) => Number(value) > 0, '金额必须大于 0')
-  .transform((value) => Number(value).toFixed(2));
+  .transform((value) => String(Number.parseInt(value, 10)));
 
 const RechargePaymentConfigSchema = z
   .object({
     enabled: z.boolean(),
-    min_yuan: RechargeMoneySchema,
-    max_yuan: RechargeMoneySchema,
+    min_coins: RechargeMoneySchema,
+    max_coins: RechargeMoneySchema,
     epay_url_prefix: z.string().trim().max(500),
     epay_platform_id: z.number().int().positive().nullable(),
     epay_merchant_private_key: z.string().max(8000),
@@ -211,10 +211,10 @@ const RechargePaymentConfigSchema = z
     return_url: z.string().trim().max(500).optional(),
   })
   .superRefine((value, ctx) => {
-    if (Number(value.max_yuan) < Number(value.min_yuan)) {
+    if (Number(value.max_coins) < Number(value.min_coins)) {
       ctx.addIssue({
         code: 'custom',
-        path: ['max_yuan'],
+        path: ['max_coins'],
         message: '最高充值金额不能小于最低充值金额',
       });
     }
@@ -236,7 +236,7 @@ const RechargePaymentConfigSchema = z
 const RewardConfigSchema = z.object({
   daily_sign_in: z.object({
     enabled: z.boolean(),
-    reward_cents: z.number().int().min(0).max(1_000_000),
+    reward_coins: z.number().int().min(0).max(1_000_000),
   }),
 });
 
@@ -341,7 +341,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return updateAdminRewardConfig({
       dailySignIn: {
         enabled: parsed.data.daily_sign_in.enabled,
-        rewardCents: parsed.data.daily_sign_in.reward_cents,
+        rewardCoins: parsed.data.daily_sign_in.reward_coins,
       },
     });
   });
@@ -366,10 +366,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       contextWindowTokens: toConfiguredContextWindowTokens(
         parsed.data.context_window_tokens,
       ),
-      inputTokenPricePerMillionCents:
-        parsed.data.input_token_price_per_million_cents,
-      outputTokenPricePerMillionCents:
-        parsed.data.output_token_price_per_million_cents,
+      inputTokenPricePerMillionCoins:
+        parsed.data.input_token_price_per_million_coins,
+      outputTokenPricePerMillionCoins:
+        parsed.data.output_token_price_per_million_coins,
       secretValue: parsed.data.api_key,
       authMode: parsed.data.auth_mode,
       actor: 'manager',
@@ -399,10 +399,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         contextWindowTokens: toConfiguredContextWindowTokens(
           parsed.data.context_window_tokens,
         ),
-        inputTokenPricePerMillionCents:
-          parsed.data.input_token_price_per_million_cents,
-        outputTokenPricePerMillionCents:
-          parsed.data.output_token_price_per_million_cents,
+        inputTokenPricePerMillionCoins:
+          parsed.data.input_token_price_per_million_coins,
+        outputTokenPricePerMillionCoins:
+          parsed.data.output_token_price_per_million_coins,
         actor: 'manager',
       });
       return provider;
@@ -505,7 +505,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { user: updated, grantId } = await grantBonusBalance({
       userId: id,
       source: body.source,
-      amountCents: body.amount_cents,
+      amountCoins: body.amount_coins,
       expiresAt: body.expires_at ?? null,
       note: body.note ?? null,
       grantedBy: request.user?.userId ?? 'admin',
@@ -513,9 +513,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return {
       success: true,
       grant_id: grantId,
-      bonus_cents: updated.bonus_cents,
-      purchased_cents: updated.purchased_cents,
-      reserved_cents: updated.reserved_cents,
+      bonus_coins: updated.bonus_coins,
+      purchased_coins: updated.purchased_coins,
+      reserved_coins: updated.reserved_coins,
     };
   });
 
@@ -529,19 +529,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = await adjustUserPurchasedBalance(
       id,
-      body.amount_cents,
+      body.amount_coins,
       body.note,
     );
     return {
       success: true,
-      purchased_cents: updated.purchased_cents,
-      bonus_cents: updated.bonus_cents,
-      reserved_cents: updated.reserved_cents,
-      available_cents: Math.max(
+      purchased_coins: updated.purchased_coins,
+      bonus_coins: updated.bonus_coins,
+      reserved_coins: updated.reserved_coins,
+      available_coins: Math.max(
         0,
-        updated.purchased_cents +
-          updated.bonus_cents -
-          updated.reserved_cents,
+        updated.purchased_coins +
+          updated.bonus_coins -
+          updated.reserved_coins,
       ),
     };
   });

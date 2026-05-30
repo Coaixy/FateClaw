@@ -10,8 +10,8 @@ export type ProviderDraft = {
   base_url: string;
   model_name: string;
   context_window_tokens: number;
-  input_token_price_per_million_cents: number;
-  output_token_price_per_million_cents: number;
+  input_token_price_per_million_coins: number;
+  output_token_price_per_million_coins: number;
 };
 
 export function createEmptyDraft(): ProviderDraft {
@@ -25,8 +25,8 @@ export function createEmptyDraft(): ProviderDraft {
     base_url: '',
     model_name: '',
     context_window_tokens: 0,
-    input_token_price_per_million_cents: 0,
-    output_token_price_per_million_cents: 0,
+    input_token_price_per_million_coins: 0,
+    output_token_price_per_million_coins: 0,
   };
 }
 

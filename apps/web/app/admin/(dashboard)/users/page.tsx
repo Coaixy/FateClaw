@@ -8,7 +8,7 @@ import {
   type WalletTransaction,
 } from '@/lib/admin-api';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
-import { formatCents, formatSignedCents } from '@/lib/money';
+import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
 import {
   Activity,
   AlertTriangle,
@@ -316,14 +316,14 @@ function UserRow({
   const handleAdjustBalance = async () => {
     const amount = parseInt(balanceDelta, 10);
     if (!amount) {
-      setMsg('请输入有效的调整金额（分）');
+      setMsg('请输入有效的调整金额（软妹币）');
       return;
     }
     setAdjustingBalance(true);
     setMsg('');
     try {
       await admin.adjustPurchasedBalance(user.id, {
-        amount_cents: amount,
+        amount_coins: amount,
         note: balanceNote || undefined,
       });
       setBalanceDelta('');
@@ -339,7 +339,7 @@ function UserRow({
   };
 
   const meaningfulTransactions = transactions
-    .filter((tx) => tx.amount_cents !== 0)
+    .filter((tx) => tx.amount_coins !== 0)
     .slice(0, 8);
 
   return (
@@ -365,14 +365,14 @@ function UserRow({
               <span>ID {user.id.slice(0, 8)}</span>
               <span className="md:hidden">{user.account_count} 个账号</span>
               <span className="md:hidden">
-                可用 {formatCents(user.available_cents)}
+                可用 {formatCoins(user.available_coins)}
               </span>
             </div>
           </div>
         </div>
 
         <DataCell label="账号" value={`${user.account_count} 个`} />
-        <DataCell label="可用余额" value={formatCents(user.available_cents)} />
+        <DataCell label="可用余额" value={formatCoins(user.available_coins)} />
         <DataCell label="总 Token" value={fmt(totalTokens(user))} />
 
         <div className="hidden justify-end md:flex">
@@ -408,7 +408,7 @@ function UserRow({
                       <span>本月 Token {fmt(user.monthly_tokens_used)}</span>
                       <span>
                         官方模型扣费{' '}
-                        {formatCents(user.estimated_monthly_total_cents)}
+                        {formatCoins(user.estimated_monthly_total_coins)}
                       </span>
                     </div>
                   </section>
@@ -424,26 +424,26 @@ function UserRow({
                     <div className="mb-3 grid overflow-hidden rounded-lg border border-hairline bg-hairline [gap:1px] sm:grid-cols-4">
                       <WalletMetric
                         label="充值"
-                        value={formatCents(detail.user.purchased_cents)}
+                        value={formatCoins(detail.user.purchased_coins)}
                       />
                       <WalletMetric
                         label="赠送"
-                        value={formatCents(detail.user.bonus_cents)}
+                        value={formatCoins(detail.user.bonus_coins)}
                       />
                       <WalletMetric
                         label="冻结"
-                        value={formatCents(detail.user.reserved_cents)}
+                        value={formatCoins(detail.user.reserved_coins)}
                       />
                       <WalletMetric
                         label="可用"
-                        value={formatCents(detail.user.available_cents)}
+                        value={formatCoins(detail.user.available_coins)}
                       />
                     </div>
 
                     <div className="grid gap-2 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
                       <label className="min-w-0">
                         <span className="mb-1 block text-[12px] text-muted">
-                          调整金额（分）
+                          调整金额（软妹币）
                         </span>
                         <input
                           type="number"
@@ -461,7 +461,7 @@ function UserRow({
                           type="text"
                           value={balanceNote}
                           onChange={(e) => setBalanceNote(e.target.value)}
-                          placeholder="例如：人工充值 10000 分"
+                          placeholder="例如：人工充值 100"
                           className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
                         />
                       </label>
@@ -537,12 +537,12 @@ function UserRow({
                             </div>
                             <div
                               className={`font-mono tabular-nums sm:text-right ${
-                                tx.amount_cents > 0
+                                tx.amount_coins > 0
                                   ? 'text-success'
                                   : 'text-error'
                               }`}
                             >
-                              {formatSignedCents(tx.amount_cents)}
+                              {formatSignedCoins(tx.amount_coins)}
                             </div>
                           </div>
                         ))}
@@ -720,8 +720,8 @@ export default function AdminUsersPage() {
 
   const summary = useMemo(() => {
     const totalAccounts = users.reduce((sum, u) => sum + u.account_count, 0);
-    const totalAvailableCents = users.reduce(
-      (sum, u) => sum + u.available_cents,
+    const totalAvailableCoins = users.reduce(
+      (sum, u) => sum + u.available_coins,
       0,
     );
     const todayMessages = users.reduce(
@@ -731,10 +731,10 @@ export default function AdminUsersPage() {
 
     return {
       totalAccounts,
-      totalAvailableCents,
+      totalAvailableCoins,
       todayMessages,
-      chargedCents: users.reduce(
-        (sum, u) => sum + u.estimated_monthly_total_cents,
+      chargedCoins: users.reduce(
+        (sum, u) => sum + u.estimated_monthly_total_coins,
         0,
       ),
     };
@@ -818,7 +818,7 @@ export default function AdminUsersPage() {
         <SummaryCard
           icon={Coins}
           label="官方扣费"
-          value={formatCents(summary.chargedCents)}
+          value={formatCoins(summary.chargedCoins)}
           sub="本月官方模型扣费"
         />
         <SummaryCard
@@ -830,7 +830,7 @@ export default function AdminUsersPage() {
         <SummaryCard
           icon={WalletCards}
           label="可用余额"
-          value={formatCents(summary.totalAvailableCents)}
+          value={formatCoins(summary.totalAvailableCoins)}
           sub={`今日消息 ${fmt(summary.todayMessages)}`}
         />
       </div>

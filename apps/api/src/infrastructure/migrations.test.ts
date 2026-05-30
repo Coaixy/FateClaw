@@ -93,6 +93,13 @@ describe('runDatabaseMigrations', () => {
         '增加每日签到软妹币奖励配置和签到记录',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0011_soft_currency_coins_schema',
+        '迁移余额与充值 schema 到软妹币整数单位',
+      ],
+    });
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS official_model_configs'),
@@ -132,6 +139,7 @@ describe('runDatabaseMigrations', () => {
       '0008_balance_cents_schema',
       '0009_remove_creator_earnings_schema',
       '0010_daily_sign_in_reward_config',
+      '0011_soft_currency_coins_schema',
     ]);
 
     await runDatabaseMigrations(client as never);

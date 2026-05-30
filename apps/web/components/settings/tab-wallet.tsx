@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
 import { WalletDailySignInPanel } from '@/components/settings/wallet/wallet-daily-sign-in-panel';
 import { WalletRechargePanel } from '@/components/settings/wallet/wallet-recharge-panel';
@@ -33,10 +33,10 @@ export function TabWallet() {
   } = useWalletOverview();
   const [subTab, setSubTab] = useState<SubTab>('overview');
 
-  const purchasedCents = billingInfo?.purchased_cents ?? 0;
-  const bonusCents = billingInfo?.bonus_cents ?? 0;
-  const reservedCents = billingInfo?.reserved_cents ?? 0;
-  const availableCents = billingInfo?.available_cents ?? 0;
+  const purchasedCoins = billingInfo?.purchased_coins ?? 0;
+  const bonusCoins = billingInfo?.bonus_coins ?? 0;
+  const reservedCoins = billingInfo?.reserved_coins ?? 0;
+  const availableCoins = billingInfo?.available_coins ?? 0;
 
   const subTabs: { key: SubTab; label: string }[] = [
     { key: 'overview', label: '概览' },
@@ -56,10 +56,10 @@ export function TabWallet() {
   return (
     <div className="space-y-5">
       <WalletBalanceCard
-        availableCents={availableCents}
-        purchasedCents={purchasedCents}
-        bonusCents={bonusCents}
-        reservedCents={reservedCents}
+        availableCoins={availableCoins}
+        purchasedCoins={purchasedCoins}
+        bonusCoins={bonusCoins}
+        reservedCoins={reservedCoins}
       />
 
       <WalletDailySignInPanel
@@ -114,14 +114,14 @@ export function TabWallet() {
                 <TrendingUp size={14} className="text-primary" />
               }
               label="本月消耗"
-              value={formatCents(
-                billingInfo?.estimated_monthly_total_cents ?? 0,
+              value={formatCoins(
+                billingInfo?.estimated_monthly_total_coins ?? 0,
               )}
             />
             <WalletStatCard
               icon={<ArrowDownLeft size={14} className="text-purple-400" />}
               label="充值累计"
-              value={formatCents(rechargeStats?.total_recharge_cents ?? 0)}
+              value={formatCoins(rechargeStats?.total_recharge_coins ?? 0)}
             />
           </div>
           <p className="text-[11px] text-muted leading-relaxed px-1">

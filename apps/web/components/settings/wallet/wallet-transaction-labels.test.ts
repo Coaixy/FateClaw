@@ -10,7 +10,7 @@ describe('walletTransactionBadgeLabel', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'overage_charge',
-        amount_cents: -12,
+        amount_coins: -12,
         balance_source: 'purchased',
       }),
     ).toBe('扣费');
@@ -20,7 +20,7 @@ describe('walletTransactionBadgeLabel', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'recharge_topup',
-        amount_cents: 100,
+        amount_coins: 100,
         balance_source: 'purchased',
       }),
     ).toBe('充值');
@@ -30,7 +30,7 @@ describe('walletTransactionBadgeLabel', () => {
     expect(
       walletTransactionBadgeLabel({
         kind: 'bonus_grant',
-        amount_cents: 20,
+        amount_coins: 20,
         balance_source: 'bonus',
       }),
     ).toBe('奖励');
@@ -44,8 +44,8 @@ describe('isWalletTransactionVisible', () => {
         id: 'wtx-1',
         user_id: 'user-1',
         kind: 'overage_charge',
-        amount_cents: -3,
-        reserved_delta_cents: 0,
+        amount_coins: -3,
+        reserved_delta_coins: 0,
         balance_source: 'bonus',
         balance_grant_id: 'batch-1',
         request_id: 'request-1',
@@ -62,8 +62,8 @@ describe('isWalletTransactionVisible', () => {
         id: 'wtx-2',
         user_id: 'user-1',
         kind: 'recharge_topup',
-        amount_cents: 100,
-        reserved_delta_cents: 0,
+        amount_coins: 100,
+        reserved_delta_coins: 0,
         balance_source: 'purchased',
         balance_grant_id: null,
         request_id: null,

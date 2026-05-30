@@ -32,15 +32,15 @@ export interface DailyUsageRowDto {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  official_model_charge_cents: number;
+  official_model_charge_coins: number;
 }
 
 export interface WalletTransactionDto {
   id: string;
   user_id: string;
   kind: string;
-  amount_cents: number;
-  reserved_delta_cents: number;
+  amount_coins: number;
+  reserved_delta_coins: number;
   balance_source: 'purchased' | 'bonus' | 'mixed' | null;
   balance_grant_id: string | null;
   request_id: string | null;
@@ -51,25 +51,25 @@ export interface WalletTransactionDto {
 
 export interface BillingStatusDto {
   monthly_tokens_used: number;
-  estimated_monthly_total_cents: number;
-  purchased_cents: number;
-  bonus_cents: number;
-  reserved_cents: number;
-  available_cents: number;
+  estimated_monthly_total_coins: number;
+  purchased_coins: number;
+  bonus_coins: number;
+  reserved_coins: number;
+  available_coins: number;
 }
 
 export interface DailySignInStatusDto {
   enabled: boolean;
-  reward_cents: number;
+  reward_coins: number;
   sign_in_date: string;
   signed_in_today: boolean;
   signed_in_at: string | null;
 }
 
 export interface DailySignInResultDto extends DailySignInStatusDto {
-  received_cents: number;
-  bonus_cents: number;
-  available_cents: number;
+  received_coins: number;
+  bonus_coins: number;
+  available_coins: number;
 }
 
 export type RechargePayTypeDto = 'alipay' | 'wechat';
@@ -82,8 +82,7 @@ export interface RechargeOrderDto {
   provider: string;
   provider_trade_id: string | null;
   pay_type: RechargePayTypeDto;
-  amount_yuan: string;
-  amount_cents: number;
+  amount_coins: number;
   pay_url: string | null;
   status: RechargeOrderStatusDto;
   paid_at: string | null;
@@ -99,7 +98,6 @@ export interface CreateRechargeOrderResponseDto {
 
 export interface RechargeStatsDto {
   total_paid_orders: number;
-  total_recharge_cents: number;
-  total_recharge_yuan: string;
+  total_recharge_coins: number;
   last_paid_at: string | null;
 }

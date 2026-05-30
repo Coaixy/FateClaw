@@ -211,7 +211,7 @@ async function settleAiChatBilling(args: {
   if (!args.payload.requestId) return false;
   if (args.pending?.llmRuntime?.billingMode !== 'metered') return false;
 
-  const actualChargeCents = await settleBillingReservation({
+  const actualChargeCoins = await settleBillingReservation({
     requestId: args.payload.requestId,
     runtime: args.pending.llmRuntime,
     promptTokens: args.payload.usage?.promptTokens ?? 0,
@@ -221,7 +221,7 @@ async function settleAiChatBilling(args: {
     {
       accountId: args.accountId,
       requestId: args.payload.requestId,
-      actualChargeCents,
+      actualChargeCoins,
     },
     'AI Chat: 已完成超额预扣结算',
   );

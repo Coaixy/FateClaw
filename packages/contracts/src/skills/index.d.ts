@@ -7,7 +7,7 @@ import type { OkResponse } from '../common/api.js';
 export interface SkillPriceTierDto {
   key: string;
   label: string;
-  price_cents: number;
+  price_coins: number;
   duration_days: number | null;
   description?: string;
 }
@@ -97,7 +97,7 @@ export interface MarketSkillDto {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_cents'>>;
+  price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_coins'>>;
   stat_subscriber_count: number;
   share_token: string | null;
   author_label: string;
@@ -157,7 +157,7 @@ export interface BundleUnsubscribeResultDto {
 export interface CreatorBundleTierDto {
   key: string;
   label: string;
-  price_cents: number;
+  price_coins: number;
   duration_days: number | null;
   description?: string;
 }

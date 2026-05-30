@@ -1,5 +1,5 @@
 import type { DailyUsageRow } from '@/features/billing/api';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
 function formatTokenCount(value: number): string {
   return value.toLocaleString();
@@ -76,7 +76,7 @@ export function WalletTokenUsagePanel({
                     {formatTokenCount(row.total_tokens)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                    {formatCents(row.official_model_charge_cents)}
+                    {formatCoins(row.official_model_charge_coins)}
                   </td>
                 </tr>
               ))}

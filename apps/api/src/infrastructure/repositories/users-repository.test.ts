@@ -29,9 +29,9 @@ function user(overrides: Partial<User> = {}): User {
     phone_verified: true,
     password_hash: 'hash',
     role: 'consumer',
-    purchased_cents: 0,
-    bonus_cents: 0,
-    reserved_cents: 0,
+    purchased_coins: 0,
+    bonus_coins: 0,
+    reserved_coins: 0,
     created_at: '2026-05-27T00:00:00.000Z',
     ...overrides,
   };
@@ -59,7 +59,7 @@ describe('users repository', () => {
 
   it('inserts all persisted user balance columns', async () => {
     const { calls } = createMockPool();
-    const input = user({ purchased_cents: 100, bonus_cents: 20 });
+    const input = user({ purchased_coins: 100, bonus_coins: 20 });
 
     await createUser(input);
 
@@ -70,9 +70,9 @@ describe('users repository', () => {
       input.phone_verified,
       input.password_hash,
       input.role,
-      input.purchased_cents,
-      input.bonus_cents,
-      input.reserved_cents,
+      input.purchased_coins,
+      input.bonus_coins,
+      input.reserved_coins,
       input.created_at,
     ]);
   });

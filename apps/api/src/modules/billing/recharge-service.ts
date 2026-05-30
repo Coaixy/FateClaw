@@ -6,7 +6,6 @@ import type {
   RechargeStatsDto,
 } from '@fateclaw/contracts/billing';
 
-import { CENTS_PER_YUAN } from '../../infrastructure/config.js';
 import {
   getRechargePaymentConfig,
   getRechargeOrderByTradeId,
@@ -42,8 +41,8 @@ import {
  */
 export interface AdminRechargePaymentConfigDto {
   enabled: boolean;
-  min_yuan: string;
-  max_yuan: string;
+  min_coins: string;
+  max_coins: string;
   epay_url_prefix: string;
   epay_platform_id: number | null;
   epay_merchant_private_key: string;
@@ -72,8 +71,8 @@ export interface RechargeCallbackUrls {
 }
 
 interface ParsedRechargeAmount {
-  amountYuan: string;
-  amountCents: number;
+  amountCoins: number;
+  providerMoney: string;
 }
 
 type EpayBaseConfig = Pick<
@@ -138,7 +137,7 @@ function resolveEpayConfig(
 
 function parseRechargeAmount(
   raw: unknown,
-  paymentConfig: Pick<RechargePaymentConfigRow, 'min_yuan' | 'max_yuan'>,
+  paymentConfig: Pick<RechargePaymentConfigRow, 'min_coins' | 'max_coins'>,
   opts: { enforceRange?: boolean } = { enforceRange: true },
 ): ParsedRechargeAmount | string {
   const source =
@@ -148,29 +147,29 @@ function parseRechargeAmount(
         ? raw.trim()
         : '';
   if (!/^\d+(\.\d{1,2})?$/.test(source)) {
-    return '充值金额必须是最多两位小数的正数';
+    return '充值金额必须是正整数软妹币';
   }
 
-  const [yuanPart, centPart = ''] = source.split('.');
-  const yuan = Number.parseInt(yuanPart, 10);
-  const cents = Number.parseInt(centPart.padEnd(2, '0') || '0', 10);
-  const amountCents = yuan * CENTS_PER_YUAN + cents;
-  const min = Number(paymentConfig.min_yuan);
-  const max = Number(paymentConfig.max_yuan);
-  const minCents = Math.round(min * CENTS_PER_YUAN);
-  const maxCents = Math.round(max * CENTS_PER_YUAN);
+  const numericAmount = Number(source);
+  const amountCoins = Math.round(numericAmount);
+  if (!Number.isInteger(numericAmount) || amountCoins <= 0) {
+    return '充值金额必须是正整数软妹币';
+  }
+  const minCoins = Number.parseInt(String(paymentConfig.min_coins), 10);
+  const maxCoins = Number.parseInt(String(paymentConfig.max_coins), 10);
 
   // 用户创建订单时校验充值区间；支付平台回查金额只做格式和一致性校验。
   if (
     opts.enforceRange !== false &&
-    (amountCents < minCents || amountCents > maxCents)
+    (amountCoins < minCoins || amountCoins > maxCoins)
   ) {
-    return `充值金额仅支持软妹币 ${paymentConfig.min_yuan} - ${paymentConfig.max_yuan}`;
+    return `充值金额仅支持软妹币 ${paymentConfig.min_coins} - ${paymentConfig.max_coins}`;
   }
 
   return {
-    amountYuan: (amountCents / CENTS_PER_YUAN).toFixed(2),
-    amountCents,
+    amountCoins,
+    // 易支付的 money 字段要求金额字符串，这里只在支付适配层保留两位格式。
+    providerMoney: amountCoins.toFixed(2),
   };
 }
 
@@ -197,7 +196,7 @@ function ensureStringRecord(input: unknown): Record<string, string> {
 
 function validateProviderAmount(
   order: RechargeOrderRow,
-  paymentConfig: Pick<RechargePaymentConfigRow, 'min_yuan' | 'max_yuan'>,
+  paymentConfig: Pick<RechargePaymentConfigRow, 'min_coins' | 'max_coins'>,
   providerMoney: string | undefined,
 ): ServiceResult<null> {
   if (!providerMoney) return ok(null);
@@ -207,7 +206,7 @@ function validateProviderAmount(
   if (typeof parsed === 'string') {
     return fail(400, '支付平台返回的金额格式异常');
   }
-  if (parsed.amountCents !== order.amount_cents) {
+  if (parsed.amountCoins !== order.amount_coins) {
     return fail(409, '支付金额和充值单不一致，请联系管理员处理');
   }
   return ok(null);
@@ -222,8 +221,8 @@ export function toAdminRechargePaymentConfigDto(
 ): AdminRechargePaymentConfigDto {
   return {
     enabled: row.enabled,
-    min_yuan: row.min_yuan,
-    max_yuan: row.max_yuan,
+    min_coins: row.min_coins,
+    max_coins: row.max_coins,
     epay_url_prefix: row.epay_url_prefix,
     epay_platform_id: row.epay_platform_id,
     epay_merchant_private_key: row.epay_merchant_private_key,
@@ -256,8 +255,8 @@ export async function updateAdminRechargePaymentConfig(
 ): Promise<AdminRechargePaymentConfigDto> {
   const saved = await updateRechargePaymentConfig({
     enabled: input.enabled,
-    minYuan: input.min_yuan,
-    maxYuan: input.max_yuan,
+    minCoins: input.min_coins,
+    maxCoins: input.max_coins,
     epayUrlPrefix: input.epay_url_prefix.trim(),
     epayPlatformId: input.epay_platform_id,
     epayMerchantPrivateKey: input.epay_merchant_private_key,
@@ -274,7 +273,7 @@ export async function updateAdminRechargePaymentConfig(
  */
 export async function createRechargeOrderForUser(input: {
   userId: string;
-  amountYuan: unknown;
+  amountCoins: unknown;
   payType: unknown;
   clientIp: string;
   callbackUrls: RechargeCallbackUrls;
@@ -290,7 +289,7 @@ export async function createRechargeOrderForUser(input: {
     return fail(400, '支付方式仅支持支付宝或微信');
   }
 
-  const parsedAmount = parseRechargeAmount(input.amountYuan, paymentConfig);
+  const parsedAmount = parseRechargeAmount(input.amountCoins, paymentConfig);
   if (typeof parsedAmount === 'string') {
     return fail(400, parsedAmount);
   }
@@ -306,8 +305,7 @@ export async function createRechargeOrderForUser(input: {
     userId: user.id,
     tradeId,
     payType,
-    amountYuan: parsedAmount.amountYuan,
-    amountCents: parsedAmount.amountCents,
+    amountCoins: parsedAmount.amountCoins,
     metadata: {
       client_ip: input.clientIp,
     },
@@ -316,8 +314,8 @@ export async function createRechargeOrderForUser(input: {
   try {
     const response = await createEpayPayment(config, {
       tradeId,
-      name: `命枢充值 ${parsedAmount.amountYuan} 元`,
-      money: parsedAmount.amountYuan,
+      name: `命枢充值 ${parsedAmount.amountCoins} 软妹币`,
+      money: parsedAmount.providerMoney,
       payType,
       clientIp: input.clientIp || '127.0.0.1',
     });

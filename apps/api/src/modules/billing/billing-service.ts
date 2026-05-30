@@ -64,11 +64,11 @@ export async function getBillingOverview(
   return ok(
     toBillingStatusDto({
       monthly_tokens_used: billing.usedTokens,
-      estimated_monthly_total_cents: billing.chargedCents,
-      purchased_cents: wallet.purchasedCents,
-      bonus_cents: wallet.bonusCents,
-      reserved_cents: wallet.reservedCents,
-      available_cents: wallet.availableCents,
+      estimated_monthly_total_coins: billing.chargedCoins,
+      purchased_coins: wallet.purchasedCoins,
+      bonus_coins: wallet.bonusCoins,
+      reserved_coins: wallet.reservedCoins,
+      available_coins: wallet.availableCoins,
     }),
   );
 }
@@ -135,7 +135,7 @@ export async function getDailySignInStatus(
 
   return ok({
     enabled: config.enabled,
-    reward_cents: config.reward_cents,
+    reward_coins: config.reward_coins,
     sign_in_date: signInDate,
     signed_in_today: Boolean(record),
     signed_in_at: record?.created_at ?? null,
@@ -159,7 +159,7 @@ export async function claimDailySignInReward(
   if (!config.enabled) {
     return fail(403, '每日签到暂未开启');
   }
-  if (config.reward_cents <= 0) {
+  if (config.reward_coins <= 0) {
     return fail(400, '每日签到奖励未配置');
   }
 
@@ -172,7 +172,7 @@ export async function claimDailySignInReward(
   const { user: updated, record, created } = await createDailySignInReward({
     userId: user.id,
     signInDate,
-    rewardCents: config.reward_cents,
+    rewardCoins: config.reward_coins,
     note: `每日签到奖励（${signInDate}）`,
   });
   if (!created) {
@@ -181,15 +181,15 @@ export async function claimDailySignInReward(
 
   return ok({
     enabled: config.enabled,
-    reward_cents: config.reward_cents,
+    reward_coins: config.reward_coins,
     sign_in_date: signInDate,
     signed_in_today: true,
     signed_in_at: record.created_at,
-    received_cents: record.reward_cents,
-    bonus_cents: updated.bonus_cents,
-    available_cents: Math.max(
+    received_coins: record.reward_coins,
+    bonus_coins: updated.bonus_coins,
+    available_coins: Math.max(
       0,
-      updated.purchased_cents + updated.bonus_cents - updated.reserved_cents,
+      updated.purchased_coins + updated.bonus_coins - updated.reserved_coins,
     ),
   });
 }

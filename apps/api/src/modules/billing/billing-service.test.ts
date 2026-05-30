@@ -44,9 +44,9 @@ import {
 
 const user = {
   id: 'user-1',
-  purchased_cents: 100,
-  bonus_cents: 10,
-  reserved_cents: 0,
+  purchased_coins: 100,
+  bonus_coins: 10,
+  reserved_coins: 0,
 };
 
 describe('daily sign-in billing service', () => {
@@ -56,7 +56,7 @@ describe('daily sign-in billing service', () => {
     mockGetDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: true,
-      reward_cents: 20,
+      reward_coins: 20,
       updated_at: '2026-05-30T00:00:00.000Z',
     });
     mockGetDailySignInRecordByDate.mockResolvedValue(undefined);
@@ -67,7 +67,7 @@ describe('daily sign-in billing service', () => {
       id: 'signin-1',
       user_id: 'user-1',
       sign_in_date: '2026-05-30',
-      reward_cents: 20,
+      reward_coins: 20,
       balance_grant_id: 'bg-1',
       created_at: '2026-05-30T00:00:00.000Z',
     });
@@ -76,7 +76,7 @@ describe('daily sign-in billing service', () => {
       ok: true,
       data: {
         enabled: true,
-        reward_cents: 20,
+        reward_coins: 20,
         signed_in_today: true,
         signed_in_at: '2026-05-30T00:00:00.000Z',
       },
@@ -87,7 +87,7 @@ describe('daily sign-in billing service', () => {
     mockGetDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: false,
-      reward_cents: 20,
+      reward_coins: 20,
       updated_at: '2026-05-30T00:00:00.000Z',
     });
 
@@ -103,7 +103,7 @@ describe('daily sign-in billing service', () => {
       id: 'signin-1',
       user_id: 'user-1',
       sign_in_date: '2026-05-30',
-      reward_cents: 20,
+      reward_coins: 20,
       balance_grant_id: 'bg-1',
       created_at: '2026-05-30T00:00:00.000Z',
     });
@@ -120,13 +120,13 @@ describe('daily sign-in billing service', () => {
     mockCreateDailySignInReward.mockResolvedValue({
       user: {
         ...user,
-        bonus_cents: 30,
+        bonus_coins: 30,
       },
       record: {
         id: 'signin-1',
         user_id: 'user-1',
         sign_in_date: '2026-05-30',
-        reward_cents: 20,
+        reward_coins: 20,
         balance_grant_id: 'bg-1',
         created_at: '2026-05-30T00:00:00.000Z',
       },
@@ -137,18 +137,18 @@ describe('daily sign-in billing service', () => {
       ok: true,
       data: {
         enabled: true,
-        reward_cents: 20,
+        reward_coins: 20,
         signed_in_today: true,
         signed_in_at: '2026-05-30T00:00:00.000Z',
-        received_cents: 20,
-        bonus_cents: 30,
-        available_cents: 130,
+        received_coins: 20,
+        bonus_coins: 30,
+        available_coins: 130,
       },
     });
     expect(mockCreateDailySignInReward).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
-        rewardCents: 20,
+        rewardCoins: 20,
       }),
     );
   });
@@ -160,7 +160,7 @@ describe('daily sign-in billing service', () => {
         id: 'signin-existing',
         user_id: 'user-1',
         sign_in_date: '2026-05-30',
-        reward_cents: 20,
+        reward_coins: 20,
         balance_grant_id: 'bg-existing',
         created_at: '2026-05-30T00:00:00.000Z',
       },

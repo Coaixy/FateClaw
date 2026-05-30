@@ -45,9 +45,9 @@ export async function registerUser(
     phone_verified: true,
     password_hash,
     role: 'consumer',
-    purchased_cents: 0,
-    bonus_cents: 0,
-    reserved_cents: 0,
+    purchased_coins: 0,
+    bonus_coins: 0,
+    reserved_coins: 0,
     created_at: now,
   };
 

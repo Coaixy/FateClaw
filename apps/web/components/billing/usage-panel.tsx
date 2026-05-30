@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 import type { BillingStatus, UsageStats } from '@/features/billing/api';
-import { formatCents } from '@/lib/money';
+import { formatCoins } from '@/lib/soft-currency';
 
 function formatTokens(value: number): string {
   if (value < 1000) return `${value}`;
@@ -80,7 +80,7 @@ export function UsagePanel({
           </span>
         </div>
         <div className="text-[10px] text-muted">
-          本月已扣 {formatCents(status.estimated_monthly_total_cents)}
+          本月已扣 {formatCoins(status.estimated_monthly_total_coins)}
         </div>
       </div>
 
@@ -108,12 +108,12 @@ export function UsagePanel({
             账户余额
           </span>
           <span className="text-[14px] font-semibold tabular-nums text-ink">
-            {formatCents(status.available_cents)}
+            {formatCoins(status.available_coins)}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-1.5 text-center">
-          <BalanceChip label="充值" value={status.purchased_cents} />
-          <BalanceChip label="赠送" value={status.bonus_cents} />
+          <BalanceChip label="充值" value={status.purchased_coins} />
+          <BalanceChip label="赠送" value={status.bonus_coins} />
         </div>
       </div>
 
@@ -166,7 +166,7 @@ function BalanceChip({ label, value }: { label: string; value: number }) {
     <div className="rounded-md bg-surface-card/50 border border-hairline/30 py-1.5">
       <div className="text-[9px] text-muted">{label}</div>
       <div className="text-[11px] font-medium tabular-nums text-ink mt-0.5">
-        {formatCents(value)}
+        {formatCoins(value)}
       </div>
     </div>
   );

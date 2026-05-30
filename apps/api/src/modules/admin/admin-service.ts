@@ -102,7 +102,7 @@ export {
 export interface AdminRewardConfigView {
   daily_sign_in: {
     enabled: boolean;
-    reward_cents: number;
+    reward_coins: number;
     updated_at: string;
   };
 }
@@ -115,7 +115,7 @@ export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
-      reward_cents: dailySignIn.reward_cents,
+      reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
     },
   };
@@ -127,17 +127,17 @@ export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
 export async function updateAdminRewardConfig(input: {
   dailySignIn: {
     enabled: boolean;
-    rewardCents: number;
+    rewardCoins: number;
   };
 }): Promise<AdminRewardConfigView> {
   const dailySignIn = await updateDailySignInConfig({
     enabled: input.dailySignIn.enabled,
-    rewardCents: input.dailySignIn.rewardCents,
+    rewardCoins: input.dailySignIn.rewardCoins,
   });
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
-      reward_cents: dailySignIn.reward_cents,
+      reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
     },
   };
@@ -185,9 +185,9 @@ export async function createAdminUser(input: {
       ADMIN_CREATE_USER_SALT_ROUNDS,
     ),
     role: input.role,
-    purchased_cents: 0,
-    bonus_cents: 0,
-    reserved_cents: 0,
+    purchased_coins: 0,
+    bonus_coins: 0,
+    reserved_coins: 0,
     created_at: now,
   };
 
@@ -218,11 +218,11 @@ export async function listAdminUsersWithStats(): Promise<
       active_tasks: number;
       usage: Awaited<ReturnType<typeof getUsageStats>>;
       monthly_tokens_used: number;
-      estimated_monthly_total_cents: number;
-      purchased_cents: number;
-      bonus_cents: number;
-      reserved_cents: number;
-      available_cents: number;
+      estimated_monthly_total_coins: number;
+      purchased_coins: number;
+      bonus_coins: number;
+      reserved_coins: number;
+      available_coins: number;
     }
   >
 > {
@@ -243,11 +243,11 @@ export async function listAdminUsersWithStats(): Promise<
         active_tasks: activeTasks,
         usage,
         monthly_tokens_used: monthlyBilling.usedTokens,
-        estimated_monthly_total_cents: monthlyBilling.chargedCents,
-        purchased_cents: wallet.purchasedCents,
-        bonus_cents: wallet.bonusCents,
-        reserved_cents: wallet.reservedCents,
-        available_cents: wallet.availableCents,
+        estimated_monthly_total_coins: monthlyBilling.chargedCoins,
+        purchased_coins: wallet.purchasedCoins,
+        bonus_coins: wallet.bonusCoins,
+        reserved_coins: wallet.reservedCoins,
+        available_coins: wallet.availableCoins,
       };
     }),
   );
@@ -265,11 +265,11 @@ export async function getAdminUserDetail(userId: string): Promise<{
     active_tasks: number;
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
-    estimated_monthly_total_cents: number;
-    purchased_cents: number;
-    bonus_cents: number;
-    reserved_cents: number;
-    available_cents: number;
+    estimated_monthly_total_coins: number;
+    purchased_coins: number;
+    bonus_coins: number;
+    reserved_coins: number;
+    available_coins: number;
   };
   accounts: Array<Record<string, unknown>>;
   usage: Awaited<ReturnType<typeof getUsageStats>>;
@@ -297,11 +297,11 @@ export async function getAdminUserDetail(userId: string): Promise<{
       active_tasks: activeTasks,
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
-      estimated_monthly_total_cents: monthlyBilling.chargedCents,
-      purchased_cents: wallet.purchasedCents,
-      bonus_cents: wallet.bonusCents,
-      reserved_cents: wallet.reservedCents,
-      available_cents: wallet.availableCents,
+      estimated_monthly_total_coins: monthlyBilling.chargedCoins,
+      purchased_coins: wallet.purchasedCoins,
+      bonus_coins: wallet.bonusCoins,
+      reserved_coins: wallet.reservedCoins,
+      available_coins: wallet.availableCoins,
     },
     accounts: accounts.map(({ bot_token: _botToken, ...rest }) => rest),
     usage,
