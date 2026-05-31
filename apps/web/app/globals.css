@@ -53,9 +53,8 @@
   --color-chart-badge: rgba(232, 165, 90, 0.14);
 
   /* Typography */
-  --font-sans: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'PingFang SC', 'Segoe UI', serif;
   --font-display: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'Times New Roman', serif;
-  --font-body: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'PingFang SC', 'Segoe UI', serif;
+  --font-body: ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', sans-serif;
   --font-mono: 'SFMono-Regular', 'Menlo', 'Consolas', ui-monospace, monospace;
 
   /* Radius */
@@ -130,6 +129,10 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
 }
 
 ::selection {

@@ -4,13 +4,18 @@
   "description": "FateClaw（命枢）是具备排盘和用户知识库检索能力的开源玄学 Agent。",
   "license": "GPL-3.0-only",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "pnpm run build:all",
-    "build:api": "pnpm --filter @fateclaw/api build",
-    "build:agent": "pnpm --filter fateclaw-agent-runner build",
-    "build:web": "pnpm --filter fateclaw-web build",
-    "build:all": "pnpm run build:api && pnpm run build:agent && pnpm run build:web",
-    "start": "pnpm --filter @fateclaw/api start",
+    "build": "npm run build:server",
+    "build:api": "npm --workspace @fateclaw/api run build",
+    "build:agent": "npm --workspace fateclaw-agent-runner run build",
+    "build:web": "npm --workspace fateclaw-web run build",
+    "build:server": "npm run build:api && npm run build:agent",
+    "build:all": "npm run build:server && npm run build:web",
+    "start": "npm --workspace @fateclaw/api run start",
     "dev": "concurrently -n api,web -c blue,green \"pnpm --filter @fateclaw/api dev\" \"pnpm --filter fateclaw-web dev\"",
     "dev:api": "pnpm --filter @fateclaw/api dev",
     "dev:api-only": "pnpm --filter @fateclaw/api dev:api-only",
@@ -30,7 +35,7 @@
     "clean": "bash scripts/clean.sh",
     "clean:all": "bash scripts/clean.sh --all",
     "clean:dist": "bash scripts/clean.sh --dist",
-    "pack": "bash scripts/pack.sh --light --skip-install --jobs 4"
+    "pack": "bash scripts/pack.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

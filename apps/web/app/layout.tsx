@@ -9,7 +9,7 @@ const kingHwaOldSong = localFont({
   src: './fonts/KingHwa_OldSong.ttf',
   variable: '--font-kinghwa-old-song',
   display: 'swap',
-  preload: true,
+  preload: false,
 });
 
 export const metadata: Metadata = {

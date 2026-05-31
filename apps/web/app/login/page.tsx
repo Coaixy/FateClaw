@@ -241,7 +241,7 @@ function LoginHeader({ mode }: { mode: AuthMode }) {
         <span className="text-2xl">☯</span>
       </div>
       <div className="mb-4">
-        <span className="text-xl font-bold tracking-tight">命枢</span>
+        <span className="font-display text-xl font-bold tracking-tight">命枢</span>
         <span className="ml-2 text-sm text-muted">FateClaw</span>
       </div>
       <h1 className="text-lg font-semibold tracking-tight">

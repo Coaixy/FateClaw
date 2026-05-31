@@ -6,8 +6,8 @@
   "type": "module",
   "main": "dist/app/index.js",
   "scripts": {
-    "build": "pnpm --dir ../.. exec tsc -p apps/api/tsconfig.json && pnpm --dir ../.. exec node scripts/copy-shared-assets.mjs api",
-    "start": "pnpm --dir ../.. exec node apps/api/dist/app/index.js",
+    "build": "npx tsc -p tsconfig.json && node ../../scripts/copy-shared-assets.mjs api",
+    "start": "node apps/api/dist/app/index.js",
     "dev": "pnpm --dir ../.. exec tsx watch apps/api/src/app/index.ts",
     "dev:api-only": "pnpm --dir ../.. exec tsx watch apps/api/src/app/dev-api.ts",
     "typecheck": "pnpm --dir ../.. exec tsc --noEmit -p apps/api/tsconfig.json",

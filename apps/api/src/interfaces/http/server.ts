@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-import Fastify, { FastifyError, FastifyInstance } from 'fastify';
+import Fastify, {
+  FastifyError,
+  FastifyInstance,
+  FastifyRequest,
+} from 'fastify';
 import fastifyCors, { type FastifyCorsOptions } from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import fastifyStatic from '@fastify/static';
@@ -28,6 +32,71 @@ const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
 const IMMUTABLE_STATIC_ASSET_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]|(?:^|[/\\])static[/\\]chunks[/\\]/;
+const FONT_ASSET_URL_PATTERN =
+  /^\/_next\/static\/media\/[^?#]+\.(?:ttf|otf|woff2?|eot)$/i;
+const FONT_ASSET_FILE_PATTERN =
+  /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
+
+function firstHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function normalizeOrigin(value: string | null): string | null {
+  if (!value || value === 'null') return null;
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function requestHostOrigin(request: FastifyRequest): string | null {
+  const forwardedHost = firstHeaderValue(request.headers['x-forwarded-host']);
+  const host = forwardedHost ?? firstHeaderValue(request.headers.host);
+  if (!host) return null;
+
+  const forwardedProto = firstHeaderValue(request.headers['x-forwarded-proto']);
+  const proto = forwardedProto?.split(',')[0]?.trim() || request.protocol;
+  return normalizeOrigin(`${proto}://${host}`);
+}
+
+function isFontAssetUrl(rawUrl: string): boolean {
+  try {
+    return FONT_ASSET_URL_PATTERN.test(new URL(rawUrl, 'http://local').pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedStaticAssetOrigin(
+  origin: string | null,
+  requestOrigin: string | null,
+  allowedOrigins: string[],
+): boolean {
+  if (!origin) return true;
+  return origin === requestOrigin || allowedOrigins.includes(origin);
+}
+
+function shouldBlockFontAssetRequest(
+  request: FastifyRequest,
+  allowedOrigins: string[],
+): boolean {
+  const fetchSite = firstHeaderValue(request.headers['sec-fetch-site']);
+  if (fetchSite === 'cross-site') return true;
+  if (fetchSite === 'same-origin') return false;
+
+  const requestOrigin = requestHostOrigin(request);
+  const origin = normalizeOrigin(firstHeaderValue(request.headers.origin));
+  const referer = normalizeOrigin(firstHeaderValue(request.headers.referer));
+  if (!origin && !referer) return true;
+
+  return (
+    !isTrustedStaticAssetOrigin(origin, requestOrigin, allowedOrigins) ||
+    !isTrustedStaticAssetOrigin(referer, requestOrigin, allowedOrigins)
+  );
+}
 
 export async function createApiServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -209,11 +278,31 @@ export async function createApiServer(): Promise<FastifyInstance> {
   // Serve static frontend (apps/web/out/) if it exists
   const webOutDir = path.resolve(resolveProjectRoot(), 'apps', 'web', 'out');
   if (fs.existsSync(webOutDir)) {
+    app.addHook('onRequest', async (request, reply) => {
+      if (!isFontAssetUrl(request.url)) return;
+
+      // 字体文件体积很大，跨站嵌入时先在源站兜底拦截，避免被当成公共 CDN 使用。
+      if (!shouldBlockFontAssetRequest(request, allowedOrigins)) return;
+
+      return reply
+        .code(403)
+        .type('text/plain; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .header('Cross-Origin-Resource-Policy', 'same-origin')
+        .send('Forbidden');
+    });
+
     await app.register(fastifyStatic, {
       root: webOutDir,
       prefix: '/',
       wildcard: false,
+      cacheControl: false,
       setHeaders: (response, filePath) => {
+        if (FONT_ASSET_FILE_PATTERN.test(filePath)) {
+          response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+          response.setHeader('Vary', 'Origin, Referer, Sec-Fetch-Site');
+        }
+
         if (IMMUTABLE_STATIC_ASSET_PATTERN.test(filePath)) {
           response.setHeader(
             'Cache-Control',

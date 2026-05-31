@@ -19,7 +19,7 @@ export function AdvancedSettingsWorkspace() {
               <ArrowLeft size={13} />
               返回个人资料
             </Link>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-ink">
+            <h2 className="font-display mt-2 text-xl font-semibold tracking-tight text-ink">
               模型设置
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-muted">

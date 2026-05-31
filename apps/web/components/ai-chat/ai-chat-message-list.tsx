@@ -45,7 +45,7 @@ export function AiChatMessageList({
         <div className="w-full max-w-xl flex flex-col items-center gap-3.5">
           <BaguaPattern />
           <div className="text-center space-y-1">
-            <h1 className="text-[16px] sm:text-[18px] lg:text-[20px] font-semibold tracking-tight text-ink">
+            <h1 className="font-display text-[16px] sm:text-[18px] lg:text-[20px] font-semibold tracking-tight text-ink">
               可以直接问，也可以手动排盘
             </h1>
             <p className="text-[10px] sm:text-[11px] text-muted">

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# 打包源码用于云端部署
-# 用法: bash scripts/pack.sh [输出文件名]
+# 分离打包 API 源码和 Web 静态产物用于部署
+# 用法:
+#   bash scripts/pack.sh [all|api|web|source]
+#   bash scripts/pack.sh api [输出文件名]
+#   bash scripts/pack.sh web [输出文件名]
 # 兼容旧参数: --light --no-obfuscate --skip-install --jobs N 会被忽略
 
 set -euo pipefail
@@ -9,10 +12,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 VERSION=$(node -p "require('./package.json').version")
-
-# 解析参数。旧参数只用于兼容 package.json 里的历史 pack 命令，源码包不再本地安装、构建或混淆。
+ROOT_NAME="$(basename "$ROOT_DIR")"
+MODE="all"
 OUTFILE=""
 LEGACY_ARGS=()
+
 while [ "$#" -gt 0 ]; do
   arg="$1"
   if [ "$arg" = "--light" ] || [ "$arg" = "--no-obfuscate" ] || [ "$arg" = "--skip-install" ]; then
@@ -31,6 +35,9 @@ while [ "$#" -gt 0 ]; do
   elif [[ "$arg" == --* ]]; then
     echo "❌ 未知参数: $arg"
     exit 1
+  elif [ "$arg" = "all" ] || [ "$arg" = "api" ] || [ "$arg" = "web" ] || [ "$arg" = "source" ]; then
+    MODE="$arg"
+    shift
   else
     if [ -n "$OUTFILE" ]; then
       echo "❌ 只能指定一个输出文件名"
@@ -40,7 +47,11 @@ while [ "$#" -gt 0 ]; do
     shift
   fi
 done
-OUTFILE="${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
+
+if [ "$MODE" = "all" ] && [ -n "$OUTFILE" ]; then
+  echo "❌ all 模式会生成两个文件，不能指定单个输出文件名"
+  exit 1
+fi
 
 SCRIPT_START=$SECONDS
 
@@ -57,49 +68,94 @@ log_duration() {
 }
 
 if [ "${#LEGACY_ARGS[@]}" -gt 0 ]; then
-  echo "ℹ️ 已切换为源码包，忽略本地构建/混淆参数: ${LEGACY_ARGS[*]}"
+  echo "ℹ️ 当前为分离部署包，忽略旧的本地混淆参数: ${LEGACY_ARGS[*]}"
 fi
 
-# ── 1. 打包源码 ──
-STEP_START=$SECONDS
-echo "📦 打包 FateClaw 源码 v${VERSION} ..."
+pack_api_source() {
+  local outfile="${1:-fateclaw-api-v${VERSION}-source.tar.gz}"
+  local tmp_out="/tmp/$outfile"
+  local step_start=$SECONDS
 
-TMP_OUT="/tmp/$OUTFILE"
+  echo "📦 打包 API 源码 v${VERSION} ..."
+  tar czf "$tmp_out" \
+    --exclude='node_modules' \
+    --exclude='.pnpm-store' \
+    --exclude='.git' \
+    --exclude='.DS_Store' \
+    --exclude='.idea' \
+    --exclude='.vscode' \
+    --exclude='.fateclaw' \
+    --exclude='.tmp-*' \
+    --exclude='.env' \
+    --exclude='*.keys.json' \
+    --exclude='*.tar.gz' \
+    --exclude='归档.zip' \
+    --exclude='*.tsbuildinfo' \
+    --exclude='*.log' \
+    --exclude="$ROOT_NAME/apps/web" \
+    --exclude="$ROOT_NAME/apps/api/dist" \
+    --exclude="$ROOT_NAME/packages/agent-runner/dist" \
+    --exclude="$ROOT_NAME/.next" \
+    --exclude="$ROOT_NAME/store" \
+    --exclude="$ROOT_NAME/data" \
+    --exclude="$ROOT_NAME/logs" \
+    --exclude="$ROOT_NAME/backups" \
+    -C "$(dirname "$ROOT_DIR")" \
+    "$ROOT_NAME"
 
-tar czf "$TMP_OUT" \
-  --exclude='node_modules' \
-  --exclude='.pnpm-store' \
-  --exclude='.git' \
-  --exclude='.DS_Store' \
-  --exclude='.idea' \
-  --exclude='.vscode' \
-  --exclude='.fateclaw' \
-  --exclude='.tmp-*' \
-  --exclude='.env' \
-  --exclude='*.keys.json' \
-  --exclude='*.tar.gz' \
-  --exclude='归档.zip' \
-  --exclude='*.tsbuildinfo' \
-  --exclude='*.log' \
-  --exclude="$(basename "$ROOT_DIR")/apps/api/dist" \
-  --exclude="$(basename "$ROOT_DIR")/apps/web/.next" \
-  --exclude="$(basename "$ROOT_DIR")/apps/web/out" \
-  --exclude="$(basename "$ROOT_DIR")/packages/agent-runner/dist" \
-  --exclude="$(basename "$ROOT_DIR")/.next" \
-  --exclude="$(basename "$ROOT_DIR")/store" \
-  --exclude="$(basename "$ROOT_DIR")/data" \
-  --exclude="$(basename "$ROOT_DIR")/logs" \
-  --exclude="$(basename "$ROOT_DIR")/backups" \
-  -C "$(dirname "$ROOT_DIR")" \
-  "$(basename "$ROOT_DIR")"
+  mv "$tmp_out" "$outfile"
+  local size
+  size=$(du -h "$outfile" | cut -f1)
+  log_duration "生成 API 源码包" "$step_start"
+  echo "✅ API 包: $outfile ($size)"
+}
 
-mv "$TMP_OUT" "$OUTFILE"
-SIZE=$(du -h "$OUTFILE" | cut -f1)
-log_duration "生成源码 tar.gz" "$STEP_START"
-echo "✅ 打包完成: $OUTFILE ($SIZE)"
+pack_web_static() {
+  local outfile="${1:-fateclaw-web-v${VERSION}-static.tar.gz}"
+  local tmp_out="/tmp/$outfile"
+  local step_start=$SECONDS
+
+  echo "🔨 构建 Web 静态产物 ..."
+  rm -rf apps/web/.next apps/web/out
+  npm run build:web
+
+  echo "📦 打包 Web 静态产物 v${VERSION} ..."
+  tar czf "$tmp_out" -C apps/web/out .
+
+  mv "$tmp_out" "$outfile"
+  local size
+  size=$(du -h "$outfile" | cut -f1)
+  log_duration "生成 Web 静态包" "$step_start"
+  echo "✅ Web 包: $outfile ($size)"
+}
+
+case "$MODE" in
+  all)
+    pack_api_source
+    pack_web_static
+    ;;
+  api)
+    pack_api_source "${OUTFILE:-}"
+    ;;
+  web)
+    pack_web_static "${OUTFILE:-}"
+    ;;
+  source)
+    pack_api_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
+    ;;
+esac
+
 log_duration "总耗时" "$SCRIPT_START"
 echo ""
 echo "部署步骤:"
-echo "  1. scp $OUTFILE user@server:~/"
-echo "  2. tar xzf $OUTFILE && cd fateclaw"
-echo "  3. npm install -f && npm run build && npm run start"
+echo "  API:"
+echo "    1. scp fateclaw-api-v${VERSION}-source.tar.gz user@server:~/"
+echo "    2. tar xzf fateclaw-api-v${VERSION}-source.tar.gz && cd fateclaw"
+echo "    3. npm install -f && npm run build && npm run start"
+echo "  Web:"
+echo "    1. scp fateclaw-web-v${VERSION}-static.tar.gz user@server:~/"
+echo "    2. mkdir -p /var/www/fateclaw-web"
+echo "    3. tar xzf fateclaw-web-v${VERSION}-static.tar.gz -C /var/www/fateclaw-web"
+echo "  Nginx:"
+echo "    /api/ 反代到 http://127.0.0.1:3000"
+echo "    /     指向 /var/www/fateclaw-web，并 try_files \$uri \$uri/ /index.html"
