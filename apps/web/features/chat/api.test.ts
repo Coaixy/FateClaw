@@ -4,6 +4,7 @@ import type { UserPastedBoardInput } from './api';
 import { buildChatSessionStreamUrl, chatSessionsApi } from './api';
 import {
   getAiChatStreamReconnectDelay,
+  getAiChatStreamErrorMessage,
   isRecoverableChatSendInterruption,
   sendChatSessionMessageWithOptions,
 } from './hooks/use-chat-messages';
@@ -212,6 +213,34 @@ describe('getAiChatStreamReconnectDelay', () => {
     expect(getAiChatStreamReconnectDelay(0)).toBe(500);
     expect(getAiChatStreamReconnectDelay(3)).toBe(4000);
     expect(getAiChatStreamReconnectDelay(10)).toBe(8000);
+  });
+});
+
+describe('getAiChatStreamErrorMessage', () => {
+  it('prefers public stream error text', () => {
+    expect(
+      getAiChatStreamErrorMessage({
+        publicErrorText: '自配模型调用失败',
+        error: 'provider failed',
+      }),
+    ).toBe('自配模型调用失败');
+  });
+
+  it('falls back to raw stream errors', () => {
+    expect(
+      getAiChatStreamErrorMessage({
+        error: 'model not found',
+      }),
+    ).toBe('model not found');
+  });
+
+  it('uses a generic message when the stream error is empty', () => {
+    expect(
+      getAiChatStreamErrorMessage({
+        publicErrorText: '   ',
+        error: '   ',
+      }),
+    ).toBe('抱歉，AI 服务暂时不可用，请稍后重试');
   });
 });
 

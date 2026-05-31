@@ -65,6 +65,18 @@ describe('chat display message state helpers', () => {
         }),
       ]),
     ).toBe(true);
+
+    expect(
+      hasFinalAssistantAfterLatestUser([
+        oldFinal,
+        latestUser,
+        createMessage({
+          id: 'error',
+          isBot: true,
+          metadata: { kind: 'error', turn_complete: true },
+        }),
+      ]),
+    ).toBe(true);
   });
 
   it('keeps tool trace progress messages visible', () => {

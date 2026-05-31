@@ -29,6 +29,7 @@ const CHAT_POLL_INTERVAL_MS = 1200;
 const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
 const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
 const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
+const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
@@ -78,15 +79,30 @@ export function getAiChatStreamReconnectDelay(attempt: number): number {
   );
 }
 
-function appendActiveStreamingMessage(
+/**
+ * 从 AI Chat 流式错误事件中取出最终展示给用户的错误文案。
+ *
+ * @param event WebSocket 推送的错误事件，优先使用后端净化后的 publicErrorText。
+ * @returns 非空错误文案；事件没有可用内容时返回通用 AI 服务错误。
+ */
+export function getAiChatStreamErrorMessage(
+  event: Pick<
+    Extract<ChatSessionStreamEvent, { type: 'error' }>,
+    'publicErrorText' | 'error'
+  >,
+): string {
+  const publicErrorText = event.publicErrorText?.trim();
+  if (publicErrorText) return publicErrorText;
+
+  const rawError = event.error?.trim();
+  return rawError || DEFAULT_AI_CHAT_ERROR_MESSAGE;
+}
+
+function appendTransientAssistantMessages(
   nextMessages: Message[],
   previousMessages: Message[],
   activeStreamingMessageIds: string[],
 ) {
-  if (activeStreamingMessageIds.length === 0) {
-    return nextMessages;
-  }
-
   const existingIds = new Set(nextMessages.map((message) => message.id));
   const streamingMessages = activeStreamingMessageIds.flatMap((id) => {
     if (existingIds.has(id)) return [];
@@ -95,9 +111,35 @@ function appendActiveStreamingMessage(
     );
     return streamingMessage ? [streamingMessage] : [];
   });
+  const streamingMessageIds = new Set(
+    streamingMessages.map((message) => message.id),
+  );
+  const shouldPreserveLocalErrors =
+    !hasFinalAssistantAfterLatestUser(nextMessages);
+  let latestUserIndex = -1;
 
-  return streamingMessages.length > 0
-    ? [...nextMessages, ...streamingMessages]
+  for (let index = previousMessages.length - 1; index >= 0; index -= 1) {
+    if (!previousMessages[index].is_bot_message) {
+      latestUserIndex = index;
+      break;
+    }
+  }
+
+  // 后台刷新可能早于 HTTP 失败响应返回，需保留本地错误气泡避免界面短暂或永久空白。
+  const localErrorMessages = shouldPreserveLocalErrors
+    ? previousMessages.slice(latestUserIndex + 1).filter((message) => {
+        return (
+          Boolean(message.is_bot_message) &&
+          message.metadata?.kind === 'error' &&
+          !existingIds.has(message.id) &&
+          !streamingMessageIds.has(message.id)
+        );
+      })
+    : [];
+  const transientMessages = [...streamingMessages, ...localErrorMessages];
+
+  return transientMessages.length > 0
+    ? [...nextMessages, ...transientMessages]
     : nextMessages;
 }
 
@@ -187,6 +229,7 @@ export function useChatMessages(options: {
   const latestStreamingMessageKeyRef = useRef<string | null>(null);
   const streamingSequenceRef = useRef(0);
   const toolTraceSequenceRef = useRef(0);
+  const localMessageSequenceRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
@@ -295,7 +338,7 @@ export function useChatMessages(options: {
         setMessages((previous) => {
           const visibleMessages =
             isBackground && !streamingResolved
-              ? appendActiveStreamingMessage(
+              ? appendTransientAssistantMessages(
                   nextMessages,
                   previous,
                   activeStreamingMessageIds,
@@ -597,6 +640,58 @@ export function useChatMessages(options: {
     [options.sessions],
   );
 
+  const appendAssistantErrorMessage = useCallback(
+    (
+      sessionId: string,
+      content: string,
+      appendOptions?: { removeMessageIds?: string[] },
+    ) => {
+      const accountId =
+        options.sessions.find((session) => session.id === sessionId)
+          ?.account_id ?? 'web';
+      const messageId = `opt-error-${Date.now()}-${localMessageSequenceRef.current}`;
+      localMessageSequenceRef.current += 1;
+      const removeMessageIdSet = new Set(appendOptions?.removeMessageIds ?? []);
+
+      setMessages((previous) => {
+        const visibleMessages =
+          removeMessageIdSet.size > 0
+            ? previous.filter((message) => !removeMessageIdSet.has(message.id))
+            : previous;
+        const latestMessage = visibleMessages[visibleMessages.length - 1];
+
+        if (
+          latestMessage?.is_bot_message &&
+          latestMessage.metadata?.kind === 'error' &&
+          latestMessage.content === content
+        ) {
+          return visibleMessages.length === previous.length
+            ? previous
+            : visibleMessages;
+        }
+
+        return [
+          ...visibleMessages,
+          {
+            id: messageId,
+            account_id: accountId,
+            sender: '',
+            sender_name: '',
+            content,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: {
+              kind: 'error',
+              turn_complete: true,
+            },
+          },
+        ];
+      });
+    },
+    [options.sessions],
+  );
+
   useEffect(() => {
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
@@ -836,18 +931,14 @@ export function useChatMessages(options: {
       if (payload.type === 'error') {
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
         resetStreamingMessageRefs();
-        if (activeStreamingMessageIds.length > 0) {
-          const activeStreamingMessageIdSet = new Set(
-            activeStreamingMessageIds,
-          );
-          setMessages((previous) =>
-            previous.filter(
-              (message) => !activeStreamingMessageIdSet.has(message.id),
-            ),
-          );
-        }
+        appendAssistantErrorMessage(
+          sessionId,
+          getAiChatStreamErrorMessage(payload),
+          { removeMessageIds: activeStreamingMessageIds },
+        );
         updateProcessing(false);
         updateAwaitingRefresh(false);
+        return;
       }
     };
 
@@ -910,6 +1001,7 @@ export function useChatMessages(options: {
     };
   }, [
     beginStreamingAssistantTurn,
+    appendAssistantErrorMessage,
     getActiveStreamingMessageIds,
     isStreamInterrupted,
     loadMessages,
@@ -1104,22 +1196,8 @@ export function useChatMessages(options: {
           const errorMessage =
             error instanceof Error
               ? error.message
-              : '抱歉，AI 服务暂时不可用，请稍后重试';
-          setMessages((previous) => [
-            ...previous,
-            {
-              id: `opt-error-${Date.now()}`,
-              account_id:
-                options.sessions.find((session) => session.id === sessionId)
-                  ?.account_id ?? 'web',
-              sender: '',
-              sender_name: '',
-              content: errorMessage,
-              timestamp: new Date().toISOString(),
-              is_from_me: true,
-              is_bot_message: true,
-            },
-          ]);
+              : DEFAULT_AI_CHAT_ERROR_MESSAGE;
+          appendAssistantErrorMessage(sessionId, errorMessage);
           return false;
         }
       } finally {
@@ -1132,6 +1210,7 @@ export function useChatMessages(options: {
     },
     [
       activeContinuationBlocked,
+      appendAssistantErrorMessage,
       isPending,
       loadMessages,
       options,

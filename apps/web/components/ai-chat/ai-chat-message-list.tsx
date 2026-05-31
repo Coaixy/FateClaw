@@ -142,7 +142,8 @@ function AiChatMessageRow({
     !Array.isArray(message.metadata)
       ? message.metadata
       : null;
-  const isFinalMessage = messageMetadata?.kind === 'final';
+  const isErrorMessage = isBot && messageMetadata?.kind === 'error';
+  const isFinalMessage = messageMetadata?.kind === 'final' || isErrorMessage;
   const { body: displayContent, marker: finalMarker } = isBot
     ? splitFinalTurnMarker(message.content)
     : { body: message.content, marker: null };
@@ -211,9 +212,12 @@ function AiChatMessageRow({
       >
         <div className="group relative max-w-full">
           <div
+            role={isErrorMessage ? 'alert' : undefined}
             className={`rounded-xl px-3 py-2 text-[12px] leading-6 transition-shadow duration-200 ${
               isBot
-                ? 'bg-surface-card border border-hairline shadow-sm hover:shadow-md'
+                ? isErrorMessage
+                  ? 'border border-error/30 bg-error/8 text-error shadow-sm'
+                  : 'bg-surface-card border border-hairline shadow-sm hover:shadow-md'
                 : 'bg-surface-dark text-on-dark shadow-sm'
             }`}
           >

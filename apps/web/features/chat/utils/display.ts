@@ -176,7 +176,11 @@ export function isThinkingMessage(message: Message) {
 }
 
 export function isFinalAssistantMessage(message: Message) {
-  return Boolean(message.is_bot_message) && getMessageKind(message) === 'final';
+  const kind = getMessageKind(message);
+  return (
+    Boolean(message.is_bot_message) &&
+    (kind === 'final' || kind === 'error')
+  );
 }
 
 export function hasFinalAssistantAfterLatestUser(messages: Message[]) {
