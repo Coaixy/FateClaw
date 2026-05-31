@@ -106,8 +106,9 @@ log_duration "编译 agent-runner" "$STEP_START"
 STEP_START=$SECONDS
 echo "🔨 构建 Web 前端 ..."
 echo "🧹 清理 web 构建产物 ..."
-# .next/cache 是 Next.js 增量构建缓存；部署包会排除 .next，所以这里只清理最终静态产物，避免每次打包都变成冷构建。
-rm -rf apps/web/out
+# Next/webpack 的增量缓存偶尔会保留旧客户端 chunk，导致静态导出后页面仍加载过期文案。
+# 打包用于部署时必须优先保证产物干净，所以同时清理 .next 和静态导出目录。
+rm -rf apps/web/.next apps/web/out
 pnpm --filter fateclaw-web run build
 log_duration "构建 Web 前端" "$STEP_START"
 
