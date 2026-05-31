@@ -118,6 +118,18 @@ async function deleteInvalidPhoneUserBillingData(
         WHERE b.user_id = doomed.id;
       END IF;
 
+      IF to_regclass('public.membership_allowances') IS NOT NULL THEN
+        DELETE FROM membership_allowances a
+        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
+        WHERE a.user_id = doomed.id;
+      END IF;
+
+      IF to_regclass('public.user_memberships') IS NOT NULL THEN
+        DELETE FROM user_memberships m
+        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
+        WHERE m.user_id = doomed.id;
+      END IF;
+
       IF to_regclass('public.recharge_orders') IS NOT NULL THEN
         DELETE FROM recharge_orders o
         USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed

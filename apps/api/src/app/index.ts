@@ -13,9 +13,15 @@
 import { pathToFileURL } from 'url';
 
 import { startApiServer } from '../interfaces/http/server.js';
-import { initDatabase, closeDatabase } from '../infrastructure/db.js';
+import {
+  initDatabase,
+  closeDatabase,
+  getEnabledAccounts,
+  getMembershipOverview,
+} from '../infrastructure/db.js';
 import { stopAllLocalAgents } from '../runtime/local-runner.js';
-import { startIpcWorker } from '../runtime/ipc-worker.js';
+import { addAccountListener, startIpcWorker } from '../runtime/ipc-worker.js';
+import { startAccountPolling } from '../runtime/poller.js';
 import { connectRedis, disconnectRedis } from '../infrastructure/redis.js';
 import {
   startRetentionWorker,
@@ -33,15 +39,13 @@ export {
 
 /**
  * 热激活新账号入口。
- * 当前微信设备运行入口关闭，因此只保留显式日志，避免调用方误判为已启动轮询。
+ * 会员微信 Claw 账号绑定后，立即启动轮询和 IPC 监听。
  */
 export async function activateAccount(
   account: import('../shared/types.js').Account,
 ): Promise<void> {
-  logger.warn(
-    { accountId: account.id },
-    '微信设备运行入口暂时关闭，跳过热激活',
-  );
+  addAccountListener(account.id);
+  await startAccountPolling(account);
 }
 
 export async function main(): Promise<void> {
@@ -55,8 +59,19 @@ export async function main(): Promise<void> {
   await connectRedis();
   logger.info('Redis 已连接');
 
-  startIpcWorker([]);
-  logger.warn('微信设备 listener/poller 暂时关闭');
+  const enabledAccounts = await getEnabledAccounts();
+  const memberAccounts: string[] = [];
+  for (const account of enabledAccounts) {
+    if (!account.owner_id) continue;
+    const membership = await getMembershipOverview(account.owner_id);
+    if (!membership.active) continue;
+    memberAccounts.push(account.id);
+    void startAccountPolling(account).catch((err) => {
+      logger.error({ accountId: account.id, err }, '微信 Claw 轮询启动失败');
+    });
+  }
+  startIpcWorker(memberAccounts);
+  logger.info({ accounts: memberAccounts.length }, '会员微信 Claw listener 已启动');
 
   // 启动数据保留策略后台任务（定时清理过期 trace_events）
   startRetentionWorker();

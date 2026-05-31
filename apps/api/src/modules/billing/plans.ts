@@ -1,5 +1,6 @@
 import {
   getBillingRequestReservationByRequestId,
+  getMembershipOverview,
   getMonthlyModelChargeCoins,
   getUserById,
   reserveUserBalanceCoins,
@@ -26,6 +27,24 @@ export interface WalletBalanceSummary {
 export interface MonthlyMeteredBillingSummary {
   usedTokens: number;
   chargedCoins: number;
+}
+
+export interface MembershipBillingSummary {
+  enabled: boolean;
+  active: boolean;
+  planKey: string | null;
+  monthlyPriceCoins: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  allowanceResetAt: string | null;
+  allowanceUsedRatio: number;
+  allowanceStatus:
+    | 'inactive'
+    | 'plenty'
+    | 'normal'
+    | 'tight'
+    | 'almost_used'
+    | 'used_up';
 }
 
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
@@ -134,6 +153,48 @@ export async function getMonthlyMeteredBillingSummary(
     getMonthlyModelChargeCoins(userId),
   ]);
   return { usedTokens, chargedCoins };
+}
+
+function resolveAllowanceStatus(
+  active: boolean,
+  usedRatio: number,
+): MembershipBillingSummary['allowanceStatus'] {
+  if (!active) return 'inactive';
+  if (usedRatio >= 1) return 'used_up';
+  if (usedRatio >= 0.95) return 'almost_used';
+  if (usedRatio >= 0.8) return 'tight';
+  if (usedRatio >= 0.5) return 'normal';
+  return 'plenty';
+}
+
+export async function getMembershipBillingSummary(
+  userId: string,
+): Promise<MembershipBillingSummary> {
+  const overview = await getMembershipOverview(userId);
+  const allowanceUnits =
+    overview.allowance?.allowance_units ??
+    (overview.active ? overview.config.monthly_allowance_units : 0);
+  const usedUnits = overview.allowance?.used_units ?? 0;
+  const usedRatio =
+    allowanceUnits > 0 ? Math.min(1, usedUnits / allowanceUnits) : 0;
+
+  return {
+    enabled: overview.config.enabled,
+    active: overview.active,
+    planKey: overview.membership?.plan_key ?? null,
+    monthlyPriceCoins: overview.config.monthly_price_coins,
+    currentPeriodStart: overview.active
+      ? (overview.membership?.current_period_start ?? null)
+      : null,
+    currentPeriodEnd: overview.active
+      ? (overview.membership?.current_period_end ?? null)
+      : null,
+    allowanceResetAt: overview.active
+      ? (overview.membership?.current_period_end ?? null)
+      : null,
+    allowanceUsedRatio: Math.round(usedRatio * 100) / 100,
+    allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
+  };
 }
 
 export async function getWalletBalanceSummary(

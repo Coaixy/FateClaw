@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGetBillingRequestReservationByRequestId,
+  mockGetMembershipOverview,
   mockGetUserById,
   mockReserveUserBalanceCoins,
   mockSettleUserModelChargeCoins,
 } = vi.hoisted(() => ({
   mockGetBillingRequestReservationByRequestId: vi.fn(),
+  mockGetMembershipOverview: vi.fn(),
   mockGetUserById: vi.fn(),
   mockReserveUserBalanceCoins: vi.fn(),
   mockSettleUserModelChargeCoins: vi.fn(),
@@ -15,6 +17,7 @@ const {
 vi.mock('../../infrastructure/db.js', () => ({
   getBillingRequestReservationByRequestId:
     mockGetBillingRequestReservationByRequestId,
+  getMembershipOverview: mockGetMembershipOverview,
   getMonthlyModelChargeCoins: vi.fn(),
   getUserById: mockGetUserById,
   releaseUserBalanceReservation: vi.fn(),
@@ -45,6 +48,16 @@ describe('metered billing plans', () => {
     });
     mockGetBillingRequestReservationByRequestId.mockResolvedValue({
       request_id: 'request-1',
+    });
+    mockGetMembershipOverview.mockResolvedValue({
+      config: {
+        enabled: true,
+        monthly_price_coins: 30,
+        monthly_allowance_units: 3000000,
+      },
+      membership: null,
+      allowance: null,
+      active: false,
     });
     mockSettleUserModelChargeCoins.mockResolvedValue({
       actualChargeCoins: 1,

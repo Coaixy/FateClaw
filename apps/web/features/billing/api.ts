@@ -4,6 +4,7 @@ import type {
   DailyUsageRowDto,
   DailySignInResultDto,
   DailySignInStatusDto,
+  MembershipSubscribeResultDto,
   PublicStatusStatsDto,
   RechargeOrderDto,
   RechargePayTypeDto,
@@ -16,6 +17,7 @@ import type { SuccessResponse } from '@fateclaw/contracts/common';
 import { requestJson } from '@/lib/http/client';
 
 export type BillingStatus = BillingStatusDto;
+export type MembershipSubscribeResult = MembershipSubscribeResultDto;
 export type WalletTransaction = WalletTransactionDto;
 export type UsageStats = UsageStatsDto;
 export type DailyUsageRow = DailyUsageRowDto;
@@ -75,6 +77,10 @@ export const billingApi = {
     requestJson<DailySignInStatus>('/api/billing/daily-sign-in'),
   claimDailySignIn: () =>
     requestJson<DailySignInResult>('/api/billing/daily-sign-in', {
+      method: 'POST',
+    }).finally(clearBillingCache),
+  subscribeMembership: () =>
+    requestJson<MembershipSubscribeResult>('/api/billing/membership/subscribe', {
       method: 'POST',
     }).finally(clearBillingCache),
   rechargeOrders: () =>

@@ -29,6 +29,7 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
+  getMembershipConfig,
   getBalanceGrantsByUserId,
   getDailySignInConfig,
   getTasksForAdmin,
@@ -43,6 +44,7 @@ import {
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateDailySignInConfig,
+  updateMembershipConfig,
   updatePublicFinancialLedgerEntry,
 } from '../../infrastructure/db.js';
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
@@ -117,18 +119,36 @@ export interface AdminRewardConfigView {
     reward_coins: number;
     updated_at: string;
   };
+  membership: {
+    enabled: boolean;
+    monthly_price_coins: number;
+    monthly_allowance_units: number;
+    standard_price_per_million_units_coins: number;
+    updated_at: string;
+  };
 }
 
 /**
  * 读取后台软妹币奖励配置。
  */
 export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
-  const dailySignIn = await getDailySignInConfig();
+  const [dailySignIn, membership] = await Promise.all([
+    getDailySignInConfig(),
+    getMembershipConfig(),
+  ]);
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
       reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
+    },
+    membership: {
+      enabled: membership.enabled,
+      monthly_price_coins: membership.monthly_price_coins,
+      monthly_allowance_units: membership.monthly_allowance_units,
+      standard_price_per_million_units_coins:
+        membership.standard_price_per_million_units_coins,
+      updated_at: membership.updated_at,
     },
   };
 }
@@ -141,16 +161,39 @@ export async function updateAdminRewardConfig(input: {
     enabled: boolean;
     rewardCoins: number;
   };
+  membership: {
+    enabled: boolean;
+    monthlyPriceCoins: number;
+    monthlyAllowanceUnits: number;
+    standardPricePerMillionUnitsCoins: number;
+  };
 }): Promise<AdminRewardConfigView> {
-  const dailySignIn = await updateDailySignInConfig({
-    enabled: input.dailySignIn.enabled,
-    rewardCoins: input.dailySignIn.rewardCoins,
-  });
+  const [dailySignIn, membership] = await Promise.all([
+    updateDailySignInConfig({
+      enabled: input.dailySignIn.enabled,
+      rewardCoins: input.dailySignIn.rewardCoins,
+    }),
+    updateMembershipConfig({
+      enabled: input.membership.enabled,
+      monthlyPriceCoins: input.membership.monthlyPriceCoins,
+      monthlyAllowanceUnits: input.membership.monthlyAllowanceUnits,
+      standardPricePerMillionUnitsCoins:
+        input.membership.standardPricePerMillionUnitsCoins,
+    }),
+  ]);
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
       reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
+    },
+    membership: {
+      enabled: membership.enabled,
+      monthly_price_coins: membership.monthly_price_coins,
+      monthly_allowance_units: membership.monthly_allowance_units,
+      standard_price_per_million_units_coins:
+        membership.standard_price_per_million_units_coins,
+      updated_at: membership.updated_at,
     },
   };
 }

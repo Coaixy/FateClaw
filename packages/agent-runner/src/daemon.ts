@@ -330,7 +330,11 @@ async function loop(): Promise<void> {
   while (!shuttingDown) {
     try {
       // 30s timeout 让退出信号能在合理时间内被察觉，并允许 ioredis 自动重连
-      const result = await redis.brpop(`ipc:${ctx.accountId}:inbox`, 30);
+      const result = await redis.brpop(
+        `ipc:${ctx.accountId}:inbox:member`,
+        `ipc:${ctx.accountId}:inbox`,
+        30,
+      );
       if (!result || shuttingDown) continue;
 
       const [, raw] = result;

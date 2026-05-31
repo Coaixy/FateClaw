@@ -5,18 +5,22 @@ const {
   mockCreatePublicFinancialLedgerEntry,
   mockDeletePublicFinancialLedgerEntry,
   mockGetDailySignInConfig,
+  mockGetMembershipConfig,
   mockGetUserByPhone,
   mockListPublicFinancialLedgerEntries,
   mockUpdateDailySignInConfig,
+  mockUpdateMembershipConfig,
   mockUpdatePublicFinancialLedgerEntry,
 } = vi.hoisted(() => ({
   mockCreateUser: vi.fn(),
   mockCreatePublicFinancialLedgerEntry: vi.fn(),
   mockDeletePublicFinancialLedgerEntry: vi.fn(),
   mockGetDailySignInConfig: vi.fn(),
+  mockGetMembershipConfig: vi.fn(),
   mockGetUserByPhone: vi.fn(),
   mockListPublicFinancialLedgerEntries: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
+  mockUpdateMembershipConfig: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
 }));
 
@@ -25,9 +29,11 @@ vi.mock('../../infrastructure/db.js', () => ({
   createUser: mockCreateUser,
   deletePublicFinancialLedgerEntry: mockDeletePublicFinancialLedgerEntry,
   getDailySignInConfig: mockGetDailySignInConfig,
+  getMembershipConfig: mockGetMembershipConfig,
   getUserByPhone: mockGetUserByPhone,
   listPublicFinancialLedgerEntries: mockListPublicFinancialLedgerEntries,
   updateDailySignInConfig: mockUpdateDailySignInConfig,
+  updateMembershipConfig: mockUpdateMembershipConfig,
   updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
 }));
 
@@ -52,6 +58,22 @@ describe('createAdminUser', () => {
       id: 'default',
       enabled: false,
       reward_coins: 10,
+      updated_at: '2026-05-30T01:00:00.000Z',
+    });
+    mockGetMembershipConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 3000000,
+      standard_price_per_million_units_coins: 10,
+      updated_at: '2026-05-30T00:00:00.000Z',
+    });
+    mockUpdateMembershipConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 5000000,
+      standard_price_per_million_units_coins: 12,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
   });
@@ -101,6 +123,22 @@ describe('createAdminUser', () => {
 describe('admin reward config', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetMembershipConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 3000000,
+      standard_price_per_million_units_coins: 10,
+      updated_at: '2026-05-30T00:00:00.000Z',
+    });
+    mockUpdateMembershipConfig.mockResolvedValue({
+      id: 'default',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 5000000,
+      standard_price_per_million_units_coins: 12,
+      updated_at: '2026-05-30T01:00:00.000Z',
+    });
   });
 
   it('reads daily sign-in reward config', async () => {
@@ -115,6 +153,13 @@ describe('admin reward config', () => {
       daily_sign_in: {
         enabled: true,
         reward_coins: 20,
+        updated_at: '2026-05-30T00:00:00.000Z',
+      },
+      membership: {
+        enabled: true,
+        monthly_price_coins: 30,
+        monthly_allowance_units: 3000000,
+        standard_price_per_million_units_coins: 10,
         updated_at: '2026-05-30T00:00:00.000Z',
       },
     });
@@ -134,6 +179,12 @@ describe('admin reward config', () => {
           enabled: false,
           rewardCoins: 10,
         },
+        membership: {
+          enabled: true,
+          monthlyPriceCoins: 30,
+          monthlyAllowanceUnits: 5000000,
+          standardPricePerMillionUnitsCoins: 12,
+        },
       }),
     ).resolves.toEqual({
       daily_sign_in: {
@@ -141,11 +192,24 @@ describe('admin reward config', () => {
         reward_coins: 10,
         updated_at: '2026-05-30T01:00:00.000Z',
       },
+      membership: {
+        enabled: true,
+        monthly_price_coins: 30,
+        monthly_allowance_units: 5000000,
+        standard_price_per_million_units_coins: 12,
+        updated_at: '2026-05-30T01:00:00.000Z',
+      },
     });
 
     expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
       enabled: false,
       rewardCoins: 10,
+    });
+    expect(mockUpdateMembershipConfig).toHaveBeenCalledWith({
+      enabled: true,
+      monthlyPriceCoins: 30,
+      monthlyAllowanceUnits: 5000000,
+      standardPricePerMillionUnitsCoins: 12,
     });
   });
 });

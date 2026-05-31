@@ -10,6 +10,7 @@ import type {
   DailyUsageRowDto,
   DailySignInResultDto,
   DailySignInStatusDto,
+  MembershipSubscribeResultDto,
   PublicStatusStatsDto,
   UsageStatsDto,
   WalletTransactionDto,
@@ -18,6 +19,7 @@ import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
   createDailySignInReward,
+  subscribeMembershipWithWallet,
   getAccountsByUserId,
   getDailySignInConfig,
   getDailySignInRecordByDate,
@@ -36,6 +38,7 @@ import {
 } from '../../infrastructure/daily-usage.js';
 import {
   getMonthlyMeteredBillingSummary,
+  getMembershipBillingSummary,
   getWalletBalanceSummary,
 } from './plans.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
@@ -60,6 +63,7 @@ export async function getBillingOverview(
 
   const billing = await getMonthlyMeteredBillingSummary(user.id);
   const wallet = await getWalletBalanceSummary(user.id);
+  const membership = await getMembershipBillingSummary(user.id);
 
   return ok(
     toBillingStatusDto({
@@ -69,8 +73,51 @@ export async function getBillingOverview(
       bonus_coins: wallet.bonusCoins,
       reserved_coins: wallet.reservedCoins,
       available_coins: wallet.availableCoins,
+      membership: {
+        enabled: membership.enabled,
+        active: membership.active,
+        plan_key: membership.planKey,
+        monthly_price_coins: membership.monthlyPriceCoins,
+        current_period_start: membership.currentPeriodStart,
+        current_period_end: membership.currentPeriodEnd,
+        allowance_reset_at: membership.allowanceResetAt,
+        allowance_used_ratio: membership.allowanceUsedRatio,
+        allowance_status: membership.allowanceStatus,
+      },
     }),
   );
+}
+
+export async function subscribeCurrentUserMembership(
+  userId: string,
+): Promise<ServiceResult<MembershipSubscribeResultDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  try {
+    const result = await subscribeMembershipWithWallet(user.id);
+    const wallet = await getWalletBalanceSummary(result.user.id);
+    const membership = await getMembershipBillingSummary(result.user.id);
+    return ok({
+      membership: {
+        enabled: membership.enabled,
+        active: membership.active,
+        plan_key: membership.planKey,
+        monthly_price_coins: membership.monthlyPriceCoins,
+        current_period_start: membership.currentPeriodStart,
+        current_period_end: membership.currentPeriodEnd,
+        allowance_reset_at: membership.allowanceResetAt,
+        allowance_used_ratio: membership.allowanceUsedRatio,
+        allowance_status: membership.allowanceStatus,
+      },
+      purchased_coins: wallet.purchasedCoins,
+      bonus_coins: wallet.bonusCoins,
+      available_coins: wallet.availableCoins,
+    });
+  } catch (err) {
+    return fail(400, err instanceof Error ? err.message : '开通会员失败');
+  }
 }
 
 export async function getBillingUsage(

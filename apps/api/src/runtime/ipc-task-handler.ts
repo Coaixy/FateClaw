@@ -5,7 +5,12 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import { TIMEZONE } from '../infrastructure/config.js';
-import { getAccount, getTaskById } from '../infrastructure/db.js';
+import {
+  getAccount,
+  getMembershipOverview,
+  getTaskById,
+  getUserByAccountId,
+} from '../infrastructure/db.js';
 import {
   ReminderAction,
   resolveAccountId,
@@ -89,6 +94,17 @@ async function applyReminderAction(
   );
 }
 
+async function assertMembershipWechatAccount(accountId: string): Promise<void> {
+  const owner = await getUserByAccountId(accountId);
+  if (!owner) {
+    throw new Error(`提醒请求对应账号未绑定平台用户: ${accountId}`);
+  }
+  const membership = await getMembershipOverview(owner.id);
+  if (!membership.active) {
+    throw new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE);
+  }
+}
+
 export async function processTaskPayload(
   payload: unknown,
   fallbackAccountId?: string,
@@ -110,6 +126,7 @@ export async function processTaskPayload(
     if (!account) {
       throw new Error(`提醒请求对应账号不存在: ${accountId}`);
     }
+    await assertMembershipWechatAccount(account.id);
 
     if (!(await getTaskById(payload.taskId!))) {
       throw new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE);
@@ -139,6 +156,7 @@ export async function processTaskPayload(
     if (!(await getAccount(accountId))) {
       throw new Error(`提醒操作对应账号不存在: ${accountId}`);
     }
+    await assertMembershipWechatAccount(accountId);
 
     const action = payload.type.replace('_reminder', '') as ReminderAction;
     await applyReminderAction(accountId, payload.taskId!, action);

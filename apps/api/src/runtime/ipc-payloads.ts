@@ -53,6 +53,8 @@ export interface LlmRuntimeSnapshot {
   outputTokenPricePerMillionCoins?: number;
 }
 
+export type InboxPriority = 'normal' | 'member';
+
 export interface PendingInboxRequest {
   accountId: string;
   /** 请求归属的平台用户。站内 AI Chat 用运行时键，不再从 accounts 反查。 */
@@ -68,6 +70,9 @@ export interface PendingInboxRequest {
   sessionId?: string;
   llmRuntime?: LlmRuntimeSnapshot;
   billingReservation?: BillingReservation | null;
+  priority?: InboxPriority;
+  /** 全局并发槽位 ID；请求进入 agent 后持有，最终响应、取消或超时时释放。 */
+  concurrencySlotId?: string;
   /** 请求提交到本机运行时的毫秒时间戳，用于计算最终回复耗时。 */
   startedAtMs?: number;
   resolve: (result: InboxRequestResult) => void;

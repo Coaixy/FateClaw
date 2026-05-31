@@ -9,6 +9,7 @@ import {
   getDailySignInStatus,
   getPublicStatusOverview,
   resetBillingScope,
+  subscribeCurrentUserMembership,
 } from '../../modules/billing/billing-service.js';
 import {
   createRechargeOrderForUser,
@@ -83,6 +84,16 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/daily-sign-in', async (request, reply) => {
     await request.requireAuth();
     const result = await claimDailySignInReward(request.user.userId);
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/billing/membership/subscribe — 使用钱包余额开通或续费 FateClaw Plus
+  app.post('/membership/subscribe', async (request, reply) => {
+    await request.requireAuth();
+    const result = await subscribeCurrentUserMembership(request.user.userId);
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

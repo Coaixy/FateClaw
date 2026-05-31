@@ -1,0 +1,91 @@
+import { Crown, Loader2 } from 'lucide-react';
+
+import type { BillingStatus } from '@/features/billing/api';
+import { formatCoins } from '@/lib/soft-currency';
+
+type MembershipStatus = BillingStatus['membership'];
+
+function membershipStatusText(status: MembershipStatus['allowance_status']) {
+  switch (status) {
+    case 'plenty':
+      return '额度充足';
+    case 'normal':
+      return '正常使用中';
+    case 'tight':
+      return '额度偏紧';
+    case 'almost_used':
+      return '即将用完';
+    case 'used_up':
+      return '本月会员额度已用完';
+    case 'inactive':
+    default:
+      return '未开通';
+  }
+}
+
+function resetText(value: string | null) {
+  if (!value) return '开通后按月重置';
+  return `将在 ${new Date(value).toLocaleDateString('zh-CN')} 重置`;
+}
+
+function roundedPercent(ratio: number) {
+  const percent = Math.min(100, Math.max(0, ratio * 100));
+  return Math.round(percent / 5) * 5;
+}
+
+export function WalletMembershipCard({
+  membership,
+  busy,
+  onSubscribe,
+}: {
+  membership: MembershipStatus;
+  busy: boolean;
+  onSubscribe: () => void;
+}) {
+  const usedPercent = roundedPercent(membership.allowance_used_ratio);
+  const active = membership.active;
+
+  return (
+    <section className="rounded-2xl border border-hairline bg-surface-card p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[13px] font-semibold">
+            <Crown size={15} className="text-primary" />
+            FateClaw Plus
+          </div>
+          <div className="mt-1 text-[12px] leading-5 text-muted">
+            {formatCoins(membership.monthly_price_coins)} / 月 · 高峰优先响应 ·
+            会员期间持续追问 · 微信 Claw
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onSubscribe}
+          disabled={busy || !membership.enabled}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary disabled:opacity-40"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+          {active ? '续费会员' : '开通会员'}
+        </button>
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-2 flex items-center justify-between gap-3 text-[12px]">
+          <span className="font-medium">{membershipStatusText(membership.allowance_status)}</span>
+          <span className="text-muted">
+            {active ? `已使用约 ${usedPercent}%` : '会员额度进度'}
+          </span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-hairline">
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${active ? usedPercent : 0}%` }}
+          />
+        </div>
+        <div className="mt-2 text-[11px] leading-5 text-muted">
+          {resetText(membership.allowance_reset_at)}；额度用完后将继续使用钱包余额。
+        </div>
+      </div>
+    </section>
+  );
+}

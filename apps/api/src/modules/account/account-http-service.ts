@@ -13,18 +13,22 @@ import type {
 } from '@fateclaw/contracts/account';
 import {
   deleteAccount,
+  bindAccountToUser,
   getAccount,
   getAccountsByUserId,
+  getMembershipOverview,
   getSoulContent,
   getUserById,
   getUserSoulContent,
   updateSoulContent,
   updateUserSoulContent,
 } from '../../infrastructure/db.js';
+import { getLoginQrCode, getQrCodeStatus } from '../../infrastructure/ilink.js';
 import { WECHAT_DEVICE_BINDING_DISABLED_MESSAGE } from './account-service.js';
 import { removeAccountListener } from '../../runtime/ipc-worker.js';
 import { stopLocalAgent } from '../../runtime/local-runner.js';
 import { stopAccountPolling } from '../../runtime/poller.js';
+import { activateAccount } from '../../app/index.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import {
   toAccountDto,
@@ -36,7 +40,11 @@ export async function checkAccountBindingLimit(
 ): Promise<string | null> {
   const user = await getUserById(userId);
   if (!user) return '用户不存在';
-  return WECHAT_DEVICE_BINDING_DISABLED_MESSAGE;
+  const membership = await getMembershipOverview(user.id);
+  if (!membership.active) return WECHAT_DEVICE_BINDING_DISABLED_MESSAGE;
+  const accounts = await getAccountsByUserId(user.id);
+  if (accounts.length >= 1) return '会员当前最多绑定 1 个微信 Claw';
+  return null;
 }
 
 export async function listSafeAccountsForUser(
@@ -119,9 +127,20 @@ export async function bindAccountForUser(
   userId: string,
   accountId: string,
 ): Promise<ServiceResult<{ success: true }>> {
-  void userId;
-  void accountId;
-  return fail(403, WECHAT_DEVICE_BINDING_DISABLED_MESSAGE);
+  const limit = await checkAccountBindingLimit(userId);
+  if (limit) {
+    return fail(limit === '用户不存在' ? 404 : 403, limit);
+  }
+  const account = await getAccount(accountId);
+  if (!account) {
+    return fail(404, '账号不存在');
+  }
+  if (account.owner_id && account.owner_id !== userId) {
+    return fail(403, '账号已被其他用户绑定');
+  }
+  await bindAccountToUser(account.id, userId);
+  await activateAccount({ ...account, owner_id: userId });
+  return ok({ success: true });
 }
 
 export async function deleteOwnedAccountAndRuntime(
@@ -144,15 +163,50 @@ export async function deleteOwnedAccountAndRuntime(
 export async function requestAccountBindingQrCode(
   userId: string,
 ): Promise<ServiceResult<QrCodeResultDto>> {
-  void userId;
-  return fail(403, WECHAT_DEVICE_BINDING_DISABLED_MESSAGE);
+  const limit = await checkAccountBindingLimit(userId);
+  if (limit) {
+    return fail(limit === '用户不存在' ? 404 : 403, limit);
+  }
+  const qrcode = await getLoginQrCode();
+  return ok({
+    qrcode: qrcode.qrcode,
+    qrcode_url: qrcode.qrcode_img_content,
+  });
 }
 
 export async function getAccountBindingQrCodeStatus(
   userId: string,
   qrcode: string,
 ): Promise<ServiceResult<QrCodeStatusResultDto>> {
-  void userId;
-  void qrcode;
-  return fail(403, WECHAT_DEVICE_BINDING_DISABLED_MESSAGE);
+  const limit = await checkAccountBindingLimit(userId);
+  if (limit) {
+    return fail(limit === '用户不存在' ? 404 : 403, limit);
+  }
+  const status = await getQrCodeStatus(qrcode);
+  if (status.status !== 'confirmed') {
+    return ok({ status: status.status });
+  }
+  if (!status.ilink_bot_id || !status.ilink_user_id || !status.bot_token) {
+    return fail(502, '微信授权结果缺少账号信息');
+  }
+  const account = await getAccount(status.ilink_bot_id);
+  if (account?.owner_id && account.owner_id !== userId) {
+    return fail(403, '账号已被其他用户绑定');
+  }
+  if (account) {
+    await bindAccountToUser(account.id, userId);
+    await activateAccount({ ...account, owner_id: userId });
+  } else {
+    const { addAccount } = await import('./account-service.js');
+    const created = await addAccount(
+      status.ilink_user_id.split('@')[0] ?? '微信用户',
+      status.ilink_user_id,
+      status.bot_token,
+      status.ilink_bot_id,
+      status.baseurl,
+    );
+    await bindAccountToUser(created.id, userId);
+    await activateAccount({ ...created, owner_id: userId });
+  }
+  return ok({ status: 'confirmed' });
 }

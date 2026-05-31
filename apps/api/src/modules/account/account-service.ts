@@ -12,13 +12,13 @@ import { logger } from '../../infrastructure/logger.js';
 import { Account } from '../../shared/types.js';
 
 export const WECHAT_DEVICE_BINDING_DISABLED_MESSAGE =
-  '微信设备绑定暂时关闭，已绑定账号数据已清理，后续恢复后可重新绑定。';
+  '微信 Claw 仅支持 FateClaw Plus 会员使用。';
 
 export const FREE_WECHAT_UNSUPPORTED_MESSAGE =
-  WECHAT_DEVICE_BINDING_DISABLED_MESSAGE;
+  '微信 Claw 仅支持 FateClaw Plus 会员使用，请开通会员后继续。';
 
-export function isWechatDeviceBindingDisabled(): boolean {
-  return true;
+export function isWechatDeviceBindingDisabled(isMember = false): boolean {
+  return !isMember;
 }
 
 export async function addAccount(

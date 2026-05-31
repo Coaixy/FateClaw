@@ -4,6 +4,7 @@
 
 import {
   getRecentMessages,
+  getMembershipOverview,
   getUserByAccountId,
   storeMessage,
 } from '../../infrastructure/db.js';
@@ -45,7 +46,9 @@ export async function processWeixinMessage(
 
   const { content, sender, sender_name } = parsed;
 
-  if (isWechatDeviceBindingDisabled()) {
+  const owner = await getUserByAccountId(account.id);
+  const membership = owner ? await getMembershipOverview(owner.id) : null;
+  if (isWechatDeviceBindingDisabled(Boolean(membership?.active))) {
     await ilinkSendMessage(
       {
         id: account.id,
@@ -76,7 +79,6 @@ export async function processWeixinMessage(
   await storeMessage(newMessage);
 
   try {
-    const owner = await getUserByAccountId(account.id);
     if (!owner) {
       throw new Error('账号未绑定平台用户，无法处理 AI 请求');
     }

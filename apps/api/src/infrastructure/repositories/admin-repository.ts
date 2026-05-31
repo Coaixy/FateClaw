@@ -232,8 +232,15 @@ export async function getChatSessionPiCleanupCandidates(opts: {
 
   const { rows } = await pool.query(
     `SELECT id, updated_at, deleted_at
-     FROM chat_sessions
-     WHERE ${conditions.map((condition) => `(${condition})`).join(' OR ')}
+     FROM chat_sessions s
+     WHERE (${conditions.map((condition) => `(${condition})`).join(' OR ')})
+       AND NOT EXISTS (
+         SELECT 1
+         FROM user_memberships m
+         WHERE m.user_id = s.user_id
+           AND m.status = 'active'
+           AND m.current_period_end > NOW()
+       )
      ORDER BY COALESCE(deleted_at, updated_at) ASC
      LIMIT $${paramIdx}`,
     params,

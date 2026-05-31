@@ -7,9 +7,11 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
+import { billingApi } from '@/features/billing/api';
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
 import { formatCoins } from '@/lib/soft-currency';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
+import { WalletMembershipCard } from '@/components/settings/wallet/wallet-membership-card';
 import { WalletRechargePanel } from '@/components/settings/wallet/wallet-recharge-panel';
 import { WalletStatCard } from '@/components/settings/wallet/wallet-stat-card';
 import { WalletTokenUsagePanel } from '@/components/settings/wallet/wallet-token-usage-panel';
@@ -30,6 +32,8 @@ export function TabWallet() {
     refresh,
   } = useWalletOverview();
   const [subTab, setSubTab] = useState<SubTab>('overview');
+  const [membershipBusy, setMembershipBusy] = useState(false);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
 
   const purchasedCoins = billingInfo?.purchased_coins ?? 0;
   const bonusCoins = billingInfo?.bonus_coins ?? 0;
@@ -58,6 +62,26 @@ export function TabWallet() {
         bonusCoins={bonusCoins}
       />
 
+      {billingInfo?.membership && (
+        <WalletMembershipCard
+          membership={billingInfo.membership}
+          busy={membershipBusy}
+          onSubscribe={() => {
+            setMembershipBusy(true);
+            setMembershipError(null);
+            billingApi
+              .subscribeMembership()
+              .then(() => refresh())
+              .catch((err) => {
+                setMembershipError(
+                  err instanceof Error ? err.message : '开通会员失败',
+                );
+              })
+              .finally(() => setMembershipBusy(false));
+          }}
+        />
+      )}
+
       <WalletRechargePanel
         orders={rechargeOrders}
         stats={rechargeStats}
@@ -68,6 +92,11 @@ export function TabWallet() {
       {error && (
         <div className="rounded-xl border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">
           {error}
+        </div>
+      )}
+      {membershipError && (
+        <div className="rounded-xl border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">
+          {membershipError}
         </div>
       )}
 

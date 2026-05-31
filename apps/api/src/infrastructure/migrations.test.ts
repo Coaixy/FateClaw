@@ -122,6 +122,13 @@ describe('runDatabaseMigrations', () => {
         '移除 Skill 付费档位与创作者整包付费 schema',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0017_membership_token_plan',
+        '增加 FateClaw Plus 会员与月度额度 schema',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -142,6 +149,11 @@ describe('runDatabaseMigrations', () => {
     expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS model_billing_config'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS membership_config'),
       ),
     ).toBe(true);
     expect(
@@ -179,6 +191,7 @@ describe('runDatabaseMigrations', () => {
       '0014_daily_usage_total_tokens',
       '0015_public_financial_ledger',
       '0016_remove_skill_paid_schema',
+      '0017_membership_token_plan',
     ]);
 
     await runDatabaseMigrations(client as never);

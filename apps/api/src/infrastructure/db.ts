@@ -44,7 +44,9 @@ import {
   getBillingRequestReservationByRequestId,
   getDailySignInConfig,
   getDailySignInRecordByDate,
+  getMembershipConfig,
   getMonthlyModelChargeCoins,
+  getMembershipOverview,
   getBalanceGrantsByUserId,
   getRechargeOrderByTradeId,
   getRechargeOrderByTradeIdForUser,
@@ -63,7 +65,9 @@ import {
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
   settleUserModelChargeCoins,
+  subscribeMembershipWithWallet,
   updateDailySignInConfig,
+  updateMembershipConfig,
   updateRechargePaymentConfig,
 } from './repositories/billing-repository.js';
 import type {
@@ -72,6 +76,9 @@ import type {
   DailySignInConfigRow,
   DailySignInRecordRow,
   MonthlyBillingStateRow,
+  MembershipAllowanceRow,
+  MembershipConfigRow,
+  MembershipOverviewRow,
   BalanceGrantRow,
   RechargeOrderRow,
   RechargeOrderStatus,
@@ -79,6 +86,7 @@ import type {
   RechargePaymentConfigRow,
   RechargeStatsRow,
   WalletTransactionRow,
+  UserMembershipRow,
 } from './repositories/billing-repository.js';
 import {
   createChatSession,
@@ -264,6 +272,8 @@ export {
   getEffectiveUserSkills,
   getEnabledAccounts,
   getGloballyEnabledSkillNames,
+  getMembershipConfig,
+  getMembershipOverview,
   getMonthlyModelChargeCoins,
   getMessagesForAdmin,
   getModelBillingConfig,
@@ -328,6 +338,7 @@ export {
   shareUserCustomSkill,
   settleRechargeOrderPaid,
   settleUserModelChargeCoins,
+  subscribeMembershipWithWallet,
   subscribeToBundle,
   subscribeToSkill,
   storeMessage,
@@ -336,6 +347,7 @@ export {
   toggleSubscription,
   toggleUserCustomSkill,
   updateDailySignInConfig,
+  updateMembershipConfig,
   updateModelBillingConfig,
   updateAccount,
   updateChatSessionTitle,
@@ -375,6 +387,9 @@ export type {
   DailySignInConfigRow,
   DailySignInRecordRow,
   DeductBalanceResult,
+  MembershipAllowanceRow,
+  MembershipConfigRow,
+  MembershipOverviewRow,
   MarketBundleListRow,
   MarketSkillListRow,
   MonthlyBillingStateRow,
@@ -389,6 +404,7 @@ export type {
   RechargeStatsRow,
   SkillGlobalConfig,
   SubscribeToBundleResult,
+  UserMembershipRow,
   WalletTransactionRow,
 };
 import { deleteUsersWithoutValidPhone } from './phone-only-user-migration.js';
@@ -453,6 +469,12 @@ export async function deleteUser(userId: string): Promise<void> {
       [userId],
     );
     await client.query('DELETE FROM monthly_billing_state WHERE user_id = $1', [
+      userId,
+    ]);
+    await client.query('DELETE FROM membership_allowances WHERE user_id = $1', [
+      userId,
+    ]);
+    await client.query('DELETE FROM user_memberships WHERE user_id = $1', [
       userId,
     ]);
     await client.query('DELETE FROM wallet_transactions WHERE user_id = $1', [

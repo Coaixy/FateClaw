@@ -3,7 +3,13 @@ import pg from 'pg';
 import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
 import { getUserByIdUsing } from './users-repository.js';
-import type { BalanceGrantSource, User } from '../../shared/types.js';
+import type {
+  BalanceGrantSource,
+  MembershipAllowance,
+  MembershipConfig,
+  User,
+  UserMembership,
+} from '../../shared/types.js';
 import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
 
 const pool = {
@@ -16,6 +22,8 @@ const pool = {
 };
 
 const COIN_CENTS = 100;
+const MEMBERSHIP_PLAN_KEY = 'fateclaw_plus';
+const MEMBERSHIP_UNIT_DENOMINATOR = 1_000_000;
 
 function toCoins(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -25,6 +33,24 @@ function toCoins(value: unknown): number {
 function roundCoinsToCents(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * COIN_CENTS) / COIN_CENTS;
+}
+
+function roundAllowanceUnits(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * COIN_CENTS) / COIN_CENTS;
+}
+
+function addMonths(date: Date, months: number): Date {
+  const next = new Date(date);
+  const originalDate = next.getUTCDate();
+  // 先落到月初再切月，避免月底日期被 JS Date 自动溢出到下下个月。
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  next.setUTCDate(Math.min(originalDate, lastDayOfTargetMonth));
+  return next;
 }
 
 function normalizeUserCoins(row: User): User {
@@ -103,6 +129,29 @@ function normalizeMonthlyBillingStateRow(
   return {
     ...row,
     billed_overage_cost_coins: toCoins(row.billed_overage_cost_coins),
+  };
+}
+
+function normalizeMembershipConfigRow(row: MembershipConfig): MembershipConfig {
+  return {
+    ...row,
+    monthly_price_coins: toCoins(row.monthly_price_coins),
+    monthly_allowance_units: roundAllowanceUnits(
+      Number(row.monthly_allowance_units ?? 0),
+    ),
+    standard_price_per_million_units_coins: toCoins(
+      row.standard_price_per_million_units_coins,
+    ),
+  };
+}
+
+function normalizeMembershipAllowanceRow(
+  row: MembershipAllowance,
+): MembershipAllowance {
+  return {
+    ...row,
+    allowance_units: roundAllowanceUnits(Number(row.allowance_units ?? 0)),
+    used_units: roundAllowanceUnits(Number(row.used_units ?? 0)),
   };
 }
 
@@ -224,6 +273,337 @@ export interface DailySignInRecordRow {
   reward_coins: number;
   balance_grant_id: string | null;
   created_at: string;
+}
+
+export type MembershipConfigRow = MembershipConfig;
+export type UserMembershipRow = UserMembership;
+export type MembershipAllowanceRow = MembershipAllowance;
+
+export interface MembershipOverviewRow {
+  config: MembershipConfigRow;
+  membership: UserMembershipRow | null;
+  allowance: MembershipAllowanceRow | null;
+  active: boolean;
+}
+
+async function getMembershipConfigUsing(input: {
+  query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
+}): Promise<MembershipConfigRow> {
+  const { rows } = await input.query(
+    `INSERT INTO membership_config (id)
+     VALUES ('default')
+     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     RETURNING *`,
+  );
+  return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
+}
+
+/**
+ * 读取会员全局配置；首次访问时补齐默认 FateClaw Plus 配置。
+ */
+export async function getMembershipConfig(): Promise<MembershipConfigRow> {
+  return getMembershipConfigUsing(pool);
+}
+
+/**
+ * 更新会员价格和每周期标准额度。
+ */
+export async function updateMembershipConfig(input: {
+  enabled: boolean;
+  monthlyPriceCoins: number;
+  monthlyAllowanceUnits: number;
+  standardPricePerMillionUnitsCoins: number;
+}): Promise<MembershipConfigRow> {
+  const { rows } = await pool.query(
+    `INSERT INTO membership_config (
+       id, enabled, monthly_price_coins, monthly_allowance_units,
+       standard_price_per_million_units_coins, updated_at
+     )
+     VALUES ('default', $1, $2, $3, $4, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       enabled = EXCLUDED.enabled,
+       monthly_price_coins = EXCLUDED.monthly_price_coins,
+       monthly_allowance_units = EXCLUDED.monthly_allowance_units,
+       standard_price_per_million_units_coins =
+         EXCLUDED.standard_price_per_million_units_coins,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      input.enabled,
+      roundCoinsToCents(input.monthlyPriceCoins),
+      roundAllowanceUnits(input.monthlyAllowanceUnits),
+      roundCoinsToCents(input.standardPricePerMillionUnitsCoins),
+    ],
+  );
+  return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
+}
+
+function calculateMembershipCostUnits(
+  costCoins: number,
+  config: MembershipConfigRow,
+): number {
+  if (costCoins <= 0) return 0;
+  const units =
+    (costCoins * MEMBERSHIP_UNIT_DENOMINATOR) /
+    config.standard_price_per_million_units_coins;
+  return roundAllowanceUnits(units);
+}
+
+async function getActiveMembershipForUserUsing(
+  client: pg.PoolClient,
+  userId: string,
+  opts?: { forUpdate?: boolean },
+): Promise<UserMembershipRow | null> {
+  const { rows } = await client.query(
+    `SELECT *
+     FROM user_memberships
+     WHERE user_id = $1
+       AND status = 'active'
+       AND current_period_end > NOW()
+     ${opts?.forUpdate ? 'FOR UPDATE' : ''}`,
+    [userId],
+  );
+  return (rows[0] as UserMembershipRow | undefined) ?? null;
+}
+
+async function ensureMembershipAllowanceForUserUsing(
+  client: pg.PoolClient,
+  input: {
+    membership: UserMembershipRow;
+    config: MembershipConfigRow;
+  },
+): Promise<MembershipAllowanceRow> {
+  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const { rows } = await client.query(
+    `INSERT INTO membership_allowances (
+       id, user_id, plan_key, period_start, period_end,
+       allowance_units, used_units, created_at, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, 0, NOW(), NOW())
+     ON CONFLICT (user_id, period_start) DO UPDATE
+       SET period_end = EXCLUDED.period_end,
+           allowance_units = GREATEST(
+             membership_allowances.allowance_units,
+             EXCLUDED.allowance_units
+           ),
+           updated_at = NOW()
+     RETURNING *`,
+    [
+      allowanceId,
+      input.membership.user_id,
+      input.membership.plan_key,
+      input.membership.current_period_start,
+      input.membership.current_period_end,
+      input.config.monthly_allowance_units,
+    ],
+  );
+  return normalizeMembershipAllowanceRow(rows[0] as MembershipAllowanceRow);
+}
+
+async function consumeMembershipAllowanceUsing(
+  client: pg.PoolClient,
+  input: {
+    userId: string;
+    chargeCoins: number;
+    config: MembershipConfigRow;
+  },
+): Promise<{
+  consumedUnits: number;
+  coveredCoins: number;
+  allowance: MembershipAllowanceRow | null;
+}> {
+  const membership = await getActiveMembershipForUserUsing(client, input.userId, {
+    forUpdate: true,
+  });
+  if (!membership) {
+    return { consumedUnits: 0, coveredCoins: 0, allowance: null };
+  }
+
+  const allowance = await ensureMembershipAllowanceForUserUsing(client, {
+    membership,
+    config: input.config,
+  });
+  const requestedUnits = calculateMembershipCostUnits(
+    input.chargeCoins,
+    input.config,
+  );
+  const remainingUnits = Math.max(
+    0,
+    allowance.allowance_units - allowance.used_units,
+  );
+  const consumedUnits = roundAllowanceUnits(
+    Math.min(requestedUnits, remainingUnits),
+  );
+  if (consumedUnits <= 0) {
+    return { consumedUnits: 0, coveredCoins: 0, allowance };
+  }
+
+  const { rows } = await client.query(
+    `UPDATE membership_allowances
+     SET used_units = LEAST(allowance_units, used_units + $1),
+         updated_at = NOW()
+     WHERE id = $2
+     RETURNING *`,
+    [consumedUnits, allowance.id],
+  );
+  const coveredCoins = roundCoinsToCents(
+    (consumedUnits * input.config.standard_price_per_million_units_coins) /
+      MEMBERSHIP_UNIT_DENOMINATOR,
+  );
+  return {
+    consumedUnits,
+    coveredCoins: Math.min(input.chargeCoins, coveredCoins),
+    allowance: normalizeMembershipAllowanceRow(
+      rows[0] as MembershipAllowanceRow,
+    ),
+  };
+}
+
+/**
+ * 读取用户会员状态和当前周期额度。
+ */
+export async function getMembershipOverview(
+  userId: string,
+): Promise<MembershipOverviewRow> {
+  const config = await getMembershipConfig();
+  const { rows: membershipRows } = await pool.query(
+    `SELECT *
+     FROM user_memberships
+     WHERE user_id = $1
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [userId],
+  );
+  const membership = (membershipRows[0] as UserMembershipRow | undefined) ?? null;
+  const active = Boolean(
+    config.enabled &&
+      membership &&
+      membership.status === 'active' &&
+      new Date(membership.current_period_end).getTime() > Date.now(),
+  );
+  const allowance = active
+    ? await (async () => {
+        const { rows } = await pool.query(
+          `SELECT *
+           FROM membership_allowances
+           WHERE user_id = $1 AND period_start = $2
+           LIMIT 1`,
+          [userId, membership!.current_period_start],
+        );
+        const row = rows[0] as MembershipAllowanceRow | undefined;
+        return row ? normalizeMembershipAllowanceRow(row) : null;
+      })()
+    : null;
+
+  return { config, membership, allowance, active };
+}
+
+/**
+ * 使用钱包余额开通或续费一个月 FateClaw Plus。
+ */
+export async function subscribeMembershipWithWallet(
+  userId: string,
+): Promise<{ user: User; overview: MembershipOverviewRow }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const config = await getMembershipConfigUsing(client);
+    if (!config.enabled) {
+      throw new Error('会员暂未开放');
+    }
+    const user = await getUserByIdUsing(client, userId, { forUpdate: true });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    const priceCoins = roundCoinsToCents(config.monthly_price_coins);
+    const deduction = await deductBalanceCoins(
+      client,
+      normalizeUserCoins(user),
+      priceCoins,
+    );
+    const updatedUser = await getUserByIdUsing(client, userId, {
+      forUpdate: true,
+    });
+    if (!updatedUser) {
+      throw new Error('用户不存在');
+    }
+
+    const current = await getActiveMembershipForUserUsing(client, userId, {
+      forUpdate: true,
+    });
+    const now = new Date();
+    const periodStart =
+      current && new Date(current.current_period_end).getTime() > now.getTime()
+        ? new Date(current.current_period_end)
+        : now;
+    const periodEnd = addMonths(periodStart, 1);
+    const { rows: membershipRows } = await client.query(
+      `INSERT INTO user_memberships (
+         user_id, plan_key, status, current_period_start,
+         current_period_end, created_at, updated_at
+       )
+       VALUES ($1, $2, 'active', $3, $4, NOW(), NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         plan_key = EXCLUDED.plan_key,
+         status = 'active',
+         current_period_start = EXCLUDED.current_period_start,
+         current_period_end = EXCLUDED.current_period_end,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        userId,
+        MEMBERSHIP_PLAN_KEY,
+        periodStart.toISOString(),
+        periodEnd.toISOString(),
+      ],
+    );
+    const membership = membershipRows[0] as UserMembershipRow;
+    const allowance = await ensureMembershipAllowanceForUserUsing(client, {
+      membership,
+      config,
+    });
+
+    await insertWalletTransaction(client, {
+      userId,
+      kind: 'membership_subscription',
+      amountCoins: -priceCoins,
+      balanceSource: deduction.balanceSource,
+      note: 'FateClaw Plus 会员月费',
+      metadata: {
+        planKey: MEMBERSHIP_PLAN_KEY,
+        periodStart: membership.current_period_start,
+        periodEnd: membership.current_period_end,
+        allowanceUnits: allowance.allowance_units,
+        bonusDeducted: deduction.bonusDeducted,
+        purchasedDeducted: deduction.purchasedDeducted,
+      },
+    });
+
+    await client.query('COMMIT');
+    return {
+      user: normalizeUserCoins(updatedUser),
+      overview: {
+        config,
+        membership,
+        allowance,
+        active: true,
+      },
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 判断用户是否处于有效会员周期。
+ */
+export async function hasActiveMembership(userId: string): Promise<boolean> {
+  const overview = await getMembershipOverview(userId);
+  return overview.active;
 }
 
 /**
@@ -1462,7 +1842,18 @@ export async function settleUserModelChargeCoins(
     const previousChargeCoins = toCoins(
       monthlyState.billed_overage_cost_coins,
     );
-    const actualChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
+    const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
+    const membershipConfig = await getMembershipConfigUsing(client);
+    const membershipDeduction = membershipConfig.enabled
+      ? await consumeMembershipAllowanceUsing(client, {
+          userId: reservation.user_id,
+          chargeCoins: rawChargeCoins,
+          config: membershipConfig,
+        })
+      : { consumedUnits: 0, coveredCoins: 0, allowance: null };
+    const actualChargeCoins = roundCoinsToCents(
+      Math.max(0, rawChargeCoins - membershipDeduction.coveredCoins),
+    );
     const nextChargeCoins = roundCoinsToCents(
       previousChargeCoins + actualChargeCoins,
     );
@@ -1519,11 +1910,32 @@ export async function settleUserModelChargeCoins(
           yearMonth: reservation.year_month,
           requestTokens,
           requestCostCoins: actualChargeCoins,
+          rawRequestCostCoins: rawChargeCoins,
+          membershipCoveredCoins: membershipDeduction.coveredCoins,
+          membershipConsumedUnits: membershipDeduction.consumedUnits,
           previousChargeCoins,
           nextChargeCoins,
           bonusDeducted: deduction.bonusDeducted,
           purchasedDeducted: deduction.purchasedDeducted,
           grantDeductions: deduction.grantDeductions,
+        },
+      });
+    }
+    if (membershipDeduction.consumedUnits > 0) {
+      await insertWalletTransaction(client, {
+        userId: reservation.user_id,
+        kind: 'membership_allowance_use',
+        amountCoins: 0,
+        balanceSource: null,
+        requestId,
+        note: '会员 AI 对话额度抵扣',
+        metadata: {
+          yearMonth: reservation.year_month,
+          requestTokens,
+          rawRequestCostCoins: rawChargeCoins,
+          membershipCoveredCoins: membershipDeduction.coveredCoins,
+          membershipConsumedUnits: membershipDeduction.consumedUnits,
+          allowanceId: membershipDeduction.allowance?.id ?? null,
         },
       });
     }

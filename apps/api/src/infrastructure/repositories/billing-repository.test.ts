@@ -31,6 +31,7 @@ import {
   listBillingRequestReservations,
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
+  subscribeMembershipWithWallet,
 } from './billing-repository.js';
 
 interface QueryCall {
@@ -412,10 +413,27 @@ describe('billing repository', () => {
       ...user,
       purchased_coins: 9.37,
     };
+    const disabledConfig = {
+      id: 'default',
+      enabled: false,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 3000000,
+      standard_price_per_million_units_coins: 10,
+    };
     mockGetUserByIdUsing.mockResolvedValue(user);
     const { clientCalls, client } = createMockPool(
       [],
-      [[], [reservation], [], [monthlyState], [], [updated], [], [], []],
+      [
+        [],
+        [reservation],
+        [],
+        [monthlyState],
+        [disabledConfig],
+        [],
+        [updated],
+        [],
+        [],
+      ],
     );
 
     const { settleUserModelChargeCoins } = await import(
@@ -430,7 +448,7 @@ describe('billing repository', () => {
     });
 
     expect(clientCalls[3]?.sql).toContain('billed_overage_cost_coins');
-    expect(clientCalls[6]?.params).toEqual([
+    expect(clientCalls[7]?.params).toEqual([
       141_873,
       3.03,
       'user-1',
@@ -450,5 +468,227 @@ describe('billing repository', () => {
     );
     expect(chargeTransaction?.params?.[3]).toBe(-0.63);
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('uses active membership allowance before charging wallet balance', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 10,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const reservation = {
+      request_id: 'request-1',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0,
+      hold_state: 'none',
+      charge_state: 'pending',
+      actual_charge_coins: 0,
+      total_overage_tokens: 0,
+      total_overage_cost_coins: 0,
+    };
+    const monthlyState = {
+      user_id: 'user-1',
+      year_month: '2026-05',
+      billed_overage_tokens: 0,
+      billed_overage_cost_coins: 0,
+    };
+    const config = {
+      id: 'default',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 3000000,
+      standard_price_per_million_units_coins: 10,
+    };
+    const membership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-05-01T00:00:00.000Z',
+      current_period_end: '2026-06-01T00:00:00.000Z',
+    };
+    const allowance = {
+      id: 'allowance-1',
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      period_start: '2026-05-01T00:00:00.000Z',
+      period_end: '2026-06-01T00:00:00.000Z',
+      allowance_units: 3000000,
+      used_units: 0,
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [reservation],
+        [],
+        [monthlyState],
+        [config],
+        [membership],
+        [allowance],
+        [{ ...allowance, used_units: 63000 }],
+        [],
+        [],
+        [],
+        [],
+      ],
+    );
+
+    const { settleUserModelChargeCoins } = await import(
+      './billing-repository.js'
+    );
+
+    await expect(
+      settleUserModelChargeCoins('request-1', 1000, 0.63),
+    ).resolves.toMatchObject({
+      actualChargeCoins: 0,
+    });
+
+    expect(
+      clientCalls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO wallet_transactions') &&
+          call.params?.[2] === 'membership_allowance_use',
+      ),
+    ).toBe(true);
+    expect(
+      clientCalls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO wallet_transactions') &&
+          call.params?.[2] === 'overage_charge',
+      ),
+    ).toBe(false);
+  });
+
+  it('opens membership by deducting wallet balance and creating a cycle allowance', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 50,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    mockGetUserByIdUsing
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, purchased_coins: 20 });
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [
+          {
+            id: 'default',
+            enabled: true,
+            monthly_price_coins: 30,
+            monthly_allowance_units: 3000000,
+            standard_price_per_million_units_coins: 10,
+          },
+        ],
+        [],
+        [],
+        [],
+        [
+          {
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            status: 'active',
+            current_period_start: '2026-05-31T00:00:00.000Z',
+            current_period_end: '2026-06-30T00:00:00.000Z',
+          },
+        ],
+        [
+          {
+            id: 'allowance-1',
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            period_start: '2026-05-31T00:00:00.000Z',
+            period_end: '2026-06-30T00:00:00.000Z',
+            allowance_units: 3000000,
+            used_units: 0,
+          },
+        ],
+        [],
+      ],
+    );
+
+    await expect(subscribeMembershipWithWallet('user-1')).resolves.toMatchObject({
+      user: { purchased_coins: 20 },
+      overview: { active: true },
+    });
+    expect(
+      clientCalls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO wallet_transactions') &&
+          call.params?.[2] === 'membership_subscription',
+      ),
+    ).toBe(true);
+  });
+
+  it('extends membership by clamping month-end renewal periods', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 60,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const currentMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-07-31T08:00:00.000Z',
+      current_period_end: '2026-08-31T08:00:00.000Z',
+    };
+    mockGetUserByIdUsing
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, purchased_coins: 30 });
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [
+          {
+            id: 'default',
+            enabled: true,
+            monthly_price_coins: 30,
+            monthly_allowance_units: 3000000,
+            standard_price_per_million_units_coins: 10,
+          },
+        ],
+        [],
+        [],
+        [currentMembership],
+        [
+          {
+            ...currentMembership,
+            current_period_start: '2026-08-31T08:00:00.000Z',
+            current_period_end: '2026-09-30T08:00:00.000Z',
+          },
+        ],
+        [
+          {
+            id: 'allowance-1',
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            period_start: '2026-08-31T08:00:00.000Z',
+            period_end: '2026-09-30T08:00:00.000Z',
+            allowance_units: 3000000,
+            used_units: 0,
+          },
+        ],
+        [],
+      ],
+    );
+
+    await subscribeMembershipWithWallet('user-1');
+
+    const membershipInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO user_memberships'),
+    );
+    expect(membershipInsert?.params?.slice(2, 4)).toEqual([
+      '2026-08-31T08:00:00.000Z',
+      '2026-09-30T08:00:00.000Z',
+    ]);
   });
 });

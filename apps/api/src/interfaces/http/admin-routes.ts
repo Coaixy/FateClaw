@@ -301,6 +301,21 @@ const RewardConfigSchema = z.object({
       '签到奖励必须在 0 到 1000000 之间',
     ),
   }),
+  membership: z.object({
+    enabled: z.boolean(),
+    monthly_price_coins: SoftCurrencyNumberSchema.refine(
+      (value) => value >= 0 && value <= 1_000_000,
+      '会员月费必须在 0 到 1000000 之间',
+    ),
+    monthly_allowance_units: z
+      .number()
+      .min(1, '会员额度必须大于 0')
+      .max(1_000_000_000_000, '会员额度过大'),
+    standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
+      (value) => value > 0 && value <= 1_000_000,
+      '标准额度折算价格必须在 0 到 1000000 之间',
+    ),
+  }),
 });
 
 const PublicFinancialLedgerEntrySchema = z.object({
@@ -421,6 +436,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       dailySignIn: {
         enabled: parsed.data.daily_sign_in.enabled,
         rewardCoins: parsed.data.daily_sign_in.reward_coins,
+      },
+      membership: {
+        enabled: parsed.data.membership.enabled,
+        monthlyPriceCoins: parsed.data.membership.monthly_price_coins,
+        monthlyAllowanceUnits: parsed.data.membership.monthly_allowance_units,
+        standardPricePerMillionUnitsCoins:
+          parsed.data.membership.standard_price_per_million_units_coins,
       },
     });
   });

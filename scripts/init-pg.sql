@@ -559,6 +559,45 @@ CREATE INDEX IF NOT EXISTS idx_point_batches_expiry_scan
   ON point_batches(expires_at)
   WHERE status = 'active' AND expires_at IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS membership_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  monthly_price_coins NUMERIC(14,2) NOT NULL DEFAULT 30,
+  monthly_allowance_units NUMERIC(18,2) NOT NULL DEFAULT 3000000,
+  standard_price_per_million_units_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO membership_config (id)
+VALUES ('default')
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS user_memberships (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL DEFAULT 'fateclaw_plus',
+  status TEXT NOT NULL DEFAULT 'active',
+  current_period_start TIMESTAMPTZ NOT NULL,
+  current_period_end TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_memberships_active_period
+  ON user_memberships(status, current_period_end);
+
+CREATE TABLE IF NOT EXISTS membership_allowances (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL DEFAULT 'fateclaw_plus',
+  period_start TIMESTAMPTZ NOT NULL,
+  period_end TIMESTAMPTZ NOT NULL,
+  allowance_units NUMERIC(18,2) NOT NULL,
+  used_units NUMERIC(18,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, period_start)
+);
+CREATE INDEX IF NOT EXISTS idx_membership_allowances_user_period
+  ON membership_allowances(user_id, period_start DESC);
+
 ALTER TABLE chat_sessions
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_owner_user_id,
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_persona_id,
@@ -819,6 +858,80 @@ BEGIN
     ALTER TABLE point_batches
       ADD CONSTRAINT chk_point_batches_remaining_points_range
       CHECK (remaining_points >= 0 AND remaining_points <= amount_points);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_config_price_nonnegative') THEN
+    UPDATE membership_config
+    SET monthly_price_coins = 30
+    WHERE monthly_price_coins < 0;
+    ALTER TABLE membership_config
+      ADD CONSTRAINT chk_membership_config_price_nonnegative
+      CHECK (monthly_price_coins >= 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_config_allowance_positive') THEN
+    UPDATE membership_config
+    SET monthly_allowance_units = 3000000
+    WHERE monthly_allowance_units <= 0;
+    ALTER TABLE membership_config
+      ADD CONSTRAINT chk_membership_config_allowance_positive
+      CHECK (monthly_allowance_units > 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_config_standard_price_positive') THEN
+    UPDATE membership_config
+    SET standard_price_per_million_units_coins = 10
+    WHERE standard_price_per_million_units_coins <= 0;
+    ALTER TABLE membership_config
+      ADD CONSTRAINT chk_membership_config_standard_price_positive
+      CHECK (standard_price_per_million_units_coins > 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_memberships_status_valid') THEN
+    UPDATE user_memberships
+    SET status = 'cancelled'
+    WHERE status NOT IN ('active', 'cancelled');
+    ALTER TABLE user_memberships
+      ADD CONSTRAINT chk_user_memberships_status_valid
+      CHECK (status IN ('active', 'cancelled'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_memberships_period_valid') THEN
+    UPDATE user_memberships
+    SET current_period_start = LEAST(current_period_start, NOW()),
+        current_period_end = GREATEST(current_period_end, NOW() + INTERVAL '1 month')
+    WHERE current_period_end <= current_period_start;
+    ALTER TABLE user_memberships
+      ADD CONSTRAINT chk_user_memberships_period_valid
+      CHECK (current_period_end > current_period_start);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_allowances_units_valid') THEN
+    UPDATE membership_allowances
+    SET allowance_units = GREATEST(allowance_units, 1),
+        used_units = GREATEST(used_units, 0)
+    WHERE allowance_units <= 0 OR used_units < 0;
+    ALTER TABLE membership_allowances
+      ADD CONSTRAINT chk_membership_allowances_units_valid
+      CHECK (allowance_units > 0 AND used_units >= 0);
   END IF;
 END $$;
 
