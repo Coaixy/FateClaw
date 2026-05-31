@@ -47,9 +47,11 @@ vi.mock('../../infrastructure/db.js', () => ({
 }));
 
 import {
+  getSystemConfigOverview,
+  getUserModelSettingsOverview,
+  listOfficialModelViews,
   removeOfficialModel,
   resolveUserLlmRuntime,
-  setOfficialModelSecret,
   updateOfficialModel,
 } from './system-config.js';
 import type {
@@ -257,6 +259,20 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
+  it('returns the current user custom API key for single-form editing', async () => {
+    mockGetUserModelConfig.mockResolvedValue(custom());
+    mockGetUserModelSelection.mockResolvedValue(null);
+
+    await expect(getUserModelSettingsOverview('user-1')).resolves.toMatchObject({
+      custom: {
+        user_id: 'user-1',
+        has_secret: true,
+        api_key: 'db-secret',
+      },
+      official_models: [],
+    });
+  });
+
   it('falls back when the selected custom model is not usable', async () => {
     mockGetUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
@@ -303,29 +319,37 @@ describe('resolveUserLlmRuntime', () => {
 
 });
 
-describe('setOfficialModelSecret', () => {
-  it('stores official model secrets as database values', async () => {
-    mockGetOfficialModelConfig.mockResolvedValue(
-      official({ api_key_secret_key: null }),
-    );
-    mockUpsertSystemSecret.mockResolvedValue(
-      secret('official-model:official-1:secret'),
-    );
-    mockUpdateOfficialModelConfig.mockResolvedValue(
-      official({ api_key_secret_key: 'official-model:official-1:secret' }),
-    );
-
-    await setOfficialModelSecret({
-      modelId: 'official-1',
-      secretValue: 'plain-secret',
-      authMode: 'openai_api_key',
-      actor: 'admin',
+describe('listOfficialModelViews', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetSystemSecret.mockResolvedValue(secret());
+    mockListOfficialModelConfigs.mockResolvedValue([official()]);
+    mockGetModelBillingConfig.mockResolvedValue({
+      id: 'default',
+      custom_model_platform_price_per_million_coins: 2,
+      updated_at: '2026-05-04T00:00:00.000Z',
     });
+  });
 
-    expect(mockUpsertSystemSecret).toHaveBeenCalledWith({
-      key: 'official-model:official-1:secret',
-      secretValue: 'plain-secret',
-      updatedBy: 'admin',
+  it('does not expose official model API keys by default', async () => {
+    await expect(listOfficialModelViews()).resolves.toMatchObject([
+      {
+        id: 'official-1',
+        has_secret: true,
+        api_key: null,
+      },
+    ]);
+  });
+
+  it('includes official model API keys for the admin overview', async () => {
+    await expect(getSystemConfigOverview()).resolves.toMatchObject({
+      providers: [
+        {
+          id: 'official-1',
+          has_secret: true,
+          api_key: 'db-secret',
+        },
+      ],
     });
   });
 });

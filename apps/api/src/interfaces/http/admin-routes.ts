@@ -37,7 +37,6 @@ import {
   listBillingRequestReservations,
   reconcileStaleBillingReservations,
   removeOfficialModel,
-  setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateModelBillingSettings,
@@ -218,11 +217,6 @@ const OfficialModelSchema = z.object({
 
 const OfficialModelCreateSchema = OfficialModelSchema.extend({
   api_key: z.string().trim().min(1).max(2000),
-});
-
-const OfficialModelSecretSchema = z.object({
-  api_key: z.string().trim().min(1).max(2000),
-  auth_mode: OfficialModelAuthModeSchema,
 });
 
 const ModelBillingSchema = z.object({
@@ -584,29 +578,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply
         .code(404)
         .send({ error: error instanceof Error ? error.message : '更新失败' });
-    }
-  });
-
-  // POST /api/admin/system-config/providers/:id/secret — 保存官方模型密钥
-  app.post('/system-config/providers/:id/secret', async (request, reply) => {
-    const parsed = OfficialModelSecretSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      await setOfficialModelSecret({
-        modelId: (request.params as { id: string }).id,
-        secretValue: parsed.data.api_key,
-        authMode: parsed.data.auth_mode,
-        actor: 'manager',
-      });
-      return { success: true };
-    } catch (error) {
-      return reply
-        .code(400)
-        .send({ error: error instanceof Error ? error.message : '保存失败' });
     }
   });
 

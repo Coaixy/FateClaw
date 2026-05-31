@@ -27,11 +27,6 @@ export const modelSettingsApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  saveCustomSecret: (data: { api_key: string }) =>
-    requestJson<{ success: boolean }>('/api/model-settings/custom/secret', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
   select: (data: {
     source: 'custom' | 'official';
     official_model_id?: string | null;

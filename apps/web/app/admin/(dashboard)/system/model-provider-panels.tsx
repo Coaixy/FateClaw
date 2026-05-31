@@ -44,19 +44,13 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
     priority: model.priority,
     base_url: model.base_url || '',
     model_name: model.model_name,
-    api_key: '',
+    api_key: model.api_key || '',
     context_window_tokens: model.context_window_tokens ?? 0,
     input_token_price_per_million_coins:
       model.input_token_price_per_million_coins,
     output_token_price_per_million_coins:
       model.output_token_price_per_million_coins,
   };
-}
-
-function getSecretSourceLabel(
-  source: AdminModelProvider['secret_source'],
-): string {
-  return source === 'database' ? '已保存密钥' : '未配置密钥';
 }
 
 export function resolveRuntimeProvider(
@@ -182,7 +176,6 @@ export function ProviderRow({
     setDraft(providerDraftFrom(provider));
   }, [provider]);
 
-  const sourceLabel = getSecretSourceLabel(provider.secret_source);
   const toggledDraft = setProviderDraftEnabled(draft, !provider.enabled);
   const description =
     provider.description || '未填写说明，用户侧会显示默认提示。';
@@ -196,7 +189,7 @@ export function ProviderRow({
           className="flex min-w-0 cursor-pointer items-start gap-3 text-left"
         >
           <div className="min-w-0 flex-1">
-            <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(160px,1.2fr)_minmax(140px,0.8fr)_minmax(140px,1fr)_minmax(96px,0.75fr)] xl:items-center xl:gap-3">
+            <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.2fr)] xl:items-start xl:gap-3">
               <div className="min-w-0">
                 <div className="truncate text-[14px] font-semibold">
                   {provider.display_name}
@@ -211,12 +204,6 @@ export function ProviderRow({
               </div>
               <div className="text-[12px] text-muted">
                 {protocolTypeLabel(provider.pi_api)}
-              </div>
-              <div className="truncate text-[12px] font-medium">
-                {provider.model_name || '未配置'}
-              </div>
-              <div className="truncate text-[12px] text-muted">
-                {provider.base_url || '默认'}
               </div>
             </div>
             <div className="mt-3 hidden items-start gap-1.5 rounded-lg border border-hairline/70 bg-canvas/50 px-3 py-2 text-[11px] leading-5 text-muted xl:flex">
@@ -250,9 +237,6 @@ export function ProviderRow({
                 停用
               </span>
             )}
-            <span className="whitespace-nowrap rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
-              {sourceLabel}
-            </span>
           </div>
           <button
             type="button"
@@ -325,7 +309,7 @@ function ProviderBasicFields({
       <TextField
         label="API Key"
         value={draft.api_key}
-        placeholder="留空则保持当前密钥"
+        placeholder="明文填写，保存后生效"
         onChange={(value) =>
           setDraft((prev) => ({ ...prev, api_key: value }))
         }

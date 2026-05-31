@@ -40,6 +40,7 @@ export interface UserCustomModelConfigDto {
   model_name: string;
   context_window_tokens: number | null;
   has_secret: boolean;
+  api_key: string | null;
   auth_mode: ModelAuthModeDto;
   created_at: string;
   updated_at: string;

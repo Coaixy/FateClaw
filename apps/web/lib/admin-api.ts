@@ -352,6 +352,7 @@ export interface AdminModelProvider {
   output_token_price_per_million_coins: number;
   extra_json: Record<string, unknown> | null;
   has_secret: boolean;
+  api_key: string | null;
   secret_source: 'database' | 'missing';
   auth_mode:
     | 'openai_api_key'
@@ -573,19 +574,6 @@ export const admin = {
       `/api/admin/system-config/providers/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
-        body: JSON.stringify(data),
-      },
-    ),
-  setOfficialModelSecret: (
-    id: string,
-    data: {
-      api_key: string;
-    },
-  ) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/system-config/providers/${encodeURIComponent(id)}/secret`,
-      {
-        method: 'POST',
         body: JSON.stringify(data),
       },
     ),

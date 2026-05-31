@@ -53,7 +53,6 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   listPublicFinancialLedgerEntries: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
-  setOfficialModelSecret: vi.fn(),
   setSkillGlobalEnabled: vi.fn(),
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),

@@ -5,7 +5,6 @@ import {
   type AdminOfficialModelView,
   getUserModelSettingsOverview,
   saveUserCustomModelConfig,
-  setUserCustomModelSecret,
   setUserModelSelection,
   type UserModelSettingsOverview,
 } from '../../modules/system/system-config.js';
@@ -52,11 +51,6 @@ const CustomModelSchema = z.object({
   api_key: z.string().trim().min(1).max(2000).optional(),
 });
 
-const CustomSecretSchema = z.object({
-  api_key: z.string().trim().min(1).max(2000),
-  auth_mode: AuthModeSchema,
-});
-
 const SelectionSchema = z.object({
   source: z.enum(['custom', 'official']),
   official_model_id: z.string().trim().min(1).nullable().optional(),
@@ -101,6 +95,7 @@ function toCustomModelDto(
     model_name: custom.model_name,
     context_window_tokens: custom.context_window_tokens,
     has_secret: custom.has_secret,
+    api_key: custom.api_key,
     auth_mode: custom.auth_mode,
     created_at: custom.created_at,
     updated_at: custom.updated_at,
@@ -152,27 +147,6 @@ export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
       authMode: parsed.data.auth_mode,
       secretValue: parsed.data.api_key,
     });
-  });
-
-  app.post('/custom/secret', async (request, reply) => {
-    const parsed = CustomSecretSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      await setUserCustomModelSecret({
-        userId: request.user.userId,
-        secretValue: parsed.data.api_key,
-        authMode: parsed.data.auth_mode,
-      });
-      return { success: true };
-    } catch (error) {
-      return reply
-        .code(400)
-        .send({ error: error instanceof Error ? error.message : '保存失败' });
-    }
   });
 
   app.put('/selection', async (request, reply) => {

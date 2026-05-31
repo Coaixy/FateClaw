@@ -73,12 +73,14 @@ export interface AdminOfficialModelView extends OfficialModelConfig {
   auth_mode: ProviderAuthMode;
   context_window_tokens: number | null;
   description: string;
+  api_key: string | null;
 }
 
 export interface UserModelSettingsOverview {
   custom:
     | (UserModelConfig & {
         has_secret: boolean;
+        api_key: string | null;
         auth_mode: ProviderAuthMode;
         context_window_tokens: number | null;
       })
@@ -391,7 +393,9 @@ export async function getEffectiveAgentModel(userId: string): Promise<string> {
   return (await resolveUserLlmRuntime(userId)).model;
 }
 
-export async function listOfficialModelViews(): Promise<
+export async function listOfficialModelViews(options?: {
+  includeSecretValue?: boolean;
+}): Promise<
   AdminOfficialModelView[]
 > {
   const models = await listOfficialModelConfigs();
@@ -407,6 +411,7 @@ export async function listOfficialModelViews(): Promise<
         has_secret: Boolean(secret.value),
         secret_source: secret.source,
         auth_mode: secret.authMode,
+        api_key: options?.includeSecretValue ? secret.value : null,
         context_window_tokens: normalizeModelContextWindowTokens(
           model.extra_json,
           model.display_name,
@@ -428,7 +433,7 @@ export async function getSystemConfigOverview(): Promise<{
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
 }> {
   const [models, auditLogs, modelBilling] = await Promise.all([
-    listOfficialModelViews(),
+    listOfficialModelViews({ includeSecretValue: true }),
     listConfigAuditLogs(50),
     getModelBillingConfig(),
   ]);
@@ -475,53 +480,6 @@ export async function updateModelBillingSettings(args: {
       updated.custom_model_platform_price_per_million_coins,
     updated_at: updated.updated_at,
   };
-}
-
-export async function setOfficialModelSecret(args: {
-  modelId: string;
-  secretValue: string;
-  authMode?: ProviderAuthMode;
-  actor?: string;
-}): Promise<void> {
-  const actor = args.actor ?? 'admin';
-  const model = await getOfficialModelConfig(args.modelId);
-  if (!model) {
-    throw new Error('官方模型不存在');
-  }
-  const secretKey =
-    model.api_key_secret_key || `official-model:${model.id}:secret`;
-  await upsertSystemSecret({
-    key: secretKey,
-    secretValue: args.secretValue,
-    updatedBy: actor,
-  });
-  await updateOfficialModelConfig({
-    id: model.id,
-    modelKey: model.model_key,
-    piApi: model.pi_api,
-    displayName: model.display_name,
-    enabled: model.enabled,
-    priority: model.priority,
-    baseUrl: model.base_url,
-    modelName: model.model_name,
-    apiKeySecretKey: secretKey,
-    inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
-    outputTokenPricePerMillionCoins:
-      model.output_token_price_per_million_coins,
-    extraJson: {
-      ...(model.extra_json ?? {}),
-      auth_mode: args.authMode ?? defaultAuthMode(model.pi_api),
-    },
-  });
-  await createConfigAuditLog({
-    id: `cfg-audit-${randomUUID()}`,
-    actorUserId: actor,
-    action: 'official_model.secret.updated',
-    targetType: 'official_model',
-    targetKey: model.id,
-    before: { had_secret: Boolean(model.api_key_secret_key) },
-    after: { secret_key: secretKey },
-  });
 }
 
 export async function createOfficialModel(args: {
@@ -703,6 +661,7 @@ export async function getUserModelSettingsOverview(
       ? {
           ...custom,
           has_secret: Boolean(customSecret?.value),
+          api_key: customSecret?.value ?? null,
           auth_mode: customSecret?.authMode ?? defaultAuthMode(custom.pi_api),
           context_window_tokens: normalizeModelContextWindowTokens(
             custom.extra_json,
@@ -749,35 +708,6 @@ export async function saveUserCustomModelConfig(args: {
         args.contextWindowTokens,
       ),
       auth_mode: args.authMode ?? defaultAuthMode(args.piApi),
-    },
-  });
-}
-
-export async function setUserCustomModelSecret(args: {
-  userId: string;
-  secretValue: string;
-  authMode?: ProviderAuthMode;
-}): Promise<void> {
-  const config = await getUserModelConfig(args.userId);
-  if (!config) {
-    throw new Error('请先保存自配模型基础配置');
-  }
-  const secretKey =
-    config.api_key_secret_key || `user-model:${args.userId}:secret`;
-  await upsertSystemSecret({
-    key: secretKey,
-    secretValue: args.secretValue,
-    updatedBy: args.userId,
-  });
-  await upsertUserModelConfig({
-    userId: args.userId,
-    piApi: config.pi_api,
-    baseUrl: config.base_url,
-    modelName: config.model_name,
-    apiKeySecretKey: secretKey,
-    extraJson: {
-      ...(config.extra_json ?? {}),
-      auth_mode: args.authMode ?? defaultAuthMode(config.pi_api),
     },
   });
 }

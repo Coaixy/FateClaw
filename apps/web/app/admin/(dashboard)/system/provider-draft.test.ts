@@ -51,7 +51,7 @@ describe('provider draft helpers', () => {
     ).toBe('anthropic-messages-claude-main-2');
   });
 
-  it('renders status badges as single-line pills', () => {
+  it('keeps technical fields out of the collapsed provider row', () => {
     const markup = renderToStaticMarkup(
       createElement(ProviderRow, {
         provider: {
@@ -70,6 +70,7 @@ describe('provider draft helpers', () => {
           output_token_price_per_million_coins: 5000,
           auth_mode: 'anthropic_api_key',
           has_secret: true,
+          api_key: 'sk-test',
           secret_source: 'database',
           extra_json: {},
           created_at: '2026-05-04T00:00:00.000Z',
@@ -83,7 +84,9 @@ describe('provider draft helpers', () => {
       }),
     );
 
-    expect(markup).toContain('whitespace-nowrap');
+    expect(markup).not.toContain('claude-sonnet-4-5');
+    expect(markup).not.toContain('https://api.anthropic.com');
+    expect(markup).not.toContain('已保存密钥');
   });
 
   it('requires an API key before creating a model', () => {

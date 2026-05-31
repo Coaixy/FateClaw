@@ -151,7 +151,7 @@ export default function AdminModelConfigPage() {
           <div>
             <div className="text-sm font-semibold">模型提供商</div>
             <div className="mt-1 text-[12px] text-muted">
-              用户只能选择启用且已保存密钥的官方模型。
+              用户只能选择启用且配置完整的官方模型。
             </div>
           </div>
           <div className="rounded-full bg-canvas px-2.5 py-1 text-[11px] text-muted">
@@ -162,11 +162,9 @@ export default function AdminModelConfigPage() {
         {overview.providers.length > 0 ? (
           <div className="space-y-3">
             <div className="hidden gap-3 px-4 text-[10px] uppercase tracking-[0.14em] text-muted xl:grid xl:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="grid grid-cols-[minmax(160px,1.2fr)_minmax(140px,0.8fr)_minmax(140px,1fr)_minmax(96px,0.75fr)_16px] gap-3">
+              <div className="grid grid-cols-[minmax(180px,0.8fr)_minmax(0,1.2fr)_16px] gap-3">
                 <div>模型</div>
                 <div>协议类型</div>
-                <div>模型</div>
-                <div>Base URL</div>
                 <div />
               </div>
               <div className="text-right">状态 / 操作</div>
@@ -184,7 +182,7 @@ export default function AdminModelConfigPage() {
                       description: draft.description.trim(),
                       model_key: provider.model_key,
                       base_url: draft.base_url || null,
-                      api_key: draft.api_key.trim() || undefined,
+                      api_key: draft.api_key.trim(),
                     });
                   })
                 }

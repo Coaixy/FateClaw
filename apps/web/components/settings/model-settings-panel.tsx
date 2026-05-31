@@ -34,6 +34,7 @@ type CustomDraft = {
   pi_api: ModelPiApi;
   base_url: string;
   model_name: string;
+  api_key: string;
   context_window_tokens: number;
 };
 
@@ -42,6 +43,7 @@ function customDraftFromOverview(data: ModelSettingsOverview): CustomDraft {
     pi_api: data.custom?.pi_api ?? 'openai-completions',
     base_url: data.custom?.base_url ?? '',
     model_name: data.custom?.model_name ?? '',
+    api_key: data.custom?.api_key ?? '',
     context_window_tokens: data.custom?.context_window_tokens ?? 0,
   };
 }
@@ -101,9 +103,9 @@ export function ModelSettingsPanel() {
     pi_api: 'openai-completions',
     base_url: '',
     model_name: '',
+    api_key: '',
     context_window_tokens: 0,
   });
-  const [secret, setSecret] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,16 +141,14 @@ export function ModelSettingsPanel() {
   const saveCustom = async () => {
     setBusy('custom');
     setMessage('');
-    const nextSecret = secret.trim();
     try {
       await modelSettingsApi.saveCustom({
         pi_api: custom.pi_api,
         base_url: custom.base_url.trim() || null,
         model_name: custom.model_name.trim(),
         context_window_tokens: custom.context_window_tokens || null,
-        api_key: nextSecret || undefined,
+        api_key: custom.api_key.trim(),
       });
-      setSecret('');
       setMessage('自配模型已保存');
       await load();
     } catch (error) {
@@ -231,11 +231,8 @@ export function ModelSettingsPanel() {
         busy={busy}
         custom={custom}
         customModelPlatformFeeCoins={customModelPlatformFeeCoins}
-        hasSecret={Boolean(overview?.custom?.has_secret)}
-        secret={secret}
         selected={selection?.source === 'custom'}
         setCustom={setCustom}
-        setSecret={setSecret}
         onSaveCustom={saveCustom}
         onSelectCustom={selectCustom}
       />
@@ -254,22 +251,16 @@ function CustomModelSection({
   busy,
   custom,
   customModelPlatformFeeCoins,
-  hasSecret,
-  secret,
   selected,
   setCustom,
-  setSecret,
   onSaveCustom,
   onSelectCustom,
 }: {
   busy: string;
   custom: CustomDraft;
   customModelPlatformFeeCoins: number;
-  hasSecret: boolean;
-  secret: string;
   selected: boolean;
   setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
-  setSecret: (value: string) => void;
   onSaveCustom: () => Promise<void>;
   onSelectCustom: () => Promise<void>;
 }) {
@@ -280,14 +271,9 @@ function CustomModelSection({
           <ServerCog size={15} className="text-muted" />
           自配模型
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
-            {customModelPlatformFeeLabel(customModelPlatformFeeCoins)}
-          </span>
-          <span className="rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
-            {hasSecret ? '已保存密钥' : '未保存密钥'}
-          </span>
-        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
+          {customModelPlatformFeeLabel(customModelPlatformFeeCoins)}
+        </span>
       </div>
       <div className="mb-3 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
         模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
@@ -300,14 +286,12 @@ function CustomModelSection({
       />
       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
-          type="password"
-          value={secret}
-          onChange={(event) => setSecret(event.target.value)}
-          placeholder={
-            hasSecret
-              ? '留空则继续使用已保存密钥'
-              : '输入 API Key'
+          type="text"
+          value={custom.api_key}
+          onChange={(event) =>
+            setCustom((prev) => ({ ...prev, api_key: event.target.value }))
           }
+          placeholder="输入 API Key"
           className={CONTROL}
         />
         <button
@@ -316,7 +300,7 @@ function CustomModelSection({
           disabled={
             busy === 'custom' ||
             !custom.model_name.trim() ||
-            (!hasSecret && !secret.trim())
+            !custom.api_key.trim()
           }
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
         >

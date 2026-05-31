@@ -52,7 +52,6 @@ import {
   createOfficialModel,
   getSystemConfigOverview,
   removeOfficialModel,
-  setOfficialModelSecret,
   updateModelBillingSettings,
   updateOfficialModel,
 } from '../system/system-config.js';
@@ -103,7 +102,6 @@ export {
   listPublicFinancialLedgerEntries,
   reconcileStaleBillingReservations,
   removeOfficialModel,
-  setOfficialModelSecret,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateModelBillingSettings,
