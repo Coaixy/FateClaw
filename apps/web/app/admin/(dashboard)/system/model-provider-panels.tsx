@@ -83,7 +83,7 @@ export function RuntimeSummary({
         <div>
           <div className="text-sm font-semibold">官方模型池</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            用户必须显式选择某个可用官方模型；系统不会自动回退。
+            用户未选择、选择失效或自配模型不可用时，系统会回退到价格最低的可用官方模型。
           </div>
         </div>
         <div className="rounded-full bg-canvas px-2.5 py-1 text-[11px] text-muted">

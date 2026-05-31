@@ -11,7 +11,9 @@ import bcrypt from 'bcryptjs';
 
 import {
   adjustUserPurchasedBalance,
+  createPublicFinancialLedgerEntry,
   createUser,
+  deletePublicFinancialLedgerEntry,
   deleteConversationLogsByAccountIds,
   deleteUser,
   getAccountsByUserId,
@@ -36,10 +38,12 @@ import {
   getWalletTransactionsByUserId,
   grantBonusBalance,
   listBillingRequestReservations,
+  listPublicFinancialLedgerEntries,
   reconcileStaleBillingReservations,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateDailySignInConfig,
+  updatePublicFinancialLedgerEntry,
 } from '../../infrastructure/db.js';
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
 import {
@@ -73,7 +77,9 @@ const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 export {
   adjustUserPurchasedBalance,
   createOfficialModel,
+  createPublicFinancialLedgerEntry,
   deleteConversationLogsByAccountIds,
+  deletePublicFinancialLedgerEntry,
   deleteUser,
   getAdminGlobalStats,
   getAdminRechargePaymentConfig,
@@ -92,6 +98,7 @@ export {
   getWalletTransactionsByUserId,
   grantBonusBalance,
   listBillingRequestReservations,
+  listPublicFinancialLedgerEntries,
   reconcileStaleBillingReservations,
   removeOfficialModel,
   setOfficialModelSecret,
@@ -100,6 +107,7 @@ export {
   updateModelBillingSettings,
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
+  updatePublicFinancialLedgerEntry,
 };
 
 /** 管理后台软妹币奖励配置视图。 */

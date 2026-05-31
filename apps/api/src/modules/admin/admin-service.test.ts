@@ -2,21 +2,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockCreateUser,
+  mockCreatePublicFinancialLedgerEntry,
+  mockDeletePublicFinancialLedgerEntry,
   mockGetDailySignInConfig,
   mockGetUserByPhone,
+  mockListPublicFinancialLedgerEntries,
   mockUpdateDailySignInConfig,
+  mockUpdatePublicFinancialLedgerEntry,
 } = vi.hoisted(() => ({
   mockCreateUser: vi.fn(),
+  mockCreatePublicFinancialLedgerEntry: vi.fn(),
+  mockDeletePublicFinancialLedgerEntry: vi.fn(),
   mockGetDailySignInConfig: vi.fn(),
   mockGetUserByPhone: vi.fn(),
+  mockListPublicFinancialLedgerEntries: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
+  mockUpdatePublicFinancialLedgerEntry: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
+  createPublicFinancialLedgerEntry: mockCreatePublicFinancialLedgerEntry,
   createUser: mockCreateUser,
+  deletePublicFinancialLedgerEntry: mockDeletePublicFinancialLedgerEntry,
   getDailySignInConfig: mockGetDailySignInConfig,
   getUserByPhone: mockGetUserByPhone,
+  listPublicFinancialLedgerEntries: mockListPublicFinancialLedgerEntries,
   updateDailySignInConfig: mockUpdateDailySignInConfig,
+  updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
 }));
 
 import {

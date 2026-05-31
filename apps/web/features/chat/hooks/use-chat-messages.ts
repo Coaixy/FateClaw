@@ -109,6 +109,7 @@ export function useChatMessages(options: {
   const [sending, setSending] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
+  const [loadedSessionId, setLoadedSessionId] = useState('');
   const [continuationBlocked, setContinuationBlocked] = useState(false);
   const [continuationBlockMessage, setContinuationBlockMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -136,6 +137,11 @@ export function useChatMessages(options: {
   const toolTraceSequenceRef = useRef(0);
   const thinkingSequenceRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
+  const activeContinuationBlocked = Boolean(
+    options.selectedSession &&
+      loadedSessionId === options.selectedSession &&
+      continuationBlocked,
+  );
 
   const getActiveStreamingMessageIds = useCallback(
     () => [
@@ -191,6 +197,7 @@ export function useChatMessages(options: {
         const data = await chatSessionsApi.messages(sessionId);
         if (activeSessionRef.current !== sessionId) return true;
 
+        setLoadedSessionId(sessionId);
         setContinuationBlocked(Boolean(data.continuation_blocked));
         setContinuationBlockMessage(data.continuation_block_message || '');
 
@@ -252,6 +259,7 @@ export function useChatMessages(options: {
     if (options.selectedSession) {
       setProcessing(false);
       setAwaitingRefresh(false);
+      setLoadedSessionId('');
       setContinuationBlocked(false);
       setContinuationBlockMessage('');
       void loadMessages(options.selectedSession, {
@@ -265,6 +273,7 @@ export function useChatMessages(options: {
     setSending(false);
     setProcessing(false);
     setAwaitingRefresh(false);
+    setLoadedSessionId('');
     setContinuationBlocked(false);
     setContinuationBlockMessage('');
   }, [loadMessages, options.selectedSession]);
@@ -815,7 +824,7 @@ export function useChatMessages(options: {
     async (text: string, sendOptions?: ChatMessageSendOptions) => {
       const content = text.trim();
       if (!content || isPending) return false;
-      if (continuationBlocked) return false;
+      if (activeContinuationBlocked) return false;
       if (!options.selectedSession && !options.chatAvailable) return false;
 
       setSending(true);
@@ -923,7 +932,7 @@ export function useChatMessages(options: {
         inputRef.current?.focus();
       }
     },
-    [continuationBlocked, isPending, loadMessages, options],
+    [activeContinuationBlocked, isPending, loadMessages, options],
   );
 
   const sendMessage = useCallback(
@@ -942,8 +951,11 @@ export function useChatMessages(options: {
     messages,
     loading,
     sending: isPending,
-    continuationBlocked,
-    continuationBlockMessage,
+    loadedSessionId,
+    continuationBlocked: activeContinuationBlocked,
+    continuationBlockMessage: activeContinuationBlocked
+      ? continuationBlockMessage
+      : '',
     scrollRef,
     inputRef,
     sendMessage,

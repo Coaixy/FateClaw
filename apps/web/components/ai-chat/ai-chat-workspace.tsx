@@ -117,8 +117,12 @@ function AiChatWorkspaceContent() {
     createSession,
     touchSession,
   });
+  const selectedSessionMessagesLoaded =
+    !selectedSession || chatMessages.loadedSessionId === selectedSession;
+  const continuationBlocked =
+    selectedSessionMessagesLoaded && chatMessages.continuationBlocked;
   const continuationBlockedMessage =
-    chatMessages.continuationBlocked && selectedSession
+    continuationBlocked && selectedSession
       ? chatMessages.continuationBlockMessage ||
         '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。'
       : '';
@@ -187,7 +191,7 @@ function AiChatWorkspaceContent() {
     async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
       if (!text || chatMessages.sending) return;
-      if (chatMessages.continuationBlocked) return;
+      if (continuationBlocked) return;
       if (authLoading) return;
       if (!chatAvailable) {
         requestLogin(text);
@@ -203,6 +207,7 @@ function AiChatWorkspaceContent() {
     [
       chatAvailable,
       chatMessages,
+      continuationBlocked,
       authLoading,
       input,
       requestLogin,
@@ -239,7 +244,7 @@ function AiChatWorkspaceContent() {
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       if (
         chatMessages.sending ||
-        chatMessages.continuationBlocked ||
+        continuationBlocked ||
         !chatAvailable
       ) {
         return;
@@ -255,7 +260,7 @@ function AiChatWorkspaceContent() {
       });
       setPasteChoiceText(text);
     },
-    [chatAvailable, chatMessages.continuationBlocked, chatMessages.sending],
+    [chatAvailable, continuationBlocked, chatMessages.sending],
   );
 
   const handleUsePasteAsBoard = useCallback(() => {
@@ -295,7 +300,7 @@ function AiChatWorkspaceContent() {
         requestLogin(pastedBoard.content);
         return;
       }
-      if (chatMessages.continuationBlocked) {
+      if (continuationBlocked) {
         toast('error', continuationBlockedMessage);
         return;
       }
@@ -321,7 +326,7 @@ function AiChatWorkspaceContent() {
     [
       authLoading,
       chatAvailable,
-      chatMessages.continuationBlocked,
+      continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
       continuationBlockedMessage,
@@ -412,7 +417,7 @@ function AiChatWorkspaceContent() {
       if (authLoading) {
         return;
       }
-      if (chatMessages.continuationBlocked) {
+      if (continuationBlocked) {
         toast('error', continuationBlockedMessage);
         return;
       }
@@ -424,7 +429,7 @@ function AiChatWorkspaceContent() {
     },
     [
       authLoading,
-      chatMessages.continuationBlocked,
+      continuationBlocked,
       continuationBlockedMessage,
       toast,
     ],
@@ -457,7 +462,7 @@ function AiChatWorkspaceContent() {
       requestLogin(input);
       return;
     }
-    if (chatMessages.continuationBlocked) {
+    if (continuationBlocked) {
       toast('error', continuationBlockedMessage);
       return;
     }
@@ -466,7 +471,7 @@ function AiChatWorkspaceContent() {
   }, [
     authLoading,
     chatAvailable,
-    chatMessages.continuationBlocked,
+    continuationBlocked,
     continuationBlockedMessage,
     input,
     openPastedBoardSheet,
@@ -474,13 +479,13 @@ function AiChatWorkspaceContent() {
     toast,
   ]);
   const pastedBoardDisabled =
-    authLoading || chatMessages.sending || chatMessages.continuationBlocked;
+    authLoading || chatMessages.sending || continuationBlocked;
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
       input={input}
       sending={chatMessages.sending}
-      disabled={chatMessages.continuationBlocked}
+      disabled={continuationBlocked}
       disabledMessage={continuationBlockedMessage}
       selectedSession={selectedSession}
       pasteChoiceOpen={Boolean(pasteChoiceText)}
@@ -508,7 +513,7 @@ function AiChatWorkspaceContent() {
           disabled={
             authLoading ||
             chatMessages.sending ||
-            chatMessages.continuationBlocked
+            continuationBlocked
           }
           onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
           onOpenAll={() => openCurrentSessionPaipan()}
@@ -559,7 +564,7 @@ function AiChatWorkspaceContent() {
                 disabled={
                   authLoading ||
                   chatMessages.sending ||
-                  chatMessages.continuationBlocked ||
+                  continuationBlocked ||
                   !selectedSession
                 }
                 onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
@@ -595,7 +600,7 @@ function AiChatWorkspaceContent() {
         canCommit={
           chatAvailable &&
           (paipanSheetMode !== 'current-session' ||
-            !chatMessages.continuationBlocked)
+            !continuationBlocked)
         }
         onClose={handleClosePaipanSheet}
         onAuthRequired={() => requestLogin(input)}

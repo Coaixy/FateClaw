@@ -16,6 +16,7 @@ import {
   type ModelPiApi,
   type ModelSettingsOverview,
   type OfficialModel,
+  type UserModelSelection,
 } from '@/features/model-settings/api';
 import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
 import { OfficialModelPriceTags } from './official-model-price-tags';
@@ -74,11 +75,21 @@ function resolveDefaultOfficialModel(
   if (data.selection?.source === 'official' && hasUsableOfficialSelection(data)) {
     return null;
   }
-  // 用户没有可用自配模型，或官方选择已失效时，才用最低价官方模型补默认值。
-  if (!hasUsableCustomModel(data) || data.selection?.source === 'official') {
-    return defaultOfficialModel;
-  }
-  return null;
+  // 未选择、所选模型失效、或自配模型不可用时，界面展示后端实际会使用的官方兜底。
+  return defaultOfficialModel;
+}
+
+function buildDefaultOfficialSelection(
+  data: ModelSettingsOverview,
+  model: OfficialModel,
+): UserModelSelection {
+  return {
+    user_id: data.selection?.user_id ?? data.custom?.user_id ?? '',
+    source: 'official',
+    official_model_id: model.id,
+    created_at: data.selection?.created_at ?? '',
+    updated_at: data.selection?.updated_at ?? '',
+  };
 }
 
 export function ModelSettingsPanel() {
@@ -103,19 +114,11 @@ export function ModelSettingsPanel() {
       let defaultSelectionMessage = '';
       const defaultOfficialModel = resolveDefaultOfficialModel(data);
       if (defaultOfficialModel) {
-        try {
-          const selection = await modelSettingsApi.select({
-            source: 'official',
-            official_model_id: defaultOfficialModel.id,
-          });
-          nextOverview = { ...data, selection };
-          defaultSelectionMessage = `已默认选择价格最低的官方模型：${defaultOfficialModel.display_name}`;
-        } catch (error) {
-          defaultSelectionMessage =
-            error instanceof Error
-              ? error.message
-              : '默认官方模型选择失败';
-        }
+        nextOverview = {
+          ...data,
+          selection: buildDefaultOfficialSelection(data, defaultOfficialModel),
+        };
+        defaultSelectionMessage = `默认使用价格最低的官方模型：${defaultOfficialModel.display_name}`;
       }
       setOverview(nextOverview);
       setCustom(customDraftFromOverview(nextOverview));
@@ -205,7 +208,7 @@ export function ModelSettingsPanel() {
         <div>
           <div className="text-sm font-semibold">模型设置</div>
           <div className="mt-1 text-[12px] text-muted">
-            选择自配模型或某个官方模型后，AI Chat 才会运行。
+            未选择或当前选择失效时，会默认使用价格最低的可用官方模型。
           </div>
         </div>
         <button

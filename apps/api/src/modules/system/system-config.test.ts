@@ -6,6 +6,7 @@ const {
   mockGetSystemSecret,
   mockGetUserModelConfig,
   mockGetUserModelSelection,
+  mockListOfficialModelConfigs,
   mockUpdateOfficialModelConfig,
   mockUpdateModelBillingConfig,
   mockUpsertSystemSecret,
@@ -15,6 +16,7 @@ const {
   mockGetSystemSecret: vi.fn(),
   mockGetUserModelConfig: vi.fn(),
   mockGetUserModelSelection: vi.fn(),
+  mockListOfficialModelConfigs: vi.fn(),
   mockUpdateOfficialModelConfig: vi.fn(),
   mockUpdateModelBillingConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
@@ -30,7 +32,7 @@ vi.mock('../../infrastructure/db.js', () => ({
   getUserModelConfig: mockGetUserModelConfig,
   getUserModelSelection: mockGetUserModelSelection,
   listConfigAuditLogs: vi.fn(async () => []),
-  listOfficialModelConfigs: vi.fn(async () => []),
+  listOfficialModelConfigs: mockListOfficialModelConfigs,
   updateOfficialModelConfig: mockUpdateOfficialModelConfig,
   updateModelBillingConfig: mockUpdateModelBillingConfig,
   upsertSystemSecret: mockUpsertSystemSecret,
@@ -97,6 +99,7 @@ describe('resolveUserLlmRuntime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetSystemSecret.mockResolvedValue(secret());
+    mockListOfficialModelConfigs.mockResolvedValue([]);
     mockGetModelBillingConfig.mockResolvedValue({
       id: 'default',
       custom_model_platform_price_per_million_coins: 2,
@@ -108,6 +111,44 @@ describe('resolveUserLlmRuntime', () => {
     mockGetUserModelSelection.mockResolvedValue(undefined);
 
     await expect(resolveUserLlmRuntime('user-1')).rejects.toThrow('未选择模型');
+  });
+
+  it('falls back to the lowest priced usable official model when the user has no selection', async () => {
+    mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'expensive',
+        model_key: 'expensive',
+        display_name: 'Expensive',
+        input_token_price_per_million_coins: 1000,
+        output_token_price_per_million_coins: 5000,
+      }),
+      official({
+        id: 'missing-secret',
+        model_key: 'missing-secret',
+        display_name: 'Missing Secret',
+        api_key_secret_key: null,
+        input_token_price_per_million_coins: 1,
+        output_token_price_per_million_coins: 1,
+      }),
+      official({
+        id: 'cheapest',
+        model_key: 'cheapest',
+        display_name: 'Cheapest',
+        model_name: 'gpt-4o-mini',
+        input_token_price_per_million_coins: 2,
+        output_token_price_per_million_coins: 3,
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'cheapest',
+      providerKey: 'cheapest',
+      model: 'gpt-4o-mini',
+      inputTokenPricePerMillionCoins: 2,
+      outputTokenPricePerMillionCoins: 3,
+    });
   });
 
   it('resolves a selected official model with metered billing', async () => {
@@ -134,7 +175,7 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
-  it('does not fallback when the selected official model lacks a secret', async () => {
+  it('falls back when the selected official model lacks a secret', async () => {
     mockGetUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
       source: 'official',
@@ -145,10 +186,23 @@ describe('resolveUserLlmRuntime', () => {
     mockGetOfficialModelConfig.mockResolvedValue(
       official({ api_key_secret_key: null }),
     );
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'fallback',
+        model_key: 'fallback',
+        display_name: 'Fallback',
+        model_name: 'gpt-4o-mini',
+        input_token_price_per_million_coins: 10,
+        output_token_price_per_million_coins: 20,
+      }),
+    ]);
 
-    await expect(resolveUserLlmRuntime('user-1')).rejects.toThrow(
-      '官方模型未配置密钥',
-    );
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'fallback',
+      providerKey: 'fallback',
+      model: 'gpt-4o-mini',
+    });
   });
 
   it('resolves selected custom model with platform token billing', async () => {
@@ -192,6 +246,32 @@ describe('resolveUserLlmRuntime', () => {
     await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
       inputTokenPricePerMillionCoins: 9,
       outputTokenPricePerMillionCoins: 9,
+    });
+  });
+
+  it('falls back when the selected custom model is not usable', async () => {
+    mockGetUserModelSelection.mockResolvedValue({
+      user_id: 'user-1',
+      source: 'custom',
+      official_model_id: null,
+      created_at: '2026-05-04T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserModelConfig.mockResolvedValue(undefined);
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'fallback',
+        model_key: 'fallback',
+        display_name: 'Fallback',
+        model_name: 'gpt-4o-mini',
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'fallback',
+      providerKey: 'fallback',
+      model: 'gpt-4o-mini',
     });
   });
 

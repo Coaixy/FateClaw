@@ -24,7 +24,9 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
   createOfficialModel: vi.fn(),
+  createPublicFinancialLedgerEntry: vi.fn(),
   deleteConversationLogsForAdminUser: vi.fn(),
+  deletePublicFinancialLedgerEntry: vi.fn(),
   deleteUser: vi.fn(),
   getAdminGlobalStats: vi.fn(),
   getAdminRechargePaymentConfig: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   listAdminGlobalSkills: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
+  listPublicFinancialLedgerEntries: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
   setOfficialModelSecret: vi.fn(),
@@ -57,6 +60,7 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   updateAdminRewardConfig: vi.fn(),
   updateModelBillingSettings: vi.fn(),
   updateOfficialModel: vi.fn(),
+  updatePublicFinancialLedgerEntry: vi.fn(),
 }));
 
 vi.mock('./payment-callback-urls.js', () => ({

@@ -2812,6 +2812,53 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0015_public_financial_ledger',
+    description: '增加关于页面公开收支流水',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public_financial_ledger_entries (
+          id TEXT PRIMARY KEY,
+          entry_type TEXT NOT NULL,
+          occurred_at DATE NOT NULL,
+          content TEXT NOT NULL,
+          amount_yuan NUMERIC(14,2) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_public_financial_ledger_entry_type_valid',
+        tableName: 'public_financial_ledger_entries',
+        expression: "entry_type IN ('income', 'expense')",
+        cleanupSql: `UPDATE public_financial_ledger_entries
+                     SET entry_type = 'expense'
+                     WHERE entry_type NOT IN ('income', 'expense')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_public_financial_ledger_amount_yuan_positive',
+        tableName: 'public_financial_ledger_entries',
+        expression: 'amount_yuan > 0',
+        cleanupSql: `UPDATE public_financial_ledger_entries
+                     SET amount_yuan = 1
+                     WHERE amount_yuan <= 0`,
+      });
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_public_financial_ledger_occurred_at
+          ON public_financial_ledger_entries (occurred_at DESC, created_at DESC)
+      `);
+      await client.query(`
+        INSERT INTO public_financial_ledger_entries (
+          id, entry_type, occurred_at, content, amount_yuan
+        )
+        VALUES
+          ('public-ledger-seed-server-cost', 'expense', CURRENT_DATE, '服务器成本', 500),
+          ('public-ledger-seed-domain-cost', 'expense', CURRENT_DATE, '域名成本', 100),
+          ('public-ledger-seed-development-cost', 'expense', CURRENT_DATE, '开发成本', 300)
+        ON CONFLICT (id) DO NOTHING
+      `);
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

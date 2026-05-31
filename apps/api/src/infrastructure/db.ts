@@ -128,6 +128,17 @@ import type {
   ConversationLogSummaryRow,
 } from './repositories/conversation-log-repository.js';
 import {
+  createPublicFinancialLedgerEntry,
+  deletePublicFinancialLedgerEntry,
+  listPublicFinancialLedgerEntries,
+  updatePublicFinancialLedgerEntry,
+} from './repositories/public-financial-ledger-repository.js';
+import type {
+  PublicFinancialLedgerEntryInput,
+  PublicFinancialLedgerEntryRow,
+  PublicFinancialLedgerEntryType,
+} from './repositories/public-financial-ledger-repository.js';
+import {
   createUser,
   getAllUsers,
   getUserByAccountId,
@@ -219,6 +230,7 @@ export {
   createConfigAuditLog,
   createDailySignInReward,
   createOfficialModelConfig,
+  createPublicFinancialLedgerEntry,
   createSkillBundle,
   createTask,
   createUser,
@@ -227,6 +239,7 @@ export {
   deleteChatSession,
   deleteConversationLogsByAccountIds,
   deleteOfficialModelConfig,
+  deletePublicFinancialLedgerEntry,
   deleteSkillBundle,
   deleteTask,
   deleteUserCustomSkill,
@@ -303,6 +316,7 @@ export {
   listMarketBundles,
   listMarketSkills,
   listOfficialModelConfigs,
+  listPublicFinancialLedgerEntries,
   listRechargeOrdersByUserId,
   listUserBundles,
   logTaskRun,
@@ -338,6 +352,7 @@ export {
   updateAccount,
   updateChatSessionTitle,
   updateOfficialModelConfig,
+  updatePublicFinancialLedgerEntry,
   updateSoulContent,
   updateTask,
   updateTaskAfterRun,
@@ -376,6 +391,9 @@ export type {
   MarketBundleListRow,
   MarketSkillListRow,
   MonthlyBillingStateRow,
+  PublicFinancialLedgerEntryInput,
+  PublicFinancialLedgerEntryRow,
+  PublicFinancialLedgerEntryType,
   BalanceGrantRow,
   RechargeOrderRow,
   RechargeOrderStatus,

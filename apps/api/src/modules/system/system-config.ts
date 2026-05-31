@@ -87,6 +87,11 @@ export interface UserModelSettingsOverview {
   custom_model_platform_price_per_million_coins: number;
 }
 
+type ResolvedOfficialModelCandidate = {
+  model: OfficialModelConfig;
+  secret: ResolvedProviderSecret & { value: string };
+};
+
 function defaultAuthMode(piApi: ModelProviderType): ProviderAuthMode {
   if (piApi === 'google-generative-ai') return 'gemini_api_key';
   if (piApi === 'anthropic-messages') return 'anthropic_api_key';
@@ -187,24 +192,17 @@ function requireModelName(modelName: string, label: string): string {
   return model;
 }
 
-async function resolveOfficialRuntime(
-  selection: UserModelSelection,
-): Promise<EffectiveLlmRuntimeConfig> {
-  if (!selection.official_model_id) {
-    throw new Error('当前选择的官方模型无效，请重新选择模型');
-  }
-  const model = await getOfficialModelConfig(selection.official_model_id);
-  if (!model || !model.enabled) {
-    throw new Error('当前选择的官方模型不可用，请重新选择模型');
-  }
-  const secret = await resolveSecret({
-    secretKey: model.api_key_secret_key,
-    piApi: model.pi_api,
-    extraJson: model.extra_json,
-  });
-  if (!secret.value) {
-    throw new Error('当前选择的官方模型未配置密钥，请联系管理员');
-  }
+function officialModelTotalPriceCoins(model: OfficialModelConfig): number {
+  return (
+    model.input_token_price_per_million_coins +
+    model.output_token_price_per_million_coins
+  );
+}
+
+function buildOfficialRuntime(
+  model: OfficialModelConfig,
+  secret: ResolvedProviderSecret & { value: string },
+): EffectiveLlmRuntimeConfig {
   const modelName = requireModelName(model.model_name, model.display_name);
   const contextWindowTokens = resolveContextWindow({
     model: modelName,
@@ -232,6 +230,72 @@ async function resolveOfficialRuntime(
     outputTokenPricePerMillionCoins:
       model.output_token_price_per_million_coins,
   };
+}
+
+async function resolveUsableOfficialModelCandidate(
+  model: OfficialModelConfig,
+): Promise<ResolvedOfficialModelCandidate | null> {
+  if (!model.enabled || !model.model_name.trim()) {
+    return null;
+  }
+
+  const secret = await resolveSecret({
+    secretKey: model.api_key_secret_key,
+    piApi: model.pi_api,
+    extraJson: model.extra_json,
+  });
+  if (!secret.value) {
+    return null;
+  }
+
+  return {
+    model,
+    secret: { ...secret, value: secret.value },
+  };
+}
+
+async function resolveLowestPricedOfficialRuntime(): Promise<
+  EffectiveLlmRuntimeConfig | null
+> {
+  const models = await listOfficialModelConfigs();
+  let lowest: ResolvedOfficialModelCandidate | null = null;
+
+  for (const model of models) {
+    const candidate = await resolveUsableOfficialModelCandidate(model);
+    if (!candidate) {
+      continue;
+    }
+    if (
+      !lowest ||
+      officialModelTotalPriceCoins(candidate.model) <
+        officialModelTotalPriceCoins(lowest.model)
+    ) {
+      lowest = candidate;
+    }
+  }
+
+  return lowest ? buildOfficialRuntime(lowest.model, lowest.secret) : null;
+}
+
+async function resolveOfficialRuntime(
+  selection: UserModelSelection,
+): Promise<EffectiveLlmRuntimeConfig> {
+  if (!selection.official_model_id) {
+    throw new Error('当前选择的官方模型无效，请重新选择模型');
+  }
+  const model = await getOfficialModelConfig(selection.official_model_id);
+  if (!model || !model.enabled) {
+    throw new Error('当前选择的官方模型不可用，请重新选择模型');
+  }
+  const secret = await resolveSecret({
+    secretKey: model.api_key_secret_key,
+    piApi: model.pi_api,
+    extraJson: model.extra_json,
+  });
+  if (!secret.value) {
+    throw new Error('当前选择的官方模型未配置密钥，请联系管理员');
+  }
+  return buildOfficialRuntime(model, { ...secret, value: secret.value });
 }
 
 async function resolveCustomRuntime(
@@ -288,12 +352,32 @@ export async function resolveUserLlmRuntime(
 ): Promise<EffectiveLlmRuntimeConfig> {
   const selection = await getUserModelSelection(userId);
   if (!selection) {
+    const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+    if (fallbackRuntime) {
+      return fallbackRuntime;
+    }
     throw new Error('未选择模型，请先在模型设置中选择官方模型或自配模型');
   }
   if (selection.source === 'custom') {
-    return resolveCustomRuntime(userId);
+    try {
+      return await resolveCustomRuntime(userId);
+    } catch (error) {
+      const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+      if (fallbackRuntime) {
+        return fallbackRuntime;
+      }
+      throw error;
+    }
   }
-  return resolveOfficialRuntime(selection);
+  try {
+    return await resolveOfficialRuntime(selection);
+  } catch (error) {
+    const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+    if (fallbackRuntime) {
+      return fallbackRuntime;
+    }
+    throw error;
+  }
 }
 
 export async function getEffectiveAgentRuntimeConfig(

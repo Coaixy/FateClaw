@@ -15,6 +15,7 @@ import {
   Puzzle,
   ScrollText,
   Bot,
+  Landmark,
   WalletCards,
   LogOut,
   Menu,
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/admin/tasks', label: '任务', icon: Clock },
   { href: '/admin/skills', label: '技能', icon: Puzzle },
   { href: '/admin/logs', label: '日志', icon: ScrollText },
+  { href: '/admin/about', label: '关于收支', icon: Landmark },
   { href: '/admin/system/models', label: '模型配置', icon: Bot },
   { href: '/admin/system/rewards', label: '软妹币配置', icon: WalletCards },
 ];

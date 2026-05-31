@@ -395,6 +395,31 @@ export interface AdminRewardConfig {
   };
 }
 
+/** 关于页面公开收支流水类型。 */
+export type AdminAboutLedgerEntryType = 'income' | 'expense';
+
+/** 关于页面公开收支流水记录。 */
+export interface AdminAboutLedgerEntry {
+  id: string;
+  entry_type: AdminAboutLedgerEntryType;
+  occurred_at: string;
+  content: string;
+  amount_yuan: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 关于页面公开收支流水列表响应。 */
+export interface AdminAboutLedgerResponse {
+  entries: AdminAboutLedgerEntry[];
+}
+
+/** 关于页面公开收支流水写入数据。 */
+export type AdminAboutLedgerEntryDraft = Pick<
+  AdminAboutLedgerEntry,
+  'entry_type' | 'occurred_at' | 'content' | 'amount_yuan'
+>;
+
 /** 后台模型计费配置视图，单位是软妹币 / 百万 Token。 */
 export interface AdminModelBillingConfig {
   custom_model_platform_price_per_million_coins: number;
@@ -463,6 +488,29 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  aboutLedger: () =>
+    adminRequest<AdminAboutLedgerResponse>('/api/admin/about-ledger'),
+  createAboutLedgerEntry: (data: AdminAboutLedgerEntryDraft) =>
+    adminRequest<AdminAboutLedgerEntry>('/api/admin/about-ledger', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateAboutLedgerEntry: (
+    id: string,
+    data: AdminAboutLedgerEntryDraft,
+  ) =>
+    adminRequest<AdminAboutLedgerEntry>(
+      `/api/admin/about-ledger/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    ),
+  deleteAboutLedgerEntry: (id: string) =>
+    adminRequest<{ success: boolean }>(
+      `/api/admin/about-ledger/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
   updateModelBilling: (data: {
     custom_model_platform_price_per_million_coins: number;
   }) =>

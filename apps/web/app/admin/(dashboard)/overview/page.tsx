@@ -455,7 +455,7 @@ export default function AdminOverviewPage() {
                 );
               })}
               <div className="pt-1 text-[12px] text-muted">
-                未选择模型的用户无法使用 AI 请求
+                未选择模型的用户会默认使用价格最低的可用官方模型
               </div>
             </div>
           </div>
