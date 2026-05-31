@@ -83,6 +83,7 @@ export async function requestJson<T>(
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...fetchOptions,
+      cache: fetchOptions.cache ?? 'no-store',
       headers,
     });
   } catch {

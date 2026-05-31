@@ -84,6 +84,21 @@ export async function createApiServer(): Promise<FastifyInstance> {
   };
   await app.register(fastifyCors, corsOptions);
 
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/api/')) return;
+
+    // 用户态 API 数据不能被 CDN 或浏览器复用，否则会出现删除会话、充值余额等状态回退。
+    reply.header(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    );
+    reply.header('CDN-Cache-Control', 'no-store');
+    reply.header('Surrogate-Control', 'no-store');
+    reply.header('Pragma', 'no-cache');
+    reply.header('Expires', '0');
+    reply.header('Vary', 'Origin, Authorization, Cookie');
+  });
+
   await app.register(fastifyJwt, {
     secret: JWT_SECRET,
   });

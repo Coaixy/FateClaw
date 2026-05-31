@@ -39,4 +39,18 @@ describe('requestJson', () => {
       message: '自配模型 Base URL 无效',
     } satisfies Partial<ApiError>);
   });
+
+  it('disables browser cache for API requests by default', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { ok: true }));
+    globalThis.fetch = fetchMock;
+
+    await expect(requestJson('/api/test')).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/test',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
 });
