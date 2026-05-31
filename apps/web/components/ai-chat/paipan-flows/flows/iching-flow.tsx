@@ -12,7 +12,7 @@ const ICHING_METHOD_OPTIONS: ChoiceGridOption[] = [
     recommended: true,
   },
   { value: 'lueshifa', label: '略筮法', hint: '以简化筮法快速起卦' },
-  { value: 'time', label: '时间起卦', hint: '用当前时间或指定时间' },
+  { value: 'time', label: '时间起卦（公历）', hint: '用当前公历时间或指定公历时间' },
   { value: 'three', label: '三数起卦', hint: '输入 3 个数字' },
   { value: 'array', label: '数字起卦', hint: '输入 2 个以上数字' },
   { value: 'manual', label: '手动输入六爻', hint: '适合已经知道卦象的人' },
@@ -93,24 +93,24 @@ export function IchingFlow({
     },
     {
       id: 'time',
-      title: '起卦时间',
-      description: '直接起卦选当前时间；复盘某个时刻再指定时间。',
+      title: '起卦时间（公历）',
+      description: '直接起卦选当前公历时间；复盘某个时刻再指定公历时间。',
       status: useCurrentTime || datetime ? 'complete' : 'incomplete',
       content: (
-        <PaipanStepFrame title="起卦时间">
+        <PaipanStepFrame title="起卦时间（公历）">
           <ChoiceGrid
-            title="起卦时间"
+            title="起卦时间（公历）"
             value={useCurrentTime ? 'now' : 'custom'}
             options={[
               {
                 value: 'now',
-                label: '当前时间',
+                label: '当前时间（公历）',
                 hint: '适合直接起卦',
                 recommended: true,
               },
               {
                 value: 'custom',
-                label: '指定时间',
+                label: '指定时间（公历）',
                 hint: '手动六爻和数字起卦也能指定时刻',
               },
             ]}
@@ -138,9 +138,9 @@ export function IchingFlow({
 
           {!useCurrentTime && (
             <DateTimeField
-              title="指定起卦时刻"
+              title="指定起卦时刻（公历）"
               required
-              description="无论是手动六爻、数字起卦还是按时间起卦，都可以指定这里的时刻。"
+              description="无论是手动六爻、数字起卦还是按时间起卦，都可以指定这里的公历时刻。"
               value={getValueAtPath(draft, ['datetime'])}
               onChange={(value) => onChange(['datetime'], value)}
             />

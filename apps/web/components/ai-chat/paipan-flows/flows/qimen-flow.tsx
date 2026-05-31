@@ -33,24 +33,24 @@ export function QimenFlow({
   const steps: PaipanStep[] = [
     {
       id: 'time-mode',
-      title: '起盘时间',
-      description: '新手直接用当前时间即可；回看某个时刻再指定时间。',
+      title: '起盘时间（公历）',
+      description: '新手直接用当前公历时间即可；回看某个时刻再指定公历时间。',
       status: useCurrentTime ? 'complete' : 'optional',
       content: (
-        <PaipanStepFrame title="起盘时间">
+        <PaipanStepFrame title="起盘时间（公历）">
           <ChoiceGrid
-            title="起盘时间"
+            title="起盘时间（公历）"
             value={useCurrentTime ? 'now' : 'custom'}
             options={[
               {
                 value: 'now',
-                label: '当前时间',
+                label: '当前时间（公历）',
                 hint: '最省事，适合直接起局',
                 recommended: true,
               },
               {
                 value: 'custom',
-                label: '指定时间',
+                label: '指定时间（公历）',
                 hint: '想回看某个时刻再选这个',
               },
             ]}
@@ -96,20 +96,20 @@ export function QimenFlow({
     },
     {
       id: 'custom-time',
-      title: '指定时刻',
-      description: '只有选择“指定时间”时需要填写。',
+      title: '指定时刻（公历）',
+      description: '只有选择“指定时间（公历）”时需要填写。',
       status: startDate && hasStartHour ? 'complete' : 'incomplete',
       content: useCurrentTime ? null : (
-        <PaipanStepFrame title="指定时刻">
+        <PaipanStepFrame title="指定时刻（公历）">
           <DateField
-            title="起盘日期"
+            title="起盘日期（公历）"
             required
             value={startDate}
             onChange={(value) => onChange(['solarDate'], value)}
           />
 
           <TimeField
-            title="起盘时间"
+            title="起盘时间（公历）"
             required
             hour={getValueAtPath(draft, ['hour'])}
             minute={getValueAtPath(draft, ['minute'])}

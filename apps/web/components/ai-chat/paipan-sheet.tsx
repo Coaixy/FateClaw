@@ -89,7 +89,7 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
     description: '想同时看大限、流年、流月等运盘时再展开填写。',
   },
   'horoscope.date': {
-    label: '运盘目标日期',
+    label: '运盘目标日期（公历）',
     placeholder: 'YYYY-MM-DD',
   },
   'horoscope.scopes': {
@@ -111,12 +111,22 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
       manual: '手动输入六爻',
       three: '三数起卦',
       array: '数字起卦',
-      time: '时间起卦',
+      time: '时间起卦（公历）',
     },
   },
   datetime: {
-    label: '起卦时间',
+    label: '起卦时间（公历）',
     placeholder: 'YYYY-MM-DD HH:mm',
+  },
+  solarDate: {
+    label: '日期（公历）',
+    placeholder: 'YYYY-MM-DD',
+  },
+  hour: {
+    label: '小时（公历时间）',
+  },
+  minute: {
+    label: '分钟（公历时间）',
   },
   yao: {
     label: '六爻卦象',
@@ -454,10 +464,10 @@ function validateDraftForSkill(
 ): string | null {
   if (skillDir === 'bazi-paipan' || skillDir === 'ziwei-paipan') {
     if (typeof getValueAtPath(draft, ['solarDate']) !== 'string') {
-      return '请先选择出生日期';
+      return '请先选择出生日期（公历）';
     }
     if (typeof getValueAtPath(draft, ['hour']) !== 'number') {
-      return '请先选择出生时间';
+      return '请先选择出生时间（公历）';
     }
     if (!normalizeGenderValue(getValueAtPath(draft, ['gender']))) {
       return '请先选择性别';
@@ -471,10 +481,10 @@ function validateDraftForSkill(
       return null;
     }
     if (typeof getValueAtPath(draft, ['solarDate']) !== 'string') {
-      return '请先选择起盘日期';
+      return '请先选择起盘日期（公历）';
     }
     if (typeof getValueAtPath(draft, ['hour']) !== 'number') {
-      return '请先选择起盘时间';
+      return '请先选择起盘时间（公历）';
     }
     return null;
   }
@@ -493,7 +503,7 @@ function validateDraftForSkill(
       : '';
 
     if (!useCurrentTime && !datetime) {
-      return '请先选择起卦时间';
+      return '请先选择起卦时间（公历）';
     }
 
     if (method === 'manual' && !/^[6789]{6}$/.test(yao)) {
@@ -826,7 +836,7 @@ function PaipanDateTimePicker({
   const selectedDate = typeof value.date === 'string' ? value.date : '';
   const selectedTimeLabel =
     selectedHour === undefined ? '请选择时间' : `${pad2(selectedHour)}:${pad2(selectedMinute ?? 0)}`;
-  const selectedDateLabel = selectedDate || '请选择日期';
+  const selectedDateLabel = selectedDate ? `${selectedDate}（公历）` : '请选择公历日期';
   const selectedMonthDays = getDaysInMonth(dateParts.year, dateParts.month);
   const [pickerOpen, setPickerOpen] = useState(false);
 

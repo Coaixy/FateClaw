@@ -33,13 +33,13 @@ export function BaziFlow({
   const steps: PaipanStep[] = [
     {
       id: 'birth-date',
-      title: '出生日期',
-      description: '先确认阳历出生日期，这是排盘最基础的信息。',
+      title: '出生日期（公历）',
+      description: '先确认公历出生日期，这是排盘最基础的信息。',
       status: birthDate ? 'complete' : 'incomplete',
       content: (
-        <PaipanStepFrame title="出生日期">
+        <PaipanStepFrame title="出生日期（公历）">
           <DateField
-            title="出生日期"
+            title="出生日期（公历）"
             required
             value={birthDate}
             onChange={(value) => onChange(['solarDate'], value)}
@@ -49,15 +49,15 @@ export function BaziFlow({
     },
     {
       id: 'birth-time',
-      title: '出生时间',
-      description: '如果只知道大概时段，先选最接近的整点。',
+      title: '出生时间（公历）',
+      description: '按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点。',
       status: hasBirthHour ? 'complete' : 'incomplete',
       content: (
-        <PaipanStepFrame title="出生时间">
+        <PaipanStepFrame title="出生时间（公历）">
           <TimeField
-            title="出生时间"
+            title="出生时间（公历）"
             required
-            description="如果只知道大概时段，先选最接近的整点即可。"
+            description="按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点即可。"
             hour={getValueAtPath(draft, ['hour'])}
             minute={getValueAtPath(draft, ['minute'])}
             onChange={(next) =>
