@@ -83,6 +83,7 @@ describe('executeContainerInput user pasted board persistence', () => {
   });
 
   it('keeps request boundary out of Pi context persistence decisions', async () => {
+    const onSessionReady = vi.fn();
     const result = await executeContainerInput(
       {
         accountId: 'web:user-1',
@@ -98,6 +99,8 @@ describe('executeContainerInput user pasted board persistence', () => {
         history: [],
       },
       createRequestScope(),
+      undefined,
+      { onSessionReady },
     );
 
     expect(result.status).toBe('success');
@@ -109,6 +112,7 @@ describe('executeContainerInput user pasted board persistence', () => {
           inputKind: 'user_pasted_board',
           pastedBoard: expect.objectContaining({ category: '六爻' }),
         }),
+        onSessionReady,
       }),
     );
     expect(result.skillContext).toBeUndefined();

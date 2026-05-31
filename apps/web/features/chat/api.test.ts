@@ -85,6 +85,47 @@ describe('chatSessionsApi.send', () => {
       },
     );
   });
+
+  it('passes abort signals to the send request', async () => {
+    const controller = new AbortController();
+
+    await chatSessionsApi.send(
+      's 1',
+      '普通问题',
+      undefined,
+      { signal: controller.signal },
+    );
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/chat-sessions/s/s%201/messages',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          content: '普通问题',
+        }),
+        exposeServerErrorMessage: true,
+        signal: controller.signal,
+      },
+    );
+  });
+});
+
+describe('chatSessionsApi.cancel', () => {
+  beforeEach(() => {
+    requestJsonMock.mockReset();
+    requestJsonMock.mockResolvedValue({ success: true });
+  });
+
+  it('posts to the session cancel endpoint', async () => {
+    await chatSessionsApi.cancel('s 1');
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/chat-sessions/s/s%201/messages/cancel',
+      {
+        method: 'POST',
+      },
+    );
+  });
 });
 
 describe('sendChatSessionMessageWithOptions', () => {
@@ -121,6 +162,26 @@ describe('sendChatSessionMessageWithOptions', () => {
 
     expect(sender).toHaveBeenCalledWith('s 1', '看这个盘', {
       selectedBoardMessageId: 'board-1',
+    });
+  });
+
+  it('passes request options to sender', async () => {
+    const controller = new AbortController();
+    const sender = vi.fn<typeof chatSessionsApi.send>().mockResolvedValue({
+      text: 'ok',
+      session_title: '选盘',
+    });
+
+    await sendChatSessionMessageWithOptions(
+      sender,
+      's 1',
+      '看这个盘',
+      undefined,
+      { signal: controller.signal },
+    );
+
+    expect(sender).toHaveBeenCalledWith('s 1', '看这个盘', undefined, {
+      signal: controller.signal,
     });
   });
 });

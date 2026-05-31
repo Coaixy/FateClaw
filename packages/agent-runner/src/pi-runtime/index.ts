@@ -51,6 +51,7 @@ export async function executePiRuntime(
     containerInput: args.containerInput,
     runtime: args.runtime,
     requestScope: args.requestScope,
+    onSessionReady: args.onSessionReady,
   });
   const runtimeSkillContext = mergeSkillContext(result.records);
   const skillContext = mergePiPersistedSkillContext({

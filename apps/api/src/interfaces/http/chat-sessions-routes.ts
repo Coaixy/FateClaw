@@ -6,6 +6,7 @@ import type {
 
 import {
   createChatSessionForOwnedUser,
+  cancelOwnedChatSessionMessage,
   deleteOwnedChatSession,
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
@@ -214,6 +215,21 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
       request.user.userId,
       request.params.sessionId,
       normalized.data,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/chat-sessions/s/:sessionId/messages/cancel — 中断当前 AI Chat 输出
+  app.post<{
+    Params: { sessionId: string };
+  }>('/s/:sessionId/messages/cancel', async (request, reply) => {
+    await request.requireAuth();
+    const result = await cancelOwnedChatSessionMessage(
+      request.user.userId,
+      request.params.sessionId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

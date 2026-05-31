@@ -22,6 +22,8 @@ export interface PiRuntimeInput {
   llmRuntime: LlmRuntimeSnapshot;
   runtime: RequestRuntime;
   requestScope: RequestScope;
+  /** session 创建完成后暴露最小控制面，宿主可据此中断当前 turn。 */
+  onSessionReady?: (sessionControls: { abort: () => Promise<void> }) => void;
 }
 
 export interface PiInvocation {

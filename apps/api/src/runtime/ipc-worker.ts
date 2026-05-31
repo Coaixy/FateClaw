@@ -15,6 +15,7 @@ const AGENT_REQUEST_TIMEOUT = parseInt(
   10,
 );
 import {
+  type CancelInboxRequestPayload,
   InboxRequestResult,
   type LlmRuntimeSnapshot,
   PendingInboxRequest,
@@ -22,7 +23,10 @@ import {
 import { processTaskPayload } from './ipc-task-handler.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import { reserveBillingForRequest } from '../modules/billing/plans.js';
+import {
+  reserveBillingForRequest,
+  settleBillingReservation,
+} from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   resolveUserLlmRuntime,
@@ -79,6 +83,99 @@ const pendingInboxRequests = new Map<string, PendingInboxRequest>();
 /** AI Chat 专属的 pending 请求 Map（完全隔离） */
 const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<string, { running: boolean; redis: Redis }>();
+
+function buildAiChatCancelPayload(input: {
+  requestId: string;
+  accountId: string;
+  sessionId: string;
+  reason?: string;
+}): string {
+  const payload: CancelInboxRequestPayload = {
+    type: 'cancel',
+    requestId: input.requestId,
+    accountId: input.accountId,
+    sessionId: input.sessionId,
+    reason: input.reason,
+    timestamp: new Date().toISOString(),
+  };
+  return JSON.stringify(payload);
+}
+
+/**
+ * 取消指定 AI Chat 会话当前正在执行的请求。
+ *
+ * @param sessionId 站内 AI Chat 会话 ID。
+ * @param accountId 会话所属运行时账号 ID；当当前 API 进程没有 pending 内存态时用于定位 cancel 队列。
+ * @param reason 取消原因，写入 cancel payload 便于运行时日志追踪。
+ * @returns 找到并取消了 active pending request 时返回 true，否则返回 false。
+ */
+export async function cancelAiChatSessionRequest(
+  sessionId: string,
+  accountId?: string,
+  reason = 'user_stop',
+): Promise<boolean> {
+  const processingKey = `session:processing:${sessionId}`;
+  const requestId = await getRedis().get(processingKey);
+  if (!requestId) {
+    return false;
+  }
+
+  const pending = pendingAiChatRequests.get(requestId);
+  if (!pending?.sessionId || pending.sessionId !== sessionId) {
+    if (pending) {
+      return false;
+    }
+  }
+  const runtimeAccountId = pending?.accountId ?? accountId;
+  if (!runtimeAccountId) {
+    return false;
+  }
+
+  if (pending) {
+    clearTimeout(pending.timeout);
+    pendingAiChatRequests.delete(requestId);
+  }
+  await getRedis().del(processingKey);
+  if (pending) {
+    await settleBillingReservation({
+      requestId,
+      runtime: pending.llmRuntime,
+      promptTokens: 0,
+      completionTokens: 0,
+    }).catch((err) => {
+      logger.warn(
+        { accountId: pending.accountId, requestId, err },
+        'AI Chat 取消时结算预留失败',
+      );
+    });
+  }
+  await getRedis().lpush(
+    `ipc:${runtimeAccountId}:cancel`,
+    buildAiChatCancelPayload({
+      requestId,
+      accountId: runtimeAccountId,
+      sessionId,
+      reason,
+    }),
+  );
+  pending?.resolve({
+    requestId,
+    status: 'error',
+    text: '',
+    error: 'cancelled',
+    publicErrorText: '',
+    publicReasonCode: reason,
+    metadata: {
+      kind: 'cancelled',
+      turn_complete: false,
+    },
+  });
+  logger.info(
+    { accountId: runtimeAccountId, requestId, sessionId, reason },
+    'AI Chat 请求已标记取消',
+  );
+  return true;
+}
 
 async function getOwnerByRuntimeId(
   runtimeId: string,
@@ -349,6 +446,18 @@ export function _resetIpcWorkerForTests(): void {
   }
   accountListeners.clear();
   ipcWorkerRunning = false;
+}
+
+/**
+ * 暴露 AI Chat pending 请求表给单元测试断言。
+ *
+ * @returns 当前进程内的 AI Chat pending request Map。
+ */
+export function __getPendingAiChatRequestsForTests(): Map<
+  string,
+  PendingInboxRequest
+> {
+  return pendingAiChatRequests;
 }
 
 /** AI Chat 请求超时时间（默认 30 分钟） */

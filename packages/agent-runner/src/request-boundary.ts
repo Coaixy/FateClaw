@@ -29,6 +29,10 @@ export async function executeContainerInput(
   containerInput: ContainerInput,
   requestScope: RequestScope = createRequestScope(),
   depsOverride?: AgentRuntimeDeps,
+  options?: {
+    /** Pi session 就绪后向宿主暴露中断当前 turn 的控制面。 */
+    onSessionReady?: (sessionControls: { abort: () => Promise<void> }) => void;
+  },
 ): Promise<ContainerOutput> {
   const sessionId = buildSessionId(containerInput.sessionId);
   const runtime = createRequestRuntime({ deps: depsOverride });
@@ -58,6 +62,7 @@ export async function executeContainerInput(
       llmRuntime,
       runtime,
       requestScope,
+      onSessionReady: options?.onSessionReady,
     });
 
     const transcript = listTranscriptEvents(requestScope);

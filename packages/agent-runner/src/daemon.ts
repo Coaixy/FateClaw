@@ -9,10 +9,15 @@ import {
 } from './request-scope.js';
 import { connectRedis, disconnectRedis, getRedis } from './redis.js';
 import {
+  CancelInboxRequest,
   InboxRequest,
   LlmRuntimeSnapshot,
   OutboxResponse,
 } from './types.js';
+
+type CancelQueueRedis = {
+  rpop: (key: string) => Promise<string | null>;
+};
 
 function isLlmRuntimeSnapshot(
   value: unknown,
@@ -66,9 +71,91 @@ function parseInboxRequest(raw: string): InboxRequest {
   return parsed as InboxRequest;
 }
 
+function parseCancelInboxRequest(raw: string): CancelInboxRequest | null {
+  const parsed = JSON.parse(raw) as Partial<CancelInboxRequest>;
+  if (
+    parsed.type !== 'cancel' ||
+    !parsed.requestId ||
+    !parsed.accountId
+  ) {
+    return null;
+  }
+
+  return parsed as CancelInboxRequest;
+}
+
+async function drainCancelRequests(
+  accountId: string,
+  activeSessions: Map<string, { abort: () => Promise<void> }>,
+  pendingCancelRequests: Set<string>,
+  redis: CancelQueueRedis = getRedis(),
+): Promise<void> {
+  while (true) {
+    const raw = await redis.rpop(`ipc:${accountId}:cancel`);
+    if (typeof raw !== 'string') {
+      return;
+    }
+
+    try {
+      const cancelRequest = parseCancelInboxRequest(raw);
+      if (!cancelRequest) {
+        log('忽略无效的 cancel 请求');
+        continue;
+      }
+      if (cancelRequest.accountId !== accountId) {
+        log(
+          `忽略账号不匹配的 cancel 请求 expected=${accountId} actual=${cancelRequest.accountId}`,
+        );
+        continue;
+      }
+
+      const activeSession = activeSessions.get(cancelRequest.requestId);
+      if (activeSession) {
+        await activeSession.abort();
+        log(
+          `已中断收件箱请求 requestId=${cancelRequest.requestId} reason=${cancelRequest.reason ?? 'user_stop'}`,
+        );
+      } else {
+        pendingCancelRequests.add(cancelRequest.requestId);
+        log(
+          `收到中断请求，等待活动会话就绪 requestId=${cancelRequest.requestId}`,
+        );
+      }
+    } catch (error) {
+      log(
+        `处理 cancel 请求失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
+/**
+ * 测试专用：从指定 Redis stub 中清空 cancel 队列。
+ *
+ * @param accountId 当前 agent-runner 账号 ID。
+ * @param activeSessions 正在执行的 session 控制表。
+ * @param pendingCancelRequests 尚未等到 session ready 的取消请求 ID 集合。
+ * @param redis 只需实现 rpop 的测试替身。
+ */
+export async function __drainCancelRequestsForTests(
+  accountId: string,
+  activeSessions: Map<string, { abort: () => Promise<void> }>,
+  pendingCancelRequests: Set<string>,
+  redis: { rpop: (key: string) => Promise<string | null> },
+): Promise<void> {
+  await drainCancelRequests(
+    accountId,
+    activeSessions,
+    pendingCancelRequests,
+    redis,
+  );
+}
+
 async function processInboxMessage(
   accountId: string,
   raw: string,
+  activeSessions: Map<string, { abort: () => Promise<void> }>,
+  pendingCancelRequests: Set<string>,
 ): Promise<void> {
   let request: InboxRequest | undefined;
   const requestScope = createRequestScope();
@@ -104,6 +191,15 @@ async function processInboxMessage(
         outboxQueue: request.outboxQueue,
       },
       requestScope,
+      undefined,
+      {
+        onSessionReady(sessionControls) {
+          activeSessions.set(request!.requestId, sessionControls);
+          if (pendingCancelRequests.delete(request!.requestId)) {
+            void sessionControls.abort();
+          }
+        },
+      },
     );
 
     const response: OutboxResponse = {
@@ -177,6 +273,10 @@ async function processInboxMessage(
       }
     }
   } finally {
+    if (request?.requestId) {
+      activeSessions.delete(request.requestId);
+      pendingCancelRequests.delete(request.requestId);
+    }
     setRequestId(requestScope, undefined);
   }
 }
@@ -196,6 +296,8 @@ async function loop(): Promise<void> {
   // 然后清理 Redis/DB 连接。避免 in-flight 请求被强杀导致响应丢失。
   let shuttingDown = false;
   let inFlight: Promise<void> | null = null;
+  const activeSessions = new Map<string, { abort: () => Promise<void> }>();
+  const pendingCancelRequests = new Set<string>();
   const SHUTDOWN_DRAIN_MS = 30_000;
 
   const onExit = async (signal: string) => {
@@ -232,9 +334,29 @@ async function loop(): Promise<void> {
       if (!result || shuttingDown) continue;
 
       const [, raw] = result;
-      inFlight = processInboxMessage(ctx.accountId, raw);
+      inFlight = processInboxMessage(
+        ctx.accountId,
+        raw,
+        activeSessions,
+        pendingCancelRequests,
+      );
+      let processingCurrent = true;
       try {
-        await inFlight;
+        await Promise.race([
+          inFlight.finally(() => {
+            processingCurrent = false;
+          }),
+          (async () => {
+            while (processingCurrent && !shuttingDown) {
+              await drainCancelRequests(
+                ctx.accountId,
+                activeSessions,
+                pendingCancelRequests,
+              );
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+          })(),
+        ]);
       } finally {
         inFlight = null;
       }

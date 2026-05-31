@@ -33,6 +33,10 @@ export type ChatSessionSendOptions =
   | NormalChatSessionSendOptions
   | UserPastedBoardChatSessionSendOptions;
 
+export type ChatSessionRequestOptions = {
+  signal?: AbortSignal;
+};
+
 export type ChatSessionStreamEvent =
   | { type: 'connected'; timestamp?: string; sessionId?: string }
   | {
@@ -179,6 +183,11 @@ export const chatSessionsApi = {
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
       { method: 'DELETE' },
     ).finally(clearChatSessionsCache),
+  cancel: (sessionId: string) =>
+    requestJson<SuccessResponse>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages/cancel`,
+      { method: 'POST' },
+    ),
   messages: (sessionId: string, limit = 50, before?: string) =>
     requestJson<SessionMessageListResponseDto>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
@@ -187,6 +196,7 @@ export const chatSessionsApi = {
     sessionId: string,
     content: string,
     options?: ChatSessionSendOptions,
+    requestOptions?: ChatSessionRequestOptions,
   ) => {
     let body: ChatSessionSendRequestDto;
 
@@ -209,13 +219,19 @@ export const chatSessionsApi = {
       };
     }
 
+    const fetchOptions: Parameters<typeof requestJson>[1] = {
+      method: 'POST',
+      body: JSON.stringify(body),
+      exposeServerErrorMessage: true,
+    };
+
+    if (requestOptions?.signal) {
+      fetchOptions.signal = requestOptions.signal;
+    }
+
     return requestJson<ChatSessionSendResponseDto>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages`,
-      {
-        method: 'POST',
-        body: JSON.stringify(body),
-        exposeServerErrorMessage: true,
-      },
+      fetchOptions,
     );
   },
 };

@@ -137,6 +137,8 @@ describe('runPiSession', () => {
         }) => void)
       | null = null;
     let capturedPrompt = '';
+    const abort = vi.fn(async () => {});
+    const onSessionReady = vi.fn();
     let createArgs: {
       noTools?: unknown;
       tools?: string[];
@@ -189,6 +191,7 @@ describe('runPiSession', () => {
               toolResults: [],
             });
           },
+          abort,
           dispose: vi.fn(),
         },
       };
@@ -201,8 +204,12 @@ describe('runPiSession', () => {
       containerInput: createInput(),
       runtime,
       requestScope,
+      onSessionReady,
     });
 
+    expect(onSessionReady).toHaveBeenCalledTimes(1);
+    await onSessionReady.mock.calls[0][0].abort();
+    expect(abort).toHaveBeenCalledTimes(1);
     expect(result.text).toBe('assistant fallback');
     expect(result.usage).toEqual({
       promptTokens: 21,

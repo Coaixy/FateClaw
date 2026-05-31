@@ -13,6 +13,7 @@ const {
   mockTouchChatSession,
   mockUpdateChatSessionTitle,
   mockDispatchAiChatPrompt,
+  mockCancelAiChatSessionRequest,
   mockBuildStructuredInputForSession,
 } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
@@ -27,6 +28,7 @@ const {
   mockTouchChatSession: vi.fn(),
   mockUpdateChatSessionTitle: vi.fn(),
   mockDispatchAiChatPrompt: vi.fn(),
+  mockCancelAiChatSessionRequest: vi.fn(),
   mockBuildStructuredInputForSession: vi.fn(),
 }));
 
@@ -70,6 +72,10 @@ vi.mock('../../runtime/resident-agent.js', () => ({
   dispatchAiChatPrompt: mockDispatchAiChatPrompt,
 }));
 
+vi.mock('../../runtime/ipc-worker.js', () => ({
+  cancelAiChatSessionRequest: mockCancelAiChatSessionRequest,
+}));
+
 vi.mock('./message-handler.js', () => ({
   buildStructuredInputForSession: mockBuildStructuredInputForSession,
 }));
@@ -102,7 +108,10 @@ vi.mock('../system/system-config.js', () => ({
   })),
 }));
 
-import { sendOwnedChatSessionMessage } from './chat-session-service.js';
+import {
+  cancelOwnedChatSessionMessage,
+  sendOwnedChatSessionMessage,
+} from './chat-session-service.js';
 
 describe('chat-session-service selected board context', () => {
   beforeEach(() => {
@@ -195,6 +204,20 @@ describe('chat-session-service selected board context', () => {
       requestId: 'request-1',
       metadata: null,
     });
+    mockCancelAiChatSessionRequest.mockResolvedValue(true);
+  });
+
+  it('cancels the owned active AI chat request', async () => {
+    const result = await cancelOwnedChatSessionMessage('user-1', 'session-1');
+
+    expect(result).toEqual({
+      ok: true,
+      data: { success: true },
+    });
+    expect(mockCancelAiChatSessionRequest).toHaveBeenCalledWith(
+      'session-1',
+      'web:user-1',
+    );
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {

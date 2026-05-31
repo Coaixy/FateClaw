@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
   ChevronRight,
+  CircleStop,
   ClipboardPaste,
   Loader2,
   Sparkles,
@@ -54,6 +55,7 @@ type PasteChoiceSelection = {
   readonly end: number;
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
+type ReplyStatus = 'completed' | 'interrupted';
 const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
 
 export function AiChatWorkspace() {
@@ -113,8 +115,9 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceText, setPasteChoiceText] = useState('');
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
-  const [replyCompleted, setReplyCompleted] = useState(false);
+  const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
   const wasSendingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
 
   const chatMessages = useChatMessages({
     chatAvailable,
@@ -271,6 +274,11 @@ function AiChatWorkspaceContent() {
     ],
   );
 
+  const handleStopGenerating = useCallback(() => {
+    stopRequestedRef.current = true;
+    chatMessages.stopGenerating();
+  }, [chatMessages]);
+
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(event.target.value);
   };
@@ -406,34 +414,34 @@ function AiChatWorkspaceContent() {
   useEffect(() => {
     if (chatMessages.sending) {
       wasSendingRef.current = true;
-      setReplyCompleted(false);
+      setReplyStatus(null);
       return;
     }
 
     if (wasSendingRef.current) {
       wasSendingRef.current = false;
-      setReplyCompleted(true);
+      setReplyStatus(stopRequestedRef.current ? 'interrupted' : 'completed');
+      stopRequestedRef.current = false;
     }
   }, [chatMessages.sending]);
 
   useEffect(() => {
-    if (!chatMessages.sending) {
-      wasSendingRef.current = false;
-      setReplyCompleted(false);
-    }
-  }, [chatMessages.sending, selectedSession]);
+    wasSendingRef.current = false;
+    stopRequestedRef.current = false;
+    setReplyStatus(null);
+  }, [selectedSession]);
 
   useEffect(() => {
-    if (!replyCompleted) return;
+    if (!replyStatus) return;
 
     const timeoutId = window.setTimeout(() => {
-      setReplyCompleted(false);
+      setReplyStatus(null);
     }, 2400);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [replyCompleted]);
+  }, [replyStatus]);
 
   const handlePaipanCommitted = useCallback(
     async (result: PaipanCommitResponse) => {
@@ -557,6 +565,7 @@ function AiChatWorkspaceContent() {
         setPasteChoiceSelection(null);
       }}
       onSend={() => void handleSend()}
+      onStop={handleStopGenerating}
     />
   );
 
@@ -608,8 +617,8 @@ function AiChatWorkspaceContent() {
           showCenteredComposer={showCenteredComposer}
           composer={showCenteredComposer ? centeredComposer : composer}
         />
-        {!showCenteredComposer && replyCompleted && (
-          <AiChatFloatingStatus completed={replyCompleted} />
+        {!showCenteredComposer && replyStatus && (
+          <AiChatFloatingStatus status={replyStatus} />
         )}
       </div>
 
@@ -677,15 +686,14 @@ function AiChatWorkspaceContent() {
   );
 }
 
-function AiChatFloatingStatus({ completed }: { completed: boolean }) {
-  const statusLabel = completed ? '回答完成' : null;
-
-  if (!statusLabel) return null;
+function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
+  const statusLabel = status === 'completed' ? '回答完成' : '已停止输出';
+  const StatusIcon = status === 'completed' ? CheckCircle2 : CircleStop;
 
   return (
     <div className="pointer-events-none sticky bottom-2 z-10 mt-2 flex justify-center px-3">
       <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/95 px-2.5 text-[10px] text-muted shadow-sm backdrop-blur transition-colors">
-        <CheckCircle2 size={12} />
+        <StatusIcon size={12} />
         <span>{statusLabel}</span>
       </span>
     </div>

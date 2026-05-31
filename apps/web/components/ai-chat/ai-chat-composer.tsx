@@ -6,7 +6,7 @@ import type {
   KeyboardEvent,
   RefObject,
 } from 'react';
-import { ClipboardPaste, Send, X } from 'lucide-react';
+import { ClipboardPaste, Send, Square, X } from 'lucide-react';
 
 interface PasteChoicePanelProps {
   preview?: string;
@@ -31,6 +31,7 @@ export function AiChatComposer({
   onKeepPasteAsMessage,
   onDismissPasteChoice,
   onSend,
+  onStop,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   input: string;
@@ -47,8 +48,10 @@ export function AiChatComposer({
   onKeepPasteAsMessage: () => void;
   onDismissPasteChoice: () => void;
   onSend: () => void;
+  onStop: () => void;
 }) {
   const composerDisabled = sending || Boolean(disabled);
+  const actionDisabled = sending ? false : !input.trim() || Boolean(disabled);
   return (
     <div className="relative">
       {pasteChoiceOpen && (
@@ -98,14 +101,18 @@ export function AiChatComposer({
           }}
         />
         <button
-          onClick={onSend}
-          disabled={!input.trim() || composerDisabled}
+          onClick={sending ? onStop : onSend}
+          disabled={actionDisabled}
           className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${
             sending ? 'scale-110' : 'hover:scale-105'
           }`}
           aria-label={sending ? '停止' : '发送'}
         >
-          <Send size={14} />
+          {sending ? (
+            <Square size={13} className="fill-current" />
+          ) : (
+            <Send size={14} />
+          )}
         </button>
       </div>
     </div>

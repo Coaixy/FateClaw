@@ -12,6 +12,7 @@ import {
   buildChatSessionStreamUrl,
   chatSessionsApi,
   type ChatSession,
+  type ChatSessionRequestOptions,
   type ChatSessionSendOptions,
   type ChatSessionStreamEvent,
   type Message,
@@ -32,6 +33,7 @@ const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
 type ChatSessionSender = typeof chatSessionsApi.send;
+type ChatSessionSendRequestOptions = Pick<ChatSessionRequestOptions, 'signal'>;
 type LoadMessagesResult =
   | {
       ok: true;
@@ -139,7 +141,11 @@ export async function sendChatSessionMessageWithOptions(
   sessionId: string,
   content: string,
   sendOptions?: ChatMessageSendOptions,
+  requestOptions?: ChatSessionSendRequestOptions,
 ) {
+  if (requestOptions) {
+    return sender(sessionId, content, sendOptions, requestOptions);
+  }
   return sender(sessionId, content, sendOptions);
 }
 
@@ -158,6 +164,7 @@ export function useChatMessages(options: {
   const [loadedSessionId, setLoadedSessionId] = useState('');
   const [continuationBlocked, setContinuationBlocked] = useState(false);
   const [continuationBlockMessage, setContinuationBlockMessage] = useState('');
+  const [streamReconnectNonce, setStreamReconnectNonce] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollInFlightRef = useRef(false);
@@ -169,6 +176,8 @@ export function useChatMessages(options: {
   const shouldAutoScrollRef = useRef(true);
   const creatingRef = useRef(false);
   const streamSocketRef = useRef<WebSocket | null>(null);
+  const sendAbortControllerRef = useRef<AbortController | null>(null);
+  const interruptedStreamSessionRef = useRef<string | null>(null);
   const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
     [],
   );
@@ -183,6 +192,11 @@ export function useChatMessages(options: {
     options.selectedSession &&
       loadedSessionId === options.selectedSession &&
       continuationBlocked,
+  );
+
+  const isStreamInterrupted = useCallback(
+    (sessionId: string) => interruptedStreamSessionRef.current === sessionId,
+    [],
   );
 
   const getActiveStreamingMessageIds = useCallback(
@@ -255,6 +269,15 @@ export function useChatMessages(options: {
         databaseProcessingRef.current = data.processing;
 
         const nextMessages = data.messages.reverse();
+        if (isBackground && isStreamInterrupted(sessionId)) {
+          databaseProcessingRef.current = false;
+          return {
+            ok: true,
+            active: true,
+            messages: nextMessages,
+            processing: false,
+          };
+        }
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
         const streamingResolved =
           isBackground &&
@@ -310,6 +333,7 @@ export function useChatMessages(options: {
     },
     [
       getActiveStreamingMessageIds,
+      isStreamInterrupted,
       resetStreamingMessageRefs,
       updateAwaitingRefresh,
       updateProcessing,
@@ -596,12 +620,17 @@ export function useChatMessages(options: {
     };
 
     const hasRecoverableStreamActivity = () =>
-      sendingRef.current ||
-      databaseProcessingRef.current ||
-      awaitingRefreshRef.current;
+      !isStreamInterrupted(sessionId) &&
+      (sendingRef.current ||
+        databaseProcessingRef.current ||
+        awaitingRefreshRef.current);
 
     const scheduleReconnect = () => {
-      if (closedByEffect || activeSessionRef.current !== sessionId) {
+      if (
+        closedByEffect ||
+        activeSessionRef.current !== sessionId ||
+        isStreamInterrupted(sessionId)
+      ) {
         return;
       }
       if (reconnectAttempt >= CHAT_STREAM_RECONNECT_MAX_ATTEMPTS) {
@@ -618,7 +647,11 @@ export function useChatMessages(options: {
     };
 
     const handleStreamMessage = (event: MessageEvent) => {
-      if (activeSessionRef.current !== sessionId) return;
+      if (
+        activeSessionRef.current !== sessionId ||
+        isStreamInterrupted(sessionId)
+      )
+        return;
       let payload: ChatSessionStreamEvent;
       try {
         payload = JSON.parse(event.data) as ChatSessionStreamEvent;
@@ -819,7 +852,11 @@ export function useChatMessages(options: {
     };
 
     const connectStream = () => {
-      if (closedByEffect || activeSessionRef.current !== sessionId) {
+      if (
+        closedByEffect ||
+        activeSessionRef.current !== sessionId ||
+        isStreamInterrupted(sessionId)
+      ) {
         return;
       }
 
@@ -874,9 +911,11 @@ export function useChatMessages(options: {
   }, [
     beginStreamingAssistantTurn,
     getActiveStreamingMessageIds,
+    isStreamInterrupted,
     loadMessages,
     options.selectedSession,
     resetStreamingMessageRefs,
+    streamReconnectNonce,
     updateAwaitingRefresh,
     updateProcessing,
     upsertLatestStreamingAssistantMessage,
@@ -912,6 +951,33 @@ export function useChatMessages(options: {
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [isPending]);
 
+  const stopGenerating = useCallback(() => {
+    const sessionId = activeSessionRef.current || options.selectedSession;
+    if (sessionId) {
+      interruptedStreamSessionRef.current = sessionId;
+      void chatSessionsApi.cancel(sessionId).catch(() => undefined);
+    }
+
+    sendAbortControllerRef.current?.abort();
+    const socket = streamSocketRef.current;
+    if (socket) {
+      streamSocketRef.current = null;
+      socket.close();
+    }
+
+    databaseProcessingRef.current = false;
+    resetStreamingMessageRefs();
+    setSending(false);
+    updateProcessing(false);
+    updateAwaitingRefresh(false);
+    inputRef.current?.focus();
+  }, [
+    options.selectedSession,
+    resetStreamingMessageRefs,
+    updateAwaitingRefresh,
+    updateProcessing,
+  ]);
+
   const sendMessageWithOptions = useCallback(
     async (text: string, sendOptions?: ChatMessageSendOptions) => {
       const content = text.trim();
@@ -919,6 +985,13 @@ export function useChatMessages(options: {
       if (activeContinuationBlocked) return false;
       if (!options.selectedSession && !options.chatAvailable) return false;
 
+      const previousInterruptedSession = interruptedStreamSessionRef.current;
+      interruptedStreamSessionRef.current = null;
+      if (previousInterruptedSession) {
+        setStreamReconnectNonce((value) => value + 1);
+      }
+      const abortController = new AbortController();
+      sendAbortControllerRef.current = abortController;
       setSending(true);
       shouldAutoScrollRef.current = true;
 
@@ -933,6 +1006,7 @@ export function useChatMessages(options: {
           try {
             const newSession = await options.createSession();
             if (!newSession) return false;
+            if (abortController.signal.aborted) return false;
 
             sessionId = newSession.id;
             activeSessionRef.current = sessionId;
@@ -957,6 +1031,7 @@ export function useChatMessages(options: {
         };
 
         setMessages((previous) => [...previous, optimisticUser]);
+        if (abortController.signal.aborted) return false;
 
         try {
           const { text: replyText, session_title: sessionTitle } =
@@ -965,6 +1040,7 @@ export function useChatMessages(options: {
               sessionId,
               content,
               sendOptions,
+              { signal: abortController.signal },
             );
 
           const refreshed = await loadMessages(sessionId, { background: true });
@@ -999,6 +1075,12 @@ export function useChatMessages(options: {
           });
           return true;
         } catch (error) {
+          if (abortController.signal.aborted) {
+            updateProcessing(false);
+            updateAwaitingRefresh(false);
+            return false;
+          }
+
           if (isRecoverableChatSendInterruption(error)) {
             const refreshed = await loadMessages(sessionId, {
               background: true,
@@ -1041,11 +1123,21 @@ export function useChatMessages(options: {
           return false;
         }
       } finally {
+        if (sendAbortControllerRef.current === abortController) {
+          sendAbortControllerRef.current = null;
+        }
         setSending(false);
         inputRef.current?.focus();
       }
     },
-    [activeContinuationBlocked, isPending, loadMessages, options],
+    [
+      activeContinuationBlocked,
+      isPending,
+      loadMessages,
+      options,
+      updateAwaitingRefresh,
+      updateProcessing,
+    ],
   );
 
   const sendMessage = useCallback(
@@ -1073,6 +1165,7 @@ export function useChatMessages(options: {
     inputRef,
     sendMessage,
     sendMessageWithOptions,
+    stopGenerating,
     refreshMessages,
   };
 }

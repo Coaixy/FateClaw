@@ -32,6 +32,7 @@ import { incrementDailyMessageCount } from '../../infrastructure/daily-usage.js'
 import { logger } from '../../infrastructure/logger.js';
 import { getRedis } from '../../infrastructure/redis.js';
 import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
+import { cancelAiChatSessionRequest } from '../../runtime/ipc-worker.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -315,6 +316,29 @@ export async function getOwnedChatSessionQueryProcessSource(
     request_id: requestId,
     trace_events: Array.isArray(log.trace_events) ? log.trace_events : [],
   });
+}
+
+/**
+ * 中断当前用户拥有的 AI Chat 会话输出。
+ *
+ * @param userId 当前登录平台用户 ID。
+ * @param sessionId 需要中断的 AI Chat 会话 ID。
+ * @returns 成功响应；没有正在执行的请求也视为幂等成功。
+ */
+export async function cancelOwnedChatSessionMessage(
+  userId: string,
+  sessionId: string,
+): Promise<ServiceResult<SuccessResponse>> {
+  const sessionResult = await getOwnedSession(userId, sessionId);
+  if (!sessionResult.ok) {
+    return sessionResult;
+  }
+
+  await cancelAiChatSessionRequest(
+    sessionResult.data.id,
+    sessionResult.data.account_id,
+  );
+  return ok({ success: true });
 }
 
 export async function sendOwnedChatSessionMessage(

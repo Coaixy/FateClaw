@@ -75,6 +75,16 @@ export interface PendingInboxRequest {
   timeout: NodeJS.Timeout;
 }
 
+/** AI Chat 取消请求 payload，用于通知 agent-runner 中断指定 request。 */
+export interface CancelInboxRequestPayload {
+  type: 'cancel';
+  requestId?: string;
+  accountId?: string;
+  sessionId?: string;
+  reason?: string;
+  timestamp?: string;
+}
+
 // ─── Payload 接口 ─────────────────────────────────────
 
 export interface SendMessageIpcPayload {

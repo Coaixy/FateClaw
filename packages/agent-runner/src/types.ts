@@ -107,6 +107,20 @@ export interface ChatTaskInboxRequest {
 
 export type InboxRequest = ChatTaskInboxRequest;
 
+/**
+ * 宿主机请求中断正在执行的 AI Chat。
+ *
+ * requestId 用于匹配当前 agent-runner 进程内的 active session。
+ */
+export interface CancelInboxRequest {
+  type: 'cancel';
+  requestId: string;
+  accountId: string;
+  sessionId?: string;
+  reason?: string;
+  timestamp?: string;
+}
+
 /** API 返回的真实 token 用量（多轮累加后的总和）。 */
 export interface TokenUsage {
   promptTokens: number;
