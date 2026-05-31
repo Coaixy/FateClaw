@@ -22,7 +22,10 @@ import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { PaipanSheet } from '@/components/ai-chat/paipan-sheet';
 import { PaipanSkillPickerSheet } from '@/components/ai-chat/paipan-skill-picker-sheet';
-import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
+import {
+  PaipanSkillRail,
+  type EnabledSkillSummary,
+} from '@/components/ai-chat/paipan-skill-rail';
 import { PastedBoardSheet } from '@/components/ai-chat/pasted-board-sheet';
 import {
   shouldPromptForPastedBoard,
@@ -41,6 +44,7 @@ import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
+import { skillsApi } from '@/features/skills/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
 
@@ -96,6 +100,8 @@ function AiChatWorkspaceContent() {
   const [paipanSkillPickerOpen, setPaipanSkillPickerOpen] = useState(false);
   const [paipanCatalog, setPaipanCatalog] = useState<PaipanCatalogItem[]>([]);
   const [paipanCatalogLoading, setPaipanCatalogLoading] = useState(false);
+  const [enabledSkills, setEnabledSkills] = useState<EnabledSkillSummary[]>([]);
+  const [enabledSkillsLoading, setEnabledSkillsLoading] = useState(false);
   const [preselectedPaipanSkill, setPreselectedPaipanSkill] = useState<
     string | null
   >(null);
@@ -155,6 +161,57 @@ function AiChatWorkspaceContent() {
   useEffect(() => {
     setPaipanSkillPickerOpen(false);
   }, [chatAvailable]);
+
+  useEffect(() => {
+    if (!chatAvailable) {
+      setEnabledSkills([]);
+      setEnabledSkillsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setEnabledSkillsLoading(true);
+
+    // AI 对话首页只展示已开启 Skill 摘要，具体启停仍在 Studio 中管理。
+    void skillsApi
+      .userList()
+      .then((result) => {
+        if (cancelled) return;
+        setEnabledSkills([
+          ...(result.own ?? [])
+            .filter((skill) => skill.enabled)
+            .map((skill) => ({
+              id: skill.id,
+              name: skill.skill_name,
+              source: 'own' as const,
+            })),
+          ...(result.subscribed ?? [])
+            .filter((skill) => skill.subscription_enabled)
+            .map((skill) => ({
+              id: skill.subscription_id,
+              name: skill.skill_name,
+              source: 'subscribed' as const,
+            })),
+        ]);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setEnabledSkills([]);
+        toast(
+          'error',
+          error instanceof Error ? error.message : '加载已开启 Skill 失败',
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEnabledSkillsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatAvailable, toast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,6 +581,8 @@ function AiChatWorkspaceContent() {
         <PaipanSkillRail
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
+          enabledSkills={enabledSkills}
+          enabledSkillsLoading={enabledSkillsLoading}
           disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
