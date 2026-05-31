@@ -5,7 +5,7 @@
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
-    "build": "pnpm run build:api",
+    "build": "pnpm run build:all",
     "build:api": "pnpm --filter @fateclaw/api build",
     "build:agent": "pnpm --filter fateclaw-agent-runner build",
     "build:web": "pnpm --filter fateclaw-web build",
