@@ -18,6 +18,7 @@ export function MarkdownContent({ content, isBot }: MarkdownContentProps) {
   const blockquoteBorder = isBot ? 'border-primary/50' : 'border-canvas/30';
   const textMuted = isBot ? 'text-muted' : 'text-canvas/60';
   const borderColor = isBot ? 'border-hairline' : 'border-canvas/20';
+  const listMarker = isBot ? 'marker:text-muted' : 'marker:text-canvas/70';
 
   const components: Components = {
     // 段落
@@ -36,13 +37,17 @@ export function MarkdownContent({ content, isBot }: MarkdownContentProps) {
     ),
     // 无序/有序列表
     ul: ({ children }) => (
-      <ul className="list-disc list-inside mb-2 space-y-0.5 pl-1">{children}</ul>
+      <ul className={`mb-2 list-outside list-disc space-y-0.5 pl-5 ${listMarker}`}>
+        {children}
+      </ul>
     ),
     ol: ({ children }) => (
-      <ol className="list-decimal list-inside mb-2 space-y-0.5 pl-1">{children}</ol>
+      <ol className={`mb-2 list-outside list-decimal space-y-0.5 pl-5 ${listMarker}`}>
+        {children}
+      </ol>
     ),
     li: ({ children }) => (
-      <li className="break-words leading-relaxed">{children}</li>
+      <li className="break-words pl-0.5 leading-relaxed [&>p]:mb-0">{children}</li>
     ),
     // 行内代码
     code: ({ children, className }) => {
