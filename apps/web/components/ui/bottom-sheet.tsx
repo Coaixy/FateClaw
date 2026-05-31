@@ -165,6 +165,12 @@ export function BottomSheet({
   const panelRadiusClass = isFullscreen
     ? 'rounded-none sm:rounded-3xl'
     : 'rounded-t-3xl sm:rounded-3xl';
+  // 部分移动端 WebView 不会稳定上报 safe-area，给全屏弹层顶部控制区保留最小可触达距离。
+  const mobileDragHandleStyle = {
+    paddingTop: isFullscreen
+      ? 'max(calc(env(safe-area-inset-top, 0px) + 0.5rem), 2rem)'
+      : 'calc(env(safe-area-inset-top, 0px) + 0.5rem)',
+  };
 
   return (
     <div
@@ -187,7 +193,10 @@ export function BottomSheet({
         style={{ transform: `translateY(${dragY}px)`, transition: isDragging.current ? 'none' : 'transform 0.3s ease-out' }}
       >
         {/* 移动端 drag handle 指示条 */}
-        <div className="lg:hidden flex justify-center pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-1">
+        <div
+          className="lg:hidden flex justify-center pb-1"
+          style={mobileDragHandleStyle}
+        >
           <div className="w-10 h-1 rounded-full bg-hairline" />
         </div>
 
