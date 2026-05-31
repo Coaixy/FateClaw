@@ -6,7 +6,10 @@ export type UserRole = 'consumer' | 'creator' | 'both' | 'admin';
 
 export interface UserDto {
   id: string;
+  /** 普通用户态只返回脱敏手机号，完整手机号不得下发到前端。 */
   phone: string;
+  /** 与 phone 相同的显式脱敏展示字段，便于前端迁移到语义化命名。 */
+  phone_masked: string;
   phone_verified: boolean;
   role: UserRole;
   purchased_coins: number;

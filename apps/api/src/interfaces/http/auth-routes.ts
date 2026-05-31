@@ -12,6 +12,8 @@ import {
   getUserSafe,
   changePassword,
   resetPasswordBySMS,
+  getCurrentUserVerifiedPhone,
+  resetCurrentUserPasswordBySMS,
 } from '../../modules/user/auth-service.js';
 import {
   getSMSCaptchaPublicMessage,
@@ -62,6 +64,16 @@ const ResetPasswordSchema = z.object({
   smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
 });
 
+const SendCurrentUserSMSCaptchaSchema = z.object({
+  captcha_token: z.string().min(1),
+  captcha_answer: z.string().min(1),
+});
+
+const ResetCurrentUserPasswordSchema = z.object({
+  newPassword: z.string().min(8, '新密码至少 8 位'),
+  smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
+});
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/captcha —— 获取新的图形验证码
   app.get('/captcha', async (request): Promise<CaptchaChallengeDto> => {
@@ -95,6 +107,41 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return { success: true };
     } catch (err) {
       request.log.error({ err }, 'send sms captcha failed');
+      return reply.code(400).send({
+        error: getSMSCaptchaPublicMessage(err),
+      });
+    }
+  });
+
+  // POST /api/auth/me/send-sms-captcha
+  // 登录态找回密码验证码：手机号由后端按当前用户解析，避免完整手机号下发前端。
+  app.post('/me/send-sms-captcha', async (request, reply) => {
+    await request.requireAuth();
+    const body = SendCurrentUserSMSCaptchaSchema.parse(request.body);
+
+    const cap = await verifyCaptcha(
+      body.captcha_token,
+      body.captcha_answer,
+      request.ip,
+    );
+    if (!cap.ok) {
+      request.log.warn(
+        { reason: cap.reason },
+        'captcha failed on current user send sms captcha',
+      );
+      return reply.code(400).send({ error: '验证码错误' });
+    }
+
+    try {
+      const phone = await getCurrentUserVerifiedPhone(request.user.userId);
+      await sendSMSCaptcha({
+        type: 0,
+        phoneNumber: phone,
+        clientIp: request.ip,
+      });
+      return { success: true };
+    } catch (err) {
+      request.log.error({ err }, 'send current user sms captcha failed');
       return reply.code(400).send({
         error: getSMSCaptchaPublicMessage(err),
       });
@@ -185,6 +232,29 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     try {
       const user = await resetPasswordBySMS({
         phone: body.phoneNumber,
+        nextPassword: body.newPassword,
+        smsCaptchaCode: body.smsCaptchaCode,
+        clientIp: request.ip,
+      });
+      const token = app.jwt.sign({ userId: user.id }, { expiresIn: '30d' });
+      const safe: UserDto = toUserDto(user);
+      const response: AuthResponseDto = { token, user: safe };
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '重置密码失败';
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  // POST /api/auth/me/reset-password
+  // 登录态短信验证码重置密码：完整手机号只在后端读取。
+  app.post('/me/reset-password', async (request, reply) => {
+    await request.requireAuth();
+    const body = ResetCurrentUserPasswordSchema.parse(request.body);
+
+    try {
+      const user = await resetCurrentUserPasswordBySMS({
+        userId: request.user.userId,
         nextPassword: body.newPassword,
         smsCaptchaCode: body.smsCaptchaCode,
         clientIp: request.ip,

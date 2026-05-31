@@ -83,6 +83,22 @@ export const authApi = {
         smsCaptchaCode,
       } satisfies ResetPasswordRequestDto),
     }),
+  sendCurrentUserSMSCaptcha: (captchaToken: string, captchaAnswer: string) =>
+    requestJson<SendSMSCaptchaResponse>('/api/auth/me/send-sms-captcha', {
+      method: 'POST',
+      body: JSON.stringify({
+        captcha_token: captchaToken,
+        captcha_answer: captchaAnswer,
+      }),
+    }),
+  resetCurrentUserPassword: (nextPassword: string, smsCaptchaCode: string) =>
+    requestJson<AuthResponse>('/api/auth/me/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        newPassword: nextPassword,
+        smsCaptchaCode,
+      }),
+    }),
   me: () => {
     meRequest ??= requestJson<User>('/api/auth/me').finally(() => {
       meRequest = null;

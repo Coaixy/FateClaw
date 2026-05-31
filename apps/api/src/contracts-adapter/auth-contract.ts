@@ -1,15 +1,19 @@
 import type { UserDto } from '@fateclaw/contracts/auth';
 
 import type { User } from '../shared/types.js';
+import { maskPhoneNumber } from '../modules/user/phone.js';
 
 /**
  * 将宿主内部用户模型映射为对外稳定 DTO。
  * 明确裁掉密码哈希等内部字段，避免 route 层手写解构。
+ * 普通用户态只暴露脱敏手机号，完整手机号仅留在后端认证域内部使用。
  */
 export function toUserDto(user: User): UserDto {
+  const phoneMasked = maskPhoneNumber(user.phone);
   return {
     id: user.id,
-    phone: user.phone,
+    phone: phoneMasked,
+    phone_masked: phoneMasked,
     phone_verified: user.phone_verified,
     role: user.role,
     purchased_coins: user.purchased_coins,

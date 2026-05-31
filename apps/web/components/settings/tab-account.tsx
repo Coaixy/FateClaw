@@ -11,7 +11,7 @@ export function TabAccount() {
     {
       icon: Smartphone,
       label: '手机号',
-      value: user?.phone || '尚未绑定',
+      value: user?.phone_masked ?? user?.phone ?? '尚未绑定',
     },
     {
       icon: Calendar,

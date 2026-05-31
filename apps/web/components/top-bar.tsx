@@ -144,7 +144,7 @@ export function TopBar({
 
         {menuOpen && (
           <UserMenuDropdown
-            user={{ phone: user.phone }}
+            user={{ phone: user.phone_masked ?? user.phone }}
             balanceLabel={
               balanceCoins === null
                 ? '加载中…'

@@ -139,6 +139,44 @@ export async function resetPasswordBySMS(params: {
   return updateUserPasswordHash(user.id, nextPasswordHash);
 }
 
+/**
+ * 读取当前登录用户的完整已验证手机号。
+ *
+ * 仅供后端认证流程内部使用，普通用户态 DTO 不应把该值返回给前端。
+ */
+export async function getCurrentUserVerifiedPhone(
+  userId: string,
+): Promise<string> {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+  if (!user.phone_verified) {
+    throw new Error('当前账号手机号尚未完成验证');
+  }
+  return user.phone;
+}
+
+/**
+ * 使用当前登录用户的后端手机号完成短信验证码重置密码。
+ *
+ * 前端只提交验证码和新密码，避免把完整手机号往返传输到浏览器。
+ */
+export async function resetCurrentUserPasswordBySMS(params: {
+  userId: string;
+  nextPassword: string;
+  smsCaptchaCode: string;
+  clientIp: string;
+}): Promise<User> {
+  const phone = await getCurrentUserVerifiedPhone(params.userId);
+  return resetPasswordBySMS({
+    phone,
+    nextPassword: params.nextPassword,
+    smsCaptchaCode: params.smsCaptchaCode,
+    clientIp: params.clientIp,
+  });
+}
+
 export async function getUserSafe(userId: string): Promise<UserDto | null> {
   const user = await getUserById(userId);
   if (!user) return null;

@@ -20,3 +20,14 @@ export function normalizePhoneNumber(raw: string): string {
 export function isValidMainlandChinaPhone(phone: string): boolean {
   return MAINLAND_CHINA_PHONE_REGEX.test(phone);
 }
+
+/**
+ * 面向普通用户态响应的手机号脱敏。
+ *
+ * 后端仍可使用完整手机号完成认证和短信验证，但 auth DTO 不应把完整号码下发到前端。
+ */
+export function maskPhoneNumber(phone: string): string {
+  const normalized = normalizePhoneNumber(phone);
+  if (normalized.length < 7) return '***';
+  return `${normalized.slice(0, 3)}****${normalized.slice(-4)}`;
+}

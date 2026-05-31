@@ -103,7 +103,7 @@ export function TabSecurity() {
   const [recoverError, setRecoverError] = useState('');
   const [recoverSubmitting, setRecoverSubmitting] = useState(false);
 
-  const phone = user?.phone ?? '';
+  const phone = user?.phone_masked ?? user?.phone ?? '';
   const phoneVerified = user?.phone_verified ?? false;
   const canUsePhoneSecurity = Boolean(phone && phoneVerified);
   const phoneStatusLabel = !phone
@@ -206,9 +206,7 @@ export function TabSecurity() {
 
     setSMSSending(true);
     try {
-      await authApi.sendSMSCaptcha(
-        0,
-        phone,
+      await authApi.sendCurrentUserSMSCaptcha(
         captcha.token,
         captchaInput.trim(),
       );
@@ -245,8 +243,7 @@ export function TabSecurity() {
 
     setRecoverSubmitting(true);
     try {
-      const response = await authApi.resetPassword(
-        phone,
+      const response = await authApi.resetCurrentUserPassword(
         recoverPassword,
         smsCode.trim(),
       );
