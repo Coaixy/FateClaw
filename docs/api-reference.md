@@ -57,11 +57,13 @@ Authorization: Bearer <token>
   "token": "eyJhbGciOi...",
   "user": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "phone": "13800138000",
+    "phone": "138****8000",
+    "phone_masked": "138****8000",
     "phone_verified": true,
-    "is_subscribed": 0,
-    "subscribed_at": null,
-    "expires_at": null,
+    "role": "consumer",
+    "purchased_coins": 0,
+    "bonus_coins": 0,
+    "reserved_coins": 0,
     "created_at": "2026-03-28T10:00:00.000Z"
   }
 }
@@ -104,11 +106,13 @@ Authorization: Bearer <token>
   "token": "eyJhbGciOi...",
   "user": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "phone": "13800138000",
+    "phone": "138****8000",
+    "phone_masked": "138****8000",
     "phone_verified": false,
-    "is_subscribed": 1,
-    "subscribed_at": "2026-03-01T00:00:00.000Z",
-    "expires_at": "2026-04-01T00:00:00.000Z",
+    "role": "consumer",
+    "purchased_coins": 100,
+    "bonus_coins": 20,
+    "reserved_coins": 0,
     "created_at": "2026-03-01T00:00:00.000Z"
   }
 }
@@ -131,11 +135,13 @@ Authorization: Bearer <token>
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "phone": "13800138000",
+  "phone": "138****8000",
+  "phone_masked": "138****8000",
   "phone_verified": false,
-  "is_subscribed": 1,
-  "subscribed_at": "2026-03-01T00:00:00.000Z",
-  "expires_at": "2026-04-01T00:00:00.000Z",
+  "role": "consumer",
+  "purchased_coins": 100,
+  "bonus_coins": 20,
+  "reserved_coins": 0,
   "created_at": "2026-03-01T00:00:00.000Z"
 }
 ```
@@ -450,7 +456,6 @@ Authorization: Bearer <token>
 - `POST /api/skills/user/:id/publish` / `DELETE /api/skills/user/:id/publish`：公开上架或取消公开
 - `GET /api/skills/shared/:token`：预览分享 Skill，无需认证
 - `POST /api/skills/subscribe/:token`：订阅分享 Skill
-- `POST /api/skills/subscribe/:token/paid`：付费订阅单个 Skill
 - `PATCH /api/skills/subscribe/:id/toggle`：启用或禁用订阅
 - `DELETE /api/skills/subscribe/:id`：取消订阅
 
@@ -503,29 +508,25 @@ Authorization: Bearer <token>
 - `GET /api/skills/market`：公开 Skill 市场
 - `GET /api/skills/bundles/market`：公开 Bundle 市场
 - `GET /api/skills/subscriptions/mine`：我的订阅
-- `GET /api/skills/creator/:creatorId/bundle`：创作者整包信息
-- `PUT /api/skills/creator/bundle/tiers`：设置整包档位
-- `POST /api/skills/creator/:creatorId/bundle/subscribe`：订阅创作者整包
 
 ---
 
-## Billing 钱包与订阅
+## Billing 钱包与 Token 计费
 
 ### GET /api/billing
 
-查询当前用户的订阅状态。需认证。
+查询当前用户的钱包余额和本月 Token 计费概览。需认证。
 
 **Response 200**
 
 ```json
 {
-  "plan": "pro",
-  "is_active": true,
-  "subscribed_at": "2026-03-01T00:00:00.000Z",
-  "expires_at": "2026-04-01T00:00:00.000Z",
-  "available_cents": 12000,
-  "purchased_cents": 10000,
-  "bonus_cents": 2000
+  "monthly_tokens_used": 905000,
+  "estimated_monthly_total_coins": 12.5,
+  "purchased_coins": 100,
+  "bonus_coins": 20,
+  "reserved_coins": 0,
+  "available_coins": 120
 }
 ```
 
@@ -566,7 +567,7 @@ Authorization: Bearer <token>
     "input_tokens": 24000,
     "output_tokens": 6200,
     "total_tokens": 30200,
-    "official_model_charge_cents": 36
+    "official_model_charge_coins": 0.36
   }
 ]
 ```
@@ -595,22 +596,6 @@ Authorization: Bearer <token>
   ]
 }
 ```
-
----
-
-### POST /api/billing/activate
-
-订阅激活入口当前暂停开放，套餐消费应先通过钱包充值余额后由后续订阅流程扣费。需认证。
-
-**Response 403**
-
-```json
-{
-  "error": "订阅开通暂未开放，请联系管理员"
-}
-```
-
----
 
 ### POST /api/billing/recharge/orders
 

@@ -81,20 +81,7 @@ export async function queryEffectiveUserSkills(
      JOIN user_custom_skills s ON s.id = sub.skill_id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
-     UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'subscribed' as source
-     FROM creator_bundle_subscriptions bs
-     JOIN user_custom_skills s ON s.user_id = bs.creator_id
-     WHERE bs.subscriber_id = $1 AND bs.status = 'active'
-       AND (bs.expires_at IS NULL OR bs.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
-       AND NOT EXISTS (
-         SELECT 1 FROM user_skill_subscriptions sub2
-         WHERE sub2.subscriber_id = $1 AND sub2.skill_id = s.id
-       )`,
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'`,
     [userId],
   );
   return rows as EffectiveUserSkill[];

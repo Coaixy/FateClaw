@@ -41,7 +41,7 @@ export function DailySignInWorkspace() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight">每日签到</h2>
           <p className="mt-1 text-[12px] text-muted">
-            每天领取一次软妹币奖励，可用于模型调用和技能消费。
+            每天领取一次软妹币奖励，可用于模型调用。
           </p>
         </div>
 

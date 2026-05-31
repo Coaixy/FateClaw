@@ -8,11 +8,7 @@ import type {
   UserCustomSkillDto,
 } from '@fateclaw/contracts/skills';
 
-import type {
-  SkillBundle,
-  SkillPriceTier,
-  UserCustomSkill,
-} from '../shared/types.js';
+import type { SkillBundle, UserCustomSkill } from '../shared/types.js';
 
 /**
  * 公开分享与订阅场景不再暴露创作者联系方式，只返回统一的安全标识。
@@ -38,7 +34,6 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     visibility: skill.visibility,
     share_token: skill.share_token,
     enabled: skill.enabled,
-    price_tiers: skill.price_tiers,
     stat_subscriber_count: skill.stat_subscriber_count,
     stat_view_count: skill.stat_view_count,
     created_at: skill.created_at,
@@ -54,7 +49,6 @@ export function toSharedSkillPreviewDto(
     skill_name: skill.skill_name,
     description: skill.description,
     content_length: skill.content_length,
-    price_tiers: skill.price_tiers,
     author_label: PUBLIC_AUTHOR_LABEL,
   };
 }
@@ -106,7 +100,6 @@ type MarketSkillSource = {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTier, 'key' | 'label' | 'price_coins'>>;
   stat_subscriber_count: number;
   share_token: string | null;
 };
@@ -116,7 +109,6 @@ export function toMarketSkillDto(skill: MarketSkillSource): MarketSkillDto {
     id: skill.id,
     skill_name: skill.skill_name,
     description: skill.description,
-    price_tiers: skill.price_tiers,
     stat_subscriber_count: skill.stat_subscriber_count,
     share_token: skill.share_token,
     author_label: PUBLIC_AUTHOR_LABEL,

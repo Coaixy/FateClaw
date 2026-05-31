@@ -33,7 +33,6 @@ import {
   listMarketBundles,
   listMarketSkills,
   seedOfficialSkills,
-  upsertCreatorBundleConfig,
 } from './skills-repository.js';
 
 interface QueryCall {
@@ -179,18 +178,6 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.sql).not.toContain('s2.category');
     expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
     expect(calls[0]?.params).toEqual([50, 10]);
-  });
-
-  it('serializes creator bundle tiers when upserting config', async () => {
-    const { calls } = createMockPool();
-
-    await upsertCreatorBundleConfig('creator-1', [{ key: 'monthly' }]);
-
-    expect(calls[0]?.sql).toContain('INSERT INTO creator_bundle_config');
-    expect(calls[0]?.params).toEqual([
-      'creator-1',
-      JSON.stringify([{ key: 'monthly' }]),
-    ]);
   });
 
   it('creates custom skills by writing bundle content inside a transaction', async () => {

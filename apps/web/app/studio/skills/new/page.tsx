@@ -52,7 +52,6 @@ export default function NewStudioSkillPage() {
             visibility: 'private',
             share_token: null,
             enabled: true,
-            price_tiers: [],
             stat_subscriber_count: 0,
             stat_view_count: 0,
             created_at: '',

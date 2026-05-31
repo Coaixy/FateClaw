@@ -133,8 +133,6 @@ function inferBalanceSourceFromKind(
     case 'manual_adjustment':
       return 'purchased';
     case 'overage_charge':
-    case 'skill_subscription':
-    case 'bundle_subscription':
       return 'mixed';
     case 'reservation_release':
     default:
@@ -834,6 +832,8 @@ export async function getVisibleWalletTransactionsByUserId(
      WHERE user_id = $1
        AND amount_coins <> 0
        AND kind <> 'overage_charge'
+       AND kind <> 'skill_subscription'
+       AND kind <> 'bundle_subscription'
      ORDER BY created_at DESC
      LIMIT $2`,
     [userId, limit],

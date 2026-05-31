@@ -46,14 +46,6 @@ export interface UserSkill {
   enabled_at: string;
 }
 
-export interface SkillPriceTier {
-  key: string;
-  label: string;
-  price_coins: number; // 软妹币定价
-  duration_days: number | null;
-  description?: string;
-}
-
 export interface TextSkillBundleFile {
   path: string;
   content: string;
@@ -77,7 +69,6 @@ export interface UserCustomSkill {
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;
-  price_tiers: SkillPriceTier[];
   stat_subscriber_count: number;
   stat_view_count: number;
   created_at: string;
@@ -90,7 +81,6 @@ export interface UserSkillSubscription {
   subscriber_id: string;
   skill_id: string;
   has_direct_source: boolean;
-  tier_key: string | null;
   status: 'active' | 'expired' | 'cancelled';
   enabled: boolean;
   expires_at: string | null;
@@ -109,24 +99,6 @@ export interface SkillBundle {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-}
-
-export interface CreatorBundleTier {
-  key: string;
-  label: string;
-  price_coins: number;
-  duration_days: number | null;
-  description?: string;
-}
-
-export interface CreatorBundleSubscription {
-  id: string;
-  subscriber_id: string;
-  creator_id: string;
-  tier_key: string;
-  status: 'active' | 'expired' | 'cancelled';
-  expires_at: string | null;
-  started_at: string;
 }
 
 /** IPC 同步到容器的用户 skill 条目（合并自有 + 订阅） */

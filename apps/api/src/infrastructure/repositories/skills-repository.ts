@@ -3,15 +3,12 @@ import pg from 'pg';
 
 import type { DbQueryable } from '../db-pool.js';
 import { getDbPool } from '../db-pool.js';
-import { deductBalanceCoins, insertWalletTransaction } from './billing-repository.js';
-import { getUserByIdUsing } from './users-repository.js';
 import {
   getSkillMarkdownMetadata,
   getTextSkillBundleContentLength,
   readTextSkillBundleFiles,
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
-import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import type {
   EffectiveUserSkill,
   SkillBundle,
@@ -111,7 +108,7 @@ export async function getResolvedEnabledOfficialSkillNames(
 }
 
 /**
- * 获取用户的有效 skill 列表（自有 + 直接订阅 + 整包订阅），用于 IPC 同步。
+ * 获取用户的有效 skill 列表（自有 + 订阅），用于 IPC 同步。
  */
 export async function getEffectiveUserSkills(
   userId: string,
@@ -130,20 +127,7 @@ export async function getEffectiveUserSkills(
      JOIN user_custom_skills s ON s.id = sub.skill_id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
-     UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'subscribed' as source
-     FROM creator_bundle_subscriptions bs
-     JOIN user_custom_skills s ON s.user_id = bs.creator_id
-     WHERE bs.subscriber_id = $1 AND bs.status = 'active'
-       AND (bs.expires_at IS NULL OR bs.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
-       AND NOT EXISTS (
-         SELECT 1 FROM user_skill_subscriptions sub2
-         WHERE sub2.subscriber_id = $1 AND sub2.skill_id = s.id
-       )`,
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'`,
     [userId],
   );
   return rows as EffectiveUserSkill[];
@@ -153,7 +137,6 @@ export interface MarketSkillListRow {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: UserCustomSkill['price_tiers'];
   stat_subscriber_count: number;
   share_token: string | null;
 }
@@ -168,7 +151,7 @@ export async function listMarketSkills(opts: {
   const off = opts.offset ?? 0;
   params.push(lim, off);
   const { rows } = await getDbPool().query(
-    `SELECT s.id, s.skill_name, s.description, s.price_tiers,
+    `SELECT s.id, s.skill_name, s.description,
             s.stat_subscriber_count,
             s.stat_view_count, s.share_token
      FROM user_custom_skills s
@@ -227,40 +210,6 @@ export async function listMarketBundles(opts: {
   return rows as MarketBundleListRow[];
 }
 
-export async function getCreatorBundleConfig(
-  creatorId: string,
-): Promise<{ bundle_tiers: unknown[] } | undefined> {
-  const { rows } = await getDbPool().query(
-    'SELECT * FROM creator_bundle_config WHERE creator_id = $1',
-    [creatorId],
-  );
-  return rows[0] as { bundle_tiers: unknown[] } | undefined;
-}
-
-export async function upsertCreatorBundleConfig(
-  creatorId: string,
-  bundleTiers: unknown[],
-): Promise<void> {
-  await getDbPool().query(
-    `INSERT INTO creator_bundle_config (creator_id, bundle_tiers, updated_at)
-     VALUES ($1, $2, NOW())
-     ON CONFLICT (creator_id) DO UPDATE SET bundle_tiers = $2, updated_at = NOW()`,
-    [creatorId, JSON.stringify(bundleTiers)],
-  );
-}
-
-export async function listCreatorSharedSkills(
-  creatorId: string,
-): Promise<unknown[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT id, skill_name, description, price_tiers
-     FROM user_custom_skills
-     WHERE user_id = $1 AND visibility = 'shared' AND deleted_at IS NULL`,
-    [creatorId],
-  );
-  return rows;
-}
-
 const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.id,
   s.user_id,
@@ -277,7 +226,6 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.visibility,
   s.share_token,
   s.enabled,
-  s.price_tiers,
   s.stat_subscriber_count,
   s.stat_view_count,
   s.created_at,
@@ -842,229 +790,6 @@ export async function getSubscriberIds(skillId: string): Promise<string[]> {
     [skillId],
   );
   return (rows as { subscriber_id: string }[]).map((r) => r.subscriber_id);
-}
-
-export interface SubscribeToSkillPaidInput {
-  subscriberId: string;
-  skillId: string;
-  tierKey: string;
-  priceCoins: number;
-  durationDays: number | null;
-}
-
-export interface SubscribeToSkillPaidResult {
-  subscription: UserSkillSubscription;
-  chargedCoins: number;
-}
-
-export async function subscribeToSkillPaid(
-  input: SubscribeToSkillPaidInput,
-): Promise<SubscribeToSkillPaidResult> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const { rows: skillRows } = await client.query(
-      `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-       FROM user_custom_skills s
-       WHERE s.id = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
-       FOR UPDATE OF s`,
-      [input.skillId],
-    );
-    const skill = skillRows[0]
-      ? hydrateUserCustomSkillContent(skillRows[0] as UserCustomSkill)
-      : undefined;
-    if (!skill) throw new Error('Skill 不存在或未公开');
-    if (skill.user_id === input.subscriberId)
-      throw new Error('不能订阅自己的 Skill');
-
-    let chargedCoins = 0;
-
-    if (input.priceCoins > 0) {
-      const subscriber = await getUserByIdUsing(client, input.subscriberId, {
-        forUpdate: true,
-      });
-      if (!subscriber) throw new Error('账号不存在');
-
-      // 可用余额 = (purchased + bonus) - reserved
-      const availableCoins = calculateAvailableSpendableCoins(subscriber);
-      if (availableCoins < input.priceCoins)
-        throw new Error('余额不足，请先充值');
-
-      chargedCoins = input.priceCoins;
-
-      // bonus → purchased 优先级扣减
-      const deduction = await deductBalanceCoins(client, subscriber, chargedCoins);
-
-      for (const bd of deduction.grantDeductions) {
-        await insertWalletTransaction(client, {
-          userId: input.subscriberId,
-          kind: 'skill_subscription',
-          amountCoins: -bd.coins,
-          balanceSource: 'bonus',
-          balanceGrantId: bd.grantId,
-          note: `订阅技能: ${skill.skill_name}（赠送余额批次）`,
-          metadata: { skill_id: input.skillId, tier_key: input.tierKey },
-        });
-      }
-      if (deduction.purchasedDeducted > 0) {
-        await insertWalletTransaction(client, {
-          userId: input.subscriberId,
-          kind: 'skill_subscription',
-          amountCoins: -deduction.purchasedDeducted,
-          balanceSource: deduction.balanceSource ?? 'purchased',
-          note: `订阅技能: ${skill.skill_name}`,
-          metadata: {
-            skill_id: input.skillId,
-            tier_key: input.tierKey,
-            bonusDeducted: deduction.bonusDeducted,
-            purchasedDeducted: deduction.purchasedDeducted,
-          },
-        });
-      }
-    }
-
-    const now = new Date();
-    const expiresAt = input.durationDays
-      ? new Date(now.getTime() + input.durationDays * 86400_000).toISOString()
-      : null;
-    const subId = `sksub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    const { rows: subRows } = await client.query(
-      `INSERT INTO user_skill_subscriptions
-         (id, subscriber_id, skill_id, tier_key, status, started_at, expires_at)
-       VALUES ($1, $2, $3, $4, 'active', $5, $6)
-       ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET
-         tier_key = EXCLUDED.tier_key, status = 'active',
-         started_at = EXCLUDED.started_at, expires_at = EXCLUDED.expires_at,
-         enabled = true, has_direct_source = true
-       RETURNING *, (xmax = 0) AS is_insert`,
-      [
-        subId,
-        input.subscriberId,
-        input.skillId,
-        input.tierKey,
-        now.toISOString(),
-        expiresAt,
-      ],
-    );
-
-    if (subRows[0] && (subRows[0] as Record<string, unknown>).is_insert) {
-      await client.query(
-        `UPDATE user_custom_skills SET stat_subscriber_count = stat_subscriber_count + 1, updated_at = NOW() WHERE id = $1`,
-        [input.skillId],
-      );
-    }
-
-    await client.query('COMMIT');
-    return {
-      subscription: subRows[0] as UserSkillSubscription,
-      chargedCoins,
-    };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-export interface SubscribeToCreatorBundleInput {
-  subscriberId: string;
-  creatorId: string;
-  tierKey: string;
-  priceCoins: number;
-  durationDays: number | null;
-}
-
-export async function subscribeToCreatorBundle(
-  input: SubscribeToCreatorBundleInput,
-): Promise<{ chargedCoins: number }> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const { rows: creatorRows } = await client.query(
-      `SELECT 1 FROM users WHERE id = $1`,
-      [input.creatorId],
-    );
-    if (!creatorRows[0]) throw new Error('创作者不存在');
-    if (input.creatorId === input.subscriberId) throw new Error('不能订阅自己');
-
-    let chargedCoins = 0;
-    if (input.priceCoins > 0) {
-      const subscriber = await getUserByIdUsing(client, input.subscriberId, {
-        forUpdate: true,
-      });
-      if (!subscriber) throw new Error('账号不存在');
-
-      const availableCoins = calculateAvailableSpendableCoins(subscriber);
-      if (availableCoins < input.priceCoins)
-        throw new Error('余额不足，请先充值');
-
-      chargedCoins = input.priceCoins;
-
-      const deduction = await deductBalanceCoins(client, subscriber, chargedCoins);
-
-      for (const bd of deduction.grantDeductions) {
-        await insertWalletTransaction(client, {
-          userId: input.subscriberId,
-          kind: 'bundle_subscription',
-          amountCoins: -bd.coins,
-          balanceSource: 'bonus',
-          balanceGrantId: bd.grantId,
-          note: `订阅创作者整包（赠送余额批次）`,
-          metadata: { creator_id: input.creatorId, tier_key: input.tierKey },
-        });
-      }
-      if (deduction.purchasedDeducted > 0) {
-        await insertWalletTransaction(client, {
-          userId: input.subscriberId,
-          kind: 'bundle_subscription',
-          amountCoins: -deduction.purchasedDeducted,
-          balanceSource: deduction.balanceSource ?? 'purchased',
-          note: `订阅创作者整包`,
-          metadata: {
-            creator_id: input.creatorId,
-            tier_key: input.tierKey,
-            bonusDeducted: deduction.bonusDeducted,
-            purchasedDeducted: deduction.purchasedDeducted,
-          },
-        });
-      }
-    }
-
-    const now = new Date();
-    const expiresAt = input.durationDays
-      ? new Date(now.getTime() + input.durationDays * 86400_000).toISOString()
-      : null;
-    const id = `bsub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    await client.query(
-      `INSERT INTO creator_bundle_subscriptions
-         (id, subscriber_id, creator_id, tier_key, status, started_at, expires_at)
-       VALUES ($1, $2, $3, $4, 'active', $5, $6)
-       ON CONFLICT (subscriber_id, creator_id) DO UPDATE SET
-         tier_key = EXCLUDED.tier_key, status = 'active',
-         started_at = EXCLUDED.started_at, expires_at = EXCLUDED.expires_at`,
-      [
-        id,
-        input.subscriberId,
-        input.creatorId,
-        input.tierKey,
-        now.toISOString(),
-        expiresAt,
-      ],
-    );
-
-    await client.query('COMMIT');
-    return { chargedCoins };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 // =====================

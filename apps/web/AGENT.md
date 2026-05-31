@@ -96,7 +96,7 @@ apps/web/
 - `app/skills/bundle/install/page.tsx`: Bundle 安装页
 - `app/wallet/page.tsx`: 钱包与充值
 - `app/devices/page.tsx`: 设备与账号绑定入口
-- `app/plans/page.tsx`: 套餐页
+- `app/plans/page.tsx`: 会员 / Token Plan 预留页
 - `app/profile/page.tsx`: 个人资料
 - `app/settings/page.tsx`: 设置
 - `app/admin/*`: 管理后台

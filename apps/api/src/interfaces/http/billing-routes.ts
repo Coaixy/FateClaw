@@ -20,7 +20,7 @@ import {
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/billing — subscription status
+  // GET /api/billing — 钱包余额与 Token 计费概览
   app.get('/', async (request, reply) => {
     await request.requireAuth();
     const result = await getBillingOverview(request.user.userId);

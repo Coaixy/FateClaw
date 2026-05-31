@@ -33,7 +33,7 @@ apps/api/src/interfaces/http/
 
 配套业务模块：
 
-- `apps/api/src/modules/user/auth-service.ts`：注册、登录、订阅状态判断
+- `apps/api/src/modules/user/auth-service.ts`：注册、登录、用户安全 DTO
 - `apps/api/src/modules/account/account-http-service.ts`：账号绑定、运行时停启、Soul 读写
 - `apps/api/src/modules/chat/web-chat-service.ts`：网页聊天消息收发
 - `apps/api/src/modules/chat/chat-session-service.ts`：AI 对话会话与查询过程

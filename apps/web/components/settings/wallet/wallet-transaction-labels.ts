@@ -28,9 +28,6 @@ function negativeTransactionLabel(kind: string): string {
   switch (kind) {
     case 'overage_charge':
       return '扣费';
-    case 'skill_subscription':
-    case 'bundle_subscription':
-      return '订阅';
     case 'manual_adjustment':
       return '扣减';
     default:

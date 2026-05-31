@@ -172,7 +172,6 @@ import {
   deleteUserCustomSkill,
   getAllSkillGlobalConfigs,
   getBundleByToken,
-  getCreatorBundleConfig,
   getEffectiveUserSkills,
   getGloballyEnabledSkillNames,
   getResolvedEnabledOfficialSkillNames,
@@ -183,7 +182,6 @@ import {
   getUserCustomSkillById,
   getUserCustomSkillCount,
   getUserCustomSkills,
-  listCreatorSharedSkills,
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
@@ -195,9 +193,7 @@ import {
   shareSkillBundle,
   shareUserCustomSkill,
   subscribeToBundle,
-  subscribeToCreatorBundle,
   subscribeToSkill,
-  subscribeToSkillPaid,
   toggleSubscription,
   toggleUserCustomSkill,
   unpublishSkillBundle,
@@ -208,7 +204,6 @@ import {
   unshareUserCustomSkill,
   updateSkillBundle,
   updateUserCustomSkill,
-  upsertCreatorBundleConfig,
 } from './repositories/skills-repository.js';
 import type {
   BundleByTokenResult,
@@ -216,9 +211,6 @@ import type {
   MarketSkillListRow,
   SkillGlobalConfig,
   SubscribeToBundleResult,
-  SubscribeToCreatorBundleInput,
-  SubscribeToSkillPaidInput,
-  SubscribeToSkillPaidResult,
 } from './repositories/skills-repository.js';
 
 export {
@@ -267,7 +259,6 @@ export {
   getConversationLogsByTimeWindow,
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
-  getCreatorBundleConfig,
   getDailySignInConfig,
   getDailySignInRecordByDate,
   getEffectiveUserSkills,
@@ -310,7 +301,6 @@ export {
   getWalletTransactionsByUserId,
   grantBonusBalance,
   insertRechargeOrder,
-  listCreatorSharedSkills,
   listBillingRequestReservations,
   listConfigAuditLogs,
   listMarketBundles,
@@ -339,9 +329,7 @@ export {
   settleRechargeOrderPaid,
   settleUserModelChargeCoins,
   subscribeToBundle,
-  subscribeToCreatorBundle,
   subscribeToSkill,
-  subscribeToSkillPaid,
   storeMessage,
   storeConversationLog,
   touchChatSession,
@@ -368,7 +356,6 @@ export {
   unsubscribeFromSkill,
   unshareSkillBundle,
   unshareUserCustomSkill,
-  upsertCreatorBundleConfig,
   upsertSystemSecret,
   upsertUserModelConfig,
   upsertUserModelSelection,
@@ -402,9 +389,6 @@ export type {
   RechargeStatsRow,
   SkillGlobalConfig,
   SubscribeToBundleResult,
-  SubscribeToCreatorBundleInput,
-  SubscribeToSkillPaidInput,
-  SubscribeToSkillPaidResult,
   WalletTransactionRow,
 };
 import { deleteUsersWithoutValidPhone } from './phone-only-user-migration.js';
@@ -456,11 +440,6 @@ export async function deleteUser(userId: string): Promise<void> {
     await client.query('BEGIN');
     // 删除用户作为订阅者 / 创作者 / 拥有者的全部关系数据
     await client.query(
-      `DELETE FROM creator_bundle_subscriptions
-       WHERE subscriber_id = $1 OR creator_id = $1`,
-      [userId],
-    );
-    await client.query(
       `DELETE FROM user_skill_subscriptions
        WHERE subscriber_id = $1
           OR skill_id IN (SELECT id FROM user_custom_skills WHERE user_id = $1)`,
@@ -469,10 +448,6 @@ export async function deleteUser(userId: string): Promise<void> {
     await client.query('DELETE FROM skill_bundles WHERE user_id = $1', [
       userId,
     ]);
-    await client.query(
-      'DELETE FROM creator_bundle_config WHERE creator_id = $1',
-      [userId],
-    );
     await client.query(
       'DELETE FROM billing_request_reservations WHERE user_id = $1',
       [userId],

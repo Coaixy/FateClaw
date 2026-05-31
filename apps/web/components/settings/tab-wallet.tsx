@@ -115,7 +115,7 @@ export function TabWallet() {
             />
           </div>
           <p className="text-[11px] text-muted leading-relaxed px-1">
-            充值余额用于官方模型、自配模型平台 Token 服务费和技能订阅消费。
+            充值余额用于官方模型和自配模型平台 Token 服务费。
           </p>
         </section>
       )}

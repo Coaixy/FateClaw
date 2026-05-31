@@ -134,7 +134,7 @@ export function WalletRechargePanel({
               {formatCoins(stats?.total_recharge_coins ?? 0)}
             </div>
             <div className="mt-1 text-[11px] text-muted">
-              累计充值 · 余额用于模型 Token 与技能订阅
+              累计充值 · 余额用于模型 Token 消耗
             </div>
           </div>
           <button

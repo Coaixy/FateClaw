@@ -115,6 +115,13 @@ describe('runDatabaseMigrations', () => {
         '为每日用量增加 Pi total token 统计列',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0016_remove_skill_paid_schema',
+        '移除 Skill 付费档位与创作者整包付费 schema',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -170,6 +177,8 @@ describe('runDatabaseMigrations', () => {
       '0012_model_billing_config',
       '0013_soft_currency_decimal_scale',
       '0014_daily_usage_total_tokens',
+      '0015_public_financial_ledger',
+      '0016_remove_skill_paid_schema',
     ]);
 
     await runDatabaseMigrations(client as never);

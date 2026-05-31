@@ -2859,6 +2859,26 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0016_remove_skill_paid_schema',
+    description: '移除 Skill 付费档位与创作者整包付费 schema',
+    async up(client) {
+      await client.query(`
+        DROP INDEX IF EXISTS idx_bundle_sub_subscriber_active_expiry;
+        DROP INDEX IF EXISTS idx_bundle_sub_creator;
+        DROP INDEX IF EXISTS idx_bundle_sub_subscriber;
+
+        DROP TABLE IF EXISTS creator_bundle_config;
+        DROP TABLE IF EXISTS creator_bundle_subscriptions;
+
+        ALTER TABLE user_custom_skills
+          DROP COLUMN IF EXISTS price_tiers;
+
+        ALTER TABLE user_skill_subscriptions
+          DROP COLUMN IF EXISTS tier_key;
+      `);
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

@@ -9,52 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS user_plan_subscriptions (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  plan TEXT DEFAULT NULL,
-  subscribed_at TIMESTAMPTZ DEFAULT NULL,
-  expires_at TIMESTAMPTZ DEFAULT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_user_plan_subscriptions_plan_active
-  ON user_plan_subscriptions(plan, expires_at)
-  WHERE plan IS NOT NULL;
-
-DO $$
-DECLARE
-  has_plan BOOLEAN;
-  has_subscribed_at BOOLEAN;
-  has_expires_at BOOLEAN;
-BEGIN
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'users' AND column_name = 'plan'
-  ) INTO has_plan;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'users' AND column_name = 'subscribed_at'
-  ) INTO has_subscribed_at;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'users' AND column_name = 'expires_at'
-  ) INTO has_expires_at;
-
-  IF has_plan AND has_subscribed_at AND has_expires_at THEN
-    INSERT INTO user_plan_subscriptions
-      (user_id, plan, subscribed_at, expires_at, updated_at)
-    SELECT id, plan, subscribed_at, expires_at, NOW()
-    FROM users
-    WHERE plan IS NOT NULL
-       OR subscribed_at IS NOT NULL
-       OR expires_at IS NOT NULL
-    ON CONFLICT (user_id) DO UPDATE SET
-      plan = EXCLUDED.plan,
-      subscribed_at = EXCLUDED.subscribed_at,
-      expires_at = EXCLUDED.expires_at,
-      updated_at = NOW();
-  END IF;
-END $$;
-
 ALTER TABLE users
   DROP COLUMN IF EXISTS plan,
   DROP COLUMN IF EXISTS subscribed_at,
@@ -188,7 +142,6 @@ ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS install_status TEXT NOT 
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS acl JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS billing_policy JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS audit_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS price_tiers JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS stat_subscriber_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE user_custom_skills ADD COLUMN IF NOT EXISTS stat_view_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE user_custom_skills DROP COLUMN IF EXISTS trigger_hint;
@@ -218,7 +171,6 @@ CREATE TABLE IF NOT EXISTS user_skill_subscriptions (
   subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(subscriber_id, skill_id)
 );
-ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS tier_key TEXT DEFAULT NULL;
 ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NULL;
 ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
@@ -463,35 +415,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT true;
 
 -- =====================
--- 宿主运行时扩展：会话 / 钱包 / 创作者整包
+-- 宿主运行时扩展：会话 / 钱包
 -- =====================
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS purchased_points INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_points INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_points INTEGER NOT NULL DEFAULT 0;
-
-CREATE TABLE IF NOT EXISTS creator_bundle_subscriptions (
-  id TEXT PRIMARY KEY,
-  subscriber_id TEXT NOT NULL REFERENCES users(id),
-  creator_id TEXT NOT NULL REFERENCES users(id),
-  tier_key TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  expires_at TIMESTAMPTZ DEFAULT NULL,
-  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  source TEXT NOT NULL DEFAULT 'web',
-  UNIQUE(subscriber_id, creator_id)
-);
-CREATE INDEX IF NOT EXISTS idx_bundle_sub_subscriber ON creator_bundle_subscriptions(subscriber_id, status);
-CREATE INDEX IF NOT EXISTS idx_bundle_sub_creator ON creator_bundle_subscriptions(creator_id, status);
-CREATE INDEX IF NOT EXISTS idx_bundle_sub_subscriber_active_expiry
-  ON creator_bundle_subscriptions(subscriber_id, expires_at)
-  WHERE status = 'active';
-
-CREATE TABLE IF NOT EXISTS creator_bundle_config (
-  creator_id TEXT PRIMARY KEY REFERENCES users(id),
-  bundle_tiers JSONB NOT NULL DEFAULT '[]',
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id TEXT PRIMARY KEY,
@@ -519,18 +448,6 @@ BEGIN
       FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL;
   END IF;
 END $$;
-
-CREATE TABLE IF NOT EXISTS plans (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  price INTEGER NOT NULL,
-  max_accounts INTEGER NOT NULL,
-  max_tasks INTEGER NOT NULL,
-  monthly_token_quota INTEGER NOT NULL,
-  overage_rate_per_m_token INTEGER NOT NULL,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
 CREATE TABLE IF NOT EXISTS wallet_transactions (
   id TEXT PRIMARY KEY,
@@ -665,19 +582,6 @@ END $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_plan_subscriptions_plan_valid') THEN
-    UPDATE user_plan_subscriptions
-    SET plan = NULL
-    WHERE plan IS NOT NULL
-      AND plan NOT IN ('starter', 'pro', 'max');
-    ALTER TABLE user_plan_subscriptions
-      ADD CONSTRAINT chk_user_plan_subscriptions_plan_valid
-      CHECK (plan IS NULL OR plan IN ('starter', 'pro', 'max'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_user_custom_skills_visibility_valid') THEN
     UPDATE user_custom_skills
     SET visibility = 'private',
@@ -710,18 +614,6 @@ BEGIN
     WHERE status NOT IN ('active', 'expired', 'cancelled');
     ALTER TABLE user_skill_subscriptions
       ADD CONSTRAINT chk_user_skill_subscriptions_status_valid
-      CHECK (status IN ('active', 'expired', 'cancelled'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_bundle_subscriptions_status_valid') THEN
-    UPDATE creator_bundle_subscriptions
-    SET status = 'active'
-    WHERE status NOT IN ('active', 'expired', 'cancelled');
-    ALTER TABLE creator_bundle_subscriptions
-      ADD CONSTRAINT chk_creator_bundle_subscriptions_status_valid
       CHECK (status IN ('active', 'expired', 'cancelled'));
   END IF;
 END $$;

@@ -9,7 +9,6 @@ import type {
   SharedSkillPreviewDto,
   SkillBundleDto,
   SkillDeleteResponseDto,
-  SkillPriceTierDto,
   SkillShareResponseDto,
   SkillSubscriptionCreateResponseDto,
   SkillSubscriptionToggleResponseDto,
@@ -21,7 +20,6 @@ import type {
 
 import { requestJson } from '@/lib/http/client';
 
-export type SkillPriceTier = SkillPriceTierDto;
 export type TextSkillBundleFile = TextSkillBundleFileDto;
 export type UserCustomSkill = UserCustomSkillDto;
 export type SubscribedSkill = SubscribedSkillDto;

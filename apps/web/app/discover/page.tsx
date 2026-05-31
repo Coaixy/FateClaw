@@ -6,7 +6,6 @@ import { Layers, Puzzle, Users, Search } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { useSkillMarket } from '@/features/skills/hooks/use-skill-market';
-import { formatCoins } from '@/lib/soft-currency';
 import { useToast } from '@/lib/use-toast';
 
 function getRankBadgeClass(rank: number): string {
@@ -155,10 +154,6 @@ export default function DiscoverPage() {
                 </div>
 
                 {market.filteredSkills.map((s, index) => {
-                  const minPrice =
-                    s.price_tiers.length > 0
-                      ? Math.min(...s.price_tiers.map((t) => t.price_coins))
-                      : 0;
                   const rank = index + 1;
 
                   return (
@@ -197,11 +192,6 @@ export default function DiscoverPage() {
                           {s.description || '暂无描述'}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
-                          <span className="font-bold text-ink">
-                            {minPrice > 0
-                              ? formatCoins(minPrice)
-                              : '免费'}
-                          </span>
                           <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
                             <Users size={11} className="text-muted" />
                             热度 {s.stat_subscriber_count.toLocaleString()}
@@ -210,9 +200,7 @@ export default function DiscoverPage() {
                       </div>
                       <div className="hidden min-w-[72px] shrink-0 text-right sm:block">
                         <span className="block text-[14px] font-bold text-ink">
-                          {minPrice > 0
-                            ? formatCoins(minPrice)
-                            : '免费'}
+                          订阅
                         </span>
                         <span className="mt-1 inline-flex items-center justify-end gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-body-strong whitespace-nowrap">
                           <Users size={11} className="text-muted" />

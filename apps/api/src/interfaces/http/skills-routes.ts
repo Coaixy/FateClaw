@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 
 import { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import {
   createSkillBundle,
@@ -9,13 +8,11 @@ import {
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
-  getCreatorBundleConfig,
   getSkillByShareToken,
   getSubscribedSkills,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
-  listCreatorSharedSkills,
   listMarketBundles,
   listMarketSkills,
   listUserBundles,
@@ -24,14 +21,11 @@ import {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_USER_SKILLS,
-  promoteUserToCreator,
   shareSkillBundle,
   shareUserCustomSkill,
   slugifySkillName,
   subscribeToBundle,
-  subscribeToCreatorBundle,
   subscribeToSkill,
-  subscribeToSkillPaid,
   toggleSubscription,
   toggleUserCustomSkill,
   unsubscribeFromBundle,
@@ -42,7 +36,6 @@ import {
   unsubscribeFromSkill,
   updateSkillBundle,
   updateUserCustomSkill,
-  upsertCreatorBundleConfig,
 } from '../../modules/skills/skills-service.js';
 
 import {
@@ -52,11 +45,7 @@ import {
   toSharedSkillPreviewDto,
   toSubscribedSkillDtos,
 } from '../../contracts-adapter/skills-contract.js';
-import type {
-  CreatorBundleTier,
-  SkillPriceTier,
-  TextSkillBundleFile,
-} from '../../shared/types.js';
+import type { TextSkillBundleFile } from '../../shared/types.js';
 
 function parseBundleFilesPayload(
   files: unknown,
@@ -323,31 +312,6 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  // POST /api/skills/subscribe/:token/paid — 付费订阅单个 Skill
-  app.post('/subscribe/:token/paid', async (request, reply) => {
-    await request.requireAuth();
-    const { token } = request.params as { token: string };
-    const { tier_key } = (request.body as { tier_key?: string }) || {};
-    if (!tier_key) return reply.code(400).send({ error: '缺少 tier_key' });
-
-    const skill = await getSkillByShareToken(token);
-    if (!skill) return reply.code(404).send({ error: '分享链接无效' });
-
-    const tier = (skill.price_tiers as SkillPriceTier[]).find(
-      (t) => t.key === tier_key,
-    );
-    if (!tier) return reply.code(400).send({ error: '档位不存在' });
-
-    const result = await subscribeToSkillPaid({
-      subscriberId: request.user.userId,
-      skillId: skill.id,
-      tierKey: tier_key,
-      priceCoins: tier.price_coins,
-      durationDays: tier.duration_days,
-    });
-    return result;
-  });
-
   // =====================
   // --- Skill Bundles ---
   // =====================
@@ -559,54 +523,5 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     return toSubscribedSkillDtos(
       await getSubscribedSkills(request.user.userId),
     );
-  });
-
-  // GET /api/skills/creator/:creatorId/bundle — 获取创作者整包信息
-  app.get('/creator/:creatorId/bundle', async (request) => {
-    const { creatorId } = request.params as { creatorId: string };
-    const config = await getCreatorBundleConfig(creatorId);
-    const skills = await listCreatorSharedSkills(creatorId);
-    return {
-      bundle_tiers: config?.bundle_tiers ?? [],
-      skills,
-    };
-  });
-
-  // PUT /api/skills/creator/bundle/tiers — 创作者设置整包档位
-  app.put('/creator/bundle/tiers', async (request, reply) => {
-    await request.requireAuth();
-    const { bundle_tiers } =
-      (request.body as { bundle_tiers?: CreatorBundleTier[] }) || {};
-    if (!Array.isArray(bundle_tiers)) {
-      return reply.code(400).send({ error: 'bundle_tiers 必须是数组' });
-    }
-    await promoteUserToCreator(request.user.userId);
-    await upsertCreatorBundleConfig(request.user.userId, bundle_tiers);
-    return { ok: true };
-  });
-
-  // POST /api/skills/creator/:creatorId/bundle/subscribe — 整包订阅
-  app.post('/creator/:creatorId/bundle/subscribe', async (request, reply) => {
-    await request.requireAuth();
-    const { creatorId } = request.params as { creatorId: string };
-    const { tier_key } = (request.body as { tier_key?: string }) || {};
-    if (!tier_key) return reply.code(400).send({ error: '缺少 tier_key' });
-
-    const config = await getCreatorBundleConfig(creatorId);
-    if (!config) return reply.code(404).send({ error: '创作者未设置整包档位' });
-
-    const tier = (config.bundle_tiers as CreatorBundleTier[]).find(
-      (t) => t.key === tier_key,
-    );
-    if (!tier) return reply.code(400).send({ error: '档位不存在' });
-
-    const result = await subscribeToCreatorBundle({
-      subscriberId: request.user.userId,
-      creatorId,
-      tierKey: tier_key,
-      priceCoins: tier.price_coins,
-      durationDays: tier.duration_days,
-    });
-    return result;
   });
 }

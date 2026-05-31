@@ -4,14 +4,6 @@
 
 import type { OkResponse } from '../common/api.js';
 
-export interface SkillPriceTierDto {
-  key: string;
-  label: string;
-  price_coins: number;
-  duration_days: number | null;
-  description?: string;
-}
-
 export interface TextSkillBundleFileDto {
   path: string;
   content: string;
@@ -46,7 +38,6 @@ export interface UserCustomSkillDto {
   visibility: 'private' | 'link_shared' | 'shared';
   share_token: string | null;
   enabled: boolean;
-  price_tiers: SkillPriceTierDto[];
   stat_subscriber_count: number;
   stat_view_count: number;
   created_at: string;
@@ -76,7 +67,6 @@ export interface SharedSkillPreviewDto {
   skill_name: string;
   description: string;
   content_length: number;
-  price_tiers: SkillPriceTierDto[];
   author_label: string;
 }
 
@@ -97,7 +87,6 @@ export interface MarketSkillDto {
   id: string;
   skill_name: string;
   description: string;
-  price_tiers: Array<Pick<SkillPriceTierDto, 'key' | 'label' | 'price_coins'>>;
   stat_subscriber_count: number;
   share_token: string | null;
   author_label: string;
@@ -152,19 +141,6 @@ export interface BundleSubscribeResultDto {
 
 export interface BundleUnsubscribeResultDto {
   unsubscribed_count: number;
-}
-
-export interface CreatorBundleTierDto {
-  key: string;
-  label: string;
-  price_coins: number;
-  duration_days: number | null;
-  description?: string;
-}
-
-export interface CreatorBundleConfigResponseDto {
-  bundle_tiers: CreatorBundleTierDto[];
-  skills: MarketSkillDto[];
 }
 
 export interface SkillDeleteResponseDto extends OkResponse {}

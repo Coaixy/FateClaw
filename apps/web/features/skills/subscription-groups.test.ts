@@ -26,7 +26,6 @@ function skill(
     visibility: 'shared',
     share_token: 'token',
     enabled: true,
-    price_tiers: [],
     stat_subscriber_count: 0,
     stat_view_count: 0,
     created_at: '2026-05-05T00:00:00.000Z',

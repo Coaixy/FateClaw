@@ -314,7 +314,7 @@ export default function StudioPage() {
           <div className="hidden lg:block">
             <h1 className="text-2xl font-bold tracking-tight">术数开发</h1>
             <p className="mt-1 text-sm text-muted">
-              打造可分享、可售卖的命理术数技能
+              打造可分享、可复用的命理术数技能
             </p>
           </div>
           <div className="flex items-center gap-2">
