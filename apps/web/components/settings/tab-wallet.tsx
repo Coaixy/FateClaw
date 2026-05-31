@@ -9,6 +9,7 @@ import {
 
 import { billingApi } from '@/features/billing/api';
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
+import { useConfirm } from '@/lib/use-confirm';
 import { formatCoins } from '@/lib/soft-currency';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
 import { WalletMembershipCard } from '@/components/settings/wallet/wallet-membership-card';
@@ -20,6 +21,7 @@ import { WalletTransactionsPanel } from '@/components/settings/wallet/wallet-tra
 type SubTab = 'overview' | 'usage' | 'transactions';
 
 export function TabWallet() {
+  const { confirm } = useConfirm();
   const {
     billingInfo,
     dailyUsage,
@@ -45,6 +47,35 @@ export function TabWallet() {
     { key: 'transactions', label: '流水' },
   ];
 
+  const handleSubscribeMembership = async () => {
+    const membership = billingInfo?.membership;
+    if (!membership || membershipBusy || !membership.enabled) return;
+
+    const priceText = formatCoins(membership.monthly_price_coins);
+    const ok = await confirm({
+      title: membership.active ? '确认续费会员' : '确认开通会员',
+      message: membership.active
+        ? `将从钱包余额扣除 ${priceText}，会员有效期将在当前周期结束后顺延 1 个月。`
+        : `将从钱包余额扣除 ${priceText}，开通 FateClaw Plus 会员 1 个月。`,
+      confirmLabel: membership.active ? '确认续费' : '确认开通',
+      cancelLabel: '取消',
+    });
+    if (!ok) return;
+
+    setMembershipBusy(true);
+    setMembershipError(null);
+    try {
+      await billingApi.subscribeMembership();
+      await refresh();
+    } catch (err) {
+      setMembershipError(
+        err instanceof Error ? err.message : '开通会员失败',
+      );
+    } finally {
+      setMembershipBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -66,19 +97,7 @@ export function TabWallet() {
         <WalletMembershipCard
           membership={billingInfo.membership}
           busy={membershipBusy}
-          onSubscribe={() => {
-            setMembershipBusy(true);
-            setMembershipError(null);
-            billingApi
-              .subscribeMembership()
-              .then(() => refresh())
-              .catch((err) => {
-                setMembershipError(
-                  err instanceof Error ? err.message : '开通会员失败',
-                );
-              })
-              .finally(() => setMembershipBusy(false));
-          }}
+          onSubscribe={() => void handleSubscribeMembership()}
         />
       )}
 
