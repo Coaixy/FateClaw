@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserPastedBoardInput } from './api';
 import { buildChatSessionStreamUrl, chatSessionsApi } from './api';
-import { sendChatSessionMessageWithOptions } from './hooks/use-chat-messages';
+import {
+  getAiChatStreamReconnectDelay,
+  isRecoverableChatSendInterruption,
+  sendChatSessionMessageWithOptions,
+} from './hooks/use-chat-messages';
 
 import { requestJson } from '@/lib/http/client';
 
@@ -118,6 +122,35 @@ describe('sendChatSessionMessageWithOptions', () => {
     expect(sender).toHaveBeenCalledWith('s 1', '看这个盘', {
       selectedBoardMessageId: 'board-1',
     });
+  });
+});
+
+describe('isRecoverableChatSendInterruption', () => {
+  it('treats browser network disconnects as recoverable send interruptions', () => {
+    expect(
+      isRecoverableChatSendInterruption(
+        Object.assign(new Error('网络连接失败'), { status: 0 }),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps server-side send failures non-recoverable', () => {
+    expect(
+      isRecoverableChatSendInterruption(
+        Object.assign(new Error('AI 处理失败'), { status: 502 }),
+      ),
+    ).toBe(false);
+    expect(isRecoverableChatSendInterruption(new Error('AI 处理失败'))).toBe(
+      false,
+    );
+  });
+});
+
+describe('getAiChatStreamReconnectDelay', () => {
+  it('uses capped exponential backoff for stream reconnects', () => {
+    expect(getAiChatStreamReconnectDelay(0)).toBe(500);
+    expect(getAiChatStreamReconnectDelay(3)).toBe(4000);
+    expect(getAiChatStreamReconnectDelay(10)).toBe(8000);
   });
 });
 

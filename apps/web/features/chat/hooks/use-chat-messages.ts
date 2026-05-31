@@ -25,10 +25,56 @@ import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
 const CHAT_POLL_INTERVAL_MS = 1200;
+const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
+const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
+const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
 type ChatSessionSender = typeof chatSessionsApi.send;
+type LoadMessagesResult =
+  | {
+      ok: true;
+      active: true;
+      messages: Message[];
+      processing: boolean;
+    }
+  | {
+      ok: true;
+      active: false;
+    }
+  | {
+      ok: false;
+    };
+
+/**
+ * 判断发送阶段的异常是否可能只是浏览器和 API 的连接中断。
+ *
+ * 这类异常不代表后端没有收到消息：长回复期间连接断开时，后端可能仍在继续生成。
+ * 因此前端应进入同步状态，而不是马上落一个“失败”气泡误导用户重复发送。
+ */
+export function isRecoverableChatSendInterruption(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return status === 0;
+}
+
+/**
+ * 计算 AI Chat 实时流断线后的退避重连间隔。
+ *
+ * @param attempt 从 0 开始的重连次数。
+ * @returns 经过上限裁剪后的毫秒延迟。
+ */
+export function getAiChatStreamReconnectDelay(attempt: number): number {
+  const normalizedAttempt = Math.max(0, Math.floor(attempt));
+  return Math.min(
+    CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS * 2 ** normalizedAttempt,
+    CHAT_STREAM_RECONNECT_MAX_DELAY_MS,
+  );
+}
 
 function appendActiveStreamingMessage(
   nextMessages: Message[],
@@ -175,8 +221,11 @@ export function useChatMessages(options: {
   }, [options.selectedSession]);
 
   const loadMessages = useCallback(
-    async (sessionId: string, loadOptions?: { background?: boolean }) => {
-      if (!sessionId) return false;
+    async (
+      sessionId: string,
+      loadOptions?: { background?: boolean },
+    ): Promise<LoadMessagesResult> => {
+      if (!sessionId) return { ok: false };
 
       const isBackground = loadOptions?.background ?? false;
       if (!isBackground) {
@@ -185,7 +234,9 @@ export function useChatMessages(options: {
 
       try {
         const data = await chatSessionsApi.messages(sessionId);
-        if (activeSessionRef.current !== sessionId) return true;
+        if (activeSessionRef.current !== sessionId) {
+          return { ok: true, active: false };
+        }
 
         setLoadedSessionId(sessionId);
         setContinuationBlocked(Boolean(data.continuation_blocked));
@@ -230,12 +281,17 @@ export function useChatMessages(options: {
             activeStreamingMessageIds.length > 0 &&
             !streamingResolved,
         );
-        return true;
+        return {
+          ok: true,
+          active: true,
+          messages: nextMessages,
+          processing: data.processing,
+        };
       } catch {
         if (activeSessionRef.current === sessionId && !isBackground) {
           setMessages([]);
         }
-        return false;
+        return { ok: false };
       } finally {
         if (activeSessionRef.current === sessionId && !isBackground) {
           setLoading(false);
@@ -508,20 +564,44 @@ export function useChatMessages(options: {
 
     let closedByEffect = false;
     let socket: WebSocket | null = null;
+    let reconnectTimeoutId: number | null = null;
+    let reconnectAttempt = 0;
 
-    try {
-      socket = new WebSocket(buildChatSessionStreamUrl(sessionId, token));
-      streamSocketRef.current = socket;
-    } catch {
-      return;
-    }
+    const clearReconnectTimeout = () => {
+      if (reconnectTimeoutId === null) return;
+      window.clearTimeout(reconnectTimeoutId);
+      reconnectTimeoutId = null;
+    };
 
-    socket.onmessage = (event) => {
+    const scheduleReconnect = () => {
+      if (closedByEffect || activeSessionRef.current !== sessionId) {
+        return;
+      }
+      if (reconnectAttempt >= CHAT_STREAM_RECONNECT_MAX_ATTEMPTS) {
+        setAwaitingRefresh(true);
+        return;
+      }
+
+      const delay = getAiChatStreamReconnectDelay(reconnectAttempt);
+      reconnectAttempt += 1;
+      clearReconnectTimeout();
+      reconnectTimeoutId = window.setTimeout(() => {
+        reconnectTimeoutId = null;
+        connectStream();
+      }, delay);
+    };
+
+    const handleStreamMessage = (event: MessageEvent) => {
       if (activeSessionRef.current !== sessionId) return;
       let payload: ChatSessionStreamEvent;
       try {
         payload = JSON.parse(event.data) as ChatSessionStreamEvent;
       } catch {
+        return;
+      }
+
+      if (payload.type === 'connected') {
+        reconnectAttempt = 0;
         return;
       }
 
@@ -712,20 +792,48 @@ export function useChatMessages(options: {
       }
     };
 
-    socket.onerror = () => {
-      if (activeSessionRef.current === sessionId) {
-        setAwaitingRefresh(true);
+    const connectStream = () => {
+      if (closedByEffect || activeSessionRef.current !== sessionId) {
+        return;
       }
+
+      let currentSocket: WebSocket;
+      try {
+        currentSocket = new WebSocket(
+          buildChatSessionStreamUrl(sessionId, token),
+        );
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
+      socket = currentSocket;
+      streamSocketRef.current = currentSocket;
+
+      currentSocket.onmessage = handleStreamMessage;
+
+      currentSocket.onerror = () => {
+        if (activeSessionRef.current === sessionId) {
+          setAwaitingRefresh(true);
+        }
+      };
+
+      currentSocket.onclose = () => {
+        if (streamSocketRef.current === currentSocket) {
+          streamSocketRef.current = null;
+        }
+        if (!closedByEffect && activeSessionRef.current === sessionId) {
+          setAwaitingRefresh(true);
+          scheduleReconnect();
+        }
+      };
     };
 
-    socket.onclose = () => {
-      if (!closedByEffect && activeSessionRef.current === sessionId) {
-        streamSocketRef.current = null;
-      }
-    };
+    connectStream();
 
     return () => {
       closedByEffect = true;
+      clearReconnectTimeout();
       socket?.close();
       if (streamSocketRef.current === socket) {
         streamSocketRef.current = null;
@@ -794,6 +902,7 @@ export function useChatMessages(options: {
             if (!newSession) return false;
 
             sessionId = newSession.id;
+            activeSessionRef.current = sessionId;
             setMessages([]);
             shouldAutoScrollRef.current = true;
           } finally {
@@ -826,7 +935,7 @@ export function useChatMessages(options: {
             );
 
           const refreshed = await loadMessages(sessionId, { background: true });
-          if (!refreshed) {
+          if (!refreshed.ok) {
             setAwaitingRefresh(true);
             setMessages((previous) => [
               ...previous,
@@ -857,6 +966,26 @@ export function useChatMessages(options: {
           });
           return true;
         } catch (error) {
+          if (isRecoverableChatSendInterruption(error)) {
+            const refreshed = await loadMessages(sessionId, {
+              background: true,
+            });
+            if (!refreshed.ok) {
+              setAwaitingRefresh(true);
+              return false;
+            }
+            if (!refreshed.active) {
+              return false;
+            }
+            if (refreshed.processing) {
+              setAwaitingRefresh(true);
+              return false;
+            }
+            if (hasFinalAssistantAfterLatestUser(refreshed.messages)) {
+              return true;
+            }
+          }
+
           const errorMessage =
             error instanceof Error
               ? error.message
