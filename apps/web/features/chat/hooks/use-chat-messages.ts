@@ -128,14 +128,9 @@ export function useChatMessages(options: {
   const toolTraceMessageEntriesRef = useRef<
     Array<{ key: string; id: string; args?: unknown }>
   >([]);
-  const thinkingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
-    [],
-  );
   const latestStreamingMessageKeyRef = useRef<string | null>(null);
-  const latestThinkingMessageKeyRef = useRef<string | null>(null);
   const streamingSequenceRef = useRef(0);
   const toolTraceSequenceRef = useRef(0);
-  const thinkingSequenceRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
@@ -144,19 +139,14 @@ export function useChatMessages(options: {
   );
 
   const getActiveStreamingMessageIds = useCallback(
-    () => [
-      ...thinkingMessageEntriesRef.current.map((entry) => entry.id),
-      ...streamingMessageEntriesRef.current.map((entry) => entry.id),
-    ],
+    () => streamingMessageEntriesRef.current.map((entry) => entry.id),
     [],
   );
 
   const resetStreamingMessageRefs = useCallback(() => {
     streamingMessageEntriesRef.current = [];
     latestStreamingMessageKeyRef.current = null;
-    latestThinkingMessageKeyRef.current = null;
     toolTraceMessageEntriesRef.current = [];
-    thinkingMessageEntriesRef.current = [];
   }, []);
 
   const beginStreamingAssistantTurn = useCallback((turnIndex?: number) => {
@@ -372,7 +362,9 @@ export function useChatMessages(options: {
           next[existingIndex] = {
             ...next[existingIndex],
             content,
-            metadata: metadata ?? next[existingIndex].metadata,
+            metadata: metadata ?? {
+              kind: 'streaming',
+            },
             timestamp: new Date().toISOString(),
           };
           return next;
@@ -416,61 +408,20 @@ export function useChatMessages(options: {
       const text = content.trim();
       if (!text) return;
 
-      const key =
+      upsertStreamingAssistantMessage(
+        sessionId,
+        text,
         typeof turnIndex === 'number'
-          ? `thinking-${turnIndex}`
-          : (latestThinkingMessageKeyRef.current ??
-            `thinking-${thinkingSequenceRef.current}`);
-      let entry = thinkingMessageEntriesRef.current.find(
-        (item) => item.key === key,
+          ? `turn-${turnIndex}`
+          : latestStreamingMessageKeyRef.current,
+        {
+          kind: 'thinking',
+          stage: 'thinking',
+          workflow: 'pi_runtime',
+        },
       );
-      if (!entry) {
-        entry = {
-          key,
-          id: `thinking-${Date.now()}-${thinkingSequenceRef.current}`,
-        };
-        thinkingSequenceRef.current += 1;
-        thinkingMessageEntriesRef.current = [
-          ...thinkingMessageEntriesRef.current,
-          entry,
-        ];
-      }
-      latestThinkingMessageKeyRef.current = key;
-
-      const accountId =
-        options.sessions.find((session) => session.id === sessionId)
-          ?.account_id ?? 'web';
-
-      setMessages((previous) => {
-        const existingIndex = previous.findIndex(
-          (message) => message.id === entry.id,
-        );
-        const nextMessage: Message = {
-          id: entry.id,
-          account_id: accountId,
-          sender: '',
-          sender_name: '',
-          content: text,
-          timestamp: new Date().toISOString(),
-          is_from_me: true,
-          is_bot_message: true,
-          metadata: {
-            kind: 'thinking',
-            stage: 'thinking',
-            workflow: 'pi_runtime',
-          },
-        };
-
-        if (existingIndex >= 0) {
-          const next = [...previous];
-          next[existingIndex] = nextMessage;
-          return next;
-        }
-
-        return [...previous, nextMessage];
-      });
     },
-    [options.sessions],
+    [upsertStreamingAssistantMessage],
   );
 
   const upsertToolTraceMessage = useCallback(
