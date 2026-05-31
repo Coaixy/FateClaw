@@ -101,6 +101,7 @@ export function AiChatComposer({
           }}
         />
         <button
+          type="button"
           onClick={sending ? onStop : onSend}
           disabled={actionDisabled}
           className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${

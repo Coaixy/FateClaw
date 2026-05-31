@@ -32,7 +32,7 @@ export function useAuthSession() {
       }
 
       console.warn('Failed to verify auth:', err);
-      setUser(null);
+      // 非 401 多半是网络或服务端临时错误，保留现有用户态，避免页面被误判为登出。
       setLoading(false);
     }
   }, []);

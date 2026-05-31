@@ -90,6 +90,7 @@ function AiChatWorkspaceContent() {
     chatAvailable,
     sessions,
     selectedSession,
+    selectedSessionRevision,
     setSelectedSession,
     createSession,
     touchSession,
@@ -122,6 +123,7 @@ function AiChatWorkspaceContent() {
   const chatMessages = useChatMessages({
     chatAvailable,
     selectedSession,
+    selectedSessionRevision,
     sessions,
     createSession,
     touchSession,
@@ -262,7 +264,14 @@ function AiChatWorkspaceContent() {
         setInput('');
       }
 
-      await chatMessages.sendMessageWithOptions(text);
+      try {
+        await chatMessages.sendMessageWithOptions(text);
+      } catch (error) {
+        toast(
+          'error',
+          error instanceof Error ? error.message : '发送失败，请稍后重试',
+        );
+      }
     },
     [
       chatAvailable,
@@ -271,6 +280,7 @@ function AiChatWorkspaceContent() {
       authLoading,
       input,
       requestLogin,
+      toast,
     ],
   );
 

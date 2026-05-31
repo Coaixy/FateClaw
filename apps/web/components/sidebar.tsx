@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
 import { TopBar } from './top-bar';
@@ -81,6 +82,34 @@ function matchSessionDateFilter(
   return updatedTime < startOfToday - 29 * dayMs;
 }
 
+function SidebarSessionSkeleton() {
+  const rows = ['w-28', 'w-36', 'w-24', 'w-32', 'w-28'];
+
+  return (
+    <div
+      className="space-y-1.5 px-1 py-1"
+      role="status"
+      aria-label="正在加载对话记录"
+    >
+      <span className="sr-only">正在加载对话记录</span>
+      {rows.map((widthClass, index) => (
+        <div
+          key={`${widthClass}-${index}`}
+          className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
+        >
+          <div className="h-6 w-6 shrink-0 animate-pulse rounded-lg bg-surface-card" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div
+              className={`h-3 animate-pulse rounded-full bg-muted/12 ${widthClass}`}
+            />
+            <div className="h-2 w-10 animate-pulse rounded-full bg-muted/10" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -113,6 +142,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
+  const { loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<SessionDateFilter>('all');
@@ -127,6 +157,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     renameSession,
     deleteSession,
     chatAvailable,
+    loading: sessionsLoading,
   } = useChatSessions();
 
   useEffect(() => {
@@ -183,6 +214,8 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     : dateFilter === 'all'
       ? '暂无对话'
       : `没有属于${activeDateFilterLabel}的对话`;
+  const showSessionSkeleton =
+    sessions.length === 0 && (authLoading || sessionsLoading);
 
   const goNewChat = () => {
     // 手机端在当前页内切会话/新建对话时，pathname 不会变化，必须主动收起抽屉。
@@ -356,7 +389,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             )}
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 scrollbar-hide">
-            {sessions.length === 0 ? (
+            {showSessionSkeleton ? (
+              <SidebarSessionSkeleton />
+            ) : sessions.length === 0 ? (
               <div className="px-3 py-6 text-center">
                 <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-card flex items-center justify-center">
                   <MessageCircle size={16} className="text-muted/40" />

@@ -20,6 +20,7 @@ interface ChatSessionsContextValue {
   chatAvailable: boolean;
   sessions: ChatSession[];
   selectedSession: string;
+  selectedSessionRevision: number;
   setSelectedSession: (id: string) => void;
   createSession: () => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
@@ -79,13 +80,38 @@ function readSelectedSessionFromUrl() {
   return new URLSearchParams(window.location.search).get('sid') || '';
 }
 
+function hasStoredAuthToken() {
+  return typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
+}
+
+/**
+ * 判断是否应该清空当前 AI Chat 会话选择。
+ *
+ * @param args.user 当前认证用户，未登录时为 null。
+ * @param args.authLoading 认证会话是否仍在初始化。
+ * @param args.hasToken 本地是否仍有登录 token。
+ * @returns 只有确认未登录时才返回 true。
+ *
+ * 注意：登录态确认前必须保留当前会话选择，避免 auth 初始化的短暂空用户
+ * 把 /ai-chat?sid=... 误清成新对话首页。若 token 仍在但 /me 临时失败，
+ * 也先保留会话选择，避免网络抖动直接把聊天界面清空。
+ */
+export function shouldClearChatSelection(args: {
+  user: unknown;
+  authLoading: boolean;
+  hasToken: boolean;
+}) {
+  return !args.authLoading && !args.user && !args.hasToken;
+}
+
 export function ChatSessionsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSession, setSelectedSessionState] = useState('');
+  const [selectedSessionRevision, setSelectedSessionRevision] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const latestSessionsRequestRef = useRef(0);
@@ -94,6 +120,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     // 首次进入和浏览器前进/后退都从地址栏同步 sid，避免依赖 useSearchParams 触发整页 CSR。
     const syncSelectedSession = () => {
       setSelectedSessionState(readSelectedSessionFromUrl());
+      setSelectedSessionRevision((value) => value + 1);
     };
 
     syncSelectedSession();
@@ -102,7 +129,11 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSessions = useCallback(async () => {
-    if (!user) {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user && !hasStoredAuthToken()) {
       setSessions([]);
       return;
     }
@@ -121,31 +152,38 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       if (latestSessionsRequestRef.current !== requestId) {
         return;
       }
-      setSessions([]);
     } finally {
       if (latestSessionsRequestRef.current === requestId) {
         setLoading(false);
       }
     }
-  }, [user]);
+  }, [authLoading, user]);
 
   useEffect(() => {
-    if (!user) {
+    const hasToken = hasStoredAuthToken();
+    if (shouldClearChatSelection({ user, authLoading, hasToken })) {
       setSessions([]);
       setSelectedSessionState('');
+      setSelectedSessionRevision((value) => value + 1);
       latestSessionsRequestRef.current = 0;
       return;
     }
 
+    if (authLoading) {
+      return;
+    }
+
     void loadSessions();
-  }, [loadSessions, user]);
+  }, [authLoading, loadSessions, user]);
 
   const setSelectedSession = useCallback(
     (id: string) => {
       setSelectedSessionState(id);
+      setSelectedSessionRevision((value) => value + 1);
       const target = id ? `/ai-chat?sid=${encodeURIComponent(id)}` : '/ai-chat';
       if (pathname === '/ai-chat') {
-        window.history.replaceState(null, '', target);
+        // 保留 Next App Router 写入的 history state，避免后续导航恢复到错误页面。
+        window.history.replaceState(window.history.state, '', target);
       } else {
         router.push(target);
       }
@@ -154,7 +192,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   );
 
   const createSession = useCallback(async () => {
-    if (!user) {
+    if (authLoading || (!user && !hasStoredAuthToken())) {
       return null;
     }
 
@@ -165,7 +203,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     ]);
     setSelectedSession(session.id);
     return session;
-  }, [setSelectedSession, user]);
+  }, [authLoading, setSelectedSession, user]);
 
   const renameSession = useCallback(async (sessionId: string, title: string) => {
     const normalizedTitle = title.trim();
@@ -202,9 +240,10 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ChatSessionsContextValue>(
     () => ({
-      chatAvailable: Boolean(user),
+      chatAvailable: !authLoading && (Boolean(user) || hasStoredAuthToken()),
       sessions,
       selectedSession,
+      selectedSessionRevision,
       setSelectedSession,
       createSession,
       renameSession,
@@ -213,9 +252,11 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       loading,
     }),
     [
+      authLoading,
       user,
       sessions,
       selectedSession,
+      selectedSessionRevision,
       setSelectedSession,
       createSession,
       renameSession,

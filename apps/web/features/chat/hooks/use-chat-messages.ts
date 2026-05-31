@@ -194,6 +194,7 @@ export async function sendChatSessionMessageWithOptions(
 export function useChatMessages(options: {
   chatAvailable: boolean;
   selectedSession: string;
+  selectedSessionRevision: number;
   sessions: ChatSession[];
   createSession: () => Promise<ChatSession | null>;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
@@ -215,6 +216,7 @@ export function useChatMessages(options: {
   const awaitingRefreshRef = useRef(false);
   const databaseProcessingRef = useRef(false);
   const activeSessionRef = useRef('');
+  const previousSelectedSessionRef = useRef('');
   const shouldAutoScrollRef = useRef(true);
   const creatingRef = useRef(false);
   const streamSocketRef = useRef<WebSocket | null>(null);
@@ -363,9 +365,30 @@ export function useChatMessages(options: {
           messages: nextMessages,
           processing: data.processing,
         };
-      } catch {
+      } catch (error) {
         if (activeSessionRef.current === sessionId && !isBackground) {
-          setMessages([]);
+          const content =
+            error instanceof Error
+              ? `加载历史消息失败：${error.message}`
+              : '加载历史消息失败，请稍后重试';
+          const messageId = `opt-load-error-${Date.now()}-${localMessageSequenceRef.current}`;
+          localMessageSequenceRef.current += 1;
+          setMessages([
+            {
+              id: messageId,
+              account_id: 'web',
+              sender: '',
+              sender_name: '',
+              content,
+              timestamp: new Date().toISOString(),
+              is_from_me: true,
+              is_bot_message: true,
+              metadata: {
+                kind: 'error',
+                turn_complete: true,
+              },
+            },
+          ]);
         }
         return { ok: false };
       } finally {
@@ -384,6 +407,9 @@ export function useChatMessages(options: {
   );
 
   useEffect(() => {
+    const previousSelectedSession = previousSelectedSessionRef.current;
+    previousSelectedSessionRef.current = options.selectedSession;
+
     if (options.selectedSession) {
       updateProcessing(false);
       updateAwaitingRefresh(false);
@@ -392,7 +418,9 @@ export function useChatMessages(options: {
       setContinuationBlocked(false);
       setContinuationBlockMessage('');
       void loadMessages(options.selectedSession, {
-        background: sendingRef.current,
+        background:
+          sendingRef.current &&
+          previousSelectedSession === options.selectedSession,
       });
       return;
     }
@@ -409,6 +437,7 @@ export function useChatMessages(options: {
   }, [
     loadMessages,
     options.selectedSession,
+    options.selectedSessionRevision,
     updateAwaitingRefresh,
     updateProcessing,
   ]);
@@ -1200,6 +1229,29 @@ export function useChatMessages(options: {
           appendAssistantErrorMessage(sessionId, errorMessage);
           return false;
         }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : DEFAULT_AI_CHAT_ERROR_MESSAGE;
+        const messageId = `opt-send-error-${Date.now()}-${localMessageSequenceRef.current}`;
+        localMessageSequenceRef.current += 1;
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: messageId,
+            account_id: 'web',
+            sender: '',
+            sender_name: '',
+            content: errorMessage,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: {
+              kind: 'error',
+              turn_complete: true,
+            },
+          },
+        ]);
+        return false;
       } finally {
         if (sendAbortControllerRef.current === abortController) {
           sendAbortControllerRef.current = null;
