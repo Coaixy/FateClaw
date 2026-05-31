@@ -30,6 +30,8 @@ const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
 const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
 const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
 const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
+const GENERIC_REQUEST_FAILED_MESSAGE = '请求失败，请检查后重试';
+const AI_CHAT_RECONNECTING_MESSAGE = '请求断开，正在重连';
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
@@ -96,6 +98,37 @@ export function getAiChatStreamErrorMessage(
 
   const rawError = event.error?.trim();
   return rawError || DEFAULT_AI_CHAT_ERROR_MESSAGE;
+}
+
+/**
+ * 归一化 AI Chat 发送阶段的错误文案。
+ *
+ * @param error 捕获到的发送异常。
+ * @returns 适合展示在聊天界面的错误或重连提示。
+ */
+export function getAiChatSendErrorMessage(error: unknown): string {
+  const message =
+    error instanceof Error
+      ? error.message.trim()
+      : DEFAULT_AI_CHAT_ERROR_MESSAGE;
+  if (
+    !message ||
+    message === GENERIC_REQUEST_FAILED_MESSAGE ||
+    message.startsWith('网络连接失败')
+  ) {
+    return AI_CHAT_RECONNECTING_MESSAGE;
+  }
+  return message;
+}
+
+function isReconnectNoticeMessage(message: Message) {
+  return (
+    Boolean(message.is_bot_message) && message.metadata?.kind === 'reconnecting'
+  );
+}
+
+function withoutReconnectNoticeMessages(messages: Message[]) {
+  return messages.filter((message) => !isReconnectNoticeMessage(message));
 }
 
 function appendTransientAssistantMessages(
@@ -721,6 +754,37 @@ export function useChatMessages(options: {
     [options.sessions],
   );
 
+  const appendReconnectNoticeMessage = useCallback(
+    (sessionId: string) => {
+      const accountId =
+        options.sessions.find((session) => session.id === sessionId)
+          ?.account_id ?? 'web';
+      const messageId = `opt-reconnect-${Date.now()}-${localMessageSequenceRef.current}`;
+      localMessageSequenceRef.current += 1;
+
+      setMessages((previous) => {
+        const visibleMessages = withoutReconnectNoticeMessages(previous);
+        return [
+          ...visibleMessages,
+          {
+            id: messageId,
+            account_id: accountId,
+            sender: '',
+            sender_name: '',
+            content: AI_CHAT_RECONNECTING_MESSAGE,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+            metadata: {
+              kind: 'reconnecting',
+            },
+          },
+        ];
+      });
+    },
+    [options.sessions],
+  );
+
   useEffect(() => {
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
@@ -785,6 +849,7 @@ export function useChatMessages(options: {
 
       if (payload.type === 'connected') {
         reconnectAttempt = 0;
+        setMessages((previous) => withoutReconnectNoticeMessages(previous));
         return;
       }
 
@@ -1000,6 +1065,7 @@ export function useChatMessages(options: {
           activeSessionRef.current === sessionId &&
           hasRecoverableStreamActivity()
         ) {
+          appendReconnectNoticeMessage(sessionId);
           updateAwaitingRefresh(true);
         }
       };
@@ -1010,6 +1076,7 @@ export function useChatMessages(options: {
         }
         if (!closedByEffect && activeSessionRef.current === sessionId) {
           if (hasRecoverableStreamActivity()) {
+            appendReconnectNoticeMessage(sessionId);
             updateAwaitingRefresh(true);
           }
           scheduleReconnect();
@@ -1031,6 +1098,7 @@ export function useChatMessages(options: {
   }, [
     beginStreamingAssistantTurn,
     appendAssistantErrorMessage,
+    appendReconnectNoticeMessage,
     getActiveStreamingMessageIds,
     isStreamInterrupted,
     loadMessages,
@@ -1207,6 +1275,7 @@ export function useChatMessages(options: {
               background: true,
             });
             if (!refreshed.ok) {
+              appendReconnectNoticeMessage(sessionId);
               updateAwaitingRefresh(true);
               return false;
             }
@@ -1222,10 +1291,12 @@ export function useChatMessages(options: {
             }
           }
 
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : DEFAULT_AI_CHAT_ERROR_MESSAGE;
+          const errorMessage = getAiChatSendErrorMessage(error);
+          if (errorMessage === AI_CHAT_RECONNECTING_MESSAGE) {
+            appendReconnectNoticeMessage(sessionId);
+            updateAwaitingRefresh(true);
+            return false;
+          }
           appendAssistantErrorMessage(sessionId, errorMessage);
           return false;
         }
@@ -1263,6 +1334,7 @@ export function useChatMessages(options: {
     [
       activeContinuationBlocked,
       appendAssistantErrorMessage,
+      appendReconnectNoticeMessage,
       isPending,
       loadMessages,
       options,

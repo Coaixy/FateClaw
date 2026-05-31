@@ -26,6 +26,7 @@ export function AiChatMessageList({
   sending,
   progressLabel,
   selectedSession,
+  switchingSession,
   showCenteredComposer,
   composer,
 }: {
@@ -34,6 +35,7 @@ export function AiChatMessageList({
   sending: boolean;
   progressLabel: string | null;
   selectedSession: string;
+  switchingSession: boolean;
   showCenteredComposer: boolean;
   composer: React.ReactNode;
 }) {
@@ -63,6 +65,10 @@ export function AiChatMessageList({
 
   if (loading && messages.length === 0 && !sending) {
     return <ChatLoadingState count={3} />;
+  }
+
+  if (switchingSession) {
+    return <ChatLoadingState count={4} />;
   }
 
   const { rows, pendingToolTraces } = buildDisplayRows(messages);

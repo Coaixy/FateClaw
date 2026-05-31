@@ -5,6 +5,7 @@ import { buildChatSessionStreamUrl, chatSessionsApi } from './api';
 import {
   getAiChatStreamReconnectDelay,
   getAiChatStreamErrorMessage,
+  getAiChatSendErrorMessage,
   isRecoverableChatSendInterruption,
   sendChatSessionMessageWithOptions,
 } from './hooks/use-chat-messages';
@@ -241,6 +242,25 @@ describe('getAiChatStreamErrorMessage', () => {
         error: '   ',
       }),
     ).toBe('抱歉，AI 服务暂时不可用，请稍后重试');
+  });
+});
+
+describe('getAiChatSendErrorMessage', () => {
+  it('shows reconnecting copy for generic request disconnects', () => {
+    expect(getAiChatSendErrorMessage(new Error('请求失败，请检查后重试'))).toBe(
+      '请求断开，正在重连',
+    );
+    expect(
+      getAiChatSendErrorMessage(
+        new Error('网络连接失败，请检查服务是否正常后重试'),
+      ),
+    ).toBe('请求断开，正在重连');
+  });
+
+  it('keeps specific server error messages visible', () => {
+    expect(getAiChatSendErrorMessage(new Error('自配模型调用失败'))).toBe(
+      '自配模型调用失败',
+    );
   });
 });
 

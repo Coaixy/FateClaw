@@ -415,6 +415,11 @@ function AiChatWorkspaceContent() {
   const progressLabel = chatMessages.sending
     ? getLatestProgressLabel(chatMessages.messages)
     : null;
+  const switchingSession =
+    Boolean(selectedSession) &&
+    chatMessages.loading &&
+    chatMessages.loadedSessionId !== selectedSession &&
+    !chatMessages.sending;
   const showCenteredComposer =
     !selectedSession ||
     (!chatMessages.loading &&
@@ -624,6 +629,7 @@ function AiChatWorkspaceContent() {
           sending={chatMessages.sending}
           progressLabel={progressLabel}
           selectedSession={selectedSession}
+          switchingSession={switchingSession}
           showCenteredComposer={showCenteredComposer}
           composer={showCenteredComposer ? centeredComposer : composer}
         />
