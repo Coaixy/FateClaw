@@ -45,82 +45,78 @@ export function UsagePanel({
   const todayTokens = usage?.today_total_tokens ?? 0;
 
   return (
-    <div className="w-[300px]">
-      <div className="px-4 pt-3 pb-2.5 border-b border-hairline/40">
+    <div className="w-[min(340px,calc(100vw-1.5rem))]">
+      <div className="border-b border-hairline/40 px-4 pb-3 pt-3.5">
         <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-ink">
-                计费概览
-              </span>
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-ink">
+              计费概览
             </div>
-            <div className="text-[10px] text-muted mt-0.5">
+            <div className="mt-1 max-w-[250px] text-[10px] leading-4 text-muted">
               官方模型与自配模型平台服务费均按用量扣费
             </div>
           </div>
           <button
             onClick={onRefresh}
             disabled={refreshing}
-            className="w-6 h-6 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors cursor-pointer disabled:opacity-50"
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink disabled:opacity-50"
             aria-label="刷新"
           >
-            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      <div className="px-4 py-3 border-b border-hairline/40">
-        <div className="flex items-center justify-between text-[10px] mb-1.5">
-          <span className="text-muted uppercase tracking-wider font-semibold">
-            本月 Token
-          </span>
-          <span className="tabular-nums text-ink font-medium">
-            {formatTokens(used)}
-          </span>
-        </div>
-        <div className="text-[10px] text-muted">
-          本月已扣 {formatCoins(status.estimated_monthly_total_coins)}
-        </div>
-      </div>
+      <div className="space-y-3 p-3">
+        <section className="rounded-lg border border-hairline/50 bg-canvas/50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-medium text-muted">
+              可用余额
+            </span>
+            <Wallet size={14} className="text-primary" />
+          </div>
+          <div className="mt-1 text-[20px] font-semibold leading-tight tabular-nums text-ink">
+            {formatCoins(status.available_coins)}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <BalanceChip label="充值余额" value={status.purchased_coins} />
+            <BalanceChip label="赠送余额" value={status.bonus_coins} />
+          </div>
+        </section>
 
-      <div className="px-4 py-3 border-b border-hairline/40">
-        <div className="text-[10px] text-muted uppercase tracking-wider font-semibold mb-2">
-          今日使用
-        </div>
         <div className="grid grid-cols-2 gap-2">
           <StatBox
             icon={MessageSquare}
-            label="消息"
+            label="今日消息"
             value={`${todayMessages}`}
           />
           <StatBox
             icon={Sparkles}
-            label="Token"
+            label="今日 Token"
             value={formatTokens(todayTokens)}
           />
         </div>
+
+        <div className="rounded-lg border border-hairline/50 bg-surface-card/45 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-medium text-muted">
+              本月 Token
+            </span>
+            <span className="text-[13px] font-semibold tabular-nums text-ink">
+              {formatTokens(used)}
+            </span>
+          </div>
+          <div className="mt-1 text-[10px] leading-4 text-muted">
+            本月已扣 {formatCoins(status.estimated_monthly_total_coins)}
+          </div>
+        </div>
       </div>
 
-      <div className="px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">
-            账户余额
-          </span>
-          <span className="text-[14px] font-semibold tabular-nums text-ink">
-            {formatCoins(status.available_coins)}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5 text-center">
-          <BalanceChip label="充值" value={status.purchased_coins} />
-          <BalanceChip label="赠送" value={status.bonus_coins} />
-        </div>
-      </div>
-
-      <div className="p-1.5 border-t border-hairline/40 flex gap-1">
+      <div className="grid grid-cols-2 gap-2 border-t border-hairline/40 p-2">
         <Link
           href="/wallet"
           onClick={onNavigate}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
+          className="flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
         >
           <Wallet size={12} />
           钱包明细
@@ -128,7 +124,7 @@ export function UsagePanel({
         <Link
           href="/settings/advanced"
           onClick={onNavigate}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
+          className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary/15 px-3 text-[11px] font-medium text-primary transition-colors hover:bg-primary/25"
         >
           <Settings2 size={12} />
           模型设置
@@ -148,12 +144,12 @@ function StatBox({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-hairline/40 bg-surface-card/40 px-2.5 py-2">
-      <div className="flex items-center gap-1 text-[9px] text-muted uppercase tracking-wider">
+    <div className="min-h-[64px] rounded-lg border border-hairline/50 bg-surface-card/45 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
         <Icon size={10} />
         {label}
       </div>
-      <div className="text-[13px] font-semibold tabular-nums text-ink mt-0.5">
+      <div className="mt-1 text-[16px] font-semibold leading-tight tabular-nums text-ink">
         {value}
       </div>
     </div>
@@ -162,9 +158,9 @@ function StatBox({
 
 function BalanceChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md bg-surface-card/50 border border-hairline/30 py-1.5">
-      <div className="text-[9px] text-muted">{label}</div>
-      <div className="text-[11px] font-medium tabular-nums text-ink mt-0.5">
+    <div className="rounded-lg border border-hairline/40 bg-surface-card/55 px-2.5 py-2 text-left">
+      <div className="text-[10px] text-muted">{label}</div>
+      <div className="mt-0.5 text-[12px] font-medium tabular-nums text-ink">
         {formatCoins(value)}
       </div>
     </div>

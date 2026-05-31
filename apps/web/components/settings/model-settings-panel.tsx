@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  BadgeDollarSign,
   Check,
   Loader2,
-  MessageSquareText,
   RefreshCw,
   Save,
   ServerCog,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 
@@ -28,7 +29,7 @@ import {
 } from './model-pricing';
 
 const CONTROL =
-  'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none focus:border-hairline';
+  'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-1 focus:ring-primary/20';
 
 type CustomDraft = {
   pi_api: ModelPiApi;
@@ -198,34 +199,92 @@ export function ModelSettingsPanel() {
   }
 
   const selection = overview?.selection;
+  const officialModels = overview?.official_models ?? [];
   const customModelPlatformFeeCoins =
     overview?.custom_model_platform_price_per_million_coins ??
     DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS;
+  const selectedSourceLabel =
+    selection?.source === 'custom'
+      ? '自配供应商'
+      : selection?.source === 'official'
+        ? '官方模型'
+        : '未选择';
+  const selectedModelLabel =
+    selection?.source === 'custom'
+      ? custom.model_name.trim() || '自配模型'
+      : officialModels.find(
+          (model) => model.id === selection?.official_model_id,
+        )?.display_name ?? '未选择模型';
+  const availableOfficialModels = officialModels.filter(
+    (model) => model.enabled && model.has_secret,
+  ).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">模型设置</div>
-          <div className="mt-1 text-[12px] text-muted">
-            未选择或当前选择失效时，会默认使用价格最低的可用官方模型。
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-lg border border-hairline bg-surface-card">
+        <div className="grid lg:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div className="p-4 sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
+                  <Check size={13} className="text-primary" />
+                  当前模型
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-[22px] font-semibold leading-tight text-ink">
+                    {selectedModelLabel}
+                  </span>
+                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {selectedSourceLabel}
+                  </span>
+                </div>
+                <div className="mt-2 max-w-2xl text-[12px] leading-5 text-muted">
+                  未选择或当前选择失效时，会默认使用价格最低的可用官方模型。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-hairline px-3 text-[12px] text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
+              >
+                <RefreshCw size={13} />
+                刷新
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 border-t border-hairline bg-canvas/45 lg:border-l lg:border-t-0">
+            <SummaryTile label="模型来源" value={selectedSourceLabel} />
+            <SummaryTile
+              label="官方可用"
+              value={`${availableOfficialModels}/${officialModels.length}`}
+            />
+            <SummaryTile
+              label="自配协议"
+              value={custom.pi_api || '未配置'}
+            />
+            <SummaryTile
+              label="平台服务费"
+              value={customModelPlatformFeeAmountLabel(
+                customModelPlatformFeeCoins,
+              )}
+            />
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-hairline px-3 text-[12px] text-muted hover:text-ink"
-        >
-          <RefreshCw size={13} />
-          刷新
-        </button>
-      </div>
+      </section>
 
       {message && (
-        <div className="rounded-lg border border-hairline bg-surface-card px-3 py-2 text-[12px] text-muted">
+        <div className="rounded-lg border border-primary/20 bg-primary/8 px-3 py-2 text-[12px] text-primary">
           {message}
         </div>
       )}
+
+      <OfficialModelsSection
+        busy={busy}
+        models={officialModels}
+        selection={selection ?? null}
+        onSelectOfficial={selectOfficial}
+      />
 
       <CustomModelSection
         busy={busy}
@@ -236,13 +295,19 @@ export function ModelSettingsPanel() {
         onSaveCustom={saveCustom}
         onSelectCustom={selectCustom}
       />
+    </div>
+  );
+}
 
-      <OfficialModelsSection
-        busy={busy}
-        models={overview?.official_models ?? []}
-        selection={selection ?? null}
-        onSelectOfficial={selectOfficial}
-      />
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 border-b border-r border-hairline/60 px-4 py-3 last:border-b-0 even:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0">
+      <div className="text-[10px] font-medium text-muted">
+        {label}
+      </div>
+      <div className="mt-1 truncate text-[13px] font-semibold text-ink">
+        {value}
+      </div>
     </div>
   );
 }
@@ -265,66 +330,131 @@ function CustomModelSection({
   onSelectCustom: () => Promise<void>;
 }) {
   return (
-    <section className="rounded-lg border border-hairline bg-surface-card p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <ServerCog size={15} className="text-muted" />
-          自配模型
+    <section
+      className={`overflow-hidden rounded-lg border ${
+        selected
+          ? 'border-primary/40 bg-primary/8'
+          : 'border-hairline bg-surface-card'
+      }`}
+    >
+      <div className="flex flex-col gap-3 border-b border-hairline/70 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary">
+            <ServerCog size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+              自配模型
+              {selected && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
+                  <Check size={11} />
+                  当前
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-[12px] leading-5 text-muted">
+              接入自有供应商账号，按网站平台服务费另行扣费。
+            </div>
+          </div>
         </div>
-        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
+        <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
           {customModelPlatformFeeLabel(customModelPlatformFeeCoins)}
         </span>
       </div>
-      <div className="mb-3 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
-        模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
-        合计收取平台服务费，每百万 Token{' '}
-        {customModelPlatformFeeAmountLabel(customModelPlatformFeeCoins)}。
+
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="p-4 sm:p-5">
+          <div className="mb-4 text-[12px] leading-5 text-muted">
+            模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
+            合计收取平台服务费，每百万 Token{' '}
+            {customModelPlatformFeeAmountLabel(customModelPlatformFeeCoins)}。
+          </div>
+          <CustomModelFields
+            custom={custom}
+            setCustom={setCustom}
+          />
+          <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-end">
+            <label className="space-y-1.5">
+              <span className="text-[12px] font-medium text-muted">
+                API Key
+              </span>
+              <input
+                type="text"
+                value={custom.api_key}
+                onChange={(event) =>
+                  setCustom((prev) => ({
+                    ...prev,
+                    api_key: event.target.value,
+                  }))
+                }
+                placeholder="输入 API Key"
+                className={CONTROL}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void onSaveCustom()}
+              disabled={
+                busy === 'custom' ||
+                !custom.model_name.trim() ||
+                !custom.api_key.trim()
+              }
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40"
+            >
+              {busy === 'custom' ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              保存模型
+            </button>
+          </div>
+        </div>
+
+        <aside className="border-t border-hairline/70 bg-canvas/45 p-4 sm:p-5 lg:border-l lg:border-t-0">
+          <div className="text-[11px] font-semibold text-muted">
+            接入状态
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-ink">
+            <ShieldCheck size={15} className="text-primary" />
+            {selected ? '当前使用自配模型' : '未启用自配模型'}
+          </div>
+          <div className="mt-4 space-y-3 border-y border-hairline/70 py-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
+                <BadgeDollarSign size={12} className="text-primary" />
+                平台服务费
+              </div>
+              <div className="mt-1 text-[13px] font-semibold text-ink">
+                {customModelPlatformFeeAmountLabel(
+                  customModelPlatformFeeCoins,
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-medium text-muted">
+                当前模型名
+              </div>
+              <div className="mt-1 truncate text-[13px] font-semibold text-ink">
+                {custom.model_name.trim() || '未填写'}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void onSelectCustom()}
+            disabled={busy === 'select-custom'}
+            className={`mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-3 text-[13px] transition-colors ${
+              selected
+                ? 'bg-primary/15 text-primary'
+                : 'border border-hairline bg-surface-card text-muted hover:bg-surface-cream-strong hover:text-ink'
+            }`}
+          >
+            <Check size={14} />
+            {selected ? '当前选择自配模型' : '选择自配模型'}
+          </button>
+        </aside>
       </div>
-      <CustomModelFields
-        custom={custom}
-        setCustom={setCustom}
-      />
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-        <input
-          type="text"
-          value={custom.api_key}
-          onChange={(event) =>
-            setCustom((prev) => ({ ...prev, api_key: event.target.value }))
-          }
-          placeholder="输入 API Key"
-          className={CONTROL}
-        />
-        <button
-          type="button"
-          onClick={() => void onSaveCustom()}
-          disabled={
-            busy === 'custom' ||
-            !custom.model_name.trim() ||
-            !custom.api_key.trim()
-          }
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
-        >
-          {busy === 'custom' ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Save size={14} />
-          )}
-          保存模型
-        </button>
-      </div>
-      <button
-        type="button"
-        onClick={() => void onSelectCustom()}
-        disabled={busy === 'select-custom'}
-        className={`mt-3 inline-flex h-10 items-center gap-2 rounded-lg px-3 text-[13px] ${
-          selected
-            ? 'bg-primary/15 text-primary'
-            : 'border border-hairline text-muted hover:text-ink'
-        }`}
-      >
-        <Check size={14} />
-        {selected ? '当前选择自配模型' : '选择自配模型'}
-      </button>
     </section>
   );
 }
@@ -337,7 +467,7 @@ function CustomModelFields({
   setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2">
       <label className="space-y-1.5">
         <span className="text-[12px] font-medium text-muted">
           协议类型
@@ -399,23 +529,36 @@ function OfficialModelsSection({
   selection: ModelSettingsOverview['selection'];
   onSelectOfficial: (modelId: string) => Promise<void>;
 }) {
+  const availableCount = models.filter(
+    (model) => model.enabled && model.has_secret,
+  ).length;
+
   return (
-    <section className="space-y-3">
-      <div>
-        <div className="flex items-center gap-2 text-[12px] font-medium text-muted">
-          <Sparkles size={13} className="text-primary" />
-          官方模型
+    <section className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+      <div className="flex flex-col gap-3 border-b border-hairline/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary">
+            <Sparkles size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-ink">
+              官方模型
+            </div>
+            <div className="mt-1 text-[12px] leading-5 text-muted">
+              由平台统一维护密钥和扣费价格，适合不想自行配置供应商账号的用户。
+            </div>
+          </div>
         </div>
-        <div className="mt-1 text-[12px] leading-5 text-muted">
-          由平台统一维护密钥和扣费价格，适合不想自行配置供应商账号的用户。
-        </div>
+        <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
+          {availableCount} 可用 / {models.length} 个
+        </span>
       </div>
       {models.length === 0 ? (
-        <div className="rounded-lg border border-hairline bg-surface-card px-4 py-6 text-[13px] text-muted">
+        <div className="mt-4 rounded-lg border border-hairline bg-canvas/55 px-4 py-6 text-[13px] text-muted">
           管理员尚未配置官方模型。
         </div>
       ) : (
-        <div className="grid gap-2">
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {models.map((model) => (
             <OfficialModelOption
               key={model.id}
@@ -454,36 +597,35 @@ function OfficialModelOption({
       type="button"
       onClick={() => void onSelect()}
       disabled={!available || busy}
-      className={`rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`flex min-h-[150px] flex-col justify-between rounded-lg border px-3.5 py-3.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         selected
           ? 'border-primary bg-primary/10 shadow-[0_8px_18px_rgba(0,0,0,0.06)]'
-          : 'border-hairline bg-surface-card hover:border-primary/35 hover:bg-surface-cream-strong'
+          : 'border-hairline bg-canvas/55 hover:border-primary/35 hover:bg-surface-cream-strong'
       }`}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">
-              {model.display_name}
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">
+            {model.display_name}
+          </span>
+          {selected && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
+              <Check size={11} />
+              当前
             </span>
-            {selected && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
-                <Check size={11} />
-                当前
-              </span>
-            )}
-            {!available && (
-              <span className="rounded-full bg-canvas px-2 py-0.5 text-[10px] text-muted">
-                暂不可用
-              </span>
-            )}
-          </div>
+          )}
+          {!available && (
+            <span className="rounded-full bg-surface-card px-2 py-0.5 text-[10px] text-muted">
+              暂不可用
+            </span>
+          )}
         </div>
-        <OfficialModelPriceTags model={model} />
+        <div className="mt-2 text-[12px] leading-5 text-muted">
+          {description}
+        </div>
       </div>
-      <div className="mt-3 flex items-start gap-2 rounded-lg border border-hairline/70 bg-canvas/55 px-3 py-2 text-[12px] leading-5 text-muted">
-        <MessageSquareText size={13} className="mt-0.5 shrink-0 text-muted" />
-        <span>{description}</span>
+      <div className="mt-4 border-t border-hairline/60 pt-3">
+        <OfficialModelPriceTags model={model} compact />
       </div>
     </button>
   );

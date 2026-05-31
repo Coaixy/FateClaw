@@ -1,8 +1,16 @@
 import type { Metadata, Viewport } from 'next';
+import localFont from 'next/font/local';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { ToastProvider } from '@/components/ui/toast';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import './globals.css';
+
+const kingHwaOldSong = localFont({
+  src: './fonts/KingHwa_OldSong.ttf',
+  variable: '--font-kinghwa-old-song',
+  display: 'swap',
+  preload: true,
+});
 
 export const metadata: Metadata = {
   title: '命枢 FateClaw',
@@ -28,7 +36,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>
+      <body className={kingHwaOldSong.variable}>
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>{children}</ConfirmProvider>

@@ -116,7 +116,7 @@ export function TopBar({
           </span>
         </button>
         {usageOpen && (
-          <div className="absolute right-0 top-full mt-2 rounded-xl border border-hairline/60 bg-surface-card/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
+          <div className="absolute right-0 top-full z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in">
             <UsagePanel
               status={status}
               usage={usage}

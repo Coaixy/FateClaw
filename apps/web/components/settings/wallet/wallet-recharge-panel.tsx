@@ -32,6 +32,14 @@ function formatCoinsLabel(value: string | number | null | undefined): string {
   return formatRechargeCoins(value);
 }
 
+function formatPresetAmount(value: string): string {
+  const amount = Number(value || 0);
+  return (Number.isFinite(amount) ? amount : 0).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function statusLabel(status: RechargeOrder['status']): string {
   switch (status) {
     case 'paid':
@@ -168,17 +176,26 @@ export function WalletRechargePanel({
                   key={preset}
                   type="button"
                   onClick={() => setAmountCoins(preset)}
-                  className={`min-h-16 rounded-xl border px-2 text-left transition-all ${
+                  className={`min-h-[58px] rounded-xl border px-2.5 py-2 text-center transition-all ${
                     amountCoins === preset
                       ? 'border-primary bg-primary/10 shadow-[0_10px_24px_rgba(0,0,0,0.06)]'
                       : 'border-hairline bg-canvas/60 hover:border-primary/35 hover:bg-surface-cream-strong'
                   }`}
                 >
-                  <span className="block text-[10px] font-medium text-muted">
+                  <span
+                    className={`block text-[12px] font-semibold ${
+                      amountCoins === preset ? 'text-primary' : 'text-ink'
+                    }`}
+                  >
                     充值
                   </span>
-                  <span className="mt-1 block text-lg font-bold tabular-nums text-ink">
-                    {formatRechargeCoins(preset)}
+                  <span className="mt-1 flex items-baseline justify-center gap-1">
+                    <span className="text-[10px] font-medium text-muted">
+                      软妹币
+                    </span>
+                    <span className="text-[15px] font-semibold tabular-nums text-ink">
+                      {formatPresetAmount(preset)}
+                    </span>
                   </span>
                 </button>
               ))}

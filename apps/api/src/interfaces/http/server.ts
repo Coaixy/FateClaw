@@ -26,6 +26,8 @@ import { resolveStaticExportRequest } from './static-export.js';
 import { tasksRoutes } from './tasks-routes.js';
 const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
+const IMMUTABLE_STATIC_ASSET_PATTERN =
+  /(?:^|[/\\])_next[/\\]static[/\\]|(?:^|[/\\])static[/\\]chunks[/\\]/;
 
 export async function createApiServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -211,6 +213,17 @@ export async function createApiServer(): Promise<FastifyInstance> {
       root: webOutDir,
       prefix: '/',
       wildcard: false,
+      setHeaders: (response, filePath) => {
+        if (IMMUTABLE_STATIC_ASSET_PATTERN.test(filePath)) {
+          response.setHeader(
+            'Cache-Control',
+            'public, max-age=31536000, immutable',
+          );
+          return;
+        }
+
+        response.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      },
     });
 
     // 兼容生产静态导出的三类请求：
