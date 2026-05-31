@@ -21,6 +21,12 @@ export interface MessageMetadataDto {
   duration_ms?: number;
   /** 本轮 AI 回复实际结算的软妹币金额。 */
   actual_charge_coins?: number;
+  /** 本轮 AI 回复按模型价格计算的原始软妹币金额。 */
+  raw_charge_coins?: number;
+  /** 本轮 AI 回复被会员额度抵扣的软妹币金额。 */
+  membership_covered_coins?: number;
+  /** 本轮 AI 回复消耗的会员额度单位。 */
+  membership_consumed_units?: number;
 }
 
 export interface MessageDto {

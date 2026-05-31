@@ -5,6 +5,7 @@ import type { Message } from '@/features/chat/api';
 import {
   filterProgressMessages,
   formatChatCost,
+  formatChatCostLabels,
   formatChatDuration,
   hasFinalAssistantAfterLatestUser,
   isStreamingAssistantMessage,
@@ -110,6 +111,18 @@ describe('chat display message state helpers', () => {
     expect(formatChatCost(0)).toBe('消耗 软妹币 0.00');
     expect(formatChatCost(1.236)).toBe('消耗 软妹币 1.24');
     expect(formatChatCost(-1)).toBeNull();
+  });
+
+  it('formats assistant response billing breakdown labels', () => {
+    expect(
+      formatChatCostLabels({
+        actual_charge_coins: 0,
+        membership_covered_coins: 0.63,
+      }),
+    ).toEqual(['会员抵扣 软妹币 0.63', '钱包实扣 软妹币 0.00']);
+    expect(formatChatCostLabels({ actual_charge_coins: 1.236 })).toEqual([
+      '钱包实扣 软妹币 1.24',
+    ]);
   });
 });
 

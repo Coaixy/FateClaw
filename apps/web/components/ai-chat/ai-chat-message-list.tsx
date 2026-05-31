@@ -8,7 +8,7 @@ import { Message } from '@/features/chat/api';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
-  formatChatCost,
+  formatChatCostLabels,
   formatChatDuration,
   hasFinalAssistantAfterLatestUser,
   isKnowledgeTrajectoryMessage,
@@ -149,9 +149,7 @@ function AiChatMessageRow({
   const durationLabel = isBot
     ? formatChatDuration(messageMetadata?.duration_ms)
     : null;
-  const costLabel = isBot
-    ? formatChatCost(messageMetadata?.actual_charge_coins)
-    : null;
+  const costLabels = isBot ? formatChatCostLabels(messageMetadata) : [];
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
@@ -225,7 +223,7 @@ function AiChatMessageRow({
             />
           </div>
 
-          {(finalMarker || durationLabel || costLabel) && (
+          {(finalMarker || durationLabel || costLabels.length > 0) && (
             <div
               className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
                 isBot
@@ -243,11 +241,14 @@ function AiChatMessageRow({
                   {durationLabel}
                 </span>
               )}
-              {costLabel && (
-                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
+              {costLabels.map((costLabel) => (
+                <span
+                  key={costLabel}
+                  className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm"
+                >
                   {costLabel}
                 </span>
-              )}
+              ))}
             </div>
           )}
         </div>

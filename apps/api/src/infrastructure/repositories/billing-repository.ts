@@ -216,6 +216,17 @@ export interface BillingRequestReservationRow {
   updated_at: string;
 }
 
+/**
+ * 单次模型请求结算结果，包含钱包实扣和会员额度抵扣明细。
+ */
+export interface ModelChargeSettlementResult {
+  actualChargeCoins: number;
+  rawChargeCoins: number;
+  membershipCoveredCoins: number;
+  membershipConsumedUnits: number;
+  user: User;
+}
+
 export type RechargePayType = 'alipay' | 'wechat';
 export type RechargeOrderStatus = 'pending' | 'paid' | 'failed';
 
@@ -1779,7 +1790,7 @@ export async function settleUserModelChargeCoins(
   requestId: string,
   requestTokens: number,
   requestCostCoins: number,
-): Promise<{ actualChargeCoins: number; user: User }> {
+): Promise<ModelChargeSettlementResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1807,6 +1818,9 @@ export async function settleUserModelChargeCoins(
       await client.query('COMMIT');
       return {
         actualChargeCoins: reservation.actual_charge_coins,
+        rawChargeCoins: reservation.total_overage_cost_coins,
+        membershipCoveredCoins: 0,
+        membershipConsumedUnits: 0,
         user: normalizeUserCoins(existingUser),
       };
     }
@@ -1943,6 +1957,9 @@ export async function settleUserModelChargeCoins(
     await client.query('COMMIT');
     return {
       actualChargeCoins,
+      rawChargeCoins,
+      membershipCoveredCoins: membershipDeduction.coveredCoins,
+      membershipConsumedUnits: membershipDeduction.consumedUnits,
       user: deduction.user,
     };
   } catch (err) {

@@ -74,17 +74,50 @@ export function formatChatDuration(value: unknown): string | null {
 }
 
 /**
- * 将 AI 回复扣费金额格式化为聊天气泡下方的紧凑标签。
+ * 将 AI 回复计费明细格式化为聊天气泡下方的紧凑标签。
+ *
+ * @param metadata 后端写入消息 metadata 的计费明细。
+ * @returns 可直接展示的中文软妹币标签列表；非法或缺失时返回空列表。
+ */
+export function formatChatCostLabels(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return [];
+  }
+
+  const data = metadata as {
+    actual_charge_coins?: unknown;
+    membership_covered_coins?: unknown;
+  };
+  const labels: string[] = [];
+
+  if (
+    typeof data.membership_covered_coins === 'number' &&
+    Number.isFinite(data.membership_covered_coins) &&
+    data.membership_covered_coins > 0
+  ) {
+    labels.push(`会员抵扣 ${formatCoins(data.membership_covered_coins)}`);
+  }
+
+  if (
+    typeof data.actual_charge_coins === 'number' &&
+    Number.isFinite(data.actual_charge_coins) &&
+    data.actual_charge_coins >= 0
+  ) {
+    labels.push(`钱包实扣 ${formatCoins(data.actual_charge_coins)}`);
+  }
+
+  return labels;
+}
+
+/**
+ * 将 AI 回复实际扣费金额格式化为聊天气泡下方的紧凑标签。
  *
  * @param value 后端写入 metadata.actual_charge_coins 的软妹币金额。
  * @returns 可直接展示的中文软妹币标签；非法或缺失时返回 null。
  */
 export function formatChatCost(value: unknown): string | null {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    return null;
-  }
-
-  return `消耗 ${formatCoins(value)}`;
+  const labels = formatChatCostLabels({ actual_charge_coins: value });
+  return labels[0]?.replace('钱包实扣', '消耗') ?? null;
 }
 
 export function formatRelativeDateLabel(ts: string) {

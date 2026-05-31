@@ -47,6 +47,16 @@ export interface MembershipBillingSummary {
     | 'used_up';
 }
 
+/**
+ * 单次计费结算摘要，用于前端展示钱包实扣和会员抵扣。
+ */
+export interface BillingSettlementSummary {
+  actualChargeCoins: number;
+  rawChargeCoins: number;
+  membershipCoveredCoins: number;
+  membershipConsumedUnits: number;
+}
+
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
 const COIN_CENTS = 100;
 export const BILLING_ARREARS_MESSAGE = '余额已欠费，请充值后继续使用';
@@ -115,19 +125,34 @@ export async function reserveBillingForRequest(input: {
   };
 }
 
-export async function settleBillingReservation(input: {
+/**
+ * 按模型 Token 用量完成计费结算，并返回原始费用、会员抵扣和钱包实扣明细。
+ */
+export async function settleBillingReservationDetailed(input: {
   requestId: string;
   runtime?: LlmRuntimeSnapshot | null;
   promptTokens: number;
   completionTokens: number;
-}): Promise<number> {
+}): Promise<BillingSettlementSummary> {
   if (input.runtime?.billingMode !== 'metered') {
-    return 0;
+    return {
+      actualChargeCoins: 0,
+      rawChargeCoins: 0,
+      membershipCoveredCoins: 0,
+      membershipConsumedUnits: 0,
+    };
   }
   const reservation = await getBillingRequestReservationByRequestId(
     input.requestId,
   );
-  if (!reservation) return 0;
+  if (!reservation) {
+    return {
+      actualChargeCoins: 0,
+      rawChargeCoins: 0,
+      membershipCoveredCoins: 0,
+      membershipConsumedUnits: 0,
+    };
+  }
   const totalTokens = input.promptTokens + input.completionTokens;
   const costCoins = calculateTokenCostCoins({
     promptTokens: input.promptTokens,
@@ -142,6 +167,21 @@ export async function settleBillingReservation(input: {
     totalTokens,
     costCoins,
   );
+  return {
+    actualChargeCoins: result.actualChargeCoins,
+    rawChargeCoins: result.rawChargeCoins,
+    membershipCoveredCoins: result.membershipCoveredCoins,
+    membershipConsumedUnits: result.membershipConsumedUnits,
+  };
+}
+
+export async function settleBillingReservation(input: {
+  requestId: string;
+  runtime?: LlmRuntimeSnapshot | null;
+  promptTokens: number;
+  completionTokens: number;
+}): Promise<number> {
+  const result = await settleBillingReservationDetailed(input);
   return result.actualChargeCoins;
 }
 
@@ -192,7 +232,7 @@ export async function getMembershipBillingSummary(
     allowanceResetAt: overview.active
       ? (overview.membership?.current_period_end ?? null)
       : null,
-    allowanceUsedRatio: Math.round(usedRatio * 100) / 100,
+    allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
     allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
   };
 }

@@ -37,7 +37,11 @@ import {
   recordConversationLogSuccess,
 } from '../shared/conversation-log-metrics.js';
 import { mapInternalErrorToPublicError } from '../shared/public-error.js';
-import { settleBillingReservation } from '../modules/billing/plans.js';
+import {
+  settleBillingReservation,
+  settleBillingReservationDetailed,
+  type BillingSettlementSummary,
+} from '../modules/billing/plans.js';
 import {
   getUserIdFromWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -137,8 +141,9 @@ function resolvePendingDurationMs(
 function buildFinalMetadata(args: {
   payload: ResponseIpcPayload;
   durationMs?: number;
-  actualChargeCoins?: number | null;
+  billing?: BillingSettlementSummary | null;
 }): Record<string, unknown> {
+  const billing = args.billing;
   return {
     ...(args.payload.metadata &&
     typeof args.payload.metadata === 'object' &&
@@ -150,8 +155,13 @@ function buildFinalMetadata(args: {
     ...(typeof args.durationMs === 'number'
       ? { duration_ms: args.durationMs }
       : {}),
-    ...(typeof args.actualChargeCoins === 'number'
-      ? { actual_charge_coins: args.actualChargeCoins }
+    ...(billing
+      ? {
+          actual_charge_coins: billing.actualChargeCoins,
+          raw_charge_coins: billing.rawChargeCoins,
+          membership_covered_coins: billing.membershipCoveredCoins,
+          membership_consumed_units: billing.membershipConsumedUnits,
+        }
       : {}),
   };
 }
@@ -224,12 +234,12 @@ async function settleAiChatBilling(args: {
   accountId: string;
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
-}): Promise<number | null> {
+}): Promise<BillingSettlementSummary | null> {
   if (!args.payload.requestId) return null;
   if (args.pending?.llmRuntime?.billingMode !== 'metered') return null;
   const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
 
-  const actualChargeCoins = await settleBillingReservation({
+  const billing = await settleBillingReservationDetailed({
     requestId: args.payload.requestId,
     runtime: args.pending.llmRuntime,
     promptTokens: normalizedUsage.promptTokens,
@@ -239,11 +249,12 @@ async function settleAiChatBilling(args: {
     {
       accountId: args.accountId,
       requestId: args.payload.requestId,
-      actualChargeCoins,
+      actualChargeCoins: billing.actualChargeCoins,
+      membershipCoveredCoins: billing.membershipCoveredCoins,
     },
     'AI Chat: 已完成模型 Token 扣费结算',
   );
-  return actualChargeCoins;
+  return billing;
 }
 
 async function resolvePendingAiChatResponse(args: {
@@ -415,7 +426,7 @@ async function processAiChatResponse(
       pending,
       payload: payloadForUsage,
     });
-    const actualChargeCoins = await settleAiChatBilling({
+    const billing = await settleAiChatBilling({
       accountId,
       pending,
       payload: payloadForUsage,
@@ -423,7 +434,7 @@ async function processAiChatResponse(
     const finalMetadata = buildFinalMetadata({
       payload: payloadForUsage,
       durationMs,
-      actualChargeCoins,
+      billing,
     });
 
     await publishAiChatStreamEvent({

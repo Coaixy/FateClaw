@@ -28,9 +28,21 @@ function resetText(value: string | null) {
   return `将在 ${new Date(value).toLocaleDateString('zh-CN')} 重置`;
 }
 
-function roundedPercent(ratio: number) {
+function progressPercent(ratio: number) {
   const percent = Math.min(100, Math.max(0, ratio * 100));
-  return Math.round(percent / 5) * 5;
+  if (percent > 0 && percent < 0.1) {
+    return 0.1;
+  }
+  return Math.round(percent * 10) / 10;
+}
+
+function displayPercent(ratio: number) {
+  const percent = Math.min(100, Math.max(0, ratio * 100));
+  if (percent === 0) return '0%';
+  if (percent < 0.01) return '< 0.01%';
+  if (percent < 0.1) return `${percent.toFixed(2)}%`;
+  if (percent < 10) return `${percent.toFixed(1)}%`;
+  return `${Math.round(percent)}%`;
 }
 
 export function WalletMembershipCard({
@@ -42,7 +54,8 @@ export function WalletMembershipCard({
   busy: boolean;
   onSubscribe: () => void;
 }) {
-  const usedPercent = roundedPercent(membership.allowance_used_ratio);
+  const usedPercent = progressPercent(membership.allowance_used_ratio);
+  const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const active = membership.active;
 
   return (
@@ -73,7 +86,7 @@ export function WalletMembershipCard({
         <div className="mb-2 flex items-center justify-between gap-3 text-[12px]">
           <span className="font-medium">{membershipStatusText(membership.allowance_status)}</span>
           <span className="text-muted">
-            {active ? `已使用约 ${usedPercent}%` : '会员额度进度'}
+            {active ? `已使用 ${usedPercentText}` : '会员额度进度'}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-hairline">
