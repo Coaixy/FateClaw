@@ -164,6 +164,7 @@ export function useChatMessages(options: {
   const sendingRef = useRef(false);
   const processingRef = useRef(false);
   const awaitingRefreshRef = useRef(false);
+  const databaseProcessingRef = useRef(false);
   const activeSessionRef = useRef('');
   const shouldAutoScrollRef = useRef(true);
   const creatingRef = useRef(false);
@@ -204,6 +205,16 @@ export function useChatMessages(options: {
     return key;
   }, []);
 
+  const updateAwaitingRefresh = useCallback((next: boolean) => {
+    awaitingRefreshRef.current = next;
+    setAwaitingRefresh(next);
+  }, []);
+
+  const updateProcessing = useCallback((next: boolean) => {
+    processingRef.current = next;
+    setProcessing(next);
+  }, []);
+
   useEffect(() => {
     sendingRef.current = sending;
   }, [sending]);
@@ -241,6 +252,7 @@ export function useChatMessages(options: {
         setLoadedSessionId(sessionId);
         setContinuationBlocked(Boolean(data.continuation_blocked));
         setContinuationBlockMessage(data.continuation_block_message || '');
+        databaseProcessingRef.current = data.processing;
 
         const nextMessages = data.messages.reverse();
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
@@ -275,11 +287,9 @@ export function useChatMessages(options: {
               ? previous
               : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
         });
-        setProcessing(data.processing);
-        setAwaitingRefresh(
-          isBackground &&
-            activeStreamingMessageIds.length > 0 &&
-            !streamingResolved,
+        updateProcessing(data.processing);
+        updateAwaitingRefresh(
+          isBackground && data.processing,
         );
         return {
           ok: true,
@@ -298,13 +308,19 @@ export function useChatMessages(options: {
         }
       }
     },
-    [getActiveStreamingMessageIds, resetStreamingMessageRefs],
+    [
+      getActiveStreamingMessageIds,
+      resetStreamingMessageRefs,
+      updateAwaitingRefresh,
+      updateProcessing,
+    ],
   );
 
   useEffect(() => {
     if (options.selectedSession) {
-      setProcessing(false);
-      setAwaitingRefresh(false);
+      updateProcessing(false);
+      updateAwaitingRefresh(false);
+      databaseProcessingRef.current = false;
       setLoadedSessionId('');
       setContinuationBlocked(false);
       setContinuationBlockMessage('');
@@ -317,12 +333,18 @@ export function useChatMessages(options: {
     setLoading(false);
     setMessages([]);
     setSending(false);
-    setProcessing(false);
-    setAwaitingRefresh(false);
+    updateProcessing(false);
+    updateAwaitingRefresh(false);
+    databaseProcessingRef.current = false;
     setLoadedSessionId('');
     setContinuationBlocked(false);
     setContinuationBlockMessage('');
-  }, [loadMessages, options.selectedSession]);
+  }, [
+    loadMessages,
+    options.selectedSession,
+    updateAwaitingRefresh,
+    updateProcessing,
+  ]);
 
   const pollMessages = useCallback(async () => {
     const sessionId = options.selectedSession;
@@ -573,12 +595,16 @@ export function useChatMessages(options: {
       reconnectTimeoutId = null;
     };
 
+    const hasRecoverableStreamActivity = () =>
+      sendingRef.current ||
+      databaseProcessingRef.current ||
+      awaitingRefreshRef.current;
+
     const scheduleReconnect = () => {
       if (closedByEffect || activeSessionRef.current !== sessionId) {
         return;
       }
       if (reconnectAttempt >= CHAT_STREAM_RECONNECT_MAX_ATTEMPTS) {
-        setAwaitingRefresh(true);
         return;
       }
 
@@ -607,12 +633,12 @@ export function useChatMessages(options: {
 
       if (payload.type === 'turn_start') {
         beginStreamingAssistantTurn(payload.turnIndex);
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
       if (payload.type === 'agent_start') {
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -628,7 +654,7 @@ export function useChatMessages(options: {
             ? `turn-${payload.turnIndex}`
             : latestStreamingMessageKeyRef.current,
         );
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -638,7 +664,7 @@ export function useChatMessages(options: {
           payload.snapshot,
           typeof payload.turnIndex === 'number' ? payload.turnIndex : undefined,
         );
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -684,10 +710,10 @@ export function useChatMessages(options: {
                 ? sanitizeToolPath(metadata.tool_path)
                 : undefined,
           });
-          setProcessing(true);
+          updateProcessing(true);
           return;
         }
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -708,7 +734,7 @@ export function useChatMessages(options: {
             args: payload.args,
           },
         );
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -729,7 +755,7 @@ export function useChatMessages(options: {
             args: payload.args,
           },
         );
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -753,7 +779,7 @@ export function useChatMessages(options: {
             path,
           },
         );
-        setProcessing(true);
+        updateProcessing(true);
         return;
       }
 
@@ -768,8 +794,8 @@ export function useChatMessages(options: {
             },
           );
         }
-        setProcessing(false);
-        setAwaitingRefresh(true);
+        updateProcessing(false);
+        updateAwaitingRefresh(true);
         void loadMessages(sessionId, { background: true });
         return;
       }
@@ -787,8 +813,8 @@ export function useChatMessages(options: {
             ),
           );
         }
-        setProcessing(false);
-        setAwaitingRefresh(false);
+        updateProcessing(false);
+        updateAwaitingRefresh(false);
       }
     };
 
@@ -813,8 +839,11 @@ export function useChatMessages(options: {
       currentSocket.onmessage = handleStreamMessage;
 
       currentSocket.onerror = () => {
-        if (activeSessionRef.current === sessionId) {
-          setAwaitingRefresh(true);
+        if (
+          activeSessionRef.current === sessionId &&
+          hasRecoverableStreamActivity()
+        ) {
+          updateAwaitingRefresh(true);
         }
       };
 
@@ -823,7 +852,9 @@ export function useChatMessages(options: {
           streamSocketRef.current = null;
         }
         if (!closedByEffect && activeSessionRef.current === sessionId) {
-          setAwaitingRefresh(true);
+          if (hasRecoverableStreamActivity()) {
+            updateAwaitingRefresh(true);
+          }
           scheduleReconnect();
         }
       };
@@ -846,6 +877,8 @@ export function useChatMessages(options: {
     loadMessages,
     options.selectedSession,
     resetStreamingMessageRefs,
+    updateAwaitingRefresh,
+    updateProcessing,
     upsertLatestStreamingAssistantMessage,
     upsertStreamingAssistantMessage,
     upsertThinkingMessage,
@@ -936,7 +969,7 @@ export function useChatMessages(options: {
 
           const refreshed = await loadMessages(sessionId, { background: true });
           if (!refreshed.ok) {
-            setAwaitingRefresh(true);
+            updateAwaitingRefresh(true);
             setMessages((previous) => [
               ...previous,
               {
@@ -971,14 +1004,14 @@ export function useChatMessages(options: {
               background: true,
             });
             if (!refreshed.ok) {
-              setAwaitingRefresh(true);
+              updateAwaitingRefresh(true);
               return false;
             }
             if (!refreshed.active) {
               return false;
             }
             if (refreshed.processing) {
-              setAwaitingRefresh(true);
+              updateAwaitingRefresh(true);
               return false;
             }
             if (hasFinalAssistantAfterLatestUser(refreshed.messages)) {

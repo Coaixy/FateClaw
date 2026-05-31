@@ -10,6 +10,7 @@ import {
   PAIPAN_SKILLS,
   formatChatCost,
   formatChatDuration,
+  hasFinalAssistantAfterLatestUser,
   isKnowledgeTrajectoryMessage,
   isProgressMessage,
   isStreamingAssistantMessage,
@@ -69,7 +70,9 @@ export function AiChatMessageList({
     isStreamingAssistantMessage,
   );
   const hasThinkingMessage = messages.some(isThinkingMessage);
+  const hasCompletedAssistantTurn = hasFinalAssistantAfterLatestUser(messages);
   const showThinkingIndicator =
+    !hasCompletedAssistantTurn &&
     sending &&
     ((!hasStreamingAssistantMessage && !hasThinkingMessage) ||
       pendingToolTraces.length > 0);
