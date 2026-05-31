@@ -25,3 +25,36 @@ describe('skillsApi bundle subscriptions', () => {
     );
   });
 });
+
+describe('skillsApi path parameters', () => {
+  beforeEach(() => {
+    requestJsonMock.mockReset();
+    requestJsonMock.mockResolvedValue({});
+  });
+
+  it('encodes user skill ids before placing them in path segments', async () => {
+    await skillsApi.share('skill/../1?x=1');
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/skills/user/skill%2F..%2F1%3Fx%3D1/share',
+      { method: 'POST' },
+    );
+  });
+
+  it('encodes shared skill tokens before placing them in path segments', async () => {
+    await skillsApi.subscribe('share/token?x=1');
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/skills/subscribe/share%2Ftoken%3Fx%3D1',
+      { method: 'POST' },
+    );
+  });
+
+  it('encodes shared bundle tokens before placing them in path segments', async () => {
+    await skillsApi.bundlePreview('bundle/token?x=1');
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/skills/bundles/shared/bundle%2Ftoken%3Fx%3D1',
+    );
+  });
+});

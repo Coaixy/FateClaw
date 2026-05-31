@@ -300,46 +300,37 @@ const RewardConfigSchema = z.object({
 });
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
-  // 所有 admin 路由需要验证 MANAGER_KEY；登录端点（/verify）额外加指数退避限流
+  // 所有 admin 路由需要验证 MANAGER_KEY，并对失败鉴权统一做指数退避限流。
   app.addHook('onRequest', async (request, reply) => {
     if (!MANAGER_KEY) {
       return reply.code(503).send({ error: '管理端未配置密钥' });
     }
 
-    const isVerifyEndpoint = request.url.endsWith('/verify');
     const ipHash = crypto
       .createHash('sha256')
       .update(request.ip)
       .digest('hex')
       .slice(0, 16);
     const rateKey = `admin:${ipHash}`;
-
-    // 只对登录端点做限流，不影响已登录后的业务 API 轮询
-    if (isVerifyEndpoint) {
-      const check = await rateLimitCheck(rateKey);
-      if (!check.allowed) {
-        request.log.warn(
-          { ipHash, retryAfterMs: check.retryAfterMs },
-          'admin verify rate limited',
-        );
-        return reply
-          .code(429)
-          .header('Retry-After', Math.ceil((check.retryAfterMs ?? 1000) / 1000))
-          .send({ error: '尝试过于频繁，请稍后再试' });
-      }
+    const check = await rateLimitCheck(rateKey);
+    if (!check.allowed) {
+      request.log.warn(
+        { ipHash, retryAfterMs: check.retryAfterMs },
+        'admin auth rate limited',
+      );
+      return reply
+        .code(429)
+        .header('Retry-After', Math.ceil((check.retryAfterMs ?? 1000) / 1000))
+        .send({ error: '尝试过于频繁，请稍后再试' });
     }
 
     const key = request.headers['x-admin-key'];
     if (key !== MANAGER_KEY) {
-      if (isVerifyEndpoint) {
-        await rateLimitRecordFail(rateKey);
-      }
+      await rateLimitRecordFail(rateKey);
       return reply.code(401).send({ error: '管理密钥无效' });
     }
 
-    if (isVerifyEndpoint) {
-      await rateLimitClear(rateKey);
-    }
+    await rateLimitClear(rateKey);
   });
 
   // POST /api/admin/verify — 验证密钥是否正确

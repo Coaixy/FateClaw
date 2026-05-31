@@ -10,7 +10,7 @@
     "start": "node dist/daemon.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.81.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@earendil-works/pi-ai": "^0.75.5",
     "@earendil-works/pi-coding-agent": "^0.75.5",
     "cron-parser": "^5.0.0",

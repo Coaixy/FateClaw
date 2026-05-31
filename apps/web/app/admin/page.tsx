@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function AdminLoginPage() {
   const [key, setKey] = useState('');
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -83,9 +83,7 @@ export default function AdminLoginPage() {
             <span className="text-sm font-semibold">命枢 Admin</span>
           </div>
           <h1 className="text-xl font-semibold tracking-tight">管理后台</h1>
-          <p className="text-[13px] text-muted mt-1">
-            输入管理密钥以访问
-          </p>
+          <p className="text-[13px] text-muted mt-1">输入管理密钥以访问</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -114,9 +112,7 @@ export default function AdminLoginPage() {
             默认记住此设备
           </label>
 
-          {error && (
-            <p className="text-[13px] text-error">{error}</p>
-          )}
+          {error && <p className="text-[13px] text-error">{error}</p>}
 
           <button
             type="submit"

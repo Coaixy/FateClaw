@@ -5,16 +5,18 @@ packages:
 trustLockfile: true
 
 overrides:
-  fast-jwt: ">=6.2.2"
-  vite: ">=8.0.5"
-  picomatch: ">=4.0.4"
+  fast-jwt: '>=6.2.4'
+  fast-uri: '>=3.1.2'
+  postcss: '>=8.5.10'
+  vite: '>=8.0.5'
+  picomatch: '>=4.0.4'
   brace-expansion@^1.0.0: 1.1.13
-  brace-expansion@^5.0.0: 5.0.5
+  brace-expansion@^5.0.0: 5.0.6
 
 packageExtensions:
-  "@alicloud/openapi-core@1.0.7":
+  '@alicloud/openapi-core@1.0.7':
     dependencies:
-      "@alicloud/tea-typescript": "^1.8.0"
+      '@alicloud/tea-typescript': '^1.8.0'
 
 allowBuilds:
   '@alicloud/openapi-core': true
