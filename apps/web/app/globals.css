@@ -53,6 +53,7 @@
   --color-chart-badge: rgba(232, 165, 90, 0.14);
 
   /* Typography */
+  --font-sans: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'PingFang SC', 'Segoe UI', serif;
   --font-display: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'Times New Roman', serif;
   --font-body: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'PingFang SC', 'Segoe UI', serif;
   --font-mono: 'SFMono-Regular', 'Menlo', 'Consolas', ui-monospace, monospace;

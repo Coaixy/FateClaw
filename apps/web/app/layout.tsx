@@ -32,11 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-CN" className={kingHwaOldSong.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={kingHwaOldSong.variable}>
+      <body>
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>{children}</ConfirmProvider>
