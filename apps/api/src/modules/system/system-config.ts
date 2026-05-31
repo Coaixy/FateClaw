@@ -4,6 +4,7 @@ import {
   createConfigAuditLog,
   createOfficialModelConfig,
   deleteOfficialModelConfig,
+  deleteUserModelSelectionsByOfficialModelId,
   getOfficialModelConfig,
   getModelBillingConfig,
   getSystemSecret,
@@ -595,6 +596,8 @@ export async function updateOfficialModel(args: {
   priority: number;
   baseUrl?: string | null;
   modelName: string;
+  secretValue?: string | null;
+  authMode?: ProviderAuthMode;
   inputTokenPricePerMillionCoins: number;
   outputTokenPricePerMillionCoins: number;
   contextWindowTokens?: number | null;
@@ -606,6 +609,17 @@ export async function updateOfficialModel(args: {
   if (!before) {
     throw new Error('官方模型不存在');
   }
+  const secretValue = args.secretValue?.trim();
+  const secretKey = secretValue
+    ? before.api_key_secret_key || `official-model:${before.id}:secret`
+    : before.api_key_secret_key;
+  if (secretValue && secretKey) {
+    await upsertSystemSecret({
+      key: secretKey,
+      secretValue,
+      updatedBy: actor,
+    });
+  }
   const updated = await updateOfficialModelConfig({
     id: args.id,
     modelKey: args.modelKey,
@@ -615,12 +629,17 @@ export async function updateOfficialModel(args: {
     priority: args.priority,
     baseUrl: args.baseUrl ?? null,
     modelName: args.modelName,
-    apiKeySecretKey: before.api_key_secret_key,
+    apiKeySecretKey: secretKey,
     inputTokenPricePerMillionCoins: args.inputTokenPricePerMillionCoins,
     outputTokenPricePerMillionCoins: args.outputTokenPricePerMillionCoins,
     extraJson: withModelDescription(
       withModelContextWindowTokens(
-        before.extra_json,
+        secretValue || args.authMode
+          ? {
+              ...(before.extra_json ?? {}),
+              auth_mode: args.authMode ?? defaultAuthMode(args.piApi),
+            }
+          : before.extra_json,
         args.contextWindowTokens,
       ),
       args.description,
@@ -649,6 +668,8 @@ export async function removeOfficialModel(
   if (!target) {
     throw new Error('官方模型不存在');
   }
+  const deletedSelectionCount =
+    await deleteUserModelSelectionsByOfficialModelId(id);
   await deleteOfficialModelConfig(id);
   await createConfigAuditLog({
     id: `cfg-audit-${randomUUID()}`,
@@ -657,6 +678,7 @@ export async function removeOfficialModel(
     targetType: 'official_model',
     targetKey: id,
     before: target,
+    after: { deleted_selection_count: deletedSelectionCount },
   });
 }
 

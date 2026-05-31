@@ -199,6 +199,8 @@ const OfficialModelSchema = z.object({
   priority: z.number().int().min(0).max(999).default(0),
   base_url: z.string().trim().max(500).nullable().optional(),
   model_name: z.string().trim().min(1).max(120),
+  api_key: z.string().trim().max(2000).optional(),
+  auth_mode: OfficialModelAuthModeSchema,
   context_window_tokens: z
     .number()
     .int()
@@ -216,7 +218,6 @@ const OfficialModelSchema = z.object({
 
 const OfficialModelCreateSchema = OfficialModelSchema.extend({
   api_key: z.string().trim().min(1).max(2000),
-  auth_mode: OfficialModelAuthModeSchema,
 });
 
 const OfficialModelSecretSchema = z.object({
@@ -242,7 +243,7 @@ function toConfiguredContextWindowTokens(
 function isOfficialModelKeyConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const record = error as Record<string, unknown>;
-  // PostgreSQL 唯一约束冲突时返回 23505；这里转成前端可读的模型标识错误。
+  // PostgreSQL 唯一约束冲突时返回 23505；这里转成前端可读的模型重复错误。
   return (
     record.code === '23505' &&
     (record.constraint === 'official_model_configs_model_key_key' ||
@@ -537,7 +538,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (isOfficialModelKeyConflict(error)) {
         return reply
           .code(409)
-          .send({ error: '模型标识已存在，请换一个模型标识' });
+          .send({ error: '同名模型已存在，请换一个显示名称或模型名' });
       }
       throw error;
     }
@@ -562,6 +563,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         priority: parsed.data.priority,
         baseUrl: parsed.data.base_url?.trim() || null,
         modelName: parsed.data.model_name,
+        secretValue: parsed.data.api_key?.trim() || null,
+        authMode: parsed.data.auth_mode,
         contextWindowTokens: toConfiguredContextWindowTokens(
           parsed.data.context_window_tokens,
         ),
@@ -576,7 +579,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (isOfficialModelKeyConflict(error)) {
         return reply
           .code(409)
-          .send({ error: '模型标识已存在，请换一个模型标识' });
+          .send({ error: '同名模型已存在，请换一个显示名称或模型名' });
       }
       return reply
         .code(404)

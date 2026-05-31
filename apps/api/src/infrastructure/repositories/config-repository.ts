@@ -176,6 +176,22 @@ export async function updateOfficialModelConfig(input: {
   return rows[0] ? mapOfficialModelRow(rows[0]) : undefined;
 }
 
+/**
+ * 删除指向指定官方模型的用户选择。
+ *
+ * @param officialModelId 即将被删除的官方模型 ID。
+ * @returns 被清理的用户选择数量。
+ */
+export async function deleteUserModelSelectionsByOfficialModelId(
+  officialModelId: string,
+): Promise<number> {
+  const { rowCount } = await getDbPool().query(
+    'DELETE FROM user_model_selections WHERE official_model_id = $1',
+    [officialModelId],
+  );
+  return rowCount ?? 0;
+}
+
 export async function deleteOfficialModelConfig(id: string): Promise<void> {
   await getDbPool().query('DELETE FROM official_model_configs WHERE id = $1', [
     id,

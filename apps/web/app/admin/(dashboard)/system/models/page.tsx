@@ -10,7 +10,6 @@ import {
   RuntimeSummary,
 } from '../model-provider-panels';
 import {
-  buildSuggestedProviderKey,
   buildUniqueSuggestedProviderKey,
   createEmptyDraft,
   type ProviderDraft,
@@ -183,17 +182,9 @@ export default function AdminModelConfigPage() {
                     await admin.updateOfficialModel(id, {
                       ...draft,
                       description: draft.description.trim(),
-                      model_key:
-                        draft.model_key.trim() ||
-                        buildSuggestedProviderKey(draft),
+                      model_key: provider.model_key,
                       base_url: draft.base_url || null,
-                    });
-                  })
-                }
-                onSaveSecret={async (id, secret) =>
-                  withBusy(id, async () => {
-                    await admin.setOfficialModelSecret(id, {
-                      api_key: secret,
+                      api_key: draft.api_key.trim() || undefined,
                     });
                   })
                 }

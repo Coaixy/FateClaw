@@ -12,6 +12,7 @@ export type ProviderDraft = {
   priority: number;
   base_url: string;
   model_name: string;
+  api_key: string;
   context_window_tokens: number;
   input_token_price_per_million_coins: number;
   output_token_price_per_million_coins: number;
@@ -30,6 +31,7 @@ export function createEmptyDraft(): ProviderDraft {
     priority: 0,
     base_url: '',
     model_name: '',
+    api_key: '',
     context_window_tokens: 0,
     input_token_price_per_million_coins: 0,
     output_token_price_per_million_coins: 0,
@@ -50,7 +52,7 @@ function trimProviderKey(value: string): string {
 }
 
 /**
- * 根据草稿内容生成默认模型标识。
+ * 根据草稿内容生成内部模型键。
  */
 export function buildSuggestedProviderKey(draft: ProviderDraft): string {
   const displayNamePart = slugifyKeyPart(draft.display_name);
@@ -63,7 +65,7 @@ export function buildSuggestedProviderKey(draft: ProviderDraft): string {
 }
 
 /**
- * 生成不会和现有模型标识冲突的默认模型标识。
+ * 生成不会和现有模型键冲突的内部模型键。
  */
 export function buildUniqueSuggestedProviderKey(
   draft: ProviderDraft,

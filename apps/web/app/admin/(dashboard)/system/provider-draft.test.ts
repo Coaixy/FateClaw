@@ -19,6 +19,7 @@ const draft: ProviderDraft = {
   priority: 10,
   base_url: 'https://api.anthropic.com',
   model_name: 'claude-sonnet-4-5',
+  api_key: '',
   context_window_tokens: 0,
   input_token_price_per_million_coins: 1000,
   output_token_price_per_million_coins: 5000,
@@ -77,7 +78,6 @@ describe('provider draft helpers', () => {
         busy: false,
         isActive: true,
         onSave: async () => {},
-        onSaveSecret: async () => {},
         onSetDefault: async () => {},
         onDelete: async () => {},
       }),
@@ -121,5 +121,27 @@ describe('provider draft helpers', () => {
     expect(disabledMarkup).toContain('保存模型');
     expect(disabledMarkup).toContain('disabled=""');
     expect(enabledMarkup).not.toContain('disabled=""');
+  });
+
+  it('renders API key as a normal text field', () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProviderCreatePanel, {
+        draft: {
+          ...draft,
+          model_key: '',
+          display_name: 'Claude Main',
+          model_name: 'claude-sonnet-4-5',
+        },
+        busy: false,
+        secret: 'sk-test',
+        onChange: () => {},
+        onCreate: async () => {},
+        onSecretChange: () => {},
+      }),
+    );
+
+    expect(markup).toContain('API Key');
+    expect(markup).toContain('type="text"');
+    expect(markup).not.toContain('type="password"');
   });
 });

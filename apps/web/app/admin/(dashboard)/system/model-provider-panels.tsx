@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronUp,
   MessageSquareText,
-  KeyRound,
   Loader2,
   Power,
   PowerOff,
@@ -45,6 +44,7 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
     priority: model.priority,
     base_url: model.base_url || '',
     model_name: model.model_name,
+    api_key: '',
     context_window_tokens: model.context_window_tokens ?? 0,
     input_token_price_per_million_coins:
       model.input_token_price_per_million_coins,
@@ -164,24 +164,18 @@ export function ProviderRow({
   provider,
   busy,
   onSave,
-  onSaveSecret,
   onDelete,
 }: {
   provider: AdminModelProvider;
   busy: boolean;
   isActive: boolean;
   onSave: (id: string, draft: ProviderDraft) => Promise<void>;
-  onSaveSecret: (
-    id: string,
-    secret: string,
-  ) => Promise<void>;
   onSetDefault: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<ProviderDraft>(() =>
     providerDraftFrom(provider),
   );
-  const [secret, setSecret] = useState('');
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -279,16 +273,6 @@ export function ProviderRow({
       {!expanded ? null : (
         <>
           <ProviderBasicFields draft={draft} setDraft={setDraft} />
-          <ProviderSecretFields
-            busy={busy}
-            onSaveSecret={async () => {
-              await onSaveSecret(provider.id, secret);
-              setSecret('');
-            }}
-            secret={secret}
-            setSecret={setSecret}
-            sourceLabel={sourceLabel}
-          />
           <div className="mt-5 flex flex-wrap gap-2 border-t border-hairline/70 pt-4">
             <button
               type="button"
@@ -332,18 +316,18 @@ function ProviderBasicFields({
         }
       />
       <TextField
-        label="模型标识"
-        value={draft.model_key}
-        placeholder="留空则自动生成"
-        onChange={(value) =>
-          setDraft((prev) => ({ ...prev, model_key: value }))
-        }
-      />
-      <TextField
         label="模型名"
         value={draft.model_name}
         onChange={(value) =>
           setDraft((prev) => ({ ...prev, model_name: value }))
+        }
+      />
+      <TextField
+        label="API Key"
+        value={draft.api_key}
+        placeholder="留空则保持当前密钥"
+        onChange={(value) =>
+          setDraft((prev) => ({ ...prev, api_key: value }))
         }
       />
       <TextAreaField
@@ -375,12 +359,6 @@ function ProviderBasicFields({
           ))}
         </select>
       </label>
-      <TextField
-        label="Base URL"
-        value={draft.base_url}
-        placeholder="可选"
-        onChange={(value) => setDraft((prev) => ({ ...prev, base_url: value }))}
-      />
       <NumberField
         label="上下文窗口 Token（0 为自动）"
         value={draft.context_window_tokens}
@@ -390,6 +368,12 @@ function ProviderBasicFields({
             context_window_tokens: value,
           }))
         }
+      />
+      <TextField
+        label="Base URL"
+        value={draft.base_url}
+        placeholder="可选"
+        onChange={(value) => setDraft((prev) => ({ ...prev, base_url: value }))}
       />
       <NumberField
         label="输入单价（软妹币 / 百万 Token）"
@@ -411,50 +395,6 @@ function ProviderBasicFields({
           }))
         }
       />
-    </div>
-  );
-}
-
-function ProviderSecretFields({
-  busy,
-  onSaveSecret,
-  secret,
-  setSecret,
-  sourceLabel,
-}: {
-  busy: boolean;
-  onSaveSecret: () => Promise<void>;
-  secret: string;
-  setSecret: (value: string) => void;
-  sourceLabel: string;
-}) {
-  return (
-    <div className="mt-4 rounded-lg border border-hairline bg-canvas/60 p-3 sm:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <KeyRound size={15} className="text-muted" />
-          更新密钥
-        </div>
-        <div className="text-[12px] text-muted">
-          当前状态：{sourceLabel}
-        </div>
-      </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_auto]">
-        <input
-          type="password"
-          value={secret}
-          onChange={(event) => setSecret(event.target.value)}
-          placeholder="输入新的 API Key"
-          className={CONTROL}
-        />
-        <button
-          onClick={() => void onSaveSecret()}
-          disabled={busy || !secret}
-          className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
-        >
-          保存密钥
-        </button>
-      </div>
     </div>
   );
 }
@@ -495,10 +435,16 @@ export function ProviderCreatePanel({
           onChange={(value) => onChange({ ...draft, display_name: value })}
         />
         <TextField
-          label="模型标识"
-          value={draft.model_key}
-          placeholder="留空则自动生成"
-          onChange={(value) => onChange({ ...draft, model_key: value })}
+          label="模型名"
+          value={draft.model_name}
+          placeholder="例如：gpt-4.1"
+          onChange={(value) => onChange({ ...draft, model_name: value })}
+        />
+        <TextField
+          label="API Key"
+          value={secret}
+          placeholder="明文填写，保存后即可使用"
+          onChange={onSecretChange}
         />
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
@@ -522,12 +468,6 @@ export function ProviderCreatePanel({
           </select>
         </label>
         <TextField
-          label="模型名"
-          value={draft.model_name}
-          placeholder="例如：gpt-4.1"
-          onChange={(value) => onChange({ ...draft, model_name: value })}
-        />
-        <TextField
           label="模型说明"
           value={draft.description}
           placeholder="例如：适合高质量问答和复杂推理"
@@ -538,13 +478,6 @@ export function ProviderCreatePanel({
           value={draft.base_url}
           placeholder="可选"
           onChange={(value) => onChange({ ...draft, base_url: value })}
-        />
-        <TextField
-          label="API Key"
-          value={secret}
-          placeholder="创建时一并保存"
-          type="password"
-          onChange={onSecretChange}
         />
         <NumberField
           label="上下文窗口 Token（0 为自动）"
@@ -612,13 +545,11 @@ function TextField({
   value,
   onChange,
   placeholder,
-  type = 'text',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  type?: string;
 }) {
   return (
     <label className="space-y-1.5">
@@ -626,7 +557,7 @@ function TextField({
         {label}
       </div>
       <input
-        type={type}
+        type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

@@ -7,6 +7,8 @@ const {
   mockGetUserModelConfig,
   mockGetUserModelSelection,
   mockListOfficialModelConfigs,
+  mockDeleteOfficialModelConfig,
+  mockDeleteUserModelSelectionsByOfficialModelId,
   mockUpdateOfficialModelConfig,
   mockUpdateModelBillingConfig,
   mockUpsertSystemSecret,
@@ -17,6 +19,8 @@ const {
   mockGetUserModelConfig: vi.fn(),
   mockGetUserModelSelection: vi.fn(),
   mockListOfficialModelConfigs: vi.fn(),
+  mockDeleteOfficialModelConfig: vi.fn(),
+  mockDeleteUserModelSelectionsByOfficialModelId: vi.fn(),
   mockUpdateOfficialModelConfig: vi.fn(),
   mockUpdateModelBillingConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
@@ -25,7 +29,9 @@ const {
 vi.mock('../../infrastructure/db.js', () => ({
   createConfigAuditLog: vi.fn(),
   createOfficialModelConfig: vi.fn(),
-  deleteOfficialModelConfig: vi.fn(),
+  deleteOfficialModelConfig: mockDeleteOfficialModelConfig,
+  deleteUserModelSelectionsByOfficialModelId:
+    mockDeleteUserModelSelectionsByOfficialModelId,
   getModelBillingConfig: mockGetModelBillingConfig,
   getOfficialModelConfig: mockGetOfficialModelConfig,
   getSystemSecret: mockGetSystemSecret,
@@ -41,8 +47,10 @@ vi.mock('../../infrastructure/db.js', () => ({
 }));
 
 import {
+  removeOfficialModel,
   resolveUserLlmRuntime,
   setOfficialModelSecret,
+  updateOfficialModel,
 } from './system-config.js';
 import type {
   OfficialModelConfig,
@@ -319,5 +327,70 @@ describe('setOfficialModelSecret', () => {
       secretValue: 'plain-secret',
       updatedBy: 'admin',
     });
+  });
+});
+
+describe('updateOfficialModel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('updates config and API key in one save', async () => {
+    mockGetOfficialModelConfig.mockResolvedValue(
+      official({ api_key_secret_key: null }),
+    );
+    mockUpsertSystemSecret.mockResolvedValue(
+      secret('official-model:official-1:secret'),
+    );
+    mockUpdateOfficialModelConfig.mockResolvedValue(
+      official({ api_key_secret_key: 'official-model:official-1:secret' }),
+    );
+
+    await updateOfficialModel({
+      id: 'official-1',
+      modelKey: 'openai-main',
+      piApi: 'openai-completions',
+      displayName: 'OpenAI Main',
+      enabled: true,
+      priority: 0,
+      baseUrl: 'https://openai.example/v1',
+      modelName: 'gpt-4.1',
+      secretValue: 'plain-secret',
+      inputTokenPricePerMillionCoins: 1000,
+      outputTokenPricePerMillionCoins: 5000,
+      actor: 'admin',
+    });
+
+    expect(mockUpsertSystemSecret).toHaveBeenCalledWith({
+      key: 'official-model:official-1:secret',
+      secretValue: 'plain-secret',
+      updatedBy: 'admin',
+    });
+    expect(mockUpdateOfficialModelConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKeySecretKey: 'official-model:official-1:secret',
+      }),
+    );
+  });
+});
+
+describe('removeOfficialModel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deletes user selections before deleting the official model', async () => {
+    mockGetOfficialModelConfig.mockResolvedValue(official());
+    mockDeleteUserModelSelectionsByOfficialModelId.mockResolvedValue(2);
+
+    await removeOfficialModel('official-1', 'admin');
+
+    expect(mockDeleteUserModelSelectionsByOfficialModelId).toHaveBeenCalledWith(
+      'official-1',
+    );
+    expect(mockDeleteOfficialModelConfig).toHaveBeenCalledWith('official-1');
+    expect(
+      mockDeleteUserModelSelectionsByOfficialModelId.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockDeleteOfficialModelConfig.mock.invocationCallOrder[0]);
   });
 });

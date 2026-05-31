@@ -566,6 +566,7 @@ export const admin = {
       context_window_tokens?: number | null;
       input_token_price_per_million_coins: number;
       output_token_price_per_million_coins: number;
+      api_key?: string;
     },
   ) =>
     adminRequest<AdminModelProvider>(
