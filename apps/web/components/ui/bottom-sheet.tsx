@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
@@ -77,9 +78,14 @@ export function BottomSheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const [dragY, setDragY] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const dragStartY = useRef(0);
   const isDragging = useRef(false);
   const DISMISS_THRESHOLD = 0.3;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
@@ -153,7 +159,7 @@ export function BottomSheet({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!mounted || !open) return null;
 
   const isFullscreen = variant === 'fullscreen-sheet';
 
@@ -172,7 +178,7 @@ export function BottomSheet({
       : 'calc(env(safe-area-inset-top, 0px) + 0.5rem)',
   };
 
-  return (
+  const sheet = (
     <div
       className="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4"
       style={{ zIndex }}
@@ -243,6 +249,9 @@ export function BottomSheet({
       </div>
     </div>
   );
+
+  // 内部再打开 BottomSheet 时需要脱离父级 transform / overflow，避免移动端被主面板裁切。
+  return createPortal(sheet, document.body);
 }
 
 // ─────────────────────────────────────────────────────────────
