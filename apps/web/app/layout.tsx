@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { ToastProvider } from '@/components/ui/toast';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
+import { PreUseNoticeDialog } from '@/components/compliance/pre-use-notice-dialog';
 import './globals.css';
 
 const kingHwaOldSong = localFont({
@@ -39,7 +40,10 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <ToastProvider>
-            <ConfirmProvider>{children}</ConfirmProvider>
+            <ConfirmProvider>
+              {children}
+              <PreUseNoticeDialog />
+            </ConfirmProvider>
           </ToastProvider>
         </AuthProvider>
       </body>

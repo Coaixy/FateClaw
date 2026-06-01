@@ -9,6 +9,7 @@ import {
   User,
 } from 'lucide-react';
 
+import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { ChatDateDivider } from '@/components/chat/chat-date-divider';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
@@ -212,11 +213,18 @@ function ChatHistoryMessageRow({
             />
           </div>
 
-          {finalMarker && (
-            <div className="mt-1.5 px-1.5">
-              <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-2 py-1 text-[10px] font-medium tabular-nums text-muted shadow-sm">
-                {finalMarker}
-              </span>
+          {(isBot || finalMarker) && (
+            <div
+              className={`mt-1.5 flex flex-wrap items-center gap-1.5 px-1.5 ${
+                isBot ? 'justify-start' : 'justify-end'
+              }`}
+            >
+              {isBot && <AiGeneratedLabel />}
+              {finalMarker && (
+                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-2 py-1 text-[10px] font-medium tabular-nums text-muted shadow-sm">
+                  {finalMarker}
+                </span>
+              )}
             </div>
           )}
 

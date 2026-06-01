@@ -2,6 +2,7 @@
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
+import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
 import { Message } from '@/features/chat/api';
@@ -160,6 +161,8 @@ function AiChatMessageRow({
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
+  const showAiGeneratedLabel =
+    isBot && !isErrorMessage && !isProgressMessage(message);
 
   // 知识检索轨迹：紧凑时间线样式
   if (isBot && isKnowledgeTrajectoryMessage(message)) {
@@ -198,6 +201,9 @@ function AiChatMessageRow({
         className="w-full max-w-6xl mx-auto animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
       >
+        <div className="mb-1 px-1">
+          <AiGeneratedLabel />
+        </div>
         <ArtifactRenderer entries={toolContext} />
         <ArtifactDebug entries={toolContext} />
       </div>
@@ -233,7 +239,10 @@ function AiChatMessageRow({
             />
           </div>
 
-          {(finalMarker || durationLabel || costLabels.length > 0) && (
+          {(showAiGeneratedLabel ||
+            finalMarker ||
+            durationLabel ||
+            costLabels.length > 0) && (
             <div
               className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
                 isBot
@@ -241,6 +250,7 @@ function AiChatMessageRow({
                   : 'justify-end text-right'
               }`}
             >
+              {showAiGeneratedLabel && <AiGeneratedLabel />}
               {finalMarker && (
                 <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
                   {finalMarker}
