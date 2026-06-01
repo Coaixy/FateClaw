@@ -64,7 +64,7 @@ export function AiChatComposer({
       )}
 
       {disabledMessage && (
-        <div className="mb-1.5 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-2 text-[11px] text-warning">
+        <div className="mb-1.5 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-2 text-[12px] text-warning">
           {disabledMessage}
         </div>
       )}
@@ -93,7 +93,7 @@ export function AiChatComposer({
           }
           disabled={composerDisabled}
           rows={1}
-          className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[14px] lg:text-[12px] leading-6 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
+          className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
           onInput={(event) => {
             const target = event.target as HTMLTextAreaElement;
             target.style.height = 'auto';
@@ -127,7 +127,7 @@ function PasteChoicePanel({
   onDismissPasteChoice,
 }: PasteChoicePanelProps) {
   return (
-    <div className="mb-1.5 rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-2 text-[11px] text-ink">
+    <div className="mb-1.5 rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-2 text-[12px] text-ink">
       <div className="flex items-start gap-2">
         <ClipboardPaste size={13} className="mt-0.5 shrink-0 text-primary" />
         <p className="min-w-0 flex-1 truncate text-muted">{preview}</p>
@@ -144,14 +144,14 @@ function PasteChoicePanel({
         <button
           type="button"
           onClick={onKeepPasteAsMessage}
-          className="h-9 rounded-md border border-hairline bg-surface-card px-2.5 text-[11px] text-muted transition-colors hover:border-primary/30 hover:text-ink"
+          className="h-9 rounded-md border border-hairline bg-surface-card px-2.5 text-[12px] text-muted transition-colors hover:border-primary/30 hover:text-ink"
         >
           作为消息
         </button>
         <button
           type="button"
           onClick={onUsePasteAsBoard}
-          className="h-9 rounded-md bg-primary px-2.5 text-[11px] font-medium text-on-primary transition-colors hover:bg-primary-active"
+          className="h-9 rounded-md bg-primary px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active"
         >
           作为盘面
         </button>

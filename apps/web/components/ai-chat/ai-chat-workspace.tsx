@@ -658,7 +658,7 @@ function AiChatWorkspaceContent() {
               />
             </div>
             {composer}
-            <p className="block text-[9px] text-muted/40 text-center mt-1.5 select-none">
+            <p className="block text-[10px] text-muted/50 text-center mt-1.5 select-none">
               Enter 发送 · Shift+Enter 换行
             </p>
           </div>
@@ -708,7 +708,7 @@ function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
 
   return (
     <div className="pointer-events-none sticky bottom-2 z-10 mt-2 flex justify-center px-3">
-      <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/95 px-2.5 text-[10px] text-muted shadow-sm backdrop-blur transition-colors">
+      <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/95 px-2.5 text-[11px] text-muted shadow-sm backdrop-blur transition-colors">
         <StatusIcon size={12} />
         <span>{statusLabel}</span>
       </span>
@@ -739,17 +739,17 @@ function PaipanSkillStrip({
       type="button"
       onClick={onOpenPastedBoard}
       disabled={pastedBoardDisabled}
-      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-hairline bg-surface-card px-2 text-[10px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-hairline bg-surface-card px-2 text-[11px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
       aria-label="自贴盘面"
     >
-      <ClipboardPaste size={11} />
+      <ClipboardPaste size={12} />
       自贴盘面
     </button>
   );
 
   if (loading) {
     return (
-      <div className="flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-2.5 text-[10px] text-muted">
+      <div className="flex h-9 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-2.5 text-[11px] text-muted">
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <Loader2 size={12} className="shrink-0 animate-spin" />
           <span className="truncate">正在加载术数...</span>
@@ -761,7 +761,7 @@ function PaipanSkillStrip({
 
   if (isEmpty) {
     return (
-      <div className="flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface-card/35 px-2.5 text-[10px] text-muted">
+      <div className="flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface-card/35 px-2.5 text-[11px] text-muted">
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <Sparkles size={12} className="shrink-0" />
           <span className="truncate">当前暂无可用术数</span>
@@ -772,9 +772,9 @@ function PaipanSkillStrip({
   }
 
   return (
-    <div className="flex h-8 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-lg border border-hairline bg-surface-card/55 px-1.5 py-1">
-      <span className="sticky left-0 z-[1] inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-surface-card px-1.5 text-[10px] font-medium text-muted">
-        <Sparkles size={11} />
+    <div className="flex h-9 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-lg border border-hairline bg-surface-card/55 px-1.5 py-1">
+      <span className="sticky left-0 z-[1] inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-surface-card px-1.5 text-[11px] font-medium text-muted">
+        <Sparkles size={12} />
         术数
       </span>
       {pastedBoardButton}
@@ -785,7 +785,7 @@ function PaipanSkillStrip({
           type="button"
           onClick={() => onSelectSkill(item.skill)}
           disabled={disabled}
-          className="inline-flex h-6 shrink-0 items-center rounded-md border border-transparent px-2 text-[11px] font-medium text-ink transition-colors hover:border-primary/25 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-[12px] font-medium text-ink transition-colors hover:border-primary/25 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {item.name}
         </button>
@@ -794,7 +794,7 @@ function PaipanSkillStrip({
         type="button"
         onClick={onOpenAll}
         disabled={disabled}
-        className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded-md border border-hairline bg-surface-card px-2 text-[10px] text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-hairline bg-surface-card px-2 text-[11px] text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
       >
         更多
         <ChevronRight size={11} />

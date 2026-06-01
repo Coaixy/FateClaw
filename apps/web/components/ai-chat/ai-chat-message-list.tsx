@@ -46,15 +46,15 @@ export function AiChatMessageList({
         <div className="w-full max-w-xl flex flex-col items-center gap-3.5">
           <BaguaPattern />
           <div className="text-center space-y-1">
-            <h1 className="font-display text-[16px] sm:text-[18px] lg:text-[20px] font-semibold tracking-tight text-ink">
+            <h1 className="font-display text-[18px] sm:text-[20px] lg:text-[22px] font-semibold tracking-tight text-ink">
               可以直接问，也可以手动排盘
             </h1>
-            <p className="text-[10px] sm:text-[11px] text-muted">
+            <p className="text-[12px] sm:text-[13px] text-muted">
               输入问题直接对话，或从下方进入手动排盘
             </p>
           </div>
           <div className="w-full">{composer}</div>
-          <p className="text-[9px] text-muted/50 select-none">
+          <p className="text-[10px] sm:text-[11px] text-muted/50 select-none">
             {selectedSession
               ? '发送一条消息开始对话 · / 查看指令'
               : '发送即可开始对话 · 也可手动排盘 · / 查看指令'}
@@ -209,7 +209,7 @@ function AiChatMessageRow({
           }`}
         />
         <span
-          className={`text-[10px] ${
+          className={`text-[11px] sm:text-[12px] ${
             stage === 'knowledge_hit'
               ? 'text-primary font-medium'
               : 'text-muted'
@@ -256,7 +256,7 @@ function AiChatMessageRow({
         <div className="group relative max-w-full">
           <div
             role={isErrorMessage ? 'alert' : undefined}
-            className={`rounded-xl px-3 py-2 text-[12px] leading-6 transition-shadow duration-200 ${
+            className={`rounded-xl px-3.5 py-2.5 text-[14px] leading-7 transition-shadow duration-200 ${
               isBot
                 ? isErrorMessage
                   ? 'border border-error/30 bg-error/8 text-error shadow-sm'
@@ -318,7 +318,7 @@ function MessageFooter({
 
   return (
     <div
-      className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
+      className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[10px] tabular-nums ${
         isBot ? 'justify-start text-left' : 'justify-end text-right'
       }`}
     >
@@ -424,7 +424,7 @@ function ThinkingIndicator({
     <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
       <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
         <div className="max-w-full rounded-xl px-3 py-2 bg-surface-card border border-hairline shadow-sm">
-          <div className="flex items-center gap-2 text-[10px] leading-5 text-muted">
+          <div className="flex items-center gap-2 text-[12px] leading-6 text-muted">
             <div className="flex items-center gap-1" aria-hidden="true">
               {[0, 1, 2].map((index) => (
                 <div
