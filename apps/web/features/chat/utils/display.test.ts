@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@/features/chat/api';
 
 import {
+  canHostToolTraceFooter,
   filterProgressMessages,
   formatChatCost,
   formatChatCostLabels,
@@ -101,6 +102,38 @@ describe('chat display message state helpers', () => {
     expect(filterProgressMessages([hiddenProgress, toolTrace])).toEqual([
       toolTrace,
     ]);
+  });
+
+  it('does not attach tool footers to transient thinking messages', () => {
+    expect(
+      canHostToolTraceFooter(
+        createMessage({
+          id: 'thinking',
+          isBot: true,
+          metadata: { kind: 'thinking' },
+        }),
+      ),
+    ).toBe(false);
+
+    expect(
+      canHostToolTraceFooter(
+        createMessage({
+          id: 'streaming',
+          isBot: true,
+          metadata: { kind: 'streaming' },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      canHostToolTraceFooter(
+        createMessage({
+          id: 'reconnecting',
+          isBot: true,
+          metadata: { kind: 'reconnecting' },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('hides local text skill paths in tool traces', () => {

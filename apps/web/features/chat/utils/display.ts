@@ -235,6 +235,21 @@ export function isToolTraceMessage(message: Message): boolean {
   return message.metadata?.kind === 'tool_trace';
 }
 
+/**
+ * 判断 tool trace 是否能挂到这条 AI 回复的底部。
+ *
+ * @param message 聊天消息。
+ * @returns 只有真实 AI 回复可承载 tool footer；思考流、进度和重连提示不承载，避免流式状态把工具信息插到中间。
+ */
+export function canHostToolTraceFooter(message: Message): boolean {
+  return (
+    Boolean(message.is_bot_message) &&
+    !isProgressMessage(message) &&
+    !isThinkingMessage(message) &&
+    message.metadata?.kind !== 'reconnecting'
+  );
+}
+
 export function filterProgressMessages(messages: Message[]) {
   return messages.filter(
     (message) =>

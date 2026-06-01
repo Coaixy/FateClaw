@@ -9,11 +9,11 @@ import { Message } from '@/features/chat/api';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
+  canHostToolTraceFooter,
   formatChatCostLabels,
   formatChatDuration,
   hasFinalAssistantAfterLatestUser,
   isKnowledgeTrajectoryMessage,
-  isProgressMessage,
   isStreamingAssistantMessage,
   isThinkingMessage,
   isToolTraceMessage,
@@ -109,6 +109,24 @@ export function AiChatMessageList({
 function buildDisplayRows(messages: Message[]) {
   const rows: Array<{ message: Message; toolTraces: Message[] }> = [];
   let pendingToolTraces: Message[] = [];
+  let latestToolTraceHostIndex: number | null = null;
+
+  // tool 事件可能出现在回复文本之前或之后；统一收束到最近的真实 AI 回复底部。
+  const attachPendingToolTracesToLatestHost = () => {
+    if (
+      pendingToolTraces.length === 0 ||
+      latestToolTraceHostIndex === null
+    ) {
+      return;
+    }
+
+    const hostRow = rows[latestToolTraceHostIndex];
+    rows[latestToolTraceHostIndex] = {
+      ...hostRow,
+      toolTraces: [...hostRow.toolTraces, ...pendingToolTraces],
+    };
+    pendingToolTraces = [];
+  };
 
   for (const message of messages) {
     if (message.is_bot_message && isToolTraceMessage(message)) {
@@ -116,17 +134,25 @@ function buildDisplayRows(messages: Message[]) {
       continue;
     }
 
-    const canAttachToolTraces =
-      message.is_bot_message &&
-      !isProgressMessage(message);
+    if (!message.is_bot_message) {
+      attachPendingToolTracesToLatestHost();
+      latestToolTraceHostIndex = null;
+      rows.push({ message, toolTraces: [] });
+      continue;
+    }
+
+    const canAttachToolTraces = canHostToolTraceFooter(message);
     rows.push({
       message,
       toolTraces: canAttachToolTraces ? pendingToolTraces : [],
     });
     if (canAttachToolTraces) {
       pendingToolTraces = [];
+      latestToolTraceHostIndex = rows.length - 1;
     }
   }
+
+  attachPendingToolTracesToLatestHost();
 
   return { rows, pendingToolTraces };
 }
@@ -162,7 +188,7 @@ function AiChatMessageRow({
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
   const showAiGeneratedLabel =
-    isBot && !isErrorMessage && !isProgressMessage(message);
+    !isErrorMessage && canHostToolTraceFooter(message);
 
   // 知识检索轨迹：紧凑时间线样式
   if (isBot && isKnowledgeTrajectoryMessage(message)) {
@@ -201,11 +227,16 @@ function AiChatMessageRow({
         className="w-full max-w-6xl mx-auto animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
       >
-        <div className="mb-1 px-1">
-          <AiGeneratedLabel />
-        </div>
         <ArtifactRenderer entries={toolContext} />
         <ArtifactDebug entries={toolContext} />
+        {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
+        <MessageFooter
+          isBot={isBot}
+          showAiGeneratedLabel={showAiGeneratedLabel}
+          finalMarker={finalMarker}
+          durationLabel={durationLabel}
+          costLabels={costLabels}
+        />
       </div>
     );
   }
@@ -238,39 +269,6 @@ function AiChatMessageRow({
               isBot={isBot}
             />
           </div>
-
-          {(showAiGeneratedLabel ||
-            finalMarker ||
-            durationLabel ||
-            costLabels.length > 0) && (
-            <div
-              className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
-                isBot
-                  ? 'justify-start text-left'
-                  : 'justify-end text-right'
-              }`}
-            >
-              {showAiGeneratedLabel && <AiGeneratedLabel />}
-              {finalMarker && (
-                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
-                  {finalMarker}
-                </span>
-              )}
-              {durationLabel && (
-                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
-                  {durationLabel}
-                </span>
-              )}
-              {costLabels.map((costLabel) => (
-                <span
-                  key={costLabel}
-                  className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm"
-                >
-                  {costLabel}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         {isBot && !isFinalMessage && toolContext.length > 0 && (
@@ -284,7 +282,65 @@ function AiChatMessageRow({
           <ToolTraceList messages={toolTraces} />
         )}
 
+        <MessageFooter
+          isBot={isBot}
+          showAiGeneratedLabel={showAiGeneratedLabel}
+          finalMarker={finalMarker}
+          durationLabel={durationLabel}
+          costLabels={costLabels}
+        />
       </div>
+    </div>
+  );
+}
+
+function MessageFooter({
+  isBot,
+  showAiGeneratedLabel,
+  finalMarker,
+  durationLabel,
+  costLabels,
+}: {
+  isBot: boolean;
+  showAiGeneratedLabel: boolean;
+  finalMarker: string | null;
+  durationLabel: string | null;
+  costLabels: string[];
+}) {
+  if (
+    !showAiGeneratedLabel &&
+    !finalMarker &&
+    !durationLabel &&
+    costLabels.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px] tabular-nums ${
+        isBot ? 'justify-start text-left' : 'justify-end text-right'
+      }`}
+    >
+      {showAiGeneratedLabel && <AiGeneratedLabel />}
+      {finalMarker && (
+        <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
+          {finalMarker}
+        </span>
+      )}
+      {durationLabel && (
+        <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
+          {durationLabel}
+        </span>
+      )}
+      {costLabels.map((costLabel) => (
+        <span
+          key={costLabel}
+          className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm"
+        >
+          {costLabel}
+        </span>
+      ))}
     </div>
   );
 }
