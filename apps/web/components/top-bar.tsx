@@ -34,6 +34,51 @@ function AvatarBadge({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function BillingPillSkeleton({ compact = false }: { compact?: boolean }) {
+  const pillClass = compact ? 'h-7 w-[116px]' : 'h-9 w-[168px]';
+  const dotClass = compact ? 'h-1.5 w-1.5' : 'h-2 w-2';
+
+  return (
+    <div
+      className={`${pillClass} inline-flex items-center gap-2 rounded-full border border-hairline/60 bg-surface-card/80 px-3 backdrop-blur-sm`}
+      aria-hidden="true"
+    >
+      <span
+        className={`${dotClass} shrink-0 animate-pulse rounded-full bg-primary/25`}
+      />
+      <span className="h-2.5 w-10 animate-pulse rounded-full bg-muted/12" />
+      <span className="h-2.5 w-1 animate-pulse rounded-full bg-muted/10" />
+      <span className="h-2.5 flex-1 animate-pulse rounded-full bg-muted/12" />
+    </div>
+  );
+}
+
+function TopBarSkeleton({ compact = false }: { compact?: boolean }) {
+  const avatarClass = compact ? 'h-7 w-7' : 'h-9 w-9';
+
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2"
+      role="status"
+      aria-label="正在加载用户信息"
+    >
+      <span className="sr-only">正在加载用户信息</span>
+      <BillingPillSkeleton compact={compact} />
+      <div
+        className={`${avatarClass} shrink-0 animate-pulse rounded-full border border-primary/15 bg-primary/10`}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
+/**
+ * 渲染全局右上角用户入口。
+ *
+ * @param compact 是否使用移动端紧凑尺寸。
+ * @param onLogout 用户点击退出登录时的回调。
+ * @returns 登录入口、用户菜单或加载骨架；加载骨架用于避免刷新时右上角空白闪烁。
+ */
 export function TopBar({
   compact = false,
   onLogout,
@@ -43,7 +88,13 @@ export function TopBar({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const { status, usage, refreshing, refresh } = useBillingSnapshot();
+  const {
+    status,
+    usage,
+    loading: billingLoading,
+    refreshing,
+    refresh,
+  } = useBillingSnapshot();
   const [menuOpen, setMenuOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +110,7 @@ export function TopBar({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [menuOpen, usageOpen]);
 
-  if (loading) return null;
+  if (loading) return <TopBarSkeleton compact={compact} />;
 
   if (!user) {
     return (
@@ -90,32 +141,43 @@ export function TopBar({
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
+  const dropdownBalanceLabel =
+    billingLoading || balanceCoins === null
+      ? '加载中…'
+      : `${formatCoins(balanceCoins)} 可用`;
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
       {/* 计费胶囊：余额 + 今日 token */}
       <div className="relative min-w-0">
-        <button
-          onClick={() => {
-            setUsageOpen((v) => !v);
-            setMenuOpen(false);
-          }}
-          className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
-          aria-label={`${balanceCoins === null ? '余额加载中' : `${formatCoins(balanceCoins)} 可用`}，今日 ${todayTokens}`}
-          aria-expanded={usageOpen}
-        >
-          <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-          <span className="tabular-nums font-medium">{balanceLabel}</span>
-          <span className="text-muted/60">·</span>
-          <span className="inline-flex items-center gap-1 text-muted whitespace-nowrap">
-            <BadgeDollarSign
-              size={compact ? 10 : 12}
-              className="text-primary"
-            />
-            <span className="tabular-nums">{todayTokensLabel}</span>
-          </span>
-        </button>
-        {usageOpen && (
+        {billingLoading ? (
+          <div role="status" aria-label="正在加载余额和用量">
+            <span className="sr-only">正在加载余额和用量</span>
+            <BillingPillSkeleton compact={compact} />
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setUsageOpen((v) => !v);
+              setMenuOpen(false);
+            }}
+            className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
+            aria-label={`${balanceCoins === null ? '余额加载中' : `${formatCoins(balanceCoins)} 可用`}，今日 ${todayTokens}`}
+            aria-expanded={usageOpen}
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+            <span className="tabular-nums font-medium">{balanceLabel}</span>
+            <span className="text-muted/60">·</span>
+            <span className="inline-flex items-center gap-1 text-muted whitespace-nowrap">
+              <BadgeDollarSign
+                size={compact ? 10 : 12}
+                className="text-primary"
+              />
+              <span className="tabular-nums">{todayTokensLabel}</span>
+            </span>
+          </button>
+        )}
+        {!billingLoading && usageOpen && (
           <div className="absolute right-0 top-full z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in">
             <UsagePanel
               status={status}
@@ -145,11 +207,7 @@ export function TopBar({
         {menuOpen && (
           <UserMenuDropdown
             user={{ phone: user.phone_masked ?? user.phone }}
-            balanceLabel={
-              balanceCoins === null
-                ? '加载中…'
-                : `${formatCoins(balanceCoins)} 可用`
-            }
+            balanceLabel={dropdownBalanceLabel}
             avatar={<AvatarBadge />}
             onNavigate={() => setMenuOpen(false)}
             onLogout={() => {
