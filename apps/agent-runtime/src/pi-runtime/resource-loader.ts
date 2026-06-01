@@ -145,7 +145,7 @@ function buildAppendSystemPrompt(
     prompts.push(
       [
         '本轮可见的用户私有知识库入口如下。',
-        '这些入口是请求授权的 Markdown Skill 资源；如需正文，请先用 read 读取对应 SKILL.md，再按 SKILL.md/index.md 指引读取 docs/examples/notes 中的相关 Markdown 文件。',
+        '这些入口是请求授权的 Markdown Skill 资源；可按需要直接用 read 读取已知 Markdown 文件，或在不确定位置时用 grep 搜索授权 Markdown 后再读取相关文件。',
         ...privateKnowledgeEntries.map((entry) =>
           [
             `- ${entry.name}`,

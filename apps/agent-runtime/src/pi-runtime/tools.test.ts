@@ -282,10 +282,19 @@ describe('createPiCustomTools', () => {
 
     expect(tools.map((tool) => tool.name)).toEqual([
       ...DEFAULT_PI_TOOL_NAMES,
+      'grep',
       'read',
     ]);
 
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
     const readTool = tools.find((tool) => tool.name === 'read')!;
+    const search = await grepTool.execute(
+      'grep-1',
+      { query: 'Markdown' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
     const ok = await readTool.execute(
       'read-1',
       { path: readableSkill.filePath },
@@ -305,6 +314,21 @@ describe('createPiCustomTools', () => {
       output: string;
     };
 
+    expect(search.details).toMatchObject({
+      isError: false,
+      query: 'Markdown',
+      total: 1,
+      truncated: false,
+      matches: [
+        {
+          path: readableSkill.filePath,
+          relativePath: 'SKILL.md',
+          skill: 'private-bazi',
+          line: 8,
+          text: '调用 Pi read 读取 Markdown 知识。',
+        },
+      ],
+    });
     expect(ok.content[0]).toEqual({
       type: 'text',
       text: expect.stringContaining('调用 Pi read'),
@@ -313,7 +337,13 @@ describe('createPiCustomTools', () => {
     expect(blockedDetails.output).toContain('读取被拒绝');
     expect(recordExecution).toHaveBeenCalledWith(
       expect.objectContaining({
-        invocation: expect.objectContaining({ toolName: 'read' }),
+        invocation: expect.objectContaining({ toolName: 'grep' }),
+        isError: false,
+      }),
+    );
+    expect(recordExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({ id: 'read-1' }),
         isError: false,
       }),
     );
@@ -323,6 +353,98 @@ describe('createPiCustomTools', () => {
         isError: true,
       }),
     );
+  });
+
+  it('greps only authorized markdown files inside visible skill bundles', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const docsDir = path.join(readableSkill.baseDir, 'docs');
+    fs.mkdirSync(docsDir);
+    fs.writeFileSync(
+      path.join(docsDir, 'knowledge.md'),
+      ['Alpha beta', 'beta conclusion', 'BETA hidden'].join('\n'),
+    );
+    fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), 'beta secret');
+    const tools = createPiCustomTools({
+      requestScope: createRequestScope(),
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    const caseInsensitive = await grepTool.execute(
+      'grep-md',
+      { query: 'beta', path: 'docs', limit: 2 },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const caseSensitive = await grepTool.execute(
+      'grep-case',
+      { query: 'beta', path: 'docs/knowledge.md', caseSensitive: true },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const nonMarkdown = await grepTool.execute(
+      'grep-txt',
+      { query: 'beta', path: 'secret.txt' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const outside = await grepTool.execute(
+      'grep-outside',
+      { query: 'beta', path: '../outside.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(caseInsensitive.details).toMatchObject({
+      isError: false,
+      total: 3,
+      truncated: true,
+      searchedFiles: 1,
+      matches: [
+        {
+          relativePath: 'docs/knowledge.md',
+          line: 1,
+          text: 'Alpha beta',
+        },
+        {
+          relativePath: 'docs/knowledge.md',
+          line: 2,
+          text: 'beta conclusion',
+        },
+      ],
+    });
+    expect(caseSensitive.details).toMatchObject({
+      isError: false,
+      total: 2,
+      truncated: false,
+      matches: [
+        {
+          relativePath: 'docs/knowledge.md',
+          line: 1,
+          text: 'Alpha beta',
+        },
+        {
+          relativePath: 'docs/knowledge.md',
+          line: 2,
+          text: 'beta conclusion',
+        },
+      ],
+    });
+    expect(nonMarkdown.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('不是授权 Skill 内的 Markdown 文件或目录'),
+      total: 0,
+      matches: [],
+    });
+    expect(outside.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('不属于本轮可见 Skill 目录'),
+    });
   });
 
   it('adds one session board tool for listing and reading visible boards', async () => {
