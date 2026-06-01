@@ -684,37 +684,6 @@ function getShichenLabel(hour: number): string {
   return SHICHEN_LABELS[Math.floor(((hour + 1) % 24) / 2)] ?? '';
 }
 
-function CompactPickerSelect({
-  label,
-  value,
-  children,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  children: ReactNode;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block min-w-0">
-      <span className="mb-1 block text-[10px] text-muted">{label}</span>
-      <span className="relative block">
-        <select
-          value={value}
-          onChange={(event) => onChange(Number.parseInt(event.currentTarget.value, 10))}
-          className="h-9 w-full appearance-none rounded-lg border border-hairline bg-surface-card px-2.5 pr-7 text-[12px] text-ink focus:border-primary/45 focus:outline-none"
-        >
-          {children}
-        </select>
-        <ChevronDown
-          size={13}
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted"
-        />
-      </span>
-    </label>
-  );
-}
-
 function CompactPickerNumberInput({
   label,
   value,
@@ -797,6 +766,45 @@ function CompactPickerNumberInput({
         )}
       </span>
     </label>
+  );
+}
+
+function CompactPickerMonthGrid({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="mb-1 block text-[10px] text-muted">月份</span>
+      <div
+        role="radiogroup"
+        aria-label="月份"
+        className="grid grid-cols-4 gap-1.5"
+      >
+        {MONTH_OPTIONS.map((month) => {
+          const active = month === value;
+          return (
+            <button
+              key={`paipan-month-${month}`}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(month)}
+              className={`min-h-11 rounded-lg border px-2 text-[12px] font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
+                active
+                  ? 'border-primary bg-primary/12 text-ink shadow-[0_6px_14px_rgba(0,0,0,0.08)]'
+                  : 'border-hairline bg-surface-card/55 text-muted hover:border-primary/35 hover:text-ink'
+              }`}
+            >
+              {month} 月
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -939,7 +947,7 @@ function PaipanDateTimePicker({
 
           {showDate && (
             <div className="space-y-3">
-              <div className="grid grid-cols-[1fr_82px_82px] gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <CompactPickerNumberInput
                   label="年份"
                   value={dateParts.year}
@@ -948,18 +956,6 @@ function PaipanDateTimePicker({
                   suffix="年"
                   onChange={(year) => commitDate(year, dateParts.month, dateParts.day)}
                 />
-
-                <CompactPickerSelect
-                  label="月份"
-                  value={dateParts.month}
-                  onChange={(month) => commitDate(dateParts.year, month, dateParts.day)}
-                >
-                  {MONTH_OPTIONS.map((month) => (
-                    <option key={`paipan-month-${month}`} value={month}>
-                      {month} 月
-                    </option>
-                  ))}
-                </CompactPickerSelect>
 
                 <CompactPickerNumberInput
                   label="日期"
@@ -970,6 +966,11 @@ function PaipanDateTimePicker({
                   onChange={(day) => commitDate(dateParts.year, dateParts.month, day)}
                 />
               </div>
+
+              <CompactPickerMonthGrid
+                value={dateParts.month}
+                onChange={(month) => commitDate(dateParts.year, month, dateParts.day)}
+              />
             </div>
           )}
 
