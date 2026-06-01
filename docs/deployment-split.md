@@ -60,10 +60,12 @@ npm install --omit=dev -f && npm run start
 
 ```bash
 mkdir -p /var/www/fateclaw-web
+rm -rf /var/www/fateclaw-web/*
 tar xzf fateclaw-web-v<version>-static.tar.gz -C /var/www/fateclaw-web
 ```
 
 Web 包内就是静态站点根目录内容，包含 `index.html`、`_next/static/*` 和各页面目录。
+部署时必须先清空目标目录再解压，避免已删除或改名的旧页面、旧路由数据继续留在线上。
 
 ## Nginx 示例
 
@@ -71,6 +73,7 @@ Web 包内就是静态站点根目录内容，包含 `index.html`、`_next/stati
 server {
   listen 80;
   server_name example.com;
+  root /var/www/fateclaw-web;
 
   location /api/ {
     proxy_pass http://127.0.0.1:3000;
@@ -81,11 +84,35 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
+  location ^~ /_next/static/ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location ~* \.(?:html|txt)$ {
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    add_header CDN-Cache-Control "no-store" always;
+    add_header Surrogate-Control "no-store" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    try_files $uri $uri/ /index.html;
+  }
+
   location / {
-    root /var/www/fateclaw-web;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    add_header CDN-Cache-Control "no-store" always;
+    add_header Surrogate-Control "no-store" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
     try_files $uri $uri/ /index.html;
   }
 }
 ```
 
 如果部署了 HTTPS，把 `listen` 和证书配置加到同一个 server 内即可。
+
+缓存策略说明：
+
+- `/_next/static/*` 文件名带构建 hash，内容变化后 URL 会变，可以长缓存一年并加 `immutable`。
+- 页面入口、`*.html` 和 Next App Router 静态导出的 `*.txt` 路由数据不能长缓存，否则浏览器或 CDN 会继续拿旧页面壳和旧路由数据。
+- 如果用了 CDN，还需要在 CDN 侧对页面入口、HTML/TXT 禁用缓存或部署后主动刷新缓存。

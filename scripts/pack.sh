@@ -219,9 +219,11 @@ fi
 if [ -n "$GENERATED_WEB_STATIC" ]; then
   echo "  Web:"
   echo "    1. scp $GENERATED_WEB_STATIC user@server:~/"
-  echo "    2. mkdir -p /var/www/fateclaw-web"
+  echo "    2. rm -rf /var/www/fateclaw-web/* && mkdir -p /var/www/fateclaw-web"
   echo "    3. tar xzf $GENERATED_WEB_STATIC -C /var/www/fateclaw-web"
 fi
 echo "  Nginx:"
 echo "    /api/ 反代到 http://127.0.0.1:3000"
+echo "    /_next/static/ 长缓存 immutable"
+echo "    *.html 和 *.txt 不缓存 no-store"
 echo "    /     指向 /var/www/fateclaw-web，并 try_files \$uri \$uri/ /index.html"
