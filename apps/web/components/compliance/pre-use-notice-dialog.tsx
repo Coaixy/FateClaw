@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+const NOTICE_SNOOZE_KEY = 'fateclaw-pre-use-notice-snoozed-date';
 
 const noticeSections = [
   {
@@ -32,13 +34,45 @@ const noticeSections = [
   },
 ];
 
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * 全站用前须知弹窗。
  *
- * @returns 每次页面加载时展示的合规告知弹窗；用户本次确认后才关闭。
+ * @returns 首次进入或当天未勾选免提醒时展示的合规告知弹窗。
  */
 export function PreUseNoticeDialog() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [checkedToday, setCheckedToday] = useState(true);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(NOTICE_SNOOZE_KEY) === getLocalDateKey()) {
+        return;
+      }
+    } catch {
+      // localStorage 可能被隐私模式或浏览器策略禁用，此时仍展示须知。
+    }
+
+    setOpen(true);
+  }, []);
+
+  const handleAccept = () => {
+    if (checkedToday) {
+      try {
+        window.localStorage.setItem(NOTICE_SNOOZE_KEY, getLocalDateKey());
+      } catch {
+        // 写入失败不影响本次继续使用，只是刷新后仍会再次提示。
+      }
+    }
+
+    setOpen(false);
+  };
 
   if (!open) {
     return null;
@@ -64,7 +98,7 @@ export function PreUseNoticeDialog() {
                   用前须知与隐私说明
                 </h1>
                 <p className="mt-1.5 max-w-2xl text-xs leading-5 text-body sm:mt-2 sm:text-sm sm:leading-6">
-                  请在继续使用前完整阅读以下内容。每次打开本站页面时，都需要先确认本须知。
+                  请在继续使用前完整阅读以下内容。确认后今天不再重复提醒。
                 </p>
               </div>
             </div>
@@ -93,9 +127,20 @@ export function PreUseNoticeDialog() {
               <p className="text-xs leading-5 text-muted">
                 不同意以上内容时，请关闭本页面；同意后方可继续使用当前页面。
               </p>
-              <Button size="md" className="w-full shrink-0 sm:h-12 sm:w-auto sm:px-6 sm:text-[15px]" onClick={() => setOpen(false)}>
-                我已阅读并同意
-              </Button>
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:items-end">
+                <label className="flex min-h-5 cursor-pointer items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={checkedToday}
+                    onChange={(event) => setCheckedToday(event.currentTarget.checked)}
+                    className="size-4 shrink-0 accent-primary"
+                  />
+                  今日不再提醒
+                </label>
+                <Button size="md" className="w-full sm:h-12 sm:w-auto sm:px-6 sm:text-[15px]" onClick={handleAccept}>
+                  我已阅读并同意
+                </Button>
+              </div>
             </div>
           </div>
         </div>
