@@ -14,6 +14,10 @@
     "./chat": "./src/chat/index.d.ts",
     "./billing": "./src/billing/index.d.ts",
     "./model-settings": "./src/model-settings/index.d.ts",
-    "./skills": "./src/skills/index.d.ts"
+    "./skills": {
+      "types": "./src/skills/index.d.ts",
+      "import": "./src/skills/index.js",
+      "default": "./src/skills/index.js"
+    }
   }
 }

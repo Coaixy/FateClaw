@@ -1,3 +1,9 @@
+import {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+} from '@fateclaw/contracts/skills';
+
 import type {
   BundleShareResponseDto,
   BundleSkillPreviewDto,
@@ -32,6 +38,11 @@ export type BundleSubscribeResult = BundleSubscribeResultDto;
 export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
 export type MarketBundle = MarketBundleDto;
 export type MarketSkill = MarketSkillDto;
+export {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+};
 
 const pathSegment = (value: string) => encodeURIComponent(value);
 

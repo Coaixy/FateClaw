@@ -23,6 +23,7 @@
     "account:remove": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts remove"
   },
   "dependencies": {
+    "@fateclaw/contracts": "workspace:*",
     "@alicloud/credentials": "^2.4.4",
     "@alicloud/dypnsapi20170525": "^2.0.0",
     "@alicloud/openapi-client": "^0.4.15",

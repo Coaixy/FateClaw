@@ -20,6 +20,11 @@ import {
 } from 'lucide-react';
 
 import { useConfirm } from '@/lib/use-confirm';
+import {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+} from '@/features/skills/api';
 import type {
   TextSkillBundleFile,
   UserCustomSkill,
@@ -75,9 +80,6 @@ const BLOCKED_FILE_SEGMENTS = new Set([
   'build',
   'coverage',
 ]);
-const MAX_SKILL_BUNDLE_FILES = 30;
-const MAX_SKILL_BUNDLE_FILE_LENGTH = 100_000;
-
 function toYamlScalar(value: string): string {
   return JSON.stringify(value);
 }
@@ -478,6 +480,16 @@ export function SkillBundleEditor({
     if (oversizedFile) {
       setError(
         `${oversizedFile.path} 内容不能超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH.toLocaleString()} 字`,
+      );
+      return;
+    }
+    const totalLength = files.reduce(
+      (sum, file) => sum + file.content.length,
+      0,
+    );
+    if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
+      setError(
+        `Bundle 总内容不能超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH.toLocaleString()} 字`,
       );
       return;
     }

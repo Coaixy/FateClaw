@@ -4,6 +4,18 @@
 
 import type { OkResponse } from '../common/api.js';
 
+/** 用户可创建的自定义 Skill 数量上限。 */
+export declare const MAX_USER_SKILLS: 30;
+
+/** 单个 Skill Bundle 允许包含的最大文本文件数。 */
+export declare const MAX_SKILL_BUNDLE_FILES: 50;
+
+/** 单个 Skill Bundle 文件允许包含的最大字符数。 */
+export declare const MAX_SKILL_BUNDLE_FILE_LENGTH: 100000;
+
+/** 单个 Skill Bundle 所有文件合计允许包含的最大字符数。 */
+export declare const MAX_SKILL_BUNDLE_TOTAL_LENGTH: 500000;
+
 export interface TextSkillBundleFileDto {
   path: string;
   content: string;

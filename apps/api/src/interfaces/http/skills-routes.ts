@@ -20,6 +20,7 @@ import {
   publishUserCustomSkill,
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
   MAX_USER_SKILLS,
   shareSkillBundle,
   shareUserCustomSkill,
@@ -57,6 +58,7 @@ function parseBundleFilesPayload(
     throw new Error(`Bundle 文件数不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
   }
 
+  let totalLength = 0;
   for (const file of files) {
     if (!file || typeof file !== 'object') return null;
     const { path, content } = file as { path?: unknown; content?: unknown };
@@ -66,7 +68,13 @@ function parseBundleFilesPayload(
         `单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`,
       );
     }
+    totalLength += content.length;
     parsed.push({ path, content });
+  }
+  if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
+    throw new Error(
+      `Bundle 总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`,
+    );
   }
 
   return parsed;

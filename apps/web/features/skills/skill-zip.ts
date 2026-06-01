@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+} from '@fateclaw/contracts/skills';
+
 import type { TextSkillBundleFile } from '@/features/skills/api';
 
 /**
@@ -52,8 +58,6 @@ const BLOCKED_DIRECTORY_NAMES = new Set([
   'coverage',
 ]);
 const MAX_ZIP_FILE_SIZE = 8 * 1024 * 1024;
-const MAX_SKILL_BUNDLE_FILES = 30;
-const MAX_SKILL_BUNDLE_FILE_LENGTH = 100_000;
 const ZIP_LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50;
@@ -335,6 +339,16 @@ function normalizeSkillFiles(
 
   if (byPath.size > MAX_SKILL_BUNDLE_FILES) {
     throw new Error(`压缩包内文本文件不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+  }
+
+  const totalLength = Array.from(byPath.values()).reduce(
+    (sum, content) => sum + content.length,
+    0,
+  );
+  if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
+    throw new Error(
+      `压缩包内文本总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`,
+    );
   }
 
   if (!byPath.has('SKILL.md')) {
