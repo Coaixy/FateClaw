@@ -123,7 +123,7 @@ apps/web/
 - 登录态逻辑优先走现有 auth hooks / provider
 - 调路由时同时检查桌面侧栏、移动导航和入口页是否受影响
 - 如果接口字段变更，检查日志页、技能页和 dashboard，这几个页面依赖最重
-- 当前仓库不保留测试源文件；前端改动后至少跑 `pnpm --filter fateclaw-web exec tsc --noEmit`，必要时再跑 `pnpm --filter fateclaw-web build`
+- 仓库保留了前端 Vitest 测试源文件；前端改动后优先跑相关 `*.test.ts`，再跑 `pnpm --filter fateclaw-web exec tsc --noEmit`，必要时再跑 `pnpm --filter fateclaw-web build`
 
 ## 安全部署要求（必读）
 

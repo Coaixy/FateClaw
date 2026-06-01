@@ -25,8 +25,10 @@ apps/api/src/interfaces/http/
 ├── auth-routes.ts
 ├── billing-routes.ts
 ├── chat-sessions-routes.ts
+├── model-settings-routes.ts
 ├── messages-routes.ts
 ├── paipan-routes.ts
+├── public-routes.ts
 ├── skills-routes.ts
 └── tasks-routes.ts
 ```
@@ -52,7 +54,9 @@ apps/api/src/interfaces/http/
 - `/api/account`
 - `/api/chat-sessions`
 - `/api/messages`
+- `/api/model-settings`
 - `/api/paipan`
+- `/api/public`
 - `/api/tasks`
 - `/api/skills`
 - `/api/billing`
@@ -107,4 +111,4 @@ apps/api/src/interfaces/http/
 - 返回结构尽量延续当前中文错误消息风格
 - 权限校验要和资源所有权绑定，不要只校验 JWT
 - 如果改了 API 路由或参数，同步检查 `apps/web/features/*/api.ts`、`apps/web/lib/admin-api.ts` 和 `docs/api-reference.md`
-- 当前仓库不保留测试源文件；API 改动后至少跑 `pnpm --filter @fateclaw/api typecheck` 和 `pnpm --filter @fateclaw/api lint`
+- 仓库保留了 API Vitest 测试源文件；API 改动后优先跑相关 `*.test.ts`，再跑 `pnpm --filter @fateclaw/api typecheck` 和 `pnpm --filter @fateclaw/api lint`

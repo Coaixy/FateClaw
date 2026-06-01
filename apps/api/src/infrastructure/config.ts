@@ -113,7 +113,7 @@ export const TRIGGER_PATTERN = new RegExp(
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// conversation_logs.trace_events 的保留天数。超过此天数的 trace_events 列
+// conversation_log_payloads.trace_events 的保留天数。超过此天数的 trace_events 列
 // 会被定时任务置 NULL（transcript 等业务数据保留不变）。trace 是纯调试数据，
 // 7 天足够覆盖"昨天出了问题帮我查一下"的典型排障场景。
 export const TRACE_RETENTION_DAYS = parseInt(

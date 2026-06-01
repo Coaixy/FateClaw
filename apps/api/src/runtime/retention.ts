@@ -1,7 +1,7 @@
 /**
  * 数据保留策略：定时清理过期的调试数据。
  *
- * 当前只清 conversation_logs.trace_events 列——trace 是纯调试数据，
+ * 当前只清 conversation_log_payloads.trace_events 列——trace 是纯调试数据，
  * 保留 N 天足够排障，过期即置 NULL 释放存储空间。transcript / usage /
  * agent_graph_summary 等业务数据不在此处清理。
  *

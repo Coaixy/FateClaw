@@ -1,15 +1,17 @@
 # 微信 OpenClaw/iLink 对接说明
 
-FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径，但当前默认启动入口暂时关闭微信设备 listener/poller。本文档用于说明现状和恢复这条链路时需要检查的边界。
+FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径。当前后端正式启动入口会为已启用且会员有效的既有账号启动 iLink 长轮询和 IPC listener，但 Web 侧新扫码绑定入口仍暂未开放。本文档用于说明现状和完整恢复这条链路时需要检查的边界。
 
 ## 当前状态
 
-- 站内 AI Chat 是当前默认可运行主链路。
+- 站内 AI Chat 是当前稳定主链路。
 - `apps/api/src/app/index.ts` 初始化 DB、系统排盘开关、Redis、IPC worker、retention worker 和 Fastify API。
-- `activateAccount()` 当前只记录“微信设备运行入口暂时关闭”，不会热激活轮询。
-- Web 侧设备绑定页面也会提示微信设备暂时关闭。
+- 正式启动会读取 `getEnabledAccounts()`，仅为有 `owner_id` 且会员状态有效的账号启动 `startAccountPolling()`，并把这些账号注册到 `startIpcWorker(memberAccounts)`。
+- `activateAccount()` 会调用 `addAccountListener(account.id)` 并启动该账号轮询，用于绑定后的热激活。
+- `pnpm run dev:api-only` 轻量入口只启动 DB、Redis 和 API Server，会跳过 iLink 轮询、IPC worker 和 runtime 激活。
+- Web 侧设备绑定页面仍把 `canBindWeixin` 固定为 `false`，因此新扫码绑定显示为暂未开放。
 
-这意味着：即使数据库中存在账号信息，默认启动命令也不会自动拉起微信消息 listener/poller。
+这意味着：后端已有微信运行链路，但产品层面没有重新开放新绑定；完整恢复微信入口时不能只看后端轮询，还要同步前端开关、会员/账号策略和外部平台协议。
 
 ## 相关模块
 
@@ -25,11 +27,11 @@ FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径，但当前默
 
 1. 确认 OpenClaw/iLink Bot API 的 Base URL、token、扫码登录和消息发送接口仍与 `ilink.ts` 中的协议一致。
 2. 明确账号和用户的绑定关系，避免一个微信账号被错误绑定到多个用户。
-3. 恢复入口编排时，确认 `startIpcWorker()`、账号 listener/poller、agent-runtime 生命周期和优雅退出顺序。
+3. 恢复新绑定入口时，确认 `DevicesPanel` 的前端开关、扫码绑定 API、`startIpcWorker()`、账号 listener/poller、agent-runtime 生命周期和优雅退出顺序。
 4. 确认 `dispatchResidentPrompt()` 的 `autoDeliver` 行为和 outbox 处理仍符合微信自动发送要求。
 5. 增加速率限制、错误重试和幂等处理，避免重复发送或失控刷屏。
 6. 检查日志脱敏，避免记录 bot token、用户微信 ID、私聊内容和模型密钥。
-7. 更新 README、API 文档和 Web 设备页文案，明确微信链路已经恢复可用。
+7. 更新 README、API 文档和 Web 设备页文案，明确微信链路的可用范围：既有账号轮询、新绑定、自动发送和故障降级是否全部开放。
 
 ## 环境变量和凭据
 

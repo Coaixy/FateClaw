@@ -38,7 +38,7 @@ pnpm run dev
 - 修改 API 契约时，同步检查 `packages/contracts`、前端 API client 和 `docs/api-reference.md`。
 - 修改 Agent 能力时，同步检查 `apps/agent-runtime/src/pi-runtime/`、官方 `SKILL.md`、Text Skill Bundle 读取逻辑和相关测试。
 - 修改排盘 Skill 时，保留本地确定性计算，不把排盘基础结果改成纯模型生成。
-- 修改微信 OpenClaw/iLink 相关代码时，必须说明当前入口是否仍保持关闭，以及需要的部署前置条件。
+- 修改微信 OpenClaw/iLink 相关代码时，必须说明影响的是既有账号后端轮询、新扫码绑定入口、自动发送链路还是部署前置条件。
 
 ## 测试与验证
 

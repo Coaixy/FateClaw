@@ -12,7 +12,7 @@ https://example.com/api/*   -> Fastify API
 ## 打包
 
 ```bash
-npm run pack
+pnpm run pack
 ```
 
 默认会生成两个包：

@@ -121,7 +121,7 @@ Web 负责：
 
 实际注入 agent-runtime 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
 
-### 6. 测试按改动范围聚焦运行
+### 5. 测试按改动范围聚焦运行
 
 仓库保留了 Vitest 测试源文件。验证改动时优先运行对应范围的测试，再补类型检查和构建：
 
@@ -132,9 +132,11 @@ Web 负责：
 
 根级 `pnpm test` 使用 Vitest；大改动不要只依赖 `--passWithNoTests` 的空覆盖结果。
 
-### 7. 当前启动入口暂时关闭微信设备运行
+### 6. 微信链路是“既有账号后端可跑，新绑定前端关闭”
 
-`apps/api/src/app/index.ts` 当前只启动 DB、Redis、IPC worker、retention worker 和 Fastify API；微信设备 listener/poller 被显式跳过，`activateAccount()` 也不会热激活设备。排查 agent 主链路时，优先按站内 AI Chat 的 `web:{userId}` runtime 理解。
+`apps/api/src/app/index.ts` 当前会初始化 DB、Redis、系统排盘开关、IPC worker、retention worker 和 Fastify API，并为已启用且会员有效的既有微信账号启动 `startAccountPolling()` 与对应 IPC listener。`activateAccount()` 也会热激活绑定账号。
+
+但 Web 侧 `DevicesPanel` 里 `canBindWeixin` 当前为 `false`，新扫码绑定入口仍显示暂未开放。排查主链路时仍优先按站内 AI Chat 的 `web:{userId}` runtime 理解；排查微信链路时要同时看后端轮询、会员状态、账号启用状态和前端绑定开关。
 
 ## 目录速查
 
@@ -150,7 +152,7 @@ Web 负责：
 
 ## 常见误区
 
-- 不要假设 trace 只写日志。`conversation_logs.trace_events` 当前会落库
+- 不要假设 trace 只写普通日志。当前 `conversation_logs` 保存元数据、计数和摘要，`conversation_log_payloads.trace_events` 保存 trace 正文
 - 不要把 `store/` 当主存储层；那是旧版本地 SQLite 遗留路径，当前正式运行链路已不再使用
 - 不要只看 `.env.example` 就断定宿主变量名，宿主实际读取逻辑在 `apps/api/src/infrastructure/config.ts` 和 `apps/api/src/runtime/agent-env.ts`
 - 不要只根据 `paipan-registry.ts` 判断系统排盘是否对用户生效，还要结合 `skill_global_config` 和用户启用状态

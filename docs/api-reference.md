@@ -10,7 +10,9 @@
 - `/api/account`
 - `/api/chat-sessions`
 - `/api/messages`
+- `/api/model-settings`
 - `/api/paipan`
+- `/api/public`
 - `/api/tasks`
 - `/api/skills`
 - `/api/billing`
@@ -20,7 +22,7 @@
 
 ## 认证
 
-除注册和登录外，所有接口需要在请求头中携带 JWT：
+除明确标注为公开接口的路由外，业务接口需要在请求头中携带 JWT。公开接口包括图形验证码、登录注册/找回密码、分享预览、排盘 catalog/preview、公开市场、状态页、支付通知、健康检查和 `/api/public/*`。
 
 ```
 Authorization: Bearer <token>
@@ -29,6 +31,16 @@ Authorization: Bearer <token>
 ---
 
 ## Auth 认证
+
+当前认证路由还包含：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/auth/captcha` | 获取图形验证码挑战 |
+| POST | `/api/auth/me/send-sms-captcha` | 登录用户发送换绑/重置类短信验证码 |
+| POST | `/api/auth/change-password` | 登录用户修改密码 |
+| POST | `/api/auth/reset-password` | 未登录找回密码 |
+| POST | `/api/auth/me/reset-password` | 登录用户重置自己的密码 |
 
 ### POST /api/auth/register
 
@@ -47,8 +59,8 @@ Authorization: Bearer <token>
 | 字段           | 类型   | 必填 | 说明               |
 | -------------- | ------ | ---- | ------------------ |
 | phoneNumber    | string | 是   | 中国大陆手机号     |
-| password       | string | 是   | 至少 6 位          |
-| smsCaptchaCode | string | 是   | 6 位短信验证码     |
+| password       | string | 是   | 至少 8 位          |
+| smsCaptchaCode | string | 是   | 短信验证码         |
 
 **Response 201**
 
@@ -186,6 +198,8 @@ Authorization: Bearer <token>
 
 ## Account 账号管理
 
+账号管理接口均需认证。当前 Web 设备页仍关闭新微信扫码绑定入口，但后端保留扫码、状态轮询和既有账号管理接口。
+
 ### GET /api/account
 
 获取当前用户绑定的所有微信账号。需认证。
@@ -253,6 +267,18 @@ Authorization: Bearer <token>
 { "error": "该账号已绑定其他用户" }
 ```
 
+### 其他账号接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/account/me/soul` | 读取当前用户级 Soul 自定义人格 |
+| PUT | `/api/account/me/soul` | 更新当前用户级 Soul 自定义人格，传 `{ "content": "..." }` |
+| GET | `/api/account/:id/soul` | 读取指定账号 Soul |
+| PUT | `/api/account/:id/soul` | 更新指定账号 Soul，传 `{ "content": "..." }` |
+| DELETE | `/api/account/:id` | 解除并删除当前用户拥有的账号 |
+| POST | `/api/account/qrcode` | 请求 iLink 扫码绑定二维码 |
+| POST | `/api/account/qrcode/status` | 轮询二维码状态，传 `{ "qrcode": "..." }` |
+
 ---
 
 ## Messages 对话历史
@@ -272,6 +298,7 @@ Authorization: Bearer <token>
 | 参数  | 类型   | 默认 | 说明               |
 | ----- | ------ | ---- | ------------------ |
 | limit | number | 50   | 返回条数，最大 200 |
+| before | string | - | 游标时间，返回该时间之前的消息 |
 
 **Response 200**
 
@@ -312,23 +339,35 @@ Authorization: Bearer <token>
 | GET    | `/api/chat-sessions/shared/:token`                                   | 通过分享令牌只读查看会话，无需认证 |
 | GET    | `/api/chat-sessions/s/:sessionId/messages`                           | 获取消息，支持 `limit` 和 `before` |
 | POST   | `/api/chat-sessions/s/:sessionId/messages`                           | 发送消息，传 `content` 和可选 `selected_board_message_id` |
+| POST   | `/api/chat-sessions/s/:sessionId/messages/cancel`                    | 中断当前会话正在处理的 AI Chat 输出 |
 | GET    | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process`  | 获取脱敏后的查询过程时间线 |
 
 ---
 
 ## Paipan 纯排盘
 
-以下接口均需认证。
-
 纯排盘接口由 API 进程调用内部 TypeScript runner 并返回结构化 `skillContext`。预览请求不写入会话，也不需要模型 `llmRuntime`。
 
 | 方法 | 路径                  | 说明                                               |
 | ---- | --------------------- | -------------------------------------------------- |
-| GET  | `/api/paipan/catalog` | 列出当前用户可直接排盘的系统排盘项                 |
-| POST | `/api/paipan/preview` | 传 `skill` 和 `input` 执行预览，不写入会话         |
-| POST | `/api/paipan/commit`  | 把预览或即时排盘结果提交到 AI Chat                |
+| GET  | `/api/paipan/catalog` | 公共接口，列出可直接排盘的系统排盘项               |
+| POST | `/api/paipan/preview` | 公共接口，传 `skill` 和 `input` 执行预览，不写入会话；携带有效 JWT 时会带入用户上下文 |
+| POST | `/api/paipan/commit`  | 需认证，把预览或即时排盘结果提交到 AI Chat        |
 
 `commit.target` 支持 `new_session_from_preview` 和 `current_session`。提交到当前会话时传 `sessionId`；也可以直接传 `skill` + `input` 让服务端即时排盘并写入。
+
+---
+
+## Model Settings 用户模型设置
+
+以下接口均需认证，用于普通用户选择官方模型或保存自配模型。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/model-settings` | 获取当前用户模型设置概览、官方模型列表和自配模型配置 |
+| GET | `/api/model-settings/official-models` | 获取可选官方模型列表 |
+| PUT | `/api/model-settings/custom` | 保存自配模型，字段包括 `pi_api`、`base_url`、`model_name`、`context_window_tokens`、`auth_mode`、`api_key` |
+| PUT | `/api/model-settings/selection` | 选择模型来源，传 `{ "source": "custom" }` 或 `{ "source": "official", "official_model_id": "..." }` |
 
 ---
 
@@ -507,6 +546,7 @@ Authorization: Bearer <token>
 - `POST /api/skills/bundles/:id/publish` / `DELETE /api/skills/bundles/:id/publish`：公开上架或取消公开
 - `GET /api/skills/bundles/shared/:token`：预览分享 Bundle，无需认证
 - `POST /api/skills/bundles/subscribe/:token`：批量订阅 Bundle
+- `DELETE /api/skills/bundles/subscriptions/:bundleId`：取消 Bundle 订阅
 - `GET /api/skills/market`：公开 Skill 市场
 - `GET /api/skills/bundles/market`：公开 Bundle 市场
 - `GET /api/skills/subscriptions/mine`：我的订阅
@@ -528,7 +568,18 @@ Authorization: Bearer <token>
   "purchased_coins": 100,
   "bonus_coins": 20,
   "reserved_coins": 0,
-  "available_coins": 120
+  "available_coins": 120,
+  "membership": {
+    "enabled": true,
+    "active": false,
+    "plan_key": null,
+    "monthly_price_coins": 30,
+    "current_period_start": null,
+    "current_period_end": null,
+    "allowance_reset_at": null,
+    "allowance_used_ratio": 0,
+    "allowance_status": "inactive"
+  }
 }
 ```
 
@@ -578,7 +629,7 @@ Authorization: Bearer <token>
 
 ### GET /api/billing/status
 
-查询状态页面展示的全站今日统计。需认证。
+查询状态页面展示的全站今日统计。无需认证。
 
 **Response 200**
 
@@ -607,7 +658,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "amount_yuan": "50.00",
+  "amount_coins": "50.00",
   "pay_type": "alipay"
 }
 ```
@@ -618,11 +669,19 @@ Authorization: Bearer <token>
 {
   "pay_url": "https://pay.example.com/...",
   "order": {
+    "id": "order-uuid",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "trade_id": "rc1770000000000123456",
+    "provider": "epay",
+    "provider_trade_id": null,
     "pay_type": "alipay",
-    "amount_yuan": "50.00",
-    "amount_cents": 5000,
-    "status": "pending"
+    "amount_coins": 50,
+    "pay_url": "https://pay.example.com/...",
+    "status": "pending",
+    "paid_at": null,
+    "notified_at": null,
+    "created_at": "2026-04-27T10:00:00.000Z",
+    "updated_at": "2026-04-27T10:00:00.000Z"
   }
 }
 ```
@@ -644,8 +703,7 @@ Authorization: Bearer <token>
 ```json
 {
   "total_paid_orders": 3,
-  "total_recharge_cents": 15000,
-  "total_recharge_yuan": "150.00",
+  "total_recharge_coins": 150,
   "last_paid_at": "2026-04-27T10:00:00.000Z"
 }
 ```
@@ -665,6 +723,36 @@ Authorization: Bearer <token>
 充值开关、金额范围、易支付网关、商户号和密钥保存在数据库表
 `recharge_payment_config`。异步通知地址和支付完成返回地址由服务端按
 `PUBLIC_BASE_URL` 或当前请求域名生成，下单时自动传给易支付。
+
+---
+
+### GET /api/billing/transactions
+
+查询当前用户最近钱包流水。需认证。
+
+---
+
+### GET /api/billing/daily-sign-in
+
+查询当前用户每日签到状态。需认证。
+
+---
+
+### POST /api/billing/daily-sign-in
+
+领取每日签到软妹币奖励。需认证。
+
+---
+
+### POST /api/billing/membership/subscribe
+
+使用钱包余额开通或续费 FateClaw Plus。需认证。
+
+---
+
+### POST /api/billing/reset
+
+按 scope 软重置当前用户数据。需认证。`scope` 支持 `all`、`messages`、`memories`、`tasks`，默认 `all`。
 
 ---
 
@@ -688,7 +776,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "status": "ok",
+  "status": "ready",
   "checks": {
     "postgres": "ok",
     "redis": "ok"
@@ -702,9 +790,21 @@ Authorization: Bearer <token>
 
 > 以下接口均走 `/api/admin/*`，需要在请求头携带 `X-Admin-Key: <MANAGER_KEY>`。
 
+### POST /api/admin/verify
+
+验证管理密钥是否正确。
+
+### GET /api/admin/stats
+
+读取全局统计数据，可按充值时间范围筛选。
+
 ### GET /api/admin/system-config
 
-读取模型提供商列表、当前生效运行时配置和最近审计日志。
+读取官方模型池、当前模型计费配置和最近审计日志。
+
+### PUT /api/admin/system-config/model-billing
+
+更新自配模型平台服务费。
 
 ### GET /api/admin/recharge-config
 
@@ -719,8 +819,8 @@ Authorization: Bearer <token>
 ```json
 {
   "enabled": true,
-  "min_yuan": "1.00",
-  "max_yuan": "1000.00",
+  "min_coins": "1.00",
+  "max_coins": "1000.00",
   "epay_url_prefix": "https://pay.example.com/",
   "epay_platform_id": 1001,
   "epay_merchant_private_key": "-----BEGIN PRIVATE KEY-----...",
@@ -729,55 +829,87 @@ Authorization: Bearer <token>
 }
 ```
 
+### GET /api/admin/reward-config
+
+读取每日签到和会员奖励配置。
+
+### PUT /api/admin/reward-config
+
+更新每日签到和会员奖励配置。
+
+### 关于页面公开收支流水
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/admin/about-ledger` | 读取公开收支流水 |
+| POST | `/api/admin/about-ledger` | 新增公开收支流水 |
+| PATCH | `/api/admin/about-ledger/:id` | 更新公开收支流水 |
+| DELETE | `/api/admin/about-ledger/:id` | 删除公开收支流水 |
+
 ### POST /api/admin/system-config/providers
 
-创建模型提供商。
+创建官方模型配置。
 
 **Request Body**
 
 ```json
 {
-  "provider_key": "openai-main",
-  "provider_type": "openai",
-  "usage_scope": "primary_agent",
+  "model_key": "openai-main",
+  "pi_api": "openai-responses",
   "display_name": "OpenAI Main",
+  "description": "默认主对话模型",
   "enabled": true,
-  "is_default": true,
   "priority": 0,
   "base_url": null,
-  "default_model": "gpt-4o"
+  "model_name": "gpt-4o",
+  "api_key": "sk-...",
+  "auth_mode": "openai_api_key",
+  "context_window_tokens": null,
+  "input_token_price_per_million_coins": 0,
+  "output_token_price_per_million_coins": 0
 }
 ```
 
-- `provider_type` 支持 `openai`、`openai_compatible`、`anthropic`、`gemini`
-- `usage_scope` 支持 `primary_agent`（主对话）和 `xuan_interpretation`（玄学子 loop）
+- `pi_api` 支持 `openai-completions`、`openai-responses`、`anthropic-messages`、`google-generative-ai`
+- `auth_mode` 支持 `openai_api_key`、`anthropic_api_key`、`claude_code_oauth_token`、`gemini_api_key`
 
 ### PATCH /api/admin/system-config/providers/:id
 
-更新模型提供商的非敏感字段。
-
-### POST /api/admin/system-config/providers/:id/secret
-
-更新模型提供商密钥（数据库加密存储）。
-
-**Request Body**
-
-```json
-{
-  "api_key": "sk-...",
-  "auth_mode": "openai_api_key"
-}
-```
-
-- `auth_mode` 支持 `openai_api_key`、`anthropic_api_key`、`claude_code_oauth_token`、`gemini_api_key`
-
-### POST /api/admin/system-config/providers/:id/set-default
-
-切换默认模型提供商。
+更新官方模型配置；如传 `api_key` 会同步更新密钥。
 
 ### DELETE /api/admin/system-config/providers/:id
 
-删除一个模型提供商（系统至少保留一个 provider 记录）。
+删除一个官方模型配置；已有用户选择该模型时会同步清理相关选择。
+
+### 其他管理接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/admin/users` | 用户列表与用量概览 |
+| POST | `/api/admin/users` | 管理员直接创建用户 |
+| GET | `/api/admin/users/:id` | 用户详情 |
+| GET | `/api/admin/users/:id/transactions` | 用户钱包流水 |
+| POST | `/api/admin/users/:id/balance/grant` | 发放赠送余额 |
+| POST | `/api/admin/users/:id/balance/adjust` | 调整充值余额 |
+| GET | `/api/admin/users/:id/balance/grants` | 用户赠送余额记录 |
+| DELETE | `/api/admin/users/:id/logs` | 删除用户对话日志 |
+| DELETE | `/api/admin/users/:id` | 删除用户 |
+| GET | `/api/admin/billing/reservations` | 查询预留计费请求 |
+| POST | `/api/admin/billing/reconcile` | 对账陈旧预留计费请求 |
+| GET | `/api/admin/messages` | 管理端消息检索 |
+| GET | `/api/admin/chat-sessions` | 管理端会话检索 |
+| POST | `/api/admin/chat-sessions/pi-sessions/cleanup` | 清理 Pi session 文件 |
+| GET | `/api/admin/tasks` | 管理端任务检索 |
+| GET | `/api/admin/skills/custom` | 管理端自定义 Skill 检索 |
+| GET | `/api/admin/skills/global` | 系统排盘全局开关列表 |
+
+---
+
+## Public 公开接口
+
+### GET /api/public/financial-ledger
+
+无需认证。返回关于页面公开收支流水。
 
 ---
 
@@ -812,7 +944,14 @@ Authorization: Bearer <token>
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
 | `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
+| `AGENT_REQUEST_TIMEOUT`     | `1800000`               | 微信 Bot 请求等待 agent 返回的超时时间，单位毫秒 |
+| `AI_CHAT_REQUEST_TIMEOUT`   | `1800000`               | 站内 AI Chat 请求等待 agent 返回的超时时间，单位毫秒 |
+| `AGENT_CONCURRENCY_LIMIT`   | `10`                    | 全站 agent 并发槽位上限，会员等待队列优先唤醒 |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
-| `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_logs.trace_events` 保留天数 |
+| `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_log_payloads.trace_events` 保留天数 |
+| `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | 用户 Text Skill Bundle 根目录      |
+| `FATECLAW_PI_SESSION_DIR`   | -                       | agent-runtime Pi session 文件目录  |
+| `LOG_LEVEL`                 | `info`                  | 服务端日志等级                     |
+| `LOG_PRETTY`                | 非生产默认开启          | `1` 强制开启 pino-pretty，`0` 强制关闭 |
 
 模型 Provider 当前主要通过管理后台 `/api/admin/system-config` 写入数据库；AI 请求消费宿主下发的 `llmRuntime`，不依赖进程级模型密钥。

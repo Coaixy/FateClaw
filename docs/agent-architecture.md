@@ -50,7 +50,7 @@ Pi SDK 模型 loop / 授权 Skill 文件读取
 
 宿主和 agent-runtime 是两个边界清晰的运行时：
 
-- 宿主负责平台侧事务：用户、账号、会话、消息落库、账单预扣与结算、模型 runtime 解析、Redis IPC、Fastify API、Text Skill Bundle 写入，以及系统排盘脚本调用。
+- 宿主负责平台侧事务：用户、账号、会话、消息落库、账单预扣与结算、模型 runtime 解析、Redis IPC、Fastify API、Text Skill Bundle 写入，以及系统排盘 runner 调用。
 - agent-runtime 负责 AI 执行：创建 request runtime、调用 Pi SDK、读取授权 Skill 文件、生成 transcript / trace / agentGraph。
 - 模型密钥和 provider 是 AI 请求级数据。宿主在 AI Chat / 微信消息入队前解析数据库配置，并通过 `llmRuntime` 快照随 IPC payload 下发；手动排盘请求由 API 侧调用系统排盘运行包，不需要模型 runtime。
 
@@ -121,7 +121,7 @@ notes/
 
 主要真源：
 
-- PostgreSQL：用户、账号、会话、消息、任务、模型配置、技能 metadata、账单、`conversation_logs`。
+- PostgreSQL：用户、账号、会话、消息、任务、模型配置、技能 metadata、账单、`conversation_logs` 和 `conversation_log_payloads`。
 - 文件系统：用户 Text Skill Bundle 正文。
 - Redis：IPC 队列、会话 busy 标记、短期历史/上下文边界等运行态数据。
 - `apps/api/src/modules/chat/paipan-registry.ts`：系统排盘目录清单、参数 schema 和 runner 绑定。
@@ -135,7 +135,7 @@ notes/
 - `traceEvents`：Pi Runtime、工具、错误、进度等结构化事件。
 - `agentGraph`：任务、证据和最终回复的图结构。
 
-宿主在 outbox handler 中把 transcript、traceEvents 和 agentGraph 写入 `conversation_logs`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
+宿主在 outbox handler 中把 usage、模型、事件计数和摘要写入 `conversation_logs`，把 transcript、traceEvents 和 agentGraph 正文写入 `conversation_log_payloads`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
 
 ## 容易误判的点
 
