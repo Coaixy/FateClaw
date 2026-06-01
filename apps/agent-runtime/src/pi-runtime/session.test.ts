@@ -52,8 +52,9 @@ const llmRuntime: LlmRuntimeSnapshot = {
 
 function createDeps(): AgentRuntimeDeps {
   return {
-    memoryStore: {
+    soulStore: {
       read: vi.fn(async () => ''),
+      update: vi.fn(),
     },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
@@ -227,6 +228,8 @@ describe('runPiSession', () => {
         'get_current_time',
         'get_ganzhi_by_datetime',
         'reverse_ganzhi',
+        'read_soul',
+        'edit_soul',
         'get_session_board',
       ],
       readableSkills: [],
@@ -248,6 +251,8 @@ describe('runPiSession', () => {
       'get_current_time',
       'get_ganzhi_by_datetime',
       'reverse_ganzhi',
+      'read_soul',
+      'edit_soul',
       'get_session_board',
     ]);
     expect(createArgs.tools).not.toEqual(expect.arrayContaining(['bazi_paipan']));

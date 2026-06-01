@@ -66,8 +66,9 @@ function createDeps(): AgentRuntimeDeps {
     source: 'self',
   };
   return {
-    memoryStore: {
+    soulStore: {
       read: vi.fn(),
+      update: vi.fn(),
     },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => [privateSkill]),

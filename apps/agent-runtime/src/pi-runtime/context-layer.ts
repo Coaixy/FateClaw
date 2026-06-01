@@ -18,12 +18,12 @@ const PROMPT_BUDGET_RATIO = 0.5;
 const MIN_CONTEXT_BUDGET_CHARS = 16_000;
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
 const APPROX_CHARS_PER_TOKEN = 4;
-const MEMORY_PREVIEW_CHARS = 2_000;
+const SOUL_PREVIEW_CHARS = 2_000;
 
 type ProvenanceSource =
   | 'request'
   | 'database'
-  | 'memory'
+  | 'soul'
   | 'knowledge'
   | 'compression';
 
@@ -332,33 +332,33 @@ function buildFollowupSection(
   });
 }
 
-async function buildMemorySection(args: {
+async function buildSoulSection(args: {
   input: ContainerInput;
   runtime: RequestRuntime;
 }): Promise<PiContextSection | null> {
   try {
-    const content = await args.runtime.deps.memoryStore.read(args.input.accountId);
+    const content = await args.runtime.deps.soulStore.read(args.input.accountId);
     if (!content.trim()) return null;
     return createSection({
-      id: 'long_term_memory',
-      title: '长期记忆摘要/全文策略',
-      source: 'memory',
+      id: 'soul',
+      title: '用户 Soul',
+      source: 'soul',
       priority: 55,
       lines: [
-        content.length > MEMORY_PREVIEW_CHARS
+        content.length > SOUL_PREVIEW_CHARS
           ? [
-              truncateMiddle(content, MEMORY_PREVIEW_CHARS),
-              '策略：这里只注入长期记忆摘要；不要调用旧 memory tool 修改或读取全文。',
+              truncateMiddle(content, SOUL_PREVIEW_CHARS),
+              '策略：这里只注入 Soul 摘要；如用户明确要求查看、记住、修改或删除 Soul，先调用 read_soul 获取全文和 baseHash。',
             ].join('\n')
           : [
               content,
-              '策略：当前长期记忆已完整注入；用户知识/记忆管理由 Pi session 与 API 控制面负责。',
+              '策略：当前 Soul 已完整注入；用户长期记忆只有这一份 Soul，不要另造 memory/persona 概念。',
             ].join('\n'),
       ],
     });
   } catch (error) {
     log(
-      `pi context memory load failed: ${
+      `pi context soul load failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -462,11 +462,11 @@ export async function createPiSessionContext(args: {
   const followupSection = buildFollowupSection(followupContext);
   if (followupSection) sections.push(followupSection);
 
-  const memorySection = await buildMemorySection({
+  const soulSection = await buildSoulSection({
     input: args.containerInput,
     runtime: args.runtime,
   });
-  if (memorySection) sections.push(memorySection);
+  if (soulSection) sections.push(soulSection);
 
   const compacted = compactSections({
     sections,

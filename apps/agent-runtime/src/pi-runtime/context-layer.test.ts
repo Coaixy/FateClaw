@@ -19,8 +19,9 @@ const llmRuntime: LlmRuntimeSnapshot = {
 
 function createRuntime(): RequestRuntime {
   const deps: AgentRuntimeDeps = {
-    memoryStore: {
-      read: vi.fn(async () => '用户长期记忆：喜欢简洁结论。'),
+    soulStore: {
+      read: vi.fn(async () => '用户 Soul：喜欢简洁结论。'),
+      update: vi.fn(),
     },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
@@ -139,8 +140,8 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).toContain('id="followup_context"');
     expect(context.prompt).not.toContain('数据库里的连续性盘面');
     expect(context.prompt).not.toContain('数据库里的盘面 JSON');
-    expect(context.prompt).toContain('id="long_term_memory"');
-    expect(context.prompt).toContain('用户长期记忆');
+    expect(context.prompt).toContain('id="soul"');
+    expect(context.prompt).toContain('用户 Soul');
     expect(context.prompt).not.toContain('id="recent_history_store"');
     expect(context.prompt).not.toContain('Redis 历史消息');
     expect(context.prompt).not.toContain('id="knowledge_index"');
@@ -151,7 +152,7 @@ describe('createPiSessionContext', () => {
         'current_request_metadata',
         'session_board_context',
         'followup_context',
-        'long_term_memory',
+        'soul',
       ]),
     );
     expect(context.provenance.map((entry) => entry.id)).not.toEqual(
@@ -188,8 +189,9 @@ describe('createPiSessionContext', () => {
       },
       runtime: {
         deps: {
-          memoryStore: {
+          soulStore: {
             read: vi.fn(async () => ''),
+            update: vi.fn(),
           },
           skillCatalog: {
             listEffectiveUserSkills: vi.fn(async () => []),

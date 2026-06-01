@@ -87,10 +87,14 @@ export async function queryEffectiveUserSkills(
   return rows as EffectiveUserSkill[];
 }
 
-// ── Soul / Memory ──
+// ── Soul ──
 
 /**
- * 读取账号的长期记忆内容。
+ * 读取账号可见的用户级 Soul。
+ *
+ * @param accountId 当前 agent-runtime 账号 ID；站内 AI Chat 使用 web:{userId}。
+ * @returns 可注入 Pi Runtime 的 Soul 内容；未配置时返回空字符串。
+ * @remarks 用户级 Soul 优先于账号级历史 Soul，确保 Dashboard 维护的是唯一长期记忆来源。
  */
 export async function querySoulContent(accountId: string): Promise<string> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
@@ -136,7 +140,12 @@ export async function querySoulContent(accountId: string): Promise<string> {
 }
 
 /**
- * 更新账号的长期记忆内容。
+ * 更新账号可见的用户级 Soul。
+ *
+ * @param accountId 当前 agent-runtime 账号 ID；站内 AI Chat 使用 web:{userId}。
+ * @param content 新的完整 Soul 内容。
+ * @returns 无返回值。
+ * @remarks 优先写入账号所属用户的 users.soul_content；只有无 owner 的历史账号才回退写 accounts.soul_content。
  */
 export async function updateSoulContentDb(
   accountId: string,

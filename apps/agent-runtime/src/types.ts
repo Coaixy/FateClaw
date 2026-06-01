@@ -61,7 +61,7 @@ export interface ContainerInput {
   userName?: string;
   /** AI 伴侣名称（用于 system prompt 人设）。 */
   assistantName?: string;
-  /** Persona 人格覆盖层：由创作者定义，会追加到 system prompt 头部。 */
+  /** 请求级 Persona 覆盖层；不是 Dashboard 维护的用户 Soul。 */
   personaPrompt?: string;
   /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
   outboxQueue?: string;

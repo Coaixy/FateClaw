@@ -124,6 +124,9 @@ export async function runPiSession(args: {
     requestScope: args.requestScope,
     readableSkills,
     sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
+    accountId: args.containerInput.accountId,
+    soulStore: args.runtime.deps.soulStore,
+    userMessage: args.containerInput.userMessage,
     recordExecution(record) {
       records.push(record);
     },

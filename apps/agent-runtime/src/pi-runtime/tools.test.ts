@@ -7,11 +7,14 @@ import { createSyntheticSourceInfo, type Skill } from '@earendil-works/pi-coding
 import { createRequestScope } from '../request-scope.js';
 import type { SessionBoardContext } from '../types.js';
 import { createPiCustomTools } from './tools.js';
+import type { CreatePiToolsOptions } from './tools.js';
 
 const DEFAULT_PI_TOOL_NAMES = [
   'get_current_time',
   'get_ganzhi_by_datetime',
   'reverse_ganzhi',
+  'read_soul',
+  'edit_soul',
 ];
 
 function createReadableSkillFixture(): Skill {
@@ -70,20 +73,37 @@ function createSessionBoardFixtures(): SessionBoardContext[] {
   ];
 }
 
+function createTools(
+  overrides: Partial<CreatePiToolsOptions> = {},
+): ReturnType<typeof createPiCustomTools> {
+  let soulContent = '用户 Soul：喜欢简洁结论。';
+  const soulStore =
+    overrides.soulStore ?? {
+      read: vi.fn(async () => soulContent),
+      update: vi.fn(async (_accountId: string, content: string) => {
+        soulContent = content;
+      }),
+    };
+  return createPiCustomTools({
+    requestScope: createRequestScope(),
+    accountId: 'web:user-1',
+    soulStore,
+    userMessage: '你好',
+    recordExecution: vi.fn(),
+    ...overrides,
+  });
+}
+
 describe('createPiCustomTools', () => {
   it('exposes deterministic time tools when no readable skills are present', () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
-      recordExecution: vi.fn(),
-    });
+    const tools = createTools();
 
     expect(tools.map((tool) => tool.name)).toEqual(DEFAULT_PI_TOOL_NAMES);
   });
 
   it('returns current time in the requested timezone', async () => {
     const recordExecution = vi.fn();
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution,
       now: () => new Date('2026-04-25T06:00:00.000Z'),
     });
@@ -113,8 +133,7 @@ describe('createPiCustomTools', () => {
   });
 
   it('can include current calendar and ganzhi details in current time', async () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution: vi.fn(),
       now: () => new Date('2026-04-25T06:00:00.000Z'),
     });
@@ -143,8 +162,7 @@ describe('createPiCustomTools', () => {
   });
 
   it('calculates ganzhi pillars for a Gregorian datetime', async () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution: vi.fn(),
     });
     const ganzhiTool = tools.find(
@@ -188,8 +206,7 @@ describe('createPiCustomTools', () => {
   });
 
   it('converts a lunar datetime before calculating ganzhi pillars', async () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution: vi.fn(),
     });
     const ganzhiTool = tools.find(
@@ -233,8 +250,7 @@ describe('createPiCustomTools', () => {
   });
 
   it('reverses four-pillar ganzhi to matching Gregorian datetimes', async () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution: vi.fn(),
     });
     const reverseTool = tools.find((tool) => tool.name === 'reverse_ganzhi')!;
@@ -271,11 +287,118 @@ describe('createPiCustomTools', () => {
     });
   });
 
+  it('reads and edits the single Dashboard Soul with hash protection', async () => {
+    let soulContent = '用户 Soul：喜欢简洁结论。';
+    const soulStore = {
+      read: vi.fn(async () => soulContent),
+      update: vi.fn(async (_accountId: string, content: string) => {
+        soulContent = content;
+      }),
+    };
+    const tools = createTools({
+      soulStore,
+      userMessage: '帮我记住：以后叫我阿七，回答更直接。',
+      recordExecution: vi.fn(),
+    });
+    const readSoul = tools.find((tool) => tool.name === 'read_soul')!;
+    const editSoul = tools.find((tool) => tool.name === 'edit_soul')!;
+    const newSoul = '用户 Soul：喜欢简洁结论。\n称呼用户为阿七。';
+
+    const read = await readSoul.execute(
+      'soul-read-1',
+      {},
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const baseHash = (read.details as { sha256: string }).sha256;
+    const edit = await editSoul.execute(
+      'soul-edit-1',
+      {
+        baseHash,
+        newContent: newSoul,
+        reason: '用户明确要求记住称呼和回答风格',
+      },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(read.details).toMatchObject({
+      isError: false,
+      content: '用户 Soul：喜欢简洁结论。',
+      charCount: '用户 Soul：喜欢简洁结论。'.length,
+    });
+    expect(edit.details).toMatchObject({
+      isError: false,
+      previousHash: baseHash,
+      charCount: newSoul.length,
+    });
+    expect(soulStore.update).toHaveBeenCalledWith('web:user-1', newSoul);
+  });
+
+  it('rejects Soul edits without explicit user intent or with a stale hash', async () => {
+    let soulContent = '用户 Soul：喜欢简洁结论。';
+    const soulStore = {
+      read: vi.fn(async () => soulContent),
+      update: vi.fn(async (_accountId: string, content: string) => {
+        soulContent = content;
+      }),
+    };
+    const noIntentTools = createTools({
+      soulStore,
+      userMessage: '今天聊点别的',
+      recordExecution: vi.fn(),
+    });
+    const noIntentEdit = noIntentTools.find(
+      (tool) => tool.name === 'edit_soul',
+    )!;
+
+    const noIntent = await noIntentEdit.execute(
+      'soul-edit-no-intent',
+      {
+        baseHash: 'stale',
+        newContent: '随手覆盖',
+        reason: '模型自行总结',
+      },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    const intentTools = createTools({
+      soulStore,
+      userMessage: '把我的记忆改一下',
+      recordExecution: vi.fn(),
+    });
+    const staleEdit = intentTools.find((tool) => tool.name === 'edit_soul')!;
+    const stale = await staleEdit.execute(
+      'soul-edit-stale',
+      {
+        baseHash: 'stale',
+        newContent: '新 Soul',
+        reason: '用户要求修改记忆',
+      },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(noIntent.details).toMatchObject({
+      isError: true,
+      error: expect.stringContaining('用户本轮没有明确要求'),
+    });
+    expect(stale.details).toMatchObject({
+      isError: true,
+      error: expect.stringContaining('baseHash 与当前 Soul 不一致'),
+    });
+    expect(soulStore.update).not.toHaveBeenCalled();
+  });
+
   it('adds a scoped read tool for visible request skill resources only', async () => {
     const readableSkill = createReadableSkillFixture();
     const recordExecution = vi.fn();
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution,
     });
@@ -364,8 +487,7 @@ describe('createPiCustomTools', () => {
       ['Alpha beta', 'beta conclusion', 'BETA hidden'].join('\n'),
     );
     fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), 'beta secret');
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution: vi.fn(),
     });
@@ -449,8 +571,7 @@ describe('createPiCustomTools', () => {
 
   it('adds one session board tool for listing and reading visible boards', async () => {
     const recordExecution = vi.fn();
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       sessionBoards: createSessionBoardFixtures(),
       recordExecution,
     });
@@ -543,8 +664,7 @@ describe('createPiCustomTools', () => {
       readableSkill.filePath,
       ['line 1', 'line 2', 'line 3', 'line 4'].join('\n'),
     );
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution: vi.fn(),
     });
@@ -610,8 +730,7 @@ describe('createPiCustomTools', () => {
     fs.mkdirSync(docsDir);
     fs.writeFileSync(path.join(docsDir, 'knowledge.md'), '知识正文');
     fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), '非 Markdown');
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution: vi.fn(),
     });
@@ -658,8 +777,7 @@ describe('createPiCustomTools', () => {
   });
 
   it('does not expose FateClaw deterministic or legacy domain-specific tools as Pi custom tools', () => {
-    const tools = createPiCustomTools({
-      requestScope: createRequestScope(),
+    const tools = createTools({
       recordExecution: vi.fn(),
     });
 
