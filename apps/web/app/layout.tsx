@@ -7,7 +7,7 @@ import { PreUseNoticeDialog } from '@/components/compliance/pre-use-notice-dialo
 import './globals.css';
 
 const kingHwaOldSong = localFont({
-  src: './fonts/KingHwa_OldSong.ttf',
+  src: './fonts/KingHwa_OldSong.woff2',
   variable: '--font-kinghwa-old-song',
   display: 'swap',
   preload: false,
