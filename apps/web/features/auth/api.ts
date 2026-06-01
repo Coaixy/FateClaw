@@ -8,6 +8,7 @@ import type {
 } from '@fateclaw/contracts/auth';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
+import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
 import { requestJson } from '@/lib/http/client';
 
 export type AuthResponse = AuthResponseDto;
@@ -15,10 +16,15 @@ export type User = UserDto;
 export type CaptchaChallenge = CaptchaChallengeDto;
 export type SendSMSCaptchaResponse = SendSMSCaptchaResponseDto;
 
-let meRequest: Promise<User> | null = null;
+const meRequestCache = createAuthScopedInFlightCache<User>();
 
+/**
+ * 清理当前用户信息的 in-flight 请求缓存。
+ *
+ * @returns 无返回值。
+ */
 export function clearAuthCache() {
-  meRequest = null;
+  meRequestCache.clear();
 }
 
 export const authApi = {
@@ -99,10 +105,5 @@ export const authApi = {
         smsCaptchaCode,
       }),
     }),
-  me: () => {
-    meRequest ??= requestJson<User>('/api/auth/me').finally(() => {
-      meRequest = null;
-    });
-    return meRequest;
-  },
+  me: () => meRequestCache.get(() => requestJson<User>('/api/auth/me')),
 };

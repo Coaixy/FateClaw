@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 
 import { authApi, User } from '@/features/auth/api';
+import { removeAuthToken, setAuthToken } from '@/lib/auth-scoped-cache';
 
 export function useAuthActions(setUser: (user: User | null) => void) {
   const login = useCallback(
@@ -18,7 +19,7 @@ export function useAuthActions(setUser: (user: User | null) => void) {
         captchaToken,
         captchaAnswer,
       );
-      localStorage.setItem('token', res.token);
+      setAuthToken(res.token);
       setUser(res.user);
     },
     [setUser],
@@ -27,14 +28,14 @@ export function useAuthActions(setUser: (user: User | null) => void) {
   const register = useCallback(
     async (phone: string, password: string, smsCaptchaCode: string) => {
       const res = await authApi.register(phone, password, smsCaptchaCode);
-      localStorage.setItem('token', res.token);
+      setAuthToken(res.token);
       setUser(res.user);
     },
     [setUser],
   );
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
+    removeAuthToken();
     setUser(null);
   }, [setUser]);
 

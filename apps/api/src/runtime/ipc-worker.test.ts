@@ -119,7 +119,13 @@ describe('cancelAiChatSessionRequest', () => {
     const result = await cancelAiChatSessionRequest('session-1');
 
     expect(result).toBe(true);
-    expect(mockDel).toHaveBeenCalledWith('session:processing:session-1');
+    expect(mockEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-1',
+      'req-1',
+    );
+    expect(mockDel).not.toHaveBeenCalled();
     expect(mockLpush).toHaveBeenCalledWith(
       'ipc:web:user-1:cancel',
       expect.stringContaining('"type":"cancel"'),
@@ -163,7 +169,13 @@ describe('cancelAiChatSessionRequest', () => {
     );
 
     expect(result).toBe(true);
-    expect(mockDel).toHaveBeenCalledWith('session:processing:session-1');
+    expect(mockEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-1',
+      'req-restore',
+    );
+    expect(mockDel).not.toHaveBeenCalled();
     expect(mockLpush).toHaveBeenCalledWith(
       'ipc:web:user-1:cancel',
       expect.stringContaining('"requestId":"req-restore"'),

@@ -14,6 +14,7 @@ import { normalizePhoneNumber, isValidMainlandChinaPhone } from './phone.js';
 const SMS_CAPTCHA_TTL_MINUTES = 3;
 const SMS_CAPTCHA_TTL_SECONDS = SMS_CAPTCHA_TTL_MINUTES * 60;
 const SMS_CAPTCHA_SEND_INTERVAL_SECONDS = 60;
+const SMS_CAPTCHA_SEND_FAILURE_COOLDOWN_SECONDS = 10;
 const SMS_SEND_IP_WINDOW_MINUTES = 10;
 const SMS_SEND_IP_WINDOW_SECONDS = SMS_SEND_IP_WINDOW_MINUTES * 60;
 const SMS_SEND_IP_LIMIT = 8;
@@ -32,6 +33,11 @@ const SMS_VERIFY_LOCK_MINUTES = 30;
 const SMS_VERIFY_LOCK_SECONDS = SMS_VERIFY_LOCK_MINUTES * 60;
 
 type SMSCaptchaType = 0 | 1;
+
+interface SMSCaptchaSendLock {
+  key: string;
+  token: string;
+}
 
 const require = createRequire(import.meta.url);
 const CredentialModule =
@@ -142,6 +148,57 @@ async function getLockRetrySeconds(lockKey: string): Promise<number | null> {
     return null;
   }
   return ttl;
+}
+
+async function acquireSMSCaptchaSendLock(
+  phoneNumber: string,
+): Promise<SMSCaptchaSendLock | null> {
+  const key = getSMSCaptchaSendLockKey(phoneNumber);
+  const token = crypto.randomUUID();
+  const result = await getRedis().set(
+    key,
+    token,
+    'EX',
+    SMS_CAPTCHA_TTL_SECONDS,
+    'NX',
+  );
+
+  if (result !== 'OK') {
+    return null;
+  }
+  return { key, token };
+}
+
+async function setOwnedSMSCaptchaSendLockTtl(
+  lock: SMSCaptchaSendLock,
+  ttlSeconds: number,
+): Promise<void> {
+  // 只调整当前请求持有的锁，避免慢请求回滚时误删新请求已抢到的锁。
+  await Promise.resolve()
+    .then(() =>
+      getRedis().eval(
+        `
+        if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+          return 0
+        end
+        local ttl = tonumber(ARGV[2])
+        if ttl <= 0 then
+          return redis.call('DEL', KEYS[1])
+        end
+        return redis.call('EXPIRE', KEYS[1], ttl)
+        `,
+        1,
+        lock.key,
+        lock.token,
+        ttlSeconds,
+      ),
+    )
+    .catch((error: unknown) => {
+      logger.warn(
+        { err: error, lockKey: lock.key, ttlSeconds },
+        '更新短信发送锁 TTL 失败',
+      );
+    });
 }
 
 async function assertSMSCaptchaSendAllowed(clientIp: string): Promise<void> {
@@ -447,31 +504,38 @@ export async function sendSMSCaptcha(input: {
 
   await assertSMSCaptchaSendAllowed(input.clientIp);
 
-  const redis = getRedis();
-  const existing = await redis.get(getSMSCaptchaSendLockKey(phoneNumber));
-  if (existing) {
+  const sendLock = await acquireSMSCaptchaSendLock(phoneNumber);
+  if (!sendLock) {
     throw userVisibleSMSCaptchaError(
       `${SMS_CAPTCHA_TTL_MINUTES}分钟内只能发送一次短信验证码`,
     );
   }
 
-  const user = await getUserByPhone(phoneNumber);
-  if (input.type === 1 && user) {
-    throw userVisibleSMSCaptchaError('手机号已注册');
-  }
-  if (input.type === 0 && !user) {
-    throw userVisibleSMSCaptchaError('手机号未注册');
+  try {
+    const user = await getUserByPhone(phoneNumber);
+    if (input.type === 1 && user) {
+      throw userVisibleSMSCaptchaError('手机号已注册');
+    }
+    if (input.type === 0 && !user) {
+      throw userVisibleSMSCaptchaError('手机号未注册');
+    }
+  } catch (error) {
+    await setOwnedSMSCaptchaSendLockTtl(sendLock, 0);
+    throw error;
   }
 
-  await sendAliyunSMS(phoneNumber);
+  try {
+    await sendAliyunSMS(phoneNumber);
+  } catch (error) {
+    await setOwnedSMSCaptchaSendLockTtl(
+      sendLock,
+      SMS_CAPTCHA_SEND_FAILURE_COOLDOWN_SECONDS,
+    );
+    throw error;
+  }
 
   // 验证码正文完全交给阿里云托管，本地只保留发送冷却锁，避免并发重复下发。
-  await redis.set(
-    getSMSCaptchaSendLockKey(phoneNumber),
-    '1',
-    'EX',
-    SMS_CAPTCHA_TTL_SECONDS,
-  );
+  await setOwnedSMSCaptchaSendLockTtl(sendLock, SMS_CAPTCHA_TTL_SECONDS);
 }
 
 export async function verifySMSCaptcha(

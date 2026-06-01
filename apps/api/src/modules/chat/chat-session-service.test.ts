@@ -22,6 +22,10 @@ const {
   mockDispatchAiChatPrompt,
   mockCancelAiChatSessionRequest,
   mockBuildStructuredInputForSession,
+  mockRedisDel,
+  mockRedisEval,
+  mockRedisGet,
+  mockRedisSet,
 } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
   mockGetChatSessionPiSessionArchive: vi.fn(),
@@ -44,6 +48,10 @@ const {
   mockDispatchAiChatPrompt: vi.fn(),
   mockCancelAiChatSessionRequest: vi.fn(),
   mockBuildStructuredInputForSession: vi.fn(),
+  mockRedisDel: vi.fn(async () => 1),
+  mockRedisEval: vi.fn(async () => 1),
+  mockRedisGet: vi.fn(),
+  mockRedisSet: vi.fn(async () => 'OK'),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
@@ -82,9 +90,10 @@ vi.mock('../../infrastructure/logger.js', () => ({
 
 vi.mock('../../infrastructure/redis.js', () => ({
   getRedis: vi.fn(() => ({
-    get: vi.fn(),
-    set: vi.fn(async () => 'OK'),
-    del: vi.fn(async () => 1),
+    get: mockRedisGet,
+    set: mockRedisSet,
+    del: mockRedisDel,
+    eval: mockRedisEval,
   })),
 }));
 
@@ -259,9 +268,20 @@ describe('chat-session-service selected board context', () => {
 
     expect(result.ok).toBe(true);
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
+    const claimCall = mockRedisEval.mock.calls[0] as unknown[] | undefined;
+    const claimRequestId = claimCall?.[3];
+    expect(claimRequestId).toEqual(expect.stringMatching(/^aichat-/));
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('SET', KEYS[1], ARGV[1]"),
+      1,
+      'session:processing:session-1',
+      claimRequestId,
+      2100,
+    );
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 'web:user-1',
+        requestId: claimRequestId,
         sessionBoardContexts: [
           {
             sourceMessageId: 'board-msg-1',

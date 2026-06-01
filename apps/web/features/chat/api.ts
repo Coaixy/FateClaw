@@ -13,6 +13,7 @@ import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { requestJson } from '@/lib/http/client';
 import { getApiBase } from '@/lib/http/client';
+import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
 
 export type Message = MessageDto;
 export type ChatSession = ChatSessionDto;
@@ -157,21 +158,23 @@ export const messagesApi = {
     ),
 };
 
-let chatSessionListRequest: Promise<ChatSession[]> | null = null;
+const chatSessionListRequestCache =
+  createAuthScopedInFlightCache<ChatSession[]>();
 
+/**
+ * 清理聊天会话列表的 in-flight 请求缓存。
+ *
+ * @returns 无返回值。
+ */
 export function clearChatSessionsCache() {
-  chatSessionListRequest = null;
+  chatSessionListRequestCache.clear();
 }
 
 export const chatSessionsApi = {
-  list: () => {
-    chatSessionListRequest ??= requestJson<ChatSession[]>(
-      '/api/chat-sessions',
-    ).finally(() => {
-      chatSessionListRequest = null;
-    });
-    return chatSessionListRequest;
-  },
+  list: () =>
+    chatSessionListRequestCache.get(() =>
+      requestJson<ChatSession[]>('/api/chat-sessions'),
+    ),
   create: (title?: string) =>
     requestJson<ChatSession>('/api/chat-sessions', {
       method: 'POST',

@@ -14,6 +14,7 @@ import type {
 } from '@fateclaw/contracts/billing';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
+import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
 import { requestJson } from '@/lib/http/client';
 
 export type BillingStatus = BillingStatusDto;
@@ -42,31 +43,28 @@ export interface BalanceGrant {
   updated_at: string;
 }
 
-let billingStatusRequest: Promise<BillingStatus> | null = null;
-let usageRequest: Promise<UsageStats> | null = null;
+const billingStatusRequestCache = createAuthScopedInFlightCache<BillingStatus>();
+const usageRequestCache = createAuthScopedInFlightCache<UsageStats>();
 
+/**
+ * 清理账单概览和用量的 in-flight 请求缓存。
+ *
+ * @returns 无返回值。
+ */
 export function clearBillingCache() {
-  billingStatusRequest = null;
-  usageRequest = null;
+  billingStatusRequestCache.clear();
+  usageRequestCache.clear();
 }
 
 export const billingApi = {
-  status: () => {
-    billingStatusRequest ??= requestJson<BillingStatus>('/api/billing').finally(
-      () => {
-        billingStatusRequest = null;
-      },
-    );
-    return billingStatusRequest;
-  },
-  usage: () => {
-    usageRequest ??= requestJson<UsageStats>('/api/billing/usage').finally(
-      () => {
-        usageRequest = null;
-      },
-    );
-    return usageRequest;
-  },
+  status: () =>
+    billingStatusRequestCache.get(() =>
+      requestJson<BillingStatus>('/api/billing'),
+    ),
+  usage: () =>
+    usageRequestCache.get(() =>
+      requestJson<UsageStats>('/api/billing/usage'),
+    ),
   dailyUsage: () =>
     requestJson<DailyUsageRow[]>('/api/billing/usage/daily'),
   publicStatus: () =>

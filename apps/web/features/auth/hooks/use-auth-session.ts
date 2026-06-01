@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { authApi, User } from '@/features/auth/api';
+import {
+  getAuthTokenSnapshot,
+  isAuthTokenSnapshotCurrent,
+  removeAuthToken,
+} from '@/lib/auth-scoped-cache';
 import { ApiError } from '@/lib/http/client';
 
 export function useAuthSession() {
@@ -10,7 +15,7 @@ export function useAuthSession() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const token = localStorage.getItem('token');
+    const token = getAuthTokenSnapshot();
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -19,13 +24,21 @@ export function useAuthSession() {
 
     try {
       const nextUser = await authApi.me();
+      if (!isAuthTokenSnapshotCurrent(token)) {
+        setLoading(false);
+        return;
+      }
       setUser(nextUser);
       setLoading(false);
       return;
     } catch (err) {
+      if (!isAuthTokenSnapshotCurrent(token)) {
+        setLoading(false);
+        return;
+      }
       if (err instanceof ApiError && err.status === 401) {
         // token 已失效时立即清理本地登录态，避免页面继续发起无效请求。
-        localStorage.removeItem('token');
+        removeAuthToken();
         setUser(null);
         setLoading(false);
         return;

@@ -19,6 +19,7 @@ import {
   ProgressIpcPayload,
   ResponseIpcPayload,
   SendMessageIpcPayload,
+  releaseSessionProcessingLock,
   resolveAccountId,
   validateMessagePayload,
   validateProgressPayload,
@@ -271,9 +272,10 @@ async function resolvePendingAiChatResponse(args: {
   clearTimeout(args.pending.timeout);
   args.pendingRequests.delete(args.payload.requestId!);
   if (args.pending.sessionId) {
-    await getRedis()
-      .del(`session:processing:${args.pending.sessionId}`)
-      .catch(() => {});
+    await releaseSessionProcessingLock(
+      args.pending.sessionId,
+      args.pending.sessionProcessingRequestId ?? args.payload.requestId,
+    ).catch(() => {});
   }
   logger.info(
     {
@@ -462,9 +464,10 @@ async function processAiChatResponse(
       clearTimeout(pending.timeout);
       pendingRequests.delete(payload.requestId!);
       if (pending.sessionId) {
-        await getRedis()
-          .del(`session:processing:${pending.sessionId}`)
-          .catch(() => {});
+        await releaseSessionProcessingLock(
+          pending.sessionId,
+          pending.sessionProcessingRequestId ?? payload.requestId,
+        ).catch(() => {});
       }
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error(

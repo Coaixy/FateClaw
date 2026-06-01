@@ -28,9 +28,12 @@ const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:wait:normal';
 const GLOBAL_AGENT_GATE_POLL_MS = 500;
 import {
   type CancelInboxRequestPayload,
+  claimOrRefreshSessionProcessingLock,
   InboxRequestResult,
   type LlmRuntimeSnapshot,
   PendingInboxRequest,
+  releaseSessionProcessingLock,
+  sessionProcessingLockKey,
 } from './ipc-payloads.js';
 import { processTaskPayload } from './ipc-task-handler.js';
 import { logger } from '../infrastructure/logger.js';
@@ -255,7 +258,7 @@ export async function cancelAiChatSessionRequest(
   accountId?: string,
   reason = 'user_stop',
 ): Promise<boolean> {
-  const processingKey = `session:processing:${sessionId}`;
+  const processingKey = sessionProcessingLockKey(sessionId);
   const requestId = await getRedis().get(processingKey);
   if (!requestId) {
     return false;
@@ -276,7 +279,7 @@ export async function cancelAiChatSessionRequest(
     clearTimeout(pending.timeout);
     pendingAiChatRequests.delete(requestId);
   }
-  await getRedis().del(processingKey);
+  await releaseSessionProcessingLock(sessionId, requestId);
   await releaseGlobalAgentSlot(pending?.concurrencySlotId);
   if (pending) {
     await settleBillingReservation({
@@ -401,6 +404,10 @@ async function listenForAccount(accountId: string): Promise<void> {
                 await releaseGlobalAgentSlot(pending.concurrencySlotId).catch(
                   () => {},
                 );
+                await releaseSessionProcessingLock(
+                  pending.sessionId,
+                  pending.sessionProcessingRequestId ?? requestId,
+                ).catch(() => {});
                 pending.reject(new Error(`outbox 处理失败: ${errorMsg}`));
               }
             }
@@ -473,9 +480,9 @@ export function submitInboxRequest(input: {
           const sessionId = pending?.sessionId;
           pendingInboxRequests.delete(requestId);
           if (sessionId) {
-            void getRedis()
-              .del(`session:processing:${sessionId}`)
-              .catch(() => {});
+            void releaseSessionProcessingLock(sessionId, requestId).catch(
+              () => {},
+            );
           }
           void releaseGlobalAgentSlot(pending?.concurrencySlotId);
           logger.error(
@@ -492,6 +499,7 @@ export function submitInboxRequest(input: {
           contextToken: input.contextToken,
           autoDeliver: input.autoDeliver ?? true,
           sessionId: input.sessionId,
+          sessionProcessingRequestId: input.sessionId ? requestId : undefined,
           llmRuntime,
           billingReservation,
           priority,
@@ -526,12 +534,14 @@ export function submitInboxRequest(input: {
 
         // 写入会话忙碌标记（35 分钟 TTL，比 agent 超时 30min 多 5min 做缓冲）
         if (input.sessionId) {
-          await getRedis().set(
-            `session:processing:${input.sessionId}`,
+          const processingClaimed = await claimOrRefreshSessionProcessingLock(
+            input.sessionId,
             requestId,
-            'EX',
             2100,
           );
+          if (!processingClaimed) {
+            throw new Error('会话正在处理其他请求');
+          }
         }
 
         const pending = pendingInboxRequests.get(requestId);
@@ -558,6 +568,11 @@ export function submitInboxRequest(input: {
           clearTimeout(timeout);
         }
         pendingInboxRequests.delete(requestId);
+        if (input.sessionId) {
+          void releaseSessionProcessingLock(input.sessionId, requestId).catch(
+            () => {},
+          );
+        }
         void releaseGlobalAgentSlot(concurrencySlotId);
         reject(
           err instanceof Error
@@ -673,12 +688,15 @@ export function submitAiChatInboxRequest(input: {
   activeBoardContext?: ActiveBoardContext;
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  requestId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
   llmRuntime?: EffectiveLlmRuntimeConfig;
 }): Promise<InboxRequestResult> {
-  const requestId = `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const requestId =
+    input.requestId ??
+    `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAtMs = Date.now();
   const aiChatOutboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
 
@@ -712,10 +730,10 @@ export function submitAiChatInboxRequest(input: {
         timeout = setTimeout(async () => {
           const pending = pendingAiChatRequests.get(requestId);
           pendingAiChatRequests.delete(requestId);
-          // 清除会话忙碌标记
-          void getRedis()
-            .del(`session:processing:${input.sessionId}`)
-            .catch(() => {});
+          // 清除当前请求持有的会话忙碌标记，避免误删后续请求的锁。
+          void releaseSessionProcessingLock(input.sessionId, requestId).catch(
+            () => {},
+          );
           void releaseGlobalAgentSlot(pending?.concurrencySlotId);
           logger.error(
             {
@@ -735,6 +753,7 @@ export function submitAiChatInboxRequest(input: {
           contextToken: undefined,
           autoDeliver: false, // AI Chat 永远不发微信
           sessionId: input.sessionId,
+          sessionProcessingRequestId: requestId,
           llmRuntime,
           billingReservation,
           startedAtMs,
@@ -774,13 +793,15 @@ export function submitAiChatInboxRequest(input: {
           outboxQueue: aiChatOutboxQueue, // 指定响应队列
         });
 
-        // 写入会话忙碌标记
-        await getRedis().set(
-          `session:processing:${input.sessionId}`,
+        // chat-session-service 已用同一个 requestId 预抢占锁；这里仅续期自有锁，避免旧请求覆盖新 owner。
+        const processingClaimed = await claimOrRefreshSessionProcessingLock(
+          input.sessionId,
           requestId,
-          'EX',
           2100, // 35 分钟 TTL
         );
+        if (!processingClaimed) {
+          throw new Error('会话正在处理其他请求');
+        }
 
         const pending = pendingAiChatRequests.get(requestId);
         await enqueueInboxPayload(
@@ -805,6 +826,9 @@ export function submitAiChatInboxRequest(input: {
           clearTimeout(timeout);
         }
         pendingAiChatRequests.delete(requestId);
+        void releaseSessionProcessingLock(input.sessionId, requestId).catch(
+          () => {},
+        );
         void releaseGlobalAgentSlot(concurrencySlotId);
         reject(
           err instanceof Error

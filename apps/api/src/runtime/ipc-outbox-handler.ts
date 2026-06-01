@@ -16,6 +16,7 @@ import {
   ProgressIpcPayload,
   ResponseIpcPayload,
   SendMessageIpcPayload,
+  releaseSessionProcessingLock,
   resolveAccountId,
   validateMessagePayload,
   validateProgressPayload,
@@ -288,9 +289,10 @@ async function processOutboxResponse(
       pendingRequests.delete(payload.requestId!);
       // 清除会话忙碌标记
       if (pending.sessionId) {
-        await getRedis()
-          .del(`session:processing:${pending.sessionId}`)
-          .catch(() => {});
+        await releaseSessionProcessingLock(
+          pending.sessionId,
+          pending.sessionProcessingRequestId ?? payload.requestId,
+        ).catch(() => {});
       }
       logger.info(
         {
@@ -318,9 +320,10 @@ async function processOutboxResponse(
       pendingRequests.delete(payload.requestId!);
       // 清除会话忙碌标记
       if (pending.sessionId) {
-        await getRedis()
-          .del(`session:processing:${pending.sessionId}`)
-          .catch(() => {});
+        await releaseSessionProcessingLock(
+          pending.sessionId,
+          pending.sessionProcessingRequestId ?? payload.requestId,
+        ).catch(() => {});
       }
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error(

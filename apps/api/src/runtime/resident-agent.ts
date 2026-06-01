@@ -33,6 +33,7 @@ export async function dispatchAiChatPrompt(input: {
   activeBoardContext?: ActiveBoardContext;
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  requestId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
@@ -50,6 +51,7 @@ export async function dispatchAiChatPrompt(input: {
     activeBoardContext: input.activeBoardContext,
     sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
+    requestId: input.requestId,
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,

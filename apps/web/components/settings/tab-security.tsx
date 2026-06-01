@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 import { authApi, type CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { setAuthToken } from '@/lib/auth-scoped-cache';
 import { useToast } from '@/lib/use-toast';
 
 type SecurityMode = 'change' | 'recover';
@@ -247,7 +248,7 @@ export function TabSecurity() {
         recoverPassword,
         smsCode.trim(),
       );
-      localStorage.setItem('token', response.token);
+      setAuthToken(response.token);
       await refresh();
       setSMSCode('');
       setRecoverPassword('');

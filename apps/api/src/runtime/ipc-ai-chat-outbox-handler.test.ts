@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockDel,
+  mockEval,
   mockIncrementDailyTokens,
   mockPublish,
   mockResolve,
@@ -11,6 +12,7 @@ const {
   mockStoreConversationLog,
 } = vi.hoisted(() => ({
   mockDel: vi.fn(async () => 1),
+  mockEval: vi.fn(async () => 1),
   mockIncrementDailyTokens: vi.fn(),
   mockPublish: vi.fn(async () => 1),
   mockResolve: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock('../infrastructure/daily-usage.js', () => ({
 vi.mock('../infrastructure/redis.js', () => ({
   getRedis: vi.fn(() => ({
     del: mockDel,
+    eval: mockEval,
     publish: mockPublish,
   })),
 }));
@@ -120,7 +123,13 @@ describe('processAiChatOutboxPayload', () => {
       }),
     );
     expect(pendingRequests.has('req-1')).toBe(false);
-    expect(mockDel).toHaveBeenCalledWith('session:processing:session-1');
+    expect(mockEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-1',
+      'req-1',
+    );
+    expect(mockDel).not.toHaveBeenCalled();
   });
 
   it('uses normalized total token usage for markers, stats, billing, stream, and logs', async () => {

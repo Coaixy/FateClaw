@@ -6,6 +6,7 @@ import type {
 } from '@fateclaw/contracts/account';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
+import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
 import { requestJson } from '@/lib/http/client';
 
 export type Account = AccountDto;
@@ -13,21 +14,20 @@ export type AccountSoul = AccountSoulDto;
 export type QrCodeResult = QrCodeResultDto;
 export type QrCodeStatusResult = QrCodeStatusResultDto;
 
-let accountListRequest: Promise<Account[]> | null = null;
+const accountListRequestCache = createAuthScopedInFlightCache<Account[]>();
 
+/**
+ * 清理账号列表的 in-flight 请求缓存。
+ *
+ * @returns 无返回值。
+ */
 export function clearAccountsCache() {
-  accountListRequest = null;
+  accountListRequestCache.clear();
 }
 
 export const accountsApi = {
-  list: () => {
-    accountListRequest ??= requestJson<Account[]>('/api/account').finally(
-      () => {
-        accountListRequest = null;
-      },
-    );
-    return accountListRequest;
-  },
+  list: () =>
+    accountListRequestCache.get(() => requestJson<Account[]>('/api/account')),
   get: (id: string) =>
     requestJson<Account>(`/api/account/${encodeURIComponent(id)}`),
   bind: (id: string) =>

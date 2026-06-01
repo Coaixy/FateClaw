@@ -44,6 +44,11 @@ import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
 import { cancelAiChatSessionRequest } from '../../runtime/ipc-worker.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import {
+  claimOrRefreshSessionProcessingLock,
+  releaseSessionProcessingLock,
+  sessionProcessingLockKey,
+} from '../../runtime/ipc-payloads.js';
+import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
   normalizeOwnedChatSessionTitle,
 } from '../../shared/chat-session-title-policy.js';
@@ -86,12 +91,8 @@ function isPaymentRequiredError(errorMessage: string): boolean {
   );
 }
 
-function sessionProcessingKey(sessionId: string): string {
-  return `session:processing:${sessionId}`;
-}
-
-function createSessionProcessingClaim(): string {
-  return `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function createAiChatRequestId(): string {
+  return `aichat-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
 }
 
 function generateChatSessionShareToken(): string {
@@ -100,19 +101,22 @@ function generateChatSessionShareToken(): string {
     .toString('base64url');
 }
 
-async function claimChatSessionProcessing(sessionId: string): Promise<boolean> {
-  const result = await getRedis().set(
-    sessionProcessingKey(sessionId),
-    createSessionProcessingClaim(),
-    'EX',
+async function claimChatSessionProcessing(
+  sessionId: string,
+  requestId: string,
+): Promise<boolean> {
+  return claimOrRefreshSessionProcessingLock(
+    sessionId,
+    requestId,
     SESSION_PROCESSING_TTL_SECONDS,
-    'NX',
   );
-  return result === 'OK';
 }
 
-async function releaseChatSessionProcessing(sessionId: string): Promise<void> {
-  await getRedis().del(sessionProcessingKey(sessionId));
+async function releaseChatSessionProcessing(
+  sessionId: string,
+  requestId: string,
+): Promise<void> {
+  await releaseSessionProcessingLock(sessionId, requestId);
 }
 
 function buildSelectedBoardContext(message: NewMessage): boolean {
@@ -278,7 +282,7 @@ export async function getOwnedChatSessionMessages(
   const session = sessionResult.data;
   const [messages, processingRequestId] = await Promise.all([
     getRecentMessages(session.account_id, limit, before, undefined, session.id),
-    getRedis().get(`session:processing:${session.id}`),
+    getRedis().get(sessionProcessingLockKey(session.id)),
   ]);
   const continuation = await resolveSessionContinuationState(session);
 
@@ -463,7 +467,11 @@ export async function sendOwnedChatSessionMessage(
     return selectedBoardContext;
   }
 
-  const processingClaimed = await claimChatSessionProcessing(session.id);
+  const requestId = createAiChatRequestId();
+  const processingClaimed = await claimChatSessionProcessing(
+    session.id,
+    requestId,
+  );
   if (!processingClaimed) {
     return fail(409, SESSION_PROCESSING_BUSY_ERROR);
   }
@@ -528,6 +536,7 @@ export async function sendOwnedChatSessionMessage(
       userName: structured.userName,
       assistantName: structured.assistantName,
       sessionId: session.id,
+      requestId,
       llmRuntime,
     });
 
@@ -596,7 +605,7 @@ export async function sendOwnedChatSessionMessage(
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    await releaseChatSessionProcessing(session.id);
+    await releaseChatSessionProcessing(session.id, requestId);
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: agent 调用失败',
