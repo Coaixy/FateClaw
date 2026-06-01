@@ -23,7 +23,7 @@
 改动：
 
 - `apps/web/package.json`：`next` 从 `^16.2.4` 升级到 `^16.2.6`。
-- `packages/agent-runner/package.json`：`@anthropic-ai/sdk` 从 `^0.81.0` 升级到 `^0.91.1`。
+- `apps/agent-runtime/package.json`：`@anthropic-ai/sdk` 从 `^0.81.0` 升级到 `^0.91.1`。
 - `pnpm-workspace.yaml`：
   - `fast-jwt` override 升到 `>=6.2.4`。
   - 新增 `fast-uri: >=3.1.2` override。
@@ -115,7 +115,7 @@ Tests       6 passed (6)
 ```text
 apps/api/node_modules/.bin/tsc --noEmit -p apps/api/tsconfig.json
 apps/web/node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json
-node_modules/.bin/tsc --noEmit -p packages/agent-runner/tsconfig.json
+node_modules/.bin/tsc --noEmit -p apps/agent-runtime/tsconfig.json
 ```
 
 已通过：

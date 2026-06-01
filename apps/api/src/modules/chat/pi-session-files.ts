@@ -92,7 +92,7 @@ export interface PiSessionArchiveReadResult {
  *
  * @param sessionId - FateClaw chat_sessions.id。
  * @returns 当前映射文件和 jsonl 文件是否存在。
- * @remarks 这里必须和 agent-runner 的 session-manager 保持同一套命名规则。
+ * @remarks 这里必须和 agent-runtime 的 session-manager 保持同一套命名规则。
  */
 export async function readPiSessionFileState(
   sessionId: string,

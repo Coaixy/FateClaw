@@ -1,5 +1,5 @@
 /**
- * agent-runner 直连数据库。
+ * agent-runtime 直连数据库。
  * 替代原先通过 IPC 文件同步的方式，所有数据实时从 DB 查询。
  */
 

@@ -1,5 +1,5 @@
 /**
- * Agent-Runner 运行时上下文。
+ * Agent Runtime 运行时上下文。
  *
  * 启动时从 process.env 解析一次，之后所有模块通过 getContext() 访问。
  * 模型运行时不属于进程上下文，必须由每个 IPC 请求携带 llmRuntime。

@@ -110,7 +110,7 @@ export type InboxRequest = ChatTaskInboxRequest;
 /**
  * 宿主机请求中断正在执行的 AI Chat。
  *
- * requestId 用于匹配当前 agent-runner 进程内的 active session。
+ * requestId 用于匹配当前 agent-runtime 进程内的 active session。
  */
 export interface CancelInboxRequest {
   type: 'cancel';

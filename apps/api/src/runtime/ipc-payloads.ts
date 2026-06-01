@@ -80,7 +80,7 @@ export interface PendingInboxRequest {
   timeout: NodeJS.Timeout;
 }
 
-/** AI Chat 取消请求 payload，用于通知 agent-runner 中断指定 request。 */
+/** AI Chat 取消请求 payload，用于通知 agent-runtime 中断指定 request。 */
 export interface CancelInboxRequestPayload {
   type: 'cancel';
   requestId?: string;

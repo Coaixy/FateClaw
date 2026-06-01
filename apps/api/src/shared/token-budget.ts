@@ -65,7 +65,7 @@ export function estimateTokens(text: string): number {
  * - 大窗口模型下，大部分空间仍给 history + skill context，提升上下文连贯性。
  */
 
-/** agent-runner 的 system prompt + tool definitions 预估开销。 */
+/** agent-runtime 的 system prompt + tool definitions 预估开销。 */
 const SYSTEM_PROMPT_RESERVE = 4000;
 
 /** soul.md 的绝对 token 上限。 */
@@ -224,7 +224,7 @@ export function fillHistoryWithBudget(
   return lines;
 }
 
-/** 结构化历史消息（与 agent-runner HistoryMessage 对齐）。 */
+/** 结构化历史消息（与 agent-runtime HistoryMessage 对齐）。 */
 export interface SkillContextEntry {
   skill: string;
   output: string;

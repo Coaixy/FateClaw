@@ -13,6 +13,7 @@
     "./tasks": "./src/tasks/index.d.ts",
     "./chat": "./src/chat/index.d.ts",
     "./billing": "./src/billing/index.d.ts",
+    "./model-settings": "./src/model-settings/index.d.ts",
     "./skills": "./src/skills/index.d.ts"
   }
 }

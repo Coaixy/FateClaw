@@ -2,17 +2,17 @@
 
 最近核对：2026-05-26。
 
-这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runner，agent-runner 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
+这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runtime，agent-runtime 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
 
 核心代码入口：
 
 - `apps/api/src/runtime/resident-agent.ts`
 - `apps/api/src/runtime/ipc-worker.ts`
 - `apps/api/src/runtime/local-runner.ts`
-- `packages/agent-runner/src/daemon.ts`
-- `packages/agent-runner/src/request-boundary.ts`
-- `packages/agent-runner/src/pi-runtime/`
-- `packages/agent-runner/src/text-skill-bundle.ts`
+- `apps/agent-runtime/src/daemon.ts`
+- `apps/agent-runtime/src/request-boundary.ts`
+- `apps/agent-runtime/src/pi-runtime/`
+- `apps/agent-runtime/src/text-skill-bundle.ts`
 
 ## 总体分层
 
@@ -35,7 +35,7 @@ Redis IPC
   ipc:{runtimeId}:tasks
         │
         ▼
-账号级 agent-runner 常驻进程
+账号级 agent-runtime 常驻进程
   - daemon BRPOP inbox
   - request-boundary 处理单次请求
   - 创建 request-scoped Pi Runtime
@@ -48,10 +48,10 @@ Pi SDK 模型 loop / 授权 Skill 文件读取
 宿主落库、结算、返回 Web 或微信
 ```
 
-宿主和 agent-runner 是两个边界清晰的运行时：
+宿主和 agent-runtime 是两个边界清晰的运行时：
 
 - 宿主负责平台侧事务：用户、账号、会话、消息落库、账单预扣与结算、模型 runtime 解析、Redis IPC、Fastify API、Text Skill Bundle 写入，以及系统排盘脚本调用。
-- agent-runner 负责 AI 执行：创建 request runtime、调用 Pi SDK、读取授权 Skill 文件、生成 transcript / trace / agentGraph。
+- agent-runtime 负责 AI 执行：创建 request runtime、调用 Pi SDK、读取授权 Skill 文件、生成 transcript / trace / agentGraph。
 - 模型密钥和 provider 是 AI 请求级数据。宿主在 AI Chat / 微信消息入队前解析数据库配置，并通过 `llmRuntime` 快照随 IPC payload 下发；手动排盘请求由 API 侧调用系统排盘运行包，不需要模型 runtime。
 
 ## Skill 与排盘模型
@@ -74,7 +74,7 @@ examples/
 notes/
 ```
 
-私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`packages/agent-runner/src/text-skill-bundle.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
+私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`apps/agent-runtime/src/text-skill-bundle.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
 
 ## 宿主请求链路
 
@@ -87,11 +87,11 @@ notes/
 5. 如用户选中盘面，追加 `activeBoardContext`。
 6. 调 `dispatchAiChatPrompt()`。
 
-`dispatchAiChatPrompt()` 会先确保对应 `web:{userId}` 的 agent-runner 已运行，再调用 `addAccountListener()` 启动宿主侧 outbox 监听，最后通过 `submitAiChatInboxRequest()` 入队。
+`dispatchAiChatPrompt()` 会先确保对应 `web:{userId}` 的 agent-runtime 已运行，再调用 `addAccountListener()` 启动宿主侧 outbox 监听，最后通过 `submitAiChatInboxRequest()` 入队。
 
-## Agent Runner 单次请求
+## Agent Runtime 单次请求
 
-`packages/agent-runner/src/daemon.ts` 是唯一常驻入口：
+`apps/agent-runtime/src/daemon.ts` 是唯一常驻入口：
 
 1. `initContext()` 从环境读取 runtimeId 和用户身份。
 2. 连接 Redis。
@@ -109,7 +109,7 @@ notes/
 
 ## Pi Runtime
 
-`packages/agent-runner/src/pi-runtime/` 是当前 AI 执行主路径：
+`apps/agent-runtime/src/pi-runtime/` 是当前 AI 执行主路径：
 
 - `resource-loader.ts`：按请求注入授权 Text Skill Bundle。
 - `session.ts`：创建 Pi session，配置 provider、prompt、工具和 ResourceLoader。
@@ -127,7 +127,7 @@ notes/
 - `apps/api/src/modules/chat/paipan-registry.ts`：系统排盘目录清单、参数 schema 和 runner 绑定。
 - `apps/api/src/modules/chat/paipan-runners/`：系统排盘 TypeScript 确定性实现。
 
-每次请求完成时，agent-runner 会返回：
+每次请求完成时，agent-runtime 会返回：
 
 - `usage`：模型真实 token 用量。
 - `skillContext`：可被后续对话复用的工具/Skill 结果。
@@ -139,10 +139,10 @@ notes/
 
 ## 容易误判的点
 
-- 当前不是每条消息临时起一个 agent，而是每个 runtimeId 复用一个常驻 agent-runner。
-- `web:{userId}` 不是账号表记录，只是复用 agent-runner、消息归档和日志分区的运行时键。
+- 当前不是每条消息临时起一个 agent，而是每个 runtimeId 复用一个常驻 agent-runtime。
+- `web:{userId}` 不是账号表记录，只是复用 agent-runtime、消息归档和日志分区的运行时键。
 - Redis 在这里是 IPC 主通道，不只是缓存。
 - 模型 provider、model、secret 是请求级 `llmRuntime` 快照，不从 agent 进程 env 读取。
 - 系统排盘不再使用旧版说明文件或独立脚本目录；参数 schema 和 runner 绑定在 `apps/api/src/modules/chat/paipan-registry.ts` 中维护。
 - 用户知识正文不存 DB；DB 只存控制平面 metadata、权限、版本、安装状态和 bundle 地址。
-- 不要在 agent-runner 里找 one-shot stdin/stdout 入口；当前唯一入口是 `daemon.ts`。
+- 不要在 agent-runtime 里找 one-shot stdin/stdout 入口；当前唯一入口是 `daemon.ts`。

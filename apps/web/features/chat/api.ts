@@ -111,7 +111,7 @@ export type ChatSessionStreamEvent =
     };
 
 /**
- * Skill artifact context（来自 agent-runner 的 tool_context）。
+ * Skill artifact context（来自 agent-runtime 的 tool_context）。
  * 当前仍属于前端展示协议，后续可以继续下沉到 contracts。
  */
 export interface SkillContextEntry {

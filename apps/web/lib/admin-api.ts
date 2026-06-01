@@ -744,7 +744,7 @@ export interface TranscriptEvent {
 }
 
 /**
- * 结构化 trace 事件。agent-runner 的 traceEvent() 写入这些条目，
+ * 结构化 trace 事件。agent-runtime 的 traceEvent() 写入这些条目，
  * 在请求完成时随 ContainerOutput 一起回传，落库到 conversation_logs.trace_events。
  *
  * 18 种事件 type 的 schema 各不相同，此处用松类型，运行时由

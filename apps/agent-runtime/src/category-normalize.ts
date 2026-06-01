@@ -1,6 +1,6 @@
 /**
  * 类别别名 → 标准类别归一化。
- * 词典来源：apps/api/src/shared/category-aliases.json（宿主与 agent-runner 共用同一份源数据）。
+ * 词典来源：packages/backend-shared/assets/category-aliases.json（后端运行时共用同一份源数据）。
  */
 
 import fs from 'fs';
@@ -11,7 +11,10 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.resolve(MODULE_DIR, '..');
 const CATEGORY_ALIASES_PATH_CANDIDATES = [
   path.resolve(PACKAGE_DIR, 'dist/shared/category-aliases.json'),
-  path.resolve(PACKAGE_DIR, '../../apps/api/src/shared/category-aliases.json'),
+  path.resolve(
+    PACKAGE_DIR,
+    '../../packages/backend-shared/assets/category-aliases.json',
+  ),
 ];
 
 let aliasesCache: Record<string, string> | null = null;

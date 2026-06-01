@@ -12,7 +12,16 @@ const DEFAULT_CONTEXT_WINDOW = 128_000;
 export const MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS = 8_192;
 export const MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS = 2_000_000;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const RULES_PATH = path.resolve(MODULE_DIR, 'model-context-windows.json');
+const RULES_PATH_CANDIDATES = [
+  path.resolve(MODULE_DIR, 'model-context-windows.json'),
+  path.resolve(
+    MODULE_DIR,
+    '../../../../packages/backend-shared/assets/model-context-windows.json',
+  ),
+];
+const RULES_PATH =
+  RULES_PATH_CANDIDATES.find((candidate) => fs.existsSync(candidate)) ??
+  RULES_PATH_CANDIDATES[0];
 
 let rulesCache: ModelContextWindowRule[] | null = null;
 

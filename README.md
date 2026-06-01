@@ -10,7 +10,7 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 
 - **本地确定性排盘**：八字、紫微、奇门、六爻、经占等系统排盘脚本本地执行，先生成结构化盘面，再交给 Agent 承接。
 - **用户知识库检索**：创作者可以把流派规则、案例边界、固定口径拆成章节，解读 Agent 按需读取，不把整本资料塞进上下文。
-- **常驻 Agent Runtime**：宿主通过 Redis IPC 调度账号级 `agent-runner` 常驻进程，避免每条消息重新初始化完整运行环境。
+- **常驻 Agent Runtime**：宿主通过 Redis IPC 调度账号级 `agent-runtime` 常驻进程，避免每条消息重新初始化完整运行环境。
 - **Pi Runtime 编排**：模型 loop、用户知识读取和最终回复都由 Pi SDK 承接，FateClaw 只保留排盘等确定性业务能力。
 - **请求级模型配置**：模型 Provider、密钥、价格和上下文窗口由宿主解析成 `llmRuntime` 快照随请求下发，不依赖 agent 进程全局模型环境变量。
 - **可观测对话链路**：每次请求返回 transcript、trace events、agent graph 和 token usage，后台可回看工具调用、知识命中和模型链路。
@@ -40,7 +40,7 @@ flowchart LR
     TaskQueue["ipc:{runtimeId}:tasks"]
   end
 
-  subgraph Agent["packages/agent-runner 常驻进程"]
+  subgraph Agent["apps/agent-runtime 常驻进程"]
     Daemon["daemon BRPOP"]
     Kernel["Pi Runtime"]
     Tools["业务运行资源 / Skill Resources"]
@@ -79,7 +79,7 @@ flowchart LR
 
 ## Pi Runtime
 
-FateClaw 的 Agent 执行已统一到 Pi SDK：宿主只负责请求、账务、权限和日志，agent-runner 每次请求创建 request-scoped Pi Runtime，并只把当前用户有权访问的 Text Skill Bundle 暴露给 Pi ResourceLoader。系统排盘由 Web/API 侧的确定性运行包完成，再把盘面 artifact 交给 Agent 推理。
+FateClaw 的 Agent 执行已统一到 Pi SDK：宿主只负责请求、账务、权限和日志，agent-runtime 每次请求创建 request-scoped Pi Runtime，并只把当前用户有权访问的 Text Skill Bundle 暴露给 Pi ResourceLoader。系统排盘由 Web/API 侧的确定性运行包完成，再把盘面 artifact 交给 Agent 推理。
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,7 @@ sequenceDiagram
   participant W as Web
   participant H as apps/api Host
   participant R as Redis IPC
-  participant A as agent-runner
+  participant A as agent-runtime
   participant S as Local Skills / Knowledge
   participant M as Model Provider
   participant DB as PostgreSQL
@@ -133,7 +133,7 @@ sequenceDiagram
 | 排盘 | Web/API 调用 `apps/api/src/modules/chat/paipan-runners/*.ts`，返回结构化 artifact |
 | 解读 | Pi Runtime 基于当前盘面、问题和授权用户知识直接回复 |
 | 用户知识库 | Web 创建 Text Skill Bundle，DB 只存 metadata、权限、版本和 `bundle_uri` |
-| Agent 调度 | `packages/agent-runner/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop 和授权 Skill 文件读取 |
+| Agent 调度 | `apps/agent-runtime/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop 和授权 Skill 文件读取 |
 | IPC | Redis list 队列：inbox、outbox、ai-chat outbox、tasks |
 | 模型 | AI 请求使用请求级 `llmRuntime` 快照，由 Pi Runtime 适配 OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
 | 可观测性 | `conversation_logs` 保存 transcript、traceEvents、agentGraph、usage |
@@ -143,7 +143,7 @@ sequenceDiagram
 
 - Monorepo: pnpm workspace
 - API: Fastify + PostgreSQL + Redis
-- Agent Runner: TypeScript daemon + Redis IPC + Pi SDK Runtime
+- Agent Runtime: TypeScript daemon + Redis IPC + Pi SDK Runtime
 - Web: Next.js 16 App Router + React 19
 - 测试与质量：Vitest、TypeScript、ESLint、Prettier
 
@@ -153,9 +153,10 @@ sequenceDiagram
 FateClaw/
 ├── apps/
 │   ├── api/                 # 宿主运行时、Fastify API、数据库和 Redis 编排
+│   ├── agent-runtime/       # 常驻 Agent 执行进程、模型循环、工具和 Skill 调用
 │   └── web/                 # Next.js 控台
 ├── packages/
-│   ├── agent-runner/        # 常驻 Agent 执行进程、模型循环、工具和 Skill 调用
+│   ├── backend-shared/      # API 与 Agent Runtime 共用的后端静态资源
 │   └── contracts/           # 前后端共享 DTO 类型
 ├── skills/
 │   └── _template/           # 用户 Text Skill 模板
@@ -232,7 +233,7 @@ pnpm run dev:web       # 仅 Web
 pnpm run typecheck     # 全 workspace 类型检查
 pnpm run lint          # API lint
 pnpm test              # Vitest 测试
-pnpm run build:all     # 构建 API、agent-runner 和 Web
+pnpm run build:all     # 构建 API、Agent Runtime 和 Web
 ```
 
 ## 首次配置模型
@@ -245,7 +246,7 @@ pnpm run build:all     # 构建 API、agent-runner 和 Web
 4. 在系统配置中新增模型 Provider，填写协议、Base URL、模型名和 API Key。
 5. 普通用户在设置页选择官方模型或保存自配模型。
 
-AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runner`，模型密钥不依赖 agent 进程级环境变量；手动排盘请求不需要模型 runtime，只通过 Pi deterministic tool 执行。
+AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runtime`，模型密钥不依赖 agent 进程级环境变量；手动排盘请求不需要模型 runtime，只通过 Pi deterministic tool 执行。
 
 ## 排盘与知识库
 

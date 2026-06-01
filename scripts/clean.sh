@@ -29,6 +29,13 @@ clean_dist() {
   else
     echo -e "  ${DIM}– apps/web/out/ (不存在)${RESET}"
   fi
+
+  if [ -d "apps/agent-runtime/dist" ]; then
+    rm -rf apps/agent-runtime/dist
+    echo -e "  ${RED}✕${RESET} apps/agent-runtime/dist/"
+  else
+    echo -e "  ${DIM}– apps/agent-runtime/dist/ (不存在)${RESET}"
+  fi
 }
 
 do_dist=false

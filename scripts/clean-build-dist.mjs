@@ -6,7 +6,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const TARGETS = {
   api: path.resolve(ROOT_DIR, 'apps/api/dist'),
-  'agent-runner': path.resolve(ROOT_DIR, 'packages/agent-runner/dist'),
+  'agent-runtime': path.resolve(ROOT_DIR, 'apps/agent-runtime/dist'),
 };
 
 function resolveTarget(scope) {
@@ -21,7 +21,7 @@ function resolveTarget(scope) {
 
 const scope = process.argv[2];
 if (!scope) {
-  throw new Error('缺少构建目标名称，例如: node scripts/clean-build-dist.mjs agent-runner');
+  throw new Error('缺少构建目标名称，例如: node scripts/clean-build-dist.mjs agent-runtime');
 }
 
 const targetDir = resolveTarget(scope);

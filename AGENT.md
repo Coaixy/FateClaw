@@ -4,10 +4,10 @@
 
 ## 一句话理解
 
-这是一个“宿主编排 + 账号级常驻 agent-runner + Web 控台”的玄学 AI Chat、手动排盘和 Text Skill Bundle 系统。
+这是一个“宿主编排 + 账号级常驻 agent-runtime + Web 控台”的玄学 AI Chat、手动排盘和 Text Skill Bundle 系统。
 
 - 宿主在 `apps/api/src/`
-- agent-runner 在 `packages/agent-runner/`
+- agent-runtime 在 `apps/agent-runtime/`
 - 前端在 `apps/web/`
 - 系统排盘实现内置在 `apps/api/src/modules/chat/paipan-runners/`
 
@@ -22,11 +22,12 @@
 5. `apps/api/src/runtime/resident-agent.ts`
 6. `apps/api/src/runtime/local-runner.ts`
 7. `apps/api/src/runtime/ipc-worker.ts`
-8. `packages/agent-runner/src/daemon.ts`
-9. `packages/agent-runner/src/engine.ts`
-10. `packages/agent-runner/src/pi-runtime/index.ts`
-11. `packages/agent-runner/src/pi-runtime/resource-loader.ts`
-12. `apps/api/src/infrastructure/db.ts`
+8. `apps/agent-runtime/src/daemon.ts`
+9. `apps/agent-runtime/src/request-boundary.ts`
+10. `apps/agent-runtime/src/pi-runtime/index.ts`
+11. `apps/agent-runtime/src/pi-runtime/resource-loader.ts`
+12. `apps/agent-runtime/src/text-skill-bundle.ts`
+13. `apps/api/src/infrastructure/db.ts`
 
 如果任务是前端改动，再补读：
 
@@ -51,7 +52,7 @@
 
 - 初始化 PostgreSQL 和 Redis
 - 启动 Fastify API
-- 通过 `apps/api/src/runtime/local-runner.ts` 以子进程方式拉起 agent-runner（`node dist/daemon.js`）
+- 通过 `apps/api/src/runtime/local-runner.ts` 以子进程方式拉起 agent-runtime（`node dist/daemon.js`）
 - 处理 iLink 长轮询代码路径
 - 通过 Redis IPC 给账号 agent 投递请求
 - 持久化消息、日志、技能配置等
@@ -63,9 +64,9 @@
 - `apps/api/src/modules/chat/message-handler.ts`
 - `apps/api/src/runtime/poller.ts`
 
-### Agent Runner `packages/agent-runner/`
+### Agent Runtime `apps/agent-runtime/`
 
-agent-runner 负责：
+agent-runtime 负责：
 
 - 读取宿主注入的环境变量
 - 为单个账号常驻监听 inbox
@@ -77,13 +78,13 @@ agent-runner 负责：
 
 优先入口：
 
-- `packages/agent-runner/src/daemon.ts`
-- `packages/agent-runner/src/engine.ts`
-- `packages/agent-runner/src/pi-runtime/index.ts`
-- `packages/agent-runner/src/pi-runtime/session.ts`
-- `packages/agent-runner/src/pi-runtime/resource-loader.ts`
-- `packages/agent-runner/src/pi-runtime/tools.ts`
-- `packages/agent-runner/src/text-skill-bundle.ts`
+- `apps/agent-runtime/src/daemon.ts`
+- `apps/agent-runtime/src/request-boundary.ts`
+- `apps/agent-runtime/src/pi-runtime/index.ts`
+- `apps/agent-runtime/src/pi-runtime/session.ts`
+- `apps/agent-runtime/src/pi-runtime/resource-loader.ts`
+- `apps/agent-runtime/src/pi-runtime/tools.ts`
+- `apps/agent-runtime/src/text-skill-bundle.ts`
 
 ### Web `apps/web/`
 
@@ -100,7 +101,7 @@ Web 负责：
 
 ### 1. 这是按账号拆分的常驻 agent 架构
 
-不要把它理解成“每条消息临时起一个 agent”。宿主会为运行时 ID 维持常驻 agent-runner，站内 AI Chat 使用 `web:{userId}`，微信场景使用账号 ID；`dispatchAiChatPrompt()` / `dispatchResidentPrompt()` 只是把请求投递进去。
+不要把它理解成“每条消息临时起一个 agent”。宿主会为运行时 ID 维持常驻 agent-runtime，站内 AI Chat 使用 `web:{userId}`，微信场景使用账号 ID；`dispatchAiChatPrompt()` / `dispatchResidentPrompt()` 只是把请求投递进去。
 
 ### 2. Redis 是 IPC，不只是缓存
 
@@ -116,9 +117,9 @@ Web 负责：
 
 ### 4. 模型配置是请求级快照
 
-模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runner 子进程环境只承载身份、Redis/PostgreSQL 等运行时依赖，不应依赖进程级模型密钥。
+模型 provider、model、secret 主要来自数据库配置，由宿主在 AI 请求入队前解析为 `llmRuntime` 快照并随 IPC payload 下发。agent-runtime 子进程环境只承载身份、Redis/PostgreSQL 等运行时依赖，不应依赖进程级模型密钥。
 
-实际注入 agent-runner 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
+实际注入 agent-runtime 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
 
 ### 6. 测试按改动范围聚焦运行
 
@@ -141,9 +142,9 @@ Web 负责：
 - `apps/api/src/modules/skills/`: Text Skill Bundle 写入和技能 HTTP 服务
 - `apps/api/src/modules/chat/paipan-registry.ts`: 系统排盘目录清单、参数 schema 和 runner 绑定
 - `apps/api/src/modules/chat/paipan-runners/`: 系统排盘 TypeScript 确定性实现
-- `packages/agent-runner/src/prompt/`: system prompt 组装
-- `packages/agent-runner/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
-- `packages/agent-runner/src/tools/skill/`: 玄学解读、用户知识组合和参数校验辅助
+- `apps/agent-runtime/src/request-boundary.ts`: 单次请求的边界、错误映射和 trace 汇总
+- `apps/agent-runtime/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
+- `apps/agent-runtime/src/text-skill-bundle.ts`: 用户 Text Skill Bundle 文件读取边界
 - `apps/web/app/admin/`: 管理后台
 - `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
@@ -155,7 +156,7 @@ Web 负责：
 - 不要只根据 `paipan-registry.ts` 判断系统排盘是否对用户生效，还要结合 `skill_global_config` 和用户启用状态
 - 不要把用户私有知识写到 `.pi/skills`、`~/.pi/agent/skills` 或任何全局扫描目录；私有知识必须是 request-scoped Text Skill Bundle
 - 不要把 `dev:api-only` 和正式启动混为一谈，它明确跳过轮询、IPC worker、调度和 runtime 激活
-- 不要在 agent-runner 里找 one-shot/stdin 入口或 Dockerfile，它们已移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
+- 不要在 agent-runtime 里找 one-shot/stdin 入口或 Dockerfile，它们已移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
 - 系统排盘不再依赖旧版说明文件或独立脚本目录；用户知识正文在文件系统 Text Skill Bundle 中，DB 只保存 metadata 和 bundle 地址
 
 ## 模块文档

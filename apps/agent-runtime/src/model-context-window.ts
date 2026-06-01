@@ -13,7 +13,10 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.resolve(MODULE_DIR, '..');
 const RULES_PATH_CANDIDATES = [
   path.resolve(PACKAGE_DIR, 'dist/shared/model-context-windows.json'),
-  path.resolve(PACKAGE_DIR, '../../apps/api/src/shared/model-context-windows.json'),
+  path.resolve(
+    PACKAGE_DIR,
+    '../../packages/backend-shared/assets/model-context-windows.json',
+  ),
 ];
 
 let rulesCache: ModelContextWindowRule[] | null = null;

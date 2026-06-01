@@ -7,7 +7,7 @@ export default defineConfig({
       '**/dist/**',
       '.pnpm-store/**',
       '.worktrees/**',
-      'packages/agent-runner/dist/**',
+      'apps/agent-runtime/dist/**',
     ],
   },
 });

@@ -132,7 +132,7 @@ async function drainCancelRequests(
 /**
  * 测试专用：从指定 Redis stub 中清空 cancel 队列。
  *
- * @param accountId 当前 agent-runner 账号 ID。
+ * @param accountId 当前 agent-runtime 账号 ID。
  * @param activeSessions 正在执行的 session 控制表。
  * @param pendingCancelRequests 尚未等到 session ready 的取消请求 ID 集合。
  * @param redis 只需实现 rpop 的测试替身。

@@ -1,7 +1,7 @@
 /**
- * 本地模式 agent-runner 管理。
+ * 本地模式 agent-runtime 管理。
  *
- * 用 spawn 直接运行 agent-runner daemon 进程，跳过 Docker。
+ * 用 spawn 直接运行 agent-runtime daemon 进程，跳过 Docker。
  * 环境变量通过 agent-env.ts 统一构建，只传递契约内的字段。
  */
 import { ChildProcess, spawn } from 'child_process';
@@ -59,7 +59,7 @@ function resolveLocalAgentEntry(args: { agentRunnerBase: string }): {
     return { daemonEntry: srcEntry, mode: 'dev' };
   }
 
-  throw new Error(`agent-runner 入口不存在: ${distEntry} 或 ${srcEntry}`);
+  throw new Error(`agent-runtime 入口不存在: ${distEntry} 或 ${srcEntry}`);
 }
 
 // 同 accountId 的并发启动 promise 共享，防止多个调用各自 spawn 出孤儿进程
@@ -122,7 +122,7 @@ function resolveDevAgentCommand(projectRoot: string): {
 async function doSpawnLocalAgent(accountId: string): Promise<void> {
   // 本地开发默认优先源码，生产/显式指定时再使用 dist，避免源码与运行物漂移
   const projectRoot = resolveProjectRoot();
-  const agentRunnerBase = path.join(projectRoot, 'packages', 'agent-runner');
+  const agentRunnerBase = path.join(projectRoot, 'apps', 'agent-runtime');
   const { daemonEntry, mode } = resolveLocalAgentEntry({ agentRunnerBase });
 
   const agentEnv = await buildAgentEnv(accountId);

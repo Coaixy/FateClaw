@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { aiChatStreamChannel, enrichAiChatStreamEvent } from './ai-chat-stream.js';
 
-describe('agent-runner AI Chat stream helpers', () => {
+describe('agent-runtime AI Chat stream helpers', () => {
   it('uses the API stream channel contract', () => {
     expect(aiChatStreamChannel('session-1')).toBe(
       'ipc:ai-chat:stream:session-1',

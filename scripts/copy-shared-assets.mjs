@@ -5,12 +5,12 @@ import { fileURLToPath } from 'url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const SOURCE_FILES = [
-  path.resolve(ROOT_DIR, 'apps/api/src/shared/category-aliases.json'),
-  path.resolve(ROOT_DIR, 'apps/api/src/shared/model-context-windows.json'),
+  path.resolve(ROOT_DIR, 'packages/backend-shared/assets/category-aliases.json'),
+  path.resolve(ROOT_DIR, 'packages/backend-shared/assets/model-context-windows.json'),
 ];
 const TARGETS = {
   api: path.resolve(ROOT_DIR, 'apps/api/dist/shared'),
-  'agent-runner': path.resolve(ROOT_DIR, 'packages/agent-runner/dist/shared'),
+  'agent-runtime': path.resolve(ROOT_DIR, 'apps/agent-runtime/dist/shared'),
 };
 
 function resolveTargets(scope) {

@@ -811,7 +811,7 @@ Authorization: Bearer <token>
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
 | `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
-| `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runner 入口选择：`auto` / `src` / `dist` |
+| `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_logs.trace_events` 保留天数 |
 

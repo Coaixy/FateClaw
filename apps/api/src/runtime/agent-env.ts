@@ -1,5 +1,5 @@
 /**
- * 宿主机 → Agent-Runner 环境变量契约与统一构建。
+ * 宿主机 → Agent Runtime 环境变量契约与统一构建。
  *
  * 所有注入 agent 进程的 env 都从这里产出。
  * 新增 env 字段只需改这一个文件。
@@ -15,7 +15,7 @@ import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.
 // ---------------------------------------------------------------------------
 
 /**
- * 宿主机注入 agent-runner 的环境变量。
+ * 宿主机注入 agent-runtime 的环境变量。
  */
 export interface AgentEnv {
   // --- 身份 ---
@@ -25,7 +25,7 @@ export interface AgentEnv {
   // --- 运行时 ---
   TZ: string;
   FATECLAW_TIMEZONE: string;
-  /** Pi session 本地文件目录；传给本地 agent-runner 以保持宿主清理路径一致。 */
+  /** Pi session 本地文件目录；传给本地 agent-runtime 以保持宿主清理路径一致。 */
   FATECLAW_PI_SESSION_DIR?: string;
 
   // --- 连接 ---
@@ -50,7 +50,7 @@ export interface AgentEnv {
 // ---------------------------------------------------------------------------
 
 /**
- * 构建注入 agent-runner 进程的完整 env。
+ * 构建注入 agent-runtime 进程的完整 env。
  */
 export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);

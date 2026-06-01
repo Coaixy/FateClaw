@@ -1,12 +1,12 @@
 {
-  "name": "fateclaw-agent-runner",
+  "name": "@fateclaw/agent-runtime",
   "version": "1.0.0",
   "type": "module",
-  "description": "Account-scoped agent runner for FateClaw (OpenAI-compatible)",
+  "description": "Account-scoped Agent Runtime for FateClaw (OpenAI-compatible)",
   "license": "GPL-3.0-only",
   "main": "dist/daemon.js",
   "scripts": {
-    "build": "node ../../scripts/clean-build-dist.mjs agent-runner && tsc -p tsconfig.build.json && node ../../scripts/copy-shared-assets.mjs agent-runner",
+    "build": "node ../../scripts/clean-build-dist.mjs agent-runtime && pnpm --dir ../.. exec tsc -p apps/agent-runtime/tsconfig.build.json && node ../../scripts/copy-shared-assets.mjs agent-runtime",
     "start": "node dist/daemon.js"
   },
   "dependencies": {

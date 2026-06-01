@@ -17,15 +17,15 @@ FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径，但当前默
 - `apps/api/src/modules/account/`：账号绑定、账号 HTTP 服务和账号管理逻辑。
 - `apps/api/src/modules/chat/message-handler.ts`：微信消息进入 Agent 前的处理链路。
 - `apps/api/src/runtime/poller.ts`：轮询入口。
-- `apps/api/src/runtime/resident-agent.ts`：向账号级 agent-runner 分发请求。
-- `apps/api/src/runtime/ipc-outbox-handler.ts`：处理 agent-runner 返回并发送微信消息。
+- `apps/api/src/runtime/resident-agent.ts`：向账号级 agent-runtime 分发请求。
+- `apps/api/src/runtime/ipc-outbox-handler.ts`：处理 agent-runtime 返回并发送微信消息。
 - `apps/web/components/workspace/`：设备和绑定相关 UI。
 
 ## 恢复接入前的检查清单
 
 1. 确认 OpenClaw/iLink Bot API 的 Base URL、token、扫码登录和消息发送接口仍与 `ilink.ts` 中的协议一致。
 2. 明确账号和用户的绑定关系，避免一个微信账号被错误绑定到多个用户。
-3. 恢复入口编排时，确认 `startIpcWorker()`、账号 listener/poller、agent-runner 生命周期和优雅退出顺序。
+3. 恢复入口编排时，确认 `startIpcWorker()`、账号 listener/poller、agent-runtime 生命周期和优雅退出顺序。
 4. 确认 `dispatchResidentPrompt()` 的 `autoDeliver` 行为和 outbox 处理仍符合微信自动发送要求。
 5. 增加速率限制、错误重试和幂等处理，避免重复发送或失控刷屏。
 6. 检查日志脱敏，避免记录 bot token、用户微信 ID、私聊内容和模型密钥。

@@ -183,7 +183,7 @@ export async function buildStructuredInput(
     contextWindowTokens,
   });
 
-  // Soul 不再塞进 prompt（agent-runner system prompt 已自动注入摘要）
+  // Soul 不再塞进 prompt（agent-runtime system prompt 已自动注入摘要）
   // 但仍计算 soul 实际占用，把未用预算让给对话历史
   let soulActual = 0;
   const soulRaw = await getSoulContent(account.id);

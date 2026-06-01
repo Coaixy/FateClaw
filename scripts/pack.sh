@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 分离打包 API 生产运行包、API 源码包和 Web 静态产物用于部署
+# 分离打包后端生产运行包、后端源码包和 Web 静态产物用于部署
 # 用法:
-#   bash scripts/pack.sh [all|api-runtime|runtime|api|api-source|web|source]
-#   bash scripts/pack.sh api-runtime [输出文件名]
-#   bash scripts/pack.sh api [输出文件名]
+#   bash scripts/pack.sh [all|backend-runtime|api-runtime|runtime|backend|api|backend-source|api-source|web|source]
+#   bash scripts/pack.sh backend-runtime [输出文件名]
+#   bash scripts/pack.sh backend [输出文件名]
 #   bash scripts/pack.sh web [输出文件名]
-# 兼容旧参数: --light --no-obfuscate --skip-install --jobs N 会被忽略
+# 兼容旧打包参数: --light --no-obfuscate --skip-install --jobs N 会被忽略
 
 set -euo pipefail
 
@@ -36,9 +36,9 @@ while [ "$#" -gt 0 ]; do
   elif [[ "$arg" == --* ]]; then
     echo "❌ 未知参数: $arg"
     exit 1
-  elif [ "$arg" = "all" ] || [ "$arg" = "api-runtime" ] || [ "$arg" = "runtime" ] || [ "$arg" = "api" ] || [ "$arg" = "api-source" ] || [ "$arg" = "web" ] || [ "$arg" = "source" ]; then
+  elif [ "$arg" = "all" ] || [ "$arg" = "backend-runtime" ] || [ "$arg" = "api-runtime" ] || [ "$arg" = "runtime" ] || [ "$arg" = "backend" ] || [ "$arg" = "api" ] || [ "$arg" = "backend-source" ] || [ "$arg" = "api-source" ] || [ "$arg" = "web" ] || [ "$arg" = "source" ]; then
     if [ "$arg" = "runtime" ]; then
-      MODE="api-runtime"
+      MODE="backend-runtime"
     else
       MODE="$arg"
     fi
@@ -59,8 +59,8 @@ if [ "$MODE" = "all" ] && [ -n "$OUTFILE" ]; then
 fi
 
 SCRIPT_START=$SECONDS
-GENERATED_API_RUNTIME=""
-GENERATED_API_SOURCE=""
+GENERATED_BACKEND_RUNTIME=""
+GENERATED_BACKEND_SOURCE=""
 GENERATED_WEB_STATIC=""
 
 # 输出步骤耗时。
@@ -79,12 +79,12 @@ if [ "${#LEGACY_ARGS[@]}" -gt 0 ]; then
   echo "ℹ️ 当前为分离部署包，忽略旧的本地混淆参数: ${LEGACY_ARGS[*]}"
 fi
 
-pack_api_source() {
-  local outfile="${1:-fateclaw-api-v${VERSION}-source.tar.gz}"
+pack_backend_source() {
+  local outfile="${1:-fateclaw-backend-v${VERSION}-source.tar.gz}"
   local tmp_out="/tmp/$outfile"
   local step_start=$SECONDS
 
-  echo "📦 打包 API 源码 v${VERSION} ..."
+  echo "📦 打包后端源码 v${VERSION} ..."
   tar czf "$tmp_out" \
     --exclude='node_modules' \
     --exclude='.pnpm-store' \
@@ -101,7 +101,7 @@ pack_api_source() {
     --exclude='*.log' \
     --exclude="$ROOT_NAME/apps/web" \
     --exclude="$ROOT_NAME/apps/api/dist" \
-    --exclude="$ROOT_NAME/packages/agent-runner/dist" \
+    --exclude="$ROOT_NAME/apps/agent-runtime/dist" \
     --exclude="$ROOT_NAME/.next" \
     --exclude="$ROOT_NAME/store" \
     --exclude="$ROOT_NAME/data" \
@@ -113,38 +113,41 @@ pack_api_source() {
   mv "$tmp_out" "$outfile"
   local size
   size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成 API 源码包" "$step_start"
-  echo "✅ API 包: $outfile ($size)"
-  GENERATED_API_SOURCE="$outfile"
+  log_duration "生成后端源码包" "$step_start"
+  echo "✅ 后端源码包: $outfile ($size)"
+  GENERATED_BACKEND_SOURCE="$outfile"
 }
 
-pack_api_runtime() {
-  local outfile="${1:-fateclaw-api-v${VERSION}-runtime.tar.gz}"
+pack_backend_runtime() {
+  local outfile="${1:-fateclaw-backend-v${VERSION}-runtime.tar.gz}"
   local tmp_out="/tmp/$outfile"
   local stage_dir
-  stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/fateclaw-api-runtime.XXXXXX")
+  stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/fateclaw-backend-runtime.XXXXXX")
   local app_dir="$stage_dir/$ROOT_NAME"
   local step_start=$SECONDS
 
-  echo "🔨 构建 API 生产运行产物 ..."
-  npm run build
+  echo "🔨 构建后端生产运行产物 ..."
+  pnpm run build:backend
 
-  echo "📦 打包 API 生产运行包 v${VERSION} ..."
-  mkdir -p "$app_dir/apps/api" "$app_dir/packages/agent-runner"
+  echo "📦 打包后端生产运行包 v${VERSION} ..."
+  mkdir -p "$app_dir/apps/api" "$app_dir/apps/agent-runtime"
   cp package.json pnpm-workspace.yaml "$app_dir/"
+  if [ -f pnpm-lock.yaml ]; then
+    cp pnpm-lock.yaml "$app_dir/pnpm-lock.yaml"
+  fi
   if [ -f .npmrc ]; then
     cp .npmrc "$app_dir/.npmrc"
   fi
   if [ -f .env ]; then
     cp .env "$app_dir/.env"
   else
-    echo "⚠️ 未找到 .env，API 生产运行包不会携带环境配置"
+    echo "⚠️ 未找到 .env，后端生产运行包不会携带环境配置"
   fi
   cp apps/api/package.json "$app_dir/apps/api/package.json"
   cp -R apps/api/dist "$app_dir/apps/api/dist"
-  cp packages/agent-runner/package.json "$app_dir/packages/agent-runner/package.json"
-  cp -R packages/agent-runner/dist "$app_dir/packages/agent-runner/dist"
-  find "$app_dir/apps/api/dist" "$app_dir/packages/agent-runner/dist" \
+  cp apps/agent-runtime/package.json "$app_dir/apps/agent-runtime/package.json"
+  cp -R apps/agent-runtime/dist "$app_dir/apps/agent-runtime/dist"
+  find "$app_dir/apps/api/dist" "$app_dir/apps/agent-runtime/dist" \
     \( -name '*.test.js' -o -name '*.test.js.map' -o -name '*.test.d.ts' -o -name '*.test.d.ts.map' \) \
     -delete
 
@@ -154,9 +157,9 @@ pack_api_runtime() {
   mv "$tmp_out" "$outfile"
   local size
   size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成 API 生产运行包" "$step_start"
-  echo "✅ API 生产运行包: $outfile ($size)"
-  GENERATED_API_RUNTIME="$outfile"
+  log_duration "生成后端生产运行包" "$step_start"
+  echo "✅ 后端生产运行包: $outfile ($size)"
+  GENERATED_BACKEND_RUNTIME="$outfile"
 }
 
 pack_web_static() {
@@ -166,7 +169,7 @@ pack_web_static() {
 
   echo "🔨 构建 Web 静态产物 ..."
   rm -rf apps/web/.next apps/web/out
-  npm run build:web
+  pnpm run build:web
 
   echo "📦 打包 Web 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/web/out .
@@ -181,40 +184,49 @@ pack_web_static() {
 
 case "$MODE" in
   all)
-    pack_api_runtime
+    pack_backend_runtime
     pack_web_static
     ;;
+  backend-runtime)
+    pack_backend_runtime "${OUTFILE:-}"
+    ;;
   api-runtime)
-    pack_api_runtime "${OUTFILE:-}"
+    pack_backend_runtime "${OUTFILE:-}"
+    ;;
+  backend)
+    pack_backend_source "${OUTFILE:-}"
     ;;
   api)
-    pack_api_source "${OUTFILE:-}"
+    pack_backend_source "${OUTFILE:-}"
+    ;;
+  backend-source)
+    pack_backend_source "${OUTFILE:-}"
     ;;
   api-source)
-    pack_api_source "${OUTFILE:-}"
+    pack_backend_source "${OUTFILE:-}"
     ;;
   web)
     pack_web_static "${OUTFILE:-}"
     ;;
   source)
-    pack_api_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
+    pack_backend_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
     ;;
 esac
 
 log_duration "总耗时" "$SCRIPT_START"
 echo ""
 echo "部署步骤:"
-if [ -n "$GENERATED_API_RUNTIME" ]; then
-  echo "  API 生产运行包（1Panel 推荐）:"
-  echo "    1. scp $GENERATED_API_RUNTIME user@server:~/"
-  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_API_RUNTIME --strip-components=1 -C fateclaw"
+if [ -n "$GENERATED_BACKEND_RUNTIME" ]; then
+  echo "  后端生产运行包（API + Agent Runtime，1Panel 推荐）:"
+  echo "    1. scp $GENERATED_BACKEND_RUNTIME user@server:~/"
+  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_BACKEND_RUNTIME --strip-components=1 -C fateclaw"
   echo "    3. cd fateclaw && npm install --omit=dev -f && npm run start"
 fi
-if [ -n "$GENERATED_API_SOURCE" ]; then
-  echo "  API 源码包:"
-  echo "    1. scp $GENERATED_API_SOURCE user@server:~/"
-  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_API_SOURCE --strip-components=1 -C fateclaw"
-  echo "    3. cd fateclaw && npm install -f && npm run build && npm run start"
+if [ -n "$GENERATED_BACKEND_SOURCE" ]; then
+  echo "  后端源码包:"
+  echo "    1. scp $GENERATED_BACKEND_SOURCE user@server:~/"
+  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_BACKEND_SOURCE --strip-components=1 -C fateclaw"
+  echo "    3. cd fateclaw && pnpm install && pnpm run build && pnpm run start"
 fi
 if [ -n "$GENERATED_WEB_STATIC" ]; then
   echo "  Web:"
