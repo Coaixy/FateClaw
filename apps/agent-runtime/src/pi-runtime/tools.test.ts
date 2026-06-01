@@ -525,6 +525,7 @@ describe('createPiCustomTools', () => {
     expect(caseInsensitive.details).toMatchObject({
       isError: false,
       total: 3,
+      totalIsExact: false,
       truncated: true,
       searchedFiles: 1,
       matches: [
@@ -543,6 +544,7 @@ describe('createPiCustomTools', () => {
     expect(caseSensitive.details).toMatchObject({
       isError: false,
       total: 2,
+      totalIsExact: true,
       truncated: false,
       matches: [
         {
@@ -566,6 +568,52 @@ describe('createPiCustomTools', () => {
     expect(outside.details).toMatchObject({
       isError: true,
       output: expect.stringContaining('不属于本轮可见 Skill 目录'),
+    });
+  });
+
+  it('caches markdown file discovery for repeated grep calls in one tool instance', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const docsDir = path.join(readableSkill.baseDir, 'docs');
+    fs.mkdirSync(docsDir);
+    fs.writeFileSync(path.join(docsDir, 'a.md'), 'alpha beta');
+    const tools = createTools({
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    const first = await grepTool.execute(
+      'grep-cache-1',
+      { query: 'alpha', path: 'docs' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    fs.writeFileSync(path.join(docsDir, 'b.md'), 'alpha late file');
+    const second = await grepTool.execute(
+      'grep-cache-2',
+      { query: 'alpha', path: 'docs' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(first.details).toMatchObject({
+      isError: false,
+      searchedFiles: 1,
+      total: 1,
+      totalIsExact: true,
+    });
+    expect(second.details).toMatchObject({
+      isError: false,
+      searchedFiles: 1,
+      total: 1,
+      totalIsExact: true,
+      matches: [
+        expect.objectContaining({
+          relativePath: 'docs/a.md',
+        }),
+      ],
     });
   });
 

@@ -1,4 +1,4 @@
-import fs, { type Dirent, type Stats } from 'fs';
+import { promises as fs, type Dirent, type Stats } from 'fs';
 import path from 'path';
 
 import {
@@ -63,6 +63,8 @@ interface SearchScope {
   targetPath: string;
 }
 
+type MarkdownFileListCache = Map<string, Promise<string[]>>;
+
 interface PiSkillGrepDetails {
   output: string;
   isError: boolean;
@@ -71,6 +73,7 @@ interface PiSkillGrepDetails {
   caseSensitive: boolean;
   matches: GrepMatch[];
   total: number;
+  totalIsExact: boolean;
   truncated: boolean;
   searchedFiles?: number;
   error?: string;
@@ -181,16 +184,18 @@ function resolveSearchScopes(
   return { scopes };
 }
 
-function safeStat(filePath: string): Stats | undefined {
+async function safeStat(filePath: string): Promise<Stats | undefined> {
   try {
-    return fs.statSync(filePath);
+    return await fs.stat(filePath);
   } catch {
     return undefined;
   }
 }
 
-function collectMarkdownFiles(scope: SearchScope): string[] {
-  const stat = safeStat(scope.targetPath);
+async function collectMarkdownFilesUncached(
+  scope: SearchScope,
+): Promise<string[]> {
+  const stat = await safeStat(scope.targetPath);
   if (!stat) return [];
   if (stat.isFile()) {
     return isMarkdownPath(scope.targetPath) ? [scope.targetPath] : [];
@@ -204,7 +209,7 @@ function collectMarkdownFiles(scope: SearchScope): string[] {
     if (!current) continue;
     let entries: Dirent[];
     try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
+      entries = await fs.readdir(current, { withFileTypes: true });
     } catch {
       continue;
     }
@@ -224,9 +229,27 @@ function collectMarkdownFiles(scope: SearchScope): string[] {
   return files.sort();
 }
 
-function validateSearchScopes(scopes: SearchScope[]): string | undefined {
+function markdownFileListCacheKey(scope: SearchScope): string {
+  return `${scope.baseDir}\0${scope.targetPath}`;
+}
+
+async function collectMarkdownFiles(
+  scope: SearchScope,
+  cache: MarkdownFileListCache,
+): Promise<string[]> {
+  const key = markdownFileListCacheKey(scope);
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const promise = collectMarkdownFilesUncached(scope);
+  cache.set(key, promise);
+  return promise;
+}
+
+async function validateSearchScopes(
+  scopes: SearchScope[],
+): Promise<string | undefined> {
   for (const scope of scopes) {
-    const stat = safeStat(scope.targetPath);
+    const stat = await safeStat(scope.targetPath);
     if (!stat) {
       return `搜索失败：路径不存在或不可访问：${scope.targetPath}`;
     }
@@ -258,23 +281,23 @@ function truncateLine(line: string, column: number): string {
   ].join('');
 }
 
-function grepFile(args: {
+async function grepFile(args: {
   filePath: string;
   scope: SearchScope;
   normalizedQuery: string;
   caseSensitive: boolean;
   remaining: number;
-}): { matches: GrepMatch[]; total: number } {
-  const stat = safeStat(args.filePath);
+}): Promise<{ matches: GrepMatch[]; total: number; truncated: boolean }> {
+  const stat = await safeStat(args.filePath);
   if (!stat?.isFile() || stat.size > MAX_FILE_BYTES) {
-    return { matches: [], total: 0 };
+    return { matches: [], total: 0, truncated: false };
   }
 
   let content: string;
   try {
-    content = fs.readFileSync(args.filePath, 'utf-8');
+    content = await fs.readFile(args.filePath, 'utf-8');
   } catch {
-    return { matches: [], total: 0 };
+    return { matches: [], total: 0, truncated: false };
   }
 
   const matches: GrepMatch[] = [];
@@ -295,20 +318,27 @@ function grepFile(args: {
         column: columnIndex + 1,
         text: truncateLine(line, columnIndex + 1),
       });
+    } else {
+      return { matches, total, truncated: true };
     }
   }
-  return { matches, total };
+  return { matches, total, truncated: false };
 }
 
-function runGrep(params: GrepParams, readableSkills: Skill[]): {
+async function runGrep(
+  params: GrepParams,
+  readableSkills: Skill[],
+  cache: MarkdownFileListCache,
+): Promise<{
   output: string;
   isError: boolean;
   matches: GrepMatch[];
   total: number;
+  totalIsExact: boolean;
   truncated: boolean;
   searchedFiles?: number;
   error?: string;
-} {
+}> {
   const query = readString(params.query);
   if (!query) {
     return {
@@ -316,6 +346,7 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
       isError: true,
       matches: [],
       total: 0,
+      totalIsExact: true,
       truncated: false,
       error: '搜索失败：query 不能为空。',
     };
@@ -330,12 +361,13 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
       isError: true,
       matches: [],
       total: 0,
+      totalIsExact: true,
       truncated: false,
       error,
     };
   }
   const validationError = params.path
-    ? validateSearchScopes(resolved.scopes)
+    ? await validateSearchScopes(resolved.scopes)
     : undefined;
   if (validationError) {
     return {
@@ -343,6 +375,7 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
       isError: true,
       matches: [],
       total: 0,
+      totalIsExact: true,
       truncated: false,
       error: validationError,
     };
@@ -354,12 +387,14 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
   const matches: GrepMatch[] = [];
   let total = 0;
   let searchedFiles = 0;
+  let truncated = false;
 
+  searchScopes:
   for (const scope of resolved.scopes) {
-    const files = collectMarkdownFiles(scope);
-    searchedFiles += files.length;
+    const files = await collectMarkdownFiles(scope, cache);
     for (const filePath of files) {
-      const fileResult = grepFile({
+      searchedFiles += 1;
+      const fileResult = await grepFile({
         filePath,
         scope,
         normalizedQuery,
@@ -370,10 +405,13 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
       if (matches.length < limit) {
         matches.push(...fileResult.matches.slice(0, limit - matches.length));
       }
+      if (fileResult.truncated) {
+        truncated = true;
+        break searchScopes;
+      }
     }
   }
 
-  const truncated = total > matches.length;
   const output = JSON.stringify(
     {
       query,
@@ -381,6 +419,7 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
       caseSensitive,
       searchedFiles,
       total,
+      totalIsExact: !truncated,
       truncated,
       matches,
     },
@@ -392,6 +431,7 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
     isError: false,
     matches,
     total,
+    totalIsExact: !truncated,
     truncated,
     searchedFiles,
   };
@@ -407,6 +447,8 @@ function runGrep(params: GrepParams, readableSkills: Skill[]): {
 export function createPiSkillGrepTool(
   options: CreatePiSkillGrepToolOptions,
 ): PiToolDefinition {
+  const markdownFileListCache: MarkdownFileListCache = new Map();
+
   return defineTool({
     name: 'grep',
     label: 'grep',
@@ -429,7 +471,11 @@ export function createPiSkillGrepTool(
       const startedAt = Date.now();
       const query = readString(params.query) ?? '';
       const caseSensitive = readBoolean(params.caseSensitive) ?? false;
-      const grepResult = runGrep(params, options.readableSkills);
+      const grepResult = await runGrep(
+        params,
+        options.readableSkills,
+        markdownFileListCache,
+      );
 
       return completePiToolExecution({
         options,
@@ -453,6 +499,7 @@ export function createPiSkillGrepTool(
           caseSensitive,
           matches: grepResult.matches,
           total: grepResult.total,
+          totalIsExact: grepResult.totalIsExact,
           truncated: grepResult.truncated,
           searchedFiles: grepResult.searchedFiles,
           error: grepResult.error,
