@@ -32,6 +32,8 @@ const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
 const IMMUTABLE_STATIC_ASSET_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]|(?:^|[/\\])static[/\\]chunks[/\\]/;
+const ROUTE_DOCUMENT_FILE_PATTERN =
+  /(?:^|[/\\])(?:index|[^/\\]+)\.(?:html|txt)$/i;
 const FONT_ASSET_URL_PATTERN =
   /^\/_next\/static\/media\/[^?#]+\.(?:ttf|otf|woff2?|eot)$/i;
 const FONT_ASSET_FILE_PATTERN =
@@ -68,6 +70,32 @@ function isFontAssetUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+function setNoStoreHeaders(reply: {
+  header(name: string, value: string): unknown;
+}) {
+  reply.header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  );
+  reply.header('CDN-Cache-Control', 'no-store');
+  reply.header('Surrogate-Control', 'no-store');
+  reply.header('Pragma', 'no-cache');
+  reply.header('Expires', '0');
+}
+
+function setNoStoreResponseHeaders(response: {
+  setHeader(name: string, value: string): void;
+}) {
+  response.setHeader(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  );
+  response.setHeader('CDN-Cache-Control', 'no-store');
+  response.setHeader('Surrogate-Control', 'no-store');
+  response.setHeader('Pragma', 'no-cache');
+  response.setHeader('Expires', '0');
 }
 
 function isTrustedStaticAssetOrigin(
@@ -159,14 +187,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
     if (!request.url.startsWith('/api/')) return;
 
     // 用户态 API 数据不能被 CDN 或浏览器复用，否则会出现删除会话、充值余额等状态回退。
-    reply.header(
-      'Cache-Control',
-      'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-    );
-    reply.header('CDN-Cache-Control', 'no-store');
-    reply.header('Surrogate-Control', 'no-store');
-    reply.header('Pragma', 'no-cache');
-    reply.header('Expires', '0');
+    setNoStoreHeaders(reply);
     reply.header('Vary', 'Origin, Authorization, Cookie');
   });
 
@@ -311,6 +332,12 @@ export async function createApiServer(): Promise<FastifyInstance> {
           return;
         }
 
+        // 静态导出的 HTML 和 App Router 路由数据必须回源，避免 CDN 长时间发旧页面壳。
+        if (ROUTE_DOCUMENT_FILE_PATTERN.test(filePath)) {
+          setNoStoreResponseHeaders(response);
+          return;
+        }
+
         response.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
       },
     });
@@ -329,11 +356,16 @@ export async function createApiServer(): Promise<FastifyInstance> {
       for (const candidateFile of resolution.candidateFiles) {
         const fullPath = path.join(webOutDir, candidateFile);
         if (fs.existsSync(fullPath)) {
+          if (ROUTE_DOCUMENT_FILE_PATTERN.test(candidateFile)) {
+            setNoStoreHeaders(reply);
+          }
+
           return reply.sendFile(candidateFile);
         }
       }
 
       if (resolution.fallbackToIndexHtml) {
+        setNoStoreHeaders(reply);
         return reply.sendFile('index.html');
       }
 
