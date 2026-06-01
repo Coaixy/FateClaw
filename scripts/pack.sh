@@ -86,7 +86,6 @@ pack_api_source() {
     --exclude='.vscode' \
     --exclude='.fateclaw' \
     --exclude='.tmp-*' \
-    --exclude='.env' \
     --exclude='*.keys.json' \
     --exclude='*.tar.gz' \
     --exclude='归档.zip' \
@@ -150,8 +149,8 @@ echo ""
 echo "部署步骤:"
 echo "  API:"
 echo "    1. scp fateclaw-api-v${VERSION}-source.tar.gz user@server:~/"
-echo "    2. tar xzf fateclaw-api-v${VERSION}-source.tar.gz && cd fateclaw"
-echo "    3. npm install -f && npm run build && npm run start"
+echo "    2. mkdir -p fateclaw && tar xzf fateclaw-api-v${VERSION}-source.tar.gz --strip-components=1 -C fateclaw"
+echo "    3. cd fateclaw && npm install -f && npm run build && npm run start"
 echo "  Web:"
 echo "    1. scp fateclaw-web-v${VERSION}-static.tar.gz user@server:~/"
 echo "    2. mkdir -p /var/www/fateclaw-web"

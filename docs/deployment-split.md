@@ -32,7 +32,8 @@ bash scripts/pack.sh web
 ## API 部署
 
 ```bash
-tar xzf fateclaw-api-v<version>-source.tar.gz
+mkdir -p fateclaw
+tar xzf fateclaw-api-v<version>-source.tar.gz --strip-components=1 -C fateclaw
 cd fateclaw
 npm install -f
 npm run build
