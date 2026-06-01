@@ -75,6 +75,21 @@ log_duration() {
   echo "⏱ ${label}: ${elapsed}s"
 }
 
+# 生产运行包部署时由 1Panel/npm 安装依赖；npm 不识别 pnpm 的 workspace: 协议。
+# 这里仅改写临时打包目录里的 package.json，源码工作区仍保持 pnpm workspace 配置。
+rewrite_runtime_package_for_npm() {
+  local package_file="$1"
+  node -e "
+    const fs = require('node:fs');
+    const file = process.argv[1];
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (pkg.dependencies?.['@fateclaw/contracts'] === 'workspace:*') {
+      pkg.dependencies['@fateclaw/contracts'] = 'file:../../packages/contracts';
+    }
+    fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+  " "$package_file"
+}
+
 if [ "${#LEGACY_ARGS[@]}" -gt 0 ]; then
   echo "ℹ️ 当前为分离部署包，忽略旧的本地混淆参数: ${LEGACY_ARGS[*]}"
 fi
@@ -130,7 +145,7 @@ pack_backend_runtime() {
   pnpm run build:backend
 
   echo "📦 打包后端生产运行包 v${VERSION} ..."
-  mkdir -p "$app_dir/apps/api" "$app_dir/apps/agent-runtime"
+  mkdir -p "$app_dir/apps/api" "$app_dir/apps/agent-runtime" "$app_dir/packages/contracts"
   cp package.json pnpm-workspace.yaml "$app_dir/"
   if [ -f pnpm-lock.yaml ]; then
     cp pnpm-lock.yaml "$app_dir/pnpm-lock.yaml"
@@ -144,9 +159,12 @@ pack_backend_runtime() {
     echo "⚠️ 未找到 .env，后端生产运行包不会携带环境配置"
   fi
   cp apps/api/package.json "$app_dir/apps/api/package.json"
+  rewrite_runtime_package_for_npm "$app_dir/apps/api/package.json"
   cp -R apps/api/dist "$app_dir/apps/api/dist"
   cp apps/agent-runtime/package.json "$app_dir/apps/agent-runtime/package.json"
   cp -R apps/agent-runtime/dist "$app_dir/apps/agent-runtime/dist"
+  cp packages/contracts/package.json "$app_dir/packages/contracts/package.json"
+  cp -R packages/contracts/src "$app_dir/packages/contracts/src"
   find "$app_dir/apps/api/dist" "$app_dir/apps/agent-runtime/dist" \
     \( -name '*.test.js' -o -name '*.test.js.map' -o -name '*.test.d.ts' -o -name '*.test.d.ts.map' \) \
     -delete

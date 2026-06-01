@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_SKILL_BUNDLE_FILES } from '@fateclaw/contracts/skills';
+
 import {
   createSkillBundleZipBlob,
   importSkillBundleFromZip,
@@ -136,13 +138,15 @@ describe('skill zip import/export', () => {
         path: 'SKILL.md',
         content: '# Skill',
       },
-      ...Array.from({ length: 30 }, (_, index) => ({
+      ...Array.from({ length: MAX_SKILL_BUNDLE_FILES }, (_, index) => ({
         path: `docs/${index}.md`,
         content: String(index),
       })),
     ];
 
-    expect(() => createSkillBundleZipBlob(files)).toThrow(/30/);
+    expect(() => createSkillBundleZipBlob(files)).toThrow(
+      String(MAX_SKILL_BUNDLE_FILES),
+    );
   });
 
   it('rejects a single file over the character limit', () => {
