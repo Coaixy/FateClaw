@@ -427,18 +427,40 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
   account_id TEXT NOT NULL,
   user_id TEXT DEFAULT NULL REFERENCES users(id),
   title TEXT NOT NULL DEFAULT '',
+  share_token TEXT DEFAULT NULL,
+  share_created_at TIMESTAMPTZ DEFAULT NULL,
+  pi_session_archived_at TIMESTAMPTZ DEFAULT NULL,
+  pi_session_archive_reason TEXT DEFAULT NULL,
+  pi_session_archive_payload JSONB DEFAULT NULL,
+  pi_session_archive_restored_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 ALTER TABLE chat_sessions DROP CONSTRAINT IF EXISTS chat_sessions_account_id_fkey;
 ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT NULL REFERENCES users(id);
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS share_token TEXT DEFAULT NULL;
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS share_created_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS pi_session_archived_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS pi_session_archive_reason TEXT DEFAULT NULL;
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS pi_session_archive_payload JSONB DEFAULT NULL;
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS pi_session_archive_restored_at TIMESTAMPTZ DEFAULT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_sessions_share_token
+  ON chat_sessions(share_token)
+  WHERE share_token IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_account_updated
   ON chat_sessions(account_id, updated_at DESC)
   WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated
   ON chat_sessions(user_id, updated_at DESC)
   WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS pi_session_cleanup_cursors (
+  mode TEXT PRIMARY KEY,
+  cursor_session_id TEXT DEFAULT NULL,
+  scanned_sessions INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 DO $$
 BEGIN

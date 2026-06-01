@@ -158,18 +158,16 @@ describe('chat repository', () => {
     ]);
   });
 
-  it('soft deletes a chat session and its messages', async () => {
+  it('soft deletes a chat session without scanning all messages', async () => {
     const { calls } = createMockPool();
 
     await deleteChatSession('session-1');
 
     expect(calls).toEqual([
       {
-        sql: 'UPDATE chat_sessions SET deleted_at = NOW() WHERE id = $1',
-        params: ['session-1'],
-      },
-      {
-        sql: 'UPDATE messages SET deleted_at = NOW() WHERE session_id = $1 AND deleted_at IS NULL',
+        sql: `UPDATE chat_sessions
+     SET deleted_at = NOW(), share_token = NULL
+     WHERE id = $1`,
         params: ['session-1'],
       },
     ]);

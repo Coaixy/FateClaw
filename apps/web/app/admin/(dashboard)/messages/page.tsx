@@ -413,7 +413,7 @@ function AdminMessagesContent() {
         message:
           mode === 'soft_deleted'
             ? '确定要删除所有软删除对话对应的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
-            : `确定要删除 ${days} 天未活跃对话对应的 Pi session 本地 jsonl/path 文件吗？这些会话后续将无法继续追问。`,
+            : `确定要归档 ${days} 天未活跃对话对应的 Pi session 本地 jsonl/path 文件吗？后续需要继续追问时会先从数据库回写。`,
         confirmLabel: '清理',
         variant: 'danger',
       });
@@ -427,7 +427,7 @@ function AdminMessagesContent() {
         });
         toast(
           'success',
-          `扫描 ${result.scanned_sessions} 个会话，删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`,
+          `从上次水位扫描 ${result.scanned_sessions} 个会话，归档 ${result.archived_sessions} 个，删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`,
         );
         handleRefresh();
       } catch (err) {
@@ -524,8 +524,8 @@ function AdminMessagesContent() {
               <div className="min-w-0">
                 <p className="text-[12px] font-medium">Pi 会话状态清理</p>
                 <p className="text-[11px] text-muted">
-                  只删除本地
-                  jsonl/path，数据库历史保留；超期清理后的老对话不允许继续追问
+                  从上次水位增量扫描，先把本地 jsonl/path
+                  归档到数据库，再删除本地文件；后续继续追问时会先尝试从数据库回写
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -620,6 +620,11 @@ function AdminMessagesContent() {
                                 {session.title || '未命名会话'}
                               </p>
                               {session.deleted_at ? <DeletedBadge /> : null}
+                              {session.pi_session_archived_at ? (
+                                <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                  已归档
+                                </span>
+                              ) : null}
                             </div>
                             <p className="text-[11px] text-muted mt-0.5 truncate">
                               {session.account_name}
@@ -669,6 +674,11 @@ function AdminMessagesContent() {
                             {selectedSession.title || '未命名会话'}
                           </h3>
                           {selectedSession.deleted_at ? <DeletedBadge /> : null}
+                          {selectedSession.pi_session_archived_at ? (
+                            <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
+                              Pi 已归档
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-[12px] text-muted mt-1">
                           {selectedSession.account_name}
@@ -690,6 +700,14 @@ function AdminMessagesContent() {
                           <p>
                             删除时间{' '}
                             {formatDateTime(selectedSession.deleted_at)}
+                          </p>
+                        ) : null}
+                        {selectedSession.pi_session_archived_at ? (
+                          <p>
+                            Pi 归档{' '}
+                            {formatDateTime(
+                              selectedSession.pi_session_archived_at,
+                            )}
                           </p>
                         ) : null}
                       </div>

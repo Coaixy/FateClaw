@@ -5,10 +5,14 @@
  * 避免 route 直接依赖底层存储和运行时实现。
  */
 
+import crypto from 'node:crypto';
+
 import type {
   ChatSessionDto,
+  ChatSessionShareResponseDto,
   ChatSessionSendResponseDto,
   SessionMessageListResponseDto,
+  SharedChatSessionDto,
 } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
@@ -17,13 +21,18 @@ import {
   deleteChatSession,
   getAccountsByUserId,
   getChatSession,
+  getChatSessionPiSessionArchive,
   getChatSessionsByUserId,
   getConversationLogByRequestId,
   getRecentMessages,
   getSessionMessageById,
+  getSessionMessages,
   getSessionMessagesWithToolContext,
+  getSharedChatSessionByToken,
   getUserById,
   hasFinalAiChatSessionReply,
+  markChatSessionPiSessionArchiveRestored,
+  shareOwnedChatSession,
   storeMessage,
   touchChatSession,
   updateChatSessionTitle,
@@ -41,6 +50,7 @@ import {
 import type { ChatSession, NewMessage } from '../../shared/types.js';
 import {
   toChatSessionDto,
+  toSharedChatSessionDto,
   toSessionMessageListResponseDto,
 } from '../../contracts-adapter/chat-contract.js';
 import {
@@ -56,12 +66,17 @@ import {
 } from './web-chat-runtime.js';
 import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js';
 import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
-import { readPiSessionFileState } from './pi-session-files.js';
+import {
+  readPiSessionFileState,
+  type PiSessionArchivePayload,
+  writePiSessionArchiveToFiles,
+} from './pi-session-files.js';
 
 const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
+const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
 
 function isPaymentRequiredError(errorMessage: string): boolean {
   return (
@@ -77,6 +92,12 @@ function sessionProcessingKey(sessionId: string): string {
 
 function createSessionProcessingClaim(): string {
   return `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function generateChatSessionShareToken(): string {
+  return crypto
+    .randomBytes(CHAT_SESSION_SHARE_TOKEN_BYTES)
+    .toString('base64url');
 }
 
 async function claimChatSessionProcessing(sessionId: string): Promise<boolean> {
@@ -174,6 +195,19 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
     return { blocked: false };
   }
 
+  const archive = await getChatSessionPiSessionArchive(session.id);
+  if (archive?.pi_session_archive_payload) {
+    await writePiSessionArchiveToFiles(
+      session.id,
+      archive.pi_session_archive_payload as PiSessionArchivePayload,
+    );
+    await markChatSessionPiSessionArchiveRestored(session.id);
+    const restoredPiSession = await readPiSessionFileState(session.id);
+    if (restoredPiSession.hasSessionFile) {
+      return { blocked: false };
+    }
+  }
+
   return {
     blocked: true,
     reason: 'pi_session_missing',
@@ -255,6 +289,48 @@ export async function getOwnedChatSessionMessages(
       continuationBlockMessage: continuation.message,
     }),
   );
+}
+
+export async function shareOwnedChatSessionForUser(
+  userId: string,
+  sessionId: string,
+): Promise<ServiceResult<ChatSessionShareResponseDto>> {
+  const sessionResult = await getOwnedSession(userId, sessionId);
+  if (!sessionResult.ok) {
+    return sessionResult;
+  }
+
+  const session = await shareOwnedChatSession({
+    userId,
+    sessionId: sessionResult.data.id,
+    shareToken: generateChatSessionShareToken(),
+  });
+  if (!session?.share_token) {
+    return fail(404, '会话不存在');
+  }
+
+  return ok({
+    share_token: session.share_token,
+    share_url_path: `/ai-chat/share?token=${encodeURIComponent(session.share_token)}`,
+    session: toChatSessionDto(session),
+  });
+}
+
+export async function getSharedChatSessionByShareToken(
+  token: string,
+): Promise<ServiceResult<SharedChatSessionDto>> {
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    return fail(400, '分享链接无效');
+  }
+
+  const session = await getSharedChatSessionByToken(normalizedToken);
+  if (!session) {
+    return fail(404, '分享链接不存在或已失效');
+  }
+
+  const messages = await getSessionMessages(session.account_id, session.id);
+  return ok(toSharedChatSessionDto({ session, messages }));
 }
 
 export async function getOwnedChatSessionQueryProcessSource(

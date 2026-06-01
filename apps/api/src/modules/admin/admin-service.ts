@@ -32,6 +32,7 @@ import {
   getMembershipConfig,
   getBalanceGrantsByUserId,
   getDailySignInConfig,
+  getPiSessionCleanupCursor,
   getTasksForAdmin,
   getUserById,
   getUserByPhone,
@@ -40,9 +41,12 @@ import {
   grantBonusBalance,
   listBillingRequestReservations,
   listPublicFinancialLedgerEntries,
+  markChatSessionPiSessionArchived,
   reconcileStaleBillingReservations,
+  resetPiSessionCleanupCursor,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  upsertPiSessionCleanupCursor,
   updateDailySignInConfig,
   updateMembershipConfig,
   updatePublicFinancialLedgerEntry,
@@ -65,7 +69,10 @@ import {
 } from '../billing/recharge-service.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
 import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
-import { deletePiSessionFilesForSession } from '../chat/pi-session-files.js';
+import {
+  deletePiSessionFilesForSession,
+  readPiSessionArchiveForSession,
+} from '../chat/pi-session-files.js';
 import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
@@ -216,7 +223,11 @@ export interface AdminPiSessionCleanupResult {
   mode: 'soft_deleted' | 'inactive';
   inactive_days: number | null;
   cutoff_at: string | null;
+  cursor_before: string | null;
+  cursor_after: string | null;
+  cursor_reset: boolean;
   scanned_sessions: number;
+  archived_sessions: number;
   touched_sessions: number;
   deleted_jsonl_files: number;
   deleted_path_files: number;
@@ -239,12 +250,27 @@ export async function cleanupPiSessionFilesForAdmin(input: {
     input.mode === 'inactive' && input.inactiveDays
       ? new Date(Date.now() - input.inactiveDays * 86_400_000).toISOString()
       : null;
-  const candidates = await getChatSessionPiCleanupCandidates({
+  const cursor = await getPiSessionCleanupCursor(input.mode);
+  const cursorBefore = cursor?.cursor_session_id ?? null;
+  let candidates = await getChatSessionPiCleanupCandidates({
     softDeleted: input.mode === 'soft_deleted',
     inactiveBefore: cutoffAt ?? undefined,
     limit: input.limit,
+    cursor: cursorBefore ?? undefined,
   });
+  let cursorReset = false;
 
+  if (candidates.length === 0 && cursorBefore) {
+    await resetPiSessionCleanupCursor(input.mode);
+    cursorReset = true;
+    candidates = await getChatSessionPiCleanupCandidates({
+      softDeleted: input.mode === 'soft_deleted',
+      inactiveBefore: cutoffAt ?? undefined,
+      limit: input.limit,
+    });
+  }
+
+  let archivedSessions = 0;
   let touchedSessions = 0;
   let deletedJsonlFiles = 0;
   let deletedPathFiles = 0;
@@ -252,6 +278,19 @@ export async function cleanupPiSessionFilesForAdmin(input: {
   const skippedUnsafeFiles: string[] = [];
 
   for (const candidate of candidates) {
+    const archive = await readPiSessionArchiveForSession(candidate.id);
+    const archived = await markChatSessionPiSessionArchived({
+      sessionId: candidate.id,
+      reason: input.mode,
+      payload: archive.payload,
+    });
+    if (!archived) {
+      continue;
+    }
+    archivedSessions += 1;
+    missingJsonlFiles += archive.missingSessionFile ? 1 : 0;
+    skippedUnsafeFiles.push(...archive.skippedUnsafeSessionFiles);
+
     const result = await deletePiSessionFilesForSession(candidate.id);
     if (
       result.deletedMappingFile ||
@@ -263,8 +302,16 @@ export async function cleanupPiSessionFilesForAdmin(input: {
     }
     deletedJsonlFiles += result.deletedSessionFiles;
     deletedPathFiles += result.deletedMappingFile ? 1 : 0;
-    missingJsonlFiles += result.missingSessionFile ? 1 : 0;
     skippedUnsafeFiles.push(...result.skippedUnsafeSessionFiles);
+  }
+
+  const cursorAfter = candidates.at(-1)?.id ?? null;
+  if (cursorAfter) {
+    await upsertPiSessionCleanupCursor({
+      mode: input.mode,
+      cursorSessionId: cursorAfter,
+      scannedSessions: candidates.length,
+    });
   }
 
   return {
@@ -273,7 +320,11 @@ export async function cleanupPiSessionFilesForAdmin(input: {
     inactive_days:
       input.mode === 'inactive' ? (input.inactiveDays ?? null) : null,
     cutoff_at: cutoffAt,
+    cursor_before: cursorReset ? null : cursorBefore,
+    cursor_after: cursorAfter,
+    cursor_reset: cursorReset,
     scanned_sessions: candidates.length,
+    archived_sessions: archivedSessions,
     touched_sessions: touchedSessions,
     deleted_jsonl_files: deletedJsonlFiles,
     deleted_path_files: deletedPathFiles,

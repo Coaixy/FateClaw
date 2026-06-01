@@ -25,6 +25,7 @@ interface ChatSessionsContextValue {
   createSession: () => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  shareSession: (sessionId: string) => Promise<string>;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
   loading: boolean;
 }
@@ -230,6 +231,16 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [selectedSession, setSelectedSession],
   );
 
+  const shareSession = useCallback(async (sessionId: string) => {
+    const result = await chatSessionsApi.share(sessionId);
+    setSessions((previous) =>
+      previous.map((session) =>
+        session.id === sessionId ? result.session : session,
+      ),
+    );
+    return result.share_token;
+  }, []);
+
   const touchSession = useCallback(
     (sessionId: string, patch: Partial<ChatSession>) => {
       // 对话一旦有新消息，应立即把该会话顶到最前，避免必须刷新后排序才正确。
@@ -248,6 +259,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       deleteSession,
+      shareSession,
       touchSession,
       loading,
     }),
@@ -261,6 +273,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       deleteSession,
+      shareSession,
       touchSession,
       loading,
     ],

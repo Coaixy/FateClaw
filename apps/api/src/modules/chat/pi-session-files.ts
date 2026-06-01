@@ -56,9 +56,35 @@ async function listMatchingSessionFiles(
 export interface PiSessionFileState {
   sessionDir: string;
   mappingFile: string;
+  mappingContent: string;
   sessionFile?: string;
   hasMappingFile: boolean;
   hasSessionFile: boolean;
+}
+
+/** 归档到数据库的单个 Pi session jsonl 文件。 */
+export interface PiSessionArchivedFile {
+  name: string;
+  content: string;
+  size_bytes: number;
+  modified_at: string | null;
+}
+
+/** Pi session 文件归档负载，后续可从数据库回写到本地文件。 */
+export interface PiSessionArchivePayload {
+  version: 1;
+  mapping_file_name: string;
+  mapping_content: string | null;
+  files: PiSessionArchivedFile[];
+  archived_at: string;
+}
+
+/** 读取 Pi session 文件并整理成可落库的归档负载。 */
+export interface PiSessionArchiveReadResult {
+  sessionId: string;
+  payload: PiSessionArchivePayload;
+  missingSessionFile: boolean;
+  skippedUnsafeSessionFiles: string[];
 }
 
 /**
@@ -90,10 +116,140 @@ export async function readPiSessionFileState(
   return {
     sessionDir,
     mappingFile,
+    mappingContent: mapped,
     sessionFile,
     hasMappingFile: Boolean(mapped),
     hasSessionFile: Boolean(sessionFile && (await pathExists(sessionFile))),
   };
+}
+
+function isSafeArchiveFileName(name: string): boolean {
+  return (
+    Boolean(name) &&
+    path.basename(name) === name &&
+    !path.isAbsolute(name) &&
+    name.endsWith('.jsonl')
+  );
+}
+
+/**
+ * 读取某个 chat session 对应的 Pi session 文件内容。
+ *
+ * @param sessionId - FateClaw chat_sessions.id。
+ * @returns 可直接存入 chat_sessions.pi_session_archive_payload 的 JSON 负载。
+ * @remarks 只归档 session 目录内的 jsonl，避免被篡改的 .path 指向任意文件。
+ */
+export async function readPiSessionArchiveForSession(
+  sessionId: string,
+): Promise<PiSessionArchiveReadResult> {
+  const state = await readPiSessionFileState(sessionId);
+  const candidates = new Set<string>();
+  if (state.sessionFile) {
+    candidates.add(state.sessionFile);
+  }
+  for (const matched of await listMatchingSessionFiles(
+    state.sessionDir,
+    sanitizeSessionId(sessionId),
+  )) {
+    candidates.add(matched);
+  }
+
+  const files: PiSessionArchivedFile[] = [];
+  const skippedUnsafeSessionFiles: string[] = [];
+
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (!isPathInside(state.sessionDir, resolved)) {
+      skippedUnsafeSessionFiles.push(resolved);
+      continue;
+    }
+
+    try {
+      const [content, stat] = await Promise.all([
+        fs.readFile(resolved, 'utf-8'),
+        fs.stat(resolved),
+      ]);
+      files.push({
+        name: path.basename(resolved),
+        content,
+        size_bytes: Buffer.byteLength(content, 'utf-8'),
+        modified_at: stat.mtime.toISOString(),
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
+  const mappedFileName = state.sessionFile
+    ? path.basename(state.sessionFile)
+    : undefined;
+  const archiveFileNames = new Set(files.map((file) => file.name));
+  const mappingContent =
+    mappedFileName && archiveFileNames.has(mappedFileName)
+      ? mappedFileName
+      : (files[0]?.name ?? null);
+
+  return {
+    sessionId,
+    payload: {
+      version: 1,
+      mapping_file_name: path.basename(state.mappingFile),
+      mapping_content: mappingContent,
+      files,
+      archived_at: new Date().toISOString(),
+    },
+    missingSessionFile:
+      state.hasMappingFile && !state.hasSessionFile && files.length === 0,
+    skippedUnsafeSessionFiles,
+  };
+}
+
+/**
+ * 将数据库中的 Pi session 归档负载回写成本地 jsonl/path 文件。
+ *
+ * @param sessionId - FateClaw chat_sessions.id。
+ * @param payload - chat_sessions.pi_session_archive_payload 中保存的负载。
+ * @returns 实际写入的 jsonl/path 数量。
+ * @remarks 该函数只接受安全 basename，避免归档数据写出 session 目录。
+ */
+export async function writePiSessionArchiveToFiles(
+  sessionId: string,
+  payload: PiSessionArchivePayload,
+): Promise<{ writtenSessionFiles: number; writtenMappingFile: boolean }> {
+  const sessionDir = resolvePiSessionDir();
+  const piSessionId = sanitizeSessionId(sessionId);
+  const mappingFile = path.join(sessionDir, `${piSessionId}.path`);
+  await fs.mkdir(sessionDir, { recursive: true });
+
+  let writtenSessionFiles = 0;
+  for (const file of payload.files) {
+    if (!isSafeArchiveFileName(file.name)) {
+      continue;
+    }
+    await fs.writeFile(path.join(sessionDir, file.name), file.content, 'utf-8');
+    writtenSessionFiles += 1;
+  }
+
+  const archivedFileNames = new Set(
+    payload.files
+      .map((file) => file.name)
+      .filter((name) => isSafeArchiveFileName(name)),
+  );
+  const mappingContent = payload.mapping_content?.trim() || '';
+  const safeMappingContent =
+    mappingContent && archivedFileNames.has(mappingContent)
+      ? mappingContent
+      : (payload.files.find((file) => archivedFileNames.has(file.name))?.name ??
+        '');
+
+  if (!safeMappingContent) {
+    return { writtenSessionFiles, writtenMappingFile: false };
+  }
+
+  await fs.writeFile(mappingFile, safeMappingContent, 'utf-8');
+  return { writtenSessionFiles, writtenMappingFile: true };
 }
 
 /** 删除单个 Pi session 文件集合后的统计结果。 */

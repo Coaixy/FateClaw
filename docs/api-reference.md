@@ -300,7 +300,7 @@ Authorization: Bearer <token>
 
 ## Chat Sessions 站内 AI Chat
 
-以下接口均需认证，只能访问当前用户自己的会话。
+除分享预览外，以下接口均需认证，只能访问当前用户自己的会话。
 
 | 方法   | 路径                                                                 | 说明                       |
 | ------ | -------------------------------------------------------------------- | -------------------------- |
@@ -308,6 +308,8 @@ Authorization: Bearer <token>
 | POST   | `/api/chat-sessions`                                                 | 创建会话，可传 `{ "title": "..." }` |
 | PATCH  | `/api/chat-sessions/s/:sessionId`                                    | 更新会话标题               |
 | DELETE | `/api/chat-sessions/s/:sessionId`                                    | 删除会话                   |
+| POST   | `/api/chat-sessions/s/:sessionId/share`                              | 生成或复用会话私密分享链接 |
+| GET    | `/api/chat-sessions/shared/:token`                                   | 通过分享令牌只读查看会话，无需认证 |
 | GET    | `/api/chat-sessions/s/:sessionId/messages`                           | 获取消息，支持 `limit` 和 `before` |
 | POST   | `/api/chat-sessions/s/:sessionId/messages`                           | 发送消息，传 `content` 和可选 `selected_board_message_id` |
 | GET    | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process`  | 获取脱敏后的查询过程时间线 |

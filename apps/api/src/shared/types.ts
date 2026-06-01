@@ -186,6 +186,18 @@ export interface ChatSession {
   /** 运行时会话键：微信场景为账号 ID，站内 AI Chat 为 web:{userId}。 */
   account_id: string;
   title: string;
+  /** 私密分享令牌；为空表示没有开放分享链接。 */
+  share_token?: string | null;
+  /** 首次生成分享令牌的时间。 */
+  share_created_at?: string | null;
+  /** Pi session 本地 jsonl/path 已归档到数据库的时间。 */
+  pi_session_archived_at?: string | null;
+  /** Pi session 归档原因。 */
+  pi_session_archive_reason?: 'soft_deleted' | 'inactive' | string | null;
+  /** Pi session 归档内容，可回写为本地 jsonl/path 文件。 */
+  pi_session_archive_payload?: unknown;
+  /** 最近一次从数据库归档回写成本地文件的时间。 */
+  pi_session_archive_restored_at?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

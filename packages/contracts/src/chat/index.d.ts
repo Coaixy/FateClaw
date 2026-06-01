@@ -59,6 +59,21 @@ export interface ChatSessionDto {
   title: string;
   created_at: string;
   updated_at: string;
+  share_token?: string | null;
+}
+
+export interface ChatSessionShareResponseDto {
+  share_token: string;
+  share_url_path: string;
+  session: ChatSessionDto;
+}
+
+export interface SharedChatSessionDto {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: MessageDto[];
 }
 
 export type ChatInputKindDto = 'normal' | 'user_pasted_board';

@@ -126,6 +126,8 @@ export interface AdminChatSessionRow {
   last_message_at: string | null;
   last_message_preview: string | null;
   deleted_at: string | null;
+  pi_session_archived_at: string | null;
+  pi_session_archive_reason: string | null;
 }
 
 export async function getChatSessionsForAdmin(opts: {
@@ -165,6 +167,8 @@ export async function getChatSessionsForAdmin(opts: {
       s.created_at,
       s.updated_at,
       s.deleted_at,
+      s.pi_session_archived_at,
+      s.pi_session_archive_reason,
       COALESCE(mc.message_count, 0)::int AS message_count,
       lm.last_message_at,
       lm.last_message_preview
@@ -197,6 +201,7 @@ export interface AdminChatSessionPiCleanupCandidate {
   id: string;
   updated_at: string;
   deleted_at: string | null;
+  pi_session_archived_at: string | null;
 }
 
 /**
@@ -209,6 +214,7 @@ export async function getChatSessionPiCleanupCandidates(opts: {
   softDeleted?: boolean;
   inactiveBefore?: string;
   limit?: number;
+  cursor?: string;
 }): Promise<AdminChatSessionPiCleanupCandidate[]> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -227,13 +233,22 @@ export async function getChatSessionPiCleanupCandidates(opts: {
     return [];
   }
 
+  const eligibilityClause = conditions
+    .map((condition) => `(${condition})`)
+    .join(' OR ');
   const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
+  if (opts.cursor) {
+    params.push(opts.cursor);
+    conditions.push(`s.id > $${paramIdx++}`);
+  }
   params.push(limit);
 
   const { rows } = await pool.query(
-    `SELECT id, updated_at, deleted_at
+    `SELECT id, updated_at, deleted_at, pi_session_archived_at
      FROM chat_sessions s
-     WHERE (${conditions.map((condition) => `(${condition})`).join(' OR ')})
+     WHERE (${eligibilityClause})
+       ${opts.cursor ? `AND ${conditions.at(-1)}` : ''}
+       AND pi_session_archived_at IS NULL
        AND NOT EXISTS (
          SELECT 1
          FROM user_memberships m
@@ -241,12 +256,85 @@ export async function getChatSessionPiCleanupCandidates(opts: {
            AND m.status = 'active'
            AND m.current_period_end > NOW()
        )
-     ORDER BY COALESCE(deleted_at, updated_at) ASC
+     ORDER BY id ASC
      LIMIT $${paramIdx}`,
     params,
   );
 
   return rows as AdminChatSessionPiCleanupCandidate[];
+}
+
+/** 管理后台增量清理 Pi session 时保存的扫描水位。 */
+export interface AdminPiSessionCleanupCursorRow {
+  mode: 'soft_deleted' | 'inactive';
+  cursor_session_id: string | null;
+  scanned_sessions: number;
+  updated_at: string;
+}
+
+/**
+ * 读取 Pi session 清理扫描水位。
+ *
+ * @param mode - 清理模式。
+ * @returns 当前水位；首次运行时返回 undefined。
+ */
+export async function getPiSessionCleanupCursor(
+  mode: 'soft_deleted' | 'inactive',
+): Promise<AdminPiSessionCleanupCursorRow | undefined> {
+  const { rows } = await pool.query(
+    `SELECT mode, cursor_session_id, scanned_sessions, updated_at
+     FROM pi_session_cleanup_cursors
+     WHERE mode = $1`,
+    [mode],
+  );
+  return rows[0] as AdminPiSessionCleanupCursorRow | undefined;
+}
+
+/**
+ * 更新 Pi session 清理扫描水位。
+ *
+ * @param input.mode - 清理模式。
+ * @param input.cursorSessionId - 本批扫描的最后一个 session id。
+ * @param input.scannedSessions - 本批扫描数量。
+ */
+export async function upsertPiSessionCleanupCursor(input: {
+  mode: 'soft_deleted' | 'inactive';
+  cursorSessionId: string;
+  scannedSessions: number;
+}): Promise<void> {
+  await pool.query(
+    `INSERT INTO pi_session_cleanup_cursors (
+       mode, cursor_session_id, scanned_sessions, updated_at
+     )
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (mode) DO UPDATE SET
+       cursor_session_id = EXCLUDED.cursor_session_id,
+       scanned_sessions =
+         pi_session_cleanup_cursors.scanned_sessions + EXCLUDED.scanned_sessions,
+       updated_at = NOW()`,
+    [input.mode, input.cursorSessionId, input.scannedSessions],
+  );
+}
+
+/**
+ * 重置 Pi session 清理扫描水位。
+ *
+ * @param mode - 清理模式。
+ */
+export async function resetPiSessionCleanupCursor(
+  mode: 'soft_deleted' | 'inactive',
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO pi_session_cleanup_cursors (
+       mode, cursor_session_id, scanned_sessions, updated_at
+     )
+     VALUES ($1, NULL, 0, NOW())
+     ON CONFLICT (mode) DO UPDATE SET
+       cursor_session_id = NULL,
+       scanned_sessions = 0,
+       updated_at = NOW()`,
+    [mode],
+  );
 }
 
 export interface AdminTaskRow {

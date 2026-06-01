@@ -1,10 +1,12 @@
 import type {
   ChatInputKindDto,
   ChatSessionDto,
+  ChatSessionShareResponseDto,
   ChatSessionSendRequestDto,
   ChatSessionSendResponseDto,
   MessageDto,
   SessionMessageListResponseDto,
+  SharedChatSessionDto,
   UserPastedBoardInputDto,
 } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
@@ -14,6 +16,8 @@ import { getApiBase } from '@/lib/http/client';
 
 export type Message = MessageDto;
 export type ChatSession = ChatSessionDto;
+export type ChatSessionShareResponse = ChatSessionShareResponseDto;
+export type SharedChatSession = SharedChatSessionDto;
 export type ChatInputKind = ChatInputKindDto;
 export type UserPastedBoardInput = UserPastedBoardInputDto;
 
@@ -183,6 +187,15 @@ export const chatSessionsApi = {
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
       { method: 'DELETE' },
     ).finally(clearChatSessionsCache),
+  share: (sessionId: string) =>
+    requestJson<ChatSessionShareResponse>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/share`,
+      { method: 'POST' },
+    ).finally(clearChatSessionsCache),
+  shared: (token: string) =>
+    requestJson<SharedChatSession>(
+      `/api/chat-sessions/shared/${encodeURIComponent(token)}`,
+    ),
   cancel: (sessionId: string) =>
     requestJson<SuccessResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages/cancel`,

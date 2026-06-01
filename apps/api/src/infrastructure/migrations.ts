@@ -2981,6 +2981,59 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0018_chat_session_archive_and_share',
+    description: '增加 AI Chat 会话分享与 Pi session 数据库归档 schema',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE chat_sessions
+          ADD COLUMN IF NOT EXISTS share_token TEXT DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS share_created_at TIMESTAMPTZ DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS pi_session_archived_at TIMESTAMPTZ DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS pi_session_archive_reason TEXT DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS pi_session_archive_payload JSONB DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS pi_session_archive_restored_at TIMESTAMPTZ DEFAULT NULL
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_sessions_share_token
+          ON chat_sessions(share_token)
+          WHERE share_token IS NOT NULL
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pi_session_cleanup_cursors (
+          mode TEXT PRIMARY KEY,
+          cursor_session_id TEXT DEFAULT NULL,
+          scanned_sessions INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_chat_sessions_pi_archive_reason_valid',
+        tableName: 'chat_sessions',
+        expression:
+          "pi_session_archive_reason IS NULL OR pi_session_archive_reason IN ('soft_deleted', 'inactive')",
+        cleanupSql: `UPDATE chat_sessions
+                     SET pi_session_archive_reason = NULL
+                     WHERE pi_session_archive_reason IS NOT NULL
+                       AND pi_session_archive_reason NOT IN ('soft_deleted', 'inactive')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_pi_session_cleanup_cursors_mode_valid',
+        tableName: 'pi_session_cleanup_cursors',
+        expression: "mode IN ('soft_deleted', 'inactive')",
+        cleanupSql: `DELETE FROM pi_session_cleanup_cursors
+                     WHERE mode NOT IN ('soft_deleted', 'inactive')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_pi_session_cleanup_cursors_scanned_nonnegative',
+        tableName: 'pi_session_cleanup_cursors',
+        expression: 'scanned_sessions >= 0',
+        cleanupSql: `UPDATE pi_session_cleanup_cursors
+                     SET scanned_sessions = 0
+                     WHERE scanned_sessions < 0`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

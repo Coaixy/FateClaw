@@ -262,6 +262,8 @@ export interface AdminChatSession {
   last_message_at: string | null;
   last_message_preview: string | null;
   deleted_at: string | null;
+  pi_session_archived_at: string | null;
+  pi_session_archive_reason: string | null;
 }
 
 export interface AdminChatSessionsResponse {
@@ -275,7 +277,11 @@ export interface AdminPiSessionCleanupResult {
   mode: 'soft_deleted' | 'inactive';
   inactive_days: number | null;
   cutoff_at: string | null;
+  cursor_before: string | null;
+  cursor_after: string | null;
+  cursor_reset: boolean;
   scanned_sessions: number;
+  archived_sessions: number;
   touched_sessions: number;
   deleted_jsonl_files: number;
   deleted_path_files: number;

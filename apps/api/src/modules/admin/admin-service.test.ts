@@ -4,24 +4,38 @@ const {
   mockCreateUser,
   mockCreatePublicFinancialLedgerEntry,
   mockDeletePublicFinancialLedgerEntry,
+  mockDeletePiSessionFilesForSession,
   mockGetDailySignInConfig,
+  mockGetChatSessionPiCleanupCandidates,
   mockGetMembershipConfig,
+  mockGetPiSessionCleanupCursor,
   mockGetUserByPhone,
   mockListPublicFinancialLedgerEntries,
+  mockMarkChatSessionPiSessionArchived,
+  mockReadPiSessionArchiveForSession,
+  mockResetPiSessionCleanupCursor,
   mockUpdateDailySignInConfig,
   mockUpdateMembershipConfig,
   mockUpdatePublicFinancialLedgerEntry,
+  mockUpsertPiSessionCleanupCursor,
 } = vi.hoisted(() => ({
   mockCreateUser: vi.fn(),
   mockCreatePublicFinancialLedgerEntry: vi.fn(),
   mockDeletePublicFinancialLedgerEntry: vi.fn(),
+  mockDeletePiSessionFilesForSession: vi.fn(),
   mockGetDailySignInConfig: vi.fn(),
+  mockGetChatSessionPiCleanupCandidates: vi.fn(),
   mockGetMembershipConfig: vi.fn(),
+  mockGetPiSessionCleanupCursor: vi.fn(),
   mockGetUserByPhone: vi.fn(),
   mockListPublicFinancialLedgerEntries: vi.fn(),
+  mockMarkChatSessionPiSessionArchived: vi.fn(),
+  mockReadPiSessionArchiveForSession: vi.fn(),
+  mockResetPiSessionCleanupCursor: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
   mockUpdateMembershipConfig: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
+  mockUpsertPiSessionCleanupCursor: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
@@ -29,15 +43,26 @@ vi.mock('../../infrastructure/db.js', () => ({
   createUser: mockCreateUser,
   deletePublicFinancialLedgerEntry: mockDeletePublicFinancialLedgerEntry,
   getDailySignInConfig: mockGetDailySignInConfig,
+  getChatSessionPiCleanupCandidates: mockGetChatSessionPiCleanupCandidates,
   getMembershipConfig: mockGetMembershipConfig,
+  getPiSessionCleanupCursor: mockGetPiSessionCleanupCursor,
   getUserByPhone: mockGetUserByPhone,
   listPublicFinancialLedgerEntries: mockListPublicFinancialLedgerEntries,
+  markChatSessionPiSessionArchived: mockMarkChatSessionPiSessionArchived,
+  resetPiSessionCleanupCursor: mockResetPiSessionCleanupCursor,
   updateDailySignInConfig: mockUpdateDailySignInConfig,
   updateMembershipConfig: mockUpdateMembershipConfig,
   updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
+  upsertPiSessionCleanupCursor: mockUpsertPiSessionCleanupCursor,
+}));
+
+vi.mock('../chat/pi-session-files.js', () => ({
+  deletePiSessionFilesForSession: mockDeletePiSessionFilesForSession,
+  readPiSessionArchiveForSession: mockReadPiSessionArchiveForSession,
 }));
 
 import {
+  cleanupPiSessionFilesForAdmin,
   createAdminUser,
   getAdminRewardConfig,
   updateAdminRewardConfig,
@@ -210,6 +235,122 @@ describe('admin reward config', () => {
       monthlyPriceCoins: 30,
       monthlyAllowanceUnits: 5000000,
       standardPricePerMillionUnitsCoins: 12,
+    });
+  });
+});
+
+describe('cleanupPiSessionFilesForAdmin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetPiSessionCleanupCursor.mockResolvedValue({
+      mode: 'soft_deleted',
+      cursor_session_id: 'session-1',
+      scanned_sessions: 5,
+      updated_at: '2026-05-30T00:00:00.000Z',
+    });
+    mockGetChatSessionPiCleanupCandidates.mockResolvedValue([
+      {
+        id: 'session-2',
+        updated_at: '2026-05-30T01:00:00.000Z',
+        deleted_at: '2026-05-30T02:00:00.000Z',
+        pi_session_archived_at: null,
+      },
+    ]);
+    mockReadPiSessionArchiveForSession.mockResolvedValue({
+      sessionId: 'session-2',
+      payload: {
+        version: 1,
+        mapping_file_name: 'session-2.path',
+        mapping_content: 'session-2.jsonl',
+        files: [
+          {
+            name: 'session-2.jsonl',
+            content: '{"type":"turn"}\n',
+            size_bytes: 16,
+            modified_at: '2026-05-30T01:00:00.000Z',
+          },
+        ],
+        archived_at: '2026-05-30T02:00:00.000Z',
+      },
+      missingSessionFile: false,
+      skippedUnsafeSessionFiles: [],
+    });
+    mockMarkChatSessionPiSessionArchived.mockResolvedValue(true);
+    mockDeletePiSessionFilesForSession.mockResolvedValue({
+      sessionId: 'session-2',
+      deletedMappingFile: true,
+      deletedSessionFiles: 1,
+      missingSessionFile: false,
+      skippedUnsafeSessionFiles: [],
+    });
+  });
+
+  it('archives and deletes only the next cursor window', async () => {
+    await expect(
+      cleanupPiSessionFilesForAdmin({
+        mode: 'soft_deleted',
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      mode: 'soft_deleted',
+      cursor_before: 'session-1',
+      cursor_after: 'session-2',
+      cursor_reset: false,
+      scanned_sessions: 1,
+      archived_sessions: 1,
+      deleted_jsonl_files: 1,
+      deleted_path_files: 1,
+    });
+
+    expect(mockGetChatSessionPiCleanupCandidates).toHaveBeenCalledWith({
+      softDeleted: true,
+      inactiveBefore: undefined,
+      limit: 10,
+      cursor: 'session-1',
+    });
+    expect(mockMarkChatSessionPiSessionArchived).toHaveBeenCalledWith({
+      sessionId: 'session-2',
+      reason: 'soft_deleted',
+      payload: expect.objectContaining({ version: 1 }),
+    });
+    expect(mockUpsertPiSessionCleanupCursor).toHaveBeenCalledWith({
+      mode: 'soft_deleted',
+      cursorSessionId: 'session-2',
+      scannedSessions: 1,
+    });
+  });
+
+  it('resets cursor and starts over when the cursor reaches the end', async () => {
+    mockGetChatSessionPiCleanupCandidates
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'session-0',
+          updated_at: '2026-05-29T01:00:00.000Z',
+          deleted_at: '2026-05-29T02:00:00.000Z',
+          pi_session_archived_at: null,
+        },
+      ]);
+
+    await expect(
+      cleanupPiSessionFilesForAdmin({
+        mode: 'soft_deleted',
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      cursor_before: null,
+      cursor_after: 'session-0',
+      cursor_reset: true,
+      scanned_sessions: 1,
+    });
+
+    expect(mockResetPiSessionCleanupCursor).toHaveBeenCalledWith(
+      'soft_deleted',
+    );
+    expect(mockGetChatSessionPiCleanupCandidates).toHaveBeenNthCalledWith(2, {
+      softDeleted: true,
+      inactiveBefore: undefined,
+      limit: 10,
     });
   });
 });

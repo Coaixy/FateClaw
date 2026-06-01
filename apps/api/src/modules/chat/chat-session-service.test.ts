@@ -2,12 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGetChatSession,
+  mockGetChatSessionPiSessionArchive,
+  mockGetRecentMessages,
   mockGetSessionMessageById,
+  mockGetSessionMessages,
   mockGetSessionMessagesWithToolContext,
+  mockGetSharedChatSessionByToken,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
+  mockMarkChatSessionPiSessionArchiveRestored,
   mockReadPiSessionFileState,
+  mockWritePiSessionArchiveToFiles,
+  mockShareOwnedChatSession,
   mockIncrementDailyMessageCount,
   mockStoreMessage,
   mockTouchChatSession,
@@ -17,12 +24,19 @@ const {
   mockBuildStructuredInputForSession,
 } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
+  mockGetChatSessionPiSessionArchive: vi.fn(),
+  mockGetRecentMessages: vi.fn(),
   mockGetSessionMessageById: vi.fn(),
+  mockGetSessionMessages: vi.fn(),
   mockGetSessionMessagesWithToolContext: vi.fn(),
+  mockGetSharedChatSessionByToken: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
+  mockMarkChatSessionPiSessionArchiveRestored: vi.fn(),
   mockReadPiSessionFileState: vi.fn(),
+  mockWritePiSessionArchiveToFiles: vi.fn(),
+  mockShareOwnedChatSession: vi.fn(),
   mockIncrementDailyMessageCount: vi.fn(),
   mockStoreMessage: vi.fn(),
   mockTouchChatSession: vi.fn(),
@@ -34,18 +48,24 @@ const {
 
 vi.mock('../../infrastructure/db.js', () => ({
   getChatSession: mockGetChatSession,
+  getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,
+  getRecentMessages: mockGetRecentMessages,
   getSessionMessageById: mockGetSessionMessageById,
+  getSessionMessages: mockGetSessionMessages,
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
+  getSharedChatSessionByToken: mockGetSharedChatSessionByToken,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
+  markChatSessionPiSessionArchiveRestored:
+    mockMarkChatSessionPiSessionArchiveRestored,
+  shareOwnedChatSession: mockShareOwnedChatSession,
   storeMessage: mockStoreMessage,
   touchChatSession: mockTouchChatSession,
   getChatSessionsByUserId: vi.fn(),
   createChatSession: vi.fn(),
   deleteChatSession: vi.fn(),
   getConversationLogByRequestId: vi.fn(),
-  getRecentMessages: vi.fn(),
   updateChatSessionTitle: mockUpdateChatSessionTitle,
 }));
 
@@ -82,6 +102,7 @@ vi.mock('./message-handler.js', () => ({
 
 vi.mock('./pi-session-files.js', () => ({
   readPiSessionFileState: mockReadPiSessionFileState,
+  writePiSessionArchiveToFiles: mockWritePiSessionArchiveToFiles,
 }));
 
 vi.mock('./paipan-runtime.js', () => ({
@@ -110,7 +131,9 @@ vi.mock('../system/system-config.js', () => ({
 
 import {
   cancelOwnedChatSessionMessage,
+  getSharedChatSessionByShareToken,
   sendOwnedChatSessionMessage,
+  shareOwnedChatSessionForUser,
 } from './chat-session-service.js';
 
 describe('chat-session-service selected board context', () => {
@@ -143,6 +166,12 @@ describe('chat-session-service selected board context', () => {
     mockStoreMessage.mockResolvedValue(undefined);
     mockTouchChatSession.mockResolvedValue(undefined);
     mockHasFinalAiChatSessionReply.mockResolvedValue(false);
+    mockGetChatSessionPiSessionArchive.mockResolvedValue(undefined);
+    mockWritePiSessionArchiveToFiles.mockResolvedValue({
+      writtenSessionFiles: 1,
+      writtenMappingFile: true,
+    });
+    mockMarkChatSessionPiSessionArchiveRestored.mockResolvedValue(undefined);
     mockReadPiSessionFileState.mockResolvedValue({
       hasSessionFile: true,
     });
@@ -292,6 +321,126 @@ describe('chat-session-service selected board context', () => {
     });
     expect(mockStoreMessage).not.toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+  });
+
+  it('restores archived Pi jsonl from database before continuing', async () => {
+    mockHasFinalAiChatSessionReply.mockResolvedValueOnce(true);
+    mockReadPiSessionFileState
+      .mockResolvedValueOnce({ hasSessionFile: false })
+      .mockResolvedValueOnce({ hasSessionFile: true });
+    mockGetChatSessionPiSessionArchive.mockResolvedValueOnce({
+      id: 'session-1',
+      pi_session_archived_at: '2026-04-26T10:00:00.000Z',
+      pi_session_archive_reason: 'inactive',
+      pi_session_archive_payload: {
+        version: 1,
+        mapping_file_name: 'session-1.path',
+        mapping_content: 'session-1.jsonl',
+        files: [
+          {
+            name: 'session-1.jsonl',
+            content: '{"type":"turn"}\n',
+            size_bytes: 16,
+            modified_at: '2026-04-26T09:00:00.000Z',
+          },
+        ],
+        archived_at: '2026-04-26T10:00:00.000Z',
+      },
+      pi_session_archive_restored_at: null,
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续分析',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockWritePiSessionArchiveToFiles).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ version: 1 }),
+    );
+    expect(mockMarkChatSessionPiSessionArchiveRestored).toHaveBeenCalledWith(
+      'session-1',
+    );
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a share link for owned sessions', async () => {
+    mockShareOwnedChatSession.mockResolvedValueOnce({
+      id: 'session-1',
+      account_id: 'web:user-1',
+      user_id: 'user-1',
+      title: '已有会话',
+      share_token: 'share-token',
+      share_created_at: '2026-04-26T10:00:00.000Z',
+      created_at: '2026-04-26T09:00:00.000Z',
+      updated_at: '2026-04-26T09:00:00.000Z',
+      deleted_at: null,
+    });
+
+    const result = await shareOwnedChatSessionForUser('user-1', 'session-1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        share_token: 'share-token',
+        share_url_path: '/ai-chat/share?token=share-token',
+        session: {
+          id: 'session-1',
+          share_token: 'share-token',
+        },
+      },
+    });
+    expect(mockShareOwnedChatSession).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      shareToken: expect.any(String),
+    });
+  });
+
+  it('loads shared sessions by token without auth ownership checks', async () => {
+    mockGetSharedChatSessionByToken.mockResolvedValueOnce({
+      id: 'session-1',
+      account_id: 'web:user-1',
+      user_id: 'user-1',
+      title: '已有会话',
+      share_token: 'share-token',
+      share_created_at: '2026-04-26T10:00:00.000Z',
+      created_at: '2026-04-26T09:00:00.000Z',
+      updated_at: '2026-04-26T09:00:00.000Z',
+      deleted_at: null,
+    });
+    mockGetSessionMessages.mockResolvedValueOnce([
+      {
+        id: 'message-1',
+        account_id: 'web:user-1',
+        sender: 'user-1',
+        sender_name: '用户',
+        content: '你好',
+        timestamp: '2026-04-26T09:01:00.000Z',
+        is_from_me: false,
+        is_bot_message: false,
+        session_id: 'session-1',
+      },
+    ]);
+
+    const result = await getSharedChatSessionByShareToken('share-token');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        id: 'session-1',
+        title: '已有会话',
+        messages: [{ id: 'message-1', content: '你好' }],
+      },
+    });
+    expect(mockGetChatSession).not.toHaveBeenCalled();
+    expect(mockGetSessionMessages).toHaveBeenCalledWith(
+      'web:user-1',
+      'session-1',
+    );
   });
 
   it('keeps placeholder titles unified without auto-generating a summary title', async () => {

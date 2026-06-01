@@ -5,8 +5,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
   Info,
+  Loader2,
   LogIn,
   MessageCircle,
+  Share2,
   Trash2,
   Menu,
   X,
@@ -149,6 +151,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const [editingSessionId, setEditingSessionId] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
   const [renamingSessionId, setRenamingSessionId] = useState('');
+  const [sharingSessionId, setSharingSessionId] = useState('');
 
   const {
     sessions,
@@ -156,6 +159,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     setSelectedSession,
     renameSession,
     deleteSession,
+    shareSession,
     chatAvailable,
     loading: sessionsLoading,
   } = useChatSessions();
@@ -171,6 +175,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     setEditingSessionId('');
     setEditingTitle('');
     setRenamingSessionId('');
+    setSharingSessionId('');
   }, [chatAvailable]);
 
   useEffect(() => {
@@ -235,6 +240,24 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     setEditingSessionId(sessionId);
     setEditingTitle(title);
     setRenamingSessionId('');
+  };
+
+  const copySessionShareLink = async (sessionId: string) => {
+    if (sharingSessionId) return;
+    setSharingSessionId(sessionId);
+    try {
+      const token = await shareSession(sessionId);
+      const url = `${window.location.origin}/ai-chat/share?token=${encodeURIComponent(token)}`;
+      await navigator.clipboard.writeText(url);
+      toast('success', '分享链接已复制');
+    } catch (error) {
+      toast(
+        'error',
+        error instanceof Error ? error.message : '生成分享链接失败，请稍后重试',
+      );
+    } finally {
+      setSharingSessionId('');
+    }
   };
 
   const saveSessionTitle = async (sessionId: string) => {
@@ -425,6 +448,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   const active = session.id === selectedSession && pathname === '/ai-chat';
                   const isEditing = session.id === editingSessionId;
                   const isRenaming = session.id === renamingSessionId;
+                  const isSharing = session.id === sharingSessionId;
                   const openSession = () => {
                     // 统一走 ChatSessionsProvider 的路由同步逻辑，确保跳转始终携带 sid。
                     // 手机端切换会话不会触发 pathname 变化，这里仍然要先主动收起侧边栏。
@@ -541,6 +565,21 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                         </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void copySessionShareLink(session.id);
+                          }}
+                          disabled={Boolean(sharingSessionId)}
+                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-40"
+                          aria-label="复制分享链接"
+                        >
+                          {isSharing ? (
+                            <Loader2 size={11} className="animate-spin" />
+                          ) : (
+                            <Share2 size={11} />
+                          )}
+                        </button>
                         <button
                           onClick={(event) => {
                             event.stopPropagation();

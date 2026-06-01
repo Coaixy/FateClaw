@@ -94,6 +94,21 @@ export async function getRecentMessages(
   return rows as NewMessage[];
 }
 
+export async function getSessionMessages(
+  accountId: string,
+  sessionId: string,
+): Promise<NewMessage[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM messages
+     WHERE account_id = $1
+       AND session_id = $2
+       AND deleted_at IS NULL
+     ORDER BY timestamp ASC`,
+    [accountId, sessionId],
+  );
+  return rows as NewMessage[];
+}
+
 export async function getSessionMessageById(
   accountId: string,
   sessionId: string,
@@ -240,13 +255,130 @@ export async function touchChatSession(id: string): Promise<void> {
 
 export async function deleteChatSession(id: string): Promise<void> {
   await getDbPool().query(
-    `UPDATE chat_sessions SET deleted_at = NOW() WHERE id = $1`,
+    `UPDATE chat_sessions
+     SET deleted_at = NOW(), share_token = NULL
+     WHERE id = $1`,
     [id],
   );
+}
+
+/** Pi session 归档状态，payload 保存可回写本地 jsonl/path 的原始内容。 */
+export interface ChatSessionPiSessionArchiveRow {
+  id: string;
+  pi_session_archived_at: string | null;
+  pi_session_archive_reason: string | null;
+  pi_session_archive_payload: unknown;
+  pi_session_archive_restored_at: string | null;
+}
+
+/**
+ * 标记会话的 Pi session 已归档到数据库。
+ *
+ * @param input.sessionId - chat_sessions.id。
+ * @param input.reason - 归档原因，用于后台区分软删除和超期清理。
+ * @param input.payload - 可回写本地 jsonl/path 的归档 JSON。
+ * @returns 是否实际更新到一行会话。
+ */
+export async function markChatSessionPiSessionArchived(input: {
+  sessionId: string;
+  reason: 'soft_deleted' | 'inactive';
+  payload: unknown;
+}): Promise<boolean> {
+  const { rowCount } = await getDbPool().query(
+    `UPDATE chat_sessions
+     SET pi_session_archived_at = NOW(),
+         pi_session_archive_reason = $2,
+         pi_session_archive_payload = $3::jsonb,
+         pi_session_archive_restored_at = NULL
+     WHERE id = $1`,
+    [input.sessionId, input.reason, JSON.stringify(input.payload)],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * 读取会话的 Pi session 数据库归档。
+ *
+ * @param sessionId - chat_sessions.id。
+ * @returns 归档行；不存在或未归档时返回 undefined。
+ */
+export async function getChatSessionPiSessionArchive(
+  sessionId: string,
+): Promise<ChatSessionPiSessionArchiveRow | undefined> {
+  const { rows } = await getDbPool().query(
+    `SELECT id,
+            pi_session_archived_at,
+            pi_session_archive_reason,
+            pi_session_archive_payload,
+            pi_session_archive_restored_at
+     FROM chat_sessions
+     WHERE id = $1
+       AND pi_session_archived_at IS NOT NULL
+       AND pi_session_archive_payload IS NOT NULL`,
+    [sessionId],
+  );
+  return rows[0] as ChatSessionPiSessionArchiveRow | undefined;
+}
+
+/**
+ * 标记数据库归档已回写成本地 Pi session 文件。
+ *
+ * @param sessionId - chat_sessions.id。
+ */
+export async function markChatSessionPiSessionArchiveRestored(
+  sessionId: string,
+): Promise<void> {
   await getDbPool().query(
-    `UPDATE messages SET deleted_at = NOW() WHERE session_id = $1 AND deleted_at IS NULL`,
-    [id],
+    `UPDATE chat_sessions
+     SET pi_session_archive_restored_at = NOW()
+     WHERE id = $1`,
+    [sessionId],
   );
+}
+
+/**
+ * 为当前用户拥有的会话生成或复用分享令牌。
+ *
+ * @param input.userId - 会话归属用户。
+ * @param input.sessionId - chat_sessions.id。
+ * @param input.shareToken - 首次分享时写入的随机令牌。
+ * @returns 更新后的会话；无权限或会话不存在时返回 undefined。
+ */
+export async function shareOwnedChatSession(input: {
+  userId: string;
+  sessionId: string;
+  shareToken: string;
+}): Promise<ChatSession | undefined> {
+  const { rows } = await getDbPool().query(
+    `UPDATE chat_sessions
+     SET share_token = COALESCE(share_token, $3),
+         share_created_at = COALESCE(share_created_at, NOW())
+     WHERE id = $1
+       AND user_id = $2
+       AND deleted_at IS NULL
+     RETURNING *`,
+    [input.sessionId, input.userId, input.shareToken],
+  );
+  return rows[0] as ChatSession | undefined;
+}
+
+/**
+ * 通过分享令牌读取公开只读会话。
+ *
+ * @param token - 分享令牌。
+ * @returns 未删除的分享会话；令牌无效时返回 undefined。
+ */
+export async function getSharedChatSessionByToken(
+  token: string,
+): Promise<ChatSession | undefined> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM chat_sessions
+     WHERE share_token = $1
+       AND deleted_at IS NULL
+     LIMIT 1`,
+    [token],
+  );
+  return rows[0] as ChatSession | undefined;
 }
 
 export async function resetUserMessages(userId: string): Promise<string[]> {

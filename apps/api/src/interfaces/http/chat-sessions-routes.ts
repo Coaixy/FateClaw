@@ -10,8 +10,10 @@ import {
   deleteOwnedChatSession,
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
+  getSharedChatSessionByShareToken,
   listChatSessionsForOwnedUser,
   renameOwnedChatSession,
+  shareOwnedChatSessionForUser,
   sendOwnedChatSessionMessage,
 } from '../../modules/chat/chat-session-service.js';
 import { toQueryProcessResponseDto } from '../../contracts-adapter/chat-contract.js';
@@ -94,6 +96,19 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
+  // GET /api/chat-sessions/shared/:token — 通过私密分享令牌查看只读会话
+  app.get<{
+    Params: { token: string };
+  }>('/shared/:token', async (request, reply) => {
+    const result = await getSharedChatSessionByShareToken(
+      request.params.token,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
   // POST /api/chat-sessions — 创建当前用户的站内 AI Chat 会话
   app.post<{
     Body: { title?: string };
@@ -137,6 +152,21 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
   }>('/s/:sessionId', async (request, reply) => {
     await request.requireAuth();
     const result = await deleteOwnedChatSession(
+      request.user.userId,
+      request.params.sessionId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/chat-sessions/s/:sessionId/share — 生成或复用会话分享链接
+  app.post<{
+    Params: { sessionId: string };
+  }>('/s/:sessionId/share', async (request, reply) => {
+    await request.requireAuth();
+    const result = await shareOwnedChatSessionForUser(
       request.user.userId,
       request.params.sessionId,
     );
