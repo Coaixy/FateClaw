@@ -440,6 +440,11 @@ export interface AdminModelBillingConfig {
   updated_at: string;
 }
 
+export interface AdminRuntimeConfig {
+  agent_concurrency_limit: number;
+  updated_at: string;
+}
+
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -452,7 +457,7 @@ export interface AdminSystemConfigOverview {
   providers: AdminModelProvider[];
   official_models: AdminModelProvider[];
   model_billing: AdminModelBillingConfig;
-  runtime: null;
+  runtime: AdminRuntimeConfig;
   audit_logs: AdminConfigAuditLog[];
 }
 
@@ -541,6 +546,11 @@ export const admin = {
         body: JSON.stringify(data),
       },
     ),
+  updateRuntimeConfig: (data: { agent_concurrency_limit: number }) =>
+    adminRequest<AdminRuntimeConfig>('/api/admin/system-config/runtime', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   createOfficialModel: (data: {
     model_key: string;
     pi_api: AdminModelPiApi;

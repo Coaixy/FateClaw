@@ -622,6 +622,15 @@ CREATE TABLE IF NOT EXISTS membership_allowances (
 CREATE INDEX IF NOT EXISTS idx_membership_allowances_user_period
   ON membership_allowances(user_id, period_start DESC);
 
+CREATE TABLE IF NOT EXISTS runtime_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  agent_concurrency_limit INTEGER NOT NULL DEFAULT 10,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO runtime_config (id)
+VALUES ('default')
+ON CONFLICT (id) DO NOTHING;
+
 ALTER TABLE chat_sessions
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_owner_user_id,
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_persona_id,
@@ -956,6 +965,18 @@ BEGIN
     ALTER TABLE membership_allowances
       ADD CONSTRAINT chk_membership_allowances_units_valid
       CHECK (allowance_units > 0 AND used_units >= 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_agent_concurrency_limit_positive') THEN
+    UPDATE runtime_config
+    SET agent_concurrency_limit = 10
+    WHERE agent_concurrency_limit <= 0;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_agent_concurrency_limit_positive
+      CHECK (agent_concurrency_limit > 0);
   END IF;
 END $$;
 

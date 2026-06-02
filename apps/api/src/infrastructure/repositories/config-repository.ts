@@ -3,6 +3,7 @@ import {
   ModelBillingConfig,
   ModelProviderType,
   OfficialModelConfig,
+  RuntimeConfig,
   SystemSecretRow,
   UserModelConfig,
   UserModelSelection,
@@ -230,6 +231,39 @@ export async function updateModelBillingConfig(input: {
     [input.customModelPlatformPricePerMillionCoins],
   );
   return rows[0] as ModelBillingConfig;
+}
+
+/**
+ * 读取 Agent 运行时全局配置；缺省行不存在时自动补齐。
+ */
+export async function getRuntimeConfig(): Promise<RuntimeConfig> {
+  const { rows } = await getDbPool().query(
+    `INSERT INTO runtime_config (id)
+     VALUES ('default')
+     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     RETURNING *`,
+  );
+  return rows[0] as RuntimeConfig;
+}
+
+/**
+ * 更新全站 Agent 并发槽位上限。
+ */
+export async function updateRuntimeConfig(input: {
+  agentConcurrencyLimit: number;
+}): Promise<RuntimeConfig> {
+  const { rows } = await getDbPool().query(
+    `INSERT INTO runtime_config (
+       id, agent_concurrency_limit, updated_at
+     )
+     VALUES ('default', $1, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
+       updated_at = NOW()
+     RETURNING *`,
+    [Math.max(1, Math.floor(input.agentConcurrencyLimit))],
+  );
+  return rows[0] as RuntimeConfig;
 }
 
 export async function getUserModelConfig(

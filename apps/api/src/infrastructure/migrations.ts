@@ -3045,6 +3045,32 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0020_runtime_config',
+    description: '增加 Agent 运行时后台配置',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS runtime_config (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          agent_concurrency_limit INTEGER NOT NULL DEFAULT 10,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO runtime_config (id)
+        VALUES ('default')
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_agent_concurrency_limit_positive',
+        tableName: 'runtime_config',
+        expression: 'agent_concurrency_limit > 0',
+        cleanupSql: `UPDATE runtime_config
+                     SET agent_concurrency_limit = 10
+                     WHERE agent_concurrency_limit <= 0`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

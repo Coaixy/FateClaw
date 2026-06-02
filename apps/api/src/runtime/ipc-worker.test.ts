@@ -81,6 +81,7 @@ vi.mock('../modules/chat/web-chat-runtime.js', () => ({
 }));
 
 vi.mock('../modules/system/system-config.js', () => ({
+  getAgentConcurrencyLimit: vi.fn(async () => 10),
   resolveUserLlmRuntime: vi.fn(),
 }));
 

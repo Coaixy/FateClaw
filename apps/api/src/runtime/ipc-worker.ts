@@ -18,7 +18,7 @@ const AGENT_REQUEST_TIMEOUT = parseInt(
   process.env.AGENT_REQUEST_TIMEOUT || '1800000',
   10,
 );
-const GLOBAL_AGENT_CONCURRENCY_LIMIT = Math.max(
+const DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT = Math.max(
   1,
   parseInt(process.env.AGENT_CONCURRENCY_LIMIT || '10', 10) || 10,
 );
@@ -26,6 +26,7 @@ const GLOBAL_AGENT_CONCURRENCY_KEY = 'agent:concurrency:active';
 const GLOBAL_AGENT_MEMBER_WAIT_QUEUE = 'agent:concurrency:wait:member';
 const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:wait:normal';
 const GLOBAL_AGENT_GATE_POLL_MS = 500;
+const GLOBAL_AGENT_LIMIT_CACHE_MS = 2_000;
 import {
   type CancelInboxRequestPayload,
   claimOrRefreshSessionProcessingLock,
@@ -44,6 +45,7 @@ import {
 } from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
+  getAgentConcurrencyLimit,
   resolveUserLlmRuntime,
   type EffectiveLlmRuntimeConfig,
 } from '../modules/system/system-config.js';
@@ -98,6 +100,9 @@ const pendingInboxRequests = new Map<string, PendingInboxRequest>();
 /** AI Chat 专属的 pending 请求 Map（完全隔离） */
 const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<string, { running: boolean; redis: Redis }>();
+let cachedGlobalAgentConcurrencyLimit:
+  | { value: number; expiresAtMs: number }
+  | null = null;
 
 async function resolveInboxPriority(userId: string): Promise<'member' | 'normal'> {
   const membership = await getMembershipOverview(userId);
@@ -112,7 +117,33 @@ async function enqueueInboxPayload(accountId: string, priority: 'member' | 'norm
   await getRedis().lpush(key, payload);
 }
 
-async function tryAcquireGlobalAgentSlot(slotId: string): Promise<boolean> {
+async function resolveGlobalAgentConcurrencyLimit(): Promise<number> {
+  if (
+    cachedGlobalAgentConcurrencyLimit &&
+    cachedGlobalAgentConcurrencyLimit.expiresAtMs > Date.now()
+  ) {
+    return cachedGlobalAgentConcurrencyLimit.value;
+  }
+  try {
+    const value = await getAgentConcurrencyLimit();
+    cachedGlobalAgentConcurrencyLimit = {
+      value,
+      expiresAtMs: Date.now() + GLOBAL_AGENT_LIMIT_CACHE_MS,
+    };
+    return value;
+  } catch (err) {
+    logger.warn(
+      { err },
+      '读取后台 agent 并发上限失败，使用环境变量默认值',
+    );
+    return DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT;
+  }
+}
+
+async function tryAcquireGlobalAgentSlot(
+  slotId: string,
+  limit: number,
+): Promise<boolean> {
   const acquired = await getRedis().eval(
     `
     redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[3])
@@ -124,7 +155,7 @@ async function tryAcquireGlobalAgentSlot(slotId: string): Promise<boolean> {
     `,
     1,
     GLOBAL_AGENT_CONCURRENCY_KEY,
-    GLOBAL_AGENT_CONCURRENCY_LIMIT,
+    limit,
     Date.now(),
     Date.now() - Math.max(AGENT_REQUEST_TIMEOUT, AI_CHAT_REQUEST_TIMEOUT),
     slotId,
@@ -192,10 +223,11 @@ async function acquireGlobalAgentSlot(input: {
     }
   };
   assertActive();
+  const initialLimit = await resolveGlobalAgentConcurrencyLimit();
   const memberQueueSize = await getRedis().llen(GLOBAL_AGENT_MEMBER_WAIT_QUEUE);
   if (
     (input.priority === 'member' || memberQueueSize <= 0) &&
-    (await tryAcquireGlobalAgentSlot(input.requestId))
+    (await tryAcquireGlobalAgentSlot(input.requestId, initialLimit))
   ) {
     return input.requestId;
   }
@@ -209,7 +241,12 @@ async function acquireGlobalAgentSlot(input: {
         await delay(GLOBAL_AGENT_GATE_POLL_MS);
         continue;
       }
-      if (await tryAcquireGlobalAgentSlot(input.requestId)) {
+      if (
+        await tryAcquireGlobalAgentSlot(
+          input.requestId,
+          await resolveGlobalAgentConcurrencyLimit(),
+        )
+      ) {
         await getRedis().rpop(queue);
         return input.requestId;
       }
@@ -659,7 +696,7 @@ export function __getGlobalAgentConcurrencyStateForTests(): {
     activeKey: GLOBAL_AGENT_CONCURRENCY_KEY,
     memberQueue: GLOBAL_AGENT_MEMBER_WAIT_QUEUE,
     normalQueue: GLOBAL_AGENT_NORMAL_WAIT_QUEUE,
-    limit: GLOBAL_AGENT_CONCURRENCY_LIMIT,
+    limit: DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT,
   };
 }
 

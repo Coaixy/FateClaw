@@ -946,7 +946,7 @@ Authorization: Bearer <token>
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
 | `AGENT_REQUEST_TIMEOUT`     | `1800000`               | 微信 Bot 请求等待 agent 返回的超时时间，单位毫秒 |
 | `AI_CHAT_REQUEST_TIMEOUT`   | `1800000`               | 站内 AI Chat 请求等待 agent 返回的超时时间，单位毫秒 |
-| `AGENT_CONCURRENCY_LIMIT`   | `10`                    | 全站 agent 并发槽位上限，会员等待队列优先唤醒 |
+| `AGENT_CONCURRENCY_LIMIT`   | `10`                    | 全站 agent 并发槽位默认值；运行中优先使用管理后台运行时配置，会员等待队列优先唤醒 |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_log_payloads.trace_events` 保留天数 |
 | `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | 用户 Text Skill Bundle 根目录      |

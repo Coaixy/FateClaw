@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockGetOfficialModelConfig,
   mockGetModelBillingConfig,
+  mockGetRuntimeConfig,
   mockGetSystemSecret,
   mockGetUserModelConfig,
   mockGetUserModelSelection,
@@ -11,10 +12,12 @@ const {
   mockDeleteUserModelSelectionsByOfficialModelId,
   mockUpdateOfficialModelConfig,
   mockUpdateModelBillingConfig,
+  mockUpdateRuntimeConfig,
   mockUpsertSystemSecret,
 } = vi.hoisted(() => ({
   mockGetOfficialModelConfig: vi.fn(),
   mockGetModelBillingConfig: vi.fn(),
+  mockGetRuntimeConfig: vi.fn(),
   mockGetSystemSecret: vi.fn(),
   mockGetUserModelConfig: vi.fn(),
   mockGetUserModelSelection: vi.fn(),
@@ -23,6 +26,7 @@ const {
   mockDeleteUserModelSelectionsByOfficialModelId: vi.fn(),
   mockUpdateOfficialModelConfig: vi.fn(),
   mockUpdateModelBillingConfig: vi.fn(),
+  mockUpdateRuntimeConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
 }));
 
@@ -34,6 +38,7 @@ vi.mock('../../infrastructure/db.js', () => ({
     mockDeleteUserModelSelectionsByOfficialModelId,
   getModelBillingConfig: mockGetModelBillingConfig,
   getOfficialModelConfig: mockGetOfficialModelConfig,
+  getRuntimeConfig: mockGetRuntimeConfig,
   getSystemSecret: mockGetSystemSecret,
   getUserModelConfig: mockGetUserModelConfig,
   getUserModelSelection: mockGetUserModelSelection,
@@ -41,6 +46,7 @@ vi.mock('../../infrastructure/db.js', () => ({
   listOfficialModelConfigs: mockListOfficialModelConfigs,
   updateOfficialModelConfig: mockUpdateOfficialModelConfig,
   updateModelBillingConfig: mockUpdateModelBillingConfig,
+  updateRuntimeConfig: mockUpdateRuntimeConfig,
   upsertSystemSecret: mockUpsertSystemSecret,
   upsertUserModelConfig: vi.fn(),
   upsertUserModelSelection: vi.fn(),
@@ -113,6 +119,11 @@ describe('resolveUserLlmRuntime', () => {
     mockGetModelBillingConfig.mockResolvedValue({
       id: 'default',
       custom_model_platform_price_per_million_coins: 2,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });

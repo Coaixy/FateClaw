@@ -41,6 +41,7 @@ import {
   setUserCustomSkillAdminState,
   updateModelBillingSettings,
   updateOfficialModel,
+  updateRuntimeSettings,
   updateAdminRechargePaymentConfig,
   updateAdminRewardConfig,
   getAdminUserDetail,
@@ -227,6 +228,14 @@ const ModelBillingSchema = z.object({
     .max(1_000_000),
 });
 
+const RuntimeConfigSchema = z.object({
+  agent_concurrency_limit: z
+    .number()
+    .int('并发上限必须是整数')
+    .min(1, '并发上限必须至少为 1')
+    .max(1000, '并发上限不能超过 1000'),
+});
+
 function toConfiguredContextWindowTokens(
   value: number | null | undefined,
 ): number | null | undefined {
@@ -391,6 +400,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return updateModelBillingSettings({
       customModelPlatformPricePerMillionCoins:
         parsed.data.custom_model_platform_price_per_million_coins,
+      actor: 'manager',
+    });
+  });
+
+  // PUT /api/admin/system-config/runtime — 更新 Agent 运行时配置
+  app.put('/system-config/runtime', async (request, reply) => {
+    const parsed = RuntimeConfigSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return updateRuntimeSettings({
+      agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
       actor: 'manager',
     });
   });

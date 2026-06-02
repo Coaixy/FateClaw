@@ -7,6 +7,7 @@ import {
   deleteUserModelSelectionsByOfficialModelId,
   getOfficialModelConfig,
   getModelBillingConfig,
+  getRuntimeConfig,
   getSystemSecret,
   getUserModelConfig,
   getUserModelSelection,
@@ -14,6 +15,7 @@ import {
   listOfficialModelConfigs,
   updateOfficialModelConfig,
   updateModelBillingConfig,
+  updateRuntimeConfig,
   upsertSystemSecret,
   upsertUserModelConfig,
   upsertUserModelSelection,
@@ -46,6 +48,7 @@ export interface ResolvedProviderSecret {
 export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
 export const DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
+export const DEFAULT_AGENT_CONCURRENCY_LIMIT = 10;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -429,13 +432,17 @@ export async function getSystemConfigOverview(): Promise<{
     custom_model_platform_price_per_million_coins: number;
     updated_at: string;
   };
-  runtime: null;
+  runtime: {
+    agent_concurrency_limit: number;
+    updated_at: string;
+  };
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
 }> {
-  const [models, auditLogs, modelBilling] = await Promise.all([
+  const [models, auditLogs, modelBilling, runtime] = await Promise.all([
     listOfficialModelViews({ includeSecretValue: true }),
     listConfigAuditLogs(50),
     getModelBillingConfig(),
+    getRuntimeConfig(),
   ]);
   return {
     official_models: models,
@@ -445,7 +452,10 @@ export async function getSystemConfigOverview(): Promise<{
         modelBilling.custom_model_platform_price_per_million_coins,
       updated_at: modelBilling.updated_at,
     },
-    runtime: null,
+    runtime: {
+      agent_concurrency_limit: runtime.agent_concurrency_limit,
+      updated_at: runtime.updated_at,
+    },
     audit_logs: auditLogs,
   };
 }
@@ -478,6 +488,49 @@ export async function updateModelBillingSettings(args: {
   return {
     custom_model_platform_price_per_million_coins:
       updated.custom_model_platform_price_per_million_coins,
+    updated_at: updated.updated_at,
+  };
+}
+
+/**
+ * 读取全站 Agent 并发槽位上限。
+ */
+export async function getAgentConcurrencyLimit(): Promise<number> {
+  const runtime = await getRuntimeConfig();
+  return Math.max(
+    1,
+    Math.floor(
+      runtime.agent_concurrency_limit || DEFAULT_AGENT_CONCURRENCY_LIMIT,
+    ),
+  );
+}
+
+/**
+ * 更新全站 Agent 并发槽位上限。
+ */
+export async function updateRuntimeSettings(args: {
+  agentConcurrencyLimit: number;
+  actor?: string;
+}): Promise<{
+  agent_concurrency_limit: number;
+  updated_at: string;
+}> {
+  const actor = args.actor ?? 'admin';
+  const before = await getRuntimeConfig();
+  const updated = await updateRuntimeConfig({
+    agentConcurrencyLimit: args.agentConcurrencyLimit,
+  });
+  await createConfigAuditLog({
+    id: `cfg-audit-${randomUUID()}`,
+    actorUserId: actor,
+    action: 'runtime.updated',
+    targetType: 'runtime',
+    targetKey: updated.id,
+    before,
+    after: updated,
+  });
+  return {
+    agent_concurrency_limit: updated.agent_concurrency_limit,
     updated_at: updated.updated_at,
   };
 }

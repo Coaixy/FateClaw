@@ -5,6 +5,7 @@ import type {
   AdminModelBillingConfig,
   AdminModelProvider,
   AdminModelPiApi,
+  AdminRuntimeConfig,
   AdminSystemConfigOverview,
 } from '@/lib/admin-api';
 import {
@@ -149,6 +150,64 @@ export function ModelBillingPanel({
       </div>
       <div className="mt-3 text-[11px] text-muted">
         输入和输出 Token 都按 {officialModelCoinsLabel(price)} / 百万 Token 扣费。
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 后台 Agent 运行时配置面板。
+ */
+export function RuntimeConfigPanel({
+  runtime,
+  busy,
+  onSave,
+}: {
+  runtime: AdminRuntimeConfig;
+  busy: boolean;
+  onSave: (limit: number) => Promise<void>;
+}) {
+  const [limit, setLimit] = useState(runtime.agent_concurrency_limit);
+
+  useEffect(() => {
+    setLimit(runtime.agent_concurrency_limit);
+  }, [runtime.agent_concurrency_limit]);
+
+  return (
+    <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-sm font-semibold">Agent 并发槽位</div>
+          <div className="mt-1 text-[12px] leading-5 text-muted">
+            控制全站同时进入 agent-runtime 的请求数量；会员等待队列会优先抢占释放出的槽位。
+          </div>
+          <div className="mt-2 text-[12px] text-muted">
+            当前：{runtime.agent_concurrency_limit} 个并发请求
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[220px_auto]">
+          <NumberField
+            label="全站并发上限"
+            value={limit}
+            onChange={setLimit}
+          />
+          <button
+            type="button"
+            onClick={() => void onSave(Math.max(1, Math.floor(limit)))}
+            disabled={busy || limit === runtime.agent_concurrency_limit}
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
+          >
+            {busy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Save size={14} />
+            )}
+            保存并发
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-muted">
+        新请求和排队请求会读取最新设置；已进入运行中的请求不会被中断。
       </div>
     </div>
   );

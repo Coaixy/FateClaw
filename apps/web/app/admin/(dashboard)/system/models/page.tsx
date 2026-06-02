@@ -7,6 +7,7 @@ import {
   ModelBillingPanel,
   ProviderCreatePanel,
   ProviderRow,
+  RuntimeConfigPanel,
   RuntimeSummary,
 } from '../model-provider-panels';
 import {
@@ -115,6 +116,18 @@ export default function AdminModelConfigPage() {
           withBusy('model-billing', async () => {
             await admin.updateModelBilling({
               custom_model_platform_price_per_million_coins: coins,
+            });
+          })
+        }
+      />
+
+      <RuntimeConfigPanel
+        runtime={overview.runtime}
+        busy={busyId === 'runtime'}
+        onSave={async (limit) =>
+          withBusy('runtime', async () => {
+            await admin.updateRuntimeConfig({
+              agent_concurrency_limit: limit,
             });
           })
         }

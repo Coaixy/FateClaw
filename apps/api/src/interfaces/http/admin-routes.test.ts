@@ -60,6 +60,7 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   updateModelBillingSettings: vi.fn(),
   updateOfficialModel: vi.fn(),
   updatePublicFinancialLedgerEntry: vi.fn(),
+  updateRuntimeSettings: vi.fn(),
 }));
 
 vi.mock('./payment-callback-urls.js', () => ({

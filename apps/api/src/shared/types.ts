@@ -247,6 +247,17 @@ export interface ModelBillingConfig {
   updated_at: string;
 }
 
+/**
+ * Agent 运行时全局配置。
+ *
+ * @remarks 并发上限控制宿主侧进入 agent-runtime 的全站请求槽位。
+ */
+export interface RuntimeConfig {
+  id: 'default' | string;
+  agent_concurrency_limit: number;
+  updated_at: string;
+}
+
 export interface UserModelConfig {
   user_id: string;
   pi_api: ModelProviderType;
