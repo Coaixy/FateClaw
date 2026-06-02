@@ -19,8 +19,10 @@ import {
   getMembershipOverview,
   getSoulContent,
   getUserById,
+  getUserSoulEditEnabled,
   getUserSoulContent,
   updateSoulContent,
+  updateUserSoulEditEnabled,
   updateUserSoulContent,
 } from '../../infrastructure/db.js';
 import { getLoginQrCode, getQrCodeStatus } from '../../infrastructure/ilink.js';
@@ -90,7 +92,8 @@ export async function getOwnedUserSoulContent(
     return fail(404, '用户不存在');
   }
   const content = await getUserSoulContent(user.id);
-  return ok(toAccountSoulDto(content));
+  const editEnabled = await getUserSoulEditEnabled(user.id);
+  return ok(toAccountSoulDto(content, editEnabled));
 }
 
 export async function updateOwnedSoulContent(
@@ -114,12 +117,33 @@ export async function updateOwnedSoulContent(
 export async function updateOwnedUserSoulContent(
   userId: string,
   content: string,
+  editEnabled?: boolean,
 ): Promise<ServiceResult<{ success: true }>> {
   const user = await getUserById(userId);
   if (!user) {
     return fail(404, '用户不存在');
   }
   await updateUserSoulContent(user.id, content);
+  if (editEnabled !== undefined) {
+    await updateUserSoulEditEnabled(user.id, editEnabled);
+  }
+  return ok({ success: true });
+}
+
+/**
+ * 更新当前用户是否允许 Pi 在对话中编辑 Soul。
+ *
+ * 关闭后运行时不会注册 edit_soul，避免模型在对话中写入长期记忆。
+ */
+export async function updateOwnedUserSoulEditEnabled(
+  userId: string,
+  editEnabled: boolean,
+): Promise<ServiceResult<{ success: true }>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  await updateUserSoulEditEnabled(user.id, editEnabled);
   return ok({ success: true });
 }
 

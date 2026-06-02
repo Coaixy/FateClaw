@@ -335,9 +335,12 @@ function buildFollowupSection(
 async function buildSoulSection(args: {
   input: ContainerInput;
   runtime: RequestRuntime;
+  soulEditEnabled: boolean;
 }): Promise<PiContextSection | null> {
   try {
-    const content = await args.runtime.deps.soulStore.read(args.input.accountId);
+    const content = await args.runtime.deps.soulStore.read(
+      args.input.accountId,
+    );
     if (!content.trim()) return null;
     return createSection({
       id: 'soul',
@@ -348,7 +351,9 @@ async function buildSoulSection(args: {
         content.length > SOUL_PREVIEW_CHARS
           ? [
               truncateMiddle(content, SOUL_PREVIEW_CHARS),
-              '策略：这里只注入 Soul 摘要；如用户明确要求查看、记住、修改或删除 Soul，先调用 read_soul 获取全文和 baseHash。',
+              args.soulEditEnabled
+                ? '策略：这里只注入 Soul 摘要；如用户明确要求查看、记住、修改或删除 Soul，先调用 read_soul 获取全文和 baseHash。'
+                : '策略：这里只注入 Soul 摘要；如用户明确要求查看 Soul，可调用 read_soul 获取全文；当前用户关闭了对话编辑 Soul。',
             ].join('\n')
           : [
               content,
@@ -448,6 +453,7 @@ export async function createPiSessionContext(args: {
   containerInput: ContainerInput;
   runtime: RequestRuntime;
   requestScope: RequestScope;
+  soulEditEnabled?: boolean;
 }): Promise<PiSessionContext> {
   const followupContext = await resolveLatestFollowupInterpretationContext({
     containerInput: args.containerInput,
@@ -465,6 +471,7 @@ export async function createPiSessionContext(args: {
   const soulSection = await buildSoulSection({
     input: args.containerInput,
     runtime: args.runtime,
+    soulEditEnabled: args.soulEditEnabled ?? true,
   });
   if (soulSection) sections.push(soulSection);
 

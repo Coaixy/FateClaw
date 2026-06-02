@@ -140,6 +140,41 @@ export async function querySoulContent(accountId: string): Promise<string> {
 }
 
 /**
+ * 读取当前账号对应用户是否允许 Pi 对话编辑 Soul。
+ *
+ * @param accountId 当前 agent-runtime 账号 ID；站内 AI Chat 使用 web:{userId}。
+ * @returns true 表示本轮可以注册 edit_soul；历史账号或缺失配置默认开启。
+ * @remarks 这是工具暴露层的硬权限开关，关闭时模型完全看不到 edit_soul。
+ */
+export async function querySoulEditEnabled(
+  accountId: string,
+): Promise<boolean> {
+  const webUserId = getUserIdFromWebChatRuntimeId(accountId);
+  if (webUserId) {
+    const { rows } = await getPool().query(
+      'SELECT soul_edit_enabled FROM users WHERE id = $1',
+      [webUserId],
+    );
+    return (
+      (rows[0] as { soul_edit_enabled: boolean | null } | undefined)
+        ?.soul_edit_enabled ?? true
+    );
+  }
+
+  const { rows } = await getPool().query(
+    `SELECT COALESCE(u.soul_edit_enabled, true) AS soul_edit_enabled
+     FROM accounts a
+     LEFT JOIN users u ON u.id = a.owner_id
+     WHERE a.id = $1`,
+    [accountId],
+  );
+  return (
+    (rows[0] as { soul_edit_enabled: boolean | null } | undefined)
+      ?.soul_edit_enabled ?? true
+  );
+}
+
+/**
  * 更新账号可见的用户级 Soul。
  *
  * @param accountId 当前 agent-runtime 账号 ID；站内 AI Chat 使用 web:{userId}。

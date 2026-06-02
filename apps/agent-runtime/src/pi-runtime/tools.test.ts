@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createSyntheticSourceInfo, type Skill } from '@earendil-works/pi-coding-agent';
+import {
+  createSyntheticSourceInfo,
+  type Skill,
+} from '@earendil-works/pi-coding-agent';
 
 import { createRequestScope } from '../request-scope.js';
 import type { SessionBoardContext } from '../types.js';
@@ -77,13 +80,13 @@ function createTools(
   overrides: Partial<CreatePiToolsOptions> = {},
 ): ReturnType<typeof createPiCustomTools> {
   let soulContent = '用户 Soul：喜欢简洁结论。';
-  const soulStore =
-    overrides.soulStore ?? {
-      read: vi.fn(async () => soulContent),
-      update: vi.fn(async (_accountId: string, content: string) => {
-        soulContent = content;
-      }),
-    };
+  const soulStore = overrides.soulStore ?? {
+    read: vi.fn(async () => soulContent),
+    canEdit: vi.fn(async () => true),
+    update: vi.fn(async (_accountId: string, content: string) => {
+      soulContent = content;
+    }),
+  };
   return createPiCustomTools({
     requestScope: createRequestScope(),
     accountId: 'web:user-1',
@@ -99,6 +102,17 @@ describe('createPiCustomTools', () => {
     const tools = createTools();
 
     expect(tools.map((tool) => tool.name)).toEqual(DEFAULT_PI_TOOL_NAMES);
+  });
+
+  it('omits edit_soul when conversation Soul edits are disabled', () => {
+    const tools = createTools({ soulEditEnabled: false });
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'get_current_time',
+      'get_ganzhi_by_datetime',
+      'reverse_ganzhi',
+      'read_soul',
+    ]);
   });
 
   it('returns current time in the requested timezone', async () => {
@@ -291,6 +305,7 @@ describe('createPiCustomTools', () => {
     let soulContent = '用户 Soul：喜欢简洁结论。';
     const soulStore = {
       read: vi.fn(async () => soulContent),
+      canEdit: vi.fn(async () => true),
       update: vi.fn(async (_accountId: string, content: string) => {
         soulContent = content;
       }),
@@ -337,27 +352,28 @@ describe('createPiCustomTools', () => {
     expect(soulStore.update).toHaveBeenCalledWith('web:user-1', newSoul);
   });
 
-  it('rejects Soul edits without explicit user intent or with a stale hash', async () => {
+  it('rejects Soul edits without baseHash or with a stale hash', async () => {
     let soulContent = '用户 Soul：喜欢简洁结论。';
     const soulStore = {
       read: vi.fn(async () => soulContent),
+      canEdit: vi.fn(async () => true),
       update: vi.fn(async (_accountId: string, content: string) => {
         soulContent = content;
       }),
     };
-    const noIntentTools = createTools({
+    const missingHashTools = createTools({
       soulStore,
       userMessage: '今天聊点别的',
       recordExecution: vi.fn(),
     });
-    const noIntentEdit = noIntentTools.find(
+    const missingHashEdit = missingHashTools.find(
       (tool) => tool.name === 'edit_soul',
     )!;
 
-    const noIntent = await noIntentEdit.execute(
-      'soul-edit-no-intent',
+    const missingHash = await missingHashEdit.execute(
+      'soul-edit-missing-hash',
       {
-        baseHash: 'stale',
+        baseHash: '',
         newContent: '随手覆盖',
         reason: '模型自行总结',
       },
@@ -384,9 +400,9 @@ describe('createPiCustomTools', () => {
       undefined as never,
     );
 
-    expect(noIntent.details).toMatchObject({
+    expect(missingHash.details).toMatchObject({
       isError: true,
-      error: expect.stringContaining('用户本轮没有明确要求'),
+      error: expect.stringContaining('缺少 baseHash'),
     });
     expect(stale.details).toMatchObject({
       isError: true,
@@ -486,7 +502,10 @@ describe('createPiCustomTools', () => {
       path.join(docsDir, 'knowledge.md'),
       ['Alpha beta', 'beta conclusion', 'BETA hidden'].join('\n'),
     );
-    fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), 'beta secret');
+    fs.writeFileSync(
+      path.join(readableSkill.baseDir, 'secret.txt'),
+      'beta secret',
+    );
     const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution: vi.fn(),
@@ -561,7 +580,9 @@ describe('createPiCustomTools', () => {
     });
     expect(nonMarkdown.details).toMatchObject({
       isError: true,
-      output: expect.stringContaining('不是授权 Skill 内的 Markdown 文件或目录'),
+      output: expect.stringContaining(
+        '不是授权 Skill 内的 Markdown 文件或目录',
+      ),
       total: 0,
       matches: [],
     });
@@ -777,7 +798,10 @@ describe('createPiCustomTools', () => {
     const docsDir = path.join(readableSkill.baseDir, 'docs');
     fs.mkdirSync(docsDir);
     fs.writeFileSync(path.join(docsDir, 'knowledge.md'), '知识正文');
-    fs.writeFileSync(path.join(readableSkill.baseDir, 'secret.txt'), '非 Markdown');
+    fs.writeFileSync(
+      path.join(readableSkill.baseDir, 'secret.txt'),
+      '非 Markdown',
+    );
     const tools = createTools({
       readableSkills: [readableSkill],
       recordExecution: vi.fn(),

@@ -19,6 +19,7 @@ export interface CreatePiResourceLoaderOptions {
   requestScope: RequestScope;
   containerInput: ContainerInput;
   piContextPrompt?: string;
+  soulEditEnabled?: boolean;
 }
 
 function createSkill(args: {
@@ -110,7 +111,10 @@ export async function createPiResourceLoader(
   const { skills, diagnostics, privateKnowledgeEntries } =
     await loadRequestScopedSkills(options);
   const extensions = createEmptyExtensionsResult();
-  const systemPrompt = buildPiSystemPrompt(options.containerInput);
+  const systemPrompt = buildPiSystemPrompt(
+    options.containerInput,
+    options.soulEditEnabled ?? true,
+  );
   const appendSystemPrompt = buildAppendSystemPrompt(
     privateKnowledgeEntries,
     options.piContextPrompt,
@@ -158,7 +162,10 @@ function buildAppendSystemPrompt(
   return prompts;
 }
 
-function buildPiSystemPrompt(containerInput: ContainerInput): string {
+function buildPiSystemPrompt(
+  containerInput: ContainerInput,
+  soulEditEnabled: boolean,
+): string {
   const persona = containerInput.personaPrompt?.trim();
   return [
     '你是 FateClaw 的 Pi-backed Agent Runtime。',
@@ -170,9 +177,15 @@ function buildPiSystemPrompt(containerInput: ContainerInput): string {
     '不要调用或假设存在专用解读工具/解读 Skill；解读必须基于 Pi context 中已经注入的事实材料完成。',
     '涉及玄学问题时，直接在 Pi 循环内基于 Pi context 中的盘面 artifact、自贴盘面或追问上下文推理。',
     '知识只通过本次请求授权的普通 Markdown Skill 读取，不能假设存在全局本地 Skill。',
-    'Soul 是用户唯一长期记忆、人格配置和表达偏好来源；Dashboard、Pi context、read_soul/edit_soul 指向同一份 Soul，不要另造 memory/persona 概念。',
-    '只有用户本轮明确要求记住、保存、修改、删除或“以后都按这个来”时，才允许编辑 Soul；编辑前必须先 read_soul，再用返回的 sha256 作为 edit_soul.baseHash。',
-    '不要把普通对话、一次性上下文、工具结果、验证码、密钥、支付信息或其他敏感信息写入 Soul。',
+    soulEditEnabled
+      ? 'Soul 是用户唯一长期记忆、人格配置和表达偏好来源；Dashboard、Pi context、read_soul/edit_soul 指向同一份 Soul，不要另造 memory/persona 概念。'
+      : 'Soul 是用户唯一长期记忆、人格配置和表达偏好来源；Dashboard、Pi context、read_soul 指向同一份 Soul，不要另造 memory/persona 概念。',
+    soulEditEnabled
+      ? '只有用户本轮明确要求记住、保存、修改、删除或“以后都按这个来”时，才允许编辑 Soul；编辑前必须先 read_soul，再用返回的 sha256 作为 edit_soul.baseHash。'
+      : '当前用户关闭了对话编辑 Soul；本轮不会提供 edit_soul，不能声称已保存、修改或删除长期记忆。',
+    soulEditEnabled
+      ? '不要把普通对话、一次性上下文、工具结果、验证码、密钥、支付信息或其他敏感信息写入 Soul。'
+      : '',
     persona
       ? [
           '<fateclaw_persona_override>',

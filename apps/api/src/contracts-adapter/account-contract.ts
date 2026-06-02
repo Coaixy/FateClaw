@@ -23,8 +23,20 @@ export function toAccountDto(account: Account): AccountDto {
   };
 }
 
-export function toAccountSoulDto(content: string): AccountSoulDto {
-  return { content };
+/**
+ * 转换用户 Soul 配置 DTO。
+ *
+ * 参数：
+ * - content：Dashboard 维护的用户级 Soul 内容。
+ * - editEnabled：是否允许 Pi 在对话中注册 edit_soul 写入工具。
+ *
+ * 返回：前端 Soul 编辑器使用的配置 DTO。
+ */
+export function toAccountSoulDto(
+  content: string,
+  editEnabled = true,
+): AccountSoulDto {
+  return { content, edit_enabled: editEnabled };
 }
 
 export function toQrCodeResultDto(data: {

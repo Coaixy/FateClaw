@@ -74,10 +74,7 @@ describe('runDatabaseMigrations', () => {
     });
     expect(calls).toContainEqual({
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
-      params: [
-        '0008_balance_cents_schema',
-        '将历史 point 列按分余额语义保留',
-      ],
+      params: ['0008_balance_cents_schema', '将历史 point 列按分余额语义保留'],
     });
     expect(calls).toContainEqual({
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
@@ -106,7 +103,10 @@ describe('runDatabaseMigrations', () => {
     });
     expect(calls).toContainEqual({
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
-      params: ['0013_soft_currency_decimal_scale', '软妹币金额字段支持两位小数'],
+      params: [
+        '0013_soft_currency_decimal_scale',
+        '软妹币金额字段支持两位小数',
+      ],
     });
     expect(calls).toContainEqual({
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
@@ -128,6 +128,17 @@ describe('runDatabaseMigrations', () => {
         '0017_membership_token_plan',
         '增加 FateClaw Plus 会员与月度额度 schema',
       ],
+    });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0018_chat_session_archive_and_share',
+        '增加 AI Chat 会话分享与 Pi session 数据库归档 schema',
+      ],
+    });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0019_user_soul_edit_enabled', '增加用户级 Soul 对话编辑开关'],
     });
     expect(
       calls.some(
@@ -168,6 +179,9 @@ describe('runDatabaseMigrations', () => {
         ),
       ),
     ).toBe(true);
+    expect(calls.some((call) => call.sql.includes('soul_edit_enabled'))).toBe(
+      true,
+    );
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
@@ -192,6 +206,8 @@ describe('runDatabaseMigrations', () => {
       '0015_public_financial_ledger',
       '0016_remove_skill_paid_schema',
       '0017_membership_token_plan',
+      '0018_chat_session_archive_and_share',
+      '0019_user_soul_edit_enabled',
     ]);
 
     await runDatabaseMigrations(client as never);

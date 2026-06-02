@@ -23,8 +23,7 @@ const editSoulParamsSchema = Type.Object({
       '调用 read_soul 后得到的 sha256；用于避免覆盖用户刚在 Dashboard 或其他请求中修改过的 Soul。',
   }),
   newContent: Type.String({
-    description:
-      '新的完整 Soul 内容。必须完整覆盖旧 Soul，不能只传局部片段。',
+    description: '新的完整 Soul 内容。必须完整覆盖旧 Soul，不能只传局部片段。',
   }),
   reason: Type.String({
     description:
@@ -62,13 +61,14 @@ interface PiSoulEditDetails {
  * - recordExecution：工具执行记录回调。
  * - accountId：当前 agent-runtime 账号 ID，用于定位 Dashboard 维护的唯一 Soul。
  * - soulStore：Soul 读写存储，实际读写 users.soul_content 或历史账号级 fallback。
- * - userMessage：用户本轮原始输入，用于限制 edit_soul 只能响应明确记忆管理请求。
+ * - userMessage：用户本轮原始输入，保留给工具创建边界追踪。
  *
  * 注意：Soul 是用户唯一长期记忆/人格配置，不要把它拆成额外 memory 或 persona。
  */
 export interface CreatePiSoulToolOptions extends PiToolRuntimeOptions {
   accountId: string;
   soulStore: SoulStore;
+  soulEditEnabled?: boolean;
   userMessage: string;
 }
 
@@ -104,22 +104,6 @@ function normalizeEditParams(args: unknown): EditSoulParams {
   };
 }
 
-function hasExplicitSoulEditIntent(userMessage: string): boolean {
-  const normalized = userMessage.toLowerCase();
-  if (!normalized.trim()) return false;
-
-  const soulEditIntent =
-    /(soul|记忆|长期记忆|人格|偏好)/i.test(normalized) &&
-    /(记住|记一下|保存|写入|加入|更新|修改|编辑|更改|改一下|改成|删除|删掉|移除|清空|remember|save|update|edit|delete|remove|clear)/i.test(
-      normalized,
-    );
-  if (soulEditIntent) return true;
-
-  return /(帮我记|记住这个|记一下|保存下来|以后记得|以后都按|以后叫我|以后称呼我|不要再|别再|删掉.*记忆|删除.*记忆|从记忆.*删除|写进记忆|加入记忆|保存到记忆)/i.test(
-    normalized,
-  );
-}
-
 /**
  * 创建 Pi 的 Soul 读取工具。
  *
@@ -130,16 +114,21 @@ function hasExplicitSoulEditIntent(userMessage: string): boolean {
 export function createPiSoulReadTool(
   options: CreatePiSoulToolOptions,
 ): PiToolDefinition {
+  const soulEditEnabled = options.soulEditEnabled ?? true;
   return defineTool({
     name: 'read_soul',
     label: 'read_soul',
-    description:
-      '读取当前用户唯一的 Soul（Dashboard 维护的长期记忆、人格、表达偏好和长期背景），并返回 sha256 供后续 edit_soul 校验。',
-    promptSnippet:
-      'Use read_soul before editing the user Soul, or when the user asks to inspect their Soul.',
+    description: soulEditEnabled
+      ? '读取当前用户唯一的 Soul（Dashboard 维护的长期记忆、人格、表达偏好和长期背景），并返回 sha256 供后续 edit_soul 校验。'
+      : '读取当前用户唯一的 Soul（Dashboard 维护的长期记忆、人格、表达偏好和长期背景）。当前用户关闭了对话编辑 Soul。',
+    promptSnippet: soulEditEnabled
+      ? 'Use read_soul before editing the user Soul, or when the user asks to inspect their Soul.'
+      : 'Use read_soul when the user asks to inspect their Soul. Soul editing is disabled for this user.',
     promptGuidelines: [
       'Soul 是用户唯一长期记忆/人格配置；不要把它叫成另一套 memory 或 persona。',
-      '编辑 Soul 前必须先调用 read_soul，并把返回的 sha256 作为 edit_soul.baseHash。',
+      soulEditEnabled
+        ? '编辑 Soul 前必须先调用 read_soul，并把返回的 sha256 作为 edit_soul.baseHash。'
+        : '当前用户关闭了对话编辑 Soul；本轮不会提供 edit_soul，不能声称已保存、修改或删除长期记忆。',
       '只有用户明确要求查看 Soul 时才展示全文；普通回答优先使用 system prompt 中已注入的 Soul。',
     ],
     parameters: readSoulParamsSchema,
@@ -221,16 +210,7 @@ export function createPiSoulEditTool(
       const normalizedNewContent = params.newContent.trimEnd();
 
       let details: PiSoulEditDetails;
-      if (!hasExplicitSoulEditIntent(options.userMessage)) {
-        details = {
-          output: '',
-          isError: true,
-          reason: params.reason,
-          previousHash: currentHash,
-          error:
-            '拒绝编辑 Soul：用户本轮没有明确要求记住、保存、修改或删除长期 Soul。',
-        };
-      } else if (!params.baseHash) {
+      if (!params.baseHash) {
         details = {
           output: '',
           isError: true,

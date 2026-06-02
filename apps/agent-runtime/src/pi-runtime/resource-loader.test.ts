@@ -68,6 +68,7 @@ function createDeps(): AgentRuntimeDeps {
   return {
     soulStore: {
       read: vi.fn(),
+      canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
     skillCatalog: {
@@ -107,16 +108,18 @@ describe('createPiResourceLoader', () => {
       before.find((skill) => skill.name === 'private-bazi')
         ?.disableModelInvocation,
     ).toBe(false);
-    expect(before.find((skill) => skill.name === 'private-bazi')?.filePath).toBe(
+    expect(
+      before.find((skill) => skill.name === 'private-bazi')?.filePath,
+    ).toBe(
       path.join(
         before.find((skill) => skill.name === 'private-bazi')!.baseDir,
         'SKILL.md',
       ),
     );
-    expect(loader.getAppendSystemPrompt().join('\n')).toContain(
-      'private-bazi',
+    expect(loader.getAppendSystemPrompt().join('\n')).toContain('private-bazi');
+    expect(loader.getSystemPrompt()).toContain(
+      '不要调用或假设存在专用解读工具/解读 Skill',
     );
-    expect(loader.getSystemPrompt()).toContain('不要调用或假设存在专用解读工具/解读 Skill');
     expect(JSON.stringify(before)).not.toContain(
       '不能暴露到 Skill metadata 的私有正文',
     );

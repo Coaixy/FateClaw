@@ -1,6 +1,7 @@
 import {
   queryEffectiveUserSkills,
   queryLatestFollowupWorkflowContext,
+  querySoulEditEnabled,
   querySoulContent,
   updateSoulContentDb,
   type EffectiveUserSkill,
@@ -18,6 +19,7 @@ import {
  */
 export interface SoulStore {
   read(accountId: string): Promise<string>;
+  canEdit(accountId: string): Promise<boolean>;
   update(accountId: string, content: string): Promise<void>;
 }
 
@@ -67,6 +69,9 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   soulStore: {
     read(accountId) {
       return querySoulContent(accountId);
+    },
+    canEdit(accountId) {
+      return querySoulEditEnabled(accountId);
     },
     update(accountId, content) {
       return updateSoulContentDb(accountId, content);

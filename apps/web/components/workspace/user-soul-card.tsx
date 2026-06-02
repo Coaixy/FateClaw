@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Save, Sparkles } from 'lucide-react';
+import { Loader2, Save, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { accountsApi } from '@/features/accounts/api';
 import { useToast } from '@/lib/use-toast';
@@ -15,8 +15,10 @@ export function UserSoulCard() {
   const { toast } = useToast();
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
+  const [editEnabled, setEditEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingEditEnabled, setSavingEditEnabled] = useState(false);
   const [error, setError] = useState('');
   const dirty = content !== savedContent;
 
@@ -31,6 +33,7 @@ export function UserSoulCard() {
         if (!alive) return;
         setContent(result.content);
         setSavedContent(result.content);
+        setEditEnabled(result.edit_enabled);
       } catch (err) {
         if (!alive) return;
         setError(err instanceof Error ? err.message : '加载自定义人格失败');
@@ -50,13 +53,30 @@ export function UserSoulCard() {
     setSaving(true);
     setError('');
     try {
-      await accountsApi.updateUserSoul(content);
+      await accountsApi.updateUserSoul(content, editEnabled);
       setSavedContent(content);
       toast('success', '自定义人格已保存并注入运行时');
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存自定义人格失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleEditEnabled = async () => {
+    if (loading || saving || savingEditEnabled) return;
+    const nextValue = !editEnabled;
+    setEditEnabled(nextValue);
+    setSavingEditEnabled(true);
+    setError('');
+    try {
+      await accountsApi.updateUserSoulEditEnabled(nextValue);
+      toast('success', nextValue ? '对话记忆编辑已开启' : '对话记忆编辑已关闭');
+    } catch (err) {
+      setEditEnabled(!nextValue);
+      setError(err instanceof Error ? err.message : '保存记忆开关失败');
+    } finally {
+      setSavingEditEnabled(false);
     }
   };
 
@@ -72,19 +92,38 @@ export function UserSoulCard() {
             统一注入站内 AI Chat 和微信 BOT 的 Pi Runtime。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void saveSoul()}
-          disabled={!dirty || loading || saving}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {saving ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Save size={14} />
-          )}
-          部署至运行时
-        </button>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <button
+            type="button"
+            onClick={() => void toggleEditEnabled()}
+            disabled={loading || saving || savingEditEnabled}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-card/70 px-3 text-[12px] font-medium text-ink transition-colors hover:border-primary/45 disabled:cursor-not-allowed disabled:opacity-45"
+            role="switch"
+            aria-checked={editEnabled}
+          >
+            {savingEditEnabled ? (
+              <Loader2 size={16} className="animate-spin text-primary" />
+            ) : editEnabled ? (
+              <ToggleRight size={20} className="text-primary" />
+            ) : (
+              <ToggleLeft size={20} className="text-muted" />
+            )}
+            {editEnabled ? '对话可编辑记忆' : '对话不可编辑记忆'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveSoul()}
+            disabled={!dirty || loading || saving || savingEditEnabled}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {saving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Save size={14} />
+            )}
+            部署至运行时
+          </button>
+        </div>
       </div>
 
       {loading ? (

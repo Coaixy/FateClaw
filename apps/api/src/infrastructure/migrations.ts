@@ -297,6 +297,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           earned_cents INTEGER NOT NULL DEFAULT 0,
           reserved_cents INTEGER NOT NULL DEFAULT 0,
           pending_withdrawal_cents INTEGER NOT NULL DEFAULT 0,
+          soul_edit_enabled BOOLEAN NOT NULL DEFAULT true,
           created_at TIMESTAMPTZ NOT NULL
         )
       `);
@@ -3032,6 +3033,16 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      SET scanned_sessions = 0
                      WHERE scanned_sessions < 0`,
       });
+    },
+  },
+  {
+    id: '0019_user_soul_edit_enabled',
+    description: '增加用户级 Soul 对话编辑开关',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS soul_edit_enabled BOOLEAN NOT NULL DEFAULT true
+      `);
     },
   },
 ];

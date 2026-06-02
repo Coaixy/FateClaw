@@ -21,6 +21,7 @@ function createRuntime(): RequestRuntime {
   const deps: AgentRuntimeDeps = {
     soulStore: {
       read: vi.fn(async () => '用户 Soul：喜欢简洁结论。'),
+      canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
     skillCatalog: {
@@ -191,6 +192,7 @@ describe('createPiSessionContext', () => {
         deps: {
           soulStore: {
             read: vi.fn(async () => ''),
+            canEdit: vi.fn(async () => true),
             update: vi.fn(),
           },
           skillCatalog: {

@@ -12,6 +12,7 @@ export interface User {
   bonus_coins: number; // 赠送余额（可过期，消费优先扣）
   reserved_coins: number; // 历史冻结余额字段，当前模型扣费不再使用
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
+  soul_edit_enabled?: boolean; // 是否允许 Pi 在对话中编辑用户级 Soul
   created_at: string;
 }
 

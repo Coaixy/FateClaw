@@ -101,12 +101,18 @@ export async function runPiSession(args: {
   const records: PiToolExecutionRecord[] = [];
   let lastAssistantText: string | null = null;
 
-  const providerRuntime = createPiProviderRuntime(args.containerInput.llmRuntime);
+  const providerRuntime = createPiProviderRuntime(
+    args.containerInput.llmRuntime,
+  );
   const userId = resolveUserId(args.containerInput);
+  const soulEditEnabled = await args.runtime.deps.soulStore.canEdit(
+    args.containerInput.accountId,
+  );
   const sessionContext = await createPiSessionContext({
     containerInput: args.containerInput,
     runtime: args.runtime,
     requestScope: args.requestScope,
+    soulEditEnabled,
   });
   const resourceLoader = await createPiResourceLoader({
     deps: args.runtime.deps,
@@ -114,6 +120,7 @@ export async function runPiSession(args: {
     requestScope: args.requestScope,
     containerInput: args.containerInput,
     piContextPrompt: sessionContext.prompt,
+    soulEditEnabled,
   });
   const readableSkills = resourceLoader
     .getSkills()
@@ -126,6 +133,7 @@ export async function runPiSession(args: {
     sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
     accountId: args.containerInput.accountId,
     soulStore: args.runtime.deps.soulStore,
+    soulEditEnabled,
     userMessage: args.containerInput.userMessage,
     recordExecution(record) {
       records.push(record);

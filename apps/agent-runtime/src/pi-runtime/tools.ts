@@ -27,7 +27,8 @@ import type { SoulStore } from '../deps.js';
  * - sessionBoards：本轮授权给 Pi 读取的会话盘面集合；为空时不暴露 get_session_board。
  * - accountId：当前 agent-runtime 账号 ID，用于读写 Dashboard 维护的唯一 Soul。
  * - soulStore：Soul 读写存储。
- * - userMessage：用户本轮原始输入，用于限制 edit_soul 的写入意图。
+ * - soulEditEnabled：是否允许本轮注册 edit_soul；默认开启用于兼容测试和历史调用。
+ * - userMessage：用户本轮原始输入。
  * - recordExecution：工具执行记录回调。
  * - now：可选时钟函数，用于固定当前时间工具的测试结果。
  * - defaultTimeZone：当前时间工具默认时区。
@@ -40,6 +41,7 @@ export interface CreatePiToolsOptions {
   sessionBoards?: SessionBoardContext[];
   accountId: string;
   soulStore: SoulStore;
+  soulEditEnabled?: boolean;
   userMessage: string;
   recordExecution(record: PiToolExecutionRecord): void;
   now?: () => Date;
@@ -76,16 +78,22 @@ export function createPiCustomTools(
       recordExecution: options.recordExecution,
       accountId: options.accountId,
       soulStore: options.soulStore,
-      userMessage: options.userMessage,
-    }),
-    createPiSoulEditTool({
-      requestScope: options.requestScope,
-      recordExecution: options.recordExecution,
-      accountId: options.accountId,
-      soulStore: options.soulStore,
+      soulEditEnabled: options.soulEditEnabled,
       userMessage: options.userMessage,
     }),
   ];
+  if (options.soulEditEnabled ?? true) {
+    tools.push(
+      createPiSoulEditTool({
+        requestScope: options.requestScope,
+        recordExecution: options.recordExecution,
+        accountId: options.accountId,
+        soulStore: options.soulStore,
+        soulEditEnabled: options.soulEditEnabled,
+        userMessage: options.userMessage,
+      }),
+    );
+  }
   if (options.readableSkills?.length) {
     tools.push(
       createPiSkillGrepTool({

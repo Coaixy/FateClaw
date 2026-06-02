@@ -21,10 +21,9 @@ const { mockCreateAgentSession, mockSessionManager, mockSettingsManager } =
   }));
 
 vi.mock('@earendil-works/pi-coding-agent', async () => {
-  const actual =
-    await vi.importActual<typeof import('@earendil-works/pi-coding-agent')>(
-      '@earendil-works/pi-coding-agent',
-    );
+  const actual = await vi.importActual<
+    typeof import('@earendil-works/pi-coding-agent')
+  >('@earendil-works/pi-coding-agent');
   return {
     ...actual,
     createAgentSession: mockCreateAgentSession,
@@ -54,6 +53,7 @@ function createDeps(): AgentRuntimeDeps {
   return {
     soulStore: {
       read: vi.fn(async () => ''),
+      canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
     skillCatalog: {
@@ -145,10 +145,7 @@ describe('runPiSession', () => {
       tools?: string[];
       customTools?: Array<{
         name: string;
-        execute(
-          toolCallId: string,
-          params: { text: string },
-        ): Promise<unknown>;
+        execute(toolCallId: string, params: { text: string }): Promise<unknown>;
       }>;
       model?: {
         reasoning?: boolean;
@@ -161,42 +158,42 @@ describe('runPiSession', () => {
       };
     } = {};
 
-    mockCreateAgentSession.mockImplementation(async (args: typeof createArgs) => {
-      createArgs = args;
-      return {
-        session: {
-          state: {
-            messages: [],
-          },
-          subscribe(
-            listener: NonNullable<typeof subscribed>,
-          ) {
-            subscribed = listener;
-            return vi.fn();
-          },
-          async prompt(text: string) {
-            capturedPrompt = text;
-            subscribed?.({
-              type: 'turn_end',
-              message: {
-                role: 'assistant',
-                content: 'assistant fallback',
-                usage: {
-                  input: 3,
-                  output: 2,
-                  cacheRead: 7,
-                  cacheWrite: 11,
-                  totalTokens: 23,
+    mockCreateAgentSession.mockImplementation(
+      async (args: typeof createArgs) => {
+        createArgs = args;
+        return {
+          session: {
+            state: {
+              messages: [],
+            },
+            subscribe(listener: NonNullable<typeof subscribed>) {
+              subscribed = listener;
+              return vi.fn();
+            },
+            async prompt(text: string) {
+              capturedPrompt = text;
+              subscribed?.({
+                type: 'turn_end',
+                message: {
+                  role: 'assistant',
+                  content: 'assistant fallback',
+                  usage: {
+                    input: 3,
+                    output: 2,
+                    cacheRead: 7,
+                    cacheWrite: 11,
+                    totalTokens: 23,
+                  },
                 },
-              },
-              toolResults: [],
-            });
+                toolResults: [],
+              });
+            },
+            abort,
+            dispose: vi.fn(),
           },
-          abort,
-          dispose: vi.fn(),
-        },
-      };
-    });
+        };
+      },
+    );
 
     const deps = createDeps();
     const runtime: RequestRuntime = { deps };
@@ -223,7 +220,9 @@ describe('runPiSession', () => {
       provider: 'openai-completions',
       model: 'gpt-4o',
       userPrompt: '基于这个盘继续看事业',
-      systemPrompt: expect.stringContaining('FateClaw 的 Pi-backed Agent Runtime'),
+      systemPrompt: expect.stringContaining(
+        'FateClaw 的 Pi-backed Agent Runtime',
+      ),
       allowedTools: [
         'get_current_time',
         'get_ganzhi_by_datetime',
@@ -255,8 +254,12 @@ describe('runPiSession', () => {
       'edit_soul',
       'get_session_board',
     ]);
-    expect(createArgs.tools).not.toEqual(expect.arrayContaining(['bazi_paipan']));
-    expect(createArgs.tools).not.toEqual(expect.arrayContaining(['read_memory']));
+    expect(createArgs.tools).not.toEqual(
+      expect.arrayContaining(['bazi_paipan']),
+    );
+    expect(createArgs.tools).not.toEqual(
+      expect.arrayContaining(['read_memory']),
+    );
     expect(createArgs.customTools?.map((tool) => tool.name)).toEqual(
       createArgs.tools,
     );
@@ -297,6 +300,58 @@ describe('runPiSession', () => {
           toolResultCount: 0,
         }),
       ]),
+    );
+  });
+
+  it('does not register edit_soul when conversation Soul edits are disabled', async () => {
+    let createArgs: {
+      tools?: string[];
+      customTools?: Array<{ name: string }>;
+      resourceLoader?: {
+        getSystemPrompt(): string;
+      };
+    } = {};
+
+    mockCreateAgentSession.mockImplementation(
+      async (args: typeof createArgs) => {
+        createArgs = args;
+        return {
+          session: {
+            state: {
+              messages: [],
+            },
+            subscribe() {
+              return vi.fn();
+            },
+            async prompt() {},
+            abort: vi.fn(),
+            dispose: vi.fn(),
+          },
+        };
+      },
+    );
+
+    const deps = createDeps();
+    vi.mocked(deps.soulStore.canEdit).mockResolvedValue(false);
+    const runtime: RequestRuntime = { deps };
+    await runPiSession({
+      containerInput: createInput(),
+      runtime,
+      requestScope: createRequestScope(),
+    });
+
+    expect(createArgs.tools).toEqual([
+      'get_current_time',
+      'get_ganzhi_by_datetime',
+      'reverse_ganzhi',
+      'read_soul',
+      'get_session_board',
+    ]);
+    expect(createArgs.customTools?.map((tool) => tool.name)).toEqual(
+      createArgs.tools,
+    );
+    expect(createArgs.resourceLoader?.getSystemPrompt()).toContain(
+      '本轮不会提供 edit_soul',
     );
   });
 });

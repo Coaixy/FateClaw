@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT NOT NULL UNIQUE,
   phone_verified BOOLEAN NOT NULL DEFAULT true,
   password_hash TEXT NOT NULL,
+  soul_content TEXT NOT NULL DEFAULT '',
+  soul_edit_enabled BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL
 );
 

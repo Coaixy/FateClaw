@@ -13,6 +13,7 @@ const USER_SELECT_COLUMNS = `
   u.bonus_coins::float8 AS bonus_coins,
   u.reserved_coins::float8 AS reserved_coins,
   u.soul_content,
+  u.soul_edit_enabled,
   u.created_at
 `;
 
@@ -112,6 +113,20 @@ export async function getUserSoulContent(userId: string): Promise<string> {
 }
 
 /**
+ * 读取用户级 Soul 是否允许对话编辑。
+ *
+ * 新老库默认都视为开启，避免迁移前后的用户行为突然变化。
+ */
+export async function getUserSoulEditEnabled(userId: string): Promise<boolean> {
+  const row = await queryOne<{ soul_edit_enabled: boolean | null }>(
+    getDbPool(),
+    'SELECT soul_edit_enabled FROM users WHERE id = $1',
+    [userId],
+  );
+  return row?.soul_edit_enabled ?? true;
+}
+
+/**
  * 更新用户级 Soul 自定义人格。
  *
  * 调用方必须已完成用户身份校验，避免跨用户写入运行时人格。
@@ -124,6 +139,21 @@ export async function updateUserSoulContent(
     content,
     userId,
   ]);
+}
+
+/**
+ * 更新用户级 Soul 的对话编辑权限。
+ *
+ * 关闭后 Pi Runtime 不再注册 edit_soul，模型无法在对话中写入 Soul。
+ */
+export async function updateUserSoulEditEnabled(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  await getDbPool().query(
+    'UPDATE users SET soul_edit_enabled = $1 WHERE id = $2',
+    [enabled, userId],
+  );
 }
 
 export async function getUserByAccountId(
