@@ -16,11 +16,22 @@ function applyTheme(mode: ThemeMode) {
   html.classList.add(resolved);
 }
 
+function readStoredTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'system';
+  const stored = localStorage.getItem('theme');
+  return stored === 'light' || stored === 'dark' || stored === 'system'
+    ? stored
+    : 'system';
+}
+
+/**
+ * 管理全局主题偏好，并在客户端挂载后同步本地存储与系统主题。
+ *
+ * @returns 当前主题模式、设置主题的方法、循环切换方法，以及实际解析出的明暗主题。
+ */
 export function useTheme() {
-  const [mode, setModeState] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'system';
-    return (localStorage.getItem('theme') as ThemeMode) || 'system';
-  });
+  const [mode, setModeState] = useState<ThemeMode>('system');
+  const [hydrated, setHydrated] = useState(false);
 
   const setMode = useCallback((m: ThemeMode) => {
     setModeState(m);
@@ -28,8 +39,18 @@ export function useTheme() {
     applyTheme(m);
   }, []);
 
-  // Apply on mount and listen for system changes
+  // 首次客户端挂载后再读取 localStorage，避免服务端和客户端首屏选中态不一致。
   useEffect(() => {
+    const storedMode = readStoredTheme();
+    setModeState(storedMode);
+    applyTheme(storedMode);
+    setHydrated(true);
+  }, []);
+
+  // 已完成挂载后，继续响应用户选择和系统主题变化。
+  useEffect(() => {
+    if (!hydrated) return;
+
     applyTheme(mode);
 
     const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -38,7 +59,7 @@ export function useTheme() {
     };
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, [mode]);
+  }, [hydrated, mode]);
 
   const cycle = useCallback(() => {
     const order: ThemeMode[] = ['system', 'light', 'dark'];

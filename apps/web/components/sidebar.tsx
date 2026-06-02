@@ -8,20 +8,24 @@ import {
   Loader2,
   LogIn,
   MessageCircle,
+  Monitor,
   Share2,
   Trash2,
   Menu,
+  Moon,
   X,
   SquarePen,
   Search,
   Pencil,
   Check,
+  Sun,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useToast } from '@/lib/use-toast';
+import { ThemeMode, useTheme } from '@/lib/use-theme';
 import { TopBar } from './top-bar';
 
 function formatSessionTime(ts: string) {
@@ -46,6 +50,16 @@ const SESSION_DATE_FILTERS: readonly {
   { value: '7d', label: '近7天' },
   { value: '30d', label: '近30天' },
   { value: 'older', label: '更早' },
+];
+
+const SIDEBAR_THEME_OPTIONS: readonly {
+  mode: ThemeMode;
+  label: string;
+  icon: typeof Monitor;
+}[] = [
+  { mode: 'system', label: '跟随', icon: Monitor },
+  { mode: 'light', label: '浅色', icon: Sun },
+  { mode: 'dark', label: '深色', icon: Moon },
 ];
 
 function matchSessionDateFilter(
@@ -136,6 +150,43 @@ function Logo({ compact = false }: { compact?: boolean }) {
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+function SidebarThemeSwitch() {
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+
+  return (
+    <div
+      className="mt-2 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+      role="group"
+      aria-label="主题切换"
+    >
+      <div className="grid grid-cols-3 gap-1">
+        {SIDEBAR_THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
+          const active = themeMode === mode;
+
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setThemeMode(mode)}
+              className={`flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg text-[11px] font-medium transition-all duration-200 cursor-pointer ${
+                active
+                  ? 'bg-primary/12 text-primary shadow-sm'
+                  : 'text-muted hover:bg-canvas hover:text-ink'
+              }`}
+              aria-label={`切换到${label}主题`}
+              aria-pressed={active}
+              title={label}
+            >
+              <Icon size={12} strokeWidth={1.8} />
+              <span className="truncate">{label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -616,7 +667,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        {/* 底部：放固定信息入口，主题切换保留在个人设置页里。 */}
+        {/* 底部：固定信息入口和全局外观偏好，避免挤占顶部栏主操作区。 */}
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
@@ -662,6 +713,8 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 </span>
               </div>
             </Link>
+
+            <SidebarThemeSwitch />
           </div>
         </div>
       </aside>
