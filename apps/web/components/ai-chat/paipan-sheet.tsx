@@ -128,6 +128,11 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
   minute: {
     label: '分钟（公历时间）',
   },
+  randomNumber: {
+    label: '随机数字',
+    description: '用于随机时辰；同一个数字会稳定映射到同一个时辰。',
+    placeholder: '例如 8848',
+  },
   yao: {
     label: '六爻卦象',
     description: '从下往上输入 6 位数字，每位只能是 6、7、8、9。',
@@ -396,7 +401,7 @@ function buildInitialDraftForSkill(
 ): Record<string, unknown> {
   const base = buildDefaultValuesFromSchema(schema);
 
-  if (skillDir === 'qimen-paipan') {
+  if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
     return { $useCurrentTime: true };
   }
 
@@ -432,10 +437,16 @@ function buildSubmitInputForSkill(
   // 这里先剥离纯前端辅助字段，再按术数规则裁掉当前模式下无效的参数。
   const normalized = pruneEmptyObjects(stripPrivateFields(input));
 
-  if (skillDir === 'qimen-paipan') {
+  if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
     const useCurrentTime = getValueAtPath(input, ['$useCurrentTime']) !== false;
     if (useCurrentTime) {
       return {};
+    }
+    if (skillDir === 'liuren-paipan') {
+      const timeMode = getValueAtPath(input, ['$liurenTimeMode']);
+      if (typeof timeMode === 'string') {
+        normalized.timeMode = timeMode;
+      }
     }
     return normalized;
   }
@@ -475,16 +486,20 @@ function validateDraftForSkill(
     return null;
   }
 
-  if (skillDir === 'qimen-paipan') {
+  if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
     const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
     if (useCurrentTime) {
       return null;
     }
     if (typeof getValueAtPath(draft, ['solarDate']) !== 'string') {
-      return '请先选择起盘日期（公历）';
+      return skillDir === 'liuren-paipan'
+        ? '请先选择起课日期（公历）'
+        : '请先选择起盘日期（公历）';
     }
     if (typeof getValueAtPath(draft, ['hour']) !== 'number') {
-      return '请先选择起盘时间（公历）';
+      return skillDir === 'liuren-paipan'
+        ? '请先选择起课时间（公历）'
+        : '请先选择起盘时间（公历）';
     }
     return null;
   }
@@ -540,7 +555,8 @@ function getSimpleHiddenFieldPaths(skillDir: string): string[] {
     case 'ziwei-paipan':
       return ['solarDate', 'hour', 'minute', 'gender'];
     case 'qimen-paipan':
-      return ['solarDate', 'hour', 'minute'];
+    case 'liuren-paipan':
+      return ['solarDate', 'hour', 'minute', 'randomNumber', 'timeMode'];
     case 'iching-paipan':
     case 'jingzhan-paipan':
       return ['method', 'datetime', 'yao', 'numbers'];

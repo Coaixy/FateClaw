@@ -10,6 +10,8 @@ export const CATEGORY_TO_OFFICIAL_SKILL: Record<string, string> = {
   六爻: 'iching-paipan',
   经占: 'jingzhan-paipan',
   奇门: 'qimen-paipan',
+  大六壬: 'liuren-paipan',
+  六壬: 'liuren-paipan',
 };
 
 const OFFICIAL_SKILL_TO_CATEGORY: Record<string, string> = {
@@ -18,6 +20,7 @@ const OFFICIAL_SKILL_TO_CATEGORY: Record<string, string> = {
   'iching-paipan': '六爻',
   'jingzhan-paipan': '经占',
   'qimen-paipan': '奇门',
+  'liuren-paipan': '大六壬',
 };
 
 export function resolveEvidenceCategoryBySkill(skill: string): string | null {

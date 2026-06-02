@@ -1,6 +1,7 @@
 import { runBaziPaipan } from './paipan-runners/bazi.js';
 import { runIchingPaipan } from './paipan-runners/iching.js';
 import { runJingzhanPaipan } from './paipan-runners/jingzhan.js';
+import { runLiurenPaipan } from './paipan-runners/liuren.js';
 import { runQimenPaipan } from './paipan-runners/qimen.js';
 import { runZiweiPaipan } from './paipan-runners/ziwei.js';
 
@@ -210,6 +211,65 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
             solarDate: '2026-04-17',
             hour: 14,
             minute: 30,
+          },
+        },
+      ],
+    },
+  },
+  'liuren-paipan': {
+    displayName: '大六壬排盘',
+    description:
+      '大六壬排盘：按当前、指定或随机时辰生成天地盘、四课、三传、遁干和神煞。',
+    trigger:
+      '用户询问大六壬、六壬、天地盘、四课、三传、月将、贵人天将等六壬相关问题，或需要按时间起六壬课',
+    runner: runLiurenPaipan,
+    parameters: {
+      type: 'object',
+      properties: {
+        solarDate: {
+          type: 'string',
+          description: '阳历日期 YYYY-MM-DD。不传则用当前时间；只传日期和 randomNumber 时按今日/该日随机时辰',
+        },
+        hour: {
+          type: 'integer',
+          description: '小时 0-23（24 小时制）。与 solarDate 一起传为指定时间',
+          minimum: 0,
+          maximum: 23,
+        },
+        minute: {
+          type: 'integer',
+          description: '分钟 0-59；与 solarDate/hour 一起传时默认 0',
+          minimum: 0,
+          maximum: 59,
+          default: 0,
+        },
+        randomNumber: {
+          type: 'integer',
+          description: '可选随机数种子；传入后稳定映射到 12 个时辰之一，不传则真实随机',
+        },
+        timeMode: {
+          type: 'string',
+          description: '前端辅助标识：now/custom/random',
+          enum: ['now', 'custom', 'random'],
+        },
+      },
+      examples: [
+        {
+          name: '默认当前时间起课',
+          value: {},
+        },
+        {
+          name: '指定时间起课',
+          value: {
+            solarDate: '2026-06-02',
+            hour: 12,
+            minute: 30,
+          },
+        },
+        {
+          name: '随机数起今日时辰',
+          value: {
+            randomNumber: 8848,
           },
         },
       ],

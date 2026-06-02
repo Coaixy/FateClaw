@@ -11,12 +11,15 @@ import { startApiServer } from '../interfaces/http/server.js';
 import { initDatabase, closeDatabase } from '../infrastructure/db.js';
 import { connectRedis, disconnectRedis } from '../infrastructure/redis.js';
 import { logger } from '../infrastructure/logger.js';
+import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
 
 async function main(): Promise<void> {
   logger.info('API-only 开发模式启动中...');
 
   await initDatabase();
   logger.info('数据库已连接');
+
+  await seedOfficialSkillsFromRegistry();
 
   await connectRedis();
   logger.info('Redis 已连接');

@@ -11,6 +11,7 @@ const PASTED_BOARD_CATEGORY_ALIASES: Readonly<Record<string, string>> = {
   六爻排盘: '六爻',
   经占排盘: '经占',
   奇门遁甲排盘: '奇门',
+  大六壬排盘: '大六壬',
 };
 
 export type ChatInputKind = ChatInputKindDto;

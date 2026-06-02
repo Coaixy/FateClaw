@@ -12,6 +12,7 @@ export type PaipanSkillId =
   | 'ziwei-paipan'
   | 'iching-paipan'
   | 'jingzhan-paipan'
+  | 'liuren-paipan'
   | 'qimen-paipan';
 
 /**

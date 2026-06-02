@@ -23,7 +23,6 @@
     "account:remove": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts remove"
   },
   "dependencies": {
-    "@fateclaw/contracts": "workspace:*",
     "@alicloud/credentials": "^2.4.4",
     "@alicloud/dypnsapi20170525": "^2.0.0",
     "@alicloud/openapi-client": "^0.4.15",
@@ -32,6 +31,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/static": "^9.1.1",
+    "@fateclaw/contracts": "workspace:*",
     "@types/qrcode-terminal": "^0.12.2",
     "bazi-ts-lib": "^1.0.1",
     "bcryptjs": "^3.0.3",
@@ -41,6 +41,7 @@
     "ioredis": "^5.10.1",
     "iztro": "^2.5.8",
     "kinqimen": "^0.2.0",
+    "liuren-ts-lib": "^3.0.0",
     "openai": "^6.32.0",
     "pg": "^8.20.0",
     "pino": "^9.6.0",
