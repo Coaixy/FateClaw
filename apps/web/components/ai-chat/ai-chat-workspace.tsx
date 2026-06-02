@@ -772,33 +772,36 @@ function PaipanSkillStrip({
   }
 
   return (
-    <div className="flex h-9 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-lg border border-hairline bg-surface-card/55 px-1.5 py-1">
-      <span className="sticky left-0 z-[1] inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-surface-card px-1.5 text-[11px] font-medium text-muted">
-        <Sparkles size={12} />
-        术数
-      </span>
-      {pastedBoardButton}
-      <span className="h-4 w-px shrink-0 bg-hairline/70" />
-      {catalog.map((item) => (
+    <div className="relative">
+      <div className="flex h-9 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-lg border border-hairline bg-surface-card/55 px-1.5 py-1 pr-6">
+        <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 text-[11px] font-medium text-primary">
+          <Sparkles size={12} />
+          术数
+        </span>
+        {catalog.map((item) => (
+          <button
+            key={item.skill}
+            type="button"
+            onClick={() => onSelectSkill(item.skill)}
+            disabled={disabled}
+            className="inline-flex h-7 shrink-0 items-center rounded-md border border-primary/10 bg-surface-card/55 px-2 text-[12px] font-medium text-ink transition-colors hover:border-primary/25 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {item.name}
+          </button>
+        ))}
         <button
-          key={item.skill}
           type="button"
-          onClick={() => onSelectSkill(item.skill)}
+          onClick={onOpenAll}
           disabled={disabled}
-          className="inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-[12px] font-medium text-ink transition-colors hover:border-primary/25 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-hairline bg-surface-card px-2 text-[11px] text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {item.name}
+          更多
+          <ChevronRight size={11} />
         </button>
-      ))}
-      <button
-        type="button"
-        onClick={onOpenAll}
-        disabled={disabled}
-        className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-hairline bg-surface-card px-2 text-[11px] text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        更多
-        <ChevronRight size={11} />
-      </button>
+        <span className="h-4 w-px shrink-0 bg-hairline/70" />
+        {pastedBoardButton}
+      </div>
+      <div className="pointer-events-none absolute inset-y-px right-px w-8 rounded-r-lg bg-gradient-to-l from-surface-card/95 to-transparent" />
     </div>
   );
 }

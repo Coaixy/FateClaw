@@ -57,7 +57,7 @@ export function PaipanSkillRail({
 
   return (
     <section className="rounded-2xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] px-2.5 py-2.5 sm:px-3">
-      <div className="flex items-center justify-between gap-2.5">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/12 text-primary">
@@ -74,7 +74,7 @@ export function PaipanSkillRail({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:shrink-0 sm:flex-wrap sm:items-center sm:justify-end">
           <Button
             size="sm"
             variant="secondary"
@@ -103,35 +103,48 @@ export function PaipanSkillRail({
             当前还没有可用的系统排盘术数。
           </div>
         ) : (
-          <div className="-mx-1 px-1">
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-1 pt-0.5 snap-x snap-mandatory">
-              {loading
-                ? Array.from({ length: 4 }).map((_, index) => (
-                    <LoadingCard key={`paipan-loading-${index}`} />
-                  ))
-                : catalog.map((item) => (
-                    <button
-                      key={item.skill}
-                      type="button"
-                      onClick={() => onSelectSkill(item.skill)}
-                      disabled={disabled}
-                      className="group min-h-[58px] min-w-[108px] snap-start rounded-xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-2.5 py-2 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[120px]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[8px] font-medium text-primary">
-                          术数
-                        </span>
-                        <ChevronRight
-                          size={12}
-                          className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
-                        />
-                      </div>
+          <div>
+            <div className="mb-1.5 flex items-center justify-between px-1">
+              <span className="text-[10px] font-medium text-muted">
+                可用术数
+              </span>
+              {!loading && catalog.length > 0 && (
+                <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                  {catalog.length} 个
+                </span>
+              )}
+            </div>
+            <div className="relative -mx-1 px-1">
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-1 pt-0.5 pr-6 snap-x snap-mandatory">
+                {loading
+                  ? Array.from({ length: 4 }).map((_, index) => (
+                      <LoadingCard key={`paipan-loading-${index}`} />
+                    ))
+                  : catalog.map((item) => (
+                      <button
+                        key={item.skill}
+                        type="button"
+                        onClick={() => onSelectSkill(item.skill)}
+                        disabled={disabled}
+                        className="group min-h-[58px] min-w-[108px] snap-start rounded-xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-2.5 py-2 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[120px]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[8px] font-medium text-primary">
+                            术数
+                          </span>
+                          <ChevronRight
+                            size={12}
+                            className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
+                          />
+                        </div>
 
-                      <p className="mt-2 line-clamp-1 text-[11px] font-semibold tracking-tight text-ink sm:text-[12px]">
-                        {item.name}
-                      </p>
-                    </button>
-                  ))}
+                        <p className="mt-2 line-clamp-1 text-[11px] font-semibold tracking-tight text-ink sm:text-[12px]">
+                          {item.name}
+                        </p>
+                      </button>
+                    ))}
+              </div>
             </div>
           </div>
         )}
