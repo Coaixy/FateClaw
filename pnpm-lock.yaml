@@ -120,8 +120,8 @@ importers:
         specifier: ^0.12.2
         version: 0.12.2
       bazi-ts-lib:
-        specifier: ^1.0.1
-        version: 1.0.1
+        specifier: ^1.0.2
+        version: 1.0.2
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -132,8 +132,8 @@ importers:
         specifier: ^5.8.5
         version: 5.8.5
       iching-shifa:
-        specifier: ^1.6.3
-        version: 1.6.3
+        specifier: ^1.6.4
+        version: 1.6.4
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
@@ -1866,8 +1866,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  bazi-ts-lib@1.0.1:
-    resolution: {integrity: sha512-JzmO11vrsrkZGJlhpci2yS+5XzrPdLRnFkgNUMUvsScN6gc7BLeLTt/5Q/CZ3QsazfR+2Rxks1UTPCiWCfTpAw==}
+  bazi-ts-lib@1.0.2:
+    resolution: {integrity: sha512-Y19h9hHqAdnWMNT4MUh/iToIkNjG5NX1HuxNMbkxqWZ99J4D2tkzAW2oGKHaRo17V05ZTOkEr4c212AhQ4icDQ==}
 
   bcryptjs@3.0.3:
     resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
@@ -2655,8 +2655,8 @@ packages:
   i18next@23.16.8:
     resolution: {integrity: sha512-06r/TitrM88Mg5FdUXAKL96dJMzgqLE5dv3ryBAra4KCwD9mJ4ndOTS95ZuymIGoE+2hzfdaMak2X11/es7ZWg==}
 
-  iching-shifa@1.6.3:
-    resolution: {integrity: sha512-lRdxr59uKzsn0iatiFHL5vZt98mGoB/KV7paNp8u7z5DlLhE5ybXAtBPq1R+uMbgCPLITf3JdgNYfD9rtaO2ZQ==}
+  iching-shifa@1.6.4:
+    resolution: {integrity: sha512-ppmpMxw0W6o6IkNUGW+tTf35wDqvcXqHSAX+QkquZizIyg/ux61Fb8FnDAgSRL3+/tmvFoQBGUUMQ/jYRYVNdA==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -6179,7 +6179,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.21: {}
 
-  bazi-ts-lib@1.0.1:
+  bazi-ts-lib@1.0.2:
     dependencies:
       tyme4ts: 1.5.0
 
@@ -7213,7 +7213,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.2
 
-  iching-shifa@1.6.3:
+  iching-shifa@1.6.4:
     dependencies:
       tyme4ts: 1.5.0
 
