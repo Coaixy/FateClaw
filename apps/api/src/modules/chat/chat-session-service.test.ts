@@ -175,6 +175,7 @@ describe('chat-session-service selected board context', () => {
     mockStoreMessage.mockResolvedValue(undefined);
     mockTouchChatSession.mockResolvedValue(undefined);
     mockHasFinalAiChatSessionReply.mockResolvedValue(false);
+    mockGetSessionMessages.mockResolvedValue([]);
     mockGetChatSessionPiSessionArchive.mockResolvedValue(undefined);
     mockWritePiSessionArchiveToFiles.mockResolvedValue({
       writtenSessionFiles: 1,
@@ -296,6 +297,151 @@ describe('chat-session-service selected board context', () => {
         ],
         history: [],
       }),
+    );
+  });
+
+  it('wraps the first normal question after a board insert for the runtime only', async () => {
+    mockGetSessionMessages.mockResolvedValueOnce([
+      {
+        id: 'board-msg-1',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content:
+          '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
+        timestamp: '2026-04-26T09:30:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        tool_context: JSON.stringify([
+          {
+            skill: 'bazi-paipan',
+            output: '八字排盘（系统排盘结果）\nbazi：true',
+            artifactTitle: '八字排盘',
+            artifactData: { bazi: true },
+          },
+        ]),
+        metadata: {
+          kind: 'board_result',
+          workflow: 'direct_paipan',
+          board_skill: 'bazi-paipan',
+        },
+      },
+    ]);
+    mockBuildStructuredInputForSession.mockImplementationOnce(
+      async (_identity, userMessage: string) => ({
+        userMessage,
+        history: [],
+        userName: '测试账号',
+        assistantName: '测试账号',
+      }),
+    );
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '看看事业',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockBuildStructuredInputForSession).toHaveBeenCalledWith(
+      expect.any(Object),
+      [
+        '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
+        '',
+        '【用户发送的问题】',
+        '看看事业',
+      ].join('\n'),
+      'session-1',
+      'gpt-4.1',
+      128_000,
+    );
+    expect(mockStoreMessage.mock.calls[0]?.[0]).toMatchObject({
+      content: '看看事业',
+      is_bot_message: false,
+    });
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: [
+          '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
+          '',
+          '【用户发送的问题】',
+          '看看事业',
+        ].join('\n'),
+      }),
+    );
+  });
+
+  it('does not wrap later normal questions after a final reply already followed the board', async () => {
+    mockGetSessionMessages.mockResolvedValueOnce([
+      {
+        id: 'board-msg-1',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content:
+          '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
+        timestamp: '2026-04-26T09:30:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        tool_context: JSON.stringify([
+          {
+            skill: 'bazi-paipan',
+            output: '八字排盘（系统排盘结果）\nbazi：true',
+            artifactTitle: '八字排盘',
+            artifactData: { bazi: true },
+          },
+        ]),
+        metadata: {
+          kind: 'board_result',
+          workflow: 'direct_paipan',
+          board_skill: 'bazi-paipan',
+        },
+      },
+      {
+        id: 'aichat-existing_reply',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        sender: 'web:user-1',
+        sender_name: '命枢',
+        content: '之前已经基于盘面回复过一次',
+        timestamp: '2026-04-26T09:31:00.000Z',
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: 'session-1',
+        metadata: {
+          kind: 'final',
+          turn_complete: true,
+        },
+      },
+    ]);
+    mockBuildStructuredInputForSession.mockImplementationOnce(
+      async (_identity, userMessage: string) => ({
+        userMessage,
+        history: [],
+        userName: '测试账号',
+        assistantName: '测试账号',
+      }),
+    );
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '今天聊点别的',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockBuildStructuredInputForSession).toHaveBeenCalledWith(
+      expect.any(Object),
+      '今天聊点别的',
+      'session-1',
+      'gpt-4.1',
+      128_000,
     );
   });
 

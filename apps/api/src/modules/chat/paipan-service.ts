@@ -83,6 +83,7 @@ function buildDirectPaipanMessages(args: {
   const now = new Date().toISOString();
   const title =
     args.skillContextEntry.artifactTitle || args.skillContextEntry.skill;
+  const resultText = `已生成${title}。你可以直接提问，后续未切换主题时会参考此盘面。`;
   return {
     requestMessage: {
       id: requestId,
@@ -107,7 +108,7 @@ function buildDirectPaipanMessages(args: {
       user_id: args.userId,
       sender: args.runtimeId,
       sender_name: WEB_CHAT_ASSISTANT_NAME,
-      content: `已生成：${title}`,
+      content: resultText,
       timestamp: now,
       is_from_me: true,
       is_bot_message: true,

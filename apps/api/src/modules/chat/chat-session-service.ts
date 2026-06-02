@@ -61,6 +61,7 @@ import {
 import {
   buildActiveBoardContext,
   buildSessionBoardContexts,
+  type SessionBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './message-handler.js';
 import { resolveUserLlmRuntime } from '../system/system-config.js';
@@ -122,6 +123,66 @@ async function releaseChatSessionProcessing(
 function buildSelectedBoardContext(message: NewMessage): boolean {
   const activeBoardContext = buildActiveBoardContext(message);
   return Boolean(activeBoardContext);
+}
+
+function getMessageTime(message: Pick<NewMessage, 'timestamp'>): number {
+  const time = new Date(message.timestamp).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function isFinalAssistantReplyMessage(message: NewMessage): boolean {
+  if (!message.is_bot_message) return false;
+  const metadata =
+    message.metadata &&
+    typeof message.metadata === 'object' &&
+    !Array.isArray(message.metadata)
+      ? (message.metadata as Record<string, unknown>)
+      : null;
+  return metadata?.kind === 'final' || /^aichat-.*_reply/.test(message.id);
+}
+
+function buildBoardFirstQuestionPrompt(args: {
+  question: string;
+  board: SessionBoardContextDto;
+}): string {
+  const title = args.board.artifactTitle?.trim() || '当前盘面';
+  return [
+    `已生成${title}。你可以直接提问，后续未切换主题时会参考此盘面。`,
+    '',
+    '【用户发送的问题】',
+    args.question,
+  ].join('\n');
+}
+
+function buildRuntimeUserMessageForBoardFirstQuestion(args: {
+  input: NormalizedChatSessionMessageInput;
+  previousMessages: NewMessage[];
+  sessionBoardContexts: SessionBoardContextDto[];
+}): string {
+  if (args.input.inputKind !== 'normal') return args.input.content;
+
+  const currentBoard = args.sessionBoardContexts.find(
+    (board) => board.isCurrent,
+  );
+  if (!currentBoard?.createdAt) return args.input.content;
+
+  const boardMessage = args.previousMessages.find(
+    (message) => message.id === currentBoard.sourceMessageId,
+  );
+  if (!boardMessage) return args.input.content;
+
+  const boardTime = getMessageTime(boardMessage);
+  const hasFinalReplyAfterBoard = args.previousMessages.some(
+    (message) =>
+      getMessageTime(message) > boardTime &&
+      isFinalAssistantReplyMessage(message),
+  );
+  if (hasFinalReplyAfterBoard) return args.input.content;
+
+  return buildBoardFirstQuestionPrompt({
+    question: args.input.content,
+    board: currentBoard,
+  });
 }
 
 function normalizeAssistantReplyTexts(output: {
@@ -478,6 +539,10 @@ export async function sendOwnedChatSessionMessage(
 
   try {
     const llmRuntime = await resolveUserLlmRuntime(userId);
+    const previousMessages =
+      input.inputKind === 'normal'
+        ? await getSessionMessages(session.account_id, session.id)
+        : [];
     const userMessage: NewMessage = {
       id: msgId,
       account_id: session.account_id,
@@ -513,6 +578,11 @@ export async function sendOwnedChatSessionMessage(
             }
           : undefined,
     });
+    const runtimeUserMessage = buildRuntimeUserMessageForBoardFirstQuestion({
+      input,
+      previousMessages,
+      sessionBoardContexts,
+    });
 
     const structured = await buildStructuredInputForSession(
       {
@@ -521,7 +591,7 @@ export async function sendOwnedChatSessionMessage(
         assistantName: WEB_CHAT_ASSISTANT_NAME,
         soulAccountId: await resolveOwnedSoulAccountId(userId),
       },
-      input.content,
+      runtimeUserMessage,
       session.id,
       llmRuntime.model,
       llmRuntime.contextWindowTokens,
