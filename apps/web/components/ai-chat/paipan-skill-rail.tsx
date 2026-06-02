@@ -159,35 +159,45 @@ export function PaipanSkillRail({
 
       {(enabledSkillsLoading || hasEnabledSkills) && (
         <div className="mt-2 border-t border-hairline/60 pt-2">
-          <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[10px] font-medium text-muted">
-            {enabledSkillsLoading ? (
-              <Loader2 size={11} className="animate-spin" />
-            ) : (
-              <Share2 size={11} />
+          <div className="mb-1.5 flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
+              {enabledSkillsLoading ? (
+                <Loader2 size={11} className="animate-spin" />
+              ) : (
+                <Share2 size={11} />
+              )}
+              <span>已开启 Skill</span>
+            </div>
+            {!enabledSkillsLoading && hasEnabledSkills && (
+              <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                {enabledSkills.length} 个
+              </span>
             )}
-            <span>已开启 Skill</span>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5">
-            {enabledSkillsLoading
-              ? Array.from({ length: 3 }).map((_, index) => (
-                  <span
-                    key={`enabled-skill-loading-${index}`}
-                    className="h-7 min-w-[86px] shrink-0 rounded-lg border border-hairline bg-surface-card/50"
-                  />
-                ))
-              : enabledSkills.map((skill) => (
-                  <span
-                    key={`${skill.source}-${skill.id}`}
-                    className="inline-flex h-7 max-w-[160px] shrink-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
-                    title={skill.name}
-                  >
-                    <Share2 size={10} className="text-primary" />
-                    <span className="truncate">{skill.name}</span>
-                    {skill.source === 'subscribed' && (
-                      <span className="text-[9px] text-muted">订阅</span>
-                    )}
-                  </span>
-                ))}
+          <div className="relative -mx-1 px-1">
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 pr-6">
+              {enabledSkillsLoading
+                ? Array.from({ length: 3 }).map((_, index) => (
+                    <span
+                      key={`enabled-skill-loading-${index}`}
+                      className="h-7 min-w-[86px] shrink-0 rounded-lg border border-hairline bg-surface-card/50"
+                    />
+                  ))
+                : enabledSkills.map((skill) => (
+                    <span
+                      key={`${skill.source}-${skill.id}`}
+                      className="inline-flex h-7 max-w-[160px] shrink-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
+                      title={skill.name}
+                    >
+                      <Share2 size={10} className="text-primary" />
+                      <span className="truncate">{skill.name}</span>
+                      {skill.source === 'subscribed' && (
+                        <span className="text-[9px] text-muted">订阅</span>
+                      )}
+                    </span>
+                  ))}
+            </div>
           </div>
         </div>
       )}
