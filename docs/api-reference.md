@@ -13,7 +13,6 @@
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
-- `/api/tasks`
 - `/api/skills`
 - `/api/billing`
 - `/api/admin`
@@ -368,67 +367,6 @@ Authorization: Bearer <token>
 | GET | `/api/model-settings/official-models` | 获取可选官方模型列表 |
 | PUT | `/api/model-settings/custom` | 保存自配模型，字段包括 `pi_api`、`base_url`、`model_name`、`context_window_tokens`、`auth_mode`、`api_key` |
 | PUT | `/api/model-settings/selection` | 选择模型来源，传 `{ "source": "custom" }` 或 `{ "source": "official", "official_model_id": "..." }` |
-
----
-
-## Tasks 定时任务
-
-### GET /api/tasks/:accountId
-
-获取指定账号的定时任务列表。需认证。
-
-**Path Params**
-
-| 参数      | 说明    |
-| --------- | ------- |
-| accountId | 账号 ID |
-
-**Response 200**
-
-```json
-[
-  {
-    "id": "task-uuid",
-    "account_id": "bot_123@im.bot",
-    "prompt": "提醒喝水",
-    "schedule_type": "cron",
-    "schedule_value": "0 */2 * * *",
-    "reminder_type": "water",
-    "voice_text": null,
-    "next_run": "2026-03-28T12:00:00.000Z",
-    "last_run": "2026-03-28T10:00:00.000Z",
-    "last_result": "已提醒",
-    "status": "active",
-    "created_at": "2026-03-01T00:00:00.000Z"
-  }
-]
-```
-
----
-
-### DELETE /api/tasks/:taskId
-
-删除一个定时任务。需认证，只能删除自己账号下的任务。
-
-**Path Params**
-
-| 参数   | 说明    |
-| ------ | ------- |
-| taskId | 任务 ID |
-
-**Response 200**
-
-```json
-{ "success": true }
-```
-
-**Error 404**
-
-```json
-{ "error": "任务不存在" }
-```
-
----
 
 ## Skills 商店与创作者
 
@@ -899,7 +837,6 @@ Authorization: Bearer <token>
 | GET | `/api/admin/messages` | 管理端消息检索 |
 | GET | `/api/admin/chat-sessions` | 管理端会话检索 |
 | POST | `/api/admin/chat-sessions/pi-sessions/cleanup` | 清理 Pi session 文件 |
-| GET | `/api/admin/tasks` | 管理端任务检索 |
 | GET | `/api/admin/skills/custom` | 管理端自定义 Skill 检索 |
 | GET | `/api/admin/skills/global` | 系统排盘全局开关列表 |
 

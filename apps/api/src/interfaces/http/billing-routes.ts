@@ -182,12 +182,12 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/billing/reset — soft-reset user data by scope
   // 审查要求：数据不物理删除，仅标记 deleted_at；soul 文件归档后重建
-  // scope: 'all' | 'messages' | 'memories' | 'tasks'（默认 'all'）
+  // scope: 'all' | 'messages' | 'memories'（默认 'all'）
   app.post('/reset', async (request, reply) => {
     await request.requireAuth();
 
     const { scope = 'all' } = (request.body as { scope?: string }) || {};
-    const validScopes = ['all', 'messages', 'memories', 'tasks'];
+    const validScopes = ['all', 'messages', 'memories'];
     if (!validScopes.includes(scope)) {
       return reply
         .code(400)
@@ -196,7 +196,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
     const result = await resetBillingScope(
       request.user.userId,
-      scope as 'all' | 'messages' | 'memories' | 'tasks',
+      scope as 'all' | 'messages' | 'memories',
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

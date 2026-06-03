@@ -307,31 +307,6 @@ export interface ConfigAuditLog {
   created_at: string;
 }
 
-export interface ScheduledTask {
-  id: string;
-  account_id: string;
-  prompt: string;
-  schedule_type: 'cron' | 'interval' | 'once';
-  schedule_value: string;
-  reminder_type: 'medicine' | 'exercise' | 'water' | 'custom' | null;
-  voice_text: string | null;
-  next_run: string | null;
-  last_run: string | null;
-  last_result: string | null;
-  scheduler_locked_until: string | null;
-  status: 'active' | 'paused' | 'completed';
-  created_at: string;
-}
-
-export interface TaskRunLog {
-  task_id: string;
-  run_at: string;
-  duration_ms: number;
-  status: 'success' | 'error';
-  result: string | null;
-  error: string | null;
-}
-
 // --- Channel abstraction ---
 
 export interface Channel {

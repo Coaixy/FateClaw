@@ -17,7 +17,6 @@ import {
   getAdminGlobalStats,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getTasksForAdmin,
 } from './admin-repository.js';
 
 interface QueryCall {
@@ -67,21 +66,6 @@ describe('admin repository', () => {
     expect(calls[1]?.params).toEqual(['user-1', 'session-1', 200, 20]);
   });
 
-  it('caps admin task query limits and keeps filter params ordered', async () => {
-    const { calls } = createMockPool();
-
-    await getTasksForAdmin({
-      userId: 'user-1',
-      status: 'active',
-      limit: 9999,
-    });
-
-    expect(calls[0]?.sql).toContain('a.owner_id = $1');
-    expect(calls[0]?.sql).toContain('t.status = $2');
-    expect(calls[0]?.sql).toContain('LIMIT $3');
-    expect(calls[0]?.params).toEqual(['user-1', 'active', 2000]);
-  });
-
   it('hydrates custom skill files from bundle storage for admin reads', async () => {
     mockReadTextSkillBundleFiles.mockReturnValue([
       { path: 'SKILL.md', content: 'skill md' },
@@ -123,7 +107,6 @@ describe('admin repository', () => {
       [{ msgs: '10', inp: '100', outp: '200', total: '300' }],
       [{ msgs: '1', inp: '10', outp: '20', total: '30' }],
       [{ cnt: '4' }],
-      [{ cnt: '1' }],
       [
         {
           total_orders: 5,
@@ -155,11 +138,11 @@ describe('admin repository', () => {
       },
     });
 
-    const rechargeStatsSql = calls[7]?.sql ?? '';
+    const rechargeStatsSql = calls[6]?.sql ?? '';
     expect(rechargeStatsSql).toContain('SUM(amount_coins)');
     expect(rechargeStatsSql).toContain('AS period_coins\n       FROM');
     expect(rechargeStatsSql).not.toContain('amount_cents');
-    expect(calls[7]?.params).toEqual([
+    expect(calls[6]?.params).toEqual([
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       '2026-05-01',
       '2026-05-31',

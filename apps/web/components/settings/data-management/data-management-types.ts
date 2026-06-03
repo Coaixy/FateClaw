@@ -1,6 +1,6 @@
 import type { MessageSquare } from 'lucide-react';
 
-export type ResetScope = 'all' | 'messages' | 'memories' | 'tasks';
+export type ResetScope = 'all' | 'messages' | 'memories';
 
 export type ResetItem = {
   scope: Exclude<ResetScope, 'all'>;

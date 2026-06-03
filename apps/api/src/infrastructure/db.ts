@@ -27,7 +27,6 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getPiSessionCleanupCursor,
-  getTasksForAdmin,
   resetPiSessionCleanupCursor,
   upsertPiSessionCleanupCursor,
 } from './repositories/admin-repository.js';
@@ -39,7 +38,6 @@ import type {
   AdminPiSessionCleanupCursorRow,
   AdminRechargePeriodStats,
   AdminRechargeStatsRange,
-  AdminTaskRow,
 } from './repositories/admin-repository.js';
 import {
   adjustUserPurchasedBalance,
@@ -182,20 +180,6 @@ import {
   updateUserSoulContent,
 } from './repositories/users-repository.js';
 import {
-  claimDueTasks,
-  createTask,
-  deleteTask,
-  extendTaskRunLock,
-  getActiveTaskCountForUser,
-  getAllTasks,
-  getTaskById,
-  getTasksForAccount,
-  logTaskRun,
-  resetUserTasks,
-  updateTask,
-  updateTaskAfterRun,
-} from './repositories/tasks-repository.js';
-import {
   createSkillBundle,
   createUserCustomSkill,
   deleteSkillBundle,
@@ -246,7 +230,6 @@ import type {
 export {
   adjustUserPurchasedBalance,
   bindAccountToUser,
-  claimDueTasks,
   createAccount,
   createChatSession,
   createConfigAuditLog,
@@ -254,7 +237,6 @@ export {
   createOfficialModelConfig,
   createPublicFinancialLedgerEntry,
   createSkillBundle,
-  createTask,
   createUser,
   createUserCustomSkill,
   deleteAccount,
@@ -263,18 +245,14 @@ export {
   deleteOfficialModelConfig,
   deletePublicFinancialLedgerEntry,
   deleteSkillBundle,
-  deleteTask,
   deleteUserCustomSkill,
   deleteUserModelSelectionsByOfficialModelId,
   deleteWechatChatSessionLink,
   expireBonusBalance,
-  extendTaskRunLock,
   getAccount,
   getAccountsByUserId,
-  getActiveTaskCountForUser,
   getAdminGlobalStats,
   getAllSkillGlobalConfigs,
-  getAllTasks,
   getAllUsers,
   getAllAccounts,
   getBillingRequestReservationByRequestId,
@@ -323,9 +301,6 @@ export {
   getSubscribedSkills,
   getSubscriberIds,
   getSystemSecret,
-  getTasksForAdmin,
-  getTaskById,
-  getTasksForAccount,
   getUserByAccountId,
   getUserById,
   getUserByPhone,
@@ -350,7 +325,6 @@ export {
   listPublicFinancialLedgerEntries,
   listRechargeOrdersByUserId,
   listUserBundles,
-  logTaskRun,
   markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
   markRechargeOrderFailed,
@@ -363,7 +337,6 @@ export {
   releaseUserBalanceReservation,
   resetPiSessionCleanupCursor,
   resetUserMessages,
-  resetUserTasks,
   reserveUserBalanceCoins,
   seedOfficialSkills,
   setSkillGlobalEnabled,
@@ -391,8 +364,6 @@ export {
   updatePublicFinancialLedgerEntry,
   updateRuntimeConfig,
   updateSoulContent,
-  updateTask,
-  updateTaskAfterRun,
   updateRechargePaymentConfig,
   updateSkillBundle,
   updateUserCustomSkill,
@@ -420,7 +391,6 @@ export type {
   AdminPiSessionCleanupCursorRow,
   AdminRechargePeriodStats,
   AdminRechargeStatsRange,
-  AdminTaskRow,
   BillingRequestReservationRow,
   BundleByTokenResult,
   ChatSessionPiSessionArchiveRow,
@@ -531,16 +501,6 @@ export async function deleteUser(userId: string): Promise<void> {
 
     // 删除用户拥有的账号链路
     await client.query(
-      `DELETE FROM task_run_logs WHERE task_id IN
-       (SELECT t.id FROM scheduled_tasks t JOIN accounts a ON a.id = t.account_id WHERE a.owner_id = $1)`,
-      [userId],
-    );
-    await client.query(
-      `DELETE FROM scheduled_tasks WHERE account_id IN
-       (SELECT id FROM accounts WHERE owner_id = $1)`,
-      [userId],
-    );
-    await client.query(
       `DELETE FROM conversation_logs WHERE account_id IN
        (SELECT id FROM accounts WHERE owner_id = $1)`,
       [userId],
@@ -568,8 +528,11 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 /**
- * 重置用户的所有数据：消息、定时任务（含运行日志）。
- * 使用软删除（标记 deleted_at）而非物理删除，以满足审查要求。
+ * 重置用户的所有消息数据。
+ *
+ * @param userId 需要重置数据的用户 ID。
+ * @returns 被重置的账号 ID 列表。
+ * @remarks 使用软删除（标记 deleted_at）而非物理删除，以满足审查要求。
  */
 export async function resetUserData(userId: string): Promise<string[]> {
   const now = new Date().toISOString();
@@ -581,15 +544,6 @@ export async function resetUserData(userId: string): Promise<string[]> {
     await client.query('BEGIN');
 
     for (const accountId of accountIds) {
-      await client.query(
-        `UPDATE task_run_logs SET deleted_at = $1 WHERE deleted_at IS NULL AND task_id IN
-         (SELECT id FROM scheduled_tasks WHERE account_id = $2)`,
-        [now, accountId],
-      );
-      await client.query(
-        'UPDATE scheduled_tasks SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL',
-        [now, accountId],
-      );
       await client.query(
         'UPDATE messages SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL',
         [now, accountId],

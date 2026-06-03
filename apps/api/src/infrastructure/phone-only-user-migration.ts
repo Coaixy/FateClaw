@@ -173,27 +173,6 @@ async function deleteInvalidPhoneUserRuntimeData(
         WHERE s.user_id = doomed.id;
       END IF;
 
-      IF to_regclass('public.task_run_logs') IS NOT NULL
-         AND to_regclass('public.scheduled_tasks') IS NOT NULL
-         AND to_regclass('public.accounts') IS NOT NULL THEN
-        DELETE FROM task_run_logs l
-        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
-        WHERE l.task_id IN (
-          SELECT t.id
-          FROM scheduled_tasks t
-          JOIN accounts a ON a.id = t.account_id
-          WHERE a.owner_id = doomed.id
-        );
-      END IF;
-
-      IF to_regclass('public.scheduled_tasks') IS NOT NULL
-         AND to_regclass('public.accounts') IS NOT NULL THEN
-        DELETE FROM scheduled_tasks t
-        USING ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
-        WHERE t.account_id IN (
-          SELECT id FROM accounts WHERE owner_id = doomed.id
-        );
-      END IF;
     END $$;
   `);
 }

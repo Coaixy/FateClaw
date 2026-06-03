@@ -32,7 +32,6 @@ Redis IPC
   ipc:{runtimeId}:inbox
   ipc:{runtimeId}:outbox
   ipc:{runtimeId}:ai-chat:outbox
-  ipc:{runtimeId}:tasks
         │
         ▼
 账号级 agent-runtime 常驻进程

@@ -350,49 +350,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await client.query(
         `CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(account_id)`,
       );
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS scheduled_tasks (
-          id TEXT PRIMARY KEY,
-          account_id TEXT NOT NULL,
-          prompt TEXT NOT NULL,
-          schedule_type TEXT NOT NULL,
-          schedule_value TEXT NOT NULL,
-          reminder_type TEXT,
-          voice_text TEXT,
-          next_run TIMESTAMPTZ,
-          last_run TIMESTAMPTZ,
-          last_result TEXT,
-          scheduler_locked_until TIMESTAMPTZ DEFAULT NULL,
-          status TEXT DEFAULT 'active',
-          created_at TIMESTAMPTZ NOT NULL,
-          deleted_at TIMESTAMPTZ DEFAULT NULL
-        )
-      `);
-      await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON scheduled_tasks(next_run)`,
-      );
-      await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_tasks_status ON scheduled_tasks(status)`,
-      );
-      await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_tasks_account ON scheduled_tasks(account_id)`,
-      );
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS task_run_logs (
-          id SERIAL PRIMARY KEY,
-          task_id TEXT NOT NULL,
-          run_at TIMESTAMPTZ NOT NULL,
-          duration_ms INTEGER NOT NULL,
-          status TEXT NOT NULL,
-          result TEXT,
-          error TEXT,
-          deleted_at TIMESTAMPTZ DEFAULT NULL,
-          FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
-        )
-      `);
-      await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at)`,
-      );
     },
   },
   {
@@ -1315,17 +1272,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         `DELETE FROM accounts WHERE base_url = 'internal://ai-chat'`,
       );
       await client.query(
-        `DELETE FROM task_run_logs
-         WHERE task_id IN (
-           SELECT id FROM scheduled_tasks
-           WHERE account_id IN (SELECT id FROM accounts)
-         )`,
-      );
-      await client.query(
-        `DELETE FROM scheduled_tasks
-         WHERE account_id IN (SELECT id FROM accounts)`,
-      );
-      await client.query(
         `DELETE FROM messages
          WHERE session_id IS NULL
            AND account_id IN (SELECT id FROM accounts)`,
@@ -1353,15 +1299,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
          ON messages(session_id, timestamp DESC)
          WHERE deleted_at IS NULL AND session_id IS NOT NULL`,
       );
-      await client.query(
-        `ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS scheduler_locked_until TIMESTAMPTZ DEFAULT NULL`,
-      );
-      await client.query(
-        `CREATE INDEX IF NOT EXISTS idx_tasks_due_lock
-         ON scheduled_tasks(status, next_run, scheduler_locked_until)
-         WHERE deleted_at IS NULL`,
-      );
-
       await client.query(
         `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'consumer'`,
       );
@@ -1623,22 +1560,6 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         cleanupSql: `UPDATE creator_bundle_subscriptions
                      SET status = 'active'
                      WHERE status NOT IN ('active', 'expired', 'cancelled')`,
-      });
-      await ensureCheckConstraint(client, {
-        constraintName: 'chk_scheduled_tasks_schedule_type_valid',
-        tableName: 'scheduled_tasks',
-        expression: `schedule_type IN ('cron', 'interval', 'once')`,
-        cleanupSql: `UPDATE scheduled_tasks
-                     SET schedule_type = 'once'
-                     WHERE schedule_type NOT IN ('cron', 'interval', 'once')`,
-      });
-      await ensureCheckConstraint(client, {
-        constraintName: 'chk_scheduled_tasks_status_valid',
-        tableName: 'scheduled_tasks',
-        expression: `status IN ('active', 'paused', 'completed')`,
-        cleanupSql: `UPDATE scheduled_tasks
-                     SET status = 'active'
-                     WHERE status NOT IN ('active', 'paused', 'completed')`,
       });
       await ensureCheckConstraint(client, {
         constraintName: 'chk_billing_request_reservations_hold_state_valid',
@@ -3095,6 +3016,14 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         CREATE INDEX IF NOT EXISTS idx_wechat_session_links_session
           ON wechat_chat_session_links(session_id)
       `);
+    },
+  },
+  {
+    id: '0022_drop_scheduled_tasks',
+    description: '下线定时任务与运行日志表',
+    async up(client) {
+      await client.query(`DROP TABLE IF EXISTS task_run_logs`);
+      await client.query(`DROP TABLE IF EXISTS scheduled_tasks`);
     },
   },
 ];

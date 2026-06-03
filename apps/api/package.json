@@ -35,7 +35,6 @@
     "@types/qrcode-terminal": "^0.12.2",
     "bazi-ts-lib": "^1.0.2",
     "bcryptjs": "^3.0.3",
-    "cron-parser": "^5.5.0",
     "fastify": "^5.8.5",
     "iching-shifa": "^1.6.4",
     "ioredis": "^5.10.1",

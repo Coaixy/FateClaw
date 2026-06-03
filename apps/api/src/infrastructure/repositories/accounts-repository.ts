@@ -123,18 +123,10 @@ export async function deleteAccount(id: string): Promise<void> {
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `DELETE FROM task_run_logs WHERE task_id IN
-       (SELECT id FROM scheduled_tasks WHERE account_id = $1)`,
-      [id],
-    );
     await client.query('DELETE FROM conversation_logs WHERE account_id = $1', [
       id,
     ]);
     await client.query('DELETE FROM messages WHERE account_id = $1', [id]);
-    await client.query('DELETE FROM scheduled_tasks WHERE account_id = $1', [
-      id,
-    ]);
     // chat_sessions.account_id 是 NOT NULL FK，必须先删除会话。
     await client.query('DELETE FROM chat_sessions WHERE account_id = $1', [id]);
     await client.query('DELETE FROM accounts WHERE id = $1', [id]);

@@ -5,7 +5,7 @@
  * 保留 N 天足够排障，过期即置 NULL 释放存储空间。transcript / usage /
  * agent_graph_summary 等业务数据不在此处清理。
  *
- * 未来可扩展：清理整条 log、清理孤儿 task_run_logs、归档历史消息等。
+ * 未来可扩展：清理整条 log、归档历史消息等。
  */
 
 import { TRACE_RETENTION_DAYS } from '../infrastructure/config.js';

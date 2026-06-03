@@ -76,42 +76,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp_active
   ON messages(session_id, timestamp DESC)
   WHERE deleted_at IS NULL AND session_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS scheduled_tasks (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL,
-  prompt TEXT NOT NULL,
-  schedule_type TEXT NOT NULL,
-  schedule_value TEXT NOT NULL,
-  reminder_type TEXT,
-  voice_text TEXT,
-  next_run TIMESTAMPTZ,
-  last_run TIMESTAMPTZ,
-  last_result TEXT,
-  scheduler_locked_until TIMESTAMPTZ DEFAULT NULL,
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMPTZ NOT NULL,
-  deleted_at TIMESTAMPTZ DEFAULT NULL,
-  FOREIGN KEY (account_id) REFERENCES accounts(id)
-);
-CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON scheduled_tasks(next_run);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON scheduled_tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_account ON scheduled_tasks(account_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_due_lock
-  ON scheduled_tasks(status, next_run, scheduler_locked_until)
-  WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS task_run_logs (
-  id SERIAL PRIMARY KEY,
-  task_id TEXT NOT NULL,
-  run_at TIMESTAMPTZ NOT NULL,
-  duration_ms INTEGER NOT NULL,
-  status TEXT NOT NULL,
-  result TEXT,
-  error TEXT,
-  deleted_at TIMESTAMPTZ DEFAULT NULL,
-  FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
-);
-CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at);
+DROP TABLE IF EXISTS task_run_logs;
+DROP TABLE IF EXISTS scheduled_tasks;
 
 -- 清理已废弃的历史表
 DROP TABLE IF EXISTS xs_apis;
@@ -687,30 +653,6 @@ BEGIN
     ALTER TABLE user_skill_subscriptions
       ADD CONSTRAINT chk_user_skill_subscriptions_status_valid
       CHECK (status IN ('active', 'expired', 'cancelled'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_scheduled_tasks_schedule_type_valid') THEN
-    UPDATE scheduled_tasks
-    SET schedule_type = 'once'
-    WHERE schedule_type NOT IN ('cron', 'interval', 'once');
-    ALTER TABLE scheduled_tasks
-      ADD CONSTRAINT chk_scheduled_tasks_schedule_type_valid
-      CHECK (schedule_type IN ('cron', 'interval', 'once'));
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_scheduled_tasks_status_valid') THEN
-    UPDATE scheduled_tasks
-    SET status = 'active'
-    WHERE status NOT IN ('active', 'paused', 'completed');
-    ALTER TABLE scheduled_tasks
-      ADD CONSTRAINT chk_scheduled_tasks_status_valid
-      CHECK (status IN ('active', 'paused', 'completed'));
   END IF;
 END $$;
 

@@ -136,7 +136,6 @@ export interface AdminUser {
   role: 'consumer' | 'creator' | 'both' | 'admin';
   created_at: string;
   account_count: number;
-  active_tasks: number;
   usage: UsageStats;
   monthly_tokens_used: number;
   estimated_monthly_total_coins: number;
@@ -202,7 +201,6 @@ export interface UserDetail {
   user: AdminUser;
   accounts: AdminAccount[];
   usage: UsageStats;
-  active_tasks: number;
 }
 
 export interface GlobalStats {
@@ -224,7 +222,6 @@ export interface GlobalStats {
   today_input_tokens: number;
   today_output_tokens: number;
   today_total_tokens: number;
-  active_tasks: number;
   recent_signups_7d: number;
   recharge_period: AdminRechargePeriodStats;
 }
@@ -287,22 +284,6 @@ export interface AdminPiSessionCleanupResult {
   deleted_path_files: number;
   missing_jsonl_files: number;
   skipped_unsafe_files: string[];
-}
-
-export interface AdminTask {
-  id: string;
-  account_id: string;
-  account_name: string;
-  owner_phone: string | null;
-  prompt: string;
-  schedule_type: string;
-  schedule_value: string;
-  reminder_type: string | null;
-  next_run: string | null;
-  last_run: string | null;
-  last_result: string | null;
-  status: string;
-  created_at: string;
 }
 
 export interface AdminSkillGlobalConfig {
@@ -681,13 +662,6 @@ export const admin = {
         body: JSON.stringify(data),
       },
     ),
-  tasks: (opts?: { user_id?: string; status?: string }) => {
-    const params = new URLSearchParams();
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.status) params.set('status', opts.status);
-    const qs = params.toString();
-    return adminRequest<AdminTask[]>(`/api/admin/tasks${qs ? `?${qs}` : ''}`);
-  },
   globalSkills: () =>
     adminRequest<AdminSkillGlobalConfig[]>('/api/admin/skills/global'),
   setSkillGlobalEnabled: (name: string, enabled: boolean) =>

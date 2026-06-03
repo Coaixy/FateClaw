@@ -41,7 +41,6 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   getCustomSkillsForAdmin: vi.fn(),
   getMessagesForAdmin: vi.fn(),
   getSystemConfigOverview: vi.fn(),
-  getTasksForAdmin: vi.fn(),
   getUserById: vi.fn(),
   getUserCustomSkillById: vi.fn(),
   getWalletTransactionsByUserId: vi.fn(),

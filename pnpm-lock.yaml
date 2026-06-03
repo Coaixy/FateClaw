@@ -58,9 +58,6 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: ^0.75.5
         version: 0.75.5(ws@8.21.0)(zod@4.3.6)
-      cron-parser:
-        specifier: ^5.0.0
-        version: 5.5.0
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
@@ -125,9 +122,6 @@ importers:
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
-      cron-parser:
-        specifier: ^5.5.0
-        version: 5.5.0
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
@@ -2009,10 +2003,6 @@ packages:
     resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
     engines: {node: '>=18'}
 
-  cron-parser@5.5.0:
-    resolution: {integrity: sha512-oML4lKUXxizYswqmxuOCpgFS8BNUJpIu6k/2HVHyaL8Ynnf3wdf9tkns0yRdJLSIjkJ+b0DXHMZEHGpMwjnPww==}
-    engines: {node: '>=18'}
-
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -3061,10 +3051,6 @@ packages:
 
   lunar-typescript@1.8.6:
     resolution: {integrity: sha512-5Eo4T/cnuXfrgO4k5LCpOGHIUOuz5hCF/IfNv0T29WY2shR36Hiz+ecN9WjnUuxUKhql9gbOkPaQoqLFKtPRNA==}
-
-  luxon@3.7.2:
-    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
-    engines: {node: '>=12'}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -6312,10 +6298,6 @@ snapshots:
 
   cookie@1.1.1: {}
 
-  cron-parser@5.5.0:
-    dependencies:
-      luxon: 3.7.2
-
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
@@ -7604,8 +7586,6 @@ snapshots:
       lunar-typescript: 1.8.6
 
   lunar-typescript@1.8.6: {}
-
-  luxon@3.7.2: {}
 
   magic-string@0.30.21:
     dependencies:

@@ -63,10 +63,6 @@ vi.mock('./ipc-ai-chat-outbox-handler.js', () => ({
   processAiChatOutboxPayload: vi.fn(),
 }));
 
-vi.mock('./ipc-task-handler.js', () => ({
-  processTaskPayload: vi.fn(),
-}));
-
 vi.mock('../modules/billing/plans.js', () => ({
   reserveBillingForRequest: vi.fn(),
   settleBillingReservation: mockSettleBillingReservation,

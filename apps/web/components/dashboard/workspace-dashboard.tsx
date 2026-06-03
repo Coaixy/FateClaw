@@ -2,7 +2,6 @@
 
 import { AppShell } from '@/components/app-shell';
 import { TabData } from '@/components/settings/tab-data';
-import { TabTasks } from '@/components/settings/tab-tasks';
 import { DevicesPanel } from '@/components/workspace/devices-panel';
 import { UserSoulCard } from '@/components/workspace/user-soul-card';
 
@@ -23,13 +22,6 @@ export function WorkspaceDashboard() {
             description="查看微信接入状态。"
           >
             <DevicesPanel embedded />
-          </DashboardSection>
-
-          <DashboardSection
-            title="定时任务"
-            description="统一查看任务状态、下次执行时间和删除操作。"
-          >
-            <TabTasks />
           </DashboardSection>
 
           <DashboardSection

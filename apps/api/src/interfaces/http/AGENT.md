@@ -29,8 +29,7 @@ apps/api/src/interfaces/http/
 ├── messages-routes.ts
 ├── paipan-routes.ts
 ├── public-routes.ts
-├── skills-routes.ts
-└── tasks-routes.ts
+└── skills-routes.ts
 ```
 
 配套业务模块：
@@ -57,7 +56,6 @@ apps/api/src/interfaces/http/
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
-- `/api/tasks`
 - `/api/skills`
 - `/api/billing`
 - `/api/health`

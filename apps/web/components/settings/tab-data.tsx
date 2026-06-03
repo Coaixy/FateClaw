@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Brain, Clock, MessageSquare } from 'lucide-react';
+import { Brain, MessageSquare } from 'lucide-react';
 
 import { billingApi } from '@/features/billing/api';
 import { DataManagementItem } from '@/components/settings/data-management/data-management-item';
@@ -20,10 +20,9 @@ export function TabData() {
 
   const handleReset = async (scope: ResetScope) => {
     const labels: Record<ResetScope, string> = {
-      all: '全部数据（消息、记忆、任务）',
+      all: '全部数据（消息、记忆）',
       messages: '所有消息记录',
       memories: '所有账号的长期记忆',
-      tasks: '所有定时任务及运行日志',
     };
     const ok = await confirm({
       title: scope === 'all' ? '重置全部数据' : '清除数据',
@@ -57,12 +56,6 @@ export function TabData() {
       icon: Brain,
       label: '长期记忆',
       desc: '清除所有 Soul 记忆',
-    },
-    {
-      scope: 'tasks',
-      icon: Clock,
-      label: '定时任务',
-      desc: '清除任务及运行日志',
     },
   ];
 

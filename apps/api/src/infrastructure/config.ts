@@ -109,12 +109,12 @@ export const TRIGGER_PATTERN = new RegExp(
   'i',
 );
 
-// 定时任务使用的时区
+// 后台任务与 agent-runtime 使用的默认时区
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // conversation_log_payloads.trace_events 的保留天数。超过此天数的 trace_events 列
-// 会被定时任务置 NULL（transcript 等业务数据保留不变）。trace 是纯调试数据，
+// 会被后台保留策略置 NULL（transcript 等业务数据保留不变）。trace 是纯调试数据，
 // 7 天足够覆盖"昨天出了问题帮我查一下"的典型排障场景。
 export const TRACE_RETENTION_DAYS = parseInt(
   process.env.TRACE_RETENTION_DAYS || '7',

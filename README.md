@@ -37,7 +37,6 @@ flowchart LR
     Inbox["ipc:{runtimeId}:inbox"]
     Outbox["ipc:{runtimeId}:outbox"]
     AiOutbox["ipc:{runtimeId}:ai-chat:outbox"]
-    TaskQueue["ipc:{runtimeId}:tasks"]
   end
 
   subgraph Agent["apps/agent-runtime 常驻进程"]
@@ -70,7 +69,6 @@ flowchart LR
   Daemon --> AiOutbox
   Outbox --> IpcWorker
   AiOutbox --> IpcWorker
-  TaskQueue --> IpcWorker
   IpcWorker --> PG
   Fastify --> Web
 ```

@@ -1,7 +1,7 @@
 /**
  * 轻量 API 开发入口 — 仅启动 DB + Redis + API Server
  *
- * 跳过：Docker 容器、iLink 轮询、IPC Worker、定时任务调度、凭据代理
+ * 跳过：Docker 容器、iLink 轮询、IPC Worker、后台保留策略、凭据代理
  * 用途：前端开发调试、API 接口测试
  *
  * 使用：pnpm run dev:api-only

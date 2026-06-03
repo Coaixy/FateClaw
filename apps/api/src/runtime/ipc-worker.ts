@@ -1,6 +1,6 @@
 /**
  * IPC 工作线程：Redis BRPOP 监听 + 收件箱请求管理。
- * 具体的 outbox / tasks 消息处理逻辑拆分到各自的 handler 模块。
+ * 具体的 outbox 消息处理逻辑拆分到各自的 handler 模块。
  */
 
 import { Redis } from 'ioredis';
@@ -36,7 +36,6 @@ import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
 } from './ipc-payloads.js';
-import { processTaskPayload } from './ipc-task-handler.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
 import {
@@ -381,7 +380,6 @@ async function listenForAccount(accountId: string): Promise<void> {
       const result = await redis.brpop(
         `ipc:${accountId}:outbox`,
         `ipc:${accountId}:ai-chat:outbox`, // AI Chat 专属队列
-        `ipc:${accountId}:tasks`,
         1, // 1s 超时，允许优雅退出
       );
 
@@ -401,8 +399,6 @@ async function listenForAccount(accountId: string): Promise<void> {
             );
           } else if (queue.endsWith(':outbox')) {
             await processOutboxPayload(payload, accountId, pendingInboxRequests);
-          } else {
-            await processTaskPayload(payload, accountId);
           }
         } finally {
           await releaseGlobalAgentSlotForPayload(queue, payload).catch((err) => {

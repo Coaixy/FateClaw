@@ -6,11 +6,8 @@
 import { getAllAccounts } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import { ScheduledTask } from '../shared/types.js';
 
 // ─── 公共类型 ──────────────────────────────────────────
-
-export type ReminderAction = 'pause' | 'resume' | 'cancel';
 
 export interface InboxRequestResult {
   requestId: string;
@@ -240,61 +237,7 @@ export interface ResponseIpcPayload {
   metadata?: unknown;
 }
 
-export interface ScheduleReminderIpcPayload {
-  type: 'schedule_reminder';
-  taskId?: string;
-  accountId?: string;
-  prompt?: string;
-  schedule_type?: ScheduledTask['schedule_type'];
-  schedule_value?: string;
-  reminder_type?: ScheduledTask['reminder_type'];
-  voice_text?: string;
-  created_at?: string;
-}
-
-export interface ManageReminderIpcPayload {
-  type: 'pause_reminder' | 'resume_reminder' | 'cancel_reminder';
-  taskId?: string;
-  accountId?: string;
-  timestamp?: string;
-}
-
 // ─── 验证函数 ─────────────────────────────────────────
-
-export function validateSchedulePayload(
-  payload: unknown,
-): payload is ScheduleReminderIpcPayload {
-  if (!payload || typeof payload !== 'object') {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  return (
-    record.type === 'schedule_reminder' &&
-    typeof record.taskId === 'string' &&
-    typeof record.prompt === 'string' &&
-    (record.schedule_type === 'cron' ||
-      record.schedule_type === 'interval' ||
-      record.schedule_type === 'once') &&
-    typeof record.schedule_value === 'string'
-  );
-}
-
-export function validateReminderActionPayload(
-  payload: unknown,
-): payload is ManageReminderIpcPayload {
-  if (!payload || typeof payload !== 'object') {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  return (
-    (record.type === 'pause_reminder' ||
-      record.type === 'resume_reminder' ||
-      record.type === 'cancel_reminder') &&
-    typeof record.taskId === 'string'
-  );
-}
 
 export function validateMessagePayload(
   payload: unknown,

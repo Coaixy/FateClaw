@@ -38,7 +38,6 @@ apps/web/
 │   ├── profile/page.tsx
 │   ├── wallet/page.tsx
 │   ├── studio/
-│   ├── tasks/page.tsx
 │   ├── settings/page.tsx
 │   ├── skills/install/page.tsx
 │   ├── skills/bundle/install/page.tsx
@@ -62,7 +61,6 @@ apps/web/
 │   ├── chat/
 │   ├── paipan/
 │   ├── skills/
-│   └── tasks/
 └── utils/
 ```
 
@@ -89,7 +87,6 @@ apps/web/
 - `app/dashboard/page.tsx`: 账号总览、绑定、Soul、计划和主要入口
 - `app/chat/page.tsx`: 聊天记录页
 - `app/ai-chat/page.tsx`: Web 侧 AI 聊天界面
-- `app/tasks/page.tsx`: 定时任务
 - `app/discover/page.tsx`: Skill 市场发现页
 - `app/studio/*`: 创作者工作台、Skill 和 Bundle 创建编辑
 - `app/skills/install/page.tsx`: 单个 Skill 安装页

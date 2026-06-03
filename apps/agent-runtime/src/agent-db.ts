@@ -213,33 +213,6 @@ export async function updateSoulContentDb(
   );
 }
 
-// ── Tasks / Reminders ──
-
-export interface TaskSnapshot {
-  id: string;
-  prompt: string;
-  schedule_type: string;
-  schedule_value: string;
-  status: string;
-  next_run: string | null;
-}
-
-/**
- * 查询账号的活跃定时任务列表。
- */
-export async function queryTasksForAccount(
-  accountId: string,
-): Promise<TaskSnapshot[]> {
-  const { rows } = await getPool().query(
-    `SELECT id, prompt, schedule_type, schedule_value, status, next_run
-     FROM scheduled_tasks
-     WHERE account_id = $1 AND deleted_at IS NULL
-     ORDER BY created_at DESC`,
-    [accountId],
-  );
-  return rows as TaskSnapshot[];
-}
-
 interface StoredToolContextEntry {
   skill: string;
   output: string;

@@ -59,7 +59,10 @@ export function DeviceBindSheet({
                 <QRCodeSVG value={qrUrl} size={200} level="M" />
                 {bindStep === 'scanned' && (
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in">
-                    <CheckCircle2 size={48} className="text-success mb-3 drop-shadow-sm" />
+                    <CheckCircle2
+                      size={48}
+                      className="text-success mb-3 drop-shadow-sm"
+                    />
                     <p className="text-[15px] font-bold text-black tracking-tight">
                       已扫码，请在手机端确认
                     </p>
@@ -72,7 +75,7 @@ export function DeviceBindSheet({
               <div className="flex items-center gap-2 mt-6 px-4 py-2 rounded-full bg-canvas border border-hairline">
                 <div className="w-2 h-2 rounded-full bg-primary animate-ping" />
                 <span className="text-[12px] font-bold text-primary uppercase tracking-wider">
-                  Awaiting Scan
+                  等待扫码
                 </span>
               </div>
             )}
@@ -96,7 +99,9 @@ export function DeviceBindSheet({
           <div className="flex flex-col items-center justify-center h-[240px] w-full rounded-2xl bg-red-500/5 border border-red-500/20">
             <XCircle size={32} className="text-red-500 mb-4" />
             <p className="text-[14px] font-bold text-red-500 mb-1">连接中断</p>
-            <p className="text-[12px] text-muted mb-5 max-w-[200px]">{bindError}</p>
+            <p className="text-[12px] text-muted mb-5 max-w-[200px]">
+              {bindError}
+            </p>
             <button
               onClick={onRetry}
               className="h-9 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold hover:bg-red-600 transition-colors shadow-sm cursor-pointer"

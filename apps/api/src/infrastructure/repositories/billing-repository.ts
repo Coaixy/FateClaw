@@ -1496,7 +1496,7 @@ export async function grantBonusBalance(input: {
 }
 
 /**
- * 定时任务入口：扫描已过期的活跃批次，批次级过期处理。
+ * 后台过期扫描入口：扫描已过期的活跃批次，批次级过期处理。
  * 每个批次在独立事务内完成：标记 expired → 扣 users.bonus_coins → 写流水。
  * FOR UPDATE SKIP LOCKED 保证多实例并发运行时不会重复处理同一批次。
  */

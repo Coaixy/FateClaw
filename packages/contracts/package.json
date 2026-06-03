@@ -10,7 +10,6 @@
     "./common": "./src/common/index.d.ts",
     "./auth": "./src/auth/index.d.ts",
     "./account": "./src/account/index.d.ts",
-    "./tasks": "./src/tasks/index.d.ts",
     "./chat": "./src/chat/index.d.ts",
     "./billing": "./src/billing/index.d.ts",
     "./model-settings": "./src/model-settings/index.d.ts",

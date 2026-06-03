@@ -27,7 +27,6 @@ import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
 import { normalizeHttpError } from './http-error.js';
 import { skillsRoutes } from './skills-routes.js';
 import { resolveStaticExportRequest } from './static-export.js';
-import { tasksRoutes } from './tasks-routes.js';
 const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
 const IMMUTABLE_STATIC_ASSET_PATTERN =
@@ -261,7 +260,6 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });
   await app.register(publicRoutes, { prefix: '/api/public' });
-  await app.register(tasksRoutes, { prefix: '/api/tasks' });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 
   await app.register(billingRoutes, { prefix: '/api/billing' });

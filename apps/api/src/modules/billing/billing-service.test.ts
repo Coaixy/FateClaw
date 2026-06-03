@@ -21,7 +21,6 @@ vi.mock('../../infrastructure/db.js', () => ({
   getVisibleWalletTransactionsByUserId: vi.fn(),
   resetUserData: vi.fn(),
   resetUserMessages: vi.fn(),
-  resetUserTasks: vi.fn(),
   updateSoulContent: vi.fn(),
   updateUserSoulContent: vi.fn(),
 }));

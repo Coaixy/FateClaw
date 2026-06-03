@@ -254,7 +254,7 @@ export default function AdminOverviewPage() {
             icon={Smartphone}
             label="绑定账号"
             value={`${stats.enabled_accounts} / ${stats.total_accounts}`}
-            sub={`活跃任务 ${stats.active_tasks}`}
+            sub="已启用 / 总数"
           />
         </div>
 

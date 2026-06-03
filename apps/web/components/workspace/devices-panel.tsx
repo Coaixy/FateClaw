@@ -86,7 +86,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const removeAccount = async (acc: Account) => {
     const ok = await confirm({
       title: '解除绑定',
-      message: `确定要解除「${acc.name}」的绑定吗？\n\n该设备的对话消息和相关定时任务将被立即且永久删除。`,
+      message: `确定要解除「${acc.name}」的绑定吗？\n\n该设备的对话消息将被立即且永久删除。`,
       confirmLabel: '解除绑定',
       variant: 'danger',
     });

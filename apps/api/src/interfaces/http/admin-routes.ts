@@ -24,7 +24,6 @@ import {
   getBalanceGrantsByUserId,
   getAdminRewardConfig,
   getSystemConfigOverview,
-  getTasksForAdmin,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
@@ -821,18 +820,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       mode: parsed.data.mode,
       inactiveDays: parsed.data.inactive_days,
       limit: parsed.data.limit,
-    });
-  });
-
-  // GET /api/admin/tasks — 查询所有定时任务（支持按用户/状态筛选）
-  app.get('/tasks', async (request) => {
-    const query = request.query as {
-      user_id?: string;
-      status?: string;
-    };
-    return getTasksForAdmin({
-      userId: query.user_id,
-      status: query.status,
     });
   });
 

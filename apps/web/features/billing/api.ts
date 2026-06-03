@@ -101,7 +101,7 @@ export const billingApi = {
       `/api/billing/recharge/orders/${encodeURIComponent(tradeId)}/sync`,
       { method: 'POST' },
     ).finally(clearBillingCache),
-  reset: (scope?: 'all' | 'messages' | 'memories' | 'tasks') =>
+  reset: (scope?: 'all' | 'messages' | 'memories') =>
     requestJson<SuccessResponse>('/api/billing/reset', {
       method: 'POST',
       body: JSON.stringify({ scope: scope || 'all' }),

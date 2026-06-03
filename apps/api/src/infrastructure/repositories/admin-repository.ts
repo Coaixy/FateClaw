@@ -27,7 +27,6 @@ export interface AdminGlobalStats {
   today_input_tokens: number;
   today_output_tokens: number;
   today_total_tokens: number;
-  active_tasks: number;
   recent_signups_7d: number;
   recharge_period: AdminRechargePeriodStats;
 }
@@ -337,59 +336,6 @@ export async function resetPiSessionCleanupCursor(
   );
 }
 
-export interface AdminTaskRow {
-  id: string;
-  account_id: string;
-  account_name: string;
-  owner_phone: string | null;
-  prompt: string;
-  schedule_type: string;
-  schedule_value: string;
-  reminder_type: string | null;
-  next_run: string | null;
-  last_run: string | null;
-  last_result: string | null;
-  status: string;
-  created_at: string;
-}
-
-export async function getTasksForAdmin(opts: {
-  userId?: string;
-  status?: string;
-  limit?: number;
-}): Promise<AdminTaskRow[]> {
-  let whereClause = 'WHERE t.deleted_at IS NULL';
-  const params: unknown[] = [];
-  let paramIdx = 1;
-
-  if (opts.userId) {
-    whereClause += ` AND a.owner_id = $${paramIdx++}`;
-    params.push(opts.userId);
-  }
-  if (opts.status) {
-    whereClause += ` AND t.status = $${paramIdx++}`;
-    params.push(opts.status);
-  }
-  // 上限默认 500，admin 视角通常按 user/status 过滤
-  const limit = Math.min(Math.max(opts.limit ?? 500, 1), 2000);
-  params.push(limit);
-
-  const { rows } = await pool.query(
-    `SELECT t.id, t.account_id, a.name as account_name, u.phone as owner_phone,
-            t.prompt, t.schedule_type, t.schedule_value, t.reminder_type,
-            t.next_run, t.last_run, t.last_result, t.status, t.created_at
-     FROM scheduled_tasks t
-     JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN users u ON u.id = a.owner_id
-     ${whereClause}
-     ORDER BY t.created_at DESC
-     LIMIT $${paramIdx}`,
-    params,
-  );
-
-  return rows as AdminTaskRow[];
-}
-
 export interface AdminCustomSkillRow {
   id: string;
   user_id: string;
@@ -589,7 +535,6 @@ export async function getAdminGlobalStats(
     accountStats,
     totalUsage,
     todayUsage,
-    taskCount,
     recentSignups,
     rechargeStats,
   ] = await Promise.all([
@@ -611,9 +556,6 @@ export async function getAdminGlobalStats(
     pool.query(
       `SELECT COALESCE(SUM(msg_count), 0) as msgs, COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as outp, COALESCE(SUM(total_tokens), 0) as total FROM daily_usage WHERE date = $1`,
       [today],
-    ),
-    pool.query(
-      `SELECT COUNT(*) as cnt FROM scheduled_tasks WHERE status = 'active' AND deleted_at IS NULL`,
     ),
     pool.query(`SELECT COUNT(*) as cnt FROM users WHERE created_at >= $1`, [
       sevenDaysAgo,
@@ -706,7 +648,6 @@ export async function getAdminGlobalStats(
     today_input_tokens: Number(td.inp),
     today_output_tokens: Number(td.outp),
     today_total_tokens: Number(td.total),
-    active_tasks: Number((taskCount.rows[0] as { cnt: string }).cnt),
     recent_signups_7d: Number((recentSignups.rows[0] as { cnt: string }).cnt),
   };
 }

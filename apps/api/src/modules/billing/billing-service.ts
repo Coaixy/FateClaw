@@ -27,7 +27,6 @@ import {
   getVisibleWalletTransactionsByUserId,
   resetUserData,
   resetUserMessages,
-  resetUserTasks,
   updateSoulContent,
   updateUserSoulContent,
 } from '../../infrastructure/db.js';
@@ -240,7 +239,7 @@ export async function claimDailySignInReward(
 
 export async function resetBillingScope(
   userId: string,
-  scope: 'all' | 'messages' | 'memories' | 'tasks',
+  scope: 'all' | 'messages' | 'memories',
 ): Promise<ServiceResult<SuccessResponse>> {
   const user = await getUserById(userId);
   if (!user) {
@@ -261,9 +260,6 @@ export async function resetBillingScope(
       break;
     case 'memories':
       await clearSoul();
-      break;
-    case 'tasks':
-      await resetUserTasks(user.id);
       break;
     case 'all':
     default: {

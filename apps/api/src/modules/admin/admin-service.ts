@@ -17,7 +17,6 @@ import {
   deleteConversationLogsByAccountIds,
   deleteUser,
   getAccountsByUserId,
-  getActiveTaskCountForUser,
   getAdminGlobalStats,
   getAllSkillGlobalConfigs,
   getAllUsers,
@@ -33,7 +32,6 @@ import {
   getBalanceGrantsByUserId,
   getDailySignInConfig,
   getPiSessionCleanupCursor,
-  getTasksForAdmin,
   getUserById,
   getUserByPhone,
   getUserCustomSkillById,
@@ -101,7 +99,6 @@ export {
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
   getSystemConfigOverview,
-  getTasksForAdmin,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
@@ -393,7 +390,6 @@ export async function listAdminUsersWithStats(): Promise<
   Array<
     Omit<Awaited<ReturnType<typeof getAllUsers>>[number], 'password_hash'> & {
       account_count: number;
-      active_tasks: number;
       usage: Awaited<ReturnType<typeof getUsageStats>>;
       monthly_tokens_used: number;
       estimated_monthly_total_coins: number;
@@ -407,18 +403,15 @@ export async function listAdminUsersWithStats(): Promise<
   const users = await getAllUsers();
   return Promise.all(
     users.map(async ({ password_hash: _passwordHash, ...safe }) => {
-      const [accounts, usage, activeTasks, monthlyBilling, wallet] =
-        await Promise.all([
-          getAccountsByUserId(safe.id),
-          getUsageStats(safe.id),
-          getActiveTaskCountForUser(safe.id),
-          getMonthlyMeteredBillingSummary(safe.id),
-          getWalletBalanceSummary(safe.id),
-        ]);
+      const [accounts, usage, monthlyBilling, wallet] = await Promise.all([
+        getAccountsByUserId(safe.id),
+        getUsageStats(safe.id),
+        getMonthlyMeteredBillingSummary(safe.id),
+        getWalletBalanceSummary(safe.id),
+      ]);
       return {
         ...safe,
         account_count: accounts.length,
-        active_tasks: activeTasks,
         usage,
         monthly_tokens_used: monthlyBilling.usedTokens,
         estimated_monthly_total_coins: monthlyBilling.chargedCoins,
@@ -440,7 +433,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     'password_hash'
   > & {
     account_count: number;
-    active_tasks: number;
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
     estimated_monthly_total_coins: number;
@@ -451,7 +443,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
   };
   accounts: Array<Record<string, unknown>>;
   usage: Awaited<ReturnType<typeof getUsageStats>>;
-  active_tasks: number;
 } | null> {
   const user = await getUserById(userId);
   if (!user) {
@@ -459,20 +450,17 @@ export async function getAdminUserDetail(userId: string): Promise<{
   }
 
   const { password_hash: _passwordHash, ...safe } = user;
-  const [accounts, usage, activeTasks, monthlyBilling, wallet] =
-    await Promise.all([
-      getAccountsByUserId(userId),
-      getUsageStats(userId),
-      getActiveTaskCountForUser(userId),
-      getMonthlyMeteredBillingSummary(userId),
-      getWalletBalanceSummary(userId),
-    ]);
+  const [accounts, usage, monthlyBilling, wallet] = await Promise.all([
+    getAccountsByUserId(userId),
+    getUsageStats(userId),
+    getMonthlyMeteredBillingSummary(userId),
+    getWalletBalanceSummary(userId),
+  ]);
 
   return {
     user: {
       ...safe,
       account_count: accounts.length,
-      active_tasks: activeTasks,
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
       estimated_monthly_total_coins: monthlyBilling.chargedCoins,
@@ -483,7 +471,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     },
     accounts: accounts.map(({ bot_token: _botToken, ...rest }) => rest),
     usage,
-    active_tasks: activeTasks,
   };
 }
 

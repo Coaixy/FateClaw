@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Clock,
   Coins,
   Loader2,
   MessageSquare,
@@ -598,11 +597,6 @@ function UserRow({
                         ))}
                       </div>
                     )}
-                    {detail.active_tasks > 0 && (
-                      <p className="mt-2 text-[12px] text-muted">
-                        活跃任务 {detail.active_tasks} 个
-                      </p>
-                    )}
                   </section>
 
                   <section className="border-b border-hairline pb-4">
@@ -622,15 +616,6 @@ function UserRow({
                       >
                         <MessageSquare size={12} />
                         查看消息
-                      </a>
-                      <a
-                        href={toAdminDocumentHref(
-                          `/admin/tasks?user_id=${encodeURIComponent(user.id)}`,
-                        )}
-                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-hairline text-[12px] text-muted transition-colors hover:border-hairline hover:text-ink"
-                      >
-                        <Clock size={12} />
-                        查看任务
                       </a>
                     </div>
                   </section>
