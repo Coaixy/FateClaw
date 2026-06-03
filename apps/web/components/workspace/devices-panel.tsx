@@ -1,18 +1,13 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { accountsApi, type Account } from '@/features/accounts/api';
+import { billingApi, type BillingStatus } from '@/features/billing/api';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useDeviceBinding } from '@/features/accounts/hooks/use-device-binding';
 import { useToast } from '@/lib/use-toast';
 import { useConfirm } from '@/lib/use-confirm';
-import {
-  AlertTriangle,
-  Plus,
-  Smartphone,
-  RefreshCw,
-  Lock,
-} from 'lucide-react';
+import { AlertTriangle, Plus, Smartphone, RefreshCw, Lock } from 'lucide-react';
 import { DeviceCard } from '@/components/workspace/device-card';
 import { DeviceBindSheet } from '@/components/workspace/device-bind-sheet';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -21,9 +16,14 @@ function sortAccounts(list: Account[]): Account[] {
   return [...list];
 }
 
+type MembershipStatus = BillingStatus['membership'];
+
 export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const { confirm } = useConfirm();
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(true);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
 
   const notify = useCallback(
     (type: 'success' | 'error', text: string) => toast(type, text),
@@ -33,7 +33,55 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
     useAccounts();
   const binding = useDeviceBinding(load);
   const deviceAccounts = accountList;
-  const canBindWeixin = false;
+  const membershipActive = Boolean(membership?.enabled && membership.active);
+  const bindingLimitReached = deviceAccounts.length >= 1;
+  const canBindWeixin =
+    membershipActive && !bindingLimitReached && !membershipLoading;
+
+  useEffect(() => {
+    let cancelled = false;
+    setMembershipLoading(true);
+    setMembershipError(null);
+    billingApi
+      .status()
+      .then((result) => {
+        if (cancelled) return;
+        setMembership(result.membership);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMembershipError(
+          err instanceof Error ? err.message : '会员状态加载失败',
+        );
+        setMembership(null);
+      })
+      .finally(() => {
+        if (!cancelled) setMembershipLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const bindStatusText = membershipLoading
+    ? '正在确认会员状态'
+    : membershipError
+      ? '会员状态暂时无法确认'
+      : membershipActive
+        ? bindingLimitReached
+          ? '会员最多绑定 1 个微信 Claw'
+          : 'FateClaw Plus 可扫码绑定微信 Claw'
+        : '微信 Claw 仅 FateClaw Plus 会员可绑定';
+
+  const bindButtonLabel = membershipLoading
+    ? '确认中'
+    : membershipError
+      ? '暂不可用'
+      : membershipActive
+        ? bindingLimitReached
+          ? '已达上限'
+          : '扫码接入'
+        : '会员专属';
 
   const removeAccount = async (acc: Account) => {
     const ok = await confirm({
@@ -63,9 +111,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
               {deviceAccounts.length}
               台设备
             </span>
-            <span className="text-[12px] text-muted">
-              微信绑定暂时关闭，已有绑定数据已清空
-            </span>
+            <span className="text-[12px] text-muted">{bindStatusText}</span>
           </div>
         ) : (
           <div className="hidden lg:block">
@@ -74,7 +120,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             </h2>
             <p className="text-[12px] text-muted font-medium mt-0.5">
               {deviceAccounts.length}
-              台接入 · 微信绑定暂时关闭
+              台接入 · {bindStatusText}
             </p>
           </div>
         )}
@@ -95,11 +141,11 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
           </button>
           <button
             onClick={binding.start}
-            disabled={!canBindWeixin}
+            disabled={!canBindWeixin || loading}
             className={`flex items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-bold hover:bg-primary-active transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${embedded ? 'h-9 px-4 text-[13px]' : 'h-10 px-6 text-[14px]'}`}
           >
             <Plus size={16} strokeWidth={2.5} />
-            <span>暂未开放</span>
+            <span>{bindButtonLabel}</span>
           </button>
         </div>
       </div>
@@ -142,18 +188,32 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             />
           </div>
           <h3 className="text-[18px] font-bold mb-2 tracking-tight">
-            微信设备暂时关闭
+            {membershipLoading
+              ? '正在确认会员状态'
+              : membershipActive
+                ? '尚未接入微信设备'
+                : '微信 Claw 会员专属'}
           </h3>
           <p className="text-[14px] text-muted mb-8 max-w-sm leading-relaxed">
-            站内 AI Chat 和手动排盘仍可使用；微信扫码绑定、已有账号绑定和后台运行入口已暂时关闭。
+            {membershipLoading
+              ? '会员状态确认完成后，Plus 会员可扫码绑定微信 Claw。'
+              : membershipError
+                ? '会员状态暂时无法确认，请稍后刷新后重试；站内 AI Chat 和手动排盘仍可继续使用。'
+                : membershipActive
+                  ? '使用移动端微信扫码绑定微信 Claw，绑定后即可在微信中进行文本对话。'
+                  : '开通 FateClaw Plus 后可扫码绑定微信 Claw；站内 AI Chat 和手动排盘仍可继续使用。'}
           </p>
           <button
             onClick={binding.start}
-            disabled={!canBindWeixin}
+            disabled={!canBindWeixin || loading}
             className="inline-flex items-center gap-2 h-12 px-8 rounded-xl bg-primary text-on-primary text-[14px] font-bold hover:bg-primary-active transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45"
           >
-            <Lock size={18} strokeWidth={2.5} />
-            暂未开放
+            {membershipActive ? (
+              <Plus size={18} strokeWidth={2.5} />
+            ) : (
+              <Lock size={18} strokeWidth={2.5} />
+            )}
+            {bindButtonLabel}
           </button>
         </div>
       )}
