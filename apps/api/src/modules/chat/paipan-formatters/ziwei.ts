@@ -120,6 +120,98 @@ function formatHoroscope(value: unknown): string[] {
   return lines;
 }
 
+function formatPalaceDisplay(
+  palaceName?: string,
+  branch?: string,
+  markers: string[] = [],
+): string | undefined {
+  if (!palaceName) return undefined;
+  const name = palaceName.endsWith('宫') ? palaceName : `${palaceName}宫`;
+  const details = joinList([
+    branch,
+    markers.length > 0 ? markers.join('/') : undefined,
+  ]);
+  return details ? `${name}（${details}）` : name;
+}
+
+function formatNatalMutagen(value: unknown): string | undefined {
+  const item = asRecord(value);
+  if (!item) return undefined;
+  const mutagen = textField(item, 'mutagen');
+  const star = textField(item, 'star');
+  const palace = formatPalaceDisplay(
+    textField(item, 'palace'),
+    textField(item, 'palaceBranch'),
+  );
+  if (!mutagen || !star || !palace) return undefined;
+  const brightness = textField(item, 'brightness');
+  return `${mutagen}${star} -> ${palace}${brightness ? `（${brightness}）` : ''}`;
+}
+
+function formatPalaceMutagenFlight(value: unknown): string | undefined {
+  const flight = asRecord(value);
+  if (!flight) return undefined;
+  const sourcePalace = textField(flight, 'sourcePalace');
+  const sourceStem = textField(flight, 'sourceHeavenlyStem');
+  const sourceBranch = textField(flight, 'sourceBranch');
+  const source = formatPalaceDisplay(
+    sourcePalace,
+    joinText([sourceStem, sourceBranch], ''),
+  );
+  const mutagen = textField(flight, 'mutagen');
+  const star = textField(flight, 'star');
+  if (!source || !mutagen || !star) return undefined;
+  const target = formatPalaceDisplay(
+    textField(flight, 'targetPalace'),
+    textField(flight, 'targetBranch'),
+    scalarArray(flight.targetMarkers),
+  );
+  const relations = scalarArray(flight.relations);
+  const relationText = relations.length > 0 ? ` [${relations.join('、')}]` : '';
+  return `${source}${mutagen}${star} -> ${target ?? '未定位'}${relationText}`;
+}
+
+function formatAnnualMutagenPair(value: unknown): string | undefined {
+  const pair = asRecord(value);
+  if (!pair) return undefined;
+  const label = textField(pair, 'label');
+  const star = textField(pair, 'star');
+  if (!label || !star) return undefined;
+  return `${label}${star}`;
+}
+
+function formatAnnualMutagen(value: unknown): string | undefined {
+  const annual = asRecord(value);
+  if (!annual) return undefined;
+  const year = textField(annual, 'year');
+  const age = textField(annual, 'nominalAge');
+  const stemBranch = joinText(
+    [textField(annual, 'heavenlyStem'), textField(annual, 'earthlyBranch')],
+    '',
+  );
+  const mutagens = arrayField(annual, 'mutagens')
+    .map(formatAnnualMutagenPair)
+    .filter((item): item is string => Boolean(item));
+  if (!year && !stemBranch && mutagens.length === 0) return undefined;
+  const title =
+    `${year ? `${year}年` : ''}${age ? `（${age}岁）` : ''}${stemBranch ? ` ${stemBranch}` : ''}`.trim();
+  return mutagens.length > 0 ? `${title}：${mutagens.join('、')}` : title;
+}
+
+function formatAnnualMutagens(root: Record<string, unknown>): string[] {
+  const annuals = arrayField(root, 'annualMutagens')
+    .map(formatAnnualMutagen)
+    .filter((line): line is string => Boolean(line));
+  if (annuals.length === 0) return [];
+
+  const range =
+    textField(root, 'annualMutagenStartYear') &&
+    textField(root, 'annualMutagenEndYear')
+      ? `流年四化范围：${textField(root, 'annualMutagenStartYear')}-${textField(root, 'annualMutagenEndYear')}年`
+      : undefined;
+  return [range, ...annuals].filter((line): line is string => Boolean(line));
+}
+
 /** 紫微 formatter：按命盘概要、十二宫和叠加运盘重排结果。 */
 export const formatZiweiPaipan: PaipanFormatter = (artifactData) => {
   const root = asRecord(artifactData);
@@ -158,7 +250,18 @@ export const formatZiweiPaipan: PaipanFormatter = (artifactData) => {
       : undefined,
   ]);
 
+  pushSection(
+    lines,
+    '生年四化',
+    arrayField(root, 'natalMutagens').map(formatNatalMutagen),
+  );
+  pushSection(
+    lines,
+    '宫干飞化',
+    arrayField(root, 'palaceMutagenFlights').map(formatPalaceMutagenFlight),
+  );
   pushSection(lines, '十二宫', arrayField(root, 'palaces').map(formatPalace));
+  pushSection(lines, '流年四化', formatAnnualMutagens(root));
   pushSection(
     lines,
     '运盘叠加',
