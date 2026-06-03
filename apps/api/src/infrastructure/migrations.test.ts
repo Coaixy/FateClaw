@@ -182,6 +182,9 @@ describe('runDatabaseMigrations', () => {
     expect(calls.some((call) => call.sql.includes('soul_edit_enabled'))).toBe(
       true,
     );
+    expect(calls.some((call) => call.sql.includes('thinking_level'))).toBe(
+      true,
+    );
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
@@ -212,6 +215,7 @@ describe('runDatabaseMigrations', () => {
       '0021_wechat_chat_session_links',
       '0022_drop_scheduled_tasks',
       '0023_skill_access_invites',
+      '0024_user_model_thinking_level',
     ]);
 
     await runDatabaseMigrations(client as never);

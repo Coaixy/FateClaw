@@ -15,6 +15,15 @@ export interface UserPastedBoardInput {
   question: string;
 }
 
+/** Pi runtime 可选的思考等级，缺省时由 runtime 按 medium 处理。 */
+export type PiThinkingLevel =
+  | 'off'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh';
+
 export interface LlmRuntimeSnapshot {
   source: 'custom' | 'official';
   billingMode: 'none' | 'metered';
@@ -27,6 +36,7 @@ export interface LlmRuntimeSnapshot {
   model: string;
   contextWindowTokens?: number;
   maxOutputTokens?: number;
+  thinkingLevel?: PiThinkingLevel;
   apiKey: string;
   baseUrl?: string;
   authMode:

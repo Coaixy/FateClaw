@@ -12,6 +12,7 @@ import {
   MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS,
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
+import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import type {
   ModelSettingsOverviewDto,
   OfficialModelDto,
@@ -54,6 +55,7 @@ const CustomModelSchema = z.object({
 const SelectionSchema = z.object({
   source: z.enum(['custom', 'official']),
   official_model_id: z.string().trim().min(1).nullable().optional(),
+  thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
 });
 
 function toConfiguredContextWindowTokens(
@@ -161,6 +163,7 @@ export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
         userId: request.user.userId,
         source: parsed.data.source,
         officialModelId: parsed.data.official_model_id ?? null,
+        thinkingLevel: parsed.data.thinking_level,
       });
     } catch (error) {
       return reply

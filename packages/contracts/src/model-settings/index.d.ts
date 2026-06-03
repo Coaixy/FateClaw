@@ -16,6 +16,14 @@ export type ModelAuthModeDto =
 
 export type UserModelSelectionSourceDto = 'custom' | 'official';
 
+export type ModelThinkingLevelDto =
+  | 'off'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh';
+
 export interface OfficialModelDto {
   id: string;
   model_key: string;
@@ -50,6 +58,7 @@ export interface UserModelSelectionDto {
   user_id: string;
   source: UserModelSelectionSourceDto;
   official_model_id: string | null;
+  thinking_level?: ModelThinkingLevelDto;
   created_at: string;
   updated_at: string;
 }

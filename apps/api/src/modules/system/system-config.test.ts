@@ -167,6 +167,7 @@ describe('resolveUserLlmRuntime', () => {
       modelConfigId: 'cheapest',
       providerKey: 'cheapest',
       model: 'gpt-4o-mini',
+      thinkingLevel: 'medium',
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 3,
     });
@@ -177,6 +178,7 @@ describe('resolveUserLlmRuntime', () => {
       user_id: 'user-1',
       source: 'official',
       official_model_id: 'official-1',
+      thinking_level: 'high',
       created_at: '2026-05-04T00:00:00.000Z',
       updated_at: '2026-05-04T00:00:00.000Z',
     });
@@ -191,6 +193,7 @@ describe('resolveUserLlmRuntime', () => {
       model: 'gpt-4.1',
       contextWindowTokens: 128000,
       maxOutputTokens: 10240,
+      thinkingLevel: 'high',
       inputTokenPricePerMillionCoins: 1000,
       outputTokenPricePerMillionCoins: 5000,
     });
@@ -244,6 +247,7 @@ describe('resolveUserLlmRuntime', () => {
       model: 'claude-sonnet-4-20250514',
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
+      thinkingLevel: 'medium',
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 2,
     });

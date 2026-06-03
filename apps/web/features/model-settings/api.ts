@@ -1,4 +1,5 @@
 import type {
+  ModelThinkingLevelDto,
   ModelPiApiDto,
   ModelSettingsOverviewDto,
   OfficialModelDto,
@@ -8,6 +9,7 @@ import type {
 import { requestJson } from '@/lib/http/client';
 
 export type ModelPiApi = ModelPiApiDto;
+export type ModelThinkingLevel = ModelThinkingLevelDto;
 export type OfficialModel = OfficialModelDto;
 export type ModelSettingsOverview = ModelSettingsOverviewDto;
 export type UserModelSelection = UserModelSelectionDto;
@@ -30,6 +32,7 @@ export const modelSettingsApi = {
   select: (data: {
     source: 'custom' | 'official';
     official_model_id?: string | null;
+    thinking_level?: ModelThinkingLevel;
   }) =>
     requestJson<UserModelSelection>('/api/model-settings/selection', {
       method: 'PUT',

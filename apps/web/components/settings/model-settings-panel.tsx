@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BadgeDollarSign,
+  Brain,
   Check,
   Loader2,
   RefreshCw,
@@ -14,6 +15,7 @@ import {
 
 import {
   modelSettingsApi,
+  type ModelThinkingLevel,
   type ModelPiApi,
   type ModelSettingsOverview,
   type OfficialModel,
@@ -30,6 +32,48 @@ import {
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-1 focus:ring-primary/20';
+
+const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
+const THINKING_LEVEL_OPTIONS: Array<{
+  value: ModelThinkingLevel;
+  label: string;
+}> = [
+  { value: 'off', label: '关闭' },
+  { value: 'minimal', label: '极简' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '极高' },
+];
+
+const THINKING_LEVEL_LABELS: Record<ModelThinkingLevel, string> = {
+  off: '关闭',
+  minimal: '极简',
+  low: '低',
+  medium: '中',
+  high: '高',
+  xhigh: '极高',
+};
+
+function resolveSelectionThinkingLevel(
+  selection: ModelSettingsOverview['selection'],
+): ModelThinkingLevel {
+  return selection?.thinking_level ?? DEFAULT_THINKING_LEVEL;
+}
+
+function resolveThinkingLevelIndex(value: ModelThinkingLevel): number {
+  const index = THINKING_LEVEL_OPTIONS.findIndex(
+    (option) => option.value === value,
+  );
+  return index >= 0 ? index : 3;
+}
+
+function resolveThinkingLevelDraftIndex(position: number): number {
+  return Math.min(
+    THINKING_LEVEL_OPTIONS.length - 1,
+    Math.max(0, Math.round(position)),
+  );
+}
 
 type CustomDraft = {
   pi_api: ModelPiApi;
@@ -90,6 +134,7 @@ function buildDefaultOfficialSelection(
     user_id: data.selection?.user_id ?? data.custom?.user_id ?? '',
     source: 'official',
     official_model_id: model.id,
+    thinking_level: resolveSelectionThinkingLevel(data.selection),
     created_at: data.selection?.created_at ?? '',
     updated_at: data.selection?.updated_at ?? '',
   };
@@ -100,6 +145,7 @@ export function ModelSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const thinkingSaveVersion = useRef(0);
   const [custom, setCustom] = useState<CustomDraft>({
     pi_api: 'openai-completions',
     base_url: '',
@@ -166,6 +212,9 @@ export function ModelSettingsPanel() {
       await modelSettingsApi.select({
         source: 'official',
         official_model_id: modelId,
+        thinking_level: resolveSelectionThinkingLevel(
+          overview?.selection ?? null,
+        ),
       });
       setMessage('已选择官方模型');
       await load();
@@ -180,13 +229,59 @@ export function ModelSettingsPanel() {
     setBusy('select-custom');
     setMessage('');
     try {
-      await modelSettingsApi.select({ source: 'custom' });
+      await modelSettingsApi.select({
+        source: 'custom',
+        thinking_level: resolveSelectionThinkingLevel(
+          overview?.selection ?? null,
+        ),
+      });
       setMessage('已选择自配模型');
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '选择失败');
     } finally {
       setBusy('');
+    }
+  };
+
+  const saveThinkingLevel = async (thinkingLevel: ModelThinkingLevel) => {
+    const selection = overview?.selection;
+    if (!selection) return;
+    const previousThinkingLevel = resolveSelectionThinkingLevel(selection);
+    const saveVersion = thinkingSaveVersion.current + 1;
+    thinkingSaveVersion.current = saveVersion;
+    setOverview((prev) =>
+      prev?.selection
+        ? {
+            ...prev,
+            selection: {
+              ...prev.selection,
+              thinking_level: thinkingLevel,
+            },
+          }
+        : prev,
+    );
+    try {
+      await modelSettingsApi.select({
+        source: selection.source,
+        official_model_id: selection.official_model_id,
+        thinking_level: thinkingLevel,
+      });
+    } catch (error) {
+      if (thinkingSaveVersion.current === saveVersion) {
+        setOverview((prev) =>
+          prev?.selection
+            ? {
+                ...prev,
+                selection: {
+                  ...prev.selection,
+                  thinking_level: previousThinkingLevel,
+                },
+              }
+            : prev,
+        );
+      }
+      setMessage(error instanceof Error ? error.message : '保存失败');
     }
   };
 
@@ -218,6 +313,7 @@ export function ModelSettingsPanel() {
   const availableOfficialModels = officialModels.filter(
     (model) => model.enabled && model.has_secret,
   ).length;
+  const thinkingLevel = resolveSelectionThinkingLevel(selection ?? null);
 
   return (
     <div className="space-y-5">
@@ -269,6 +365,10 @@ export function ModelSettingsPanel() {
                 customModelPlatformFeeCoins,
               )}
             />
+            <SummaryTile
+              label="思考等级"
+              value={THINKING_LEVEL_LABELS[thinkingLevel]}
+            />
           </div>
         </div>
       </section>
@@ -278,6 +378,11 @@ export function ModelSettingsPanel() {
           {message}
         </div>
       )}
+
+      <ThinkingLevelSection
+        value={thinkingLevel}
+        onChange={saveThinkingLevel}
+      />
 
       <OfficialModelsSection
         busy={busy}
@@ -296,6 +401,127 @@ export function ModelSettingsPanel() {
         onSelectCustom={selectCustom}
       />
     </div>
+  );
+}
+
+function ThinkingLevelSection({
+  value,
+  onChange,
+}: {
+  value: ModelThinkingLevel;
+  onChange: (value: ModelThinkingLevel) => Promise<void>;
+}) {
+  const [draftPosition, setDraftPosition] = useState(() =>
+    resolveThinkingLevelIndex(value),
+  );
+
+  useEffect(() => {
+    setDraftPosition(resolveThinkingLevelIndex(value));
+  }, [value]);
+
+  const draftIndex = resolveThinkingLevelDraftIndex(draftPosition);
+  const draftOption =
+    THINKING_LEVEL_OPTIONS[draftIndex] ??
+    THINKING_LEVEL_OPTIONS[resolveThinkingLevelIndex(DEFAULT_THINKING_LEVEL)];
+  const rangeMax = THINKING_LEVEL_OPTIONS.length - 1;
+  const progressPercent = rangeMax > 0 ? (draftPosition / rangeMax) * 100 : 0;
+
+  const commitPosition = (position: number) => {
+    const nextIndex = resolveThinkingLevelDraftIndex(position);
+    const nextValue =
+      THINKING_LEVEL_OPTIONS[nextIndex]?.value ?? DEFAULT_THINKING_LEVEL;
+    setDraftPosition(nextIndex);
+    if (nextValue === value) return;
+    void onChange(nextValue);
+  };
+
+  const stepKeyboard = (nextIndex: number) => {
+    const normalizedIndex = Math.min(rangeMax, Math.max(0, nextIndex));
+    setDraftPosition(normalizedIndex);
+    commitPosition(normalizedIndex);
+  };
+
+  return (
+    <section className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary">
+            <Brain size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm font-semibold text-ink">思考等级</div>
+              <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                {draftOption.label}
+              </span>
+            </div>
+            <div className="mt-1 text-[12px] leading-5 text-muted">
+              当前会话默认使用中等思考，可按偏好调低响应成本或调高推理深度。
+            </div>
+          </div>
+        </div>
+        <div className="w-full sm:w-[360px]">
+          <div className="flex items-center gap-2">
+            <div className="relative h-7 flex-1">
+              <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-hairline/80" />
+              <div
+                className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary transition-[width] duration-150"
+                style={{ width: `${progressPercent}%` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={rangeMax}
+                step={0.01}
+                value={draftPosition}
+                aria-label="思考等级"
+                aria-valuetext={draftOption.label}
+                onChange={(event) =>
+                  setDraftPosition(Number.parseFloat(event.target.value))
+                }
+                onPointerUp={(event) =>
+                  commitPosition(Number.parseFloat(event.currentTarget.value))
+                }
+                onBlur={(event) =>
+                  commitPosition(Number.parseFloat(event.currentTarget.value))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    stepKeyboard(draftIndex - 1);
+                  } else if (
+                    event.key === 'ArrowRight' ||
+                    event.key === 'ArrowUp'
+                  ) {
+                    event.preventDefault();
+                    stepKeyboard(draftIndex + 1);
+                  } else if (event.key === 'Home') {
+                    event.preventDefault();
+                    stepKeyboard(0);
+                  } else if (event.key === 'End') {
+                    event.preventDefault();
+                    stepKeyboard(rangeMax);
+                  }
+                }}
+                className="absolute inset-0 z-10 h-7 w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-surface-card [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-sm [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-1.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-surface-card [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-6 gap-1 text-center">
+            {THINKING_LEVEL_OPTIONS.map((option, index) => (
+              <span
+                key={option.value}
+                className={`truncate text-[10px] font-medium ${
+                  index === draftIndex ? 'text-primary' : 'text-muted'
+                }`}
+              >
+                {option.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

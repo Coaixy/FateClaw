@@ -252,6 +252,19 @@ export type ModelProviderType =
   | 'anthropic-messages'
   | 'google-generative-ai';
 
+/** Pi runtime 可选的思考等级，和底层 Pi SDK 的 ThinkingLevel 保持一致。 */
+export const PI_THINKING_LEVELS = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+] as const;
+
+/** 用户模型选择中保存的 Pi 思考等级。 */
+export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
+
 export type UserModelSelectionSource = 'custom' | 'official';
 
 export interface SystemSecretRow {
@@ -315,6 +328,8 @@ export interface UserModelSelection {
   user_id: string;
   source: UserModelSelectionSource;
   official_model_id: string | null;
+  /** 本用户当前模型调用使用的 Pi 思考等级，历史记录缺失时按 medium 处理。 */
+  thinking_level?: PiThinkingLevel;
   created_at: string;
   updated_at: string;
 }

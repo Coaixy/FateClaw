@@ -6,6 +6,7 @@
 import { getAllAccounts } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
+import type { PiThinkingLevel } from '../shared/types.js';
 
 // ─── 公共类型 ──────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export interface LlmRuntimeSnapshot {
   model: string;
   contextWindowTokens?: number;
   maxOutputTokens?: number;
+  thinkingLevel?: PiThinkingLevel;
   apiKey: string;
   baseUrl?: string;
   authMode:

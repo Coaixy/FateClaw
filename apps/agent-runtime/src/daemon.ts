@@ -43,6 +43,13 @@ function isLlmRuntimeSnapshot(
       (typeof record.maxOutputTokens === 'number' &&
         Number.isInteger(record.maxOutputTokens) &&
         record.maxOutputTokens > 0)) &&
+    (record.thinkingLevel === undefined ||
+      record.thinkingLevel === 'off' ||
+      record.thinkingLevel === 'minimal' ||
+      record.thinkingLevel === 'low' ||
+      record.thinkingLevel === 'medium' ||
+      record.thinkingLevel === 'high' ||
+      record.thinkingLevel === 'xhigh') &&
     typeof record.apiKey === 'string' &&
     record.apiKey.trim().length > 0 &&
     typeof record.providerKey === 'string' &&

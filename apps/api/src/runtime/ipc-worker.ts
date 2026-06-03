@@ -85,6 +85,7 @@ function llmRuntimeToSnapshot(
     model: runtime.model,
     contextWindowTokens: runtime.contextWindowTokens,
     maxOutputTokens: runtime.maxOutputTokens,
+    thinkingLevel: runtime.thinkingLevel,
     apiKey: runtime.secret,
     baseUrl: runtime.baseUrl || undefined,
     authMode: runtime.authMode,

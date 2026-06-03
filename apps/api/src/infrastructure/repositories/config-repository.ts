@@ -323,17 +323,24 @@ export async function upsertUserModelSelection(input: {
   userId: string;
   source: UserModelSelection['source'];
   officialModelId?: string | null;
+  thinkingLevel: NonNullable<UserModelSelection['thinking_level']>;
 }): Promise<UserModelSelection> {
   const { rows } = await getDbPool().query(
     `INSERT INTO user_model_selections
-       (user_id, source, official_model_id, created_at, updated_at)
-     VALUES ($1, $2, $3, NOW(), NOW())
+       (user_id, source, official_model_id, thinking_level, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, NOW(), NOW())
      ON CONFLICT (user_id) DO UPDATE SET
        source = EXCLUDED.source,
        official_model_id = EXCLUDED.official_model_id,
+       thinking_level = EXCLUDED.thinking_level,
        updated_at = NOW()
      RETURNING *`,
-    [input.userId, input.source, input.officialModelId ?? null],
+    [
+      input.userId,
+      input.source,
+      input.officialModelId ?? null,
+      input.thinkingLevel,
+    ],
   );
   return rows[0] as UserModelSelection;
 }

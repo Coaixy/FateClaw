@@ -3157,6 +3157,24 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0024_user_model_thinking_level',
+    description: '增加用户模型选择的 Pi 思考等级偏好',
+    async up(client) {
+      await client.query(
+        `ALTER TABLE user_model_selections
+         ADD COLUMN IF NOT EXISTS thinking_level TEXT NOT NULL DEFAULT 'medium'`,
+      );
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_model_selections_thinking_level_valid',
+        tableName: 'user_model_selections',
+        expression: `thinking_level IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
+        cleanupSql: `UPDATE user_model_selections
+                     SET thinking_level = 'medium'
+                     WHERE thinking_level NOT IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

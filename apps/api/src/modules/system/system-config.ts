@@ -28,9 +28,11 @@ import {
 import type {
   ModelProviderType,
   OfficialModelConfig,
+  PiThinkingLevel,
   UserModelConfig,
   UserModelSelection,
 } from '../../shared/types.js';
+import { PI_THINKING_LEVELS } from '../../shared/types.js';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export type ProviderAuthMode =
@@ -49,6 +51,7 @@ export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
 export const DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
 export const DEFAULT_AGENT_CONCURRENCY_LIMIT = 10;
+export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'medium';
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -64,6 +67,7 @@ export interface EffectiveLlmRuntimeConfig {
   model: string;
   contextWindowTokens: number;
   maxOutputTokens: number;
+  thinkingLevel: PiThinkingLevel;
   inputTokenPricePerMillionCoins: number;
   outputTokenPricePerMillionCoins: number;
 }
@@ -117,6 +121,12 @@ function normalizeAuthMode(
     return value;
   }
   return defaultAuthMode(piApi);
+}
+
+function normalizeThinkingLevel(value: unknown): PiThinkingLevel {
+  return PI_THINKING_LEVELS.includes(value as PiThinkingLevel)
+    ? (value as PiThinkingLevel)
+    : DEFAULT_PI_THINKING_LEVEL;
 }
 
 function normalizeModelContextWindowTokens(
@@ -208,6 +218,7 @@ function officialModelTotalPriceCoins(model: OfficialModelConfig): number {
 function buildOfficialRuntime(
   model: OfficialModelConfig,
   secret: ResolvedProviderSecret & { value: string },
+  thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
 ): EffectiveLlmRuntimeConfig {
   const modelName = requireModelName(model.model_name, model.display_name);
   const contextWindowTokens = resolveContextWindow({
@@ -232,6 +243,7 @@ function buildOfficialRuntime(
     contextWindowTokens,
     // 输出上限不再从后台配置读取，避免把“上下文窗口”误传成供应商 API 的 max_tokens。
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
+    thinkingLevel,
     inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
     outputTokenPricePerMillionCoins:
       model.output_token_price_per_million_coins,
@@ -260,9 +272,9 @@ async function resolveUsableOfficialModelCandidate(
   };
 }
 
-async function resolveLowestPricedOfficialRuntime(): Promise<
-  EffectiveLlmRuntimeConfig | null
-> {
+async function resolveLowestPricedOfficialRuntime(
+  thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
+): Promise<EffectiveLlmRuntimeConfig | null> {
   const models = await listOfficialModelConfigs();
   let lowest: ResolvedOfficialModelCandidate | null = null;
 
@@ -280,7 +292,9 @@ async function resolveLowestPricedOfficialRuntime(): Promise<
     }
   }
 
-  return lowest ? buildOfficialRuntime(lowest.model, lowest.secret) : null;
+  return lowest
+    ? buildOfficialRuntime(lowest.model, lowest.secret, thinkingLevel)
+    : null;
 }
 
 async function resolveOfficialRuntime(
@@ -301,11 +315,19 @@ async function resolveOfficialRuntime(
   if (!secret.value) {
     throw new Error('当前选择的官方模型未配置密钥，请联系管理员');
   }
-  return buildOfficialRuntime(model, { ...secret, value: secret.value });
+  return buildOfficialRuntime(
+    model,
+    {
+      ...secret,
+      value: secret.value,
+    },
+    normalizeThinkingLevel(selection.thinking_level),
+  );
 }
 
 async function resolveCustomRuntime(
   userId: string,
+  thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
 ): Promise<EffectiveLlmRuntimeConfig> {
   const config = await getUserModelConfig(userId);
   if (!config) {
@@ -342,6 +364,7 @@ async function resolveCustomRuntime(
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
+    thinkingLevel,
     inputTokenPricePerMillionCoins:
       billingConfig.custom_model_platform_price_per_million_coins,
     outputTokenPricePerMillionCoins:
@@ -365,10 +388,12 @@ export async function resolveUserLlmRuntime(
     throw new Error('未选择模型，请先在模型设置中选择官方模型或自配模型');
   }
   if (selection.source === 'custom') {
+    const thinkingLevel = normalizeThinkingLevel(selection.thinking_level);
     try {
-      return await resolveCustomRuntime(userId);
+      return await resolveCustomRuntime(userId, thinkingLevel);
     } catch (error) {
-      const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+      const fallbackRuntime =
+        await resolveLowestPricedOfficialRuntime(thinkingLevel);
       if (fallbackRuntime) {
         return fallbackRuntime;
       }
@@ -378,7 +403,9 @@ export async function resolveUserLlmRuntime(
   try {
     return await resolveOfficialRuntime(selection);
   } catch (error) {
-    const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+    const fallbackRuntime = await resolveLowestPricedOfficialRuntime(
+      normalizeThinkingLevel(selection.thinking_level),
+    );
     if (fallbackRuntime) {
       return fallbackRuntime;
     }
@@ -722,7 +749,12 @@ export async function getUserModelSettingsOverview(
           ),
         }
       : null,
-    selection: selection ?? null,
+    selection: selection
+      ? {
+          ...selection,
+          thinking_level: normalizeThinkingLevel(selection.thinking_level),
+        }
+      : null,
     official_models: officialModels,
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
@@ -769,7 +801,12 @@ export async function setUserModelSelection(args: {
   userId: string;
   source: UserModelSelection['source'];
   officialModelId?: string | null;
+  thinkingLevel?: PiThinkingLevel;
 }): Promise<UserModelSelection> {
+  const existing = await getUserModelSelection(args.userId);
+  const thinkingLevel = normalizeThinkingLevel(
+    args.thinkingLevel ?? existing?.thinking_level,
+  );
   if (args.source === 'official') {
     if (!args.officialModelId) {
       throw new Error('请选择官方模型');
@@ -784,5 +821,6 @@ export async function setUserModelSelection(args: {
     source: args.source,
     officialModelId:
       args.source === 'official' ? (args.officialModelId ?? null) : null,
+    thinkingLevel,
   });
 }

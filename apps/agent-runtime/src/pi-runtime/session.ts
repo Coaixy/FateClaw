@@ -7,6 +7,7 @@ import { getContext } from '../context.js';
 import { traceEvent } from '../trace.js';
 import type {
   ContainerInput,
+  PiThinkingLevel,
   PiSessionSnapshot,
   TokenUsage,
 } from '../types.js';
@@ -33,6 +34,14 @@ import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
 import { getRequestId } from '../request-scope.js';
+
+const DEFAULT_THINKING_LEVEL: PiThinkingLevel = 'medium';
+
+function resolveThinkingLevel(
+  level: PiThinkingLevel | undefined,
+): PiThinkingLevel {
+  return level ?? DEFAULT_THINKING_LEVEL;
+}
 
 export interface PiSessionRunResult {
   text: string | null;
@@ -156,7 +165,9 @@ export async function runPiSession(args: {
     cwd,
     agentDir: cwd,
     model: providerRuntime.model,
-    thinkingLevel: 'xhigh',
+    thinkingLevel: resolveThinkingLevel(
+      args.containerInput.llmRuntime.thinkingLevel,
+    ),
     authStorage: providerRuntime.authStorage,
     modelRegistry: providerRuntime.modelRegistry,
     resourceLoader,
