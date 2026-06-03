@@ -3087,6 +3087,76 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await client.query(`DROP TABLE IF EXISTS scheduled_tasks`);
     },
   },
+  {
+    id: '0023_skill_access_invites',
+    description: '增加 Skill 私密授权链接 schema',
+    async up(client) {
+      await client.query(
+        `ALTER TABLE user_skill_subscriptions ADD COLUMN IF NOT EXISTS source_kind TEXT NOT NULL DEFAULT 'share'`,
+      );
+      await client.query(`DO $$
+        BEGIN
+          IF to_regclass('public.user_skill_subscription_bundle_sources') IS NOT NULL THEN
+            UPDATE user_skill_subscriptions sub
+            SET source_kind = 'bundle_share'
+            WHERE sub.has_direct_source = false
+              AND sub.source_kind = 'share'
+              AND EXISTS (
+                SELECT 1
+                FROM user_skill_subscription_bundle_sources src
+                WHERE src.subscription_id = sub.id
+              );
+          END IF;
+        END $$;`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS skill_access_invites (
+          id TEXT PRIMARY KEY,
+          creator_id TEXT NOT NULL REFERENCES users(id),
+          target_type TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          token TEXT NOT NULL UNIQUE,
+          max_redemptions INTEGER NOT NULL DEFAULT 1,
+          redeemed_count INTEGER NOT NULL DEFAULT 0,
+          expires_at TIMESTAMPTZ DEFAULT NULL,
+          revoked_at TIMESTAMPTZ DEFAULT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_skill_access_invites_creator_target
+         ON skill_access_invites(creator_id, target_type, target_id, created_at DESC)`,
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_skill_access_invites_token
+         ON skill_access_invites(token)`,
+      );
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_skill_subscriptions_source_kind_valid',
+        tableName: 'user_skill_subscriptions',
+        expression: `source_kind IN ('share', 'bundle_share', 'invite', 'bundle_invite')`,
+        cleanupSql: `UPDATE user_skill_subscriptions
+                     SET source_kind = 'share'
+                     WHERE source_kind NOT IN ('share', 'bundle_share', 'invite', 'bundle_invite')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_skill_access_invites_target_type_valid',
+        tableName: 'skill_access_invites',
+        expression: `target_type IN ('skill', 'bundle')`,
+        cleanupSql: `UPDATE skill_access_invites
+                     SET target_type = 'skill'
+                     WHERE target_type NOT IN ('skill', 'bundle')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_skill_access_invites_redemptions_valid',
+        tableName: 'skill_access_invites',
+        expression: `max_redemptions > 0 AND redeemed_count >= 0 AND redeemed_count <= max_redemptions`,
+        cleanupSql: `UPDATE skill_access_invites
+                     SET max_redemptions = GREATEST(1, max_redemptions),
+                         redeemed_count = LEAST(GREATEST(0, redeemed_count), GREATEST(1, max_redemptions))`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

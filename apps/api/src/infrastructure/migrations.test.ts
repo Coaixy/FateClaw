@@ -208,6 +208,10 @@ describe('runDatabaseMigrations', () => {
       '0017_membership_token_plan',
       '0018_chat_session_archive_and_share',
       '0019_user_soul_edit_enabled',
+      '0020_runtime_config',
+      '0021_wechat_chat_session_links',
+      '0022_drop_scheduled_tasks',
+      '0023_skill_access_invites',
     ]);
 
     await runDatabaseMigrations(client as never);
