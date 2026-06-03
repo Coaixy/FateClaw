@@ -81,6 +81,10 @@ function formatYaoLine(
     textField(yao, 'liuQin') ? `六亲 ${textField(yao, 'liuQin')}` : undefined,
     textField(yao, 'naJia') ? `纳甲 ${textField(yao, 'naJia')}` : undefined,
     textField(yao, 'naYin') ? `纳音 ${textField(yao, 'naYin')}` : undefined,
+    textField(yao, 'xingXiu')
+      ? `星宿 ${textField(yao, 'xingXiu')}`
+      : undefined,
+    textField(yao, 'suoBo') ? `锁泊 ${textField(yao, 'suoBo')}` : undefined,
     formatSuiXian(yao),
     zhiYao && yao.isMoving === true ? formatChangedYao(zhiYao) : undefined,
   ]);
@@ -98,6 +102,10 @@ function formatChangedYao(yao: Record<string, unknown>): string | undefined {
     textField(yao, 'naJia') ? `纳甲 ${textField(yao, 'naJia')}` : undefined,
     textField(yao, 'liuQin') ? `六亲 ${textField(yao, 'liuQin')}` : undefined,
     textField(yao, 'naYin') ? `纳音 ${textField(yao, 'naYin')}` : undefined,
+    textField(yao, 'xingXiu')
+      ? `星宿 ${textField(yao, 'xingXiu')}`
+      : undefined,
+    textField(yao, 'suoBo') ? `锁泊 ${textField(yao, 'suoBo')}` : undefined,
     formatSuiXian(yao),
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? `化 ${parts.join(' ')}` : undefined;

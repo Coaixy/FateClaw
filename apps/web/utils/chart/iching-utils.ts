@@ -16,6 +16,7 @@ export interface IchingYao {
     endAge: number;
   };
   xingXiu?: string;
+  suoBo?: string;
 }
 
 export interface IchingFuShen {

@@ -139,6 +139,15 @@ function formatSuiXian(yao: IchingYao): string | null {
   return `岁限 ${yao.suiXian.startAge}-${yao.suiXian.endAge}`;
 }
 
+function formatYaoExtra(yao: IchingYao): string | null {
+  // 星宿 / 锁泊来自 iching-shifa 的每爻附加信息，单独成行避免挤压主排盘内容。
+  const items = [
+    yao.xingXiu ? `星宿 ${yao.xingXiu}` : null,
+    yao.suoBo ? `锁泊 ${yao.suoBo}` : null,
+  ].filter(Boolean);
+  return items.length > 0 ? items.join(' · ') : null;
+}
+
 function YaoRow({
   benYao,
   bianYao,
@@ -154,6 +163,8 @@ function YaoRow({
   const fuShenRows = fuShen ?? [];
   const benSuiXian = formatSuiXian(benYao);
   const bianSuiXian = formatSuiXian(bianYao);
+  const benExtra = formatYaoExtra(benYao);
+  const bianExtra = formatYaoExtra(bianYao);
 
   return (
     <div className="flex items-center justify-between py-1.5 sm:py-2.5 border-b border-hairline-soft last:border-0 hover:bg-chart-highlight">
@@ -183,6 +194,16 @@ function YaoRow({
               {[benYao.naYin ? `纳音 ${benYao.naYin}` : null, benSuiXian]
                 .filter(Boolean)
                 .join(' · ')}
+            </span>
+          )}
+          {benExtra && (
+            <span
+              className={cn(
+                'col-span-2 justify-self-end text-[9px] sm:text-[10px] leading-tight',
+                CHART.muted,
+              )}
+            >
+              {benExtra}
             </span>
           )}
           {fuShenRows.length > 0 && (
@@ -278,6 +299,16 @@ function YaoRow({
               {[bianYao.naYin ? `纳音 ${bianYao.naYin}` : null, bianSuiXian]
                 .filter(Boolean)
                 .join(' · ')}
+            </div>
+          )}
+          {bianExtra && (
+            <div
+              className={cn(
+                'text-[9px] sm:text-[10px] leading-tight whitespace-nowrap',
+                CHART.muted,
+              )}
+            >
+              {bianExtra}
             </div>
           )}
         </div>
