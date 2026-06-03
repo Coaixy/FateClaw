@@ -310,6 +310,30 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
           description: '是否修正闰月：前半月作上月，后半月作下月',
           default: true,
         },
+        dayDivide: {
+          type: 'string',
+          description: '晚子时换日规则：forward=晚子时算次日；current=晚子时算当日',
+          enum: ['forward', 'current'],
+          default: 'forward',
+        },
+        yearDivide: {
+          type: 'string',
+          description: '年干支分界规则：normal=农历新年分界；exact=立春分界',
+          enum: ['normal', 'exact'],
+          default: 'normal',
+        },
+        horoscopeDivide: {
+          type: 'string',
+          description: '运限分界规则：normal=农历新年分界；exact=立春分界',
+          enum: ['normal', 'exact'],
+          default: 'normal',
+        },
+        ageDivide: {
+          type: 'string',
+          description: '小限分界规则：normal=自然年分界；birthday=生日分界',
+          enum: ['normal', 'birthday'],
+          default: 'normal',
+        },
         horoscope: {
           type: 'object',
           description: '可选：叠加运盘（大限/小限/流年/流月/流日/流时）',

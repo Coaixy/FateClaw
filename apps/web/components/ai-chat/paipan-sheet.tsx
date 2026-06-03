@@ -84,6 +84,38 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
     label: '闰月修正',
     description: '紫微斗数里遇到闰月时的处理方式，通常保持默认开启即可。',
   },
+  dayDivide: {
+    label: '晚子时换日规则',
+    description: '紫微斗数里 23:00-23:59 的晚子时处理方式。',
+    optionLabels: {
+      forward: '晚子时算次日',
+      current: '晚子时算当日',
+    },
+  },
+  yearDivide: {
+    label: '年干支分界',
+    description: '影响年干支、生肖以及部分按年份安置的星曜。',
+    optionLabels: {
+      normal: '农历新年分界',
+      exact: '立春分界',
+    },
+  },
+  horoscopeDivide: {
+    label: '运限分界',
+    description: '影响大限、流年等运盘分界规则。',
+    optionLabels: {
+      normal: '农历新年分界',
+      exact: '立春分界',
+    },
+  },
+  ageDivide: {
+    label: '小限分界',
+    description: '影响小限按自然年还是生日切换。',
+    optionLabels: {
+      normal: '自然年分界',
+      birthday: '生日分界',
+    },
+  },
   horoscope: {
     label: '叠加运盘',
     description: '想同时看大限、流年、流月等运盘时再展开填写。',

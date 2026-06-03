@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { astro } from 'iztro';
 
 import { runZiweiPaipan } from './ziwei.js';
 
@@ -65,5 +66,27 @@ describe('ziwei-paipan mutagens', () => {
         { label: '化忌', star: '廉贞' },
       ],
     });
+  });
+
+  it('applies divide options without leaking iztro global config', async () => {
+    const previousConfig = astro.getConfig();
+
+    const result = await runZiweiPaipan({
+      solarDate: '1990-05-15',
+      hour: 23,
+      minute: 30,
+      gender: '男',
+      dayDivide: 'current',
+      yearDivide: 'exact',
+      horoscopeDivide: 'exact',
+      ageDivide: 'birthday',
+      horoscope: {
+        date: '2026-04-17',
+        scopes: ['yearly'],
+      },
+    });
+
+    expect(result.horoscope?.yearly).toBeDefined();
+    expect(astro.getConfig()).toEqual(previousConfig);
   });
 });

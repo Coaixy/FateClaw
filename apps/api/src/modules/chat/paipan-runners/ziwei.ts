@@ -12,6 +12,11 @@ const HOROSCOPE_SCOPES = [
 type HoroscopeScope = (typeof HOROSCOPE_SCOPES)[number];
 type ZiweiGender = 'male' | 'female';
 type ZiweiAstrolabe = ReturnType<typeof astro.bySolar>;
+type ZiweiConfig = Parameters<typeof astro.config>[0];
+type ZiweiDayDivide = ZiweiConfig['dayDivide'];
+type ZiweiYearDivide = ZiweiConfig['yearDivide'];
+type ZiweiHoroscopeDivide = ZiweiConfig['horoscopeDivide'];
+type ZiweiAgeDivide = ZiweiConfig['ageDivide'];
 type ZiweiHoroscope = ReturnType<ZiweiAstrolabe['horoscope']>;
 type ZiweiPalace = ZiweiAstrolabe['palaces'][number];
 type ZiweiStar = ZiweiPalace['majorStars'][number];
@@ -29,6 +34,10 @@ interface ZiweiInput {
   minute?: number;
   gender?: string;
   fixLeap?: boolean;
+  dayDivide?: ZiweiDayDivide;
+  yearDivide?: ZiweiYearDivide;
+  horoscopeDivide?: ZiweiHoroscopeDivide;
+  ageDivide?: ZiweiAgeDivide;
   horoscope?: {
     date?: string;
     scopes?: HoroscopeScope[];
@@ -124,6 +133,30 @@ function normalizeGender(gender: string | undefined): ZiweiGender {
   if (gender === '女') return 'female';
   if (gender === 'male' || gender === 'female') return gender;
   throw new Error(`非法 gender: ${gender}`);
+}
+
+function normalizeDayDivide(value: unknown): ZiweiDayDivide {
+  if (value === 'current' || value === 'forward') return value;
+  throw new Error(`非法 dayDivide: ${String(value)}`);
+}
+
+function normalizeYearDivide(value: unknown): ZiweiYearDivide {
+  if (value === 'normal' || value === 'exact') return value;
+  throw new Error(`非法 yearDivide: ${String(value)}`);
+}
+
+function normalizeHoroscopeDivide(value: unknown): ZiweiHoroscopeDivide {
+  if (value === 'normal' || value === 'exact') return value;
+  throw new Error(`非法 horoscopeDivide: ${String(value)}`);
+}
+
+function normalizeAgeDivide(value: unknown): ZiweiAgeDivide {
+  if (value === 'normal' || value === 'birthday') return value;
+  throw new Error(`非法 ageDivide: ${String(value)}`);
+}
+
+function restoreZiweiConfig(config: ReturnType<typeof astro.getConfig>): void {
+  astro.config(config as unknown as ZiweiConfig);
 }
 
 function formatHoroscope(
@@ -366,6 +399,10 @@ export async function runZiweiPaipan(
     minute = 0,
     gender,
     fixLeap = true,
+    dayDivide = 'forward',
+    yearDivide = 'normal',
+    horoscopeDivide = 'normal',
+    ageDivide = 'normal',
     horoscope,
   } = input as ZiweiInput;
 
@@ -374,26 +411,40 @@ export async function runZiweiPaipan(
   }
 
   const timeIndex = hourToTimeIndex(hour, minute);
-  const astrolabe = astro.bySolar(
-    solarDate,
-    timeIndex,
-    normalizeGender(gender),
-    fixLeap,
-    'zh-CN',
-  );
-  const result = formatAstrolabe(astrolabe);
+  const previousConfig = astro.getConfig();
+  astro.config({
+    dayDivide: normalizeDayDivide(dayDivide),
+    yearDivide: normalizeYearDivide(yearDivide),
+    horoscopeDivide: normalizeHoroscopeDivide(horoscopeDivide),
+    ageDivide: normalizeAgeDivide(ageDivide),
+  });
 
-  if (horoscope?.date) {
-    const scopes = horoscope.scopes ?? ['decadal', 'yearly'];
-    const invalid = scopes.filter((scope) => !HOROSCOPE_SCOPES.includes(scope));
-    if (invalid.length) {
-      throw new Error(`非法 horoscope scope: ${invalid.join(',')}`);
-    }
-    result.horoscope = formatHoroscope(
-      astrolabe.horoscope(horoscope.date),
-      scopes,
+  try {
+    const astrolabe = astro.bySolar(
+      solarDate,
+      timeIndex,
+      normalizeGender(gender),
+      fixLeap,
+      'zh-CN',
     );
-  }
+    const result = formatAstrolabe(astrolabe);
 
-  return result;
+    if (horoscope?.date) {
+      const scopes = horoscope.scopes ?? ['decadal', 'yearly'];
+      const invalid = scopes.filter((scope) =>
+        !HOROSCOPE_SCOPES.includes(scope)
+      );
+      if (invalid.length) {
+        throw new Error(`非法 horoscope scope: ${invalid.join(',')}`);
+      }
+      result.horoscope = formatHoroscope(
+        astrolabe.horoscope(horoscope.date),
+        scopes,
+      );
+    }
+
+    return result;
+  } finally {
+    restoreZiweiConfig(previousConfig);
+  }
 }
