@@ -2,6 +2,8 @@
  * 微信消息处理：解析消息、构建 prompt、分发给 Agent、处理失败兜底。
  */
 
+import crypto from 'crypto';
+
 import {
   getRecentMessages,
   getMembershipOverview,
@@ -31,6 +33,26 @@ import {
   truncateToTokenBudget,
 } from '../../shared/token-budget.js';
 import { Account, NewMessage } from '../../shared/types.js';
+
+/**
+ * 构建微信聊天在 Pi Runtime 中使用的稳定会话 ID。
+ *
+ * @param accountId 微信 Claw 账号 ID。
+ * @param sender 微信侧发送方 ID。
+ * @returns 去标识化后的 Pi Runtime 会话 ID。
+ * @remarks 不直接拼接微信 ID，避免把外部账号标识写入 Pi session 文件名或 Redis key。
+ */
+export function buildWeixinRuntimeSessionId(
+  accountId: string,
+  sender: string,
+): string {
+  const digest = crypto
+    .createHash('sha256')
+    .update(`${accountId}:${sender}`)
+    .digest('hex')
+    .slice(0, 32);
+  return `wx-${digest}`;
+}
 
 export async function processWeixinMessage(
   account: Account,
@@ -83,13 +105,14 @@ export async function processWeixinMessage(
       throw new Error('账号未绑定平台用户，无法处理 AI 请求');
     }
     const llmRuntime = await resolveUserLlmRuntime(owner.id);
-    // 构建结构化上下文
-    const structured = await buildStructuredInput(
-      account,
-      content,
-      llmRuntime.model,
-      llmRuntime.contextWindowTokens,
-    );
+    const sessionId = buildWeixinRuntimeSessionId(account.id, sender);
+    // 微信聊天的连续性由 Pi session 文件维护，避免把同一 Claw 账号下不同联系人的历史混入本轮上下文。
+    const structured: StructuredInput = {
+      userMessage: content,
+      history: [],
+      userName: account.name,
+      assistantName: account.name,
+    };
 
     // 分发给 Agent
     const output = await dispatchResidentPrompt({
@@ -102,6 +125,7 @@ export async function processWeixinMessage(
       toUserId: sender,
       contextToken: msg.context_token,
       autoDeliver: true,
+      sessionId,
       llmRuntime,
     });
     if (output.status === 'error') {
