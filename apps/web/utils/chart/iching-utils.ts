@@ -70,11 +70,11 @@ export function getShiYingLabel(shiYing: string | undefined): '世' | '应' | ''
 const LIUSHOU_COLOR: Record<string, string> = {
   青龙: 'text-emerald-400',
   朱雀: 'text-rose-400',
-  勾陈: 'text-yellow-600',
+  勾陈: 'text-amber-700',
   腾蛇: 'text-amber-300',
   螣蛇: 'text-amber-300',
   白虎: 'text-slate-300',
-  玄武: 'text-sky-400',
+  玄武: 'text-blue-400',
 };
 
 export function getLiuShouColor(liushou: string): string {
@@ -86,8 +86,8 @@ const LIUQIN_COLOR: Record<string, string> = {
   子孙: 'text-emerald-400',
   妻财: 'text-yellow-400',
   官鬼: 'text-rose-400',
-  父母: 'text-sky-400',
-  兄弟: 'text-amber-300',
+  父母: 'text-blue-400',
+  兄弟: 'text-yellow-400',
 };
 
 export function getLiuQinColor(liuqin: string): string {

@@ -59,11 +59,11 @@ export const SHEN_COLOR: Record<string, string> = {
 };
 
 const WUXING_TEXT_COLOR: Record<string, string> = {
-  金: 'text-amber-300',
+  金: 'text-yellow-400',
   木: 'text-emerald-400',
-  水: 'text-sky-400',
+  水: 'text-blue-400',
   火: 'text-rose-400',
-  土: 'text-yellow-600',
+  土: 'text-amber-700',
 };
 
 export function wuxingColor(wuxing?: string): string {
