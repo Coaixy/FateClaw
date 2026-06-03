@@ -39,6 +39,13 @@ interface FuShenDisplay {
   naYin?: string;
 }
 
+const YAO_META_BADGE_CLASS =
+  'inline-flex w-fit rounded-md border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] sm:text-[11px] font-medium leading-tight whitespace-nowrap';
+const YAO_CORE_BADGE_CLASS =
+  'inline-flex w-fit items-center justify-center rounded-md border border-hairline bg-canvas px-1 py-0.5 text-[11px] sm:text-base font-semibold leading-tight whitespace-nowrap';
+const YAO_LIUSHOU_BADGE_CLASS =
+  'inline-flex min-w-[1.55rem] sm:min-w-[2rem] items-center justify-center rounded-md border border-primary bg-primary px-1 py-0.5 text-[11px] sm:text-base font-bold leading-tight text-on-primary whitespace-nowrap';
+
 const METHOD_LABEL: Record<string, string> = {
   dayan: '大衍筮法',
   lueshifa: '略筮法',
@@ -140,10 +147,10 @@ function formatSuiXian(yao: IchingYao): string | null {
 }
 
 function formatYaoExtra(yao: IchingYao): string | null {
-  // 星宿 / 锁泊来自 iching-shifa 的每爻附加信息，单独成行避免挤压主排盘内容。
+  // 星宿 / 锁泊在盘面上只展示值，保持每爻信息紧凑。
   const items = [
-    yao.xingXiu ? `星宿 ${yao.xingXiu}` : null,
-    yao.suoBo ? `锁泊 ${yao.suoBo}` : null,
+    yao.xingXiu,
+    yao.suoBo,
   ].filter(Boolean);
   return items.length > 0 ? items.join(' · ') : null;
 }
@@ -171,24 +178,25 @@ function YaoRow({
       {/* LEFT: 本卦 */}
       <div className="flex-1 flex items-center justify-end gap-0.5 sm:gap-2 relative">
         {/* 六兽 */}
-        <span className={cn('font-bold text-[10px] sm:text-base min-w-[0.8rem] sm:min-w-[1.2rem] w-auto text-center select-none shrink-0 whitespace-nowrap', CHART.primary)}>
+        <span className={cn(YAO_LIUSHOU_BADGE_CLASS, 'select-none shrink-0')}>
           {benYao.liuShou}
         </span>
 
         {/* 六亲 + 纳甲五行 */}
-        <div className="grid grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:gap-x-1.5 whitespace-nowrap min-w-[3.5rem] sm:min-w-[4.5rem]">
-          <span className="text-[10px] sm:text-base text-ink font-medium">
+        <div className="grid grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:gap-x-1 whitespace-nowrap min-w-[4.25rem] sm:min-w-[5.25rem]">
+          <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
             {benYao.liuQin}
           </span>
-          <span className="text-[10px] sm:text-base text-ink font-medium">
+          <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
             {benYao.naJia}
             {benYao.wuXing}
           </span>
           {(benYao.naYin || benSuiXian) && (
             <span
               className={cn(
-                'col-span-2 justify-self-end text-[8px] sm:text-[10px] leading-none',
-                CHART.mutedSoft,
+                'col-span-2 mt-0.5 justify-self-end',
+                YAO_META_BADGE_CLASS,
+                CHART.muted,
               )}
             >
               {[benYao.naYin ? `纳音 ${benYao.naYin}` : null, benSuiXian]
@@ -199,8 +207,9 @@ function YaoRow({
           {benExtra && (
             <span
               className={cn(
-                'col-span-2 justify-self-end text-[9px] sm:text-[10px] leading-tight',
-                CHART.muted,
+                'col-span-2 mt-0.5 justify-self-end',
+                YAO_META_BADGE_CLASS,
+                CHART.earth,
               )}
             >
               {benExtra}
@@ -211,15 +220,14 @@ function YaoRow({
               {fuShenRows.map((item, index) => (
                 <div
                   key={`${item.kind}-${index}-${item.naJiaWuXing}`}
-                  className="grid grid-cols-[0.8rem_auto_auto] items-center justify-end gap-x-0.5 sm:gap-x-1.5 whitespace-nowrap"
+                  className={cn(
+                    'inline-grid grid-cols-[0.9rem_auto_auto] items-center justify-end gap-x-0.5 rounded-md border border-primary/20 bg-primary/10 px-1 py-px text-[10px] sm:text-[11px] font-semibold leading-tight whitespace-nowrap',
+                    CHART.primary,
+                  )}
                 >
-                  <span className={cn('text-[9px] sm:text-xs font-medium', CHART.primary)}>
-                    {item.kind}
-                  </span>
-                  <span className={cn('text-[9px] sm:text-xs font-medium', CHART.primary)}>
-                    {item.liuQin}
-                  </span>
-                  <span className={cn('text-[9px] sm:text-xs font-medium', CHART.primary)}>
+                  <span>{item.kind}</span>
+                  <span>{item.liuQin}</span>
+                  <span>
                     {item.naJiaWuXing}
                     {item.naYin ? ` ${item.naYin}` : ''}
                   </span>
@@ -262,7 +270,7 @@ function YaoRow({
       {/* RIGHT: 变卦 */}
       <div
         className={`flex-1 flex items-center justify-start gap-0.5 sm:gap-2 ${
-          isMoving ? 'opacity-100' : 'opacity-40 grayscale'
+          isMoving ? 'opacity-100' : 'opacity-60 grayscale'
         }`}
       >
         <div className="relative flex items-center justify-center w-9 sm:w-20 shrink-0">
@@ -282,9 +290,9 @@ function YaoRow({
           </span>
         </div>
         <div className="flex flex-col items-start min-w-0">
-          <div className="flex items-center gap-0.5 sm:gap-1.5 text-[10px] sm:text-base text-body font-medium whitespace-nowrap">
-            <span>{bianYao.liuQin}</span>
-            <span>
+          <div className="flex items-center gap-0.5 sm:gap-1 whitespace-nowrap">
+            <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>{bianYao.liuQin}</span>
+            <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
               {bianYao.naJia}
               {bianYao.wuXing}
             </span>
@@ -292,8 +300,9 @@ function YaoRow({
           {(bianYao.naYin || bianSuiXian) && (
             <div
               className={cn(
-                'text-[8px] sm:text-[10px] leading-none whitespace-nowrap',
-                CHART.mutedSoft,
+                'mt-0.5',
+                YAO_META_BADGE_CLASS,
+                CHART.muted,
               )}
             >
               {[bianYao.naYin ? `纳音 ${bianYao.naYin}` : null, bianSuiXian]
@@ -304,8 +313,9 @@ function YaoRow({
           {bianExtra && (
             <div
               className={cn(
-                'text-[9px] sm:text-[10px] leading-tight whitespace-nowrap',
-                CHART.muted,
+                'mt-0.5',
+                YAO_META_BADGE_CLASS,
+                CHART.earth,
               )}
             >
               {bianExtra}
@@ -465,7 +475,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
             {benGua.guaName ?? '本卦'}
           </div>
           {benGua.guaCi && (
-            <div className="text-[10px] sm:text-xs text-body italic text-center leading-tight px-1">
+            <div className="text-[10px] sm:text-xs text-body text-center leading-tight px-1">
               {benGua.guaCi}
             </div>
           )}
@@ -476,7 +486,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
             {zhiGua.guaName ?? '变卦'}
           </div>
           {zhiGua.guaCi && (
-            <div className="text-[10px] sm:text-xs text-body italic text-center leading-tight px-1">
+            <div className="text-[10px] sm:text-xs text-body text-center leading-tight px-1">
               {zhiGua.guaCi}
             </div>
           )}
@@ -571,8 +581,8 @@ function ScriptureBlock({ label, gua }: { label: string; gua: IchingGua }) {
       </div>
 
       {gua.guaCi && (
-        <p className="italic text-body">
-          <span className="text-muted not-italic mr-1">卦辞</span>
+        <p className="text-body">
+          <span className="text-muted mr-1">卦辞</span>
           {gua.guaCi}
         </p>
       )}
