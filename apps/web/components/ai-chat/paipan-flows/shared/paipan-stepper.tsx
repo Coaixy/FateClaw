@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const CONFIRM_STEP_ID = '__paipan-confirm';
 const RESULT_STEP_ID = '__paipan-result';
@@ -24,6 +24,10 @@ interface PaipanStepperProps {
   finalAction?: ReactNode;
   resultContent?: ReactNode;
   resultAction?: ReactNode;
+  /**
+   * 通知外层当前是否停在预览结果步骤，方便外层把主操作固定在弹层底部。
+   */
+  onResultStepChange?: (isActive: boolean) => void;
 }
 
 /**
@@ -37,6 +41,7 @@ export function PaipanStepper({
   finalAction,
   resultContent,
   resultAction,
+  onResultStepChange,
 }: PaipanStepperProps) {
   const visibleSteps = useMemo(() => {
     const baseSteps = steps.filter(
@@ -68,13 +73,15 @@ export function PaipanStepper({
     return [...baseSteps, ...confirmStep, ...resultStep];
   }, [finalAction, finalContent, resultContent, steps]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const hadResultContentRef = useRef(false);
   const activeStep = visibleSteps[activeIndex];
   const canGoPrevious = activeIndex > 0;
   const canGoNext = activeIndex < visibleSteps.length - 1;
   const isLastStep = !canGoNext;
   const isConfirmStep = activeStep?.id === CONFIRM_STEP_ID;
   const isResultStep = activeStep?.id === RESULT_STEP_ID;
-  const showFinalAction = isConfirmStep && !resultContent;
+  const hasResultContent = resultContent !== null && resultContent !== undefined;
+  const showFinalAction = isConfirmStep && !hasResultContent;
   const getStepIndicatorClassName = (step: PaipanStep, index: number) => {
     const hasReachedStep = index <= activeIndex;
     const statusColor = !hasReachedStep
@@ -97,10 +104,16 @@ export function PaipanStepper({
   }, [visibleSteps.length]);
 
   useEffect(() => {
-    if (resultContent) {
+    // 只在预览结果第一次出现时自动跳到结果页，避免父级重渲染后锁死步骤导航。
+    if (hasResultContent && !hadResultContentRef.current) {
       setActiveIndex(Math.max(visibleSteps.length - 1, 0));
     }
-  }, [resultContent, visibleSteps.length]);
+    hadResultContentRef.current = hasResultContent;
+  }, [hasResultContent, visibleSteps.length]);
+
+  useEffect(() => {
+    onResultStepChange?.(isResultStep);
+  }, [isResultStep, onResultStepChange]);
 
   if (!activeStep) return null;
 

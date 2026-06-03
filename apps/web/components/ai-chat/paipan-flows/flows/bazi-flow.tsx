@@ -20,6 +20,7 @@ export function BaziFlow({
   finalAction,
   resultContent,
   resultAction,
+  onResultStepChange,
 }: PaipanFlowProps) {
   const { DateField, TimeField, ChoiceGrid } = fieldKit;
   const { getValueAtPath, normalizeGenderValue } = helpers;
@@ -99,6 +100,7 @@ export function BaziFlow({
       finalAction={finalAction}
       resultContent={resultContent}
       resultAction={resultAction}
+      onResultStepChange={onResultStepChange}
     />
   );
 }

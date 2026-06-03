@@ -117,6 +117,10 @@ export interface PaipanFlowProps {
   finalAction?: ReactNode;
   resultContent?: ReactNode;
   resultAction?: ReactNode;
+  /**
+   * 通知外层当前是否停在预览结果步骤，供弹层固定展示结果主操作。
+   */
+  onResultStepChange?: (isActive: boolean) => void;
 }
 
 /**

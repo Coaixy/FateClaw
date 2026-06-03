@@ -31,6 +31,7 @@ export function QimenFlow({
   finalAction,
   resultContent,
   resultAction,
+  onResultStepChange,
 }: PaipanFlowProps) {
   const { DateField, TimeField, ChoiceGrid } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts } = helpers;
@@ -170,6 +171,7 @@ export function QimenFlow({
       finalAction={finalAction}
       resultContent={resultContent}
       resultAction={resultAction}
+      onResultStepChange={onResultStepChange}
     />
   );
 }

@@ -46,6 +46,7 @@ export function LiurenFlow({
   finalAction,
   resultContent,
   resultAction,
+  onResultStepChange,
 }: PaipanFlowProps) {
   const { DateField, TimeField, ChoiceGrid, FieldTextInput } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts } = helpers;
@@ -250,6 +251,7 @@ export function LiurenFlow({
       finalAction={finalAction}
       resultContent={resultContent}
       resultAction={resultAction}
+      onResultStepChange={onResultStepChange}
     />
   );
 }

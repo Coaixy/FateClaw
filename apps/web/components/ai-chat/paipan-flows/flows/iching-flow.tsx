@@ -270,6 +270,7 @@ export function IchingFlow({
   finalAction,
   resultContent,
   resultAction,
+  onResultStepChange,
 }: PaipanFlowProps) {
   const {
     DateTimeField,
@@ -434,6 +435,7 @@ export function IchingFlow({
       finalAction={finalAction}
       resultContent={resultContent}
       resultAction={resultAction}
+      onResultStepChange={onResultStepChange}
     />
   );
 }

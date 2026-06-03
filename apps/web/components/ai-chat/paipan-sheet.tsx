@@ -1441,6 +1441,7 @@ export function PaipanSheet({
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [previewResult, setPreviewResult] = useState<PaipanPreviewResponse | null>(null);
   const [previewSkillName, setPreviewSkillName] = useState('');
+  const [resultStepActive, setResultStepActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -1493,12 +1494,14 @@ export function PaipanSheet({
   useEffect(() => {
     if (!selectedCatalogItem) {
       setDraft({});
+      setResultStepActive(false);
       return;
     }
     // 每次切换术数时重建一份更适合普通用户的初始表单状态。
     setDraft(buildInitialDraftForSkill(selectedCatalogItem.skill, selectedCatalogItem.parameters));
     setPreviewResult(null);
     setPreviewSkillName('');
+    setResultStepActive(false);
     setAdvancedOpen(false);
   }, [selectedCatalogItem]);
 
@@ -1507,6 +1510,7 @@ export function PaipanSheet({
       setSelectedSkill('');
       setPreviewResult(null);
       setPreviewSkillName('');
+      setResultStepActive(false);
       setSubmitting(false);
       setAdvancedOpen(false);
     }
@@ -1515,6 +1519,7 @@ export function PaipanSheet({
   const resetPreviewState = () => {
     setPreviewResult(null);
     setPreviewSkillName('');
+    setResultStepActive(false);
   };
 
   const handleChange = (path: string[], value: unknown) => {
@@ -1688,6 +1693,20 @@ export function PaipanSheet({
       />
     </div>
   ) : null;
+  // 结果页主动作固定在弹层底部，避免长盘面把按钮推到可视区之外。
+  const resultFooter = previewResult && resultStepActive ? (
+    <div className="px-4 py-3 sm:px-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium text-ink">预览盘面已生成</p>
+          <p className="truncate text-[10px] leading-4 text-muted">
+            {previewSkillName || '已生成盘面'}
+          </p>
+        </div>
+        <div className="w-full shrink-0 sm:w-auto">{flowResultAction}</div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <BottomSheet
@@ -1701,6 +1720,7 @@ export function PaipanSheet({
           {mode === 'pre-chat' ? '可选入口' : '当前会话'}
         </span>
       }
+      footer={resultFooter}
     >
       <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-5">
         {catalogLoading ? (
@@ -1758,7 +1778,7 @@ export function PaipanSheet({
                     onManyChanges={handleManyChanges}
                     finalAction={flowFinalAction}
                     resultContent={flowResultContent}
-                    resultAction={flowResultAction}
+                    onResultStepChange={setResultStepActive}
                   />
                 ) : (
                   <div className="rounded-2xl border border-hairline bg-surface-card/35 px-4 py-3 text-[12px] leading-5 text-muted">
