@@ -141,10 +141,10 @@ function isSkippedDir(name: string): boolean {
   return SKIPPED_DIRS.has(name) || name.startsWith('.');
 }
 
-function resolveSearchScopes(
+async function resolveSearchScopes(
   rawPath: string | undefined,
   readableSkills: Skill[],
-): { scopes?: SearchScope[]; error?: string } {
+): Promise<{ scopes?: SearchScope[]; error?: string }> {
   if (!rawPath) {
     return {
       scopes: readableSkills.map((skill) => ({
@@ -162,6 +162,8 @@ function resolveSearchScopes(
 
   const cwdCandidate = path.resolve(trimmed);
   const scopes: SearchScope[] = [];
+  let sawAuthorizedCandidate = false;
+  let sawUnsupportedPath = false;
 
   for (const skill of readableSkills) {
     const baseDir = path.resolve(skill.baseDir);
@@ -169,19 +171,47 @@ function resolveSearchScopes(
       ? path.resolve(trimmed)
       : path.resolve(baseDir, trimmed);
     const candidates = [targetPath, cwdCandidate];
+    const seenCandidates = new Set<string>();
 
     for (const candidate of candidates) {
+      if (seenCandidates.has(candidate)) continue;
+      seenCandidates.add(candidate);
       if (!isPathInside(candidate, baseDir)) continue;
-      scopes.push({ skill, baseDir, targetPath: candidate });
-      break;
+      sawAuthorizedCandidate = true;
+
+      const stat = await safeStat(candidate);
+      if (!stat) continue;
+      if (stat.isFile()) {
+        if (!isMarkdownPath(candidate)) {
+          sawUnsupportedPath = true;
+          continue;
+        }
+        scopes.push({ skill, baseDir, targetPath: candidate });
+        break;
+      }
+      if (stat.isDirectory()) {
+        scopes.push({ skill, baseDir, targetPath: candidate });
+        break;
+      }
+      sawUnsupportedPath = true;
     }
   }
 
-  if (scopes.length === 0) {
+  if (scopes.length > 0) {
+    return { scopes };
+  }
+
+  if (!sawAuthorizedCandidate) {
     return { error: `搜索被拒绝：${rawPath} 不属于本轮可见 Skill 目录。` };
   }
 
-  return { scopes };
+  if (sawUnsupportedPath) {
+    return {
+      error: `搜索被拒绝：${rawPath} 不是授权 Skill 内的 Markdown 文件或目录。`,
+    };
+  }
+
+  return { error: `搜索失败：路径不存在或不可访问：${rawPath}` };
 }
 
 async function safeStat(filePath: string): Promise<Stats | undefined> {
@@ -352,7 +382,7 @@ async function runGrep(
     };
   }
 
-  const resolved = resolveSearchScopes(params.path, readableSkills);
+  const resolved = await resolveSearchScopes(params.path, readableSkills);
   if (!resolved.scopes) {
     const error =
       resolved.error ?? `搜索被拒绝：${params.path || '(空路径)'} 不属于本轮可见 Skill 目录。`;

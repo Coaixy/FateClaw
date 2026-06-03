@@ -592,6 +592,47 @@ describe('createPiCustomTools', () => {
     });
   });
 
+  it('greps a relative path that exists in only one visible skill bundle', async () => {
+    const firstSkill = createReadableSkillFixture();
+    const secondSkill = {
+      ...createReadableSkillFixture(),
+      name: 'second-bazi',
+    };
+    const docsDir = path.join(secondSkill.baseDir, 'docs');
+    const knowledgePath = path.join(docsDir, 'knowledge.md');
+    fs.mkdirSync(docsDir);
+    fs.writeFileSync(knowledgePath, 'only second needle');
+    const tools = createTools({
+      readableSkills: [firstSkill, secondSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    const result = await grepTool.execute(
+      'grep-relative-one-skill',
+      { query: 'needle', path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      total: 1,
+      totalIsExact: true,
+      searchedFiles: 1,
+      matches: [
+        {
+          path: knowledgePath,
+          relativePath: 'docs/knowledge.md',
+          skill: 'second-bazi',
+          line: 1,
+          text: 'only second needle',
+        },
+      ],
+    });
+  });
+
   it('caches markdown file discovery for repeated grep calls in one tool instance', async () => {
     const readableSkill = createReadableSkillFixture();
     const docsDir = path.join(readableSkill.baseDir, 'docs');
