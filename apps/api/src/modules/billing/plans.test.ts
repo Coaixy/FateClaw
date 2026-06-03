@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGetBillingRequestReservationByRequestId,
@@ -30,6 +30,7 @@ vi.mock('../../infrastructure/daily-usage.js', () => ({
 }));
 
 import {
+  getMembershipBillingSummary,
   reserveBillingForRequest,
   settleBillingReservation,
 } from './plans.js';
@@ -62,6 +63,10 @@ describe('metered billing plans', () => {
     mockSettleUserModelChargeCoins.mockResolvedValue({
       actualChargeCoins: 1,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('records metered requests without reserving balance', async () => {
@@ -129,5 +134,63 @@ describe('metered billing plans', () => {
       141_873,
       0.63,
     );
+  });
+
+  it('reports personal allowance reset instead of membership expiration', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+
+    mockGetMembershipOverview.mockResolvedValue({
+      config: {
+        enabled: true,
+        monthly_price_coins: 30,
+        monthly_allowance_units: 3000000,
+      },
+      membership: {
+        plan_key: 'fateclaw_plus',
+        current_period_start: '2026-06-30T00:00:00.000Z',
+        current_period_end: '2026-07-30T00:00:00.000Z',
+        created_at: '2026-05-30T00:00:00.000Z',
+      },
+      allowance: {
+        period_end: '2026-06-30T00:00:00.000Z',
+        allowance_units: 3000000,
+        used_units: 1500000,
+      },
+      active: true,
+    });
+
+    await expect(getMembershipBillingSummary('user-1')).resolves.toMatchObject({
+      currentPeriodEnd: '2026-07-30T00:00:00.000Z',
+      allowanceResetAt: '2026-06-30T00:00:00.000Z',
+      allowanceUsedRatio: 0.5,
+    });
+  });
+
+  it('falls back to next personal reset when current allowance row has not been created yet', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+
+    mockGetMembershipOverview.mockResolvedValue({
+      config: {
+        enabled: true,
+        monthly_price_coins: 30,
+        monthly_allowance_units: 3000000,
+      },
+      membership: {
+        plan_key: 'fateclaw_plus',
+        current_period_start: '2026-06-30T00:00:00.000Z',
+        current_period_end: '2026-07-30T00:00:00.000Z',
+        created_at: '2026-05-30T00:00:00.000Z',
+      },
+      allowance: null,
+      active: true,
+    });
+
+    await expect(getMembershipBillingSummary('user-1')).resolves.toMatchObject({
+      currentPeriodEnd: '2026-07-30T00:00:00.000Z',
+      allowanceResetAt: '2026-06-30T00:00:00.000Z',
+      allowanceUsedRatio: 0,
+    });
   });
 });

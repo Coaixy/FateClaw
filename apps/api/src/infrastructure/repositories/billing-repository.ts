@@ -11,6 +11,7 @@ import type {
   UserMembership,
 } from '../../shared/types.js';
 import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
+import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 
 const pool = {
   query(sql: string, params?: unknown[]) {
@@ -385,6 +386,7 @@ async function ensureMembershipAllowanceForUserUsing(
   },
 ): Promise<MembershipAllowanceRow> {
   const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const period = resolveMembershipAllowancePeriod(input.membership);
   const { rows } = await client.query(
     `INSERT INTO membership_allowances (
        id, user_id, plan_key, period_start, period_end,
@@ -403,8 +405,8 @@ async function ensureMembershipAllowanceForUserUsing(
       allowanceId,
       input.membership.user_id,
       input.membership.plan_key,
-      input.membership.current_period_start,
-      input.membership.current_period_end,
+      period.start,
+      period.end,
       input.config.monthly_allowance_units,
     ],
   );
@@ -485,26 +487,31 @@ export async function getMembershipOverview(
      LIMIT 1`,
     [userId],
   );
-  const membership = (membershipRows[0] as UserMembershipRow | undefined) ?? null;
+  const membership =
+    (membershipRows[0] as UserMembershipRow | undefined) ?? null;
+  const period = membership
+    ? resolveMembershipAllowancePeriod(membership)
+    : null;
   const active = Boolean(
     config.enabled &&
       membership &&
       membership.status === 'active' &&
       new Date(membership.current_period_end).getTime() > Date.now(),
   );
-  const allowance = active
-    ? await (async () => {
-        const { rows } = await pool.query(
-          `SELECT *
+  const allowance =
+    active && period
+      ? await (async () => {
+          const { rows } = await pool.query(
+            `SELECT *
            FROM membership_allowances
            WHERE user_id = $1 AND period_start = $2
            LIMIT 1`,
-          [userId, membership!.current_period_start],
-        );
-        const row = rows[0] as MembershipAllowanceRow | undefined;
-        return row ? normalizeMembershipAllowanceRow(row) : null;
-      })()
-    : null;
+            [userId, period.start],
+          );
+          const row = rows[0] as MembershipAllowanceRow | undefined;
+          return row ? normalizeMembershipAllowanceRow(row) : null;
+        })()
+      : null;
 
   return { config, membership, allowance, active };
 }
@@ -544,11 +551,17 @@ export async function subscribeMembershipWithWallet(
       forUpdate: true,
     });
     const now = new Date();
+    const currentActive = Boolean(
+      current && new Date(current.current_period_end).getTime() > now.getTime(),
+    );
     const periodStart =
-      current && new Date(current.current_period_end).getTime() > now.getTime()
-        ? new Date(current.current_period_end)
+      currentActive && current
+        ? new Date(resolveMembershipAllowancePeriod(current, now).anchor)
         : now;
-    const periodEnd = addMonths(periodStart, 1);
+    const periodEnd = addMonths(
+      currentActive && current ? new Date(current.current_period_end) : now,
+      1,
+    );
     const { rows: membershipRows } = await client.query(
       `INSERT INTO user_memberships (
          user_id, plan_key, status, current_period_start,

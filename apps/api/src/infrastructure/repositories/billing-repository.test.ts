@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGetDbPool, mockGetUserByIdUsing, mockLoggerWarn } = vi.hoisted(
   () => ({
@@ -26,6 +26,7 @@ import {
   createDailySignInReward,
   deductBalanceCoins,
   deductModelChargeCoinsAllowDebt,
+  getMembershipOverview,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
@@ -80,6 +81,10 @@ function createMockPool(
 describe('billing repository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('inserts recharge orders and serializes metadata', async () => {
@@ -442,7 +447,7 @@ describe('billing repository', () => {
 
     await expect(
       settleUserModelChargeCoins('request-1', 141_873, 0.63),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       actualChargeCoins: 0.63,
       user: updated,
     });
@@ -471,6 +476,9 @@ describe('billing repository', () => {
   });
 
   it('uses active membership allowance before charging wallet balance', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
+
     const user = {
       id: 'user-1',
       purchased_coins: 10,
@@ -506,15 +514,15 @@ describe('billing repository', () => {
       user_id: 'user-1',
       plan_key: 'fateclaw_plus',
       status: 'active',
-      current_period_start: '2026-05-01T00:00:00.000Z',
-      current_period_end: '2026-06-01T00:00:00.000Z',
+      current_period_start: '2026-05-10T08:00:00.000Z',
+      current_period_end: '2026-06-10T08:00:00.000Z',
     };
     const allowance = {
       id: 'allowance-1',
       user_id: 'user-1',
       plan_key: 'fateclaw_plus',
-      period_start: '2026-05-01T00:00:00.000Z',
-      period_end: '2026-06-01T00:00:00.000Z',
+      period_start: '2026-05-10T08:00:00.000Z',
+      period_end: '2026-06-10T08:00:00.000Z',
       allowance_units: 3000000,
       used_units: 0,
     };
@@ -554,6 +562,13 @@ describe('billing repository', () => {
           call.params?.[2] === 'membership_allowance_use',
       ),
     ).toBe(true);
+    const allowanceInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO membership_allowances'),
+    );
+    expect(allowanceInsert?.params?.slice(3, 5)).toEqual([
+      '2026-05-10T08:00:00.000Z',
+      '2026-06-10T08:00:00.000Z',
+    ]);
     expect(
       clientCalls.some(
         (call) =>
@@ -563,7 +578,10 @@ describe('billing repository', () => {
     ).toBe(false);
   });
 
-  it('opens membership by deducting wallet balance and creating a cycle allowance', async () => {
+  it('opens membership by deducting wallet balance and creating a monthly allowance', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-31T00:00:00.000Z'));
+
     const user = {
       id: 'user-1',
       purchased_coins: 50,
@@ -624,9 +642,91 @@ describe('billing repository', () => {
           call.params?.[2] === 'membership_subscription',
       ),
     ).toBe(true);
+    const allowanceInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO membership_allowances'),
+    );
+    expect(allowanceInsert?.params?.slice(3, 5)).toEqual([
+      '2026-05-31T00:00:00.000Z',
+      '2026-06-30T00:00:00.000Z',
+    ]);
   });
 
-  it('extends membership by clamping month-end renewal periods', async () => {
+  it('reopens expired membership with a fresh allowance anchor', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T03:00:00.000Z'));
+
+    const user = {
+      id: 'user-1',
+      purchased_coins: 50,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    mockGetUserByIdUsing
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, purchased_coins: 20 });
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [
+          {
+            id: 'default',
+            enabled: true,
+            monthly_price_coins: 30,
+            monthly_allowance_units: 3000000,
+            standard_price_per_million_units_coins: 10,
+          },
+        ],
+        [],
+        [],
+        [],
+        [
+          {
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            status: 'active',
+            current_period_start: '2026-07-10T03:00:00.000Z',
+            current_period_end: '2026-08-10T03:00:00.000Z',
+            created_at: '2026-01-10T03:00:00.000Z',
+          },
+        ],
+        [
+          {
+            id: 'allowance-1',
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            period_start: '2026-07-10T03:00:00.000Z',
+            period_end: '2026-08-10T03:00:00.000Z',
+            allowance_units: 3000000,
+            used_units: 0,
+          },
+        ],
+        [],
+      ],
+    );
+
+    await subscribeMembershipWithWallet('user-1');
+
+    const membershipInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO user_memberships'),
+    );
+    expect(membershipInsert?.params?.slice(2, 4)).toEqual([
+      '2026-07-10T03:00:00.000Z',
+      '2026-08-10T03:00:00.000Z',
+    ]);
+    const allowanceInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO membership_allowances'),
+    );
+    expect(allowanceInsert?.params?.slice(3, 5)).toEqual([
+      '2026-07-10T03:00:00.000Z',
+      '2026-08-10T03:00:00.000Z',
+    ]);
+  });
+
+  it('extends membership by clamping month-end renewal periods without moving the reset anchor', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-01T00:00:00.000Z'));
+
     const user = {
       id: 'user-1',
       purchased_coins: 60,
@@ -639,6 +739,7 @@ describe('billing repository', () => {
       status: 'active',
       current_period_start: '2026-07-31T08:00:00.000Z',
       current_period_end: '2026-08-31T08:00:00.000Z',
+      created_at: '2026-07-31T08:00:00.000Z',
     };
     mockGetUserByIdUsing
       .mockResolvedValueOnce(user)
@@ -662,7 +763,6 @@ describe('billing repository', () => {
         [
           {
             ...currentMembership,
-            current_period_start: '2026-08-31T08:00:00.000Z',
             current_period_end: '2026-09-30T08:00:00.000Z',
           },
         ],
@@ -671,8 +771,8 @@ describe('billing repository', () => {
             id: 'allowance-1',
             user_id: 'user-1',
             plan_key: 'fateclaw_plus',
-            period_start: '2026-08-31T08:00:00.000Z',
-            period_end: '2026-09-30T08:00:00.000Z',
+            period_start: '2026-07-31T08:00:00.000Z',
+            period_end: '2026-08-31T08:00:00.000Z',
             allowance_units: 3000000,
             used_units: 0,
           },
@@ -687,8 +787,50 @@ describe('billing repository', () => {
       call.sql.includes('INSERT INTO user_memberships'),
     );
     expect(membershipInsert?.params?.slice(2, 4)).toEqual([
-      '2026-08-31T08:00:00.000Z',
+      '2026-07-31T08:00:00.000Z',
       '2026-09-30T08:00:00.000Z',
     ]);
+  });
+
+  it('reads the current personal allowance cycle even after historical renewal moved membership period start forward', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+
+    const membership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-30T00:00:00.000Z',
+      current_period_end: '2026-07-30T00:00:00.000Z',
+      created_at: '2026-05-30T00:00:00.000Z',
+    };
+    const allowance = {
+      id: 'allowance-1',
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      period_start: '2026-05-30T00:00:00.000Z',
+      period_end: '2026-06-30T00:00:00.000Z',
+      allowance_units: 3000000,
+      used_units: 42,
+    };
+    const { calls } = createMockPool([
+      [
+        {
+          id: 'default',
+          enabled: true,
+          monthly_price_coins: 30,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [membership],
+      [allowance],
+    ]);
+
+    await expect(getMembershipOverview('user-1')).resolves.toMatchObject({
+      active: true,
+      allowance,
+    });
+    expect(calls[2]?.params).toEqual(['user-1', '2026-05-30T00:00:00.000Z']);
   });
 });

@@ -8,6 +8,7 @@ import {
 } from '../../infrastructure/db.js';
 import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
+import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 
 export interface BillingReservation {
   userId: string;
@@ -211,6 +212,9 @@ export async function getMembershipBillingSummary(
   userId: string,
 ): Promise<MembershipBillingSummary> {
   const overview = await getMembershipOverview(userId);
+  const allowancePeriod = overview.membership
+    ? resolveMembershipAllowancePeriod(overview.membership)
+    : null;
   const allowanceUnits =
     overview.allowance?.allowance_units ??
     (overview.active ? overview.config.monthly_allowance_units : 0);
@@ -230,7 +234,7 @@ export async function getMembershipBillingSummary(
       ? (overview.membership?.current_period_end ?? null)
       : null,
     allowanceResetAt: overview.active
-      ? (overview.membership?.current_period_end ?? null)
+      ? (overview.allowance?.period_end ?? allowancePeriod?.end ?? null)
       : null,
     allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
     allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
