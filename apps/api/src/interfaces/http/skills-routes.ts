@@ -1,13 +1,19 @@
 import crypto from 'crypto';
 
 import { FastifyInstance } from 'fastify';
+import type {
+  CreateSkillAccessInviteRequestDto,
+  SkillAccessInviteTargetTypeDto,
+} from '@fateclaw/contracts/skills';
 
 import {
+  createSkillAccessInvite,
   createSkillBundle,
   createUserCustomSkill,
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
+  getSkillAccessInvitePreviewByToken,
   getSkillByShareToken,
   getSubscribedSkills,
   getUserCustomSkill,
@@ -15,9 +21,12 @@ import {
   getUserCustomSkills,
   listMarketBundles,
   listMarketSkills,
+  listSkillAccessInvites,
   listUserBundles,
   publishSkillBundle,
   publishUserCustomSkill,
+  redeemSkillAccessInvite,
+  revokeSkillAccessInvite,
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
@@ -42,6 +51,9 @@ import {
 import {
   toMarketBundleDtos,
   toMarketSkillDtos,
+  toSkillAccessInviteDto,
+  toSkillAccessInvitePreviewDto,
+  toSkillAccessInviteRedeemResultDto,
   toSharedBundlePreviewDto,
   toSharedSkillPreviewDto,
   toSubscribedSkillDtos,
@@ -78,6 +90,28 @@ function parseBundleFilesPayload(
   }
 
   return parsed;
+}
+
+function isAccessInviteTargetType(
+  value: unknown,
+): value is SkillAccessInviteTargetTypeDto {
+  return value === 'skill' || value === 'bundle';
+}
+
+function accessInviteRedeemError(status: string): string {
+  switch (status) {
+    case 'expired':
+      return '授权链接已过期';
+    case 'revoked':
+      return '授权链接已撤销';
+    case 'used_up':
+      return '授权链接领取名额已满';
+    case 'own_target':
+      return '不能领取自己的授权链接';
+    case 'invalid':
+    default:
+      return '授权链接无效';
+  }
 }
 
 export async function skillsRoutes(app: FastifyInstance): Promise<void> {
@@ -318,6 +352,105 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     if (!ok) return reply.code(404).send({ error: '订阅不存在' });
 
     return { ok: true };
+  });
+
+  // POST /api/skills/access-invites — 作者创建私密授权链接
+  app.post('/access-invites', async (request, reply) => {
+    await request.requireAuth();
+    const body = (request.body || {}) as CreateSkillAccessInviteRequestDto;
+    if (!isAccessInviteTargetType(body.target_type)) {
+      return reply.code(400).send({ error: '授权目标类型无效' });
+    }
+    const targetId = body.target_id?.trim() ?? '';
+    if (!targetId) {
+      return reply.code(400).send({ error: '授权目标不能为空' });
+    }
+    const maxRedemptions =
+      body.max_redemptions === undefined ? 1 : body.max_redemptions;
+    if (
+      !Number.isInteger(maxRedemptions) ||
+      maxRedemptions < 1 ||
+      maxRedemptions > 1000
+    ) {
+      return reply.code(400).send({ error: '领取次数必须在 1 到 1000 之间' });
+    }
+    let expiresAt: string | null = null;
+    if (body.expires_at) {
+      const date = new Date(body.expires_at);
+      if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+        return reply.code(400).send({ error: '过期时间必须是未来时间' });
+      }
+      expiresAt = date.toISOString();
+    }
+    const note = typeof body.note === 'string' ? body.note.trim() : '';
+    if (note.length > 200) {
+      return reply.code(400).send({ error: '备注不超过 200 字' });
+    }
+
+    const invite = await createSkillAccessInvite({
+      id: crypto.randomUUID(),
+      creatorId: request.user.userId,
+      targetType: body.target_type,
+      targetId,
+      token: crypto.randomUUID(),
+      maxRedemptions,
+      expiresAt,
+      note,
+    });
+    if (!invite) return reply.code(404).send({ error: '授权目标不存在' });
+    return toSkillAccessInviteDto(invite);
+  });
+
+  // GET /api/skills/access-invites — 作者查看自己创建的私密授权链接
+  app.get('/access-invites', async (request, reply) => {
+    await request.requireAuth();
+    const query = (request.query || {}) as {
+      target_type?: string;
+      target_id?: string;
+    };
+    const targetType = query.target_type?.trim();
+    if (targetType && !isAccessInviteTargetType(targetType)) {
+      return reply.code(400).send({ error: '授权目标类型无效' });
+    }
+    const inviteTargetType = isAccessInviteTargetType(targetType)
+      ? targetType
+      : undefined;
+    const invites = await listSkillAccessInvites(request.user.userId, {
+      targetType: inviteTargetType,
+      targetId: query.target_id?.trim() || undefined,
+    });
+    return invites.map(toSkillAccessInviteDto);
+  });
+
+  // GET /api/skills/access-invites/:token — 预览私密授权链接（无需认证）
+  app.get('/access-invites/:token', async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const preview = await getSkillAccessInvitePreviewByToken(token);
+    if (!preview) return reply.code(404).send({ error: '授权链接无效' });
+    return toSkillAccessInvitePreviewDto(preview);
+  });
+
+  // POST /api/skills/access-invites/:token/redeem — 领取私密授权
+  app.post('/access-invites/:token/redeem', async (request, reply) => {
+    await request.requireAuth();
+    const { token } = request.params as { token: string };
+    const result = await redeemSkillAccessInvite(request.user.userId, token);
+    if (result.status !== 'redeemed') {
+      const code = result.status === 'invalid' ? 404 : 400;
+      return reply
+        .code(code)
+        .send({ error: accessInviteRedeemError(result.status) });
+    }
+    return toSkillAccessInviteRedeemResultDto(result);
+  });
+
+  // DELETE /api/skills/access-invites/:id — 作者撤销私密授权链接
+  app.delete('/access-invites/:id', async (request, reply) => {
+    await request.requireAuth();
+    const { id } = request.params as { id: string };
+    const invite = await revokeSkillAccessInvite(id, request.user.userId);
+    if (!invite) return reply.code(404).send({ error: '授权链接不存在' });
+    return toSkillAccessInviteDto(invite);
   });
 
   // =====================

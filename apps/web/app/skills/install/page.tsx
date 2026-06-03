@@ -35,12 +35,24 @@ export default function SkillInstallPage() {
 function SkillInstallContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const invite = searchParams.get('invite');
   const router = useRouter();
   const { user } = useAuth();
   const redirectAfterSubscribe = useCallback(() => {
-    setTimeout(() => router.push('/studio'), 1500);
-  }, [router]);
-  const install = useSkillInstall(token, redirectAfterSubscribe);
+    setTimeout(() => router.push(invite ? '/ai-chat' : '/studio'), 1500);
+  }, [invite, router]);
+  const install = useSkillInstall({ token, invite }, redirectAfterSubscribe);
+  const inviteMode = install.mode === 'invite';
+  const accessStatus = install.preview?.access_status;
+  const accessActive = !inviteMode || accessStatus === 'active';
+  const inactiveAccessLabel =
+    accessStatus === 'expired'
+      ? '授权链接已过期'
+      : accessStatus === 'revoked'
+        ? '授权链接已撤销'
+        : accessStatus === 'used_up'
+          ? '授权链接领取名额已满'
+          : '授权链接暂不可用';
 
   return (
     <div className="min-h-dvh bg-canvas flex flex-col items-center justify-center p-4">
@@ -81,6 +93,11 @@ function SkillInstallContent() {
               <div className="w-14 h-14 rounded-2xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] flex items-center justify-center mx-auto mb-4">
                 <BookOpen size={22} className="text-primary" />
               </div>
+              {inviteMode ? (
+                <p className="mb-2 text-[11px] font-medium text-primary">
+                  作者授权
+                </p>
+              ) : null}
               <h2 className="text-base font-semibold mb-1.5">
                 {install.preview.skill_name}
               </h2>
@@ -130,30 +147,46 @@ function SkillInstallContent() {
                   {install.error}
                 </div>
               )}
+              {!install.done ? (
+                <p className="mb-3 text-center text-[11px] leading-5 text-muted">
+                  {inviteMode
+                    ? '此授权链接由作者私下提供，平台不参与交易或收款。'
+                    : '订阅后会出现在 AI Chat 的 Skill 列表里，可直接用于追问和解读。'}
+                </p>
+              ) : null}
+              {!accessActive ? (
+                <div
+                  className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-[12px] text-amber-400"
+                  role="status"
+                >
+                  {inactiveAccessLabel}
+                </div>
+              ) : null}
               {!user ? (
                 <button
                   onClick={() => router.push(buildLoginHref())}
-                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active transition-colors cursor-pointer"
+                  disabled={!accessActive}
+                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
                 >
-                  登录后订阅
+                  {inviteMode ? '登录后领取授权' : '登录后订阅并使用'}
                 </button>
               ) : install.done ? (
                 <div className="flex items-center justify-center gap-2 h-11 text-sm font-medium text-primary animate-fade-in">
                   <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
                     <Check size={12} className="text-white" />
                   </div>
-                  订阅成功，正在跳转...
+                  {inviteMode ? '授权已领取，正在前往 AI Chat...' : '订阅成功，正在跳转...'}
                 </div>
               ) : (
                 <button
                   onClick={() => void install.subscribe()}
-                  disabled={install.subscribing}
+                  disabled={install.subscribing || !accessActive}
                   className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
                 >
                   {install.subscribing && (
-                    <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={14} className="animate-spin" />
                   )}
-                  订阅此术数技能
+                  {inviteMode ? '领取授权并使用' : '订阅并用于 AI Chat'}
                 </button>
               )}
             </div>

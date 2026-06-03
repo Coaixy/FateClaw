@@ -178,6 +178,18 @@ export default function StudioPage() {
     }, '复制链接失败');
   };
 
+  const handleSkillAccessInvite = async (id: string) => {
+    await runWithToast(async () => {
+      const res = await skillsApi.accessInviteCreate({
+        target_type: 'skill',
+        target_id: id,
+      });
+      const url = `${window.location.origin}${res.install_url}`;
+      await navigator.clipboard.writeText(url);
+      toast('success', '作者授权链接已复制到剪贴板');
+    }, '生成授权链接失败');
+  };
+
   const handleUnshare = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.unshare(id);
@@ -280,6 +292,18 @@ export default function StudioPage() {
       toast('success', '私密链接已复制到剪贴板');
       setTimeout(() => setCopiedBundleId(null), 2000);
     }, '复制链接失败');
+  };
+
+  const handleBundleAccessInvite = async (id: string) => {
+    await runWithToast(async () => {
+      const res = await skillsApi.accessInviteCreate({
+        target_type: 'bundle',
+        target_id: id,
+      });
+      const url = `${window.location.origin}${res.install_url}`;
+      await navigator.clipboard.writeText(url);
+      toast('success', '作者授权链接已复制到剪贴板');
+    }, '生成授权链接失败');
   };
 
   const handleBundleUnshare = async (id: string) => {
@@ -460,6 +484,7 @@ export default function StudioPage() {
                   copiedId={copiedId}
                   onToggle={handleToggle}
                   onCopyLink={handleShare}
+                  onCopyInviteLink={handleSkillAccessInvite}
                   onUnshare={handleUnshare}
                   onPublish={handlePublish}
                   onUnpublish={handleUnpublish}
@@ -517,6 +542,7 @@ export default function StudioPage() {
                   bundle={b}
                   copiedId={copiedBundleId}
                   onCopyLink={handleBundleShare}
+                  onCopyInviteLink={handleBundleAccessInvite}
                   onUnshare={handleBundleUnshare}
                   onPublish={handleBundlePublish}
                   onUnpublish={handleBundleUnpublish}

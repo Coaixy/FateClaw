@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Loader2, MessageCircle, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -68,11 +69,20 @@ export function SharedChatSessionView() {
               {session?.title || 'AI Chat 对话'}
             </h1>
           </div>
-          {session ? (
-            <span className="shrink-0 rounded-md border border-hairline bg-surface-card px-2 py-1 text-[10px] text-muted">
-              {new Date(session.updated_at).toLocaleDateString('zh-CN')}
-            </span>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {session ? (
+              <span className="hidden rounded-md border border-hairline bg-surface-card px-2 py-1 text-[10px] text-muted sm:inline-flex">
+                {new Date(session.updated_at).toLocaleDateString('zh-CN')}
+              </span>
+            ) : null}
+            <Link
+              href="/ai-chat"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active"
+            >
+              <MessageCircle size={12} />
+              继续提问
+            </Link>
+          </div>
         </div>
 
         <div className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3">

@@ -67,8 +67,20 @@ export function WalletMembershipCard({
             FateClaw Plus
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            {formatCoins(membership.monthly_price_coins)} / 月 · 高峰优先响应 ·
-            会员期间持续追问 · 微信 Claw
+            {formatCoins(membership.monthly_price_coins)} / 月 · 会员额度优先抵扣
+            AI Chat 消耗
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {['AI Chat 会员额度', '高峰优先响应', '持续追问', '微信 Claw'].map(
+              (item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-hairline bg-surface-cream-strong px-2 py-1 text-[10px] font-medium text-muted"
+                >
+                  {item}
+                </span>
+              ),
+            )}
           </div>
         </div>
         <button
@@ -96,7 +108,11 @@ export function WalletMembershipCard({
           />
         </div>
         <div className="mt-2 text-[11px] leading-5 text-muted">
-          {resetText(membership.allowance_reset_at)}；额度用完后将继续使用钱包余额。
+          {membership.enabled
+            ? active
+              ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用钱包余额。`
+              : '开通后会员额度优先抵扣 AI Chat 消耗；额度用完后继续使用钱包余额。'
+            : 'Plus 暂未开放购买，当前仍按钱包余额扣费。'}
         </div>
       </div>
     </section>

@@ -35,14 +35,26 @@ export default function BundleInstallPage() {
 function BundleInstallContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const invite = searchParams.get('invite');
   const router = useRouter();
   const { user } = useAuth();
   const redirectAfterSubscribe = useCallback(() => {
-    setTimeout(() => router.push('/studio'), 1800);
-  }, [router]);
-  const install = useBundleInstall(token, redirectAfterSubscribe);
+    setTimeout(() => router.push(invite ? '/ai-chat' : '/studio'), 1800);
+  }, [invite, router]);
+  const install = useBundleInstall({ token, invite }, redirectAfterSubscribe);
 
   const total = install.preview?.skills.length ?? 0;
+  const inviteMode = install.mode === 'invite';
+  const accessStatus = install.preview?.access_status;
+  const accessActive = !inviteMode || accessStatus === 'active';
+  const inactiveAccessLabel =
+    accessStatus === 'expired'
+      ? '授权链接已过期'
+      : accessStatus === 'revoked'
+        ? '授权链接已撤销'
+        : accessStatus === 'used_up'
+          ? '授权链接领取名额已满'
+          : '授权链接暂不可用';
 
   return (
     <div className="min-h-dvh bg-canvas flex flex-col items-center justify-center p-4">
@@ -82,6 +94,11 @@ function BundleInstallContent() {
               <div className="w-14 h-14 rounded-2xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] flex items-center justify-center mx-auto mb-4">
                 <Layers size={22} className="text-primary" />
               </div>
+              {inviteMode ? (
+                <p className="mb-2 text-[11px] font-medium text-primary">
+                  作者授权
+                </p>
+              ) : null}
               <h2 className="text-base font-semibold mb-1.5">
                 {install.preview.name}
               </h2>
@@ -169,12 +186,28 @@ function BundleInstallContent() {
                   {install.error}
                 </div>
               )}
+              {!install.done ? (
+                <p className="mb-3 text-center text-[11px] leading-5 text-muted">
+                  {inviteMode
+                    ? '此授权链接由作者私下提供，平台不参与交易或收款。'
+                    : '订阅后可在 AI Chat 一次启用整组术数技能，用于连续追问和解读。'}
+                </p>
+              ) : null}
+              {!accessActive ? (
+                <div
+                  className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-[12px] text-amber-400"
+                  role="status"
+                >
+                  {inactiveAccessLabel}
+                </div>
+              ) : null}
               {!user ? (
                 <button
                   onClick={() => router.push(buildLoginHref())}
-                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active transition-colors cursor-pointer"
+                  disabled={!accessActive}
+                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
                 >
-                  登录后订阅
+                  {inviteMode ? '登录后领取授权' : '登录后订阅并使用'}
                 </button>
               ) : install.done ? (
                 <div className="flex flex-col items-center justify-center gap-1 min-h-11 text-center animate-fade-in">
@@ -187,19 +220,21 @@ function BundleInstallContent() {
                       `，跳过 ${install.done.skipped} 个`}
                   </div>
                   <p className="text-[11px] text-muted">
-                    正在跳转...
+                    {inviteMode ? '正在前往 AI Chat...' : '正在跳转...'}
                   </p>
                 </div>
               ) : (
                 <button
                   onClick={() => void install.subscribe()}
-                  disabled={install.subscribing || total === 0}
+                  disabled={install.subscribing || total === 0 || !accessActive}
                   className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
                 >
                   {install.subscribing && (
-                    <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={14} className="animate-spin" />
                   )}
-                  一键订阅全部 {total} 个技能
+                  {inviteMode
+                    ? `领取授权并使用 ${total} 个技能`
+                    : `一键订阅并使用 ${total} 个技能`}
                 </button>
               )}
             </div>

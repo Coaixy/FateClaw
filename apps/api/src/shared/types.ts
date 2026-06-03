@@ -115,11 +115,34 @@ export interface UserSkillSubscription {
   subscriber_id: string;
   skill_id: string;
   has_direct_source: boolean;
+  source_kind: 'share' | 'bundle_share' | 'invite' | 'bundle_invite';
   status: 'active' | 'expired' | 'cancelled';
   enabled: boolean;
   expires_at: string | null;
   started_at: string;
   subscribed_at: string;
+}
+
+/** 私密授权链接可绑定的目标类型。 */
+export type SkillAccessInviteTargetType = 'skill' | 'bundle';
+
+/**
+ * 作者生成的私密授权链接。
+ *
+ * @remarks 平台只记录授权领取所需信息，不包含价格、订单或分成字段。
+ */
+export interface SkillAccessInvite {
+  id: string;
+  creator_id: string;
+  target_type: SkillAccessInviteTargetType;
+  target_id: string;
+  token: string;
+  max_redemptions: number;
+  redeemed_count: number;
+  expires_at: string | null;
+  revoked_at: string | null;
+  note: string;
+  created_at: string;
 }
 
 export interface SkillBundle {

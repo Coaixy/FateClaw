@@ -5,6 +5,7 @@ import {
   Check,
   Download,
   Globe2,
+  KeyRound,
   Link2,
   Pencil,
   Share2,
@@ -21,6 +22,7 @@ export function OwnSkillCard({
   copiedId,
   onToggle,
   onCopyLink,
+  onCopyInviteLink,
   onUnshare,
   onPublish,
   onUnpublish,
@@ -32,6 +34,7 @@ export function OwnSkillCard({
   copiedId: string | null;
   onToggle: (id: string) => void;
   onCopyLink: (id: string) => void;
+  onCopyInviteLink: (id: string) => void;
   onUnshare: (id: string) => void;
   onPublish: (id: string) => void;
   onUnpublish: (id: string) => void;
@@ -165,6 +168,15 @@ export function OwnSkillCard({
                     {isShared ? '复制链接' : '开启链接'}
                   </>
                 )}
+              </button>
+              <button
+                onClick={() => onCopyInviteLink(sk.id)}
+                className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] transition-all cursor-pointer"
+                title="生成作者授权链接"
+                aria-label="生成作者授权链接"
+              >
+                <KeyRound size={13} />
+                授权链接
               </button>
               <button
                 onClick={() =>

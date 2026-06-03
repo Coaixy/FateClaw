@@ -26,9 +26,13 @@ vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
 }));
 
 import {
+  createSkillAccessInvite,
   createUserCustomSkill,
   getBundleByToken,
   getEffectiveUserSkills,
+  getSkillAccessInvitePreviewByToken,
+  getSubscribedSkills,
+  redeemSkillAccessInvite,
   getResolvedEnabledOfficialSkillNames,
   listMarketBundles,
   listMarketSkills,
@@ -77,6 +81,69 @@ function createSequencedMockPool(poolRows: unknown[][]) {
   mockGetDbPool.mockReturnValue(pool);
   return { calls };
 }
+
+function createSequencedClientMockPool(clientRows: unknown[][]) {
+  const calls: QueryCall[] = [];
+  const clientCalls: QueryCall[] = [];
+  let idx = 0;
+  const client = {
+    async query(sql: string, params?: unknown[]) {
+      clientCalls.push({ sql, params });
+      const rows = clientRows[Math.min(idx, clientRows.length - 1)] ?? [];
+      idx += 1;
+      return { rows, rowCount: rows.length };
+    },
+    release: vi.fn(),
+  };
+  const pool = {
+    async query(sql: string, params?: unknown[]) {
+      calls.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      return client;
+    },
+  };
+  mockGetDbPool.mockReturnValue(pool);
+  return { calls, clientCalls, client };
+}
+
+const skillRow = {
+  id: 'skill-1',
+  user_id: 'creator-1',
+  skill_name: 'Invite Skill',
+  dir_name: 'invite-skill',
+  description: 'desc',
+  version: '1.0.0',
+  bundle_uri: 'text-skill://skill-1',
+  checksum: null,
+  install_status: 'installed',
+  acl: {},
+  billing_policy: {},
+  audit_metadata: {},
+  visibility: 'private',
+  share_token: null,
+  enabled: true,
+  stat_subscriber_count: 0,
+  stat_view_count: 0,
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+  deleted_at: null,
+};
+
+const inviteRow = {
+  id: 'invite-1',
+  creator_id: 'creator-1',
+  target_type: 'skill',
+  target_id: 'skill-1',
+  token: 'invite-token',
+  max_redemptions: 1,
+  redeemed_count: 0,
+  expires_at: null,
+  revoked_at: null,
+  note: '',
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 
 describe('skills repository official skill settings', () => {
   beforeEach(() => {
@@ -155,6 +222,16 @@ describe('skills repository official skill settings', () => {
 
     expect(calls[0]?.sql).toContain("'self' as source");
     expect(calls[0]?.sql).toContain("'subscribed' as source");
+    expect(calls[0]?.sql).toContain("sub.source_kind IN ('invite', 'bundle_invite')");
+    expect(calls[0]?.params).toEqual(['user-1']);
+  });
+
+  it('includes private invite subscriptions in subscribed skill reads', async () => {
+    const { calls } = createMockPool([{ ...skillRow, subscription_id: 'sub-1' }]);
+
+    await getSubscribedSkills('user-1');
+
+    expect(calls[0]?.sql).toContain("sub.source_kind IN ('invite', 'bundle_invite')");
     expect(calls[0]?.params).toEqual(['user-1']);
   });
 
@@ -277,5 +354,115 @@ describe('skills repository official skill settings', () => {
         { id: 'skill-1', content_length: 2 },
       ],
     });
+  });
+
+  it('creates access invites for owned skills only', async () => {
+    const { calls } = createSequencedMockPool([[skillRow], [inviteRow]]);
+
+    await expect(
+      createSkillAccessInvite({
+        id: 'invite-1',
+        creatorId: 'creator-1',
+        targetType: 'skill',
+        targetId: 'skill-1',
+        token: 'invite-token',
+        maxRedemptions: 1,
+        expiresAt: null,
+        note: '',
+      }),
+    ).resolves.toMatchObject({ id: 'invite-1', token: 'invite-token' });
+
+    expect(calls[0]?.sql).toContain('WHERE s.id = $1 AND s.user_id = $2');
+    expect(calls[1]?.sql).toContain('INSERT INTO skill_access_invites');
+  });
+
+  it('previews private skill access invites without requiring share visibility', async () => {
+    const { calls } = createSequencedMockPool([[inviteRow], [skillRow]]);
+
+    await expect(
+      getSkillAccessInvitePreviewByToken('invite-token'),
+    ).resolves.toMatchObject({
+      status: 'active',
+      skill: { id: 'skill-1', visibility: 'private' },
+    });
+
+    expect(calls[1]?.sql).toContain('WHERE s.id = $1 AND s.deleted_at IS NULL');
+    expect(calls[1]?.sql).not.toContain("s.visibility IN ('link_shared', 'shared')");
+  });
+
+  it('redeems private skill invites into invite-sourced subscriptions', async () => {
+    const { clientCalls, client } = createSequencedClientMockPool([
+      [],
+      [inviteRow],
+      [skillRow],
+      [{ id: 'sub-1', is_insert: true }],
+      [],
+      [],
+      [],
+    ]);
+
+    await expect(
+      redeemSkillAccessInvite('user-1', 'invite-token'),
+    ).resolves.toEqual({
+      status: 'redeemed',
+      targetType: 'skill',
+      subscribedCount: 1,
+      skippedCount: 0,
+      subscriptionIds: ['sub-1'],
+    });
+
+    expect(clientCalls[0]?.sql).toBe('BEGIN');
+    expect(clientCalls[3]?.sql).toContain("source_kind = 'invite'");
+    expect(clientCalls[5]?.sql).toContain('redeemed_count = redeemed_count + 1');
+    expect(clientCalls[6]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('redeems private bundle invites into bundle-invite subscriptions', async () => {
+    const bundleInvite = {
+      ...inviteRow,
+      target_type: 'bundle',
+      target_id: 'bundle-1',
+    };
+    const { clientCalls } = createSequencedClientMockPool([
+      [],
+      [bundleInvite],
+      [
+        {
+          id: 'bundle-1',
+          user_id: 'creator-1',
+          name: 'Private Bundle',
+          description: '',
+          skill_ids: ['skill-1'],
+        },
+      ],
+      [
+        {
+          id: 'skill-1',
+          skill_name: 'Invite Skill',
+          description: 'desc',
+          bundle_uri: 'text-skill://skill-1',
+        },
+      ],
+      [{ id: 'sub-1', is_insert: true }],
+      [],
+      [],
+      [],
+      [],
+    ]);
+
+    await expect(
+      redeemSkillAccessInvite('user-1', 'bundle-invite-token'),
+    ).resolves.toMatchObject({
+      status: 'redeemed',
+      targetType: 'bundle',
+      subscribedCount: 1,
+      subscriptionIds: ['sub-1'],
+    });
+
+    expect(clientCalls[4]?.sql).toContain("'bundle_invite'");
+    expect(clientCalls[5]?.sql).toContain(
+      'INSERT INTO user_skill_subscription_bundle_sources',
+    );
   });
 });

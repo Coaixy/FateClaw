@@ -4,11 +4,23 @@ import type {
   MarketSkillDto,
   SharedBundlePreviewDto,
   SharedSkillPreviewDto,
+  SkillAccessInviteDto,
+  SkillAccessInvitePreviewDto,
+  SkillAccessInviteRedeemResultDto,
   SubscribedSkillDto,
   UserCustomSkillDto,
 } from '@fateclaw/contracts/skills';
 
-import type { SkillBundle, UserCustomSkill } from '../shared/types.js';
+import {
+  resolveSkillAccessInviteStatus,
+  type RedeemSkillAccessInviteResult,
+  type SkillAccessInvitePreviewResult,
+} from '../infrastructure/db.js';
+import type {
+  SkillAccessInvite,
+  SkillBundle,
+  UserCustomSkill,
+} from '../shared/types.js';
 
 /**
  * 公开分享与订阅场景不再暴露创作者联系方式，只返回统一的安全标识。
@@ -93,6 +105,66 @@ export function toSharedBundlePreviewDto(
     description: source.bundle.description,
     author_label: PUBLIC_AUTHOR_LABEL,
     skills: source.skills,
+  };
+}
+
+function inviteInstallUrl(invite: SkillAccessInvite): string {
+  const path =
+    invite.target_type === 'skill'
+      ? '/skills/install'
+      : '/skills/bundle/install';
+  return `${path}?invite=${encodeURIComponent(invite.token)}`;
+}
+
+/**
+ * 转换作者侧私密授权链接 DTO。
+ */
+export function toSkillAccessInviteDto(
+  invite: SkillAccessInvite,
+): SkillAccessInviteDto {
+  return {
+    id: invite.id,
+    creator_id: invite.creator_id,
+    target_type: invite.target_type,
+    target_id: invite.target_id,
+    token: invite.token,
+    max_redemptions: invite.max_redemptions,
+    redeemed_count: invite.redeemed_count,
+    expires_at: invite.expires_at,
+    revoked_at: invite.revoked_at,
+    note: invite.note,
+    created_at: invite.created_at,
+    install_url: inviteInstallUrl(invite),
+    status: resolveSkillAccessInviteStatus(invite),
+  };
+}
+
+/**
+ * 转换私密授权链接公开预览 DTO。
+ */
+export function toSkillAccessInvitePreviewDto(
+  source: SkillAccessInvitePreviewResult,
+): SkillAccessInvitePreviewDto {
+  return {
+    token: source.invite.token,
+    target_type: source.invite.target_type,
+    status: source.status,
+    skill: source.skill ? toSharedSkillPreviewDto(source.skill) : null,
+    bundle: source.bundle ? toSharedBundlePreviewDto(source.bundle) : null,
+  };
+}
+
+/**
+ * 转换私密授权领取结果 DTO。
+ */
+export function toSkillAccessInviteRedeemResultDto(
+  source: RedeemSkillAccessInviteResult,
+): SkillAccessInviteRedeemResultDto {
+  return {
+    target_type: source.targetType ?? 'skill',
+    subscribed_count: source.subscribedCount,
+    skipped_count: source.skippedCount,
+    subscription_ids: source.subscriptionIds,
   };
 }
 

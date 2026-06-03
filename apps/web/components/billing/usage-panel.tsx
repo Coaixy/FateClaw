@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  Crown,
   MessageSquare,
   RefreshCw,
   Sparkles,
@@ -17,6 +18,24 @@ function formatTokens(value: number): string {
   if (value < 1_000_000)
     return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}K`;
   return `${(value / 1_000_000).toFixed(2).replace(/\.0+$/, '')}M`;
+}
+
+function membershipStatusText(status: BillingStatus['membership']['allowance_status']) {
+  switch (status) {
+    case 'plenty':
+      return '额度充足';
+    case 'normal':
+      return '正常使用中';
+    case 'tight':
+      return '额度偏紧';
+    case 'almost_used':
+      return '即将用完';
+    case 'used_up':
+      return '本月已用完';
+    case 'inactive':
+    default:
+      return '未开通';
+  }
 }
 
 export function UsagePanel({
@@ -43,6 +62,8 @@ export function UsagePanel({
   const used = status.monthly_tokens_used;
   const todayMessages = usage?.today_messages ?? 0;
   const todayTokens = usage?.today_total_tokens ?? 0;
+  const membership = status.membership;
+  const membershipActive = membership.enabled && membership.active;
 
   return (
     <div className="w-[min(340px,calc(100vw-1.5rem))]">
@@ -110,6 +131,32 @@ export function UsagePanel({
             本月已扣 {formatCoins(status.estimated_monthly_total_coins)}
           </div>
         </div>
+
+        <section className="rounded-lg border border-primary/20 bg-primary/8 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-semibold text-ink">
+              FateClaw Plus
+            </span>
+            <Crown size={13} className="text-primary" />
+          </div>
+          <div className="mt-1 text-[10px] leading-4 text-muted">
+            {membershipActive
+              ? `会员额度 ${membershipStatusText(membership.allowance_status)}，用完后继续走钱包余额。`
+              : membership.enabled
+                ? '开通后会员额度先抵扣 AI Chat 消耗，并解锁微信 Claw。'
+                : 'Plus 暂未开放购买，当前按钱包余额扣费。'}
+          </div>
+          {!membershipActive && membership.enabled ? (
+            <Link
+              href="/wallet"
+              onClick={onNavigate}
+              className="mt-2 inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-[10px] font-medium text-on-primary transition-colors hover:bg-primary-active"
+            >
+              <Crown size={11} />
+              开通 Plus
+            </Link>
+          ) : null}
+        </section>
       </div>
 
       <div className="grid grid-cols-2 gap-2 border-t border-hairline/40 p-2">
@@ -119,7 +166,7 @@ export function UsagePanel({
           className="flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
         >
           <Wallet size={12} />
-          钱包明细
+          {membershipActive ? '钱包明细' : '充值 / Plus'}
         </Link>
         <Link
           href="/settings/advanced"

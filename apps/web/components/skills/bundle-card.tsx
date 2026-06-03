@@ -3,6 +3,7 @@
 import {
   Check,
   Globe2,
+  KeyRound,
   Layers,
   Link2,
   Pencil,
@@ -17,6 +18,7 @@ export function BundleCard({
   bundle,
   copiedId,
   onCopyLink,
+  onCopyInviteLink,
   onUnshare,
   onPublish,
   onUnpublish,
@@ -26,6 +28,7 @@ export function BundleCard({
   bundle: SkillBundle;
   copiedId: string | null;
   onCopyLink: (id: string) => void;
+  onCopyInviteLink: (id: string) => void;
   onUnshare: (id: string) => void;
   onPublish: (id: string) => void;
   onUnpublish: (id: string) => void;
@@ -136,6 +139,15 @@ export function BundleCard({
                     {shared ? '复制链接' : '开启链接'}
                   </>
                 )}
+              </button>
+              <button
+                onClick={() => onCopyInviteLink(bundle.id)}
+                className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] transition-all cursor-pointer"
+                title="生成作者授权链接"
+                aria-label="生成作者授权链接"
+              >
+                <KeyRound size={13} />
+                授权链接
               </button>
               <button
                 onClick={() =>

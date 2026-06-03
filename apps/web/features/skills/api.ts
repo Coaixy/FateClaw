@@ -9,10 +9,14 @@ import type {
   BundleSkillPreviewDto,
   BundleSubscribeResultDto,
   BundleUnsubscribeResultDto,
+  CreateSkillAccessInviteRequestDto,
   MarketBundleDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
   SharedSkillPreviewDto,
+  SkillAccessInviteDto,
+  SkillAccessInvitePreviewDto,
+  SkillAccessInviteRedeemResultDto,
   SkillBundleDto,
   SkillDeleteResponseDto,
   SkillShareResponseDto,
@@ -38,6 +42,9 @@ export type BundleSubscribeResult = BundleSubscribeResultDto;
 export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
 export type MarketBundle = MarketBundleDto;
 export type MarketSkill = MarketSkillDto;
+export type SkillAccessInvite = SkillAccessInviteDto;
+export type SkillAccessInvitePreview = SkillAccessInvitePreviewDto;
+export type SkillAccessInviteRedeemResult = SkillAccessInviteRedeemResultDto;
 export {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
@@ -107,6 +114,34 @@ export const skillsApi = {
     requestJson<SkillSubscriptionCreateResponseDto>(
       `/api/skills/subscribe/${pathSegment(token)}`,
       { method: 'POST' },
+    ),
+  accessInviteCreate: (data: CreateSkillAccessInviteRequestDto) =>
+    requestJson<SkillAccessInvite>('/api/skills/access-invites', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  accessInviteList: (params: { target_type?: 'skill' | 'bundle'; target_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.target_type) qs.set('target_type', params.target_type);
+    if (params.target_id) qs.set('target_id', params.target_id);
+    const query = qs.toString();
+    return requestJson<SkillAccessInvite[]>(
+      `/api/skills/access-invites${query ? `?${query}` : ''}`,
+    );
+  },
+  accessInvitePreview: (token: string) =>
+    requestJson<SkillAccessInvitePreview>(
+      `/api/skills/access-invites/${pathSegment(token)}`,
+    ),
+  accessInviteRedeem: (token: string) =>
+    requestJson<SkillAccessInviteRedeemResult>(
+      `/api/skills/access-invites/${pathSegment(token)}/redeem`,
+      { method: 'POST' },
+    ),
+  accessInviteRevoke: (id: string) =>
+    requestJson<SkillAccessInvite>(
+      `/api/skills/access-invites/${pathSegment(id)}`,
+      { method: 'DELETE' },
     ),
   subscriptionToggle: (id: string) =>
     requestJson<SkillSubscriptionToggleResponseDto>(

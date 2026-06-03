@@ -57,4 +57,34 @@ describe('skillsApi path parameters', () => {
       '/api/skills/bundles/shared/bundle%2Ftoken%3Fx%3D1',
     );
   });
+
+  it('creates access invites without billing fields', async () => {
+    await skillsApi.accessInviteCreate({
+      target_type: 'skill',
+      target_id: 'skill 1',
+    });
+
+    expect(requestJsonMock).toHaveBeenCalledWith('/api/skills/access-invites', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_type: 'skill',
+        target_id: 'skill 1',
+      }),
+    });
+  });
+
+  it('encodes access invite tokens before previewing and redeeming', async () => {
+    await skillsApi.accessInvitePreview('invite/token?x=1');
+    await skillsApi.accessInviteRedeem('invite/token?x=1');
+
+    expect(requestJsonMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/skills/access-invites/invite%2Ftoken%3Fx%3D1',
+    );
+    expect(requestJsonMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/skills/access-invites/invite%2Ftoken%3Fx%3D1/redeem',
+      { method: 'POST' },
+    );
+  });
 });

@@ -95,6 +95,59 @@ export interface SkillSubscriptionToggleResponseDto {
   enabled: boolean;
 }
 
+/** 私密授权链接绑定的目标类型。 */
+export type SkillAccessInviteTargetTypeDto = 'skill' | 'bundle';
+
+/** 私密授权链接当前可领取状态。 */
+export type SkillAccessInviteStatusDto =
+  | 'active'
+  | 'expired'
+  | 'revoked'
+  | 'used_up';
+
+/** 创建私密授权链接的请求。 */
+export interface CreateSkillAccessInviteRequestDto {
+  target_type: SkillAccessInviteTargetTypeDto;
+  target_id: string;
+  max_redemptions?: number;
+  expires_at?: string | null;
+  note?: string;
+}
+
+/** 作者侧查看的私密授权链接信息。 */
+export interface SkillAccessInviteDto {
+  id: string;
+  creator_id: string;
+  target_type: SkillAccessInviteTargetTypeDto;
+  target_id: string;
+  token: string;
+  max_redemptions: number;
+  redeemed_count: number;
+  expires_at: string | null;
+  revoked_at: string | null;
+  note: string;
+  created_at: string;
+  install_url: string;
+  status: SkillAccessInviteStatusDto;
+}
+
+/** 领取私密授权前展示的公开预览。 */
+export interface SkillAccessInvitePreviewDto {
+  token: string;
+  target_type: SkillAccessInviteTargetTypeDto;
+  status: SkillAccessInviteStatusDto;
+  skill: SharedSkillPreviewDto | null;
+  bundle: SharedBundlePreviewDto | null;
+}
+
+/** 领取私密授权后的订阅结果。 */
+export interface SkillAccessInviteRedeemResultDto {
+  target_type: SkillAccessInviteTargetTypeDto;
+  subscribed_count: number;
+  skipped_count: number;
+  subscription_ids: string[];
+}
+
 export interface MarketSkillDto {
   id: string;
   skill_name: string;

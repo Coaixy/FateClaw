@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { accountsApi, type Account } from '@/features/accounts/api';
 import { billingApi, type BillingStatus } from '@/features/billing/api';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
@@ -19,6 +20,7 @@ function sortAccounts(list: Account[]): Account[] {
 type MembershipStatus = BillingStatus['membership'];
 
 export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
+  const router = useRouter();
   const { toast } = useToast();
   const { confirm } = useConfirm();
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
@@ -37,6 +39,11 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const bindingLimitReached = deviceAccounts.length >= 1;
   const canBindWeixin =
     membershipActive && !bindingLimitReached && !membershipLoading;
+  const canOpenMembership =
+    Boolean(membership?.enabled) &&
+    !membershipActive &&
+    !membershipLoading &&
+    !membershipError;
 
   useEffect(() => {
     let cancelled = false;
@@ -77,11 +84,23 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
     ? '确认中'
     : membershipError
       ? '暂不可用'
-      : membershipActive
+      : !membership?.enabled
+        ? '暂未开放'
+        : membershipActive
         ? bindingLimitReached
           ? '已达上限'
           : '扫码接入'
-        : '会员专属';
+        : '开通会员';
+
+  const handleBindAction = () => {
+    if (canBindWeixin) {
+      binding.start();
+      return;
+    }
+    if (canOpenMembership) {
+      router.push('/wallet');
+    }
+  };
 
   const removeAccount = async (acc: Account) => {
     const ok = await confirm({
@@ -140,11 +159,15 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             />
           </button>
           <button
-            onClick={binding.start}
-            disabled={!canBindWeixin || loading}
+            onClick={handleBindAction}
+            disabled={loading || (!canBindWeixin && !canOpenMembership)}
             className={`flex items-center justify-center gap-2 rounded-xl bg-primary text-on-primary font-bold hover:bg-primary-active transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${embedded ? 'h-9 px-4 text-[13px]' : 'h-10 px-6 text-[14px]'}`}
           >
-            <Plus size={16} strokeWidth={2.5} />
+            {canBindWeixin ? (
+              <Plus size={16} strokeWidth={2.5} />
+            ) : (
+              <Lock size={16} strokeWidth={2.5} />
+            )}
             <span>{bindButtonLabel}</span>
           </button>
         </div>
@@ -204,11 +227,11 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
                   : '开通 FateClaw Plus 后可扫码绑定微信 Claw；站内 AI Chat 和手动排盘仍可继续使用。'}
           </p>
           <button
-            onClick={binding.start}
-            disabled={!canBindWeixin || loading}
+            onClick={handleBindAction}
+            disabled={loading || (!canBindWeixin && !canOpenMembership)}
             className="inline-flex items-center gap-2 h-12 px-8 rounded-xl bg-primary text-on-primary text-[14px] font-bold hover:bg-primary-active transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45"
           >
-            {membershipActive ? (
+            {canBindWeixin ? (
               <Plus size={18} strokeWidth={2.5} />
             ) : (
               <Lock size={18} strokeWidth={2.5} />

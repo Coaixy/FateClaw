@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { Wallet } from 'lucide-react';
+
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
@@ -157,6 +160,10 @@ function buildDisplayRows(messages: Message[]) {
   return { rows, pendingToolTraces };
 }
 
+function shouldShowWalletRecovery(content: string) {
+  return /余额已欠费|充值后继续使用|余额不足|欠费/.test(content);
+}
+
 function AiChatMessageRow({
   message,
   toolTraces,
@@ -189,6 +196,8 @@ function AiChatMessageRow({
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
   const showAiGeneratedLabel =
     !isErrorMessage && canHostToolTraceFooter(message);
+  const showWalletRecovery =
+    isErrorMessage && shouldShowWalletRecovery(displayContent);
 
   // 知识检索轨迹：紧凑时间线样式
   if (isBot && isKnowledgeTrajectoryMessage(message)) {
@@ -269,6 +278,15 @@ function AiChatMessageRow({
               isBot={isBot}
             />
           </div>
+          {showWalletRecovery ? (
+            <Link
+              href="/wallet"
+              className="mt-2 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
+            >
+              <Wallet size={12} />
+              充值 / 开通 Plus
+            </Link>
+          ) : null}
         </div>
 
         {isBot && !isFinalMessage && toolContext.length > 0 && (
