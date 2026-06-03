@@ -1,22 +1,15 @@
 /**
  * iLink 长轮询：每个账号一个独立的轮询循环。
  *
- * 消息处理与轮询解耦：收到消息后 fire-and-forget 交给 processWeixinMessage，
- * 不阻塞下一轮 getUpdates。同一账号同时最多处理一条消息，后续消息排队等候。
+ * 消息处理与轮询解耦：收到消息后 fire-and-forget 交给 processWeixinMessage。
+ * 同一网页 AI Chat session 的互斥由 session processing lock 负责；微信侧不做排队。
  */
 
 import { updateAccount } from '../infrastructure/db.js';
-import {
-  getUpdates,
-  IlinkAccount,
-  sendMessage as ilinkSendMessage,
-} from '../infrastructure/ilink.js';
+import { getUpdates, IlinkAccount } from '../infrastructure/ilink.js';
 import { logger } from '../infrastructure/logger.js';
 import { processWeixinMessage } from '../modules/chat/message-handler.js';
 import { Account } from '../shared/types.js';
-
-/** 排队提示的节流间隔（30 秒内只提示一次） */
-const PROCESSING_NOTIFY_INTERVAL = 30000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,25 +53,6 @@ export async function startAccountPolling(account: Account): Promise<void> {
 
   let buf = account.get_updates_buf ?? '';
 
-  // 消息处理队列：保证同一账号串行处理，但不阻塞轮询
-  let processing = false;
-  let lastProcessingNotifyTime = 0;
-  const queue: Parameters<typeof processWeixinMessage>[] = [];
-
-  const drain = async () => {
-    if (processing) return;
-    processing = true;
-    while (queue.length > 0) {
-      const args = queue.shift()!;
-      try {
-        await processWeixinMessage(...args);
-      } catch (err) {
-        log.error({ err }, '消息处理失败');
-      }
-    }
-    processing = false;
-  };
-
   while (!abortController.signal.aborted) {
     try {
       const resp = await getUpdates(ilinkAccount, buf);
@@ -115,36 +89,11 @@ export async function startAccountPolling(account: Account): Promise<void> {
         log.info({ count: resp.msgs.length }, '收到消息');
         for (const msg of resp.msgs) {
           if (msg.message_type === 1) {
-            queue.push([account, msg]);
-
-            // 如果正在处理且距离上次提示超过 30 秒，发送排队提示
-            if (
-              processing &&
-              Date.now() - lastProcessingNotifyTime > PROCESSING_NOTIFY_INTERVAL
-            ) {
-              lastProcessingNotifyTime = Date.now();
-              const sender = msg.from_user_id;
-              if (sender) {
-                ilinkSendMessage(
-                  {
-                    id: account.id,
-                    bot_token: account.bot_token,
-                    base_url: account.base_url,
-                  },
-                  sender,
-                  '收到，正在处理上一条消息，请稍候...',
-                  msg.context_token,
-                ).catch((err) => {
-                  log.warn({ err, sender }, '发送排队提示失败');
-                });
-              }
-            }
+            void processWeixinMessage(account, msg).catch((err) => {
+              log.error({ err, msgId: msg.message_id }, '消息处理失败');
+            });
           }
         }
-        // 触发消息处理但不阻塞轮询
-        drain().catch((err) => {
-          log.error({ err }, '消息队列处理异常');
-        });
       }
     } catch (err) {
       log.error({ err }, 'iLink 轮询循环出错');

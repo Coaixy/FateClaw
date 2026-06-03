@@ -3071,6 +3071,32 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0021_wechat_chat_session_links',
+    description: '增加微信 sender 与网页 AI Chat 会话接续映射',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS wechat_chat_session_links (
+          account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          sender_hash TEXT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (account_id, sender_hash)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_wechat_session_links_user_updated
+          ON wechat_chat_session_links(user_id, updated_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_wechat_session_links_session
+          ON wechat_chat_session_links(session_id)
+      `);
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

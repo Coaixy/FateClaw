@@ -204,6 +204,25 @@ export interface ChatSession {
   deleted_at: string | null;
 }
 
+/**
+ * 微信 sender 与网页 AI Chat 会话的接续映射。
+ *
+ * @remarks sender_hash 必须是去标识化值，避免持久化外部微信 ID。
+ */
+export interface WechatChatSessionLink {
+  /** 微信 Claw 账号 ID。 */
+  account_id: string;
+  /** 去标识化后的微信发送方哈希。 */
+  sender_hash: string;
+  /** 绑定的 FateClaw 用户 ID。 */
+  user_id: string;
+  /** 当前接续的 chat_sessions.id。 */
+  session_id: string;
+  created_at: string;
+  updated_at: string;
+  last_used_at: string;
+}
+
 export type ModelProviderType =
   | 'openai-completions'
   | 'openai-responses'

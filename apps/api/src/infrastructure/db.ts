@@ -116,6 +116,12 @@ import {
 } from './repositories/chat-repository.js';
 import type { ChatSessionPiSessionArchiveRow } from './repositories/chat-repository.js';
 import {
+  deleteWechatChatSessionLink,
+  getWechatChatSessionLink,
+  touchWechatChatSessionLink,
+  upsertWechatChatSessionLink,
+} from './repositories/wechat-session-link-repository.js';
+import {
   createConfigAuditLog,
   createOfficialModelConfig,
   deleteOfficialModelConfig,
@@ -260,6 +266,7 @@ export {
   deleteTask,
   deleteUserCustomSkill,
   deleteUserModelSelectionsByOfficialModelId,
+  deleteWechatChatSessionLink,
   expireBonusBalance,
   extendTaskRunLock,
   getAccount,
@@ -330,6 +337,7 @@ export {
   getUserCustomSkills,
   getUserModelConfig,
   getUserModelSelection,
+  getWechatChatSessionLink,
   getVisibleWalletTransactionsByUserId,
   getWalletTransactionsByUserId,
   grantBonusBalance,
@@ -371,6 +379,7 @@ export {
   storeMessage,
   storeConversationLog,
   touchChatSession,
+  touchWechatChatSessionLink,
   toggleSubscription,
   toggleUserCustomSkill,
   updateDailySignInConfig,
@@ -401,6 +410,7 @@ export {
   upsertSystemSecret,
   upsertUserModelConfig,
   upsertUserModelSelection,
+  upsertWechatChatSessionLink,
 };
 export type {
   AdminChatSessionRow,

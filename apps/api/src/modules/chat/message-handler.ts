@@ -10,7 +10,6 @@ import {
   getUserByAccountId,
   storeMessage,
 } from '../../infrastructure/db.js';
-import { incrementDailyMessageCount } from '../../infrastructure/daily-usage.js';
 import {
   sendMessage as ilinkSendMessage,
   parseWeixinMessage,
@@ -19,12 +18,10 @@ import {
 import { logger } from '../../infrastructure/logger.js';
 import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
 import { getSoulContent } from '../../infrastructure/db.js';
-import { dispatchResidentPrompt } from '../../runtime/resident-agent.js';
 import {
   FREE_WECHAT_UNSUPPORTED_MESSAGE,
   isWechatDeviceBindingDisabled,
 } from '../account/account-service.js';
-import { resolveUserLlmRuntime } from '../system/system-config.js';
 import {
   computeTokenBudget,
   estimateTokens,
@@ -33,14 +30,22 @@ import {
   truncateToTokenBudget,
 } from '../../shared/token-budget.js';
 import { Account, NewMessage } from '../../shared/types.js';
+import type { StructuredInput } from './structured-input.js';
+import {
+  handleWechatChatCommand,
+  runWechatChatSessionTurn,
+  WECHAT_CHAT_THINKING_ACK,
+} from './wechat-chat-session-service.js';
+
+export { buildStructuredInputForSession } from './structured-input.js';
 
 /**
- * 构建微信聊天在 Pi Runtime 中使用的稳定会话 ID。
+ * 构建旧版微信独立聊天在 Pi Runtime 中使用的稳定会话 ID。
  *
  * @param accountId 微信 Claw 账号 ID。
  * @param sender 微信侧发送方 ID。
  * @returns 去标识化后的 Pi Runtime 会话 ID。
- * @remarks 不直接拼接微信 ID，避免把外部账号标识写入 Pi session 文件名或 Redis key。
+ * @remarks 普通微信消息已接入网页 AI Chat session；此 helper 保留给兼容旧独立会话场景。
  */
 export function buildWeixinRuntimeSessionId(
   accountId: string,
@@ -66,7 +71,7 @@ export async function processWeixinMessage(
   const parsed = parseWeixinMessage(msg, account.id);
   if (!parsed) return;
 
-  const { content, sender, sender_name } = parsed;
+  const { content, sender } = parsed;
 
   const owner = await getUserByAccountId(account.id);
   const membership = owner ? await getMembershipOverview(owner.id) : null;
@@ -84,58 +89,67 @@ export async function processWeixinMessage(
     return;
   }
 
-  // 存入数据库
-  const newMessage: NewMessage = {
-    id: msgId,
-    account_id: account.id,
-    sender,
-    sender_name,
-    content,
-    timestamp:
-      typeof msg.create_time_ms === 'number'
-        ? new Date(msg.create_time_ms).toISOString()
-        : new Date().toISOString(),
-    is_from_me: false,
-    is_bot_message: false,
-  };
-  await storeMessage(newMessage);
-
   try {
     if (!owner) {
       throw new Error('账号未绑定平台用户，无法处理 AI 请求');
     }
-    const llmRuntime = await resolveUserLlmRuntime(owner.id);
-    const sessionId = buildWeixinRuntimeSessionId(account.id, sender);
-    // 微信聊天的连续性由 Pi session 文件维护，避免把同一 Claw 账号下不同联系人的历史混入本轮上下文。
-    const structured: StructuredInput = {
-      userMessage: content,
-      history: [],
-      userName: account.name,
-      assistantName: account.name,
-    };
 
-    // 分发给 Agent
-    const output = await dispatchResidentPrompt({
-      accountId: account.id,
-      type: 'chat',
-      userMessage: structured.userMessage,
-      history: structured.history,
-      userName: structured.userName,
-      assistantName: structured.assistantName,
-      toUserId: sender,
-      contextToken: msg.context_token,
-      autoDeliver: true,
-      sessionId,
-      llmRuntime,
+    const command = await handleWechatChatCommand({
+      account,
+      owner,
+      sender,
+      content,
     });
-    if (output.status === 'error') {
-      log.warn(
-        { requestId: output.requestId, error: output.error },
-        '常驻 agent 返回错误响应',
+    if (command.handled) {
+      if (command.replyText) {
+        await ilinkSendMessage(
+          {
+            id: account.id,
+            bot_token: account.bot_token,
+            base_url: account.base_url,
+          },
+          sender,
+          command.replyText,
+          msg.context_token,
+        );
+      }
+      return;
+    }
+
+    const result = await runWechatChatSessionTurn({
+      account,
+      owner,
+      sender,
+      messageId: msgId,
+      content,
+      onAccepted: () =>
+        ilinkSendMessage(
+          {
+            id: account.id,
+            bot_token: account.bot_token,
+            base_url: account.base_url,
+          },
+          sender,
+          WECHAT_CHAT_THINKING_ACK,
+          msg.context_token,
+        ).then(() => undefined),
+    });
+    if (result.status === 'discarded') {
+      return;
+    }
+
+    for (const message of result.finalAssistantMessages ?? []) {
+      if (!message.content.trim()) continue;
+      await ilinkSendMessage(
+        {
+          id: account.id,
+          bot_token: account.bot_token,
+          base_url: account.base_url,
+        },
+        sender,
+        message.content,
+        msg.context_token,
       );
-    } else {
-      const today = new Date().toISOString().slice(0, 10);
-      await incrementDailyMessageCount(owner.id, today);
     }
   } catch (err) {
     log.error({ err }, '容器 agent 失败');
@@ -166,13 +180,6 @@ export async function processWeixinMessage(
       publicError.publicMessage,
     );
   }
-}
-
-interface StructuredInput {
-  userMessage: string;
-  history: HistoryMessage[];
-  userName: string;
-  assistantName: string;
 }
 
 function buildHistoryViews(args: {
@@ -256,32 +263,6 @@ export async function buildStructuredInput(
     history,
     userName: account.name,
     assistantName: account.name,
-  };
-}
-
-/**
- * 为 AI 对话（chat session）构建结构化输入。
- * 与 buildStructuredInput 的区别：
- * - AI 历史由 Pi session 文件负责，FateClaw DB 只保留业务展示副本
- * - 选中盘面、自贴盘面等显式上下文通过专用字段传入
- */
-export async function buildStructuredInputForSession(
-  identity: {
-    runtimeId: string;
-    userName: string;
-    assistantName: string;
-    soulAccountId?: string;
-  },
-  userMessage: string,
-  sessionId: string,
-  model: string,
-  contextWindowTokens?: number,
-): Promise<StructuredInput> {
-  return {
-    userMessage,
-    history: [],
-    userName: identity.userName,
-    assistantName: identity.assistantName,
   };
 }
 

@@ -105,7 +105,7 @@ vi.mock('../../runtime/ipc-worker.js', () => ({
   cancelAiChatSessionRequest: mockCancelAiChatSessionRequest,
 }));
 
-vi.mock('./message-handler.js', () => ({
+vi.mock('./structured-input.js', () => ({
   buildStructuredInputForSession: mockBuildStructuredInputForSession,
 }));
 

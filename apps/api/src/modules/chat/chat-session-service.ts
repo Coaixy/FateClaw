@@ -11,6 +11,7 @@ import type {
   ChatSessionDto,
   ChatSessionShareResponseDto,
   ChatSessionSendResponseDto,
+  MessageDto,
   SessionMessageListResponseDto,
   SharedChatSessionDto,
 } from '@fateclaw/contracts/chat';
@@ -55,6 +56,7 @@ import {
 import type { ChatSession, NewMessage } from '../../shared/types.js';
 import {
   toChatSessionDto,
+  toMessageDto,
   toSharedChatSessionDto,
   toSessionMessageListResponseDto,
 } from '../../contracts-adapter/chat-contract.js';
@@ -63,7 +65,7 @@ import {
   buildSessionBoardContexts,
   type SessionBoardContextDto,
 } from './active-board-context.js';
-import { buildStructuredInputForSession } from './message-handler.js';
+import { buildStructuredInputForSession } from './structured-input.js';
 import { resolveUserLlmRuntime } from '../system/system-config.js';
 import {
   getWebChatRuntimeId,
@@ -83,6 +85,39 @@ const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍�
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
+
+/**
+ * AI Chat turn 的来源元信息。
+ *
+ * @remarks 当前用于标记微信进入网页 session 的消息，后续前端可据此展示来源徽标。
+ */
+export interface ChatSessionTurnSourceMetadata {
+  source_channel?: 'wechat';
+  wechat_account_id?: string;
+  sender_hash?: string;
+}
+
+/**
+ * 发送 AI Chat turn 时可覆盖的内部选项。
+ *
+ * @remarks 微信入口会传入确定性消息 ID，避免 iLink 重试导致重复触发模型。
+ */
+export interface OwnedChatSessionTurnOptions {
+  userMessageId?: string;
+  sourceMetadata?: ChatSessionTurnSourceMetadata;
+  /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
+  onProcessingClaimed?: () => Promise<void>;
+}
+
+/**
+ * AI Chat turn 的内部执行结果。
+ *
+ * @remarks HTTP API 继续只暴露 response；微信入口使用 finalAssistantMessages 同步最终落库内容。
+ */
+export interface OwnedChatSessionTurnResult {
+  response: ChatSessionSendResponseDto;
+  finalAssistantMessages: MessageDto[];
+}
 
 function isPaymentRequiredError(errorMessage: string): boolean {
   return (
@@ -217,6 +252,17 @@ function buildFinalReplyMetadata(output: {
         turn_complete: true,
         request_id: output.requestId,
       };
+}
+
+function mergeMessageMetadata(
+  base: Record<string, unknown> | null,
+  source?: ChatSessionTurnSourceMetadata,
+): Record<string, unknown> | null {
+  if (!source) return base;
+  return {
+    ...(base ?? {}),
+    ...source,
+  };
 }
 
 async function getOwnedSession(
@@ -487,6 +533,28 @@ export async function sendOwnedChatSessionMessage(
   sessionId: string,
   input: NormalizedChatSessionMessageInput,
 ): Promise<ServiceResult<ChatSessionSendResponseDto>> {
+  const result = await runOwnedChatSessionTurn(userId, sessionId, input);
+  if (!result.ok) {
+    return result;
+  }
+  return ok(result.data.response);
+}
+
+/**
+ * 执行当前用户拥有的 AI Chat 会话一轮对话。
+ *
+ * @param userId - 会话归属用户。
+ * @param sessionId - chat_sessions.id。
+ * @param input - 标准化后的用户输入。
+ * @param options - 内部调用选项；微信入口用于传入来源与幂等消息 ID。
+ * @returns 包含 HTTP 响应数据和最终已落库 assistant 消息的服务结果。
+ */
+export async function runOwnedChatSessionTurn(
+  userId: string,
+  sessionId: string,
+  input: NormalizedChatSessionMessageInput,
+  options: OwnedChatSessionTurnOptions = {},
+): Promise<ServiceResult<OwnedChatSessionTurnResult>> {
   const sessionResult = await getOwnedSession(userId, sessionId);
   if (!sessionResult.ok) {
     return sessionResult;
@@ -506,7 +574,19 @@ export async function sendOwnedChatSessionMessage(
   if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
-  const msgId = `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const msgId =
+    options.userMessageId ??
+    `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (options.userMessageId) {
+    const existingMessage = await getSessionMessageById(
+      session.account_id,
+      session.id,
+      options.userMessageId,
+    );
+    if (existingMessage) {
+      return fail(409, '消息已处理');
+    }
+  }
   const selectedBoardMessageId = input.selectedBoardMessageId;
   const selectedBoardContext = selectedBoardMessageId
     ? await (async () => {
@@ -536,6 +616,14 @@ export async function sendOwnedChatSessionMessage(
   if (!processingClaimed) {
     return fail(409, SESSION_PROCESSING_BUSY_ERROR);
   }
+  try {
+    await options.onProcessingClaimed?.();
+  } catch (err) {
+    logger.warn(
+      { accountId: session.account_id, sessionId: session.id, err },
+      'AI 对话: 会话抢占后的回调执行失败',
+    );
+  }
 
   try {
     const llmRuntime = await resolveUserLlmRuntime(userId);
@@ -550,13 +638,15 @@ export async function sendOwnedChatSessionMessage(
       sender: userId,
       sender_name: WEB_CHAT_USER_NAME,
       content: input.content,
-      metadata:
+      metadata: mergeMessageMetadata(
         input.inputKind === 'user_pasted_board'
           ? {
               kind: 'user_pasted_board',
               category: input.pastedBoard?.category,
             }
           : null,
+        options.sourceMetadata,
+      ),
       timestamp: new Date().toISOString(),
       is_from_me: false,
       is_bot_message: false,
@@ -631,11 +721,12 @@ export async function sendOwnedChatSessionMessage(
     const replyTexts = normalizeAssistantReplyTexts(output);
     const sessionTitle = normalizeOwnedChatSessionTitle(session.title);
     const replyTimestampBase = Date.now();
+    const finalAssistantMessages: MessageDto[] = [];
 
     // 多轮 runtime 可能返回多条 assistant 文本，逐条落库才能让网页最终态完整呈现。
     for (let index = 0; index < replyTexts.length; index += 1) {
       const isFinalReply = index === replyTexts.length - 1;
-      await storeMessage({
+      const assistantMessage: NewMessage = {
         id:
           replyTexts.length === 1
             ? `${msgId}_reply`
@@ -659,7 +750,9 @@ export async function sendOwnedChatSessionMessage(
               kind: 'assistant',
               request_id: output.requestId,
             },
-      });
+      };
+      await storeMessage(assistantMessage);
+      finalAssistantMessages.push(toMessageDto(assistantMessage));
     }
 
     await touchChatSession(session.id);
@@ -670,8 +763,11 @@ export async function sendOwnedChatSessionMessage(
     }
 
     return ok({
-      text: replyText,
-      session_title: sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+      response: {
+        text: replyText,
+        session_title: sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+      },
+      finalAssistantMessages,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
