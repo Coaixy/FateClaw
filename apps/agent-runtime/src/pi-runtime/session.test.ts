@@ -80,11 +80,6 @@ function createInput(): ContainerInput {
         ],
       },
     ],
-    activeBoardContext: {
-      sourceMessageId: 'message-1',
-      skill: 'bazi-paipan',
-      output: '当前选中八字盘面',
-    },
     inputKind: 'user_pasted_board',
     pastedBoard: {
       category: '八字',

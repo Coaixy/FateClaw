@@ -61,8 +61,8 @@ import {
   toSessionMessageListResponseDto,
 } from '../../contracts-adapter/chat-contract.js';
 import {
-  buildActiveBoardContext,
   buildSessionBoardContexts,
+  messageHasBoardContext,
   type SessionBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './structured-input.js';
@@ -156,8 +156,7 @@ async function releaseChatSessionProcessing(
 }
 
 function buildSelectedBoardContext(message: NewMessage): boolean {
-  const activeBoardContext = buildActiveBoardContext(message);
-  return Boolean(activeBoardContext);
+  return messageHasBoardContext(message);
 }
 
 function getMessageTime(message: Pick<NewMessage, 'timestamp'>): number {

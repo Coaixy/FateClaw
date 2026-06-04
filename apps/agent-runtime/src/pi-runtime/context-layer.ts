@@ -109,10 +109,6 @@ function resolveCurrentEvidenceCategory(
   if (currentBoard) {
     return resolveEvidenceCategoryBySkill(currentBoard.skill) ?? undefined;
   }
-  if (input.activeBoardContext) {
-    return resolveEvidenceCategoryBySkill(input.activeBoardContext.skill) ??
-      undefined;
-  }
   return undefined;
 }
 
@@ -164,14 +160,6 @@ function buildPersistedSkillContext(args: {
     args.containerInput.inputKind === 'user_pasted_board' &&
     args.containerInput.pastedBoard
       ? buildUserPastedBoardSkillContext(args.containerInput.pastedBoard)
-      : args.containerInput.activeBoardContext
-        ? {
-            skill: args.containerInput.activeBoardContext.skill,
-            output: args.containerInput.activeBoardContext.output,
-            artifactType: args.containerInput.activeBoardContext.artifactType,
-            artifactTitle: args.containerInput.activeBoardContext.artifactTitle,
-            artifactData: args.containerInput.activeBoardContext.artifactData,
-          }
       : buildBoardSkillContextFromFollowup(args.followupContext);
 
   return referencedBoardContext ? [referencedBoardContext] : [];
@@ -188,32 +176,10 @@ function escapeXmlAttr(value: string): string {
   return escapeXmlText(value).replace(/"/g, '&quot;');
 }
 
-function isLikelyRawJson(value: string): boolean {
-  const trimmed = value.trim();
-  return (
-    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-    (trimmed.startsWith('[') && trimmed.endsWith(']'))
-  );
-}
-
 function buildFallbackSessionBoardContexts(
   input: ContainerInput,
 ): SessionBoardContext[] {
   const boards: SessionBoardContext[] = [];
-  if (
-    input.activeBoardContext?.output.trim() &&
-    !isLikelyRawJson(input.activeBoardContext.output)
-  ) {
-    boards.push({
-      sourceMessageId: input.activeBoardContext.sourceMessageId,
-      source: 'official_paipan',
-      skill: input.activeBoardContext.skill,
-      artifactTitle: input.activeBoardContext.artifactTitle,
-      promptText: input.activeBoardContext.output,
-      artifactData: input.activeBoardContext.artifactData,
-      isCurrent: true,
-    });
-  }
   if (input.pastedBoard?.content.trim()) {
     boards.push({
       sourceMessageId: 'current_user_pasted_board',
@@ -225,7 +191,7 @@ function buildFallbackSessionBoardContexts(
         ...input.pastedBoard,
         source: 'user_pasted_board',
       },
-      isCurrent: boards.length === 0,
+      isCurrent: true,
     });
   }
   return boards;

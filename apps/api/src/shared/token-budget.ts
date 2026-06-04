@@ -233,10 +233,6 @@ export interface SkillContextEntry {
   artifactData?: unknown;
 }
 
-export interface ActiveBoardContext extends SkillContextEntry {
-  sourceMessageId: string;
-}
-
 export interface SessionBoardContext {
   sourceMessageId: string;
   source: 'official_paipan' | 'user_pasted_board';

@@ -61,8 +61,6 @@ export interface ContainerInput {
   inputKind?: ChatInputKind;
   /** 用户通过自贴盘面入口提交的原始盘面文本和问题。 */
   pastedBoard?: UserPastedBoardInput;
-  /** 当前明确选中的盘面。存在时，本轮按该盘面继续解读。 */
-  activeBoardContext?: ActiveBoardContext;
   /** 当前会话内全部有效盘面；每轮由 FateClaw API 从 DB 重建后注入 Pi system context。 */
   sessionBoardContexts?: SessionBoardContext[];
   /** 结构化对话历史（按时间正序）。 */
@@ -75,10 +73,6 @@ export interface ContainerInput {
   personaPrompt?: string;
   /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
   outboxQueue?: string;
-}
-
-export interface ActiveBoardContext extends SkillContextEntry {
-  sourceMessageId: string;
 }
 
 export interface SessionBoardContext {
@@ -102,8 +96,6 @@ export interface ChatTaskInboxRequest {
   history: HistoryMessage[];
   inputKind?: ChatInputKind;
   pastedBoard?: UserPastedBoardInput;
-  /** AI Chat 当前选中的盘面上下文。 */
-  activeBoardContext?: ActiveBoardContext;
   /** AI Chat 当前会话内的全部有效盘面上下文。 */
   sessionBoardContexts?: SessionBoardContext[];
   /** AI Chat 真实会话 ID，用于同一 session 内查找历史工具上下文。 */

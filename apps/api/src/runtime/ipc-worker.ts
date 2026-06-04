@@ -52,7 +52,6 @@ import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-serv
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import type { User } from '../shared/types.js';
 import type {
-  ActiveBoardContext,
   HistoryMessage,
   SessionBoardContext,
 } from '../shared/token-budget.js';
@@ -719,7 +718,6 @@ export function submitAiChatInboxRequest(input: {
   inputKind?: ChatInputKind;
   pastedBoard?: UserPastedBoardInput;
   history: HistoryMessage[];
-  activeBoardContext?: ActiveBoardContext;
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
   requestId?: string;
@@ -816,7 +814,6 @@ export function submitAiChatInboxRequest(input: {
           inputKind: input.inputKind,
           pastedBoard: input.pastedBoard,
           history: input.history,
-          activeBoardContext: input.activeBoardContext,
           sessionBoardContexts: input.sessionBoardContexts,
           sessionId: input.sessionId,
           userName: input.userName,

@@ -189,7 +189,6 @@ async function processInboxMessage(
         userMessage: request.userMessage,
         inputKind: request.inputKind,
         pastedBoard: request.pastedBoard,
-        activeBoardContext: request.activeBoardContext,
         sessionBoardContexts: request.sessionBoardContexts,
         history: request.history ?? [],
         userName: request.userName,

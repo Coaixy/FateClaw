@@ -6,7 +6,6 @@ import {
 } from './ipc-worker.js';
 import { ensureLocalAgentRunning } from './local-runner.js';
 import {
-  type ActiveBoardContext,
   type HistoryMessage,
   type SessionBoardContext,
 } from '../shared/token-budget.js';
@@ -30,7 +29,6 @@ export async function dispatchAiChatPrompt(input: {
   inputKind?: ChatInputKind;
   pastedBoard?: UserPastedBoardInput;
   history: HistoryMessage[];
-  activeBoardContext?: ActiveBoardContext;
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
   requestId?: string;
@@ -48,7 +46,6 @@ export async function dispatchAiChatPrompt(input: {
     inputKind: input.inputKind,
     pastedBoard: input.pastedBoard,
     history: input.history,
-    activeBoardContext: input.activeBoardContext,
     sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
     requestId: input.requestId,

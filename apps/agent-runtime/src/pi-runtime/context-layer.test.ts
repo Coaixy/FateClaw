@@ -52,14 +52,6 @@ function createInput(): ContainerInput {
       content: '用户自贴八字盘面',
       question: '看事业',
     },
-    activeBoardContext: {
-      sourceMessageId: 'message-1',
-      skill: 'bazi-paipan',
-      output: '当前选中八字盘面',
-      artifactType: 'skill.bazi-paipan',
-      artifactTitle: '当前选中盘面',
-      artifactData: { bazi: '当前选中八字盘面 JSON' },
-    },
     history: [
       {
         role: 'assistant',
@@ -213,42 +205,5 @@ describe('createPiSessionContext', () => {
         'board_absence_policy',
       ]),
     );
-  });
-
-  it('does not inject raw JSON from legacy activeBoardContext fallback', async () => {
-    const requestScope = createRequestScope();
-    const context = await createPiSessionContext({
-      containerInput: {
-        accountId: 'web:user-1',
-        sessionId: 'session-1',
-        llmRuntime,
-        userMessage: '继续看',
-        activeBoardContext: {
-          sourceMessageId: 'legacy-board',
-          skill: 'bazi-paipan',
-          output: '{"bazi":"raw json"}',
-          artifactData: { bazi: 'raw json' },
-        },
-        history: [],
-      },
-      runtime: {
-        deps: {
-          soulStore: {
-            read: vi.fn(async () => ''),
-            canEdit: vi.fn(async () => true),
-            update: vi.fn(),
-          },
-          skillCatalog: {
-            listEffectiveUserSkills: vi.fn(async () => []),
-          },
-        },
-      },
-      requestScope,
-    });
-
-    expect(context.prompt).not.toContain('id="session_board_context"');
-    expect(context.prompt).toContain('id="board_absence_policy"');
-    expect(context.prompt).not.toContain('{"bazi":"raw json"}');
-    expect(context.prompt).not.toContain('raw json');
   });
 });

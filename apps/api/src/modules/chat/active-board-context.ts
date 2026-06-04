@@ -5,10 +5,6 @@ import { formatOfficialPaipan } from './paipan-formatters.js';
 
 const USER_PASTED_BOARD_SKILL_PREFIX = 'user-pasted-board::';
 
-export interface ActiveBoardContextDto extends SkillContextEntryDto {
-  sourceMessageId: string;
-}
-
 export interface SessionBoardContextDto {
   sourceMessageId: string;
   source: 'official_paipan' | 'user_pasted_board';
@@ -81,20 +77,6 @@ export function extractDirectBoardEntries(
   return parseStoredSkillContext(rawToolContext).filter(isBoardEntry);
 }
 
-export function buildActiveBoardContext(
-  message: BoardMessageLike,
-): ActiveBoardContextDto | null {
-  const boardEntry = parseStoredSkillContext(message.tool_context).find(
-    isBoardEntry,
-  );
-  if (!boardEntry) return null;
-
-  return {
-    sourceMessageId: message.id,
-    ...boardEntry,
-  };
-}
-
 function isUserPastedBoardSkill(skill: string): boolean {
   return skill.startsWith(USER_PASTED_BOARD_SKILL_PREFIX);
 }
@@ -103,6 +85,20 @@ function isBoardEntry(entry: SkillContextEntryDto): boolean {
   return (
     isDirectPaipanSkill(entry.skill) || isUserPastedBoardSkill(entry.skill)
   );
+}
+
+/**
+ * 判断消息是否携带可作为会话盘面的 tool_context。
+ *
+ * 参数：
+ * - message：待检查的会话消息。
+ *
+ * 返回：包含官方排盘或用户自贴盘面时返回 true。
+ *
+ * 注意：这里只做是否可选的轻量判断，真正注入 Pi 的盘面正文由 buildSessionBoardContexts 统一重建。
+ */
+export function messageHasBoardContext(message: BoardMessageLike): boolean {
+  return parseStoredSkillContext(message.tool_context).some(isBoardEntry);
 }
 
 function isLikelyRawJson(value: string): boolean {
