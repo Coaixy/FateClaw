@@ -91,7 +91,7 @@ function ArtifactBlock({
         <div
           key={index}
           className={cn(
-            'w-full mx-auto',
+            'w-full min-w-0 mx-auto',
             shellClassName,
           )}
         >
