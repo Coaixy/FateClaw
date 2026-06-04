@@ -303,6 +303,72 @@ describe('runPiSession', () => {
     );
   });
 
+  it('injects the no-board policy for normal chat without authorized board context', async () => {
+    const userMessage = '我是 1990-01-01 早上八点出生，帮我排盘看事业';
+    let capturedPrompt = '';
+    let createArgs: {
+      tools?: string[];
+      resourceLoader?: {
+        getAppendSystemPrompt(): string[];
+      };
+    } = {};
+
+    mockCreateAgentSession.mockImplementation(
+      async (args: typeof createArgs) => {
+        createArgs = args;
+        return {
+          session: {
+            state: {
+              messages: [],
+            },
+            subscribe() {
+              return vi.fn();
+            },
+            async prompt(text: string) {
+              capturedPrompt = text;
+            },
+            abort: vi.fn(),
+            dispose: vi.fn(),
+          },
+        };
+      },
+    );
+
+    const runtime: RequestRuntime = { deps: createDeps() };
+    const result = await runPiSession({
+      containerInput: {
+        accountId: 'web:user-1',
+        sessionId: 'session-no-board',
+        llmRuntime,
+        userMessage,
+        history: [],
+      },
+      runtime,
+      requestScope: createRequestScope(),
+    });
+
+    const appendedContext =
+      createArgs.resourceLoader?.getAppendSystemPrompt().join('\n') ?? '';
+
+    expect(capturedPrompt).toBe(userMessage);
+    expect(appendedContext).toContain('id="board_absence_policy"');
+    expect(appendedContext).toContain('本轮没有授权盘面材料');
+    expect(appendedContext).toContain('不要自行计算或生成盘面');
+    expect(appendedContext).toContain('FateClaw Web/API 的专用排盘入口');
+    expect(appendedContext).not.toContain('id="session_board_context"');
+    expect(appendedContext).not.toContain(userMessage);
+    expect(createArgs.tools).toEqual([
+      'get_current_time',
+      'get_ganzhi_by_datetime',
+      'reverse_ganzhi',
+      'read_soul',
+      'edit_soul',
+    ]);
+    expect(result.piSession?.appendSystemPrompt.join('\n')).toContain(
+      'id="board_absence_policy"',
+    );
+  });
+
   it('does not register edit_soul when conversation Soul edits are disabled', async () => {
     let createArgs: {
       tools?: string[];

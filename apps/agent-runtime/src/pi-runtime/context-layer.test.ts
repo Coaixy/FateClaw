@@ -118,6 +118,7 @@ describe('createPiSessionContext', () => {
 
     expect(context.prompt).toContain('id="current_request_metadata"');
     expect(context.prompt).not.toContain('继续看事业');
+    expect(context.prompt).not.toContain('id="board_absence_policy"');
     expect(context.prompt).not.toContain('id="session_history"');
     expect(context.prompt).not.toContain('上一轮解读结论');
     expect(context.prompt).not.toContain('id="historical_tool_context"');
@@ -172,6 +173,48 @@ describe('createPiSessionContext', () => {
     });
   });
 
+  it('injects a no-board policy when no authorized board context is visible', async () => {
+    const requestScope = createRequestScope();
+    const context = await createPiSessionContext({
+      containerInput: {
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        llmRuntime,
+        userMessage: '我是 1990-01-01 早上八点出生，帮我排盘看事业',
+        history: [],
+      },
+      runtime: {
+        deps: {
+          soulStore: {
+            read: vi.fn(async () => ''),
+            canEdit: vi.fn(async () => true),
+            update: vi.fn(),
+          },
+          skillCatalog: {
+            listEffectiveUserSkills: vi.fn(async () => []),
+          },
+        },
+      },
+      requestScope,
+    });
+
+    expect(context.prompt).toContain('id="board_absence_policy"');
+    expect(context.prompt).toContain('本轮没有授权盘面材料');
+    expect(context.prompt).toContain('不等于已授权的盘面 artifact');
+    expect(context.prompt).toContain('不要自行计算或生成盘面');
+    expect(context.prompt).toContain('FateClaw Web/API 的专用排盘入口');
+    expect(context.prompt).not.toContain('id="session_board_context"');
+    expect(context.prompt).not.toContain(
+      '我是 1990-01-01 早上八点出生，帮我排盘看事业',
+    );
+    expect(context.provenance.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        'current_request_metadata',
+        'board_absence_policy',
+      ]),
+    );
+  });
+
   it('does not inject raw JSON from legacy activeBoardContext fallback', async () => {
     const requestScope = createRequestScope();
     const context = await createPiSessionContext({
@@ -204,6 +247,7 @@ describe('createPiSessionContext', () => {
     });
 
     expect(context.prompt).not.toContain('id="session_board_context"');
+    expect(context.prompt).toContain('id="board_absence_policy"');
     expect(context.prompt).not.toContain('{"bazi":"raw json"}');
     expect(context.prompt).not.toContain('raw json');
   });

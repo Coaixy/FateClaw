@@ -291,6 +291,32 @@ function buildSessionBoardContextSection(
   });
 }
 
+function hasAuthorizedBoardContext(input: ContainerInput): boolean {
+  return buildVisibleSessionBoardContexts(input).some(
+    (board) => board.promptText.trim().length > 0,
+  );
+}
+
+function buildBoardAbsencePolicySection(
+  input: ContainerInput,
+): PiContextSection | null {
+  if (hasAuthorizedBoardContext(input)) return null;
+
+  return createSection({
+    id: 'board_absence_policy',
+    title: '无授权盘面策略',
+    source: 'request',
+    priority: 99,
+    alwaysKeep: true,
+    lines: [
+      '本轮没有授权盘面材料。',
+      '用户自然语言中的出生日期、出生时辰、性别、地点或问题描述，不等于已授权的盘面 artifact。',
+      '如果用户要求排盘、生成命盘/卦盘/星盘/八字四柱，或要求根据聊天中的出生信息推盘，不要自行计算或生成盘面。',
+      '只能引导用户使用 FateClaw Web/API 的专用排盘入口创建盘面；获得 session_board_context 或专用自贴盘面后，才可以基于盘面事实解读。',
+    ],
+  });
+}
+
 function buildCurrentInputSection(input: ContainerInput): PiContextSection[] {
   const sections: PiContextSection[] = [];
   const current = createSection({
@@ -305,6 +331,9 @@ function buildCurrentInputSection(input: ContainerInput): PiContextSection[] {
     ],
   });
   if (current) sections.push(current);
+
+  const boardAbsencePolicy = buildBoardAbsencePolicySection(input);
+  if (boardAbsencePolicy) sections.push(boardAbsencePolicy);
 
   const boardContext = buildSessionBoardContextSection(input);
   if (boardContext) sections.push(boardContext);
