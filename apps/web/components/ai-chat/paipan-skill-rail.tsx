@@ -6,6 +6,7 @@ import {
   Loader2,
   Share2,
   Sparkles,
+  Store,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -22,10 +23,12 @@ interface PaipanSkillRailProps {
   loading: boolean;
   enabledSkills?: EnabledSkillSummary[];
   enabledSkillsLoading?: boolean;
+  showEnabledSkillsEmptyState?: boolean;
   disabled?: boolean;
   pastedBoardDisabled?: boolean;
   onSelectSkill: (skill: string) => void;
   onOpenAll: () => void;
+  onOpenSkillMarket: () => void;
   onOpenPastedBoard: () => void;
 }
 
@@ -46,14 +49,18 @@ export function PaipanSkillRail({
   loading,
   enabledSkills = [],
   enabledSkillsLoading = false,
+  showEnabledSkillsEmptyState = false,
   disabled = false,
   pastedBoardDisabled,
   onSelectSkill,
   onOpenAll,
+  onOpenSkillMarket,
   onOpenPastedBoard,
 }: PaipanSkillRailProps) {
   const isEmpty = !loading && catalog.length === 0;
   const hasEnabledSkills = enabledSkills.length > 0;
+  const shouldShowEnabledSkills =
+    enabledSkillsLoading || hasEnabledSkills || showEnabledSkillsEmptyState;
 
   return (
     <section className="rounded-2xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] px-2.5 py-2.5 sm:px-3">
@@ -157,7 +164,7 @@ export function PaipanSkillRail({
         </div>
       )}
 
-      {(enabledSkillsLoading || hasEnabledSkills) && (
+      {shouldShowEnabledSkills && (
         <div className="mt-2 border-t border-hairline/60 pt-2">
           <div className="mb-1.5 flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
@@ -174,31 +181,51 @@ export function PaipanSkillRail({
               </span>
             )}
           </div>
-          <div className="relative -mx-1 px-1">
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 pr-6">
-              {enabledSkillsLoading
-                ? Array.from({ length: 3 }).map((_, index) => (
-                    <span
-                      key={`enabled-skill-loading-${index}`}
-                      className="h-7 min-w-[86px] shrink-0 rounded-lg border border-hairline bg-surface-card/50"
-                    />
-                  ))
-                : enabledSkills.map((skill) => (
-                    <span
-                      key={`${skill.source}-${skill.id}`}
-                      className="inline-flex h-7 max-w-[160px] shrink-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
-                      title={skill.name}
-                    >
-                      <Share2 size={10} className="text-primary" />
-                      <span className="truncate">{skill.name}</span>
-                      {skill.source === 'subscribed' && (
-                        <span className="text-[9px] text-muted">订阅</span>
-                      )}
-                    </span>
-                  ))}
+          {enabledSkillsLoading || hasEnabledSkills ? (
+            <div className="relative -mx-1 px-1">
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 pr-6">
+                {enabledSkillsLoading
+                  ? Array.from({ length: 3 }).map((_, index) => (
+                      <span
+                        key={`enabled-skill-loading-${index}`}
+                        className="h-7 min-w-[86px] shrink-0 rounded-lg border border-hairline bg-surface-card/50"
+                      />
+                    ))
+                  : enabledSkills.map((skill) => (
+                      <span
+                        key={`${skill.source}-${skill.id}`}
+                        className="inline-flex h-7 max-w-[160px] shrink-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
+                        title={skill.name}
+                      >
+                        <Share2 size={10} className="text-primary" />
+                        <span className="truncate">{skill.name}</span>
+                        {skill.source === 'subscribed' && (
+                          <span className="text-[9px] text-muted">订阅</span>
+                        )}
+                      </span>
+                    ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="min-w-0 text-[10px] leading-5 text-muted sm:text-[11px]">
+                  Skill 是给 AI Chat 补充专门术数流程、规则和解读偏好的能力包。去技能市场订阅后，可在对话里启用。
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={onOpenSkillMarket}
+                  icon={<Store size={12} />}
+                  className="h-8 shrink-0 rounded-lg px-2.5"
+                >
+                  去技能市场
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

@@ -545,6 +545,10 @@ function AiChatWorkspaceContent() {
     setPaipanSkillPickerOpen(true);
   }, [authLoading]);
 
+  const openSkillMarket = useCallback(() => {
+    router.push('/discover');
+  }, [router]);
+
   const openCurrentSessionPaipan = useCallback(
     (skill?: string) => {
       if (authLoading) {
@@ -660,10 +664,12 @@ function AiChatWorkspaceContent() {
           loading={paipanCatalogLoading}
           enabledSkills={enabledSkills}
           enabledSkillsLoading={enabledSkillsLoading}
+          showEnabledSkillsEmptyState={chatAvailable}
           disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
           onOpenAll={openPaipanSkillPicker}
+          onOpenSkillMarket={openSkillMarket}
           onOpenPastedBoard={handleOpenComposerPastedBoard}
         />
       )}
