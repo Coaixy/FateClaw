@@ -39,8 +39,6 @@ interface FuShenDisplay {
   naYin?: string;
 }
 
-const YAO_META_BADGE_CLASS =
-  'inline-flex max-w-full min-w-0 w-fit rounded-md border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] sm:text-[11px] font-medium leading-tight whitespace-normal break-keep sm:whitespace-nowrap';
 const YAO_MOBILE_DETAIL_BADGE_CLASS =
   'inline-flex max-w-full min-w-0 w-fit rounded border border-hairline-soft bg-chart-badge px-0.5 py-px text-[8px] font-medium leading-tight whitespace-normal break-keep sm:hidden';
 const YAO_MOBILE_FUSHEN_BADGE_CLASS =
@@ -133,12 +131,12 @@ function formatShenShaItems(shenSha?: ShenShaData) {
 
 function YaoBar({ isYang: yang }: { isYang: boolean }) {
   const base = CHART.line;
-  const h = 'h-2.5 sm:h-3.5';
+  const h = 'h-2.5 md:h-3.5';
   if (yang) {
-    return <div className={`w-8 sm:w-16 ${h} ${base} rounded-[2px]`} />;
+    return <div className={`w-8 md:w-16 ${h} ${base} rounded-[2px]`} />;
   }
   return (
-    <div className="flex w-8 sm:w-16 justify-between">
+    <div className="flex w-8 justify-between md:w-16">
       <div className={`w-[42%] ${h} ${base} rounded-[2px]`} />
       <div className={`w-[42%] ${h} ${base} rounded-[2px]`} />
     </div>
@@ -176,6 +174,46 @@ function formatFuShenMobileDetail(item: FuShenDisplay): string {
   }`;
 }
 
+function formatYaoDesktopDetail(
+  yao: IchingYao,
+  suiXian: string | null,
+  extra: string | null,
+  fuShenRows: FuShenDisplay[] = [],
+): string {
+  // 桌面端优先保证六爻主体一屏可扫读，辅助信息合并成一行摘要避免撑高每爻。
+  return [
+    yao.naYin ? `纳音 ${yao.naYin}` : null,
+    suiXian,
+    extra,
+    ...fuShenRows.map(formatFuShenMobileDetail),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function YaoDesktopDetail({
+  value,
+  align = 'left',
+}: {
+  value: string;
+  align?: 'left' | 'right';
+}) {
+  if (!value) return null;
+
+  return (
+    <span
+      title={value}
+      className={cn(
+        'hidden min-w-0 truncate rounded border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] font-medium leading-tight md:block md:max-w-[7rem] lg:max-w-[9rem]',
+        align === 'right' ? 'text-right' : 'text-left',
+        CHART.muted,
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
 function YaoRow({
   benYao,
   bianYao,
@@ -195,6 +233,17 @@ function YaoRow({
   const bianExtra = formatYaoExtra(bianYao);
   const benMobileDetail = formatYaoMobileDetail(benYao);
   const bianMobileDetail = formatYaoMobileDetail(bianYao);
+  const benDesktopDetail = formatYaoDesktopDetail(
+    benYao,
+    benSuiXian,
+    benExtra,
+    fuShenRows,
+  );
+  const bianDesktopDetail = formatYaoDesktopDetail(
+    bianYao,
+    bianSuiXian,
+    bianExtra,
+  );
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)] items-start py-1.5 sm:flex sm:items-center sm:justify-between sm:py-2.5 border-b border-hairline-soft last:border-0 hover:bg-chart-highlight">
@@ -206,58 +255,15 @@ function YaoRow({
         </span>
 
         {/* 六亲 + 纳甲五行 */}
-        <div className="grid w-[4.75rem] min-w-0 grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:w-auto sm:min-w-[5.25rem] sm:gap-x-1">
-          <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
+        <div className="grid w-[4.75rem] min-w-0 grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:flex sm:w-auto sm:min-w-0 sm:items-center sm:gap-x-1">
+          <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
             {benYao.liuQin}
           </span>
-          <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
+          <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
             {benYao.naJia}
             {benYao.wuXing}
           </span>
-          {(benYao.naYin || benSuiXian) && (
-            <span
-              className={cn(
-                YAO_META_BADGE_CLASS,
-                'col-span-2 mt-0.5 hidden justify-self-end sm:inline-flex',
-                CHART.muted,
-              )}
-            >
-              {[benYao.naYin ? `纳音 ${benYao.naYin}` : null, benSuiXian]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          )}
-          {benExtra && (
-            <span
-              className={cn(
-                YAO_META_BADGE_CLASS,
-                'col-span-2 mt-0.5 hidden justify-self-end sm:inline-flex',
-                CHART.earth,
-              )}
-            >
-              {benExtra}
-            </span>
-          )}
-          {fuShenRows.length > 0 && (
-            <div className="col-span-2 mt-0.5 hidden max-w-full min-w-0 flex-col items-end gap-0.5 sm:flex sm:gap-1 leading-none">
-              {fuShenRows.map((item, index) => (
-                <div
-                  key={`${item.kind}-${index}-${item.naJiaWuXing}`}
-                  className={cn(
-                    'inline-grid max-w-full grid-cols-[0.8rem_auto] items-center justify-end gap-x-0.5 rounded-md border border-primary/20 bg-primary/10 px-1 py-px text-[10px] sm:grid-cols-[0.9rem_auto_auto] sm:text-[11px] font-semibold leading-tight whitespace-normal break-keep sm:whitespace-nowrap',
-                    CHART.primary,
-                  )}
-                >
-                  <span>{item.kind}</span>
-                  <span>{item.liuQin}</span>
-                  <span className="col-span-2 min-w-0 justify-self-end text-right sm:col-auto sm:justify-self-auto sm:text-left">
-                    {item.naJiaWuXing}
-                    {item.naYin ? ` ${item.naYin}` : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <YaoDesktopDetail value={benDesktopDetail} align="right" />
         </div>
 
         {/* 世应 */}
@@ -276,7 +282,7 @@ function YaoRow({
         </div>
 
         {/* 爻条 */}
-        <div className="relative flex items-center justify-center w-8 sm:w-20 shrink-0">
+        <div className="relative flex w-8 shrink-0 items-center justify-center md:w-20">
           <YaoBar isYang={benIsYang} />
         </div>
 
@@ -311,10 +317,10 @@ function YaoRow({
       </div>
 
       {/* CENTER: 动爻箭头 */}
-      <div className={cn('flex min-h-5 min-w-0 items-center justify-center text-[9px] sm:min-h-0 sm:w-16 sm:shrink-0 sm:text-xs select-none', CHART.muted)}>
+      <div className={cn('flex min-h-5 min-w-0 items-center justify-center text-[9px] md:min-h-0 md:w-16 md:shrink-0 md:text-xs select-none', CHART.muted)}>
         {isMoving && (
-          <span className="flex items-center transform scale-75 sm:scale-100">
-            <span className={CHART.primary}>X</span> <span className={cn('mx-0.5 sm:mx-1', CHART.lineMutedText)}>→</span>
+          <span className="flex items-center transform scale-75 md:scale-100">
+            <span className={CHART.primary}>X</span> <span className={cn('mx-0.5 md:mx-1', CHART.lineMutedText)}>→</span>
           </span>
         )}
       </div>
@@ -325,7 +331,7 @@ function YaoRow({
           isMoving ? 'opacity-100' : 'opacity-60 grayscale'
         }`}
       >
-        <div className="relative flex items-center justify-center w-8 sm:w-20 shrink-0">
+        <div className="relative flex w-8 shrink-0 items-center justify-center md:w-20">
           <YaoBar isYang={bianIsYang} />
         </div>
         <div className="w-3 sm:w-6 flex items-center justify-center shrink-0">
@@ -341,38 +347,15 @@ function YaoRow({
               : ''}
           </span>
         </div>
-        <div className="flex w-[4.75rem] min-w-0 flex-col items-start sm:w-auto">
-          <div className="flex items-center gap-0.5 sm:gap-1 whitespace-nowrap">
-            <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>{bianYao.liuQin}</span>
-            <span className={cn(YAO_CORE_BADGE_CLASS, CHART.ink)}>
+        <div className="flex w-[4.75rem] min-w-0 flex-col items-start sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-row sm:items-center sm:gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 whitespace-nowrap sm:gap-1">
+            <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>{bianYao.liuQin}</span>
+            <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
               {bianYao.naJia}
               {bianYao.wuXing}
             </span>
           </div>
-          {(bianYao.naYin || bianSuiXian) && (
-            <div
-              className={cn(
-                YAO_META_BADGE_CLASS,
-                'mt-0.5 hidden sm:inline-flex',
-                CHART.muted,
-              )}
-            >
-              {[bianYao.naYin ? `纳音 ${bianYao.naYin}` : null, bianSuiXian]
-                .filter(Boolean)
-                .join(' · ')}
-            </div>
-          )}
-          {bianExtra && (
-            <div
-              className={cn(
-                YAO_META_BADGE_CLASS,
-                'mt-0.5 hidden sm:inline-flex',
-                CHART.earth,
-              )}
-            >
-              {bianExtra}
-            </div>
-          )}
+          <YaoDesktopDetail value={bianDesktopDetail} />
         </div>
 
         {bianMobileDetail && (
