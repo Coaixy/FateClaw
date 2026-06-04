@@ -19,7 +19,6 @@ import {
   Pencil,
   Check,
   Sun,
-  Users,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
@@ -144,7 +143,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="flex flex-col">
           <span className="text-[15px] font-bold tracking-tight text-ink">
-            命枢
+            守义AI
           </span>
           <span className="text-[9px] text-primary/70 tracking-[0.2em] font-medium">
             FATECLAW
@@ -204,6 +203,10 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const [editingTitle, setEditingTitle] = useState('');
   const [renamingSessionId, setRenamingSessionId] = useState('');
   const [sharingSessionId, setSharingSessionId] = useState('');
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactQrType, setContactQrType] = useState<'wechat' | 'qq'>(
+    'wechat',
+  );
 
   const {
     sessions,
@@ -219,6 +222,21 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!contactOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContactOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [contactOpen]);
 
   useEffect(() => {
     // 登录态变化后复位筛选和编辑态，避免用户误以为列表丢失。
@@ -273,6 +291,22 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       : `没有属于${activeDateFilterLabel}的对话`;
   const showSessionSkeleton =
     sessions.length === 0 && (authLoading || sessionsLoading);
+  const contactQr =
+    contactQrType === 'wechat'
+      ? {
+          title: '名誉站长',
+          subtitle: '微信联系',
+          src: '/contact/honorary-stationmaster-wechat.jpg',
+          alt: '名誉站长微信二维码',
+          helper: '扫码添加微信',
+        }
+      : {
+          title: '守义AI内测群',
+          subtitle: 'QQ群号：2163031185',
+          src: '/contact/shouyi-ai-qq-group.jpg',
+          alt: '守义AI内测QQ群二维码',
+          helper: '扫码加入QQ群',
+        };
 
   const goNewChat = () => {
     // 手机端在当前页内切会话/新建对话时，pathname 不会变化，必须主动收起抽屉。
@@ -712,28 +746,106 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 <span className="max-w-full truncate leading-tight">关于</span>
               </Link>
 
-              <a
-                href="https://qm.qq.com/q/v3HJzAEppK"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={closeSidebar}
+              <button
+                type="button"
+                onClick={() => setContactOpen(true)}
                 className="group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
-                aria-label="加入FateClaw内部测试群聊"
-                title="加入FateClaw内部测试群聊"
+                aria-label="联系名誉站长"
+                title="联系名誉站长"
               >
-                <Users
+                <MessageCircle
                   size={15}
                   strokeWidth={1.8}
                   className="group-hover:text-primary"
                 />
-                <span className="max-w-full truncate leading-tight">加群</span>
-              </a>
+                <span className="max-w-full truncate leading-tight">联系</span>
+              </button>
             </div>
 
             <SidebarThemeSwitch />
           </div>
         </div>
       </aside>
+
+      {contactOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-sm animate-fade-in"
+          onClick={() => setContactOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contact-stationmaster-title"
+            className="w-full max-w-[320px] rounded-2xl border border-hairline bg-canvas p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p
+                  id="contact-stationmaster-title"
+                  className="truncate text-[15px] font-semibold text-ink"
+                >
+                  {contactQr.title}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted">
+                  {contactQr.subtitle}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContactOpen(false)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
+                aria-label="关闭联系方式"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div
+              className="mt-4 grid grid-cols-2 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+              role="group"
+              aria-label="选择联系方式"
+            >
+              <button
+                type="button"
+                onClick={() => setContactQrType('wechat')}
+                className={`h-8 rounded-lg text-[12px] font-medium transition-all duration-200 ${
+                  contactQrType === 'wechat'
+                    ? 'bg-primary/12 text-primary shadow-sm'
+                    : 'text-muted hover:bg-canvas hover:text-ink'
+                }`}
+                aria-pressed={contactQrType === 'wechat'}
+              >
+                名誉站长
+              </button>
+              <button
+                type="button"
+                onClick={() => setContactQrType('qq')}
+                className={`h-8 rounded-lg text-[12px] font-medium transition-all duration-200 ${
+                  contactQrType === 'qq'
+                    ? 'bg-primary/12 text-primary shadow-sm'
+                    : 'text-muted hover:bg-canvas hover:text-ink'
+                }`}
+                aria-pressed={contactQrType === 'qq'}
+              >
+                QQ群
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-hairline bg-white p-3">
+              <img
+                src={contactQr.src}
+                alt={contactQr.alt}
+                className="max-h-[58dvh] w-full rounded-lg object-contain"
+              />
+            </div>
+
+            <p className="mt-3 text-center text-[12px] text-muted">
+              {contactQr.helper}
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

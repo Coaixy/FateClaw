@@ -53,7 +53,7 @@
   --color-chart-badge: rgba(232, 165, 90, 0.14);
 
   /* Typography */
-  --font-sans: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'Times New Roman', serif;
+  --font-sans: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
   --font-display: var(--font-sans);
   --font-body: var(--font-sans);
   --font-mono: 'SFMono-Regular', 'Menlo', 'Consolas', ui-monospace, monospace;
@@ -68,9 +68,9 @@
   --radius-full: 9999px;
 }
 
-/* 全站正文和 Tailwind font-sans 工具类都统一走本地宋体，避免局部组件回退成系统黑体。 */
+/* 全站正文和 Tailwind font-sans 工具类统一走系统宋体/衬线回退，避免加载大体积字体文件。 */
 :root {
-  --font-sans: var(--font-kinghwa-old-song), 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'Times New Roman', serif;
+  --font-sans: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
   --font-display: var(--font-sans);
   --font-body: var(--font-sans);
 }

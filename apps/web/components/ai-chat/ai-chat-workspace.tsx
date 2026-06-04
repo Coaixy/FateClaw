@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
   CheckCircle2,
   ChevronRight,
@@ -21,13 +22,10 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
-import { PaipanSheet } from '@/components/ai-chat/paipan-sheet';
-import { PaipanSkillPickerSheet } from '@/components/ai-chat/paipan-skill-picker-sheet';
 import {
   PaipanSkillRail,
   type EnabledSkillSummary,
 } from '@/components/ai-chat/paipan-skill-rail';
-import { PastedBoardSheet } from '@/components/ai-chat/pasted-board-sheet';
 import {
   shouldPromptForPastedBoard,
   type UserPastedBoardInput,
@@ -57,6 +55,51 @@ type PasteChoiceSelection = {
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
+const PaipanSheet = dynamic(
+  () =>
+    import('@/components/ai-chat/paipan-sheet').then(
+      (module) => module.PaipanSheet,
+    ),
+  { ssr: false, loading: () => null },
+);
+const PaipanSkillPickerSheet = dynamic(
+  () =>
+    import('@/components/ai-chat/paipan-skill-picker-sheet').then(
+      (module) => module.PaipanSkillPickerSheet,
+    ),
+  { ssr: false, loading: () => null },
+);
+const PastedBoardSheet = dynamic(
+  () =>
+    import('@/components/ai-chat/pasted-board-sheet').then(
+      (module) => module.PastedBoardSheet,
+    ),
+  { ssr: false, loading: () => null },
+);
+
+function scheduleIdleTask(task: () => void) {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+  const browserWindow = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+  if (browserWindow.requestIdleCallback) {
+    const idleId = browserWindow.requestIdleCallback(() => task(), {
+      timeout: 1200,
+    });
+    return () => browserWindow.cancelIdleCallback?.(idleId);
+  }
+
+  const timeoutId = browserWindow.setTimeout(task, 250);
+  return () => browserWindow.clearTimeout(timeoutId);
+}
 
 export function AiChatWorkspace() {
   return (
@@ -177,44 +220,49 @@ function AiChatWorkspaceContent() {
     let cancelled = false;
     setEnabledSkillsLoading(true);
 
-    // AI 对话首页只展示已开启 Skill 摘要，具体启停仍在 Studio 中管理。
-    void skillsApi
-      .userList()
-      .then((result) => {
-        if (cancelled) return;
-        setEnabledSkills([
-          ...(result.own ?? [])
-            .filter((skill) => skill.enabled)
-            .map((skill) => ({
-              id: skill.id,
-              name: skill.skill_name,
-              source: 'own' as const,
-            })),
-          ...(result.subscribed ?? [])
-            .filter((skill) => skill.subscription_enabled)
-            .map((skill) => ({
-              id: skill.subscription_id,
-              name: skill.skill_name,
-              source: 'subscribed' as const,
-            })),
-        ]);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setEnabledSkills([]);
-        toast(
-          'error',
-          error instanceof Error ? error.message : '加载已开启 Skill 失败',
-        );
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setEnabledSkillsLoading(false);
-        }
-      });
+    const cancelIdleTask = scheduleIdleTask(() => {
+      if (cancelled) return;
+
+      // AI 对话首页只展示已开启 Skill 摘要，具体启停仍在 Studio 中管理。
+      void skillsApi
+        .userList()
+        .then((result) => {
+          if (cancelled) return;
+          setEnabledSkills([
+            ...(result.own ?? [])
+              .filter((skill) => skill.enabled)
+              .map((skill) => ({
+                id: skill.id,
+                name: skill.skill_name,
+                source: 'own' as const,
+              })),
+            ...(result.subscribed ?? [])
+              .filter((skill) => skill.subscription_enabled)
+              .map((skill) => ({
+                id: skill.subscription_id,
+                name: skill.skill_name,
+                source: 'subscribed' as const,
+              })),
+          ]);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setEnabledSkills([]);
+          toast(
+            'error',
+            error instanceof Error ? error.message : '加载已开启 Skill 失败',
+          );
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setEnabledSkillsLoading(false);
+          }
+        });
+    });
 
     return () => {
       cancelled = true;
+      cancelIdleTask();
     };
   }, [chatAvailable, toast]);
 
@@ -223,29 +271,34 @@ function AiChatWorkspaceContent() {
     setPaipanCatalog([]);
     setPaipanCatalogLoading(true);
 
-    // 术数目录由工作台统一加载，避免空态入口和排盘弹层各自重复请求。
-    void paipanApi
-      .catalog()
-      .then((items) => {
-        if (cancelled) return;
-        setPaipanCatalog(items);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setPaipanCatalog([]);
-        toast(
-          'error',
-          error instanceof Error ? error.message : '加载排盘术数失败',
-        );
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setPaipanCatalogLoading(false);
-        }
-      });
+    const cancelIdleTask = scheduleIdleTask(() => {
+      if (cancelled) return;
+
+      // 术数目录由工作台统一加载，避免空态入口和排盘弹层各自重复请求。
+      void paipanApi
+        .catalog()
+        .then((items) => {
+          if (cancelled) return;
+          setPaipanCatalog(items);
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setPaipanCatalog([]);
+          toast(
+            'error',
+            error instanceof Error ? error.message : '加载排盘术数失败',
+          );
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setPaipanCatalogLoading(false);
+          }
+        });
+    });
 
     return () => {
       cancelled = true;
+      cancelIdleTask();
     };
   }, [toast]);
 

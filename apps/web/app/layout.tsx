@@ -1,20 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import localFont from 'next/font/local';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { ToastProvider } from '@/components/ui/toast';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { PreUseNoticeDialog } from '@/components/compliance/pre-use-notice-dialog';
 import './globals.css';
 
-const kingHwaOldSong = localFont({
-  src: './fonts/KingHwa_OldSong.woff2',
-  variable: '--font-kinghwa-old-song',
-  display: 'swap',
-  preload: false,
-});
-
 export const metadata: Metadata = {
-  title: '命枢 FateClaw',
+  title: '小奕想要三合木｜守义AI',
   description: '面向命理创作者的 AI 分身平台 — 在微信对话中运行，沉淀方法，持续服务。',
 };
 
@@ -33,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" className={kingHwaOldSong.variable} suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

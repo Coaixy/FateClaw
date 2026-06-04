@@ -1,6 +1,12 @@
 'use client';
 
-import { MarkdownContent } from '@/components/chat/markdown-content';
+import { lazy, Suspense } from 'react';
+
+const MarkdownContent = lazy(() =>
+  import('@/components/chat/markdown-content').then((module) => ({
+    default: module.MarkdownContent,
+  })),
+);
 
 export function CollapsibleMessage({
   content,
@@ -10,7 +16,11 @@ export function CollapsibleMessage({
   isBot: boolean;
 }) {
   return isBot ? (
-    <MarkdownContent content={content} isBot={isBot} />
+    <Suspense
+      fallback={<p className="whitespace-pre-wrap break-words">{content}</p>}
+    >
+      <MarkdownContent content={content} isBot={isBot} />
+    </Suspense>
   ) : (
     <p className="whitespace-pre-wrap break-words">{content}</p>
   );

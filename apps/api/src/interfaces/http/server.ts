@@ -9,6 +9,7 @@ import Fastify, {
 import fastifyCors, { type FastifyCorsOptions } from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import fastifyStatic from '@fastify/static';
+import fastifyCompress from '@fastify/compress';
 
 import { JWT_SECRET } from '../../infrastructure/config.js';
 import { logger } from '../../infrastructure/logger.js';
@@ -181,6 +182,11 @@ export async function createApiServer(): Promise<FastifyInstance> {
     credentials: true,
   };
   await app.register(fastifyCors, corsOptions);
+  await app.register(fastifyCompress, {
+    global: true,
+    encodings: ['br', 'gzip'],
+    threshold: 1024,
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api/')) return;

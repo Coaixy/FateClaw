@@ -173,13 +173,13 @@ export function AboutClient() {
                 公开记事本
               </div>
               <h1 className="mt-2 text-2xl font-semibold text-ink">
-                LetFate·Claw
+                FateClaw·守义AI
               </h1>
             </div>
 
             <div className="space-y-4 text-[14px] leading-7 text-ink/85">
               <p>
-                LetFate·Claw 致力于以现代方式弘扬中国优良传统文化瑰宝，八字命理、奇门遁甲、六爻纳甲等皆为中华先民的智慧结晶。
+                FateClaw·守义AI 致力于以现代方式弘扬中国优良传统文化瑰宝，八字命理、奇门遁甲、六爻纳甲等皆为中华先民的智慧结晶。
               </p>
               <p>
                 本站为非盈利性质，收费部分覆盖服务器与 AI 算力等运营成本后，结余将用于支持中国公益事业。
