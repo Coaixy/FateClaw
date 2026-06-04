@@ -14,6 +14,25 @@ async function runPaipan(
 }
 
 describe('qimen-paipan reference alignment', () => {
+  it('exposes the corrected 2026-06-04 17:00 sky pan and dark stem data from kinqimen 0.3', async () => {
+    const result = await runPaipan({
+      solarDate: '2026-06-04',
+      hour: 17,
+      minute: 0,
+    });
+
+    expect(result.干支).toBe('丙午年癸巳月己酉日癸酉时');
+    expect(result.排局).toBe('阳五局上');
+    expect(result.值符值使).toMatchObject({
+      值符天干: ['甲子', '戊'],
+      值符星宫: ['禽', '坎'],
+      值使门宫: ['死', '中'],
+    });
+    expect(result.天盘.离).toBe('辛');
+    expect(result.地盘.离).toBe('壬');
+    expect(result.暗干.离).toBe('戊');
+  });
+
   it('matches the reference qimen core pan data', async () => {
     const result = await runPaipan();
 

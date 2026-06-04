@@ -135,8 +135,8 @@ importers:
         specifier: ^2.5.8
         version: 2.5.8
       kinqimen:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.1
+        version: 0.3.1
       liuren-ts-lib:
         specifier: ^3.0.0
         version: 3.0.0
@@ -2907,8 +2907,8 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  kinqimen@0.2.0:
-    resolution: {integrity: sha512-vFO21fPjX7QXZIZY5PUqX1RB19M4RcPmSdzYqplmSlsT1aaGrlUD9f+Tp9KoTDjz822SZXl+TkalzG6RMDJCwg==}
+  kinqimen@0.3.1:
+    resolution: {integrity: sha512-QxOe+RmytQdRsvAfFPiKxT2CRDG4aK/yFUX1T8Vr215o412Y6Rxgjum/je8QmRYUREzUaYMcOEgB4txPzBBIBQ==}
 
   kitx@2.2.0:
     resolution: {integrity: sha512-tBMwe6AALTBQJb0woQDD40734NKzb0Kzi3k7wQj9ar3AbP9oqhoVrdXPh7rk2r00/glIgd0YbToIUJsnxWMiIg==}
@@ -7472,9 +7472,9 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  kinqimen@0.2.0:
+  kinqimen@0.3.1:
     dependencies:
-      tyme4ts: 1.5.0
+      tyme4ts: 1.5.1
 
   kitx@2.2.0:
     dependencies:

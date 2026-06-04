@@ -68,7 +68,7 @@ interface QimenData {
     地盘?: Record<string, { 天干?: string; 长生?: Record<string, string> }>;
   };
   门迫?: Array<{ 门?: string; 宫?: string }>;
-  击刑?: Array<{ 宫1?: string; 宫2?: string; 类型?: string }>;
+  击刑?: Array<{ 宫1?: string; 宫2?: string; 类型?: string; 六仪?: string; 落宫?: string }>;
 }
 
 // 后天宫 → 先天宫（和 lyts-front 一致）
@@ -158,12 +158,13 @@ function PalaceCell({
 }) {
   const isCenter = gua === '中';
   const tianGan = data.天盘?.[gua] ?? '';
-  const diGan = data.地盘?.[gua] ?? '';
+  const hasAngan = Boolean(data.暗干?.[gua]);
+  const diGan = data.暗干?.[gua] ?? data.地盘?.[gua] ?? '';
   const men = data.门?.[gua] ?? '';
   const star = data.星?.[gua] ?? '';
   const shen = data.神?.[gua] ?? '';
   const tianState = extractChangSheng(data.长生运?.天盘?.[gua]);
-  const diState = extractChangSheng(data.长生运?.地盘?.[gua]);
+  const diState = hasAngan ? '' : extractChangSheng(data.长生运?.地盘?.[gua]);
   const gongNumber = GUA_TO_GONG_NUMBER[gua];
   const branches = GUA_TO_BRANCHES[gua] ?? [];
   const isKongWang = branches.some((b) => kongwangBranches.includes(b));
@@ -264,7 +265,7 @@ function PalaceCell({
         </div>
       </div>
 
-      {/* 底部：门 + 地盘干 */}
+      {/* 底部：门 + 下方干。新版库里用户盘面口径对应暗干，没有暗干时回退到固定地盘。 */}
       <div className="mx-auto grid w-full max-w-[5.75rem] grid-cols-[minmax(0,1fr)_auto] items-end gap-x-1">
         <div className="min-w-0">
           {men && (

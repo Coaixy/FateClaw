@@ -6,6 +6,17 @@ import {
 } from 'kinqimen';
 import { calcXunKong, solarToLunar } from 'iching-shifa';
 
+type GongGanPan = Partial<Record<Gong, string>>;
+type FullGongGanPan = Record<Gong, string>;
+type KinqimenChangshengItem = { gan: string; changsheng: Record<string, string> };
+type KinqimenMenpoItem = {
+  door: string;
+  gong: string;
+  doorWuxing: string;
+  gongWuxing: string;
+};
+type KinqimenJixingItem = { gong: string; gan: string };
+
 const SHORT_GOD_MAP: Record<string, string> = {
   值符: '符',
   螣蛇: '蛇',
@@ -68,11 +79,63 @@ interface QimenInput {
   minute?: number;
 }
 
-export type QimenPaipanResult = Omit<HourChabuPan, '旬空' | '星' | '神'> & {
-  旬空: HourChabuPan['旬空'] & Record<'年空' | '月空', string>;
-  星: Record<string, string>;
-  神: Record<string, string>;
-};
+interface ChineseZhifuZhishi {
+  值符天干: [string, string];
+  值符星宫: [string, string];
+  值使门宫: [string, string];
+}
+
+interface ChineseMaXing {
+  天马: string;
+  丁马: string;
+  驿马: string;
+}
+
+interface ChineseChangshengItem {
+  天干: string;
+  长生: Record<string, string>;
+}
+
+interface ChineseMenpoItem {
+  门: string;
+  宫: string;
+  门五行: string;
+  宫五行: string;
+}
+
+interface ChineseJixingItem {
+  宫1?: string;
+  宫2?: string;
+  类型?: string;
+  六仪?: string;
+  落宫?: string;
+}
+
+/** 奇门排盘对外结果，保持中文字段契约以兼容前端图表和 formatter。 */
+export interface QimenPaipanResult {
+  排盘方式: HourChabuPan['method'];
+  干支: string;
+  旬首: string;
+  旬空: Record<'年空' | '月空' | '日空' | '时空', string>;
+  局日: string;
+  排局: string;
+  节气: string;
+  值符值使: ChineseZhifuZhishi;
+  天乙: string;
+  天盘: GongGanPan;
+  地盘: FullGongGanPan;
+  门: GongGanPan;
+  星: GongGanPan;
+  神: GongGanPan;
+  暗干: FullGongGanPan;
+  马星: ChineseMaXing;
+  长生运: {
+    天盘: Record<string, ChineseChangshengItem>;
+    地盘: Record<string, ChineseChangshengItem>;
+  };
+  门迫: ChineseMenpoItem[];
+  击刑: ChineseJixingItem[];
+}
 
 function resolveDateInput(input: QimenInput): QimenDateInput {
   if (input.solarDate && input.hour !== undefined) {
@@ -117,6 +180,67 @@ function buildFourPillarKong(
   };
 }
 
+function normalizeGanPan(pan: Partial<Record<string, string>>): GongGanPan {
+  return Object.fromEntries(
+    Object.entries(pan).map(([palace, gan]) => [palace, String(gan)]),
+  ) as GongGanPan;
+}
+
+function normalizeFullGanPan(pan: Record<string, string>): FullGongGanPan {
+  return normalizeGanPan(pan) as FullGongGanPan;
+}
+
+function normalizeStarPan(pan: HourChabuPan['starPan']): GongGanPan {
+  return Object.fromEntries(
+    Object.entries(pan).map(([palace, star]) => [
+      palace,
+      star === '禽' ? '芮禽' : String(star),
+    ]),
+  ) as GongGanPan;
+}
+
+function normalizeGodPan(pan: HourChabuPan['godPan']): GongGanPan {
+  return Object.fromEntries(
+    Object.entries(pan).map(([palace, god]) => [
+      palace,
+      SHORT_GOD_MAP[String(god)] ?? String(god),
+    ]),
+  ) as GongGanPan;
+}
+
+function normalizeChangshengPan(
+  pan: Record<string, KinqimenChangshengItem>,
+): Record<string, ChineseChangshengItem> {
+  return Object.fromEntries(
+    Object.entries(pan).map(([palace, item]) => [
+      palace,
+      {
+        天干: item.gan,
+        长生: item.changsheng,
+      },
+    ]),
+  );
+}
+
+function normalizeMenpo(pan: KinqimenMenpoItem[]): ChineseMenpoItem[] {
+  return pan.map((item) => ({
+    门: item.door,
+    宫: item.gong,
+    门五行: item.doorWuxing,
+    宫五行: item.gongWuxing,
+  }));
+}
+
+function normalizeJixing(pan: KinqimenJixingItem[]): ChineseJixingItem[] {
+  return pan.map((item) => ({
+    宫1: item.gan,
+    宫2: item.gong,
+    类型: '击刑',
+    六仪: item.gan.slice(-1),
+    落宫: item.gong,
+  }));
+}
+
 function referenceShenPan(
   yinYangDun: string | undefined,
   zhifuStarGong: readonly string[],
@@ -140,32 +264,49 @@ function normalizeQimenPan(
   pan: HourChabuPan,
   dateInput: QimenDateInput,
 ): QimenPaipanResult {
-  const zhifuStarGong = pan.值符值使?.值符星宫;
+  const zhifuStarGong = pan.zhifuZhishi.zhifuStarGong;
   const normalized: QimenPaipanResult = {
-    ...pan,
+    排盘方式: pan.method,
+    干支: pan.ganzhi,
+    旬首: pan.xunHead,
     旬空: buildFourPillarKong(dateInput),
-    星: Object.fromEntries(
-      Object.entries(pan.星 ?? {}).map(([palace, star]) => [
-        palace,
-        star === '禽' ? '芮禽' : star,
-      ]),
-    ),
-    神: Object.fromEntries(
-      Object.entries(pan.神 ?? {}).map(([palace, god]) => [
-        palace,
-        SHORT_GOD_MAP[String(god)] ?? String(god),
-      ]),
-    ),
+    局日: pan.juDay,
+    排局: pan.ju,
+    节气: pan.jieqi,
+    值符值使: {
+      值符天干: pan.zhifuZhishi.zhifuGan,
+      值符星宫: zhifuStarGong,
+      值使门宫: pan.zhifuZhishi.zhishiDoorGong,
+    },
+    天乙: pan.tianyi,
+    天盘: normalizeGanPan(pan.skyPan),
+    地盘: normalizeFullGanPan(pan.earthPan),
+    门: normalizeGanPan(pan.doorPan),
+    星: normalizeStarPan(pan.starPan),
+    神: normalizeGodPan(pan.godPan),
+    暗干: normalizeFullGanPan(pan.anganPan),
+    马星: {
+      天马: pan.maXing.tianMa,
+      丁马: pan.maXing.dingMa,
+      驿马: pan.maXing.yiMa,
+    },
+    长生运: {
+      天盘: normalizeChangshengPan(pan.changshengYun.skyPan),
+      地盘: normalizeChangshengPan(pan.changshengYun.earthPan),
+    },
+    门迫: normalizeMenpo(pan.menpo),
+    击刑: normalizeJixing(pan.jixing),
   };
 
   if (Array.isArray(zhifuStarGong)) {
-    const referenceGods = referenceShenPan(pan.排局?.[0], zhifuStarGong);
+    const referenceGods = referenceShenPan(pan.ju?.[0], zhifuStarGong);
     normalized.神 = referenceGods;
   }
 
   return normalized;
 }
 
+/** 按指定公历时间执行奇门拆补法排盘，并输出前端兼容的中文字段。 */
 export async function runQimenPaipan(
   input: Record<string, unknown>,
 ): Promise<QimenPaipanResult> {
