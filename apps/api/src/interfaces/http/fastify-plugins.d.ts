@@ -28,5 +28,11 @@ declare module 'fastify' {
     user: { userId: string };
     // 路由按需调用此方法校验登录态，公共接口无需挂全局认证钩子。
     requireAuth: () => Promise<void>;
+    // 当前管理端密钥解析出的后台身份；仅 admin 路由会写入。
+    adminPrincipal?: {
+      role: 'owner' | 'user_manager';
+      scopes: ('admin:*' | 'users:*' | 'messages:*')[];
+      home_path: '/admin/overview' | '/admin/users';
+    };
   }
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   admin,
+  adminLogs,
   type AdminUser,
   type UserDetail,
   type WalletTransaction,
@@ -266,11 +267,17 @@ function UserRow({
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [adjustingBalance, setAdjustingBalance] = useState(false);
+  const [grantingBonus, setGrantingBonus] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [msg, setMsg] = useState('');
   const [balanceDelta, setBalanceDelta] = useState('');
   const [balanceNote, setBalanceNote] = useState('');
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusNote, setBonusNote] = useState('');
+  const [bonusExpiresAt, setBonusExpiresAt] = useState('');
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
 
   const loadDetail = useCallback(async () => {
@@ -339,6 +346,59 @@ function UserRow({
       setMsg(err instanceof Error ? err.message : '余额调整失败');
     } finally {
       setAdjustingBalance(false);
+    }
+  };
+
+  const handleGrantBonus = async () => {
+    const normalizedAmount = bonusAmount.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(normalizedAmount)) {
+      setMsg('请输入有效的赠送金额（最多 2 位小数）');
+      return;
+    }
+    const amount = Math.round(Number(normalizedAmount) * 100) / 100;
+    if (amount <= 0) {
+      setMsg('赠送金额必须大于 0');
+      return;
+    }
+
+    setGrantingBonus(true);
+    setMsg('');
+    try {
+      await admin.grantBonusBalance(user.id, {
+        amount_coins: amount,
+        note: bonusNote || undefined,
+        expires_at: bonusExpiresAt
+          ? new Date(`${bonusExpiresAt}T23:59:59.999+08:00`).toISOString()
+          : undefined,
+      });
+      setBonusAmount('');
+      setBonusNote('');
+      setBonusExpiresAt('');
+      setMsg('赠送余额已发放');
+      void onRefresh();
+      void loadDetail();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : '赠送余额失败');
+    } finally {
+      setGrantingBonus(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!confirmClearLogs) {
+      setConfirmClearLogs(true);
+      return;
+    }
+    setClearingLogs(true);
+    setMsg('');
+    try {
+      const result = await adminLogs.clearUser(user.id);
+      setMsg(`已清空 ${result.deleted_count} 条对话日志`);
+      setConfirmClearLogs(false);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : '清空日志失败');
+    } finally {
+      setClearingLogs(false);
     }
   };
 
@@ -477,6 +537,62 @@ function UserRow({
                         )}
                         调整余额
                       </button>
+                    </div>
+
+                    <div className="mt-4 border-t border-hairline pt-3">
+                      <div className="mb-2 text-[12px] font-medium text-muted">
+                        赠送余额
+                      </div>
+                      <div className="grid gap-2 lg:grid-cols-[160px_minmax(0,1fr)_150px_auto] lg:items-end">
+                        <label className="min-w-0">
+                          <span className="mb-1 block text-[12px] text-muted">
+                            金额（软妹币）
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={bonusAmount}
+                            onChange={(e) => setBonusAmount(e.target.value)}
+                            placeholder="正数"
+                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                          />
+                        </label>
+                        <label className="min-w-0">
+                          <span className="mb-1 block text-[12px] text-muted">
+                            备注
+                          </span>
+                          <input
+                            type="text"
+                            value={bonusNote}
+                            onChange={(e) => setBonusNote(e.target.value)}
+                            placeholder="例如：活动补偿"
+                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                          />
+                        </label>
+                        <label className="min-w-0">
+                          <span className="mb-1 block text-[12px] text-muted">
+                            过期日
+                          </span>
+                          <input
+                            type="date"
+                            value={bonusExpiresAt}
+                            onChange={(e) => setBonusExpiresAt(e.target.value)}
+                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleGrantBonus}
+                          disabled={grantingBonus}
+                          className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline px-4 text-[13px] font-medium text-ink transition-opacity hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {grantingBonus && (
+                            <Loader2 size={12} className="animate-spin" />
+                          )}
+                          发放赠送
+                        </button>
+                      </div>
                     </div>
                   </section>
 
@@ -630,32 +746,61 @@ function UserRow({
                         危险操作
                       </h4>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                        confirmDelete
-                          ? 'bg-error text-white'
-                          : 'border border-error text-error hover:bg-error hover:text-white'
-                      }`}
-                    >
-                      {deleting ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <Trash2 size={12} />
-                      )}
-                      {confirmDelete ? '确认删除该用户及所有数据' : '删除用户'}
-                    </button>
-                    {confirmDelete && !deleting && (
+                    <div className="space-y-2">
                       <button
                         type="button"
-                        onClick={() => setConfirmDelete(false)}
-                        className="mt-2 cursor-pointer text-[12px] text-muted hover:text-ink"
+                        onClick={handleClearLogs}
+                        disabled={clearingLogs}
+                        className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          confirmClearLogs
+                            ? 'bg-error text-white'
+                            : 'border border-error text-error hover:bg-error hover:text-white'
+                        }`}
                       >
-                        取消
+                        {clearingLogs ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={12} />
+                        )}
+                        {confirmClearLogs ? '确认清空该用户日志' : '清空用户日志'}
                       </button>
-                    )}
+                      {confirmClearLogs && !clearingLogs && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmClearLogs(false)}
+                          className="cursor-pointer text-[12px] text-muted hover:text-ink"
+                        >
+                          取消清空
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          confirmDelete
+                            ? 'bg-error text-white'
+                            : 'border border-error text-error hover:bg-error hover:text-white'
+                        }`}
+                      >
+                        {deleting ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={12} />
+                        )}
+                        {confirmDelete ? '确认删除该用户及所有数据' : '删除用户'}
+                      </button>
+                      {confirmDelete && !deleting && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="cursor-pointer text-[12px] text-muted hover:text-ink"
+                        >
+                          取消删除
+                        </button>
+                      )}
+                    </div>
                   </section>
                 </aside>
               </div>

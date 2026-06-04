@@ -75,6 +75,21 @@ export function isAdminUnauthorizedError(
   return error instanceof AdminApiError && error.status === 401;
 }
 
+export function isAdminForbiddenError(error: unknown): error is AdminApiError {
+  return error instanceof AdminApiError && error.status === 403;
+}
+
+export type AdminRole = 'owner' | 'user_manager';
+export type AdminScope = 'admin:*' | 'users:*' | 'messages:*';
+export type AdminHomePath = '/admin/overview' | '/admin/users';
+
+export interface AdminSession {
+  success: boolean;
+  role: AdminRole;
+  scopes: AdminScope[];
+  home_path: AdminHomePath;
+}
+
 async function adminRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -444,7 +459,7 @@ export interface AdminSystemConfigOverview {
 
 export const admin = {
   verify: () =>
-    adminRequest<{ success: boolean }>('/api/admin/verify', {
+    adminRequest<AdminSession>('/api/admin/verify', {
       method: 'POST',
     }),
   stats: (options?: {

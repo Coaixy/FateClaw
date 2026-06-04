@@ -726,11 +726,23 @@ Authorization: Bearer <token>
 
 ## Admin 系统配置
 
-> 以下接口均走 `/api/admin/*`，需要在请求头携带 `X-Admin-Key: <MANAGER_KEY>`。
+> 以下接口均走 `/api/admin/*`，需要在请求头携带 `X-Admin-Key`。
+> `MANAGER_KEY` 拥有全部权限；`USER_MANAGER_KEY` 仅允许用户管理和消息模块。
 
 ### POST /api/admin/verify
 
-验证管理密钥是否正确。
+验证管理密钥是否正确，并返回当前后台身份。
+
+**Response**
+
+```json
+{
+  "success": true,
+  "role": "owner",
+  "scopes": ["admin:*"],
+  "home_path": "/admin/overview"
+}
+```
 
 ### GET /api/admin/stats
 
@@ -879,6 +891,7 @@ Authorization: Bearer <token>
 | `REDIS_URL`                 | -                       | Redis 连接地址                     |
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
+| `USER_MANAGER_KEY`          | -                       | 用户管理员密钥，仅开放用户和消息模块，提供时必须强随机 |
 | `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
 | `AGENT_REQUEST_TIMEOUT`     | `1800000`               | 微信 Bot 请求等待 agent 返回的超时时间，单位毫秒 |

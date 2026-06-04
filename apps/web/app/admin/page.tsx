@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
     admin
       .verify()
       // 管理后台在静态导出部署下统一走整页跳转，避免依赖 App Router 的 txt 预取链路。
-      .then(() => replaceAdminDocument('/admin/overview'))
+      .then((session) => replaceAdminDocument(session.home_path))
       .catch((err) => {
         if (isAdminUnauthorizedError(err)) {
           clearAdminKey();
@@ -51,8 +51,8 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     try {
       setAdminKey(key, remember);
-      await admin.verify();
-      replaceAdminDocument('/admin/overview');
+      const session = await admin.verify();
+      replaceAdminDocument(session.home_path);
     } catch (err) {
       if (isAdminUnauthorizedError(err)) {
         clearAdminKey();
@@ -97,7 +97,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setKey(e.target.value)}
               required
               className="w-full h-9 px-3 rounded-md border border-hairline bg-canvas text-sm placeholder:text-muted focus:outline-none focus:border-hairline transition-colors duration-100"
-              placeholder="MANAGER_KEY"
+              placeholder="MANAGER_KEY / USER_MANAGER_KEY"
               autoFocus
             />
           </div>

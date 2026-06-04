@@ -11,6 +11,7 @@ const { mockRateLimitCheck, mockRateLimitClear, mockRateLimitRecordFail } =
 vi.mock('../../infrastructure/config.js', () => ({
   BILLING_RESERVATION_STALE_MS: 2_400_000,
   MANAGER_KEY: 'test-manager-key',
+  USER_MANAGER_KEY: 'test-user-manager-key',
 }));
 
 vi.mock('./rate-limit.js', () => ({
@@ -70,6 +71,11 @@ vi.mock('./payment-callback-urls.js', () => ({
 }));
 
 import { adminRoutes } from './admin-routes.js';
+import {
+  getAdminGlobalStats,
+  getMessagesForAdmin,
+  listAdminUsersWithStats,
+} from '../../modules/admin/admin-service.js';
 
 describe('adminRoutes authentication throttling', () => {
   let app: FastifyInstance;
@@ -79,6 +85,14 @@ describe('adminRoutes authentication throttling', () => {
     mockRateLimitCheck.mockResolvedValue({ allowed: true });
     mockRateLimitRecordFail.mockResolvedValue(undefined);
     mockRateLimitClear.mockResolvedValue(undefined);
+    vi.mocked(getAdminGlobalStats).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof getAdminGlobalStats>>,
+    );
+    vi.mocked(getMessagesForAdmin).mockResolvedValue({
+      messages: [],
+      total: 0,
+    } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
+    vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
 
     app = Fastify({ logger: false });
     await app.register(adminRoutes);
@@ -102,6 +116,149 @@ describe('adminRoutes authentication throttling', () => {
     expect(mockRateLimitCheck).toHaveBeenCalledTimes(1);
     expect(mockRateLimitRecordFail).toHaveBeenCalledTimes(1);
     expect(mockRateLimitClear).not.toHaveBeenCalled();
+  });
+
+  it('returns owner principal metadata from verify', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/verify',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      success: true,
+      role: 'owner',
+      scopes: ['admin:*'],
+      home_path: '/admin/overview',
+    });
+  });
+
+  it('returns user manager principal metadata from verify', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/verify',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      success: true,
+      role: 'user_manager',
+      scopes: ['users:*', 'messages:*'],
+      home_path: '/admin/users',
+    });
+  });
+
+  it('allows the owner key to access owner-only endpoints', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/stats',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(getAdminGlobalStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows the user manager key to access user and message endpoints', async () => {
+    const usersResponse = await app.inject({
+      method: 'GET',
+      url: '/users',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+    const messagesResponse = await app.inject({
+      method: 'GET',
+      url: '/messages',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+
+    expect(usersResponse.statusCode).toBe(200);
+    expect(messagesResponse.statusCode).toBe(200);
+    expect(listAdminUsersWithStats).toHaveBeenCalledTimes(1);
+    expect(getMessagesForAdmin).toHaveBeenCalledTimes(1);
+  });
+
+  it('matches user manager scopes when admin routes are mounted with the API prefix', async () => {
+    const prefixedApp = Fastify({ logger: false });
+    await prefixedApp.register(adminRoutes, { prefix: '/api/admin' });
+    await prefixedApp.ready();
+
+    try {
+      const response = await prefixedApp.inject({
+        method: 'GET',
+        url: '/api/admin/users',
+        headers: {
+          'x-admin-key': 'test-user-manager-key',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await prefixedApp.close();
+    }
+  });
+
+  it('allows the user manager key to reach high-risk user operations', async () => {
+    const adjustResponse = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/balance/adjust',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        amount_coins: 1,
+      },
+    });
+    const clearLogsResponse = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1/logs',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+
+    expect(adjustResponse.statusCode).toBe(404);
+    expect(clearLogsResponse.statusCode).toBe(404);
+    expect(deleteResponse.statusCode).toBe(404);
+  });
+
+  it('blocks the user manager key from owner-only endpoints', async () => {
+    const statsResponse = await app.inject({
+      method: 'GET',
+      url: '/stats',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+    const logsResponse = await app.inject({
+      method: 'GET',
+      url: '/logs?accountId=account-1',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+
+    expect(statsResponse.statusCode).toBe(403);
+    expect(logsResponse.statusCode).toBe(403);
+    expect(getAdminGlobalStats).not.toHaveBeenCalled();
   });
 
   it('blocks non-verify endpoints when admin auth is rate limited', async () => {

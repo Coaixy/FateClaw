@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { clearAdminKey } from '@/lib/admin-api';
+import type { AdminRole } from '@/lib/admin-api';
 import {
   normalizeAdminPathname,
   replaceAdminDocument,
@@ -23,17 +24,48 @@ import {
 import { useState, useEffect } from 'react';
 
 const navItems = [
-  { href: '/admin/overview', label: '总览', icon: LayoutDashboard },
-  { href: '/admin/users', label: '用户', icon: Users },
-  { href: '/admin/messages', label: '消息', icon: MessageSquare },
-  { href: '/admin/skills', label: '技能', icon: Puzzle },
-  { href: '/admin/logs', label: '日志', icon: ScrollText },
-  { href: '/admin/about', label: '关于收支', icon: Landmark },
-  { href: '/admin/system/models', label: '模型配置', icon: Bot },
-  { href: '/admin/system/rewards', label: '软妹币配置', icon: WalletCards },
-];
+  {
+    href: '/admin/overview',
+    label: '总览',
+    icon: LayoutDashboard,
+    roles: ['owner'],
+  },
+  {
+    href: '/admin/users',
+    label: '用户',
+    icon: Users,
+    roles: ['owner', 'user_manager'],
+  },
+  {
+    href: '/admin/messages',
+    label: '消息',
+    icon: MessageSquare,
+    roles: ['owner', 'user_manager'],
+  },
+  { href: '/admin/skills', label: '技能', icon: Puzzle, roles: ['owner'] },
+  { href: '/admin/logs', label: '日志', icon: ScrollText, roles: ['owner'] },
+  { href: '/admin/about', label: '关于收支', icon: Landmark, roles: ['owner'] },
+  {
+    href: '/admin/system/models',
+    label: '模型配置',
+    icon: Bot,
+    roles: ['owner'],
+  },
+  {
+    href: '/admin/system/rewards',
+    label: '软妹币配置',
+    icon: WalletCards,
+    roles: ['owner'],
+  },
+] satisfies {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: AdminRole[];
+}[];
 
-export function AdminSidebar() {
+export function AdminSidebar({ role }: { role: AdminRole }) {
+  const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -81,7 +113,7 @@ export function AdminSidebar() {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = normalizedPathname === item.href;
             const Icon = item.icon;
             return (

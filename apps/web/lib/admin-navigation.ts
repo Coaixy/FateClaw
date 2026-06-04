@@ -1,3 +1,5 @@
+import type { AdminHomePath, AdminRole } from '@/lib/admin-api';
+
 function splitHref(href: string): { pathname: string; search: string } {
   const [pathname, ...rest] = href.split('?');
   return {
@@ -27,4 +29,27 @@ export function toAdminDocumentHref(href: string): string {
 
 export function replaceAdminDocument(href: string) {
   window.location.replace(toAdminDocumentHref(href));
+}
+
+const ADMIN_ROLE_HOME_PATH: Record<AdminRole, AdminHomePath> = {
+  owner: '/admin/overview',
+  user_manager: '/admin/users',
+};
+
+export function getAdminHomePathForRole(role: AdminRole): AdminHomePath {
+  return ADMIN_ROLE_HOME_PATH[role];
+}
+
+export function canAdminRoleAccessPath(
+  role: AdminRole,
+  pathname: string,
+): boolean {
+  const normalizedPathname = normalizeAdminPathname(pathname);
+  if (role === 'owner') {
+    return normalizedPathname.startsWith('/admin');
+  }
+  return (
+    normalizedPathname === '/admin/users' ||
+    normalizedPathname === '/admin/messages'
+  );
 }

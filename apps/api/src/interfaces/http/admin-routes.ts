@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   BILLING_RESERVATION_STALE_MS,
   MANAGER_KEY,
+  USER_MANAGER_KEY,
 } from '../../infrastructure/config.js';
 import {
   adjustUserPurchasedBalance,
@@ -59,6 +60,90 @@ import {
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
+
+type AdminRole = 'owner' | 'user_manager';
+type AdminScope = 'admin:*' | 'users:*' | 'messages:*';
+type AdminHomePath = '/admin/overview' | '/admin/users';
+
+interface AdminPrincipal {
+  role: AdminRole;
+  scopes: AdminScope[];
+  home_path: AdminHomePath;
+}
+
+const OWNER_ADMIN_PRINCIPAL: AdminPrincipal = {
+  role: 'owner',
+  scopes: ['admin:*'],
+  home_path: '/admin/overview',
+};
+
+const USER_MANAGER_ADMIN_PRINCIPAL: AdminPrincipal = {
+  role: 'user_manager',
+  scopes: ['users:*', 'messages:*'],
+  home_path: '/admin/users',
+};
+
+const USER_MANAGER_ALLOWED_ROUTES = new Map<string, AdminScope>([
+  ['GET /users', 'users:*'],
+  ['POST /users', 'users:*'],
+  ['GET /users/:id', 'users:*'],
+  ['GET /users/:id/transactions', 'users:*'],
+  ['POST /users/:id/balance/grant', 'users:*'],
+  ['POST /users/:id/balance/adjust', 'users:*'],
+  ['GET /users/:id/balance/grants', 'users:*'],
+  ['DELETE /users/:id/logs', 'users:*'],
+  ['DELETE /users/:id', 'users:*'],
+  ['GET /messages', 'messages:*'],
+  ['GET /chat-sessions', 'messages:*'],
+  ['POST /chat-sessions/pi-sessions/cleanup', 'messages:*'],
+]);
+
+function normalizeAdminRouteUrl(
+  routeUrl: string | undefined,
+): string | undefined {
+  if (!routeUrl) return routeUrl;
+  // Fastify 带 prefix 注册插件时会把前缀并入 routeOptions.url，权限表统一用插件内路径维护。
+  if (routeUrl.startsWith('/api/admin')) {
+    return routeUrl.slice('/api/admin'.length) || '/';
+  }
+  return routeUrl;
+}
+
+function cloneAdminPrincipal(principal: AdminPrincipal): AdminPrincipal {
+  return {
+    role: principal.role,
+    scopes: [...principal.scopes],
+    home_path: principal.home_path,
+  };
+}
+
+function resolveAdminPrincipal(key: string | undefined): AdminPrincipal | null {
+  if (key && MANAGER_KEY && key === MANAGER_KEY) {
+    return cloneAdminPrincipal(OWNER_ADMIN_PRINCIPAL);
+  }
+  if (key && USER_MANAGER_KEY && key === USER_MANAGER_KEY) {
+    return cloneAdminPrincipal(USER_MANAGER_ADMIN_PRINCIPAL);
+  }
+  return null;
+}
+
+function getRequiredAdminScope(
+  method: string,
+  routeUrl: string | undefined,
+): AdminScope | null {
+  const normalizedRouteUrl = normalizeAdminRouteUrl(routeUrl);
+  if (normalizedRouteUrl === '/verify') return null;
+  return (
+    USER_MANAGER_ALLOWED_ROUTES.get(`${method} ${normalizedRouteUrl}`) ??
+    'admin:*'
+  );
+}
+
+function hasAdminScope(principal: AdminPrincipal, required: AdminScope): boolean {
+  return (
+    principal.scopes.includes('admin:*') || principal.scopes.includes(required)
+  );
+}
 
 function roundCoinsToCents(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -332,9 +417,9 @@ const PublicFinancialLedgerEntrySchema = z.object({
 });
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
-  // 所有 admin 路由需要验证 MANAGER_KEY，并对失败鉴权统一做指数退避限流。
+  // 所有 admin 路由需要验证后台密钥，并对失败鉴权统一做指数退避限流。
   app.addHook('onRequest', async (request, reply) => {
-    if (!MANAGER_KEY) {
+    if (!MANAGER_KEY && !USER_MANAGER_KEY) {
       return reply.code(503).send({ error: '管理端未配置密钥' });
     }
 
@@ -356,18 +441,42 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: '尝试过于频繁，请稍后再试' });
     }
 
-    const key = request.headers['x-admin-key'];
-    if (key !== MANAGER_KEY) {
+    const rawKey = request.headers['x-admin-key'];
+    const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+    const principal = resolveAdminPrincipal(key);
+    if (!principal) {
       await rateLimitRecordFail(rateKey);
       return reply.code(401).send({ error: '管理密钥无效' });
     }
 
+    request.adminPrincipal = principal;
     await rateLimitClear(rateKey);
   });
 
+  app.addHook('preHandler', async (request, reply) => {
+    const principal = request.adminPrincipal;
+    if (!principal) {
+      return reply.code(401).send({ error: '管理密钥无效' });
+    }
+
+    const required = getRequiredAdminScope(
+      request.method,
+      request.routeOptions.url,
+    );
+    if (required && !hasAdminScope(principal, required)) {
+      return reply.code(403).send({ error: '无权访问该管理功能' });
+    }
+  });
+
   // POST /api/admin/verify — 验证密钥是否正确
-  app.post('/verify', async () => {
-    return { success: true };
+  app.post('/verify', async (request) => {
+    const principal = request.adminPrincipal ?? OWNER_ADMIN_PRINCIPAL;
+    return {
+      success: true,
+      role: principal.role,
+      scopes: principal.scopes,
+      home_path: principal.home_path,
+    };
   });
 
   // GET /api/admin/stats — 全局统计数据，可按时间范围聚合充值收入

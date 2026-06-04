@@ -15,6 +15,7 @@ const envConfig = readEnvFile([
   'REDIS_URL',
   'JWT_SECRET',
   'MANAGER_KEY',
+  'USER_MANAGER_KEY',
   'PUBLIC_BASE_URL',
 ]);
 
@@ -76,6 +77,14 @@ if (RAW_MANAGER_KEY) {
   assertStrongSecret('MANAGER_KEY', RAW_MANAGER_KEY);
 }
 export const MANAGER_KEY = RAW_MANAGER_KEY;
+
+// 用户管理员密钥——仅开放用户和消息模块；缺失时不启用该受限后台身份
+const RAW_USER_MANAGER_KEY =
+  process.env.USER_MANAGER_KEY || envConfig.USER_MANAGER_KEY || '';
+if (RAW_USER_MANAGER_KEY) {
+  assertStrongSecret('USER_MANAGER_KEY', RAW_USER_MANAGER_KEY);
+}
+export const USER_MANAGER_KEY = RAW_USER_MANAGER_KEY;
 
 function normalizePublicBaseUrl(raw: string): string {
   const trimmed = raw.trim();
