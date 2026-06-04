@@ -8,6 +8,7 @@ export const PAIPAN_SKILLS = new Set([
   'ziwei-paipan',
   'iching-paipan',
   'jingzhan-paipan',
+  'meihua-paipan',
   'liuren-paipan',
   'qimen-paipan',
 ]);

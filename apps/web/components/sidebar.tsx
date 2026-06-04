@@ -19,6 +19,7 @@ import {
   Pencil,
   Check,
   Sun,
+  Users,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
@@ -667,52 +668,67 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        {/* 底部：固定信息入口和全局外观偏好，避免挤占顶部栏主操作区。 */}
+        {/* 底部：紧凑入口和全局外观偏好，尽量把纵向空间留给对话历史。 */}
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
           <div className="space-y-1">
-            <Link
-              href="/status"
-              onClick={closeSidebar}
-              className={`group flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
-                pathname === '/status'
-                  ? 'bg-primary/10 text-ink'
-                  : 'text-muted hover:text-ink hover:bg-surface-card'
-              }`}
-              aria-label="查看平台状态"
-            >
-              <div className="w-8 h-8 rounded-lg bg-surface-card flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all duration-200">
-                <Activity size={16} strokeWidth={1.8} />
-              </div>
-              <div className="min-w-0">
-                <span className="block leading-tight">状态</span>
-                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted/65">
-                  平台运行与 Token 趋势
-                </span>
-              </div>
-            </Link>
+            <div className="grid grid-cols-3 gap-1.5">
+              <Link
+                href="/status"
+                onClick={closeSidebar}
+                className={`group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-all duration-200 ${
+                  pathname === '/status'
+                    ? 'bg-primary/10 text-ink'
+                    : 'text-muted hover:text-ink hover:bg-surface-card'
+                }`}
+                aria-label="查看平台状态"
+                title="状态"
+              >
+                <Activity
+                  size={15}
+                  strokeWidth={1.8}
+                  className="group-hover:text-primary"
+                />
+                <span className="max-w-full truncate leading-tight">状态</span>
+              </Link>
 
-            <Link
-              href="/about"
-              onClick={closeSidebar}
-              className={`group flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
-                pathname === '/about'
-                  ? 'bg-primary/10 text-ink'
-                  : 'text-muted hover:text-ink hover:bg-surface-card'
-              }`}
-              aria-label="查看关于我们"
-            >
-              <div className="w-8 h-8 rounded-lg bg-surface-card flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all duration-200">
-                <Info size={16} strokeWidth={1.8} />
-              </div>
-              <div className="min-w-0">
-                <span className="block leading-tight">关于我们</span>
-                <span className="mt-0.5 block truncate text-[10px] font-normal text-muted/65">
-                  传统文化与公益初心
-                </span>
-              </div>
-            </Link>
+              <Link
+                href="/about"
+                onClick={closeSidebar}
+                className={`group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-all duration-200 ${
+                  pathname === '/about'
+                    ? 'bg-primary/10 text-ink'
+                    : 'text-muted hover:text-ink hover:bg-surface-card'
+                }`}
+                aria-label="查看关于我们"
+                title="关于我们"
+              >
+                <Info
+                  size={15}
+                  strokeWidth={1.8}
+                  className="group-hover:text-primary"
+                />
+                <span className="max-w-full truncate leading-tight">关于</span>
+              </Link>
+
+              <a
+                href="https://qm.qq.com/q/v3HJzAEppK"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeSidebar}
+                className="group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
+                aria-label="加入FateClaw内部测试群聊"
+                title="加入FateClaw内部测试群聊"
+              >
+                <Users
+                  size={15}
+                  strokeWidth={1.8}
+                  className="group-hover:text-primary"
+                />
+                <span className="max-w-full truncate leading-tight">加群</span>
+              </a>
+            </div>
 
             <SidebarThemeSwitch />
           </div>

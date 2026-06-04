@@ -140,6 +140,9 @@ importers:
       liuren-ts-lib:
         specifier: ^3.0.0
         version: 3.0.0
+      meihua-ts-lib:
+        specifier: ^0.1.0
+        version: 0.1.0
       openai:
         specifier: ^6.32.0
         version: 6.32.0(ws@8.21.0)(zod@4.3.6)
@@ -3119,6 +3122,9 @@ packages:
   mdast-util-to-string@4.0.0:
     resolution: {integrity: sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==}
 
+  meihua-ts-lib@0.1.0:
+    resolution: {integrity: sha512-Re7ugn5VtL85YnR/MNgUPm40bdWxOiiObPOArvnwXlOomuOV7JNsIYXlAEB2HLXygVvNhQIA+n2aWYGXSHkaaQ==}
+
   merge2@1.4.1:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
     engines: {node: '>= 8'}
@@ -4010,6 +4016,9 @@ packages:
 
   tyme4ts@1.5.0:
     resolution: {integrity: sha512-SqmlNyDtYb3bsnSkjX8lxyMcCt9xBaBkF8xWs/2ORiysWXftEoTGHEi/zxWEJ8s7aANe5veMcLcOuMK6Z+kzbw==}
+
+  tyme4ts@1.5.1:
+    resolution: {integrity: sha512-GzL9rP4k5vFdj/8iLnlGrC3jPop4Og2oAE9aBTj2JbOKuZ22+iMlpD+4Ekke4FylHn5BO9V6XRJOgJtFVDFDqQ==}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -7760,6 +7769,10 @@ snapshots:
     dependencies:
       '@types/mdast': 4.0.4
 
+  meihua-ts-lib@0.1.0:
+    dependencies:
+      tyme4ts: 1.5.1
+
   merge2@1.4.1: {}
 
   micromark-core-commonmark@2.0.3:
@@ -8845,6 +8858,8 @@ snapshots:
   tyme4ts@1.4.6: {}
 
   tyme4ts@1.5.0: {}
+
+  tyme4ts@1.5.1: {}
 
   type-check@0.4.0:
     dependencies:

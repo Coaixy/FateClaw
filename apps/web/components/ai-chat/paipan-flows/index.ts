@@ -5,6 +5,7 @@ import { BaziFlow } from './flows/bazi-flow';
 import { IchingFlow } from './flows/iching-flow';
 import { JingzhanFlow } from './flows/jingzhan-flow';
 import { LiurenFlow } from './flows/liuren-flow';
+import { MeihuaFlow } from './flows/meihua-flow';
 import { QimenFlow } from './flows/qimen-flow';
 import { ZiweiFlow } from './flows/ziwei-flow';
 
@@ -21,6 +22,7 @@ const PAIPAN_FLOW_REGISTRY: Record<PaipanSkillId, PaipanFlowComponent> = {
   'ziwei-paipan': ZiweiFlow,
   'iching-paipan': IchingFlow,
   'jingzhan-paipan': JingzhanFlow,
+  'meihua-paipan': MeihuaFlow,
   'liuren-paipan': LiurenFlow,
   'qimen-paipan': QimenFlow,
 };

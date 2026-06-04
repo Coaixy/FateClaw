@@ -3,6 +3,7 @@ import { formatGenericPaipan } from './fallback.js';
 import { formatIchingPaipan } from './iching.js';
 import { formatJingzhanPaipan } from './jingzhan.js';
 import { formatLiurenPaipan } from './liuren.js';
+import { formatMeihuaPaipan } from './meihua.js';
 import { formatQimenPaipan } from './qimen.js';
 import type { PaipanFormatter } from './types.js';
 import { formatZiweiPaipan } from './ziwei.js';
@@ -15,6 +16,7 @@ const OFFICIAL_PAIPAN_TITLES: Record<string, string> = {
   'iching-paipan': '六爻排盘',
   'jingzhan-paipan': '经占排盘',
   'liuren-paipan': '大六壬排盘',
+  'meihua-paipan': '梅花易数排盘',
   'qimen-paipan': '奇门遁甲排盘',
   'ziwei-paipan': '紫微斗数排盘',
 };
@@ -24,6 +26,7 @@ const OFFICIAL_PAIPAN_FORMATTERS: Record<string, PaipanFormatter> = {
   'iching-paipan': formatIchingPaipan,
   'jingzhan-paipan': formatJingzhanPaipan,
   'liuren-paipan': formatLiurenPaipan,
+  'meihua-paipan': formatMeihuaPaipan,
   'qimen-paipan': formatQimenPaipan,
   'ziwei-paipan': formatZiweiPaipan,
 };

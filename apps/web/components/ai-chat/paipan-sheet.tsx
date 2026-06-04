@@ -144,7 +144,42 @@ const FRIENDLY_FIELD_COPY: Record<string, FieldCopy> = {
       three: '三数起卦',
       array: '数字起卦',
       time: '时间起卦（公历）',
+      counts: '数值起卦',
+      trigrams: '指定上下卦',
     },
+  },
+  countMethod: {
+    label: '取数来源',
+    optionLabels: {
+      number: '报数',
+      word: '字数',
+      sound: '声音',
+      object: '物数',
+      direction: '方位',
+      external: '外应',
+    },
+  },
+  upper: {
+    label: '上卦取数',
+  },
+  lower: {
+    label: '下卦取数',
+  },
+  moving: {
+    label: '动爻取数',
+    description: '不填写时使用上卦取数和下卦取数之和。',
+  },
+  upperTrigram: {
+    label: '上卦',
+  },
+  lowerTrigram: {
+    label: '下卦',
+  },
+  movingLine: {
+    label: '动爻',
+  },
+  label: {
+    label: '备注',
   },
   datetime: {
     label: '起卦时间（公历）',
@@ -459,6 +494,19 @@ function buildInitialDraftForSkill(
     };
   }
 
+  if (skillDir === 'meihua-paipan') {
+    const hasPresetDatetime =
+      typeof base.datetime === 'string' && base.datetime.trim().length > 0;
+    return {
+      ...base,
+      method: typeof base.method === 'string' ? base.method : 'time',
+      countMethod:
+        typeof base.countMethod === 'string' ? base.countMethod : 'number',
+      $useCurrentTime: !hasPresetDatetime,
+      datetime: hasPresetDatetime ? base.datetime : undefined,
+    };
+  }
+
   return { ...base };
 }
 
@@ -494,6 +542,30 @@ function buildSubmitInputForSkill(
     }
     if (useCurrentTime) {
       delete normalized.datetime;
+    }
+    return normalized;
+  }
+
+  if (skillDir === 'meihua-paipan') {
+    const method =
+      typeof normalized.method === 'string' ? normalized.method : 'time';
+    const useCurrentTime = getValueAtPath(input, ['$useCurrentTime']) !== false;
+    if (method !== 'time' || useCurrentTime) {
+      delete normalized.datetime;
+    }
+    if (method !== 'counts') {
+      delete normalized.countMethod;
+      delete normalized.upper;
+      delete normalized.lower;
+      delete normalized.moving;
+    }
+    if (method !== 'trigrams') {
+      delete normalized.upperTrigram;
+      delete normalized.lowerTrigram;
+      delete normalized.movingLine;
+    }
+    if (method === 'time') {
+      delete normalized.label;
     }
     return normalized;
   }
@@ -578,6 +650,65 @@ function validateDraftForSkill(
     }
   }
 
+  if (skillDir === 'meihua-paipan') {
+    const method =
+      typeof getValueAtPath(draft, ['method']) === 'string'
+        ? String(getValueAtPath(draft, ['method']))
+        : 'time';
+    const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
+    const datetime =
+      typeof getValueAtPath(draft, ['datetime']) === 'string'
+        ? String(getValueAtPath(draft, ['datetime'])).trim()
+        : '';
+    const upper = getValueAtPath(draft, ['upper']);
+    const lower = getValueAtPath(draft, ['lower']);
+    const moving = getValueAtPath(draft, ['moving']);
+    const upperTrigram = getValueAtPath(draft, ['upperTrigram']);
+    const lowerTrigram = getValueAtPath(draft, ['lowerTrigram']);
+    const movingLine = getValueAtPath(draft, ['movingLine']);
+
+    if (method === 'time') {
+      if (!useCurrentTime && !datetime) {
+        return '请先选择起卦时间（公历）';
+      }
+      return null;
+    }
+
+    if (method === 'counts') {
+      if (typeof upper !== 'number' || !Number.isInteger(upper)) {
+        return '请先填写上卦取数';
+      }
+      if (typeof lower !== 'number' || !Number.isInteger(lower)) {
+        return '请先填写下卦取数';
+      }
+      if (
+        moving !== undefined &&
+        (typeof moving !== 'number' || !Number.isInteger(moving))
+      ) {
+        return '动爻取数需要填写整数';
+      }
+      return null;
+    }
+
+    if (method === 'trigrams') {
+      if (typeof upperTrigram !== 'string') {
+        return '请先选择上卦';
+      }
+      if (typeof lowerTrigram !== 'string') {
+        return '请先选择下卦';
+      }
+      if (
+        typeof movingLine !== 'number' ||
+        !Number.isInteger(movingLine) ||
+        movingLine < 1 ||
+        movingLine > 6
+      ) {
+        return '请先选择动爻';
+      }
+      return null;
+    }
+  }
+
   return null;
 }
 
@@ -592,6 +723,19 @@ function getSimpleHiddenFieldPaths(skillDir: string): string[] {
     case 'iching-paipan':
     case 'jingzhan-paipan':
       return ['method', 'datetime', 'yao', 'numbers'];
+    case 'meihua-paipan':
+      return [
+        'method',
+        'datetime',
+        'countMethod',
+        'upper',
+        'lower',
+        'moving',
+        'upperTrigram',
+        'lowerTrigram',
+        'movingLine',
+        'label',
+      ];
     default:
       return [];
   }

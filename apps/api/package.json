@@ -41,6 +41,7 @@
     "iztro": "^2.5.8",
     "kinqimen": "^0.2.0",
     "liuren-ts-lib": "^3.0.0",
+    "meihua-ts-lib": "^0.1.0",
     "openai": "^6.32.0",
     "pg": "^8.20.0",
     "pino": "^9.6.0",

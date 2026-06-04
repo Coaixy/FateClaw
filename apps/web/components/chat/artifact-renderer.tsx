@@ -21,6 +21,9 @@ const QimenChart = dynamic(() => import('@/components/charts/qimen-chart'), {
 const LiurenChart = dynamic(() => import('@/components/charts/liuren-chart'), {
   ssr: false,
 });
+const MeihuaChart = dynamic(() => import('@/components/charts/meihua-chart'), {
+  ssr: false,
+});
 const JingzhanChart = dynamic(
   () => import('@/components/charts/jingzhan-chart'),
   { ssr: false },
@@ -40,6 +43,7 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
     'lg:max-w-[min(40rem,calc(100vh-14rem))] xl:max-w-[min(42rem,calc(100vh-15rem))]',
   'jingzhan-paipan':
     'lg:max-w-[min(29rem,calc(100vh-18rem))] xl:max-w-[min(31rem,calc(100vh-19rem))]',
+  'meihua-paipan': 'lg:max-w-[900px] xl:max-w-[960px]',
   'liuren-paipan': 'lg:max-w-[960px] xl:max-w-[1020px]',
   'iching-paipan': 'lg:max-w-[920px] xl:max-w-[980px]',
   'bazi-paipan': 'lg:max-w-[880px] xl:max-w-[940px]',
@@ -56,6 +60,8 @@ function resolveChart(entry: SkillContextEntry) {
       return <LiuyaoChart data={data} />;
     case 'jingzhan-paipan':
       return <JingzhanChart data={data} />;
+    case 'meihua-paipan':
+      return <MeihuaChart data={data} />;
     case 'qimen-paipan':
       return <QimenChart data={data} />;
     case 'liuren-paipan':

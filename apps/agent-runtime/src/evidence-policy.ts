@@ -6,7 +6,7 @@ export const CATEGORY_TO_OFFICIAL_SKILL: Record<string, string> = {
   紫微: 'ziwei-paipan',
   周易: 'jingzhan-paipan',
   大衍: 'jingzhan-paipan',
-  梅花: 'iching-paipan',
+  梅花: 'meihua-paipan',
   六爻: 'iching-paipan',
   经占: 'jingzhan-paipan',
   奇门: 'qimen-paipan',
@@ -19,6 +19,7 @@ const OFFICIAL_SKILL_TO_CATEGORY: Record<string, string> = {
   'ziwei-paipan': '紫微',
   'iching-paipan': '六爻',
   'jingzhan-paipan': '经占',
+  'meihua-paipan': '梅花',
   'qimen-paipan': '奇门',
   'liuren-paipan': '大六壬',
 };

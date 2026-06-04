@@ -2,6 +2,7 @@ import { runBaziPaipan } from './paipan-runners/bazi.js';
 import { runIchingPaipan } from './paipan-runners/iching.js';
 import { runJingzhanPaipan } from './paipan-runners/jingzhan.js';
 import { runLiurenPaipan } from './paipan-runners/liuren.js';
+import { runMeihuaPaipan } from './paipan-runners/meihua.js';
 import { runQimenPaipan } from './paipan-runners/qimen.js';
 import { runZiweiPaipan } from './paipan-runners/ziwei.js';
 
@@ -170,6 +171,120 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
       '用户询问周易、易经、占卜、起卦、大衍筮法、略筮法、卦辞、爻辞等经占排盘相关问题',
     runner: runJingzhanPaipan,
     parameters: ichingLikeParameters,
+  },
+  'meihua-paipan': {
+    displayName: '梅花易数排盘',
+    description:
+      '梅花易数排盘：按时间、数值或上下卦生成本卦、互卦、变卦、错卦、综卦与体用五行关系。',
+    trigger:
+      '用户询问梅花易数、梅花起卦、本互变、体用、错综卦等梅花易数相关问题',
+    runner: runMeihuaPaipan,
+    parameters: {
+      type: 'object',
+      properties: {
+        method: {
+          type: 'string',
+          description: '起卦方式',
+          enum: ['time', 'counts', 'trigrams'],
+          default: 'time',
+        },
+        datetime: {
+          type: 'string',
+          description:
+            'method=time 时可选：公历起卦时间，格式 "YYYY-MM-DD HH:mm"，默认当前时间',
+        },
+        countMethod: {
+          type: 'string',
+          description: 'method=counts 时可选：数值来源标签',
+          enum: ['number', 'word', 'sound', 'object', 'direction', 'external'],
+          default: 'number',
+        },
+        upper: {
+          type: 'integer',
+          description: 'method=counts 时必填：上卦取数',
+        },
+        lower: {
+          type: 'integer',
+          description: 'method=counts 时必填：下卦取数',
+        },
+        moving: {
+          type: 'integer',
+          description:
+            'method=counts 时可选：动爻取数；不传则使用 upper + lower',
+        },
+        upperTrigram: {
+          type: 'string',
+          description: 'method=trigrams 时必填：上卦',
+          enum: ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'],
+        },
+        lowerTrigram: {
+          type: 'string',
+          description: 'method=trigrams 时必填：下卦',
+          enum: ['乾', '兑', '离', '震', '巽', '坎', '艮', '坤'],
+        },
+        movingLine: {
+          type: 'integer',
+          description: 'method=trigrams 时必填：动爻 1-6',
+          minimum: 1,
+          maximum: 6,
+        },
+        label: {
+          type: 'string',
+          description: '可选备注，例如原始报数、外应或问题标签',
+        },
+      },
+      conditionalRequired: [
+        {
+          when: {
+            field: 'method',
+            equals: 'counts',
+          },
+          required: ['upper', 'lower'],
+          description: '数值起卦需要填写上卦取数和下卦取数',
+        },
+        {
+          when: {
+            field: 'method',
+            equals: 'trigrams',
+          },
+          required: ['upperTrigram', 'lowerTrigram', 'movingLine'],
+          description: '指定上下卦起盘需要填写上卦、下卦和动爻',
+        },
+      ],
+      examples: [
+        {
+          name: '当前时间起卦',
+          value: {
+            method: 'time',
+          },
+        },
+        {
+          name: '指定时间起卦',
+          value: {
+            method: 'time',
+            datetime: '2026-06-02 12:30',
+          },
+        },
+        {
+          name: '报数起卦',
+          value: {
+            method: 'counts',
+            upper: 9,
+            lower: 10,
+            moving: 10,
+          },
+        },
+        {
+          name: '指定上下卦',
+          value: {
+            method: 'trigrams',
+            upperTrigram: '乾',
+            lowerTrigram: '兑',
+            movingLine: 4,
+          },
+        },
+      ],
+    },
   },
   'qimen-paipan': {
     displayName: '奇门遁甲排盘',
