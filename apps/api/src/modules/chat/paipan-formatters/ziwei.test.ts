@@ -3,6 +3,33 @@ import { describe, expect, it } from 'vitest';
 import { formatZiweiPaipan } from './ziwei.js';
 
 describe('formatZiweiPaipan', () => {
+  it('prints adjective and decorative stars in palace lines', () => {
+    const output = formatZiweiPaipan({
+      palaces: [
+        {
+          name: '福德',
+          heavenlyStem: '戊',
+          earthlyBranch: '寅',
+          majorStars: [{ name: '紫微', brightness: '旺' }],
+          minorStars: [{ name: '文昌' }],
+          adjectiveStars: [{ name: '天厨' }, { name: '天月' }],
+          changsheng12: '长生',
+          boshi12: '飞廉',
+          jiangqian12: '指背',
+          suiqian12: '白虎',
+        },
+      ],
+    });
+
+    expect(output).toContain('【十二宫】');
+    expect(output).toContain('主星 紫微（旺）');
+    expect(output).toContain('辅星 文昌');
+    expect(output).toContain('杂曜 天厨、天月');
+    expect(output).toContain(
+      '十二神 长生十二神 长生、博士十二神 飞廉、将前十二神 指背、岁前十二神 白虎',
+    );
+  });
+
   it('prints yearly mutagens when the artifact includes them', () => {
     const output = formatZiweiPaipan({
       solarDate: '1990-05-15',

@@ -52,10 +52,15 @@ type FormattedPalace = Pick<
   | 'isOriginalPalace'
   | 'heavenlyStem'
   | 'earthlyBranch'
+  | 'changsheng12'
+  | 'boshi12'
+  | 'jiangqian12'
+  | 'suiqian12'
   | 'decadal'
 > & {
   majorStars: FormattedStar[];
   minorStars: FormattedStar[];
+  adjectiveStars: FormattedStar[];
 };
 type FormattedHoroscopeItem = {
   name: string;
@@ -100,6 +105,7 @@ type FormattedPalaceMutagenFlight = {
   relations: string[];
 };
 
+/** 紫微斗数排盘的结构化输出，供前端命盘和模型可见 formatter 共用。 */
 export interface ZiweiPaipanResult {
   solarDate: string;
   lunarDate: string;
@@ -376,8 +382,13 @@ function formatAstrolabe(astrolabe: ZiweiAstrolabe): ZiweiPaipanResult {
       isOriginalPalace: palace.isOriginalPalace,
       heavenlyStem: palace.heavenlyStem,
       earthlyBranch: palace.earthlyBranch,
+      changsheng12: palace.changsheng12,
+      boshi12: palace.boshi12,
+      jiangqian12: palace.jiangqian12,
+      suiqian12: palace.suiqian12,
       majorStars: palace.majorStars.map(formatStar),
       minorStars: palace.minorStars.map(formatStar),
+      adjectiveStars: palace.adjectiveStars.map(formatStar),
       decadal: palace.decadal,
     })),
     natalMutagens,

@@ -15,9 +15,21 @@ describe('ziwei-paipan mutagens', () => {
     const annual2026 = result.annualMutagens.find(
       (annual) => annual.year === 2026,
     );
+    const fudePalace = result.palaces.find((palace) => palace.name === '福德');
 
     expect(result.annualMutagenStartYear).toBe(1990);
     expect(result.annualMutagenEndYear).toBeGreaterThanOrEqual(2114);
+    expect(fudePalace?.adjectiveStars.map((star) => star.name)).toEqual([
+      '天厨',
+      '天月',
+      '蜚廉',
+    ]);
+    expect(fudePalace).toMatchObject({
+      changsheng12: '长生',
+      boshi12: '飞廉',
+      jiangqian12: '指背',
+      suiqian12: '白虎',
+    });
     expect(result.natalMutagens).toEqual([
       expect.objectContaining({
         mutagen: '化禄',

@@ -18,6 +18,11 @@ interface Palace {
   earthlyBranch: string;
   majorStars?: Star[];
   minorStars?: Star[];
+  adjectiveStars?: Star[];
+  changsheng12?: string;
+  boshi12?: string;
+  jiangqian12?: string;
+  suiqian12?: string;
   decadal?: {
     range?: [number, number] | number[];
     heavenlyStem?: string;
@@ -97,6 +102,31 @@ function StarCell({ star, isMajor }: { star: Star; isMajor: boolean }) {
   );
 }
 
+function SmallStarList({
+  stars,
+  className,
+}: {
+  stars: string[];
+  className?: string;
+}) {
+  if (stars.length === 0) return null;
+
+  return (
+    <div
+      className={cn(
+        'basis-full flex flex-wrap gap-x-1 gap-y-0.5 text-[8px] sm:text-[9px] leading-tight',
+        className,
+      )}
+    >
+      {stars.map((star, index) => (
+        <span key={`${star}-${index}`} className="whitespace-nowrap">
+          {star}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function PalaceCell({
   palace,
   className,
@@ -114,6 +144,13 @@ function PalaceCell({
 
   const majorStars = palace.majorStars ?? [];
   const minorStars = palace.minorStars ?? [];
+  const adjectiveStars = (palace.adjectiveStars ?? []).map((star) => star.name);
+  const decorativeStars = [
+    palace.changsheng12,
+    palace.boshi12,
+    palace.jiangqian12,
+    palace.suiqian12,
+  ].filter((star): star is string => Boolean(star));
 
   return (
     <div
@@ -133,6 +170,14 @@ function PalaceCell({
           {minorStars.map((star, i) => (
             <StarCell key={`m-${i}`} star={star} isMajor={false} />
           ))}
+          <SmallStarList
+            stars={adjectiveStars}
+            className={CHART.mutedSoft}
+          />
+          <SmallStarList
+            stars={decorativeStars}
+            className={CHART.lineMutedText}
+          />
         </div>
 
         {/* 底部：宫名、干支、大限 */}

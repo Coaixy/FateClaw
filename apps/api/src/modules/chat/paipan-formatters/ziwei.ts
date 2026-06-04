@@ -45,6 +45,25 @@ function formatDecadal(value: unknown): string | undefined {
   return joinList([ageRange, stemBranch ? `干支 ${stemBranch}` : undefined]);
 }
 
+function formatDecorativeStars(
+  palace: Record<string, unknown>,
+): string | undefined {
+  return joinList([
+    textField(palace, 'changsheng12')
+      ? `长生十二神 ${textField(palace, 'changsheng12')}`
+      : undefined,
+    textField(palace, 'boshi12')
+      ? `博士十二神 ${textField(palace, 'boshi12')}`
+      : undefined,
+    textField(palace, 'jiangqian12')
+      ? `将前十二神 ${textField(palace, 'jiangqian12')}`
+      : undefined,
+    textField(palace, 'suiqian12')
+      ? `岁前十二神 ${textField(palace, 'suiqian12')}`
+      : undefined,
+  ]);
+}
+
 function formatPalace(value: unknown): string | undefined {
   const palace = asRecord(value);
   if (!palace) return undefined;
@@ -58,18 +77,19 @@ function formatPalace(value: unknown): string | undefined {
     palace.isBodyPalace === true ? '身宫' : undefined,
     palace.isOriginalPalace === true ? '来因宫' : undefined,
   ]);
+  const majorStars = formatStars(palace, 'majorStars');
+  const minorStars = formatStars(palace, 'minorStars');
+  const adjectiveStars = formatStars(palace, 'adjectiveStars');
+  const decorativeStars = formatDecorativeStars(palace);
+  const decadal = formatDecadal(recordField(palace, 'decadal'));
   const title = `${name ?? '未命名宫'}${branch ? `（${branch}）` : ''}`;
   const details = joinList([
     markers || undefined,
-    formatStars(palace, 'majorStars')
-      ? `主星 ${formatStars(palace, 'majorStars')}`
-      : undefined,
-    formatStars(palace, 'minorStars')
-      ? `辅星 ${formatStars(palace, 'minorStars')}`
-      : undefined,
-    formatDecadal(recordField(palace, 'decadal'))
-      ? `大限 ${formatDecadal(recordField(palace, 'decadal'))}`
-      : undefined,
+    majorStars ? `主星 ${majorStars}` : undefined,
+    minorStars ? `辅星 ${minorStars}` : undefined,
+    adjectiveStars ? `杂曜 ${adjectiveStars}` : undefined,
+    decorativeStars ? `十二神 ${decorativeStars}` : undefined,
+    decadal ? `大限 ${decadal}` : undefined,
   ]);
   return details ? `${title}：${details}` : title;
 }
