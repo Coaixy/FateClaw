@@ -4,12 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockCommitDirectPaipanForOwnedUser,
+  mockGetUserById,
   mockListDirectPaipanCatalogForOwnedUser,
   mockPreviewDirectPaipanForOwnedUser,
 } = vi.hoisted(() => ({
   mockCommitDirectPaipanForOwnedUser: vi.fn(),
+  mockGetUserById: vi.fn(),
   mockListDirectPaipanCatalogForOwnedUser: vi.fn(),
   mockPreviewDirectPaipanForOwnedUser: vi.fn(),
+}));
+
+vi.mock('../../infrastructure/db.js', () => ({
+  getUserById: mockGetUserById,
 }));
 
 vi.mock('../../modules/chat/paipan-service.js', () => ({
@@ -28,6 +34,10 @@ describe('paipanRoutes', () => {
     mockListDirectPaipanCatalogForOwnedUser.mockResolvedValue({
       ok: true,
       data: [],
+    });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      auth_token_version: 2,
     });
     mockPreviewDirectPaipanForOwnedUser.mockResolvedValue({
       ok: true,
@@ -61,7 +71,7 @@ describe('paipanRoutes', () => {
   });
 
   it('passes authenticated user id to preview service', async () => {
-    const token = app.jwt.sign({ userId: 'user-1' });
+    const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 2 });
 
     const response = await app.inject({
       method: 'POST',

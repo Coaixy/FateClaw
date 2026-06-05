@@ -147,6 +147,13 @@ describe('runDatabaseMigrations', () => {
         '增加本地 agent-runtime 常驻进程上限与空闲回收配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0027_user_auth_token_version',
+        '增加用户认证 token 版本以支持改密后旧 JWT 失效',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -201,6 +208,9 @@ describe('runDatabaseMigrations', () => {
     expect(
       calls.some((call) => call.sql.includes('pi_session_health_enabled')),
     ).toBe(true);
+    expect(calls.some((call) => call.sql.includes('auth_token_version'))).toBe(
+      true,
+    );
     expect(
       calls.some((call) =>
         call.sql.includes(
@@ -246,6 +256,7 @@ describe('runDatabaseMigrations', () => {
       '0024_user_model_thinking_level',
       '0025_local_agent_runtime_limits',
       '0026_pi_session_health_runtime_config',
+      '0027_user_auth_token_version',
     ]);
 
     await runDatabaseMigrations(client as never);

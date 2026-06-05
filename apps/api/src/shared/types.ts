@@ -7,6 +7,7 @@ export interface User {
   phone: string;
   phone_verified: boolean;
   password_hash: string;
+  auth_token_version?: number; // 认证令牌版本，改密后递增以撤销旧 JWT
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
   purchased_coins: number; // 充值余额（不过期，可消费）
   bonus_coins: number; // 赠送余额（可过期，消费优先扣）

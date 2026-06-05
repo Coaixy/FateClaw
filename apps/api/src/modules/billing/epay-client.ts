@@ -50,6 +50,49 @@ export interface EpayQueryOrderResponse {
   payurl?: string;
 }
 
+function isLocalDevelopmentEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_ENV === 'test' ||
+    Boolean(process.env.VITEST)
+  );
+}
+
+function isLocalhostUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
+  );
+}
+
+/**
+ * 校验易支付网关地址是否适合传输商户密钥。
+ *
+ * @param urlPrefix 管理后台配置的易支付网关前缀。
+ * @returns 生产可用的 HTTPS 地址，或开发/测试环境的本机 HTTP 地址时返回 true。
+ * @remarks 查询接口会把 key 放进 query string，非 HTTPS 只能用于本机联调。
+ */
+export function isSafeEpayUrlPrefix(urlPrefix: string): boolean {
+  const trimmed = urlPrefix.trim();
+  if (!URL.canParse(trimmed)) return false;
+  const url = new URL(trimmed);
+  if (url.protocol === 'https:') return true;
+  return (
+    url.protocol === 'http:' &&
+    isLocalDevelopmentEnvironment() &&
+    isLocalhostUrl(url)
+  );
+}
+
+function assertSafeEpayUrlPrefix(urlPrefix: string): void {
+  if (!isSafeEpayUrlPrefix(urlPrefix)) {
+    throw new Error('易支付网关地址必须使用 HTTPS，本机开发测试除外');
+  }
+}
+
 function normalizeUrlPrefix(urlPrefix: string): string {
   return urlPrefix.endsWith('/') ? urlPrefix : `${urlPrefix}/`;
 }
@@ -138,6 +181,8 @@ export async function createEpayPayment(
   config: EpayConfig,
   input: EpayCreatePaymentInput,
 ): Promise<EpayCreatePaymentResponse> {
+  assertSafeEpayUrlPrefix(config.urlPrefix);
+
   const data: Record<string, string> = {
     pid: String(config.platformId),
     method: 'jump',
@@ -175,6 +220,8 @@ export async function queryEpayOrder(
   config: Pick<EpayConfig, 'urlPrefix' | 'platformId' | 'merchantKey'>,
   tradeId: string,
 ): Promise<EpayQueryOrderResponse> {
+  assertSafeEpayUrlPrefix(config.urlPrefix);
+
   const url = new URL(`${normalizeUrlPrefix(config.urlPrefix)}api.php`);
   url.searchParams.set('act', 'order');
   url.searchParams.set('pid', String(config.platformId));

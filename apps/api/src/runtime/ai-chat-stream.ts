@@ -1,9 +1,9 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 
-import { getChatSession } from '../infrastructure/db.js';
+import { getChatSession, getUserById } from '../infrastructure/db.js';
 import { logger } from '../infrastructure/logger.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type {
@@ -133,9 +133,66 @@ export type AiChatStreamEvent =
 
 const WEBSOCKET_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_CONTROL_PAYLOAD_BYTES = 125;
+const STREAM_TICKET_BYTES = 32;
+const STREAM_TICKET_TTL_SECONDS = 60;
+
+interface AiChatStreamTicketPayload {
+  userId: string;
+  sessionId: string;
+  expiresAt: string;
+}
 
 export function aiChatStreamChannel(sessionId: string): string {
   return `ipc:ai-chat:stream:${sessionId}`;
+}
+
+function aiChatStreamTicketKey(ticket: string): string {
+  const digest = createHash('sha256').update(ticket).digest('hex');
+  return `aichat:stream-ticket:${digest}`;
+}
+
+/**
+ * 获取 AI Chat WebSocket 连接票据的有效秒数。
+ *
+ * @returns 当前服务端签发 stream ticket 时使用的 TTL 秒数。
+ */
+export function getAiChatStreamTicketTtlSeconds(): number {
+  return STREAM_TICKET_TTL_SECONDS;
+}
+
+/**
+ * 为指定用户和会话签发短期单用途 WebSocket 连接票据。
+ *
+ * @param args.userId 当前登录用户 ID。
+ * @param args.sessionId 需要连接实时流的会话 ID。
+ * @returns 原始票据和过期时间；原始票据只返回给调用方，Redis 中仅以哈希键保存。
+ *
+ * @throws 当会话不存在或不属于当前用户时抛出错误。
+ */
+export async function issueAiChatStreamTicket(args: {
+  userId: string;
+  sessionId: string;
+}): Promise<{ ticket: string; expiresAt: string }> {
+  await verifySessionOwner(args.userId, args.sessionId);
+
+  const ticket = randomBytes(STREAM_TICKET_BYTES).toString('base64url');
+  const expiresAt = new Date(
+    Date.now() + STREAM_TICKET_TTL_SECONDS * 1000,
+  ).toISOString();
+  const payload: AiChatStreamTicketPayload = {
+    userId: args.userId,
+    sessionId: args.sessionId,
+    expiresAt,
+  };
+
+  await getRedis().set(
+    aiChatStreamTicketKey(ticket),
+    JSON.stringify(payload),
+    'EX',
+    STREAM_TICKET_TTL_SECONDS,
+  );
+
+  return { ticket, expiresAt };
 }
 
 export function buildAiChatStreamEvent(args: {
@@ -349,24 +406,69 @@ function rejectUpgrade(socket: Duplex, status: number, message: string): void {
 }
 
 async function authenticateUpgrade(
-  app: FastifyInstance,
-  request: IncomingMessage,
+  _app: FastifyInstance,
+  _request: IncomingMessage,
   url: URL,
+  sessionId: string,
 ): Promise<string> {
-  const authorization = request.headers.authorization;
-  const bearer =
-    typeof authorization === 'string' && authorization.startsWith('Bearer ')
-      ? authorization.slice('Bearer '.length).trim()
-      : '';
-  const token = bearer || url.searchParams.get('token') || '';
-  if (!token) {
-    throw new Error('missing_token');
+  const ticket = url.searchParams.get('ticket') || '';
+  if (!ticket) {
+    throw new Error('missing_ticket');
   }
-  const verified = await app.jwt.verify<{ userId: string }>(token);
-  if (!verified.userId) {
-    throw new Error('invalid_token');
+  const payload = await consumeAiChatStreamTicket(ticket, sessionId);
+  return payload.userId;
+}
+
+/**
+ * 消费 AI Chat WebSocket 连接票据，并校验其绑定的会话。
+ *
+ * @param ticket 浏览器通过 WebSocket query 传入的短期票据。
+ * @param sessionId WebSocket 路径中的目标会话 ID。
+ * @returns 票据内绑定的用户和会话信息。
+ *
+ * @throws 当票据不存在、已消费、过期、会话不匹配或归属变化时抛出错误。
+ */
+export async function consumeAiChatStreamTicket(
+  ticket: string,
+  sessionId: string,
+): Promise<AiChatStreamTicketPayload> {
+  const raw = await getRedis().eval(
+    `
+local value = redis.call("GET", KEYS[1])
+if not value then
+  return nil
+end
+redis.call("DEL", KEYS[1])
+return value
+`,
+    1,
+    aiChatStreamTicketKey(ticket),
+  );
+
+  if (typeof raw !== 'string') {
+    throw new Error('invalid_ticket');
   }
-  return verified.userId;
+
+  let payload: AiChatStreamTicketPayload;
+  try {
+    payload = JSON.parse(raw) as AiChatStreamTicketPayload;
+  } catch {
+    throw new Error('invalid_ticket');
+  }
+
+  const expiresAtMs = Date.parse(payload.expiresAt);
+  if (
+    payload.sessionId !== sessionId ||
+    !payload.userId ||
+    !Number.isFinite(expiresAtMs) ||
+    expiresAtMs <= Date.now()
+  ) {
+    throw new Error('invalid_ticket');
+  }
+
+  // ticket 绑定会话和用户；消费时再次查库，防止签发后会话归属发生变化。
+  await verifySessionOwner(payload.userId, sessionId);
+  return payload;
 }
 
 async function verifySessionOwner(
@@ -383,6 +485,38 @@ async function verifySessionOwner(
 }
 
 export function registerAiChatStreamWebSocket(app: FastifyInstance): void {
+  app.post<{
+    Params: { sessionId: string };
+  }>('/api/chat-sessions/s/:sessionId/stream-ticket', async (request, reply) => {
+    let userId: string;
+    try {
+      await request.jwtVerify();
+      // stream ticket 是长期登录态换取的一次性凭证，这里复用普通 API 的 token 版本校验。
+      if (typeof request.user.authTokenVersion !== 'number') {
+        throw new Error('invalid_token_version');
+      }
+      const user = await getUserById(request.user.userId);
+      if (
+        !user ||
+        (user.auth_token_version ?? 0) !== request.user.authTokenVersion
+      ) {
+        throw new Error('invalid_token_version');
+      }
+      userId = request.user.userId;
+    } catch {
+      return reply.code(401).send({ error: '登录状态已失效，请重新登录' });
+    }
+
+    try {
+      return await issueAiChatStreamTicket({
+        userId,
+        sessionId: request.params.sessionId,
+      });
+    } catch {
+      return reply.code(404).send({ error: '会话不存在或无权访问' });
+    }
+  });
+
   app.addHook('onReady', (done) => {
     const server = app.server as Server;
     server.on('upgrade', (request, socket, head) => {
@@ -413,8 +547,7 @@ async function handleUpgrade(
   }
 
   try {
-    const userId = await authenticateUpgrade(app, request, url);
-    await verifySessionOwner(userId, sessionId);
+    await authenticateUpgrade(app, request, url, sessionId);
   } catch (err) {
     logger.warn({ err, sessionId }, 'AI Chat WebSocket 鉴权失败');
     rejectUpgrade(socket, 401, 'Unauthorized');

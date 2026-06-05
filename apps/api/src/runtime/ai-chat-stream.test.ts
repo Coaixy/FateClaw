@@ -1,11 +1,46 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
+  mockGetChatSession: vi.fn(),
+  mockGetUserById: vi.fn(),
+  mockRedis: {
+    eval: vi.fn(),
+    set: vi.fn(),
+  },
+}));
+
+vi.mock('../infrastructure/db.js', () => ({
+  getChatSession: mockGetChatSession,
+  getUserById: mockGetUserById,
+}));
+
+vi.mock('../infrastructure/redis.js', () => ({
+  getRedis: () => mockRedis,
+}));
 
 import {
   aiChatStreamChannel,
+  consumeAiChatStreamTicket,
+  getAiChatStreamTicketTtlSeconds,
+  issueAiChatStreamTicket,
   streamEventFromMessagePayload,
   streamEventFromProgressPayload,
   streamEventFromResponsePayload,
 } from './ai-chat-stream.js';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockRedis.set.mockResolvedValue('OK');
+  mockRedis.eval.mockResolvedValue(null);
+  mockGetChatSession.mockResolvedValue({
+    id: 'session-1',
+    user_id: 'user-1',
+  });
+  mockGetUserById.mockResolvedValue({
+    id: 'user-1',
+    auth_token_version: 1,
+  });
+});
 
 describe('AI Chat stream event helpers', () => {
   it('uses a stable per-session Redis channel', () => {
@@ -98,5 +133,91 @@ describe('AI Chat stream event helpers', () => {
         sessionId: 'session-1',
       }),
     ).toBeNull();
+  });
+});
+
+describe('AI Chat stream tickets', () => {
+  it('issues short-lived single-session tickets for the session owner', async () => {
+    const result = await issueAiChatStreamTicket({
+      userId: 'user-1',
+      sessionId: 'session-1',
+    });
+
+    expect(result.ticket).toEqual(expect.any(String));
+    expect(Date.parse(result.expiresAt)).toBeGreaterThan(Date.now());
+    expect(mockGetChatSession).toHaveBeenCalledWith('session-1');
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      expect.stringMatching(/^aichat:stream-ticket:[a-f0-9]{64}$/),
+      expect.stringContaining('"sessionId":"session-1"'),
+      'EX',
+      getAiChatStreamTicketTtlSeconds(),
+    );
+    expect(mockRedis.set.mock.calls[0][0]).not.toContain(result.ticket);
+  });
+
+  it('rejects ticket issuing when the session does not belong to the user', async () => {
+    mockGetChatSession.mockResolvedValueOnce({
+      id: 'session-1',
+      user_id: 'other-user',
+    });
+
+    await expect(
+      issueAiChatStreamTicket({
+        userId: 'user-1',
+        sessionId: 'session-1',
+      }),
+    ).rejects.toThrow('forbidden');
+    expect(mockRedis.set).not.toHaveBeenCalled();
+  });
+
+  it('consumes a ticket once and validates its session owner', async () => {
+    mockRedis.eval.mockResolvedValueOnce(
+      JSON.stringify({
+        userId: 'user-1',
+        sessionId: 'session-1',
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      }),
+    );
+
+    await expect(
+      consumeAiChatStreamTicket('ticket-1', 'session-1'),
+    ).resolves.toMatchObject({
+      userId: 'user-1',
+      sessionId: 'session-1',
+    });
+    expect(mockRedis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("DEL"'),
+      1,
+      expect.stringMatching(/^aichat:stream-ticket:[a-f0-9]{64}$/),
+    );
+    expect(mockGetChatSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('rejects missing, expired, or wrong-session tickets', async () => {
+    await expect(
+      consumeAiChatStreamTicket('reused-ticket', 'session-1'),
+    ).rejects.toThrow('invalid_ticket');
+
+    mockRedis.eval.mockResolvedValueOnce(
+      JSON.stringify({
+        userId: 'user-1',
+        sessionId: 'session-2',
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      }),
+    );
+    await expect(
+      consumeAiChatStreamTicket('wrong-session-ticket', 'session-1'),
+    ).rejects.toThrow('invalid_ticket');
+
+    mockRedis.eval.mockResolvedValueOnce(
+      JSON.stringify({
+        userId: 'user-1',
+        sessionId: 'session-1',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+      }),
+    );
+    await expect(
+      consumeAiChatStreamTicket('expired-ticket', 'session-1'),
+    ).rejects.toThrow('invalid_ticket');
   });
 });

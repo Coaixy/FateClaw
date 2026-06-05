@@ -195,15 +195,39 @@ export interface MarketSkillListRow {
   share_token: string | null;
 }
 
+const MAX_MARKET_OFFSET = 10_000;
+
+function clampMarketPagination(opts: {
+  limit: number | undefined;
+  offset: number | undefined;
+  defaultLimit: number;
+  maxLimit: number;
+}): { limit: number; offset: number } {
+  const limit =
+    Number.isFinite(opts.limit) && opts.limit && opts.limit > 0
+      ? Math.min(Math.floor(opts.limit), opts.maxLimit)
+      : opts.defaultLimit;
+  const offset =
+    Number.isFinite(opts.offset) && opts.offset && opts.offset > 0
+      ? Math.min(Math.floor(opts.offset), MAX_MARKET_OFFSET)
+      : 0;
+  return { limit, offset };
+}
+
 export async function listMarketSkills(opts: {
   limit?: number;
   offset?: number;
 }): Promise<MarketSkillListRow[]> {
   const conditions = ['s.deleted_at IS NULL', "s.visibility = 'shared'"];
   const params: unknown[] = [];
-  const lim = Math.min(opts.limit ?? 50, 100);
-  const off = opts.offset ?? 0;
-  params.push(lim, off);
+  // 路由层已经拒绝异常分页值；仓库层再兜底，避免内部调用绕过校验导致慢查询。
+  const pagination = clampMarketPagination({
+    limit: opts.limit,
+    offset: opts.offset,
+    defaultLimit: 50,
+    maxLimit: 100,
+  });
+  params.push(pagination.limit, pagination.offset);
   const { rows } = await getDbPool().query(
     `SELECT s.id, s.skill_name, s.description,
             s.stat_subscriber_count,
@@ -236,9 +260,14 @@ export async function listMarketBundles(opts: {
   ];
   const params: unknown[] = [];
 
-  const lim = Math.min(opts.limit ?? 20, 50);
-  const off = opts.offset ?? 0;
-  params.push(lim, off);
+  // Bundle 市场同样只允许小窗口翻页，避免公开接口被大 offset 拖慢数据库。
+  const pagination = clampMarketPagination({
+    limit: opts.limit,
+    offset: opts.offset,
+    defaultLimit: 20,
+    maxLimit: 50,
+  });
+  params.push(pagination.limit, pagination.offset);
 
   const { rows } = await getDbPool().query(
     `SELECT
@@ -449,23 +478,13 @@ export async function getUserCustomSkillById(
 export async function updateUserCustomSkill(
   id: string,
   userId: string,
-  updates: Partial<
-    Pick<
-      UserCustomSkill,
-      | 'skill_name'
-      | 'dir_name'
-      | 'files'
-    >
-  >,
+  updates: Partial<Pick<UserCustomSkill, 'skill_name' | 'dir_name' | 'files'>>,
 ): Promise<UserCustomSkill | undefined> {
   const skillFields: string[] = [];
   const values: unknown[] = [];
   let paramIdx = 1;
 
-  const allowed = [
-    'skill_name',
-    'dir_name',
-  ] as const;
+  const allowed = ['skill_name', 'dir_name'] as const;
   for (const key of allowed) {
     if (updates[key] !== undefined) {
       skillFields.push(`${key} = $${paramIdx++}`);
@@ -722,7 +741,9 @@ export async function getSkillByShareToken(
     : undefined;
 }
 
-function rowToSkillAccessInvite(row: Record<string, unknown>): SkillAccessInvite {
+function rowToSkillAccessInvite(
+  row: Record<string, unknown>,
+): SkillAccessInvite {
   return row as unknown as SkillAccessInvite;
 }
 
@@ -738,7 +759,10 @@ export function resolveSkillAccessInviteStatus(
   now = new Date(),
 ): SkillAccessInviteStatus {
   if (invite.revoked_at) return 'revoked';
-  if (invite.expires_at && new Date(invite.expires_at).getTime() <= now.getTime()) {
+  if (
+    invite.expires_at &&
+    new Date(invite.expires_at).getTime() <= now.getTime()
+  ) {
     return 'expired';
   }
   if (invite.redeemed_count >= invite.max_redemptions) return 'used_up';
@@ -795,9 +819,7 @@ async function getSkillBundleWithSkillsByIdUsing(
       id: row.id as string,
       skill_name: row.skill_name as string,
       description: row.description as string,
-      content_length: getTextSkillBundleContentLength(
-        row.bundle_uri as string,
-      ),
+      content_length: getTextSkillBundleContentLength(row.bundle_uri as string),
     }));
 
   return { bundle, skills };
@@ -944,7 +966,10 @@ export async function getSkillAccessInvitePreviewByToken(
     return { invite, status, skill, bundle: null };
   }
 
-  const bundle = await getSkillBundleWithSkillsByIdUsing(pool, invite.target_id);
+  const bundle = await getSkillBundleWithSkillsByIdUsing(
+    pool,
+    invite.target_id,
+  );
   if (!bundle) return null;
   return { invite, status, skill: null, bundle };
 }

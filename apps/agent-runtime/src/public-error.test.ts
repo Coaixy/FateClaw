@@ -18,7 +18,7 @@ const customRuntime = {
 describe('mapContainerErrorToPublicError', () => {
   it('includes detailed custom model configuration for the owner', () => {
     const result = mapContainerErrorToPublicError(
-      '404 Not Found: model gpt-4o does not exist',
+      '404 Not Found: model gpt-4o does not exist with sk-user-custom-secret',
       { llmRuntime: customRuntime },
     );
 
@@ -30,9 +30,10 @@ describe('mapContainerErrorToPublicError', () => {
       'Base URL：https://models.example.com/v1',
     );
     expect(result.publicErrorText).toContain('认证方式：openai_api_key');
-    expect(result.publicErrorText).toContain('API Key：sk-user-custom-secret');
+    expect(result.publicErrorText).toContain('API Key：已配置（...cret）');
+    expect(result.publicErrorText).not.toContain('sk-user-custom-secret');
     expect(result.publicErrorText).toContain(
-      '供应商原始错误：404 Not Found: model gpt-4o does not exist',
+      '供应商原始错误：404 Not Found: model gpt-4o does not exist with [已脱敏]',
     );
     expect(result.publicErrorText).toContain('优先检查模型名是否存在');
   });
@@ -54,7 +55,7 @@ describe('mapContainerErrorToPublicError', () => {
 
     expect(result.publicReasonCode).toBe('internal_error');
     expect(result.publicErrorText).toBe(
-      '这次没有完成，原因：401 invalid api key: sk-official-secret',
+      '这次没有完成，原因：401 invalid api key: [已脱敏]',
     );
   });
 });

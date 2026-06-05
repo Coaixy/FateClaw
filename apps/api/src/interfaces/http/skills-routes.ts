@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import type {
   CreateSkillAccessInviteRequestDto,
   SkillAccessInviteTargetTypeDto,
@@ -60,9 +61,30 @@ import {
 } from '../../contracts-adapter/skills-contract.js';
 import type { TextSkillBundleFile } from '../../shared/types.js';
 
-function parseBundleFilesPayload(
-  files: unknown,
-): TextSkillBundleFile[] | null {
+const MAX_MARKET_OFFSET = 10_000;
+
+function createMarketPaginationSchema(defaultLimit: number, maxLimit: number) {
+  return z.object({
+    limit: z.coerce
+      .number()
+      .int('limit 必须是整数')
+      .min(1, 'limit 必须大于 0')
+      .optional()
+      .transform((value) => Math.min(value ?? defaultLimit, maxLimit)),
+    offset: z.coerce
+      .number()
+      .int('offset 必须是整数')
+      .min(0, 'offset 不能为负数')
+      .max(MAX_MARKET_OFFSET, 'offset 超出允许范围')
+      .optional()
+      .default(0),
+  });
+}
+
+const MarketSkillQuerySchema = createMarketPaginationSchema(50, 100);
+const MarketBundleQuerySchema = createMarketPaginationSchema(20, 50);
+
+function parseBundleFilesPayload(files: unknown): TextSkillBundleFile[] | null {
   if (!Array.isArray(files)) return null;
   const parsed: TextSkillBundleFile[] = [];
 
@@ -76,17 +98,13 @@ function parseBundleFilesPayload(
     const { path, content } = file as { path?: unknown; content?: unknown };
     if (typeof path !== 'string' || typeof content !== 'string') return null;
     if (content.length > MAX_SKILL_BUNDLE_FILE_LENGTH) {
-      throw new Error(
-        `单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`,
-      );
+      throw new Error(`单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`);
     }
     totalLength += content.length;
     parsed.push({ path, content });
   }
   if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
-    throw new Error(
-      `Bundle 总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`,
-    );
+    throw new Error(`Bundle 总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`);
   }
 
   return parsed;
@@ -199,10 +217,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       files?: unknown;
     };
 
-    if (
-      body.skill_name !== undefined &&
-      body.skill_name.trim().length > 50
-    ) {
+    if (body.skill_name !== undefined && body.skill_name.trim().length > 50) {
       return reply.code(400).send({ error: '技能名称不超过 50 字' });
     }
 
@@ -211,9 +226,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const parsed = parseBundleFilesPayload(body.files);
         if (!parsed) {
-          return reply
-            .code(400)
-            .send({ error: 'files 必须是文本文件数组' });
+          return reply.code(400).send({ error: 'files 必须是文本文件数组' });
         }
         files = parsed;
       } catch (err) {
@@ -631,29 +644,33 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/skills/market — 公开 Skill 市场
-  app.get('/market', async (request) => {
-    const { limit, offset } = request.query as {
-      limit?: string;
-      offset?: string;
-    };
+  app.get('/market', async (request, reply) => {
+    const parsed = MarketSkillQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '分页参数无效' });
+    }
     return toMarketSkillDtos(
       await listMarketSkills({
-        limit: parseInt(limit || '50', 10) || 50,
-        offset: parseInt(offset || '0', 10) || 0,
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
       }),
     );
   });
 
   // GET /api/skills/bundles/market — 公开 Bundle 市场
-  app.get('/bundles/market', async (request) => {
-    const { limit, offset } = request.query as {
-      limit?: string;
-      offset?: string;
-    };
+  app.get('/bundles/market', async (request, reply) => {
+    const parsed = MarketBundleQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '分页参数无效' });
+    }
     return toMarketBundleDtos(
       await listMarketBundles({
-        limit: parseInt(limit || '20', 10) || 20,
-        offset: parseInt(offset || '0', 10) || 0,
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
       }),
     );
   });

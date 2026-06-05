@@ -42,6 +42,11 @@ export type ChatSessionRequestOptions = {
   signal?: AbortSignal;
 };
 
+export type ChatSessionStreamTicket = {
+  ticket: string;
+  expiresAt: string;
+};
+
 export type ChatSessionStreamEvent =
   | { type: 'connected'; timestamp?: string; sessionId?: string }
   | {
@@ -133,9 +138,9 @@ export function parseToolContext(raw?: string | null): SkillContextEntry[] {
   }
 }
 
-export function buildChatSessionStreamUrl(sessionId: string, token: string) {
+export function buildChatSessionStreamUrl(sessionId: string, ticket: string) {
   const base = getApiBase();
-  const path = `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream?token=${encodeURIComponent(token)}`;
+  const path = `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream?ticket=${encodeURIComponent(ticket)}`;
   const sameOriginUrl = (targetPath: string) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${targetPath}`;
@@ -208,6 +213,11 @@ export const chatSessionsApi = {
   shared: (token: string) =>
     requestJson<SharedChatSession>(
       `/api/chat-sessions/shared/${encodeURIComponent(token)}`,
+    ),
+  createStreamTicket: (sessionId: string) =>
+    requestJson<ChatSessionStreamTicket>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream-ticket`,
+      { method: 'POST' },
     ),
   cancel: (sessionId: string) =>
     requestJson<SuccessResponse>(

@@ -73,7 +73,12 @@ vi.mock('./payment-callback-urls.js', () => ({
 
 import { adminRoutes } from './admin-routes.js';
 import {
+  adjustUserPurchasedBalance,
+  cleanupPiSessionFilesForAdmin,
+  deleteConversationLogsForAdminUser,
+  deleteUser,
   getAdminGlobalStats,
+  grantBonusBalance,
   getMessagesForAdmin,
   listAdminUsersWithStats,
   scanPiSessionOrphanFilesForAdmin,
@@ -152,7 +157,7 @@ describe('adminRoutes authentication throttling', () => {
     expect(response.json()).toEqual({
       success: true,
       role: 'user_manager',
-      scopes: ['users:*', 'messages:*'],
+      scopes: ['users:read', 'users:create', 'messages:read'],
       home_path: '/admin/users',
     });
   });
@@ -212,7 +217,17 @@ describe('adminRoutes authentication throttling', () => {
     }
   });
 
-  it('allows the user manager key to reach high-risk user operations', async () => {
+  it('blocks the user manager key from high-risk user operations', async () => {
+    const grantResponse = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/balance/grant',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        amount_coins: 1,
+      },
+    });
     const adjustResponse = await app.inject({
       method: 'POST',
       url: '/users/user-1/balance/adjust',
@@ -238,9 +253,42 @@ describe('adminRoutes authentication throttling', () => {
       },
     });
 
-    expect(adjustResponse.statusCode).toBe(404);
-    expect(clearLogsResponse.statusCode).toBe(404);
-    expect(deleteResponse.statusCode).toBe(404);
+    expect(grantResponse.statusCode).toBe(403);
+    expect(adjustResponse.statusCode).toBe(403);
+    expect(clearLogsResponse.statusCode).toBe(403);
+    expect(deleteResponse.statusCode).toBe(403);
+    expect(grantBonusBalance).not.toHaveBeenCalled();
+    expect(adjustUserPurchasedBalance).not.toHaveBeenCalled();
+    expect(deleteConversationLogsForAdminUser).not.toHaveBeenCalled();
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('blocks the user manager key from Pi session cleanup operations', async () => {
+    const cleanupResponse = await app.inject({
+      method: 'POST',
+      url: '/chat-sessions/pi-sessions/cleanup',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        mode: 'inactive',
+      },
+    });
+    const orphanScanResponse = await app.inject({
+      method: 'POST',
+      url: '/chat-sessions/pi-sessions/orphans/scan',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        action: 'audit',
+      },
+    });
+
+    expect(cleanupResponse.statusCode).toBe(403);
+    expect(orphanScanResponse.statusCode).toBe(403);
+    expect(cleanupPiSessionFilesForAdmin).not.toHaveBeenCalled();
+    expect(scanPiSessionOrphanFilesForAdmin).not.toHaveBeenCalled();
   });
 
   it('blocks the user manager key from owner-only endpoints', async () => {

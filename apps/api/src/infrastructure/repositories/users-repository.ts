@@ -8,6 +8,7 @@ const USER_SELECT_COLUMNS = `
   u.phone,
   u.phone_verified,
   u.password_hash,
+  u.auth_token_version,
   u.role,
   u.purchased_coins::float8 AS purchased_coins,
   u.bonus_coins::float8 AS bonus_coins,
@@ -87,10 +88,13 @@ export async function updateUserPasswordHash(
   userId: string,
   passwordHash: string,
 ): Promise<User> {
-  await getDbPool().query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-    passwordHash,
-    userId,
-  ]);
+  await getDbPool().query(
+    `UPDATE users
+     SET password_hash = $1,
+         auth_token_version = auth_token_version + 1
+     WHERE id = $2`,
+    [passwordHash, userId],
+  );
   const user = await getUserById(userId);
   if (!user) {
     throw new Error('用户不存在');

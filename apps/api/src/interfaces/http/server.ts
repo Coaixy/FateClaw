@@ -12,6 +12,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyCompress from '@fastify/compress';
 
 import { JWT_SECRET } from '../../infrastructure/config.js';
+import { getUserById } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
 import { resolveProjectRoot } from '../../infrastructure/project-root.js';
 import { accountRoutes } from './account-routes.js';
@@ -38,6 +39,14 @@ const FONT_ASSET_URL_PATTERN =
   /^\/_next\/static\/media\/[^?#]+\.(?:ttf|otf|woff2?|eot)$/i;
 const FONT_ASSET_FILE_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
+
+function unauthorizedError(): Error & { statusCode: number } {
+  const err = new Error('未登录或 token 已过期') as Error & {
+    statusCode: number;
+  };
+  err.statusCode = 401;
+  return err;
+}
 
 function firstHeaderValue(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -218,9 +227,25 @@ export async function createApiServer(): Promise<FastifyInstance> {
       try {
         await request.jwtVerify();
       } catch {
-        const err = new Error('未登录或 token 已过期');
-        (err as Error & { statusCode: number }).statusCode = 401;
-        throw err;
+        throw unauthorizedError();
+      }
+
+      const authUser = request.user as {
+        userId: string;
+        authTokenVersion?: unknown;
+      };
+      if (typeof authUser.authTokenVersion !== 'number') {
+        throw unauthorizedError();
+      }
+
+      const user = (await getUserById(authUser.userId)) as
+        | { auth_token_version?: number }
+        | undefined;
+      if (
+        !user ||
+        (user.auth_token_version ?? 0) !== authUser.authTokenVersion
+      ) {
+        throw unauthorizedError();
       }
     };
   });

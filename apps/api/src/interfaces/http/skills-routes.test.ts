@@ -246,4 +246,64 @@ describe('skillsRoutes access invites', () => {
       status: 'active',
     });
   });
+
+  it('clamps public skill market limit before calling the service', async () => {
+    serviceMocks.listMarketSkills.mockResolvedValueOnce([]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/market?limit=999&offset=10',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(serviceMocks.listMarketSkills).toHaveBeenCalledWith({
+      limit: 100,
+      offset: 10,
+    });
+  });
+
+  it('rejects invalid public skill market offsets', async () => {
+    const negativeResponse = await app.inject({
+      method: 'GET',
+      url: '/market?offset=-1',
+    });
+    const oversizedResponse = await app.inject({
+      method: 'GET',
+      url: '/market?offset=10001',
+    });
+
+    expect(negativeResponse.statusCode).toBe(400);
+    expect(oversizedResponse.statusCode).toBe(400);
+    expect(serviceMocks.listMarketSkills).not.toHaveBeenCalled();
+  });
+
+  it('clamps public bundle market limit before calling the service', async () => {
+    serviceMocks.listMarketBundles.mockResolvedValueOnce([]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/bundles/market?limit=999&offset=12',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(serviceMocks.listMarketBundles).toHaveBeenCalledWith({
+      limit: 50,
+      offset: 12,
+    });
+  });
+
+  it('rejects invalid public bundle market offsets', async () => {
+    const negativeResponse = await app.inject({
+      method: 'GET',
+      url: '/bundles/market?offset=-1',
+    });
+    const oversizedResponse = await app.inject({
+      method: 'GET',
+      url: '/bundles/market?offset=10001',
+    });
+
+    expect(negativeResponse.statusCode).toBe(400);
+    expect(oversizedResponse.statusCode).toBe(400);
+    expect(serviceMocks.listMarketBundles).not.toHaveBeenCalled();
+  });
 });

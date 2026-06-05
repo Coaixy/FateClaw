@@ -793,9 +793,6 @@ export function useChatMessages(options: {
     const sessionId = options.selectedSession;
     if (!sessionId || typeof window === 'undefined') return;
 
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
     let closedByEffect = false;
     let socket: WebSocket | null = null;
     let reconnectTimeoutId: number | null = null;
@@ -1036,7 +1033,24 @@ export function useChatMessages(options: {
       }
     };
 
-    const connectStream = () => {
+    const connectStream = async () => {
+      if (
+        closedByEffect ||
+        activeSessionRef.current !== sessionId ||
+        isStreamInterrupted(sessionId)
+      ) {
+        return;
+      }
+
+      let streamTicket: string;
+      try {
+        const result = await chatSessionsApi.createStreamTicket(sessionId);
+        streamTicket = result.ticket;
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
       if (
         closedByEffect ||
         activeSessionRef.current !== sessionId ||
@@ -1048,7 +1062,7 @@ export function useChatMessages(options: {
       let currentSocket: WebSocket;
       try {
         currentSocket = new WebSocket(
-          buildChatSessionStreamUrl(sessionId, token),
+          buildChatSessionStreamUrl(sessionId, streamTicket),
         );
       } catch {
         scheduleReconnect();
@@ -1084,7 +1098,7 @@ export function useChatMessages(options: {
       };
     };
 
-    connectStream();
+    void connectStream();
 
     return () => {
       closedByEffect = true;

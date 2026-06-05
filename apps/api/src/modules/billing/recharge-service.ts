@@ -31,6 +31,7 @@ import {
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import {
   createEpayPayment,
+  isSafeEpayUrlPrefix,
   queryEpayOrder,
   verifyEpayNotification,
   type EpayConfig,
@@ -91,6 +92,7 @@ function resolveEpayBaseConfig(
   if (
     !paymentConfig.enabled ||
     !paymentConfig.epay_url_prefix.trim() ||
+    !isSafeEpayUrlPrefix(paymentConfig.epay_url_prefix) ||
     !paymentConfig.epay_platform_id ||
     paymentConfig.epay_platform_id <= 0 ||
     !paymentConfig.epay_merchant_private_key.trim() ||
@@ -182,6 +184,13 @@ function normalizePayType(raw: unknown): RechargePayType | null {
   if (raw === 'alipay') return 'alipay';
   if (raw === 'wechat' || raw === 'wxpay') return 'wechat';
   return null;
+}
+
+function isSuccessfulEpayNotificationStatus(raw: unknown): boolean {
+  if (typeof raw === 'number') return raw === 1;
+  if (typeof raw !== 'string') return false;
+  // 易支付官方成功状态为 1；通知入账必须显式看到成功状态。
+  return raw.trim() === '1';
 }
 
 function generateRechargeTradeId(): string {
@@ -466,6 +475,10 @@ export async function handleRechargeNotification(
   const order = await getRechargeOrderByTradeId(tradeId);
   if (!order) {
     return fail(404, '充值单不存在');
+  }
+
+  if (!isSuccessfulEpayNotificationStatus(payload.status)) {
+    return ok(toRechargeOrderDto(order));
   }
 
   const amountCheck = validateProviderAmount(

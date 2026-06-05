@@ -298,9 +298,9 @@ describe('buildChatSessionStreamUrl', () => {
     });
   });
 
-  it('builds same-origin websocket URLs with token query auth', () => {
-    expect(buildChatSessionStreamUrl('s 1', 'token value')).toBe(
-      'wss://app.example.test/api/chat-sessions/s/s%201/stream?token=token%20value',
+  it('builds same-origin websocket URLs with stream ticket query auth', () => {
+    expect(buildChatSessionStreamUrl('s 1', 'ticket value')).toBe(
+      'wss://app.example.test/api/chat-sessions/s/s%201/stream?ticket=ticket%20value',
     );
   });
 });

@@ -17,6 +17,7 @@ const envConfig = readEnvFile([
   'MANAGER_KEY',
   'USER_MANAGER_KEY',
   'PUBLIC_BASE_URL',
+  'PAYMENT_CALLBACK_ALLOWED_HOSTS',
 ]);
 
 export const ASSISTANT_NAME =
@@ -91,12 +92,42 @@ function normalizePublicBaseUrl(raw: string): string {
   if (!trimmed) return '';
   if (!URL.canParse(trimmed)) return '';
   const url = new URL(trimmed);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
   return `${url.protocol}//${url.host}`;
 }
 
-// 公开访问地址用于生成第三方支付回调 URL。未配置时由请求 Host 自动推断。
+function normalizeAllowedHost(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const candidate = URL.canParse(trimmed) ? trimmed : `https://${trimmed}`;
+  if (!URL.canParse(candidate)) return '';
+  const url = new URL(candidate);
+  return url.pathname === '/' && !url.search && !url.hash
+    ? url.host.toLowerCase()
+    : '';
+}
+
+function normalizeAllowedHosts(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map(normalizeAllowedHost)
+        .filter((host) => host.length > 0),
+    ),
+  );
+}
+
+// 公开访问地址用于生成第三方支付回调 URL。未配置时只允许可信 Host 兜底。
 export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
   process.env.PUBLIC_BASE_URL || envConfig.PUBLIC_BASE_URL || '',
+);
+
+// 支付回调 Host 兜底白名单，避免 Host/X-Forwarded-Host 污染下单回调地址。
+export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
+  process.env.PAYMENT_CALLBACK_ALLOWED_HOSTS ||
+    envConfig.PAYMENT_CALLBACK_ALLOWED_HOSTS ||
+    '',
 );
 
 // 超过该时长仍未完成结算的预留请求会被自动释放占用，但保留账务记录，

@@ -1,6 +1,9 @@
 import type { FastifyRequest } from 'fastify';
 
-import { PUBLIC_BASE_URL } from '../../infrastructure/config.js';
+import {
+  PAYMENT_CALLBACK_ALLOWED_HOSTS,
+  PUBLIC_BASE_URL,
+} from '../../infrastructure/config.js';
 
 const RECHARGE_NOTIFY_PATH = '/api/billing/recharge/notify';
 const RECHARGE_RETURN_PATH = '/wallet';
@@ -24,10 +27,63 @@ function normalizeProtocol(value: string): 'http' | 'https' {
     : 'http';
 }
 
+function isLocalDevelopmentEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_ENV === 'test' ||
+    Boolean(process.env.VITEST)
+  );
+}
+
+function normalizeRequestHost(value: string): string {
+  if (!value || /[\s/@\\?#]/.test(value)) return '';
+  const origin = `https://${value}`;
+  if (!URL.canParse(origin)) return '';
+  const url = new URL(origin);
+  if (url.pathname !== '/' || url.search || url.hash) return '';
+  return url.host.toLowerCase();
+}
+
+function parseHost(host: string): URL | null {
+  if (!host || !URL.canParse(`https://${host}`)) return null;
+  return new URL(`https://${host}`);
+}
+
+function isLocalhostHost(host: string): boolean {
+  const url = parseHost(host);
+  if (!url) return false;
+  const hostname = url.hostname.toLowerCase();
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
+  );
+}
+
+function isAllowedCallbackHost(host: string): boolean {
+  const url = parseHost(host);
+  if (!url) return false;
+  return PAYMENT_CALLBACK_ALLOWED_HOSTS.some(
+    (allowedHost) =>
+      allowedHost === url.host.toLowerCase() ||
+      allowedHost === url.hostname.toLowerCase(),
+  );
+}
+
+function isTrustedCallbackHost(host: string): boolean {
+  if (isAllowedCallbackHost(host)) return true;
+  // 本机 Host 只作为开发/测试兜底；线上必须配置 PUBLIC_BASE_URL 或白名单。
+  return isLocalDevelopmentEnvironment() && isLocalhostHost(host);
+}
+
 function resolveRequestOrigin(request: FastifyRequest): string {
   const forwardedHost = firstHeaderValue(request.headers['x-forwarded-host']);
-  const host = forwardedHost || firstHeaderValue(request.headers.host);
+  const host = normalizeRequestHost(
+    forwardedHost || firstHeaderValue(request.headers.host),
+  );
   if (!host) return '';
+  if (!isTrustedCallbackHost(host)) return '';
 
   const forwardedProtocol = firstHeaderValue(
     request.headers['x-forwarded-proto'],
@@ -49,8 +105,8 @@ function buildAbsoluteUrl(origin: string, path: string): string {
 /**
  * 根据部署公开地址或当前请求域名生成充值回调地址。
  *
- * PUBLIC_BASE_URL 用于生产反代或多域名部署的显式覆盖；未配置时使用
- * 当前请求 Host，保证开发环境和同源部署不需要额外手填。
+ * PUBLIC_BASE_URL 用于生产反代或多域名部署的显式覆盖；未配置时只接受
+ * 白名单 Host 或开发本机 Host，避免攻击者通过 Host 头污染平台回调地址。
  */
 export function resolvePaymentCallbackUrls(
   request: FastifyRequest,

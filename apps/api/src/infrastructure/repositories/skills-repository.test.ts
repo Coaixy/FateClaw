@@ -222,16 +222,22 @@ describe('skills repository official skill settings', () => {
 
     expect(calls[0]?.sql).toContain("'self' as source");
     expect(calls[0]?.sql).toContain("'subscribed' as source");
-    expect(calls[0]?.sql).toContain("sub.source_kind IN ('invite', 'bundle_invite')");
+    expect(calls[0]?.sql).toContain(
+      "sub.source_kind IN ('invite', 'bundle_invite')",
+    );
     expect(calls[0]?.params).toEqual(['user-1']);
   });
 
   it('includes private invite subscriptions in subscribed skill reads', async () => {
-    const { calls } = createMockPool([{ ...skillRow, subscription_id: 'sub-1' }]);
+    const { calls } = createMockPool([
+      { ...skillRow, subscription_id: 'sub-1' },
+    ]);
 
     await getSubscribedSkills('user-1');
 
-    expect(calls[0]?.sql).toContain("sub.source_kind IN ('invite', 'bundle_invite')");
+    expect(calls[0]?.sql).toContain(
+      "sub.source_kind IN ('invite', 'bundle_invite')",
+    );
     expect(calls[0]?.params).toEqual(['user-1']);
   });
 
@@ -246,6 +252,16 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.params).toEqual([100, 30]);
   });
 
+  it('clamps unsafe marketplace skill offsets defensively', async () => {
+    const { calls } = createMockPool();
+
+    await listMarketSkills({ limit: 50, offset: -10 });
+    await listMarketSkills({ limit: 50, offset: 99_999 });
+
+    expect(calls[0]?.params).toEqual([50, 0]);
+    expect(calls[1]?.params).toEqual([50, 10_000]);
+  });
+
   it('builds marketplace bundle filters and caps list size', async () => {
     const { calls } = createMockPool();
 
@@ -255,6 +271,16 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.sql).not.toContain('s2.category');
     expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
     expect(calls[0]?.params).toEqual([50, 10]);
+  });
+
+  it('clamps unsafe marketplace bundle offsets defensively', async () => {
+    const { calls } = createMockPool();
+
+    await listMarketBundles({ limit: 20, offset: -10 });
+    await listMarketBundles({ limit: 20, offset: 99_999 });
+
+    expect(calls[0]?.params).toEqual([20, 0]);
+    expect(calls[1]?.params).toEqual([20, 10_000]);
   });
 
   it('creates custom skills by writing bundle content inside a transaction', async () => {
@@ -387,7 +413,9 @@ describe('skills repository official skill settings', () => {
     });
 
     expect(calls[1]?.sql).toContain('WHERE s.id = $1 AND s.deleted_at IS NULL');
-    expect(calls[1]?.sql).not.toContain("s.visibility IN ('link_shared', 'shared')");
+    expect(calls[1]?.sql).not.toContain(
+      "s.visibility IN ('link_shared', 'shared')",
+    );
   });
 
   it('redeems private skill invites into invite-sourced subscriptions', async () => {
@@ -413,7 +441,9 @@ describe('skills repository official skill settings', () => {
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[3]?.sql).toContain("source_kind = 'invite'");
-    expect(clientCalls[5]?.sql).toContain('redeemed_count = redeemed_count + 1');
+    expect(clientCalls[5]?.sql).toContain(
+      'redeemed_count = redeemed_count + 1',
+    );
     expect(clientCalls[6]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });

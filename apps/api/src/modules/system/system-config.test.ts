@@ -14,6 +14,7 @@ const {
   mockUpdateModelBillingConfig,
   mockUpdateRuntimeConfig,
   mockUpsertSystemSecret,
+  mockUpsertUserModelConfig,
 } = vi.hoisted(() => ({
   mockGetOfficialModelConfig: vi.fn(),
   mockGetModelBillingConfig: vi.fn(),
@@ -28,6 +29,7 @@ const {
   mockUpdateModelBillingConfig: vi.fn(),
   mockUpdateRuntimeConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
+  mockUpsertUserModelConfig: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
@@ -48,7 +50,7 @@ vi.mock('../../infrastructure/db.js', () => ({
   updateModelBillingConfig: mockUpdateModelBillingConfig,
   updateRuntimeConfig: mockUpdateRuntimeConfig,
   upsertSystemSecret: mockUpsertSystemSecret,
-  upsertUserModelConfig: vi.fn(),
+  upsertUserModelConfig: mockUpsertUserModelConfig,
   upsertUserModelSelection: vi.fn(),
 }));
 
@@ -58,8 +60,10 @@ import {
   getSystemConfigOverview,
   getUserModelSettingsOverview,
   listOfficialModelViews,
+  normalizeCustomModelBaseUrl,
   removeOfficialModel,
   resolveUserLlmRuntime,
+  saveUserCustomModelConfig,
   updateOfficialModel,
 } from './system-config.js';
 import type {
@@ -281,7 +285,7 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
-  it('returns the current user custom API key for single-form editing', async () => {
+  it('does not expose the current user custom API key', async () => {
     mockGetUserModelConfig.mockResolvedValue(custom());
     mockGetUserModelSelection.mockResolvedValue(null);
 
@@ -290,10 +294,28 @@ describe('resolveUserLlmRuntime', () => {
         custom: {
           user_id: 'user-1',
           has_secret: true,
-          api_key: 'db-secret',
+          api_key: null,
+          api_key_preview: '...cret',
         },
         official_models: [],
       },
+    );
+  });
+
+  it('rejects historical custom model private base URLs at runtime', async () => {
+    mockGetUserModelSelection.mockResolvedValue({
+      user_id: 'user-1',
+      source: 'custom',
+      official_model_id: null,
+      created_at: '2026-05-04T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserModelConfig.mockResolvedValue(
+      custom({ base_url: 'http://169.254.169.254/latest' }),
+    );
+
+    await expect(resolveUserLlmRuntime('user-1')).rejects.toThrow(
+      'Base URL 不能指向本机、内网、链路本地或云 metadata 地址',
     );
   });
 
@@ -388,6 +410,110 @@ describe('getPiSessionHealthPolicy', () => {
       inactiveCleanupDays: 1,
       orphanGraceDays: 3650,
     });
+  });
+});
+
+describe('normalizeCustomModelBaseUrl', () => {
+  it('allows public http and https URLs with paths', () => {
+    expect(normalizeCustomModelBaseUrl('https://models.example.com/v1')).toBe(
+      'https://models.example.com/v1',
+    );
+    expect(normalizeCustomModelBaseUrl('http://models.example.com/v1')).toBe(
+      'http://models.example.com/v1',
+    );
+  });
+
+  it('rejects localhost, private CIDR, link-local, metadata and internal hosts', () => {
+    const blocked = [
+      'http://localhost:11434/v1',
+      'http://127.0.0.1/v1',
+      'http://10.0.0.2/v1',
+      'http://172.16.0.1/v1',
+      'http://192.168.1.8/v1',
+      'http://169.254.169.254/latest',
+      'http://[::1]/v1',
+      'https://metadata.google.internal/computeMetadata/v1',
+      'https://ollama/v1',
+      'https://gateway.local/v1',
+    ];
+
+    for (const url of blocked) {
+      expect(() => normalizeCustomModelBaseUrl(url), url).toThrow(/Base URL/);
+    }
+  });
+
+  it('rejects unsupported schemes and credential-bearing URLs', () => {
+    expect(() => normalizeCustomModelBaseUrl('file:///etc/passwd')).toThrow(
+      'Base URL 仅支持 http 或 https',
+    );
+    expect(() =>
+      normalizeCustomModelBaseUrl('https://user:pass@models.example.com/v1'),
+    ).toThrow('Base URL 不允许包含用户名或密码');
+  });
+});
+
+describe('saveUserCustomModelConfig', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUserModelConfig.mockResolvedValue(undefined);
+    mockUpsertSystemSecret.mockResolvedValue(
+      secret('user-model:user-1:secret'),
+    );
+    mockUpsertUserModelConfig.mockResolvedValue(custom());
+  });
+
+  it('stores only validated public custom model base URLs', async () => {
+    await saveUserCustomModelConfig({
+      userId: 'user-1',
+      piApi: 'openai-completions',
+      baseUrl: 'https://models.example.com/v1',
+      modelName: 'gpt-4o',
+      secretValue: 'plain-secret',
+    });
+
+    expect(mockUpsertUserModelConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: 'https://models.example.com/v1',
+      }),
+    );
+  });
+
+  it('rejects private custom model base URLs before saving', async () => {
+    await expect(
+      saveUserCustomModelConfig({
+        userId: 'user-1',
+        piApi: 'openai-completions',
+        baseUrl: 'http://192.168.1.2/v1',
+        modelName: 'gpt-4o',
+        secretValue: 'plain-secret',
+      }),
+    ).rejects.toThrow(
+      'Base URL 不能指向本机、内网、链路本地或云 metadata 地址',
+    );
+
+    expect(mockUpsertUserModelConfig).not.toHaveBeenCalled();
+    expect(mockUpsertSystemSecret).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing secret when an empty API key is submitted', async () => {
+    mockGetUserModelConfig.mockResolvedValue(
+      custom({ api_key_secret_key: 'user-model:user-1:secret' }),
+    );
+
+    await saveUserCustomModelConfig({
+      userId: 'user-1',
+      piApi: 'openai-completions',
+      baseUrl: 'https://models.example.com/v1',
+      modelName: 'gpt-4o',
+      secretValue: '',
+    });
+
+    expect(mockUpsertSystemSecret).not.toHaveBeenCalled();
+    expect(mockUpsertUserModelConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKeySecretKey: 'user-model:user-1:secret',
+      }),
+    );
   });
 });
 

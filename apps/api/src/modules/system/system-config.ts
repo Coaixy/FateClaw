@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 
 import {
   createConfigAuditLog,
@@ -92,6 +93,8 @@ export interface UserModelSettingsOverview {
     | (UserModelConfig & {
         has_secret: boolean;
         api_key: string | null;
+        api_key_preview: string | null;
+        api_key_fingerprint: string | null;
         auth_mode: ProviderAuthMode;
         context_window_tokens: number | null;
       })
@@ -166,6 +169,134 @@ function withModelContextWindowTokens(
   return next;
 }
 
+function stripIpv6Brackets(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+}
+
+function ipv4ToNumber(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let value = 0;
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) return null;
+    const octet = Number(part);
+    if (!Number.isInteger(octet) || octet < 0 || octet > 255) return null;
+    value = (value << 8) + octet;
+  }
+  return value >>> 0;
+}
+
+function ipv4InCidr(ip: number, cidrBase: string, prefix: number): boolean {
+  const base = ipv4ToNumber(cidrBase);
+  if (base === null) return false;
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return (ip & mask) === (base & mask);
+}
+
+function isBlockedIpv4(hostname: string): boolean {
+  const ip = ipv4ToNumber(hostname);
+  if (ip === null) return false;
+  return [
+    ['0.0.0.0', 8],
+    ['10.0.0.0', 8],
+    ['100.64.0.0', 10],
+    ['127.0.0.0', 8],
+    ['169.254.0.0', 16],
+    ['172.16.0.0', 12],
+    ['192.0.0.0', 24],
+    ['192.168.0.0', 16],
+    ['198.18.0.0', 15],
+    ['224.0.0.0', 4],
+    ['240.0.0.0', 4],
+  ].some(([base, prefix]) => ipv4InCidr(ip, base as string, prefix as number));
+}
+
+function isBlockedIpv6(hostname: string): boolean {
+  const normalized = stripIpv6Brackets(hostname).toLowerCase();
+  if (normalized === '::' || normalized === '::1') return true;
+  if (normalized.startsWith('::ffff:')) return true;
+  const first = normalized.split(':').find((part) => part.length > 0);
+  if (!first) return false;
+  const firstHextet = Number.parseInt(first, 16);
+  if (!Number.isFinite(firstHextet)) return false;
+  return (
+    (firstHextet & 0xfe00) === 0xfc00 ||
+    (firstHextet & 0xffc0) === 0xfe80 ||
+    (firstHextet & 0xff00) === 0xff00 ||
+    normalized === '2001:db8' ||
+    normalized.startsWith('2001:db8:')
+  );
+}
+
+function isBlockedHostname(hostname: string): boolean {
+  const normalized = stripIpv6Brackets(hostname)
+    .toLowerCase()
+    .replace(/\.$/, '');
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) return isBlockedIpv4(normalized);
+  if (ipVersion === 6) return isBlockedIpv6(normalized);
+  if (
+    normalized === 'localhost' ||
+    normalized === 'ip6-localhost' ||
+    normalized === 'ip6-loopback' ||
+    normalized === 'metadata' ||
+    normalized === 'metadata.google.internal'
+  ) {
+    return true;
+  }
+  if (!normalized.includes('.')) return true;
+  return ['.localhost', '.local', '.internal', '.lan', '.home', '.corp'].some(
+    (suffix) => normalized.endsWith(suffix),
+  );
+}
+
+/**
+ * 校验并规范化用户自配模型 Base URL。
+ *
+ * @param value 用户提交或数据库中保存的 Base URL。
+ * @returns 可安全传给供应商 SDK 的 URL；空值表示使用协议默认地址。
+ * @throws 当 URL 协议、主机或凭据存在 SSRF 风险时抛出面向用户的错误。
+ */
+export function normalizeCustomModelBaseUrl(
+  value: string | null | undefined,
+): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('Base URL 格式不正确');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Base URL 仅支持 http 或 https');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('Base URL 不允许包含用户名或密码');
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error('Base URL 不允许包含查询参数或片段');
+  }
+  if (!parsed.hostname || isBlockedHostname(parsed.hostname)) {
+    throw new Error('Base URL 不能指向本机、内网、链路本地或云 metadata 地址');
+  }
+  return raw;
+}
+
+function apiKeyPreview(secret: string | null | undefined): string | null {
+  const normalized = secret?.trim();
+  if (!normalized) return null;
+  return normalized.length <= 4 ? '已配置' : `...${normalized.slice(-4)}`;
+}
+
+function apiKeyFingerprint(secret: string | null | undefined): string | null {
+  const normalized = secret?.trim();
+  if (!normalized) return null;
+  return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+}
+
 /** 从扩展配置里读取供用户理解模型用途的说明文案。 */
 function normalizeModelDescription(
   extraJson: Record<string, unknown> | null | undefined,
@@ -195,10 +326,7 @@ function withModelDescription(
 function normalizePolicyDays(value: unknown, fallback: number): number {
   const numeric =
     typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  return Math.min(
-    3650,
-    Math.max(1, Math.floor(numeric)),
-  );
+  return Math.min(3650, Math.max(1, Math.floor(numeric)));
 }
 
 async function resolveSecret(input: {
@@ -206,10 +334,7 @@ async function resolveSecret(input: {
   piApi: ModelProviderType;
   extraJson?: Record<string, unknown> | null;
 }): Promise<ResolvedProviderSecret> {
-  const authMode = normalizeAuthMode(
-    input.piApi,
-    input.extraJson?.auth_mode,
-  );
+  const authMode = normalizeAuthMode(input.piApi, input.extraJson?.auth_mode);
   if (!input.secretKey) {
     return { value: null, source: 'missing', authMode };
   }
@@ -265,8 +390,7 @@ function buildOfficialRuntime(
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
     thinkingLevel,
     inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
-    outputTokenPricePerMillionCoins:
-      model.output_token_price_per_million_coins,
+    outputTokenPricePerMillionCoins: model.output_token_price_per_million_coins,
   };
 }
 
@@ -380,7 +504,7 @@ async function resolveCustomRuntime(
     authMode: secret.authMode,
     secret: secret.value,
     secretSource: secret.source,
-    baseUrl: config.base_url,
+    baseUrl: normalizeCustomModelBaseUrl(config.base_url),
     model: modelName,
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
@@ -445,9 +569,7 @@ export async function getEffectiveAgentModel(userId: string): Promise<string> {
 
 export async function listOfficialModelViews(options?: {
   includeSecretValue?: boolean;
-}): Promise<
-  AdminOfficialModelView[]
-> {
+}): Promise<AdminOfficialModelView[]> {
   const models = await listOfficialModelConfigs();
   return Promise.all(
     models.map(async (model) => {
@@ -659,8 +781,7 @@ export async function updateRuntimeSettings(args: {
     local_agent_max_processes: updated.local_agent_max_processes,
     local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
     pi_session_health_enabled: updated.pi_session_health_enabled,
-    pi_session_inactive_cleanup_days:
-      updated.pi_session_inactive_cleanup_days,
+    pi_session_inactive_cleanup_days: updated.pi_session_inactive_cleanup_days,
     pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
     updated_at: updated.updated_at,
   };
@@ -684,9 +805,7 @@ export async function createOfficialModel(args: {
 }): Promise<OfficialModelConfig> {
   const actor = args.actor ?? 'admin';
   const id = `official-model-${randomUUID()}`;
-  const secretKey = args.secretValue
-    ? `official-model:${id}:secret`
-    : null;
+  const secretKey = args.secretValue ? `official-model:${id}:secret` : null;
   if (args.secretValue && secretKey) {
     await upsertSystemSecret({
       key: secretKey,
@@ -714,8 +833,7 @@ export async function createOfficialModel(args: {
     modelName: args.modelName,
     apiKeySecretKey: secretKey,
     inputTokenPricePerMillionCoins: args.inputTokenPricePerMillionCoins ?? 0,
-    outputTokenPricePerMillionCoins:
-      args.outputTokenPricePerMillionCoins ?? 0,
+    outputTokenPricePerMillionCoins: args.outputTokenPricePerMillionCoins ?? 0,
     extraJson,
   });
   await createConfigAuditLog({
@@ -845,7 +963,9 @@ export async function getUserModelSettingsOverview(
       ? {
           ...custom,
           has_secret: Boolean(customSecret?.value),
-          api_key: customSecret?.value ?? null,
+          api_key: null,
+          api_key_preview: apiKeyPreview(customSecret?.value),
+          api_key_fingerprint: apiKeyFingerprint(customSecret?.value),
           auth_mode: customSecret?.authMode ?? defaultAuthMode(custom.pi_api),
           context_window_tokens: normalizeModelContextWindowTokens(
             custom.extra_json,
@@ -875,9 +995,10 @@ export async function saveUserCustomModelConfig(args: {
   secretValue?: string;
 }): Promise<UserModelConfig> {
   const existing = await getUserModelConfig(args.userId);
+  const baseUrl = normalizeCustomModelBaseUrl(args.baseUrl);
   const secretKey = args.secretValue
-    ? existing?.api_key_secret_key ?? `user-model:${args.userId}:secret`
-    : existing?.api_key_secret_key ?? null;
+    ? (existing?.api_key_secret_key ?? `user-model:${args.userId}:secret`)
+    : (existing?.api_key_secret_key ?? null);
   if (args.secretValue && secretKey) {
     await upsertSystemSecret({
       key: secretKey,
@@ -888,7 +1009,7 @@ export async function saveUserCustomModelConfig(args: {
   return upsertUserModelConfig({
     userId: args.userId,
     piApi: args.piApi,
-    baseUrl: args.baseUrl ?? null,
+    baseUrl,
     modelName: args.modelName,
     apiKeySecretKey: secretKey,
     extraJson: {

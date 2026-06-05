@@ -63,7 +63,7 @@ import {
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 type AdminRole = 'owner' | 'user_manager';
-type AdminScope = 'admin:*' | 'users:*' | 'messages:*';
+type AdminScope = 'admin:*' | 'users:read' | 'users:create' | 'messages:read';
 type AdminHomePath = '/admin/overview' | '/admin/users';
 
 interface AdminPrincipal {
@@ -80,24 +80,18 @@ const OWNER_ADMIN_PRINCIPAL: AdminPrincipal = {
 
 const USER_MANAGER_ADMIN_PRINCIPAL: AdminPrincipal = {
   role: 'user_manager',
-  scopes: ['users:*', 'messages:*'],
+  scopes: ['users:read', 'users:create', 'messages:read'],
   home_path: '/admin/users',
 };
 
 const USER_MANAGER_ALLOWED_ROUTES = new Map<string, AdminScope>([
-  ['GET /users', 'users:*'],
-  ['POST /users', 'users:*'],
-  ['GET /users/:id', 'users:*'],
-  ['GET /users/:id/transactions', 'users:*'],
-  ['POST /users/:id/balance/grant', 'users:*'],
-  ['POST /users/:id/balance/adjust', 'users:*'],
-  ['GET /users/:id/balance/grants', 'users:*'],
-  ['DELETE /users/:id/logs', 'users:*'],
-  ['DELETE /users/:id', 'users:*'],
-  ['GET /messages', 'messages:*'],
-  ['GET /chat-sessions', 'messages:*'],
-  ['POST /chat-sessions/pi-sessions/cleanup', 'messages:*'],
-  ['POST /chat-sessions/pi-sessions/orphans/scan', 'messages:*'],
+  ['GET /users', 'users:read'],
+  ['POST /users', 'users:create'],
+  ['GET /users/:id', 'users:read'],
+  ['GET /users/:id/transactions', 'users:read'],
+  ['GET /users/:id/balance/grants', 'users:read'],
+  ['GET /messages', 'messages:read'],
+  ['GET /chat-sessions', 'messages:read'],
 ]);
 
 function normalizeAdminRouteUrl(
@@ -141,7 +135,10 @@ function getRequiredAdminScope(
   );
 }
 
-function hasAdminScope(principal: AdminPrincipal, required: AdminScope): boolean {
+function hasAdminScope(
+  principal: AdminPrincipal,
+  required: AdminScope,
+): boolean {
   return (
     principal.scopes.includes('admin:*') || principal.scopes.includes(required)
   );

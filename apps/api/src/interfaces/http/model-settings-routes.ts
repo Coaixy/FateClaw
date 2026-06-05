@@ -49,7 +49,7 @@ const CustomModelSchema = z.object({
     .nullable()
     .optional(),
   auth_mode: AuthModeSchema,
-  api_key: z.string().trim().min(1).max(2000).optional(),
+  api_key: z.string().trim().max(2000).optional(),
 });
 
 const SelectionSchema = z.object({
@@ -98,6 +98,8 @@ function toCustomModelDto(
     context_window_tokens: custom.context_window_tokens,
     has_secret: custom.has_secret,
     api_key: custom.api_key,
+    api_key_preview: custom.api_key_preview,
+    api_key_fingerprint: custom.api_key_fingerprint,
     auth_mode: custom.auth_mode,
     created_at: custom.created_at,
     updated_at: custom.updated_at,
@@ -138,17 +140,23 @@ export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: parsed.error.issues[0]?.message || '参数错误' });
     }
-    return saveUserCustomModelConfig({
-      userId: request.user.userId,
-      piApi: parsed.data.pi_api,
-      baseUrl: parsed.data.base_url?.trim() || null,
-      modelName: parsed.data.model_name,
-      contextWindowTokens: toConfiguredContextWindowTokens(
-        parsed.data.context_window_tokens,
-      ),
-      authMode: parsed.data.auth_mode,
-      secretValue: parsed.data.api_key,
-    });
+    try {
+      return await saveUserCustomModelConfig({
+        userId: request.user.userId,
+        piApi: parsed.data.pi_api,
+        baseUrl: parsed.data.base_url?.trim() || null,
+        modelName: parsed.data.model_name,
+        contextWindowTokens: toConfiguredContextWindowTokens(
+          parsed.data.context_window_tokens,
+        ),
+        authMode: parsed.data.auth_mode,
+        secretValue: parsed.data.api_key,
+      });
+    } catch (error) {
+      return reply
+        .code(400)
+        .send({ error: error instanceof Error ? error.message : '保存失败' });
+    }
   });
 
   app.put('/selection', async (request, reply) => {

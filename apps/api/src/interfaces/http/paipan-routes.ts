@@ -5,6 +5,7 @@ import {
   listDirectPaipanCatalogForOwnedUser,
   previewDirectPaipanForOwnedUser,
 } from '../../modules/chat/paipan-service.js';
+import { getUserById } from '../../infrastructure/db.js';
 
 function isJwtVerificationError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -27,6 +28,16 @@ async function resolveOptionalUserId(
   try {
     // 预览仍允许游客使用；只有请求携带有效 token 时，才把预览绑定到用户。
     await request.jwtVerify();
+    if (typeof request.user.authTokenVersion !== 'number') {
+      return undefined;
+    }
+    const user = await getUserById(request.user.userId);
+    if (
+      !user ||
+      (user.auth_token_version ?? 0) !== request.user.authTokenVersion
+    ) {
+      return undefined;
+    }
     return request.user.userId;
   } catch (error) {
     if (isJwtVerificationError(error)) {

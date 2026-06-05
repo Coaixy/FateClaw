@@ -27,11 +27,18 @@ describe('createPiProviderRuntime', () => {
     expect(pi.model.baseUrl).toBe('https://llm.example.test/v1');
     expect(pi.model.contextWindow).toBe(8192);
     expect(pi.model.maxTokens).toBe(1024);
-    await expect(
-      pi.authStorage.getApiKey(provider),
-    ).resolves.toBe('request-scoped-key');
-    expect(
-      pi.authStorage.getAuthStatus(provider).source,
-    ).toBe('runtime');
+    await expect(pi.authStorage.getApiKey(provider)).resolves.toBe(
+      'request-scoped-key',
+    );
+    expect(pi.authStorage.getAuthStatus(provider).source).toBe('runtime');
+  });
+
+  it('rejects custom model private base URLs as a runtime guard', () => {
+    expect(() =>
+      createPiProviderRuntime({
+        ...runtime,
+        baseUrl: 'http://127.0.0.1:11434/v1',
+      }),
+    ).toThrow('自配模型 Base URL 不能指向本机、内网或 metadata 地址');
   });
 });

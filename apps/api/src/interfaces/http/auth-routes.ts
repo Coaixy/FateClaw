@@ -26,6 +26,11 @@ import {
 import { toUserDto } from '../../contracts-adapter/auth-contract.js';
 import { generateCaptcha, verifyCaptcha } from './captcha.js';
 
+type AuthTokenUser = {
+  id: string;
+  auth_token_version?: number;
+};
+
 const PhoneSchema = z
   .string()
   .trim()
@@ -74,10 +79,18 @@ const ResetCurrentUserPasswordSchema = z.object({
   smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
 });
 
+function signAuthToken(app: FastifyInstance, user: AuthTokenUser): string {
+  const payload = {
+    userId: user.id,
+    authTokenVersion: user.auth_token_version ?? 0,
+  };
+  return app.jwt.sign(payload, { expiresIn: '30d' });
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/captcha —— 获取新的图形验证码
   app.get('/captcha', async (request): Promise<CaptchaChallengeDto> => {
-    return generateCaptcha(request.ip);
+    return await generateCaptcha(request.ip);
   });
 
   // POST /api/auth/send-sms-captcha
@@ -159,7 +172,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         body.smsCaptchaCode,
         request.ip,
       );
-      const token = app.jwt.sign({ userId: user.id }, { expiresIn: '30d' });
+      const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);
       const response: AuthResponseDto = { token, user: safe };
       return reply.code(201).send(response);
@@ -185,7 +198,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const user = await loginUser(body.phone, body.password);
-      const token = app.jwt.sign({ userId: user.id }, { expiresIn: '30d' });
+      const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);
       const response: AuthResponseDto = { token, user: safe };
       return response;
@@ -236,7 +249,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         smsCaptchaCode: body.smsCaptchaCode,
         clientIp: request.ip,
       });
-      const token = app.jwt.sign({ userId: user.id }, { expiresIn: '30d' });
+      const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);
       const response: AuthResponseDto = { token, user: safe };
       return response;
@@ -259,7 +272,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         smsCaptchaCode: body.smsCaptchaCode,
         clientIp: request.ip,
       });
-      const token = app.jwt.sign({ userId: user.id }, { expiresIn: '30d' });
+      const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);
       const response: AuthResponseDto = { token, user: safe };
       return response;

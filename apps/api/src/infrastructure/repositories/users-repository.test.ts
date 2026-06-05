@@ -90,8 +90,11 @@ describe('users repository', () => {
     expect(calls[0]?.params).toEqual(['user-1']);
   });
 
-  it('returns the updated user after changing password hash', async () => {
-    const nextUser = user({ password_hash: 'next-hash' });
+  it('returns the updated user after changing password hash and token version', async () => {
+    const nextUser = {
+      ...user({ password_hash: 'next-hash' }),
+      auth_token_version: 1,
+    };
     const { calls } = createMockPool([
       { match: 'FROM users u', rows: [nextUser] },
     ]);
@@ -101,7 +104,10 @@ describe('users repository', () => {
     ).resolves.toMatchObject({ password_hash: 'next-hash' });
 
     expect(calls[0]).toEqual({
-      sql: 'UPDATE users SET password_hash = $1 WHERE id = $2',
+      sql: `UPDATE users
+     SET password_hash = $1,
+         auth_token_version = auth_token_version + 1
+     WHERE id = $2`,
       params: ['next-hash', 'user-1'],
     });
   });

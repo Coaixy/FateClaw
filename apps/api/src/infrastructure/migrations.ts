@@ -291,6 +291,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           phone TEXT NOT NULL UNIQUE,
           phone_verified BOOLEAN NOT NULL DEFAULT true,
           password_hash TEXT NOT NULL,
+          auth_token_version INTEGER NOT NULL DEFAULT 0,
           role TEXT NOT NULL DEFAULT 'consumer',
           purchased_cents INTEGER NOT NULL DEFAULT 0,
           bonus_cents INTEGER NOT NULL DEFAULT 0,
@@ -3226,6 +3227,24 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         cleanupSql: `UPDATE runtime_config
                      SET pi_session_orphan_grace_days = LEAST(GREATEST(pi_session_orphan_grace_days, 1), 3650)
                      WHERE pi_session_orphan_grace_days < 1 OR pi_session_orphan_grace_days > 3650`,
+      });
+    },
+  },
+  {
+    id: '0027_user_auth_token_version',
+    description: '增加用户认证 token 版本以支持改密后旧 JWT 失效',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS auth_token_version INTEGER NOT NULL DEFAULT 0
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_users_auth_token_version_nonnegative',
+        tableName: 'users',
+        expression: 'auth_token_version >= 0',
+        cleanupSql: `UPDATE users
+                     SET auth_token_version = 0
+                     WHERE auth_token_version < 0`,
       });
     },
   },
