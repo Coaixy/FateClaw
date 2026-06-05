@@ -233,24 +233,33 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
   app.post<{
     Params: { sessionId: string };
     Body: ChatSessionSendRequestDto;
-  }>('/s/:sessionId/messages', async (request, reply) => {
-    await request.requireAuth();
-    const normalized = normalizeChatSessionMessageBody(request.body);
-    if (!normalized.ok) {
-      return reply
-        .code(normalized.statusCode)
-        .send({ error: normalized.error });
-    }
-    const result = await sendOwnedChatSessionMessage(
-      request.user.userId,
-      request.params.sessionId,
-      normalized.data,
-    );
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
+  }>(
+    '/s/:sessionId/messages',
+    {
+      config: {
+        // 这个接口会等待 AI 完整回复；断连时压缩流容易产生 Premature close 噪声。
+        compress: false,
+      },
+    },
+    async (request, reply) => {
+      await request.requireAuth();
+      const normalized = normalizeChatSessionMessageBody(request.body);
+      if (!normalized.ok) {
+        return reply
+          .code(normalized.statusCode)
+          .send({ error: normalized.error });
+      }
+      const result = await sendOwnedChatSessionMessage(
+        request.user.userId,
+        request.params.sessionId,
+        normalized.data,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
 
   // POST /api/chat-sessions/s/:sessionId/messages/cancel — 中断当前 AI Chat 输出
   app.post<{

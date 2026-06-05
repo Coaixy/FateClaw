@@ -98,6 +98,13 @@ function setNoStoreResponseHeaders(response: {
   response.setHeader('Expires', '0');
 }
 
+function isPrematureStreamCloseError(error: FastifyError): boolean {
+  const code = (error as FastifyError & { code?: unknown }).code;
+  return (
+    code === 'ERR_STREAM_PREMATURE_CLOSE' || error.message === 'Premature close'
+  );
+}
+
 function isTrustedStaticAssetOrigin(
   origin: string | null,
   requestOrigin: string | null,
@@ -236,6 +243,20 @@ export async function createApiServer(): Promise<FastifyInstance> {
 
   // Error handler — log + return JSON
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (isPrematureStreamCloseError(error)) {
+      // 客户端或代理提前断开时，压缩流会抛出 ERR_STREAM_PREMATURE_CLOSE。
+      // 这类错误不代表业务处理失败，按断连记录，避免污染 500 告警。
+      logger.warn(
+        {
+          code: (error as FastifyError & { code?: unknown }).code,
+          method: request.method,
+          url: request.url,
+        },
+        `客户端提前断开连接: ${request.method} ${request.url}`,
+      );
+      return reply.status(499).send({ error: '客户端已断开连接' });
+    }
+
     const normalizedError = normalizeHttpError(error);
     const status = normalizedError.statusCode;
     if (status >= 500) {

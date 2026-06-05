@@ -239,6 +239,9 @@ export const chatSessionsApi = {
       method: 'POST',
       body: JSON.stringify(body),
       exposeServerErrorMessage: true,
+      headers: {
+        'x-no-compression': '1',
+      },
     };
 
     if (requestOptions?.signal) {

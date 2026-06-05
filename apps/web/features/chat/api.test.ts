@@ -50,6 +50,9 @@ describe('chatSessionsApi.send', () => {
           pasted_board: pastedBoard,
         }),
         exposeServerErrorMessage: true,
+        headers: {
+          'x-no-compression': '1',
+        },
       },
     );
   });
@@ -68,6 +71,9 @@ describe('chatSessionsApi.send', () => {
           selected_board_message_id: 'board-1',
         }),
         exposeServerErrorMessage: true,
+        headers: {
+          'x-no-compression': '1',
+        },
       },
     );
   });
@@ -84,6 +90,9 @@ describe('chatSessionsApi.send', () => {
           input_kind: 'normal',
         }),
         exposeServerErrorMessage: true,
+        headers: {
+          'x-no-compression': '1',
+        },
       },
     );
   });
@@ -106,6 +115,9 @@ describe('chatSessionsApi.send', () => {
           content: '普通问题',
         }),
         exposeServerErrorMessage: true,
+        headers: {
+          'x-no-compression': '1',
+        },
         signal: controller.signal,
       },
     );
