@@ -318,6 +318,18 @@ const RuntimeConfigSchema = z.object({
     .int('并发上限必须是整数')
     .min(1, '并发上限必须至少为 1')
     .max(1000, '并发上限不能超过 1000'),
+  local_agent_max_processes: z
+    .number()
+    .int('常驻进程上限必须是整数')
+    .min(1, '常驻进程上限必须至少为 1')
+    .max(100, '常驻进程上限不能超过 100')
+    .optional(),
+  local_agent_idle_ttl_ms: z
+    .number()
+    .int('空闲回收时间必须是整数')
+    .min(30_000, '空闲回收时间不能少于 30 秒')
+    .max(86_400_000, '空闲回收时间不能超过 24 小时')
+    .optional(),
 });
 
 function toConfiguredContextWindowTokens(
@@ -522,6 +534,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     return updateRuntimeSettings({
       agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
+      localAgentMaxProcesses: parsed.data.local_agent_max_processes,
+      localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
       actor: 'manager',
     });
   });

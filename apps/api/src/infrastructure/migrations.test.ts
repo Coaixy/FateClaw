@@ -140,6 +140,13 @@ describe('runDatabaseMigrations', () => {
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
       params: ['0019_user_soul_edit_enabled', '增加用户级 Soul 对话编辑开关'],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0025_local_agent_runtime_limits',
+        '增加本地 agent-runtime 常驻进程上限与空闲回收配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -185,6 +192,17 @@ describe('runDatabaseMigrations', () => {
     expect(calls.some((call) => call.sql.includes('thinking_level'))).toBe(
       true,
     );
+    expect(
+      calls.some((call) => call.sql.includes('local_agent_max_processes')),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call.sql.includes('local_agent_idle_ttl_ms')),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_runtime_config_local_agent_max_processes_range'),
+      ),
+    ).toBe(true);
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
@@ -216,6 +234,7 @@ describe('runDatabaseMigrations', () => {
       '0022_drop_scheduled_tasks',
       '0023_skill_access_invites',
       '0024_user_model_thinking_level',
+      '0025_local_agent_runtime_limits',
     ]);
 
     await runDatabaseMigrations(client as never);

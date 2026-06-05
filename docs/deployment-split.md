@@ -54,6 +54,25 @@ npm run start
 npm install --omit=dev -f && npm run start
 ```
 
+2G 内存服务器建议在 1Panel / Docker 中额外设置：
+
+- FateClaw 后端容器内存限制：`768MiB`
+- FateClaw 后端容器 `pids_limit`：`128`
+- PostgreSQL、Redis 单独设置资源限制，避免和 agent-runtime 抢占同一上限
+- 首次部署带 runtime 回收能力的版本前，手动清理旧的 `agent-runtime` 孤儿进程
+
+生产 `.env` 建议只保留部署和进程启动类配置，例如：
+
+```bash
+NODE_ENV=production
+LOCAL_AGENT_ENTRY_MODE=dist
+LOG_PRETTY=0
+LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB=128
+```
+
+Agent 并发槽位、常驻 runtime 上限和空闲回收时间在管理后台写入数据库。
+2G 服务器可先使用 `1` 并发、`2` 个常驻 runtime、`120` 秒空闲回收。
+
 如需在服务器上重新构建源码包，可使用 `bash scripts/pack.sh api` 生成
 `fateclaw-backend-v<version>-source.tar.gz`，部署时执行
 `pnpm install && pnpm run build && pnpm run start`。

@@ -75,6 +75,7 @@ import {
   getAdminGlobalStats,
   getMessagesForAdmin,
   listAdminUsersWithStats,
+  updateRuntimeSettings,
 } from '../../modules/admin/admin-service.js';
 
 describe('adminRoutes authentication throttling', () => {
@@ -279,5 +280,81 @@ describe('adminRoutes authentication throttling', () => {
     expect(response.headers['retry-after']).toBe('3');
     expect(mockRateLimitRecordFail).not.toHaveBeenCalled();
     expect(mockRateLimitClear).not.toHaveBeenCalled();
+  });
+
+  it('updates runtime config with local agent process policy fields', async () => {
+    vi.mocked(updateRuntimeSettings).mockResolvedValueOnce({
+      agent_concurrency_limit: 1,
+      local_agent_max_processes: 2,
+      local_agent_idle_ttl_ms: 120_000,
+      updated_at: '2026-06-05T00:00:00.000Z',
+    });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        agent_concurrency_limit: 1,
+        local_agent_max_processes: 2,
+        local_agent_idle_ttl_ms: 120_000,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(updateRuntimeSettings).toHaveBeenCalledWith({
+      agentConcurrencyLimit: 1,
+      localAgentMaxProcesses: 2,
+      localAgentIdleTtlMs: 120_000,
+      actor: 'manager',
+    });
+  });
+
+  it('keeps runtime config update compatible with old clients', async () => {
+    vi.mocked(updateRuntimeSettings).mockResolvedValueOnce({
+      agent_concurrency_limit: 3,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      updated_at: '2026-06-05T00:00:00.000Z',
+    });
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        agent_concurrency_limit: 3,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(updateRuntimeSettings).toHaveBeenCalledWith({
+      agentConcurrencyLimit: 3,
+      localAgentMaxProcesses: undefined,
+      localAgentIdleTtlMs: undefined,
+      actor: 'manager',
+    });
+  });
+
+  it('rejects runtime config outside local agent policy ranges', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        agent_concurrency_limit: 1,
+        local_agent_max_processes: 2,
+        local_agent_idle_ttl_ms: 29_999,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(updateRuntimeSettings).not.toHaveBeenCalled();
   });
 });

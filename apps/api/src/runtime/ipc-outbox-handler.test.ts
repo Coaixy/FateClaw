@@ -4,6 +4,7 @@ const {
   mockGetAccount,
   mockGetUserByAccountId,
   mockIncrementDailyTokens,
+  mockReleaseLocalAgent,
   mockSendMessage,
   mockSettleBillingReservation,
   mockStoreConversationLog,
@@ -12,6 +13,7 @@ const {
   mockGetAccount: vi.fn(),
   mockGetUserByAccountId: vi.fn(),
   mockIncrementDailyTokens: vi.fn(),
+  mockReleaseLocalAgent: vi.fn(async () => undefined),
   mockSendMessage: vi.fn(async () => 'client-msg-1'),
   mockSettleBillingReservation: vi.fn(async () => 0),
   mockStoreConversationLog: vi.fn(async () => undefined),
@@ -58,6 +60,10 @@ vi.mock('../shared/conversation-log-metrics.js', () => ({
   recordConversationLogSuccess: vi.fn(),
 }));
 
+vi.mock('./local-runner.js', () => ({
+  releaseLocalAgent: mockReleaseLocalAgent,
+}));
+
 import type { PendingInboxRequest } from './ipc-payloads.js';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 
@@ -95,6 +101,7 @@ describe('processOutboxPayload', () => {
             inputTokenPricePerMillionCoins: 1000,
             outputTokenPricePerMillionCoins: 5000,
           },
+          localAgentLeaseAccountId: 'account-1',
           resolve,
           reject: vi.fn(),
           timeout,
@@ -146,5 +153,6 @@ describe('processOutboxPayload', () => {
         text: 'reply\n\n📥 15 · 📤 5 Finished',
       }),
     );
+    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('account-1');
   });
 });

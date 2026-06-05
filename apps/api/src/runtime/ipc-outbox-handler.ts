@@ -23,6 +23,7 @@ import {
   validateResponsePayload,
 } from './ipc-payloads.js';
 import { normalizeRuntimeTokenUsage } from './token-usage.js';
+import { releaseLocalAgent } from './local-runner.js';
 import { logger } from '../infrastructure/logger.js';
 import {
   recordConversationLogFailure,
@@ -57,6 +58,24 @@ function appendIntermediateMarker(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return trimmed;
   return `${trimmed}\n\n💭 Thinking...`;
+}
+
+async function releaseLocalAgentLeaseForPending(
+  pending: PendingInboxRequest | undefined,
+  context: { accountId?: string; requestId?: string; reason: string },
+): Promise<void> {
+  if (!pending?.localAgentLeaseAccountId) return;
+  await releaseLocalAgent(pending.localAgentLeaseAccountId).catch((err) => {
+    logger.warn(
+      {
+        accountId: context.accountId ?? pending.accountId,
+        requestId: context.requestId,
+        reason: context.reason,
+        err,
+      },
+      '释放本地 agent-runtime 租约失败',
+    );
+  });
 }
 
 async function deliverOutboundMessage(
@@ -294,6 +313,11 @@ async function processOutboxResponse(
           pending.sessionProcessingRequestId ?? payload.requestId,
         ).catch(() => {});
       }
+      await releaseLocalAgentLeaseForPending(pending, {
+        accountId,
+        requestId: payload.requestId,
+        reason: 'response',
+      });
       logger.info(
         {
           accountId,
@@ -325,6 +349,11 @@ async function processOutboxResponse(
           pending.sessionProcessingRequestId ?? payload.requestId,
         ).catch(() => {});
       }
+      await releaseLocalAgentLeaseForPending(pending, {
+        accountId: pending.accountId,
+        requestId: payload.requestId,
+        reason: 'response_error',
+      });
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error(
         { requestId: payload.requestId, err: error },

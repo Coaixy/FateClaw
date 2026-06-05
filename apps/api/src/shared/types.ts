@@ -310,6 +310,8 @@ export interface ModelBillingConfig {
 export interface RuntimeConfig {
   id: 'default' | string;
   agent_concurrency_limit: number;
+  local_agent_max_processes: number;
+  local_agent_idle_ttl_ms: number;
   updated_at: string;
 }
 

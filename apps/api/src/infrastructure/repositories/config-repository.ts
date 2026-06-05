@@ -238,8 +238,11 @@ export async function updateModelBillingConfig(input: {
  */
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   const { rows } = await getDbPool().query(
-    `INSERT INTO runtime_config (id)
-     VALUES ('default')
+    `INSERT INTO runtime_config (
+       id, agent_concurrency_limit, local_agent_max_processes,
+       local_agent_idle_ttl_ms
+     )
+     VALUES ('default', 10, 4, 600000)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
   );
@@ -247,21 +250,47 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 }
 
 /**
- * 更新全站 Agent 并发槽位上限。
+ * 更新全站 Agent 运行时策略。
  */
 export async function updateRuntimeConfig(input: {
-  agentConcurrencyLimit: number;
+  agentConcurrencyLimit?: number;
+  localAgentMaxProcesses?: number;
+  localAgentIdleTtlMs?: number;
 }): Promise<RuntimeConfig> {
+  const current = await getRuntimeConfig();
+  const agentConcurrencyLimit = Math.max(
+    1,
+    Math.floor(input.agentConcurrencyLimit ?? current.agent_concurrency_limit),
+  );
+  const localAgentMaxProcesses = Math.min(
+    100,
+    Math.max(
+      1,
+      Math.floor(
+        input.localAgentMaxProcesses ?? current.local_agent_max_processes,
+      ),
+    ),
+  );
+  const localAgentIdleTtlMs = Math.min(
+    86_400_000,
+    Math.max(
+      30_000,
+      Math.floor(input.localAgentIdleTtlMs ?? current.local_agent_idle_ttl_ms),
+    ),
+  );
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
-       id, agent_concurrency_limit, updated_at
+       id, agent_concurrency_limit, local_agent_max_processes,
+       local_agent_idle_ttl_ms, updated_at
      )
-     VALUES ('default', $1, NOW())
+     VALUES ('default', $1, $2, $3, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
+       local_agent_max_processes = EXCLUDED.local_agent_max_processes,
+       local_agent_idle_ttl_ms = EXCLUDED.local_agent_idle_ttl_ms,
        updated_at = NOW()
      RETURNING *`,
-    [Math.max(1, Math.floor(input.agentConcurrencyLimit))],
+    [agentConcurrencyLimit, localAgentMaxProcesses, localAgentIdleTtlMs],
   );
   return rows[0] as RuntimeConfig;
 }

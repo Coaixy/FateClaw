@@ -5,9 +5,12 @@ const {
   mockDel,
   mockEval,
   mockLindex,
+  mockLlen,
   mockLpush,
   mockLrem,
   mockLoggerInfo,
+  mockReleaseLocalAgent,
+  mockRetainLocalAgent,
   mockRpop,
   mockRpush,
   mockSettleBillingReservation,
@@ -17,9 +20,12 @@ const {
   mockDel: vi.fn(async () => 1),
   mockEval: vi.fn(async () => 1),
   mockLindex: vi.fn(),
+  mockLlen: vi.fn(async () => 0),
   mockLpush: vi.fn(async () => 1),
   mockLrem: vi.fn(async () => 1),
   mockLoggerInfo: vi.fn(),
+  mockReleaseLocalAgent: vi.fn(async () => undefined),
+  mockRetainLocalAgent: vi.fn((accountId: string) => accountId),
   mockRpop: vi.fn(),
   mockRpush: vi.fn(async () => 1),
   mockSettleBillingReservation: vi.fn(async () => 0),
@@ -38,6 +44,7 @@ vi.mock('../infrastructure/redis.js', () => ({
     del: mockDel,
     eval: mockEval,
     lindex: mockLindex,
+    llen: mockLlen,
     lpush: mockLpush,
     lrem: mockLrem,
     rpop: mockRpop,
@@ -63,6 +70,11 @@ vi.mock('./ipc-ai-chat-outbox-handler.js', () => ({
   processAiChatOutboxPayload: vi.fn(),
 }));
 
+vi.mock('./local-runner.js', () => ({
+  releaseLocalAgent: mockReleaseLocalAgent,
+  retainLocalAgent: mockRetainLocalAgent,
+}));
+
 vi.mock('../modules/billing/plans.js', () => ({
   reserveBillingForRequest: vi.fn(),
   settleBillingReservation: mockSettleBillingReservation,
@@ -81,8 +93,37 @@ vi.mock('../modules/system/system-config.js', () => ({
   resolveUserLlmRuntime: vi.fn(),
 }));
 
-import { cancelAiChatSessionRequest } from './ipc-worker.js';
+import {
+  _resetIpcWorkerForTests,
+  __getPendingAiChatRequestsForTests,
+  cancelAiChatSessionRequest,
+  submitAiChatInboxRequest,
+  submitInboxRequest,
+} from './ipc-worker.js';
 import type { PendingInboxRequest } from './ipc-payloads.js';
+import {
+  getMembershipOverview,
+  getUserByAccountId,
+} from '../infrastructure/db.js';
+
+const effectiveRuntime = {
+  source: 'official' as const,
+  billingMode: 'metered' as const,
+  modelConfigId: 'official-1',
+  providerKey: 'openai-main',
+  piApi: 'openai-completions' as const,
+  displayName: 'OpenAI Main',
+  authMode: 'openai_api_key' as const,
+  secret: 'secret',
+  secretSource: 'database' as const,
+  baseUrl: null,
+  model: 'gpt-4.1',
+  contextWindowTokens: 128_000,
+  maxOutputTokens: 10_240,
+  thinkingLevel: 'medium' as const,
+  inputTokenPricePerMillionCoins: 1000,
+  outputTokenPricePerMillionCoins: 5000,
+};
 
 function createPending(
   overrides: Partial<PendingInboxRequest> = {},
@@ -92,6 +133,7 @@ function createPending(
     ownerUserId: 'user-1',
     autoDeliver: false,
     sessionId: 'session-1',
+    localAgentLeaseAccountId: 'web:user-1',
     resolve: vi.fn(),
     reject: vi.fn(),
     timeout: setTimeout(() => undefined, 10_000),
@@ -137,6 +179,7 @@ describe('cancelAiChatSessionRequest', () => {
       promptTokens: 0,
       completionTokens: 0,
     });
+    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
     expect(pending.resolve).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: 'req-1',
@@ -160,10 +203,7 @@ describe('cancelAiChatSessionRequest', () => {
   it('can cancel by processing marker and account id after pending memory is gone', async () => {
     mockGet.mockResolvedValueOnce('req-restore');
 
-    const result = await cancelAiChatSessionRequest(
-      'session-1',
-      'web:user-1',
-    );
+    const result = await cancelAiChatSessionRequest('session-1', 'web:user-1');
 
     expect(result).toBe(true);
     expect(mockEval).toHaveBeenCalledWith(
@@ -219,7 +259,9 @@ describe('global agent concurrency gate', () => {
   });
 
   it('falls back to normal waiters when there is no member waiter', async () => {
-    mockLindex.mockResolvedValueOnce(null).mockResolvedValueOnce('normal-request');
+    mockLindex
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce('normal-request');
 
     const next = await (
       await import('./ipc-worker.js')
@@ -245,5 +287,59 @@ describe('global agent concurrency gate', () => {
 
     expect(result).toBe(true);
     expect(mockZrem).toHaveBeenCalledWith('agent:concurrency:active', 'slot-1');
+  });
+});
+
+describe('runtime lease lifecycle for submitted inbox requests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetIpcWorkerForTests();
+    mockEval.mockResolvedValue(1);
+    mockLpush.mockResolvedValue(1);
+    vi.mocked(getUserByAccountId).mockResolvedValue({ id: 'user-1' } as never);
+    vi.mocked(getMembershipOverview).mockResolvedValue({
+      active: true,
+    } as never);
+  });
+
+  it('retains AI Chat runtime and keeps the lease after waitForResponse=false accepted', async () => {
+    const result = await submitAiChatInboxRequest({
+      accountId: 'account-1',
+      userMessage: 'hi',
+      history: [],
+      sessionId: 'session-1',
+      llmRuntime: effectiveRuntime,
+      waitForResponse: false,
+    });
+
+    expect(result).toEqual({
+      requestId: expect.stringMatching(/^aichat-/),
+      status: 'success',
+      text: '',
+    });
+    expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
+    expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
+    expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
+      expect.objectContaining({
+        localAgentLeaseAccountId: 'account-1',
+      }),
+    );
+  });
+
+  it('releases normal inbox runtime lease when enqueue fails', async () => {
+    mockLpush.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(
+      submitInboxRequest({
+        accountId: 'account-1',
+        type: 'chat',
+        userMessage: 'hi',
+        history: [],
+        llmRuntime: effectiveRuntime,
+      }),
+    ).rejects.toThrow('redis down');
+
+    expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
+    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('account-1');
   });
 });

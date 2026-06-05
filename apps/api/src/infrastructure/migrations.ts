@@ -1742,8 +1742,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       await ensureCheckConstraint(client, {
         constraintName: 'chk_balance_grants_remaining_cents_range',
         tableName: 'balance_grants',
-        expression:
-          'remaining_cents >= 0 AND remaining_cents <= amount_cents',
+        expression: 'remaining_cents >= 0 AND remaining_cents <= amount_cents',
         cleanupSql: `UPDATE balance_grants
                      SET remaining_cents = LEAST(amount_cents, GREATEST(remaining_cents, 0))
                      WHERE remaining_cents < 0 OR remaining_cents > amount_cents`,
@@ -2258,9 +2257,7 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
           END
         $fn$;
       `);
-      await client.query(
-        `DROP INDEX IF EXISTS idx_balance_grants_user_active`,
-      );
+      await client.query(`DROP INDEX IF EXISTS idx_balance_grants_user_active`);
       await client.query(`
         ALTER TABLE billing_request_reservations
           DROP CONSTRAINT IF EXISTS chk_billing_request_reservations_reserved_cents_nonnegative,
@@ -2602,7 +2599,8 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
                      WHERE amount_coins <= 0`,
       });
       await ensureCheckConstraint(client, {
-        constraintName: 'chk_billing_request_reservations_reserved_coins_nonnegative',
+        constraintName:
+          'chk_billing_request_reservations_reserved_coins_nonnegative',
         tableName: 'billing_request_reservations',
         expression: 'reserved_coins >= 0',
         cleanupSql: `UPDATE billing_request_reservations
@@ -3172,6 +3170,33 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
         cleanupSql: `UPDATE user_model_selections
                      SET thinking_level = 'medium'
                      WHERE thinking_level NOT IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
+      });
+    },
+  },
+  {
+    id: '0025_local_agent_runtime_limits',
+    description: '增加本地 agent-runtime 常驻进程上限与空闲回收配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE runtime_config
+          ADD COLUMN IF NOT EXISTS local_agent_max_processes INTEGER NOT NULL DEFAULT 4,
+          ADD COLUMN IF NOT EXISTS local_agent_idle_ttl_ms INTEGER NOT NULL DEFAULT 600000
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_local_agent_max_processes_range',
+        tableName: 'runtime_config',
+        expression: 'local_agent_max_processes BETWEEN 1 AND 100',
+        cleanupSql: `UPDATE runtime_config
+                     SET local_agent_max_processes = LEAST(GREATEST(local_agent_max_processes, 1), 100)
+                     WHERE local_agent_max_processes < 1 OR local_agent_max_processes > 100`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_local_agent_idle_ttl_ms_range',
+        tableName: 'runtime_config',
+        expression: 'local_agent_idle_ttl_ms BETWEEN 30000 AND 86400000',
+        cleanupSql: `UPDATE runtime_config
+                     SET local_agent_idle_ttl_ms = LEAST(GREATEST(local_agent_idle_ttl_ms, 30000), 86400000)
+                     WHERE local_agent_idle_ttl_ms < 30000 OR local_agent_idle_ttl_ms > 86400000`,
       });
     },
   },

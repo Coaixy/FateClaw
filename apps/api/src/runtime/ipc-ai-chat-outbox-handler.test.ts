@@ -5,6 +5,7 @@ const {
   mockEval,
   mockIncrementDailyTokens,
   mockPublish,
+  mockReleaseLocalAgent,
   mockResolve,
   mockReject,
   mockSettleBillingReservationDetailed,
@@ -18,6 +19,7 @@ const {
   mockEval: vi.fn(async () => 1),
   mockIncrementDailyTokens: vi.fn(),
   mockPublish: vi.fn(async () => 1),
+  mockReleaseLocalAgent: vi.fn(async () => undefined),
   mockResolve: vi.fn(),
   mockReject: vi.fn(),
   mockSettleBillingReservationDetailed: vi.fn(async () => ({
@@ -72,6 +74,10 @@ vi.mock('../shared/conversation-log-metrics.js', () => ({
   recordConversationLogSuccess: vi.fn(),
 }));
 
+vi.mock('./local-runner.js', () => ({
+  releaseLocalAgent: mockReleaseLocalAgent,
+}));
+
 import type { PendingInboxRequest } from './ipc-payloads.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 
@@ -92,6 +98,7 @@ describe('processAiChatOutboxPayload', () => {
           sessionId: 'session-1',
           userMessageId: 'user-msg-1',
           startedAtMs: Date.now() - 1234,
+          localAgentLeaseAccountId: 'web:user-1',
           resolve: mockResolve,
           reject: mockReject,
           timeout,
@@ -173,6 +180,7 @@ describe('processAiChatOutboxPayload', () => {
       'req-1',
     );
     expect(mockDel).not.toHaveBeenCalled();
+    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
   });
 
   it('uses normalized total token usage for markers, stats, billing, stream, and logs', async () => {

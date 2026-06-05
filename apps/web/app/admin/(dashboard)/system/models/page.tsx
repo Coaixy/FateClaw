@@ -124,11 +124,9 @@ export default function AdminModelConfigPage() {
       <RuntimeConfigPanel
         runtime={overview.runtime}
         busy={busyId === 'runtime'}
-        onSave={async (limit) =>
+        onSave={async (config) =>
           withBusy('runtime', async () => {
-            await admin.updateRuntimeConfig({
-              agent_concurrency_limit: limit,
-            });
+            await admin.updateRuntimeConfig(config);
           })
         }
       />

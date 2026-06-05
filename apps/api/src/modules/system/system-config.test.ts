@@ -53,6 +53,7 @@ vi.mock('../../infrastructure/db.js', () => ({
 }));
 
 import {
+  getLocalAgentRuntimePolicy,
   getSystemConfigOverview,
   getUserModelSettingsOverview,
   listOfficialModelViews,
@@ -124,6 +125,8 @@ describe('resolveUserLlmRuntime', () => {
     mockGetRuntimeConfig.mockResolvedValue({
       id: 'default',
       agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });
@@ -278,14 +281,16 @@ describe('resolveUserLlmRuntime', () => {
     mockGetUserModelConfig.mockResolvedValue(custom());
     mockGetUserModelSelection.mockResolvedValue(null);
 
-    await expect(getUserModelSettingsOverview('user-1')).resolves.toMatchObject({
-      custom: {
-        user_id: 'user-1',
-        has_secret: true,
-        api_key: 'db-secret',
+    await expect(getUserModelSettingsOverview('user-1')).resolves.toMatchObject(
+      {
+        custom: {
+          user_id: 'user-1',
+          has_secret: true,
+          api_key: 'db-secret',
+        },
+        official_models: [],
       },
-      official_models: [],
-    });
+    );
   });
 
   it('falls back when the selected custom model is not usable', async () => {
@@ -331,7 +336,27 @@ describe('resolveUserLlmRuntime', () => {
       maxOutputTokens: 32768,
     });
   });
+});
 
+describe('getLocalAgentRuntimePolicy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('normalizes local agent process and idle ttl limits', async () => {
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 999,
+      local_agent_idle_ttl_ms: 1,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+
+    await expect(getLocalAgentRuntimePolicy()).resolves.toEqual({
+      maxProcesses: 100,
+      idleTtlMs: 30_000,
+    });
+  });
 });
 
 describe('listOfficialModelViews', () => {
@@ -342,6 +367,13 @@ describe('listOfficialModelViews', () => {
     mockGetModelBillingConfig.mockResolvedValue({
       id: 'default',
       custom_model_platform_price_per_million_coins: 2,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });
@@ -429,7 +461,8 @@ describe('removeOfficialModel', () => {
     );
     expect(mockDeleteOfficialModelConfig).toHaveBeenCalledWith('official-1');
     expect(
-      mockDeleteUserModelSelectionsByOfficialModelId.mock.invocationCallOrder[0],
+      mockDeleteUserModelSelectionsByOfficialModelId.mock
+        .invocationCallOrder[0],
     ).toBeLessThan(mockDeleteOfficialModelConfig.mock.invocationCallOrder[0]);
   });
 });

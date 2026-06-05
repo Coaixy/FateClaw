@@ -27,10 +27,7 @@ import {
   customModelPlatformFeeLabel,
   officialModelCoinsLabel,
 } from '../../../../components/settings/model-pricing';
-import {
-  setProviderDraftEnabled,
-  type ProviderDraft,
-} from './provider-draft';
+import { setProviderDraftEnabled, type ProviderDraft } from './provider-draft';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none';
@@ -149,7 +146,8 @@ export function ModelBillingPanel({
         </div>
       </div>
       <div className="mt-3 text-[11px] text-muted">
-        输入和输出 Token 都按 {officialModelCoinsLabel(price)} / 百万 Token 扣费。
+        输入和输出 Token 都按 {officialModelCoinsLabel(price)} / 百万 Token
+        扣费。
       </div>
     </div>
   );
@@ -165,36 +163,87 @@ export function RuntimeConfigPanel({
 }: {
   runtime: AdminRuntimeConfig;
   busy: boolean;
-  onSave: (limit: number) => Promise<void>;
+  onSave: (config: {
+    agent_concurrency_limit: number;
+    local_agent_max_processes: number;
+    local_agent_idle_ttl_ms: number;
+  }) => Promise<void>;
 }) {
   const [limit, setLimit] = useState(runtime.agent_concurrency_limit);
+  const [maxProcesses, setMaxProcesses] = useState(
+    runtime.local_agent_max_processes,
+  );
+  const [idleSeconds, setIdleSeconds] = useState(
+    Math.round(runtime.local_agent_idle_ttl_ms / 1000),
+  );
 
   useEffect(() => {
     setLimit(runtime.agent_concurrency_limit);
-  }, [runtime.agent_concurrency_limit]);
+    setMaxProcesses(runtime.local_agent_max_processes);
+    setIdleSeconds(Math.round(runtime.local_agent_idle_ttl_ms / 1000));
+  }, [
+    runtime.agent_concurrency_limit,
+    runtime.local_agent_idle_ttl_ms,
+    runtime.local_agent_max_processes,
+  ]);
+
+  const normalized = {
+    agent_concurrency_limit: Math.max(1, Math.floor(limit)),
+    local_agent_max_processes: Math.min(
+      100,
+      Math.max(1, Math.floor(maxProcesses)),
+    ),
+    local_agent_idle_ttl_ms: Math.min(
+      86_400_000,
+      Math.max(30_000, Math.floor(idleSeconds) * 1000),
+    ),
+  };
+  const dirty =
+    normalized.agent_concurrency_limit !== runtime.agent_concurrency_limit ||
+    normalized.local_agent_max_processes !==
+      runtime.local_agent_max_processes ||
+    normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms;
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-sm font-semibold">Agent 并发槽位</div>
+          <div className="text-sm font-semibold">Agent 运行时策略</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            控制全站同时进入 agent-runtime 的请求数量；会员等待队列会优先抢占释放出的槽位。
+            控制请求并发、常驻 agent-runtime 数量和空闲回收时间。
           </div>
           <div className="mt-2 text-[12px] text-muted">
-            当前：{runtime.agent_concurrency_limit} 个并发请求
+            当前：{runtime.agent_concurrency_limit} 并发 /{' '}
+            {runtime.local_agent_max_processes} runtime /{' '}
+            {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[220px_auto]">
+        <div className="grid gap-2 md:grid-cols-3 lg:min-w-[640px] lg:grid-cols-[1fr_1fr_1fr_auto]">
           <NumberField
             label="全站并发上限"
             value={limit}
             onChange={setLimit}
+            min={1}
+            max={1000}
+          />
+          <NumberField
+            label="最大常驻 runtime"
+            value={maxProcesses}
+            onChange={setMaxProcesses}
+            min={1}
+            max={100}
+          />
+          <NumberField
+            label="空闲回收秒数"
+            value={idleSeconds}
+            onChange={setIdleSeconds}
+            min={30}
+            max={86_400}
           />
           <button
             type="button"
-            onClick={() => void onSave(Math.max(1, Math.floor(limit)))}
-            disabled={busy || limit === runtime.agent_concurrency_limit}
+            onClick={() => void onSave(normalized)}
+            disabled={busy || !dirty}
             className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
           >
             {busy ? (
@@ -202,12 +251,12 @@ export function RuntimeConfigPanel({
             ) : (
               <Save size={14} />
             )}
-            保存并发
+            保存策略
           </button>
         </div>
       </div>
       <div className="mt-3 text-[11px] text-muted">
-        新请求和排队请求会读取最新设置；已进入运行中的请求不会被中断。
+        2G 服务器建议使用 1 并发 / 2 runtime / 120 秒回收。
       </div>
     </div>
   );
@@ -254,10 +303,7 @@ export function ProviderRow({
                   {provider.display_name}
                 </div>
                 <div className="mt-1 flex items-start gap-1.5 text-[11px] leading-4 text-muted xl:hidden">
-                  <MessageSquareText
-                    size={12}
-                    className="mt-0.5 shrink-0"
-                  />
+                  <MessageSquareText size={12} className="mt-0.5 shrink-0" />
                   <span className="line-clamp-2">{description}</span>
                 </div>
               </div>
@@ -266,10 +312,7 @@ export function ProviderRow({
               </div>
             </div>
             <div className="mt-3 hidden items-start gap-1.5 rounded-lg border border-hairline/70 bg-canvas/50 px-3 py-2 text-[11px] leading-5 text-muted xl:flex">
-              <MessageSquareText
-                size={12}
-                className="mt-0.5 shrink-0"
-              />
+              <MessageSquareText size={12} className="mt-0.5 shrink-0" />
               <span className="line-clamp-2">{description}</span>
             </div>
             <div className="mt-3">
@@ -277,15 +320,9 @@ export function ProviderRow({
             </div>
           </div>
           {expanded ? (
-            <ChevronUp
-              size={16}
-              className="mt-1 shrink-0 text-muted"
-            />
+            <ChevronUp size={16} className="mt-1 shrink-0 text-muted" />
           ) : (
-            <ChevronDown
-              size={16}
-              className="mt-1 shrink-0 text-muted"
-            />
+            <ChevronDown size={16} className="mt-1 shrink-0 text-muted" />
           )}
         </button>
 
@@ -369,9 +406,7 @@ function ProviderBasicFields({
         label="API Key"
         value={draft.api_key}
         placeholder="明文填写，保存后生效"
-        onChange={(value) =>
-          setDraft((prev) => ({ ...prev, api_key: value }))
-        }
+        onChange={(value) => setDraft((prev) => ({ ...prev, api_key: value }))}
       />
       <TextAreaField
         label="模型说明"
@@ -382,9 +417,7 @@ function ProviderBasicFields({
         }
       />
       <label className="space-y-1.5">
-        <div className="text-[12px] font-medium text-muted">
-          协议类型
-        </div>
+        <div className="text-[12px] font-medium text-muted">协议类型</div>
         <select
           value={draft.pi_api}
           onChange={(event) =>
@@ -467,7 +500,8 @@ export function ProviderCreatePanel({
       <div>
         <div className="text-sm font-semibold">新增官方模型</div>
         <div className="mt-1 text-[13px] text-muted">
-          协议类型决定请求格式，例如 Chat Completions、Responses、Anthropic Messages 或 Google Generative AI。
+          协议类型决定请求格式，例如 Chat Completions、Responses、Anthropic
+          Messages 或 Google Generative AI。
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -490,9 +524,7 @@ export function ProviderCreatePanel({
           onChange={onSecretChange}
         />
         <label className="space-y-1.5">
-          <div className="text-[12px] font-medium text-muted">
-            协议类型
-          </div>
+          <div className="text-[12px] font-medium text-muted">协议类型</div>
           <select
             value={draft.pi_api}
             onChange={(event) =>
@@ -596,9 +628,7 @@ function TextField({
 }) {
   return (
     <label className="space-y-1.5">
-      <div className="text-[12px] font-medium text-muted">
-        {label}
-      </div>
+      <div className="text-[12px] font-medium text-muted">{label}</div>
       <input
         type="text"
         value={value}
@@ -623,9 +653,7 @@ function TextAreaField({
 }) {
   return (
     <label className="space-y-1.5 sm:col-span-2">
-      <div className="text-[12px] font-medium text-muted">
-        {label}
-      </div>
+      <div className="text-[12px] font-medium text-muted">{label}</div>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -634,9 +662,7 @@ function TextAreaField({
         maxLength={240}
         className="min-h-24 w-full resize-y rounded-lg border border-hairline bg-canvas px-3 py-2.5 text-sm leading-6 focus:border-hairline focus:outline-none"
       />
-      <div className="text-[11px] text-muted">
-        {value.trim().length}/240
-      </div>
+      <div className="text-[11px] text-muted">{value.trim().length}/240</div>
     </label>
   );
 }
@@ -645,19 +671,25 @@ function NumberField({
   label,
   value,
   onChange,
+  min = 0,
+  max,
+  step = 1,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
 }) {
   return (
     <label className="space-y-1.5">
-      <div className="text-[12px] font-medium text-muted">
-        {label}
-      </div>
+      <div className="text-[12px] font-medium text-muted">{label}</div>
       <input
         type="number"
-        min={0}
+        min={min}
+        max={max}
+        step={step}
         value={value}
         onChange={(event) =>
           onChange(Number.parseInt(event.target.value || '0', 10) || 0)

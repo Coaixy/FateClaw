@@ -893,10 +893,11 @@ Authorization: Bearer <token>
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
 | `USER_MANAGER_KEY`          | -                       | 用户管理员密钥，仅开放用户和消息模块，提供时必须强随机 |
 | `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
+| `NODE_ENV`                  | -                       | 生产环境建议设为 `production`      |
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
+| `LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB` | -               | agent-runtime 子进程 V8 old space 上限，2G 服务器建议 `128` |
 | `AGENT_REQUEST_TIMEOUT`     | `1800000`               | 微信 Bot 请求等待 agent 返回的超时时间，单位毫秒 |
 | `AI_CHAT_REQUEST_TIMEOUT`   | `1800000`               | 站内 AI Chat 请求等待 agent 返回的超时时间，单位毫秒 |
-| `AGENT_CONCURRENCY_LIMIT`   | `10`                    | 全站 agent 并发槽位默认值；运行中优先使用管理后台运行时配置，会员等待队列优先唤醒 |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_log_payloads.trace_events` 保留天数 |
 | `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | 用户 Text Skill Bundle 根目录      |
@@ -905,3 +906,4 @@ Authorization: Bearer <token>
 | `LOG_PRETTY`                | 非生产默认开启          | `1` 强制开启 pino-pretty，`0` 强制关闭 |
 
 模型 Provider 当前主要通过管理后台 `/api/admin/system-config` 写入数据库；AI 请求消费宿主下发的 `llmRuntime`，不依赖进程级模型密钥。
+Agent 并发槽位、常驻 runtime 上限和空闲回收时间通过管理后台写入 `runtime_config`。

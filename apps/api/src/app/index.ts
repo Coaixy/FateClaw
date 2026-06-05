@@ -19,7 +19,10 @@ import {
   getEnabledAccounts,
   getMembershipOverview,
 } from '../infrastructure/db.js';
-import { stopAllLocalAgents } from '../runtime/local-runner.js';
+import {
+  cleanupStaleLocalAgentsOnStartup,
+  stopAllLocalAgents,
+} from '../runtime/local-runner.js';
 import { addAccountListener, startIpcWorker } from '../runtime/ipc-worker.js';
 import { startAccountPolling } from '../runtime/poller.js';
 import { connectRedis, disconnectRedis } from '../infrastructure/redis.js';
@@ -50,6 +53,7 @@ export async function activateAccount(
 
 export async function main(): Promise<void> {
   logger.info('FateClaw 启动中...');
+  cleanupStaleLocalAgentsOnStartup();
 
   await initDatabase();
   logger.info('数据库已初始化（PostgreSQL）');
@@ -71,7 +75,10 @@ export async function main(): Promise<void> {
     });
   }
   startIpcWorker(memberAccounts);
-  logger.info({ accounts: memberAccounts.length }, '会员微信 Claw listener 已启动');
+  logger.info(
+    { accounts: memberAccounts.length },
+    '会员微信 Claw listener 已启动',
+  );
 
   // 启动数据保留策略后台任务（定时清理过期 trace_events）
   startRetentionWorker();

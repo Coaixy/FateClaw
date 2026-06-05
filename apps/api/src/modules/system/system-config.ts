@@ -51,6 +51,8 @@ export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
 export const DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
 export const DEFAULT_AGENT_CONCURRENCY_LIMIT = 10;
+export const DEFAULT_LOCAL_AGENT_MAX_PROCESSES = 4;
+export const DEFAULT_LOCAL_AGENT_IDLE_TTL_MS = 600_000;
 export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'medium';
 
 export interface EffectiveLlmRuntimeConfig {
@@ -461,6 +463,8 @@ export async function getSystemConfigOverview(): Promise<{
   };
   runtime: {
     agent_concurrency_limit: number;
+    local_agent_max_processes: number;
+    local_agent_idle_ttl_ms: number;
     updated_at: string;
   };
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
@@ -481,6 +485,8 @@ export async function getSystemConfigOverview(): Promise<{
     },
     runtime: {
       agent_concurrency_limit: runtime.agent_concurrency_limit,
+      local_agent_max_processes: runtime.local_agent_max_processes,
+      local_agent_idle_ttl_ms: runtime.local_agent_idle_ttl_ms,
       updated_at: runtime.updated_at,
     },
     audit_logs: auditLogs,
@@ -533,19 +539,56 @@ export async function getAgentConcurrencyLimit(): Promise<number> {
 }
 
 /**
- * 更新全站 Agent 并发槽位上限。
+ * 读取本地 agent-runtime 常驻进程策略。
+ */
+export async function getLocalAgentRuntimePolicy(): Promise<{
+  maxProcesses: number;
+  idleTtlMs: number;
+}> {
+  const runtime = await getRuntimeConfig();
+  return {
+    maxProcesses: Math.min(
+      100,
+      Math.max(
+        1,
+        Math.floor(
+          runtime.local_agent_max_processes ||
+            DEFAULT_LOCAL_AGENT_MAX_PROCESSES,
+        ),
+      ),
+    ),
+    idleTtlMs: Math.min(
+      86_400_000,
+      Math.max(
+        30_000,
+        Math.floor(
+          runtime.local_agent_idle_ttl_ms || DEFAULT_LOCAL_AGENT_IDLE_TTL_MS,
+        ),
+      ),
+    ),
+  };
+}
+
+/**
+ * 更新全站 Agent 运行时策略。
  */
 export async function updateRuntimeSettings(args: {
   agentConcurrencyLimit: number;
+  localAgentMaxProcesses?: number;
+  localAgentIdleTtlMs?: number;
   actor?: string;
 }): Promise<{
   agent_concurrency_limit: number;
+  local_agent_max_processes: number;
+  local_agent_idle_ttl_ms: number;
   updated_at: string;
 }> {
   const actor = args.actor ?? 'admin';
   const before = await getRuntimeConfig();
   const updated = await updateRuntimeConfig({
     agentConcurrencyLimit: args.agentConcurrencyLimit,
+    localAgentMaxProcesses: args.localAgentMaxProcesses,
+    localAgentIdleTtlMs: args.localAgentIdleTtlMs,
   });
   await createConfigAuditLog({
     id: `cfg-audit-${randomUUID()}`,
@@ -558,6 +601,8 @@ export async function updateRuntimeSettings(args: {
   });
   return {
     agent_concurrency_limit: updated.agent_concurrency_limit,
+    local_agent_max_processes: updated.local_agent_max_processes,
+    local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
     updated_at: updated.updated_at,
   };
 }

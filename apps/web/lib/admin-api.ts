@@ -438,6 +438,8 @@ export interface AdminModelBillingConfig {
 
 export interface AdminRuntimeConfig {
   agent_concurrency_limit: number;
+  local_agent_max_processes: number;
+  local_agent_idle_ttl_ms: number;
   updated_at: string;
 }
 
@@ -516,10 +518,7 @@ export const admin = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateAboutLedgerEntry: (
-    id: string,
-    data: AdminAboutLedgerEntryDraft,
-  ) =>
+  updateAboutLedgerEntry: (id: string, data: AdminAboutLedgerEntryDraft) =>
     adminRequest<AdminAboutLedgerEntry>(
       `/api/admin/about-ledger/${encodeURIComponent(id)}`,
       {
@@ -542,7 +541,11 @@ export const admin = {
         body: JSON.stringify(data),
       },
     ),
-  updateRuntimeConfig: (data: { agent_concurrency_limit: number }) =>
+  updateRuntimeConfig: (data: {
+    agent_concurrency_limit: number;
+    local_agent_max_processes?: number;
+    local_agent_idle_ttl_ms?: number;
+  }) =>
     adminRequest<AdminRuntimeConfig>('/api/admin/system-config/runtime', {
       method: 'PUT',
       body: JSON.stringify(data),

@@ -48,6 +48,7 @@ import {
   resolveUserLlmRuntime,
   type EffectiveLlmRuntimeConfig,
 } from '../modules/system/system-config.js';
+import { releaseLocalAgent, retainLocalAgent } from './local-runner.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import type { User } from '../shared/types.js';
@@ -99,16 +100,23 @@ const pendingInboxRequests = new Map<string, PendingInboxRequest>();
 /** AI Chat 专属的 pending 请求 Map（完全隔离） */
 const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<string, { running: boolean; redis: Redis }>();
-let cachedGlobalAgentConcurrencyLimit:
-  | { value: number; expiresAtMs: number }
-  | null = null;
+let cachedGlobalAgentConcurrencyLimit: {
+  value: number;
+  expiresAtMs: number;
+} | null = null;
 
-async function resolveInboxPriority(userId: string): Promise<'member' | 'normal'> {
+async function resolveInboxPriority(
+  userId: string,
+): Promise<'member' | 'normal'> {
   const membership = await getMembershipOverview(userId);
   return membership.active ? 'member' : 'normal';
 }
 
-async function enqueueInboxPayload(accountId: string, priority: 'member' | 'normal', payload: string) {
+async function enqueueInboxPayload(
+  accountId: string,
+  priority: 'member' | 'normal',
+  payload: string,
+) {
   const key =
     priority === 'member'
       ? `ipc:${accountId}:inbox:member`
@@ -131,10 +139,7 @@ async function resolveGlobalAgentConcurrencyLimit(): Promise<number> {
     };
     return value;
   } catch (err) {
-    logger.warn(
-      { err },
-      '读取后台 agent 并发上限失败，使用环境变量默认值',
-    );
+    logger.warn({ err }, '读取后台 agent 并发上限失败，使用环境变量默认值');
     return DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT;
   }
 }
@@ -252,9 +257,11 @@ async function acquireGlobalAgentSlot(input: {
       await delay(GLOBAL_AGENT_GATE_POLL_MS);
     }
   } catch (err) {
-    await getRedis().lrem(queue, 0, input.requestId).catch(() => {
-      // 等待队列清理失败不应覆盖原始入队/抢占错误。
-    });
+    await getRedis()
+      .lrem(queue, 0, input.requestId)
+      .catch(() => {
+        // 等待队列清理失败不应覆盖原始入队/抢占错误。
+      });
     throw err;
   }
 }
@@ -262,6 +269,24 @@ async function acquireGlobalAgentSlot(input: {
 export async function releaseGlobalAgentSlot(slotId?: string): Promise<void> {
   if (!slotId) return;
   await getRedis().zrem(GLOBAL_AGENT_CONCURRENCY_KEY, slotId);
+}
+
+async function releaseLocalAgentLeaseForPending(
+  pending: PendingInboxRequest | undefined,
+  context: { accountId?: string; requestId?: string; reason: string },
+): Promise<void> {
+  if (!pending?.localAgentLeaseAccountId) return;
+  await releaseLocalAgent(pending.localAgentLeaseAccountId).catch((err) => {
+    logger.warn(
+      {
+        accountId: context.accountId ?? pending.accountId,
+        requestId: context.requestId,
+        reason: context.reason,
+        err,
+      },
+      '释放本地 agent-runtime 租约失败',
+    );
+  });
 }
 
 function buildAiChatCancelPayload(input: {
@@ -317,6 +342,11 @@ export async function cancelAiChatSessionRequest(
   }
   await releaseSessionProcessingLock(sessionId, requestId);
   await releaseGlobalAgentSlot(pending?.concurrencySlotId);
+  await releaseLocalAgentLeaseForPending(pending, {
+    accountId: runtimeAccountId,
+    requestId,
+    reason: 'cancel',
+  });
   if (pending) {
     await settleBillingReservation({
       requestId,
@@ -398,12 +428,18 @@ async function listenForAccount(accountId: string): Promise<void> {
               pendingAiChatRequests,
             );
           } else if (queue.endsWith(':outbox')) {
-            await processOutboxPayload(payload, accountId, pendingInboxRequests);
+            await processOutboxPayload(
+              payload,
+              accountId,
+              pendingInboxRequests,
+            );
           }
         } finally {
-          await releaseGlobalAgentSlotForPayload(queue, payload).catch((err) => {
-            logger.warn({ accountId, queue, err }, '释放 agent 并发槽位失败');
-          });
+          await releaseGlobalAgentSlotForPayload(queue, payload).catch(
+            (err) => {
+              logger.warn({ accountId, queue, err }, '释放 agent 并发槽位失败');
+            },
+          );
         }
       } catch (error) {
         logger.error(
@@ -437,6 +473,11 @@ async function listenForAccount(accountId: string): Promise<void> {
                 await releaseGlobalAgentSlot(pending.concurrencySlotId).catch(
                   () => {},
                 );
+                await releaseLocalAgentLeaseForPending(pending, {
+                  accountId,
+                  requestId,
+                  reason: 'outbox_fallback_error',
+                });
                 await releaseSessionProcessingLock(
                   pending.sessionId,
                   pending.sessionProcessingRequestId ?? requestId,
@@ -481,6 +522,7 @@ export function submitInboxRequest(input: {
       let timeout: NodeJS.Timeout | null = null;
       let billingReservation: BillingReservation | null = null;
       let concurrencySlotId: string | undefined;
+      let localAgentLeaseAccountId: string | undefined;
 
       try {
         const owner = await getOwnerByRuntimeId(input.accountId);
@@ -518,6 +560,11 @@ export function submitInboxRequest(input: {
             );
           }
           void releaseGlobalAgentSlot(pending?.concurrencySlotId);
+          void releaseLocalAgentLeaseForPending(pending, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'timeout',
+          });
           logger.error(
             { accountId: input.accountId, requestId, type: input.type },
             '收件箱请求超时',
@@ -525,6 +572,10 @@ export function submitInboxRequest(input: {
           reject(new Error(`收件箱请求超时: ${requestId}`));
         }, AGENT_REQUEST_TIMEOUT);
 
+        localAgentLeaseAccountId = retainLocalAgent(input.accountId);
+        if (!localAgentLeaseAccountId) {
+          throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
+        }
         pendingInboxRequests.set(requestId, {
           accountId: input.accountId,
           ownerUserId: owner.id,
@@ -537,6 +588,7 @@ export function submitInboxRequest(input: {
           billingReservation,
           priority,
           concurrencySlotId,
+          localAgentLeaseAccountId,
           resolve,
           reject,
           timeout,
@@ -600,6 +652,7 @@ export function submitInboxRequest(input: {
         if (timeout) {
           clearTimeout(timeout);
         }
+        const pending = pendingInboxRequests.get(requestId);
         pendingInboxRequests.delete(requestId);
         if (input.sessionId) {
           void releaseSessionProcessingLock(input.sessionId, requestId).catch(
@@ -607,6 +660,11 @@ export function submitInboxRequest(input: {
           );
         }
         void releaseGlobalAgentSlot(concurrencySlotId);
+        void releaseLocalAgentLeaseForPending(pending, {
+          accountId: input.accountId,
+          requestId,
+          reason: 'submit_error',
+        });
         reject(
           err instanceof Error
             ? err
@@ -739,6 +797,7 @@ export function submitAiChatInboxRequest(input: {
       let timeout: NodeJS.Timeout | null = null;
       let billingReservation: BillingReservation | null = null;
       let concurrencySlotId: string | undefined;
+      let localAgentLeaseAccountId: string | undefined;
 
       try {
         const owner = await getOwnerByRuntimeId(input.accountId);
@@ -769,6 +828,11 @@ export function submitAiChatInboxRequest(input: {
             () => {},
           );
           void releaseGlobalAgentSlot(pending?.concurrencySlotId);
+          void releaseLocalAgentLeaseForPending(pending, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'timeout',
+          });
           logger.error(
             {
               accountId: input.accountId,
@@ -780,6 +844,10 @@ export function submitAiChatInboxRequest(input: {
           reject(new Error(`AI Chat 请求超时: ${requestId}`));
         }, AI_CHAT_REQUEST_TIMEOUT);
 
+        localAgentLeaseAccountId = retainLocalAgent(input.accountId);
+        if (!localAgentLeaseAccountId) {
+          throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
+        }
         pendingAiChatRequests.set(requestId, {
           accountId: input.accountId,
           ownerUserId: owner.id,
@@ -794,6 +862,7 @@ export function submitAiChatInboxRequest(input: {
           startedAtMs,
           priority,
           concurrencySlotId,
+          localAgentLeaseAccountId,
           resolve,
           reject,
           timeout,
@@ -868,11 +937,17 @@ export function submitAiChatInboxRequest(input: {
         if (timeout) {
           clearTimeout(timeout);
         }
+        const pending = pendingAiChatRequests.get(requestId);
         pendingAiChatRequests.delete(requestId);
         void releaseSessionProcessingLock(input.sessionId, requestId).catch(
           () => {},
         );
         void releaseGlobalAgentSlot(concurrencySlotId);
+        void releaseLocalAgentLeaseForPending(pending, {
+          accountId: input.accountId,
+          requestId,
+          reason: 'submit_error',
+        });
         reject(
           err instanceof Error
             ? err

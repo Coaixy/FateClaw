@@ -9,6 +9,7 @@ import { DATABASE_URL, REDIS_URL, TIMEZONE } from '../infrastructure/config.js';
 import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
+import { resolveProjectRoot } from '../infrastructure/project-root.js';
 
 // ---------------------------------------------------------------------------
 // 契约接口
@@ -27,6 +28,12 @@ export interface AgentEnv {
   FATECLAW_TIMEZONE: string;
   /** Pi session 本地文件目录；传给本地 agent-runtime 以保持宿主清理路径一致。 */
   FATECLAW_PI_SESSION_DIR?: string;
+  /** 标记本进程是宿主拉起的本地 agent-runtime，供孤儿清理精确识别。 */
+  FATECLAW_LOCAL_AGENT_RUNTIME: '1';
+  /** 宿主 API 进程 PID，非优雅重启后用于识别孤儿 agent-runtime。 */
+  FATECLAW_AGENT_PARENT_PID: string;
+  /** 当前部署根目录，避免误清理同机其他 FateClaw 实例。 */
+  FATECLAW_PROJECT_ROOT: string;
 
   // --- 连接 ---
   REDIS_URL?: string;
@@ -69,6 +76,9 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     TZ: TIMEZONE,
     FATECLAW_TIMEZONE: TIMEZONE,
     FATECLAW_PI_SESSION_DIR: process.env.FATECLAW_PI_SESSION_DIR || undefined,
+    FATECLAW_LOCAL_AGENT_RUNTIME: '1',
+    FATECLAW_AGENT_PARENT_PID: String(process.pid),
+    FATECLAW_PROJECT_ROOT: resolveProjectRoot(),
 
     // 连接
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,
