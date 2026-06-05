@@ -30,6 +30,10 @@ import {
   startRetentionWorker,
   stopRetentionWorker,
 } from '../runtime/retention.js';
+import {
+  startPiSessionHealthWorker,
+  stopPiSessionHealthWorker,
+} from '../runtime/pi-session-health-worker.js';
 import { logger } from '../infrastructure/logger.js';
 import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
 
@@ -82,6 +86,8 @@ export async function main(): Promise<void> {
 
   // 启动数据保留策略后台任务（定时清理过期 trace_events）
   startRetentionWorker();
+  // 启动 Pi session 健康维护任务（未启用时只定时检查后台配置）
+  startPiSessionHealthWorker();
 
   await startApiServer();
 
@@ -95,6 +101,7 @@ export async function main(): Promise<void> {
     try {
       stopAllLocalAgents();
       stopRetentionWorker();
+      stopPiSessionHealthWorker();
       await disconnectRedis();
       await closeDatabase();
       logger.info('优雅退出完成');

@@ -44,6 +44,7 @@ export function toChatSessionDto(session: ChatSession): ChatSessionDto {
     created_at: session.created_at,
     updated_at: session.updated_at,
     share_token: session.share_token ?? null,
+    deleted_at: session.deleted_at ?? null,
   };
 }
 

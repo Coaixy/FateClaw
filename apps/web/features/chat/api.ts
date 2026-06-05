@@ -161,6 +161,13 @@ export const messagesApi = {
 const chatSessionListRequestCache =
   createAuthScopedInFlightCache<ChatSession[]>();
 
+function archiveChatSessionRequest(sessionId: string) {
+  return requestJson<SuccessResponse>(
+    `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE' },
+  ).finally(clearChatSessionsCache);
+}
+
 /**
  * 清理聊天会话列表的 in-flight 请求缓存。
  *
@@ -175,6 +182,7 @@ export const chatSessionsApi = {
     chatSessionListRequestCache.get(() =>
       requestJson<ChatSession[]>('/api/chat-sessions'),
     ),
+  archived: () => requestJson<ChatSession[]>('/api/chat-sessions/archived'),
   create: (title?: string) =>
     requestJson<ChatSession>('/api/chat-sessions', {
       method: 'POST',
@@ -185,10 +193,12 @@ export const chatSessionsApi = {
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
       { method: 'PATCH', body: JSON.stringify({ title }) },
     ),
-  remove: (sessionId: string) =>
-    requestJson<SuccessResponse>(
-      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
-      { method: 'DELETE' },
+  archive: archiveChatSessionRequest,
+  remove: archiveChatSessionRequest,
+  restore: (sessionId: string) =>
+    requestJson<ChatSession>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/restore`,
+      { method: 'POST' },
     ).finally(clearChatSessionsCache),
   share: (sessionId: string) =>
     requestJson<ChatSessionShareResponse>(

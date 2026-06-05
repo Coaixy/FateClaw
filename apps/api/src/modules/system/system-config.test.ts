@@ -54,6 +54,7 @@ vi.mock('../../infrastructure/db.js', () => ({
 
 import {
   getLocalAgentRuntimePolicy,
+  getPiSessionHealthPolicy,
   getSystemConfigOverview,
   getUserModelSettingsOverview,
   listOfficialModelViews,
@@ -127,6 +128,9 @@ describe('resolveUserLlmRuntime', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });
@@ -349,12 +353,40 @@ describe('getLocalAgentRuntimePolicy', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 999,
       local_agent_idle_ttl_ms: 1,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
 
     await expect(getLocalAgentRuntimePolicy()).resolves.toEqual({
       maxProcesses: 100,
       idleTtlMs: 30_000,
+    });
+  });
+});
+
+describe('getPiSessionHealthPolicy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('normalizes Pi session health policy days', async () => {
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      pi_session_health_enabled: true,
+      pi_session_inactive_cleanup_days: 0,
+      pi_session_orphan_grace_days: 5000,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+
+    await expect(getPiSessionHealthPolicy()).resolves.toEqual({
+      enabled: true,
+      inactiveCleanupDays: 1,
+      orphanGraceDays: 3650,
     });
   });
 });
@@ -374,6 +406,9 @@ describe('listOfficialModelViews', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });

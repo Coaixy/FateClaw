@@ -199,6 +199,16 @@ describe('runDatabaseMigrations', () => {
       calls.some((call) => call.sql.includes('local_agent_idle_ttl_ms')),
     ).toBe(true);
     expect(
+      calls.some((call) => call.sql.includes('pi_session_health_enabled')),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes(
+          'chk_runtime_config_pi_session_inactive_cleanup_days_range',
+        ),
+      ),
+    ).toBe(true);
+    expect(
       calls.some((call) =>
         call.sql.includes('chk_runtime_config_local_agent_max_processes_range'),
       ),
@@ -235,6 +245,7 @@ describe('runDatabaseMigrations', () => {
       '0023_skill_access_invites',
       '0024_user_model_thinking_level',
       '0025_local_agent_runtime_limits',
+      '0026_pi_session_health_runtime_config',
     ]);
 
     await runDatabaseMigrations(client as never);

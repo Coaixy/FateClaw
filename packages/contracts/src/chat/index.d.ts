@@ -60,6 +60,8 @@ export interface ChatSessionDto {
   created_at: string;
   updated_at: string;
   share_token?: string | null;
+  /** 会话归档时间；未归档时为空。 */
+  deleted_at?: string | null;
 }
 
 export interface ChatSessionShareResponseDto {

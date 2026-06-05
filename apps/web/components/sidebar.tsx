@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
+  Archive,
   Info,
   Loader2,
   LogIn,
   MessageCircle,
   Monitor,
   Share2,
-  Trash2,
   Menu,
   Moon,
   X,
@@ -213,7 +213,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     selectedSession,
     setSelectedSession,
     renameSession,
-    deleteSession,
+    archiveSession,
     shareSession,
     chatAvailable,
     loading: sessionsLoading,
@@ -447,11 +447,27 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               <span className="text-[10px] font-semibold uppercase tracking-widest text-muted/70">
                 最近对话
               </span>
-              {sessions.length > 0 && (
-                <span className="text-[10px] text-muted/55">
-                  {filteredSessions.length}/{sessions.length}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                {sessions.length > 0 && (
+                  <span className="text-[10px] text-muted/55">
+                    {filteredSessions.length}/{sessions.length}
+                  </span>
+                )}
+                <Link
+                  href="/ai-chat/archive"
+                  onClick={closeSidebar}
+                  className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-medium transition-all duration-200 ${
+                    pathname === '/ai-chat/archive'
+                      ? 'border-primary/25 bg-primary/12 text-primary'
+                      : 'border-hairline/60 bg-surface-card text-muted hover:border-primary/25 hover:text-ink'
+                  }`}
+                  aria-label="查看归档对话"
+                  title="归档"
+                >
+                  <Archive size={12} strokeWidth={1.8} />
+                  <span>归档</span>
+                </Link>
+              </div>
             </div>
             {sessions.length > 0 && (
               <div className="space-y-2">
@@ -679,19 +695,22 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            void deleteSession(session.id).catch((error) => {
-                              toast(
-                                'error',
-                                error instanceof Error
-                                  ? error.message
-                                  : '删除对话失败，请稍后重试',
-                              );
-                            });
+                            void archiveSession(session.id)
+                              .then(() => toast('success', '已归档'))
+                              .catch((error) => {
+                                toast(
+                                  'error',
+                                  error instanceof Error
+                                    ? error.message
+                                    : '归档对话失败，请稍后重试',
+                                );
+                              });
                           }}
-                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-error hover:bg-error/10 transition-all duration-200 cursor-pointer"
-                          aria-label="删除对话"
+                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
+                          aria-label="归档对话"
+                          title="归档对话"
                         >
-                          <Trash2 size={11} />
+                          <Archive size={11} />
                         </button>
                       </div>
                     </div>

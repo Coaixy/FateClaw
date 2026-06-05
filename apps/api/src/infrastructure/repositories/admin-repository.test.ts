@@ -15,6 +15,8 @@ vi.mock('../../modules/skills/text-skill-bundle-store.js', () => ({
 
 import {
   getAdminGlobalStats,
+  getChatSessionPiArchiveStates,
+  getChatSessionPiCleanupCandidates,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
 } from './admin-repository.js';
@@ -97,6 +99,53 @@ describe('admin repository', () => {
     expect(mockReadTextSkillBundleFiles).toHaveBeenCalledWith(
       'text-skill://skill-1',
     );
+  });
+
+  it('selects Pi cleanup candidates with reusable archive payloads', async () => {
+    const { calls } = createMockPool([[{ id: 'session-1' }]]);
+
+    await expect(
+      getChatSessionPiCleanupCandidates({
+        softDeleted: true,
+        limit: 25,
+        cursor: 'session-0',
+      }),
+    ).resolves.toEqual([{ id: 'session-1' }]);
+
+    const sql = calls[0]?.sql ?? '';
+    expect(sql).toContain('SELECT id, account_id');
+    expect(sql).toContain('pi_session_archive_payload IS NOT NULL');
+    expect(sql).toContain('pi_session_archived_at IS NULL');
+    expect(sql).toContain('NOT EXISTS');
+    expect(sql).toContain("m.status = 'active'");
+    expect(calls[0]?.params).toEqual(['session-0', 25]);
+  });
+
+  it('selects Pi archive states for orphan cleanup decisions', async () => {
+    const { calls } = createMockPool([
+      [
+        {
+          id: 'session-1',
+          pi_session_archived_at: null,
+          has_pi_session_archive_payload: true,
+        },
+      ],
+    ]);
+
+    await expect(
+      getChatSessionPiArchiveStates(['session-1', 'session-1']),
+    ).resolves.toEqual([
+      {
+        id: 'session-1',
+        pi_session_archived_at: null,
+        has_pi_session_archive_payload: true,
+      },
+    ]);
+
+    const sql = calls[0]?.sql ?? '';
+    expect(sql).toContain('pi_session_archive_payload IS NOT NULL');
+    expect(sql).toContain('WHERE id = ANY($1::text[])');
+    expect(calls[0]?.params).toEqual([['session-1']]);
   });
 
   it('builds recharge stats SQL with decimal soft currency columns', async () => {

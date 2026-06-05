@@ -32,6 +32,7 @@ import {
   hasOfficialSkill,
   createAdminUser,
   cleanupPiSessionFilesForAdmin,
+  scanPiSessionOrphanFilesForAdmin,
   listAdminGlobalSkills,
   listAdminUsersWithStats,
   listBillingRequestReservations,
@@ -96,6 +97,7 @@ const USER_MANAGER_ALLOWED_ROUTES = new Map<string, AdminScope>([
   ['GET /messages', 'messages:*'],
   ['GET /chat-sessions', 'messages:*'],
   ['POST /chat-sessions/pi-sessions/cleanup', 'messages:*'],
+  ['POST /chat-sessions/pi-sessions/orphans/scan', 'messages:*'],
 ]);
 
 function normalizeAdminRouteUrl(
@@ -188,21 +190,17 @@ const AdminCreateUserSchema = z.object({
   phone_verified: z.boolean().default(true),
 });
 
-const PiSessionCleanupSchema = z
-  .object({
-    mode: z.enum(['soft_deleted', 'inactive']),
-    inactive_days: z.number().int().min(1).max(3650).optional(),
-    limit: z.number().int().min(1).max(5000).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.mode === 'inactive' && value.inactive_days === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['inactive_days'],
-        message: '未活跃天数不能为空',
-      });
-    }
-  });
+const PiSessionCleanupSchema = z.object({
+  mode: z.enum(['soft_deleted', 'inactive']),
+  inactive_days: z.number().int().min(1).max(3650).optional(),
+  limit: z.number().int().min(1).max(5000).optional(),
+});
+
+const PiSessionOrphanScanSchema = z.object({
+  action: z.enum(['audit', 'delete']).default('audit'),
+  limit: z.number().int().min(1).max(50_000).optional(),
+  sample_limit: z.number().int().min(1).max(100).optional(),
+});
 
 const DateOnlySchema = z
   .string()
@@ -329,6 +327,19 @@ const RuntimeConfigSchema = z.object({
     .int('空闲回收时间必须是整数')
     .min(30_000, '空闲回收时间不能少于 30 秒')
     .max(86_400_000, '空闲回收时间不能超过 24 小时')
+    .optional(),
+  pi_session_health_enabled: z.boolean().optional(),
+  pi_session_inactive_cleanup_days: z
+    .number()
+    .int('Pi session 未活跃清理天数必须是整数')
+    .min(1, 'Pi session 未活跃清理天数不能少于 1 天')
+    .max(3650, 'Pi session 未活跃清理天数不能超过 3650 天')
+    .optional(),
+  pi_session_orphan_grace_days: z
+    .number()
+    .int('Pi session 孤儿文件保护天数必须是整数')
+    .min(1, 'Pi session 孤儿文件保护天数不能少于 1 天')
+    .max(3650, 'Pi session 孤儿文件保护天数不能超过 3650 天')
     .optional(),
 });
 
@@ -536,6 +547,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
       localAgentMaxProcesses: parsed.data.local_agent_max_processes,
       localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
+      piSessionHealthEnabled: parsed.data.pi_session_health_enabled,
+      piSessionInactiveCleanupDays:
+        parsed.data.pi_session_inactive_cleanup_days,
+      piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
       actor: 'manager',
     });
   });
@@ -945,6 +960,24 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       limit: parsed.data.limit,
     });
   });
+
+  // POST /api/admin/chat-sessions/pi-sessions/orphans/scan — 审计/删除安全的 Pi session 孤儿文件
+  app.post(
+    '/chat-sessions/pi-sessions/orphans/scan',
+    async (request, reply) => {
+      const parsed = PiSessionOrphanScanSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      return scanPiSessionOrphanFilesForAdmin({
+        action: parsed.data.action,
+        limit: parsed.data.limit,
+        sampleLimit: parsed.data.sample_limit,
+      });
+    },
+  );
 
   // GET /api/admin/skills/custom — 查看所有用户自定义知识技能
   app.get('/skills/custom', async (request) => {

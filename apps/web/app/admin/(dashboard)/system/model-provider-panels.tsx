@@ -167,6 +167,9 @@ export function RuntimeConfigPanel({
     agent_concurrency_limit: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
+    pi_session_health_enabled: boolean;
+    pi_session_inactive_cleanup_days: number;
+    pi_session_orphan_grace_days: number;
   }) => Promise<void>;
 }) {
   const [limit, setLimit] = useState(runtime.agent_concurrency_limit);
@@ -176,15 +179,30 @@ export function RuntimeConfigPanel({
   const [idleSeconds, setIdleSeconds] = useState(
     Math.round(runtime.local_agent_idle_ttl_ms / 1000),
   );
+  const [piHealthEnabled, setPiHealthEnabled] = useState(
+    runtime.pi_session_health_enabled,
+  );
+  const [piInactiveDays, setPiInactiveDays] = useState(
+    runtime.pi_session_inactive_cleanup_days,
+  );
+  const [piOrphanGraceDays, setPiOrphanGraceDays] = useState(
+    runtime.pi_session_orphan_grace_days,
+  );
 
   useEffect(() => {
     setLimit(runtime.agent_concurrency_limit);
     setMaxProcesses(runtime.local_agent_max_processes);
     setIdleSeconds(Math.round(runtime.local_agent_idle_ttl_ms / 1000));
+    setPiHealthEnabled(runtime.pi_session_health_enabled);
+    setPiInactiveDays(runtime.pi_session_inactive_cleanup_days);
+    setPiOrphanGraceDays(runtime.pi_session_orphan_grace_days);
   }, [
     runtime.agent_concurrency_limit,
     runtime.local_agent_idle_ttl_ms,
     runtime.local_agent_max_processes,
+    runtime.pi_session_health_enabled,
+    runtime.pi_session_inactive_cleanup_days,
+    runtime.pi_session_orphan_grace_days,
   ]);
 
   const normalized = {
@@ -197,12 +215,27 @@ export function RuntimeConfigPanel({
       86_400_000,
       Math.max(30_000, Math.floor(idleSeconds) * 1000),
     ),
+    pi_session_health_enabled: piHealthEnabled,
+    pi_session_inactive_cleanup_days: Math.min(
+      3650,
+      Math.max(1, Math.floor(piInactiveDays)),
+    ),
+    pi_session_orphan_grace_days: Math.min(
+      3650,
+      Math.max(1, Math.floor(piOrphanGraceDays)),
+    ),
   };
   const dirty =
     normalized.agent_concurrency_limit !== runtime.agent_concurrency_limit ||
     normalized.local_agent_max_processes !==
       runtime.local_agent_max_processes ||
-    normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms;
+    normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms ||
+    normalized.pi_session_health_enabled !==
+      runtime.pi_session_health_enabled ||
+    normalized.pi_session_inactive_cleanup_days !==
+      runtime.pi_session_inactive_cleanup_days ||
+    normalized.pi_session_orphan_grace_days !==
+      runtime.pi_session_orphan_grace_days;
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
@@ -210,15 +243,16 @@ export function RuntimeConfigPanel({
         <div>
           <div className="text-sm font-semibold">Agent 运行时策略</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            控制请求并发、常驻 agent-runtime 数量和空闲回收时间。
+            控制请求并发、常驻 agent-runtime、空闲回收和 Pi session 自动健康维护。
           </div>
           <div className="mt-2 text-[12px] text-muted">
             当前：{runtime.agent_concurrency_limit} 并发 /{' '}
             {runtime.local_agent_max_processes} runtime /{' '}
-            {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收
+            {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收 / Pi{' '}
+            {runtime.pi_session_health_enabled ? '自动维护' : '手动维护'}
           </div>
         </div>
-        <div className="grid gap-2 md:grid-cols-3 lg:min-w-[640px] lg:grid-cols-[1fr_1fr_1fr_auto]">
+        <div className="grid gap-2 md:grid-cols-3 lg:min-w-[720px] lg:grid-cols-[1fr_1fr_1fr_auto]">
           <NumberField
             label="全站并发上限"
             value={limit}
@@ -240,11 +274,34 @@ export function RuntimeConfigPanel({
             min={30}
             max={86_400}
           />
+          <label className="flex h-11 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] text-muted">
+            <input
+              type="checkbox"
+              checked={piHealthEnabled}
+              onChange={(event) => setPiHealthEnabled(event.target.checked)}
+              className="h-4 w-4 accent-primary"
+            />
+            Pi 自动维护
+          </label>
+          <NumberField
+            label="Pi 未活跃天数"
+            value={piInactiveDays}
+            onChange={setPiInactiveDays}
+            min={1}
+            max={3650}
+          />
+          <NumberField
+            label="孤儿保护天数"
+            value={piOrphanGraceDays}
+            onChange={setPiOrphanGraceDays}
+            min={1}
+            max={3650}
+          />
           <button
             type="button"
             onClick={() => void onSave(normalized)}
             disabled={busy || !dirty}
-            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
+            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40 md:col-start-3 lg:col-start-auto"
           >
             {busy ? (
               <Loader2 size={14} className="animate-spin" />

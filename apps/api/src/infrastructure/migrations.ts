@@ -3200,6 +3200,35 @@ const MIGRATIONS: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0026_pi_session_health_runtime_config',
+    description: '增加 Pi session 健康维护后台配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE runtime_config
+          ADD COLUMN IF NOT EXISTS pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
+          ADD COLUMN IF NOT EXISTS pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName:
+          'chk_runtime_config_pi_session_inactive_cleanup_days_range',
+        tableName: 'runtime_config',
+        expression: 'pi_session_inactive_cleanup_days BETWEEN 1 AND 3650',
+        cleanupSql: `UPDATE runtime_config
+                     SET pi_session_inactive_cleanup_days = LEAST(GREATEST(pi_session_inactive_cleanup_days, 1), 3650)
+                     WHERE pi_session_inactive_cleanup_days < 1 OR pi_session_inactive_cleanup_days > 3650`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_pi_session_orphan_grace_days_range',
+        tableName: 'runtime_config',
+        expression: 'pi_session_orphan_grace_days BETWEEN 1 AND 3650',
+        cleanupSql: `UPDATE runtime_config
+                     SET pi_session_orphan_grace_days = LEAST(GREATEST(pi_session_orphan_grace_days, 1), 3650)
+                     WHERE pi_session_orphan_grace_days < 1 OR pi_session_orphan_grace_days > 3650`,
+      });
+    },
+  },
 ];
 
 const MIGRATION_LOCK_KEY = [708527, 1];

@@ -294,12 +294,49 @@ export interface AdminPiSessionCleanupResult {
   cursor_reset: boolean;
   scanned_sessions: number;
   archived_sessions: number;
+  payload_restored_from_snapshot: number;
+  unarchivable_sessions: number;
+  already_archived_sessions: number;
   touched_sessions: number;
   deleted_jsonl_files: number;
   deleted_path_files: number;
   missing_jsonl_files: number;
   skipped_unsafe_files: string[];
 }
+
+export interface AdminPiSessionOrphanScanResult {
+  success: boolean;
+  action: 'audit' | 'delete';
+  grace_days: number;
+  session_dir: string;
+  total_files: number;
+  scanned_files: number;
+  truncated: boolean;
+  scanned_path_files: number;
+  scanned_jsonl_files: number;
+  dangling_path_files: number;
+  unmapped_jsonl_files: number;
+  unknown_files: number;
+  unsafe_path_files: number;
+  safe_deletable_files: number;
+  deleted_path_files: number;
+  deleted_jsonl_files: number;
+  skipped_recent_files: number;
+  skipped_unarchived_files: number;
+  skipped_unmapped_session_files: number;
+  samples: {
+    dangling_path_files: string[];
+    unmapped_jsonl_files: string[];
+    unknown_files: string[];
+    unsafe_path_files: string[];
+    safe_deletable_files: string[];
+    skipped_recent_files: string[];
+    skipped_unarchived_files: string[];
+    skipped_unmapped_session_files: string[];
+  };
+}
+
+export type AdminPiSessionOrphanScanAction = 'audit' | 'delete';
 
 export interface AdminSkillGlobalConfig {
   skill_name: string;
@@ -440,6 +477,9 @@ export interface AdminRuntimeConfig {
   agent_concurrency_limit: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
+  pi_session_health_enabled: boolean;
+  pi_session_inactive_cleanup_days: number;
+  pi_session_orphan_grace_days: number;
   updated_at: string;
 }
 
@@ -545,6 +585,9 @@ export const admin = {
     agent_concurrency_limit: number;
     local_agent_max_processes?: number;
     local_agent_idle_ttl_ms?: number;
+    pi_session_health_enabled?: boolean;
+    pi_session_inactive_cleanup_days?: number;
+    pi_session_orphan_grace_days?: number;
   }) =>
     adminRequest<AdminRuntimeConfig>('/api/admin/system-config/runtime', {
       method: 'PUT',
@@ -675,6 +718,18 @@ export const admin = {
   }) =>
     adminRequest<AdminPiSessionCleanupResult>(
       '/api/admin/chat-sessions/pi-sessions/cleanup',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+  scanPiSessionOrphans: (data: {
+    action?: AdminPiSessionOrphanScanAction;
+    limit?: number;
+    sample_limit?: number;
+  }) =>
+    adminRequest<AdminPiSessionOrphanScanResult>(
+      '/api/admin/chat-sessions/pi-sessions/orphans/scan',
       {
         method: 'POST',
         body: JSON.stringify(data),

@@ -240,9 +240,10 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
-       local_agent_idle_ttl_ms
+       local_agent_idle_ttl_ms, pi_session_health_enabled,
+       pi_session_inactive_cleanup_days, pi_session_orphan_grace_days
      )
-     VALUES ('default', 10, 4, 600000)
+     VALUES ('default', 10, 4, 600000, false, 30, 30)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
   );
@@ -256,6 +257,9 @@ export async function updateRuntimeConfig(input: {
   agentConcurrencyLimit?: number;
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
+  piSessionHealthEnabled?: boolean;
+  piSessionInactiveCleanupDays?: number;
+  piSessionOrphanGraceDays?: number;
 }): Promise<RuntimeConfig> {
   const current = await getRuntimeConfig();
   const agentConcurrencyLimit = Math.max(
@@ -278,19 +282,53 @@ export async function updateRuntimeConfig(input: {
       Math.floor(input.localAgentIdleTtlMs ?? current.local_agent_idle_ttl_ms),
     ),
   );
+  const piSessionHealthEnabled =
+    input.piSessionHealthEnabled ?? current.pi_session_health_enabled;
+  const piSessionInactiveCleanupDays = Math.min(
+    3650,
+    Math.max(
+      1,
+      Math.floor(
+        input.piSessionInactiveCleanupDays ??
+          current.pi_session_inactive_cleanup_days,
+      ),
+    ),
+  );
+  const piSessionOrphanGraceDays = Math.min(
+    3650,
+    Math.max(
+      1,
+      Math.floor(
+        input.piSessionOrphanGraceDays ??
+          current.pi_session_orphan_grace_days,
+      ),
+    ),
+  );
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
-       local_agent_idle_ttl_ms, updated_at
+       local_agent_idle_ttl_ms, pi_session_health_enabled,
+       pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
+       updated_at
      )
-     VALUES ('default', $1, $2, $3, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
        local_agent_max_processes = EXCLUDED.local_agent_max_processes,
        local_agent_idle_ttl_ms = EXCLUDED.local_agent_idle_ttl_ms,
+       pi_session_health_enabled = EXCLUDED.pi_session_health_enabled,
+       pi_session_inactive_cleanup_days = EXCLUDED.pi_session_inactive_cleanup_days,
+       pi_session_orphan_grace_days = EXCLUDED.pi_session_orphan_grace_days,
        updated_at = NOW()
      RETURNING *`,
-    [agentConcurrencyLimit, localAgentMaxProcesses, localAgentIdleTtlMs],
+    [
+      agentConcurrencyLimit,
+      localAgentMaxProcesses,
+      localAgentIdleTtlMs,
+      piSessionHealthEnabled,
+      piSessionInactiveCleanupDays,
+      piSessionOrphanGraceDays,
+    ],
   );
   return rows[0] as RuntimeConfig;
 }

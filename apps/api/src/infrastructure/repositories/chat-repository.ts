@@ -226,6 +226,27 @@ export async function getChatSessionsByUserId(
   return rows as ChatSession[];
 }
 
+/**
+ * 读取当前用户已归档的 AI Chat 会话。
+ *
+ * @param userId 会话归属用户 ID。
+ * @param limit 返回数量上限。
+ * @returns 按归档时间倒序排列的会话列表。
+ */
+export async function getArchivedChatSessionsByUserId(
+  userId: string,
+  limit = 100,
+): Promise<ChatSession[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM chat_sessions
+     WHERE user_id = $1 AND deleted_at IS NOT NULL
+     ORDER BY deleted_at DESC, updated_at DESC
+     LIMIT $2`,
+    [userId, Math.min(Math.max(limit, 1), 500)],
+  );
+  return rows as ChatSession[];
+}
+
 export async function getChatSession(
   id: string,
 ): Promise<ChatSession | undefined> {
@@ -253,13 +274,55 @@ export async function touchChatSession(id: string): Promise<void> {
   );
 }
 
-export async function deleteChatSession(id: string): Promise<void> {
+/**
+ * 归档单个 AI Chat 会话。
+ *
+ * @param id chat_sessions.id。
+ * @returns 无返回值。
+ *
+ * 注意：这里保留 deleted_at 作为数据库字段名，是为了复用现有软删除 schema；
+ * 产品语义上它代表用户主动归档。
+ */
+export async function archiveChatSession(id: string): Promise<void> {
   await getDbPool().query(
     `UPDATE chat_sessions
      SET deleted_at = NOW(), share_token = NULL
      WHERE id = $1`,
     [id],
   );
+}
+
+/**
+ * 兼容旧调用方的软删除入口。
+ *
+ * @param id chat_sessions.id。
+ * @returns 无返回值。
+ */
+export async function deleteChatSession(id: string): Promise<void> {
+  await archiveChatSession(id);
+}
+
+/**
+ * 恢复当前用户拥有的已归档 AI Chat 会话。
+ *
+ * @param input.userId 会话归属用户 ID。
+ * @param input.sessionId chat_sessions.id。
+ * @returns 恢复后的会话；会话不存在、无权限或未归档时返回 undefined。
+ */
+export async function restoreArchivedChatSession(input: {
+  userId: string;
+  sessionId: string;
+}): Promise<ChatSession | undefined> {
+  const { rows } = await getDbPool().query(
+    `UPDATE chat_sessions
+     SET deleted_at = NULL, updated_at = NOW()
+     WHERE id = $1
+       AND user_id = $2
+       AND deleted_at IS NOT NULL
+     RETURNING *`,
+    [input.sessionId, input.userId],
+  );
+  return rows[0] as ChatSession | undefined;
 }
 
 /** Pi session 归档状态，payload 保存可回写本地 jsonl/path 的原始内容。 */
@@ -300,7 +363,11 @@ export async function markChatSessionPiSessionArchived(input: {
  * 读取会话的 Pi session 数据库归档。
  *
  * @param sessionId - chat_sessions.id。
- * @returns 归档行；不存在或未归档时返回 undefined。
+ * @returns 包含可回写 payload 的归档行；不存在或无 payload 时返回 undefined。
+ *
+ * 注意：历史数据或人工修复可能只补了 pi_session_archive_payload，
+ * 没有同步 pi_session_archived_at。恢复判断只依赖 payload 是否可回写，
+ * 因此这里不能用 archived_at 作为硬条件。
  */
 export async function getChatSessionPiSessionArchive(
   sessionId: string,
@@ -311,10 +378,9 @@ export async function getChatSessionPiSessionArchive(
             pi_session_archive_reason,
             pi_session_archive_payload,
             pi_session_archive_restored_at
-     FROM chat_sessions
-     WHERE id = $1
-       AND pi_session_archived_at IS NOT NULL
-       AND pi_session_archive_payload IS NOT NULL`,
+	     FROM chat_sessions
+	     WHERE id = $1
+	       AND pi_session_archive_payload IS NOT NULL`,
     [sessionId],
   );
   return rows[0] as ChatSessionPiSessionArchiveRow | undefined;

@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockArchiveChatSession,
+  mockGetArchivedChatSessionsByUserId,
   mockGetChatSession,
   mockGetChatSessionPiSessionArchive,
+  mockGetConversationLogByRequestId,
   mockGetRecentMessages,
   mockGetSessionMessageById,
   mockGetSessionMessages,
@@ -11,8 +14,13 @@ const {
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
+  mockMarkChatSessionPiSessionArchived,
   mockMarkChatSessionPiSessionArchiveRestored,
+  mockDeletePiSessionFilesForSession,
+  mockReadPiSessionArchiveForSession,
   mockReadPiSessionFileState,
+  mockRestoreArchivedChatSession,
+  mockWritePiSessionSnapshotArchiveToFiles,
   mockWritePiSessionArchiveToFiles,
   mockShareOwnedChatSession,
   mockIncrementDailyMessageCount,
@@ -27,8 +35,11 @@ const {
   mockRedisGet,
   mockRedisSet,
 } = vi.hoisted(() => ({
+  mockArchiveChatSession: vi.fn(),
+  mockGetArchivedChatSessionsByUserId: vi.fn(),
   mockGetChatSession: vi.fn(),
   mockGetChatSessionPiSessionArchive: vi.fn(),
+  mockGetConversationLogByRequestId: vi.fn(),
   mockGetRecentMessages: vi.fn(),
   mockGetSessionMessageById: vi.fn(),
   mockGetSessionMessages: vi.fn(),
@@ -37,8 +48,13 @@ const {
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
+  mockMarkChatSessionPiSessionArchived: vi.fn(),
   mockMarkChatSessionPiSessionArchiveRestored: vi.fn(),
+  mockDeletePiSessionFilesForSession: vi.fn(),
+  mockReadPiSessionArchiveForSession: vi.fn(),
   mockReadPiSessionFileState: vi.fn(),
+  mockRestoreArchivedChatSession: vi.fn(),
+  mockWritePiSessionSnapshotArchiveToFiles: vi.fn(),
   mockWritePiSessionArchiveToFiles: vi.fn(),
   mockShareOwnedChatSession: vi.fn(),
   mockIncrementDailyMessageCount: vi.fn(),
@@ -55,6 +71,8 @@ const {
 }));
 
 vi.mock('../../infrastructure/db.js', () => ({
+  archiveChatSession: mockArchiveChatSession,
+  getArchivedChatSessionsByUserId: mockGetArchivedChatSessionsByUserId,
   getChatSession: mockGetChatSession,
   getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,
   getRecentMessages: mockGetRecentMessages,
@@ -65,15 +83,17 @@ vi.mock('../../infrastructure/db.js', () => ({
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
+  markChatSessionPiSessionArchived: mockMarkChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored:
     mockMarkChatSessionPiSessionArchiveRestored,
+  restoreArchivedChatSession: mockRestoreArchivedChatSession,
   shareOwnedChatSession: mockShareOwnedChatSession,
   storeMessage: mockStoreMessage,
   touchChatSession: mockTouchChatSession,
   getChatSessionsByUserId: vi.fn(),
   createChatSession: vi.fn(),
   deleteChatSession: vi.fn(),
-  getConversationLogByRequestId: vi.fn(),
+  getConversationLogByRequestId: mockGetConversationLogByRequestId,
   updateChatSessionTitle: mockUpdateChatSessionTitle,
 }));
 
@@ -110,7 +130,23 @@ vi.mock('./structured-input.js', () => ({
 }));
 
 vi.mock('./pi-session-files.js', () => ({
+  deletePiSessionFilesForSession: mockDeletePiSessionFilesForSession,
+  readPiSessionArchiveForSession: mockReadPiSessionArchiveForSession,
   readPiSessionFileState: mockReadPiSessionFileState,
+  readPiSessionSnapshotFromTraceEvents: vi.fn((traceEvents: unknown) => {
+    if (!Array.isArray(traceEvents)) return null;
+    const event = traceEvents.find(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        (item as { type?: unknown }).type === 'pi_session_snapshot',
+    );
+    return event && typeof event === 'object' && !Array.isArray(event)
+      ? ((event as { session?: unknown }).session ?? null)
+      : null;
+  }),
+  writePiSessionSnapshotArchiveToFiles: mockWritePiSessionSnapshotArchiveToFiles,
   writePiSessionArchiveToFiles: mockWritePiSessionArchiveToFiles,
 }));
 
@@ -139,8 +175,11 @@ vi.mock('../system/system-config.js', () => ({
 }));
 
 import {
+  archiveOwnedChatSession,
   cancelOwnedChatSessionMessage,
   getSharedChatSessionByShareToken,
+  listArchivedChatSessionsForOwnedUser,
+  restoreOwnedArchivedChatSession,
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
 } from './chat-session-service.js';
@@ -175,12 +214,42 @@ describe('chat-session-service selected board context', () => {
     mockStoreMessage.mockResolvedValue(undefined);
     mockTouchChatSession.mockResolvedValue(undefined);
     mockHasFinalAiChatSessionReply.mockResolvedValue(false);
+    mockGetRecentMessages.mockResolvedValue([]);
+    mockGetConversationLogByRequestId.mockResolvedValue(undefined);
     mockGetSessionMessages.mockResolvedValue([]);
     mockGetChatSessionPiSessionArchive.mockResolvedValue(undefined);
+    mockReadPiSessionArchiveForSession.mockResolvedValue({
+      sessionId: 'session-1',
+      payload: {
+        version: 1,
+        mapping_file_name: 'session-1.path',
+        mapping_content: 'session-1.jsonl',
+        files: [
+          {
+            name: 'session-1.jsonl',
+            content: '{"type":"session"}\n',
+            size_bytes: 19,
+            modified_at: '2026-04-26T09:00:00.000Z',
+          },
+        ],
+        archived_at: '2026-04-26T09:10:00.000Z',
+      },
+      missingSessionFile: false,
+      skippedUnsafeSessionFiles: [],
+    });
+    mockMarkChatSessionPiSessionArchived.mockResolvedValue(true);
+    mockDeletePiSessionFilesForSession.mockResolvedValue({
+      sessionId: 'session-1',
+      deletedMappingFile: true,
+      deletedSessionFiles: 1,
+      missingSessionFile: false,
+      skippedUnsafeSessionFiles: [],
+    });
     mockWritePiSessionArchiveToFiles.mockResolvedValue({
       writtenSessionFiles: 1,
       writtenMappingFile: true,
     });
+    mockWritePiSessionSnapshotArchiveToFiles.mockResolvedValue(null);
     mockMarkChatSessionPiSessionArchiveRestored.mockResolvedValue(undefined);
     mockReadPiSessionFileState.mockResolvedValue({
       hasSessionFile: true,
@@ -244,6 +313,82 @@ describe('chat-session-service selected board context', () => {
       metadata: null,
     });
     mockCancelAiChatSessionRequest.mockResolvedValue(true);
+  });
+
+  it('lists archived chat sessions for the owned user', async () => {
+    mockGetArchivedChatSessionsByUserId.mockResolvedValueOnce([
+      {
+        id: 'session-archived',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        title: '旧会话',
+        created_at: '2026-04-20T09:00:00.000Z',
+        updated_at: '2026-04-21T09:00:00.000Z',
+        deleted_at: '2026-04-26T09:00:00.000Z',
+      },
+    ]);
+
+    const result = await listArchivedChatSessionsForOwnedUser('user-1');
+
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          id: 'session-archived',
+          account_id: 'web:user-1',
+          title: '旧会话',
+          created_at: '2026-04-20T09:00:00.000Z',
+          updated_at: '2026-04-21T09:00:00.000Z',
+          share_token: null,
+          deleted_at: '2026-04-26T09:00:00.000Z',
+        },
+      ],
+    });
+    expect(mockGetArchivedChatSessionsByUserId).toHaveBeenCalledWith('user-1');
+  });
+
+  it('archives the Pi session payload and deletes local files when archiving a chat session', async () => {
+    const result = await archiveOwnedChatSession('user-1', 'session-1');
+
+    expect(result).toEqual({
+      ok: true,
+      data: { success: true },
+    });
+    expect(mockReadPiSessionArchiveForSession).toHaveBeenCalledWith(
+      'session-1',
+    );
+    expect(mockArchiveChatSession).toHaveBeenCalledWith('session-1');
+    expect(mockMarkChatSessionPiSessionArchived).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      reason: 'soft_deleted',
+      payload: expect.objectContaining({ version: 1 }),
+    });
+    expect(mockDeletePiSessionFilesForSession).toHaveBeenCalledWith(
+      'session-1',
+    );
+  });
+
+  it('restores an owned archived chat session', async () => {
+    mockRestoreArchivedChatSession.mockResolvedValueOnce({
+      id: 'session-archived',
+      account_id: 'web:user-1',
+      user_id: 'user-1',
+      title: '旧会话',
+      created_at: '2026-04-20T09:00:00.000Z',
+      updated_at: '2026-04-26T09:30:00.000Z',
+      deleted_at: null,
+    });
+
+    const result = await restoreOwnedArchivedChatSession(
+      'user-1',
+      'session-archived',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mockRestoreArchivedChatSession).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sessionId: 'session-archived',
+    });
   });
 
   it('cancels the owned active AI chat request', async () => {
@@ -526,6 +671,112 @@ describe('chat-session-service selected board context', () => {
     expect(mockWritePiSessionArchiveToFiles).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({ version: 1 }),
+    );
+    expect(mockMarkChatSessionPiSessionArchiveRestored).toHaveBeenCalledWith(
+      'session-1',
+    );
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuilds Pi jsonl from conversation log snapshot before continuing', async () => {
+    mockHasFinalAiChatSessionReply.mockResolvedValueOnce(true);
+    mockReadPiSessionFileState
+      .mockResolvedValueOnce({ hasSessionFile: false })
+      .mockResolvedValueOnce({ hasSessionFile: true });
+    mockGetRecentMessages.mockResolvedValueOnce([
+      {
+        id: 'aichat-reply-1',
+        account_id: 'web:user-1',
+        sender: 'assistant',
+        sender_name: '命枢',
+        content: '已有回复',
+        timestamp: '2026-04-26T09:20:00.000Z',
+        is_from_me: false,
+        is_bot_message: true,
+        session_id: 'session-1',
+        metadata: {
+          kind: 'final',
+          request_id: 'request-1',
+        },
+      },
+    ]);
+    mockGetConversationLogByRequestId.mockResolvedValueOnce({
+      id: 'log-1',
+      account_id: 'web:user-1',
+      request_id: 'request-1',
+      transcript: [],
+      usage: null,
+      model: 'gpt-4.1',
+      provider: 'openai-completions',
+      trace_events: [
+        {
+          type: 'pi_session_snapshot',
+          session: {
+            provider: 'openai-completions',
+            model: 'gpt-4.1',
+            messages: [
+              {
+                role: 'user',
+                content: [{ type: 'text', text: '继续分析' }],
+                timestamp: 1780145082878,
+              },
+              {
+                role: 'assistant',
+                content: [{ type: 'text', text: '可以' }],
+                provider: 'openai-completions',
+                model: 'gpt-4.1',
+                stopReason: 'stop',
+                timestamp: 1780145083878,
+              },
+            ],
+          },
+        },
+      ],
+      agent_graph: null,
+      agent_graph_summary: null,
+      capability_ledger: null,
+      created_at: '2026-04-26T09:20:00.000Z',
+    });
+    mockWritePiSessionSnapshotArchiveToFiles.mockResolvedValueOnce({
+      payload: {
+        version: 1,
+        mapping_file_name: 'session-1.path',
+        mapping_content: '2026-04-26T09-20-00-000Z_session-1.jsonl',
+        files: [
+          {
+            name: '2026-04-26T09-20-00-000Z_session-1.jsonl',
+            content: '{"type":"session"}\n',
+            size_bytes: 19,
+            modified_at: '2026-04-26T09:20:00.000Z',
+          },
+        ],
+        archived_at: '2026-04-26T09:20:00.000Z',
+      },
+      writtenSessionFiles: 1,
+      writtenMappingFile: true,
+      snapshotMessageCount: 2,
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续分析',
+      selectedBoardMessageId: undefined,
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockGetConversationLogByRequestId).toHaveBeenCalledWith(
+      'request-1',
+    );
+    expect(mockWritePiSessionSnapshotArchiveToFiles).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ model: 'gpt-4.1' }),
+    );
+    expect(mockMarkChatSessionPiSessionArchived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        reason: 'inactive',
+      }),
     );
     expect(mockMarkChatSessionPiSessionArchiveRestored).toHaveBeenCalledWith(
       'session-1',

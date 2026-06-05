@@ -20,11 +20,14 @@ import {
   getAdminGlobalStats,
   getAllSkillGlobalConfigs,
   getAllUsers,
+  getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
+  getChatSessionPiSessionArchive,
   getChatSessionsForAdmin,
   getConversationLogById,
   getConversationLogByRequestId,
   getConversationLogSummaries,
+  getRecentMessages,
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
@@ -52,6 +55,7 @@ import {
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
 import {
   createOfficialModel,
+  getPiSessionHealthPolicy,
   getSystemConfigOverview,
   removeOfficialModel,
   updateModelBillingSettings,
@@ -70,7 +74,13 @@ import { listPaipanRegistry } from '../chat/paipan-registry.js';
 import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
 import {
   deletePiSessionFilesForSession,
+  deletePiSessionOrphanFiles,
   readPiSessionArchiveForSession,
+  readPiSessionSnapshotFromTraceEvents,
+  scanPiSessionOrphanFiles,
+  writePiSessionSnapshotArchiveToFiles,
+  type PiSessionArchivePayload,
+  type PiSessionOrphanFileEntry,
 } from '../chat/pi-session-files.js';
 import {
   isValidMainlandChinaPhone,
@@ -227,11 +237,184 @@ export interface AdminPiSessionCleanupResult {
   cursor_reset: boolean;
   scanned_sessions: number;
   archived_sessions: number;
+  payload_restored_from_snapshot: number;
+  unarchivable_sessions: number;
+  already_archived_sessions: number;
   touched_sessions: number;
   deleted_jsonl_files: number;
   deleted_path_files: number;
   missing_jsonl_files: number;
   skipped_unsafe_files: string[];
+}
+
+export type AdminPiSessionOrphanScanAction = 'audit' | 'delete';
+
+/** 管理后台 Pi session 孤儿文件扫描/清理结果。 */
+export interface AdminPiSessionOrphanScanResult {
+  success: true;
+  action: AdminPiSessionOrphanScanAction;
+  grace_days: number;
+  session_dir: string;
+  total_files: number;
+  scanned_files: number;
+  truncated: boolean;
+  scanned_path_files: number;
+  scanned_jsonl_files: number;
+  dangling_path_files: number;
+  unmapped_jsonl_files: number;
+  unknown_files: number;
+  unsafe_path_files: number;
+  safe_deletable_files: number;
+  deleted_path_files: number;
+  deleted_jsonl_files: number;
+  skipped_recent_files: number;
+  skipped_unarchived_files: number;
+  skipped_unmapped_session_files: number;
+  samples: {
+    dangling_path_files: string[];
+    unmapped_jsonl_files: string[];
+    unknown_files: string[];
+    unsafe_path_files: string[];
+    safe_deletable_files: string[];
+    skipped_recent_files: string[];
+    skipped_unarchived_files: string[];
+    skipped_unmapped_session_files: string[];
+  };
+}
+
+type PiSessionCleanupMode = 'soft_deleted' | 'inactive';
+
+type PiSessionCleanupPayloadResolution = {
+  payload: PiSessionArchivePayload;
+  source: 'existing_payload' | 'local_files' | 'snapshot';
+  missingSessionFile: boolean;
+  skippedUnsafeSessionFiles: string[];
+  shouldMarkArchived: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSafeJsonlArchiveFile(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const name = value.name;
+  const content = value.content;
+  return (
+    typeof name === 'string' &&
+    name.trim().length > 0 &&
+    !name.includes('/') &&
+    !name.includes('\\') &&
+    name.endsWith('.jsonl') &&
+    typeof content === 'string' &&
+    content.length > 0
+  );
+}
+
+function hasUsablePiSessionArchivePayload(
+  payload: unknown,
+): payload is PiSessionArchivePayload {
+  if (!isRecord(payload) || !Array.isArray(payload.files)) {
+    return false;
+  }
+  return payload.files.some((file) => isSafeJsonlArchiveFile(file));
+}
+
+function readRequestIdFromMessageMetadata(message: {
+  metadata?: unknown;
+}): string | null {
+  const metadata = isRecord(message.metadata) ? message.metadata : null;
+  const requestId = metadata?.request_id;
+  return typeof requestId === 'string' && requestId.trim()
+    ? requestId.trim()
+    : null;
+}
+
+async function restorePiSessionPayloadFromConversationSnapshot(input: {
+  sessionId: string;
+  accountId: string;
+}): Promise<PiSessionCleanupPayloadResolution | null> {
+  const recentMessages = await getRecentMessages(
+    input.accountId,
+    50,
+    undefined,
+    undefined,
+    input.sessionId,
+  );
+  const requestIds = Array.from(
+    new Set(
+      recentMessages
+        .map(readRequestIdFromMessageMetadata)
+        .filter((requestId): requestId is string => Boolean(requestId)),
+    ),
+  );
+
+  for (const requestId of requestIds) {
+    const log = await getConversationLogByRequestId(requestId);
+    if (!log || log.account_id !== input.accountId) {
+      continue;
+    }
+    const snapshot = readPiSessionSnapshotFromTraceEvents(log.trace_events);
+    if (!snapshot) {
+      continue;
+    }
+    const restored = await writePiSessionSnapshotArchiveToFiles(
+      input.sessionId,
+      snapshot,
+    );
+    if (!restored || !hasUsablePiSessionArchivePayload(restored.payload)) {
+      continue;
+    }
+    return {
+      payload: restored.payload,
+      source: 'snapshot',
+      missingSessionFile: true,
+      skippedUnsafeSessionFiles: [],
+      shouldMarkArchived: true,
+    };
+  }
+
+  return null;
+}
+
+async function resolvePiSessionCleanupPayload(input: {
+  sessionId: string;
+  accountId: string;
+  piSessionArchivedAt: string | null;
+}): Promise<PiSessionCleanupPayloadResolution | null> {
+  const existingArchive = await getChatSessionPiSessionArchive(input.sessionId);
+  if (
+    existingArchive &&
+    hasUsablePiSessionArchivePayload(
+      existingArchive.pi_session_archive_payload,
+    )
+  ) {
+    return {
+      payload: existingArchive.pi_session_archive_payload,
+      source: 'existing_payload',
+      missingSessionFile: false,
+      skippedUnsafeSessionFiles: [],
+      shouldMarkArchived: !input.piSessionArchivedAt,
+    };
+  }
+
+  const archive = await readPiSessionArchiveForSession(input.sessionId);
+  if (hasUsablePiSessionArchivePayload(archive.payload)) {
+    return {
+      payload: archive.payload,
+      source: 'local_files',
+      missingSessionFile: archive.missingSessionFile,
+      skippedUnsafeSessionFiles: archive.skippedUnsafeSessionFiles,
+      shouldMarkArchived: true,
+    };
+  }
+
+  return restorePiSessionPayloadFromConversationSnapshot({
+    sessionId: input.sessionId,
+    accountId: input.accountId,
+  });
 }
 
 /**
@@ -241,13 +424,18 @@ export interface AdminPiSessionCleanupResult {
  * @returns 清理统计，供后台确认实际影响范围。
  */
 export async function cleanupPiSessionFilesForAdmin(input: {
-  mode: 'soft_deleted' | 'inactive';
+  mode: PiSessionCleanupMode;
   inactiveDays?: number;
   limit?: number;
 }): Promise<AdminPiSessionCleanupResult> {
+  const policy =
+    input.mode === 'inactive' && !input.inactiveDays
+      ? await getPiSessionHealthPolicy()
+      : null;
+  const inactiveDays = input.inactiveDays ?? policy?.inactiveCleanupDays;
   const cutoffAt =
-    input.mode === 'inactive' && input.inactiveDays
-      ? new Date(Date.now() - input.inactiveDays * 86_400_000).toISOString()
+    input.mode === 'inactive' && inactiveDays
+      ? new Date(Date.now() - inactiveDays * 86_400_000).toISOString()
       : null;
   const cursor = await getPiSessionCleanupCursor(input.mode);
   const cursorBefore = cursor?.cursor_session_id ?? null;
@@ -270,6 +458,9 @@ export async function cleanupPiSessionFilesForAdmin(input: {
   }
 
   let archivedSessions = 0;
+  let payloadRestoredFromSnapshot = 0;
+  let unarchivableSessions = 0;
+  let alreadyArchivedSessions = 0;
   let touchedSessions = 0;
   let deletedJsonlFiles = 0;
   let deletedPathFiles = 0;
@@ -277,18 +468,38 @@ export async function cleanupPiSessionFilesForAdmin(input: {
   const skippedUnsafeFiles: string[] = [];
 
   for (const candidate of candidates) {
-    const archive = await readPiSessionArchiveForSession(candidate.id);
-    const archived = await markChatSessionPiSessionArchived({
+    const resolution = await resolvePiSessionCleanupPayload({
       sessionId: candidate.id,
-      reason: input.mode,
-      payload: archive.payload,
+      accountId: candidate.account_id,
+      piSessionArchivedAt: candidate.pi_session_archived_at,
     });
-    if (!archived) {
+    if (!resolution) {
+      unarchivableSessions += 1;
       continue;
     }
-    archivedSessions += 1;
-    missingJsonlFiles += archive.missingSessionFile ? 1 : 0;
-    skippedUnsafeFiles.push(...archive.skippedUnsafeSessionFiles);
+
+    if (resolution.shouldMarkArchived) {
+      const archived = await markChatSessionPiSessionArchived({
+        sessionId: candidate.id,
+        reason: input.mode,
+        payload: resolution.payload,
+      });
+      if (!archived) {
+        continue;
+      }
+      if (resolution.source !== 'existing_payload') {
+        archivedSessions += 1;
+      }
+    }
+    if (resolution.source === 'existing_payload') {
+      alreadyArchivedSessions += 1;
+    }
+    if (resolution.source === 'snapshot') {
+      payloadRestoredFromSnapshot += 1;
+    }
+
+    missingJsonlFiles += resolution.missingSessionFile ? 1 : 0;
+    skippedUnsafeFiles.push(...resolution.skippedUnsafeSessionFiles);
 
     const result = await deletePiSessionFilesForSession(candidate.id);
     if (
@@ -316,19 +527,168 @@ export async function cleanupPiSessionFilesForAdmin(input: {
   return {
     success: true,
     mode: input.mode,
-    inactive_days:
-      input.mode === 'inactive' ? (input.inactiveDays ?? null) : null,
+    inactive_days: input.mode === 'inactive' ? (inactiveDays ?? null) : null,
     cutoff_at: cutoffAt,
     cursor_before: cursorReset ? null : cursorBefore,
     cursor_after: cursorAfter,
     cursor_reset: cursorReset,
     scanned_sessions: candidates.length,
     archived_sessions: archivedSessions,
+    payload_restored_from_snapshot: payloadRestoredFromSnapshot,
+    unarchivable_sessions: unarchivableSessions,
+    already_archived_sessions: alreadyArchivedSessions,
     touched_sessions: touchedSessions,
     deleted_jsonl_files: deletedJsonlFiles,
     deleted_path_files: deletedPathFiles,
     missing_jsonl_files: missingJsonlFiles,
     skipped_unsafe_files: skippedUnsafeFiles,
+  };
+}
+
+function sampleEntryNames(
+  entries: Array<PiSessionOrphanFileEntry | string>,
+  sampleLimit: number,
+): string[] {
+  return entries.slice(0, sampleLimit).map((entry) =>
+    typeof entry === 'string' ? entry : entry.name,
+  );
+}
+
+function isOlderThanGraceDays(
+  entry: PiSessionOrphanFileEntry,
+  nowMs: number,
+  graceDays: number,
+): boolean {
+  if (!entry.modified_at) {
+    return false;
+  }
+  const modifiedAtMs = new Date(entry.modified_at).getTime();
+  if (!Number.isFinite(modifiedAtMs)) {
+    return false;
+  }
+  return nowMs - modifiedAtMs >= graceDays * 86_400_000;
+}
+
+/**
+ * 扫描并按需物理删除 Pi session 孤儿文件。
+ *
+ * @param input - 管理员选择的动作和扫描上限。
+ * @returns 文件系统审计、跳过原因和删除数量。
+ * @remarks 只有 action=delete 时才会物理删除；自动后台任务不会调用删除动作。
+ */
+export async function scanPiSessionOrphanFilesForAdmin(input?: {
+  action?: AdminPiSessionOrphanScanAction;
+  limit?: number;
+  sampleLimit?: number;
+}): Promise<AdminPiSessionOrphanScanResult> {
+  const action = input?.action ?? 'audit';
+  const sampleLimit = Math.min(Math.max(input?.sampleLimit ?? 20, 1), 100);
+  const policy = await getPiSessionHealthPolicy();
+  const scan = await scanPiSessionOrphanFiles({ limit: input?.limit });
+  const candidates = [
+    ...scan.dangling_path_files,
+    ...scan.unmapped_jsonl_files,
+  ];
+  const sessionIds = [
+    ...new Set(
+      candidates
+        .map((entry) => entry.session_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const archiveStates = new Map(
+    (await getChatSessionPiArchiveStates(sessionIds)).map((state) => [
+      state.id,
+      state,
+    ]),
+  );
+
+  const nowMs = Date.now();
+  const safeDeletableFiles: PiSessionOrphanFileEntry[] = [];
+  const skippedRecentFiles: PiSessionOrphanFileEntry[] = [];
+  const skippedUnarchivedFiles: PiSessionOrphanFileEntry[] = [];
+  const skippedUnmappedSessionFiles: PiSessionOrphanFileEntry[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.session_id) {
+      skippedUnmappedSessionFiles.push(candidate);
+      continue;
+    }
+    if (
+      !isOlderThanGraceDays(candidate, nowMs, policy.orphanGraceDays)
+    ) {
+      skippedRecentFiles.push(candidate);
+      continue;
+    }
+    const archiveState = archiveStates.get(candidate.session_id);
+    if (archiveState && !archiveState.has_pi_session_archive_payload) {
+      skippedUnarchivedFiles.push(candidate);
+      continue;
+    }
+    safeDeletableFiles.push(candidate);
+  }
+
+  const deleteResult =
+    action === 'delete'
+      ? await deletePiSessionOrphanFiles(safeDeletableFiles)
+      : {
+          deleted_path_files: 0,
+          deleted_jsonl_files: 0,
+          skipped_unsafe_files: [],
+        };
+  const unsafeFiles = [
+    ...scan.unsafe_path_files,
+    ...deleteResult.skipped_unsafe_files,
+  ];
+
+  return {
+    success: true,
+    action,
+    grace_days: policy.orphanGraceDays,
+    session_dir: scan.session_dir,
+    total_files: scan.total_files,
+    scanned_files: scan.scanned_files,
+    truncated: scan.truncated,
+    scanned_path_files: scan.scanned_path_files,
+    scanned_jsonl_files: scan.scanned_jsonl_files,
+    dangling_path_files: scan.dangling_path_files.length,
+    unmapped_jsonl_files: scan.unmapped_jsonl_files.length,
+    unknown_files: scan.unknown_files.length,
+    unsafe_path_files: unsafeFiles.length,
+    safe_deletable_files: safeDeletableFiles.length,
+    deleted_path_files: deleteResult.deleted_path_files,
+    deleted_jsonl_files: deleteResult.deleted_jsonl_files,
+    skipped_recent_files: skippedRecentFiles.length,
+    skipped_unarchived_files: skippedUnarchivedFiles.length,
+    skipped_unmapped_session_files: skippedUnmappedSessionFiles.length,
+    samples: {
+      dangling_path_files: sampleEntryNames(
+        scan.dangling_path_files,
+        sampleLimit,
+      ),
+      unmapped_jsonl_files: sampleEntryNames(
+        scan.unmapped_jsonl_files,
+        sampleLimit,
+      ),
+      unknown_files: sampleEntryNames(scan.unknown_files, sampleLimit),
+      unsafe_path_files: sampleEntryNames(unsafeFiles, sampleLimit),
+      safe_deletable_files: sampleEntryNames(
+        safeDeletableFiles,
+        sampleLimit,
+      ),
+      skipped_recent_files: sampleEntryNames(
+        skippedRecentFiles,
+        sampleLimit,
+      ),
+      skipped_unarchived_files: sampleEntryNames(
+        skippedUnarchivedFiles,
+        sampleLimit,
+      ),
+      skipped_unmapped_session_files: sampleEntryNames(
+        skippedUnmappedSessionFiles,
+        sampleLimit,
+      ),
+    },
   };
 }
 

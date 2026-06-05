@@ -24,7 +24,8 @@ interface ChatSessionsContextValue {
   setSelectedSession: (id: string) => void;
   createSession: () => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  archiveSession: (sessionId: string) => Promise<void>;
+  restoreSession: (sessionId: string) => Promise<ChatSession>;
   shareSession: (sessionId: string) => Promise<string>;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
   loading: boolean;
@@ -218,9 +219,9 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const deleteSession = useCallback(
+  const archiveSession = useCallback(
     async (sessionId: string) => {
-      await chatSessionsApi.remove(sessionId);
+      await chatSessionsApi.archive(sessionId);
       setSessions((previous) =>
         previous.filter((session) => session.id !== sessionId),
       );
@@ -230,6 +231,14 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     },
     [selectedSession, setSelectedSession],
   );
+
+  const restoreSession = useCallback(async (sessionId: string) => {
+    const session = await chatSessionsApi.restore(sessionId);
+    setSessions((previous) =>
+      mergeSessionPatch(previous, session.id, session),
+    );
+    return session;
+  }, []);
 
   const shareSession = useCallback(async (sessionId: string) => {
     const result = await chatSessionsApi.share(sessionId);
@@ -258,7 +267,8 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       setSelectedSession,
       createSession,
       renameSession,
-      deleteSession,
+      archiveSession,
+      restoreSession,
       shareSession,
       touchSession,
       loading,
@@ -272,7 +282,8 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       setSelectedSession,
       createSession,
       renameSession,
-      deleteSession,
+      archiveSession,
+      restoreSession,
       shareSession,
       touchSession,
       loading,

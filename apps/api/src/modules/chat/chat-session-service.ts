@@ -18,8 +18,9 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
+  archiveChatSession,
   createChatSession,
-  deleteChatSession,
+  getArchivedChatSessionsByUserId,
   getAccountsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
@@ -32,7 +33,9 @@ import {
   getSharedChatSessionByToken,
   getUserById,
   hasFinalAiChatSessionReply,
+  markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
+  restoreArchivedChatSession,
   shareOwnedChatSession,
   storeMessage,
   updateChatSessionTitle,
@@ -74,7 +77,11 @@ import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js'
 import type { StructuredInput } from './structured-input.js';
 import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
 import {
+  deletePiSessionFilesForSession,
+  readPiSessionArchiveForSession,
   readPiSessionFileState,
+  readPiSessionSnapshotFromTraceEvents,
+  writePiSessionSnapshotArchiveToFiles,
   type PiSessionArchivePayload,
   writePiSessionArchiveToFiles,
 } from './pi-session-files.js';
@@ -298,6 +305,73 @@ async function resolveOwnedSoulAccountId(
   return accounts[0]?.id;
 }
 
+function readRequestIdFromMessage(message: NewMessage): string | null {
+  const metadata =
+    message.metadata &&
+    typeof message.metadata === 'object' &&
+    !Array.isArray(message.metadata)
+      ? (message.metadata as Record<string, unknown>)
+      : null;
+  const requestId = metadata?.request_id;
+  return typeof requestId === 'string' && requestId.trim()
+    ? requestId.trim()
+    : null;
+}
+
+async function restorePiSessionFromConversationSnapshot(
+  session: ChatSession,
+): Promise<boolean> {
+  const recentMessages = await getRecentMessages(
+    session.account_id,
+    50,
+    undefined,
+    undefined,
+    session.id,
+  );
+  const requestIds = Array.from(
+    new Set(
+      recentMessages
+        .map(readRequestIdFromMessage)
+        .filter((requestId): requestId is string => Boolean(requestId)),
+    ),
+  );
+
+  for (const requestId of requestIds) {
+    const log = await getConversationLogByRequestId(requestId);
+    if (!log || log.account_id !== session.account_id) {
+      continue;
+    }
+    const snapshot = readPiSessionSnapshotFromTraceEvents(log.trace_events);
+    if (!snapshot) {
+      continue;
+    }
+    const result = await writePiSessionSnapshotArchiveToFiles(
+      session.id,
+      snapshot,
+    );
+    if (!result?.writtenMappingFile || result.writtenSessionFiles <= 0) {
+      continue;
+    }
+    await markChatSessionPiSessionArchived({
+      sessionId: session.id,
+      reason: 'inactive',
+      payload: result.payload,
+    });
+    await markChatSessionPiSessionArchiveRestored(session.id);
+    logger.warn(
+      {
+        sessionId: session.id,
+        requestId,
+        snapshotMessageCount: result.snapshotMessageCount,
+      },
+      '已从 conversation log 的 Pi session snapshot 重建本地 Pi session 文件',
+    );
+    return true;
+  }
+
+  return false;
+}
+
 async function resolveSessionContinuationState(session: ChatSession): Promise<{
   blocked: boolean;
   reason?: 'pi_session_missing';
@@ -329,6 +403,13 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
     }
   }
 
+  if (await restorePiSessionFromConversationSnapshot(session)) {
+    const restoredPiSession = await readPiSessionFileState(session.id);
+    if (restoredPiSession.hasSessionFile) {
+      return { blocked: false };
+    }
+  }
+
   return {
     blocked: true,
     reason: 'pi_session_missing',
@@ -340,6 +421,19 @@ export async function listChatSessionsForOwnedUser(
   userId: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
   const sessions = await getChatSessionsByUserId(userId);
+  return ok(sessions.map(toChatSessionDto));
+}
+
+/**
+ * 列出当前用户已归档的 AI Chat 会话。
+ *
+ * @param userId 会话归属用户 ID。
+ * @returns 已归档会话 DTO 列表。
+ */
+export async function listArchivedChatSessionsForOwnedUser(
+  userId: string,
+): Promise<ServiceResult<ChatSessionDto[]>> {
+  const sessions = await getArchivedChatSessionsByUserId(userId);
   return ok(sessions.map(toChatSessionDto));
 }
 
@@ -372,7 +466,14 @@ export async function renameOwnedChatSession(
   return ok({ success: true });
 }
 
-export async function deleteOwnedChatSession(
+/**
+ * 归档当前用户拥有的 AI Chat 会话，并清理本地 Pi session 文件。
+ *
+ * @param userId 会话归属用户 ID。
+ * @param sessionId chat_sessions.id。
+ * @returns 成功响应；无权限、会话不存在或文件归档失败时返回错误。
+ */
+export async function archiveOwnedChatSession(
   userId: string,
   sessionId: string,
 ): Promise<ServiceResult<SuccessResponse>> {
@@ -381,8 +482,49 @@ export async function deleteOwnedChatSession(
     return sessionResult;
   }
 
-  await deleteChatSession(sessionResult.data.id);
+  const piSessionArchive = await readPiSessionArchiveForSession(
+    sessionResult.data.id,
+  );
+  await archiveChatSession(sessionResult.data.id);
+  await markChatSessionPiSessionArchived({
+    sessionId: sessionResult.data.id,
+    reason: 'soft_deleted',
+    payload: piSessionArchive.payload,
+  });
+  await deletePiSessionFilesForSession(sessionResult.data.id);
   return ok({ success: true });
+}
+
+/**
+ * 兼容旧路由命名的归档入口。
+ *
+ * @param userId 会话归属用户 ID。
+ * @param sessionId chat_sessions.id。
+ * @returns 成功响应；无权限或会话不存在时返回错误。
+ */
+export async function deleteOwnedChatSession(
+  userId: string,
+  sessionId: string,
+): Promise<ServiceResult<SuccessResponse>> {
+  return archiveOwnedChatSession(userId, sessionId);
+}
+
+/**
+ * 恢复当前用户拥有的已归档 AI Chat 会话。
+ *
+ * @param userId 会话归属用户 ID。
+ * @param sessionId chat_sessions.id。
+ * @returns 恢复后的会话；不存在或不属于当前用户时返回错误。
+ */
+export async function restoreOwnedArchivedChatSession(
+  userId: string,
+  sessionId: string,
+): Promise<ServiceResult<ChatSessionDto>> {
+  const session = await restoreArchivedChatSession({ userId, sessionId });
+  if (!session) {
+    return fail(404, '归档会话不存在');
+  }
+  return ok(toChatSessionDto(session));
 }
 
 export async function getOwnedChatSessionMessages(

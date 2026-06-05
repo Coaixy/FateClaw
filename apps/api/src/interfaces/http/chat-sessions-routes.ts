@@ -5,14 +5,16 @@ import type {
 } from '@fateclaw/contracts/chat';
 
 import {
+  archiveOwnedChatSession,
   createChatSessionForOwnedUser,
   cancelOwnedChatSessionMessage,
-  deleteOwnedChatSession,
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
   getSharedChatSessionByShareToken,
+  listArchivedChatSessionsForOwnedUser,
   listChatSessionsForOwnedUser,
   renameOwnedChatSession,
+  restoreOwnedArchivedChatSession,
   shareOwnedChatSessionForUser,
   sendOwnedChatSessionMessage,
 } from '../../modules/chat/chat-session-service.js';
@@ -96,6 +98,18 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
+  // GET /api/chat-sessions/archived — 列出当前用户已归档的 AI Chat 会话
+  app.get('/archived', async (request, reply) => {
+    await request.requireAuth();
+    const result = await listArchivedChatSessionsForOwnedUser(
+      request.user.userId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
   // GET /api/chat-sessions/shared/:token — 通过私密分享令牌查看只读会话
   app.get<{
     Params: { token: string };
@@ -146,12 +160,27 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // DELETE /api/chat-sessions/s/:sessionId — 删除会话
+  // DELETE /api/chat-sessions/s/:sessionId — 归档会话（保留旧 DELETE 路径）
   app.delete<{
     Params: { sessionId: string };
   }>('/s/:sessionId', async (request, reply) => {
     await request.requireAuth();
-    const result = await deleteOwnedChatSession(
+    const result = await archiveOwnedChatSession(
+      request.user.userId,
+      request.params.sessionId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/chat-sessions/s/:sessionId/restore — 恢复已归档会话
+  app.post<{
+    Params: { sessionId: string };
+  }>('/s/:sessionId/restore', async (request, reply) => {
+    await request.requireAuth();
+    const result = await restoreOwnedArchivedChatSession(
       request.user.userId,
       request.params.sessionId,
     );

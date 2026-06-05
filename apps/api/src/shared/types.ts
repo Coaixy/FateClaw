@@ -312,6 +312,9 @@ export interface RuntimeConfig {
   agent_concurrency_limit: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
+  pi_session_health_enabled: boolean;
+  pi_session_inactive_cleanup_days: number;
+  pi_session_orphan_grace_days: number;
   updated_at: string;
 }
 

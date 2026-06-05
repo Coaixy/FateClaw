@@ -21,6 +21,7 @@ import {
 } from './repositories/accounts-repository.js';
 import {
   getAdminGlobalStats,
+  getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
   getChatSessionsForAdmin,
   getCustomSkillForAdmin,
@@ -32,6 +33,7 @@ import {
 } from './repositories/admin-repository.js';
 import type {
   AdminChatSessionRow,
+  AdminChatSessionPiArchiveState,
   AdminCustomSkillRow,
   AdminGlobalStats,
   AdminMessageRow,
@@ -91,8 +93,10 @@ import type {
   UserMembershipRow,
 } from './repositories/billing-repository.js';
 import {
+  archiveChatSession,
   createChatSession,
   deleteChatSession,
+  getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
   getChatSessions,
@@ -107,6 +111,7 @@ import {
   markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
   resetUserMessages,
+  restoreArchivedChatSession,
   shareOwnedChatSession,
   storeMessage,
   touchChatSession,
@@ -238,6 +243,7 @@ import type {
 
 export {
   adjustUserPurchasedBalance,
+  archiveChatSession,
   bindAccountToUser,
   createAccount,
   createChatSession,
@@ -265,10 +271,12 @@ export {
   getAllSkillGlobalConfigs,
   getAllUsers,
   getAllAccounts,
+  getArchivedChatSessionsByUserId,
   getBillingRequestReservationByRequestId,
   getBundleByToken,
   getChatSession,
   getChatSessionPiSessionArchive,
+  getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
   getChatSessions,
   getChatSessionsByUserId,
@@ -351,6 +359,7 @@ export {
   resolveSkillAccessInviteStatus,
   resetPiSessionCleanupCursor,
   resetUserMessages,
+  restoreArchivedChatSession,
   revokeSkillAccessInvite,
   reserveUserBalanceCoins,
   seedOfficialSkills,

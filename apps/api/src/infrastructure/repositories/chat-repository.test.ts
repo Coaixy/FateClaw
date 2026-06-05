@@ -22,8 +22,11 @@ vi.mock('../logger.js', () => ({
 
 import {
   deleteChatSession,
+  getArchivedChatSessionsByUserId,
+  getChatSessionPiSessionArchive,
   getRecentMessages,
   resetUserMessages,
+  restoreArchivedChatSession,
   storeMessage,
 } from './chat-repository.js';
 import type { NewMessage } from '../../shared/types.js';
@@ -171,6 +174,61 @@ describe('chat repository', () => {
         params: ['session-1'],
       },
     ]);
+  });
+
+  it('lists archived chat sessions for a user', async () => {
+    const { calls } = createMockPool([]);
+
+    await getArchivedChatSessionsByUserId('user-1', 20);
+
+    expect(calls[0]?.sql).toContain('deleted_at IS NOT NULL');
+    expect(calls[0]?.sql).toContain('ORDER BY deleted_at DESC');
+    expect(calls[0]?.params).toEqual(['user-1', 20]);
+  });
+
+  it('restores an archived chat session owned by a user', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'session-1',
+        user_id: 'user-1',
+        account_id: 'web:user-1',
+        title: '旧会话',
+        created_at: '2026-05-27T00:00:00.000Z',
+        updated_at: '2026-05-27T01:00:00.000Z',
+        deleted_at: null,
+      },
+    ]);
+
+    const restored = await restoreArchivedChatSession({
+      userId: 'user-1',
+      sessionId: 'session-1',
+    });
+
+    expect(restored?.id).toBe('session-1');
+    expect(calls[0]?.sql).toContain('SET deleted_at = NULL');
+    expect(calls[0]?.sql).toContain('AND deleted_at IS NOT NULL');
+    expect(calls[0]?.params).toEqual(['session-1', 'user-1']);
+  });
+
+  it('reads a Pi session archive payload even when archived_at is missing', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'session-1',
+        pi_session_archived_at: null,
+        pi_session_archive_reason: null,
+        pi_session_archive_payload: { version: 1, files: [] },
+        pi_session_archive_restored_at: null,
+      },
+    ]);
+
+    const archive = await getChatSessionPiSessionArchive('session-1');
+
+    expect(archive?.pi_session_archive_payload).toEqual({
+      version: 1,
+      files: [],
+    });
+    expect(calls[0]?.sql).toContain('pi_session_archive_payload IS NOT NULL');
+    expect(calls[0]?.sql).not.toContain('pi_session_archived_at IS NOT NULL');
   });
 
   it('soft deletes all messages for a user account set transactionally', async () => {

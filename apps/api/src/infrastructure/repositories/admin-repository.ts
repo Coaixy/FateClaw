@@ -198,9 +198,16 @@ export async function getChatSessionsForAdmin(opts: {
 /** 管理后台清理 Pi session 文件时使用的会话候选行。 */
 export interface AdminChatSessionPiCleanupCandidate {
   id: string;
+  account_id: string;
   updated_at: string;
   deleted_at: string | null;
   pi_session_archived_at: string | null;
+}
+
+export interface AdminChatSessionPiArchiveState {
+  id: string;
+  pi_session_archived_at: string | null;
+  has_pi_session_archive_payload: boolean;
 }
 
 /**
@@ -243,11 +250,14 @@ export async function getChatSessionPiCleanupCandidates(opts: {
   params.push(limit);
 
   const { rows } = await pool.query(
-    `SELECT id, updated_at, deleted_at, pi_session_archived_at
+    `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
      FROM chat_sessions s
      WHERE (${eligibilityClause})
        ${opts.cursor ? `AND ${conditions.at(-1)}` : ''}
-       AND pi_session_archived_at IS NULL
+       AND (
+         pi_session_archived_at IS NULL
+         OR pi_session_archive_payload IS NOT NULL
+       )
        AND NOT EXISTS (
          SELECT 1
          FROM user_memberships m
@@ -261,6 +271,31 @@ export async function getChatSessionPiCleanupCandidates(opts: {
   );
 
   return rows as AdminChatSessionPiCleanupCandidate[];
+}
+
+/**
+ * 批量读取 chat session 的 Pi session 归档状态。
+ *
+ * @param sessionIds - 从文件名中保守解析出的 chat session id。
+ * @returns 已存在 session 的归档状态；不存在的 id 不返回。
+ */
+export async function getChatSessionPiArchiveStates(
+  sessionIds: string[],
+): Promise<AdminChatSessionPiArchiveState[]> {
+  const ids = [...new Set(sessionIds.filter((id) => id.trim()))];
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id,
+            pi_session_archived_at,
+            pi_session_archive_payload IS NOT NULL AS has_pi_session_archive_payload
+     FROM chat_sessions
+     WHERE id = ANY($1::text[])`,
+    [ids],
+  );
+  return rows as AdminChatSessionPiArchiveState[];
 }
 
 /** 管理后台增量清理 Pi session 时保存的扫描水位。 */

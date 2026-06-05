@@ -54,6 +54,8 @@ export const DEFAULT_AGENT_CONCURRENCY_LIMIT = 10;
 export const DEFAULT_LOCAL_AGENT_MAX_PROCESSES = 4;
 export const DEFAULT_LOCAL_AGENT_IDLE_TTL_MS = 600_000;
 export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'medium';
+export const DEFAULT_PI_SESSION_INACTIVE_CLEANUP_DAYS = 30;
+export const DEFAULT_PI_SESSION_ORPHAN_GRACE_DAYS = 30;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -97,6 +99,13 @@ export interface UserModelSettingsOverview {
   selection: UserModelSelection | null;
   official_models: AdminOfficialModelView[];
   custom_model_platform_price_per_million_coins: number;
+}
+
+/** Pi session 健康维护策略，供后台任务和管理端文件审计复用。 */
+export interface PiSessionHealthPolicy {
+  enabled: boolean;
+  inactiveCleanupDays: number;
+  orphanGraceDays: number;
 }
 
 type ResolvedOfficialModelCandidate = {
@@ -181,6 +190,15 @@ function withModelDescription(
     delete next.description;
   }
   return next;
+}
+
+function normalizePolicyDays(value: unknown, fallback: number): number {
+  const numeric =
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(
+    3650,
+    Math.max(1, Math.floor(numeric)),
+  );
 }
 
 async function resolveSecret(input: {
@@ -465,6 +483,9 @@ export async function getSystemConfigOverview(): Promise<{
     agent_concurrency_limit: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
+    pi_session_health_enabled: boolean;
+    pi_session_inactive_cleanup_days: number;
+    pi_session_orphan_grace_days: number;
     updated_at: string;
   };
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
@@ -487,6 +508,10 @@ export async function getSystemConfigOverview(): Promise<{
       agent_concurrency_limit: runtime.agent_concurrency_limit,
       local_agent_max_processes: runtime.local_agent_max_processes,
       local_agent_idle_ttl_ms: runtime.local_agent_idle_ttl_ms,
+      pi_session_health_enabled: runtime.pi_session_health_enabled,
+      pi_session_inactive_cleanup_days:
+        runtime.pi_session_inactive_cleanup_days,
+      pi_session_orphan_grace_days: runtime.pi_session_orphan_grace_days,
       updated_at: runtime.updated_at,
     },
     audit_logs: auditLogs,
@@ -570,17 +595,44 @@ export async function getLocalAgentRuntimePolicy(): Promise<{
 }
 
 /**
+ * 读取 Pi session 健康维护策略。
+ *
+ * @returns 后台任务和孤儿文件扫描共用的归一化策略。
+ * @remarks 这里只读取 DB 配置，不引入 Pi session 相关环境变量。
+ */
+export async function getPiSessionHealthPolicy(): Promise<PiSessionHealthPolicy> {
+  const runtime = await getRuntimeConfig();
+  return {
+    enabled: Boolean(runtime.pi_session_health_enabled),
+    inactiveCleanupDays: normalizePolicyDays(
+      runtime.pi_session_inactive_cleanup_days,
+      DEFAULT_PI_SESSION_INACTIVE_CLEANUP_DAYS,
+    ),
+    orphanGraceDays: normalizePolicyDays(
+      runtime.pi_session_orphan_grace_days,
+      DEFAULT_PI_SESSION_ORPHAN_GRACE_DAYS,
+    ),
+  };
+}
+
+/**
  * 更新全站 Agent 运行时策略。
  */
 export async function updateRuntimeSettings(args: {
   agentConcurrencyLimit: number;
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
+  piSessionHealthEnabled?: boolean;
+  piSessionInactiveCleanupDays?: number;
+  piSessionOrphanGraceDays?: number;
   actor?: string;
 }): Promise<{
   agent_concurrency_limit: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
+  pi_session_health_enabled: boolean;
+  pi_session_inactive_cleanup_days: number;
+  pi_session_orphan_grace_days: number;
   updated_at: string;
 }> {
   const actor = args.actor ?? 'admin';
@@ -589,6 +641,9 @@ export async function updateRuntimeSettings(args: {
     agentConcurrencyLimit: args.agentConcurrencyLimit,
     localAgentMaxProcesses: args.localAgentMaxProcesses,
     localAgentIdleTtlMs: args.localAgentIdleTtlMs,
+    piSessionHealthEnabled: args.piSessionHealthEnabled,
+    piSessionInactiveCleanupDays: args.piSessionInactiveCleanupDays,
+    piSessionOrphanGraceDays: args.piSessionOrphanGraceDays,
   });
   await createConfigAuditLog({
     id: `cfg-audit-${randomUUID()}`,
@@ -603,6 +658,10 @@ export async function updateRuntimeSettings(args: {
     agent_concurrency_limit: updated.agent_concurrency_limit,
     local_agent_max_processes: updated.local_agent_max_processes,
     local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
+    pi_session_health_enabled: updated.pi_session_health_enabled,
+    pi_session_inactive_cleanup_days:
+      updated.pi_session_inactive_cleanup_days,
+    pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
     updated_at: updated.updated_at,
   };
 }

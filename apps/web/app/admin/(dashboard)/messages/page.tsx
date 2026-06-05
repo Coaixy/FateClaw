@@ -13,6 +13,7 @@ import {
   admin,
   AdminChatSession,
   AdminMessage,
+  type AdminPiSessionOrphanScanResult,
   AdminUser,
 } from '@/lib/admin-api';
 import {
@@ -236,6 +237,11 @@ function AdminMessagesContent() {
   const [cleanupLoading, setCleanupLoading] = useState<
     'soft_deleted' | 'inactive' | null
   >(null);
+  const [orphanLoading, setOrphanLoading] = useState<
+    'audit' | 'delete' | null
+  >(null);
+  const [orphanResult, setOrphanResult] =
+    useState<AdminPiSessionOrphanScanResult | null>(null);
 
   const prevUserIdRef = useRef(selectedUserId);
   const prevAccountIdRef = useRef(selectedAccountId);
@@ -409,10 +415,10 @@ function AdminMessagesContent() {
 
       const ok = await confirm({
         title:
-          mode === 'soft_deleted' ? '清理已删除会话状态' : '清理超期会话状态',
+          mode === 'soft_deleted' ? '清理已归档会话状态' : '清理超期会话状态',
         message:
           mode === 'soft_deleted'
-            ? '确定要删除所有软删除对话对应的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
+            ? '确定要清理所有已归档对话对应的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
             : `确定要归档 ${days} 天未活跃对话对应的 Pi session 本地 jsonl/path 文件吗？后续需要继续追问时会先从数据库回写。`,
         confirmLabel: '清理',
         variant: 'danger',
@@ -427,7 +433,7 @@ function AdminMessagesContent() {
         });
         toast(
           'success',
-          `从上次水位扫描 ${result.scanned_sessions} 个会话，归档 ${result.archived_sessions} 个，删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`,
+          `扫描 ${result.scanned_sessions} 个，新增归档 ${result.archived_sessions} 个，复用 ${result.already_archived_sessions} 个，snapshot 修复 ${result.payload_restored_from_snapshot} 个，无法归档 ${result.unarchivable_sessions} 个；删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`,
         );
         handleRefresh();
       } catch (err) {
@@ -437,6 +443,45 @@ function AdminMessagesContent() {
       }
     },
     [cleanupLoading, confirm, handleRefresh, inactiveDays, toast],
+  );
+
+  const runPiSessionOrphanScan = useCallback(
+    async (action: 'audit' | 'delete') => {
+      if (orphanLoading) return;
+      if (action === 'delete') {
+        const ok = await confirm({
+          title: '删除安全孤儿文件',
+          message:
+            '确定要删除已通过数据库归档状态校验的 Pi session 孤儿文件吗？未知文件、unsafe path 和未归档会话会跳过。',
+          confirmLabel: '删除',
+          variant: 'danger',
+        });
+        if (!ok) return;
+      }
+
+      setOrphanLoading(action);
+      try {
+        const result = await admin.scanPiSessionOrphans({
+          action,
+          sample_limit: 10,
+        });
+        setOrphanResult(result);
+        toast(
+          'success',
+          action === 'delete'
+            ? `扫描 ${result.scanned_files} 个文件，删除 ${result.deleted_jsonl_files} 个 jsonl、${result.deleted_path_files} 个 path`
+            : `扫描 ${result.scanned_files} 个文件，安全可删 ${result.safe_deletable_files} 个，未知 ${result.unknown_files} 个，unsafe ${result.unsafe_path_files} 个`,
+        );
+        if (action === 'delete') {
+          handleRefresh();
+        }
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : '孤儿文件扫描失败');
+      } finally {
+        setOrphanLoading(null);
+      }
+    },
+    [confirm, handleRefresh, orphanLoading, toast],
   );
 
   return (
@@ -525,7 +570,7 @@ function AdminMessagesContent() {
                 <p className="text-[12px] font-medium">Pi 会话状态清理</p>
                 <p className="text-[11px] text-muted">
                   从上次水位增量扫描，先把本地 jsonl/path
-                  归档到数据库，再删除本地文件；后续继续追问时会先尝试从数据库回写
+                  归档到数据库，再删除本地文件；已有 payload 会直接复用，缺失文件会尝试从 snapshot 修复
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -540,7 +585,7 @@ function AdminMessagesContent() {
                   ) : (
                     <Trash2 size={13} />
                   )}
-                  软删除
+                  已归档
                 </button>
                 <div className="flex items-center gap-1.5">
                   <input
@@ -567,6 +612,69 @@ function AdminMessagesContent() {
                   清理超期
                 </button>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-hairline bg-surface-card px-3 py-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium">Pi 孤儿文件审计</p>
+                  <p className="text-[11px] text-muted">
+                    只处理未被 path 引用、超过后台保护天数且 DB 已归档或不存在的安全文件
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runPiSessionOrphanScan('audit')}
+                    disabled={orphanLoading !== null}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline px-2.5 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {orphanLoading === 'audit' ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Search size={13} />
+                    )}
+                    审计
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runPiSessionOrphanScan('delete')}
+                    disabled={orphanLoading !== null}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {orphanLoading === 'delete' ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} />
+                    )}
+                    删除安全孤儿
+                  </button>
+                </div>
+              </div>
+              {orphanResult ? (
+                <div className="mt-2 grid gap-2 text-[11px] text-muted sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    扫描 {orphanResult.scanned_files}/
+                    {orphanResult.total_files} 个
+                    {orphanResult.truncated ? '，已截断' : ''}
+                  </div>
+                  <div>
+                    安全可删 {orphanResult.safe_deletable_files} 个，已删{' '}
+                    {orphanResult.deleted_jsonl_files +
+                      orphanResult.deleted_path_files}{' '}
+                    个
+                  </div>
+                  <div>
+                    dangling {orphanResult.dangling_path_files} / unmapped{' '}
+                    {orphanResult.unmapped_jsonl_files}
+                  </div>
+                  <div>
+                    跳过 recent {orphanResult.skipped_recent_files} / 未归档{' '}
+                    {orphanResult.skipped_unarchived_files} / unknown{' '}
+                    {orphanResult.unknown_files}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

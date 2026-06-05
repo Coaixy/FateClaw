@@ -53,6 +53,7 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   listPublicFinancialLedgerEntries: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
+  scanPiSessionOrphanFilesForAdmin: vi.fn(),
   setSkillGlobalEnabled: vi.fn(),
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),
@@ -75,6 +76,7 @@ import {
   getAdminGlobalStats,
   getMessagesForAdmin,
   listAdminUsersWithStats,
+  scanPiSessionOrphanFilesForAdmin,
   updateRuntimeSettings,
 } from '../../modules/admin/admin-service.js';
 
@@ -287,6 +289,9 @@ describe('adminRoutes authentication throttling', () => {
       agent_concurrency_limit: 1,
       local_agent_max_processes: 2,
       local_agent_idle_ttl_ms: 120_000,
+      pi_session_health_enabled: true,
+      pi_session_inactive_cleanup_days: 45,
+      pi_session_orphan_grace_days: 60,
       updated_at: '2026-06-05T00:00:00.000Z',
     });
 
@@ -300,6 +305,9 @@ describe('adminRoutes authentication throttling', () => {
         agent_concurrency_limit: 1,
         local_agent_max_processes: 2,
         local_agent_idle_ttl_ms: 120_000,
+        pi_session_health_enabled: true,
+        pi_session_inactive_cleanup_days: 45,
+        pi_session_orphan_grace_days: 60,
       },
     });
 
@@ -308,6 +316,9 @@ describe('adminRoutes authentication throttling', () => {
       agentConcurrencyLimit: 1,
       localAgentMaxProcesses: 2,
       localAgentIdleTtlMs: 120_000,
+      piSessionHealthEnabled: true,
+      piSessionInactiveCleanupDays: 45,
+      piSessionOrphanGraceDays: 60,
       actor: 'manager',
     });
   });
@@ -317,6 +328,9 @@ describe('adminRoutes authentication throttling', () => {
       agent_concurrency_limit: 3,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
       updated_at: '2026-06-05T00:00:00.000Z',
     });
 
@@ -336,6 +350,9 @@ describe('adminRoutes authentication throttling', () => {
       agentConcurrencyLimit: 3,
       localAgentMaxProcesses: undefined,
       localAgentIdleTtlMs: undefined,
+      piSessionHealthEnabled: undefined,
+      piSessionInactiveCleanupDays: undefined,
+      piSessionOrphanGraceDays: undefined,
       actor: 'manager',
     });
   });
@@ -356,5 +373,93 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(response.statusCode).toBe(400);
     expect(updateRuntimeSettings).not.toHaveBeenCalled();
+  });
+
+  it('rejects runtime config outside Pi session health policy ranges', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        agent_concurrency_limit: 1,
+        pi_session_inactive_cleanup_days: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(updateRuntimeSettings).not.toHaveBeenCalled();
+  });
+
+  it('scans Pi session orphan files with admin parameters', async () => {
+    vi.mocked(scanPiSessionOrphanFilesForAdmin).mockResolvedValueOnce({
+      success: true,
+      action: 'delete',
+      grace_days: 30,
+      session_dir: '/tmp/pi-sessions',
+      total_files: 1,
+      scanned_files: 1,
+      truncated: false,
+      scanned_path_files: 1,
+      scanned_jsonl_files: 0,
+      dangling_path_files: 1,
+      unmapped_jsonl_files: 0,
+      unknown_files: 0,
+      unsafe_path_files: 0,
+      safe_deletable_files: 1,
+      deleted_path_files: 1,
+      deleted_jsonl_files: 0,
+      skipped_recent_files: 0,
+      skipped_unarchived_files: 0,
+      skipped_unmapped_session_files: 0,
+      samples: {
+        dangling_path_files: ['session-1.path'],
+        unmapped_jsonl_files: [],
+        unknown_files: [],
+        unsafe_path_files: [],
+        safe_deletable_files: ['session-1.path'],
+        skipped_recent_files: [],
+        skipped_unarchived_files: [],
+        skipped_unmapped_session_files: [],
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/chat-sessions/pi-sessions/orphans/scan',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        action: 'delete',
+        limit: 100,
+        sample_limit: 5,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(scanPiSessionOrphanFilesForAdmin).toHaveBeenCalledWith({
+      action: 'delete',
+      limit: 100,
+      sampleLimit: 5,
+    });
+  });
+
+  it('rejects Pi session orphan scan outside configured ranges', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/chat-sessions/pi-sessions/orphans/scan',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        action: 'audit',
+        sample_limit: 101,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(scanPiSessionOrphanFilesForAdmin).not.toHaveBeenCalled();
   });
 });
