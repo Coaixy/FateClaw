@@ -204,7 +204,7 @@ function YaoDesktopDetail({
     <span
       title={value}
       className={cn(
-        'hidden min-w-0 truncate rounded border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] font-medium leading-tight md:block md:max-w-[7rem] lg:max-w-[9rem]',
+        'hidden min-w-0 rounded border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] font-medium leading-tight sm:block sm:w-full sm:basis-full sm:max-w-full sm:whitespace-normal sm:break-keep',
         align === 'right' ? 'text-right' : 'text-left',
         CHART.muted,
       )}
@@ -255,7 +255,7 @@ function YaoRow({
         </span>
 
         {/* 六亲 + 纳甲五行 */}
-        <div className="grid w-[4.75rem] min-w-0 grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:flex sm:w-auto sm:min-w-0 sm:items-center sm:gap-x-1">
+        <div className="grid w-[4.75rem] min-w-0 grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-0.5">
           <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
             {benYao.liuQin}
           </span>
@@ -347,7 +347,7 @@ function YaoRow({
               : ''}
           </span>
         </div>
-        <div className="flex w-[4.75rem] min-w-0 flex-col items-start sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-row sm:items-center sm:gap-1">
+        <div className="flex w-[4.75rem] min-w-0 flex-col items-start sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-0.5">
           <div className="flex shrink-0 items-center gap-0.5 whitespace-nowrap sm:gap-1">
             <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>{bianYao.liuQin}</span>
             <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
