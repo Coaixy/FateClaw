@@ -415,12 +415,14 @@ function AdminMessagesContent() {
 
       const ok = await confirm({
         title:
-          mode === 'soft_deleted' ? '清理已归档会话状态' : '清理超期会话状态',
+          mode === 'soft_deleted'
+            ? '清理已归档文件'
+            : '归档并清理超期文件',
         message:
           mode === 'soft_deleted'
-            ? '确定要清理所有已归档对话对应的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
-            : `确定要归档 ${days} 天未活跃对话对应的 Pi session 本地 jsonl/path 文件吗？后续需要继续追问时会先从数据库回写。`,
-        confirmLabel: '清理',
+            ? '确定要删除已经有数据库归档 payload 的 Pi session 本地 jsonl/path 文件吗？数据库消息不会删除。'
+            : `确定要处理 ${days} 天未活跃对话吗？系统会先把可恢复 payload 写入数据库，再删除本地 jsonl/path 文件。`,
+        confirmLabel: '开始处理',
         variant: 'danger',
       });
       if (!ok) return;
@@ -452,7 +454,7 @@ function AdminMessagesContent() {
         const ok = await confirm({
           title: '删除安全孤儿文件',
           message:
-            '确定要删除已通过数据库归档状态校验的 Pi session 孤儿文件吗？未知文件、unsafe path 和未归档会话会跳过。',
+            '确定要删除已通过数据库归档状态校验的 Pi session 孤儿文件吗？未知文件、unsafe path 和未归档会话都会跳过。',
           confirmLabel: '删除',
           variant: 'danger',
         });
@@ -565,61 +567,62 @@ function AdminMessagesContent() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium">Pi 会话状态清理</p>
-                <p className="text-[11px] text-muted">
-                  从上次水位增量扫描，先把本地 jsonl/path
-                  归档到数据库，再删除本地文件；已有 payload 会直接复用，缺失文件会尝试从 snapshot 修复
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void runPiSessionCleanup('soft_deleted')}
-                  disabled={cleanupLoading !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline px-2.5 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {cleanupLoading === 'soft_deleted' ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={13} />
-                  )}
-                  已归档
-                </button>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    max={3650}
-                    value={inactiveDays}
-                    onChange={(event) => setInactiveDays(event.target.value)}
-                    className="h-8 w-16 rounded-md border border-hairline bg-canvas px-2 text-[12px] focus:outline-none"
-                  />
-                  <span className="text-[12px] text-muted">天未活跃</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void runPiSessionCleanup('inactive')}
-                  disabled={cleanupLoading !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {cleanupLoading === 'inactive' ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={13} />
-                  )}
-                  清理超期
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-hairline bg-surface-card px-3 py-2.5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <details className="rounded-xl border border-hairline bg-surface-card px-3 py-2.5">
+              <summary className="cursor-pointer text-[12px] font-medium text-muted marker:text-muted">
+                高级：Pi session 文件维护
+              </summary>
+              <div className="mt-3 flex flex-col gap-2 border-t border-hairline/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[12px] font-medium">Pi 孤儿文件审计</p>
+                  <p className="text-[12px] font-medium">按会话清理</p>
                   <p className="text-[11px] text-muted">
-                    只处理未被 path 引用、超过后台保护天数且 DB 已归档或不存在的安全文件
+                    处理能对应到数据库 session 的本地 jsonl/path；必要时先生成可恢复 payload
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runPiSessionCleanup('soft_deleted')}
+                    disabled={cleanupLoading !== null}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline px-2.5 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {cleanupLoading === 'soft_deleted' ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} />
+                    )}
+                    清理已归档文件
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={inactiveDays}
+                      onChange={(event) => setInactiveDays(event.target.value)}
+                      className="h-8 w-16 rounded-md border border-hairline bg-canvas px-2 text-[12px] focus:outline-none"
+                    />
+                    <span className="text-[12px] text-muted">天未活跃</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void runPiSessionCleanup('inactive')}
+                    disabled={cleanupLoading !== null}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {cleanupLoading === 'inactive' ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} />
+                    )}
+                    归档并清理超期
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 border-t border-hairline/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium">孤儿文件</p>
+                  <p className="text-[11px] text-muted">
+                    先扫描未被 path 引用的文件；只有超过保护天数且 DB 可确认安全的文件才允许删除
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -634,21 +637,24 @@ function AdminMessagesContent() {
                     ) : (
                       <Search size={13} />
                     )}
-                    审计
+                    扫描孤儿文件
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void runPiSessionOrphanScan('delete')}
-                    disabled={orphanLoading !== null}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {orphanLoading === 'delete' ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={13} />
-                    )}
-                    删除安全孤儿
-                  </button>
+                  {orphanResult?.action === 'audit' &&
+                  orphanResult.safe_deletable_files > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => void runPiSessionOrphanScan('delete')}
+                      disabled={orphanLoading !== null}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-error px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {orphanLoading === 'delete' ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={13} />
+                      )}
+                      删除安全项
+                    </button>
+                  ) : null}
                 </div>
               </div>
               {orphanResult ? (
@@ -659,7 +665,7 @@ function AdminMessagesContent() {
                     {orphanResult.truncated ? '，已截断' : ''}
                   </div>
                   <div>
-                    安全可删 {orphanResult.safe_deletable_files} 个，已删{' '}
+                    可安全删除 {orphanResult.safe_deletable_files} 个，已删{' '}
                     {orphanResult.deleted_jsonl_files +
                       orphanResult.deleted_path_files}{' '}
                     个
@@ -675,7 +681,7 @@ function AdminMessagesContent() {
                   </div>
                 </div>
               ) : null}
-            </div>
+            </details>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">

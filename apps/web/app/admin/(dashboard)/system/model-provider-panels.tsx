@@ -239,77 +239,101 @@ export function RuntimeConfigPanel({
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
+        <div className="min-w-0">
           <div className="text-sm font-semibold">Agent 运行时策略</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
             控制请求并发、常驻 agent-runtime、空闲回收和 Pi session 自动健康维护。
           </div>
-          <div className="mt-2 text-[12px] text-muted">
-            当前：{runtime.agent_concurrency_limit} 并发 /{' '}
-            {runtime.local_agent_max_processes} runtime /{' '}
-            {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收 / Pi{' '}
-            {runtime.pi_session_health_enabled ? '自动维护' : '手动维护'}
+          <div className="mt-3 grid gap-1 text-[12px] text-muted">
+            <div>
+              当前 Agent：{runtime.agent_concurrency_limit} 并发 /{' '}
+              {runtime.local_agent_max_processes} runtime /{' '}
+              {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收
+            </div>
+            <div>
+              当前 Pi：{runtime.pi_session_health_enabled ? '自动维护' : '手动维护'} /{' '}
+              {runtime.pi_session_inactive_cleanup_days} 天未活跃 /{' '}
+              {runtime.pi_session_orphan_grace_days} 天孤儿保护
+            </div>
           </div>
         </div>
-        <div className="grid gap-2 md:grid-cols-3 lg:min-w-[720px] lg:grid-cols-[1fr_1fr_1fr_auto]">
-          <NumberField
-            label="全站并发上限"
-            value={limit}
-            onChange={setLimit}
-            min={1}
-            max={1000}
-          />
-          <NumberField
-            label="最大常驻 runtime"
-            value={maxProcesses}
-            onChange={setMaxProcesses}
-            min={1}
-            max={100}
-          />
-          <NumberField
-            label="空闲回收秒数"
-            value={idleSeconds}
-            onChange={setIdleSeconds}
-            min={30}
-            max={86_400}
-          />
-          <label className="flex h-11 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] text-muted">
-            <input
-              type="checkbox"
-              checked={piHealthEnabled}
-              onChange={(event) => setPiHealthEnabled(event.target.checked)}
-              className="h-4 w-4 accent-primary"
-            />
-            Pi 自动维护
-          </label>
-          <NumberField
-            label="Pi 未活跃天数"
-            value={piInactiveDays}
-            onChange={setPiInactiveDays}
-            min={1}
-            max={3650}
-          />
-          <NumberField
-            label="孤儿保护天数"
-            value={piOrphanGraceDays}
-            onChange={setPiOrphanGraceDays}
-            min={1}
-            max={3650}
-          />
-          <button
-            type="button"
-            onClick={() => void onSave(normalized)}
-            disabled={busy || !dirty}
-            className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40 md:col-start-3 lg:col-start-auto"
-          >
-            {busy ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Save size={14} />
-            )}
-            保存策略
-          </button>
+
+        <div className="space-y-4">
+          <div>
+            <div className="mb-2 text-[12px] font-medium text-muted">
+              Agent 资源
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              <NumberField
+                label="全站并发上限"
+                value={limit}
+                onChange={setLimit}
+                min={1}
+                max={1000}
+              />
+              <NumberField
+                label="最大常驻 runtime"
+                value={maxProcesses}
+                onChange={setMaxProcesses}
+                min={1}
+                max={100}
+              />
+              <NumberField
+                label="空闲回收秒数"
+                value={idleSeconds}
+                onChange={setIdleSeconds}
+                min={30}
+                max={86_400}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-hairline/70 pt-4">
+            <div className="mb-2 text-[12px] font-medium text-muted">
+              Pi session 健康
+            </div>
+            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+              <label className="flex h-11 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={piHealthEnabled}
+                  onChange={(event) =>
+                    setPiHealthEnabled(event.target.checked)
+                  }
+                  className="h-4 w-4 accent-primary"
+                />
+                自动维护
+              </label>
+              <NumberField
+                label="未活跃天数"
+                value={piInactiveDays}
+                onChange={setPiInactiveDays}
+                min={1}
+                max={3650}
+              />
+              <NumberField
+                label="孤儿保护天数"
+                value={piOrphanGraceDays}
+                onChange={setPiOrphanGraceDays}
+                min={1}
+                max={3650}
+              />
+              <button
+                type="button"
+                onClick={() => void onSave(normalized)}
+                disabled={busy || !dirty}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40 md:col-start-3 xl:col-start-auto"
+              >
+                {busy ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                保存策略
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div className="mt-3 text-[11px] text-muted">
