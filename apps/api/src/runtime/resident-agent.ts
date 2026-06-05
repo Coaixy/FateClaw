@@ -31,11 +31,13 @@ export async function dispatchAiChatPrompt(input: {
   history: HistoryMessage[];
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  userMessageId?: string;
   requestId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
   llmRuntime?: EffectiveLlmRuntimeConfig;
+  waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
   await ensureLocalAgentRunning(input.accountId);
   addAccountListener(input.accountId);
@@ -48,11 +50,13 @@ export async function dispatchAiChatPrompt(input: {
     history: input.history,
     sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
+    userMessageId: input.userMessageId,
     requestId: input.requestId,
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,
     llmRuntime: input.llmRuntime,
+    waitForResponse: input.waitForResponse,
   });
 }
 

@@ -216,4 +216,8 @@ export interface QueryProcessResponseDto {
 
 export interface ChatSessionSendResponseDto extends TextResponse {
   session_title?: string;
+  /** 异步提交后的后台请求 ID，可用于关联流式事件和查询过程。 */
+  request_id?: string;
+  /** 为 true 表示服务端已接收并开始后台处理，text 可为空。 */
+  accepted?: true;
 }

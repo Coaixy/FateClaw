@@ -35,10 +35,8 @@ import {
   markChatSessionPiSessionArchiveRestored,
   shareOwnedChatSession,
   storeMessage,
-  touchChatSession,
   updateChatSessionTitle,
 } from '../../infrastructure/db.js';
-import { incrementDailyMessageCount } from '../../infrastructure/daily-usage.js';
 import { logger } from '../../infrastructure/logger.js';
 import { getRedis } from '../../infrastructure/redis.js';
 import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
@@ -73,6 +71,7 @@ import {
   WEB_CHAT_USER_NAME,
 } from './web-chat-runtime.js';
 import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js';
+import type { StructuredInput } from './structured-input.js';
 import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
 import {
   readPiSessionFileState,
@@ -117,6 +116,18 @@ export interface OwnedChatSessionTurnOptions {
 export interface OwnedChatSessionTurnResult {
   response: ChatSessionSendResponseDto;
   finalAssistantMessages: MessageDto[];
+}
+
+interface PreparedOwnedChatSessionTurn {
+  userId: string;
+  session: ChatSession;
+  input: NormalizedChatSessionMessageInput;
+  msgId: string;
+  requestId: string;
+  llmRuntime: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
+  structured: StructuredInput;
+  sessionBoardContexts: SessionBoardContextDto[];
+  sessionTitle: string;
 }
 
 function isPaymentRequiredError(errorMessage: string): boolean {
@@ -532,11 +543,12 @@ export async function sendOwnedChatSessionMessage(
   sessionId: string,
   input: NormalizedChatSessionMessageInput,
 ): Promise<ServiceResult<ChatSessionSendResponseDto>> {
-  const result = await runOwnedChatSessionTurn(userId, sessionId, input);
-  if (!result.ok) {
-    return result;
+  const prepared = await prepareOwnedChatSessionTurn(userId, sessionId, input);
+  if (!prepared.ok) {
+    return prepared;
   }
-  return ok(result.data.response);
+
+  return enqueuePreparedOwnedChatSessionTurn(prepared.data);
 }
 
 /**
@@ -554,6 +566,25 @@ export async function runOwnedChatSessionTurn(
   input: NormalizedChatSessionMessageInput,
   options: OwnedChatSessionTurnOptions = {},
 ): Promise<ServiceResult<OwnedChatSessionTurnResult>> {
+  const prepared = await prepareOwnedChatSessionTurn(
+    userId,
+    sessionId,
+    input,
+    options,
+  );
+  if (!prepared.ok) {
+    return prepared;
+  }
+
+  return completeOwnedChatSessionTurn(prepared.data);
+}
+
+async function prepareOwnedChatSessionTurn(
+  userId: string,
+  sessionId: string,
+  input: NormalizedChatSessionMessageInput,
+  options: OwnedChatSessionTurnOptions = {},
+): Promise<ServiceResult<PreparedOwnedChatSessionTurn>> {
   const sessionResult = await getOwnedSession(userId, sessionId);
   if (!sessionResult.ok) {
     return sessionResult;
@@ -569,7 +600,6 @@ export async function runOwnedChatSessionTurn(
   }
 
   const owner = await getUserById(userId);
-  const shouldCountMessage = Boolean(owner);
   if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
@@ -685,16 +715,107 @@ export async function runOwnedChatSessionTurn(
       llmRuntime.model,
       llmRuntime.contextWindowTokens,
     );
+
+    return ok({
+      userId,
+      session,
+      input,
+      msgId,
+      requestId,
+      llmRuntime,
+      structured,
+      sessionBoardContexts,
+      sessionTitle:
+        normalizeOwnedChatSessionTitle(session.title) ||
+        DEFAULT_OWNED_CHAT_SESSION_TITLE,
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await releaseChatSessionProcessing(session.id, requestId);
+    logger.error(
+      { accountId: session.account_id, sessionId: session.id, err },
+      'AI 对话: 请求准备失败',
+    );
+
+    if (isPaymentRequiredError(errorMessage)) {
+      return fail(402, errorMessage);
+    }
+
+    return fail(502, errorMessage || '抱歉，AI 服务暂时不可用');
+  }
+}
+
+async function enqueuePreparedOwnedChatSessionTurn(
+  prepared: PreparedOwnedChatSessionTurn,
+): Promise<ServiceResult<ChatSessionSendResponseDto>> {
+  const { input, llmRuntime, msgId, requestId, session, structured } = prepared;
+
+  try {
     const output = await dispatchAiChatPrompt({
       accountId: session.account_id,
       userMessage: structured.userMessage,
       inputKind: input.inputKind,
       pastedBoard: input.pastedBoard,
       history: [],
-      sessionBoardContexts,
+      sessionBoardContexts: prepared.sessionBoardContexts,
       userName: structured.userName,
       assistantName: structured.assistantName,
       sessionId: session.id,
+      userMessageId: msgId,
+      requestId,
+      llmRuntime,
+      waitForResponse: false,
+    });
+
+    if (output.status === 'error') {
+      const errorMessage =
+        output.publicErrorText || output.text || output.error || 'AI 处理失败';
+      await releaseChatSessionProcessing(session.id, requestId);
+      return fail(
+        isPaymentRequiredError(errorMessage) ? 402 : 502,
+        errorMessage,
+      );
+    }
+
+    return ok({
+      text: '',
+      accepted: true,
+      request_id: output.requestId || requestId,
+      session_title: prepared.sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await releaseChatSessionProcessing(session.id, requestId);
+    logger.error(
+      { accountId: session.account_id, sessionId: session.id, err },
+      'AI 对话: 请求入队失败',
+    );
+
+    if (isPaymentRequiredError(errorMessage)) {
+      return fail(402, errorMessage);
+    }
+
+    return fail(502, errorMessage || '抱歉，AI 服务暂时不可用');
+  }
+}
+
+async function completeOwnedChatSessionTurn(
+  prepared: PreparedOwnedChatSessionTurn,
+): Promise<ServiceResult<OwnedChatSessionTurnResult>> {
+  const { input, llmRuntime, msgId, requestId, session, structured } = prepared;
+
+  try {
+    const output = await dispatchAiChatPrompt({
+      accountId: session.account_id,
+      userMessage: structured.userMessage,
+      inputKind: input.inputKind,
+      pastedBoard: input.pastedBoard,
+      history: [],
+      sessionBoardContexts: prepared.sessionBoardContexts,
+      userName: structured.userName,
+      assistantName: structured.assistantName,
+      sessionId: session.id,
+      userMessageId: msgId,
       requestId,
       llmRuntime,
     });
@@ -718,11 +839,10 @@ export async function runOwnedChatSessionTurn(
 
     const replyText = output.text || '';
     const replyTexts = normalizeAssistantReplyTexts(output);
-    const sessionTitle = normalizeOwnedChatSessionTitle(session.title);
     const replyTimestampBase = Date.now();
     const finalAssistantMessages: MessageDto[] = [];
 
-    // 多轮 runtime 可能返回多条 assistant 文本，逐条落库才能让网页最终态完整呈现。
+    // 多轮 runtime 可能返回多条 assistant 文本；这里仅组装给同步调用方，最终落库由 outbox handler 统一完成。
     for (let index = 0; index < replyTexts.length; index += 1) {
       const isFinalReply = index === replyTexts.length - 1;
       const assistantMessage: NewMessage = {
@@ -731,7 +851,7 @@ export async function runOwnedChatSessionTurn(
             ? `${msgId}_reply`
             : `${msgId}_reply_${index + 1}`,
         account_id: session.account_id,
-        user_id: userId,
+        user_id: prepared.userId,
         sender: session.account_id,
         sender_name: WEB_CHAT_ASSISTANT_NAME,
         content: replyTexts[index],
@@ -750,21 +870,15 @@ export async function runOwnedChatSessionTurn(
               request_id: output.requestId,
             },
       };
-      await storeMessage(assistantMessage);
       finalAssistantMessages.push(toMessageDto(assistantMessage));
-    }
-
-    await touchChatSession(session.id);
-
-    if (shouldCountMessage && owner) {
-      const today = new Date().toISOString().slice(0, 10);
-      await incrementDailyMessageCount(owner.id, today);
     }
 
     return ok({
       response: {
         text: replyText,
-        session_title: sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+        session_title:
+          prepared.sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+        request_id: output.requestId || requestId,
       },
       finalAssistantMessages,
     });

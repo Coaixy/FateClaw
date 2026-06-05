@@ -11,8 +11,12 @@ import {
   getUserById,
   storeConversationLog,
   storeMessage,
+  touchChatSession,
 } from '../infrastructure/db.js';
-import { incrementDailyTokens } from '../infrastructure/daily-usage.js';
+import {
+  incrementDailyMessageCount,
+  incrementDailyTokens,
+} from '../infrastructure/daily-usage.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   PendingInboxRequest,
@@ -39,7 +43,6 @@ import {
 } from '../shared/conversation-log-metrics.js';
 import { mapInternalErrorToPublicError } from '../shared/public-error.js';
 import {
-  settleBillingReservation,
   settleBillingReservationDetailed,
   type BillingSettlementSummary,
 } from '../modules/billing/plans.js';
@@ -153,6 +156,7 @@ function buildFinalMetadata(args: {
       : {}),
     kind: 'final',
     turn_complete: true,
+    request_id: args.payload.requestId,
     ...(typeof args.durationMs === 'number'
       ? { duration_ms: args.durationMs }
       : {}),
@@ -208,6 +212,7 @@ async function recordAiChatTokenUsage(args: {
   const ownerUserId = await resolveOwnerUserId({
     accountId: args.accountId,
     pending: args.pending,
+    payloadOwnerUserId: args.payload.ownerUserId,
   });
   if (!ownerUserId) return;
 
@@ -302,9 +307,13 @@ async function resolvePendingAiChatResponse(args: {
 async function resolveOwnerUserId(args: {
   accountId: string;
   pending?: PendingInboxRequest;
+  payloadOwnerUserId?: string;
 }): Promise<string | null> {
   if (args.pending?.ownerUserId) {
     return args.pending.ownerUserId;
+  }
+  if (args.payloadOwnerUserId?.trim()) {
+    return args.payloadOwnerUserId.trim();
   }
   const webUserId = getUserIdFromWebChatRuntimeId(args.accountId);
   if (!webUserId) {
@@ -316,6 +325,149 @@ async function resolveOwnerUserId(args: {
 
 function normalizeMessageIdPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 96) || 'unknown';
+}
+
+function resolveAiChatFinalSessionId(
+  pending: PendingInboxRequest | undefined,
+  payload: ResponseIpcPayload,
+): string | undefined {
+  return pending?.sessionId ?? payload.sessionId;
+}
+
+function resolveAiChatFinalUserMessageId(
+  pending: PendingInboxRequest | undefined,
+  payload: ResponseIpcPayload,
+): string | undefined {
+  return pending?.userMessageId ?? payload.userMessageId ?? payload.requestId;
+}
+
+async function incrementAiChatDailyMessageCount(
+  ownerUserId: string | null,
+): Promise<void> {
+  if (!ownerUserId) return;
+  const today = new Date().toISOString().slice(0, 10);
+  await incrementDailyMessageCount(ownerUserId, today);
+}
+
+async function releaseCompletedAiChatSessionLock(args: {
+  pending?: PendingInboxRequest;
+  payload: ResponseIpcPayload;
+  sessionId?: string;
+}): Promise<void> {
+  if (!args.sessionId || !args.payload.requestId) return;
+  await releaseSessionProcessingLock(
+    args.sessionId,
+    args.pending?.sessionProcessingRequestId ?? args.payload.requestId,
+  ).catch(() => {});
+}
+
+async function storeAiChatFinalResponseMessages(args: {
+  accountId: string;
+  pending?: PendingInboxRequest;
+  payload: ResponseIpcPayload;
+  responseText: string;
+  assistantMessages: string[];
+  finalMetadata: Record<string, unknown>;
+}): Promise<void> {
+  const sessionId = resolveAiChatFinalSessionId(args.pending, args.payload);
+  const userMessageId = resolveAiChatFinalUserMessageId(
+    args.pending,
+    args.payload,
+  );
+  if (!sessionId || !args.payload.requestId || !userMessageId) {
+    logger.warn(
+      {
+        accountId: args.accountId,
+        requestId: args.payload.requestId,
+        sessionId,
+        userMessageId,
+      },
+      'AI Chat: 最终响应缺少会话上下文，跳过最终消息落库',
+    );
+    return;
+  }
+
+  const ownerUserId = await resolveOwnerUserId({
+    accountId: args.accountId,
+    pending: args.pending,
+    payloadOwnerUserId: args.payload.ownerUserId,
+  });
+
+  if (args.payload.status === 'error') {
+    const content =
+      args.responseText.trim() ||
+      args.payload.publicErrorText?.trim() ||
+      mapInternalErrorToPublicError(args.payload.error, {}).publicMessage;
+    await storeMessage({
+      id: `${userMessageId}_error`,
+      account_id: args.accountId,
+      user_id: ownerUserId,
+      sender: args.accountId,
+      sender_name: WEB_CHAT_ASSISTANT_NAME,
+      content,
+      timestamp: args.payload.timestamp || new Date().toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+      session_id: sessionId,
+      metadata: {
+        ...args.finalMetadata,
+        kind: 'error',
+        turn_complete: true,
+        request_id: args.payload.requestId,
+      },
+    });
+    await touchChatSession(sessionId);
+    return;
+  }
+
+  if (args.assistantMessages.length === 0) {
+    logger.warn(
+      {
+        accountId: args.accountId,
+        requestId: args.payload.requestId,
+        sessionId,
+      },
+      'AI Chat: 最终响应没有 assistant 文本，仅更新会话完成状态',
+    );
+    await touchChatSession(sessionId);
+    await incrementAiChatDailyMessageCount(ownerUserId);
+    return;
+  }
+
+  const replyTimestampBase = Date.now();
+  for (let index = 0; index < args.assistantMessages.length; index += 1) {
+    const isFinalReply = index === args.assistantMessages.length - 1;
+    await storeMessage({
+      id:
+        args.assistantMessages.length === 1
+          ? `${userMessageId}_reply`
+          : `${userMessageId}_reply_${index + 1}`,
+      account_id: args.accountId,
+      user_id: ownerUserId,
+      sender: args.accountId,
+      sender_name: WEB_CHAT_ASSISTANT_NAME,
+      content: args.assistantMessages[index],
+      timestamp: new Date(replyTimestampBase + index).toISOString(),
+      is_from_me: true,
+      is_bot_message: true,
+      session_id: sessionId,
+      tool_context:
+        isFinalReply &&
+        args.payload.skillContext &&
+        args.payload.skillContext.length > 0
+          ? JSON.stringify(args.payload.skillContext)
+          : null,
+      metadata: isFinalReply
+        ? args.finalMetadata
+        : {
+            kind: 'assistant',
+            request_id: args.payload.requestId,
+          },
+    });
+  }
+
+  await touchChatSession(sessionId);
+  await incrementAiChatDailyMessageCount(ownerUserId);
 }
 
 function buildProgressMessageId(payload: ProgressIpcPayload): string {
@@ -408,19 +560,17 @@ async function processAiChatResponse(
       finalText,
     });
     const durationMs = resolvePendingDurationMs(pending);
+    const sessionId = resolveAiChatFinalSessionId(pending, payloadForUsage);
 
     logger.info(
       {
         accountId,
         requestId: payload.requestId,
         status: payload.status,
-        sessionId: pending?.sessionId,
+        sessionId,
       },
       'AI Chat: 处理最终响应（不发微信）',
     );
-
-    // 注意：最终响应的落库由 chat-sessions.ts 负责，这里不重复存储
-    // 只处理 conversation log、token 用量、billing 结算
 
     storeAiChatConversationLog({ accountId, payload: payloadForUsage });
     await recordAiChatTokenUsage({
@@ -439,12 +589,26 @@ async function processAiChatResponse(
       billing,
     });
 
+    await storeAiChatFinalResponseMessages({
+      accountId,
+      pending,
+      payload: payloadForUsage,
+      responseText: text,
+      assistantMessages,
+      finalMetadata,
+    });
+    await releaseCompletedAiChatSessionLock({
+      pending,
+      payload: payloadForUsage,
+      sessionId,
+    });
+
     await publishAiChatStreamEvent({
-      sessionId: pending?.sessionId,
+      sessionId,
       event: streamEventFromResponsePayload({
         payload: payloadForUsage,
         accountId,
-        sessionId: pending?.sessionId,
+        sessionId,
         text: finalText || text,
         metadata: finalMetadata,
       }),
@@ -459,6 +623,11 @@ async function processAiChatResponse(
       finalMetadata,
     });
   } catch (error) {
+    await releaseCompletedAiChatSessionLock({
+      pending,
+      payload,
+      sessionId: resolveAiChatFinalSessionId(pending, payload),
+    });
     // 即使处理失败也必须 resolve pending
     if (pending) {
       clearTimeout(pending.timeout);

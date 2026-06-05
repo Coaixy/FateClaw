@@ -138,6 +138,8 @@ export interface PendingInboxRequest {
    * autoDeliver=true（微信场景）时为 undefined。
    */
   sessionId?: string;
+  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID，避免重复落库。 */
+  userMessageId?: string;
   /** session:processing 锁内保存的 owner 值，必须与当前请求 ID 一致后才可释放。 */
   sessionProcessingRequestId?: string;
   llmRuntime?: LlmRuntimeSnapshot;
@@ -168,6 +170,12 @@ export interface SendMessageIpcPayload {
   type: 'message';
   accountId?: string;
   requestId?: string;
+  /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
+  sessionId?: string;
+  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
+  userMessageId?: string;
+  /** 请求归属用户 ID；用于最终消息 user_id 和用量归属兜底。 */
+  ownerUserId?: string;
   text?: string;
   timestamp?: string;
   metadata?: unknown;
@@ -203,6 +211,12 @@ export interface ResponseIpcPayload {
   type: 'response';
   accountId?: string;
   requestId?: string;
+  /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
+  sessionId?: string;
+  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
+  userMessageId?: string;
+  /** 请求归属用户 ID；用于最终消息 user_id 和用量归属兜底。 */
+  ownerUserId?: string;
   text?: string;
   assistantMessages?: string[];
   status?: 'success' | 'error';

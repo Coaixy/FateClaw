@@ -10,6 +10,9 @@ const {
   mockSettleBillingReservationDetailed,
   mockSettleBillingReservation,
   mockStoreConversationLog,
+  mockStoreMessage,
+  mockTouchChatSession,
+  mockIncrementDailyMessageCount,
 } = vi.hoisted(() => ({
   mockDel: vi.fn(async () => 1),
   mockEval: vi.fn(async () => 1),
@@ -25,16 +28,21 @@ const {
   })),
   mockSettleBillingReservation: vi.fn(async () => 1.23),
   mockStoreConversationLog: vi.fn(async () => undefined),
+  mockStoreMessage: vi.fn(async () => undefined),
+  mockTouchChatSession: vi.fn(async () => undefined),
+  mockIncrementDailyMessageCount: vi.fn(async () => undefined),
 }));
 
 vi.mock('../infrastructure/db.js', () => ({
   getAllAccounts: vi.fn(),
   getUserById: vi.fn(),
   storeConversationLog: mockStoreConversationLog,
-  storeMessage: vi.fn(),
+  storeMessage: mockStoreMessage,
+  touchChatSession: mockTouchChatSession,
 }));
 
 vi.mock('../infrastructure/daily-usage.js', () => ({
+  incrementDailyMessageCount: mockIncrementDailyMessageCount,
   incrementDailyTokens: mockIncrementDailyTokens,
 }));
 
@@ -82,6 +90,7 @@ describe('processAiChatOutboxPayload', () => {
           ownerUserId: 'user-1',
           autoDeliver: false,
           sessionId: 'session-1',
+          userMessageId: 'user-msg-1',
           startedAtMs: Date.now() - 1234,
           resolve: mockResolve,
           reject: mockReject,
@@ -119,8 +128,42 @@ describe('processAiChatOutboxPayload', () => {
         metadata: expect.objectContaining({
           kind: 'final',
           duration_ms: expect.any(Number),
+          request_id: 'req-1',
         }),
       }),
+    );
+    expect(mockStoreMessage).toHaveBeenCalledTimes(2);
+    expect(mockStoreMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        id: 'user-msg-1_reply_1',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        session_id: 'session-1',
+        content: 'first reply',
+        metadata: {
+          kind: 'assistant',
+          request_id: 'req-1',
+        },
+        tool_context: null,
+      }),
+    );
+    expect(mockStoreMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        id: 'user-msg-1_reply_2',
+        content: 'second reply\n\n📥 3 · 📤 5 Finished',
+        metadata: expect.objectContaining({
+          kind: 'final',
+          turn_complete: true,
+          request_id: 'req-1',
+        }),
+      }),
+    );
+    expect(mockTouchChatSession).toHaveBeenCalledWith('session-1');
+    expect(mockIncrementDailyMessageCount).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
     );
     expect(pendingRequests.has('req-1')).toBe(false);
     expect(mockEval).toHaveBeenCalledWith(
@@ -320,6 +363,105 @@ describe('processAiChatOutboxPayload', () => {
       20,
       0,
       20,
+    );
+  });
+
+  it('stores final responses using payload context when local pending is absent', async () => {
+    const pendingRequests = new Map<string, PendingInboxRequest>();
+
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        accountId: 'web:user-payload',
+        requestId: 'req-payload',
+        sessionId: 'session-payload',
+        userMessageId: 'user-msg-payload',
+        ownerUserId: 'user-payload',
+        text: 'payload reply',
+        status: 'success',
+      },
+      'web:user-payload',
+      pendingRequests,
+    );
+
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockStoreMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'user-msg-payload_reply',
+        account_id: 'web:user-payload',
+        user_id: 'user-payload',
+        session_id: 'session-payload',
+        content: 'payload reply\n\n📥 0 · 📤 0 Finished',
+        metadata: expect.objectContaining({
+          kind: 'final',
+          turn_complete: true,
+          request_id: 'req-payload',
+        }),
+      }),
+    );
+    expect(mockTouchChatSession).toHaveBeenCalledWith('session-payload');
+    expect(mockIncrementDailyMessageCount).toHaveBeenCalledWith(
+      'user-payload',
+      expect.any(String),
+    );
+    expect(mockEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-payload',
+      'req-payload',
+    );
+  });
+
+  it('stores error responses as final error messages without counting successful sends', async () => {
+    const timeout = setTimeout(() => undefined, 10_000);
+    const pendingRequests = new Map<string, PendingInboxRequest>([
+      [
+        'req-error',
+        {
+          accountId: 'web:user-1',
+          ownerUserId: 'user-1',
+          autoDeliver: false,
+          sessionId: 'session-error',
+          userMessageId: 'user-msg-error',
+          resolve: mockResolve,
+          reject: mockReject,
+          timeout,
+        },
+      ],
+    ]);
+
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        accountId: 'web:user-1',
+        requestId: 'req-error',
+        text: '内部错误详情',
+        status: 'error',
+        error: 'raw error',
+        publicErrorText: '这次没有完成',
+        publicReasonCode: 'internal_error',
+      },
+      'web:user-1',
+      pendingRequests,
+    );
+
+    expect(mockStoreMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'user-msg-error_error',
+        content: '这次没有完成',
+        metadata: expect.objectContaining({
+          kind: 'error',
+          turn_complete: true,
+          request_id: 'req-error',
+        }),
+      }),
+    );
+    expect(mockIncrementDailyMessageCount).not.toHaveBeenCalled();
+    expect(mockResolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'error',
+        publicErrorText: '这次没有完成',
+      }),
     );
   });
 });

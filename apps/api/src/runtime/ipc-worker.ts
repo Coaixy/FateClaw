@@ -720,11 +720,13 @@ export function submitAiChatInboxRequest(input: {
   history: HistoryMessage[];
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  userMessageId?: string;
   requestId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
   llmRuntime?: EffectiveLlmRuntimeConfig;
+  waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
   const requestId =
     input.requestId ??
@@ -785,6 +787,7 @@ export function submitAiChatInboxRequest(input: {
           contextToken: undefined,
           autoDeliver: false, // AI Chat 永远不发微信
           sessionId: input.sessionId,
+          userMessageId: input.userMessageId,
           sessionProcessingRequestId: requestId,
           llmRuntime,
           billingReservation,
@@ -816,6 +819,8 @@ export function submitAiChatInboxRequest(input: {
           history: input.history,
           sessionBoardContexts: input.sessionBoardContexts,
           sessionId: input.sessionId,
+          userMessageId: input.userMessageId,
+          ownerUserId: owner.id,
           userName: input.userName,
           assistantName: input.assistantName,
           personaPrompt: input.personaPrompt,
@@ -852,6 +857,13 @@ export function submitAiChatInboxRequest(input: {
           },
           'AI Chat 请求已提交到 Redis',
         );
+        if (input.waitForResponse === false) {
+          resolve({
+            requestId,
+            status: 'success',
+            text: '',
+          });
+        }
       } catch (err) {
         if (timeout) {
           clearTimeout(timeout);

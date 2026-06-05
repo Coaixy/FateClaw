@@ -212,6 +212,9 @@ async function processInboxMessage(
       type: 'response',
       requestId: request.requestId,
       accountId,
+      sessionId: request.sessionId,
+      userMessageId: request.userMessageId,
+      ownerUserId: request.ownerUserId,
       text:
         output.status === 'success'
           ? output.result || ''
@@ -257,6 +260,9 @@ async function processInboxMessage(
           type: 'response',
           requestId: request.requestId,
           accountId,
+          sessionId: request.sessionId,
+          userMessageId: request.userMessageId,
+          ownerUserId: request.ownerUserId,
           text: '这次没有完成，原因：处理收件箱请求失败。',
           status: 'error',
           error: errorMessage,

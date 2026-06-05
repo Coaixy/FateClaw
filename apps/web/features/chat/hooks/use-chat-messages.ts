@@ -1223,7 +1223,7 @@ export function useChatMessages(options: {
         if (abortController.signal.aborted) return false;
 
         try {
-          const { text: replyText, session_title: sessionTitle } =
+          const { session_title: sessionTitle } =
             await sendChatSessionMessageWithOptions(
               chatSessionsApi.send,
               sessionId,
@@ -1234,22 +1234,15 @@ export function useChatMessages(options: {
 
           const refreshed = await loadMessages(sessionId, { background: true });
           if (!refreshed.ok) {
+            appendReconnectNoticeMessage(sessionId);
             updateAwaitingRefresh(true);
-            setMessages((previous) => [
-              ...previous,
-              {
-                id: `opt-bot-${Date.now()}`,
-                account_id:
-                  options.sessions.find((session) => session.id === sessionId)
-                    ?.account_id ?? 'web',
-                sender: '',
-                sender_name: '',
-                content: replyText,
-                timestamp: new Date().toISOString(),
-                is_from_me: true,
-                is_bot_message: true,
-              },
-            ]);
+            return false;
+          }
+          if (!refreshed.active) {
+            return false;
+          }
+          if (refreshed.processing) {
+            updateAwaitingRefresh(true);
           }
 
           const currentSession = options.sessions.find(

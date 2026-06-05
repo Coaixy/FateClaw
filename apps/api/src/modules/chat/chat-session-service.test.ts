@@ -634,13 +634,11 @@ describe('chat-session-service selected board context', () => {
     expect(mockUpdateChatSessionTitle).not.toHaveBeenCalled();
   });
 
-  it('stores every assistant message returned by the runtime', async () => {
+  it('acknowledges async sends without storing final assistant messages in service', async () => {
     mockDispatchAiChatPrompt.mockResolvedValueOnce({
       status: 'success',
-      text: '第二条回复\n\n📥 3 · 📤 5 Finished',
-      assistantMessages: ['第一条回复', '第二条回复\n\n📥 3 · 📤 5 Finished'],
+      text: '',
       requestId: 'request-multi',
-      metadata: { kind: 'final', turn_complete: true },
     });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
@@ -651,26 +649,23 @@ describe('chat-session-service selected board context', () => {
     });
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toMatchObject({
+        text: '',
+        accepted: true,
+        request_id: 'request-multi',
+      });
+    }
     const storedBotMessages = mockStoreMessage.mock.calls
       .map(([message]) => message)
       .filter((message) => message.is_bot_message);
-    expect(storedBotMessages).toHaveLength(2);
-    expect(storedBotMessages[0]).toMatchObject({
-      content: '第一条回复',
-      metadata: {
-        kind: 'assistant',
-        request_id: 'request-multi',
-      },
-      tool_context: null,
-    });
-    expect(storedBotMessages[1]).toMatchObject({
-      content: '第二条回复\n\n📥 3 · 📤 5 Finished',
-      metadata: {
-        kind: 'final',
-        turn_complete: true,
-        request_id: 'request-multi',
-      },
-    });
+    expect(storedBotMessages).toHaveLength(0);
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        waitForResponse: false,
+        userMessageId: expect.stringMatching(/^aichat-/),
+      }),
+    );
   });
 
   it('uses the owned WeChat account as the Soul source for web AI chat', async () => {

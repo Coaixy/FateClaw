@@ -100,6 +100,10 @@ export interface ChatTaskInboxRequest {
   sessionBoardContexts?: SessionBoardContext[];
   /** AI Chat 真实会话 ID，用于同一 session 内查找历史工具上下文。 */
   sessionId?: string;
+  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
+  userMessageId?: string;
+  /** 请求归属用户 ID；最终响应回传给宿主机用于独立落库。 */
+  ownerUserId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
@@ -424,6 +428,12 @@ export interface OutboxResponse {
   type: 'response';
   requestId: string;
   accountId: string;
+  /** AI Chat 会话 ID；宿主机最终响应落库需要。 */
+  sessionId?: string;
+  /** 本轮用户消息 ID；宿主机用它派生最终 assistant 消息 ID。 */
+  userMessageId?: string;
+  /** 请求归属用户 ID；宿主机最终消息 user_id 兜底使用。 */
+  ownerUserId?: string;
   text: string;
   status: 'success' | 'error';
   timestamp: string;
