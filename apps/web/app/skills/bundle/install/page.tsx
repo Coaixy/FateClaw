@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useBundleInstall } from '@/features/skills/hooks/use-bundle-install';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { appendGuideResume } from '@/lib/return-to';
 import {
   AlertCircle,
   ArrowLeft,
@@ -38,9 +39,16 @@ function BundleInstallContent() {
   const invite = searchParams.get('invite');
   const router = useRouter();
   const { user } = useAuth();
+  const guideReturnHref =
+    searchParams.get('guide') === 'resume'
+      ? appendGuideResume(searchParams.get('returnTo') ?? '/ai-chat')
+      : null;
   const redirectAfterSubscribe = useCallback(() => {
-    setTimeout(() => router.push(invite ? '/ai-chat' : '/studio'), 1800);
-  }, [invite, router]);
+    setTimeout(
+      () => router.push(guideReturnHref ?? (invite ? '/ai-chat' : '/studio')),
+      1800,
+    );
+  }, [guideReturnHref, invite, router]);
   const install = useBundleInstall({ token, invite }, redirectAfterSubscribe);
 
   const total = install.preview?.skills.length ?? 0;
@@ -60,11 +68,17 @@ function BundleInstallContent() {
     <div className="min-h-dvh bg-canvas flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm mb-4">
         <button
-          onClick={() => router.push(user ? '/studio' : '/')}
+          onClick={() =>
+            router.push(guideReturnHref ?? (user ? '/studio' : '/'))
+          }
           className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors cursor-pointer"
         >
           <ArrowLeft size={14} />
-          {user ? '返回术数开发' : '返回首页'}
+          {guideReturnHref
+            ? '返回 AI Chat 继续向导'
+            : user
+              ? '返回术数开发'
+              : '返回首页'}
         </button>
       </div>
 

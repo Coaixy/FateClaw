@@ -22,10 +22,9 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
-import {
-  PaipanSkillRail,
-  type EnabledSkillSummary,
-} from '@/components/ai-chat/paipan-skill-rail';
+import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
+import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
+import { useOnboardingGuideStatus } from '@/components/ai-chat/use-onboarding-guide-status';
 import {
   shouldPromptForPastedBoard,
   type UserPastedBoardInput,
@@ -43,8 +42,8 @@ import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
-import { skillsApi } from '@/features/skills/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
@@ -146,8 +145,6 @@ function AiChatWorkspaceContent() {
   const [paipanSkillPickerOpen, setPaipanSkillPickerOpen] = useState(false);
   const [paipanCatalog, setPaipanCatalog] = useState<PaipanCatalogItem[]>([]);
   const [paipanCatalogLoading, setPaipanCatalogLoading] = useState(false);
-  const [enabledSkills, setEnabledSkills] = useState<EnabledSkillSummary[]>([]);
-  const [enabledSkillsLoading, setEnabledSkillsLoading] = useState(false);
   const [preselectedPaipanSkill, setPreselectedPaipanSkill] = useState<
     string | null
   >(null);
@@ -180,6 +177,9 @@ function AiChatWorkspaceContent() {
       ? chatMessages.continuationBlockMessage ||
         '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。'
       : '';
+  const onboardingGuide = useOnboardingGuideStatus({
+    enabled: chatAvailable && !authLoading,
+  });
 
   const requestLogin = useCallback(
     (draft?: string) => {
@@ -209,62 +209,6 @@ function AiChatWorkspaceContent() {
   useEffect(() => {
     setPaipanSkillPickerOpen(false);
   }, [chatAvailable]);
-
-  useEffect(() => {
-    if (!chatAvailable) {
-      setEnabledSkills([]);
-      setEnabledSkillsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setEnabledSkillsLoading(true);
-
-    const cancelIdleTask = scheduleIdleTask(() => {
-      if (cancelled) return;
-
-      // AI 对话首页只展示已开启 Skill 摘要，具体启停仍在 Studio 中管理。
-      void skillsApi
-        .userList()
-        .then((result) => {
-          if (cancelled) return;
-          setEnabledSkills([
-            ...(result.own ?? [])
-              .filter((skill) => skill.enabled)
-              .map((skill) => ({
-                id: skill.id,
-                name: skill.skill_name,
-                source: 'own' as const,
-              })),
-            ...(result.subscribed ?? [])
-              .filter((skill) => skill.subscription_enabled)
-              .map((skill) => ({
-                id: skill.subscription_id,
-                name: skill.skill_name,
-                source: 'subscribed' as const,
-              })),
-          ]);
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          setEnabledSkills([]);
-          toast(
-            'error',
-            error instanceof Error ? error.message : '加载已开启 Skill 失败',
-          );
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setEnabledSkillsLoading(false);
-          }
-        });
-    });
-
-    return () => {
-      cancelled = true;
-      cancelIdleTask();
-    };
-  }, [chatAvailable, toast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -549,6 +493,20 @@ function AiChatWorkspaceContent() {
     router.push('/discover');
   }, [router]);
 
+  const openModelSettingsFromGuide = useCallback(() => {
+    onboardingGuide.saveStep('model');
+    router.push(`/settings/advanced?${buildGuideReturnQuery('/ai-chat')}`);
+  }, [onboardingGuide, router]);
+
+  const openSkillMarketFromGuide = useCallback(() => {
+    onboardingGuide.saveStep('skill');
+    router.push(`/discover?${buildGuideReturnQuery('/ai-chat')}`);
+  }, [onboardingGuide, router]);
+
+  const retryOnboardingGuide = useCallback(() => {
+    void onboardingGuide.refresh();
+  }, [onboardingGuide]);
+
   const openCurrentSessionPaipan = useCallback(
     (skill?: string) => {
       if (authLoading) {
@@ -644,6 +602,9 @@ function AiChatWorkspaceContent() {
   const centeredComposer = (
     <div className="space-y-2.5">
       {composer}
+      {onboardingGuide.shouldShowContinueEntry && (
+        <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
+      )}
       {selectedSession ? (
         <PaipanSkillStrip
           catalog={paipanCatalog}
@@ -662,8 +623,8 @@ function AiChatWorkspaceContent() {
         <PaipanSkillRail
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          enabledSkills={enabledSkills}
-          enabledSkillsLoading={enabledSkillsLoading}
+          enabledSkills={onboardingGuide.enabledSkills}
+          enabledSkillsLoading={onboardingGuide.enabledSkillsLoading}
           showEnabledSkillsEmptyState={chatAvailable}
           disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
@@ -757,6 +718,27 @@ function AiChatWorkspaceContent() {
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
       />
+
+      <OnboardingGuideDialog
+        open={onboardingGuide.open}
+        step={onboardingGuide.step}
+        modelReady={onboardingGuide.modelReady}
+        skillReady={onboardingGuide.skillReady}
+        modelLoading={onboardingGuide.modelLoading}
+        skillLoading={onboardingGuide.skillLoading}
+        modelError={onboardingGuide.modelError}
+        skillError={onboardingGuide.skillError}
+        availableOfficialModelCount={
+          onboardingGuide.availableOfficialModelCount
+        }
+        hasAnyInstalledSkill={onboardingGuide.hasAnyInstalledSkill}
+        onClose={onboardingGuide.dismissGuide}
+        onSaveStep={onboardingGuide.saveStep}
+        onRetry={retryOnboardingGuide}
+        onOpenModelSettings={openModelSettingsFromGuide}
+        onOpenSkillMarket={openSkillMarketFromGuide}
+        onComplete={onboardingGuide.completeGuide}
+      />
     </div>
   );
 }
@@ -772,6 +754,29 @@ function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
         <span>{statusLabel}</span>
       </span>
     </div>
+  );
+}
+
+function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/8 px-3 py-2.5 text-left transition-colors hover:border-primary/35 hover:bg-primary/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <Sparkles size={14} className="shrink-0 text-primary" />
+        <span className="min-w-0">
+          <span className="block text-[12px] font-semibold text-ink">
+            继续完成启动向导
+          </span>
+          <span className="block truncate text-[10px] text-muted">
+            选择官方模型，并启用一个 Skill 后即可开始
+          </span>
+        </span>
+      </span>
+      <ChevronRight size={14} className="shrink-0 text-primary" />
+    </button>
   );
 }
 

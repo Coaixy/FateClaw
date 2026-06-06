@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Layers, Puzzle, Users, Search } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { useSkillMarket } from '@/features/skills/hooks/use-skill-market';
+import { appendGuideResume, buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
 function getRankBadgeClass(rank: number): string {
@@ -21,24 +22,54 @@ function getRankBadgeClass(rank: number): string {
   return 'border-hairline bg-canvas text-body-strong';
 }
 
+function appendQueryString(href: string, query: string) {
+  if (!query) return href;
+  return `${href}${href.includes('?') ? '&' : '?'}${query}`;
+}
+
 export default function DiscoverPage() {
   const { toast } = useToast();
+  const [guideReturnQuery, setGuideReturnQuery] = useState('');
+  const [guideReturnHref, setGuideReturnHref] = useState<string | null>(null);
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
   );
   const market = useSkillMarket(notify);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('guide') !== 'resume') {
+      setGuideReturnQuery('');
+      setGuideReturnHref(null);
+      return;
+    }
+
+    const returnTo = params.get('returnTo') ?? '/ai-chat';
+    setGuideReturnQuery(buildGuideReturnQuery(returnTo));
+    setGuideReturnHref(appendGuideResume(returnTo));
+  }, []);
+
   return (
     <AppShell requireAuth={false}>
       <div className="max-w-6xl mx-auto p-4 lg:p-10 space-y-4 lg:space-y-6">
-        <header className="px-0.5">
-          <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl lg:text-3xl">
-            技能市场
-          </h1>
-          <p className="mt-1 text-[12px] text-muted sm:text-sm">
-            发现并订阅命理师发布的术数技能
-          </p>
+        <header className="flex flex-col gap-3 px-0.5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl lg:text-3xl">
+              技能市场
+            </h1>
+            <p className="mt-1 text-[12px] text-muted sm:text-sm">
+              发现并订阅命理师发布的术数技能
+            </p>
+          </div>
+          {guideReturnHref && (
+            <Link
+              href={guideReturnHref}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
+            >
+              返回 AI Chat 继续向导
+            </Link>
+          )}
         </header>
 
         <div className="flex items-center gap-2">
@@ -89,7 +120,10 @@ export default function DiscoverPage() {
                   return (
                     <Link
                       key={bundle.id}
-                      href={`/skills/bundle/install?token=${bundle.bundle_token}`}
+                      href={appendQueryString(
+                        `/skills/bundle/install?token=${bundle.bundle_token}`,
+                        guideReturnQuery,
+                      )}
                       className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
@@ -161,7 +195,10 @@ export default function DiscoverPage() {
                       key={s.id}
                       href={
                         s.share_token
-                          ? `/skills/install?token=${s.share_token}`
+                          ? appendQueryString(
+                              `/skills/install?token=${s.share_token}`,
+                              guideReturnQuery,
+                            )
                           : '#'
                       }
                       className="group flex min-h-[76px] items-start gap-3 rounded-2xl border border-hairline/80 bg-[color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas))] px-3.5 py-3 shadow-sm hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] hover:bg-surface-card transition-all duration-200 sm:items-center"
