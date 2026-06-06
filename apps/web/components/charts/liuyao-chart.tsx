@@ -46,9 +46,9 @@ interface FuShenDisplay {
 const YAO_BOARD_GRID_CLASS =
   'grid grid-cols-[clamp(1.75rem,5.5cqw,3.5rem)_clamp(3.5rem,13cqw,7rem)_minmax(0,1fr)_clamp(0.9rem,2.5cqw,2rem)_minmax(0,1fr)] gap-x-[clamp(0.15rem,0.85cqw,0.5rem)]';
 const YAO_TEXT_CLASS =
-  'text-[clamp(8.5px,2.15cqw,16px)]';
+  'text-[clamp(11px,2.55cqw,15px)]';
 const YAO_SUB_TEXT_CLASS =
-  'text-[clamp(8px,1.8cqw,14px)]';
+  'text-[clamp(9px,2.1cqw,13px)]';
 const LIUYAO_BOARD_WIDTH = 760;
 
 interface FitWidthState {
@@ -182,8 +182,10 @@ function formatYaoSubLine(yao: IchingYao): string {
 }
 
 function formatFuShenMain(item: FuShenDisplay): string {
-  const prefix = item.kind === '旁' ? '旁' : '';
-  return `${prefix}${shortLiuQin(item.liuQin)}${item.naJiaWuXing}`;
+  return `${shortLiuQin(item.liuQin)}${item.naJiaWuXing.replace(
+    /[金木水火土]$/,
+    '',
+  )}`;
 }
 
 function shortLiuQin(liuQin: string): string {
@@ -200,6 +202,17 @@ function shortLiuQin(liuQin: string): string {
 function movingMark(yao: IchingYao, isMoving: boolean): string {
   if (!isMoving) return '';
   return yao.yaoValue === 6 ? 'x' : 'o';
+}
+
+function isMovingYao(benYao: IchingYao, bianYao: IchingYao): boolean {
+  return benYao.isMoving || benYao.yaoValue !== bianYao.yaoValue;
+}
+
+function hasMovingYao(benGua: IchingGua, zhiGua: IchingGua): boolean {
+  return benGua.yaoList.some((benYao, index) => {
+    const bianYao = zhiGua.yaoList[index];
+    return bianYao ? isMovingYao(benYao, bianYao) : false;
+  });
 }
 
 function FuShenCell({ rows }: { rows: FuShenDisplay[] }) {
@@ -244,9 +257,11 @@ function FuShenCell({ rows }: { rows: FuShenDisplay[] }) {
 function GuaYaoCell({
   yao,
   isYang,
+  dimmed,
 }: {
   yao: IchingYao;
   isYang: boolean;
+  dimmed?: boolean;
 }) {
   const shiYingLabel = getShiYingLabel(yao.shiYing);
   const subLine = formatYaoSubLine(yao);
@@ -257,7 +272,7 @@ function GuaYaoCell({
     .join(' ');
 
   return (
-    <div className="min-w-0" title={title}>
+    <div className={cn('min-w-0', dimmed && 'opacity-[0.55]')} title={title}>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 sm:gap-x-2">
         <div
           className={cn(
@@ -301,15 +316,18 @@ function YaoRow({
   benYao,
   bianYao,
   fuShen,
+  hasMovingGua,
 }: {
   benYao: IchingYao;
   bianYao: IchingYao;
   fuShen?: FuShenDisplay[];
+  hasMovingGua: boolean;
 }) {
-  const isMoving = benYao.isMoving || benYao.yaoValue !== bianYao.yaoValue;
+  const isMoving = isMovingYao(benYao, bianYao);
   const benIsYang = benYao.yaoValue === 7 || benYao.yaoValue === 9;
   const bianIsYang = bianYao.yaoValue === 7 || bianYao.yaoValue === 9;
   const fuShenRows = fuShen ?? [];
+  const dimBianYao = !hasMovingGua || !isMoving;
 
   return (
     <div
@@ -331,13 +349,13 @@ function YaoRow({
       <GuaYaoCell yao={benYao} isYang={benIsYang} />
       <div
         className={cn(
-          'flex min-h-[clamp(1rem,3.2cqw,1.25rem)] items-center justify-center pt-0.5 text-[clamp(8px,1.8cqw,14px)] font-bold leading-none select-none',
+          'flex min-h-[clamp(1rem,3.2cqw,1.25rem)] items-center justify-center pt-0.5 text-[clamp(11px,2.5cqw,18px)] font-bold leading-none select-none',
           CHART.ink,
         )}
       >
         {movingMark(benYao, isMoving)}
       </div>
-      <GuaYaoCell yao={bianYao} isYang={bianIsYang} />
+      <GuaYaoCell yao={bianYao} isYang={bianIsYang} dimmed={dimBianYao} />
     </div>
   );
 }
@@ -353,7 +371,13 @@ function guaHeaderLabel(gua: IchingGua, fallback: string): string {
   return [gua.guaName ?? fallback, palaceLabel].filter(Boolean).join(' ');
 }
 
-function FitWidthFrame({ children }: { children: React.ReactNode }) {
+function FitWidthFrame({
+  boardWidth,
+  children,
+}: {
+  boardWidth: number;
+  children: React.ReactNode;
+}) {
   const shellRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<FitWidthState>({
@@ -363,10 +387,10 @@ function FitWidthFrame({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const updateFit = () => {
-      const shellWidth = shellRef.current?.clientWidth ?? LIUYAO_BOARD_WIDTH;
+      const shellWidth = shellRef.current?.clientWidth ?? boardWidth;
       const boardHeight = boardRef.current?.offsetHeight ?? 0;
       const scale =
-        shellWidth > 0 ? Math.min(1, shellWidth / LIUYAO_BOARD_WIDTH) : 1;
+        shellWidth > 0 ? Math.min(1, shellWidth / boardWidth) : 1;
       const height = boardHeight * scale;
 
       setFit((prev) => {
@@ -396,7 +420,7 @@ function FitWidthFrame({ children }: { children: React.ReactNode }) {
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateFit);
     };
-  }, []);
+  }, [boardWidth]);
 
   return (
     <div ref={shellRef} className="w-full overflow-hidden">
@@ -405,7 +429,7 @@ function FitWidthFrame({ children }: { children: React.ReactNode }) {
           ref={boardRef}
           className="mx-auto"
           style={{
-            width: LIUYAO_BOARD_WIDTH,
+            width: boardWidth,
             transform: `scale(${fit.scale})`,
             transformOrigin: 'top left',
           }}
@@ -436,6 +460,10 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
   } = data;
 
   const [scriptureOpen, setScriptureOpen] = useState(false);
+  const hasMovingGua = useMemo(
+    () => (benGua?.yaoList && zhiGua?.yaoList ? hasMovingYao(benGua, zhiGua) : false),
+    [benGua, zhiGua],
+  );
   const hasScripture = !!(
     benGua?.yaoCi?.length ||
     benGua?.tuanCi ||
@@ -467,14 +495,15 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
 
   const indexOrder = [5, 4, 3, 2, 1, 0];
   const methodDisplay = formatMethod(method);
+  const dimStaticZhiGua = !hasMovingGua;
 
   return (
-    <FitWidthFrame>
+    <FitWidthFrame boardWidth={LIUYAO_BOARD_WIDTH}>
       <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
       {/* 起卦副信息 */}
       {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
         <div className="px-2 sm:px-5 py-2 sm:py-3 border-b border-hairline bg-surface-soft">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[clamp(11px,2cqw,13px)]">
             {methodDisplay && (
               <div className="flex items-baseline gap-1 whitespace-nowrap">
                 <span className="text-chart-earth font-medium">起卦</span>
@@ -506,7 +535,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       {/* 1. 干支 / 空亡 / 神煞 表 */}
       {hasSizhu && (
         <div className="border-b border-hairline">
-          <div className="flex divide-x divide-hairline border-b border-hairline text-xs sm:text-sm text-center">
+          <div className="flex divide-x divide-hairline border-b border-hairline text-center text-[clamp(12px,2.35cqw,15px)]">
             <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
               干支
             </div>
@@ -516,7 +545,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
               </div>
             ))}
           </div>
-          <div className="flex divide-x divide-hairline text-xs sm:text-sm text-center bg-canvas">
+          <div className="flex divide-x divide-hairline text-center text-[clamp(12px,2.35cqw,15px)] bg-canvas">
             <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
               空亡
             </div>
@@ -527,12 +556,12 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
             ))}
           </div>
           {shenShaItems.length > 0 && (
-            <div className="flex divide-x divide-hairline border-t border-hairline text-xs sm:text-sm bg-canvas">
+            <div className="flex divide-x divide-hairline border-t border-hairline text-[clamp(12px,2.35cqw,15px)] bg-canvas">
               <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
                 神煞
               </div>
               <div className="flex-1 px-1.5 sm:px-2 py-1.5">
-                <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-xs">
+                <div className="flex flex-wrap items-center gap-1 text-[clamp(11px,2cqw,13px)]">
                   {shenShaItems.map((item) => (
                     <span
                       key={item.name}
@@ -589,7 +618,12 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           )}
         </div>
         <div aria-hidden="true" />
-        <div className="flex min-w-0 flex-col items-center justify-center gap-1">
+        <div
+          className={cn(
+            'flex min-w-0 flex-col items-center justify-center gap-1',
+            dimStaticZhiGua && 'opacity-[0.55]',
+          )}
+        >
           <div className="whitespace-normal break-keep text-center text-[clamp(12px,2.55cqw,18px)] font-bold leading-tight text-ink">
             {guaHeaderLabel(zhiGua, '变卦')}
           </div>
@@ -615,6 +649,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
                 bianYao={bianYao}
                 // 伏神按新版 hostPosition 存为 1 基爻位；这里用当前爻位换算到数组索引取对应伏神。
                 fuShen={fuShenByHost[benYao.position - 1]}
+                hasMovingGua={hasMovingGua}
               />
             );
           })}
@@ -636,7 +671,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           </span>
         </div>
         <div aria-hidden="true" />
-        <div className="min-w-0 text-center">
+        <div className={cn('min-w-0 text-center', dimStaticZhiGua && 'opacity-[0.55]')}>
           <span className="text-ink">
             变卦 {zhiGua.palace ? `(${zhiGua.palace}宫)` : ''}
           </span>
