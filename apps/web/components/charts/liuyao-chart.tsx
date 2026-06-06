@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/utils/chart/cn';
-import type { IchingGua, IchingYao } from '@/utils/chart/iching-utils';
+import {
+  getShiYingLabel,
+  type IchingGua,
+  type IchingYao,
+} from '@/utils/chart/iching-utils';
 import { CHART } from './chart-theme';
 
 interface GanZhi {
@@ -39,14 +43,18 @@ interface FuShenDisplay {
   naYin?: string;
 }
 
-const YAO_MOBILE_DETAIL_BADGE_CLASS =
-  'inline-flex max-w-full min-w-0 w-fit rounded border border-hairline-soft bg-chart-badge px-0.5 py-px text-[8px] font-medium leading-tight whitespace-normal break-keep sm:hidden';
-const YAO_MOBILE_FUSHEN_BADGE_CLASS =
-  'inline-flex max-w-full min-w-0 w-fit rounded border border-primary/20 bg-primary/10 px-0.5 py-px text-[8px] font-semibold leading-tight whitespace-normal break-keep';
-const YAO_CORE_BADGE_CLASS =
-  'inline-flex w-fit items-center justify-center rounded-md border border-hairline bg-canvas px-1 py-0.5 text-[9px] sm:text-base font-semibold leading-tight whitespace-nowrap';
-const YAO_LIUSHOU_BADGE_CLASS =
-  'inline-flex min-w-[1.55rem] sm:min-w-[2rem] items-center justify-center rounded-md border border-primary bg-primary px-1 py-0.5 text-[9px] sm:text-base font-bold leading-tight text-on-primary whitespace-nowrap';
+const YAO_BOARD_GRID_CLASS =
+  'grid grid-cols-[clamp(1.75rem,5.5cqw,3.5rem)_clamp(3.5rem,13cqw,7rem)_minmax(0,1fr)_clamp(0.9rem,2.5cqw,2rem)_minmax(0,1fr)] gap-x-[clamp(0.15rem,0.85cqw,0.5rem)]';
+const YAO_TEXT_CLASS =
+  'text-[clamp(8.5px,2.15cqw,16px)]';
+const YAO_SUB_TEXT_CLASS =
+  'text-[clamp(8px,1.8cqw,14px)]';
+const LIUYAO_BOARD_WIDTH = 760;
+
+interface FitWidthState {
+  scale: number;
+  height: number;
+}
 
 const METHOD_LABEL: Record<string, string> = {
   dayan: '大衍筮法',
@@ -131,12 +139,13 @@ function formatShenShaItems(shenSha?: ShenShaData) {
 
 function YaoBar({ isYang: yang }: { isYang: boolean }) {
   const base = CHART.line;
-  const h = 'h-2.5 md:h-3.5';
+  const h = 'h-[clamp(0.5rem,1.65cqw,0.875rem)]';
+  const w = 'w-[clamp(1.75rem,7.8cqw,4rem)]';
   if (yang) {
-    return <div className={`w-8 md:w-16 ${h} ${base} rounded-[2px]`} />;
+    return <div className={`${w} ${h} ${base} rounded-[2px]`} />;
   }
   return (
-    <div className="flex w-8 justify-between md:w-16">
+    <div className={`flex ${w} justify-between`}>
       <div className={`w-[42%] ${h} ${base} rounded-[2px]`} />
       <div className={`w-[42%] ${h} ${base} rounded-[2px]`} />
     </div>
@@ -157,60 +166,134 @@ function formatYaoExtra(yao: IchingYao): string | null {
   return items.length > 0 ? items.join(' · ') : null;
 }
 
-function formatYaoMobileDetail(yao: IchingYao): string {
-  // 手机端省略字段名前缀，把信息留在爻上，同时减少标签换行高度。
-  return [
-    yao.naYin,
-    yao.suiXian ? `${yao.suiXian.startAge}-${yao.suiXian.endAge}` : null,
-    formatYaoExtra(yao),
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
 function formatFuShenMobileDetail(item: FuShenDisplay): string {
   return `${item.kind}${item.liuQin} ${item.naJiaWuXing}${
     item.naYin ? ` ${item.naYin}` : ''
   }`;
 }
 
-function formatYaoDesktopDetail(
-  yao: IchingYao,
-  suiXian: string | null,
-  extra: string | null,
-  fuShenRows: FuShenDisplay[] = [],
-): string {
-  // 桌面端优先保证六爻主体一屏可扫读，辅助信息合并成一行摘要避免撑高每爻。
-  return [
-    yao.naYin ? `纳音 ${yao.naYin}` : null,
-    suiXian,
-    extra,
-    ...fuShenRows.map(formatFuShenMobileDetail),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+function formatYaoMainExtra(yao: IchingYao): string {
+  const extra = formatYaoExtra(yao);
+  return extra ? `(${extra.replaceAll(' · ', ',')})` : '';
 }
 
-function YaoDesktopDetail({
-  value,
-  align = 'left',
-}: {
-  value: string;
-  align?: 'left' | 'right';
-}) {
-  if (!value) return null;
+function formatYaoSubLine(yao: IchingYao): string {
+  return [yao.naYin, formatSuiXian(yao)].filter(Boolean).join(' · ');
+}
+
+function formatFuShenMain(item: FuShenDisplay): string {
+  const prefix = item.kind === '旁' ? '旁' : '';
+  return `${prefix}${shortLiuQin(item.liuQin)}${item.naJiaWuXing}`;
+}
+
+function shortLiuQin(liuQin: string): string {
+  const shortName: Record<string, string> = {
+    兄弟: '兄',
+    子孙: '子',
+    妻财: '妻',
+    父母: '父',
+    官鬼: '官',
+  };
+  return shortName[liuQin] ?? liuQin;
+}
+
+function movingMark(yao: IchingYao, isMoving: boolean): string {
+  if (!isMoving) return '';
+  return yao.yaoValue === 6 ? 'x' : 'o';
+}
+
+function FuShenCell({ rows }: { rows: FuShenDisplay[] }) {
+  if (rows.length === 0) {
+    return <div aria-hidden="true" />;
+  }
 
   return (
-    <span
-      title={value}
-      className={cn(
-        'hidden min-w-0 rounded border border-hairline-soft bg-chart-badge px-1 py-px text-[10px] font-medium leading-tight sm:block sm:w-full sm:basis-full sm:max-w-full sm:whitespace-normal sm:break-keep',
-        align === 'right' ? 'text-right' : 'text-left',
-        CHART.muted,
-      )}
-    >
-      {value}
-    </span>
+    <div className="min-w-0 space-y-0.5 self-start pt-0.5">
+      {rows.map((item, index) => (
+        <div
+          key={`${item.kind}-${index}-${item.naJiaWuXing}`}
+          className="min-w-0"
+          title={formatFuShenMobileDetail(item)}
+        >
+          <div
+            className={cn(
+              YAO_TEXT_CLASS,
+              'whitespace-nowrap font-semibold leading-tight',
+              CHART.ink,
+            )}
+          >
+            {formatFuShenMain(item)}
+          </div>
+          {item.naYin && (
+            <div
+              className={cn(
+                YAO_SUB_TEXT_CLASS,
+                'whitespace-normal break-keep leading-tight',
+                CHART.body,
+              )}
+            >
+              {item.naYin}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GuaYaoCell({
+  yao,
+  isYang,
+}: {
+  yao: IchingYao;
+  isYang: boolean;
+}) {
+  const shiYingLabel = getShiYingLabel(yao.shiYing);
+  const subLine = formatYaoSubLine(yao);
+  const mainExtra = formatYaoMainExtra(yao);
+  const naJiaWuXing = `${yao.naJia ?? ''}${yao.wuXing}`;
+  const title = [yao.liuQin, naJiaWuXing, mainExtra, subLine]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <div className="min-w-0" title={title}>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 sm:gap-x-2">
+        <div
+          className={cn(
+            YAO_TEXT_CLASS,
+            'min-w-0 whitespace-nowrap font-semibold leading-tight',
+            CHART.ink,
+          )}
+        >
+          <span>{shortLiuQin(yao.liuQin)}</span>
+          <span>
+            {naJiaWuXing}
+            {mainExtra}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-x-0.5 sm:gap-x-1">
+          <span
+            className={cn(
+              'inline-flex w-[clamp(0.75rem,2.4cqw,1.2rem)] justify-center text-[clamp(10px,2.1cqw,15px)] font-bold leading-none',
+              shiYingLabel ? CHART.ink : CHART.body,
+            )}
+          >
+            {shiYingLabel}
+          </span>
+          <YaoBar isYang={isYang} />
+        </div>
+      </div>
+      <div
+        className={cn(
+          YAO_SUB_TEXT_CLASS,
+          'mt-0.5 min-h-[1em] whitespace-normal break-keep leading-tight',
+          CHART.body,
+        )}
+      >
+        {subLine}
+      </div>
+    </div>
   );
 }
 
@@ -227,149 +310,34 @@ function YaoRow({
   const benIsYang = benYao.yaoValue === 7 || benYao.yaoValue === 9;
   const bianIsYang = bianYao.yaoValue === 7 || bianYao.yaoValue === 9;
   const fuShenRows = fuShen ?? [];
-  const benSuiXian = formatSuiXian(benYao);
-  const bianSuiXian = formatSuiXian(bianYao);
-  const benExtra = formatYaoExtra(benYao);
-  const bianExtra = formatYaoExtra(bianYao);
-  const benMobileDetail = formatYaoMobileDetail(benYao);
-  const bianMobileDetail = formatYaoMobileDetail(bianYao);
-  const benDesktopDetail = formatYaoDesktopDetail(
-    benYao,
-    benSuiXian,
-    benExtra,
-    fuShenRows,
-  );
-  const bianDesktopDetail = formatYaoDesktopDetail(
-    bianYao,
-    bianSuiXian,
-    bianExtra,
-  );
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)] items-start py-1.5 sm:flex sm:items-center sm:justify-between sm:py-2.5 border-b border-hairline-soft last:border-0 hover:bg-chart-highlight">
-      {/* LEFT: 本卦 */}
-      <div className="grid min-w-0 grid-cols-[auto_auto_0.75rem_2rem] items-center justify-end gap-x-0.5 overflow-hidden max-[374px]:[zoom:0.96] max-[340px]:[zoom:0.92] max-[320px]:[zoom:0.88] sm:flex sm:flex-1 sm:gap-2 relative">
-        {/* 六兽 */}
-        <span className={cn(YAO_LIUSHOU_BADGE_CLASS, 'select-none shrink-0')}>
-          {benYao.liuShou}
-        </span>
-
-        {/* 六亲 + 纳甲五行 */}
-        <div className="grid w-[4.75rem] min-w-0 grid-cols-[auto_auto] items-center justify-end justify-items-end gap-x-0.5 sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-0.5">
-          <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
-            {benYao.liuQin}
-          </span>
-          <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
-            {benYao.naJia}
-            {benYao.wuXing}
-          </span>
-          <YaoDesktopDetail value={benDesktopDetail} align="right" />
-        </div>
-
-        {/* 世应 */}
-        <div className="w-3 sm:w-6 flex items-center justify-center shrink-0">
-          <span
-            className={`text-[9px] sm:text-xs font-bold ${
-              benYao.shiYing === '世' ? CHART.primary : CHART.muted
-            }`}
-          >
-            {benYao.shiYing === '世' || benYao.shiYing === '應' || benYao.shiYing === '应'
-              ? benYao.shiYing === '應'
-                ? '应'
-                : benYao.shiYing
-              : ''}
-          </span>
-        </div>
-
-        {/* 爻条 */}
-        <div className="relative flex w-8 shrink-0 items-center justify-center md:w-20">
-          <YaoBar isYang={benIsYang} />
-        </div>
-
-        {benMobileDetail && (
-          <span
-            className={cn(
-              YAO_MOBILE_DETAIL_BADGE_CLASS,
-              'col-span-4 mt-0.5 justify-self-center text-center',
-              CHART.muted,
-            )}
-          >
-            {benMobileDetail}
-          </span>
-        )}
-
-        {fuShenRows.length > 0 && (
-          <div className="col-span-4 mt-0.5 flex max-w-full min-w-0 flex-col items-center gap-0.5 sm:hidden">
-            {fuShenRows.map((item, index) => (
-              <span
-                key={`${item.kind}-${index}-${item.naJiaWuXing}-mobile`}
-                className={cn(
-                  YAO_MOBILE_FUSHEN_BADGE_CLASS,
-                  'text-center',
-                  CHART.primary,
-                )}
-              >
-                {formatFuShenMobileDetail(item)}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* CENTER: 动爻箭头 */}
-      <div className={cn('flex min-h-5 min-w-0 items-center justify-center text-[9px] md:min-h-0 md:w-16 md:shrink-0 md:text-xs select-none', CHART.muted)}>
-        {isMoving && (
-          <span className="flex items-center transform scale-75 md:scale-100">
-            <span className={CHART.primary}>X</span> <span className={cn('mx-0.5 md:mx-1', CHART.lineMutedText)}>→</span>
-          </span>
-        )}
-      </div>
-
-      {/* RIGHT: 变卦 */}
+    <div
+      className={cn(
+        YAO_BOARD_GRID_CLASS,
+        'items-start border-b border-hairline-soft py-[clamp(0.35rem,1.05cqw,0.5rem)] last:border-0 hover:bg-chart-highlight',
+      )}
+    >
       <div
-        className={`grid min-w-0 grid-cols-[2rem_0.75rem_auto] items-center justify-start gap-x-0.5 overflow-hidden max-[374px]:[zoom:0.96] max-[340px]:[zoom:0.92] max-[320px]:[zoom:0.88] sm:flex sm:flex-1 sm:gap-2 ${
-          isMoving ? 'opacity-100' : 'opacity-60 grayscale'
-        }`}
-      >
-        <div className="relative flex w-8 shrink-0 items-center justify-center md:w-20">
-          <YaoBar isYang={bianIsYang} />
-        </div>
-        <div className="w-3 sm:w-6 flex items-center justify-center shrink-0">
-          <span
-            className={`text-[9px] sm:text-xs font-bold ${
-              bianYao.shiYing === '世' ? CHART.primary : CHART.muted
-            }`}
-          >
-            {bianYao.shiYing === '世' || bianYao.shiYing === '應' || bianYao.shiYing === '应'
-              ? bianYao.shiYing === '應'
-                ? '应'
-                : bianYao.shiYing
-              : ''}
-          </span>
-        </div>
-        <div className="flex w-[4.75rem] min-w-0 flex-col items-start sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1 sm:gap-y-0.5">
-          <div className="flex shrink-0 items-center gap-0.5 whitespace-nowrap sm:gap-1">
-            <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>{bianYao.liuQin}</span>
-            <span className={cn(YAO_CORE_BADGE_CLASS, 'shrink-0', CHART.ink)}>
-              {bianYao.naJia}
-              {bianYao.wuXing}
-            </span>
-          </div>
-          <YaoDesktopDetail value={bianDesktopDetail} />
-        </div>
-
-        {bianMobileDetail && (
-          <div
-            className={cn(
-              YAO_MOBILE_DETAIL_BADGE_CLASS,
-              'col-span-3 mt-0.5 justify-self-center text-center',
-              CHART.muted,
-            )}
-          >
-            {bianMobileDetail}
-          </div>
+        className={cn(
+          YAO_TEXT_CLASS,
+          'whitespace-nowrap pt-0.5 font-semibold leading-tight',
+          CHART.ink,
         )}
+      >
+        {benYao.liuShou}
       </div>
+      <FuShenCell rows={fuShenRows} />
+      <GuaYaoCell yao={benYao} isYang={benIsYang} />
+      <div
+        className={cn(
+          'flex min-h-[clamp(1rem,3.2cqw,1.25rem)] items-center justify-center pt-0.5 text-[clamp(8px,1.8cqw,14px)] font-bold leading-none select-none',
+          CHART.ink,
+        )}
+      >
+        {movingMark(benYao, isMoving)}
+      </div>
+      <GuaYaoCell yao={bianYao} isYang={bianIsYang} />
     </div>
   );
 }
@@ -378,6 +346,75 @@ function gzLabel(g?: GanZhi): string {
   if (!g) return '';
   if (g.gz) return g.gz;
   return `${g.tian ?? ''}${g.di ?? ''}`;
+}
+
+function guaHeaderLabel(gua: IchingGua, fallback: string): string {
+  const palaceLabel = `${gua.palace ?? ''}${gua.palaceLevel ?? ''}`;
+  return [gua.guaName ?? fallback, palaceLabel].filter(Boolean).join(' ');
+}
+
+function FitWidthFrame({ children }: { children: React.ReactNode }) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<FitWidthState>({
+    scale: 1,
+    height: 0,
+  });
+
+  useEffect(() => {
+    const updateFit = () => {
+      const shellWidth = shellRef.current?.clientWidth ?? LIUYAO_BOARD_WIDTH;
+      const boardHeight = boardRef.current?.offsetHeight ?? 0;
+      const scale =
+        shellWidth > 0 ? Math.min(1, shellWidth / LIUYAO_BOARD_WIDTH) : 1;
+      const height = boardHeight * scale;
+
+      setFit((prev) => {
+        if (
+          Math.abs(prev.scale - scale) < 0.001 &&
+          Math.abs(prev.height - height) < 0.5
+        ) {
+          return prev;
+        }
+        return { scale, height };
+      });
+    };
+
+    updateFit();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateFit);
+      return () => window.removeEventListener('resize', updateFit);
+    }
+
+    const resizeObserver = new ResizeObserver(updateFit);
+    if (shellRef.current) resizeObserver.observe(shellRef.current);
+    if (boardRef.current) resizeObserver.observe(boardRef.current);
+    window.addEventListener('resize', updateFit);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateFit);
+    };
+  }, []);
+
+  return (
+    <div ref={shellRef} className="w-full overflow-hidden">
+      <div style={{ height: fit.height ? `${fit.height}px` : undefined }}>
+        <div
+          ref={boardRef}
+          className="mx-auto"
+          style={{
+            width: LIUYAO_BOARD_WIDTH,
+            transform: `scale(${fit.scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
@@ -432,7 +469,8 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
   const methodDisplay = formatMethod(method);
 
   return (
-    <div className="w-full min-w-0 bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
+    <FitWidthFrame>
+      <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
       {/* 起卦副信息 */}
       {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
         <div className="px-2 sm:px-5 py-2 sm:py-3 border-b border-hairline bg-surface-soft">
@@ -515,25 +553,48 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
         </div>
       )}
 
-      {/* 2. 卦名 + 卦辞 */}
-      <div className="grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)] items-start w-full px-1 sm:flex sm:px-5 py-2.5 sm:py-3 bg-canvas">
-        <div className="flex-1 flex flex-col justify-center items-center gap-1">
-          <div className="font-bold text-sm sm:text-lg text-ink leading-none">
-            {benGua.guaName ?? '本卦'}
+      {/* 2. 列头：和六爻主体共用列轨，确保标题、伏神、本卦、变卦一眼对齐。 */}
+      <div
+        className={cn(
+          YAO_BOARD_GRID_CLASS,
+          'w-full items-start border-b border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.65rem,1.8cqw,0.75rem)]',
+        )}
+      >
+        <div
+          className={cn(
+            YAO_TEXT_CLASS,
+            'text-center font-bold leading-tight',
+            CHART.ink,
+          )}
+        >
+          六神
+        </div>
+        <div
+          className={cn(
+            YAO_TEXT_CLASS,
+            'text-center font-bold leading-tight',
+            CHART.ink,
+          )}
+        >
+          伏神
+        </div>
+        <div className="flex min-w-0 flex-col items-center justify-center gap-1">
+          <div className="whitespace-normal break-keep text-center text-[clamp(12px,2.55cqw,18px)] font-bold leading-tight text-ink">
+            {guaHeaderLabel(benGua, '本卦')}
           </div>
           {benGua.guaCi && (
-            <div className="text-[10px] sm:text-xs text-body text-center leading-tight px-1">
+            <div className="max-w-full whitespace-normal break-keep px-1 text-center text-[clamp(8px,1.6cqw,12px)] leading-tight text-body">
               {benGua.guaCi}
             </div>
           )}
         </div>
-        <div className="sm:w-16 sm:shrink-0" />
-        <div className="flex-1 flex flex-col justify-center items-center gap-1">
-          <div className="font-bold text-sm sm:text-lg text-ink leading-none">
-            {zhiGua.guaName ?? '变卦'}
+        <div aria-hidden="true" />
+        <div className="flex min-w-0 flex-col items-center justify-center gap-1">
+          <div className="whitespace-normal break-keep text-center text-[clamp(12px,2.55cqw,18px)] font-bold leading-tight text-ink">
+            {guaHeaderLabel(zhiGua, '变卦')}
           </div>
           {zhiGua.guaCi && (
-            <div className="text-[10px] sm:text-xs text-body text-center leading-tight px-1">
+            <div className="max-w-full whitespace-normal break-keep px-1 text-center text-[clamp(8px,1.6cqw,12px)] leading-tight text-body">
               {zhiGua.guaCi}
             </div>
           )}
@@ -542,7 +603,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
 
       {/* 3. 六爻主体 */}
       <div className="w-full pb-3 sm:pb-4">
-        <div className="w-full px-1 sm:px-5">
+        <div className="w-full px-[clamp(0.5rem,2.6cqw,1.25rem)]">
           {indexOrder.map((i) => {
             const benYao = benGua.yaoList[i];
             const bianYao = zhiGua.yaoList[i];
@@ -561,15 +622,22 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       </div>
 
       {/* 4. Footer 本卦 / 变卦 */}
-      <div className="grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)] items-center w-full px-1 sm:flex sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-primary bg-canvas border-t border-hairline-soft">
-        <div className="min-w-0 text-center sm:flex-1">
-          <span className="text-primary">
+      <div
+        className={cn(
+          YAO_BOARD_GRID_CLASS,
+          'w-full items-center border-t border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.4rem,1.2cqw,0.5rem)] text-[clamp(9px,1.8cqw,14px)] font-bold text-ink',
+        )}
+      >
+        <div aria-hidden="true" />
+        <div aria-hidden="true" />
+        <div className="min-w-0 text-center">
+          <span className="text-ink">
             本卦 {benGua.palace ? `(${benGua.palace}宫)` : ''}
           </span>
         </div>
-        <div className="sm:w-16 sm:shrink-0" />
-        <div className="min-w-0 text-center sm:flex-1">
-          <span className="text-primary">
+        <div aria-hidden="true" />
+        <div className="min-w-0 text-center">
+          <span className="text-ink">
             变卦 {zhiGua.palace ? `(${zhiGua.palace}宫)` : ''}
           </span>
         </div>
@@ -605,7 +673,8 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </FitWidthFrame>
   );
 }
 
@@ -642,10 +711,10 @@ function ScriptureBlock({ label, gua }: { label: string; gua: IchingGua }) {
             return (
               <li
                 key={idx}
-                className={`flex gap-1.5 ${isMoving ? 'text-primary font-medium' : 'text-body'}`}
+                className={`flex gap-1.5 ${isMoving ? 'text-ink font-medium' : 'text-body'}`}
               >
                 {isMoving && (
-                  <span className="shrink-0 text-[10px] sm:text-xs text-primary mt-[1px]">●</span>
+                  <span className="shrink-0 text-[10px] sm:text-xs text-ink mt-[1px]">●</span>
                 )}
                 <span className="flex-1">{line}</span>
               </li>
