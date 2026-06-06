@@ -27,6 +27,10 @@ function appendQueryString(href: string, query: string) {
   return `${href}${href.includes('?') ? '&' : '?'}${query}`;
 }
 
+const DISCOVER_RETURN_QUERY = new URLSearchParams({
+  returnTo: '/discover',
+}).toString();
+
 export default function DiscoverPage() {
   const { toast } = useToast();
   const [guideReturnQuery, setGuideReturnQuery] = useState('');
@@ -122,7 +126,7 @@ export default function DiscoverPage() {
                       key={bundle.id}
                       href={appendQueryString(
                         `/skills/bundle/install?token=${bundle.bundle_token}`,
-                        guideReturnQuery,
+                        guideReturnQuery || DISCOVER_RETURN_QUERY,
                       )}
                       className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
@@ -197,7 +201,7 @@ export default function DiscoverPage() {
                         s.share_token
                           ? appendQueryString(
                               `/skills/install?token=${s.share_token}`,
-                              guideReturnQuery,
+                              guideReturnQuery || DISCOVER_RETURN_QUERY,
                             )
                           : '#'
                       }
