@@ -6,7 +6,10 @@ import type {
   KeyboardEvent,
   RefObject,
 } from 'react';
+import { useLayoutEffect } from 'react';
 import { ClipboardPaste, Send, Square, X } from 'lucide-react';
+
+const MAX_TEXTAREA_HEIGHT = 96;
 
 interface PasteChoicePanelProps {
   preview?: string;
@@ -15,6 +18,41 @@ interface PasteChoicePanelProps {
   onDismissPasteChoice: () => void;
 }
 
+function syncTextareaHeight(textarea: HTMLTextAreaElement | null, value: string) {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.style.height = 'auto';
+  if (!value) {
+    textarea.style.height = '';
+    return;
+  }
+
+  textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+}
+
+/**
+ * AI 对话输入框，负责展示粘贴盘面选择、禁用提示、发送/停止按钮和 textarea 高度同步。
+ *
+ * @param props.inputRef 输入框 DOM 引用，用于父级聚焦和本组件同步高度。
+ * @param props.input 当前输入内容。
+ * @param props.sending 是否正在等待 AI 回复；为 true 时按钮切换为停止输出。
+ * @param props.disabled 是否因业务规则禁用继续追问。
+ * @param props.disabledMessage 禁用时展示在输入框上方的说明。
+ * @param props.selectedSession 当前会话 ID，空值表示还未进入具体会话。
+ * @param props.pasteChoiceOpen 是否展示粘贴内容处理选项。
+ * @param props.pasteChoicePreview 粘贴内容预览。
+ * @param props.onInputChange 输入内容变化回调。
+ * @param props.onPaste 粘贴事件回调。
+ * @param props.onKeyDown 键盘事件回调。
+ * @param props.onUsePasteAsBoard 将粘贴内容作为盘面处理。
+ * @param props.onKeepPasteAsMessage 将粘贴内容保留为普通消息。
+ * @param props.onDismissPasteChoice 关闭粘贴处理选项。
+ * @param props.onSend 发送当前输入。
+ * @param props.onStop 停止当前 AI 输出。
+ * @returns 可复用的 AI 聊天输入区域。
+ */
 export function AiChatComposer({
   inputRef,
   input,
@@ -52,6 +90,11 @@ export function AiChatComposer({
 }) {
   const composerDisabled = sending || Boolean(disabled);
   const actionDisabled = sending ? false : !input.trim() || Boolean(disabled);
+
+  useLayoutEffect(() => {
+    syncTextareaHeight(inputRef.current, input);
+  }, [disabled, input, inputRef, selectedSession, sending]);
+
   return (
     <div className="relative">
       {pasteChoiceOpen && (
@@ -85,19 +128,16 @@ export function AiChatComposer({
           placeholder={
             disabled
               ? '此对话无法继续追问'
-              : sending
-                ? '思考中...'
-                : selectedSession
-                  ? '输入消息...'
-                  : '有什么想问的？'
+              : selectedSession
+                ? '输入消息...'
+                : '有什么想问的？'
           }
+          aria-label={sending ? 'AI 正在回复' : '输入消息'}
           disabled={composerDisabled}
           rows={1}
           className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
           onInput={(event) => {
-            const target = event.target as HTMLTextAreaElement;
-            target.style.height = 'auto';
-            target.style.height = `${Math.min(target.scrollHeight, 96)}px`;
+            syncTextareaHeight(event.currentTarget, event.currentTarget.value);
           }}
         />
         <button

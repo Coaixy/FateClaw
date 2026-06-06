@@ -9,6 +9,15 @@ import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
 
+/**
+ * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和底部备案信息。
+ *
+ * @param props.children 页面主体内容。
+ * @param props.wide 是否使用宽版内容容器。
+ * @param props.noPadding 是否移除主内容底部内边距，常用于占满视口的聊天界面。
+ * @param props.requireAuth 是否要求登录后访问；公开页面可关闭。
+ * @returns 带全局导航、错误边界与备案页脚的页面框架。
+ */
 export function AppShell({
   children,
   wide,
@@ -87,8 +96,44 @@ export function AppShell({
           >
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
+          <SiteComplianceFooter wide={wide} noPadding={noPadding} />
         </div>
       </div>
     </ChatSessionsProvider>
+  );
+}
+
+function SiteComplianceFooter({
+  wide,
+  noPadding,
+}: {
+  wide?: boolean;
+  noPadding?: boolean;
+}) {
+  return (
+    <footer
+      aria-label="备案信息"
+      className={`mx-auto ${
+        wide ? 'max-w-[1400px] px-4 lg:px-8' : 'max-w-3xl px-4 lg:px-10'
+      } ${noPadding ? 'py-4 lg:py-5' : 'pb-8 lg:pb-10'} text-center`}
+    >
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-hairline/50 pt-4 text-[11px] leading-5 text-muted/70">
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-6 items-center transition-colors hover:text-ink"
+        >
+          浙ICP备2024132053号
+        </a>
+        <span
+          className="hidden h-3 w-px bg-hairline/70 sm:inline-block"
+          aria-hidden="true"
+        />
+        <span className="inline-flex min-h-6 items-center">
+          大模型备案：网信算备110108970550101240011号等
+        </span>
+      </div>
+    </footer>
   );
 }
