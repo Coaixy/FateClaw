@@ -37,7 +37,7 @@
     "bazi-ts-lib": "^1.0.2",
     "bcryptjs": "^3.0.3",
     "fastify": "^5.8.5",
-    "iching-shifa": "^1.6.4",
+    "iching-shifa": "^1.6.5",
     "ioredis": "^5.10.1",
     "iztro": "^2.5.8",
     "kinqimen": "^0.3.1",
