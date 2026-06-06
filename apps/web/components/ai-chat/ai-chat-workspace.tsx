@@ -11,10 +11,12 @@ import {
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
+  Bot,
+  Brain,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleStop,
-  ClipboardPaste,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -42,6 +44,12 @@ import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
+import {
+  modelSettingsApi,
+  type ModelSettingsOverview,
+  type ModelThinkingLevel,
+  type OfficialModel,
+} from '@/features/model-settings/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
@@ -53,7 +61,28 @@ type PasteChoiceSelection = {
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
+type ModelToolbarBusy = '' | 'model' | 'thinking';
 const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
+const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
+const THINKING_LEVEL_OPTIONS: Array<{
+  value: ModelThinkingLevel;
+  label: string;
+}> = [
+  { value: 'off', label: '关闭' },
+  { value: 'minimal', label: '极简' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '极高' },
+];
+const THINKING_LEVEL_LABELS: Record<ModelThinkingLevel, string> = {
+  off: '关闭',
+  minimal: '极简',
+  low: '低',
+  medium: '中',
+  high: '高',
+  xhigh: '极高',
+};
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
@@ -98,6 +127,35 @@ function scheduleIdleTask(task: () => void) {
 
   const timeoutId = browserWindow.setTimeout(task, 250);
   return () => browserWindow.clearTimeout(timeoutId);
+}
+
+function getAvailableOfficialModels(
+  overview: ModelSettingsOverview | null,
+): OfficialModel[] {
+  return (
+    overview?.official_models.filter(
+      (model) => model.enabled && model.has_secret,
+    ) ?? []
+  );
+}
+
+function resolveToolbarThinkingLevel(
+  overview: ModelSettingsOverview | null,
+): ModelThinkingLevel {
+  return overview?.selection?.thinking_level ?? DEFAULT_THINKING_LEVEL;
+}
+
+function findSelectedOfficialModel(
+  overview: ModelSettingsOverview | null,
+): OfficialModel | null {
+  if (overview?.selection?.source !== 'official') {
+    return null;
+  }
+  return (
+    getAvailableOfficialModels(overview).find(
+      (model) => model.id === overview.selection?.official_model_id,
+    ) ?? null
+  );
 }
 
 export function AiChatWorkspace() {
@@ -157,8 +215,15 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
+  const [modelOverview, setModelOverview] =
+    useState<ModelSettingsOverview | null>(null);
+  const [modelSettingsLoading, setModelSettingsLoading] = useState(false);
+  const [modelSettingsError, setModelSettingsError] = useState('');
+  const [modelToolbarBusy, setModelToolbarBusy] =
+    useState<ModelToolbarBusy>('');
   const wasSendingRef = useRef(false);
   const stopRequestedRef = useRef(false);
+  const modelSettingsRequestIdRef = useRef(0);
 
   const chatMessages = useChatMessages({
     chatAvailable,
@@ -209,6 +274,46 @@ function AiChatWorkspaceContent() {
   useEffect(() => {
     setPaipanSkillPickerOpen(false);
   }, [chatAvailable]);
+
+  const loadModelSettings = useCallback(async () => {
+    if (!chatAvailable || authLoading) {
+      return;
+    }
+
+    const requestId = modelSettingsRequestIdRef.current + 1;
+    modelSettingsRequestIdRef.current = requestId;
+    setModelSettingsLoading(true);
+    setModelSettingsError('');
+
+    try {
+      const data = await modelSettingsApi.overview();
+      if (modelSettingsRequestIdRef.current !== requestId) return;
+      setModelOverview(data);
+    } catch (error) {
+      if (modelSettingsRequestIdRef.current !== requestId) return;
+      setModelOverview(null);
+      setModelSettingsError(
+        error instanceof Error ? error.message : '加载模型设置失败',
+      );
+    } finally {
+      if (modelSettingsRequestIdRef.current === requestId) {
+        setModelSettingsLoading(false);
+      }
+    }
+  }, [authLoading, chatAvailable]);
+
+  useEffect(() => {
+    if (!chatAvailable || authLoading) {
+      modelSettingsRequestIdRef.current += 1;
+      setModelOverview(null);
+      setModelSettingsLoading(false);
+      setModelSettingsError('');
+      setModelToolbarBusy('');
+      return;
+    }
+
+    void loadModelSettings();
+  }, [authLoading, chatAvailable, loadModelSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -493,6 +598,101 @@ function AiChatWorkspaceContent() {
     router.push('/discover');
   }, [router]);
 
+  const selectOfficialModel = useCallback(async (
+    officialModelId: string,
+  ) => {
+    if (!modelOverview || modelToolbarBusy || !officialModelId) {
+      return;
+    }
+
+    const officialModels = getAvailableOfficialModels(modelOverview);
+    const nextModel = officialModels.find(
+      (model) => model.id === officialModelId,
+    );
+    if (!nextModel) {
+      toast('error', '只能选择可用官方模型');
+      return;
+    }
+
+    if (
+      modelOverview.selection?.source === 'official' &&
+      modelOverview.selection.official_model_id === nextModel.id
+    ) {
+      return;
+    }
+
+    const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
+
+    setModelToolbarBusy('model');
+    try {
+      await modelSettingsApi.select({
+        source: 'official',
+        official_model_id: nextModel.id,
+        thinking_level: thinkingLevel,
+      });
+      await loadModelSettings();
+      void onboardingGuide.refresh();
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '切换模型失败');
+    } finally {
+      setModelToolbarBusy('');
+    }
+  }, [
+    loadModelSettings,
+    modelOverview,
+    modelToolbarBusy,
+    onboardingGuide,
+    toast,
+  ]);
+
+  const selectThinkingLevel = useCallback(async (
+    nextThinkingLevel: ModelThinkingLevel,
+  ) => {
+    if (!modelOverview || modelToolbarBusy || !modelOverview.selection) {
+      return;
+    }
+
+    if (nextThinkingLevel === resolveToolbarThinkingLevel(modelOverview)) {
+      return;
+    }
+
+    const selectedOfficial = findSelectedOfficialModel(modelOverview);
+    const fallbackOfficial = getAvailableOfficialModels(modelOverview)[0];
+    const officialModelId =
+      modelOverview.selection.source === 'official'
+        ? (selectedOfficial?.id ?? fallbackOfficial?.id ?? null)
+        : null;
+
+    if (modelOverview.selection.source === 'official' && !officialModelId) {
+      toast('error', '当前没有可用官方模型');
+      return;
+    }
+
+    setModelToolbarBusy('thinking');
+    try {
+      await modelSettingsApi.select({
+        source: modelOverview.selection.source,
+        official_model_id: officialModelId,
+        thinking_level: nextThinkingLevel,
+      });
+      await loadModelSettings();
+      void onboardingGuide.refresh();
+    } catch (error) {
+      toast(
+        'error',
+        error instanceof Error ? error.message : '切换思考等级失败',
+      );
+    } finally {
+      setModelToolbarBusy('');
+    }
+  }, [
+    loadModelSettings,
+    modelOverview,
+    modelToolbarBusy,
+    onboardingGuide,
+    toast,
+  ]);
+
   const openModelSettingsFromGuide = useCallback(() => {
     onboardingGuide.saveStep('model');
     router.push(`/settings/advanced?${buildGuideReturnQuery('/ai-chat')}`);
@@ -575,6 +775,26 @@ function AiChatWorkspaceContent() {
   ]);
   const pastedBoardDisabled =
     authLoading || chatMessages.sending || continuationBlocked;
+  const availableOfficialModels = getAvailableOfficialModels(modelOverview);
+  const selectedOfficialModel = findSelectedOfficialModel(modelOverview);
+  const modelControlsDisabled =
+    authLoading ||
+    !chatAvailable ||
+    chatMessages.sending ||
+    continuationBlocked;
+  const canSelectOfficialModel =
+    !modelSettingsError &&
+    availableOfficialModels.length > 0;
+  const canSelectThinkingLevel =
+    !modelSettingsError && Boolean(modelOverview?.selection);
+  const modelSwitchLabel = modelSettingsLoading
+    ? '加载中'
+    : modelSettingsError
+      ? '不可用'
+      : selectedOfficialModel?.display_name ??
+        (availableOfficialModels.length > 0 ? '官方模型' : '无官方');
+  const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
+  const thinkingSwitchLabel = THINKING_LEVEL_LABELS[thinkingLevel];
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
@@ -606,7 +826,7 @@ function AiChatWorkspaceContent() {
         <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
       )}
       {selectedSession ? (
-        <PaipanSkillStrip
+        <ChatToolStrip
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
           disabled={
@@ -614,10 +834,31 @@ function AiChatWorkspaceContent() {
             chatMessages.sending ||
             continuationBlocked
           }
-          onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
           onOpenAll={() => openCurrentSessionPaipan()}
-          onOpenPastedBoard={handleOpenComposerPastedBoard}
-          pastedBoardDisabled={pastedBoardDisabled}
+          modelLabel={modelSwitchLabel}
+          modelLoading={modelSettingsLoading}
+          modelBusy={modelToolbarBusy === 'model'}
+          modelDisabled={
+            modelControlsDisabled ||
+            modelSettingsLoading ||
+            Boolean(modelToolbarBusy) ||
+            !canSelectOfficialModel
+          }
+          modelTitle={modelSettingsError || '切换官方模型'}
+          selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
+          officialModels={availableOfficialModels}
+          onSelectModel={selectOfficialModel}
+          thinkingLabel={thinkingSwitchLabel}
+          thinkingBusy={modelToolbarBusy === 'thinking'}
+          thinkingDisabled={
+            modelControlsDisabled ||
+            modelSettingsLoading ||
+            Boolean(modelToolbarBusy) ||
+            !canSelectThinkingLevel
+          }
+          thinkingTitle={modelSettingsError || '切换思考等级'}
+          thinkingLevel={thinkingLevel}
+          onSelectThinking={selectThinkingLevel}
         />
       ) : (
         <PaipanSkillRail
@@ -662,7 +903,7 @@ function AiChatWorkspaceContent() {
         <div className="shrink-0 pt-1.5 pb-1">
           <div className="max-w-2xl mx-auto px-2.5 sm:px-3">
             <div className="mb-1.5">
-              <PaipanSkillStrip
+              <ChatToolStrip
                 catalog={paipanCatalog}
                 loading={paipanCatalogLoading}
                 disabled={
@@ -671,10 +912,31 @@ function AiChatWorkspaceContent() {
                   continuationBlocked ||
                   !selectedSession
                 }
-                onSelectSkill={(skill) => openCurrentSessionPaipan(skill)}
                 onOpenAll={() => openCurrentSessionPaipan()}
-                onOpenPastedBoard={handleOpenComposerPastedBoard}
-                pastedBoardDisabled={pastedBoardDisabled}
+                modelLabel={modelSwitchLabel}
+                modelLoading={modelSettingsLoading}
+                modelBusy={modelToolbarBusy === 'model'}
+                modelDisabled={
+                  modelControlsDisabled ||
+                  modelSettingsLoading ||
+                  Boolean(modelToolbarBusy) ||
+                  !canSelectOfficialModel
+                }
+                modelTitle={modelSettingsError || '切换官方模型'}
+                selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
+                officialModels={availableOfficialModels}
+                onSelectModel={selectOfficialModel}
+                thinkingLabel={thinkingSwitchLabel}
+                thinkingBusy={modelToolbarBusy === 'thinking'}
+                thinkingDisabled={
+                  modelControlsDisabled ||
+                  modelSettingsLoading ||
+                  Boolean(modelToolbarBusy) ||
+                  !canSelectThinkingLevel
+                }
+                thinkingTitle={modelSettingsError || '切换思考等级'}
+                thinkingLevel={thinkingLevel}
+                onSelectThinking={selectThinkingLevel}
               />
             </div>
             {composer}
@@ -780,92 +1042,232 @@ function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function PaipanSkillStrip({
+function ChatToolStrip({
   catalog,
   loading,
   disabled,
-  onSelectSkill,
   onOpenAll,
-  onOpenPastedBoard,
-  pastedBoardDisabled,
+  modelLabel,
+  modelLoading,
+  modelBusy,
+  modelDisabled,
+  modelTitle,
+  selectedOfficialModelId,
+  officialModels,
+  onSelectModel,
+  thinkingLabel,
+  thinkingBusy,
+  thinkingDisabled,
+  thinkingTitle,
+  thinkingLevel,
+  onSelectThinking,
 }: {
   catalog: PaipanCatalogItem[];
   loading: boolean;
   disabled?: boolean;
-  onSelectSkill: (skill: string) => void;
   onOpenAll: () => void;
-  onOpenPastedBoard: () => void;
-  pastedBoardDisabled?: boolean;
+  modelLabel: string;
+  modelLoading: boolean;
+  modelBusy: boolean;
+  modelDisabled?: boolean;
+  modelTitle: string;
+  selectedOfficialModelId: string;
+  officialModels: OfficialModel[];
+  onSelectModel: (modelId: string) => void;
+  thinkingLabel: string;
+  thinkingBusy: boolean;
+  thinkingDisabled?: boolean;
+  thinkingTitle: string;
+  thinkingLevel: ModelThinkingLevel;
+  onSelectThinking: (thinkingLevel: ModelThinkingLevel) => void;
 }) {
-  const isEmpty = !loading && catalog.length === 0;
-  const pastedBoardButton = (
-    <button
-      type="button"
-      onClick={onOpenPastedBoard}
-      disabled={pastedBoardDisabled}
-      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-hairline bg-surface-card px-2 text-[11px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
-      aria-label="自贴盘面"
-    >
-      <ClipboardPaste size={12} />
-      自贴盘面
-    </button>
+  const [openPicker, setOpenPicker] = useState<'model' | 'thinking' | null>(
+    null,
   );
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const isEmpty = !loading && catalog.length === 0;
+  const buttonDisabled = disabled || loading || isEmpty;
+  const chipClass =
+    'group inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] px-2.5 text-[12px] font-medium text-ink shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors duration-150 hover:border-primary/30 hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:bg-surface-card/40 disabled:text-muted disabled:opacity-60';
 
-  if (loading) {
-    return (
-      <div className="flex h-9 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-2.5 text-[11px] text-muted">
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <Loader2 size={12} className="shrink-0 animate-spin" />
-          <span className="truncate">正在加载术数...</span>
-        </span>
-        {pastedBoardButton}
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!openPicker) return;
 
-  if (isEmpty) {
-    return (
-      <div className="flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface-card/35 px-2.5 text-[11px] text-muted">
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <Sparkles size={12} className="shrink-0" />
-          <span className="truncate">当前暂无可用术数</span>
-        </span>
-        {pastedBoardButton}
-      </div>
-    );
-  }
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!stripRef.current?.contains(event.target as Node)) {
+        setOpenPicker(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenPicker(null);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openPicker]);
 
   return (
-    <div className="relative">
-      <div className="flex h-9 items-center gap-1.5 overflow-x-auto scrollbar-hide rounded-lg border border-hairline bg-surface-card/55 px-1.5 py-1 pr-6">
-        <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 text-[11px] font-medium text-primary">
-          <Sparkles size={12} />
-          术数
-        </span>
-        {catalog.map((item) => (
-          <button
-            key={item.skill}
-            type="button"
-            onClick={() => onSelectSkill(item.skill)}
-            disabled={disabled}
-            className="inline-flex h-7 shrink-0 items-center rounded-md border border-primary/10 bg-surface-card/55 px-2 text-[12px] font-medium text-ink transition-colors hover:border-primary/25 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {item.name}
-          </button>
-        ))}
+    <div ref={stripRef} className="flex min-h-8 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onOpenAll}
+        disabled={buttonDisabled}
+        title="合参术数"
+        className={chipClass}
+        aria-label="合参术数"
+      >
+        {loading ? (
+          <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
+        ) : (
+          <Sparkles size={13} className="shrink-0 text-primary" />
+        )}
+        <span className="whitespace-nowrap">合参术数</span>
+        <ChevronRight
+          size={12}
+          className="shrink-0 text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary group-disabled:translate-x-0 group-disabled:text-muted"
+        />
+      </button>
+
+      <div className="relative shrink-0">
         <button
           type="button"
-          onClick={onOpenAll}
-          disabled={disabled}
-          className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-hairline bg-surface-card px-2 text-[11px] text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
+          title={modelTitle}
+          disabled={modelDisabled}
+          onClick={() =>
+            setOpenPicker((current) =>
+              current === 'model' ? null : 'model',
+            )
+          }
+          className={chipClass}
+          aria-haspopup="menu"
+          aria-expanded={openPicker === 'model'}
+          aria-label={`选择官方模型，当前 ${modelLabel}`}
         >
-          更多
-          <ChevronRight size={11} />
+          {modelLoading || modelBusy ? (
+            <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
+          ) : (
+            <Bot size={13} className="shrink-0 text-primary" />
+          )}
+          <span className="whitespace-nowrap">模型</span>
+          <span className="max-w-[96px] truncate text-muted group-hover:text-primary">
+            {modelLabel}
+          </span>
+          <ChevronDown
+            size={12}
+            className={`shrink-0 text-muted transition-transform duration-150 ${
+              openPicker === 'model' ? 'rotate-180 text-primary' : ''
+            }`}
+          />
         </button>
-        <span className="h-4 w-px shrink-0 bg-hairline/70" />
-        {pastedBoardButton}
+        {openPicker === 'model' && (
+          <div
+            className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-[0_14px_36px_rgba(0,0,0,0.14)]"
+            role="menu"
+          >
+            <div className="border-b border-hairline/70 px-3 py-2 text-[10px] font-medium text-muted">
+              官方模型
+            </div>
+            <div className="max-h-64 overflow-y-auto p-1.5">
+              {officialModels.map((model) => {
+                const selected = model.id === selectedOfficialModelId;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    onClick={() => {
+                      setOpenPicker(null);
+                      if (!selected) onSelectModel(model.id);
+                    }}
+                    className={`flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+                      selected
+                        ? 'bg-primary/12 text-primary'
+                        : 'text-ink hover:bg-surface-cream-strong'
+                    }`}
+                  >
+                    <span className="min-w-0 truncate">
+                      {model.display_name}
+                    </span>
+                    {selected && (
+                      <CheckCircle2 size={13} className="shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
-      <div className="pointer-events-none absolute inset-y-px right-px w-8 rounded-r-lg bg-gradient-to-l from-surface-card/95 to-transparent" />
+
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          title={thinkingTitle}
+          disabled={thinkingDisabled}
+          onClick={() =>
+            setOpenPicker((current) =>
+              current === 'thinking' ? null : 'thinking',
+            )
+          }
+          className={chipClass}
+          aria-haspopup="menu"
+          aria-expanded={openPicker === 'thinking'}
+          aria-label={`选择思考等级，当前 ${thinkingLabel}`}
+        >
+          {thinkingBusy ? (
+            <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
+          ) : (
+            <Brain size={13} className="shrink-0 text-primary" />
+          )}
+          <span className="whitespace-nowrap">思考</span>
+          <span className="text-muted group-hover:text-primary">
+            {thinkingLabel}
+          </span>
+          <ChevronDown
+            size={12}
+            className={`shrink-0 text-muted transition-transform duration-150 ${
+              openPicker === 'thinking' ? 'rotate-180 text-primary' : ''
+            }`}
+          />
+        </button>
+        {openPicker === 'thinking' && (
+          <div
+            className="absolute bottom-full right-0 z-40 mb-2 w-36 overflow-hidden rounded-xl border border-hairline bg-surface-card p-1.5 shadow-[0_14px_36px_rgba(0,0,0,0.14)]"
+            role="menu"
+          >
+            {THINKING_LEVEL_OPTIONS.map((option) => {
+              const selected = option.value === thinkingLevel;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setOpenPicker(null);
+                    if (!selected) onSelectThinking(option.value);
+                  }}
+                  className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-[12px] transition-colors ${
+                    selected
+                      ? 'bg-primary/12 text-primary'
+                      : 'text-ink hover:bg-surface-cream-strong'
+                  }`}
+                >
+                  <span>{option.label}</span>
+                  {selected && <CheckCircle2 size={13} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
