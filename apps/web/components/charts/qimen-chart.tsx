@@ -20,6 +20,11 @@ const SHEN_WUXING: Record<string, '金' | '木' | '水' | '火' | '土'> = {
   勾: '土', 雀: '火',
   虎: '金', 地: '土', 天: '金', 玄: '水',
 };
+const CELL_MARK_TEXT = 'text-[clamp(8px,calc(6cqw_+_2px),13px)]';
+const CELL_SIDE_TEXT = 'text-[clamp(9px,calc(6cqw_+_2px),14px)]';
+const CELL_MAIN_TEXT = 'text-[clamp(11px,calc(18cqw_-_7px),30px)]';
+const CELL_STEM_TEXT = 'text-[clamp(12px,calc(20cqw_-_8px),32px)]';
+const CELL_STATE_TEXT = 'text-[clamp(8px,calc(7cqw_+_1px),15px)]';
 
 function stemColor(stem?: string): string {
   if (!stem) return CHART.ink;
@@ -58,6 +63,10 @@ interface QimenData {
   天乙?: string;
   天盘?: Record<string, string>;
   地盘?: Record<string, string>;
+  寄干?: Record<string, string>;
+  寄宫干?: Record<string, string>;
+  天盘寄干?: Record<string, string>;
+  地盘寄干?: Record<string, string>;
   门?: Record<string, string>;
   星?: Record<string, string>;
   神?: Record<string, string>;
@@ -93,42 +102,83 @@ function parseSizhu(ganzhi?: string): [string, string, string, string] {
   return [m[1], m[2], m[3], m[4]];
 }
 
-function StemStack({
+function stemMarkClass(stem: string, dayGan: string, hourGan: string): string {
+  return cn(
+    stem === dayGan && 'underline decoration-success decoration-2 underline-offset-2',
+    stem === hourGan && 'underline decoration-warning decoration-2 underline-offset-2',
+  );
+}
+
+function StemGlyph({
   stem,
-  state,
-  stateClassName,
+  dayGan,
+  hourGan,
   className,
 }: {
   stem: string;
-  state?: string;
-  stateClassName: string;
+  dayGan: string;
+  hourGan: string;
   className?: string;
 }) {
   if (!stem) return null;
 
   return (
-    <div className="grid min-w-[1.35rem] shrink-0 justify-items-center gap-y-[1px]">
-      <div className={cn(
-        'text-[12px] sm:text-[14px] font-bold leading-none',
-        stemColor(stem),
-        className,
-      )}>
-        {stem}
-      </div>
+    <span className={cn(stemColor(stem), stemMarkClass(stem, dayGan, hourGan), className)}>
+      {stem}
+    </span>
+  );
+}
+
+function StemColumn({
+  state,
+  stems,
+  dayGan,
+  hourGan,
+  stateClassName,
+}: {
+  state?: string;
+  stems: string[];
+  dayGan: string;
+  hourGan: string;
+  stateClassName: string;
+}) {
+  const visibleStems = stems.filter(Boolean);
+  if (visibleStems.length === 0) return null;
+
+  return (
+    <div className="grid justify-items-end gap-y-[1px] text-right">
       {state && (
         <div
-          className={cn(
-            // 长生运是天干的附属信息，保持可读字号并限制宽度，避免小屏被压没、大屏被拉散。
-            'max-w-[4.5em] truncate whitespace-nowrap text-[8px] sm:text-[10px] font-medium leading-none',
-            stateClassName,
-          )}
+          className={cn(CELL_STATE_TEXT, 'max-w-[5.5em] truncate whitespace-nowrap font-medium leading-none', stateClassName)}
           title={state}
         >
           {state}
         </div>
       )}
+      <div className={cn(CELL_STEM_TEXT, 'inline-flex items-baseline justify-end gap-[0.04em] font-bold leading-none')}>
+        {visibleStems.map((stem, index) => (
+          <StemGlyph
+            key={`${stem}-${index}`}
+            stem={stem}
+            dayGan={dayGan}
+            hourGan={hourGan}
+          />
+        ))}
+      </div>
     </div>
   );
+}
+
+function resolveSkyJiGan(gua: string, data: QimenData): string {
+  // 天盘中宫随天禽寄到芮禽所在宫；若后端显式给天盘寄干，则优先使用。
+  const centerGan = data.天盘?.中 ?? '';
+  const star = data.星?.[gua] ?? '';
+  return data.天盘寄干?.[gua] ?? data.寄干?.[gua] ?? (centerGan && star.includes('禽') ? centerGan : '');
+}
+
+function resolveEarthJiGan(gua: string, data: QimenData): string {
+  // 地盘中宫固定寄坤；若后端显式给地盘寄干，则优先使用。
+  return data.地盘寄干?.[gua] ?? data.寄宫干?.[gua] ?? (gua === '坤' ? (data.地盘?.中 ?? data.天盘?.中 ?? '') : '');
 }
 
 function PalaceCell({
@@ -158,13 +208,15 @@ function PalaceCell({
 }) {
   const isCenter = gua === '中';
   const tianGan = data.天盘?.[gua] ?? '';
-  const hasAngan = Boolean(data.暗干?.[gua]);
-  const diGan = data.暗干?.[gua] ?? data.地盘?.[gua] ?? '';
+  const diGan = data.地盘?.[gua] ?? '';
+  const darkGan = data.暗干?.[gua] ?? '';
+  const skyJiGan = resolveSkyJiGan(gua, data);
+  const earthJiGan = resolveEarthJiGan(gua, data);
   const men = data.门?.[gua] ?? '';
   const star = data.星?.[gua] ?? '';
   const shen = data.神?.[gua] ?? '';
   const tianState = extractChangSheng(data.长生运?.天盘?.[gua]);
-  const diState = hasAngan ? '' : extractChangSheng(data.长生运?.地盘?.[gua]);
+  const diState = extractChangSheng(data.长生运?.地盘?.[gua]);
   const gongNumber = GUA_TO_GONG_NUMBER[gua];
   const branches = GUA_TO_BRANCHES[gua] ?? [];
   const isKongWang = branches.some((b) => kongwangBranches.includes(b));
@@ -174,27 +226,27 @@ function PalaceCell({
 
   if (isCenter) {
     return (
-      <div className="relative p-1 aspect-square flex flex-col items-center justify-center bg-surface-soft border border-hairline rounded-md shadow-sm">
-        <div className={cn('absolute top-0.5 right-1 text-[9px] sm:text-[11px] font-medium', CHART.mutedSoft)}>
+      <div className="relative aspect-square [container-type:inline-size] flex flex-col items-center justify-center bg-surface-soft border border-hairline rounded-md shadow-sm [padding:clamp(0.25rem,2cqw,0.625rem)]">
+        <div className={cn('absolute top-0.5 right-1 font-medium', CELL_SIDE_TEXT, CHART.mutedSoft)}>
           {gongNumber ?? 5}
         </div>
         <div className="flex flex-col items-center text-center px-0.5">
-          <div className={cn('text-[8px] sm:text-[10px] font-medium mb-0.5', CHART.muted)}>
+          <div className={cn(CELL_STATE_TEXT, 'font-medium mb-0.5', CHART.muted)}>
             {hexagramName ? '时干演卦' : '中宫'}
           </div>
           {hexagramName ? (
-            <div className={cn('text-[11px] sm:text-base font-bold leading-tight', CHART.ink)}>
+            <div className={cn(CELL_MAIN_TEXT, 'font-bold leading-tight', CHART.ink)}>
               {hexagramName}
             </div>
           ) : (
             <>
               {tianGan && (
-                <div className={cn('text-[12px] sm:text-[15px] font-bold leading-none', stemColor(tianGan))}>
+                <div className={cn(CELL_STEM_TEXT, 'font-bold leading-none', stemColor(tianGan))}>
                   {tianGan}
                 </div>
               )}
               {data.排局 && (
-                <div className={cn('text-[8px] sm:text-[10px] mt-0.5 leading-tight truncate max-w-full', CHART.body)}>
+                <div className={cn(CELL_STATE_TEXT, 'mt-0.5 leading-tight truncate max-w-full', CHART.body)}>
                   {data.排局}
                 </div>
               )}
@@ -210,85 +262,100 @@ function PalaceCell({
   const menFull = men ? `${men}门` : '';
   const hasZhifuMark = star && star === zhifuStar;
   const hasZhishiMark = men && men === zhishiMen;
+  const upperStems = [skyJiGan && skyJiGan !== tianGan ? skyJiGan : '', tianGan];
+  const lowerStems = [earthJiGan && earthJiGan !== diGan ? earthJiGan : '', diGan];
 
   return (
-    <div className="relative grid aspect-square grid-rows-[auto_minmax(0,1fr)_auto] gap-y-0.5 overflow-hidden rounded-md border border-hairline bg-surface-card p-1 shadow-sm sm:p-1.5">
-      {/* 顶部：标记 + 宫号 */}
+    <div className="relative grid aspect-square [container-type:inline-size] grid-rows-[auto_minmax(0,1fr)_auto] gap-y-[clamp(0.125rem,1cqw,0.375rem)] overflow-hidden rounded-md border border-hairline bg-surface-card [padding:clamp(0.25rem,2cqw,0.625rem)] shadow-sm">
+      {/* 顶部：轻量标记 + 宫号 */}
       <div className="flex justify-between items-start gap-0.5">
         <div className="flex gap-0.5 flex-wrap">
           {isMaxing && (
-            <span className="text-[8px] sm:text-[10px] px-0.5 bg-chart-badge text-chart-earth border border-hairline rounded leading-tight font-medium">
-              马
+            <span
+              className={cn(CELL_MARK_TEXT, 'leading-none')}
+              title="马星"
+            >
+              🐎
             </span>
           )}
           {isKongWang && (
-            <span className="text-[8px] sm:text-[10px] px-0.5 bg-chart-badge text-chart-earth border border-hairline rounded leading-tight font-medium">
-              空
+            <span
+              className={cn(CELL_MARK_TEXT, 'font-semibold leading-none text-chart-earth')}
+              title="空亡"
+            >
+              ○
             </span>
           )}
         </div>
-        <div className={cn('text-[8px] sm:text-[11px] font-medium whitespace-nowrap shrink-0', CHART.muted)}>
+        <div className={cn(CELL_SIDE_TEXT, 'font-medium whitespace-nowrap shrink-0', CHART.muted)}>
           {xianTianNumber ? `${xianTianNumber}→${gongNumber}` : gongNumber}
         </div>
       </div>
 
-      {/* 中间：神居中 + 星/天盘一行。内容组设置最大宽度，避免宽屏时左右信息被宫格边缘拉开。 */}
-      <div className="grid min-h-0 content-center gap-y-0.5">
-        {shen && (
-          <div className="mx-auto flex w-full max-w-[5.75rem] justify-center">
-            <div className={cn('truncate text-[11px] sm:text-[13px] font-semibold leading-tight', shenColor(shen))}>
+      {/* 主体：参考传统盘式，左侧放神、暗干/星、门，右侧竖列放天盘干与寄干/地盘干。 */}
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-x-[clamp(0.25rem,2.2cqw,0.875rem)]">
+        <div className="grid min-w-0 content-around gap-y-[clamp(0.125rem,1cqw,0.375rem)]">
+          {shen && (
+            <div className={cn(CELL_MAIN_TEXT, 'truncate font-semibold leading-tight', shenColor(shen))}>
               {shenFull}
             </div>
-          </div>
-        )}
-        <div className="mx-auto grid w-full max-w-[5.75rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1">
-          <div className="min-w-0">
-            {star && (
-              <div className={cn(
-                'truncate text-[11px] sm:text-[13px] font-semibold leading-tight',
-                starColor(star),
-                hasZhifuMark && 'underline decoration-error decoration-2 underline-offset-2',
-              )}>
-                {starFull}
-              </div>
-            )}
-          </div>
-          <StemStack
-            stem={tianGan}
-            state={tianState}
-            stateClassName={CHART.muted}
-            className={cn(
-              tianGan === dayGan && 'underline decoration-success decoration-2 underline-offset-2',
-              tianGan === hourGan && 'underline decoration-warning decoration-2 underline-offset-2',
-            )}
-          />
-        </div>
-      </div>
-
-      {/* 底部：门 + 下方干。新版库里用户盘面口径对应暗干，没有暗干时回退到固定地盘。 */}
-      <div className="mx-auto grid w-full max-w-[5.75rem] grid-cols-[minmax(0,1fr)_auto] items-end gap-x-1">
-        <div className="min-w-0">
+          )}
+          {(star || darkGan) && (
+            <div className={cn(CELL_MAIN_TEXT, 'flex min-w-0 items-baseline gap-[0.08em] font-semibold leading-tight')}>
+              {darkGan && (
+                <StemGlyph
+                  stem={darkGan}
+                  dayGan={dayGan}
+                  hourGan={hourGan}
+                  className={CHART.muted}
+                />
+              )}
+              {star && (
+                <span
+                  className={cn(
+                    'min-w-0 truncate',
+                    starColor(star),
+                    hasZhifuMark && 'underline decoration-error decoration-2 underline-offset-2',
+                  )}
+                >
+                  {starFull}
+                </span>
+              )}
+            </div>
+          )}
           {men && (
             <span className={cn(
-              'block truncate text-[11px] sm:text-[13px] font-semibold whitespace-nowrap leading-tight',
+              CELL_MAIN_TEXT,
+              'block truncate font-semibold whitespace-nowrap leading-tight',
               menColor(men),
               hasZhishiMark && 'underline decoration-primary decoration-2 underline-offset-2',
             )}>
               {menFull}
               {hasMenPo && (
-                <span className="ml-0.5 text-[8px] sm:text-[10px] text-error font-bold">迫</span>
+                <span className={cn(CELL_MARK_TEXT, 'ml-0.5 text-error font-bold')}>迫</span>
               )}
               {hasJiXing && (
-                <span className="ml-0.5 text-[8px] sm:text-[10px] text-warning font-bold">刑</span>
+                <span className={cn(CELL_MARK_TEXT, 'ml-0.5 text-warning font-bold')}>刑</span>
               )}
             </span>
           )}
         </div>
-        <StemStack
-          stem={diGan}
-          state={diState}
-          stateClassName={CHART.mutedSoft}
-        />
+        <div className="grid min-w-[clamp(1.35rem,18cqw,4.5rem)] content-around justify-items-end">
+          <StemColumn
+            state={tianState}
+            stems={upperStems}
+            dayGan={dayGan}
+            hourGan={hourGan}
+            stateClassName={CHART.muted}
+          />
+          <StemColumn
+            state={diState}
+            stems={lowerStems}
+            dayGan={dayGan}
+            hourGan={hourGan}
+            stateClassName={CHART.mutedSoft}
+          />
+        </div>
       </div>
     </div>
   );
@@ -324,16 +391,16 @@ export default function QimenChart({ data }: { data: QimenData }) {
   }, [data?.击刑]);
 
   const kongwangBranches = useMemo(() => {
-    const arr: string[] = [];
     const shi = data?.旬空?.时空 ?? '';
-    const ri = data?.旬空?.日空 ?? '';
-    arr.push(...Array.from(shi));
-    arr.push(...Array.from(ri));
-    return arr;
+    // 奇门九宫空亡按时旬空落宫；旧数据缺时空时再退回日空。
+    return Array.from(shi || data?.旬空?.日空 || '');
   }, [data?.旬空]);
 
   const maxingBranches = useMemo(
-    () => (Object.values(data?.马星 ?? {}) as string[]).filter(Boolean),
+    () => {
+      const yiMa = data?.马星?.驿马 ?? '';
+      return yiMa ? [yiMa] : [];
+    },
     [data?.马星],
   );
 

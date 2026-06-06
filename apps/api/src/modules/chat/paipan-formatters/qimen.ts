@@ -10,7 +10,7 @@ import {
   textField,
 } from './utils.js';
 
-const PALACE_ORDER = ['坎', '坤', '震', '巽', '中', '乾', '兑', '艮', '离'];
+const PALACE_ORDER = ['坎', '坤', '震', '巽', '乾', '兑', '艮', '离'];
 
 function palaceValue(
   root: Record<string, unknown>,
@@ -21,10 +21,46 @@ function palaceValue(
   return record ? textField(record, palace) : undefined;
 }
 
+function joinGan(
+  jiGan: string | undefined,
+  gan: string | undefined,
+): string | undefined {
+  if (!jiGan) return gan;
+  if (!gan || jiGan === gan) return gan ?? jiGan;
+  return `${jiGan}${gan}`;
+}
+
+function skyJiGan(
+  root: Record<string, unknown>,
+  palace: string,
+): string | undefined {
+  const explicit =
+    palaceValue(root, '天盘寄干', palace) ?? palaceValue(root, '寄干', palace);
+  if (explicit) return explicit;
+  const centerGan = palaceValue(root, '天盘', '中');
+  const star = palaceValue(root, '星', palace);
+  return centerGan && star?.includes('禽') ? centerGan : undefined;
+}
+
+function earthJiGan(
+  root: Record<string, unknown>,
+  palace: string,
+): string | undefined {
+  const explicit =
+    palaceValue(root, '地盘寄干', palace) ??
+    palaceValue(root, '寄宫干', palace);
+  if (explicit) return explicit;
+  return palace === '坤'
+    ? (palaceValue(root, '地盘', '中') ?? palaceValue(root, '天盘', '中'))
+    : undefined;
+}
+
 function formatPalace(
   root: Record<string, unknown>,
   palace: string,
 ): string | undefined {
+  const skyGan = palaceValue(root, '天盘', palace);
+  const earthGan = palaceValue(root, '地盘', palace);
   const parts = joinList([
     palaceValue(root, '神', palace)
       ? `神 ${palaceValue(root, '神', palace)}`
@@ -35,11 +71,11 @@ function formatPalace(
     palaceValue(root, '门', palace)
       ? `门 ${palaceValue(root, '门', palace)}`
       : undefined,
-    palaceValue(root, '天盘', palace)
-      ? `天盘 ${palaceValue(root, '天盘', palace)}`
+    joinGan(skyJiGan(root, palace), skyGan)
+      ? `天盘 ${joinGan(skyJiGan(root, palace), skyGan)}`
       : undefined,
-    palaceValue(root, '地盘', palace)
-      ? `地盘 ${palaceValue(root, '地盘', palace)}`
+    joinGan(earthJiGan(root, palace), earthGan)
+      ? `地盘 ${joinGan(earthJiGan(root, palace), earthGan)}`
       : undefined,
     palaceValue(root, '暗干', palace)
       ? `暗干 ${palaceValue(root, '暗干', palace)}`

@@ -115,6 +115,7 @@ export const SHEN_FULL_NAME: Record<string, string> = {
 // 九星名字规范化：fateclaw 单字 "蓬" → "天蓬"
 export function fullStarName(s?: string): string {
   if (!s) return '';
+  if (s === '芮禽') return s;
   if (s.startsWith('天')) return s;
   return `天${s}`;
 }
