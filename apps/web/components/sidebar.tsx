@@ -5,6 +5,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
   Archive,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Info,
   Loader2,
   LogIn,
@@ -51,6 +54,8 @@ const SESSION_DATE_FILTERS: readonly {
   { value: '30d', label: '近30天' },
   { value: 'older', label: '更早' },
 ];
+const SIDEBAR_SESSION_PREVIEW_LIMIT = 10;
+const SESSION_PANEL_PAGE_SIZE = 6;
 
 const SIDEBAR_THEME_OPTIONS: readonly {
   mode: ThemeMode;
@@ -154,43 +159,6 @@ function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function SidebarThemeSwitch() {
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
-
-  return (
-    <div
-      className="mt-2 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
-      role="group"
-      aria-label="主题切换"
-    >
-      <div className="grid grid-cols-3 gap-1">
-        {SIDEBAR_THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
-          const active = themeMode === mode;
-
-          return (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setThemeMode(mode)}
-              className={`flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg text-[11px] font-medium transition-all duration-200 cursor-pointer ${
-                active
-                  ? 'bg-primary/12 text-primary shadow-sm'
-                  : 'text-muted hover:bg-canvas hover:text-ink'
-              }`}
-              aria-label={`切换到${label}主题`}
-              aria-pressed={active}
-              title={label}
-            >
-              <Icon size={12} strokeWidth={1.8} />
-              <span className="truncate">{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -204,9 +172,25 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const [renamingSessionId, setRenamingSessionId] = useState('');
   const [sharingSessionId, setSharingSessionId] = useState('');
   const [contactOpen, setContactOpen] = useState(false);
+  const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false);
+  const [sessionPanelPage, setSessionPanelPage] = useState(1);
   const [contactQrType, setContactQrType] = useState<'wechat' | 'qq'>(
     'wechat',
   );
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const activeThemeOption =
+    SIDEBAR_THEME_OPTIONS.find((item) => item.mode === themeMode) ??
+    SIDEBAR_THEME_OPTIONS[0];
+  const ActiveThemeIcon = activeThemeOption.icon;
+  const cycleThemeMode = () => {
+    const currentIndex = SIDEBAR_THEME_OPTIONS.findIndex(
+      (item) => item.mode === themeMode,
+    );
+    const nextTheme =
+      SIDEBAR_THEME_OPTIONS[(currentIndex + 1) % SIDEBAR_THEME_OPTIONS.length];
+
+    setThemeMode(nextTheme.mode);
+  };
 
   const {
     sessions,
@@ -221,22 +205,27 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => {
     setOpen(false);
+    setSessionsPanelOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (!contactOpen) {
+    if (!contactOpen && !sessionsPanelOpen) {
       return;
     }
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setContactOpen(false);
+        if (contactOpen) {
+          setContactOpen(false);
+          return;
+        }
+        setSessionsPanelOpen(false);
       }
     };
 
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [contactOpen]);
+  }, [contactOpen, sessionsPanelOpen]);
 
   useEffect(() => {
     // 登录态变化后复位筛选和编辑态，避免用户误以为列表丢失。
@@ -246,6 +235,8 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     setEditingTitle('');
     setRenamingSessionId('');
     setSharingSessionId('');
+    setSessionsPanelOpen(false);
+    setSessionPanelPage(1);
   }, [chatAvailable]);
 
   useEffect(() => {
@@ -279,6 +270,22 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         session.title.toLowerCase().includes(normalizedSearch),
       )
     : dateFilteredSessions;
+  const sidebarPreviewSessions = filteredSessions.slice(
+    0,
+    SIDEBAR_SESSION_PREVIEW_LIMIT,
+  );
+  const sessionPanelPageCount = Math.max(
+    1,
+    Math.ceil(filteredSessions.length / SESSION_PANEL_PAGE_SIZE),
+  );
+  const currentSessionPanelPage = Math.min(
+    sessionPanelPage,
+    sessionPanelPageCount,
+  );
+  const pagedSessions = filteredSessions.slice(
+    (currentSessionPanelPage - 1) * SESSION_PANEL_PAGE_SIZE,
+    currentSessionPanelPage * SESSION_PANEL_PAGE_SIZE,
+  );
   const activeDateFilterLabel =
     SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)?.label ??
     '全部';
@@ -308,12 +315,28 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           helper: '扫码加入QQ群',
         };
 
+  useEffect(() => {
+    setSessionPanelPage(1);
+  }, [dateFilter, normalizedSearch]);
+
+  useEffect(() => {
+    setSessionPanelPage((page) => Math.min(page, sessionPanelPageCount));
+  }, [sessionPanelPageCount]);
+
   const goNewChat = () => {
     // 手机端在当前页内切会话/新建对话时，pathname 不会变化，必须主动收起抽屉。
+    setSessionsPanelOpen(false);
     closeSidebar();
     // 统一走 ChatSessionsProvider 的路由同步逻辑，避免这里再补一次 router.push
     // 把带参数的目标地址覆盖成裸 /ai-chat。
     setSelectedSession('');
+  };
+
+  const openChatSession = (sessionId: string) => {
+    // 弹层里选会话后要同步收起，避免跳转到 AI Chat 后仍遮住主内容。
+    setSessionsPanelOpen(false);
+    closeSidebar();
+    setSelectedSession(sessionId);
   };
 
   const resetEditingState = () => {
@@ -428,49 +451,80 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        {/* 新建对话按钮 */}
+        {/* 新建对话和最近对话入口 */}
         <div className="relative px-3 shrink-0">
-          <button
-            onClick={goNewChat}
-            className="w-full flex items-center gap-2.5 px-3.5 h-11 rounded-xl border border-hairline/60 bg-surface-card/50 text-ink text-[13px] font-medium hover:border-primary/40 hover:bg-primary/10 transition-all duration-200 cursor-pointer"
-            aria-label="新建对话"
-          >
-            <SquarePen size={15} className="text-primary" />
-            新建对话
-          </button>
-        </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSessionsPanelOpen((value) => !value)}
+              className={`flex h-11 min-w-0 items-center justify-between gap-1.5 rounded-xl border px-2.5 text-left transition-all duration-200 ${
+                sessionsPanelOpen || normalizedSearch || dateFilter !== 'all'
+                  ? 'border-primary/25 bg-primary/10 text-ink'
+                  : 'border-hairline/60 bg-surface-card/60 text-muted hover:border-primary/25 hover:text-ink'
+              }`}
+              aria-label="打开最近对话面板"
+              aria-expanded={sessionsPanelOpen}
+              aria-haspopup="dialog"
+            >
+              <div className="min-w-0">
+                <span className="block truncate text-[11px] font-semibold leading-tight text-ink">
+                  最近对话
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] leading-none text-muted">
+                  {filteredSessions.length}/{sessions.length} · {activeDateFilterLabel}
+                  {normalizedSearch ? ' · 搜索中' : ''}
+                </span>
+              </div>
+              <ChevronDown
+                size={13}
+                strokeWidth={1.8}
+                className={`shrink-0 transition-transform duration-200 ${
+                  sessionsPanelOpen ? 'rotate-180 text-primary' : 'text-muted'
+                }`}
+              />
+            </button>
 
-        {/* 对话历史列表 */}
-        <div className="relative flex-1 min-h-0 flex flex-col mt-4">
-          <div className="px-5 pb-2 shrink-0 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted/70">
-                最近对话
-              </span>
-              <div className="flex items-center gap-1.5">
-                {sessions.length > 0 && (
-                  <span className="text-[10px] text-muted/55">
-                    {filteredSessions.length}/{sessions.length}
-                  </span>
-                )}
+            <button
+              onClick={goNewChat}
+              className="flex h-11 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-hairline/60 bg-surface-card/50 px-2.5 text-[13px] font-medium text-ink transition-all duration-200 hover:border-primary/40 hover:bg-primary/10"
+              aria-label="新建对话"
+            >
+              <SquarePen size={15} className="shrink-0 text-primary" />
+              <span className="truncate">新建对话</span>
+            </button>
+          </div>
+
+          {sessionsPanelOpen && (
+            <div
+              role="dialog"
+              aria-label="未归档对话"
+              className="absolute left-3 right-3 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-hairline/70 bg-canvas shadow-2xl"
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-hairline/50 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold text-ink">
+                    未归档对话
+                  </p>
+                  <p className="text-[10px] leading-tight text-muted">
+                    共 {sessions.length.toLocaleString()} 个
+                  </p>
+                </div>
                 <Link
                   href="/ai-chat/archive"
-                  onClick={closeSidebar}
-                  className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-medium transition-all duration-200 ${
-                    pathname === '/ai-chat/archive'
-                      ? 'border-primary/25 bg-primary/12 text-primary'
-                      : 'border-hairline/60 bg-surface-card text-muted hover:border-primary/25 hover:text-ink'
-                  }`}
+                  onClick={() => {
+                    setSessionsPanelOpen(false);
+                    closeSidebar();
+                  }}
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-hairline/60 bg-surface-card px-2 text-[11px] font-medium text-muted transition-all duration-200 hover:border-primary/25 hover:text-ink"
                   aria-label="查看归档对话"
                   title="归档"
                 >
                   <Archive size={12} strokeWidth={1.8} />
-                  <span>归档</span>
+                  归档
                 </Link>
               </div>
-            </div>
-            {sessions.length > 0 && (
-              <div className="space-y-2">
+
+              <div className="space-y-2 px-3 py-3">
                 <div className="relative">
                   <Search
                     size={14}
@@ -481,12 +535,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="搜索对话标题..."
-                    className="w-full h-9 rounded-xl border border-hairline bg-canvas pl-9 pr-9 text-[12px] text-ink placeholder:text-muted/75 focus:border-primary focus:ring-1 focus:ring-primary/20 focus:outline-none transition-all"
+                    className="h-9 w-full rounded-xl border border-hairline bg-canvas pl-9 pr-8 text-[12px] text-ink placeholder:text-muted/75 transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                   />
                   {search && (
                     <button
+                      type="button"
                       onClick={() => setSearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-md flex items-center justify-center text-muted/70 hover:text-ink hover:bg-surface-card transition-all duration-200 cursor-pointer"
+                      className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted/70 transition-all duration-200 hover:bg-surface-card hover:text-ink"
                       aria-label="清空搜索"
                     >
                       <X size={12} />
@@ -494,15 +549,16 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   )}
                 </div>
 
-                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
                   {SESSION_DATE_FILTERS.map((item) => (
                     <button
                       key={item.value}
+                      type="button"
                       onClick={() => setDateFilter(item.value)}
-                      className={`shrink-0 whitespace-nowrap h-7 px-2.5 rounded-lg text-[11px] font-medium transition-all duration-200 cursor-pointer ${
+                      className={`h-7 shrink-0 rounded-lg border px-2 text-[11px] font-medium transition-all duration-200 ${
                         dateFilter === item.value
-                          ? 'bg-primary/12 text-primary border border-primary/20'
-                          : 'bg-surface-card text-muted border border-hairline/60 hover:text-ink hover:border-primary/20'
+                          ? 'border-primary/20 bg-primary/12 text-primary'
+                          : 'border-hairline/60 bg-surface-card text-muted hover:border-primary/20 hover:text-ink'
                       }`}
                       aria-pressed={dateFilter === item.value}
                     >
@@ -511,8 +567,107 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+
+              <div className="max-h-[18.5rem] overflow-y-auto px-2 pb-2 scrollbar-hide">
+                {showSessionSkeleton ? (
+                  <SidebarSessionSkeleton />
+                ) : sessions.length === 0 ? (
+                  <div className="px-3 py-6 text-center">
+                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-surface-card">
+                      <MessageCircle size={16} className="text-muted/40" />
+                    </div>
+                    <p className="text-[11px] text-muted/60">
+                      {chatAvailable ? '暂无对话' : '登录后查看对话记录'}
+                    </p>
+                  </div>
+                ) : filteredSessions.length === 0 ? (
+                  <div className="px-3 py-6 text-center">
+                    <Search size={16} className="mx-auto text-muted/40" />
+                    <p className="mt-2 text-[11px] text-muted/60">
+                      {emptyStateMessage}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {pagedSessions.map((session) => {
+                      const active =
+                        session.id === selectedSession &&
+                        pathname === '/ai-chat';
+
+                      return (
+                        <button
+                          key={session.id}
+                          type="button"
+                          onClick={() => openChatSession(session.id)}
+                          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all duration-200 ${
+                            active
+                              ? 'bg-primary/10 text-ink shadow-sm'
+                              : 'text-muted hover:bg-surface-card hover:text-ink'
+                          }`}
+                        >
+                          <div
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
+                              active
+                                ? 'bg-primary/20 text-primary'
+                                : 'bg-surface-card text-muted/60'
+                            }`}
+                          >
+                            <MessageCircle size={12} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12px] font-medium leading-tight">
+                              {session.title}
+                            </p>
+                            <p className="mt-0.5 text-[10px] leading-tight text-muted/50">
+                              {formatSessionTime(session.updated_at)}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-t border-hairline/50 px-3 py-2">
+                <span className="text-[10px] text-muted">
+                  {filteredSessions.length === 0
+                    ? '0 / 0'
+                    : `${currentSessionPanelPage} / ${sessionPanelPageCount}`}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSessionPanelPage((page) => Math.max(1, page - 1))
+                    }
+                    disabled={currentSessionPanelPage <= 1}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label="上一页"
+                  >
+                    <ChevronLeft size={13} strokeWidth={1.8} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSessionPanelPage((page) =>
+                        Math.min(sessionPanelPageCount, page + 1),
+                      )
+                    }
+                    disabled={currentSessionPanelPage >= sessionPanelPageCount}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label="下一页"
+                  >
+                    <ChevronRight size={13} strokeWidth={1.8} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 对话历史列表 */}
+        <div className="relative flex-1 min-h-0 flex flex-col mt-3">
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 scrollbar-hide">
             {showSessionSkeleton ? (
               <SidebarSessionSkeleton />
@@ -546,16 +701,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               </div>
             ) : (
               <div className="space-y-1">
-                {filteredSessions.map((session) => {
+                {sidebarPreviewSessions.map((session) => {
                   const active = session.id === selectedSession && pathname === '/ai-chat';
                   const isEditing = session.id === editingSessionId;
                   const isRenaming = session.id === renamingSessionId;
                   const isSharing = session.id === sharingSessionId;
                   const openSession = () => {
-                    // 统一走 ChatSessionsProvider 的路由同步逻辑，确保跳转始终携带 sid。
-                    // 手机端切换会话不会触发 pathname 变化，这里仍然要先主动收起侧边栏。
-                    closeSidebar();
-                    setSelectedSession(session.id);
+                    openChatSession(session.id);
                   };
 
                   if (isEditing) {
@@ -725,63 +877,76 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
-          <div className="space-y-1">
-            <div className="grid grid-cols-3 gap-1.5">
-              <Link
-                href="/status"
-                onClick={closeSidebar}
-                className={`group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-all duration-200 ${
-                  pathname === '/status'
-                    ? 'bg-primary/10 text-ink'
-                    : 'text-muted hover:text-ink hover:bg-surface-card'
-                }`}
-                aria-label="查看平台状态"
-                title="状态"
-              >
-                <Activity
-                  size={15}
-                  strokeWidth={1.8}
-                  className="group-hover:text-primary"
-                />
-                <span className="max-w-full truncate leading-tight">状态</span>
-              </Link>
+          <div
+            className="grid grid-cols-4 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+            role="group"
+            aria-label="侧栏快捷入口和主题切换"
+          >
+            <Link
+              href="/status"
+              onClick={closeSidebar}
+              className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
+                pathname === '/status'
+                  ? 'bg-primary/10 text-ink'
+                  : 'text-muted hover:text-ink hover:bg-surface-card'
+              }`}
+              aria-label="查看平台状态"
+              title="状态"
+            >
+              <Activity
+                size={14}
+                strokeWidth={1.8}
+                className="group-hover:text-primary"
+              />
+              <span className="max-w-full truncate leading-tight">状态</span>
+            </Link>
 
-              <Link
-                href="/about"
-                onClick={closeSidebar}
-                className={`group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-all duration-200 ${
-                  pathname === '/about'
-                    ? 'bg-primary/10 text-ink'
-                    : 'text-muted hover:text-ink hover:bg-surface-card'
-                }`}
-                aria-label="查看关于我们"
-                title="关于我们"
-              >
-                <Info
-                  size={15}
-                  strokeWidth={1.8}
-                  className="group-hover:text-primary"
-                />
-                <span className="max-w-full truncate leading-tight">关于</span>
-              </Link>
+            <Link
+              href="/about"
+              onClick={closeSidebar}
+              className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
+                pathname === '/about'
+                  ? 'bg-primary/10 text-ink'
+                  : 'text-muted hover:text-ink hover:bg-surface-card'
+              }`}
+              aria-label="查看关于我们"
+              title="关于我们"
+            >
+              <Info
+                size={14}
+                strokeWidth={1.8}
+                className="group-hover:text-primary"
+              />
+              <span className="max-w-full truncate leading-tight">关于</span>
+            </Link>
 
-              <button
-                type="button"
-                onClick={() => setContactOpen(true)}
-                className="group flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
-                aria-label="联系名誉站长"
-                title="联系名誉站长"
-              >
-                <MessageCircle
-                  size={15}
-                  strokeWidth={1.8}
-                  className="group-hover:text-primary"
-                />
-                <span className="max-w-full truncate leading-tight">联系</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setContactOpen(true)}
+              className="group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
+              aria-label="联系名誉站长"
+              title="联系名誉站长"
+            >
+              <MessageCircle
+                size={14}
+                strokeWidth={1.8}
+                className="group-hover:text-primary"
+              />
+              <span className="max-w-full truncate leading-tight">联系</span>
+            </button>
 
-            <SidebarThemeSwitch />
+            <button
+              type="button"
+              onClick={cycleThemeMode}
+              className="flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg bg-primary/12 text-[10px] font-medium text-primary shadow-sm transition-all duration-200 hover:bg-primary/18"
+              aria-label={`切换主题，当前${activeThemeOption.label}`}
+              title={`当前主题：${activeThemeOption.label}`}
+            >
+              <ActiveThemeIcon size={14} strokeWidth={1.8} />
+              <span className="max-w-full truncate leading-tight">
+                {activeThemeOption.label}
+              </span>
+            </button>
           </div>
         </div>
       </aside>
