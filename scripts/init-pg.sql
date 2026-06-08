@@ -591,11 +591,30 @@ CREATE INDEX IF NOT EXISTS idx_membership_allowances_user_period
 CREATE TABLE IF NOT EXISTS runtime_config (
   id TEXT PRIMARY KEY DEFAULT 'default',
   agent_concurrency_limit INTEGER NOT NULL DEFAULT 10,
+  local_agent_max_processes INTEGER NOT NULL DEFAULT 4,
+  local_agent_idle_ttl_ms INTEGER NOT NULL DEFAULT 600000,
+  pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
+  pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
+  pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,
+  skill_bundle_max_files INTEGER NOT NULL DEFAULT 50,
+  skill_bundle_max_file_chars INTEGER NOT NULL DEFAULT 100000,
+  skill_bundle_max_total_chars INTEGER NOT NULL DEFAULT 500000,
+  skill_bundle_max_zip_bytes INTEGER NOT NULL DEFAULT 8388608,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 INSERT INTO runtime_config (id)
 VALUES ('default')
 ON CONFLICT (id) DO NOTHING;
+ALTER TABLE runtime_config
+  ADD COLUMN IF NOT EXISTS local_agent_max_processes INTEGER NOT NULL DEFAULT 4,
+  ADD COLUMN IF NOT EXISTS local_agent_idle_ttl_ms INTEGER NOT NULL DEFAULT 600000,
+  ADD COLUMN IF NOT EXISTS pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
+  ADD COLUMN IF NOT EXISTS pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,
+  ADD COLUMN IF NOT EXISTS skill_bundle_max_files INTEGER NOT NULL DEFAULT 50,
+  ADD COLUMN IF NOT EXISTS skill_bundle_max_file_chars INTEGER NOT NULL DEFAULT 100000,
+  ADD COLUMN IF NOT EXISTS skill_bundle_max_total_chars INTEGER NOT NULL DEFAULT 500000,
+  ADD COLUMN IF NOT EXISTS skill_bundle_max_zip_bytes INTEGER NOT NULL DEFAULT 8388608;
 
 ALTER TABLE chat_sessions
   DROP CONSTRAINT IF EXISTS fk_chat_sessions_owner_user_id,
@@ -919,6 +938,66 @@ BEGIN
     ALTER TABLE runtime_config
       ADD CONSTRAINT chk_runtime_config_agent_concurrency_limit_positive
       CHECK (agent_concurrency_limit > 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_skill_bundle_max_files_range') THEN
+    UPDATE runtime_config
+    SET skill_bundle_max_files = LEAST(GREATEST(skill_bundle_max_files, 1), 500)
+    WHERE skill_bundle_max_files < 1 OR skill_bundle_max_files > 500;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_skill_bundle_max_files_range
+      CHECK (skill_bundle_max_files BETWEEN 1 AND 500);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_skill_bundle_max_file_chars_range') THEN
+    UPDATE runtime_config
+    SET skill_bundle_max_file_chars = LEAST(GREATEST(skill_bundle_max_file_chars, 1), 2000000)
+    WHERE skill_bundle_max_file_chars < 1 OR skill_bundle_max_file_chars > 2000000;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_skill_bundle_max_file_chars_range
+      CHECK (skill_bundle_max_file_chars BETWEEN 1 AND 2000000);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_skill_bundle_max_total_chars_range') THEN
+    UPDATE runtime_config
+    SET skill_bundle_max_total_chars = LEAST(GREATEST(skill_bundle_max_total_chars, 1), 10000000)
+    WHERE skill_bundle_max_total_chars < 1 OR skill_bundle_max_total_chars > 10000000;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_skill_bundle_max_total_chars_range
+      CHECK (skill_bundle_max_total_chars BETWEEN 1 AND 10000000);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_skill_bundle_total_chars_at_least_file_chars') THEN
+    UPDATE runtime_config
+    SET skill_bundle_max_total_chars = skill_bundle_max_file_chars
+    WHERE skill_bundle_max_total_chars < skill_bundle_max_file_chars;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_skill_bundle_total_chars_at_least_file_chars
+      CHECK (skill_bundle_max_total_chars >= skill_bundle_max_file_chars);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_skill_bundle_max_zip_bytes_range') THEN
+    UPDATE runtime_config
+    SET skill_bundle_max_zip_bytes = LEAST(GREATEST(skill_bundle_max_zip_bytes, 1024), 104857600)
+    WHERE skill_bundle_max_zip_bytes < 1024 OR skill_bundle_max_zip_bytes > 104857600;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_skill_bundle_max_zip_bytes_range
+      CHECK (skill_bundle_max_zip_bytes BETWEEN 1024 AND 104857600);
   END IF;
 END $$;
 

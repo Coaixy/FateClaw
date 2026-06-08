@@ -34,6 +34,13 @@ import type {
   UserModelSelection,
 } from '../../shared/types.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
+import {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  MAX_SKILL_BUNDLE_ZIP_BYTES,
+  type SkillBundleLimitsDto,
+} from '@fateclaw/contracts/skills';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export type ProviderAuthMode =
@@ -57,6 +64,14 @@ export const DEFAULT_LOCAL_AGENT_IDLE_TTL_MS = 600_000;
 export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'medium';
 export const DEFAULT_PI_SESSION_INACTIVE_CLEANUP_DAYS = 30;
 export const DEFAULT_PI_SESSION_ORPHAN_GRACE_DAYS = 30;
+export const DEFAULT_SKILL_BUNDLE_MAX_FILES = MAX_SKILL_BUNDLE_FILES;
+export const DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS =
+  MAX_SKILL_BUNDLE_FILE_LENGTH;
+export const DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS =
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH;
+export const DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES = MAX_SKILL_BUNDLE_ZIP_BYTES;
+
+export type SkillBundleLimitsPolicy = SkillBundleLimitsDto;
 
 export interface EffectiveLlmRuntimeConfig {
   source: LlmRuntimeSource;
@@ -327,6 +342,52 @@ function normalizePolicyDays(value: unknown, fallback: number): number {
   const numeric =
     typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   return Math.min(3650, Math.max(1, Math.floor(numeric)));
+}
+
+function normalizePolicyInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const numeric =
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, Math.floor(numeric)));
+}
+
+function runtimeToSkillBundleLimits(runtime: {
+  skill_bundle_max_files?: number;
+  skill_bundle_max_file_chars?: number;
+  skill_bundle_max_total_chars?: number;
+  skill_bundle_max_zip_bytes?: number;
+}): SkillBundleLimitsPolicy {
+  const maxFileChars = normalizePolicyInteger(
+    runtime.skill_bundle_max_file_chars,
+    DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS,
+    1,
+    2_000_000,
+  );
+  return {
+    max_files: normalizePolicyInteger(
+      runtime.skill_bundle_max_files,
+      DEFAULT_SKILL_BUNDLE_MAX_FILES,
+      1,
+      500,
+    ),
+    max_file_chars: maxFileChars,
+    max_total_chars: normalizePolicyInteger(
+      runtime.skill_bundle_max_total_chars,
+      DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS,
+      maxFileChars,
+      10_000_000,
+    ),
+    max_zip_bytes: normalizePolicyInteger(
+      runtime.skill_bundle_max_zip_bytes,
+      DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES,
+      1024,
+      100 * 1024 * 1024,
+    ),
+  };
 }
 
 async function resolveSecret(input: {
@@ -608,6 +669,10 @@ export async function getSystemConfigOverview(): Promise<{
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
+    skill_bundle_max_files: number;
+    skill_bundle_max_file_chars: number;
+    skill_bundle_max_total_chars: number;
+    skill_bundle_max_zip_bytes: number;
     updated_at: string;
   };
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
@@ -618,6 +683,7 @@ export async function getSystemConfigOverview(): Promise<{
     getModelBillingConfig(),
     getRuntimeConfig(),
   ]);
+  const skillBundleLimits = runtimeToSkillBundleLimits(runtime);
   return {
     official_models: models,
     providers: models,
@@ -634,6 +700,10 @@ export async function getSystemConfigOverview(): Promise<{
       pi_session_inactive_cleanup_days:
         runtime.pi_session_inactive_cleanup_days,
       pi_session_orphan_grace_days: runtime.pi_session_orphan_grace_days,
+      skill_bundle_max_files: skillBundleLimits.max_files,
+      skill_bundle_max_file_chars: skillBundleLimits.max_file_chars,
+      skill_bundle_max_total_chars: skillBundleLimits.max_total_chars,
+      skill_bundle_max_zip_bytes: skillBundleLimits.max_zip_bytes,
       updated_at: runtime.updated_at,
     },
     audit_logs: auditLogs,
@@ -738,6 +808,17 @@ export async function getPiSessionHealthPolicy(): Promise<PiSessionHealthPolicy>
 }
 
 /**
+ * 读取当前生效的用户 Text Skill Bundle 文件限制。
+ *
+ * @returns 普通用户导入、编辑和服务端写入校验共用的限制。
+ */
+export async function getSkillBundleLimitsPolicy(): Promise<
+  SkillBundleLimitsPolicy
+> {
+  return runtimeToSkillBundleLimits(await getRuntimeConfig());
+}
+
+/**
  * 更新全站 Agent 运行时策略。
  */
 export async function updateRuntimeSettings(args: {
@@ -747,6 +828,10 @@ export async function updateRuntimeSettings(args: {
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
+  skillBundleMaxFiles?: number;
+  skillBundleMaxFileChars?: number;
+  skillBundleMaxTotalChars?: number;
+  skillBundleMaxZipBytes?: number;
   actor?: string;
 }): Promise<{
   agent_concurrency_limit: number;
@@ -755,6 +840,10 @@ export async function updateRuntimeSettings(args: {
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
+  skill_bundle_max_files: number;
+  skill_bundle_max_file_chars: number;
+  skill_bundle_max_total_chars: number;
+  skill_bundle_max_zip_bytes: number;
   updated_at: string;
 }> {
   const actor = args.actor ?? 'admin';
@@ -766,6 +855,10 @@ export async function updateRuntimeSettings(args: {
     piSessionHealthEnabled: args.piSessionHealthEnabled,
     piSessionInactiveCleanupDays: args.piSessionInactiveCleanupDays,
     piSessionOrphanGraceDays: args.piSessionOrphanGraceDays,
+    skillBundleMaxFiles: args.skillBundleMaxFiles,
+    skillBundleMaxFileChars: args.skillBundleMaxFileChars,
+    skillBundleMaxTotalChars: args.skillBundleMaxTotalChars,
+    skillBundleMaxZipBytes: args.skillBundleMaxZipBytes,
   });
   await createConfigAuditLog({
     id: `cfg-audit-${randomUUID()}`,
@@ -776,6 +869,7 @@ export async function updateRuntimeSettings(args: {
     before,
     after: updated,
   });
+  const skillBundleLimits = runtimeToSkillBundleLimits(updated);
   return {
     agent_concurrency_limit: updated.agent_concurrency_limit,
     local_agent_max_processes: updated.local_agent_max_processes,
@@ -783,6 +877,10 @@ export async function updateRuntimeSettings(args: {
     pi_session_health_enabled: updated.pi_session_health_enabled,
     pi_session_inactive_cleanup_days: updated.pi_session_inactive_cleanup_days,
     pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
+    skill_bundle_max_files: skillBundleLimits.max_files,
+    skill_bundle_max_file_chars: skillBundleLimits.max_file_chars,
+    skill_bundle_max_total_chars: skillBundleLimits.max_total_chars,
+    skill_bundle_max_zip_bytes: skillBundleLimits.max_zip_bytes,
     updated_at: updated.updated_at,
   };
 }

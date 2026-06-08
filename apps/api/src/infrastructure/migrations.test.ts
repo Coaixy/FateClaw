@@ -154,6 +154,13 @@ describe('runDatabaseMigrations', () => {
         '增加用户认证 token 版本以支持改密后旧 JWT 失效',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0028_skill_bundle_runtime_limits',
+        '增加用户 Skill Bundle 文件限制后台配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -212,6 +219,16 @@ describe('runDatabaseMigrations', () => {
       true,
     );
     expect(
+      calls.some((call) => call.sql.includes('skill_bundle_max_files')),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes(
+          'chk_runtime_config_skill_bundle_total_chars_at_least_file_chars',
+        ),
+      ),
+    ).toBe(true);
+    expect(
       calls.some((call) =>
         call.sql.includes(
           'chk_runtime_config_pi_session_inactive_cleanup_days_range',
@@ -257,6 +274,7 @@ describe('runDatabaseMigrations', () => {
       '0025_local_agent_runtime_limits',
       '0026_pi_session_health_runtime_config',
       '0027_user_auth_token_version',
+      '0028_skill_bundle_runtime_limits',
     ]);
 
     await runDatabaseMigrations(client as never);

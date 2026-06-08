@@ -34,6 +34,12 @@ const {
       deleteSkillBundle: noop,
       deleteUserCustomSkill: noop,
       getBundleByToken: noop,
+      getSkillBundleLimitsPolicy: vi.fn(async () => ({
+        max_files: 50,
+        max_file_chars: 100000,
+        max_total_chars: 500000,
+        max_zip_bytes: 8 * 1024 * 1024,
+      })),
       getSkillByShareToken: noop,
       getSubscribedSkills: noop,
       getUserCustomSkill: noop,
@@ -132,6 +138,21 @@ describe('skillsRoutes access invites', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('returns current Skill Bundle limits', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/limits',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      max_files: 50,
+      max_file_chars: 100000,
+      max_total_chars: 500000,
+      max_zip_bytes: 8 * 1024 * 1024,
+    });
   });
 
   it('previews access invite links without authentication', async () => {

@@ -57,6 +57,7 @@ vi.mock('../../infrastructure/db.js', () => ({
 import {
   getLocalAgentRuntimePolicy,
   getPiSessionHealthPolicy,
+  getSkillBundleLimitsPolicy,
   getSystemConfigOverview,
   getUserModelSettingsOverview,
   listOfficialModelViews,
@@ -135,6 +136,10 @@ describe('resolveUserLlmRuntime', () => {
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });
@@ -378,6 +383,10 @@ describe('getLocalAgentRuntimePolicy', () => {
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
 
@@ -402,6 +411,10 @@ describe('getPiSessionHealthPolicy', () => {
       pi_session_health_enabled: true,
       pi_session_inactive_cleanup_days: 0,
       pi_session_orphan_grace_days: 5000,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
 
@@ -409,6 +422,36 @@ describe('getPiSessionHealthPolicy', () => {
       enabled: true,
       inactiveCleanupDays: 1,
       orphanGraceDays: 3650,
+    });
+  });
+});
+
+describe('getSkillBundleLimitsPolicy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('normalizes Skill Bundle file limits from runtime config', async () => {
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 999,
+      skill_bundle_max_file_chars: 3_000_000,
+      skill_bundle_max_total_chars: 2,
+      skill_bundle_max_zip_bytes: 1,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+
+    await expect(getSkillBundleLimitsPolicy()).resolves.toEqual({
+      max_files: 500,
+      max_file_chars: 2_000_000,
+      max_total_chars: 2_000_000,
+      max_zip_bytes: 1024,
     });
   });
 });
@@ -535,6 +578,10 @@ describe('listOfficialModelViews', () => {
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 12,
+      skill_bundle_max_file_chars: 20_000,
+      skill_bundle_max_total_chars: 80_000,
+      skill_bundle_max_zip_bytes: 2 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
   });

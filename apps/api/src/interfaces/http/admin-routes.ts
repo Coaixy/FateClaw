@@ -307,38 +307,76 @@ const ModelBillingSchema = z.object({
     .max(1_000_000),
 });
 
-const RuntimeConfigSchema = z.object({
-  agent_concurrency_limit: z
-    .number()
-    .int('并发上限必须是整数')
-    .min(1, '并发上限必须至少为 1')
-    .max(1000, '并发上限不能超过 1000'),
-  local_agent_max_processes: z
-    .number()
-    .int('常驻进程上限必须是整数')
-    .min(1, '常驻进程上限必须至少为 1')
-    .max(100, '常驻进程上限不能超过 100')
-    .optional(),
-  local_agent_idle_ttl_ms: z
-    .number()
-    .int('空闲回收时间必须是整数')
-    .min(30_000, '空闲回收时间不能少于 30 秒')
-    .max(86_400_000, '空闲回收时间不能超过 24 小时')
-    .optional(),
-  pi_session_health_enabled: z.boolean().optional(),
-  pi_session_inactive_cleanup_days: z
-    .number()
-    .int('Pi session 未活跃清理天数必须是整数')
-    .min(1, 'Pi session 未活跃清理天数不能少于 1 天')
-    .max(3650, 'Pi session 未活跃清理天数不能超过 3650 天')
-    .optional(),
-  pi_session_orphan_grace_days: z
-    .number()
-    .int('Pi session 孤儿文件保护天数必须是整数')
-    .min(1, 'Pi session 孤儿文件保护天数不能少于 1 天')
-    .max(3650, 'Pi session 孤儿文件保护天数不能超过 3650 天')
-    .optional(),
-});
+const RuntimeConfigSchema = z
+  .object({
+    agent_concurrency_limit: z
+      .number()
+      .int('并发上限必须是整数')
+      .min(1, '并发上限必须至少为 1')
+      .max(1000, '并发上限不能超过 1000'),
+    local_agent_max_processes: z
+      .number()
+      .int('常驻进程上限必须是整数')
+      .min(1, '常驻进程上限必须至少为 1')
+      .max(100, '常驻进程上限不能超过 100')
+      .optional(),
+    local_agent_idle_ttl_ms: z
+      .number()
+      .int('空闲回收时间必须是整数')
+      .min(30_000, '空闲回收时间不能少于 30 秒')
+      .max(86_400_000, '空闲回收时间不能超过 24 小时')
+      .optional(),
+    pi_session_health_enabled: z.boolean().optional(),
+    pi_session_inactive_cleanup_days: z
+      .number()
+      .int('Pi session 未活跃清理天数必须是整数')
+      .min(1, 'Pi session 未活跃清理天数不能少于 1 天')
+      .max(3650, 'Pi session 未活跃清理天数不能超过 3650 天')
+      .optional(),
+    pi_session_orphan_grace_days: z
+      .number()
+      .int('Pi session 孤儿文件保护天数必须是整数')
+      .min(1, 'Pi session 孤儿文件保护天数不能少于 1 天')
+      .max(3650, 'Pi session 孤儿文件保护天数不能超过 3650 天')
+      .optional(),
+    skill_bundle_max_files: z
+      .number()
+      .int('Skill 文件数上限必须是整数')
+      .min(1, 'Skill 文件数上限不能少于 1 个')
+      .max(500, 'Skill 文件数上限不能超过 500 个')
+      .optional(),
+    skill_bundle_max_file_chars: z
+      .number()
+      .int('Skill 单文件字符上限必须是整数')
+      .min(1, 'Skill 单文件字符上限不能少于 1 字')
+      .max(2_000_000, 'Skill 单文件字符上限不能超过 2000000 字')
+      .optional(),
+    skill_bundle_max_total_chars: z
+      .number()
+      .int('Skill 总字符上限必须是整数')
+      .min(1, 'Skill 总字符上限不能少于 1 字')
+      .max(10_000_000, 'Skill 总字符上限不能超过 10000000 字')
+      .optional(),
+    skill_bundle_max_zip_bytes: z
+      .number()
+      .int('Skill ZIP 体积上限必须是整数')
+      .min(1024, 'Skill ZIP 体积上限不能少于 1KB')
+      .max(100 * 1024 * 1024, 'Skill ZIP 体积上限不能超过 100MB')
+      .optional(),
+  })
+  .superRefine((config, ctx) => {
+    if (
+      config.skill_bundle_max_file_chars !== undefined &&
+      config.skill_bundle_max_total_chars !== undefined &&
+      config.skill_bundle_max_total_chars < config.skill_bundle_max_file_chars
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['skill_bundle_max_total_chars'],
+        message: 'Skill 总字符上限不能小于单文件字符上限',
+      });
+    }
+  });
 
 function toConfiguredContextWindowTokens(
   value: number | null | undefined,
@@ -548,6 +586,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       piSessionInactiveCleanupDays:
         parsed.data.pi_session_inactive_cleanup_days,
       piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
+      skillBundleMaxFiles: parsed.data.skill_bundle_max_files,
+      skillBundleMaxFileChars: parsed.data.skill_bundle_max_file_chars,
+      skillBundleMaxTotalChars: parsed.data.skill_bundle_max_total_chars,
+      skillBundleMaxZipBytes: parsed.data.skill_bundle_max_zip_bytes,
       actor: 'manager',
     });
   });

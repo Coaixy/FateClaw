@@ -21,9 +21,8 @@ import {
 
 import { useConfirm } from '@/lib/use-confirm';
 import {
-  MAX_SKILL_BUNDLE_FILE_LENGTH,
-  MAX_SKILL_BUNDLE_FILES,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  DEFAULT_SKILL_BUNDLE_LIMITS,
+  skillsApi,
 } from '@/features/skills/api';
 import type {
   TextSkillBundleFile,
@@ -355,6 +354,7 @@ export function SkillBundleEditor({
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
+  const [limits, setLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const newFilePathInputRef = useRef<HTMLInputElement>(null);
@@ -391,6 +391,19 @@ export function SkillBundleEditor({
   useEffect(() => {
     if (addingFile) newFilePathInputRef.current?.focus();
   }, [addingFile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    skillsApi
+      .limits()
+      .then((nextLimits) => {
+        if (!cancelled) setLimits(nextLimits);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateFile = (path: string, content: string) => {
     setFiles((prev) =>
@@ -470,16 +483,16 @@ export function SkillBundleEditor({
       setError('Bundle 必须包含 SKILL.md');
       return;
     }
-    if (files.length > MAX_SKILL_BUNDLE_FILES) {
-      setError(`Bundle 文件数不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+    if (files.length > limits.max_files) {
+      setError(`Bundle 文件数不超过 ${limits.max_files} 个`);
       return;
     }
     const oversizedFile = files.find(
-      (file) => file.content.length > MAX_SKILL_BUNDLE_FILE_LENGTH,
+      (file) => file.content.length > limits.max_file_chars,
     );
     if (oversizedFile) {
       setError(
-        `${oversizedFile.path} 内容不能超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH.toLocaleString()} 字`,
+        `${oversizedFile.path} 内容不能超过 ${limits.max_file_chars.toLocaleString()} 字`,
       );
       return;
     }
@@ -487,9 +500,9 @@ export function SkillBundleEditor({
       (sum, file) => sum + file.content.length,
       0,
     );
-    if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
+    if (totalLength > limits.max_total_chars) {
       setError(
-        `Bundle 总内容不能超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH.toLocaleString()} 字`,
+        `Bundle 总内容不能超过 ${limits.max_total_chars.toLocaleString()} 字`,
       );
       return;
     }
@@ -520,7 +533,7 @@ export function SkillBundleEditor({
     setError('');
     setPathError('');
     try {
-      const imported = await importSkillBundleFromZip(file);
+      const imported = await importSkillBundleFromZip(file, limits);
       setFiles(imported.files);
       setSelectedPath('SKILL.md');
       setActiveTab('edit');
@@ -536,7 +549,7 @@ export function SkillBundleEditor({
   const handleExportZip = () => {
     setError('');
     try {
-      downloadSkillBundleZip(displayName, files);
+      downloadSkillBundleZip(displayName, files, limits);
     } catch (err) {
       setError(err instanceof Error ? err.message : '导出 ZIP 失败');
     }

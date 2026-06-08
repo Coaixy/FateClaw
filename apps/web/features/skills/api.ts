@@ -2,6 +2,7 @@ import {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  MAX_SKILL_BUNDLE_ZIP_BYTES,
 } from '@fateclaw/contracts/skills';
 
 import type {
@@ -17,6 +18,7 @@ import type {
   SkillAccessInviteDto,
   SkillAccessInvitePreviewDto,
   SkillAccessInviteRedeemResultDto,
+  SkillBundleLimitsDto,
   SkillBundleDto,
   SkillDeleteResponseDto,
   SkillShareResponseDto,
@@ -35,6 +37,7 @@ export type UserCustomSkill = UserCustomSkillDto;
 export type SubscribedSkill = SubscribedSkillDto;
 export type UserSkillsResponse = UserSkillsResponseDto;
 export type SharedSkillPreview = SharedSkillPreviewDto;
+export type SkillBundleLimits = SkillBundleLimitsDto;
 export type SkillBundle = SkillBundleDto;
 export type BundleSkillPreview = BundleSkillPreviewDto;
 export type SharedBundlePreview = SharedBundlePreviewDto;
@@ -49,11 +52,20 @@ export {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  MAX_SKILL_BUNDLE_ZIP_BYTES,
+};
+
+export const DEFAULT_SKILL_BUNDLE_LIMITS: SkillBundleLimits = {
+  max_files: MAX_SKILL_BUNDLE_FILES,
+  max_file_chars: MAX_SKILL_BUNDLE_FILE_LENGTH,
+  max_total_chars: MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  max_zip_bytes: MAX_SKILL_BUNDLE_ZIP_BYTES,
 };
 
 const pathSegment = (value: string) => encodeURIComponent(value);
 
 export const skillsApi = {
+  limits: () => requestJson<SkillBundleLimits>('/api/skills/limits'),
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
   userCreate: (data: {
     skill_name: string;

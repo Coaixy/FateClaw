@@ -4,9 +4,12 @@ import {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  MAX_SKILL_BUNDLE_ZIP_BYTES,
 } from '@fateclaw/contracts/skills';
-
-import type { TextSkillBundleFile } from '@/features/skills/api';
+import type {
+  SkillBundleLimits,
+  TextSkillBundleFile,
+} from '@/features/skills/api';
 
 /**
  * 从 ZIP 导入后给页面层使用的 Skill Bundle 草稿。
@@ -22,6 +25,13 @@ type ZipEntryRecord = {
   uncompressedSize: number;
   compressionMethod: number;
   dataOffset: number;
+};
+
+const DEFAULT_ZIP_SKILL_BUNDLE_LIMITS: SkillBundleLimits = {
+  max_files: MAX_SKILL_BUNDLE_FILES,
+  max_file_chars: MAX_SKILL_BUNDLE_FILE_LENGTH,
+  max_total_chars: MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  max_zip_bytes: MAX_SKILL_BUNDLE_ZIP_BYTES,
 };
 
 const ALLOWED_TEXT_EXTENSIONS = new Set([
@@ -57,7 +67,6 @@ const BLOCKED_DIRECTORY_NAMES = new Set([
   'build',
   'coverage',
 ]);
-const MAX_ZIP_FILE_SIZE = 8 * 1024 * 1024;
 const ZIP_LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50;
@@ -204,6 +213,14 @@ function toSafeDownloadName(name: string): string {
   return slug || 'skill';
 }
 
+function formatByteLimit(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+  if (Number.isInteger(megabytes)) return `${megabytes}MB`;
+  const kilobytes = bytes / 1024;
+  if (Number.isInteger(kilobytes)) return `${kilobytes}KB`;
+  return `${bytes} 字节`;
+}
+
 function normalizeRawZipPath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\/+/, '');
 }
@@ -322,6 +339,7 @@ function parseSkillNameFromManifest(
 function normalizeSkillFiles(
   rawFiles: TextSkillBundleFile[],
   fallbackName: string,
+  limits: SkillBundleLimits = DEFAULT_ZIP_SKILL_BUNDLE_LIMITS,
 ): ImportedSkillBundle {
   const byPath = new Map<string, string>();
 
@@ -329,25 +347,23 @@ function normalizeSkillFiles(
     const safePath = normalizeBundleTextPath(file.path);
     if (!safePath) continue;
     if (byPath.has(safePath)) throw new Error(`压缩包内存在重复文件：${safePath}`);
-    if (file.content.length > MAX_SKILL_BUNDLE_FILE_LENGTH) {
-      throw new Error(
-        `单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`,
-      );
+    if (file.content.length > limits.max_file_chars) {
+      throw new Error(`单个文件内容不超过 ${limits.max_file_chars} 字`);
     }
     byPath.set(safePath, file.content);
   }
 
-  if (byPath.size > MAX_SKILL_BUNDLE_FILES) {
-    throw new Error(`压缩包内文本文件不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+  if (byPath.size > limits.max_files) {
+    throw new Error(`压缩包内文本文件不超过 ${limits.max_files} 个`);
   }
 
   const totalLength = Array.from(byPath.values()).reduce(
     (sum, content) => sum + content.length,
     0,
   );
-  if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
+  if (totalLength > limits.max_total_chars) {
     throw new Error(
-      `压缩包内文本总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`,
+      `压缩包内文本总内容不超过 ${limits.max_total_chars} 字`,
     );
   }
 
@@ -441,9 +457,12 @@ async function inflateRawDeflate(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-async function readZipTextFiles(file: File): Promise<TextSkillBundleFile[]> {
-  if (file.size > MAX_ZIP_FILE_SIZE) {
-    throw new Error('压缩包不能超过 8MB');
+async function readZipTextFiles(
+  file: File,
+  limits: SkillBundleLimits,
+): Promise<TextSkillBundleFile[]> {
+  if (file.size > limits.max_zip_bytes) {
+    throw new Error(`压缩包不能超过 ${formatByteLimit(limits.max_zip_bytes)}`);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const entries = parseZipEntries(bytes);
@@ -478,12 +497,17 @@ async function readZipTextFiles(file: File): Promise<TextSkillBundleFile[]> {
  */
 export async function importSkillBundleFromZip(
   file: File,
+  limits: SkillBundleLimits = DEFAULT_ZIP_SKILL_BUNDLE_LIMITS,
 ): Promise<ImportedSkillBundle> {
   if (!file.name.toLowerCase().endsWith('.zip')) {
     throw new Error('请上传 .zip 压缩包');
   }
   const fallbackName = file.name.replace(/\.zip$/i, '') || '导入 Skill';
-  return normalizeSkillFiles(await readZipTextFiles(file), fallbackName);
+  return normalizeSkillFiles(
+    await readZipTextFiles(file, limits),
+    fallbackName,
+    limits,
+  );
 }
 
 /**
@@ -491,8 +515,11 @@ export async function importSkillBundleFromZip(
  *
  * 为了避免额外依赖，这里写入 store 模式 ZIP；系统解压工具和后续导入流程都能正常读取。
  */
-export function createSkillBundleZipBlob(files: TextSkillBundleFile[]): Blob {
-  const normalized = normalizeSkillFiles(files, 'Skill');
+export function createSkillBundleZipBlob(
+  files: TextSkillBundleFile[],
+  limits: SkillBundleLimits = DEFAULT_ZIP_SKILL_BUNDLE_LIMITS,
+): Blob {
+  const normalized = normalizeSkillFiles(files, 'Skill', limits);
   const now = dateToDosTime(new Date());
   const fileChunks: Uint8Array[] = [];
   const centralDirectoryChunks: Uint8Array[] = [];
@@ -543,8 +570,9 @@ export function createSkillBundleZipBlob(files: TextSkillBundleFile[]): Blob {
 export function downloadSkillBundleZip(
   skillName: string,
   files: TextSkillBundleFile[],
+  limits: SkillBundleLimits = DEFAULT_ZIP_SKILL_BUNDLE_LIMITS,
 ): void {
-  const blob = createSkillBundleZipBlob(files);
+  const blob = createSkillBundleZipBlob(files, limits);
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

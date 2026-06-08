@@ -431,6 +431,7 @@ Authorization: Bearer <token>
 - `PUT /api/skills/user/:id`：更新 Markdown Skill Bundle
 - `DELETE /api/skills/user/:id`：软删除
 - `PATCH /api/skills/user/:id/toggle`：启用或禁用
+- `GET /api/skills/limits`：读取当前生效的 Skill Bundle 文件限制，无需认证
 - `POST /api/skills/user/:id/share` / `DELETE /api/skills/user/:id/share`：开启或关闭私密分享
 - `POST /api/skills/user/:id/publish` / `DELETE /api/skills/user/:id/publish`：公开上架或取消公开
 - `GET /api/skills/shared/:token`：预览分享 Skill，无需认证
@@ -474,7 +475,18 @@ Authorization: Bearer <token>
 }
 ```
 
-`files` 只能包含安全相对路径下的 `.md` 文件，允许根文件 `SKILL.md`、`index.md`，以及 `docs/`、`examples/`、`notes/` 目录；必须包含 `SKILL.md`。响应中的 `skill_name` 与 `description` 从 `SKILL.md` frontmatter 同步。
+`GET /api/skills/limits` 响应：
+
+```json
+{
+  "max_files": 50,
+  "max_file_chars": 100000,
+  "max_total_chars": 500000,
+  "max_zip_bytes": 8388608
+}
+```
+
+`files` 只能包含安全相对路径下的文本文件，必须包含 `SKILL.md`。文件数量、单文件字符数、总字符数和 ZIP 导入体积限制由后台系统配置控制。响应中的 `skill_name` 与 `description` 从 `SKILL.md` frontmatter 同步。
 
 ### Bundle 与市场
 

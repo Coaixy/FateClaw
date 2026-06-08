@@ -8,6 +8,12 @@ import {
   UserModelConfig,
   UserModelSelection,
 } from '../../shared/types.js';
+import {
+  MAX_SKILL_BUNDLE_FILE_LENGTH,
+  MAX_SKILL_BUNDLE_FILES,
+  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+  MAX_SKILL_BUNDLE_ZIP_BYTES,
+} from '@fateclaw/contracts/skills';
 import { getDbPool } from '../db-pool.js';
 
 type JsonObject = Record<string, unknown>;
@@ -33,6 +39,17 @@ function mapUserModelRow(row: unknown): UserModelConfig {
     ...record,
     extra_json: toJsonObject(record.extra_json),
   };
+}
+
+function clampInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const numeric =
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, Math.floor(numeric)));
 }
 
 export async function getSystemSecret(
@@ -241,11 +258,19 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
        local_agent_idle_ttl_ms, pi_session_health_enabled,
-       pi_session_inactive_cleanup_days, pi_session_orphan_grace_days
+       pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
+       skill_bundle_max_files, skill_bundle_max_file_chars,
+       skill_bundle_max_total_chars, skill_bundle_max_zip_bytes
      )
-     VALUES ('default', 10, 4, 600000, false, 30, 30)
+     VALUES ('default', 10, 4, 600000, false, 30, 30, $1, $2, $3, $4)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
+    [
+      MAX_SKILL_BUNDLE_FILES,
+      MAX_SKILL_BUNDLE_FILE_LENGTH,
+      MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+      MAX_SKILL_BUNDLE_ZIP_BYTES,
+    ],
   );
   return rows[0] as RuntimeConfig;
 }
@@ -260,6 +285,10 @@ export async function updateRuntimeConfig(input: {
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
+  skillBundleMaxFiles?: number;
+  skillBundleMaxFileChars?: number;
+  skillBundleMaxTotalChars?: number;
+  skillBundleMaxZipBytes?: number;
 }): Promise<RuntimeConfig> {
   const current = await getRuntimeConfig();
   const agentConcurrencyLimit = Math.max(
@@ -304,14 +333,40 @@ export async function updateRuntimeConfig(input: {
       ),
     ),
   );
+  const skillBundleMaxFiles = clampInteger(
+    input.skillBundleMaxFiles ?? current.skill_bundle_max_files,
+    MAX_SKILL_BUNDLE_FILES,
+    1,
+    500,
+  );
+  const skillBundleMaxFileChars = clampInteger(
+    input.skillBundleMaxFileChars ?? current.skill_bundle_max_file_chars,
+    MAX_SKILL_BUNDLE_FILE_LENGTH,
+    1,
+    2_000_000,
+  );
+  const skillBundleMaxTotalChars = clampInteger(
+    input.skillBundleMaxTotalChars ?? current.skill_bundle_max_total_chars,
+    MAX_SKILL_BUNDLE_TOTAL_LENGTH,
+    skillBundleMaxFileChars,
+    10_000_000,
+  );
+  const skillBundleMaxZipBytes = clampInteger(
+    input.skillBundleMaxZipBytes ?? current.skill_bundle_max_zip_bytes,
+    MAX_SKILL_BUNDLE_ZIP_BYTES,
+    1024,
+    100 * 1024 * 1024,
+  );
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
        local_agent_idle_ttl_ms, pi_session_health_enabled,
        pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
+       skill_bundle_max_files, skill_bundle_max_file_chars,
+       skill_bundle_max_total_chars, skill_bundle_max_zip_bytes,
        updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, $5, $6, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
        local_agent_max_processes = EXCLUDED.local_agent_max_processes,
@@ -319,6 +374,10 @@ export async function updateRuntimeConfig(input: {
        pi_session_health_enabled = EXCLUDED.pi_session_health_enabled,
        pi_session_inactive_cleanup_days = EXCLUDED.pi_session_inactive_cleanup_days,
        pi_session_orphan_grace_days = EXCLUDED.pi_session_orphan_grace_days,
+       skill_bundle_max_files = EXCLUDED.skill_bundle_max_files,
+       skill_bundle_max_file_chars = EXCLUDED.skill_bundle_max_file_chars,
+       skill_bundle_max_total_chars = EXCLUDED.skill_bundle_max_total_chars,
+       skill_bundle_max_zip_bytes = EXCLUDED.skill_bundle_max_zip_bytes,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -328,6 +387,10 @@ export async function updateRuntimeConfig(input: {
       piSessionHealthEnabled,
       piSessionInactiveCleanupDays,
       piSessionOrphanGraceDays,
+      skillBundleMaxFiles,
+      skillBundleMaxFileChars,
+      skillBundleMaxTotalChars,
+      skillBundleMaxZipBytes,
     ],
   );
   return rows[0] as RuntimeConfig;

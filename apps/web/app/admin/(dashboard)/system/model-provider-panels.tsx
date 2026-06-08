@@ -170,6 +170,10 @@ export function RuntimeConfigPanel({
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
+    skill_bundle_max_files: number;
+    skill_bundle_max_file_chars: number;
+    skill_bundle_max_total_chars: number;
+    skill_bundle_max_zip_bytes: number;
   }) => Promise<void>;
 }) {
   const [limit, setLimit] = useState(runtime.agent_concurrency_limit);
@@ -188,6 +192,18 @@ export function RuntimeConfigPanel({
   const [piOrphanGraceDays, setPiOrphanGraceDays] = useState(
     runtime.pi_session_orphan_grace_days,
   );
+  const [skillMaxFiles, setSkillMaxFiles] = useState(
+    runtime.skill_bundle_max_files,
+  );
+  const [skillMaxFileChars, setSkillMaxFileChars] = useState(
+    runtime.skill_bundle_max_file_chars,
+  );
+  const [skillMaxTotalChars, setSkillMaxTotalChars] = useState(
+    runtime.skill_bundle_max_total_chars,
+  );
+  const [skillMaxZipMb, setSkillMaxZipMb] = useState(
+    Math.round(runtime.skill_bundle_max_zip_bytes / 1024 / 1024),
+  );
 
   useEffect(() => {
     setLimit(runtime.agent_concurrency_limit);
@@ -196,6 +212,12 @@ export function RuntimeConfigPanel({
     setPiHealthEnabled(runtime.pi_session_health_enabled);
     setPiInactiveDays(runtime.pi_session_inactive_cleanup_days);
     setPiOrphanGraceDays(runtime.pi_session_orphan_grace_days);
+    setSkillMaxFiles(runtime.skill_bundle_max_files);
+    setSkillMaxFileChars(runtime.skill_bundle_max_file_chars);
+    setSkillMaxTotalChars(runtime.skill_bundle_max_total_chars);
+    setSkillMaxZipMb(
+      Math.round(runtime.skill_bundle_max_zip_bytes / 1024 / 1024),
+    );
   }, [
     runtime.agent_concurrency_limit,
     runtime.local_agent_idle_ttl_ms,
@@ -203,8 +225,16 @@ export function RuntimeConfigPanel({
     runtime.pi_session_health_enabled,
     runtime.pi_session_inactive_cleanup_days,
     runtime.pi_session_orphan_grace_days,
+    runtime.skill_bundle_max_file_chars,
+    runtime.skill_bundle_max_files,
+    runtime.skill_bundle_max_total_chars,
+    runtime.skill_bundle_max_zip_bytes,
   ]);
 
+  const normalizedSkillMaxFileChars = Math.min(
+    2_000_000,
+    Math.max(1, Math.floor(skillMaxFileChars)),
+  );
   const normalized = {
     agent_concurrency_limit: Math.max(1, Math.floor(limit)),
     local_agent_max_processes: Math.min(
@@ -224,6 +254,17 @@ export function RuntimeConfigPanel({
       3650,
       Math.max(1, Math.floor(piOrphanGraceDays)),
     ),
+    skill_bundle_max_files: Math.min(
+      500,
+      Math.max(1, Math.floor(skillMaxFiles)),
+    ),
+    skill_bundle_max_file_chars: normalizedSkillMaxFileChars,
+    skill_bundle_max_total_chars: Math.min(
+      10_000_000,
+      Math.max(normalizedSkillMaxFileChars, Math.floor(skillMaxTotalChars)),
+    ),
+    skill_bundle_max_zip_bytes:
+      Math.min(100, Math.max(1, Math.floor(skillMaxZipMb))) * 1024 * 1024,
   };
   const dirty =
     normalized.agent_concurrency_limit !== runtime.agent_concurrency_limit ||
@@ -235,7 +276,14 @@ export function RuntimeConfigPanel({
     normalized.pi_session_inactive_cleanup_days !==
       runtime.pi_session_inactive_cleanup_days ||
     normalized.pi_session_orphan_grace_days !==
-      runtime.pi_session_orphan_grace_days;
+      runtime.pi_session_orphan_grace_days ||
+    normalized.skill_bundle_max_files !== runtime.skill_bundle_max_files ||
+    normalized.skill_bundle_max_file_chars !==
+      runtime.skill_bundle_max_file_chars ||
+    normalized.skill_bundle_max_total_chars !==
+      runtime.skill_bundle_max_total_chars ||
+    normalized.skill_bundle_max_zip_bytes !==
+      runtime.skill_bundle_max_zip_bytes;
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
@@ -255,6 +303,11 @@ export function RuntimeConfigPanel({
               当前 Pi：{runtime.pi_session_health_enabled ? '自动维护' : '手动维护'} /{' '}
               {runtime.pi_session_inactive_cleanup_days} 天未活跃 /{' '}
               {runtime.pi_session_orphan_grace_days} 天孤儿保护
+            </div>
+            <div>
+              当前 Skill：{runtime.skill_bundle_max_files} 文件 / 单文件{' '}
+              {runtime.skill_bundle_max_file_chars.toLocaleString()} 字 / 总计{' '}
+              {runtime.skill_bundle_max_total_chars.toLocaleString()} 字
             </div>
           </div>
         </div>
@@ -293,7 +346,7 @@ export function RuntimeConfigPanel({
             <div className="mb-2 text-[12px] font-medium text-muted">
               Pi session 健康
             </div>
-            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+            <div className="grid gap-2 md:grid-cols-3">
               <label className="flex h-11 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] text-muted">
                 <input
                   type="checkbox"
@@ -319,20 +372,59 @@ export function RuntimeConfigPanel({
                 min={1}
                 max={3650}
               />
-              <button
-                type="button"
-                onClick={() => void onSave(normalized)}
-                disabled={busy || !dirty}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40 md:col-start-3 xl:col-start-auto"
-              >
-                {busy ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                保存策略
-              </button>
             </div>
+          </div>
+
+          <div className="border-t border-hairline/70 pt-4">
+            <div className="mb-2 text-[12px] font-medium text-muted">
+              Skill Bundle 限制
+            </div>
+            <div className="grid gap-2 md:grid-cols-4">
+              <NumberField
+                label="文本文件数"
+                value={skillMaxFiles}
+                onChange={setSkillMaxFiles}
+                min={1}
+                max={500}
+              />
+              <NumberField
+                label="单文件字符"
+                value={skillMaxFileChars}
+                onChange={setSkillMaxFileChars}
+                min={1}
+                max={2_000_000}
+              />
+              <NumberField
+                label="总字符"
+                value={skillMaxTotalChars}
+                onChange={setSkillMaxTotalChars}
+                min={1}
+                max={10_000_000}
+              />
+              <NumberField
+                label="ZIP 体积 MB"
+                value={skillMaxZipMb}
+                onChange={setSkillMaxZipMb}
+                min={1}
+                max={100}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => void onSave(normalized)}
+              disabled={busy || !dirty}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary disabled:opacity-40"
+            >
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              保存策略
+            </button>
           </div>
         </div>
       </div>

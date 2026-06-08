@@ -340,6 +340,10 @@ describe('adminRoutes authentication throttling', () => {
       pi_session_health_enabled: true,
       pi_session_inactive_cleanup_days: 45,
       pi_session_orphan_grace_days: 60,
+      skill_bundle_max_files: 80,
+      skill_bundle_max_file_chars: 200_000,
+      skill_bundle_max_total_chars: 800_000,
+      skill_bundle_max_zip_bytes: 16 * 1024 * 1024,
       updated_at: '2026-06-05T00:00:00.000Z',
     });
 
@@ -356,6 +360,10 @@ describe('adminRoutes authentication throttling', () => {
         pi_session_health_enabled: true,
         pi_session_inactive_cleanup_days: 45,
         pi_session_orphan_grace_days: 60,
+        skill_bundle_max_files: 80,
+        skill_bundle_max_file_chars: 200_000,
+        skill_bundle_max_total_chars: 800_000,
+        skill_bundle_max_zip_bytes: 16 * 1024 * 1024,
       },
     });
 
@@ -367,6 +375,10 @@ describe('adminRoutes authentication throttling', () => {
       piSessionHealthEnabled: true,
       piSessionInactiveCleanupDays: 45,
       piSessionOrphanGraceDays: 60,
+      skillBundleMaxFiles: 80,
+      skillBundleMaxFileChars: 200_000,
+      skillBundleMaxTotalChars: 800_000,
+      skillBundleMaxZipBytes: 16 * 1024 * 1024,
       actor: 'manager',
     });
   });
@@ -379,6 +391,10 @@ describe('adminRoutes authentication throttling', () => {
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-06-05T00:00:00.000Z',
     });
 
@@ -401,8 +417,30 @@ describe('adminRoutes authentication throttling', () => {
       piSessionHealthEnabled: undefined,
       piSessionInactiveCleanupDays: undefined,
       piSessionOrphanGraceDays: undefined,
+      skillBundleMaxFiles: undefined,
+      skillBundleMaxFileChars: undefined,
+      skillBundleMaxTotalChars: undefined,
+      skillBundleMaxZipBytes: undefined,
       actor: 'manager',
     });
+  });
+
+  it('rejects Skill Bundle runtime limits when total chars is smaller than single file chars', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        agent_concurrency_limit: 1,
+        skill_bundle_max_file_chars: 100,
+        skill_bundle_max_total_chars: 99,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(updateRuntimeSettings).not.toHaveBeenCalled();
   });
 
   it('rejects runtime config outside local agent policy ranges', async () => {

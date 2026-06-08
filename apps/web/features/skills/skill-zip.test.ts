@@ -163,4 +163,34 @@ describe('skill zip import/export', () => {
       ]),
     ).toThrow(/100000/);
   });
+
+  it('uses configured limits when importing bundles', async () => {
+    const blob = createSkillBundleZipBlob(
+      [
+        {
+          path: 'SKILL.md',
+          content: '# Skill',
+        },
+        {
+          path: 'docs/a.md',
+          content: '# A',
+        },
+      ],
+      {
+        max_files: 2,
+        max_file_chars: 100,
+        max_total_chars: 200,
+        max_zip_bytes: 8 * 1024 * 1024,
+      },
+    );
+
+    await expect(
+      importSkillBundleFromZip(await blobToFile(blob, 'skill.zip'), {
+        max_files: 1,
+        max_file_chars: 100,
+        max_total_chars: 200,
+        max_zip_bytes: 8 * 1024 * 1024,
+      }),
+    ).rejects.toThrow('压缩包内文本文件不超过 1 个');
+  });
 });

@@ -16,6 +16,17 @@ export declare const MAX_SKILL_BUNDLE_FILE_LENGTH: 100000;
 /** 单个 Skill Bundle 所有文件合计允许包含的最大字符数。 */
 export declare const MAX_SKILL_BUNDLE_TOTAL_LENGTH: 500000;
 
+/** ZIP 导入文件允许的最大字节数。 */
+export declare const MAX_SKILL_BUNDLE_ZIP_BYTES: 8388608;
+
+/** 当前生效的 Skill Bundle 文件限制。 */
+export interface SkillBundleLimitsDto {
+  max_files: number;
+  max_file_chars: number;
+  max_total_chars: number;
+  max_zip_bytes: number;
+}
+
 export interface TextSkillBundleFileDto {
   path: string;
   content: string;

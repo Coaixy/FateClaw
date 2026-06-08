@@ -22,6 +22,7 @@ import { SkillSkeleton } from '@/components/skills/skill-skeleton';
 import { SubscribedBundleGroup } from '@/components/skills/subscribed-bundle-group';
 import { SubscribedSkillCard } from '@/components/skills/subscribed-skill-card';
 import {
+  DEFAULT_SKILL_BUNDLE_LIMITS,
   SkillBundle,
   UserCustomSkill,
   skillsApi,
@@ -48,6 +49,7 @@ export default function StudioPage() {
   const [editingBundle, setEditingBundle] = useState<SkillBundle | null>(null);
   const [copiedBundleId, setCopiedBundleId] = useState<string | null>(null);
   const [importingSkill, setImportingSkill] = useState(false);
+  const [skillLimits, setSkillLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
@@ -64,11 +66,13 @@ export default function StudioPage() {
     Promise.all([
       skillsApi.userList(),
       skillsApi.bundleList().catch(() => [] as SkillBundle[]),
+      skillsApi.limits().catch(() => DEFAULT_SKILL_BUNDLE_LIMITS),
     ])
-      .then(([s, b]) => {
+      .then(([s, b, limits]) => {
         if (cancelled) return;
         applyUserSkills(s);
         setBundles(Array.isArray(b) ? b : []);
+        setSkillLimits(limits);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -134,7 +138,7 @@ export default function StudioPage() {
     if (!file) return;
     setImportingSkill(true);
     await runWithToast(async () => {
-      const imported = await importSkillBundleFromZip(file);
+      const imported = await importSkillBundleFromZip(file, skillLimits);
       await skillsApi.userCreate({
         skill_name: imported.skillName,
         files: imported.files,
@@ -147,7 +151,7 @@ export default function StudioPage() {
 
   const handleExportSkillZip = (skill: UserCustomSkill) => {
     try {
-      downloadSkillBundleZip(skill.skill_name, skill.files);
+      downloadSkillBundleZip(skill.skill_name, skill.files, skillLimits);
     } catch (err) {
       toast('error', err instanceof Error ? err.message : '导出 Skill ZIP 失败');
     }

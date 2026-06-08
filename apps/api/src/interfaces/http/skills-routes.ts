@@ -4,6 +4,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type {
   CreateSkillAccessInviteRequestDto,
+  SkillBundleLimitsDto,
   SkillAccessInviteTargetTypeDto,
 } from '@fateclaw/contracts/skills';
 
@@ -14,6 +15,7 @@ import {
   deleteSkillBundle,
   deleteUserCustomSkill,
   getBundleByToken,
+  getSkillBundleLimitsPolicy,
   getSkillAccessInvitePreviewByToken,
   getSkillByShareToken,
   getSubscribedSkills,
@@ -28,9 +30,6 @@ import {
   publishUserCustomSkill,
   redeemSkillAccessInvite,
   revokeSkillAccessInvite,
-  MAX_SKILL_BUNDLE_FILE_LENGTH,
-  MAX_SKILL_BUNDLE_FILES,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
   MAX_USER_SKILLS,
   shareSkillBundle,
   shareUserCustomSkill,
@@ -84,12 +83,15 @@ function createMarketPaginationSchema(defaultLimit: number, maxLimit: number) {
 const MarketSkillQuerySchema = createMarketPaginationSchema(50, 100);
 const MarketBundleQuerySchema = createMarketPaginationSchema(20, 50);
 
-function parseBundleFilesPayload(files: unknown): TextSkillBundleFile[] | null {
+async function parseBundleFilesPayload(
+  files: unknown,
+): Promise<TextSkillBundleFile[] | null> {
   if (!Array.isArray(files)) return null;
   const parsed: TextSkillBundleFile[] = [];
+  const limits = await getSkillBundleLimitsPolicy();
 
-  if (files.length > MAX_SKILL_BUNDLE_FILES) {
-    throw new Error(`Bundle 文件数不超过 ${MAX_SKILL_BUNDLE_FILES} 个`);
+  if (files.length > limits.max_files) {
+    throw new Error(`Bundle 文件数不超过 ${limits.max_files} 个`);
   }
 
   let totalLength = 0;
@@ -97,17 +99,28 @@ function parseBundleFilesPayload(files: unknown): TextSkillBundleFile[] | null {
     if (!file || typeof file !== 'object') return null;
     const { path, content } = file as { path?: unknown; content?: unknown };
     if (typeof path !== 'string' || typeof content !== 'string') return null;
-    if (content.length > MAX_SKILL_BUNDLE_FILE_LENGTH) {
-      throw new Error(`单个文件内容不超过 ${MAX_SKILL_BUNDLE_FILE_LENGTH} 字`);
+    if (content.length > limits.max_file_chars) {
+      throw new Error(`单个文件内容不超过 ${limits.max_file_chars} 字`);
     }
     totalLength += content.length;
     parsed.push({ path, content });
   }
-  if (totalLength > MAX_SKILL_BUNDLE_TOTAL_LENGTH) {
-    throw new Error(`Bundle 总内容不超过 ${MAX_SKILL_BUNDLE_TOTAL_LENGTH} 字`);
+  if (totalLength > limits.max_total_chars) {
+    throw new Error(`Bundle 总内容不超过 ${limits.max_total_chars} 字`);
   }
 
   return parsed;
+}
+
+function toSkillBundleLimitsDto(
+  limits: Awaited<ReturnType<typeof getSkillBundleLimitsPolicy>>,
+): SkillBundleLimitsDto {
+  return {
+    max_files: limits.max_files,
+    max_file_chars: limits.max_file_chars,
+    max_total_chars: limits.max_total_chars,
+    max_zip_bytes: limits.max_zip_bytes,
+  };
 }
 
 function isAccessInviteTargetType(
@@ -133,6 +146,11 @@ function accessInviteRedeemError(status: string): string {
 }
 
 export async function skillsRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/skills/limits — 当前生效的用户 Skill Bundle 文件限制
+  app.get('/limits', async () =>
+    toSkillBundleLimitsDto(await getSkillBundleLimitsPolicy()),
+  );
+
   // =====================
   // --- User custom skill CRUD ---
   // =====================
@@ -164,7 +182,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     }
     let files: TextSkillBundleFile[] | null;
     try {
-      files = parseBundleFilesPayload(body.files);
+      files = await parseBundleFilesPayload(body.files);
     } catch (err) {
       return reply.code(400).send({
         error: err instanceof Error ? err.message : 'Bundle 文件不符合限制',
@@ -224,7 +242,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     let files: TextSkillBundleFile[] | undefined;
     if (body.files !== undefined) {
       try {
-        const parsed = parseBundleFilesPayload(body.files);
+        const parsed = await parseBundleFilesPayload(body.files);
         if (!parsed) {
           return reply.code(400).send({ error: 'files 必须是文本文件数组' });
         }
