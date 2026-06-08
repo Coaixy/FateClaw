@@ -135,6 +135,9 @@ export function TopBar({
     billingLoading || balanceCoins === null
       ? '加载中…'
       : `${formatCoins(balanceCoins)} 可用`;
+  const plusActive = Boolean(
+    status?.membership.enabled && status.membership.active,
+  );
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
@@ -193,13 +196,22 @@ export function TopBar({
           className={`cursor-pointer border border-primary/15 bg-primary/8 text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
             compact
               ? 'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 pr-2 text-[11px] font-medium'
-              : 'rounded-full'
+              : `inline-flex h-9 items-center gap-1.5 rounded-full p-0 ${plusActive ? 'pr-2' : ''}`
           }`}
           aria-label="个人菜单"
           aria-expanded={menuOpen}
         >
           <AvatarBadge compact={compact} />
           {compact && <span>我的</span>}
+          {plusActive && (
+            <span
+              className={`shrink-0 rounded-full border border-primary/20 bg-primary/12 font-semibold uppercase leading-none text-primary ${
+                compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'
+              }`}
+            >
+              Plus
+            </span>
+          )}
         </button>
 
         {menuOpen && (
@@ -208,6 +220,7 @@ export function TopBar({
             balanceLabel={dropdownBalanceLabel}
             avatar={<AvatarBadge />}
             onNavigate={() => setMenuOpen(false)}
+            onBillingChanged={refresh}
             onLogout={() => {
               setMenuOpen(false);
               onLogout();

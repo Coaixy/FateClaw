@@ -9,7 +9,7 @@ import { useToast } from '@/lib/use-toast';
 /**
  * 用户级 Soul 编辑器。
  *
- * 这份自定义人格统一注入站内 AI Chat 和微信 BOT 的 Pi Runtime。
+ * 这份自定义人格统一注入站内 AI Chat 和微信对话的 Pi Runtime。
  */
 export function UserSoulCard() {
   const { toast } = useToast();
@@ -89,7 +89,7 @@ export function UserSoulCard() {
             自定义人格 Soul
           </div>
           <p className="mt-1 text-[12px] leading-5 text-muted">
-            统一注入站内 AI Chat 和微信 BOT 的 Pi Runtime。
+            统一注入站内 AI Chat 和微信对话的 Pi Runtime。
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
