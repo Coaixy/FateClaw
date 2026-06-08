@@ -258,7 +258,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   const closeSidebar = () => {
     setOpen(false);
+    setSessionsPanelOpen(false);
   };
+
   // 搜索和日期筛选都只作用于展示层，不改动原始会话数组，避免影响当前选中和排序状态。
   const now = new Date();
   const dateFilteredSessions = sessions.filter((session) =>
@@ -405,7 +407,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   return (
     <>
-      {/* Mobile top bar：汉堡 + 页名 + TopBar(compact) */}
+      {/* Mobile top bar：把菜单入口做成文字按钮，避免新用户误以为左上角只是装饰图标。 */}
       <header className="fixed top-0 left-0 right-0 h-14 z-40 lg:hidden">
         <div className="absolute inset-0 bg-canvas/85 backdrop-blur-xl" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-hairline/60 to-transparent" />
@@ -414,11 +416,20 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={() => setOpen((value) => !value)}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-ink hover:bg-surface-card active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[12px] font-semibold shadow-sm transition-all duration-200 active:scale-95 ${
+                open
+                  ? 'border-primary/30 bg-primary/12 text-primary'
+                  : 'border-hairline/70 bg-surface-card/80 text-ink hover:border-primary/30 hover:bg-primary/8'
+              }`}
               aria-label={open ? '收起菜单' : '打开菜单'}
               aria-expanded={open}
             >
-              {open ? <X size={18} strokeWidth={1.8} /> : <Menu size={18} strokeWidth={1.8} />}
+              {open ? (
+                <X size={16} strokeWidth={1.8} />
+              ) : (
+                <Menu size={16} strokeWidth={1.8} />
+              )}
+              <span>{open ? '收起' : '菜单'}</span>
             </button>
           </div>
           <TopBar compact onLogout={onLogout} />
@@ -451,30 +462,35 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        {/* 新建对话和最近对话入口 */}
+        {/* 新建对话和归档入口 */}
         <div className="relative px-3 shrink-0">
           <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
               onClick={() => setSessionsPanelOpen((value) => !value)}
-              className={`flex h-11 min-w-0 items-center justify-between gap-1.5 rounded-xl border px-2.5 text-left transition-all duration-200 ${
+              className={`flex h-12 min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 text-left shadow-sm transition-all duration-200 ${
                 sessionsPanelOpen || normalizedSearch || dateFilter !== 'all'
-                  ? 'border-primary/25 bg-primary/10 text-ink'
-                  : 'border-hairline/60 bg-surface-card/60 text-muted hover:border-primary/25 hover:text-ink'
+                  ? 'border-primary/30 bg-primary/12 text-ink shadow-primary/5'
+                  : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
               }`}
-              aria-label="打开最近对话面板"
+              aria-label="打开归档面板"
               aria-expanded={sessionsPanelOpen}
               aria-haspopup="dialog"
             >
-              <div className="min-w-0">
-                <span className="block truncate text-[11px] font-semibold leading-tight text-ink">
-                  最近对话
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                  <Archive size={14} strokeWidth={1.8} />
                 </span>
-                <span className="mt-0.5 block truncate text-[10px] leading-none text-muted">
-                  {filteredSessions.length}/{sessions.length} · {activeDateFilterLabel}
-                  {normalizedSearch ? ' · 搜索中' : ''}
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-semibold leading-tight text-ink">
+                    归档
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] leading-none text-muted">
+                    {filteredSessions.length}/{sessions.length} · {activeDateFilterLabel}
+                    {normalizedSearch ? ' · 搜索中' : ''}
+                  </span>
                 </span>
-              </div>
+              </span>
               <ChevronDown
                 size={13}
                 strokeWidth={1.8}
@@ -486,7 +502,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
             <button
               onClick={goNewChat}
-              className="flex h-11 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-hairline/60 bg-surface-card/50 px-2.5 text-[13px] font-medium text-ink transition-all duration-200 hover:border-primary/40 hover:bg-primary/10"
+              className="flex h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-2.5 text-[13px] font-semibold text-ink shadow-sm transition-all duration-200 hover:border-primary/40 hover:bg-primary/14"
               aria-label="新建对话"
             >
               <SquarePen size={15} className="shrink-0 text-primary" />
@@ -497,13 +513,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           {sessionsPanelOpen && (
             <div
               role="dialog"
-              aria-label="未归档对话"
+              aria-label="对话归档"
               className="absolute left-3 right-3 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-hairline/70 bg-canvas shadow-2xl"
             >
               <div className="flex items-center justify-between gap-2 border-b border-hairline/50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-semibold text-ink">
-                    未归档对话
+                    对话归档
                   </p>
                   <p className="text-[10px] leading-tight text-muted">
                     共 {sessions.length.toLocaleString()} 个
@@ -520,7 +536,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   title="归档"
                 >
                   <Archive size={12} strokeWidth={1.8} />
-                  归档
+                  已归档
                 </Link>
               </div>
 

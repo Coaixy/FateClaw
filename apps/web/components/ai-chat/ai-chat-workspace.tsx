@@ -3,6 +3,7 @@
 import {
   Suspense,
   type ClipboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -11,14 +12,19 @@ import {
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
+  ArrowLeft,
   Bot,
   Brain,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleStop,
+  Compass,
   Loader2,
+  LogIn,
+  LockKeyhole,
   Sparkles,
+  Workflow,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -59,6 +65,7 @@ type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
 };
+type HomeMode = 'select' | 'expert';
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
@@ -185,7 +192,7 @@ export function AiChatWorkspace() {
 function AiChatWorkspaceContent() {
   const { toast } = useToast();
   const router = useRouter();
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const {
     chatAvailable,
     sessions,
@@ -214,6 +221,7 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceText, setPasteChoiceText] = useState('');
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
+  const [homeMode, setHomeMode] = useState<HomeMode>('select');
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
   const [modelOverview, setModelOverview] =
     useState<ModelSettingsOverview | null>(null);
@@ -819,7 +827,7 @@ function AiChatWorkspaceContent() {
     />
   );
 
-  const centeredComposer = (
+  const expertCenteredComposer = (
     <div className="space-y-2.5">
       {composer}
       {onboardingGuide.shouldShowContinueEntry && (
@@ -877,6 +885,27 @@ function AiChatWorkspaceContent() {
       )}
     </div>
   );
+  const showHomeModeSelector = !selectedSession && homeMode === 'select';
+  const centeredContent = showHomeModeSelector ? (
+    <HomeModeSelector
+      loginRequired={!authLoading && !user}
+      onLogin={() => requestLogin()}
+      onOpenExpert={() => setHomeMode('expert')}
+    />
+  ) : !selectedSession ? (
+    <ExpertModeFrame onBack={() => setHomeMode('select')}>
+      {expertCenteredComposer}
+    </ExpertModeFrame>
+  ) : (
+    expertCenteredComposer
+  );
+  const emptyStateTitle = showHomeModeSelector ? '' : '专家模式';
+  const emptyStateDescription = showHomeModeSelector
+    ? ''
+    : '直接输入问题，或使用手动排盘、自贴盘面和 Skill';
+  const emptyStateHint = showHomeModeSelector
+    ? ''
+    : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
@@ -892,7 +921,13 @@ function AiChatWorkspaceContent() {
           selectedSession={selectedSession}
           switchingSession={switchingSession}
           showCenteredComposer={showCenteredComposer}
-          composer={showCenteredComposer ? centeredComposer : composer}
+          composer={showCenteredComposer ? centeredContent : composer}
+          emptyStateTitle={emptyStateTitle}
+          emptyStateDescription={emptyStateDescription}
+          emptyStateHint={emptyStateHint}
+          emptyStateMaxWidthClassName={
+            showHomeModeSelector ? 'max-w-3xl' : 'max-w-xl'
+          }
         />
         {!showCenteredComposer && replyStatus && (
           <AiChatFloatingStatus status={replyStatus} />
@@ -1001,6 +1036,146 @@ function AiChatWorkspaceContent() {
         onOpenSkillMarket={openSkillMarketFromGuide}
         onComplete={onboardingGuide.completeGuide}
       />
+    </div>
+  );
+}
+
+function HomeModeSelector({
+  loginRequired,
+  onLogin,
+  onOpenExpert,
+}: {
+  loginRequired: boolean;
+  onLogin: () => void;
+  onOpenExpert: () => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <div className="text-center">
+        <h1 className="font-display text-[28px] font-semibold tracking-tight text-ink sm:text-[34px]">
+          FateClaw · 守义
+        </h1>
+        <p className="mt-1 text-[12px] text-muted">
+          AI 排盘与对话工作台
+        </p>
+      </div>
+
+      {loginRequired && (
+        <div className="rounded-2xl border border-primary/30 bg-[linear-gradient(180deg,rgba(204,120,92,0.14),rgba(204,120,92,0.055))] px-4 py-4 text-left shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex min-w-0 items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
+                <LogIn size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[16px] font-semibold tracking-tight text-ink">
+                  登录后开始体验
+                </span>
+                <span className="mt-1 block text-[12px] leading-5 text-muted">
+                  登录后可进入专家模式、保存对话记录，并查看可用余额和用量。
+                </span>
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={onLogin}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+            >
+              <LogIn size={14} />
+              立即登录
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <button
+          type="button"
+          disabled
+          className="flex min-h-[164px] cursor-not-allowed flex-col justify-between rounded-2xl border border-hairline bg-surface-card/55 p-4 text-left opacity-75"
+          title="简易模式正在设计中"
+        >
+          <span className="flex items-start justify-between gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-cream-strong text-muted">
+              <Workflow size={18} />
+            </span>
+            <span className="rounded-full border border-hairline bg-surface-card px-2 py-0.5 text-[10px] font-medium text-muted">
+              新手友好
+            </span>
+          </span>
+
+          <span className="mt-5 block space-y-1">
+            <span className="block text-[17px] font-semibold text-ink">
+              简易模式
+            </span>
+            <span className="block text-[12px] leading-5 text-muted">
+              适合新手和非从业者，后续会用流程一步步引导提问和排盘。
+            </span>
+          </span>
+
+          <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-muted">
+            <LockKeyhole size={13} />
+            暂未开放
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenExpert}
+          className="group flex min-h-[164px] flex-col justify-between rounded-2xl border border-primary/25 bg-[linear-gradient(180deg,rgba(204,120,92,0.1),rgba(255,255,255,0.02))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/12 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.99]"
+        >
+          <span className="flex items-start justify-between gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/14 text-primary">
+              <Compass size={18} />
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary shadow-sm">
+              <CheckCircle2 size={11} strokeWidth={2} />
+              立即可用
+            </span>
+          </span>
+
+          <span className="mt-5 block space-y-1">
+            <span className="block text-[17px] font-semibold text-ink">
+              专家模式
+            </span>
+            <span className="block text-[12px] leading-5 text-muted">
+              适合懂术数、从业者和专业人士，可直接使用完整对话与排盘能力。
+            </span>
+          </span>
+
+          <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-primary">
+            进入专家模式
+            <ChevronRight
+              size={13}
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpertModeFrame({
+  children,
+  onBack,
+}: {
+  children: ReactNode;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+        >
+          <ArrowLeft size={13} />
+          返回模式选择
+        </button>
+      </div>
+      {children}
     </div>
   );
 }

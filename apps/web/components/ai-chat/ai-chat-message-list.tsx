@@ -33,6 +33,10 @@ export function AiChatMessageList({
   switchingSession,
   showCenteredComposer,
   composer,
+  emptyStateTitle,
+  emptyStateDescription,
+  emptyStateHint,
+  emptyStateMaxWidthClassName,
 }: {
   messages: Message[];
   loading: boolean;
@@ -42,26 +46,47 @@ export function AiChatMessageList({
   switchingSession: boolean;
   showCenteredComposer: boolean;
   composer: React.ReactNode;
+  emptyStateTitle?: string;
+  emptyStateDescription?: string;
+  emptyStateHint?: string;
+  emptyStateMaxWidthClassName?: string;
 }) {
   if (showCenteredComposer) {
+    const title = emptyStateTitle ?? '可以直接问，也可以手动排盘';
+    const description =
+      emptyStateDescription ?? '输入问题直接对话，或从下方进入手动排盘';
+    const hint =
+      emptyStateHint ??
+      (selectedSession
+        ? '发送一条消息开始对话 · / 查看指令'
+        : '发送即可开始对话 · 也可手动排盘 · / 查看指令');
+
     return (
       <div className="flex flex-col items-center justify-center h-full px-3">
-        <div className="w-full max-w-xl flex flex-col items-center gap-3.5">
+        <div
+          className={`w-full ${emptyStateMaxWidthClassName ?? 'max-w-xl'} flex flex-col items-center gap-3.5`}
+        >
           <BaguaPattern />
-          <div className="text-center space-y-1">
-            <h1 className="font-display text-[18px] sm:text-[20px] lg:text-[22px] font-semibold tracking-tight text-ink">
-              可以直接问，也可以手动排盘
-            </h1>
-            <p className="text-[12px] sm:text-[13px] text-muted">
-              输入问题直接对话，或从下方进入手动排盘
-            </p>
-          </div>
+          {(title || description) && (
+            <div className="text-center space-y-1">
+              {title && (
+                <h1 className="font-display text-[18px] sm:text-[20px] lg:text-[22px] font-semibold tracking-tight text-ink">
+                  {title}
+                </h1>
+              )}
+              {description && (
+                <p className="text-[12px] sm:text-[13px] text-muted">
+                  {description}
+                </p>
+              )}
+            </div>
+          )}
           <div className="w-full">{composer}</div>
-          <p className="text-[10px] sm:text-[11px] text-muted/50 select-none">
-            {selectedSession
-              ? '发送一条消息开始对话 · / 查看指令'
-              : '发送即可开始对话 · 也可手动排盘 · / 查看指令'}
-          </p>
+          {hint && (
+            <p className="text-center text-[10px] sm:text-[11px] text-muted/50 select-none">
+              {hint}
+            </p>
+          )}
         </div>
       </div>
     );

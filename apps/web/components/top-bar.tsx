@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { User as UserIcon, BadgeDollarSign, LogIn } from 'lucide-react';
+import { User as UserIcon, LogIn } from 'lucide-react';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
@@ -11,14 +11,12 @@ import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapsho
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { formatCoins } from '@/lib/soft-currency';
 
-function formatBalanceShort(coins: number): string {
-  return formatCoins(coins);
-}
-
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n}`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
-  return `${(n / 1_000_000).toFixed(2).replace(/\.0+$/, '')}M`;
+function formatBalanceAmount(coins: number): string {
+  const amount = Number.isFinite(coins) ? coins : 0;
+  return amount.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function AvatarBadge({ compact = false }: { compact?: boolean }) {
@@ -35,7 +33,7 @@ function AvatarBadge({ compact = false }: { compact?: boolean }) {
 }
 
 function BillingPillSkeleton({ compact = false }: { compact?: boolean }) {
-  const pillClass = compact ? 'h-7 w-[116px]' : 'h-9 w-[168px]';
+  const pillClass = compact ? 'h-7 w-[128px]' : 'h-9 w-[152px]';
   const dotClass = compact ? 'h-1.5 w-1.5' : 'h-2 w-2';
 
   return (
@@ -46,8 +44,6 @@ function BillingPillSkeleton({ compact = false }: { compact?: boolean }) {
       <span
         className={`${dotClass} shrink-0 animate-pulse rounded-full bg-primary/25`}
       />
-      <span className="h-2.5 w-10 animate-pulse rounded-full bg-muted/12" />
-      <span className="h-2.5 w-1 animate-pulse rounded-full bg-muted/10" />
       <span className="h-2.5 flex-1 animate-pulse rounded-full bg-muted/12" />
     </div>
   );
@@ -128,16 +124,10 @@ export function TopBar({
 
   const balanceCoins = status?.available_coins ?? null;
   const dotColor = 'bg-primary';
-  const todayTokens = usage ? formatTokens(usage.today_total_tokens ?? 0) : '—';
-  const todayTokensLabel = compact
-    ? `今 ${todayTokens}`
-    : `今日 ${todayTokens}`;
   const balanceLabel =
     balanceCoins === null
       ? '—'
-      : compact
-        ? formatBalanceShort(balanceCoins)
-        : formatCoins(balanceCoins);
+      : formatBalanceAmount(balanceCoins);
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
@@ -148,7 +138,7 @@ export function TopBar({
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
-      {/* 计费胶囊：余额 + 今日 token */}
+      {/* 计费胶囊：导航栏只保留余额，详细 Token 放到展开面板里。 */}
       <div className="relative min-w-0">
         {billingLoading ? (
           <div role="status" aria-label="正在加载余额和用量">
@@ -162,23 +152,26 @@ export function TopBar({
               setMenuOpen(false);
             }}
             className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
-            aria-label={`${balanceCoins === null ? '余额加载中' : `${formatCoins(balanceCoins)} 可用`}，今日 ${todayTokens}`}
+            aria-label={
+              balanceCoins === null
+                ? '余额加载中'
+                : `可用余额 ${formatBalanceAmount(balanceCoins)}`
+            }
             aria-expanded={usageOpen}
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+            <span className="whitespace-nowrap font-medium">可用余额</span>
             <span className="tabular-nums font-medium">{balanceLabel}</span>
-            <span className="text-muted/60">·</span>
-            <span className="inline-flex items-center gap-1 text-muted whitespace-nowrap">
-              <BadgeDollarSign
-                size={compact ? 10 : 12}
-                className="text-primary"
-              />
-              <span className="tabular-nums">{todayTokensLabel}</span>
-            </span>
           </button>
         )}
         {!billingLoading && usageOpen && (
-          <div className="absolute right-0 top-full z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in">
+          <div
+            className={`z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in ${
+              compact
+                ? 'fixed left-3 right-3 top-14 max-h-[calc(100dvh-4.5rem)] overflow-y-auto'
+                : 'absolute right-0 top-full'
+            }`}
+          >
             <UsagePanel
               status={status}
               usage={usage}
@@ -197,11 +190,16 @@ export function TopBar({
             setMenuOpen((v) => !v);
             setUsageOpen(false);
           }}
-          className="rounded-full cursor-pointer hover:border-primary/60 active:scale-95 transition-all"
+          className={`cursor-pointer border border-primary/15 bg-primary/8 text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
+            compact
+              ? 'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 pr-2 text-[11px] font-medium'
+              : 'rounded-full'
+          }`}
           aria-label="个人菜单"
           aria-expanded={menuOpen}
         >
           <AvatarBadge compact={compact} />
+          {compact && <span>我的</span>}
         </button>
 
         {menuOpen && (

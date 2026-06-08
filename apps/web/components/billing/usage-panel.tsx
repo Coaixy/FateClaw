@@ -66,7 +66,7 @@ export function UsagePanel({
   const membershipActive = membership.enabled && membership.active;
 
   return (
-    <div className="w-[min(340px,calc(100vw-1.5rem))]">
+    <div className="mx-auto w-[min(340px,calc(100vw-1.5rem))]">
       <div className="border-b border-hairline/40 px-4 pb-3 pt-3.5">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
