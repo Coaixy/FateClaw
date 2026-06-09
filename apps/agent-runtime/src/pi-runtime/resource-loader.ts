@@ -58,6 +58,10 @@ function normalizeAuthorizedSkillBundleIds(input: ContainerInput): string[] {
   );
 }
 
+function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
+  return Array.isArray(input.authorizedSkillBundleIds);
+}
+
 async function loadRequestScopedSkills(
   options: CreatePiResourceLoaderOptions,
 ): Promise<{
@@ -68,14 +72,26 @@ async function loadRequestScopedSkills(
   const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
     options.containerInput,
   );
-  const effectivePrivateKnowledge = options.userId
-    ? authorizedSkillBundleIds.length > 0
-      ? await options.deps.skillCatalog.listEffectiveUserSkills(
-          options.userId,
-          { skillBundleIds: authorizedSkillBundleIds },
-        )
-      : await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
-    : [];
+  const explicitSkillBundleScope = hasExplicitSkillBundleScope(
+    options.containerInput,
+  );
+  const effectivePrivateKnowledge =
+    explicitSkillBundleScope
+      ? authorizedSkillBundleIds.length > 0
+        ? options.deps.skillCatalog.listWorkflowBundleSkills
+          ? await options.deps.skillCatalog.listWorkflowBundleSkills(
+              authorizedSkillBundleIds,
+            )
+          : options.userId
+            ? await options.deps.skillCatalog.listEffectiveUserSkills(
+                options.userId,
+                { skillBundleIds: authorizedSkillBundleIds },
+              )
+            : []
+        : []
+      : options.userId
+        ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
+        : [];
   const privateKnowledgeEntries = effectivePrivateKnowledge
     .filter((skill) => getTextSkillBundleSkillFile(skill.bundle_uri))
     .map((skill) => ({
@@ -167,8 +183,8 @@ function buildAppendSystemPrompt(
   if (privateKnowledgeEntries.length > 0) {
     prompts.push(
       [
-        '本轮可见的用户私有知识库入口如下。',
-        '这些入口是请求授权的 Markdown Skill 资源；可按需要直接用 read 读取已知 Markdown 文件，或在不确定位置时用 grep 搜索授权 Markdown 后再读取相关文件。',
+        '本轮 workflow/请求已授权的 Markdown Skill 知识库入口如下。',
+        '当前问题与这些入口相关时，应优先使用 read 读取已知 Markdown 文件，或在不确定位置时用 grep 搜索授权 Markdown 后再读取相关文件。',
         ...privateKnowledgeEntries.map((entry) =>
           [
             `- ${entry.name}`,

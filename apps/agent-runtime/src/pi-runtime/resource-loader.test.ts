@@ -165,6 +165,17 @@ describe('createPiResourceLoader', () => {
       source: 'self',
       source_bundle_ids: ['bundle-liuyao'],
     };
+    const listEffectiveUserSkills = vi.fn(async () => [
+      baziSkill,
+      liuyaoSkill,
+    ]);
+    const listWorkflowBundleSkills = vi.fn(async (bundleIds: string[]) =>
+      [baziSkill, liuyaoSkill].filter((skill) =>
+        skill.source_bundle_ids?.some((bundleId) =>
+          bundleIds.includes(bundleId),
+        ),
+      ),
+    );
     const deps: AgentRuntimeDeps = {
       soulStore: {
         read: vi.fn(),
@@ -172,13 +183,8 @@ describe('createPiResourceLoader', () => {
         update: vi.fn(),
       },
       skillCatalog: {
-        listEffectiveUserSkills: vi.fn(async (_userId, options) =>
-          [baziSkill, liuyaoSkill].filter((skill) =>
-            skill.source_bundle_ids?.some((bundleId) =>
-              options?.skillBundleIds?.includes(bundleId),
-            ),
-          ),
-        ),
+        listEffectiveUserSkills,
+        listWorkflowBundleSkills,
       },
     };
 
@@ -195,9 +201,29 @@ describe('createPiResourceLoader', () => {
     expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
       'private-bazi',
     ]);
-    expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
-      'user-1',
-      { skillBundleIds: ['bundle-bazi'] },
+    expect(listWorkflowBundleSkills).toHaveBeenCalledWith(['bundle-bazi']);
+    expect(listEffectiveUserSkills).not.toHaveBeenCalled();
+    expect(loader.getAppendSystemPrompt().join('\n')).toContain(
+      '本轮 workflow/请求已授权的 Markdown Skill 知识库入口如下。',
+    );
+  });
+
+  it('does not fall back to user skills when an explicit empty workflow bundle scope is provided', async () => {
+    const deps = createDeps();
+    const loader = await createPiResourceLoader({
+      deps,
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput: {
+        ...containerInput,
+        authorizedSkillBundleIds: [],
+      },
+    });
+
+    expect(loader.getSkills().skills).toEqual([]);
+    expect(deps.skillCatalog.listEffectiveUserSkills).not.toHaveBeenCalled();
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+      'private-bazi',
     );
   });
 });

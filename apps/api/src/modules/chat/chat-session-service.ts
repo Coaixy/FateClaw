@@ -118,7 +118,7 @@ export interface OwnedChatSessionTurnOptions {
   llmRuntimeOverride?: EffectiveLlmRuntimeConfig;
   /** 内部 workflow 可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
   runtimeUserMessageOverride?: string;
-  /** 本轮 AI 请求明确授权可读取的 Skill Bundle；为空时保持用户全部有效 Skill 可见。 */
+  /** 本轮 AI 请求明确授权可读取的 Skill Bundle；不传时保持用户全部有效 Skill 可见，传空数组时不加载用户级 Skill。 */
   authorizedSkillBundleIds?: string[];
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
@@ -143,7 +143,7 @@ interface PreparedOwnedChatSessionTurn {
   llmRuntime: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
   structured: StructuredInput;
   sessionBoardContexts: SessionBoardContextDto[];
-  authorizedSkillBundleIds: string[];
+  authorizedSkillBundleIds?: string[];
   sessionTitle: string;
 }
 
@@ -821,9 +821,10 @@ async function prepareOwnedChatSessionTurn(
   try {
     const llmRuntime =
       options.llmRuntimeOverride ?? (await resolveUserLlmRuntime(userId));
-    const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
-      options.authorizedSkillBundleIds,
-    );
+    const authorizedSkillBundleIds =
+      options.authorizedSkillBundleIds === undefined
+        ? undefined
+        : normalizeAuthorizedSkillBundleIds(options.authorizedSkillBundleIds);
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)

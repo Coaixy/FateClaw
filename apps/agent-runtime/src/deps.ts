@@ -3,6 +3,7 @@ import {
   queryLatestFollowupWorkflowContext,
   querySoulEditEnabled,
   querySoulContent,
+  queryWorkflowBundleSkills,
   updateSoulContentDb,
   type EffectiveUserSkill,
   type FollowupWorkflowContext,
@@ -36,6 +37,10 @@ export interface SkillCatalog {
   listEffectiveUserSkills(
     userId: string,
     options?: { skillBundleIds?: string[] },
+  ): Promise<EffectiveUserSkill[]>;
+  /** 读取后端 workflow 已授权的 Bundle Skill，不再按终端用户订阅关系过滤。 */
+  listWorkflowBundleSkills?(
+    skillBundleIds: string[],
   ): Promise<EffectiveUserSkill[]>;
 }
 
@@ -84,6 +89,9 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   skillCatalog: {
     listEffectiveUserSkills(userId, options) {
       return queryEffectiveUserSkills(userId, options);
+    },
+    listWorkflowBundleSkills(skillBundleIds) {
+      return queryWorkflowBundleSkills(skillBundleIds);
     },
   },
 
