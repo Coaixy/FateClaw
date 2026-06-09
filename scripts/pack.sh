@@ -94,6 +94,46 @@ rewrite_runtime_package_for_npm() {
   " "$package_file"
 }
 
+# 前端静态构建不会自动读取仓库根 .env；这里仅导出公开变量，
+# 避免把后端密钥类配置带进 Next 构建进程。
+load_frontend_public_env() {
+  if [ -n "${NEXT_PUBLIC_API_BASE:-}" ]; then
+    return
+  fi
+  if [ ! -f .env ]; then
+    return
+  fi
+
+  local api_base
+  api_base=$(node -e "
+    const fs = require('node:fs');
+    const env = fs.readFileSync('.env', 'utf8');
+    const keys = new Set(['NEXT_PUBLIC_API_BASE', 'PUBLIC_API_BASE_URL']);
+    for (const line of env.split(/\\r?\\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const index = trimmed.indexOf('=');
+      if (index < 0) continue;
+      const key = trimmed.slice(0, index).trim();
+      if (!keys.has(key)) continue;
+      let value = trimmed.slice(index + 1).trim();
+      if (
+        (value.startsWith('\"') && value.endsWith('\"')) ||
+        (value.startsWith(\"'\") && value.endsWith(\"'\"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.stdout.write(value);
+      break;
+    }
+  ")
+
+  if [ -n "$api_base" ]; then
+    export NEXT_PUBLIC_API_BASE="$api_base"
+    echo "ℹ️ 已从根 .env 为前端构建设置 NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE"
+  fi
+}
+
 if [ "${#LEGACY_ARGS[@]}" -gt 0 ]; then
   echo "ℹ️ 当前为分离部署包，忽略旧的本地混淆参数: ${LEGACY_ARGS[*]}"
 fi
@@ -192,6 +232,7 @@ pack_www_static() {
 
   echo "🔨 构建 www 静态产物 ..."
   rm -rf apps/web/.next apps/web/out
+  load_frontend_public_env
   pnpm run build:www
 
   echo "📦 打包 www 静态产物 v${VERSION} ..."
@@ -212,6 +253,7 @@ pack_admin_static() {
 
   echo "🔨 构建 admin 静态产物 ..."
   rm -rf apps/admin/.next apps/admin/out
+  load_frontend_public_env
   pnpm run build:admin
 
   echo "📦 打包 admin 静态产物 v${VERSION} ..."
