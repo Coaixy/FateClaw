@@ -2,19 +2,14 @@
 
 import { useState } from 'react';
 import {
-  Activity,
-  Crown,
   Loader2,
   MessageSquare,
-  RefreshCw,
   Sparkles,
-  TrendingUp,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
-import { useAuth } from '@/features/auth/hooks/use-auth';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
 import type { BillingStatus } from '@/features/billing/api';
@@ -29,49 +24,6 @@ function formatCompactNumber(value: number): string {
   return `${(value / 1_000_000).toFixed(2).replace(/\.0+$/, '')}M`;
 }
 
-function membershipStatusText(status: MembershipStatus['allowance_status']) {
-  switch (status) {
-    case 'plenty':
-      return '额度充足';
-    case 'normal':
-      return '正常使用中';
-    case 'tight':
-      return '额度偏紧';
-    case 'almost_used':
-      return '即将用完';
-    case 'used_up':
-      return '本月额度已用完';
-    case 'inactive':
-    default:
-      return '未开通';
-  }
-}
-
-function resetText(value: string | null) {
-  if (!value) return '开通后按月重置';
-  return `${new Date(value).toLocaleDateString('zh-CN')} 重置`;
-}
-
-function progressPercent(ratio: number) {
-  const percent = Math.min(100, Math.max(0, ratio * 100));
-  if (percent > 0 && percent < 0.1) return 0.1;
-  return Math.round(percent * 10) / 10;
-}
-
-function displayPercent(ratio: number) {
-  const percent = Math.min(100, Math.max(0, ratio * 100));
-  if (percent === 0) return '0%';
-  if (percent < 0.01) return '< 0.01%';
-  if (percent < 0.1) return `${percent.toFixed(2)}%`;
-  if (percent < 10) return `${percent.toFixed(1)}%`;
-  return `${Math.round(percent)}%`;
-}
-
-function userHandle(phoneLabel: string | null | undefined) {
-  const compact = (phoneLabel || 'member').replace(/\s+/g, '');
-  return `@${compact}`;
-}
-
 function activityCells(seed: number, percent: number) {
   const normalizedSeed = Math.max(1, Math.floor(seed));
   const activeCount = Math.min(
@@ -84,6 +36,108 @@ function activityCells(seed: number, percent: number) {
     const hot = (index * 17 + normalizedSeed) % 53 < activeCount;
     const alert = (index * 11 + Math.round(percent)) % 47 < alertCount;
     return alert ? 'alert' : hot ? 'active' : 'idle';
+  });
+}
+
+function activityTooltip(monthlyMessages: number, monthlyTokens: number) {
+  return `本月消息 ${monthlyMessages.toLocaleString('zh-CN')} · 本月 Token ${formatCompactNumber(monthlyTokens)}`;
+}
+
+function formatMembershipDate(value: string | null) {
+  if (!value) return '待开通';
+  return new Date(value).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+function formatMembershipUsage(monthlyMessages: number, monthlyTokens: number) {
+  return `${monthlyMessages.toLocaleString('zh-CN')} 条 · ${formatCompactNumber(monthlyTokens)} Token`;
+}
+
+function TaijiIcon({
+  className = '',
+  size = 1,
+}: {
+  className?: string;
+  size?: number;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size * 24}
+      height={size * 24}
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M12 2a10 10 0 0 1 0 20c2.76 0 5-2.24 5-5s-2.24-5-5-5-5-2.24-5-5 2.24-5 5-5z"
+        fill="currentColor"
+      />
+      <circle cx="12" cy="7.1" r="1.45" fill="var(--color-canvas)" />
+      <circle cx="12" cy="16.9" r="1.45" fill="var(--color-primary)" />
+    </svg>
+  );
+}
+
+function shouldReduceMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+function setCardMotionVars(
+  element: HTMLElement,
+  vars: Record<string, string>,
+) {
+  for (const [key, value] of Object.entries(vars)) {
+    element.style.setProperty(key, value);
+  }
+}
+
+function handleCardPointerEnter(event: React.PointerEvent<HTMLElement>) {
+  if (event.pointerType !== 'mouse' || shouldReduceMotion()) return;
+  setCardMotionVars(event.currentTarget, {
+    '--amp-lift': '-8px',
+    '--amp-scale': '1.012',
+  });
+}
+
+function handleCardPointerMove(event: React.PointerEvent<HTMLElement>) {
+  if (event.pointerType !== 'mouse' || shouldReduceMotion()) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width - 0.5;
+  const y = (event.clientY - rect.top) / rect.height - 0.5;
+
+  setCardMotionVars(event.currentTarget, {
+    '--amp-lift': '-8px',
+    '--amp-scale': '1.012',
+    '--amp-tilt-x': `${(-y * 8).toFixed(2)}deg`,
+    '--amp-tilt-y': `${(x * 9).toFixed(2)}deg`,
+    '--amp-glare-x': `${((x + 0.5) * 100).toFixed(1)}%`,
+    '--amp-glare-y': `${((y + 0.5) * 100).toFixed(1)}%`,
+  });
+}
+
+function handleCardPointerLeave(event: React.PointerEvent<HTMLElement>) {
+  setCardMotionVars(event.currentTarget, {
+    '--amp-lift': '0px',
+    '--amp-scale': '1',
+    '--amp-tilt-x': '0deg',
+    '--amp-tilt-y': '0deg',
+    '--amp-glare-x': '50%',
+    '--amp-glare-y': '50%',
   });
 }
 
@@ -121,37 +175,33 @@ function AmpMetric({
 }
 
 function AmpMembershipCard({
-  membership,
-  phoneLabel,
-  todayMessages,
-  todayTokens,
+  monthlyMessages,
   monthlyTokens,
-  monthlyCost,
-  busy,
-  refreshing,
-  onSubscribe,
-  onRefresh,
 }: {
-  membership: MembershipStatus;
-  phoneLabel: string | null | undefined;
-  todayMessages: number;
-  todayTokens: number;
+  monthlyMessages: number;
   monthlyTokens: number;
-  monthlyCost: number;
-  busy: boolean;
-  refreshing: boolean;
-  onSubscribe: () => void;
-  onRefresh: () => void;
 }) {
-  const active = membership.active;
-  const usedPercent = active
-    ? progressPercent(membership.allowance_used_ratio)
-    : 0;
-  const usedPercentText = displayPercent(membership.allowance_used_ratio);
-  const cells = activityCells(monthlyTokens + todayTokens + todayMessages, usedPercent);
+  const cells = activityCells(monthlyTokens + monthlyMessages, 100);
+  const activityTip = activityTooltip(monthlyMessages, monthlyTokens);
+  const terms = ['六爻', '八字', '紫微斗数', '奇门遁甲'] as const;
 
   return (
-    <section className="relative overflow-hidden rounded-lg border border-hairline bg-[color-mix(in_srgb,var(--color-canvas)_82%,var(--color-surface-card))] shadow-[0_24px_70px_color-mix(in_srgb,var(--color-accent-teal)_10%,transparent)]">
+    <section
+      className="group relative overflow-hidden rounded-lg border border-hairline bg-[color-mix(in_srgb,var(--color-canvas)_82%,var(--color-surface-card))] shadow-[0_24px_70px_color-mix(in_srgb,var(--color-accent-teal)_10%,transparent)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform [transform:perspective(1200px)_rotateX(var(--amp-tilt-x,0deg))_rotateY(var(--amp-tilt-y,0deg))_translate3d(0,var(--amp-lift,0px),0)_scale(var(--amp-scale,1))] [transform-style:preserve-3d] hover:shadow-[0_36px_100px_color-mix(in_srgb,var(--color-accent-teal)_18%,transparent)] motion-reduce:transform-none motion-reduce:transition-none"
+      onPointerEnter={handleCardPointerEnter}
+      onPointerMove={handleCardPointerMove}
+      onPointerLeave={handleCardPointerLeave}
+      style={
+        {
+          '--amp-glare-x': '50%',
+          '--amp-glare-y': '50%',
+          '--amp-lift': '0px',
+          '--amp-scale': '1',
+          '--amp-tilt-x': '0deg',
+          '--amp-tilt-y': '0deg',
+        } as React.CSSProperties
+      }
+    >
       <div
         className="pointer-events-none absolute inset-0 opacity-80"
         style={{
@@ -170,112 +220,163 @@ function AmpMembershipCard({
         }}
         aria-hidden="true"
       />
+      <div
+        className="pointer-events-none absolute inset-0 z-[2] opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:hidden"
+        style={{
+          background:
+            'radial-gradient(circle at var(--amp-glare-x) var(--amp-glare-y), color-mix(in srgb, var(--color-on-primary) 42%, transparent), transparent 38%)',
+        }}
+        aria-hidden="true"
+      />
 
-      <div className="relative z-10 flex min-h-16 items-center justify-between border-b border-hairline/70 px-5 sm:px-6">
+      <div className="relative z-10 flex min-h-14 items-center justify-between border-b border-hairline/70 px-5 [transform:translateZ(22px)] sm:min-h-16 sm:px-6">
         <div className="text-[22px] font-extrabold text-muted/35 sm:text-[26px]">
           FateClaw+
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-hairline bg-canvas/70 text-muted transition-colors hover:text-ink disabled:opacity-50"
-          aria-label="刷新会员中心"
-          title="刷新"
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-        </button>
       </div>
 
       <div className="relative z-10 grid border-b border-hairline/70 sm:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="border-b border-hairline/70 px-5 py-6 sm:border-b-0 sm:border-r sm:px-6">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-hairline bg-[conic-gradient(from_160deg,color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-primary)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-warning)_45%,var(--color-canvas)),color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)))] shadow-[0_10px_30px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]">
-            <Crown size={38} className="text-on-primary drop-shadow-sm" />
+        <div className="border-b border-hairline/70 px-5 py-5 [transform:translateZ(28px)] sm:border-b-0 sm:border-r sm:px-6 sm:py-6">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-hairline bg-[conic-gradient(from_160deg,color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-primary)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-warning)_45%,var(--color-canvas)),color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)))] shadow-[0_10px_30px_color-mix(in_srgb,var(--color-primary)_18%,transparent)] transition-transform duration-300 group-hover:scale-[1.04] sm:h-24 sm:w-24">
+            <TaijiIcon size={1.25} className="text-on-primary drop-shadow-sm" />
           </div>
-          <div className="mt-5 text-[30px] font-extrabold leading-tight text-ink sm:text-[34px]">
-            FateClaw Plus
+          <div className="mt-4 text-[52px] font-extrabold leading-none text-ink sm:mt-5 sm:text-[64px]">
+            Plus
           </div>
-          <div className="mt-1 break-all font-mono text-[16px] font-semibold text-muted">
-            {userHandle(phoneLabel)}
-          </div>
-          <button
-            type="button"
-            onClick={onSubscribe}
-            disabled={busy || !membership.enabled}
-            className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-[14px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40 sm:w-auto"
-          >
-            {busy ? <Loader2 size={15} className="animate-spin" /> : null}
-            {active ? '续费会员' : '开通会员'}
-          </button>
         </div>
 
-        <div className="grid min-h-[270px] content-between gap-6 px-5 py-6 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="inline-flex min-h-8 items-center rounded-full border border-primary/25 bg-primary/8 px-3 text-[12px] font-semibold text-primary">
-                {membershipStatusText(membership.allowance_status)}
-              </div>
-              <div className="mt-3 text-[13px] leading-6 text-muted">
-                {formatCoins(membership.monthly_price_coins)} / 月 ·{' '}
-                {active ? resetText(membership.allowance_reset_at) : '待开通'}
-              </div>
-            </div>
-            <div className="text-left sm:text-right">
-              <div className="text-[12px] text-muted">会员额度</div>
-              <div className="mt-1 text-[28px] font-extrabold tabular-nums text-ink">
-                {active ? usedPercentText : '--'}
-              </div>
-            </div>
-          </div>
-
-          <div>
+        <div className="grid content-center gap-5 px-5 py-5 [transform:translateZ(18px)] sm:min-h-[270px] sm:gap-6 sm:px-6 sm:py-6">
+          <div className="relative">
             <div className="mb-3 flex items-center justify-between gap-3 text-[12px] text-muted">
               <span>ACTIVITY</span>
-              <span>{active ? '本月会员用量' : '等待开通'}</span>
             </div>
-            <div className="grid grid-cols-12 gap-1" aria-hidden="true">
-              {cells.map((state, index) => (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {terms.map((term, index) => (
                 <span
-                  key={`${state}-${index}`}
-                  className={`aspect-square min-w-0 border ${
-                    state === 'alert'
-                      ? 'border-primary/45 bg-primary/55'
-                      : state === 'active'
-                        ? 'border-accent-teal/35 bg-accent-teal/35'
-                        : 'border-hairline/70 bg-canvas/35'
+                  key={term}
+                  className={`inline-flex min-h-8 items-center rounded-full border border-hairline bg-canvas/70 px-3 text-[12px] font-medium text-muted shadow-[0_6px_14px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] transition-transform duration-300 ${
+                    index % 2 === 0 ? '-rotate-2' : 'rotate-2'
                   }`}
-                />
+                >
+                  {term}
+                </span>
               ))}
+            </div>
+            <div className="grid grid-cols-12 gap-1">
+              {cells.map((state, index) => {
+                const stateLabel =
+                  state === 'alert'
+                    ? '高频活跃'
+                    : state === 'active'
+                      ? '持续活跃'
+                      : '轻度活跃';
+                return (
+                  <span
+                    key={`${state}-${index}`}
+                    title={activityTip}
+                    aria-label={`${activityTip} · ${stateLabel}`}
+                    className={`aspect-square min-w-0 border ${index >= 48 ? 'hidden sm:block' : ''} ${
+                      state === 'alert'
+                        ? 'border-primary/45 bg-primary/55'
+                        : state === 'active'
+                          ? 'border-accent-teal/35 bg-accent-teal/35'
+                          : 'border-hairline/70 bg-canvas/35'
+                    }`}
+                  />
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="relative z-10 grid grid-cols-2 overflow-hidden sm:grid-cols-4">
+      <div className="relative z-10 grid grid-cols-2 overflow-hidden [transform:translateZ(14px)]">
         <AmpMetric
           icon={<MessageSquare size={15} className="text-primary" />}
-          label="今日消息"
-          value={todayMessages.toLocaleString('zh-CN')}
+          label="本月消息"
+          value={monthlyMessages.toLocaleString('zh-CN')}
           tone="default"
         />
         <AmpMetric
           icon={<Sparkles size={15} className="text-primary" />}
-          label="今日 Token"
-          value={formatCompactNumber(todayTokens)}
-          tone="success"
-        />
-        <AmpMetric
-          icon={<Activity size={15} className="text-primary" />}
           label="本月 Token"
           value={formatCompactNumber(monthlyTokens)}
           tone="primary"
         />
-        <AmpMetric
-          icon={<TrendingUp size={15} className="text-primary" />}
-          label="本月消耗"
-          value={formatCoins(monthlyCost)}
-          tone="warning"
-        />
+      </div>
+    </section>
+  );
+}
+
+function MembershipDetailPanel({
+  membership,
+  monthlyMessages,
+  monthlyTokens,
+  busy,
+  onSubscribe,
+}: {
+  membership: MembershipStatus;
+  monthlyMessages: number;
+  monthlyTokens: number;
+  busy: boolean;
+  onSubscribe: () => void;
+}) {
+  const label = membership.active ? '续费会员' : '开通会员';
+  const detailItems = [
+    {
+      className: 'border-r border-hairline/70',
+      label: '到期时间',
+      value: formatMembershipDate(membership.current_period_end),
+    },
+    {
+      className: 'sm:border-r sm:border-hairline/70',
+      label: '本月用量',
+      value: formatMembershipUsage(monthlyMessages, monthlyTokens),
+    },
+    {
+      className: 'col-span-2 border-t border-hairline/70 sm:col-span-1 sm:border-t-0',
+      label: '会员价格',
+      value: `${formatCoins(membership.monthly_price_coins)} / 月`,
+    },
+  ] as const;
+
+  return (
+    <section
+      aria-label="会员详情"
+      className="-mt-1 overflow-hidden rounded-lg border border-hairline bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_7%,transparent)]"
+    >
+      <div className="grid sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid grid-cols-2 sm:grid-cols-3">
+          {detailItems.map((item) => (
+            <div
+              key={item.label}
+              className={`min-w-0 px-3 py-3 sm:px-4 ${item.className}`}
+            >
+              <div className="text-[11px] font-medium text-muted">
+                {item.label}
+              </div>
+              <div className="mt-1 min-h-5 whitespace-nowrap text-[13px] font-semibold leading-5 text-ink">
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-hairline/70 p-3 sm:border-l sm:border-t-0">
+          <button
+            type="button"
+            onClick={onSubscribe}
+            disabled={busy || !membership.enabled}
+            aria-label={`${label} FateClaw Plus`}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 text-[14px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40 sm:w-[132px]"
+          >
+            {busy ? (
+              <Loader2 size={15} className="shrink-0 animate-spin" />
+            ) : (
+              <Sparkles size={15} className="shrink-0" />
+            )}
+            {label}
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -288,12 +389,10 @@ function AmpMembershipCard({
  */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();
-  const { user } = useAuth();
   const {
     billingInfo,
     usage,
     loading,
-    refreshing,
     error,
     refresh,
   } = useMembershipOverview();
@@ -330,7 +429,7 @@ export function MembershipWorkspace() {
   if (loading) {
     return (
       <AppShell>
-        <div className="space-y-4">
+        <div className="space-y-4 pt-5 sm:pt-6 lg:pt-0">
           <div className="h-[200px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
           <div className="h-[150px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
         </div>
@@ -339,43 +438,31 @@ export function MembershipWorkspace() {
   }
 
   const monthlyTokens = billingInfo?.monthly_tokens_used ?? 0;
-  const monthlyCost = billingInfo?.estimated_monthly_total_coins ?? 0;
-  const todayMessages = usage?.today_messages ?? 0;
-  const todayTokens = usage?.today_total_tokens ?? 0;
+  const monthlyMessages = usage?.monthly_messages ?? 0;
+  const membership = billingInfo?.membership;
 
   return (
     <AppShell>
-      <div className="space-y-5">
+      <div className="space-y-5 pt-5 sm:pt-6 lg:pt-0">
         <div className="hidden items-center justify-between gap-3 lg:flex">
           <h2 className="font-display text-base font-semibold tracking-tight">
             会员中心
           </h2>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={refreshing}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-card px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink disabled:opacity-50"
-          >
-            <RefreshCw
-              size={13}
-              className={refreshing ? 'animate-spin' : ''}
-            />
-            刷新
-          </button>
         </div>
 
-        {billingInfo?.membership ? (
+        {membership ? (
           <AmpMembershipCard
-            membership={billingInfo.membership}
-            phoneLabel={user?.phone_masked ?? user?.phone}
-            todayMessages={todayMessages}
-            todayTokens={todayTokens}
+            monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
-            monthlyCost={monthlyCost}
+          />
+        ) : null}
+        {membership ? (
+          <MembershipDetailPanel
+            membership={membership}
+            monthlyMessages={monthlyMessages}
+            monthlyTokens={monthlyTokens}
             busy={membershipBusy}
-            refreshing={refreshing}
             onSubscribe={() => void handleSubscribeMembership()}
-            onRefresh={() => void refresh()}
           />
         ) : null}
 

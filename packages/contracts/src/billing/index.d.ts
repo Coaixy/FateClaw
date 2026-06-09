@@ -7,6 +7,7 @@ export interface UsageStatsDto {
   total_input_tokens: number;
   total_output_tokens: number;
   total_tokens: number;
+  monthly_messages: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;

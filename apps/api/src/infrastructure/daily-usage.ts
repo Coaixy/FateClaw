@@ -15,6 +15,7 @@ export interface UsageStats {
   total_input_tokens: number;
   total_output_tokens: number;
   total_tokens: number;
+  monthly_messages: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
@@ -172,6 +173,7 @@ export async function getMonthlyTokenUsage(
 
 export async function getUsageStats(userId: string): Promise<UsageStats> {
   const today = new Date().toISOString().slice(0, 10);
+  const yearMonth = today.slice(0, 7);
 
   const { rows: totalRows } = await getDbPool().query(
     `SELECT COALESCE(SUM(msg_count), 0) AS total_messages,
@@ -187,6 +189,16 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     total_input_tokens: string | number;
     total_output_tokens: string | number;
     total_tokens: string | number;
+  };
+
+  const { rows: monthlyRows } = await getDbPool().query(
+    `SELECT COALESCE(SUM(msg_count), 0) AS monthly_messages
+     FROM daily_usage WHERE user_id = $1 AND date LIKE $2`,
+    [userId, `${yearMonth}%`],
+  );
+
+  const monthly = monthlyRows[0] as {
+    monthly_messages: string | number;
   };
 
   const { rows: todayRows } = await getDbPool().query(
@@ -212,6 +224,7 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     total_input_tokens: Number(total.total_input_tokens),
     total_output_tokens: Number(total.total_output_tokens),
     total_tokens: Number(total.total_tokens),
+    monthly_messages: Number(monthly.monthly_messages),
     today_messages: todayRow?.today_messages ?? 0,
     today_input_tokens: todayRow?.today_input_tokens ?? 0,
     today_output_tokens: todayRow?.today_output_tokens ?? 0,
