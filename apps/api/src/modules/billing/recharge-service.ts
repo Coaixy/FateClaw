@@ -399,12 +399,6 @@ export async function syncRechargeOrderForUser(input: {
   userId: string;
   tradeId: string;
 }): Promise<ServiceResult<RechargeOrderDto>> {
-  const paymentConfig = await getRechargePaymentConfig();
-  const config = resolveEpayBaseConfig(paymentConfig);
-  if (!config) {
-    return fail(503, '充值暂未开放，请联系管理员配置支付');
-  }
-
   const order = await getRechargeOrderByTradeIdForUser(
     input.userId,
     input.tradeId,
@@ -416,10 +410,24 @@ export async function syncRechargeOrderForUser(input: {
     return ok(toRechargeOrderDto(order));
   }
 
+  const paymentConfig = await getRechargePaymentConfig();
+  const config = resolveEpayBaseConfig(paymentConfig);
+  if (!config) {
+    return ok(toRechargeOrderDto(order));
+  }
+
   try {
     const response = await queryEpayOrder(config, order.trade_id);
     if (response.code !== 1) {
-      return fail(502, response.msg || '查询支付状态失败');
+      logger.warn(
+        {
+          tradeId: input.tradeId,
+          providerCode: response.code,
+          providerMessage: response.msg,
+        },
+        '查询充值单支付状态失败，保留本地状态',
+      );
+      return ok(toRechargeOrderDto(order));
     }
     if (response.status !== 1) {
       return ok(toRechargeOrderDto(order));
@@ -442,8 +450,11 @@ export async function syncRechargeOrderForUser(input: {
     });
     return ok(toRechargeOrderDto(settled));
   } catch (err) {
-    logger.warn({ err, tradeId: input.tradeId }, '同步充值单状态失败');
-    return fail(502, '同步支付状态失败，请稍后重试');
+    logger.warn(
+      { err, tradeId: input.tradeId },
+      '同步充值单状态失败，保留本地状态',
+    );
+    return ok(toRechargeOrderDto(order));
   }
 }
 

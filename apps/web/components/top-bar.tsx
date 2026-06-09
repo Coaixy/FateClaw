@@ -173,7 +173,7 @@ export function TopBar({
           <div
             className={`z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in ${
               compact
-                ? 'fixed left-3 right-3 top-14 max-h-[calc(100dvh-4.5rem)] overflow-y-auto'
+                ? 'fixed right-3 top-14 w-[min(340px,calc(100vw-1.5rem))] max-h-[calc(100dvh-4.5rem)] overflow-y-auto'
                 : 'absolute right-0 top-full'
             }`}
           >

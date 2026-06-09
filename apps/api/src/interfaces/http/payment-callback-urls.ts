@@ -8,7 +8,7 @@ import {
 } from '../../infrastructure/config.js';
 
 const RECHARGE_NOTIFY_PATH = '/api/billing/recharge/notify';
-const RECHARGE_RETURN_PATH = '/wallet';
+const RECHARGE_RETURN_PATH = '/wallet/recharge/result';
 
 /**
  * 第三方支付平台需要回传或跳转的公开 URL。

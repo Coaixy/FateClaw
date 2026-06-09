@@ -76,7 +76,7 @@ describe('resolvePaymentCallbackUrls', () => {
 
     expect(urls).toEqual({
       notifyUrl: 'https://app.example.test/api/billing/recharge/notify',
-      returnUrl: 'https://app.example.test/wallet',
+      returnUrl: 'https://app.example.test/wallet/recharge/result',
     });
   });
 
@@ -95,7 +95,7 @@ describe('resolvePaymentCallbackUrls', () => {
 
     expect(urls).toEqual({
       notifyUrl: 'https://api.example.test/api/billing/recharge/notify',
-      returnUrl: 'https://www.example.test/wallet',
+      returnUrl: 'https://www.example.test/wallet/recharge/result',
     });
   });
 
@@ -112,7 +112,7 @@ describe('resolvePaymentCallbackUrls', () => {
 
     expect(urls).toEqual({
       notifyUrl: '/api/billing/recharge/notify',
-      returnUrl: '/wallet',
+      returnUrl: '/wallet/recharge/result',
     });
   });
 
@@ -131,7 +131,9 @@ describe('resolvePaymentCallbackUrls', () => {
     expect(urls.notifyUrl).toBe(
       'https://app.example.test/api/billing/recharge/notify',
     );
-    expect(urls.returnUrl).toBe('https://app.example.test/wallet');
+    expect(urls.returnUrl).toBe(
+      'https://app.example.test/wallet/recharge/result',
+    );
   });
 
   it('rejects suspicious Host header syntax even when the hostname is allowed', async () => {
@@ -147,7 +149,7 @@ describe('resolvePaymentCallbackUrls', () => {
 
     expect(urls).toEqual({
       notifyUrl: '/api/billing/recharge/notify',
-      returnUrl: '/wallet',
+      returnUrl: '/wallet/recharge/result',
     });
   });
 });

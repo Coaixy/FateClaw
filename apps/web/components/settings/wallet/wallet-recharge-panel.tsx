@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import {
+  ArrowLeft,
+  ArrowRight,
   Banknote,
   CheckCircle2,
   ChevronDown,
@@ -22,6 +24,16 @@ import { formatCoins } from '@/lib/soft-currency';
 
 const AMOUNT_PRESETS = ['10', '30', '50'];
 const PENDING_ORDER_VISIBLE_MS = 30 * 60 * 1000;
+type RechargeStep = 'amount' | 'payment' | 'confirm';
+
+const RECHARGE_STEPS: readonly {
+  key: RechargeStep;
+  label: string;
+}[] = [
+  { key: 'amount', label: '金额' },
+  { key: 'payment', label: '支付' },
+  { key: 'confirm', label: '创建' },
+];
 
 function formatRechargeCoins(value: string | number | null | undefined): string {
   const amount = Number(value || 0);
@@ -70,6 +82,15 @@ function isFreshPendingOrder(order: RechargeOrder): boolean {
     : false;
 }
 
+/**
+ * 渲染钱包充值面板。
+ *
+ * @param props.orders 最近充值订单。
+ * @param props.stats 充值统计数据。
+ * @param props.refreshing 是否正在刷新充值状态。
+ * @param props.onChanged 充值订单变化后的刷新回调。
+ * @returns 分步充值表单、待支付订单和可折叠历史订单。
+ */
 export function WalletRechargePanel({
   orders,
   stats,
@@ -83,6 +104,7 @@ export function WalletRechargePanel({
 }) {
   const [amountCoins, setAmountCoins] = useState('50');
   const [payType, setPayType] = useState<RechargePayType>('alipay');
+  const [rechargeStep, setRechargeStep] = useState<RechargeStep>('amount');
   const [creating, setCreating] = useState(false);
   const [syncingTradeId, setSyncingTradeId] = useState<string | null>(null);
   const [activeOrder, setActiveOrder] = useState<RechargeOrder | null>(null);
@@ -97,8 +119,28 @@ export function WalletRechargePanel({
     (order) => order.status !== 'pending' || isFreshPendingOrder(order),
   );
   const shownOrders = ordersOpen ? orders : collapsedOrders.slice(0, 3);
+  const amountNumber = Number(amountCoins);
+  const amountValid = Number.isFinite(amountNumber) && amountNumber > 0;
+  const payTypeLabel = payType === 'alipay' ? '支付宝' : '微信';
+  const activeStepIndex = RECHARGE_STEPS.findIndex(
+    (step) => step.key === rechargeStep,
+  );
+
+  const goToPayment = () => {
+    if (!amountValid) {
+      setError('充值金额需要大于 0');
+      return;
+    }
+    setError('');
+    setRechargeStep('payment');
+  };
 
   async function createOrder() {
+    if (!amountValid) {
+      setError('充值金额需要大于 0');
+      setRechargeStep('amount');
+      return;
+    }
     setCreating(true);
     setError('');
     try {
@@ -161,12 +203,40 @@ export function WalletRechargePanel({
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="space-y-4">
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="space-y-4 p-4 sm:p-5">
+        <div
+          className="grid grid-cols-3 gap-1 rounded-xl border border-hairline bg-canvas/55 p-1"
+          role="tablist"
+          aria-label="充值步骤"
+        >
+          {RECHARGE_STEPS.map((step, index) => (
+            <button
+              key={step.key}
+              type="button"
+              onClick={() => {
+                if (index <= activeStepIndex) {
+                  setRechargeStep(step.key);
+                }
+              }}
+              disabled={index > activeStepIndex}
+              className={`h-8 rounded-lg text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                rechargeStep === step.key
+                  ? 'bg-primary/12 text-primary shadow-sm'
+                  : 'text-muted hover:bg-surface-card hover:text-ink'
+              }`}
+              aria-selected={rechargeStep === step.key}
+              role="tab"
+            >
+              {index + 1}. {step.label}
+            </button>
+          ))}
+        </div>
+
+        {rechargeStep === 'amount' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] font-semibold text-muted">
-                快捷金额
+                选择充值金额
               </span>
               <span className="text-[10px] text-muted">软妹币</span>
             </div>
@@ -200,68 +270,136 @@ export function WalletRechargePanel({
                 </button>
               ))}
             </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-semibold text-muted">
+                自定义金额
+              </span>
+              <div className="flex h-11 items-center rounded-xl border border-hairline bg-canvas px-3 focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/20">
+                <span className="mr-2 text-[12px] text-muted">软妹币</span>
+                <input
+                  value={amountCoins}
+                  onChange={(event) => setAmountCoins(event.target.value)}
+                  inputMode="decimal"
+                  className="h-full min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums outline-none"
+                  placeholder="输入其他金额"
+                />
+              </div>
+            </label>
+            <button
+              type="button"
+              onClick={goToPayment}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
+            >
+              选择支付方式
+              <ArrowRight size={14} />
+            </button>
           </div>
+        )}
 
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold text-muted">
-              自定义金额
-            </span>
-            <div className="flex h-11 items-center rounded-xl border border-hairline bg-canvas px-3 focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/20">
-              <span className="mr-2 text-[12px] text-muted">软妹币</span>
-              <input
-                value={amountCoins}
-                onChange={(event) => setAmountCoins(event.target.value)}
-                inputMode="decimal"
-                className="h-full min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums outline-none"
-                placeholder="输入其他金额"
-              />
+        {rechargeStep === 'payment' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
+              <span className="text-[11px] font-medium text-muted">
+                充值金额
+              </span>
+              <span className="text-[13px] font-semibold tabular-nums text-ink">
+                {formatRechargeCoins(amountCoins)}
+              </span>
             </div>
-          </label>
-        </div>
-
-        <div className="rounded-xl border border-hairline bg-canvas/55 p-3">
-          <div className="mb-2 text-[11px] font-semibold text-muted">
-            支付方式
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ['alipay', '支付宝'],
-                ['wechat', '微信'],
-              ] as const
-            ).map(([key, label]) => (
+            <div>
+              <div className="mb-2 text-[11px] font-semibold text-muted">
+                选择支付方式
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['alipay', '支付宝'],
+                    ['wechat', '微信'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPayType(key)}
+                    className={`h-11 rounded-xl border text-[13px] font-semibold transition-colors ${
+                      payType === key
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-hairline bg-canvas/60 text-muted hover:text-ink'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
               <button
-                key={key}
                 type="button"
-                onClick={() => setPayType(key)}
-                className={`h-10 rounded-lg border text-[12px] font-semibold transition-colors ${
-                  payType === key
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-hairline bg-surface-card text-muted hover:text-ink'
-                }`}
+                onClick={() => setRechargeStep('amount')}
+                className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-hairline px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink"
               >
-                {label}
+                <ArrowLeft size={14} />
+                返回
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setRechargeStep('confirm')}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
+              >
+                确认充值信息
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void createOrder()}
-            disabled={creating}
-            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-50"
-          >
-            {creating ? (
-              <RefreshCw size={15} className="animate-spin" />
-            ) : (
-              <CreditCard size={15} />
-            )}
-            创建充值单
-          </button>
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted">
-            <ShieldCheck size={11} />
-            支付成功后自动入账，也可手动刷新到账状态
+        )}
+
+        {rechargeStep === 'confirm' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
+                <div className="text-[10px] font-medium text-muted">
+                  充值金额
+                </div>
+                <div className="mt-1 text-[14px] font-semibold tabular-nums text-ink">
+                  {formatRechargeCoins(amountCoins)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
+                <div className="text-[10px] font-medium text-muted">
+                  支付方式
+                </div>
+                <div className="mt-1 text-[14px] font-semibold text-ink">
+                  {payTypeLabel}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void createOrder()}
+              disabled={creating}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-50"
+            >
+              {creating ? (
+                <RefreshCw size={15} className="animate-spin" />
+              ) : (
+                <CreditCard size={15} />
+              )}
+              创建充值单
+            </button>
+            <div className="flex items-center gap-1.5 text-[10px] text-muted">
+              <ShieldCheck size={11} />
+              支付成功后自动入账，也可手动刷新到账状态
+            </div>
+            <button
+              type="button"
+              onClick={() => setRechargeStep('payment')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-muted transition-colors hover:bg-canvas/55 hover:text-ink"
+            >
+              <ArrowLeft size={13} />
+              返回修改支付方式
+            </button>
           </div>
-        </div>
+        )}
       </div>
 
       {error && (

@@ -70,7 +70,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
 vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
   resolvePaymentCallbackUrls: vi.fn(() => ({
     notify_url: 'https://app.example.test/api/billing/recharge/notify',
-    return_url: 'https://app.example.test/wallet',
+    return_url: 'https://app.example.test/wallet/recharge/result',
   })),
 }));
 

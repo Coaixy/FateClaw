@@ -12,7 +12,6 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { WalletMembershipCard } from '@/components/settings/wallet/wallet-membership-card';
 import { WalletStatCard } from '@/components/settings/wallet/wallet-stat-card';
-import { WalletTokenUsagePanel } from '@/components/settings/wallet/wallet-token-usage-panel';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
 import { formatCoins } from '@/lib/soft-currency';
@@ -29,14 +28,13 @@ function formatCompactNumber(value: number): string {
 /**
  * 渲染会员中心页面。
  *
- * @returns 会员订阅、会员额度用量和 Token 明细视图。
+ * @returns 会员订阅和会员额度用量视图。
  */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();
   const {
     billingInfo,
     usage,
-    dailyUsage,
     loading,
     refreshing,
     error,
@@ -78,7 +76,6 @@ export function MembershipWorkspace() {
         <div className="space-y-4">
           <div className="h-[200px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
           <div className="h-[150px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
-          <div className="h-[220px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
         </div>
       </AppShell>
     );
@@ -174,8 +171,6 @@ export function MembershipWorkspace() {
             />
           </div>
         </section>
-
-        <WalletTokenUsagePanel dailyUsage={dailyUsage} />
       </div>
     </AppShell>
   );

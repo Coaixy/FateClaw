@@ -8,6 +8,7 @@ import type {
 const {
   mockCreateEpayPayment,
   mockGetRechargeOrderByTradeId,
+  mockGetRechargeOrderByTradeIdForUser,
   mockGetRechargePaymentConfig,
   mockGetUserById,
   mockInsertRechargeOrder,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   mockCreateEpayPayment: vi.fn(),
   mockGetRechargeOrderByTradeId: vi.fn(),
+  mockGetRechargeOrderByTradeIdForUser: vi.fn(),
   mockGetRechargePaymentConfig: vi.fn(),
   mockGetUserById: vi.fn(),
   mockInsertRechargeOrder: vi.fn(),
@@ -31,7 +33,7 @@ const {
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
   getRechargeOrderByTradeId: mockGetRechargeOrderByTradeId,
-  getRechargeOrderByTradeIdForUser: vi.fn(),
+  getRechargeOrderByTradeIdForUser: mockGetRechargeOrderByTradeIdForUser,
   getRechargePaymentConfig: mockGetRechargePaymentConfig,
   getRechargeStatsByUserId: vi.fn(),
   getUserById: mockGetUserById,
@@ -58,6 +60,7 @@ vi.mock('../../../src/modules/billing/epay-client.js', async () => {
 import {
   createRechargeOrderForUser,
   handleRechargeNotification,
+  syncRechargeOrderForUser,
 } from '../../../src/modules/billing/recharge-service.js';
 
 function paymentConfig(
@@ -106,6 +109,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetRechargePaymentConfig.mockResolvedValue(paymentConfig());
   mockGetRechargeOrderByTradeId.mockResolvedValue(rechargeOrder());
+  mockGetRechargeOrderByTradeIdForUser.mockResolvedValue(rechargeOrder());
   mockSettleRechargeOrderPaid.mockResolvedValue(
     rechargeOrder({
       status: 'paid',
@@ -114,6 +118,43 @@ beforeEach(() => {
     }),
   );
   mockVerifyEpayNotification.mockReturnValue(true);
+});
+
+describe('syncRechargeOrderForUser', () => {
+  it('keeps the local pending order when the provider query is temporarily unavailable', async () => {
+    mockQueryEpayOrder.mockRejectedValue(new Error('provider unavailable'));
+
+    const result = await syncRechargeOrderForUser({
+      userId: 'user-1',
+      tradeId: 'trade-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockSettleRechargeOrderPaid).not.toHaveBeenCalled();
+    if (result.ok) {
+      expect(result.data.status).toBe('pending');
+      expect(result.data.trade_id).toBe('trade-1');
+    }
+  });
+
+  it('keeps the local pending order when the provider query reports a non-success code', async () => {
+    mockQueryEpayOrder.mockResolvedValue({
+      code: 0,
+      msg: 'not ready',
+    });
+
+    const result = await syncRechargeOrderForUser({
+      userId: 'user-1',
+      tradeId: 'trade-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockSettleRechargeOrderPaid).not.toHaveBeenCalled();
+    if (result.ok) {
+      expect(result.data.status).toBe('pending');
+      expect(result.data.trade_id).toBe('trade-1');
+    }
+  });
 });
 
 describe('handleRechargeNotification', () => {
@@ -185,7 +226,7 @@ describe('createRechargeOrderForUser', () => {
       clientIp: '127.0.0.1',
       callbackUrls: {
         notifyUrl: 'https://app.example.test/api/billing/recharge/notify',
-        returnUrl: 'https://app.example.test/wallet',
+        returnUrl: 'https://app.example.test/wallet/recharge/result',
       },
     });
 
