@@ -1399,6 +1399,54 @@ export async function listUserBundles(userId: string): Promise<SkillBundle[]> {
   return (rows as Record<string, unknown>[]).map(rowToSkillBundle);
 }
 
+export interface AdminSkillBundleSummary {
+  id: string;
+  user_id: string;
+  owner_phone: string | null;
+  name: string;
+  description: string;
+  skill_ids: string[];
+  skill_names: string[];
+  visibility: SkillBundle['visibility'];
+  created_at: string;
+  updated_at: string;
+}
+
+/** 查询管理后台 workflow 配置可绑定的 Skill Bundle 摘要。 */
+export async function listAdminSkillBundleSummaries(): Promise<
+  AdminSkillBundleSummary[]
+> {
+  const { rows } = await pool.query(
+    `SELECT
+       b.id,
+       b.user_id,
+       u.phone AS owner_phone,
+       b.name,
+       b.description,
+       COALESCE(
+         array_agg(sbi.skill_id ORDER BY sbi.sort_order)
+           FILTER (WHERE sbi.skill_id IS NOT NULL),
+         ARRAY[]::text[]
+       ) AS skill_ids,
+       COALESCE(
+         array_agg(COALESCE(s.skill_name, s.dir_name) ORDER BY sbi.sort_order)
+           FILTER (WHERE s.id IS NOT NULL),
+         ARRAY[]::text[]
+       ) AS skill_names,
+       b.visibility,
+       b.created_at,
+       b.updated_at
+     FROM skill_bundles b
+     LEFT JOIN users u ON u.id = b.user_id
+     LEFT JOIN skill_bundle_items sbi ON sbi.bundle_id = b.id
+     LEFT JOIN user_custom_skills s ON s.id = sbi.skill_id AND s.deleted_at IS NULL
+     WHERE b.deleted_at IS NULL
+     GROUP BY b.id, b.user_id, u.phone, b.name, b.description, b.visibility, b.created_at, b.updated_at
+     ORDER BY b.updated_at DESC, b.created_at DESC`,
+  );
+  return rows as AdminSkillBundleSummary[];
+}
+
 export async function updateSkillBundle(
   id: string,
   userId: string,

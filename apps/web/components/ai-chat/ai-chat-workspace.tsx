@@ -22,7 +22,6 @@ import {
   Compass,
   Loader2,
   LogIn,
-  LockKeyhole,
   Sparkles,
   Workflow,
 } from 'lucide-react';
@@ -32,6 +31,7 @@ import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
+import { SimpleModeWorkspace } from '@/components/ai-chat/simple-mode-workspace';
 import { useOnboardingGuideStatus } from '@/components/ai-chat/use-onboarding-guide-status';
 import {
   shouldPromptForPastedBoard,
@@ -65,7 +65,7 @@ type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
 };
-type HomeMode = 'select' | 'expert';
+type HomeMode = 'select' | 'simple' | 'expert';
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
@@ -427,11 +427,7 @@ function AiChatWorkspaceContent() {
 
   const handleComposerPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (
-        chatMessages.sending ||
-        continuationBlocked ||
-        !chatAvailable
-      ) {
+      if (chatMessages.sending || continuationBlocked || !chatAvailable) {
         return;
       }
 
@@ -580,6 +576,14 @@ function AiChatWorkspaceContent() {
     [chatMessages, selectedSession, setSelectedSession, touchSession],
   );
 
+  const handleSimpleWorkflowStarted = useCallback(
+    async (result: { session: PaipanCommitResponse['session'] }) => {
+      touchSession(result.session.id, result.session);
+      setSelectedSession(result.session.id);
+    },
+    [setSelectedSession, touchSession],
+  );
+
   const openPreChatPaipan = useCallback(
     (skill?: string) => {
       if (authLoading) {
@@ -606,100 +610,102 @@ function AiChatWorkspaceContent() {
     router.push('/discover');
   }, [router]);
 
-  const selectOfficialModel = useCallback(async (
-    officialModelId: string,
-  ) => {
-    if (!modelOverview || modelToolbarBusy || !officialModelId) {
-      return;
-    }
+  const selectOfficialModel = useCallback(
+    async (officialModelId: string) => {
+      if (!modelOverview || modelToolbarBusy || !officialModelId) {
+        return;
+      }
 
-    const officialModels = getAvailableOfficialModels(modelOverview);
-    const nextModel = officialModels.find(
-      (model) => model.id === officialModelId,
-    );
-    if (!nextModel) {
-      toast('error', '只能选择可用官方模型');
-      return;
-    }
-
-    if (
-      modelOverview.selection?.source === 'official' &&
-      modelOverview.selection.official_model_id === nextModel.id
-    ) {
-      return;
-    }
-
-    const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
-
-    setModelToolbarBusy('model');
-    try {
-      await modelSettingsApi.select({
-        source: 'official',
-        official_model_id: nextModel.id,
-        thinking_level: thinkingLevel,
-      });
-      await loadModelSettings();
-      void onboardingGuide.refresh();
-    } catch (error) {
-      toast('error', error instanceof Error ? error.message : '切换模型失败');
-    } finally {
-      setModelToolbarBusy('');
-    }
-  }, [
-    loadModelSettings,
-    modelOverview,
-    modelToolbarBusy,
-    onboardingGuide,
-    toast,
-  ]);
-
-  const selectThinkingLevel = useCallback(async (
-    nextThinkingLevel: ModelThinkingLevel,
-  ) => {
-    if (!modelOverview || modelToolbarBusy || !modelOverview.selection) {
-      return;
-    }
-
-    if (nextThinkingLevel === resolveToolbarThinkingLevel(modelOverview)) {
-      return;
-    }
-
-    const selectedOfficial = findSelectedOfficialModel(modelOverview);
-    const fallbackOfficial = getAvailableOfficialModels(modelOverview)[0];
-    const officialModelId =
-      modelOverview.selection.source === 'official'
-        ? (selectedOfficial?.id ?? fallbackOfficial?.id ?? null)
-        : null;
-
-    if (modelOverview.selection.source === 'official' && !officialModelId) {
-      toast('error', '当前没有可用官方模型');
-      return;
-    }
-
-    setModelToolbarBusy('thinking');
-    try {
-      await modelSettingsApi.select({
-        source: modelOverview.selection.source,
-        official_model_id: officialModelId,
-        thinking_level: nextThinkingLevel,
-      });
-      await loadModelSettings();
-      void onboardingGuide.refresh();
-    } catch (error) {
-      toast(
-        'error',
-        error instanceof Error ? error.message : '切换思考等级失败',
+      const officialModels = getAvailableOfficialModels(modelOverview);
+      const nextModel = officialModels.find(
+        (model) => model.id === officialModelId,
       );
-    } finally {
-      setModelToolbarBusy('');
-    }
-  }, [
-    loadModelSettings,
-    modelOverview,
-    modelToolbarBusy,
-    onboardingGuide,
-    toast,
-  ]);
+      if (!nextModel) {
+        toast('error', '只能选择可用官方模型');
+        return;
+      }
+
+      if (
+        modelOverview.selection?.source === 'official' &&
+        modelOverview.selection.official_model_id === nextModel.id
+      ) {
+        return;
+      }
+
+      const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
+
+      setModelToolbarBusy('model');
+      try {
+        await modelSettingsApi.select({
+          source: 'official',
+          official_model_id: nextModel.id,
+          thinking_level: thinkingLevel,
+        });
+        await loadModelSettings();
+        void onboardingGuide.refresh();
+      } catch (error) {
+        toast('error', error instanceof Error ? error.message : '切换模型失败');
+      } finally {
+        setModelToolbarBusy('');
+      }
+    },
+    [
+      loadModelSettings,
+      modelOverview,
+      modelToolbarBusy,
+      onboardingGuide,
+      toast,
+    ],
+  );
+
+  const selectThinkingLevel = useCallback(
+    async (nextThinkingLevel: ModelThinkingLevel) => {
+      if (!modelOverview || modelToolbarBusy || !modelOverview.selection) {
+        return;
+      }
+
+      if (nextThinkingLevel === resolveToolbarThinkingLevel(modelOverview)) {
+        return;
+      }
+
+      const selectedOfficial = findSelectedOfficialModel(modelOverview);
+      const fallbackOfficial = getAvailableOfficialModels(modelOverview)[0];
+      const officialModelId =
+        modelOverview.selection.source === 'official'
+          ? (selectedOfficial?.id ?? fallbackOfficial?.id ?? null)
+          : null;
+
+      if (modelOverview.selection.source === 'official' && !officialModelId) {
+        toast('error', '当前没有可用官方模型');
+        return;
+      }
+
+      setModelToolbarBusy('thinking');
+      try {
+        await modelSettingsApi.select({
+          source: modelOverview.selection.source,
+          official_model_id: officialModelId,
+          thinking_level: nextThinkingLevel,
+        });
+        await loadModelSettings();
+        void onboardingGuide.refresh();
+      } catch (error) {
+        toast(
+          'error',
+          error instanceof Error ? error.message : '切换思考等级失败',
+        );
+      } finally {
+        setModelToolbarBusy('');
+      }
+    },
+    [
+      loadModelSettings,
+      modelOverview,
+      modelToolbarBusy,
+      onboardingGuide,
+      toast,
+    ],
+  );
 
   const openModelSettingsFromGuide = useCallback(() => {
     onboardingGuide.saveStep('model');
@@ -730,12 +736,7 @@ function AiChatWorkspaceContent() {
       setLockPaipanSkill(Boolean(skill));
       setPaipanSheetMode('current-session');
     },
-    [
-      authLoading,
-      continuationBlocked,
-      continuationBlockedMessage,
-      toast,
-    ],
+    [authLoading, continuationBlocked, continuationBlockedMessage, toast],
   );
 
   const handleClosePaipanSheet = useCallback(() => {
@@ -791,16 +792,15 @@ function AiChatWorkspaceContent() {
     chatMessages.sending ||
     continuationBlocked;
   const canSelectOfficialModel =
-    !modelSettingsError &&
-    availableOfficialModels.length > 0;
+    !modelSettingsError && availableOfficialModels.length > 0;
   const canSelectThinkingLevel =
     !modelSettingsError && Boolean(modelOverview?.selection);
   const modelSwitchLabel = modelSettingsLoading
     ? '加载中'
     : modelSettingsError
       ? '不可用'
-      : selectedOfficialModel?.display_name ??
-        (availableOfficialModels.length > 0 ? '官方模型' : '无官方');
+      : (selectedOfficialModel?.display_name ??
+        (availableOfficialModels.length > 0 ? '官方模型' : '无官方'));
   const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
   const thinkingSwitchLabel = THINKING_LEVEL_LABELS[thinkingLevel];
   const composer = (
@@ -837,11 +837,7 @@ function AiChatWorkspaceContent() {
         <ChatToolStrip
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          disabled={
-            authLoading ||
-            chatMessages.sending ||
-            continuationBlocked
-          }
+          disabled={authLoading || chatMessages.sending || continuationBlocked}
           onOpenAll={() => openCurrentSessionPaipan()}
           modelLabel={modelSwitchLabel}
           modelLoading={modelSettingsLoading}
@@ -890,7 +886,16 @@ function AiChatWorkspaceContent() {
     <HomeModeSelector
       loginRequired={!authLoading && !user}
       onLogin={() => requestLogin()}
+      onOpenSimple={() => setHomeMode('simple')}
       onOpenExpert={() => setHomeMode('expert')}
+    />
+  ) : !selectedSession && homeMode === 'simple' ? (
+    <SimpleModeWorkspace
+      disabled={authLoading || chatMessages.sending}
+      chatAvailable={chatAvailable}
+      onBack={() => setHomeMode('select')}
+      onAuthRequired={(draft) => requestLogin(draft)}
+      onStarted={(result) => void handleSimpleWorkflowStarted(result)}
     />
   ) : !selectedSession ? (
     <ExpertModeFrame onBack={() => setHomeMode('select')}>
@@ -899,13 +904,15 @@ function AiChatWorkspaceContent() {
   ) : (
     expertCenteredComposer
   );
-  const emptyStateTitle = showHomeModeSelector ? '' : '专家模式';
-  const emptyStateDescription = showHomeModeSelector
-    ? ''
-    : '直接输入问题，或使用手动排盘、自贴盘面和 Skill';
-  const emptyStateHint = showHomeModeSelector
-    ? ''
-    : undefined;
+  const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
+  const emptyStateTitle =
+    !selectedSession && homeMode !== 'expert' ? '' : '专家模式';
+  const emptyStateDescription =
+    !selectedSession && homeMode !== 'expert'
+      ? ''
+      : '直接输入问题，或使用手动排盘、自贴盘面和 Skill';
+  const emptyStateHint =
+    !selectedSession && homeMode !== 'expert' ? '' : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
@@ -926,7 +933,9 @@ function AiChatWorkspaceContent() {
           emptyStateDescription={emptyStateDescription}
           emptyStateHint={emptyStateHint}
           emptyStateMaxWidthClassName={
-            showHomeModeSelector ? 'max-w-3xl' : 'max-w-xl'
+            showHomeModeSelector || showSimpleModeWorkspace
+              ? 'max-w-3xl'
+              : 'max-w-xl'
           }
         />
         {!showCenteredComposer && replyStatus && (
@@ -1000,8 +1009,7 @@ function AiChatWorkspaceContent() {
         lockSkill={lockPaipanSkill}
         canCommit={
           chatAvailable &&
-          (paipanSheetMode !== 'current-session' ||
-            !continuationBlocked)
+          (paipanSheetMode !== 'current-session' || !continuationBlocked)
         }
         onClose={handleClosePaipanSheet}
         onAuthRequired={() => requestLogin(input)}
@@ -1043,10 +1051,12 @@ function AiChatWorkspaceContent() {
 function HomeModeSelector({
   loginRequired,
   onLogin,
+  onOpenSimple,
   onOpenExpert,
 }: {
   loginRequired: boolean;
   onLogin: () => void;
+  onOpenSimple: () => void;
   onOpenExpert: () => void;
 }) {
   return (
@@ -1055,9 +1065,7 @@ function HomeModeSelector({
         <h1 className="font-display text-[28px] font-semibold tracking-tight text-ink sm:text-[34px]">
           FateClaw · 守义
         </h1>
-        <p className="mt-1 text-[12px] text-muted">
-          AI 排盘与对话工作台
-        </p>
+        <p className="mt-1 text-[12px] text-muted">AI 排盘与对话工作台</p>
       </div>
 
       {loginRequired && (
@@ -1091,9 +1099,8 @@ function HomeModeSelector({
       <div className="grid gap-2.5 sm:grid-cols-2">
         <button
           type="button"
-          disabled
-          className="flex min-h-[164px] cursor-not-allowed flex-col justify-between rounded-2xl border border-hairline bg-surface-card/55 p-4 text-left opacity-75"
-          title="简易模式正在设计中"
+          onClick={onOpenSimple}
+          className="group flex min-h-[164px] flex-col justify-between rounded-2xl border border-hairline bg-surface-card/65 p-4 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
         >
           <span className="flex items-start justify-between gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-cream-strong text-muted">
@@ -1114,8 +1121,11 @@ function HomeModeSelector({
           </span>
 
           <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-muted">
-            <LockKeyhole size={13} />
-            暂未开放
+            进入简易模式
+            <ChevronRight
+              size={13}
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
           </span>
         </button>
 
@@ -1315,9 +1325,7 @@ function ChatToolStrip({
           title={modelTitle}
           disabled={modelDisabled}
           onClick={() =>
-            setOpenPicker((current) =>
-              current === 'model' ? null : 'model',
-            )
+            setOpenPicker((current) => (current === 'model' ? null : 'model'))
           }
           className={chipClass}
           aria-haspopup="menu"

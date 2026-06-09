@@ -28,6 +28,7 @@ import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
 
 import { normalizeHttpError } from './http-error.js';
 import { skillsRoutes } from './skills-routes.js';
+import { simpleWorkflowsRoutes } from './simple-workflows-routes.js';
 import { resolveStaticExportRequest } from './static-export.js';
 const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
@@ -75,7 +76,9 @@ function requestHostOrigin(request: FastifyRequest): string | null {
 
 function isFontAssetUrl(rawUrl: string): boolean {
   try {
-    return FONT_ASSET_URL_PATTERN.test(new URL(rawUrl, 'http://local').pathname);
+    return FONT_ASSET_URL_PATTERN.test(
+      new URL(rawUrl, 'http://local').pathname,
+    );
   } catch {
     return false;
   }
@@ -312,6 +315,9 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });
   await app.register(publicRoutes, { prefix: '/api/public' });
+  await app.register(simpleWorkflowsRoutes, {
+    prefix: '/api/simple-workflows',
+  });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 
   await app.register(billingRoutes, { prefix: '/api/billing' });
@@ -388,7 +394,10 @@ export async function createApiServer(): Promise<FastifyInstance> {
           return;
         }
 
-        response.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        response.setHeader(
+          'Cache-Control',
+          'public, max-age=0, must-revalidate',
+        );
       },
     });
 

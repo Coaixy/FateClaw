@@ -2,7 +2,7 @@ import type { DatabaseMigration } from '../types.js';
 import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0020-0028。
+ * 数据库迁移分段：0020-0029。
  */
 export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
@@ -266,7 +266,8 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
         constraintName:
           'chk_runtime_config_skill_bundle_total_chars_at_least_file_chars',
         tableName: 'runtime_config',
-        expression: 'skill_bundle_max_total_chars >= skill_bundle_max_file_chars',
+        expression:
+          'skill_bundle_max_total_chars >= skill_bundle_max_file_chars',
         cleanupSql: `UPDATE runtime_config
                      SET skill_bundle_max_total_chars = skill_bundle_max_file_chars
                      WHERE skill_bundle_max_total_chars < skill_bundle_max_file_chars`,
@@ -279,6 +280,121 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
                      SET skill_bundle_max_zip_bytes = LEAST(GREATEST(skill_bundle_max_zip_bytes, 1024), 104857600)
                      WHERE skill_bundle_max_zip_bytes < 1024 OR skill_bundle_max_zip_bytes > 104857600`,
       });
+    },
+  },
+  {
+    id: '0029_simple_workflow_presets',
+    description: '增加简易模式 Workflow preset 配置',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS simple_workflow_presets (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          name TEXT NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT true,
+          is_default BOOLEAN NOT NULL DEFAULT false,
+          entry_title TEXT NOT NULL,
+          entry_description TEXT NOT NULL DEFAULT '',
+          paipan_skill TEXT NOT NULL,
+          paipan_input_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+          model_policy JSONB NOT NULL DEFAULT '{"mode":"system-default"}'::jsonb,
+          skill_bundle_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+          prompt_template TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_simple_workflow_presets_kind_valid',
+        tableName: 'simple_workflow_presets',
+        expression: `kind IN ('divination', 'natal')`,
+        cleanupSql: `UPDATE simple_workflow_presets
+                     SET kind = 'divination'
+                     WHERE kind NOT IN ('divination', 'natal')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_simple_workflow_presets_paipan_skill_valid',
+        tableName: 'simple_workflow_presets',
+        expression: `paipan_skill IN ('iching-paipan', 'bazi-paipan')`,
+        cleanupSql: `UPDATE simple_workflow_presets
+                     SET paipan_skill = CASE
+                       WHEN kind = 'natal' THEN 'bazi-paipan'
+                       ELSE 'iching-paipan'
+                     END
+                     WHERE paipan_skill NOT IN ('iching-paipan', 'bazi-paipan')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_simple_workflow_presets_kind_skill_match',
+        tableName: 'simple_workflow_presets',
+        expression: `(kind = 'divination' AND paipan_skill = 'iching-paipan')
+                     OR (kind = 'natal' AND paipan_skill = 'bazi-paipan')`,
+        cleanupSql: `UPDATE simple_workflow_presets
+                     SET paipan_skill = CASE
+                       WHEN kind = 'natal' THEN 'bazi-paipan'
+                       ELSE 'iching-paipan'
+                     END`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_simple_workflow_presets_model_policy_object',
+        tableName: 'simple_workflow_presets',
+        expression: `jsonb_typeof(model_policy) = 'object'
+                     AND model_policy ? 'mode'
+                     AND model_policy->>'mode' IN ('system-default', 'user-current', 'fixed')`,
+        cleanupSql: `UPDATE simple_workflow_presets
+                     SET model_policy = '{"mode":"system-default"}'::jsonb
+                     WHERE jsonb_typeof(model_policy) <> 'object'
+                        OR NOT (model_policy ? 'mode')
+                        OR model_policy->>'mode' NOT IN ('system-default', 'user-current', 'fixed')`,
+      });
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_simple_workflow_presets_kind_default
+          ON simple_workflow_presets(kind)
+          WHERE enabled = true AND is_default = true
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_simple_workflow_presets_kind_sort
+          ON simple_workflow_presets(kind, sort_order, id)
+      `);
+      await client.query(
+        `INSERT INTO simple_workflow_presets (
+           id, kind, name, enabled, is_default, entry_title, entry_description,
+           paipan_skill, paipan_input_defaults, model_policy, skill_bundle_ids,
+           prompt_template, sort_order
+         )
+         VALUES
+           (
+             'simple-divination-default',
+             'divination',
+             '默认占卜问事',
+             true,
+             true,
+             '占卜问事',
+             '适合近期选择、关系走向、工作决策和单件事情。',
+             'iching-paipan',
+             '{"method":"dayan"}'::jsonb,
+             '{"mode":"user-current","thinkingLevel":"medium"}'::jsonb,
+             ARRAY[]::TEXT[],
+             '结合用户问题、背景补充和六爻盘面，用新手能理解的方式给出判断。',
+             10
+           ),
+           (
+             'simple-natal-default',
+             'natal',
+             '默认命理分析',
+             true,
+             true,
+             '命理分析',
+             '适合长期性格、事业方向、关系模式和人生阶段。',
+             'bazi-paipan',
+             '{"include":["bazi","fortune","pattern"]}'::jsonb,
+             '{"mode":"system-default","thinkingLevel":"medium"}'::jsonb,
+             ARRAY[]::TEXT[],
+             '结合用户问题方向和八字盘面，给出结构化命理分析。',
+             20
+           )
+         ON CONFLICT (id) DO NOTHING`,
+      );
     },
   },
 ];

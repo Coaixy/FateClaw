@@ -309,6 +309,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       history: [],
       sessionId: 'session-1',
       llmRuntime: effectiveRuntime,
+      authorizedSkillBundleIds: ['bundle-bazi'],
       waitForResponse: false,
     });
 
@@ -319,6 +320,10 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     });
     expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
     expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
+    expect(mockLpush).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
+    );
     expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
       expect.objectContaining({
         localAgentLeaseAccountId: 'account-1',

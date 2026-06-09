@@ -48,6 +48,16 @@ interface RequestKnowledgeEntry {
   description: string;
 }
 
+function normalizeAuthorizedSkillBundleIds(input: ContainerInput): string[] {
+  return Array.from(
+    new Set(
+      (input.authorizedSkillBundleIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  );
+}
+
 async function loadRequestScopedSkills(
   options: CreatePiResourceLoaderOptions,
 ): Promise<{
@@ -55,8 +65,16 @@ async function loadRequestScopedSkills(
   diagnostics: ResourceDiagnostic[];
   privateKnowledgeEntries: RequestKnowledgeEntry[];
 }> {
+  const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
+    options.containerInput,
+  );
   const effectivePrivateKnowledge = options.userId
-    ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
+    ? authorizedSkillBundleIds.length > 0
+      ? await options.deps.skillCatalog.listEffectiveUserSkills(
+          options.userId,
+          { skillBundleIds: authorizedSkillBundleIds },
+        )
+      : await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
     : [];
   const privateKnowledgeEntries = effectivePrivateKnowledge
     .filter((skill) => getTextSkillBundleSkillFile(skill.bundle_uri))
@@ -85,6 +103,7 @@ async function loadRequestScopedSkills(
     {
       type: 'pi_resource_loader_prepared',
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
+      authorizedSkillBundleCount: authorizedSkillBundleIds.length,
       isolation: 'request_scoped',
     },
     options.requestScope,

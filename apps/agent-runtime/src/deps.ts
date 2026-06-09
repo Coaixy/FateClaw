@@ -33,7 +33,10 @@ export interface SoulStore {
  * 注意：这里只暴露请求级授权资源，不代表全局本地 Skill 可见。
  */
 export interface SkillCatalog {
-  listEffectiveUserSkills(userId: string): Promise<EffectiveUserSkill[]>;
+  listEffectiveUserSkills(
+    userId: string,
+    options?: { skillBundleIds?: string[] },
+  ): Promise<EffectiveUserSkill[]>;
 }
 
 /**
@@ -79,8 +82,8 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   },
 
   skillCatalog: {
-    listEffectiveUserSkills(userId) {
-      return queryEffectiveUserSkills(userId);
+    listEffectiveUserSkills(userId, options) {
+      return queryEffectiveUserSkills(userId, options);
     },
   },
 

@@ -17,6 +17,7 @@ import {
   Bot,
   Landmark,
   WalletCards,
+  Workflow,
   LogOut,
   Menu,
   X,
@@ -43,6 +44,12 @@ const navItems = [
     roles: ['owner', 'user_manager'],
   },
   { href: '/admin/skills', label: '技能', icon: Puzzle, roles: ['owner'] },
+  {
+    href: '/admin/workflows',
+    label: 'Workflow',
+    icon: Workflow,
+    roles: ['owner'],
+  },
   { href: '/admin/logs', label: '日志', icon: ScrollText, roles: ['owner'] },
   { href: '/admin/about', label: '关于收支', icon: Landmark, roles: ['owner'] },
   {
@@ -108,7 +115,9 @@ export function AdminSidebar({ role }: { role: AdminRole }) {
       >
         {/* Logo */}
         <div className="flex items-center px-4 h-14 border-b border-hairline">
-          <span className="text-sm font-semibold tracking-tight">命枢 Admin</span>
+          <span className="text-sm font-semibold tracking-tight">
+            命枢 Admin
+          </span>
         </div>
 
         {/* Nav */}

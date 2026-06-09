@@ -67,7 +67,10 @@ import {
   type SessionBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './structured-input.js';
-import { resolveUserLlmRuntime } from '../system/system-config.js';
+import {
+  resolveUserLlmRuntime,
+  type EffectiveLlmRuntimeConfig,
+} from '../system/system-config.js';
 import {
   getWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -111,6 +114,12 @@ export interface ChatSessionTurnSourceMetadata {
 export interface OwnedChatSessionTurnOptions {
   userMessageId?: string;
   sourceMetadata?: ChatSessionTurnSourceMetadata;
+  /** 简易模式等内部 workflow 可传入本轮指定模型运行时。 */
+  llmRuntimeOverride?: EffectiveLlmRuntimeConfig;
+  /** 内部 workflow 可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
+  runtimeUserMessageOverride?: string;
+  /** 本轮 AI 请求明确授权可读取的 Skill Bundle；为空时保持用户全部有效 Skill 可见。 */
+  authorizedSkillBundleIds?: string[];
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -134,6 +143,7 @@ interface PreparedOwnedChatSessionTurn {
   llmRuntime: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
   structured: StructuredInput;
   sessionBoardContexts: SessionBoardContextDto[];
+  authorizedSkillBundleIds: string[];
   sessionTitle: string;
 }
 
@@ -147,6 +157,12 @@ function isPaymentRequiredError(errorMessage: string): boolean {
 
 function createAiChatRequestId(): string {
   return `aichat-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+}
+
+function normalizeAuthorizedSkillBundleIds(ids?: string[]): string[] {
+  return Array.from(
+    new Set((ids ?? []).map((id) => id.trim()).filter((id) => id.length > 0)),
+  );
 }
 
 function generateChatSessionShareToken(): string {
@@ -684,8 +700,14 @@ export async function sendOwnedChatSessionMessage(
   userId: string,
   sessionId: string,
   input: NormalizedChatSessionMessageInput,
+  options: OwnedChatSessionTurnOptions = {},
 ): Promise<ServiceResult<ChatSessionSendResponseDto>> {
-  const prepared = await prepareOwnedChatSessionTurn(userId, sessionId, input);
+  const prepared = await prepareOwnedChatSessionTurn(
+    userId,
+    sessionId,
+    input,
+    options,
+  );
   if (!prepared.ok) {
     return prepared;
   }
@@ -797,7 +819,11 @@ async function prepareOwnedChatSessionTurn(
   }
 
   try {
-    const llmRuntime = await resolveUserLlmRuntime(userId);
+    const llmRuntime =
+      options.llmRuntimeOverride ?? (await resolveUserLlmRuntime(userId));
+    const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
+      options.authorizedSkillBundleIds,
+    );
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -839,11 +865,14 @@ async function prepareOwnedChatSessionTurn(
             }
           : undefined,
     });
-    const runtimeUserMessage = buildRuntimeUserMessageForBoardFirstQuestion({
-      input,
-      previousMessages,
-      sessionBoardContexts,
-    });
+    const defaultRuntimeUserMessage =
+      buildRuntimeUserMessageForBoardFirstQuestion({
+        input,
+        previousMessages,
+        sessionBoardContexts,
+      });
+    const runtimeUserMessage =
+      options.runtimeUserMessageOverride?.trim() || defaultRuntimeUserMessage;
 
     const structured = await buildStructuredInputForSession(
       {
@@ -867,6 +896,7 @@ async function prepareOwnedChatSessionTurn(
       llmRuntime,
       structured,
       sessionBoardContexts,
+      authorizedSkillBundleIds,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -906,6 +936,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       userMessageId: msgId,
       requestId,
       llmRuntime,
+      authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
       waitForResponse: false,
     });
 
@@ -960,6 +991,7 @@ async function completeOwnedChatSessionTurn(
       userMessageId: msgId,
       requestId,
       llmRuntime,
+      authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
     });
 
     if (output.status === 'error') {

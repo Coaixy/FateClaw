@@ -28,21 +28,21 @@ const containerInput: ContainerInput = {
   history: [],
 };
 
-function createTextSkillBundleFixture(): string {
+function createTextSkillBundleFixture(dirName = 'private-bazi'): string {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'fateclaw-private-skill-'),
   );
-  const skillDir = path.join(root, 'private-bazi');
+  const skillDir = path.join(root, dirName);
   fs.mkdirSync(path.join(skillDir, 'docs'), { recursive: true });
   fs.writeFileSync(
     path.join(skillDir, 'SKILL.md'),
     [
       '---',
-      'name: private-bazi',
-      'description: 私有八字入口',
+      `name: ${dirName}`,
+      `description: ${dirName} 入口`,
       '---',
       '',
-      '# 私有八字知识',
+      `# ${dirName} 知识`,
     ].join('\n'),
   );
   fs.writeFileSync(
@@ -137,6 +137,67 @@ describe('createPiResourceLoader', () => {
     ).toBe(true);
     expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
       'user-1',
+    );
+  });
+
+  it('passes authorized skill bundle ids into request-scoped private knowledge loading', async () => {
+    const baziSkill: EffectiveUserSkill = {
+      id: 'private-bazi-id',
+      dir: 'private-bazi',
+      name: '私有八字知识',
+      description: '私有八字入口',
+      bundle_uri: createTextSkillBundleFixture('private-bazi'),
+      checksum: null,
+      install_status: 'installed',
+      visibility: 'private',
+      source: 'self',
+      source_bundle_ids: ['bundle-bazi'],
+    };
+    const liuyaoSkill: EffectiveUserSkill = {
+      id: 'private-liuyao-id',
+      dir: 'private-liuyao',
+      name: '私有六爻知识',
+      description: '私有六爻入口',
+      bundle_uri: createTextSkillBundleFixture('private-liuyao'),
+      checksum: null,
+      install_status: 'installed',
+      visibility: 'private',
+      source: 'self',
+      source_bundle_ids: ['bundle-liuyao'],
+    };
+    const deps: AgentRuntimeDeps = {
+      soulStore: {
+        read: vi.fn(),
+        canEdit: vi.fn(async () => true),
+        update: vi.fn(),
+      },
+      skillCatalog: {
+        listEffectiveUserSkills: vi.fn(async (_userId, options) =>
+          [baziSkill, liuyaoSkill].filter((skill) =>
+            skill.source_bundle_ids?.some((bundleId) =>
+              options?.skillBundleIds?.includes(bundleId),
+            ),
+          ),
+        ),
+      },
+    };
+
+    const loader = await createPiResourceLoader({
+      deps,
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput: {
+        ...containerInput,
+        authorizedSkillBundleIds: ['bundle-bazi'],
+      },
+    });
+
+    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
+      'private-bazi',
+    ]);
+    expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
+      'user-1',
+      { skillBundleIds: ['bundle-bazi'] },
     );
   });
 });

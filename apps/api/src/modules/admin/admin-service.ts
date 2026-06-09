@@ -40,8 +40,10 @@ import {
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
   grantBonusBalance,
+  listAdminSkillBundleSummaries,
   listBillingRequestReservations,
   listPublicFinancialLedgerEntries,
+  listSimpleWorkflowPresets,
   markChatSessionPiSessionArchived,
   reconcileStaleBillingReservations,
   resetPiSessionCleanupCursor,
@@ -51,6 +53,7 @@ import {
   updateDailySignInConfig,
   updateMembershipConfig,
   updatePublicFinancialLedgerEntry,
+  updateSimpleWorkflowPreset,
 } from '../../infrastructure/db.js';
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
 import {
@@ -113,8 +116,10 @@ export {
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
   grantBonusBalance,
+  listAdminSkillBundleSummaries,
   listBillingRequestReservations,
   listPublicFinancialLedgerEntries,
+  listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
   removeOfficialModel,
   setSkillGlobalEnabled,
@@ -124,6 +129,7 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updatePublicFinancialLedgerEntry,
+  updateSimpleWorkflowPreset,
 };
 
 /** 管理后台软妹币奖励配置视图。 */
@@ -387,9 +393,7 @@ async function resolvePiSessionCleanupPayload(input: {
   const existingArchive = await getChatSessionPiSessionArchive(input.sessionId);
   if (
     existingArchive &&
-    hasUsablePiSessionArchivePayload(
-      existingArchive.pi_session_archive_payload,
-    )
+    hasUsablePiSessionArchivePayload(existingArchive.pi_session_archive_payload)
   ) {
     return {
       payload: existingArchive.pi_session_archive_payload,
@@ -549,9 +553,9 @@ function sampleEntryNames(
   entries: Array<PiSessionOrphanFileEntry | string>,
   sampleLimit: number,
 ): string[] {
-  return entries.slice(0, sampleLimit).map((entry) =>
-    typeof entry === 'string' ? entry : entry.name,
-  );
+  return entries
+    .slice(0, sampleLimit)
+    .map((entry) => (typeof entry === 'string' ? entry : entry.name));
 }
 
 function isOlderThanGraceDays(
@@ -614,9 +618,7 @@ export async function scanPiSessionOrphanFilesForAdmin(input?: {
       skippedUnmappedSessionFiles.push(candidate);
       continue;
     }
-    if (
-      !isOlderThanGraceDays(candidate, nowMs, policy.orphanGraceDays)
-    ) {
+    if (!isOlderThanGraceDays(candidate, nowMs, policy.orphanGraceDays)) {
       skippedRecentFiles.push(candidate);
       continue;
     }
@@ -672,14 +674,8 @@ export async function scanPiSessionOrphanFilesForAdmin(input?: {
       ),
       unknown_files: sampleEntryNames(scan.unknown_files, sampleLimit),
       unsafe_path_files: sampleEntryNames(unsafeFiles, sampleLimit),
-      safe_deletable_files: sampleEntryNames(
-        safeDeletableFiles,
-        sampleLimit,
-      ),
-      skipped_recent_files: sampleEntryNames(
-        skippedRecentFiles,
-        sampleLimit,
-      ),
+      safe_deletable_files: sampleEntryNames(safeDeletableFiles, sampleLimit),
+      skipped_recent_files: sampleEntryNames(skippedRecentFiles, sampleLimit),
       skipped_unarchived_files: sampleEntryNames(
         skippedUnarchivedFiles,
         sampleLimit,

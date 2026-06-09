@@ -1,3 +1,8 @@
+import type {
+  SimpleModelPolicyDto,
+  SimpleWorkflowPresetDto,
+} from '@fateclaw/contracts/chat';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 const ADMIN_KEY_STORAGE_KEY = 'admin_key';
 const DEFAULT_SERVER_ERROR_MESSAGE = '服务暂时不可用，请稍后重试';
@@ -487,6 +492,42 @@ export interface AdminRuntimeConfig {
   updated_at: string;
 }
 
+export type AdminSimpleWorkflowPreset = SimpleWorkflowPresetDto;
+
+export interface AdminSimpleWorkflowPresetListResponse {
+  presets: AdminSimpleWorkflowPreset[];
+}
+
+export interface AdminSimpleWorkflowPresetUpdate {
+  name?: string;
+  enabled?: boolean;
+  is_default?: boolean;
+  entry_title?: string;
+  entry_description?: string;
+  paipan_input_defaults?: Record<string, unknown>;
+  model_policy?: SimpleModelPolicyDto;
+  skill_bundle_ids?: string[];
+  prompt_template?: string;
+  sort_order?: number;
+}
+
+export interface AdminWorkflowSkillBundleSummary {
+  id: string;
+  user_id: string;
+  owner_phone: string | null;
+  name: string;
+  description: string;
+  skill_ids: string[];
+  skill_names: string[];
+  visibility: 'private' | 'link_shared' | 'shared';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminSimpleWorkflowResourcesResponse {
+  skill_bundles: AdminWorkflowSkillBundleSummary[];
+}
+
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -601,6 +642,25 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  simpleWorkflows: () =>
+    adminRequest<AdminSimpleWorkflowPresetListResponse>(
+      '/api/admin/simple-workflows',
+    ),
+  simpleWorkflowResources: () =>
+    adminRequest<AdminSimpleWorkflowResourcesResponse>(
+      '/api/admin/simple-workflows/resources',
+    ),
+  updateSimpleWorkflowPreset: (
+    id: string,
+    data: AdminSimpleWorkflowPresetUpdate,
+  ) =>
+    adminRequest<AdminSimpleWorkflowPreset>(
+      `/api/admin/simple-workflows/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    ),
   createOfficialModel: (data: {
     model_key: string;
     pi_api: AdminModelPiApi;

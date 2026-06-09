@@ -783,6 +783,7 @@ export function submitAiChatInboxRequest(input: {
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
+  authorizedSkillBundleIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
   waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
@@ -893,6 +894,7 @@ export function submitAiChatInboxRequest(input: {
           userName: input.userName,
           assistantName: input.assistantName,
           personaPrompt: input.personaPrompt,
+          authorizedSkillBundleIds: input.authorizedSkillBundleIds,
           llmRuntime,
           timestamp: new Date().toISOString(),
           outboxQueue: aiChatOutboxQueue, // 指定响应队列

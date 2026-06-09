@@ -58,31 +58,85 @@ export interface EffectiveUserSkill {
   install_status: 'installed' | 'missing' | 'error';
   visibility: 'private' | 'link_shared' | 'shared';
   source: 'self' | 'subscribed';
+  source_bundle_ids?: string[];
 }
 
 /**
  * 查询用户的有效自定义 Skill（自有 + 订阅且启用的）。
+ *
+ * @param userId 平台用户 ID。
+ * @param options.skillBundleIds 可选的请求级 Skill Bundle 白名单；为空时返回全部有效 Skill。
+ * @returns 当前用户在本轮请求中可见的自定义 Skill。
  */
 export async function queryEffectiveUserSkills(
   userId: string,
+  options: { skillBundleIds?: string[] } = {},
 ): Promise<EffectiveUserSkill[]> {
   if (!userId) return [];
+  const skillBundleIds = Array.from(
+    new Set(
+      (options.skillBundleIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  );
+  const skillBundleFilter = skillBundleIds.length > 0 ? skillBundleIds : null;
   const { rows } = await getPool().query(
     `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'self' as source
+            'self' as source,
+            ARRAY(
+              SELECT DISTINCT sbi.bundle_id
+              FROM skill_bundle_items sbi
+              JOIN skill_bundles b ON b.id = sbi.bundle_id
+              WHERE sbi.skill_id = s.id
+                AND b.user_id = $1
+                AND b.deleted_at IS NULL
+                AND ($2::text[] IS NULL OR sbi.bundle_id = ANY($2::text[]))
+              ORDER BY sbi.bundle_id
+            ) as source_bundle_ids
      FROM user_custom_skills s
      WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
+       AND (
+         $2::text[] IS NULL OR EXISTS (
+           SELECT 1
+           FROM skill_bundle_items sbi
+           JOIN skill_bundles b ON b.id = sbi.bundle_id
+           WHERE sbi.skill_id = s.id
+             AND b.user_id = $1
+             AND b.deleted_at IS NULL
+             AND sbi.bundle_id = ANY($2::text[])
+         )
+       )
      UNION ALL
     SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'subscribed' as source
+            'subscribed' as source,
+            ARRAY(
+              SELECT DISTINCT src.bundle_id
+              FROM user_skill_subscription_bundle_sources src
+              JOIN skill_bundles b ON b.id = src.bundle_id
+              WHERE src.subscription_id = sub.id
+                AND b.deleted_at IS NULL
+                AND ($2::text[] IS NULL OR src.bundle_id = ANY($2::text[]))
+              ORDER BY src.bundle_id
+            ) as source_bundle_ids
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'`,
-    [userId],
+       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
+       AND (
+         $2::text[] IS NULL OR EXISTS (
+           SELECT 1
+           FROM user_skill_subscription_bundle_sources src
+           JOIN skill_bundles b ON b.id = src.bundle_id
+           WHERE src.subscription_id = sub.id
+             AND b.deleted_at IS NULL
+             AND src.bundle_id = ANY($2::text[])
+         )
+       )`,
+    [userId, skillBundleFilter],
   );
   return rows as EffectiveUserSkill[];
 }

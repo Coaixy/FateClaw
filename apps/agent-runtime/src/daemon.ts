@@ -194,6 +194,7 @@ async function processInboxMessage(
         userName: request.userName,
         assistantName: request.assistantName,
         personaPrompt: request.personaPrompt,
+        authorizedSkillBundleIds: request.authorizedSkillBundleIds,
         outboxQueue: request.outboxQueue,
       },
       requestScope,

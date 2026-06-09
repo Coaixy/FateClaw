@@ -48,9 +48,11 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   grantBonusBalance: vi.fn(),
   hasOfficialSkill: vi.fn(),
   listAdminGlobalSkills: vi.fn(),
+  listAdminSkillBundleSummaries: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
   listPublicFinancialLedgerEntries: vi.fn(),
+  listSimpleWorkflowPresets: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
   scanPiSessionOrphanFilesForAdmin: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock('../../modules/admin/admin-service.js', () => ({
   updateOfficialModel: vi.fn(),
   updatePublicFinancialLedgerEntry: vi.fn(),
   updateRuntimeSettings: vi.fn(),
+  updateSimpleWorkflowPreset: vi.fn(),
 }));
 
 vi.mock('./payment-callback-urls.js', () => ({
@@ -80,8 +83,10 @@ import {
   getAdminGlobalStats,
   grantBonusBalance,
   getMessagesForAdmin,
+  listAdminSkillBundleSummaries,
   listAdminUsersWithStats,
   scanPiSessionOrphanFilesForAdmin,
+  updateSimpleWorkflowPreset,
   updateRuntimeSettings,
 } from '../../modules/admin/admin-service.js';
 
@@ -101,6 +106,7 @@ describe('adminRoutes authentication throttling', () => {
       total: 0,
     } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
+    vi.mocked(listAdminSkillBundleSummaries).mockResolvedValue([]);
 
     app = Fastify({ logger: false });
     await app.register(adminRoutes);
@@ -547,5 +553,92 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(response.statusCode).toBe(400);
     expect(scanPiSessionOrphanFilesForAdmin).not.toHaveBeenCalled();
+  });
+
+  it('returns simple workflow selectable resources for owner admins', async () => {
+    vi.mocked(listAdminSkillBundleSummaries).mockResolvedValueOnce([
+      {
+        id: 'bundle-1',
+        user_id: 'user-1',
+        owner_phone: '13800000000',
+        name: '新手入门套件',
+        description: '六爻基础',
+        skill_ids: ['skill-1'],
+        skill_names: ['六爻入门'],
+        visibility: 'private',
+        created_at: '2026-06-09T00:00:00.000Z',
+        updated_at: '2026-06-09T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/simple-workflows/resources',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      skill_bundles: [
+        expect.objectContaining({
+          id: 'bundle-1',
+          name: '新手入门套件',
+          skill_names: ['六爻入门'],
+        }),
+      ],
+    });
+  });
+
+  it('accepts xhigh thinking level for simple workflow model policy', async () => {
+    vi.mocked(updateSimpleWorkflowPreset).mockResolvedValueOnce({
+      id: 'simple-divination-default',
+      kind: 'divination',
+      name: '默认占卜问事',
+      enabled: true,
+      is_default: true,
+      entry_title: '占卜问事',
+      entry_description: '',
+      paipan_skill: 'iching-paipan',
+      paipan_input_defaults: { method: 'dayan' },
+      model_policy: {
+        mode: 'fixed',
+        fixedModelId: 'model-1',
+        thinkingLevel: 'xhigh',
+      },
+      skill_bundle_ids: [],
+      prompt_template: '模板',
+      sort_order: 10,
+      created_at: '2026-06-09T00:00:00.000Z',
+      updated_at: '2026-06-09T00:00:00.000Z',
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/simple-workflows/simple-divination-default',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        model_policy: {
+          mode: 'fixed',
+          fixedModelId: 'model-1',
+          thinkingLevel: 'xhigh',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(updateSimpleWorkflowPreset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'simple-divination-default',
+        modelPolicy: {
+          mode: 'fixed',
+          fixedModelId: 'model-1',
+          thinkingLevel: 'xhigh',
+        },
+      }),
+    );
   });
 });

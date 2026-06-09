@@ -161,6 +161,13 @@ describe('runDatabaseMigrations', () => {
         '增加用户 Skill Bundle 文件限制后台配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0029_simple_workflow_presets',
+        '增加简易模式 Workflow preset 配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -219,6 +226,11 @@ describe('runDatabaseMigrations', () => {
       true,
     );
     expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS simple_workflow_presets'),
+      ),
+    ).toBe(true);
+    expect(
       calls.some((call) => call.sql.includes('skill_bundle_max_files')),
     ).toBe(true);
     expect(
@@ -275,6 +287,7 @@ describe('runDatabaseMigrations', () => {
       '0026_pi_session_health_runtime_config',
       '0027_user_auth_token_version',
       '0028_skill_bundle_runtime_limits',
+      '0029_simple_workflow_presets',
     ]);
 
     await runDatabaseMigrations(client as never);
