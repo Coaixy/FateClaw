@@ -2,7 +2,9 @@ import type { FastifyRequest } from 'fastify';
 
 import {
   PAYMENT_CALLBACK_ALLOWED_HOSTS,
+  PUBLIC_API_BASE_URL,
   PUBLIC_BASE_URL,
+  PUBLIC_WEB_BASE_URL,
 } from '../../infrastructure/config.js';
 
 const RECHARGE_NOTIFY_PATH = '/api/billing/recharge/notify';
@@ -73,7 +75,7 @@ function isAllowedCallbackHost(host: string): boolean {
 
 function isTrustedCallbackHost(host: string): boolean {
   if (isAllowedCallbackHost(host)) return true;
-  // 本机 Host 只作为开发/测试兜底；线上必须配置 PUBLIC_BASE_URL 或白名单。
+  // 本机 Host 只作为开发/测试兜底；线上必须配置公开 Base URL 或白名单。
   return isLocalDevelopmentEnvironment() && isLocalhostHost(host);
 }
 
@@ -105,19 +107,22 @@ function buildAbsoluteUrl(origin: string, path: string): string {
 /**
  * 根据部署公开地址或当前请求域名生成充值回调地址。
  *
- * PUBLIC_BASE_URL 用于生产反代或多域名部署的显式覆盖；未配置时只接受
- * 白名单 Host 或开发本机 Host，避免攻击者通过 Host 头污染平台回调地址。
+ * 三站点部署时，notify_url 应回到 API 站点，return_url 应回到 www 站点。
+ * 旧 PUBLIC_BASE_URL 仍作为兼容兜底；未配置时只接受白名单 Host 或开发本机 Host，
+ * 避免攻击者通过 Host 头污染平台回调地址。
  */
 export function resolvePaymentCallbackUrls(
   request: FastifyRequest,
 ): PaymentCallbackUrls {
-  const origin = PUBLIC_BASE_URL || resolveRequestOrigin(request);
+  const fallbackOrigin = PUBLIC_BASE_URL || resolveRequestOrigin(request);
+  const notifyOrigin = PUBLIC_API_BASE_URL || fallbackOrigin;
+  const returnOrigin = PUBLIC_WEB_BASE_URL || fallbackOrigin;
   return {
-    notifyUrl: origin
-      ? buildAbsoluteUrl(origin, RECHARGE_NOTIFY_PATH)
+    notifyUrl: notifyOrigin
+      ? buildAbsoluteUrl(notifyOrigin, RECHARGE_NOTIFY_PATH)
       : RECHARGE_NOTIFY_PATH,
-    returnUrl: origin
-      ? buildAbsoluteUrl(origin, RECHARGE_RETURN_PATH)
+    returnUrl: returnOrigin
+      ? buildAbsoluteUrl(returnOrigin, RECHARGE_RETURN_PATH)
       : RECHARGE_RETURN_PATH,
   };
 }

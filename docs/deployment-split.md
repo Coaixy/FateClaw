@@ -13,10 +13,16 @@ API 生产环境必须把两个前端来源都加入 `ALLOWED_ORIGINS`：
 
 ```dotenv
 ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
+PUBLIC_API_BASE_URL=https://api.example.com
+PUBLIC_WEB_BASE_URL=https://www.example.com
 ```
 
 admin 是静态站点，不能替代服务端鉴权；生产环境仍建议在反向代理层为
 `admin.example.com` 增加 IP 白名单、VPN 或额外认证。
+
+支付回调也按三站点拆分：易支付异步通知 `notify_url` 指向
+`https://api.example.com/api/billing/recharge/notify`，用户支付完成后的
+`return_url` 指向 `https://www.example.com/wallet`。
 
 ## 打包
 
@@ -81,6 +87,8 @@ LOCAL_AGENT_ENTRY_MODE=dist
 LOG_PRETTY=0
 LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB=128
 ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
+PUBLIC_API_BASE_URL=https://api.example.com
+PUBLIC_WEB_BASE_URL=https://www.example.com
 ```
 
 Agent 并发槽位、常驻 runtime 上限和空闲回收时间在管理后台写入数据库。

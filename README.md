@@ -202,6 +202,9 @@ MANAGER_KEY=replace-with-strong-random-admin-key-at-least-32-chars
 # 可选：仅开放用户和消息模块的受限后台密钥
 USER_MANAGER_KEY=replace-with-strong-random-user-manager-key-at-least-32-chars
 ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3002
+# 生产三站点部署时填写，用于生成支付 notify_url / return_url
+# PUBLIC_API_BASE_URL=https://api.example.com
+# PUBLIC_WEB_BASE_URL=https://www.example.com
 ```
 
 说明：

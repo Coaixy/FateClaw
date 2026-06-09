@@ -5,6 +5,8 @@ const ORIGINAL_ENV = {
   NODE_ENV: process.env.NODE_ENV,
   PAYMENT_CALLBACK_ALLOWED_HOSTS: process.env.PAYMENT_CALLBACK_ALLOWED_HOSTS,
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
+  PUBLIC_API_BASE_URL: process.env.PUBLIC_API_BASE_URL,
+  PUBLIC_WEB_BASE_URL: process.env.PUBLIC_WEB_BASE_URL,
 };
 
 function restoreEnv(): void {
@@ -29,15 +31,27 @@ function requestWithHeaders(
 async function loadResolver(env: {
   allowedHosts?: string;
   publicBaseUrl?: string;
+  publicApiBaseUrl?: string;
+  publicWebBaseUrl?: string;
 }) {
   vi.resetModules();
   restoreEnv();
   process.env.NODE_ENV = 'production';
+  delete process.env.PAYMENT_CALLBACK_ALLOWED_HOSTS;
+  process.env.PUBLIC_BASE_URL = 'invalid-url';
+  process.env.PUBLIC_API_BASE_URL = 'invalid-url';
+  process.env.PUBLIC_WEB_BASE_URL = 'invalid-url';
   if (env.allowedHosts !== undefined) {
     process.env.PAYMENT_CALLBACK_ALLOWED_HOSTS = env.allowedHosts;
   }
   if (env.publicBaseUrl !== undefined) {
     process.env.PUBLIC_BASE_URL = env.publicBaseUrl;
+  }
+  if (env.publicApiBaseUrl !== undefined) {
+    process.env.PUBLIC_API_BASE_URL = env.publicApiBaseUrl;
+  }
+  if (env.publicWebBaseUrl !== undefined) {
+    process.env.PUBLIC_WEB_BASE_URL = env.publicWebBaseUrl;
   }
   return import('../../../src/interfaces/http/payment-callback-urls.js');
 }
@@ -63,6 +77,25 @@ describe('resolvePaymentCallbackUrls', () => {
     expect(urls).toEqual({
       notifyUrl: 'https://app.example.test/api/billing/recharge/notify',
       returnUrl: 'https://app.example.test/wallet',
+    });
+  });
+
+  it('uses separate API and web origins for three-site deployment', async () => {
+    const { resolvePaymentCallbackUrls } = await loadResolver({
+      publicApiBaseUrl: 'https://api.example.test',
+      publicWebBaseUrl: 'https://www.example.test',
+    });
+
+    const urls = resolvePaymentCallbackUrls(
+      requestWithHeaders({
+        host: 'admin.example.test',
+        'x-forwarded-host': 'attacker.example.test',
+      }),
+    );
+
+    expect(urls).toEqual({
+      notifyUrl: 'https://api.example.test/api/billing/recharge/notify',
+      returnUrl: 'https://www.example.test/wallet',
     });
   });
 

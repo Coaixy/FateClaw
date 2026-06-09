@@ -125,7 +125,7 @@ export function RechargeConfigPanel({
             充值配置
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            易支付密钥保存在数据库，回调地址由服务端按当前站点生成。
+            易支付密钥保存在数据库，通知地址按 API 公开地址生成，跳转地址按 www 公开地址生成。
           </div>
         </div>
         <label className="inline-flex items-center gap-2 text-[13px] text-muted">

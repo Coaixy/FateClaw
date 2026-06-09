@@ -672,7 +672,9 @@ Authorization: Bearer <token>
 
 充值开关、金额范围、易支付网关、商户号和密钥保存在数据库表
 `recharge_payment_config`。异步通知地址和支付完成返回地址由服务端按
-`PUBLIC_BASE_URL` 或当前请求域名生成，下单时自动传给易支付。
+`PUBLIC_API_BASE_URL` / `PUBLIC_WEB_BASE_URL`、兼容变量 `PUBLIC_BASE_URL`
+或当前请求域名生成，下单时自动传给易支付。三站点部署时，`notify_url`
+应指向 API 站点，`return_url` 应指向 www 站点。
 
 ---
 
@@ -899,6 +901,8 @@ Authorization: Bearer <token>
 | `API_PORT`                  | 3000                    | API 监听端口                       |
 | `API_HOST`                  | 0.0.0.0                 | API 监听地址                       |
 | `PUBLIC_BASE_URL`           | -                       | 公开访问地址，用于生成支付回调 URL |
+| `PUBLIC_API_BASE_URL`       | -                       | API 公开访问地址，用于生成支付异步通知 `notify_url` |
+| `PUBLIC_WEB_BASE_URL`       | -                       | www 公开访问地址，用于生成支付完成跳转 `return_url` |
 | `DATABASE_URL`              | -                       | PostgreSQL 连接地址                |
 | `REDIS_URL`                 | -                       | Redis 连接地址                     |
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |

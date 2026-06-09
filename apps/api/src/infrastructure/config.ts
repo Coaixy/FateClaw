@@ -17,6 +17,8 @@ const envConfig = readEnvFile([
   'MANAGER_KEY',
   'USER_MANAGER_KEY',
   'PUBLIC_BASE_URL',
+  'PUBLIC_API_BASE_URL',
+  'PUBLIC_WEB_BASE_URL',
   'PAYMENT_CALLBACK_ALLOWED_HOSTS',
 ]);
 
@@ -122,6 +124,18 @@ function normalizeAllowedHosts(raw: string): string[] {
 export const PUBLIC_BASE_URL = normalizePublicBaseUrl(
   process.env.PUBLIC_BASE_URL || envConfig.PUBLIC_BASE_URL || '',
 );
+
+// API 公开访问地址用于生成支付平台异步通知 notify_url；默认兼容旧 PUBLIC_BASE_URL。
+export const PUBLIC_API_BASE_URL =
+  normalizePublicBaseUrl(
+    process.env.PUBLIC_API_BASE_URL || envConfig.PUBLIC_API_BASE_URL || '',
+  ) || PUBLIC_BASE_URL;
+
+// www 公开访问地址用于生成用户支付完成后的 return_url；默认兼容旧 PUBLIC_BASE_URL。
+export const PUBLIC_WEB_BASE_URL =
+  normalizePublicBaseUrl(
+    process.env.PUBLIC_WEB_BASE_URL || envConfig.PUBLIC_WEB_BASE_URL || '',
+  ) || PUBLIC_BASE_URL;
 
 // 支付回调 Host 兜底白名单，避免 Host/X-Forwarded-Host 污染下单回调地址。
 export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
