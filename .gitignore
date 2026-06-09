@@ -7,6 +7,8 @@ dist/
 packages/*/dist/
 apps/web/out/
 apps/web/.next/
+apps/admin/out/
+apps/admin/.next/
 
 # Lockfiles — project uses pnpm, ignore npm lockfiles
 package-lock.json
@@ -16,7 +18,8 @@ store/
 data/
 logs/
 backups/
-!apps/web/app/admin/(dashboard)/logs/
+!apps/admin/app/(dashboard)/logs/
+!apps/admin/app/(dashboard)/logs/**
 
 # Groups - only track base structure and specific CLAUDE.md files
 groups/*

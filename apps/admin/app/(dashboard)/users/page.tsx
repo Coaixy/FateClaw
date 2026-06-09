@@ -726,7 +726,7 @@ function UserRow({
                     <div className="grid gap-2">
                       <a
                         href={toAdminDocumentHref(
-                          `/admin/messages?user_id=${encodeURIComponent(user.id)}`,
+                          `/messages?user_id=${encodeURIComponent(user.id)}`,
                         )}
                         className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-hairline text-[12px] text-muted transition-colors hover:border-hairline hover:text-ink"
                       >

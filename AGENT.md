@@ -147,7 +147,8 @@ Web 负责：
 - `apps/agent-runtime/src/request-boundary.ts`: 单次请求的边界、错误映射和 trace 汇总
 - `apps/agent-runtime/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
 - `apps/agent-runtime/src/text-skill-bundle.ts`: 用户 Text Skill Bundle 文件读取边界
-- `apps/web/app/admin/`: 管理后台
+- `apps/web/`: www 用户前端静态站点
+- `apps/admin/`: admin 管理后台静态站点
 - `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
 ## 常见误区

@@ -1,13 +1,22 @@
-# 前后端分离部署
+# www / admin / api 三站点部署
 
-FateClaw 生产环境推荐使用同域名路径分离：
+FateClaw 生产环境推荐拆成三个独立站点：
 
 ```text
-https://example.com/        -> Web 静态站点
-https://example.com/api/*   -> Fastify API
+https://www.example.com      -> www 用户静态站点（apps/web）
+https://admin.example.com    -> admin 管理静态站点（apps/admin）
+https://api.example.com      -> Fastify API（apps/api）
 ```
 
-这样浏览器仍然同源访问 `/api/*`，不需要额外配置跨域和 Cookie 域名。
+www 和 admin 都通过 `NEXT_PUBLIC_API_BASE=https://api.example.com` 调用 API。
+API 生产环境必须把两个前端来源都加入 `ALLOWED_ORIGINS`：
+
+```dotenv
+ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
+```
+
+admin 是静态站点，不能替代服务端鉴权；生产环境仍建议在反向代理层为
+`admin.example.com` 增加 IP 白名单、VPN 或额外认证。
 
 ## 打包
 
@@ -15,11 +24,12 @@ https://example.com/api/*   -> Fastify API
 pnpm run pack
 ```
 
-默认会生成两个包：
+默认会生成三个包：
 
 ```text
 fateclaw-backend-v<version>-runtime.tar.gz
-fateclaw-web-v<version>-static.tar.gz
+fateclaw-www-v<version>-static.tar.gz
+fateclaw-admin-v<version>-static.tar.gz
 ```
 
 也可以单独打包：
@@ -28,12 +38,14 @@ fateclaw-web-v<version>-static.tar.gz
 bash scripts/pack.sh backend-runtime
 bash scripts/pack.sh backend-source
 bash scripts/pack.sh backend
-bash scripts/pack.sh web
+bash scripts/pack.sh www
+bash scripts/pack.sh admin
 ```
 
-旧参数 `api-runtime`、`api-source`、`api` 仍是兼容别名，但新文档统一称为后端包。
+旧参数 `api-runtime`、`api-source`、`api` 仍是后端包兼容别名；旧参数 `web`
+仍兼容为 `www` 静态包。
 
-## 后端部署
+## API 部署
 
 生产环境推荐使用后端 runtime 包。它已经包含 `apps/api/dist` 和
 `apps/agent-runtime/dist`，服务器不需要再执行 TypeScript 构建。
@@ -41,9 +53,9 @@ bash scripts/pack.sh web
 `package-lock.json` 影响本次安装。
 
 ```bash
-mkdir -p fateclaw
-tar xzf fateclaw-backend-v<version>-runtime.tar.gz --strip-components=1 -C fateclaw
-cd fateclaw
+mkdir -p fateclaw-api
+tar xzf fateclaw-backend-v<version>-runtime.tar.gz --strip-components=1 -C fateclaw-api
+cd fateclaw-api
 npm install --omit=dev -f
 npm run start
 ```
@@ -56,18 +68,19 @@ npm install --omit=dev -f && npm run start
 
 2G 内存服务器建议在 1Panel / Docker 中额外设置：
 
-- FateClaw 后端容器内存限制：`768MiB`
-- FateClaw 后端容器 `pids_limit`：`128`
+- FateClaw API 容器内存限制：`768MiB`
+- FateClaw API 容器 `pids_limit`：`128`
 - PostgreSQL、Redis 单独设置资源限制，避免和 agent-runtime 抢占同一上限
 - 首次部署带 runtime 回收能力的版本前，手动清理旧的 `agent-runtime` 孤儿进程
 
-生产 `.env` 建议只保留部署和进程启动类配置，例如：
+生产 `.env` 建议包含：
 
 ```bash
 NODE_ENV=production
 LOCAL_AGENT_ENTRY_MODE=dist
 LOG_PRETTY=0
 LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB=128
+ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
 ```
 
 Agent 并发槽位、常驻 runtime 上限和空闲回收时间在管理后台写入数据库。
@@ -77,26 +90,37 @@ Agent 并发槽位、常驻 runtime 上限和空闲回收时间在管理后台�
 `fateclaw-backend-v<version>-source.tar.gz`，部署时执行
 `pnpm install && pnpm run build && pnpm run start`。
 
-## Web 部署
+## www 部署
 
 ```bash
-mkdir -p /var/www/fateclaw-web
-rm -rf /var/www/fateclaw-web/*
-tar xzf fateclaw-web-v<version>-static.tar.gz -C /var/www/fateclaw-web
+mkdir -p /var/www/fateclaw-www
+rm -rf /var/www/fateclaw-www/*
+tar xzf fateclaw-www-v<version>-static.tar.gz -C /var/www/fateclaw-www
 ```
 
-Web 包内就是静态站点根目录内容，包含 `index.html`、`_next/static/*` 和各页面目录。
-部署时必须先清空目标目录再解压，避免已删除或改名的旧页面、旧路由数据继续留在线上。
+www 包内就是用户静态站点根目录内容，包含 `index.html`、`_next/static/*`
+和各页面目录。部署时必须先清空目标目录再解压，避免已删除或改名的旧页面、
+旧路由数据继续留在线上。
+
+## admin 部署
+
+```bash
+mkdir -p /var/www/fateclaw-admin
+rm -rf /var/www/fateclaw-admin/*
+tar xzf fateclaw-admin-v<version>-static.tar.gz -C /var/www/fateclaw-admin
+```
+
+admin 包内是独立管理站点，登录页位于站点根路径 `/`，管理页面位于
+`/overview`、`/users`、`/system/models` 等路径。
 
 ## Nginx 示例
 
 ```nginx
 server {
   listen 80;
-  server_name example.com;
-  root /var/www/fateclaw-web;
+  server_name api.example.com;
 
-  location /api/ {
+  location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -104,33 +128,43 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
   }
+}
+
+server {
+  listen 80;
+  server_name www.example.com;
+  root /var/www/fateclaw-www;
 
   location ^~ /_next/static/ {
     add_header Cache-Control "public, max-age=31536000, immutable" always;
     try_files $uri =404;
   }
 
-  location ~* \.(?:html|txt)$ {
+  location / {
     add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
-    add_header CDN-Cache-Control "no-store" always;
-    add_header Surrogate-Control "no-store" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
     try_files $uri $uri/ /index.html;
+  }
+}
+
+server {
+  listen 80;
+  server_name admin.example.com;
+  root /var/www/fateclaw-admin;
+
+  # 生产环境建议在这里增加 allow/deny、Basic Auth 或 VPN 入口控制。
+  location ^~ /_next/static/ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
   }
 
   location / {
     add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
-    add_header CDN-Cache-Control "no-store" always;
-    add_header Surrogate-Control "no-store" always;
-    add_header Pragma "no-cache" always;
-    add_header Expires "0" always;
     try_files $uri $uri/ /index.html;
   }
 }
 ```
 
-如果部署了 HTTPS，把 `listen` 和证书配置加到同一个 server 内即可。
+如果部署了 HTTPS，把 `listen` 和证书配置加到对应 server 内即可。
 
 缓存策略说明：
 

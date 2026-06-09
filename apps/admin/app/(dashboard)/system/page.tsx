@@ -8,7 +8,7 @@ import { replaceAdminDocument } from '@/lib/admin-navigation';
  */
 export default function AdminSystemConfigRedirectPage() {
   useEffect(() => {
-    replaceAdminDocument('/admin/system/models');
+    replaceAdminDocument('/system/models');
   }, []);
 
   return (

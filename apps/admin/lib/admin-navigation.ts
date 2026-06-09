@@ -8,22 +8,36 @@ function splitHref(href: string): { pathname: string; search: string } {
   };
 }
 
-// Admin 区域在生产静态导出下统一当作多页文档站点使用，
+// 后端历史上会返回 /admin/* 作为管理后台 home path；独立 admin 站点以根路径承载，
+// 所以导航层统一把旧路径转换成本站路径，避免牵动后端契约。
+function toLocalAdminPathname(pathname: string): string {
+  const normalized =
+    pathname.length > 1 && pathname.endsWith('/')
+      ? pathname.slice(0, -1)
+      : pathname;
+
+  if (normalized === '/admin') return '/';
+  if (normalized.startsWith('/admin/')) {
+    return normalized.slice('/admin'.length) || '/';
+  }
+  return normalized || '/';
+}
+
+// Admin 独立站在生产静态导出下统一当作多页文档站点使用，
 // 这里把路径规范成真实导出产物对应的尾斜杠形式。
 export function normalizeAdminPathname(pathname: string): string {
-  if (pathname === '/admin/') return '/admin';
-  if (pathname.endsWith('/')) return pathname.slice(0, -1);
-  return pathname;
+  return toLocalAdminPathname(pathname);
 }
 
 export function toAdminDocumentHref(href: string): string {
   const { pathname, search } = splitHref(href);
+  const localPathname = toLocalAdminPathname(pathname);
   const normalizedPathname =
-    pathname === '/admin' || pathname === '/admin/'
-      ? '/admin/'
-      : pathname.endsWith('/')
-        ? pathname
-        : `${pathname}/`;
+    localPathname === '/'
+      ? '/'
+      : localPathname.endsWith('/')
+        ? localPathname
+        : `${localPathname}/`;
   return `${normalizedPathname}${search}`;
 }
 
@@ -32,8 +46,8 @@ export function replaceAdminDocument(href: string) {
 }
 
 const ADMIN_ROLE_HOME_PATH: Record<AdminRole, AdminHomePath> = {
-  owner: '/admin/overview',
-  user_manager: '/admin/users',
+  owner: '/overview',
+  user_manager: '/users',
 };
 
 export function getAdminHomePathForRole(role: AdminRole): AdminHomePath {
@@ -46,10 +60,9 @@ export function canAdminRoleAccessPath(
 ): boolean {
   const normalizedPathname = normalizeAdminPathname(pathname);
   if (role === 'owner') {
-    return normalizedPathname.startsWith('/admin');
+    return normalizedPathname.startsWith('/');
   }
   return (
-    normalizedPathname === '/admin/users' ||
-    normalizedPathname === '/admin/messages'
+    normalizedPathname === '/users' || normalizedPathname === '/messages'
   );
 }

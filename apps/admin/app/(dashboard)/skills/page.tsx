@@ -513,7 +513,7 @@ function AdminSkillsContent() {
       const params = new URLSearchParams({ id: skillId });
       if (selectedUserId) params.set('user_id', selectedUserId);
       if (selectedVisibility) params.set('visibility', selectedVisibility);
-      return `/admin/skills/detail?${params.toString()}`;
+      return `/skills/detail?${params.toString()}`;
     },
     [selectedUserId, selectedVisibility],
   );

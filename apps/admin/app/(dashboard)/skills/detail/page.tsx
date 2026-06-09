@@ -159,7 +159,7 @@ function buildBackHref(userId: string, visibility: string) {
   if (userId) params.set('user_id', userId);
   if (visibility) params.set('visibility', visibility);
   const qs = params.toString();
-  return `/admin/skills${qs ? `?${qs}` : ''}`;
+  return `/skills${qs ? `?${qs}` : ''}`;
 }
 
 function AdminSkillDetailContent() {

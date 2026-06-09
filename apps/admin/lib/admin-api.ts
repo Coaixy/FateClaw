@@ -86,7 +86,11 @@ export function isAdminForbiddenError(error: unknown): error is AdminApiError {
 
 export type AdminRole = 'owner' | 'user_manager';
 export type AdminScope = 'admin:*' | 'users:*' | 'messages:*';
-export type AdminHomePath = '/admin/overview' | '/admin/users';
+export type AdminHomePath =
+  | '/admin/overview'
+  | '/admin/users'
+  | '/overview'
+  | '/users';
 
 export interface AdminSession {
   success: boolean;

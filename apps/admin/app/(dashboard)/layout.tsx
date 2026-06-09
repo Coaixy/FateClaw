@@ -23,7 +23,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     setSession(null);
     const key = getAdminKey();
     if (!key) {
-      replaceAdminDocument('/admin');
+      replaceAdminDocument('/');
       return;
     }
     admin
@@ -39,7 +39,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
         if (isAdminUnauthorizedError(err)) {
           clearAdminKey();
         }
-        replaceAdminDocument('/admin');
+        replaceAdminDocument('/');
       });
   }, [pathname]);
 

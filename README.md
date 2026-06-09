@@ -201,7 +201,7 @@ JWT_SECRET=replace-with-strong-random-secret-at-least-32-chars
 MANAGER_KEY=replace-with-strong-random-admin-key-at-least-32-chars
 # 可选：仅开放用户和消息模块的受限后台密钥
 USER_MANAGER_KEY=replace-with-strong-random-user-manager-key-at-least-32-chars
-ALLOWED_ORIGINS=http://localhost:3001
+ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3002
 ```
 
 说明：
@@ -221,20 +221,22 @@ pnpm run dev
 默认端口：
 
 - API: `http://localhost:3000`
-- Web: `http://localhost:3001`
+- www: `http://localhost:3001`
+- admin: `http://localhost:3002`
 
 常用开发命令：
 
 ```bash
-pnpm run dev           # 宿主 API + Web
-pnpm run dev:light     # 轻量 API + Web，跳过部分运行时后台任务
+pnpm run dev           # API + www + admin
+pnpm run dev:light     # 轻量 API + www + admin，跳过部分运行时后台任务
 pnpm run dev:api       # 仅宿主 API
 pnpm run dev:api-only  # 仅轻量 API
-pnpm run dev:web       # 仅 Web
+pnpm run dev:www       # 仅 www
+pnpm run dev:admin     # 仅 admin
 pnpm run typecheck     # 全 workspace 类型检查
 pnpm run lint          # API lint
 pnpm test              # Vitest 测试
-pnpm run build:all     # 构建 API、Agent Runtime 和 Web
+pnpm run build:all     # 构建 API、Agent Runtime、www 和 admin
 ```
 
 ## 首次配置模型
@@ -242,7 +244,7 @@ pnpm run build:all     # 构建 API、Agent Runtime 和 Web
 站内 AI Chat 需要可用模型配置。当前推荐通过管理后台配置官方模型：
 
 1. 设置 `.env` 中的 `MANAGER_KEY` 并启动服务。
-2. 打开 `http://localhost:3001/admin`。
+2. 打开 `http://localhost:3002/`。
 3. 输入 `MANAGER_KEY` 进入后台。
 4. 在系统配置中新增模型 Provider，填写协议、Base URL、模型名和 API Key。
 5. 普通用户在设置页选择官方模型或保存自配模型。

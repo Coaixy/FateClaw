@@ -21,12 +21,12 @@ import {
 import {
   PI_API_OPTIONS,
   protocolTypeLabel,
-} from '../../../../features/model-settings/pi-api-options';
-import { OfficialModelPriceTags } from '../../../../components/settings/official-model-price-tags';
+} from '../../../features/model-settings/pi-api-options';
+import { OfficialModelPriceTags } from '../../../components/settings/official-model-price-tags';
 import {
   customModelPlatformFeeLabel,
   officialModelCoinsLabel,
-} from '../../../../components/settings/model-pricing';
+} from '../../../components/settings/model-pricing';
 import { setProviderDraftEnabled, type ProviderDraft } from './provider-draft';
 
 const CONTROL =

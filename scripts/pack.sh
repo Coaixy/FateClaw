@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# 分离打包后端生产运行包、后端源码包和 Web 静态产物用于部署
+# 分离打包 API 生产运行包、后端源码包、www 静态产物和 admin 静态产物用于部署
 # 用法:
-#   bash scripts/pack.sh [all|backend-runtime|api-runtime|runtime|backend|api|backend-source|api-source|web|source]
+#   bash scripts/pack.sh [all|backend-runtime|api-runtime|runtime|backend|api|backend-source|api-source|www|web|admin|source]
 #   bash scripts/pack.sh backend-runtime [输出文件名]
 #   bash scripts/pack.sh backend [输出文件名]
-#   bash scripts/pack.sh web [输出文件名]
+#   bash scripts/pack.sh www [输出文件名]
+#   bash scripts/pack.sh admin [输出文件名]
 # 兼容旧打包参数: --light --no-obfuscate --skip-install --jobs N 会被忽略
 
 set -euo pipefail
@@ -36,9 +37,11 @@ while [ "$#" -gt 0 ]; do
   elif [[ "$arg" == --* ]]; then
     echo "❌ 未知参数: $arg"
     exit 1
-  elif [ "$arg" = "all" ] || [ "$arg" = "backend-runtime" ] || [ "$arg" = "api-runtime" ] || [ "$arg" = "runtime" ] || [ "$arg" = "backend" ] || [ "$arg" = "api" ] || [ "$arg" = "backend-source" ] || [ "$arg" = "api-source" ] || [ "$arg" = "web" ] || [ "$arg" = "source" ]; then
+  elif [ "$arg" = "all" ] || [ "$arg" = "backend-runtime" ] || [ "$arg" = "api-runtime" ] || [ "$arg" = "runtime" ] || [ "$arg" = "backend" ] || [ "$arg" = "api" ] || [ "$arg" = "backend-source" ] || [ "$arg" = "api-source" ] || [ "$arg" = "www" ] || [ "$arg" = "web" ] || [ "$arg" = "admin" ] || [ "$arg" = "source" ]; then
     if [ "$arg" = "runtime" ]; then
       MODE="backend-runtime"
+    elif [ "$arg" = "web" ]; then
+      MODE="www"
     else
       MODE="$arg"
     fi
@@ -54,14 +57,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$MODE" = "all" ] && [ -n "$OUTFILE" ]; then
-  echo "❌ all 模式会生成两个文件，不能指定单个输出文件名"
+  echo "❌ all 模式会生成三个文件，不能指定单个输出文件名"
   exit 1
 fi
 
 SCRIPT_START=$SECONDS
 GENERATED_BACKEND_RUNTIME=""
 GENERATED_BACKEND_SOURCE=""
-GENERATED_WEB_STATIC=""
+GENERATED_WWW_STATIC=""
+GENERATED_ADMIN_STATIC=""
 
 # 输出步骤耗时。
 # 参数:
@@ -115,6 +119,7 @@ pack_backend_source() {
     --exclude='*.tsbuildinfo' \
     --exclude='*.log' \
     --exclude="$ROOT_NAME/apps/web" \
+    --exclude="$ROOT_NAME/apps/admin" \
     --exclude="$ROOT_NAME/apps/api/dist" \
     --exclude="$ROOT_NAME/apps/agent-runtime/dist" \
     --exclude="$ROOT_NAME/.next" \
@@ -180,30 +185,51 @@ pack_backend_runtime() {
   GENERATED_BACKEND_RUNTIME="$outfile"
 }
 
-pack_web_static() {
-  local outfile="${1:-fateclaw-web-v${VERSION}-static.tar.gz}"
+pack_www_static() {
+  local outfile="${1:-fateclaw-www-v${VERSION}-static.tar.gz}"
   local tmp_out="/tmp/$outfile"
   local step_start=$SECONDS
 
-  echo "🔨 构建 Web 静态产物 ..."
+  echo "🔨 构建 www 静态产物 ..."
   rm -rf apps/web/.next apps/web/out
-  pnpm run build:web
+  pnpm run build:www
 
-  echo "📦 打包 Web 静态产物 v${VERSION} ..."
+  echo "📦 打包 www 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/web/out .
 
   mv "$tmp_out" "$outfile"
   local size
   size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成 Web 静态包" "$step_start"
-  echo "✅ Web 包: $outfile ($size)"
-  GENERATED_WEB_STATIC="$outfile"
+  log_duration "生成 www 静态包" "$step_start"
+  echo "✅ www 包: $outfile ($size)"
+  GENERATED_WWW_STATIC="$outfile"
+}
+
+pack_admin_static() {
+  local outfile="${1:-fateclaw-admin-v${VERSION}-static.tar.gz}"
+  local tmp_out="/tmp/$outfile"
+  local step_start=$SECONDS
+
+  echo "🔨 构建 admin 静态产物 ..."
+  rm -rf apps/admin/.next apps/admin/out
+  pnpm run build:admin
+
+  echo "📦 打包 admin 静态产物 v${VERSION} ..."
+  tar czf "$tmp_out" -C apps/admin/out .
+
+  mv "$tmp_out" "$outfile"
+  local size
+  size=$(du -h "$outfile" | cut -f1)
+  log_duration "生成 admin 静态包" "$step_start"
+  echo "✅ admin 包: $outfile ($size)"
+  GENERATED_ADMIN_STATIC="$outfile"
 }
 
 case "$MODE" in
   all)
     pack_backend_runtime
-    pack_web_static
+    pack_www_static
+    pack_admin_static
     ;;
   backend-runtime)
     pack_backend_runtime "${OUTFILE:-}"
@@ -223,8 +249,11 @@ case "$MODE" in
   api-source)
     pack_backend_source "${OUTFILE:-}"
     ;;
-  web)
-    pack_web_static "${OUTFILE:-}"
+  www)
+    pack_www_static "${OUTFILE:-}"
+    ;;
+  admin)
+    pack_admin_static "${OUTFILE:-}"
     ;;
   source)
     pack_backend_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
@@ -246,14 +275,21 @@ if [ -n "$GENERATED_BACKEND_SOURCE" ]; then
   echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_BACKEND_SOURCE --strip-components=1 -C fateclaw"
   echo "    3. cd fateclaw && pnpm install && pnpm run build && pnpm run start"
 fi
-if [ -n "$GENERATED_WEB_STATIC" ]; then
-  echo "  Web:"
-  echo "    1. scp $GENERATED_WEB_STATIC user@server:~/"
-  echo "    2. rm -rf /var/www/fateclaw-web/* && mkdir -p /var/www/fateclaw-web"
-  echo "    3. tar xzf $GENERATED_WEB_STATIC -C /var/www/fateclaw-web"
+if [ -n "$GENERATED_WWW_STATIC" ]; then
+  echo "  www:"
+  echo "    1. scp $GENERATED_WWW_STATIC user@server:~/"
+  echo "    2. rm -rf /var/www/fateclaw-www/* && mkdir -p /var/www/fateclaw-www"
+  echo "    3. tar xzf $GENERATED_WWW_STATIC -C /var/www/fateclaw-www"
+fi
+if [ -n "$GENERATED_ADMIN_STATIC" ]; then
+  echo "  admin:"
+  echo "    1. scp $GENERATED_ADMIN_STATIC user@server:~/"
+  echo "    2. rm -rf /var/www/fateclaw-admin/* && mkdir -p /var/www/fateclaw-admin"
+  echo "    3. tar xzf $GENERATED_ADMIN_STATIC -C /var/www/fateclaw-admin"
 fi
 echo "  Nginx:"
-echo "    /api/ 反代到 http://127.0.0.1:3000"
+echo "    api 站点反代到 http://127.0.0.1:3000"
 echo "    /_next/static/ 长缓存 immutable"
 echo "    *.html 和 *.txt 不缓存 no-store"
-echo "    /     指向 /var/www/fateclaw-web，并 try_files \$uri \$uri/ /index.html"
+echo "    www 站点指向 /var/www/fateclaw-www，并 try_files \$uri \$uri/ /index.html"
+echo "    admin 站点指向 /var/www/fateclaw-admin，并 try_files \$uri \$uri/ /index.html"

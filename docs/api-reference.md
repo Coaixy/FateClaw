@@ -904,7 +904,7 @@ Authorization: Bearer <token>
 | `JWT_SECRET`                | -                       | JWT 签名密钥，必须是强随机值       |
 | `MANAGER_KEY`               | -                       | 管理后台认证密钥，提供时必须强随机 |
 | `USER_MANAGER_KEY`          | -                       | 用户管理员密钥，仅开放用户和消息模块，提供时必须强随机 |
-| `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单               |
+| `ALLOWED_ORIGINS`           | -                       | 生产环境 CORS 白名单；三站点部署时需包含 www 和 admin 来源 |
 | `NODE_ENV`                  | -                       | 生产环境建议设为 `production`      |
 | `LOCAL_AGENT_ENTRY_MODE`    | `auto`                  | 本地 agent-runtime 入口选择：`auto` / `src` / `dist` |
 | `LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB` | -               | agent-runtime 子进程 V8 old space 上限，2G 服务器建议 `128` |

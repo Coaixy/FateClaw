@@ -26,40 +26,40 @@ import { useState, useEffect } from 'react';
 
 const navItems = [
   {
-    href: '/admin/overview',
+    href: '/overview',
     label: '总览',
     icon: LayoutDashboard,
     roles: ['owner'],
   },
   {
-    href: '/admin/users',
+    href: '/users',
     label: '用户',
     icon: Users,
     roles: ['owner', 'user_manager'],
   },
   {
-    href: '/admin/messages',
+    href: '/messages',
     label: '消息',
     icon: MessageSquare,
     roles: ['owner', 'user_manager'],
   },
-  { href: '/admin/skills', label: '技能', icon: Puzzle, roles: ['owner'] },
+  { href: '/skills', label: '技能', icon: Puzzle, roles: ['owner'] },
   {
-    href: '/admin/workflows',
+    href: '/workflows',
     label: 'Workflow',
     icon: Workflow,
     roles: ['owner'],
   },
-  { href: '/admin/logs', label: '日志', icon: ScrollText, roles: ['owner'] },
-  { href: '/admin/about', label: '关于收支', icon: Landmark, roles: ['owner'] },
+  { href: '/logs', label: '日志', icon: ScrollText, roles: ['owner'] },
+  { href: '/about', label: '关于收支', icon: Landmark, roles: ['owner'] },
   {
-    href: '/admin/system/models',
+    href: '/system/models',
     label: '模型配置',
     icon: Bot,
     roles: ['owner'],
   },
   {
-    href: '/admin/system/rewards',
+    href: '/system/rewards',
     label: '软妹币配置',
     icon: WalletCards,
     roles: ['owner'],
@@ -82,7 +82,7 @@ export function AdminSidebar({ role }: { role: AdminRole }) {
 
   const handleLogout = () => {
     clearAdminKey();
-    replaceAdminDocument('/admin');
+    replaceAdminDocument('/');
   };
 
   const normalizedPathname = normalizeAdminPathname(pathname);
