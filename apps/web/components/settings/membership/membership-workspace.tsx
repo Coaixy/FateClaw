@@ -56,6 +56,46 @@ function formatMembershipUsage(monthlyMessages: number, monthlyTokens: number) {
   return `${monthlyMessages.toLocaleString('zh-CN')} 条 · ${formatCompactNumber(monthlyTokens)} Token`;
 }
 
+function membershipStatusText(status: MembershipStatus['allowance_status']) {
+  switch (status) {
+    case 'plenty':
+      return '额度充足';
+    case 'normal':
+      return '正常使用中';
+    case 'tight':
+      return '额度偏紧';
+    case 'almost_used':
+      return '即将用完';
+    case 'used_up':
+      return '额度已用完';
+    case 'inactive':
+    default:
+      return '未开通';
+  }
+}
+
+function resetText(value: string | null) {
+  if (!value) return '开通后按月重置';
+  return `${new Date(value).toLocaleDateString('zh-CN')} 重置`;
+}
+
+function progressPercent(ratio: number) {
+  const percent = Math.min(100, Math.max(0, ratio * 100));
+  if (percent > 0 && percent < 0.1) {
+    return 0.1;
+  }
+  return Math.round(percent * 10) / 10;
+}
+
+function displayPercent(ratio: number) {
+  const percent = Math.min(100, Math.max(0, ratio * 100));
+  if (percent === 0) return '0%';
+  if (percent < 0.01) return '< 0.01%';
+  if (percent < 0.1) return `${percent.toFixed(2)}%`;
+  if (percent < 10) return `${percent.toFixed(1)}%`;
+  return `${Math.round(percent)}%`;
+}
+
 function TaijiIcon({
   className = '',
   size = 1,
@@ -322,6 +362,8 @@ function MembershipDetailPanel({
   onSubscribe: () => void;
 }) {
   const label = membership.active ? '续费会员' : '开通会员';
+  const usedPercent = progressPercent(membership.allowance_used_ratio);
+  const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const detailItems = [
     {
       className: 'border-r border-hairline/70',
@@ -339,6 +381,10 @@ function MembershipDetailPanel({
       value: `${formatCoins(membership.monthly_price_coins)} / 月`,
     },
   ] as const;
+  const progressLabel = membership.active
+    ? `${membershipStatusText(membership.allowance_status)} · 已使用 ${usedPercentText}`
+    : '开通后显示额度进度';
+  const progressValue = membership.active ? usedPercent : 0;
 
   return (
     <section
@@ -346,22 +392,52 @@ function MembershipDetailPanel({
       className="-mt-1 overflow-hidden rounded-lg border border-hairline bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_7%,transparent)]"
     >
       <div className="grid sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid grid-cols-2 sm:grid-cols-3">
-          {detailItems.map((item) => (
-            <div
-              key={item.label}
-              className={`min-w-0 px-3 py-3 sm:px-4 ${item.className}`}
-            >
-              <div className="text-[11px] font-medium text-muted">
-                {item.label}
+        <div className="min-w-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3">
+            {detailItems.map((item) => (
+              <div
+                key={item.label}
+                className={`min-w-0 px-3 py-3 sm:px-4 ${item.className}`}
+              >
+                <div className="text-[11px] font-medium text-muted">
+                  {item.label}
+                </div>
+                <div className="mt-1 min-h-5 whitespace-nowrap text-[13px] font-semibold leading-5 text-ink">
+                  {item.value}
+                </div>
               </div>
-              <div className="mt-1 min-h-5 whitespace-nowrap text-[13px] font-semibold leading-5 text-ink">
-                {item.value}
-              </div>
+            ))}
+          </div>
+          <div className="border-t border-hairline/70 py-3 pl-14 pr-3 sm:px-4">
+            <div className="mb-2 flex items-center justify-between gap-3 text-[12px] leading-5">
+              <span className="font-medium text-muted">额度进度</span>
+              <span className="min-w-0 text-right text-ink">
+                {progressLabel}
+              </span>
             </div>
-          ))}
+            <div
+              role="meter"
+              aria-label="本月会员额度用量"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressValue}
+              className="h-2.5 overflow-hidden rounded-full border border-hairline/70 bg-canvas/55"
+            >
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,var(--color-accent-teal),var(--color-primary))] transition-[width]"
+                style={{ width: `${progressValue}%` }}
+              />
+            </div>
+            <div className="mt-2 text-[11px] leading-5 text-muted">
+              {membership.enabled
+                ? membership.active
+                  ? `${resetText(membership.allowance_reset_at)}；额度用完后继续使用钱包余额。`
+                  : '开通后会员额度优先抵扣 AI Chat 消耗。'
+                : 'Plus 暂未开放购买，当前仍按钱包余额扣费。'}
+            </div>
+          </div>
         </div>
-        <div className="border-t border-hairline/70 p-3 sm:border-l sm:border-t-0">
+        <div className="border-t border-hairline/70 p-3 sm:flex sm:items-center sm:border-l sm:border-t-0">
           <button
             type="button"
             onClick={onSubscribe}
