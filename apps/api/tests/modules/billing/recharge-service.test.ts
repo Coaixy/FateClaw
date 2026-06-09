@@ -198,7 +198,32 @@ describe('handleRechargeNotification', () => {
     );
   });
 
-  it('does not settle signed notifications without an explicit paid status', async () => {
+  it('settles signed notifications when trade_status reports success', async () => {
+    const result = await handleRechargeNotification({
+      out_trade_no: 'trade-1',
+      pid: '1001',
+      money: '10',
+      trade_no: 'provider-1',
+      trade_status: 'TRADE_SUCCESS',
+      type: 'alipay',
+      sign: 'signature',
+      sign_type: 'RSA',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockSettleRechargeOrderPaid).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tradeId: 'trade-1',
+        providerTradeId: 'provider-1',
+        payType: 'alipay',
+        notifyPayload: expect.objectContaining({
+          trade_status: 'TRADE_SUCCESS',
+        }),
+      }),
+    );
+  });
+
+  it('does not settle signed notifications without any paid status', async () => {
     const result = await handleRechargeNotification({
       out_trade_no: 'trade-1',
       pid: '1001',

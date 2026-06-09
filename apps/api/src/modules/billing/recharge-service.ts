@@ -186,11 +186,14 @@ function normalizePayType(raw: unknown): RechargePayType | null {
   return null;
 }
 
-function isSuccessfulEpayNotificationStatus(raw: unknown): boolean {
-  if (typeof raw === 'number') return raw === 1;
-  if (typeof raw !== 'string') return false;
-  // 易支付官方成功状态为 1；通知入账必须显式看到成功状态。
-  return raw.trim() === '1';
+function isSuccessfulEpayNotification(
+  payload: Record<string, string>,
+): boolean {
+  const status = payload.status;
+  if (status?.trim() === '1') return true;
+
+  // 易支付异步通知使用 trade_status，查单接口才返回 status=1。
+  return payload.trade_status?.trim().toUpperCase() === 'TRADE_SUCCESS';
 }
 
 function generateRechargeTradeId(): string {
@@ -488,7 +491,7 @@ export async function handleRechargeNotification(
     return fail(404, '充值单不存在');
   }
 
-  if (!isSuccessfulEpayNotificationStatus(payload.status)) {
+  if (!isSuccessfulEpayNotification(payload)) {
     return ok(toRechargeOrderDto(order));
   }
 
