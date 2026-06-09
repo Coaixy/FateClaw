@@ -118,13 +118,16 @@ describe('createPiResourceLoader', () => {
     );
     expect(loader.getAppendSystemPrompt().join('\n')).toContain('private-bazi');
     expect(loader.getSystemPrompt()).toContain(
-      '不要调用或假设存在专用解读工具/解读 Skill',
+      '可读取本轮授权的 Markdown Skill 作为方法和知识依据',
     );
     expect(JSON.stringify(before)).not.toContain(
       '不能暴露到 Skill metadata 的私有正文',
     );
     expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
       '不能暴露到 Skill metadata 的私有正文',
+    );
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+      '# private-bazi 知识',
     );
     const privateSkills = before.filter(
       (skill) => skill.sourceInfo.source === 'fateclaw-request-knowledge',
@@ -204,7 +207,16 @@ describe('createPiResourceLoader', () => {
     expect(listWorkflowBundleSkills).toHaveBeenCalledWith(['bundle-bazi']);
     expect(listEffectiveUserSkills).not.toHaveBeenCalled();
     expect(loader.getAppendSystemPrompt().join('\n')).toContain(
-      '本轮 workflow/请求已授权的 Markdown Skill 知识库入口如下。',
+      '本轮 workflow 已绑定的 Markdown Skill 知识库入口如下。',
+    );
+    expect(loader.getAppendSystemPrompt().join('\n')).toContain(
+      '不是可选装饰',
+    );
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+      '# private-bazi 知识',
+    );
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+      '# private-liuyao 知识',
     );
   });
 

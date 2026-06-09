@@ -261,7 +261,7 @@ describe('runPiSession', () => {
     const visibleSkills = createArgs.resourceLoader?.getSkills().skills ?? [];
     expect(visibleSkills.map((skill) => skill.name)).toEqual([]);
     expect(createArgs.resourceLoader?.getSystemPrompt()).toContain(
-      '不要调用或假设存在专用解读工具/解读 Skill',
+      '可读取本轮授权的 Markdown Skill 作为方法和知识依据',
     );
     expect(capturedPrompt).toBe('基于这个盘继续看事业');
     const appendedContext =

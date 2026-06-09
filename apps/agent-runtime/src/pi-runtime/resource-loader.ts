@@ -153,6 +153,7 @@ export async function createPiResourceLoader(
   const appendSystemPrompt = buildAppendSystemPrompt(
     privateKnowledgeEntries,
     options.piContextPrompt,
+    hasExplicitSkillBundleScope(options.containerInput),
   );
 
   return {
@@ -175,6 +176,7 @@ export async function createPiResourceLoader(
 function buildAppendSystemPrompt(
   privateKnowledgeEntries: RequestKnowledgeEntry[],
   piContextPrompt?: string,
+  workflowScopedKnowledge = false,
 ): string[] {
   const prompts: string[] = [];
   if (piContextPrompt?.trim()) {
@@ -183,14 +185,19 @@ function buildAppendSystemPrompt(
   if (privateKnowledgeEntries.length > 0) {
     prompts.push(
       [
-        '本轮 workflow/请求已授权的 Markdown Skill 知识库入口如下。',
-        '当前问题与这些入口相关时，应优先使用 read 读取已知 Markdown 文件，或在不确定位置时用 grep 搜索授权 Markdown 后再读取相关文件。',
-        ...privateKnowledgeEntries.map((entry) =>
-          [
+        workflowScopedKnowledge
+          ? '本轮 workflow 已绑定的 Markdown Skill 知识库入口如下。'
+          : '本轮请求已授权的 Markdown Skill 知识库入口如下。',
+        workflowScopedKnowledge
+          ? '这些入口是当前 workflow 的解读依据，不是可选装饰；回答前应先使用 read 读取最相关入口，不确定读哪个时用 grep 搜索授权 Markdown 后再读取相关文件。'
+          : '当前问题与这些入口相关时，应优先使用 read 读取已知 Markdown 文件，或在不确定位置时用 grep 搜索授权 Markdown 后再读取相关文件。',
+        ...privateKnowledgeEntries.map((entry) => {
+          const fields = [
             `- ${entry.name}`,
             `description=${entry.description}`,
-          ].join(' | '),
-        ),
+          ];
+          return fields.join(' | ');
+        }),
       ].join('\n'),
     );
   }
@@ -209,7 +216,7 @@ function buildPiSystemPrompt(
     '避免使用“真正地”、“诚实地”、“实际上”这类填充式强调词。',
     '你负责 AI session、上下文连续性、用户问题理解和最终推理。',
     '排盘是 Web/API 侧已经完成的确定性业务能力；不要自行调用或声称拥有排盘工具。',
-    '不要调用或假设存在专用解读工具/解读 Skill；解读必须基于 Pi context 中已经注入的事实材料完成。',
+    '不要调用或假设存在排盘/专用解读的执行型工具；可读取本轮授权的 Markdown Skill 作为方法和知识依据。',
     '涉及玄学问题时，直接在 Pi 循环内基于 Pi context 中的盘面 artifact、自贴盘面或追问上下文推理。',
     '知识只通过本次请求授权的普通 Markdown Skill 读取，不能假设存在全局本地 Skill。',
     soulEditEnabled
