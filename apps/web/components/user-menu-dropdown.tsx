@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
   CalendarCheck,
+  ChevronRight,
   Compass,
   Crown,
   LogOut,
@@ -119,7 +120,7 @@ export function UserMenuDropdown({
   };
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-60 rounded-xl border border-hairline/60 bg-surface-card/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
+    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-hairline/70 bg-surface-card/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
       <div className="px-4 py-3 border-b border-hairline/40">
         <div className="flex items-center gap-2.5">
           {avatar}
@@ -133,7 +134,7 @@ export function UserMenuDropdown({
           </div>
         </div>
       </div>
-      <div className="p-1.5 max-h-[calc(100vh-20rem)] overflow-y-auto">
+      <div className="p-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
         <MenuSection label="微信对话">
           <MenuItem
             href="/dashboard"
@@ -197,13 +198,19 @@ export function UserMenuDropdown({
           />
         </MenuSection>
       </div>
-      <div className="border-t border-hairline/40 p-1.5">
+      <div className="border-t border-hairline/40 p-2">
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-muted hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
+          className="group flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg border border-transparent bg-canvas/45 px-3 py-2 text-[12px] font-semibold text-muted shadow-sm transition-all hover:-translate-y-0.5 hover:border-error/20 hover:bg-error/10 hover:text-error active:translate-y-0"
         >
-          <LogOut size={14} />
-          退出登录
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-error/8 text-error transition-colors group-hover:bg-error/14">
+            <LogOut size={14} />
+          </span>
+          <span className="min-w-0 flex-1 text-left">退出登录</span>
+          <ChevronRight
+            size={13}
+            className="shrink-0 opacity-35 transition-transform group-hover:translate-x-0.5 group-hover:opacity-70"
+          />
         </button>
       </div>
     </div>
@@ -218,11 +225,11 @@ function MenuSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="py-1 first:pt-0 last:pb-0 border-b border-hairline/30 last:border-0">
-      <div className="px-3 pt-1 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted/60">
+    <div className="py-1.5 first:pt-0 last:pb-0 border-b border-hairline/30 last:border-0">
+      <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-semibold uppercase tracking-wider text-muted/65">
         {label}
       </div>
-      <div className="space-y-0.5">{children}</div>
+      <div className="space-y-1">{children}</div>
     </div>
   );
 }
@@ -242,10 +249,16 @@ function MenuItem({
     <Link
       href={href}
       onClick={onNavigate}
-      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
+      className="group flex min-h-11 items-center gap-2.5 rounded-lg border border-hairline/50 bg-canvas/55 px-3 py-2 text-[12px] font-semibold text-body shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:bg-primary/10 hover:text-ink hover:shadow-md active:translate-y-0"
     >
-      <Icon size={14} />
-      {label}
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/16">
+        <Icon size={14} />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <ChevronRight
+        size={13}
+        className="shrink-0 text-primary opacity-35 transition-transform group-hover:translate-x-0.5 group-hover:opacity-80"
+      />
     </Link>
   );
 }
@@ -265,20 +278,36 @@ function MenuActionItem({
   disabled: boolean;
   onClick: () => void;
 }) {
+  const actionable = !disabled && !busy;
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled || busy}
-      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[12px] font-medium text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted"
+      className={`group flex min-h-11 w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold shadow-sm transition-all active:translate-y-0 ${
+        actionable
+          ? 'cursor-pointer border-primary/25 bg-primary/12 text-ink hover:-translate-y-0.5 hover:bg-primary/16 hover:shadow-md'
+          : 'cursor-not-allowed border-hairline/45 bg-canvas/38 text-muted/80'
+      }`}
     >
-      {busy ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Icon size={14} />
-      )}
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+          actionable ? 'bg-primary/14 text-primary' : 'bg-muted/8 text-muted'
+        }`}
+      >
+        {busy ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <Icon size={14} />
+        )}
+      </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="shrink-0 text-[10px] font-medium text-muted/70">
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+          actionable ? 'bg-primary/14 text-primary' : 'bg-muted/8 text-muted/70'
+        }`}
+      >
         {secondary}
       </span>
     </button>
