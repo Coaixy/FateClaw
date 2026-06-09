@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { User as UserIcon, LogIn } from 'lucide-react';
+import { Crown, User as UserIcon, LogIn } from 'lucide-react';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
@@ -86,7 +86,6 @@ export function TopBar({
   const router = useRouter();
   const {
     status,
-    usage,
     loading: billingLoading,
     refreshing,
     refresh,
@@ -131,6 +130,9 @@ export function TopBar({
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
+  const membershipPillClass = compact
+    ? 'h-7 px-2 gap-1 text-[10px]'
+    : 'h-9 px-3 gap-1.5 text-[12px]';
   const dropdownBalanceLabel =
     billingLoading || balanceCoins === null
       ? '加载中…'
@@ -141,11 +143,11 @@ export function TopBar({
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
-      {/* 计费胶囊：导航栏只保留余额，详细 Token 放到展开面板里。 */}
+      {/* 余额胶囊只承载钱包信息，会员入口保持独立。 */}
       <div className="relative min-w-0">
         {billingLoading ? (
-          <div role="status" aria-label="正在加载余额和用量">
-            <span className="sr-only">正在加载余额和用量</span>
+          <div role="status" aria-label="正在加载余额">
+            <span className="sr-only">正在加载余额</span>
             <BillingPillSkeleton compact={compact} />
           </div>
         ) : (
@@ -177,7 +179,6 @@ export function TopBar({
           >
             <UsagePanel
               status={status}
-              usage={usage}
               refreshing={refreshing}
               onRefresh={refresh}
               onNavigate={() => setUsageOpen(false)}
@@ -185,6 +186,24 @@ export function TopBar({
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setUsageOpen(false);
+          setMenuOpen(false);
+          router.push('/membership');
+        }}
+        className={`inline-flex shrink-0 items-center justify-center rounded-full border text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
+          plusActive
+            ? 'border-primary/25 bg-primary/12'
+            : 'border-hairline/60 bg-surface-card/80'
+        } ${membershipPillClass}`}
+        aria-label="会员中心"
+      >
+        <Crown size={compact ? 12 : 14} />
+        <span className="whitespace-nowrap font-medium">会员中心</span>
+      </button>
 
       {/* 头像 + 菜单 */}
       <div className="relative">
@@ -196,22 +215,13 @@ export function TopBar({
           className={`cursor-pointer border border-primary/15 bg-primary/8 text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
             compact
               ? 'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 pr-2 text-[11px] font-medium'
-              : `inline-flex h-9 items-center gap-1.5 rounded-full p-0 ${plusActive ? 'pr-2' : ''}`
+              : 'inline-flex h-9 items-center gap-1.5 rounded-full p-0'
           }`}
           aria-label="个人菜单"
           aria-expanded={menuOpen}
         >
           <AvatarBadge compact={compact} />
           {compact && <span>我的</span>}
-          {plusActive && (
-            <span
-              className={`shrink-0 rounded-full border border-primary/20 bg-primary/12 font-semibold uppercase leading-none text-primary ${
-                compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'
-              }`}
-            >
-              Plus
-            </span>
-          )}
         </button>
 
         {menuOpen && (

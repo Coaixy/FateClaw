@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Wallet } from 'lucide-react';
+import { Crown, Wallet } from 'lucide-react';
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
@@ -304,13 +304,22 @@ function AiChatMessageRow({
             />
           </div>
           {showWalletRecovery ? (
-            <Link
-              href="/wallet"
-              className="mt-2 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
-            >
-              <Wallet size={12} />
-              充值 / 开通 Plus
-            </Link>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link
+                href="/wallet"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
+              >
+                <Wallet size={12} />
+                去充值
+              </Link>
+              <Link
+                href="/membership"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/15"
+              >
+                <Crown size={12} />
+                会员中心
+              </Link>
+            </div>
           ) : null}
         </div>
 

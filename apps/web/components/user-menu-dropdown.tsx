@@ -7,6 +7,7 @@ import {
   Bot,
   CalendarCheck,
   Compass,
+  Crown,
   LogOut,
   Loader2,
   ServerCog,
@@ -157,6 +158,18 @@ export function UserMenuDropdown({
         </MenuSection>
         <MenuSection label="账户">
           <MenuItem
+            href="/membership"
+            icon={Crown}
+            label="会员中心"
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/wallet"
+            icon={Wallet}
+            label="钱包"
+            onNavigate={onNavigate}
+          />
+          <MenuItem
             href="/persona"
             icon={Sparkles}
             label="人格设置"
@@ -166,12 +179,6 @@ export function UserMenuDropdown({
             href="/settings/advanced"
             icon={ServerCog}
             label="模型设置"
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/wallet"
-            icon={Wallet}
-            label="钱包"
             onNavigate={onNavigate}
           />
           <MenuActionItem

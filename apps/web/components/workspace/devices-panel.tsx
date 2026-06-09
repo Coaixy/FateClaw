@@ -98,7 +98,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
       return;
     }
     if (canOpenMembership) {
-      router.push('/wallet');
+      router.push('/membership');
     }
   };
 

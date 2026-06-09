@@ -45,6 +45,14 @@ function displayPercent(ratio: number) {
   return `${Math.round(percent)}%`;
 }
 
+/**
+ * 渲染 FateClaw Plus 订阅卡片。
+ *
+ * @param props.membership 当前会员状态和额度进度。
+ * @param props.busy 是否正在提交开通或续费请求。
+ * @param props.onSubscribe 用户点击开通或续费会员时的回调。
+ * @returns Plus 订阅信息、权益标签、额度进度和订阅按钮。
+ */
 export function WalletMembershipCard({
   membership,
   busy,
