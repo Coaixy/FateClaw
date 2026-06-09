@@ -8,7 +8,9 @@ const { mockGetUserById, mockLoggerError, mockLoggerWarn } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../src/infrastructure/config.js', () => ({
+  ALLOWED_ORIGINS: ['https://admin.letfate.test'],
   JWT_SECRET: 'test-jwt-secret',
+  PUBLIC_WEB_BASE_URL: 'https://www.letfate.test',
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
@@ -127,5 +129,23 @@ describe('createApiServer auth guard', () => {
     });
 
     expect(response.statusCode).toBe(401);
+  });
+
+  it('allows public web origin on CORS preflight requests', async () => {
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/model-settings',
+      headers: {
+        origin: 'https://www.letfate.test',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe(
+      'https://www.letfate.test',
+    );
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
   });
 });

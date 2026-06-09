@@ -11,7 +11,11 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyStatic from '@fastify/static';
 import fastifyCompress from '@fastify/compress';
 
-import { JWT_SECRET } from '../../infrastructure/config.js';
+import {
+  ALLOWED_ORIGINS,
+  JWT_SECRET,
+  PUBLIC_WEB_BASE_URL,
+} from '../../infrastructure/config.js';
 import { getUserById } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
 import { resolveProjectRoot } from '../../infrastructure/project-root.js';
@@ -175,14 +179,14 @@ export async function createApiServer(): Promise<FastifyInstance> {
     },
   );
 
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // PUBLIC_WEB_BASE_URL 已经是显式配置的用户站点公开来源，默认加入 CORS 白名单。
+  const allowedOrigins = Array.from(
+    new Set([...ALLOWED_ORIGINS, PUBLIC_WEB_BASE_URL].filter(Boolean)),
+  );
   const isProd = process.env.NODE_ENV === 'production';
   if (isProd && allowedOrigins.length === 0) {
     throw new Error(
-      'ALLOWED_ORIGINS 未配置：生产环境必须显式声明跨域白名单（逗号分隔）。',
+      'ALLOWED_ORIGINS 或 PUBLIC_WEB_BASE_URL 未配置：生产环境必须显式声明跨域白名单。',
     );
   }
   const corsOptions: FastifyCorsOptions = {

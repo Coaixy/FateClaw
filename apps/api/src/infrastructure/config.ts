@@ -16,6 +16,7 @@ const envConfig = readEnvFile([
   'JWT_SECRET',
   'MANAGER_KEY',
   'USER_MANAGER_KEY',
+  'ALLOWED_ORIGINS',
   'PUBLIC_BASE_URL',
   'PUBLIC_API_BASE_URL',
   'PUBLIC_WEB_BASE_URL',
@@ -98,6 +99,17 @@ function normalizePublicBaseUrl(raw: string): string {
   return `${url.protocol}//${url.host}`;
 }
 
+function normalizeAllowedOrigins(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map(normalizePublicBaseUrl)
+        .filter((origin) => origin.length > 0),
+    ),
+  );
+}
+
 function normalizeAllowedHost(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
@@ -136,6 +148,11 @@ export const PUBLIC_WEB_BASE_URL =
   normalizePublicBaseUrl(
     process.env.PUBLIC_WEB_BASE_URL || envConfig.PUBLIC_WEB_BASE_URL || '',
   ) || PUBLIC_BASE_URL;
+
+// 浏览器跨域来源白名单，API CORS 使用；这里只保留 origin，避免路径误配置影响匹配。
+export const ALLOWED_ORIGINS = normalizeAllowedOrigins(
+  process.env.ALLOWED_ORIGINS || envConfig.ALLOWED_ORIGINS || '',
+);
 
 // 支付回调 Host 兜底白名单，避免 Host/X-Forwarded-Host 污染下单回调地址。
 export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
