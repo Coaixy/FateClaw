@@ -171,9 +171,21 @@ describe('startSimpleWorkflowForOwnedUser', () => {
       expect.objectContaining({
         authorizedSkillBundleIds: ['bundle-liuyao'],
         llmRuntimeOverride: { model: 'gpt-test' },
-        runtimeUserMessageOverride: expect.stringContaining('占卜模板'),
+        runtimeUserMessageOverride: [
+          '我该不该换工作？',
+          '',
+          '最近有新机会',
+        ].join('\n'),
       }),
     );
+    expect(
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
+        ?.runtimeUserMessageOverride,
+    ).not.toContain('占卜模板');
+    expect(
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
+        ?.runtimeUserMessageOverride,
+    ).not.toContain('六爻盘面作答');
   });
 
   it('returns the created session before the first AI turn finishes enqueue preparation', async () => {
@@ -253,9 +265,17 @@ describe('startSimpleWorkflowForOwnedUser', () => {
       }),
       expect.objectContaining({
         authorizedSkillBundleIds: ['bundle-bazi'],
-        runtimeUserMessageOverride: expect.stringContaining('命理模板'),
+        runtimeUserMessageOverride: '事业方向',
       }),
     );
+    expect(
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
+        ?.runtimeUserMessageOverride,
+    ).not.toContain('命理模板');
+    expect(
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
+        ?.runtimeUserMessageOverride,
+    ).not.toContain('八字盘面作答');
   });
 
   it('rejects an empty divination question before paipan', async () => {

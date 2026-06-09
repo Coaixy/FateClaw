@@ -29,7 +29,6 @@ type WorkflowDraft = {
   ichingMethod: string;
   baziIncludes: string[];
   skillBundleIds: string[];
-  promptTemplate: string;
 };
 
 const KIND_LABELS: Record<AdminSimpleWorkflowPreset['kind'], string> = {
@@ -62,8 +61,6 @@ const THINKING_LEVEL_OPTIONS: Array<{
 
 const inputClassName =
   'h-10 w-full rounded-md border border-hairline bg-canvas px-3 text-[13px] text-ink outline-none transition-colors focus:border-primary/50 disabled:opacity-50';
-const textareaClassName =
-  'w-full rounded-md border border-hairline bg-canvas px-3 py-2 text-[13px] leading-6 text-ink outline-none transition-colors focus:border-primary/50 disabled:opacity-50';
 
 function modelChoiceFromPreset(preset: AdminSimpleWorkflowPreset): string {
   if (preset.model_policy.mode === 'fixed') {
@@ -89,7 +86,6 @@ function draftFromPreset(preset: AdminSimpleWorkflowPreset): WorkflowDraft {
         ? include.map(String)
         : ['bazi', 'fortune', 'pattern'],
     skillBundleIds: preset.skill_bundle_ids,
-    promptTemplate: preset.prompt_template,
   };
 }
 
@@ -142,7 +138,6 @@ function buildUpdatePayload(
           : { include: draft.baziIncludes },
       model_policy: buildModelPolicy(draft),
       skill_bundle_ids: draft.skillBundleIds,
-      prompt_template: draft.promptTemplate.trim(),
     },
   };
 }
@@ -464,19 +459,6 @@ function WorkflowPresetPanel({
           onChange={(ids) => updateDraft('skillBundleIds', ids)}
         />
       </div>
-
-      <label className="mt-5 block">
-        <FieldLabel>Prompt 模板</FieldLabel>
-        <textarea
-          value={draft.promptTemplate}
-          onChange={(event) =>
-            updateDraft('promptTemplate', event.target.value)
-          }
-          disabled={busy}
-          rows={7}
-          className={textareaClassName}
-        />
-      </label>
     </section>
   );
 }

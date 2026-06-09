@@ -656,8 +656,9 @@ function validateDraftForSkill(
 function getSimpleHiddenFieldPaths(skillDir: string): string[] {
   switch (skillDir) {
     case 'bazi-paipan':
+      return ['solarDate', 'hour', 'minute', 'gender', 'include'];
     case 'ziwei-paipan':
-      return ['solarDate', 'hour', 'minute', 'gender'];
+      return ['solarDate', 'hour', 'minute', 'gender', 'horoscope'];
     case 'qimen-paipan':
     case 'liuren-paipan':
       return ['solarDate', 'hour', 'minute', 'randomNumber', 'timeMode'];

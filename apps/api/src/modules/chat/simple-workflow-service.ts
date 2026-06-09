@@ -80,33 +80,17 @@ function buildSessionTitle(kind: SimpleWorkflowKind, topic: string): string {
 }
 
 function buildRuntimePrompt(args: {
-  preset: SimpleWorkflowPreset;
   input: SimpleWorkflowStartRequestDto;
 }): string {
-  const { preset, input } = args;
+  const { input } = args;
   if (input.kind === 'divination') {
     const background = trimText(input.background);
-    const userText = [trimText(input.question), background]
+    return [trimText(input.question), background]
       .filter((line) => line.length > 0)
       .join('\n\n');
-    return [
-      preset.prompt_template,
-      '',
-      userText,
-      '',
-      '请基于当前会话中的六爻盘面作答。',
-    ]
-      .filter((line) => line !== '')
-      .join('\n');
   }
 
-  return [
-    preset.prompt_template,
-    '',
-    trimText(input.questionDirection),
-    '',
-    '请基于当前会话中的八字盘面作答。',
-  ].join('\n');
+  return trimText(input.questionDirection);
 }
 
 function prepareSimpleWorkflowInput(
@@ -122,7 +106,7 @@ function prepareSimpleWorkflowInput(
       kind: 'divination',
       paipanInput: mergePaipanInput(preset, {}),
       displayQuestion: question,
-      runtimePrompt: buildRuntimePrompt({ preset, input }),
+      runtimePrompt: buildRuntimePrompt({ input }),
       sessionTitle: buildSessionTitle('divination', question),
       requestSummary: '简易模式：占卜问事',
     });
@@ -156,7 +140,7 @@ function prepareSimpleWorkflowInput(
       gender: input.gender,
     }),
     displayQuestion: `命理分析：${questionDirection}`,
-    runtimePrompt: buildRuntimePrompt({ preset, input }),
+    runtimePrompt: buildRuntimePrompt({ input }),
     sessionTitle: buildSessionTitle('natal', questionDirection),
     requestSummary: '简易模式：命理分析',
   });
