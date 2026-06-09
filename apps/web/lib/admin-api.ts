@@ -653,12 +653,14 @@ export const admin = {
   updateSimpleWorkflowPreset: (
     id: string,
     data: AdminSimpleWorkflowPresetUpdate,
+    options?: Pick<RequestInit, 'signal'>,
   ) =>
     adminRequest<AdminSimpleWorkflowPreset>(
       `/api/admin/simple-workflows/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
         body: JSON.stringify(data),
+        signal: options?.signal,
       },
     ),
   createOfficialModel: (data: {

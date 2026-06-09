@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,7 +19,15 @@ import {
   type AdminSimpleWorkflowPresetUpdate,
   type AdminWorkflowSkillBundleSummary,
 } from '@/lib/admin-api';
-import { Bot, Check, Loader2, RefreshCw, Save, Workflow } from 'lucide-react';
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Save,
+  Workflow,
+} from 'lucide-react';
 
 type WorkflowDraft = {
   enabled: boolean;
@@ -29,6 +38,12 @@ type WorkflowDraft = {
   ichingMethod: string;
   baziIncludes: string[];
   skillBundleIds: string[];
+};
+
+type WorkflowSelectOption<T extends string> = {
+  value: T;
+  label: string;
+  description?: string;
 };
 
 const KIND_LABELS: Record<AdminSimpleWorkflowPreset['kind'], string> = {
@@ -61,6 +76,7 @@ const THINKING_LEVEL_OPTIONS: Array<{
 
 const inputClassName =
   'h-10 w-full rounded-md border border-hairline bg-canvas px-3 text-[13px] text-ink outline-none transition-colors focus:border-primary/50 disabled:opacity-50';
+const SAVE_TIMEOUT_MS = 15_000;
 
 function modelChoiceFromPreset(preset: AdminSimpleWorkflowPreset): string {
   if (preset.model_policy.mode === 'fixed') {
@@ -147,6 +163,129 @@ function FieldLabel({ children }: { children: ReactNode }) {
     <span className="mb-1.5 block text-[12px] font-medium text-muted">
       {children}
     </span>
+  );
+}
+
+function WorkflowSelect<T extends string>({
+  value,
+  options,
+  disabled,
+  label,
+  onChange,
+}: {
+  value: T;
+  options: Array<WorkflowSelectOption<T>>;
+  disabled: boolean;
+  label: string;
+  onChange: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className={`flex h-10 w-full items-center gap-2 rounded-md border bg-canvas px-3 text-left text-[13px] text-ink outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          open
+            ? 'border-primary/55 ring-2 ring-primary/10'
+            : 'border-hairline hover:border-primary/30 focus:border-primary/50'
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {selected?.label ?? '请选择'}
+        </span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-md border border-hairline bg-surface-card shadow-lg">
+          <div
+            role="listbox"
+            aria-label={label}
+            className="max-h-72 overflow-y-auto p-1"
+          >
+            {options.map((option) => {
+              const selectedOption = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedOption}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-start gap-2 rounded px-2.5 py-2 text-left transition-colors ${
+                    selectedOption
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-ink hover:bg-canvas'
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      selectedOption
+                        ? 'border-primary bg-primary text-on-primary'
+                        : 'border-hairline bg-canvas'
+                    }`}
+                  >
+                    {selectedOption && <Check size={11} strokeWidth={3} />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium">
+                      {option.label}
+                    </span>
+                    {option.description && (
+                      <span className="mt-0.5 block truncate text-[11px] text-muted">
+                        {option.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -280,11 +419,20 @@ function WorkflowPresetPanel({
 
   const modelOptions = useMemo(
     () => [
-      { value: 'user-current', label: '用户当前模型' },
-      { value: 'system-default', label: '系统默认模型' },
+      {
+        value: 'user-current',
+        label: '用户当前模型',
+        description: '跟随用户自己的模型设置',
+      },
+      {
+        value: 'system-default',
+        label: '系统默认模型',
+        description: '使用后台可用模型兜底',
+      },
       ...officialModels.map((model) => ({
         value: `fixed:${model.id}`,
-        label: `${model.display_name} · ${model.model_name}`,
+        label: model.display_name,
+        description: model.model_name,
       })),
     ],
     [officialModels],
@@ -375,41 +523,26 @@ function WorkflowPresetPanel({
       </div>
 
       <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        <label>
+        <div>
           <FieldLabel>模型</FieldLabel>
-          <select
+          <WorkflowSelect
+            label="模型"
             value={draft.modelChoice}
-            onChange={(event) => updateDraft('modelChoice', event.target.value)}
+            options={modelOptions}
             disabled={busy}
-            className={inputClassName}
-          >
-            {modelOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
+            onChange={(value) => updateDraft('modelChoice', value)}
+          />
+        </div>
+        <div>
           <FieldLabel>思考等级</FieldLabel>
-          <select
+          <WorkflowSelect
+            label="思考等级"
             value={draft.thinkingLevel}
-            onChange={(event) =>
-              updateDraft(
-                'thinkingLevel',
-                event.target.value as SimpleModelThinkingLevelDto,
-              )
-            }
+            options={THINKING_LEVEL_OPTIONS}
             disabled={busy}
-            className={inputClassName}
-          >
-            {THINKING_LEVEL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(value) => updateDraft('thinkingLevel', value)}
+          />
+        </div>
       </div>
 
       <div className="mt-5">
@@ -501,24 +634,50 @@ export default function AdminWorkflowsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!busyId) return;
+    const timeoutId = window.setTimeout(() => {
+      setBusyId('');
+      setError('保存超时，请检查网络或稍后重试');
+    }, SAVE_TIMEOUT_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [busyId]);
+
   const handleSave = useCallback(
     async (id: string, payload: AdminSimpleWorkflowPresetUpdate) => {
+      if (busyId) return;
+      const controller = new AbortController();
+      let timedOut = false;
+      const timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, SAVE_TIMEOUT_MS);
+
       setBusyId(id);
       setError('');
       try {
-        const updated = await admin.updateSimpleWorkflowPreset(id, payload);
+        const updated = await admin.updateSimpleWorkflowPreset(id, payload, {
+          signal: controller.signal,
+        });
         setPresets((current) =>
           current
             .map((preset) => (preset.id === id ? updated : preset))
             .sort((left, right) => left.sort_order - right.sort_order),
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : '保存失败');
+        setError(
+          timedOut
+            ? '保存超时，请检查网络或稍后重试'
+            : err instanceof Error
+              ? err.message
+              : '保存失败',
+        );
       } finally {
+        window.clearTimeout(timeoutId);
         setBusyId('');
       }
     },
-    [],
+    [busyId],
   );
 
   if (loading) {
