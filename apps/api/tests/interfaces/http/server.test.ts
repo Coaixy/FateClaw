@@ -134,10 +134,10 @@ describe('createApiServer auth guard', () => {
   it('allows public web origin on CORS preflight requests', async () => {
     const response = await app.inject({
       method: 'OPTIONS',
-      url: '/api/model-settings',
+      url: '/api/chat-sessions/s/session-test',
       headers: {
         origin: 'https://www.letfate.test',
-        'access-control-request-method': 'GET',
+        'access-control-request-method': 'DELETE',
         'access-control-request-headers': 'authorization',
       },
     });
@@ -147,5 +147,8 @@ describe('createApiServer auth guard', () => {
       'https://www.letfate.test',
     );
     expect(response.headers['access-control-allow-credentials']).toBe('true');
+    expect(response.headers['access-control-allow-methods']).toContain(
+      'DELETE',
+    );
   });
 });

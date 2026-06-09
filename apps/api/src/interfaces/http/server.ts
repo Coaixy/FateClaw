@@ -202,6 +202,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
       }
       cb(null, false);
     },
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   };
   await app.register(fastifyCors, corsOptions);
