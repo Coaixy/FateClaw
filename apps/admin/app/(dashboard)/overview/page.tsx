@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Banknote,
   Calculator,
+  Clock3,
   Coins,
   Cpu,
   CreditCard,
@@ -18,6 +19,7 @@ import {
   RefreshCw,
   Smartphone,
   Users,
+  WalletCards,
 } from 'lucide-react';
 
 type DateRange = {
@@ -256,6 +258,30 @@ export default function AdminOverviewPage() {
             value={`${stats.enabled_accounts} / ${stats.total_accounts}`}
             sub="已启用 / 总数"
           />
+          <StatCard
+            icon={WalletCards}
+            label="活跃会员"
+            value={fmt(stats.active_subscriptions)}
+            sub="FateClaw Plus 有效周期"
+          />
+          <StatCard
+            icon={CreditCard}
+            label="付费用户"
+            value={fmt(stats.paid_recharge_users)}
+            sub={`累计订单 ${fmt(stats.paid_recharge_orders)}`}
+          />
+          <StatCard
+            icon={Coins}
+            label="可用余额池"
+            value={fmtCoins(stats.total_available_coins)}
+            sub={`冻结 ${fmtCoins(stats.total_reserved_coins)}`}
+          />
+          <StatCard
+            icon={Clock3}
+            label="计费预约"
+            value={fmt(stats.pending_billing_reservations)}
+            sub={`冻结中 ${fmt(stats.held_billing_reservations)}`}
+          />
         </div>
 
         <section className="overflow-hidden rounded-xl border border-hairline bg-surface-card">
@@ -340,7 +366,7 @@ export default function AdminOverviewPage() {
               icon={ReceiptText}
               label="已支付订单"
               value={fmt(rechargePeriod.paid_orders)}
-              sub={`累计已支付 ${fmt(stats.paid_recharge_orders)} 笔`}
+              sub={`${fmt(rechargePeriod.paid_users)} 位付费用户，累计已支付 ${fmt(stats.paid_recharge_orders)} 笔`}
             />
             <RevenueMetric
               icon={Coins}
@@ -359,7 +385,7 @@ export default function AdminOverviewPage() {
             />
           </div>
 
-          <div className="grid gap-px bg-hairline md:grid-cols-3">
+          <div className="grid gap-px bg-hairline md:grid-cols-4">
             <RevenueFooterItem
               label="今日收入"
               value={fmtCoins(stats.today_recharge_coins)}
@@ -371,6 +397,10 @@ export default function AdminOverviewPage() {
             <RevenueFooterItem
               label="待支付订单"
               value={fmt(stats.pending_recharge_orders)}
+            />
+            <RevenueFooterItem
+              label="失败订单"
+              value={fmt(stats.failed_recharge_orders)}
             />
           </div>
         </section>

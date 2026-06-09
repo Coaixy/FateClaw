@@ -22,11 +22,18 @@ import { formatCoins } from '@/lib/soft-currency';
 
 type ResultStatus = 'loading' | 'paid' | 'pending' | 'failed' | 'missing' | 'error';
 
-const TRADE_ID_PARAM_KEYS = [
+const MERCHANT_TRADE_ID_PARAM_KEYS = [
   'out_trade_no',
   'trade_id',
   'tradeId',
   'outTradeNo',
+] as const;
+const PROVIDER_TRADE_ID_PARAM_KEYS = [
+  'trade_no',
+  'api_trade_no',
+  'bill_trade_no',
+  'trade_id',
+  'tradeId',
 ] as const;
 
 function firstSearchParam(
@@ -51,6 +58,24 @@ function formatPayType(value: RechargeOrder['pay_type'] | null | undefined): str
   if (value === 'wechat') return '微信';
   if (value === 'alipay') return '支付宝';
   return '待确认';
+}
+
+function findReturnedRechargeOrder(
+  orders: RechargeOrder[],
+  tradeId: string,
+  providerTradeId: string,
+): RechargeOrder | null {
+  const byTradeId = tradeId
+    ? orders.find((item) => item.trade_id === tradeId)
+    : null;
+  if (byTradeId) return byTradeId;
+
+  // 支付平台返回页有时只带平台单号，这里用最近订单兜底映射回本地充值单。
+  const byProviderTradeId = providerTradeId
+    ? orders.find((item) => item.provider_trade_id === providerTradeId)
+    : null;
+  if (tradeId || providerTradeId) return byProviderTradeId ?? null;
+  return orders[0] ?? null;
 }
 
 function getStatus(order: RechargeOrder | null, loading: boolean, error: string): ResultStatus {
@@ -164,10 +189,13 @@ function DetailRow({
 export function RechargeResultWorkspace() {
   const searchParams = useSearchParams();
   const tradeId = useMemo(
-    () => firstSearchParam(searchParams, TRADE_ID_PARAM_KEYS),
+    () => firstSearchParam(searchParams, MERCHANT_TRADE_ID_PARAM_KEYS),
     [searchParams],
   );
-  const providerTradeId = searchParams.get('trade_no')?.trim() || '';
+  const providerTradeId = useMemo(
+    () => firstSearchParam(searchParams, PROVIDER_TRADE_ID_PARAM_KEYS),
+    [searchParams],
+  );
 
   const [order, setOrder] = useState<RechargeOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,18 +210,53 @@ export function RechargeResultWorkspace() {
         setLoading(true);
       }
       setError('');
+      const findRecentOrder = async () => {
+        const orders = await billingApi.rechargeOrders();
+        return findReturnedRechargeOrder(orders, tradeId, providerTradeId);
+      };
+
       try {
-        if (tradeId) {
-          setOrder(await billingApi.syncRechargeOrder(tradeId));
-        } else {
-          const orders = await billingApi.rechargeOrders();
-          setOrder(orders[0] ?? null);
-        }
-      } catch (err) {
+        let nextOrder: RechargeOrder | null = null;
+
         if (tradeId) {
           try {
-            const orders = await billingApi.rechargeOrders();
-            const localOrder = orders.find((item) => item.trade_id === tradeId);
+            nextOrder = await billingApi.syncRechargeOrder(tradeId);
+          } catch (err) {
+            const localOrder = await findRecentOrder();
+            if (!localOrder) throw err;
+
+            if (localOrder.trade_id !== tradeId) {
+              try {
+                nextOrder = await billingApi.syncRechargeOrder(
+                  localOrder.trade_id,
+                );
+              } catch {
+                nextOrder = localOrder;
+              }
+            } else {
+              nextOrder = localOrder;
+            }
+          }
+        } else {
+          const localOrder = await findRecentOrder();
+          if (localOrder?.trade_id) {
+            try {
+              nextOrder = await billingApi.syncRechargeOrder(
+                localOrder.trade_id,
+              );
+            } catch {
+              nextOrder = localOrder;
+            }
+          } else {
+            nextOrder = localOrder;
+          }
+        }
+
+        setOrder(nextOrder);
+      } catch (err) {
+        if (tradeId || providerTradeId) {
+          try {
+            const localOrder = await findRecentOrder();
             if (localOrder) setOrder(localOrder);
           } catch {
             // 查单失败时仍尽量展示本地订单信息；兜底查询失败则保留错误态。
@@ -205,7 +268,7 @@ export function RechargeResultWorkspace() {
         setSyncing(false);
       }
     },
-    [tradeId],
+    [providerTradeId, tradeId],
   );
 
   useEffect(() => {

@@ -20,6 +20,7 @@ admin 站点以域名根路径作为登录页：
 
 - `/`: 管理登录页
 - `/overview`: 总览
+- `/billing`: 账单管理
 - `/users`: 用户
 - `/messages`: 消息
 - `/skills`: 技能

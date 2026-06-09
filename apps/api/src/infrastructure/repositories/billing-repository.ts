@@ -73,6 +73,16 @@ function normalizeWalletTransactionRow(
   };
 }
 
+function normalizeAdminWalletTransactionRow(
+  row: AdminWalletTransactionRow,
+): AdminWalletTransactionRow {
+  return {
+    ...row,
+    ...normalizeWalletTransactionRow(row),
+    user_phone: row.user_phone ?? null,
+  };
+}
+
 function normalizeDailySignInConfigRow(
   row: DailySignInConfigRow,
 ): DailySignInConfigRow {
@@ -95,6 +105,16 @@ function normalizeRechargeOrderRow(row: RechargeOrderRow): RechargeOrderRow {
   return {
     ...row,
     amount_coins: toCoins(row.amount_coins),
+  };
+}
+
+function normalizeAdminRechargeOrderRow(
+  row: AdminRechargeOrderRow,
+): AdminRechargeOrderRow {
+  return {
+    ...row,
+    ...normalizeRechargeOrderRow(row),
+    user_phone: row.user_phone ?? null,
   };
 }
 
@@ -170,6 +190,17 @@ export interface WalletTransactionRow {
   created_at: string;
 }
 
+/** 管理后台余额流水列表行，附带用户手机号便于人工核对。 */
+export interface AdminWalletTransactionRow extends WalletTransactionRow {
+  user_phone: string | null;
+}
+
+/** 管理后台余额流水列表响应。 */
+export interface AdminWalletTransactionListResult {
+  transactions: AdminWalletTransactionRow[];
+  total: number;
+}
+
 /**
  * 根据 wallet_transactions.kind 推断 balance_source。
  * 调用方可覆写（如 overage_charge 的细化为 'bonus'/'purchased'/'mixed'）。
@@ -217,6 +248,12 @@ export interface BillingRequestReservationRow {
   updated_at: string;
 }
 
+/** 管理后台请求级计费预约分页响应。 */
+export interface BillingRequestReservationListResult {
+  reservations: BillingRequestReservationRow[];
+  total: number;
+}
+
 /**
  * 单次模型请求结算结果，包含钱包实扣和会员额度抵扣明细。
  */
@@ -246,6 +283,17 @@ export interface RechargeOrderRow {
   metadata: unknown;
   created_at: string;
   updated_at: string;
+}
+
+/** 管理后台充值订单列表行，附带用户手机号便于人工核对。 */
+export interface AdminRechargeOrderRow extends RechargeOrderRow {
+  user_phone: string | null;
+}
+
+/** 管理后台充值订单列表响应。 */
+export interface AdminRechargeOrderListResult {
+  orders: AdminRechargeOrderRow[];
+  total: number;
 }
 
 export interface RechargeStatsRow {
@@ -983,6 +1031,67 @@ export async function listRechargeOrdersByUserId(
   return (rows as RechargeOrderRow[]).map(normalizeRechargeOrderRow);
 }
 
+/**
+ * 查询管理后台使用的全局充值订单列表。
+ *
+ * @param opts - 可按用户、订单状态和支付方式筛选，并支持分页。
+ * @returns 订单列表与匹配总数；每行附带用户手机号。
+ */
+export async function listRechargeOrdersForAdmin(
+  opts: {
+    userId?: string;
+    status?: RechargeOrderStatus;
+    payType?: RechargePayType;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<AdminRechargeOrderListResult> {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (opts.userId) {
+    where.push(`ro.user_id = $${idx++}`);
+    values.push(opts.userId);
+  }
+  if (opts.status) {
+    where.push(`ro.status = $${idx++}`);
+    values.push(opts.status);
+  }
+  if (opts.payType) {
+    where.push(`ro.pay_type = $${idx++}`);
+    values.push(opts.payType);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const limit = Math.min(Math.max(opts.limit ?? 80, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS cnt
+     FROM recharge_orders ro
+     ${whereClause}`,
+    values,
+  );
+
+  const { rows } = await pool.query(
+    `SELECT ro.*, u.phone AS user_phone
+     FROM recharge_orders ro
+     LEFT JOIN users u ON u.id = ro.user_id
+     ${whereClause}
+     ORDER BY ro.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...values, limit, offset],
+  );
+
+  return {
+    orders: (rows as AdminRechargeOrderRow[]).map(
+      normalizeAdminRechargeOrderRow,
+    ),
+    total: Number((countRows[0] as { cnt: string }).cnt),
+  };
+}
+
 export async function getRechargeStatsByUserId(
   userId: string,
 ): Promise<RechargeStatsRow> {
@@ -1131,6 +1240,7 @@ export async function listBillingRequestReservations(opts?: {
   holdState?: BillingRequestReservationRow['hold_state'];
   chargeState?: BillingRequestReservationRow['charge_state'];
   limit?: number;
+  offset?: number;
 }): Promise<BillingRequestReservationRow[]> {
   const where: string[] = [];
   const values: unknown[] = [];
@@ -1148,17 +1258,78 @@ export async function listBillingRequestReservations(opts?: {
     values.push(opts.chargeState);
   }
   values.push(Math.min(opts?.limit ?? 50, 200));
+  values.push(Math.max(opts?.offset ?? 0, 0));
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
   const { rows } = await pool.query(
     `SELECT * FROM billing_request_reservations
      ${whereClause}
      ORDER BY created_at DESC
-     LIMIT $${idx}`,
+     LIMIT $${idx++} OFFSET $${idx}`,
     values,
   );
   return (rows as BillingRequestReservationRow[]).map(
     normalizeBillingRequestReservationRow,
   );
+}
+
+/**
+ * 查询管理后台使用的请求级计费预约分页列表。
+ *
+ * @param opts - 可按用户、冻结状态和结算状态筛选，并支持分页。
+ * @returns 计费预约列表与匹配总数。
+ */
+export async function listBillingRequestReservationsPageForAdmin(
+  opts: {
+    userId?: string;
+    holdState?: BillingRequestReservationRow['hold_state'];
+    chargeState?: BillingRequestReservationRow['charge_state'];
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<BillingRequestReservationListResult> {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (opts.userId) {
+    where.push(`user_id = $${idx++}`);
+    values.push(opts.userId);
+  }
+  if (opts.holdState) {
+    where.push(`hold_state = $${idx++}`);
+    values.push(opts.holdState);
+  }
+  if (opts.chargeState) {
+    where.push(`charge_state = $${idx++}`);
+    values.push(opts.chargeState);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS cnt
+     FROM billing_request_reservations
+     ${whereClause}`,
+    values,
+  );
+
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM billing_request_reservations
+     ${whereClause}
+     ORDER BY created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...values, limit, offset],
+  );
+
+  return {
+    reservations: (rows as BillingRequestReservationRow[]).map(
+      normalizeBillingRequestReservationRow,
+    ),
+    total: Number((countRows[0] as { cnt: string }).cnt),
+  };
 }
 
 export async function reconcileStaleBillingReservations(
@@ -1213,6 +1384,73 @@ export async function getWalletTransactionsByUserId(
     [userId, limit],
   );
   return (rows as WalletTransactionRow[]).map(normalizeWalletTransactionRow);
+}
+
+/**
+ * 查询管理后台使用的全局余额流水列表。
+ *
+ * @param opts - 可按用户和流水类型筛选，并支持分页。
+ * @returns 余额流水列表与匹配总数；每行附带用户手机号。
+ */
+export async function listWalletTransactionsForAdmin(
+  opts: {
+    userId?: string;
+    kind?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<AdminWalletTransactionListResult> {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (opts.userId) {
+    where.push(`wt.user_id = $${idx++}`);
+    values.push(opts.userId);
+  }
+  if (opts.kind) {
+    where.push(`wt.kind = $${idx++}`);
+    values.push(opts.kind);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const limit = Math.min(Math.max(opts.limit ?? 80, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS cnt
+     FROM wallet_transactions wt
+     ${whereClause}`,
+    values,
+  );
+
+  const { rows } = await pool.query(
+    `SELECT wt.id,
+            wt.user_id,
+            wt.kind,
+            wt.amount_coins::float8 AS amount_coins,
+            wt.reserved_delta_coins::float8 AS reserved_delta_coins,
+            wt.balance_source,
+            wt.balance_grant_id,
+            wt.request_id,
+            wt.note,
+            wt.metadata,
+            wt.created_at,
+            u.phone AS user_phone
+     FROM wallet_transactions wt
+     LEFT JOIN users u ON u.id = wt.user_id
+     ${whereClause}
+     ORDER BY wt.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...values, limit, offset],
+  );
+
+  return {
+    transactions: (rows as AdminWalletTransactionRow[]).map(
+      normalizeAdminWalletTransactionRow,
+    ),
+    total: Number((countRows[0] as { cnt: string }).cnt),
+  };
 }
 
 export async function getVisibleWalletTransactionsByUserId(

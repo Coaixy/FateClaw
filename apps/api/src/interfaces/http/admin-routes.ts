@@ -37,6 +37,9 @@ import {
   listAdminSkillBundleSummaries,
   listAdminUsersWithStats,
   listBillingRequestReservations,
+  listBillingRequestReservationsPageForAdmin,
+  listRechargeOrdersForAdmin,
+  listWalletTransactionsForAdmin,
   listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
   removeOfficialModel,
@@ -271,6 +274,30 @@ const AdminStatsQuerySchema = z
       });
     }
   });
+
+const AdminRechargeOrdersQuerySchema = z.object({
+  user_id: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(['pending', 'paid', 'failed']).optional(),
+  pay_type: z.enum(['alipay', 'wechat']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const AdminWalletTransactionsQuerySchema = z.object({
+  user_id: z.string().trim().min(1).max(120).optional(),
+  kind: z.string().trim().min(1).max(80).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const AdminBillingReservationsQuerySchema = z.object({
+  user_id: z.string().trim().min(1).max(120).optional(),
+  hold_state: z.enum(['none', 'held', 'released']).optional(),
+  charge_state: z.enum(['pending', 'charged']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  include_total: z.enum(['true', 'false']).optional(),
+});
 
 const OfficialModelAuthModeSchema = z
   .enum([
@@ -635,6 +662,39 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     );
   });
 
+  // GET /api/admin/billing/recharge-orders — 查询全局充值订单
+  app.get('/billing/recharge-orders', async (request, reply) => {
+    const parsed = AdminRechargeOrdersQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return listRechargeOrdersForAdmin({
+      userId: parsed.data.user_id,
+      status: parsed.data.status,
+      payType: parsed.data.pay_type,
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
+    });
+  });
+
+  // GET /api/admin/billing/wallet-transactions — 查询全局余额流水
+  app.get('/billing/wallet-transactions', async (request, reply) => {
+    const parsed = AdminWalletTransactionsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return listWalletTransactionsForAdmin({
+      userId: parsed.data.user_id,
+      kind: parsed.data.kind,
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
+    });
+  });
+
   // GET /api/admin/reward-config — 读取软妹币奖励配置
   app.get('/reward-config', async () => {
     return getAdminRewardConfig();
@@ -962,19 +1022,26 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/admin/billing/reservations — 查询请求级预留记录
-  app.get('/billing/reservations', async (request) => {
-    const query = request.query as {
-      user_id?: string;
-      hold_state?: 'none' | 'held' | 'released';
-      charge_state?: 'pending' | 'charged';
-      limit?: string;
+  app.get('/billing/reservations', async (request, reply) => {
+    const parsed = AdminBillingReservationsQuerySchema.safeParse(
+      request.query,
+    );
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    const opts = {
+      userId: parsed.data.user_id,
+      holdState: parsed.data.hold_state,
+      chargeState: parsed.data.charge_state,
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
     };
-    return listBillingRequestReservations({
-      userId: query.user_id,
-      holdState: query.hold_state,
-      chargeState: query.charge_state,
-      limit: query.limit ? Number(query.limit) : undefined,
-    });
+    if (parsed.data.include_total === 'true') {
+      return listBillingRequestReservationsPageForAdmin(opts);
+    }
+    return listBillingRequestReservations(opts);
   });
 
   // POST /api/admin/billing/reconcile — 手动触发陈旧预留修复

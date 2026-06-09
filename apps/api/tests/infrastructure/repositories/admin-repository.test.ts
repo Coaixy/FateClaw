@@ -161,12 +161,26 @@ describe('admin repository', () => {
           total_orders: 5,
           paid_orders: 3,
           pending_orders: 1,
+          failed_orders: 1,
+          paid_users: 2,
           total_coins: 120,
           today_coins: 20,
           period_paid_orders: 2,
+          period_paid_users: 2,
           period_coins: 70,
         },
       ],
+      [{ active: 2 }],
+      [
+        {
+          purchased: 100,
+          bonus: 20,
+          reserved: 5,
+          available: 115,
+          negative_users: 1,
+        },
+      ],
+      [{ held: 3, pending: 4 }],
     ]);
 
     await expect(
@@ -176,13 +190,21 @@ describe('admin repository', () => {
         rechargeEndDate: '2026-05-30',
       }),
     ).resolves.toMatchObject({
+      active_subscriptions: 2,
+      failed_recharge_orders: 1,
+      paid_recharge_users: 2,
       total_recharge_coins: 120,
       today_recharge_coins: 20,
+      held_billing_reservations: 3,
+      pending_billing_reservations: 4,
+      total_available_coins: 115,
+      negative_balance_users: 1,
       recharge_period: {
         range: 'custom',
         start_date: '2026-05-01',
         end_date: '2026-05-30',
         paid_orders: 2,
+        paid_users: 2,
         total_recharge_coins: 70,
       },
     });

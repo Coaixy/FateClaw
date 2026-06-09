@@ -15,8 +15,17 @@ export interface AdminGlobalStats {
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
+  failed_recharge_orders: number;
+  paid_recharge_users: number;
   total_recharge_coins: number;
   today_recharge_coins: number;
+  held_billing_reservations: number;
+  pending_billing_reservations: number;
+  total_purchased_coins: number;
+  total_bonus_coins: number;
+  total_reserved_coins: number;
+  total_available_coins: number;
+  negative_balance_users: number;
   total_accounts: number;
   enabled_accounts: number;
   total_messages: number;
@@ -45,6 +54,7 @@ export interface AdminRechargePeriodStats {
   start_date: string | null;
   end_date: string | null;
   paid_orders: number;
+  paid_users: number;
   total_recharge_coins: number;
 }
 
@@ -572,6 +582,9 @@ export async function getAdminGlobalStats(
     todayUsage,
     recentSignups,
     rechargeStats,
+    membershipStats,
+    balanceStats,
+    billingReservationStats,
   ] = await Promise.all([
     pool.query('SELECT COUNT(*) as cnt FROM users'),
     pool.query(
@@ -600,6 +613,8 @@ export async function getAdminGlobalStats(
          COUNT(*)::int AS total_orders,
          COUNT(*) FILTER (WHERE status = 'paid')::int AS paid_orders,
          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_orders,
+         COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_orders,
+         COUNT(DISTINCT user_id) FILTER (WHERE status = 'paid')::int AS paid_users,
          COALESCE(SUM(amount_coins) FILTER (WHERE status = 'paid'), 0)::float8
            AS total_coins,
          COALESCE(SUM(amount_coins) FILTER (
@@ -612,6 +627,11 @@ export async function getAdminGlobalStats(
              AND ($2::date IS NULL OR paid_at >= $2::date)
              AND ($3::date IS NULL OR paid_at < $3::date)
          )::int AS period_paid_orders,
+         COUNT(DISTINCT user_id) FILTER (
+           WHERE status = 'paid'
+             AND ($2::date IS NULL OR paid_at >= $2::date)
+             AND ($3::date IS NULL OR paid_at < $3::date)
+         )::int AS period_paid_users,
          COALESCE(SUM(amount_coins) FILTER (
            WHERE status = 'paid'
              AND ($2::date IS NULL OR paid_at >= $2::date)
@@ -619,6 +639,29 @@ export async function getAdminGlobalStats(
          ), 0)::float8 AS period_coins
        FROM recharge_orders`,
       rechargeStatsParams,
+    ),
+    pool.query(
+      `SELECT COUNT(*) FILTER (
+         WHERE status = 'active' AND current_period_end > NOW()
+       )::int AS active
+       FROM user_memberships`,
+    ),
+    pool.query(
+      `SELECT
+         COALESCE(SUM(purchased_coins), 0)::float8 AS purchased,
+         COALESCE(SUM(bonus_coins), 0)::float8 AS bonus,
+         COALESCE(SUM(reserved_coins), 0)::float8 AS reserved,
+         COALESCE(SUM(purchased_coins + bonus_coins - reserved_coins), 0)::float8 AS available,
+         COUNT(*) FILTER (
+           WHERE purchased_coins + bonus_coins - reserved_coins < 0
+         )::int AS negative_users
+       FROM users`,
+    ),
+    pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE hold_state = 'held')::int AS held,
+         COUNT(*) FILTER (WHERE charge_state = 'pending')::int AS pending
+       FROM billing_request_reservations`,
     ),
   ]);
 
@@ -639,10 +682,25 @@ export async function getAdminGlobalStats(
     total_orders: number;
     paid_orders: number;
     pending_orders: number;
+    failed_orders: number;
+    paid_users: number;
     total_coins: number;
     today_coins: number;
     period_paid_orders: number;
+    period_paid_users: number;
     period_coins: number;
+  };
+  const ms = membershipStats.rows[0] as { active: number };
+  const bs = balanceStats.rows[0] as {
+    purchased: number;
+    bonus: number;
+    reserved: number;
+    available: number;
+    negative_users: number;
+  };
+  const brs = billingReservationStats.rows[0] as {
+    held: number;
+    pending: number;
   };
 
   const modelSelectionDistribution = (
@@ -659,18 +717,28 @@ export async function getAdminGlobalStats(
       plan: r.source,
       count: r.count,
     })),
-    active_subscriptions: 0,
+    active_subscriptions: Number(ms.active),
     total_recharge_orders: Number(rs.total_orders),
     paid_recharge_orders: Number(rs.paid_orders),
     pending_recharge_orders: Number(rs.pending_orders),
+    failed_recharge_orders: Number(rs.failed_orders),
+    paid_recharge_users: Number(rs.paid_users),
     total_recharge_coins: Number(rs.total_coins),
     today_recharge_coins: Number(rs.today_coins),
+    held_billing_reservations: Number(brs.held),
+    pending_billing_reservations: Number(brs.pending),
+    total_purchased_coins: Number(bs.purchased),
+    total_bonus_coins: Number(bs.bonus),
+    total_reserved_coins: Number(bs.reserved),
+    total_available_coins: Number(bs.available),
+    negative_balance_users: Number(bs.negative_users),
     recharge_period: {
       range: rechargePeriod.range,
       label: rechargePeriod.label,
       start_date: rechargePeriod.startDate,
       end_date: rechargePeriod.endDate,
       paid_orders: Number(rs.period_paid_orders),
+      paid_users: Number(rs.period_paid_users),
       total_recharge_coins: Number(rs.period_coins),
     },
     total_accounts: Number(acc.total),

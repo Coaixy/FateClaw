@@ -218,6 +218,7 @@ export interface AdminRechargePeriodStats {
   start_date: string | null;
   end_date: string | null;
   paid_orders: number;
+  paid_users: number;
   total_recharge_coins: number;
 }
 
@@ -234,8 +235,17 @@ export interface GlobalStats {
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
+  failed_recharge_orders: number;
+  paid_recharge_users: number;
   total_recharge_coins: number;
   today_recharge_coins: number;
+  held_billing_reservations: number;
+  pending_billing_reservations: number;
+  total_purchased_coins: number;
+  total_bonus_coins: number;
+  total_reserved_coins: number;
+  total_available_coins: number;
+  negative_balance_users: number;
   total_accounts: number;
   enabled_accounts: number;
   total_messages: number;
@@ -248,6 +258,74 @@ export interface GlobalStats {
   today_total_tokens: number;
   recent_signups_7d: number;
   recharge_period: AdminRechargePeriodStats;
+}
+
+export type AdminRechargeOrderStatus = 'pending' | 'paid' | 'failed';
+export type AdminRechargePayType = 'alipay' | 'wechat';
+
+/** 管理后台充值订单行。 */
+export interface AdminRechargeOrder {
+  id: string;
+  user_id: string;
+  user_phone: string | null;
+  trade_id: string;
+  provider: string;
+  provider_trade_id: string | null;
+  pay_type: AdminRechargePayType;
+  amount_coins: number;
+  pay_url: string | null;
+  status: AdminRechargeOrderStatus;
+  paid_at: string | null;
+  notified_at: string | null;
+  metadata: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 管理后台充值订单列表响应。 */
+export interface AdminRechargeOrdersResponse {
+  orders: AdminRechargeOrder[];
+  total: number;
+}
+
+export type AdminBillingHoldState = 'none' | 'held' | 'released';
+export type AdminBillingChargeState = 'pending' | 'charged';
+
+/** 管理后台请求级计费预约记录。 */
+export interface AdminBillingRequestReservation {
+  request_id: string;
+  user_id: string;
+  model_config_id: string | null;
+  year_month: string;
+  reserved_coins: number;
+  hold_state: AdminBillingHoldState;
+  charge_state: AdminBillingChargeState;
+  actual_charge_coins: number;
+  total_overage_tokens: number;
+  total_overage_cost_coins: number;
+  note: string | null;
+  metadata: unknown;
+  released_at: string | null;
+  charged_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 管理后台请求级计费预约分页响应。 */
+export interface AdminBillingReservationsResponse {
+  reservations: AdminBillingRequestReservation[];
+  total: number;
+}
+
+/** 管理后台全局余额流水行。 */
+export interface AdminWalletTransaction extends WalletTransaction {
+  user_phone: string | null;
+}
+
+/** 管理后台全局余额流水列表响应。 */
+export interface AdminWalletTransactionsResponse {
+  transactions: AdminWalletTransaction[];
+  total: number;
 }
 
 export interface AdminMessage {
@@ -571,6 +649,59 @@ export const admin = {
     const query = params.toString();
     return adminRequest<GlobalStats>(
       `/api/admin/stats${query ? `?${query}` : ''}`,
+    );
+  },
+  rechargeOrders: (opts?: {
+    user_id?: string;
+    status?: AdminRechargeOrderStatus;
+    pay_type?: AdminRechargePayType;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.user_id) params.set('user_id', opts.user_id);
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.pay_type) params.set('pay_type', opts.pay_type);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const query = params.toString();
+    return adminRequest<AdminRechargeOrdersResponse>(
+      `/api/admin/billing/recharge-orders${query ? `?${query}` : ''}`,
+    );
+  },
+  walletTransactions: (opts?: {
+    user_id?: string;
+    kind?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.user_id) params.set('user_id', opts.user_id);
+    if (opts?.kind) params.set('kind', opts.kind);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const query = params.toString();
+    return adminRequest<AdminWalletTransactionsResponse>(
+      `/api/admin/billing/wallet-transactions${query ? `?${query}` : ''}`,
+    );
+  },
+  billingReservations: (opts?: {
+    user_id?: string;
+    hold_state?: AdminBillingHoldState;
+    charge_state?: AdminBillingChargeState;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    params.set('include_total', 'true');
+    if (opts?.user_id) params.set('user_id', opts.user_id);
+    if (opts?.hold_state) params.set('hold_state', opts.hold_state);
+    if (opts?.charge_state) params.set('charge_state', opts.charge_state);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const query = params.toString();
+    return adminRequest<AdminBillingReservationsResponse>(
+      `/api/admin/billing/reservations${query ? `?${query}` : ''}`,
     );
   },
   systemConfig: () =>

@@ -1,10 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import {
   BadgeDollarSign,
   Brain,
+  ChevronDown,
   Check,
+  Cpu,
+  Hash,
+  KeyRound,
+  Link2,
   Loader2,
   RefreshCw,
   Save,
@@ -31,7 +44,8 @@ import {
 } from './model-pricing';
 
 const CONTROL =
-  'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-1 focus:ring-primary/20';
+  'h-11 w-full rounded-md border border-hairline/80 bg-canvas/70 text-[15px] text-ink outline-none transition-all duration-150 placeholder:text-muted-soft/75 hover:border-primary/30 hover:bg-canvas focus:border-primary/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgba(204,120,92,0.13)] disabled:cursor-not-allowed disabled:opacity-50';
+const ICON_INPUT_CONTROL = `${CONTROL} pl-10 pr-3`;
 
 const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
 const THINKING_LEVEL_OPTIONS: Array<{
@@ -551,7 +565,7 @@ function CustomModelSection({
   custom: CustomDraft;
   customModelPlatformFeeCoins: number;
   selected: boolean;
-  setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
+  setCustom: Dispatch<SetStateAction<CustomDraft>>;
   onSaveCustom: () => Promise<void>;
   onSelectCustom: () => Promise<void>;
 }) {
@@ -600,10 +614,10 @@ function CustomModelSection({
             setCustom={setCustom}
           />
           <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-end">
-            <label className="space-y-1.5">
-              <span className="text-[12px] font-medium text-muted">
-                API Key
-              </span>
+            <FormField
+              label="API Key"
+              icon={<KeyRound size={15} />}
+            >
               <input
                 type="text"
                 value={custom.api_key}
@@ -614,9 +628,9 @@ function CustomModelSection({
                   }))
                 }
                 placeholder="输入 API Key"
-                className={CONTROL}
+                className={ICON_INPUT_CONTROL}
               />
-            </label>
+            </FormField>
             <button
               type="button"
               onClick={() => void onSaveCustom()}
@@ -625,7 +639,7 @@ function CustomModelSection({
                 !custom.model_name.trim() ||
                 !custom.api_key.trim()
               }
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-transparent bg-primary px-4 text-sm font-medium text-on-primary shadow-[0_8px_18px_rgba(169,88,62,0.18)] transition-all duration-150 hover:bg-primary-active active:scale-[0.98] disabled:cursor-not-allowed disabled:border-hairline disabled:bg-surface-cream-strong disabled:text-muted-soft disabled:shadow-none disabled:active:scale-100"
             >
               {busy === 'custom' ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -690,33 +704,22 @@ function CustomModelFields({
   setCustom,
 }: {
   custom: CustomDraft;
-  setCustom: React.Dispatch<React.SetStateAction<CustomDraft>>;
+  setCustom: Dispatch<SetStateAction<CustomDraft>>;
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <label className="space-y-1.5">
-        <span className="text-[12px] font-medium text-muted">
-          协议类型
-        </span>
-        <select
-          value={custom.pi_api}
-          onChange={(event) =>
-            setCustom((prev) => ({
-              ...prev,
-              pi_api: event.target.value as ModelPiApi,
-            }))
-          }
-          className={CONTROL}
-        >
-          {PI_API_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ProtocolSelectField
+        value={custom.pi_api}
+        onChange={(value) =>
+          setCustom((prev) => ({
+            ...prev,
+            pi_api: value,
+          }))
+        }
+      />
       <TextField
         label="模型名"
+        icon={<Brain size={15} />}
         value={custom.model_name}
         onChange={(value) =>
           setCustom((prev) => ({ ...prev, model_name: value }))
@@ -724,6 +727,7 @@ function CustomModelFields({
       />
       <TextField
         label="上下文窗口 Token（0 为自动）"
+        icon={<Hash size={15} />}
         value={String(custom.context_window_tokens)}
         onChange={(value) =>
           setCustom((prev) => ({
@@ -734,6 +738,7 @@ function CustomModelFields({
       />
       <TextField
         label="Base URL"
+        icon={<Link2 size={15} />}
         value={custom.base_url}
         placeholder="可选"
         onChange={(value) =>
@@ -744,6 +749,149 @@ function CustomModelFields({
   );
 }
 
+function ProtocolSelectField({
+  value,
+  onChange,
+}: {
+  value: ModelPiApi;
+  onChange: (value: ModelPiApi) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedOption =
+    PI_API_OPTIONS.find((option) => option.value === value) ??
+    PI_API_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="group relative min-w-0 space-y-1.5">
+      <span className="text-[12px] font-medium text-muted">
+        协议类型
+      </span>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-muted-soft transition-colors group-focus-within:text-primary">
+          <Cpu size={15} />
+        </span>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={`协议类型，当前 ${selectedOption.label}`}
+          onClick={() => setOpen((current) => !current)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          className={`flex items-center gap-3 pl-10 pr-10 text-left ${CONTROL} ${
+            open
+              ? 'border-primary/60 bg-canvas shadow-[0_0_0_3px_rgba(204,120,92,0.13)]'
+              : ''
+          }`}
+        >
+          <span className="min-w-0 flex-1 truncate font-mono text-[14px]">
+            {selectedOption.label}
+          </span>
+        </button>
+        <ChevronDown
+          size={15}
+          className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-soft transition-all duration-150 group-focus-within:text-primary ${
+            open ? 'rotate-180 text-primary' : ''
+          }`}
+        />
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-hairline bg-surface-card shadow-[0_14px_34px_rgba(0,0,0,0.12)] animate-scale-in">
+            <div
+              role="listbox"
+              aria-label="选择协议类型"
+              className="space-y-1 p-1.5"
+            >
+              {PI_API_OPTIONS.map((option) => {
+                const selected = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      setOpen(false);
+                      if (!selected) onChange(option.value);
+                    }}
+                    className={`flex min-h-10 w-full items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors ${
+                      selected
+                        ? 'bg-primary/12 text-primary'
+                        : 'text-ink hover:bg-surface-cream-strong'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
+                        selected
+                          ? 'border-primary/30 bg-primary/10 text-primary'
+                          : 'border-hairline bg-canvas text-muted-soft'
+                      }`}
+                    >
+                      {selected ? <Check size={14} /> : <Cpu size={14} />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-medium">
+                      {option.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <label className="group block min-w-0 space-y-1.5">
+      <span className="text-[12px] font-medium text-muted">
+        {label}
+      </span>
+      <span className="relative block">
+        <span className="pointer-events-none absolute left-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-muted-soft transition-colors group-focus-within:text-primary">
+          {icon}
+        </span>
+        {children}
+      </span>
+    </label>
+  );
+}
 function OfficialModelsSection({
   busy,
   models,
@@ -859,26 +1007,25 @@ function OfficialModelOption({
 
 function TextField({
   label,
+  icon,
   value,
   onChange,
   placeholder,
 }: {
   label: string;
+  icon: ReactNode;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
   return (
-    <label className="space-y-1.5">
-      <span className="text-[12px] font-medium text-muted">
-        {label}
-      </span>
+    <FormField label={label} icon={icon}>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={CONTROL}
+        className={ICON_INPUT_CONTROL}
       />
-    </label>
+    </FormField>
   );
 }

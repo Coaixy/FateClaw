@@ -30,6 +30,9 @@ import {
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
+  listBillingRequestReservationsPageForAdmin,
+  listRechargeOrdersForAdmin,
+  listWalletTransactionsForAdmin,
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
   subscribeMembershipWithWallet,
@@ -172,8 +175,155 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('user_id = $1');
     expect(calls[0]?.sql).toContain('hold_state = $2');
     expect(calls[0]?.sql).toContain('charge_state = $3');
-    expect(calls[0]?.sql).toContain('LIMIT $4');
-    expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200]);
+    expect(calls[0]?.sql).toContain('LIMIT $4 OFFSET $5');
+    expect(calls[0]?.params).toEqual([
+      'user-1',
+      'held',
+      'pending',
+      200,
+      0,
+    ]);
+  });
+
+  it('lists admin billing reservations with filters and total count', async () => {
+    const { calls } = createMockPool([
+      [{ cnt: '6' }],
+      [
+        {
+          request_id: 'request-1',
+          user_id: 'user-1',
+          reserved_coins: '1.25',
+          actual_charge_coins: '0.5',
+          total_overage_cost_coins: '0.5',
+        },
+      ],
+    ]);
+
+    await expect(
+      listBillingRequestReservationsPageForAdmin({
+        userId: 'user-1',
+        holdState: 'held',
+        chargeState: 'pending',
+        limit: 20,
+        offset: 40,
+      }),
+    ).resolves.toEqual({
+      reservations: [
+        {
+          request_id: 'request-1',
+          user_id: 'user-1',
+          reserved_coins: 1.25,
+          actual_charge_coins: 0.5,
+          total_overage_cost_coins: 0.5,
+        },
+      ],
+      total: 6,
+    });
+
+    expect(calls[0]?.sql).toContain('FROM billing_request_reservations');
+    expect(calls[0]?.sql).toContain('user_id = $1');
+    expect(calls[0]?.sql).toContain('hold_state = $2');
+    expect(calls[0]?.sql).toContain('charge_state = $3');
+    expect(calls[1]?.sql).toContain('LIMIT $4 OFFSET $5');
+    expect(calls[1]?.params).toEqual([
+      'user-1',
+      'held',
+      'pending',
+      20,
+      40,
+    ]);
+  });
+
+  it('lists admin recharge orders with filters and total count', async () => {
+    const { calls } = createMockPool([
+      [{ cnt: '3' }],
+      [
+        {
+          id: 'order-1',
+          user_id: 'user-1',
+          user_phone: '13800138000',
+          amount_coins: '19.5',
+        },
+      ],
+    ]);
+
+    await expect(
+      listRechargeOrdersForAdmin({
+        userId: 'user-1',
+        status: 'paid',
+        payType: 'wechat',
+        limit: 500,
+        offset: 10,
+      }),
+    ).resolves.toEqual({
+      orders: [
+        {
+          id: 'order-1',
+          user_id: 'user-1',
+          user_phone: '13800138000',
+          amount_coins: 19.5,
+        },
+      ],
+      total: 3,
+    });
+
+    expect(calls[0]?.sql).toContain('FROM recharge_orders ro');
+    expect(calls[0]?.sql).toContain('ro.user_id = $1');
+    expect(calls[0]?.sql).toContain('ro.status = $2');
+    expect(calls[0]?.sql).toContain('ro.pay_type = $3');
+    expect(calls[1]?.sql).toContain('LEFT JOIN users u ON u.id = ro.user_id');
+    expect(calls[1]?.sql).toContain('LIMIT $4 OFFSET $5');
+    expect(calls[1]?.params).toEqual([
+      'user-1',
+      'paid',
+      'wechat',
+      200,
+      10,
+    ]);
+  });
+
+  it('lists admin wallet transactions with filters and total count', async () => {
+    const { calls } = createMockPool([
+      [{ cnt: '2' }],
+      [
+        {
+          id: 'tx-1',
+          user_id: 'user-1',
+          user_phone: null,
+          kind: 'overage_charge',
+          amount_coins: '-0.25',
+          reserved_delta_coins: '0',
+        },
+      ],
+    ]);
+
+    await expect(
+      listWalletTransactionsForAdmin({
+        userId: 'user-1',
+        kind: 'overage_charge',
+        limit: 30,
+        offset: 5,
+      }),
+    ).resolves.toEqual({
+      transactions: [
+        {
+          id: 'tx-1',
+          user_id: 'user-1',
+          user_phone: null,
+          kind: 'overage_charge',
+          amount_coins: -0.25,
+          reserved_delta_coins: 0,
+        },
+      ],
+      total: 2,
+    });
+
+    expect(calls[0]?.sql).toContain('FROM wallet_transactions wt');
+    expect(calls[0]?.sql).toContain('wt.user_id = $1');
+    expect(calls[0]?.sql).toContain('wt.kind = $2');
+    expect(calls[1]?.sql).toContain('LEFT JOIN users u ON u.id = wt.user_id');
+    expect(calls[1]?.sql).toContain('LIMIT $3 OFFSET $4');
+    expect(calls[1]?.params).toEqual(['user-1', 'overage_charge', 30, 5]);
   });
 
   it('creates daily sign-in rewards transactionally', async () => {

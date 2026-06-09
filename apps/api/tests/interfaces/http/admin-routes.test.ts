@@ -51,7 +51,10 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listAdminSkillBundleSummaries: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
+  listBillingRequestReservationsPageForAdmin: vi.fn(),
+  listRechargeOrdersForAdmin: vi.fn(),
   listPublicFinancialLedgerEntries: vi.fn(),
+  listWalletTransactionsForAdmin: vi.fn(),
   listSimpleWorkflowPresets: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
@@ -83,8 +86,11 @@ import {
   getAdminGlobalStats,
   grantBonusBalance,
   getMessagesForAdmin,
+  listBillingRequestReservationsPageForAdmin,
+  listRechargeOrdersForAdmin,
   listAdminSkillBundleSummaries,
   listAdminUsersWithStats,
+  listWalletTransactionsForAdmin,
   scanPiSessionOrphanFilesForAdmin,
   updateSimpleWorkflowPreset,
   updateRuntimeSettings,
@@ -107,6 +113,20 @@ describe('adminRoutes authentication throttling', () => {
     } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
     vi.mocked(listAdminSkillBundleSummaries).mockResolvedValue([]);
+    vi.mocked(listBillingRequestReservationsPageForAdmin).mockResolvedValue({
+      reservations: [],
+      total: 0,
+    } as Awaited<
+      ReturnType<typeof listBillingRequestReservationsPageForAdmin>
+    >);
+    vi.mocked(listRechargeOrdersForAdmin).mockResolvedValue({
+      orders: [],
+      total: 0,
+    } as Awaited<ReturnType<typeof listRechargeOrdersForAdmin>>);
+    vi.mocked(listWalletTransactionsForAdmin).mockResolvedValue({
+      transactions: [],
+      total: 0,
+    } as Awaited<ReturnType<typeof listWalletTransactionsForAdmin>>);
 
     app = Fastify({ logger: false });
     await app.register(adminRoutes);
@@ -179,6 +199,54 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(response.statusCode).toBe(200);
     expect(getAdminGlobalStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows the owner key to query billing ledgers with filters', async () => {
+    const ordersResponse = await app.inject({
+      method: 'GET',
+      url: '/billing/recharge-orders?user_id=user-1&status=paid&pay_type=wechat&limit=20&offset=5',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+    const transactionsResponse = await app.inject({
+      method: 'GET',
+      url: '/billing/wallet-transactions?user_id=user-1&kind=overage_charge&limit=30&offset=10',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+    const reservationsResponse = await app.inject({
+      method: 'GET',
+      url: '/billing/reservations?include_total=true&user_id=user-1&hold_state=held&charge_state=pending&limit=20&offset=40',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(ordersResponse.statusCode).toBe(200);
+    expect(transactionsResponse.statusCode).toBe(200);
+    expect(reservationsResponse.statusCode).toBe(200);
+    expect(listRechargeOrdersForAdmin).toHaveBeenCalledWith({
+      userId: 'user-1',
+      status: 'paid',
+      payType: 'wechat',
+      limit: 20,
+      offset: 5,
+    });
+    expect(listWalletTransactionsForAdmin).toHaveBeenCalledWith({
+      userId: 'user-1',
+      kind: 'overage_charge',
+      limit: 30,
+      offset: 10,
+    });
+    expect(listBillingRequestReservationsPageForAdmin).toHaveBeenCalledWith({
+      userId: 'user-1',
+      holdState: 'held',
+      chargeState: 'pending',
+      limit: 20,
+      offset: 40,
+    });
   });
 
   it('allows the user manager key to access user and message endpoints', async () => {
@@ -312,10 +380,19 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
     });
+    const billingResponse = await app.inject({
+      method: 'GET',
+      url: '/billing/recharge-orders',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
 
     expect(statsResponse.statusCode).toBe(403);
     expect(logsResponse.statusCode).toBe(403);
+    expect(billingResponse.statusCode).toBe(403);
     expect(getAdminGlobalStats).not.toHaveBeenCalled();
+    expect(listRechargeOrdersForAdmin).not.toHaveBeenCalled();
   });
 
   it('blocks non-verify endpoints when admin auth is rate limited', async () => {

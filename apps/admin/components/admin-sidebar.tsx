@@ -16,6 +16,7 @@ import {
   ScrollText,
   Bot,
   Landmark,
+  ReceiptText,
   WalletCards,
   Workflow,
   LogOut,
@@ -29,6 +30,12 @@ const navItems = [
     href: '/overview',
     label: '总览',
     icon: LayoutDashboard,
+    roles: ['owner'],
+  },
+  {
+    href: '/billing',
+    label: '账单管理',
+    icon: ReceiptText,
     roles: ['owner'],
   },
   {
