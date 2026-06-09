@@ -158,12 +158,12 @@ function StatusHero({
       : '公开状态指标正常同步';
 
   return (
-    <section className="relative overflow-hidden rounded-lg border border-primary/20 bg-[linear-gradient(135deg,rgba(250,249,245,0.96),rgba(239,233,222,0.78))] shadow-[0_18px_48px_rgba(139,107,69,0.12)]">
+    <section className="relative overflow-hidden rounded-lg border border-primary/20 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-soft)_70%,var(--color-canvas)))] shadow-[0_18px_48px_rgba(15,23,42,0.1)]">
       <div
         className="pointer-events-none absolute inset-0 opacity-35"
         aria-hidden="true"
       >
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(20,20,19,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(20,20,19,0.045)_1px,transparent_1px)] bg-[size:32px_32px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px)] bg-[size:32px_32px]" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
       </div>
 
@@ -266,7 +266,7 @@ function StatusCard({
   caption: string;
 }) {
   return (
-    <section className="group rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))] p-2.5 shadow-[0_10px_28px_rgba(15,23,42,0.04)] transition-colors hover:border-primary/30 sm:p-3 md:p-4">
+    <section className="group rounded-lg border border-hairline bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface-card)_72%,transparent),color-mix(in_srgb,var(--color-canvas)_58%,transparent))] p-2.5 shadow-[0_10px_28px_rgba(15,23,42,0.04)] transition-colors hover:border-primary/30 sm:p-3 md:p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary sm:h-9 sm:w-9">
           {icon}
@@ -348,9 +348,9 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
         </div>
       ) : (
         <>
-          <div className="relative flex h-32 items-end gap-2 overflow-hidden rounded-lg border border-hairline bg-[linear-gradient(to_bottom,rgba(250,249,245,0.7),rgba(239,233,222,0.35))] px-2 pb-8 pt-3 sm:h-40 md:h-56 md:gap-3 md:px-4 md:pt-4">
+          <div className="relative flex h-32 items-end gap-2 overflow-hidden rounded-lg border border-hairline bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--color-surface-card)_72%,var(--color-canvas)),color-mix(in_srgb,var(--color-canvas)_86%,var(--color-surface-soft)))] px-2 pb-8 pt-3 sm:h-40 md:h-56 md:gap-3 md:px-4 md:pt-4">
             <div
-              className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(20,20,19,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(20,20,19,0.045)_1px,transparent_1px)] bg-[size:32px_32px]"
+              className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px)] bg-[size:32px_32px]"
               aria-hidden="true"
             />
             {chartRows.map((row) => {

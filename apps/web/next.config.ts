@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  // 把 Next 开发指示器移到右下角，避免遮住移动端顶部菜单。
+  devIndicators: {
+    position: 'bottom-right',
+  },
 };
 
 export default nextConfig;
