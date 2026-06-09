@@ -219,8 +219,12 @@ function AiChatMessageRow({
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
+  const rendersTextBubble = !hasChart || isFinalMessage;
   const showAiGeneratedLabel =
-    !isErrorMessage && canHostToolTraceFooter(message);
+    !isErrorMessage &&
+    rendersTextBubble &&
+    displayContent.trim().length > 0 &&
+    canHostToolTraceFooter(message);
   const showWalletRecovery =
     isErrorMessage && shouldShowWalletRecovery(displayContent);
 

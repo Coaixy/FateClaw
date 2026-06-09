@@ -1100,28 +1100,29 @@ function HomeModeSelector({
         <button
           type="button"
           onClick={onOpenSimple}
-          className="group flex min-h-[164px] flex-col justify-between rounded-2xl border border-hairline bg-surface-card/65 p-4 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+          className="group flex min-h-[172px] flex-col justify-between rounded-2xl border border-primary/35 bg-[linear-gradient(135deg,rgba(204,120,92,0.18),rgba(232,165,90,0.12)_48%,rgba(255,255,255,0.22))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/55 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.99]"
         >
           <span className="flex items-start justify-between gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-cream-strong text-muted">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
               <Workflow size={18} />
             </span>
-            <span className="rounded-full border border-hairline bg-surface-card px-2 py-0.5 text-[10px] font-medium text-muted">
-              新手友好
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary shadow-sm">
+              <Sparkles size={11} strokeWidth={2} />
+              推荐入口
             </span>
           </span>
 
           <span className="mt-5 block space-y-1">
-            <span className="block text-[17px] font-semibold text-ink">
+            <span className="block text-[18px] font-semibold text-ink">
               简易模式
             </span>
-            <span className="block text-[12px] leading-5 text-muted">
-              适合新手和非从业者，后续会用流程一步步引导提问和排盘。
+            <span className="block text-[12px] leading-5 text-body">
+              适合新手和非从业者，先把问题讲清楚，再由流程完成排盘。
             </span>
           </span>
 
-          <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-muted">
-            进入简易模式
+          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-on-primary shadow-sm transition-colors duration-200 group-hover:bg-primary-active">
+            先从这里开始
             <ChevronRight
               size={13}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
@@ -1132,15 +1133,15 @@ function HomeModeSelector({
         <button
           type="button"
           onClick={onOpenExpert}
-          className="group flex min-h-[164px] flex-col justify-between rounded-2xl border border-primary/25 bg-[linear-gradient(180deg,rgba(204,120,92,0.1),rgba(255,255,255,0.02))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/12 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.99]"
+          className="group flex min-h-[172px] flex-col justify-between rounded-2xl border border-primary/20 bg-[linear-gradient(180deg,rgba(204,120,92,0.08),rgba(255,255,255,0.04))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 active:scale-[0.99]"
         >
           <span className="flex items-start justify-between gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/14 text-primary">
               <Compass size={18} />
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary shadow-sm">
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-primary">
               <CheckCircle2 size={11} strokeWidth={2} />
-              立即可用
+              完整能力
             </span>
           </span>
 

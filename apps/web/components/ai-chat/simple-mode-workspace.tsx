@@ -6,7 +6,6 @@ import {
   CalendarClock,
   HelpCircle,
   Send,
-  Sparkles,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -362,10 +361,6 @@ export function SimpleModeWorkspace({
           disabled={disabled || submitting}
           onClick={() => setPanel('natal')}
         />
-      </div>
-      <div className="flex items-center gap-2 rounded-2xl border border-hairline bg-surface-card/55 px-3 py-2.5 text-[11px] leading-5 text-muted">
-        <Sparkles size={14} className="shrink-0 text-primary" />
-        <span>占卜固定六爻，命理固定八字；模型和 Skill 由后台流程配置。</span>
       </div>
     </div>
   );
