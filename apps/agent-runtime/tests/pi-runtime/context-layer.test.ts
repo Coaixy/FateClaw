@@ -99,7 +99,7 @@ function createInput(): ContainerInput {
 }
 
 describe('createPiSessionContext', () => {
-  it('loads first-class Pi context sections with provenance and persisted board context', async () => {
+  it('loads first-class Pi context manifest sections and persisted board context', async () => {
     const requestScope = createRequestScope();
     const runtime = createRuntime();
     const context = await createPiSessionContext({
@@ -118,8 +118,9 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).not.toContain('id="historical_artifacts"');
     expect(context.prompt).not.toContain('历史八字盘面 JSON');
     expect(context.prompt).not.toContain('id="active_board_context"');
-    expect(context.prompt).toContain('id="session_board_context"');
-    expect(context.prompt).toContain('本会话包含 2 个盘面');
+    expect(context.prompt).toContain('id="session_board_manifest"');
+    expect(context.prompt).toContain('本会话包含 2 个已授权盘面');
+    expect(context.prompt).toContain('必须先调用 get_session_board');
     expect(context.prompt).toContain(
       '<board index="1" current="true" source="official_paipan"',
     );
@@ -131,25 +132,25 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).toContain('用户自贴八字盘面');
     expect(context.prompt).toContain('用户提供的数据材料');
     expect(context.prompt).not.toContain('当前选中八字盘面 JSON');
-    expect(context.prompt).toContain('id="followup_context"');
+    expect(context.prompt).not.toContain('id="followup_context"');
     expect(context.prompt).not.toContain('数据库里的连续性盘面');
     expect(context.prompt).not.toContain('数据库里的盘面 JSON');
-    expect(context.prompt).toContain('id="soul"');
-    expect(context.prompt).toContain('用户 Soul');
+    expect(context.prompt).not.toContain('数据库里的上一轮解读');
+    expect(context.prompt).toContain('id="soul_manifest"');
+    expect(context.prompt).toContain('用户 Soul 清单');
     expect(context.prompt).not.toContain('id="recent_history_store"');
     expect(context.prompt).not.toContain('Redis 历史消息');
     expect(context.prompt).not.toContain('id="knowledge_index"');
     expect(context.prompt).not.toContain('id="required_knowledge_body"');
-    expect(context.prompt).toContain('id="context_provenance"');
-    expect(context.provenance.map((entry) => entry.id)).toEqual(
+    expect(context.prompt).toContain('id="context_manifest"');
+    expect(context.manifest.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         'current_request_metadata',
-        'session_board_context',
-        'followup_context',
-        'soul',
+        'session_board_manifest',
+        'soul_manifest',
       ]),
     );
-    expect(context.provenance.map((entry) => entry.id)).not.toEqual(
+    expect(context.manifest.map((entry) => entry.id)).not.toEqual(
       expect.arrayContaining(['knowledge_index', 'required_knowledge_body']),
     );
     expect(context.persistedSkillContext).toEqual([
@@ -158,11 +159,48 @@ describe('createPiSessionContext', () => {
         output: '用户自贴八字盘面',
       }),
     ]);
-    expect(requestScope.latestFollowupInterpretation).toMatchObject({
-      category: '八字',
-      boardSkill: 'bazi-paipan',
-      interpretationOutput: '数据库里的上一轮解读',
+    expect(
+      runtime.deps.workflowContextStore?.latestFollowupContext,
+    ).not.toHaveBeenCalled();
+    expect(requestScope.latestFollowupInterpretation).toBeNull();
+  });
+
+  it('keeps long board facts behind get_session_board instead of injecting full prompt text', async () => {
+    const requestScope = createRequestScope();
+    const longBoard = [
+      '长盘面开头',
+      '甲'.repeat(400),
+      '中段唯一内容不应进入 system prompt',
+      '乙'.repeat(400),
+      '长盘面结尾',
+    ].join('\n');
+    const context = await createPiSessionContext({
+      containerInput: {
+        accountId: 'web:user-1',
+        sessionId: 'session-long-board',
+        llmRuntime,
+        userMessage: '继续看这个盘',
+        history: [],
+        sessionBoardContexts: [
+          {
+            sourceMessageId: 'message-long',
+            source: 'official_paipan',
+            skill: 'bazi-paipan',
+            artifactTitle: '长盘面',
+            promptText: longBoard,
+            isCurrent: true,
+          },
+        ],
+      },
+      runtime: createRuntime(),
+      requestScope,
     });
+
+    expect(context.prompt).toContain('id="session_board_manifest"');
+    expect(context.prompt).toContain('previewTruncated=true');
+    expect(context.prompt).toContain('必须先调用 get_session_board');
+    expect(context.prompt).toContain('长盘面开头');
+    expect(context.prompt).not.toContain('中段唯一内容不应进入 system prompt');
   });
 
   it('injects a no-board policy when no authorized board context is visible', async () => {
@@ -195,11 +233,11 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).toContain('不等于已授权的盘面 artifact');
     expect(context.prompt).toContain('不要自行计算或生成盘面');
     expect(context.prompt).toContain('FateClaw Web/API 的专用排盘入口');
-    expect(context.prompt).not.toContain('id="session_board_context"');
+    expect(context.prompt).not.toContain('id="session_board_manifest"');
     expect(context.prompt).not.toContain(
       '我是 1990-01-01 早上八点出生，帮我排盘看事业',
     );
-    expect(context.provenance.map((entry) => entry.id)).toEqual(
+    expect(context.manifest.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         'current_request_metadata',
         'board_absence_policy',

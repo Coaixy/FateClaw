@@ -267,12 +267,13 @@ describe('runPiSession', () => {
     const appendedContext =
       createArgs.resourceLoader?.getAppendSystemPrompt().join('\n') ?? '';
     expect(appendedContext).toContain('<fateclaw_pi_context>');
-    expect(appendedContext).toContain('id="context_provenance"');
+    expect(appendedContext).toContain('id="context_manifest"');
     expect(appendedContext).not.toContain('id="session_history"');
     expect(appendedContext).not.toContain('历史八字盘面');
     expect(appendedContext).not.toContain('id="active_board_context"');
-    expect(appendedContext).toContain('id="session_board_context"');
-    expect(appendedContext).toContain('本会话包含 2 个盘面');
+    expect(appendedContext).toContain('id="session_board_manifest"');
+    expect(appendedContext).toContain('本会话包含 2 个已授权盘面');
+    expect(appendedContext).toContain('必须先调用 get_session_board');
     expect(appendedContext).toContain('当前选中八字盘面');
     expect(appendedContext).not.toContain('id="pasted_board"');
     expect(appendedContext).toContain('用户自贴八字盘面');
@@ -350,7 +351,7 @@ describe('runPiSession', () => {
     expect(appendedContext).toContain('本轮没有授权盘面材料');
     expect(appendedContext).toContain('不要自行计算或生成盘面');
     expect(appendedContext).toContain('FateClaw Web/API 的专用排盘入口');
-    expect(appendedContext).not.toContain('id="session_board_context"');
+    expect(appendedContext).not.toContain('id="session_board_manifest"');
     expect(appendedContext).not.toContain(userMessage);
     expect(createArgs.tools).toEqual([
       'get_current_time',
