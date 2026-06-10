@@ -1,12 +1,10 @@
 import {
   queryEffectiveUserSkills,
-  queryLatestFollowupWorkflowContext,
   querySoulEditEnabled,
   querySoulContent,
   queryWorkflowBundleSkills,
   updateSoulContentDb,
   type EffectiveUserSkill,
-  type FollowupWorkflowContext,
 } from './agent-db.js';
 
 /**
@@ -45,24 +43,6 @@ export interface SkillCatalog {
 }
 
 /**
- * 业务连续性上下文存储。
- *
- * 参数：
- * - accountId：当前 agent-runtime 账号 ID。
- * - category：可选业务分类。
- * - sessionId：可选会话 ID。
- *
- * 返回：最近一次可用于追问续接的业务 artifact 上下文；不存在时返回 null。
- */
-export interface WorkflowContextStore {
-  latestFollowupContext(args: {
-    accountId: string;
-    category?: string;
-    sessionId?: string;
-  }): Promise<FollowupWorkflowContext | null>;
-}
-
-/**
  * 单次 Agent Runtime 请求依赖集合。
  *
  * 注意：这些依赖是运行时边界，测试可注入替身；生产默认实现直连数据库。
@@ -70,7 +50,6 @@ export interface WorkflowContextStore {
 export interface AgentRuntimeDeps {
   soulStore: SoulStore;
   skillCatalog: SkillCatalog;
-  workflowContextStore?: WorkflowContextStore;
 }
 
 const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
@@ -94,19 +73,13 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
       return queryWorkflowBundleSkills(skillBundleIds);
     },
   },
-
-  workflowContextStore: {
-    latestFollowupContext(args) {
-      return queryLatestFollowupWorkflowContext(args);
-    },
-  },
 };
 
 /**
  * 获取生产默认 Agent Runtime 依赖。
  *
  * @returns 默认依赖集合。
- * @remarks 默认实现会直连数据库读取 Soul、Skill 和连续性上下文。
+ * @remarks 默认实现会直连数据库读取 Soul 和 Skill。
  */
 export function getDefaultAgentRuntimeDeps(): AgentRuntimeDeps {
   return defaultAgentRuntimeDeps;

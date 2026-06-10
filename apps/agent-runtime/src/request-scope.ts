@@ -4,14 +4,6 @@ import type {
   TranscriptEvent,
 } from './types.js';
 
-export interface FollowupInterpretationContext {
-  category: string;
-  interpretationOutput: string;
-  boardSkill?: string;
-  boardOutput?: string;
-  boardArtifactData?: unknown;
-}
-
 export interface RequestScope {
   requestId?: string;
   traceEvents: TraceEventEntry[];
@@ -19,7 +11,6 @@ export interface RequestScope {
   traceOverflowReported: boolean;
   transcript: TranscriptEvent[];
   artifacts: Artifact[];
-  latestFollowupInterpretation: FollowupInterpretationContext | null;
 }
 
 const TRACE_EVENT_MAX_BYTES = 16 * 1024;
@@ -35,7 +26,6 @@ export function createRequestScope(): RequestScope {
     traceOverflowReported: false,
     transcript: [],
     artifacts: [],
-    latestFollowupInterpretation: null,
   };
 }
 
@@ -112,17 +102,4 @@ export function setRequestId(scope: RequestScope, requestId?: string): void {
 
 export function getRequestId(scope: RequestScope): string | undefined {
   return scope.requestId;
-}
-
-export function setLatestFollowupInterpretation(
-  scope: RequestScope,
-  context: FollowupInterpretationContext | null,
-): void {
-  scope.latestFollowupInterpretation = context;
-}
-
-export function getLatestFollowupInterpretation(
-  scope: RequestScope,
-): FollowupInterpretationContext | null {
-  return scope.latestFollowupInterpretation;
 }

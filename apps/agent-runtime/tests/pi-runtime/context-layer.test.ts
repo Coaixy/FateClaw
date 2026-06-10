@@ -27,15 +27,6 @@ function createRuntime(): RequestRuntime {
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
     },
-    workflowContextStore: {
-      latestFollowupContext: vi.fn(async () => ({
-        category: '八字',
-        boardSkill: 'bazi-paipan',
-        boardOutput: '数据库里的连续性盘面',
-        boardArtifactData: { bazi: '数据库里的盘面 JSON' },
-        interpretationOutput: '数据库里的上一轮解读',
-      })),
-    },
   };
   return { deps };
 }
@@ -131,9 +122,7 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).toContain('用户自贴八字盘面');
     expect(context.prompt).toContain('用户提供的数据材料');
     expect(context.prompt).not.toContain('当前选中八字盘面 JSON');
-    expect(context.prompt).toContain('id="followup_context"');
-    expect(context.prompt).not.toContain('数据库里的连续性盘面');
-    expect(context.prompt).not.toContain('数据库里的盘面 JSON');
+    expect(context.prompt).not.toContain('id="followup_context"');
     expect(context.prompt).toContain('id="soul"');
     expect(context.prompt).toContain('用户 Soul');
     expect(context.prompt).not.toContain('id="recent_history_store"');
@@ -145,24 +134,65 @@ describe('createPiSessionContext', () => {
       expect.arrayContaining([
         'current_request_metadata',
         'session_board_context',
-        'followup_context',
         'soul',
       ]),
     );
     expect(context.provenance.map((entry) => entry.id)).not.toEqual(
-      expect.arrayContaining(['knowledge_index', 'required_knowledge_body']),
+      expect.arrayContaining([
+        'followup_context',
+        'knowledge_index',
+        'required_knowledge_body',
+      ]),
     );
+    expect(context.provenance.every((entry) => entry.retained)).toBe(true);
     expect(context.persistedSkillContext).toEqual([
       expect.objectContaining({
         skill: 'user-pasted-board::八字',
         output: '用户自贴八字盘面',
       }),
     ]);
-    expect(requestScope.latestFollowupInterpretation).toMatchObject({
-      category: '八字',
-      boardSkill: 'bazi-paipan',
-      interpretationOutput: '数据库里的上一轮解读',
+  });
+
+  it('keeps all built sections while previewing long Soul', async () => {
+    const requestScope = createRequestScope();
+    const longSoul = `用户 Soul：${'长期偏好'.repeat(800)}`;
+    const runtime: RequestRuntime = {
+      deps: {
+        soulStore: {
+          read: vi.fn(async () => longSoul),
+          canEdit: vi.fn(async () => true),
+          update: vi.fn(),
+        },
+        skillCatalog: {
+          listEffectiveUserSkills: vi.fn(async () => []),
+        },
+      },
+    };
+    const context = await createPiSessionContext({
+      containerInput: {
+        ...createInput(),
+        llmRuntime: {
+          ...llmRuntime,
+          contextWindowTokens: 64,
+        },
+      },
+      runtime,
+      requestScope,
     });
+
+    expect(context.prompt).toContain('id="current_request_metadata"');
+    expect(context.prompt).toContain('id="session_board_context"');
+    expect(context.prompt).toContain('id="soul"');
+    expect(context.prompt).toContain('已由 Pi context layer 压缩');
+    expect(context.prompt).toContain('这里只注入 Soul 摘要');
+    expect(context.provenance.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        'current_request_metadata',
+        'session_board_context',
+        'soul',
+      ]),
+    );
+    expect(context.provenance.every((entry) => entry.retained)).toBe(true);
   });
 
   it('injects a no-board policy when no authorized board context is visible', async () => {
