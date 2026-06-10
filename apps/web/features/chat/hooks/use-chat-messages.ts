@@ -717,6 +717,59 @@ export function useChatMessages(options: {
     [options.sessions],
   );
 
+  const finalizeRunningToolTraceMessages = useCallback(
+    (status: 'completed' | 'failed') => {
+      setMessages((previous) => {
+        let changed = false;
+        const next = previous.map((message) => {
+          const metadata =
+            message.metadata &&
+            typeof message.metadata === 'object' &&
+            !Array.isArray(message.metadata)
+              ? (message.metadata as Record<string, unknown>)
+              : null;
+          if (
+            !metadata ||
+            metadata.kind !== 'tool_trace' ||
+            metadata.tool_status !== 'running'
+          ) {
+            return message;
+          }
+
+          const toolName =
+            typeof metadata.tool_name === 'string'
+              ? metadata.tool_name
+              : typeof metadata.tool_label === 'string'
+                ? metadata.tool_label
+                : 'tool';
+          const path =
+            typeof metadata.tool_path === 'string'
+              ? sanitizeToolPath(metadata.tool_path)
+              : undefined;
+          changed = true;
+
+          return {
+            ...message,
+            content: buildToolTraceContent({
+              toolName,
+              status,
+              path,
+            }),
+            metadata: {
+              ...metadata,
+              stage: `tool_${status}`,
+              tool_status: status,
+              tool_path: path,
+            },
+          };
+        });
+
+        return changed ? next : previous;
+      });
+    },
+    [],
+  );
+
   const appendAssistantErrorMessage = useCallback(
     (
       sessionId: string,
@@ -1018,6 +1071,9 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'final') {
+        finalizeRunningToolTraceMessages(
+          payload.status === 'error' ? 'failed' : 'completed',
+        );
         if (payload.text.trim()) {
           upsertLatestStreamingAssistantMessage(
             sessionId,
@@ -1128,6 +1184,7 @@ export function useChatMessages(options: {
     beginStreamingAssistantTurn,
     appendAssistantErrorMessage,
     appendReconnectNoticeMessage,
+    finalizeRunningToolTraceMessages,
     getActiveStreamingMessageIds,
     isStreamInterrupted,
     loadMessages,
