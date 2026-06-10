@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Crown, Wallet } from 'lucide-react';
+import { Brain, Crown, Wallet } from 'lucide-react';
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
@@ -214,6 +214,7 @@ function AiChatMessageRow({
       ? message.metadata
       : null;
   const isErrorMessage = isBot && messageMetadata?.kind === 'error';
+  const isThinkingBubble = isBot && isThinkingMessage(message);
   const isFinalMessage = messageMetadata?.kind === 'final' || isErrorMessage;
   const { body: displayContent, marker: finalMarker } = isBot
     ? splitFinalTurnMarker(message.content)
@@ -262,6 +263,15 @@ function AiChatMessageRow({
           {displayContent}
         </span>
       </div>
+    );
+  }
+
+  if (isThinkingBubble) {
+    return (
+      <ThinkingMessageBox
+        content={displayContent}
+        animationIndex={animationIndex}
+      />
     );
   }
 
@@ -351,6 +361,35 @@ function AiChatMessageRow({
           durationLabel={durationLabel}
           costLabels={costLabels}
         />
+      </div>
+    </div>
+  );
+}
+
+function ThinkingMessageBox({
+  content,
+  animationIndex,
+}: {
+  content: string;
+  animationIndex: number;
+}) {
+  const displayContent = content.trim() || '正在思考...';
+
+  return (
+    <div
+      className="max-w-2xl mx-auto flex justify-start animate-message-in"
+      style={{ animationDelay: `${Math.min(animationIndex * 30, 120)}ms` }}
+    >
+      <div className="flex min-w-0 max-w-[82%] flex-col items-start sm:max-w-[62%]">
+        <div className="max-w-full overflow-hidden rounded-lg border border-hairline bg-surface-card/80 px-2.5 py-2 shadow-sm">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium leading-4 text-muted-soft">
+            <Brain size={11} strokeWidth={1.8} aria-hidden="true" />
+            <span>思考</span>
+          </div>
+          <div className="thinking-scrollbar max-h-24 overflow-y-auto overscroll-contain pr-1 text-[11px] leading-5 text-muted whitespace-pre-wrap break-words">
+            {displayContent}
+          </div>
+        </div>
       </div>
     </div>
   );

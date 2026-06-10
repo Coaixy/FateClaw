@@ -262,6 +262,7 @@ export function useChatMessages(options: {
     Array<{ key: string; id: string; args?: unknown }>
   >([]);
   const latestStreamingMessageKeyRef = useRef<string | null>(null);
+  const latestThinkingMessageKeyRef = useRef<string | null>(null);
   const streamingSequenceRef = useRef(0);
   const toolTraceSequenceRef = useRef(0);
   const localMessageSequenceRef = useRef(0);
@@ -285,6 +286,7 @@ export function useChatMessages(options: {
   const resetStreamingMessageRefs = useCallback(() => {
     streamingMessageEntriesRef.current = [];
     latestStreamingMessageKeyRef.current = null;
+    latestThinkingMessageKeyRef.current = null;
     toolTraceMessageEntriesRef.current = [];
   }, []);
 
@@ -294,6 +296,7 @@ export function useChatMessages(options: {
         ? `turn-${turnIndex}`
         : `turn-${streamingSequenceRef.current}`;
     latestStreamingMessageKeyRef.current = key;
+    latestThinkingMessageKeyRef.current = `thinking-${key}`;
     return key;
   }, []);
 
@@ -536,6 +539,7 @@ export function useChatMessages(options: {
       content: string,
       streamKey?: string | null,
       metadata?: Message['metadata'],
+      streamOptions?: { updateLatestKey?: boolean },
     ) => {
       const key =
         streamKey ??
@@ -555,7 +559,9 @@ export function useChatMessages(options: {
           entry,
         ];
       }
-      latestStreamingMessageKeyRef.current = key;
+      if (streamOptions?.updateLatestKey !== false) {
+        latestStreamingMessageKeyRef.current = key;
+      }
       const accountId =
         options.sessions.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
@@ -614,18 +620,27 @@ export function useChatMessages(options: {
     (sessionId: string, content: string, turnIndex?: number) => {
       const text = content.trim();
       if (!text) return;
+      const baseKey =
+        typeof turnIndex === 'number'
+          ? `turn-${turnIndex}`
+          : latestStreamingMessageKeyRef.current ??
+            `turn-${streamingSequenceRef.current}`;
+      const key =
+        typeof turnIndex === 'number'
+          ? `thinking-${baseKey}`
+          : latestThinkingMessageKeyRef.current ?? `thinking-${baseKey}`;
+      latestThinkingMessageKeyRef.current = key;
 
       upsertStreamingAssistantMessage(
         sessionId,
         text,
-        typeof turnIndex === 'number'
-          ? `turn-${turnIndex}`
-          : latestStreamingMessageKeyRef.current,
+        key,
         {
           kind: 'thinking',
           stage: 'thinking',
           workflow: 'pi_runtime',
         },
+        { updateLatestKey: false },
       );
     },
     [upsertStreamingAssistantMessage],
