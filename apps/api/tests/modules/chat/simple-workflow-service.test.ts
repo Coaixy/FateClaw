@@ -171,6 +171,7 @@ describe('startSimpleWorkflowForOwnedUser', () => {
       expect.objectContaining({
         authorizedSkillBundleIds: ['bundle-liuyao'],
         llmRuntimeOverride: { model: 'gpt-test' },
+        plusGateBypass: 'simple_workflow_first_turn',
         runtimeUserMessageOverride: [
           '我该不该换工作？',
           '',

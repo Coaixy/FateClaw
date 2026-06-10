@@ -34,9 +34,9 @@ interface PaipanSkillRailProps {
 
 function LoadingCard() {
   return (
-    <div className="h-8 rounded-lg border border-hairline bg-surface-card/60 px-2 py-1.5">
+    <div className="h-11 rounded-xl border border-hairline bg-surface-card/60 px-3 py-2">
       <div className="flex h-full items-center gap-1.5">
-        <div className="h-4 w-4 rounded-full bg-hairline/60" />
+        <div className="h-6 w-6 rounded-full bg-hairline/60" />
         <div className="h-3 flex-1 rounded-full bg-hairline/45" />
       </div>
     </div>
@@ -62,19 +62,19 @@ export function PaipanSkillRail({
     enabledSkillsLoading || hasEnabledSkills || showEnabledSkillsEmptyState;
 
   return (
-    <section className="rounded-2xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] px-2.5 py-2.5 sm:px-3">
+    <section className="rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,rgba(204,120,92,0.08),rgba(255,255,255,0.03))] p-3 shadow-sm">
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/12 text-primary">
-              <Sparkles size={14} />
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
+              <Sparkles size={15} />
             </div>
             <div>
-              <p className="text-[12px] sm:text-[13px] font-semibold tracking-tight text-ink">
-                手动排盘
+              <p className="text-[14px] font-semibold tracking-tight text-ink">
+                选择术数开始排盘
               </p>
-              <p className="text-[9px] text-muted">
-                也可以直接发消息对话
+              <p className="mt-0.5 text-[10px] text-muted">
+                先生成盘面，再决定是否发给 AI 解读
               </p>
             </div>
           </div>
@@ -87,7 +87,7 @@ export function PaipanSkillRail({
             onClick={onOpenPastedBoard}
             disabled={pastedBoardDisabled ?? disabled}
             icon={<ClipboardPaste size={13} />}
-            className="h-8 rounded-lg px-2.5"
+            className="h-9 rounded-lg px-2.5"
           >
             自贴盘面
           </Button>
@@ -96,7 +96,7 @@ export function PaipanSkillRail({
             variant="secondary"
             onClick={onOpenAll}
             disabled={disabled || loading || isEmpty}
-            className="h-8 rounded-lg px-3"
+            className="h-9 rounded-lg px-3"
           >
             更多术数
           </Button>
@@ -104,28 +104,28 @@ export function PaipanSkillRail({
       </div>
 
       <div
-        className={`mt-2.5 grid gap-1.5 ${
-          shouldShowEnabledSkills ? 'grid-cols-2' : ''
+        className={`mt-3 grid gap-2.5 ${
+          shouldShowEnabledSkills ? 'md:grid-cols-[1.35fr_0.85fr]' : ''
         }`}
       >
-        <div className="min-w-0 rounded-xl border border-hairline/60 bg-surface-card/25 p-2">
+        <div className="min-w-0 rounded-xl border border-primary/20 bg-surface-card/55 p-2.5 shadow-sm">
           {isEmpty ? (
-            <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2 text-[10px] leading-5 text-muted sm:text-[11px]">
+            <div className="rounded-xl border border-dashed border-primary/25 bg-surface-card/45 px-3 py-3 text-[11px] leading-5 text-muted">
               当前还没有可用的系统排盘术数。
             </div>
           ) : (
             <>
-              <div className="mb-2 flex items-center justify-between gap-1.5 px-0.5">
-                <span className="text-[10px] font-medium text-muted">
+              <div className="mb-2.5 flex items-center justify-between gap-1.5 px-0.5">
+                <span className="text-[11px] font-semibold text-primary">
                   可用术数
                 </span>
                 {!loading && catalog.length > 0 && (
-                  <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                  <span className="rounded-full border border-primary/20 bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
                     {catalog.length} 个
                   </span>
                 )}
               </div>
-              <div className="grid gap-1">
+              <div className="grid gap-1.5">
                 {loading
                   ? Array.from({ length: 4 }).map((_, index) => (
                       <LoadingCard key={`paipan-loading-${index}`} />
@@ -136,23 +136,25 @@ export function PaipanSkillRail({
                         type="button"
                         onClick={() => onSelectSkill(item.skill)}
                         disabled={disabled}
-                        className="group flex h-7 min-w-0 items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-2 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-primary/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.68),rgba(255,255,255,0.32))] px-3 text-left shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/8 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[8px] font-medium text-primary">
+                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary">
                           术
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold tracking-tight text-ink sm:text-[12px]">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-ink">
                           {item.name}
                         </span>
-                        <ChevronRight
-                          size={11}
-                          className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
-                        />
+                        <span className="hidden shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary sm:inline-flex">
+                          开始
+                        </span>
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-card text-muted transition-all duration-200 group-hover:translate-x-0.5 group-hover:bg-primary group-hover:text-on-primary">
+                          <ChevronRight size={13} />
+                        </span>
                       </button>
                     ))}
               </div>
               {loading && (
-                <div className="mt-2 flex items-center gap-1.5 px-0.5 text-[10px] text-muted">
+                <div className="mt-2.5 flex items-center gap-1.5 px-0.5 text-[11px] text-muted">
                   <Loader2 size={12} className="animate-spin" />
                   正在加载可用术数...
                 </div>
@@ -162,9 +164,9 @@ export function PaipanSkillRail({
         </div>
 
         {shouldShowEnabledSkills && (
-          <div className="min-w-0 rounded-xl border border-hairline/60 bg-surface-card/20 p-2">
-            <div className="mb-2 flex items-center justify-between gap-1.5 px-0.5">
-              <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted">
+          <div className="min-w-0 rounded-xl border border-hairline/60 bg-surface-card/25 p-2.5">
+            <div className="mb-2.5 flex items-center justify-between gap-1.5 px-0.5">
+              <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-muted">
                 {enabledSkillsLoading ? (
                   <Loader2 size={11} className="shrink-0 animate-spin" />
                 ) : (
@@ -173,7 +175,7 @@ export function PaipanSkillRail({
                 <span>已开启 Skill</span>
               </div>
               {!enabledSkillsLoading && hasEnabledSkills && (
-                <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[10px] text-muted">
                   {enabledSkills.length} 个
                 </span>
               )}
@@ -184,16 +186,16 @@ export function PaipanSkillRail({
                   ? Array.from({ length: 3 }).map((_, index) => (
                       <span
                         key={`enabled-skill-loading-${index}`}
-                        className="h-7 rounded-lg border border-hairline bg-surface-card/50"
+                        className="h-8 rounded-lg border border-hairline bg-surface-card/50"
                       />
                     ))
                   : enabledSkills.map((skill) => (
                       <span
                         key={`${skill.source}-${skill.id}`}
-                        className="inline-flex h-7 min-w-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
+                        className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg border border-hairline/70 bg-surface-card/45 px-2 text-[10px] font-medium text-muted"
                         title={skill.name}
                       >
-                        <Share2 size={10} className="shrink-0 text-primary" />
+                        <Share2 size={10} className="shrink-0 text-primary/75" />
                         <span className="min-w-0 flex-1 truncate">
                           {skill.name}
                         </span>
@@ -206,7 +208,7 @@ export function PaipanSkillRail({
                     ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2.5">
+              <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-3 py-3">
                 <div className="flex flex-col gap-2">
                   <p className="min-w-0 text-[10px] leading-5 text-muted sm:text-[11px]">
                     Skill 是给 AI Chat 补充专门术数流程、规则和解读偏好的能力包。去技能市场订阅后，可在对话里启用。

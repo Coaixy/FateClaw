@@ -26,6 +26,7 @@ import {
   getChatSessionPiSessionArchive,
   getChatSessionsByUserId,
   getConversationLogByRequestId,
+  getMembershipOverview,
   getRecentMessages,
   getSessionMessageById,
   getSessionMessages,
@@ -93,6 +94,8 @@ const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
+const PLUS_REQUIRED_AI_CHAT_MESSAGE =
+  '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
 
 /**
@@ -120,6 +123,8 @@ export interface OwnedChatSessionTurnOptions {
   runtimeUserMessageOverride?: string;
   /** 本轮 AI 请求明确授权可读取的 Skill Bundle；不传时保持用户全部有效 Skill 可见，传空数组时不加载用户级 Skill。 */
   authorizedSkillBundleIds?: string[];
+  /** 简易模式首轮由服务端内部豁免 Plus 门禁；不要暴露到 HTTP 请求体。 */
+  plusGateBypass?: 'simple_workflow_first_turn';
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -766,6 +771,12 @@ async function prepareOwnedChatSessionTurn(
   const owner = await getUserById(userId);
   if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
     return fail(402, BILLING_ARREARS_MESSAGE);
+  }
+  if (!options.plusGateBypass) {
+    const membership = await getMembershipOverview(userId);
+    if (!membership.active) {
+      return fail(403, PLUS_REQUIRED_AI_CHAT_MESSAGE);
+    }
   }
   const msgId =
     options.userMessageId ??

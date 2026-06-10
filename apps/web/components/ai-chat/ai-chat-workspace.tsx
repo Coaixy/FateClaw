@@ -45,6 +45,7 @@ import {
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import {
   paipanApi,
   type PaipanCatalogItem,
@@ -70,6 +71,8 @@ type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
 const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
+const AI_CHAT_PLUS_REQUIRED_MESSAGE =
+  '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus。';
 const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
 const THINKING_LEVEL_OPTIONS: Array<{
   value: ModelThinkingLevel;
@@ -194,6 +197,10 @@ function AiChatWorkspaceContent() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const {
+    status: billingStatus,
+    loading: billingLoading,
+  } = useBillingSnapshot();
+  const {
     chatAvailable,
     sessions,
     selectedSession,
@@ -203,6 +210,12 @@ function AiChatWorkspaceContent() {
     touchSession,
     loading: sessionsLoading,
   } = useChatSessions();
+  const plusActive = Boolean(
+    billingStatus?.membership.enabled && billingStatus.membership.active,
+  );
+  const aiChatPlusLocked = Boolean(
+    user && !billingLoading && billingStatus && !plusActive,
+  );
 
   const [input, setInput] = useState('');
   const [paipanSheetMode, setPaipanSheetMode] =
@@ -369,6 +382,10 @@ function AiChatWorkspaceContent() {
         requestLogin(text);
         return;
       }
+      if (aiChatPlusLocked) {
+        toast('error', AI_CHAT_PLUS_REQUIRED_MESSAGE);
+        return;
+      }
 
       if (!overrideText) {
         setInput('');
@@ -388,6 +405,7 @@ function AiChatWorkspaceContent() {
       chatMessages,
       continuationBlocked,
       authLoading,
+      aiChatPlusLocked,
       input,
       requestLogin,
       toast,
@@ -490,6 +508,10 @@ function AiChatWorkspaceContent() {
         toast('error', '上一条消息仍在处理中，请稍后再试');
         return;
       }
+      if (aiChatPlusLocked) {
+        toast('error', AI_CHAT_PLUS_REQUIRED_MESSAGE);
+        return;
+      }
 
       startUserPastedBoardSubmission({
         pastedBoard,
@@ -510,6 +532,7 @@ function AiChatWorkspaceContent() {
       continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
+      aiChatPlusLocked,
       continuationBlockedMessage,
       pastedBoardDraftSource,
       requestLogin,
@@ -795,6 +818,9 @@ function AiChatWorkspaceContent() {
     !modelSettingsError && availableOfficialModels.length > 0;
   const canSelectThinkingLevel =
     !modelSettingsError && Boolean(modelOverview?.selection);
+  const aiControlTitle = aiChatPlusLocked
+    ? AI_CHAT_PLUS_REQUIRED_MESSAGE
+    : modelSettingsError;
   const modelSwitchLabel = modelSettingsLoading
     ? '加载中'
     : modelSettingsError
@@ -846,9 +872,10 @@ function AiChatWorkspaceContent() {
             modelControlsDisabled ||
             modelSettingsLoading ||
             Boolean(modelToolbarBusy) ||
+            aiChatPlusLocked ||
             !canSelectOfficialModel
           }
-          modelTitle={modelSettingsError || '切换官方模型'}
+          modelTitle={aiControlTitle || '切换官方模型'}
           selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
           officialModels={availableOfficialModels}
           onSelectModel={selectOfficialModel}
@@ -858,9 +885,10 @@ function AiChatWorkspaceContent() {
             modelControlsDisabled ||
             modelSettingsLoading ||
             Boolean(modelToolbarBusy) ||
+            aiChatPlusLocked ||
             !canSelectThinkingLevel
           }
-          thinkingTitle={modelSettingsError || '切换思考等级'}
+          thinkingTitle={aiControlTitle || '切换思考等级'}
           thinkingLevel={thinkingLevel}
           onSelectThinking={selectThinkingLevel}
         />
@@ -969,9 +997,10 @@ function AiChatWorkspaceContent() {
                   modelControlsDisabled ||
                   modelSettingsLoading ||
                   Boolean(modelToolbarBusy) ||
+                  aiChatPlusLocked ||
                   !canSelectOfficialModel
                 }
-                modelTitle={modelSettingsError || '切换官方模型'}
+                modelTitle={aiControlTitle || '切换官方模型'}
                 selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
                 officialModels={availableOfficialModels}
                 onSelectModel={selectOfficialModel}
@@ -981,9 +1010,10 @@ function AiChatWorkspaceContent() {
                   modelControlsDisabled ||
                   modelSettingsLoading ||
                   Boolean(modelToolbarBusy) ||
+                  aiChatPlusLocked ||
                   !canSelectThinkingLevel
                 }
-                thinkingTitle={modelSettingsError || '切换思考等级'}
+                thinkingTitle={aiControlTitle || '切换思考等级'}
                 thinkingLevel={thinkingLevel}
                 onSelectThinking={selectThinkingLevel}
               />
@@ -1146,7 +1176,7 @@ function HomeModeSelector({
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-primary">
               <CheckCircle2 size={11} strokeWidth={2} />
-              完整能力
+              排盘可用 · AI Plus
             </span>
           </span>
 

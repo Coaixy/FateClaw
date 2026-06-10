@@ -309,6 +309,7 @@ async function enqueueSimpleWorkflowFirstTurn(args: {
         llmRuntimeOverride: llmRuntime,
         runtimeUserMessageOverride: args.prepared.runtimePrompt,
         authorizedSkillBundleIds: args.preset.skill_bundle_ids,
+        plusGateBypass: 'simple_workflow_first_turn',
       },
     );
 

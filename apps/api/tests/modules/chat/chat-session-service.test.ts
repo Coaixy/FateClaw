@@ -11,6 +11,7 @@ const {
   mockGetSessionMessages,
   mockGetSessionMessagesWithToolContext,
   mockGetSharedChatSessionByToken,
+  mockGetMembershipOverview,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
@@ -45,6 +46,7 @@ const {
   mockGetSessionMessages: vi.fn(),
   mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetSharedChatSessionByToken: vi.fn(),
+  mockGetMembershipOverview: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
@@ -80,6 +82,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getSessionMessages: mockGetSessionMessages,
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getSharedChatSessionByToken: mockGetSharedChatSessionByToken,
+  getMembershipOverview: mockGetMembershipOverview,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
@@ -199,6 +202,9 @@ describe('chat-session-service selected board context', () => {
       deleted_at: null,
     });
     mockGetUserById.mockResolvedValue({ id: 'user-1' });
+    mockGetMembershipOverview.mockResolvedValue({
+      active: true,
+    });
     mockGetAccountsByUserId.mockResolvedValue([
       {
         id: 'account-1',
@@ -403,6 +409,25 @@ describe('chat-session-service selected board context', () => {
       'session-1',
       'web:user-1',
     );
+  });
+
+  it('rejects non-Plus professional AI turns before writing messages or claiming the session', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '请解读这张盘',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 403,
+      error: '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus',
+    });
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockRedisEval).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {
