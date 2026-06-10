@@ -348,6 +348,73 @@ function AmpMembershipCard({
   );
 }
 
+function FreeMembershipCard({
+  availableCoins,
+  monthlyMessages,
+  monthlyTokens,
+}: {
+  availableCoins: number;
+  monthlyMessages: number;
+  monthlyTokens: number;
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-hairline bg-[color-mix(in_srgb,var(--color-canvas)_88%,var(--color-surface-card))] shadow-[0_18px_54px_color-mix(in_srgb,var(--color-ink)_5%,transparent)]">
+      <div className="grid border-b border-hairline/70 sm:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="border-b border-hairline/70 px-5 py-5 sm:border-b-0 sm:border-r sm:px-6 sm:py-6">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-hairline bg-[conic-gradient(from_180deg,color-mix(in_srgb,var(--color-surface-card)_82%,var(--color-canvas)),color-mix(in_srgb,var(--color-accent-teal)_24%,var(--color-canvas)),color-mix(in_srgb,var(--color-primary)_22%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-card)_82%,var(--color-canvas)))] shadow-[0_10px_28px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] sm:h-24 sm:w-24">
+            <TaijiIcon size={1.25} className="text-muted/70" />
+          </div>
+          <div className="mt-4 text-[48px] font-extrabold leading-none text-ink sm:mt-5 sm:text-[60px]">
+            Free
+          </div>
+        </div>
+
+        <div className="grid content-center gap-4 px-5 py-5 sm:min-h-[220px] sm:px-6 sm:py-6">
+          <div>
+            <div className="text-[20px] font-semibold tracking-tight text-ink">
+              当前为免费账户
+            </div>
+            <p className="mt-2 max-w-xl text-[12px] leading-6 text-muted sm:text-[13px]">
+              未开通会员时，AI Chat 消耗会直接使用钱包余额；开通后会员额度会优先抵扣。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {['钱包余额计费', '可随时升级', '会员额度未启用'].map((item) => (
+              <span
+                key={item}
+                className="inline-flex min-h-8 items-center rounded-full border border-hairline bg-surface-card/70 px-3 text-[12px] font-medium text-muted"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 overflow-hidden">
+        <AmpMetric
+          icon={<Sparkles size={15} className="text-primary" />}
+          label="可用余额"
+          value={formatCoins(availableCoins)}
+          tone="primary"
+        />
+        <AmpMetric
+          icon={<MessageSquare size={15} className="text-primary" />}
+          label="本月消息"
+          value={monthlyMessages.toLocaleString('zh-CN')}
+          tone="default"
+        />
+        <AmpMetric
+          icon={<Sparkles size={15} className="text-primary" />}
+          label="本月 Token"
+          value={formatCompactNumber(monthlyTokens)}
+          tone="default"
+        />
+      </div>
+    </section>
+  );
+}
+
 function MembershipDetailPanel({
   membership,
   monthlyMessages,
@@ -515,6 +582,7 @@ export function MembershipWorkspace() {
 
   const monthlyTokens = billingInfo?.monthly_tokens_used ?? 0;
   const monthlyMessages = usage?.monthly_messages ?? 0;
+  const availableCoins = billingInfo?.available_coins ?? 0;
   const membership = billingInfo?.membership;
 
   return (
@@ -527,10 +595,18 @@ export function MembershipWorkspace() {
         </div>
 
         {membership ? (
-          <AmpMembershipCard
-            monthlyMessages={monthlyMessages}
-            monthlyTokens={monthlyTokens}
-          />
+          membership.active ? (
+            <AmpMembershipCard
+              monthlyMessages={monthlyMessages}
+              monthlyTokens={monthlyTokens}
+            />
+          ) : (
+            <FreeMembershipCard
+              availableCoins={availableCoins}
+              monthlyMessages={monthlyMessages}
+              monthlyTokens={monthlyTokens}
+            />
+          )
         ) : null}
         {membership ? (
           <MembershipDetailPanel
