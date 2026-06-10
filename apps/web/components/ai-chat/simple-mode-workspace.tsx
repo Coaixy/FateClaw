@@ -70,7 +70,7 @@ function SimpleModeCard({
           {icon}
         </span>
         <span className="rounded-full border border-hairline bg-surface-card px-2 py-0.5 text-[10px] font-medium text-muted">
-          简易
+          快速
         </span>
       </span>
       <span className="mt-5 block">
@@ -343,7 +343,7 @@ export function SimpleModeWorkspace({
 
   return (
     <div className="space-y-3">
-      <SimpleModeHeader title="简易模式" onBack={onBack} />
+      <SimpleModeHeader title="快速模式" onBack={onBack} />
       <div className="grid gap-2.5 sm:grid-cols-2">
         <SimpleModeCard
           icon={<HelpCircle size={19} />}

@@ -36,6 +36,7 @@ export function AiChatMessageList({
   emptyStateTitle,
   emptyStateDescription,
   emptyStateHint,
+  emptyStateFrameClassName,
   emptyStateMaxWidthClassName,
 }: {
   messages: Message[];
@@ -49,6 +50,7 @@ export function AiChatMessageList({
   emptyStateTitle?: string;
   emptyStateDescription?: string;
   emptyStateHint?: string;
+  emptyStateFrameClassName?: string;
   emptyStateMaxWidthClassName?: string;
 }) {
   if (showCenteredComposer) {
@@ -62,7 +64,11 @@ export function AiChatMessageList({
         : '发送即可开始对话 · 也可手动排盘 · / 查看指令');
 
     return (
-      <div className="flex flex-col items-center justify-center h-full px-3">
+      <div
+        className={`flex h-full flex-col items-center px-3 ${
+          emptyStateFrameClassName ?? 'justify-center'
+        }`}
+      >
         <div
           className={`w-full ${emptyStateMaxWidthClassName ?? 'max-w-xl'} flex flex-col items-center gap-3.5`}
         >

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { ChatSessionsProvider } from '@/features/chat/hooks/use-chat-sessions';
 import { buildLoginHref } from '@/lib/auth-redirect';
@@ -16,7 +16,7 @@ import { ErrorBoundary } from './error-boundary';
  * @param props.wide 是否使用宽版内容容器。
  * @param props.noPadding 是否移除主内容底部内边距，常用于占满视口的聊天界面。
  * @param props.requireAuth 是否要求登录后访问；公开页面可关闭。
- * @returns 带全局导航、错误边界与备案页脚的页面框架。
+ * @returns 带全局导航、错误边界与首页备案页脚的页面框架。
  */
 export function AppShell({
   children,
@@ -30,6 +30,7 @@ export function AppShell({
   requireAuth?: boolean;
 }) {
   const { user, loading, logout } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export function AppShell({
     logout();
     router.replace('/login');
   };
+  const showComplianceFooter = pathname === '/' || pathname === '/ai-chat';
 
   return (
     <ChatSessionsProvider>
@@ -96,7 +98,9 @@ export function AppShell({
           >
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
-          <SiteComplianceFooter wide={wide} noPadding={noPadding} />
+          {showComplianceFooter ? (
+            <SiteComplianceFooter wide={wide} noPadding={noPadding} />
+          ) : null}
         </div>
       </div>
     </ChatSessionsProvider>

@@ -34,12 +34,11 @@ interface PaipanSkillRailProps {
 
 function LoadingCard() {
   return (
-    <div className="min-w-[108px] rounded-xl border border-hairline bg-surface-card/60 px-2.5 py-2 sm:min-w-[120px]">
-      <div className="flex items-center justify-between gap-2">
-        <div className="h-5 w-5 rounded-full bg-hairline/60" />
-        <div className="h-3 w-3 rounded-full bg-hairline/50" />
+    <div className="h-8 rounded-lg border border-hairline bg-surface-card/60 px-2 py-1.5">
+      <div className="flex h-full items-center gap-1.5">
+        <div className="h-4 w-4 rounded-full bg-hairline/60" />
+        <div className="h-3 flex-1 rounded-full bg-hairline/45" />
       </div>
-      <div className="mt-2.5 h-3.5 w-14 rounded-full bg-hairline/45" />
     </div>
   );
 }
@@ -104,26 +103,29 @@ export function PaipanSkillRail({
         </div>
       </div>
 
-      <div className="mt-2">
-        {isEmpty ? (
-          <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2 text-[10px] leading-5 text-muted sm:text-[11px]">
-            当前还没有可用的系统排盘术数。
-          </div>
-        ) : (
-          <div>
-            <div className="mb-1.5 flex items-center justify-between px-1">
-              <span className="text-[10px] font-medium text-muted">
-                可用术数
-              </span>
-              {!loading && catalog.length > 0 && (
-                <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
-                  {catalog.length} 个
-                </span>
-              )}
+      <div
+        className={`mt-2.5 grid gap-1.5 ${
+          shouldShowEnabledSkills ? 'grid-cols-2' : ''
+        }`}
+      >
+        <div className="min-w-0 rounded-xl border border-hairline/60 bg-surface-card/25 p-2">
+          {isEmpty ? (
+            <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2 text-[10px] leading-5 text-muted sm:text-[11px]">
+              当前还没有可用的系统排盘术数。
             </div>
-            <div className="relative -mx-1 px-1">
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-1 pt-0.5 pr-6 snap-x snap-mandatory">
+          ) : (
+            <>
+              <div className="mb-2 flex items-center justify-between gap-1.5 px-0.5">
+                <span className="text-[10px] font-medium text-muted">
+                  可用术数
+                </span>
+                {!loading && catalog.length > 0 && (
+                  <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                    {catalog.length} 个
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-1">
                 {loading
                   ? Array.from({ length: 4 }).map((_, index) => (
                       <LoadingCard key={`paipan-loading-${index}`} />
@@ -134,100 +136,97 @@ export function PaipanSkillRail({
                         type="button"
                         onClick={() => onSelectSkill(item.skill)}
                         disabled={disabled}
-                        className="group min-h-[58px] min-w-[108px] snap-start rounded-xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-2.5 py-2 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[120px]"
+                        className="group flex h-7 min-w-0 items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-2 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[8px] font-medium text-primary">
-                            术数
-                          </span>
-                          <ChevronRight
-                            size={12}
-                            className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
-                          />
-                        </div>
-
-                        <p className="mt-2 line-clamp-1 text-[11px] font-semibold tracking-tight text-ink sm:text-[12px]">
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[8px] font-medium text-primary">
+                          术
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold tracking-tight text-ink sm:text-[12px]">
                           {item.name}
-                        </p>
+                        </span>
+                        <ChevronRight
+                          size={11}
+                          className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"
+                        />
                       </button>
                     ))}
               </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {loading && (
-        <div className="mt-1.5 flex items-center gap-1.5 px-1 text-[10px] text-muted">
-          <Loader2 size={12} className="animate-spin" />
-          正在加载可用术数...
-        </div>
-      )}
-
-      {shouldShowEnabledSkills && (
-        <div className="mt-2 border-t border-hairline/60 pt-2">
-          <div className="mb-1.5 flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
-              {enabledSkillsLoading ? (
-                <Loader2 size={11} className="animate-spin" />
-              ) : (
-                <Share2 size={11} />
+              {loading && (
+                <div className="mt-2 flex items-center gap-1.5 px-0.5 text-[10px] text-muted">
+                  <Loader2 size={12} className="animate-spin" />
+                  正在加载可用术数...
+                </div>
               )}
-              <span>已开启 Skill</span>
+            </>
+          )}
+        </div>
+
+        {shouldShowEnabledSkills && (
+          <div className="min-w-0 rounded-xl border border-hairline/60 bg-surface-card/20 p-2">
+            <div className="mb-2 flex items-center justify-between gap-1.5 px-0.5">
+              <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted">
+                {enabledSkillsLoading ? (
+                  <Loader2 size={11} className="shrink-0 animate-spin" />
+                ) : (
+                  <Share2 size={11} className="shrink-0" />
+                )}
+                <span>已开启 Skill</span>
+              </div>
+              {!enabledSkillsLoading && hasEnabledSkills && (
+                <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
+                  {enabledSkills.length} 个
+                </span>
+              )}
             </div>
-            {!enabledSkillsLoading && hasEnabledSkills && (
-              <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[9px] text-muted">
-                {enabledSkills.length} 个
-              </span>
-            )}
-          </div>
-          {enabledSkillsLoading || hasEnabledSkills ? (
-            <div className="relative -mx-1 px-1">
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-8 bg-gradient-to-l from-surface-card/95 to-transparent" />
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 pr-6">
+            {enabledSkillsLoading || hasEnabledSkills ? (
+              <div className="grid gap-1">
                 {enabledSkillsLoading
                   ? Array.from({ length: 3 }).map((_, index) => (
                       <span
                         key={`enabled-skill-loading-${index}`}
-                        className="h-7 min-w-[86px] shrink-0 rounded-lg border border-hairline bg-surface-card/50"
+                        className="h-7 rounded-lg border border-hairline bg-surface-card/50"
                       />
                     ))
                   : enabledSkills.map((skill) => (
                       <span
                         key={`${skill.source}-${skill.id}`}
-                        className="inline-flex h-7 max-w-[160px] shrink-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
+                        className="inline-flex h-7 min-w-0 items-center gap-1 rounded-lg border border-hairline bg-surface-card/65 px-2 text-[10px] font-medium text-ink"
                         title={skill.name}
                       >
-                        <Share2 size={10} className="text-primary" />
-                        <span className="truncate">{skill.name}</span>
+                        <Share2 size={10} className="shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {skill.name}
+                        </span>
                         {skill.source === 'subscribed' && (
-                          <span className="text-[9px] text-muted">订阅</span>
+                          <span className="shrink-0 text-[9px] text-muted">
+                            订阅
+                          </span>
                         )}
                       </span>
                     ))}
               </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2.5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="min-w-0 text-[10px] leading-5 text-muted sm:text-[11px]">
-                  Skill 是给 AI Chat 补充专门术数流程、规则和解读偏好的能力包。去技能市场订阅后，可在对话里启用。
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={onOpenSkillMarket}
-                  icon={<Store size={12} />}
-                  className="h-8 shrink-0 rounded-lg px-2.5"
-                >
-                  去技能市场
-                </Button>
+            ) : (
+              <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-2.5 py-2.5">
+                <div className="flex flex-col gap-2">
+                  <p className="min-w-0 text-[10px] leading-5 text-muted sm:text-[11px]">
+                    Skill 是给 AI Chat 补充专门术数流程、规则和解读偏好的能力包。去技能市场订阅后，可在对话里启用。
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={onOpenSkillMarket}
+                    icon={<Store size={12} />}
+                    className="h-8 w-full rounded-lg px-2.5"
+                  >
+                    去技能市场
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

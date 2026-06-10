@@ -906,13 +906,17 @@ function AiChatWorkspaceContent() {
   );
   const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
   const emptyStateTitle =
-    !selectedSession && homeMode !== 'expert' ? '' : '专家模式';
+    !selectedSession && homeMode !== 'expert' ? '' : '专业模式';
   const emptyStateDescription =
     !selectedSession && homeMode !== 'expert'
       ? ''
       : '直接输入问题，或使用手动排盘、自贴盘面和 Skill';
   const emptyStateHint =
     !selectedSession && homeMode !== 'expert' ? '' : undefined;
+  const emptyStateFrameClassName =
+    !selectedSession && homeMode === 'expert'
+      ? 'justify-start pb-8 pt-8 lg:pt-10'
+      : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
@@ -932,6 +936,7 @@ function AiChatWorkspaceContent() {
           emptyStateTitle={emptyStateTitle}
           emptyStateDescription={emptyStateDescription}
           emptyStateHint={emptyStateHint}
+          emptyStateFrameClassName={emptyStateFrameClassName}
           emptyStateMaxWidthClassName={
             showHomeModeSelector || showSimpleModeWorkspace
               ? 'max-w-3xl'
@@ -1080,7 +1085,7 @@ function HomeModeSelector({
                   登录后开始体验
                 </span>
                 <span className="mt-1 block text-[12px] leading-5 text-muted">
-                  登录后可进入专家模式、保存对话记录，并查看可用余额和用量。
+                  登录后可进入专业模式、保存对话记录，并查看可用余额和用量。
                 </span>
               </span>
             </span>
@@ -1114,7 +1119,7 @@ function HomeModeSelector({
 
           <span className="mt-5 block space-y-1">
             <span className="block text-[18px] font-semibold text-ink">
-              简易模式
+              快速模式
             </span>
             <span className="block text-[12px] leading-5 text-body">
               适合新手和非从业者，先把问题讲清楚，再由流程完成排盘。
@@ -1147,7 +1152,7 @@ function HomeModeSelector({
 
           <span className="mt-5 block space-y-1">
             <span className="block text-[17px] font-semibold text-ink">
-              专家模式
+              专业模式
             </span>
             <span className="block text-[12px] leading-5 text-muted">
               适合懂术数、从业者和专业人士，可直接使用完整对话与排盘能力。
@@ -1155,7 +1160,7 @@ function HomeModeSelector({
           </span>
 
           <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-primary">
-            进入专家模式
+            进入专业模式
             <ChevronRight
               size={13}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
