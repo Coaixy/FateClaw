@@ -119,83 +119,89 @@ export function PaipanStepper({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-hairline bg-surface-card/45 px-3 py-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-medium text-muted">
-            第 {activeIndex + 1} 步 / 共 {visibleSteps.length} 步
-          </p>
-          <p className="mt-1 text-[14px] font-semibold tracking-tight text-ink">
-            {activeStep.title}
-          </p>
-          {activeStep.description && (
-            <p className="mt-1 text-[11px] leading-5 text-muted">
-              {activeStep.description}
+      {!isResultStep && (
+        <div className="rounded-2xl border border-hairline bg-surface-card/45 px-3 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium text-muted">
+              第 {activeIndex + 1} 步 / 共 {visibleSteps.length} 步
             </p>
-          )}
-        </div>
+            <p className="mt-1 text-[14px] font-semibold tracking-tight text-ink">
+              {activeStep.title}
+            </p>
+            {activeStep.description && (
+              <p className="mt-1 text-[11px] leading-5 text-muted">
+                {activeStep.description}
+              </p>
+            )}
+          </div>
 
-        <div className="mt-3 flex gap-1.5">
-          {visibleSteps.map((step, index) => (
-            <button
-              key={step.id}
-              type="button"
-              onClick={() => setActiveIndex(index)}
-              className={`h-1.5 flex-1 rounded-full transition-colors ${getStepIndicatorClassName(step, index)}`}
-              aria-label={`跳到第 ${index + 1} 步：${step.title}`}
-            />
-          ))}
-        </div>
+          <div className="mt-3 flex gap-1.5">
+            {visibleSteps.map((step, index) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                className={`h-1.5 flex-1 rounded-full transition-colors ${getStepIndicatorClassName(step, index)}`}
+                aria-label={`跳到第 ${index + 1} 步：${step.title}`}
+              />
+            ))}
+          </div>
 
-        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary/45" />
-            已完成
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-rose-400/60" />
-            需补充
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-hairline/80" />
-            未到达
-          </span>
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/45" />
+              已完成
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-400/60" />
+              需补充
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-hairline/80" />
+              未到达
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-4">
         {activeStep.content}
       </div>
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={() => setActiveIndex((current) => Math.max(current - 1, 0))}
-          disabled={!canGoPrevious}
-          className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-hairline bg-surface-card px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-35 sm:rounded-lg"
-        >
-          <ChevronLeft size={14} />
-          上一步
-        </button>
-
-        {showFinalAction ? (
-          finalAction
-        ) : isLastStep ? (
-          isResultStep ? resultAction : null
-        ) : (
+      {!isResultStep && (
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() =>
-              setActiveIndex((current) =>
-                Math.min(current + 1, visibleSteps.length - 1),
-              )
+              setActiveIndex((current) => Math.max(current - 1, 0))
             }
-            className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
+            disabled={!canGoPrevious}
+            className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-hairline bg-surface-card px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-35 sm:rounded-lg"
           >
-            下一步
-            <ChevronRight size={14} />
+            <ChevronLeft size={14} />
+            上一步
           </button>
-        )}
-      </div>
+
+          {showFinalAction ? (
+            finalAction
+          ) : isLastStep ? (
+            isResultStep ? resultAction : null
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                setActiveIndex((current) =>
+                  Math.min(current + 1, visibleSteps.length - 1),
+                )
+              }
+              className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
+            >
+              下一步
+              <ChevronRight size={14} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/utils/chart/cn';
 import {
@@ -49,12 +49,6 @@ const YAO_TEXT_CLASS =
   'text-[clamp(11px,2.55cqw,15px)]';
 const YAO_SUB_TEXT_CLASS =
   'text-[clamp(9px,2.1cqw,13px)]';
-const LIUYAO_BOARD_WIDTH = 760;
-
-interface FitWidthState {
-  scale: number;
-  height: number;
-}
 
 const METHOD_LABEL: Record<string, string> = {
   dayan: '大衍筮法',
@@ -371,76 +365,6 @@ function guaHeaderLabel(gua: IchingGua, fallback: string): string {
   return [gua.guaName ?? fallback, palaceLabel].filter(Boolean).join(' ');
 }
 
-function FitWidthFrame({
-  boardWidth,
-  children,
-}: {
-  boardWidth: number;
-  children: React.ReactNode;
-}) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<FitWidthState>({
-    scale: 1,
-    height: 0,
-  });
-
-  useEffect(() => {
-    const updateFit = () => {
-      const shellWidth = shellRef.current?.clientWidth ?? boardWidth;
-      const boardHeight = boardRef.current?.offsetHeight ?? 0;
-      const scale =
-        shellWidth > 0 ? Math.min(1, shellWidth / boardWidth) : 1;
-      const height = boardHeight * scale;
-
-      setFit((prev) => {
-        if (
-          Math.abs(prev.scale - scale) < 0.001 &&
-          Math.abs(prev.height - height) < 0.5
-        ) {
-          return prev;
-        }
-        return { scale, height };
-      });
-    };
-
-    updateFit();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateFit);
-      return () => window.removeEventListener('resize', updateFit);
-    }
-
-    const resizeObserver = new ResizeObserver(updateFit);
-    if (shellRef.current) resizeObserver.observe(shellRef.current);
-    if (boardRef.current) resizeObserver.observe(boardRef.current);
-    window.addEventListener('resize', updateFit);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', updateFit);
-    };
-  }, [boardWidth]);
-
-  return (
-    <div ref={shellRef} className="w-full overflow-hidden">
-      <div style={{ height: fit.height ? `${fit.height}px` : undefined }}>
-        <div
-          ref={boardRef}
-          className="mx-auto"
-          style={{
-            width: boardWidth,
-            transform: `scale(${fit.scale})`,
-            transformOrigin: 'top left',
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
   const {
     benGua,
@@ -498,8 +422,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
   const dimStaticZhiGua = !hasMovingGua;
 
   return (
-    <FitWidthFrame boardWidth={LIUYAO_BOARD_WIDTH}>
-      <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
+    <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
       {/* 起卦副信息 */}
       {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
         <div className="px-2 sm:px-5 py-2 sm:py-3 border-b border-hairline bg-surface-soft">
@@ -708,8 +631,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           )}
         </div>
       )}
-      </div>
-    </FitWidthFrame>
+    </div>
   );
 }
 

@@ -1309,7 +1309,7 @@ function ChatToolStrip({
   const isEmpty = !loading && catalog.length === 0;
   const buttonDisabled = disabled || loading || isEmpty;
   const chipClass =
-    'group inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] px-2.5 text-[12px] font-medium text-ink shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors duration-150 hover:border-primary/30 hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:bg-surface-card/40 disabled:text-muted disabled:opacity-60';
+    'group inline-flex h-8 min-w-0 max-w-full shrink items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] px-2.5 text-[12px] font-medium text-ink shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors duration-150 hover:border-primary/30 hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:bg-surface-card/40 disabled:text-muted disabled:opacity-60';
 
   useEffect(() => {
     if (!openPicker) return;
@@ -1334,7 +1334,7 @@ function ChatToolStrip({
   }, [openPicker]);
 
   return (
-    <div ref={stripRef} className="flex min-h-8 items-center gap-1.5">
+    <div ref={stripRef} className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5">
       <button
         type="button"
         onClick={onOpenAll}
@@ -1355,7 +1355,7 @@ function ChatToolStrip({
         />
       </button>
 
-      <div className="relative shrink-0">
+      <div className="relative min-w-0 shrink">
         <button
           type="button"
           title={modelTitle}
@@ -1374,7 +1374,7 @@ function ChatToolStrip({
             <Bot size={13} className="shrink-0 text-primary" />
           )}
           <span className="whitespace-nowrap">模型</span>
-          <span className="max-w-[96px] truncate text-muted group-hover:text-primary">
+          <span className="min-w-0 max-w-[min(24vw,96px)] truncate text-muted group-hover:text-primary">
             {modelLabel}
           </span>
           <ChevronDown
@@ -1425,7 +1425,7 @@ function ChatToolStrip({
         )}
       </div>
 
-      <div className="relative shrink-0">
+      <div className="relative min-w-0 shrink">
         <button
           type="button"
           title={thinkingTitle}
