@@ -42,6 +42,12 @@ const RegisterSchema = z.object({
   phoneNumber: PhoneSchema,
   password: z.string().min(8, '密码至少 8 位'),
   smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
+  invite_code: z
+    .string()
+    .trim()
+    .max(64, '邀请码不超过 64 位')
+    .nullable()
+    .optional(),
 });
 
 const LoginSchema = z.object({
@@ -171,6 +177,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         body.password,
         body.smsCaptchaCode,
         request.ip,
+        body.invite_code,
       );
       const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);

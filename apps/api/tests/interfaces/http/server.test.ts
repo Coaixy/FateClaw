@@ -57,6 +57,9 @@ vi.mock('../../../src/interfaces/http/paipan-routes.js', () => ({
 vi.mock('../../../src/interfaces/http/public-routes.js', () => ({
   publicRoutes: vi.fn(async () => {}),
 }));
+vi.mock('../../../src/interfaces/http/referrals-routes.js', () => ({
+  referralsRoutes: vi.fn(async () => {}),
+}));
 vi.mock('../../../src/interfaces/http/skills-routes.js', () => ({
   skillsRoutes: vi.fn(async () => {}),
 }));

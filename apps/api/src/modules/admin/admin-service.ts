@@ -34,6 +34,7 @@ import {
   getMembershipConfig,
   getBalanceGrantsByUserId,
   getDailySignInConfig,
+  getReferralConfig,
   getPiSessionCleanupCursor,
   getUserById,
   getUserByPhone,
@@ -45,6 +46,7 @@ import {
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
+  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   markChatSessionPiSessionArchived,
@@ -56,7 +58,12 @@ import {
   updateDailySignInConfig,
   updateMembershipConfig,
   updatePublicFinancialLedgerEntry,
+  updateReferralConfig,
   updateSimpleWorkflowPreset,
+} from '../../infrastructure/db.js';
+import type {
+  AdminReferralListResult,
+  ReferralRewardStatus,
 } from '../../infrastructure/db.js';
 import { getUsageStats } from '../../infrastructure/daily-usage.js';
 import {
@@ -114,6 +121,7 @@ export {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
+  getReferralConfig,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -124,6 +132,7 @@ export {
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
+  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
@@ -135,6 +144,7 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updatePublicFinancialLedgerEntry,
+  updateReferralConfig,
   updateSimpleWorkflowPreset,
 };
 
@@ -221,6 +231,74 @@ export async function updateAdminRewardConfig(input: {
         membership.standard_price_per_million_units_coins,
       updated_at: membership.updated_at,
     },
+  };
+}
+
+/** 管理后台邀请配置视图。 */
+export interface AdminReferralConfigView {
+  enabled: boolean;
+  inviter_reward_days: number;
+  monthly_reward_cap_days: number;
+  reward_first_membership_only: boolean;
+  updated_at: string;
+}
+
+/**
+ * 读取后台邀请配置。
+ */
+export async function getAdminReferralConfig(): Promise<AdminReferralConfigView> {
+  const config = await getReferralConfig();
+  return {
+    enabled: config.enabled,
+    inviter_reward_days: config.inviter_reward_days,
+    monthly_reward_cap_days: config.monthly_reward_cap_days,
+    reward_first_membership_only: config.reward_first_membership_only,
+    updated_at: config.updated_at,
+  };
+}
+
+/**
+ * 更新后台邀请配置。
+ */
+export async function updateAdminReferralConfig(input: {
+  enabled: boolean;
+  inviterRewardDays: number;
+  monthlyRewardCapDays: number;
+  rewardFirstMembershipOnly: boolean;
+}): Promise<AdminReferralConfigView> {
+  const config = await updateReferralConfig(input);
+  return {
+    enabled: config.enabled,
+    inviter_reward_days: config.inviter_reward_days,
+    monthly_reward_cap_days: config.monthly_reward_cap_days,
+    reward_first_membership_only: config.reward_first_membership_only,
+    updated_at: config.updated_at,
+  };
+}
+
+function maskAdminPhone(phone: string | null): string | null {
+  if (!phone || phone.length < 7) return phone;
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+}
+
+/**
+ * 查询后台邀请关系列表。
+ */
+export async function listAdminReferrals(input: {
+  inviterId?: string;
+  inviteeId?: string;
+  rewardStatus?: ReferralRewardStatus;
+  limit?: number;
+  offset?: number;
+}): Promise<AdminReferralListResult> {
+  const result = await listReferralsForAdmin(input);
+  return {
+    total: result.total,
+    referrals: result.referrals.map((row) => ({
+      ...row,
+      inviter_phone: maskAdminPhone(row.inviter_phone),
+      invitee_phone: maskAdminPhone(row.invitee_phone),
+    })),
   };
 }
 

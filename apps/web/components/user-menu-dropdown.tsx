@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Compass,
   Crown,
+  Gift,
   LogOut,
   Loader2,
   ServerCog,
@@ -17,10 +18,7 @@ import {
   User as UserIcon,
   Wallet,
 } from 'lucide-react';
-import {
-  billingApi,
-  type DailySignInStatus,
-} from '@/features/billing/api';
+import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { formatCoins } from '@/lib/soft-currency';
 import { useToast } from '@/lib/use-toast';
 import { getUserIdentityLabel } from '@/lib/user-identity';
@@ -162,6 +160,12 @@ export function UserMenuDropdown({
             href="/membership"
             icon={Crown}
             label="会员中心"
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/referrals"
+            icon={Gift}
+            label="邀请中心"
             onNavigate={onNavigate}
           />
           <MenuItem

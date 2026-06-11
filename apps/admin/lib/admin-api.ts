@@ -529,6 +529,45 @@ export interface AdminRewardConfig {
   };
 }
 
+/** 管理后台邀请奖励状态。 */
+export type AdminReferralRewardStatus =
+  | 'pending'
+  | 'granted'
+  | 'skipped'
+  | 'ineligible';
+
+/** 管理后台邀请返会员配置。 */
+export interface AdminReferralConfig {
+  enabled: boolean;
+  inviter_reward_days: number;
+  monthly_reward_cap_days: number;
+  reward_first_membership_only: boolean;
+  updated_at: string;
+}
+
+/** 管理后台邀请关系列表行。 */
+export interface AdminReferralRow {
+  id: string;
+  invite_code: string;
+  inviter_id: string;
+  inviter_phone: string | null;
+  invitee_id: string;
+  invitee_phone: string | null;
+  bind_source: 'register' | 'redeem';
+  reward_status: AdminReferralRewardStatus;
+  reward_days: number;
+  reward_event_id: string | null;
+  rewarded_at: string | null;
+  skip_reason: string | null;
+  created_at: string;
+}
+
+/** 管理后台邀请关系列表响应。 */
+export interface AdminReferralListResponse {
+  referrals: AdminReferralRow[];
+  total: number;
+}
+
 /** 关于页面公开收支流水类型。 */
 export type AdminAboutLedgerEntryType = 'income' | 'expense';
 
@@ -731,6 +770,36 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  referralConfig: () =>
+    adminRequest<AdminReferralConfig>('/api/admin/referrals/config'),
+  updateReferralConfig: (data: {
+    enabled: boolean;
+    inviter_reward_days: number;
+    monthly_reward_cap_days: number;
+    reward_first_membership_only?: boolean;
+  }) =>
+    adminRequest<AdminReferralConfig>('/api/admin/referrals/config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  referrals: (opts?: {
+    inviter_id?: string;
+    invitee_id?: string;
+    reward_status?: AdminReferralRewardStatus;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.inviter_id) params.set('inviter_id', opts.inviter_id);
+    if (opts?.invitee_id) params.set('invitee_id', opts.invitee_id);
+    if (opts?.reward_status) params.set('reward_status', opts.reward_status);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const query = params.toString();
+    return adminRequest<AdminReferralListResponse>(
+      `/api/admin/referrals${query ? `?${query}` : ''}`,
+    );
+  },
   aboutLedger: () =>
     adminRequest<AdminAboutLedgerResponse>('/api/admin/about-ledger'),
   createAboutLedgerEntry: (data: AdminAboutLedgerEntryDraft) =>

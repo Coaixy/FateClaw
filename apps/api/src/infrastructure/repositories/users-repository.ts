@@ -47,7 +47,19 @@ export async function getUserByPhoneUsing(
 }
 
 export async function createUser(user: User): Promise<void> {
-  await getDbPool().query(
+  await createUserUsing(getDbPool(), user);
+}
+
+/**
+ * 在指定 queryable 上创建用户。
+ *
+ * 用于注册时把用户创建和邀请关系绑定放进同一个数据库事务。
+ */
+export async function createUserUsing(
+  queryable: DbQueryable,
+  user: User,
+): Promise<void> {
+  await queryable.query(
     `INSERT INTO users
        (id, phone, phone_verified, password_hash, role,
         purchased_coins, bonus_coins, reserved_coins,

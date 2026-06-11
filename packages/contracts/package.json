@@ -12,6 +12,7 @@
     "./account": "./src/account/index.d.ts",
     "./chat": "./src/chat/index.d.ts",
     "./billing": "./src/billing/index.d.ts",
+    "./referrals": "./src/referrals/index.d.ts",
     "./model-settings": "./src/model-settings/index.d.ts",
     "./skills": {
       "types": "./src/skills/index.d.ts",

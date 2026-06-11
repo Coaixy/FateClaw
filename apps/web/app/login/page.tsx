@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { readLoginRedirect } from '@/lib/auth-redirect';
@@ -15,8 +15,50 @@ const AUTH_MODES: ReadonlyArray<readonly [AuthMode, string]> = [
   ['register', '注册'],
 ];
 
+function inviteCodeFromSearchParams(searchParams: {
+  get(name: string): string | null;
+}): string {
+  // 邀请链接会先写入 next 回跳参数，注册页需要从两种位置继承邀请码。
+  const directCode =
+    searchParams.get('invite_code') ??
+    searchParams.get('invite') ??
+    searchParams.get('code') ??
+    '';
+  if (directCode.trim()) return directCode.trim();
+
+  const next = searchParams.get('next');
+  if (!next?.startsWith('/invite')) return '';
+
+  try {
+    const nextUrl = new URL(next, 'http://local');
+    return (
+      nextUrl.searchParams.get('code') ??
+      nextUrl.searchParams.get('invite') ??
+      nextUrl.searchParams.get('invite_code') ??
+      ''
+    ).trim();
+  } catch {
+    return '';
+  }
+}
+
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas">
+          <Loader2 size={24} className="animate-spin text-muted" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading, login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const requiresSMSCaptcha = mode === 'register';
@@ -36,6 +78,7 @@ export default function LoginPage() {
   const [smsSending, setSMSSending] = useState(false);
   const [smsCaptchaCode, setSMSCaptchaCode] = useState('');
   const [smsCooldown, setSMSCooldown] = useState(0);
+  const [inviteCode, setInviteCode] = useState('');
 
   const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
   const [captchaLoading, setCaptchaLoading] = useState(false);
@@ -57,6 +100,14 @@ export default function LoginPage() {
   useEffect(() => {
     refreshCaptcha();
   }, [refreshCaptcha]);
+
+  useEffect(() => {
+    const fromQuery = inviteCodeFromSearchParams(searchParams);
+    if (fromQuery.trim()) {
+      setInviteCode(fromQuery.trim().toUpperCase());
+      setMode('register');
+    }
+  }, [searchParams]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
@@ -144,7 +195,12 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       if (mode === 'register') {
-        await register(normalizedPhone, password, smsCaptchaCode.trim());
+        await register(
+          normalizedPhone,
+          password,
+          smsCaptchaCode.trim(),
+          inviteCode.trim() || null,
+        );
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
       }
@@ -200,6 +256,11 @@ export default function LoginPage() {
             onRefresh={refreshCaptcha}
           />
           {requiresSMSCaptcha ? (
+            <>
+              <InviteCodeField value={inviteCode} onChange={setInviteCode} />
+            </>
+          ) : null}
+          {requiresSMSCaptcha ? (
             <SMSCaptchaField
               value={smsCaptchaCode}
               sending={smsSending}
@@ -211,9 +272,7 @@ export default function LoginPage() {
             />
           ) : null}
 
-          {error && (
-            <p className="text-[13px] text-error">{error}</p>
-          )}
+          {error && <p className="text-[13px] text-error">{error}</p>}
 
           <SubmitButton
             mode={mode}
@@ -234,6 +293,33 @@ export default function LoginPage() {
   );
 }
 
+function InviteCodeField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[13px] text-muted mb-1.5">
+        邀请码（选填）
+      </label>
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value.toUpperCase())}
+        maxLength={64}
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
+        className="w-full h-10 px-3 rounded-lg border border-hairline bg-canvas text-sm placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-150"
+        placeholder="有邀请码可填写"
+      />
+    </div>
+  );
+}
+
 function LoginHeader({ mode }: { mode: AuthMode }) {
   return (
     <div className="mb-8 text-center">
@@ -241,7 +327,9 @@ function LoginHeader({ mode }: { mode: AuthMode }) {
         <span className="text-2xl">☯</span>
       </div>
       <div className="mb-4">
-        <span className="font-display text-xl font-bold tracking-tight">命枢</span>
+        <span className="font-display text-xl font-bold tracking-tight">
+          命枢
+        </span>
         <span className="ml-2 text-sm text-muted">FateClaw</span>
       </div>
       <h1 className="text-lg font-semibold tracking-tight">
@@ -296,9 +384,7 @@ function PhoneField({
 }) {
   return (
     <div>
-      <label className="block text-[13px] text-muted mb-1.5">
-        手机号
-      </label>
+      <label className="block text-[13px] text-muted mb-1.5">手机号</label>
       <input
         type="tel"
         inputMode="numeric"
@@ -323,9 +409,7 @@ function PhoneField({
         }`}
         placeholder="13800138000"
       />
-      {error ? (
-        <p className="text-[11px] text-error mt-1">{error}</p>
-      ) : null}
+      {error ? <p className="text-[11px] text-error mt-1">{error}</p> : null}
     </div>
   );
 }
@@ -343,9 +427,7 @@ function PasswordField({
 }) {
   return (
     <div>
-      <label className="block text-[13px] text-muted mb-1.5">
-        密码
-      </label>
+      <label className="block text-[13px] text-muted mb-1.5">密码</label>
       <div className="relative">
         <input
           type={visible ? 'text' : 'password'}
@@ -400,10 +482,7 @@ function CaptchaField({
               draggable={false}
             />
           ) : (
-            <Loader2
-              size={14}
-              className="animate-spin text-muted"
-            />
+            <Loader2 size={14} className="animate-spin text-muted" />
           )}
         </div>
         <input
@@ -458,9 +537,7 @@ function SMSCaptchaField({
 }) {
   return (
     <div>
-      <label className="block text-[13px] text-muted mb-1.5">
-        短信验证码
-      </label>
+      <label className="block text-[13px] text-muted mb-1.5">短信验证码</label>
       <div className="flex items-center gap-2">
         <input
           type="text"

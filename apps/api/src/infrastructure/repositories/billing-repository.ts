@@ -2,6 +2,7 @@ import pg from 'pg';
 
 import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
+import { settleReferralMembershipRewardUsing } from './referrals-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type {
   BalanceGrantSource,
@@ -473,9 +474,13 @@ async function consumeMembershipAllowanceUsing(
   coveredCoins: number;
   allowance: MembershipAllowanceRow | null;
 }> {
-  const membership = await getActiveMembershipForUserUsing(client, input.userId, {
-    forUpdate: true,
-  });
+  const membership = await getActiveMembershipForUserUsing(
+    client,
+    input.userId,
+    {
+      forUpdate: true,
+    },
+  );
   if (!membership) {
     return { consumedUnits: 0, coveredCoins: 0, allowance: null };
   }
@@ -542,9 +547,9 @@ export async function getMembershipOverview(
     : null;
   const active = Boolean(
     config.enabled &&
-      membership &&
-      membership.status === 'active' &&
-      new Date(membership.current_period_end).getTime() > Date.now(),
+    membership &&
+    membership.status === 'active' &&
+    new Date(membership.current_period_end).getTime() > Date.now(),
   );
   const allowance =
     active && period
@@ -636,7 +641,7 @@ export async function subscribeMembershipWithWallet(
       config,
     });
 
-    await insertWalletTransaction(client, {
+    const membershipTransactionId = await insertWalletTransaction(client, {
       userId,
       kind: 'membership_subscription',
       amountCoins: -priceCoins,
@@ -650,6 +655,13 @@ export async function subscribeMembershipWithWallet(
         bonusDeducted: deduction.bonusDeducted,
         purchasedDeducted: deduction.purchasedDeducted,
       },
+    });
+    await settleReferralMembershipRewardUsing(client, {
+      inviteeId: userId,
+      bonusDeducted: deduction.bonusDeducted,
+      purchasedDeducted: deduction.purchasedDeducted,
+      priceCoins,
+      triggerWalletTransactionId: membershipTransactionId,
     });
 
     await client.query('COMMIT');
@@ -743,13 +755,15 @@ export async function insertWalletTransaction(
     note?: string | null;
     metadata?: unknown;
   },
-): Promise<void> {
+): Promise<string> {
   const amountCoins = roundCoinsToCents(input.amountCoins ?? 0);
   const reservedDeltaCoins = roundCoinsToCents(input.reservedDeltaCoins ?? 0);
   const balanceSource =
     input.balanceSource !== undefined
       ? input.balanceSource
       : inferBalanceSourceFromKind(input.kind);
+
+  const id = `wtx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   await client.query(
     `INSERT INTO wallet_transactions
@@ -758,7 +772,7 @@ export async function insertWalletTransaction(
        request_id, note, metadata, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
     [
-      `wtx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id,
       input.userId,
       input.kind,
       amountCoins,
@@ -770,6 +784,7 @@ export async function insertWalletTransaction(
       input.metadata ? JSON.stringify(input.metadata) : null,
     ],
   );
+  return id;
 }
 
 export async function getRechargePaymentConfig(): Promise<RechargePaymentConfigRow> {
@@ -2104,9 +2119,7 @@ export async function settleUserModelChargeCoins(
     const monthlyState = normalizeMonthlyBillingStateRow(
       monthlyRows[0] as MonthlyBillingStateRow,
     );
-    const previousChargeCoins = toCoins(
-      monthlyState.billed_overage_cost_coins,
-    );
+    const previousChargeCoins = toCoins(monthlyState.billed_overage_cost_coins);
     const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
     const membershipConfig = await getMembershipConfigUsing(client);
     const membershipDeduction = membershipConfig.enabled
@@ -2155,12 +2168,7 @@ export async function settleUserModelChargeCoins(
            charged_at = NOW(),
            updated_at = NOW()
        WHERE request_id = $1`,
-      [
-        requestId,
-        actualChargeCoins,
-        requestTokens,
-        actualChargeCoins,
-      ],
+      [requestId, actualChargeCoins, requestTokens, actualChargeCoins],
     );
 
     if (actualChargeCoins > 0) {

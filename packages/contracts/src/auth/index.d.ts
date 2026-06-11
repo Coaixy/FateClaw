@@ -23,6 +23,13 @@ export interface AuthResponseDto {
   user: UserDto;
 }
 
+export interface RegisterRequestDto {
+  phoneNumber: string;
+  password: string;
+  smsCaptchaCode: string;
+  invite_code?: string | null;
+}
+
 export interface CaptchaChallengeDto {
   token: string;
   svg: string;

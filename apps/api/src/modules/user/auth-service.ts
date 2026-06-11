@@ -4,11 +4,13 @@ import bcrypt from 'bcryptjs';
 import type { UserDto } from '@fateclaw/contracts/auth';
 
 import {
-  createUser,
+  createUserUsing,
+  getDbPool,
   getUserByPhone,
   getUserById,
   updateUserPasswordHash,
 } from '../../infrastructure/db.js';
+import { redeemReferralInviteCodeUsing } from '../../infrastructure/db.js';
 import { User } from '../../shared/types.js';
 import { toUserDto } from '../../contracts-adapter/auth-contract.js';
 import { isValidMainlandChinaPhone, normalizePhoneNumber } from './phone.js';
@@ -22,6 +24,7 @@ export async function registerUser(
   password: string,
   smsCaptchaCode: string,
   clientIp: string,
+  inviteCode?: string | null,
 ): Promise<User> {
   const normalizedPhone = normalizePhoneNumber(phone);
   if (!isValidMainlandChinaPhone(normalizedPhone)) {
@@ -51,8 +54,29 @@ export async function registerUser(
     created_at: now,
   };
 
-  await createUser(user);
-  return user;
+  const normalizedInviteCode = inviteCode?.trim() || '';
+  if (!normalizedInviteCode) {
+    await createUserUsing(getDbPool(), user);
+    return user;
+  }
+
+  const client = await getDbPool().connect();
+  try {
+    await client.query('BEGIN');
+    await createUserUsing(client, user);
+    await redeemReferralInviteCodeUsing(client, {
+      inviteeId: user.id,
+      code: normalizedInviteCode,
+      source: 'register',
+    });
+    await client.query('COMMIT');
+    return user;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function loginUser(

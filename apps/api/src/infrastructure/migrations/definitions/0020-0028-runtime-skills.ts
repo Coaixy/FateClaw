@@ -397,4 +397,141 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       );
     },
   },
+  {
+    id: '0030_user_referrals',
+    description: '增加用户邀请会员返利 schema',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS referral_config (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          enabled BOOLEAN NOT NULL DEFAULT true,
+          inviter_reward_days INTEGER NOT NULL DEFAULT 7,
+          monthly_reward_cap_days INTEGER NOT NULL DEFAULT 30,
+          reward_first_membership_only BOOLEAN NOT NULL DEFAULT true,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO referral_config (id)
+        VALUES ('default')
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_invite_codes (
+          id TEXT PRIMARY KEY,
+          inviter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          code TEXT NOT NULL UNIQUE,
+          max_redemptions INTEGER NOT NULL DEFAULT 1000000,
+          redeemed_count INTEGER NOT NULL DEFAULT 0,
+          expires_at TIMESTAMPTZ DEFAULT NULL,
+          revoked_at TIMESTAMPTZ DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_invite_codes_inviter
+          ON user_invite_codes(inviter_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_invite_codes_code
+          ON user_invite_codes(code)
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_referrals (
+          id TEXT PRIMARY KEY,
+          invite_code_id TEXT NOT NULL REFERENCES user_invite_codes(id),
+          inviter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          invitee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          bind_source TEXT NOT NULL DEFAULT 'redeem',
+          reward_status TEXT NOT NULL DEFAULT 'pending',
+          reward_days INTEGER NOT NULL DEFAULT 0,
+          reward_event_id TEXT DEFAULT NULL,
+          rewarded_at TIMESTAMPTZ DEFAULT NULL,
+          skip_reason TEXT DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (invitee_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_referrals_inviter_created
+          ON user_referrals(inviter_id, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_referrals_reward_status
+          ON user_referrals(reward_status, created_at DESC)
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS referral_reward_events (
+          id TEXT PRIMARY KEY,
+          referral_id TEXT NOT NULL REFERENCES user_referrals(id) ON DELETE CASCADE,
+          inviter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          invitee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          reward_days INTEGER NOT NULL DEFAULT 0,
+          trigger_wallet_transaction_id TEXT DEFAULT NULL,
+          status TEXT NOT NULL,
+          reason TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_reward_events_referral_granted
+          ON referral_reward_events(referral_id)
+          WHERE status = 'granted'
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_referral_reward_events_inviter_created
+          ON referral_reward_events(inviter_id, created_at DESC)
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_referral_config_reward_days_valid',
+        tableName: 'referral_config',
+        expression:
+          'inviter_reward_days >= 0 AND inviter_reward_days <= 366 AND monthly_reward_cap_days >= 0 AND monthly_reward_cap_days <= 3660',
+        cleanupSql: `UPDATE referral_config
+                     SET inviter_reward_days = LEAST(GREATEST(inviter_reward_days, 0), 366),
+                         monthly_reward_cap_days = LEAST(GREATEST(monthly_reward_cap_days, 0), 3660)`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_invite_codes_redemptions_valid',
+        tableName: 'user_invite_codes',
+        expression:
+          'max_redemptions > 0 AND redeemed_count >= 0 AND redeemed_count <= max_redemptions',
+        cleanupSql: `UPDATE user_invite_codes
+                     SET max_redemptions = GREATEST(1, max_redemptions),
+                         redeemed_count = LEAST(GREATEST(0, redeemed_count), GREATEST(1, max_redemptions))`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_referrals_no_self',
+        tableName: 'user_referrals',
+        expression: 'inviter_id <> invitee_id',
+        cleanupSql: `DELETE FROM user_referrals WHERE inviter_id = invitee_id`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_referrals_bind_source_valid',
+        tableName: 'user_referrals',
+        expression: `bind_source IN ('register', 'redeem')`,
+        cleanupSql: `UPDATE user_referrals
+                     SET bind_source = 'redeem'
+                     WHERE bind_source NOT IN ('register', 'redeem')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_referrals_reward_status_valid',
+        tableName: 'user_referrals',
+        expression: `reward_status IN ('pending', 'granted', 'skipped', 'ineligible')`,
+        cleanupSql: `UPDATE user_referrals
+                     SET reward_status = 'pending'
+                     WHERE reward_status NOT IN ('pending', 'granted', 'skipped', 'ineligible')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_referral_reward_events_status_valid',
+        tableName: 'referral_reward_events',
+        expression: `status IN ('granted', 'skipped', 'ineligible')`,
+        cleanupSql: `UPDATE referral_reward_events
+                     SET status = 'skipped'
+                     WHERE status NOT IN ('granted', 'skipped', 'ineligible')`,
+      });
+    },
+  },
 ];

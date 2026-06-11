@@ -2,6 +2,7 @@ import type {
   AuthResponseDto,
   CaptchaChallengeDto,
   ChangePasswordRequestDto,
+  RegisterRequestDto,
   ResetPasswordRequestDto,
   SendSMSCaptchaResponseDto,
   UserDto,
@@ -44,14 +45,20 @@ export const authApi = {
         captcha_answer: captchaAnswer,
       }),
     }),
-  register: (phone: string, password: string, smsCaptchaCode: string) =>
+  register: (
+    phone: string,
+    password: string,
+    smsCaptchaCode: string,
+    inviteCode?: string | null,
+  ) =>
     requestJson<AuthResponse>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         phoneNumber: phone,
         password,
         smsCaptchaCode,
-      }),
+        invite_code: inviteCode?.trim() || undefined,
+      } satisfies RegisterRequestDto),
     }),
   login: (
     phone: string,

@@ -19,6 +19,7 @@ import {
   ReceiptText,
   WalletCards,
   Workflow,
+  UserPlus,
   LogOut,
   Menu,
   X,
@@ -43,6 +44,12 @@ const navItems = [
     label: '用户',
     icon: Users,
     roles: ['owner', 'user_manager'],
+  },
+  {
+    href: '/referrals',
+    label: '邀请管理',
+    icon: UserPlus,
+    roles: ['owner'],
   },
   {
     href: '/messages',
