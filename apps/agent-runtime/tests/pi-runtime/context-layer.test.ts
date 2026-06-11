@@ -27,15 +27,6 @@ function createRuntime(): RequestRuntime {
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
     },
-    workflowContextStore: {
-      latestFollowupContext: vi.fn(async () => ({
-        category: '八字',
-        boardSkill: 'bazi-paipan',
-        boardOutput: '数据库里的连续性盘面',
-        boardArtifactData: { bazi: '数据库里的盘面 JSON' },
-        interpretationOutput: '数据库里的上一轮解读',
-      })),
-    },
   };
   return { deps };
 }
@@ -159,10 +150,6 @@ describe('createPiSessionContext', () => {
         output: '用户自贴八字盘面',
       }),
     ]);
-    expect(
-      runtime.deps.workflowContextStore?.latestFollowupContext,
-    ).not.toHaveBeenCalled();
-    expect(requestScope.latestFollowupInterpretation).toBeNull();
   });
 
   it('keeps long board facts behind get_session_board instead of injecting full prompt text', async () => {
@@ -201,6 +188,47 @@ describe('createPiSessionContext', () => {
     expect(context.prompt).toContain('必须先调用 get_session_board');
     expect(context.prompt).toContain('长盘面开头');
     expect(context.prompt).not.toContain('中段唯一内容不应进入 system prompt');
+  });
+
+  it('keeps all built sections while previewing long Soul in the manifest', async () => {
+    const requestScope = createRequestScope();
+    const longSoul = `用户 Soul：${'长期偏好'.repeat(800)}`;
+    const runtime: RequestRuntime = {
+      deps: {
+        soulStore: {
+          read: vi.fn(async () => longSoul),
+          canEdit: vi.fn(async () => true),
+          update: vi.fn(),
+        },
+        skillCatalog: {
+          listEffectiveUserSkills: vi.fn(async () => []),
+        },
+      },
+    };
+    const context = await createPiSessionContext({
+      containerInput: {
+        ...createInput(),
+        llmRuntime: {
+          ...llmRuntime,
+          contextWindowTokens: 64,
+        },
+      },
+      runtime,
+      requestScope,
+    });
+
+    expect(context.prompt).toContain('id="current_request_metadata"');
+    expect(context.prompt).toContain('id="session_board_manifest"');
+    expect(context.prompt).toContain('id="soul_manifest"');
+    expect(context.prompt).toContain('previewTruncated=true');
+    expect(context.prompt).toContain('需要全文请使用对应读取工具');
+    expect(context.manifest.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        'current_request_metadata',
+        'session_board_manifest',
+        'soul_manifest',
+      ]),
+    );
   });
 
   it('injects a no-board policy when no authorized board context is visible', async () => {

@@ -1146,21 +1146,7 @@ export function PaipanSheet({
       </Button>
     );
   const flowResultContent = previewResult ? (
-    <div className="rounded-[30px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 sm:p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-          <Sparkles size={15} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[12px] sm:text-[13px] font-medium text-ink">
-            已生成预览盘面
-          </p>
-          <p className="text-[11px] text-muted">
-            {previewSkillName || '已生成盘面'}
-          </p>
-        </div>
-      </div>
-
+    <div className="rounded-[24px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-2 sm:p-3">
       <ArtifactRenderer
         entries={[
           {
@@ -1174,17 +1160,11 @@ export function PaipanSheet({
       />
     </div>
   ) : null;
-  // 结果页主动作固定在弹层底部，避免长盘面把按钮推到可视区之外。
+  // 结果页主动作固定在弹层底部；只保留按钮，把垂直空间让给盘面本身。
   const resultFooter = previewResult && resultStepActive ? (
     <div className="px-4 py-3 sm:px-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium text-ink">预览盘面已生成</p>
-          <p className="truncate text-[10px] leading-4 text-muted">
-            {previewSkillName || '已生成盘面'}
-          </p>
-        </div>
-        <div className="w-full shrink-0 sm:w-auto">{flowResultAction}</div>
+      <div className="w-full shrink-0 sm:ml-auto sm:w-auto">
+        {flowResultAction}
       </div>
     </div>
   ) : null;
@@ -1215,38 +1195,41 @@ export function PaipanSheet({
           </div>
         ) : (
           <>
-            {lockSkill && selectedCatalogItem ? (
-              <div className="rounded-[24px] border border-hairline bg-surface-card/45 px-4 py-4">
-                <p className="text-[11px] font-medium tracking-[0.08em] text-muted">
-                  已选术数
-                </p>
-                <div className="mt-2 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[14px] sm:text-[15px] font-semibold tracking-tight text-ink">
-                      {selectedCatalogItem.name}
-                    </p>
+            {!resultStepActive &&
+              (lockSkill && selectedCatalogItem ? (
+                <div className="rounded-[24px] border border-hairline bg-surface-card/45 px-4 py-4">
+                  <p className="text-[11px] font-medium tracking-[0.08em] text-muted">
+                    已选术数
+                  </p>
+                  <div className="mt-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[14px] sm:text-[15px] font-semibold tracking-tight text-ink">
+                        {selectedCatalogItem.name}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
+                      快捷入口
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-                    快捷入口
-                  </span>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <FieldLabel title="排盘类型" required />
-                <select
-                  value={selectedSkill}
-                  onChange={(event) => setSelectedSkill(event.currentTarget.value)}
-                  className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none"
-                >
-                  {catalog.map((item) => (
-                    <option key={item.skill} value={item.skill}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+              ) : (
+                <div>
+                  <FieldLabel title="排盘类型" required />
+                  <select
+                    value={selectedSkill}
+                    onChange={(event) =>
+                      setSelectedSkill(event.currentTarget.value)
+                    }
+                    className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none"
+                  >
+                    {catalog.map((item) => (
+                      <option key={item.skill} value={item.skill}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
 
             {selectedCatalogItem ? (
               <div className="space-y-4">

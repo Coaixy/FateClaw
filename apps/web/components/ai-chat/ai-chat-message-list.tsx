@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Crown, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { Brain, ChevronDown, Crown, Wallet, Wrench } from 'lucide-react';
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
@@ -214,6 +215,7 @@ function AiChatMessageRow({
       ? message.metadata
       : null;
   const isErrorMessage = isBot && messageMetadata?.kind === 'error';
+  const isThinkingBubble = isBot && isThinkingMessage(message);
   const isFinalMessage = messageMetadata?.kind === 'final' || isErrorMessage;
   const { body: displayContent, marker: finalMarker } = isBot
     ? splitFinalTurnMarker(message.content)
@@ -262,6 +264,15 @@ function AiChatMessageRow({
           {displayContent}
         </span>
       </div>
+    );
+  }
+
+  if (isThinkingBubble) {
+    return (
+      <ThinkingMessageBox
+        content={displayContent}
+        animationIndex={animationIndex}
+      />
     );
   }
 
@@ -341,7 +352,10 @@ function AiChatMessageRow({
         )}
 
         {isBot && toolTraces.length > 0 && (
-          <ToolTraceList messages={toolTraces} />
+          <ToolTraceList
+            messages={toolTraces}
+            forceComplete={isFinalMessage}
+          />
         )}
 
         <MessageFooter
@@ -351,6 +365,35 @@ function AiChatMessageRow({
           durationLabel={durationLabel}
           costLabels={costLabels}
         />
+      </div>
+    </div>
+  );
+}
+
+function ThinkingMessageBox({
+  content,
+  animationIndex,
+}: {
+  content: string;
+  animationIndex: number;
+}) {
+  const displayContent = content.trim() || '正在思考...';
+
+  return (
+    <div
+      className="max-w-2xl mx-auto flex justify-start animate-message-in"
+      style={{ animationDelay: `${Math.min(animationIndex * 30, 120)}ms` }}
+    >
+      <div className="flex min-w-0 max-w-[82%] flex-col items-start sm:max-w-[62%]">
+        <div className="max-w-full overflow-hidden rounded-lg border border-hairline bg-surface-card/80 px-2.5 py-2 shadow-sm">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium leading-4 text-muted-soft">
+            <Brain size={11} strokeWidth={1.8} aria-hidden="true" />
+            <span>思考</span>
+          </div>
+          <div className="thinking-scrollbar max-h-24 overflow-y-auto overscroll-contain pr-1 text-[11px] leading-5 text-muted whitespace-pre-wrap break-words">
+            {displayContent}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -407,47 +450,128 @@ function MessageFooter({
   );
 }
 
-function ToolTraceList({ messages }: { messages: Message[] }) {
-  return (
-    <div className="mt-1 flex max-w-full flex-col gap-1">
-      {messages.map((message) => {
-        const metadata =
-          message.metadata &&
-          typeof message.metadata === 'object' &&
-          !Array.isArray(message.metadata)
-            ? message.metadata
-            : null;
-        const status = metadata?.tool_status as
-          | 'running'
-          | 'completed'
-          | 'failed'
-          | undefined;
-        const path =
-          typeof metadata?.tool_path === 'string'
-            ? sanitizeToolPath(metadata.tool_path)
-            : undefined;
-        const label =
-          (metadata?.tool_name as string | undefined) ||
-          (metadata?.tool_label as string | undefined) ||
-          'tool';
-        const statusLabel = status ?? 'unknown';
+type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
 
-        return (
-          <div key={message.id} className="flex min-w-0">
-            <div className="min-w-0 flex flex-wrap items-center gap-1.5 text-[10px]">
-              <ToolTraceLabel label="Tool" value={label} />
-              <ToolTraceLabel label="Status" value={statusLabel} />
-              {path && (
-                <ToolTraceLabel
-                  label="Path"
-                  value={path}
-                  valueClassName="font-mono text-[9px]"
-                />
-              )}
+function getToolTraceStatusLabel(status: ToolTraceStatus) {
+  if (status === 'running') return '运行中';
+  if (status === 'completed') return '完成';
+  if (status === 'failed') return '失败';
+  return '未知';
+}
+
+function ToolTraceList({
+  messages,
+  forceComplete = false,
+}: {
+  messages: Message[];
+  forceComplete?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const traces = messages.map((message) => {
+    const metadata =
+      message.metadata &&
+      typeof message.metadata === 'object' &&
+      !Array.isArray(message.metadata)
+        ? message.metadata
+        : null;
+    const rawStatus = metadata?.tool_status as ToolTraceStatus;
+    const status =
+      forceComplete && rawStatus === 'running' ? 'completed' : rawStatus;
+    const path =
+      typeof metadata?.tool_path === 'string'
+        ? sanitizeToolPath(metadata.tool_path)
+        : undefined;
+    const label =
+      (metadata?.tool_name as string | undefined) ||
+      (metadata?.tool_label as string | undefined) ||
+      'tool';
+
+    return {
+      id: message.id,
+      label,
+      path,
+      status,
+      statusLabel: getToolTraceStatusLabel(status),
+    };
+  });
+  const runningCount = traces.filter((trace) => trace.status === 'running').length;
+  const failedCount = traces.filter((trace) => trace.status === 'failed').length;
+  const completedCount = traces.filter(
+    (trace) => trace.status === 'completed',
+  ).length;
+  const latestTrace = traces[traces.length - 1];
+  const statusSummary =
+    runningCount > 0
+      ? `${runningCount} 运行中`
+      : failedCount > 0
+        ? `${failedCount} 失败`
+        : completedCount > 0
+          ? `${completedCount} 完成`
+          : '待更新';
+
+  return (
+    <div className="mt-1 max-w-full">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="group inline-flex min-h-7 max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-hairline/70 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-muted shadow-sm transition-colors hover:border-primary/30 hover:bg-surface-cream-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      >
+        <Wrench
+          size={11}
+          strokeWidth={1.8}
+          aria-hidden="true"
+          className="shrink-0 text-muted-soft group-hover:text-primary"
+        />
+        <span className="shrink-0">工具轨迹</span>
+        <span className="shrink-0 rounded-full bg-surface-soft px-1.5 py-0.5 tabular-nums text-muted-soft">
+          {traces.length}
+        </span>
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 tabular-nums ${
+            runningCount > 0
+              ? 'bg-primary/10 text-primary'
+              : failedCount > 0
+                ? 'bg-error/10 text-error'
+                : 'bg-surface-soft text-muted-soft'
+          }`}
+        >
+          {statusSummary}
+        </span>
+        {latestTrace?.path && (
+          <span className="hidden min-w-0 max-w-[180px] truncate font-mono text-[9px] text-muted-soft sm:inline">
+            {latestTrace.path}
+          </span>
+        )}
+        <ChevronDown
+          size={12}
+          strokeWidth={1.8}
+          aria-hidden="true"
+          className={`shrink-0 text-muted-soft transition-transform duration-150 group-hover:text-primary ${
+            expanded ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="mt-1.5 flex max-w-full flex-col gap-1 rounded-lg border border-hairline/70 bg-surface-card/45 p-1.5 shadow-sm">
+          {traces.map((trace) => (
+            <div key={trace.id} className="flex min-w-0">
+              <div className="min-w-0 flex flex-wrap items-center gap-1.5 text-[10px]">
+                <ToolTraceLabel label="Tool" value={trace.label} />
+                <ToolTraceLabel label="Status" value={trace.statusLabel} />
+                {trace.path && (
+                  <ToolTraceLabel
+                    label="Path"
+                    value={trace.path}
+                    valueClassName="font-mono text-[9px]"
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      )}
     </div>
   );
 }

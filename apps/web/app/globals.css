@@ -180,6 +180,35 @@ body {
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
+/* 思考小框空间很窄，使用低存在感滚动条，避免系统滚动条抢视觉焦点。 */
+.thinking-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 28%, transparent) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.thinking-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.thinking-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thinking-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: 999px;
+}
+
+.thinking-scrollbar:hover::-webkit-scrollbar-thumb,
+.thinking-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-primary) 42%, transparent);
+}
+
+.thinking-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Safe Area */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 

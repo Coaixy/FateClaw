@@ -429,7 +429,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
   });
 
   return (
-    <div className="w-full space-y-3 font-sans">
+    <div className="w-full space-y-3 font-sans [container-type:inline-size]">
       {/* 顶部基础信息区 */}
       {(bazi?.birthTime || bazi?.baziString) && (
         <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] sm:text-xs">
@@ -682,15 +682,18 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
           {/* 大运轴 */}
           {decades.length > 0 && (
             <div className="flex border-b border-hairline-soft">
-              <div className="w-8 sm:w-10 flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
+              <div className="w-[clamp(1.5rem,8cqw,2.5rem)] flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
                 <span
-                  className={CHART.muted + ' font-medium'}
+                  className={
+                    CHART.muted +
+                    ' text-[clamp(10px,3.2cqw,13px)] font-medium'
+                  }
                   style={{ writingMode: 'vertical-lr' }}
                 >
                   大运
                 </span>
               </div>
-              <div className="flex-1 overflow-x-auto flex scrollbar-hide snap-x">
+              <div className="grid flex-1 grid-cols-[repeat(auto-fit,minmax(clamp(1.95rem,11.5cqw,3rem),1fr))]">
                 {decades.map((d, i) => {
                   const stem = d.heavenStem ?? d.sixtyCycle?.[0] ?? '';
                   const branch = d.earthBranch ?? d.sixtyCycle?.[1] ?? '';
@@ -703,28 +706,34 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleDecadeSelect(i)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'snap-start flex-none w-[44px] sm:w-[50px] flex flex-col items-center py-2 border-r border-hairline-soft last:border-r-0 transition-colors',
+                        'min-w-0 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors last:border-r-0',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
                       )}
                     >
-                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">
+                      <span className="text-[clamp(8px,2.8cqw,11px)] text-body font-medium leading-none">
                         {d.startYear ?? '-'}
                       </span>
-                      <span className={CHART.mutedSoft + ' mt-1 leading-none'}>
+                      <span
+                        className={
+                          CHART.mutedSoft +
+                          ' mt-[clamp(0.15rem,1cqw,0.25rem)] text-[clamp(8px,2.65cqw,11px)] leading-none'
+                        }
+                      >
                         {d.startAge}岁
                       </span>
-                      <div className="flex items-end gap-[1px] mt-1.5">
+                      <div className="flex items-end gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
                         <span
-                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}
+                          className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(stem)}`}
                         >
                           {stem}
                         </span>
                         {d.tenStar && (
                           <span
                             className={
-                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                              CHART.mutedSoft +
+                              ' text-[clamp(8px,2.8cqw,11px)] leading-none mb-[1px]'
                             }
                           >
                             {d.tenStar}
@@ -733,14 +742,15 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       </div>
                       <div className="flex items-end gap-[1px] mt-0.5">
                         <span
-                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}
+                          className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(branch)}`}
                         >
                           {branch}
                         </span>
                         {branchTenStar && (
                           <span
                             className={
-                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                              CHART.mutedSoft +
+                              ' text-[clamp(8px,2.8cqw,11px)] leading-none mb-[1px]'
                             }
                           >
                             {branchTenStar}
@@ -756,15 +766,18 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
           {/* 流年轴 */}
           {annuals.length > 0 && (
             <div className="flex">
-              <div className="w-8 sm:w-10 flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
+              <div className="w-[clamp(1.5rem,8cqw,2.5rem)] flex-none flex items-center justify-center bg-surface-soft border-r border-hairline-soft">
                 <span
-                  className={CHART.muted + ' font-medium'}
+                  className={
+                    CHART.muted +
+                    ' text-[clamp(10px,3.2cqw,13px)] font-medium'
+                  }
                   style={{ writingMode: 'vertical-lr' }}
                 >
                   流年
                 </span>
               </div>
-              <div className="flex-1 overflow-x-auto flex scrollbar-hide snap-x">
+              <div className="grid flex-1 grid-cols-[repeat(auto-fit,minmax(clamp(2.15rem,13.5cqw,3.55rem),1fr))]">
                 {visibleAnnuals.map((a, i) => {
                   const stem = a.heavenStem ?? a.sixtyCycle[0] ?? '';
                   const branch = a.earthBranch ?? a.sixtyCycle[1] ?? '';
@@ -777,32 +790,36 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleAnnualSelect(a.year)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'snap-start flex-none w-[58px] sm:w-[64px] flex flex-col items-center py-2 border-r border-hairline-soft last:border-r-0 transition-colors',
+                        'min-w-0 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors last:border-r-0',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
                       )}
                     >
-                      <span className="text-[10px] sm:text-[11px] text-body font-medium leading-none">
+                      <span className="text-[clamp(8px,2.8cqw,11px)] text-body font-medium leading-none">
                         {a.year}
                       </span>
                       {a.age !== undefined && (
                         <span
-                          className={CHART.mutedSoft + ' mt-1 leading-none'}
+                          className={
+                            CHART.mutedSoft +
+                            ' mt-[clamp(0.15rem,1cqw,0.25rem)] text-[clamp(8px,2.65cqw,11px)] leading-none'
+                          }
                         >
                           {a.age}岁
                         </span>
                       )}
-                      <div className="flex items-end gap-[1px] mt-1.5">
+                      <div className="flex items-end gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
                         <span
-                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(stem)}`}
+                          className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(stem)}`}
                         >
                           {stem}
                         </span>
                         {a.tenStar && (
                           <span
                             className={
-                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                              CHART.mutedSoft +
+                              ' text-[clamp(8px,2.8cqw,11px)] leading-none mb-[1px]'
                             }
                           >
                             {a.tenStar}
@@ -811,14 +828,15 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       </div>
                       <div className="flex items-end gap-[1px] mt-0.5">
                         <span
-                          className={`text-[15px] sm:text-[16px] font-bold leading-none ${wuxingColor(branch)}`}
+                          className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(branch)}`}
                         >
                           {branch}
                         </span>
                         {branchTenStar && (
                           <span
                             className={
-                              CHART.mutedSoft + ' leading-none mb-[1px]'
+                              CHART.mutedSoft +
+                              ' text-[clamp(8px,2.8cqw,11px)] leading-none mb-[1px]'
                             }
                           >
                             {branchTenStar}
@@ -828,7 +846,8 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       {a.sound && (
                         <span
                           className={
-                            CHART.mutedSoft + ' mt-1 text-[8px] leading-none'
+                            CHART.mutedSoft +
+                            ' mt-[clamp(0.15rem,1cqw,0.25rem)] text-[clamp(7px,2.4cqw,9px)] leading-none'
                           }
                         >
                           {a.sound}
