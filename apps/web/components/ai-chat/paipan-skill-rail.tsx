@@ -62,7 +62,7 @@ export function PaipanSkillRail({
     enabledSkillsLoading || hasEnabledSkills || showEnabledSkillsEmptyState;
 
   return (
-    <section className="rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,rgba(204,120,92,0.08),rgba(255,255,255,0.03))] p-3 shadow-sm">
+    <section className="rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-primary)_12%,var(--color-surface-card)),color-mix(in_srgb,var(--color-surface-card)_82%,var(--color-canvas)))] p-3 shadow-[0_12px_30px_color-mix(in_srgb,var(--color-ink)_6%,transparent)]">
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -108,7 +108,7 @@ export function PaipanSkillRail({
           shouldShowEnabledSkills ? 'md:grid-cols-[1.35fr_0.85fr]' : ''
         }`}
       >
-        <div className="min-w-0 rounded-xl border border-primary/20 bg-surface-card/55 p-2.5 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-primary/20 bg-[color-mix(in_srgb,var(--color-surface-card)_72%,var(--color-canvas))] p-2.5 shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_4%,transparent)_inset]">
           {isEmpty ? (
             <div className="rounded-xl border border-dashed border-primary/25 bg-surface-card/45 px-3 py-3 text-[11px] leading-5 text-muted">
               当前还没有可用的系统排盘术数。
@@ -136,7 +136,7 @@ export function PaipanSkillRail({
                         type="button"
                         onClick={() => onSelectSkill(item.skill)}
                         disabled={disabled}
-                        className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-primary/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.68),rgba(255,255,255,0.32))] px-3 text-left shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/8 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-primary/20 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface-cream-strong)_86%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)))] px-3 text-left shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_7%,transparent)_inset] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,var(--color-surface-card))] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary">
                           术
@@ -147,7 +147,7 @@ export function PaipanSkillRail({
                         <span className="hidden shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary sm:inline-flex">
                           开始
                         </span>
-                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-card text-muted transition-all duration-200 group-hover:translate-x-0.5 group-hover:bg-primary group-hover:text-on-primary">
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-surface-card)_74%,var(--color-canvas))] text-muted transition-all duration-200 group-hover:translate-x-0.5 group-hover:bg-primary group-hover:text-on-primary">
                           <ChevronRight size={13} />
                         </span>
                       </button>
