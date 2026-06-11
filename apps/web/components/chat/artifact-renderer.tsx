@@ -37,6 +37,13 @@ const JingzhanChart = dynamic(
 
 interface ArtifactRendererProps {
   entries: SkillContextEntry[];
+  /**
+   * 是否按当前视口剩余高度等比缩放盘面。
+   *
+   * 聊天流里的盘面会随着新消息插入被推到视口下方，如果按当前位置计算剩余高度，
+   * 旧盘面会被误判成空间不足而持续缩小；只有弹层预览这类固定视窗才需要开启。
+   */
+  fitViewportHeight?: boolean;
 }
 
 interface ArtifactFitState {
@@ -62,12 +69,19 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
 };
 
 /**
- * 盘面自适应外壳会读取可用宽高，短屏时整体等比缩放，避免盘面被内部 overflow 裁切。
+ * 盘面自适应外壳默认只按容器宽度缩放；固定视窗场景可额外按可用高度缩放。
  *
  * @param props.children 实际盘面节点。
- * @returns 自动适配当前视口宽高的盘面容器。
+ * @param props.fitViewportHeight 是否把当前视口剩余高度纳入缩放计算。
+ * @returns 自动适配展示区域的盘面容器。
  */
-function ResponsiveArtifactFrame({ children }: { children: ReactNode }) {
+function ResponsiveArtifactFrame({
+  children,
+  fitViewportHeight = false,
+}: {
+  children: ReactNode;
+  fitViewportHeight?: boolean;
+}) {
   const shellRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const heightProbeRef = useRef<HTMLDivElement>(null);
@@ -86,27 +100,32 @@ function ResponsiveArtifactFrame({ children }: { children: ReactNode }) {
       const shellWidth = shell.clientWidth;
       const naturalWidth = Math.max(shellWidth, board.scrollWidth);
       const naturalHeight = board.scrollHeight;
-      const probeHeight =
-        heightProbeRef.current?.getBoundingClientRect().height ?? 0;
-      const shellTop = shell.getBoundingClientRect().top;
-      // 盘面可能出现在弹层或聊天输入框上方，按真实剩余视口高度兜底，避免底部固定操作区遮挡。
-      const viewportRemainingHeight =
-        typeof window === 'undefined'
-          ? probeHeight
-          : window.innerHeight - shellTop - 136;
-      const availableHeight = Math.max(
-        320,
-        Math.min(
-          probeHeight || viewportRemainingHeight,
-          viewportRemainingHeight,
-        ),
-      );
       const widthScale =
         naturalWidth > 0 ? Math.min(1, shellWidth / naturalWidth) : 1;
-      const heightScale =
-        naturalHeight > 0
-          ? Math.min(1, availableHeight / naturalHeight)
-          : 1;
+      let heightScale = 1;
+
+      if (fitViewportHeight) {
+        const probeHeight =
+          heightProbeRef.current?.getBoundingClientRect().height ?? 0;
+        const shellTop = shell.getBoundingClientRect().top;
+        // 弹层内的盘面需要考虑底部固定操作区；聊天流禁用该逻辑，避免滚动位置影响盘面尺寸。
+        const viewportRemainingHeight =
+          typeof window === 'undefined'
+            ? probeHeight
+            : window.innerHeight - shellTop - 136;
+        const availableHeight = Math.max(
+          320,
+          Math.min(
+            probeHeight || viewportRemainingHeight,
+            viewportRemainingHeight,
+          ),
+        );
+        heightScale =
+          naturalHeight > 0
+            ? Math.min(1, availableHeight / naturalHeight)
+            : 1;
+      }
+
       const nextScale = Math.min(widthScale, heightScale);
       const nextFit = {
         width: naturalWidth,
@@ -142,7 +161,7 @@ function ResponsiveArtifactFrame({ children }: { children: ReactNode }) {
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateFit);
     };
-  }, []);
+  }, [fitViewportHeight]);
 
   const contentWidth = fit.width || undefined;
   const visualWidth = fit.width ? fit.width * fit.scale : undefined;
@@ -206,9 +225,11 @@ function resolveChart(entry: SkillContextEntry) {
 function ArtifactBlock({
   entry,
   index,
+  fitViewportHeight,
 }: {
   entry: SkillContextEntry;
   index: number;
+  fitViewportHeight: boolean;
 }) {
   const chart = resolveChart(entry);
   if (!chart || entry.artifactData == null) return null;
@@ -227,19 +248,36 @@ function ArtifactBlock({
             shellClassName,
           )}
         >
-          <ResponsiveArtifactFrame>{chart}</ResponsiveArtifactFrame>
+          <ResponsiveArtifactFrame fitViewportHeight={fitViewportHeight}>
+            {chart}
+          </ResponsiveArtifactFrame>
         </div>
       </ChartErrorBoundary>
     </div>
   );
 }
 
-export function ArtifactRenderer({ entries }: ArtifactRendererProps) {
+/**
+ * 渲染 Agent 工具产生的结构化盘面，并按使用场景选择尺寸适配策略。
+ *
+ * @param props.entries 需要展示的工具上下文列表。
+ * @param props.fitViewportHeight 是否按视口剩余高度缩放，聊天流默认关闭以保持可读尺寸。
+ * @returns 可直接嵌入聊天消息或排盘弹层的盘面节点。
+ */
+export function ArtifactRenderer({
+  entries,
+  fitViewportHeight = false,
+}: ArtifactRendererProps) {
   if (!entries || entries.length === 0) return null;
   return (
     <>
       {entries.map((entry, i) => (
-        <ArtifactBlock key={`${entry.skill}-${i}`} entry={entry} index={i} />
+        <ArtifactBlock
+          key={`${entry.skill}-${i}`}
+          entry={entry}
+          index={i}
+          fitViewportHeight={fitViewportHeight}
+        />
       ))}
     </>
   );

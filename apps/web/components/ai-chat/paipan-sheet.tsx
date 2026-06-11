@@ -1148,6 +1148,7 @@ export function PaipanSheet({
   const flowResultContent = previewResult ? (
     <div className="rounded-[24px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-2 sm:p-3">
       <ArtifactRenderer
+        fitViewportHeight
         entries={[
           {
             skill: previewResult.skillContextEntry.skill,
