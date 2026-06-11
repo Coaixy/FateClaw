@@ -6,6 +6,7 @@ import {
   Gift,
   Link as LinkIcon,
   Loader2,
+  PlusCircle,
   RefreshCw,
   Share2,
   Users,
@@ -56,11 +57,13 @@ function InviteMetric({ label, value }: { label: string; value: number }) {
 
 function RuleRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-h-10 items-center justify-between gap-3 border-t border-hairline py-2 first:border-t-0">
-      <span className="text-[12px] text-muted">{label}</span>
-      <span className="text-right text-[12px] font-semibold text-ink">
+    <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
+        {label}
+      </div>
+      <div className="mt-1 text-[12px] font-semibold leading-5 text-ink">
         {value}
-      </span>
+      </div>
     </div>
   );
 }
@@ -84,6 +87,8 @@ export function ReferralCenter() {
   const [summary, setSummary] = useState<MyReferralSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemCode, setRedeemCode] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -115,6 +120,23 @@ export function ReferralCenter() {
       toast('error', '复制失败');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const redeemInviteCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const code = redeemCode.trim().toUpperCase();
+    if (!code || redeeming) return;
+    setRedeeming(true);
+    try {
+      await referralsApi.redeem(code);
+      setRedeemCode('');
+      toast('success', '邀请码已绑定');
+      await load();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '绑定邀请码失败');
+    } finally {
+      setRedeeming(false);
     }
   };
 
@@ -212,13 +234,54 @@ export function ReferralCenter() {
           </section>
 
           <section className="rounded-2xl border border-hairline bg-surface-card p-5">
-            <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-[13px] font-semibold">
+                  <PlusCircle size={15} className="text-primary" />
+                  绑定邀请码
+                </div>
+                <div className="mt-1 text-[12px] leading-5 text-muted">
+                  已注册用户可以在这里绑定邀请人。每个账号只能绑定一次。
+                </div>
+              </div>
+            </div>
+            <form
+              onSubmit={redeemInviteCode}
+              className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"
+            >
+              <input
+                value={redeemCode}
+                onChange={(event) =>
+                  setRedeemCode(event.target.value.toUpperCase())
+                }
+                maxLength={64}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="输入好友的邀请码"
+                className="h-11 rounded-xl border border-hairline bg-canvas px-3 text-sm font-medium outline-none transition-colors focus:border-primary"
+              />
+              <button
+                type="submit"
+                disabled={redeeming || !redeemCode.trim()}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-medium text-on-primary disabled:opacity-40"
+              >
+                {redeeming ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : null}
+                绑定
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-2xl border border-hairline bg-surface-card p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <Users size={16} />
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold">奖励规则</div>
-                <div className="mt-3 rounded-xl border border-hairline bg-canvas/45 px-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <RuleRow
                     label="邀请功能"
                     value={summary.config.enabled ? '已开启' : '已关闭'}
