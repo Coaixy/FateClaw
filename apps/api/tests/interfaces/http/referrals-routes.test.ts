@@ -103,6 +103,7 @@ describe('referralsRoutes', () => {
         invited_count: 1,
         rewarded_count: 0,
         total_reward_days: 0,
+        bound_referral: null,
         config: {
           enabled: true,
           inviter_reward_days: 7,
@@ -121,5 +122,6 @@ describe('referralsRoutes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(mockGetMyReferralSummary).toHaveBeenCalledWith('user-1');
+    expect(response.json()).toMatchObject({ bound_referral: null });
   });
 });

@@ -342,6 +342,19 @@ async function getReferralByInviteeUsing(
   return row ? normalizeReferralRow(row) : null;
 }
 
+/**
+ * 读取用户已经绑定的邀请关系。
+ *
+ * @param userId 当前登录用户 ID。
+ * @returns 用户作为被邀请人时的绑定关系；尚未绑定时返回 null。
+ * @remarks 该查询只用于页面展示状态，写入前校验仍由 redeemReferralInviteCodeUsing 在事务内加锁完成。
+ */
+export async function getBoundReferralForUser(
+  userId: string,
+): Promise<UserReferralRow | null> {
+  return getReferralByInviteeUsing(getDbPool(), userId);
+}
+
 async function wouldCreateReferralCycleUsing(
   queryable: ReferralQueryable,
   input: {

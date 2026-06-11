@@ -241,6 +241,7 @@ import {
   updateUserCustomSkill,
 } from './repositories/skills-repository.js';
 import {
+  getBoundReferralForUser,
   getReferralConfig,
   getReferralSummaryForUser,
   listReferralsForAdmin,
@@ -310,6 +311,7 @@ export {
   getAllAccounts,
   getArchivedChatSessionsByUserId,
   getBillingRequestReservationByRequestId,
+  getBoundReferralForUser,
   getBundleByToken,
   getChatSession,
   getChatSessionPiSessionArchive,

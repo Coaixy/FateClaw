@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  CheckCircle2,
+  ChevronDown,
   Copy,
   Gift,
   Link as LinkIcon,
@@ -57,11 +59,11 @@ function InviteMetric({ label, value }: { label: string; value: number }) {
 
 function RuleRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
+    <div className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
         {label}
       </div>
-      <div className="mt-1 text-[12px] font-semibold leading-5 text-ink">
+      <div className="text-[12px] font-semibold leading-5 text-ink sm:text-right">
         {value}
       </div>
     </div>
@@ -88,6 +90,7 @@ export function ReferralCenter() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
+  const [rulesExpanded, setRulesExpanded] = useState(false);
   const [redeemCode, setRedeemCode] = useState('');
   const [error, setError] = useState('');
 
@@ -221,6 +224,24 @@ export function ReferralCenter() {
                 <LinkIcon size={13} className="mt-0.5 shrink-0 text-primary" />
                 <span className="break-all">{link}</span>
               </div>
+              {summary.bound_referral ? (
+                <div className="mt-3 flex flex-col gap-2 rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5 text-[12px] leading-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2 text-muted">
+                    <CheckCircle2
+                      size={14}
+                      className="mt-0.5 shrink-0 text-primary"
+                    />
+                    <span>已绑定邀请人，绑定后不可更换。</span>
+                  </div>
+                  <div className="shrink-0 pl-6 text-[11px] font-medium text-muted sm:pl-0">
+                    {new Intl.DateTimeFormat('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                    }).format(new Date(summary.bound_referral.created_at))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid bg-canvas/35 sm:grid-cols-3">
@@ -233,81 +254,119 @@ export function ReferralCenter() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-hairline bg-surface-card p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          {!summary.bound_referral ? (
+            <section className="rounded-2xl border border-hairline bg-surface-card p-5">
               <div>
-                <div className="flex items-center gap-2 text-[13px] font-semibold">
-                  <PlusCircle size={15} className="text-primary" />
-                  绑定邀请码
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-[13px] font-semibold">
+                      <PlusCircle size={15} className="text-primary" />
+                      绑定邀请码
+                    </div>
+                    <div className="mt-1 text-[12px] leading-5 text-muted">
+                      已注册用户可以在这里绑定邀请人。每个账号只能绑定一次。
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-1 text-[12px] leading-5 text-muted">
-                  已注册用户可以在这里绑定邀请人。每个账号只能绑定一次。
-                </div>
+                <form
+                  onSubmit={redeemInviteCode}
+                  className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"
+                >
+                  <input
+                    value={redeemCode}
+                    onChange={(event) =>
+                      setRedeemCode(event.target.value.toUpperCase())
+                    }
+                    maxLength={64}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="输入好友的邀请码"
+                    className="h-11 rounded-xl border border-hairline bg-canvas px-3 text-sm font-medium outline-none transition-colors focus:border-primary"
+                  />
+                  <button
+                    type="submit"
+                    disabled={redeeming || !redeemCode.trim()}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-medium text-on-primary disabled:opacity-40"
+                  >
+                    {redeeming ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : null}
+                    绑定
+                  </button>
+                </form>
               </div>
-            </div>
-            <form
-              onSubmit={redeemInviteCode}
-              className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]"
-            >
-              <input
-                value={redeemCode}
-                onChange={(event) =>
-                  setRedeemCode(event.target.value.toUpperCase())
-                }
-                maxLength={64}
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="输入好友的邀请码"
-                className="h-11 rounded-xl border border-hairline bg-canvas px-3 text-sm font-medium outline-none transition-colors focus:border-primary"
-              />
-              <button
-                type="submit"
-                disabled={redeeming || !redeemCode.trim()}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-medium text-on-primary disabled:opacity-40"
-              >
-                {redeeming ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : null}
-                绑定
-              </button>
-            </form>
-          </section>
+            </section>
+          ) : null}
 
           <section className="rounded-2xl border border-hairline bg-surface-card p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <Users size={16} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold">奖励规则</div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <RuleRow
-                    label="邀请功能"
-                    value={summary.config.enabled ? '已开启' : '已关闭'}
-                  />
-                  <RuleRow
-                    label="邀请者奖励"
-                    value={`${summary.config.inviter_reward_days} 天会员`}
-                  />
-                  <RuleRow
-                    label="每月奖励上限"
-                    value={`${summary.config.monthly_reward_cap_days} 天会员`}
-                  />
-                  <RuleRow
-                    label="奖励触发"
-                    value={
-                      summary.config.reward_first_membership_only
-                        ? '仅首次会员购买'
-                        : '符合条件的会员购买'
-                    }
-                  />
-                  <RuleRow label="支付条件" value="仅纯充值余额支付会员" />
-                  <RuleRow
-                    label="绑定规则"
-                    value="绑定后不可更换，不允许自邀或循环绑定"
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold">奖励规则</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
+                        {summary.config.enabled ? '已开启' : '已关闭'}
+                      </span>
+                      <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
+                        奖励 {summary.config.inviter_reward_days} 天会员
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-expanded={rulesExpanded}
+                    aria-controls="referral-rules-panel"
+                    onClick={() => setRulesExpanded((expanded) => !expanded)}
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink"
+                  >
+                    {rulesExpanded ? '收起' : '展开'}
+                    <ChevronDown
+                      size={14}
+                      className={
+                        rulesExpanded
+                          ? 'rotate-180 transition-transform'
+                          : 'transition-transform'
+                      }
+                    />
+                  </button>
                 </div>
+                {rulesExpanded ? (
+                  <div
+                    id="referral-rules-panel"
+                    className="mt-3 divide-y divide-hairline rounded-xl border border-hairline bg-canvas/45 px-3"
+                  >
+                    <RuleRow
+                      label="邀请功能"
+                      value={summary.config.enabled ? '已开启' : '已关闭'}
+                    />
+                    <RuleRow
+                      label="邀请者奖励"
+                      value={`${summary.config.inviter_reward_days} 天会员`}
+                    />
+                    <RuleRow
+                      label="每月奖励上限"
+                      value={`${summary.config.monthly_reward_cap_days} 天会员`}
+                    />
+                    <RuleRow
+                      label="奖励触发"
+                      value={
+                        summary.config.reward_first_membership_only
+                          ? '仅首次会员购买'
+                          : '符合条件的会员购买'
+                      }
+                    />
+                    <RuleRow label="支付条件" value="仅纯充值余额支付会员" />
+                    <RuleRow
+                      label="绑定规则"
+                      value="绑定后不可更换，不允许自邀或循环绑定"
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>

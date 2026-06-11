@@ -21,6 +21,16 @@ export interface ReferralConfigDto {
   updated_at: string;
 }
 
+/**
+ * 当前用户已经绑定的邀请关系。
+ *
+ * @remarks 只暴露前端展示需要的状态，避免泄露邀请人用户 ID；为空表示仍可绑定邀请人。
+ */
+export interface MyBoundReferralDto {
+  /** 绑定关系创建时间，ISO 8601 字符串。 */
+  created_at: string;
+}
+
 /** 当前用户的邀请概览。 */
 export interface MyReferralSummaryDto {
   invite_code: string;
@@ -28,6 +38,8 @@ export interface MyReferralSummaryDto {
   invited_count: number;
   rewarded_count: number;
   total_reward_days: number;
+  /** 当前用户是否已经绑定过邀请人；为空表示仍可绑定。 */
+  bound_referral: MyBoundReferralDto | null;
   config: ReferralConfigDto;
 }
 

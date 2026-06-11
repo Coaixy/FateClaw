@@ -5,6 +5,7 @@ import type {
 } from '@fateclaw/contracts/referrals';
 
 import {
+  getBoundReferralForUser,
   getReferralConfig,
   getReferralSummaryForUser,
   previewReferralInviteCode,
@@ -26,9 +27,10 @@ function inviteUrl(code: string): string {
 export async function getMyReferralSummary(
   userId: string,
 ): Promise<ServiceResult<MyReferralSummaryDto>> {
-  const [summary, config] = await Promise.all([
+  const [summary, config, boundReferral] = await Promise.all([
     getReferralSummaryForUser(userId),
     getReferralConfig(),
+    getBoundReferralForUser(userId),
   ]);
   return ok({
     invite_code: summary.inviteCode.code,
@@ -36,6 +38,11 @@ export async function getMyReferralSummary(
     invited_count: summary.invitedCount,
     rewarded_count: summary.rewardedCount,
     total_reward_days: summary.totalRewardDays,
+    bound_referral: boundReferral
+      ? {
+          created_at: boundReferral.created_at,
+        }
+      : null,
     config: {
       enabled: config.enabled,
       inviter_reward_days: config.inviter_reward_days,
