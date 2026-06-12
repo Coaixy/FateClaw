@@ -10,11 +10,16 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
+import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
 import type { BillingStatus } from '@/features/billing/api';
 
 type MembershipStatus = BillingStatus['membership'];
+type TranslationFn = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
 
 function formatCompactNumber(value: number): string {
   if (value < 1000) return `${value}`;
@@ -39,44 +44,75 @@ function activityCells(seed: number, percent: number) {
   });
 }
 
-function activityTooltip(monthlyMessages: number, monthlyTokens: number) {
-  return `本月消息 ${monthlyMessages.toLocaleString('zh-CN')} · 本月 Token ${formatCompactNumber(monthlyTokens)}`;
-}
-
-function formatMembershipDate(value: string | null) {
-  if (!value) return '待开通';
-  return new Date(value).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+function activityTooltip(
+  monthlyMessages: number,
+  monthlyTokens: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+  t: TranslationFn,
+) {
+  return t('pages.membership.activityTooltip', {
+    messages: formatNumber(monthlyMessages),
+    tokens: formatCompactNumber(monthlyTokens),
   });
 }
 
-function formatMembershipUsage(monthlyMessages: number, monthlyTokens: number) {
-  return `${monthlyMessages.toLocaleString('zh-CN')} 条 · ${formatCompactNumber(monthlyTokens)} Token`;
+function formatMembershipDate(
+  value: string | null,
+  formatDate: (
+    value: string | number | Date,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string,
+  t: TranslationFn,
+) {
+  if (!value) return t('pages.membership.notSubscribed');
+  return formatDate(value, { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
-function membershipStatusText(status: MembershipStatus['allowance_status']) {
+function formatMembershipUsage(
+  monthlyMessages: number,
+  monthlyTokens: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+  t: TranslationFn,
+) {
+  return t('pages.membership.usageLabel', {
+    messages: formatNumber(monthlyMessages),
+    tokens: formatCompactNumber(monthlyTokens),
+  });
+}
+
+function membershipStatusText(
+  status: MembershipStatus['allowance_status'],
+  t: TranslationFn,
+) {
   switch (status) {
     case 'plenty':
-      return '额度充足';
+      return t('pages.membership.statusPlenty');
     case 'normal':
-      return '正常使用中';
+      return t('pages.membership.statusNormal');
     case 'tight':
-      return '额度偏紧';
+      return t('pages.membership.statusTight');
     case 'almost_used':
-      return '即将用完';
+      return t('pages.membership.statusAlmostUsed');
     case 'used_up':
-      return '额度已用完';
+      return t('pages.membership.statusUsedUp');
     case 'inactive':
     default:
-      return '未开通';
+      return t('pages.membership.statusInactive');
   }
 }
 
-function resetText(value: string | null) {
-  if (!value) return '开通后按月重置';
-  return `${new Date(value).toLocaleDateString('zh-CN')} 重置`;
+function resetText(
+  value: string | null,
+  formatDate: (
+    value: string | number | Date,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string,
+  t: TranslationFn,
+) {
+  if (!value) return t('pages.membership.resetPending');
+  return t('pages.membership.resetAt', {
+    date: formatDate(value, { year: 'numeric', month: '2-digit', day: '2-digit' }),
+  });
 }
 
 function progressPercent(ratio: number) {
@@ -217,13 +253,27 @@ function AmpMetric({
 function AmpMembershipCard({
   monthlyMessages,
   monthlyTokens,
+  formatNumber,
+  t,
 }: {
   monthlyMessages: number;
   monthlyTokens: number;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  t: TranslationFn;
 }) {
   const cells = activityCells(monthlyTokens + monthlyMessages, 100);
-  const activityTip = activityTooltip(monthlyMessages, monthlyTokens);
-  const terms = ['六爻', '八字', '紫微斗数', '奇门遁甲'] as const;
+  const activityTip = activityTooltip(
+    monthlyMessages,
+    monthlyTokens,
+    formatNumber,
+    t,
+  );
+  const terms = [
+    t('pages.membership.termsLiuYao'),
+    t('pages.membership.termsBazi'),
+    t('pages.membership.termsZiwei'),
+    t('pages.membership.termsQimen'),
+  ] as const;
 
   return (
     <section
@@ -288,7 +338,7 @@ function AmpMembershipCard({
         <div className="grid content-center gap-5 px-5 py-5 [transform:translateZ(18px)] sm:min-h-[270px] sm:gap-6 sm:px-6 sm:py-6">
           <div className="relative">
             <div className="mb-3 flex items-center justify-between gap-3 text-[12px] text-muted">
-              <span>ACTIVITY</span>
+              <span>{t('pages.membership.activity')}</span>
             </div>
             <div className="mb-4 flex flex-wrap gap-2">
               {terms.map((term, index) => (
@@ -306,10 +356,10 @@ function AmpMembershipCard({
               {cells.map((state, index) => {
                 const stateLabel =
                   state === 'alert'
-                    ? '高频活跃'
+                    ? t('pages.membership.highActivity')
                     : state === 'active'
-                      ? '持续活跃'
-                      : '轻度活跃';
+                      ? t('pages.membership.sustainedActivity')
+                      : t('pages.membership.lightActivity');
                 return (
                   <span
                     key={`${state}-${index}`}
@@ -333,13 +383,13 @@ function AmpMembershipCard({
       <div className="relative z-10 grid grid-cols-2 overflow-hidden [transform:translateZ(14px)]">
         <AmpMetric
           icon={<MessageSquare size={15} className="text-primary" />}
-          label="本月消息"
-          value={monthlyMessages.toLocaleString('zh-CN')}
+          label={t('pages.membership.monthlyMessages')}
+          value={formatNumber(monthlyMessages)}
           tone="default"
         />
         <AmpMetric
           icon={<Sparkles size={15} className="text-primary" />}
-          label="本月 Token"
+          label={t('pages.membership.monthlyToken')}
           value={formatCompactNumber(monthlyTokens)}
           tone="primary"
         />
@@ -352,10 +402,16 @@ function FreeMembershipCard({
   availableCoins,
   monthlyMessages,
   monthlyTokens,
+  formatNumber,
+  locale,
+  t,
 }: {
   availableCoins: number;
   monthlyMessages: number;
   monthlyTokens: number;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  locale: Parameters<typeof formatCoins>[1];
+  t: TranslationFn;
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-hairline bg-[color-mix(in_srgb,var(--color-canvas)_88%,var(--color-surface-card))] shadow-[0_18px_54px_color-mix(in_srgb,var(--color-ink)_5%,transparent)]">
@@ -372,14 +428,18 @@ function FreeMembershipCard({
         <div className="grid content-center gap-4 px-5 py-5 sm:min-h-[220px] sm:px-6 sm:py-6">
           <div>
             <div className="text-[20px] font-semibold tracking-tight text-ink">
-              当前为免费账户
+              {t('pages.membership.freeAccount')}
             </div>
             <p className="mt-2 max-w-xl text-[12px] leading-6 text-muted sm:text-[13px]">
-              未开通会员时，AI Chat 消耗会直接使用钱包余额；开通后会员额度会优先抵扣。
+              {t('pages.membership.freeDescription')}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {['钱包余额计费', '可随时升级', '会员额度未启用'].map((item) => (
+            {[
+              t('pages.membership.freeBadgeWallet'),
+              t('pages.membership.freeBadgeUpgrade'),
+              t('pages.membership.freeBadgeInactive'),
+            ].map((item) => (
               <span
                 key={item}
                 className="inline-flex min-h-8 items-center rounded-full border border-hairline bg-surface-card/70 px-3 text-[12px] font-medium text-muted"
@@ -394,19 +454,19 @@ function FreeMembershipCard({
       <div className="grid grid-cols-3 overflow-hidden">
         <AmpMetric
           icon={<Sparkles size={15} className="text-primary" />}
-          label="可用余额"
-          value={formatCoins(availableCoins)}
+          label={t('pages.membership.availableBalance')}
+          value={formatCoins(availableCoins, locale)}
           tone="primary"
         />
         <AmpMetric
           icon={<MessageSquare size={15} className="text-primary" />}
-          label="本月消息"
-          value={monthlyMessages.toLocaleString('zh-CN')}
+          label={t('pages.membership.monthlyMessages')}
+          value={formatNumber(monthlyMessages)}
           tone="default"
         />
         <AmpMetric
           icon={<Sparkles size={15} className="text-primary" />}
-          label="本月 Token"
+          label={t('pages.membership.monthlyToken')}
           value={formatCompactNumber(monthlyTokens)}
           tone="default"
         />
@@ -420,42 +480,60 @@ function MembershipDetailPanel({
   monthlyMessages,
   monthlyTokens,
   busy,
+  formatDate,
+  formatNumber,
+  locale,
   onSubscribe,
+  t,
 }: {
   membership: MembershipStatus;
   monthlyMessages: number;
   monthlyTokens: number;
   busy: boolean;
+  formatDate: (
+    value: string | number | Date,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  locale: Parameters<typeof formatCoins>[1];
   onSubscribe: () => void;
+  t: TranslationFn;
 }) {
-  const label = membership.active ? '续费会员' : '开通会员';
+  const label = membership.active
+    ? t('pages.membership.renew')
+    : t('pages.membership.subscribe');
   const usedPercent = progressPercent(membership.allowance_used_ratio);
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const detailItems = [
     {
       className: 'border-r border-hairline/70',
-      label: '到期时间',
-      value: formatMembershipDate(membership.current_period_end),
+      label: t('pages.membership.expiresAt'),
+      value: formatMembershipDate(membership.current_period_end, formatDate, t),
     },
     {
       className: 'sm:border-r sm:border-hairline/70',
-      label: '本月用量',
-      value: formatMembershipUsage(monthlyMessages, monthlyTokens),
+      label: t('pages.membership.monthlyUsage'),
+      value: formatMembershipUsage(monthlyMessages, monthlyTokens, formatNumber, t),
     },
     {
       className: 'col-span-2 border-t border-hairline/70 sm:col-span-1 sm:border-t-0',
-      label: '会员价格',
-      value: `${formatCoins(membership.monthly_price_coins)} / 月`,
+      label: t('pages.membership.membershipPrice'),
+      value: t('pages.membership.pricePerMonth', {
+        price: formatCoins(membership.monthly_price_coins, locale),
+      }),
     },
   ] as const;
   const progressLabel = membership.active
-    ? `${membershipStatusText(membership.allowance_status)} · 已使用 ${usedPercentText}`
-    : '开通后显示额度进度';
+    ? `${membershipStatusText(membership.allowance_status, t)} · ${t(
+        'pages.membership.usedPercent',
+        { percent: usedPercentText },
+      )}`
+    : t('pages.membership.progressAfterSubscribe');
   const progressValue = membership.active ? usedPercent : 0;
 
   return (
     <section
-      aria-label="会员详情"
+      aria-label={t('pages.membership.detailAria')}
       className="-mt-1 overflow-hidden rounded-lg border border-hairline bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_7%,transparent)]"
     >
       <div className="grid sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -477,14 +555,16 @@ function MembershipDetailPanel({
           </div>
           <div className="border-t border-hairline/70 py-3 pl-14 pr-3 sm:px-4">
             <div className="mb-2 flex items-center justify-between gap-3 text-[12px] leading-5">
-              <span className="font-medium text-muted">额度进度</span>
+              <span className="font-medium text-muted">
+                {t('pages.membership.allowanceProgress')}
+              </span>
               <span className="min-w-0 text-right text-ink">
                 {progressLabel}
               </span>
             </div>
             <div
               role="meter"
-              aria-label="本月会员额度用量"
+              aria-label={t('pages.membership.allowanceUsageAria')}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={progressValue}
@@ -498,9 +578,11 @@ function MembershipDetailPanel({
             <div className="mt-2 text-[11px] leading-5 text-muted">
               {membership.enabled
                 ? membership.active
-                  ? `${resetText(membership.allowance_reset_at)}；额度用完后继续使用钱包余额。`
-                  : '开通后会员额度优先抵扣 AI Chat 消耗。'
-                : 'Plus 暂未开放购买，当前仍按钱包余额扣费。'}
+                  ? t('pages.membership.activeHint', {
+                      reset: resetText(membership.allowance_reset_at, formatDate, t),
+                    })
+                  : t('pages.membership.inactiveHint')
+                : t('pages.membership.disabledHint')}
             </div>
           </div>
         </div>
@@ -532,6 +614,7 @@ function MembershipDetailPanel({
  */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();
+  const { formatDate, formatNumber, locale, t } = useI18n();
   const {
     billingInfo,
     usage,
@@ -546,14 +629,18 @@ export function MembershipWorkspace() {
     const membership = billingInfo?.membership;
     if (!membership || membershipBusy || !membership.enabled) return;
 
-    const priceText = formatCoins(membership.monthly_price_coins);
+    const priceText = formatCoins(membership.monthly_price_coins, locale);
     const ok = await confirm({
-      title: membership.active ? '确认续费会员' : '确认开通会员',
+      title: membership.active
+        ? t('pages.membership.confirmRenewTitle')
+        : t('pages.membership.confirmSubscribeTitle'),
       message: membership.active
-        ? `将从钱包余额扣除 ${priceText}，会员有效期将在当前周期结束后顺延 1 个月。`
-        : `将从钱包余额扣除 ${priceText}，开通 FateClaw Plus 会员 1 个月。`,
-      confirmLabel: membership.active ? '确认续费' : '确认开通',
-      cancelLabel: '取消',
+        ? t('pages.membership.confirmRenewMessage', { price: priceText })
+        : t('pages.membership.confirmSubscribeMessage', { price: priceText }),
+      confirmLabel: membership.active
+        ? t('pages.membership.confirmRenew')
+        : t('pages.membership.confirmSubscribe'),
+      cancelLabel: t('common.cancel'),
     });
     if (!ok) return;
 
@@ -563,7 +650,9 @@ export function MembershipWorkspace() {
       await billingApi.subscribeMembership();
       await refresh();
     } catch (err) {
-      setMembershipError(err instanceof Error ? err.message : '开通会员失败');
+      setMembershipError(
+        err instanceof Error ? err.message : t('pages.membership.subscribeFailed'),
+      );
     } finally {
       setMembershipBusy(false);
     }
@@ -590,7 +679,7 @@ export function MembershipWorkspace() {
       <div className="space-y-5 pt-5 sm:pt-6 lg:pt-0">
         <div className="hidden items-center justify-between gap-3 lg:flex">
           <h2 className="font-display text-base font-semibold tracking-tight">
-            会员中心
+            {t('pages.membership.title')}
           </h2>
         </div>
 
@@ -599,12 +688,17 @@ export function MembershipWorkspace() {
             <AmpMembershipCard
               monthlyMessages={monthlyMessages}
               monthlyTokens={monthlyTokens}
+              formatNumber={formatNumber}
+              t={t}
             />
           ) : (
             <FreeMembershipCard
               availableCoins={availableCoins}
               monthlyMessages={monthlyMessages}
               monthlyTokens={monthlyTokens}
+              formatNumber={formatNumber}
+              locale={locale}
+              t={t}
             />
           )
         ) : null}
@@ -614,7 +708,11 @@ export function MembershipWorkspace() {
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
             busy={membershipBusy}
+            formatDate={formatDate}
+            formatNumber={formatNumber}
+            locale={locale}
             onSubscribe={() => void handleSubscribeMembership()}
+            t={t}
           />
         ) : null}
 

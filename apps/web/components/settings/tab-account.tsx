@@ -3,21 +3,23 @@
 import { Calendar, Smartphone, UserRound } from 'lucide-react';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useI18n } from '@/lib/i18n';
 
 export function TabAccount() {
   const { user } = useAuth();
+  const { formatDate, t } = useI18n();
 
   const rows = [
     {
       icon: Smartphone,
-      label: '手机号',
-      value: user?.phone_masked ?? user?.phone ?? '尚未绑定',
+      label: t('pages.profile.phone'),
+      value: user?.phone_masked ?? user?.phone ?? t('pages.profile.unbound'),
     },
     {
       icon: Calendar,
-      label: '注册时间',
+      label: t('pages.profile.registeredAt'),
       value: user?.created_at
-        ? new Date(user.created_at).toLocaleDateString('zh-CN')
+        ? formatDate(user.created_at, { year: 'numeric', month: '2-digit', day: '2-digit' })
         : '-',
     },
   ];
@@ -28,9 +30,11 @@ export function TabAccount() {
         <div className="flex items-center gap-2.5">
           <UserRound size={14} className="text-muted" />
           <div>
-            <p className="text-[12px] font-medium">账号信息</p>
+            <p className="text-[12px] font-medium">
+              {t('pages.profile.accountTitle')}
+            </p>
             <p className="text-[10px] text-muted">
-              查看当前登录账号的基础资料
+              {t('pages.profile.accountDescription')}
             </p>
           </div>
         </div>

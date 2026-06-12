@@ -20,6 +20,7 @@ import {
   type RechargePayType,
   type RechargeStats,
 } from '@/features/billing/api';
+import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 
 const AMOUNT_PRESETS = ['10', '30', '50'];
@@ -28,39 +29,51 @@ type RechargeStep = 'amount' | 'payment' | 'confirm';
 
 const RECHARGE_STEPS: readonly {
   key: RechargeStep;
-  label: string;
+  labelKey: string;
 }[] = [
-  { key: 'amount', label: '金额' },
-  { key: 'payment', label: '支付' },
-  { key: 'confirm', label: '创建' },
+  { key: 'amount', labelKey: 'pages.wallet.stepsAmount' },
+  { key: 'payment', labelKey: 'pages.wallet.stepsPayment' },
+  { key: 'confirm', labelKey: 'pages.wallet.stepsConfirm' },
 ];
 
-function formatRechargeCoins(value: string | number | null | undefined): string {
+function formatRechargeCoins(
+  value: string | number | null | undefined,
+  locale?: Parameters<typeof formatCoins>[1],
+): string {
   const amount = Number(value || 0);
-  return formatCoins(Number.isFinite(amount) ? amount : 0);
+  return formatCoins(Number.isFinite(amount) ? amount : 0, locale);
 }
 
-function formatCoinsLabel(value: string | number | null | undefined): string {
-  return formatRechargeCoins(value);
+function formatCoinsLabel(
+  value: string | number | null | undefined,
+  locale?: Parameters<typeof formatCoins>[1],
+): string {
+  return formatRechargeCoins(value, locale);
 }
 
-function formatPresetAmount(value: string): string {
+function formatPresetAmount(
+  value: string,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
   const amount = Number(value || 0);
-  return (Number.isFinite(amount) ? amount : 0).toLocaleString('zh-CN', {
+  return formatNumber(Number.isFinite(amount) ? amount : 0, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-function statusLabel(status: RechargeOrder['status']): string {
+function statusLabel(
+  status: RechargeOrder['status'],
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   switch (status) {
     case 'paid':
-      return '已到账';
+      return t('pages.wallet.paid');
     case 'failed':
-      return '已关闭';
+      return t('pages.wallet.failed');
     case 'pending':
     default:
-      return '待支付';
+      return t('pages.wallet.pending');
   }
 }
 
@@ -102,6 +115,7 @@ export function WalletRechargePanel({
   refreshing: boolean;
   onChanged: () => Promise<void> | void;
 }) {
+  const { formatNumber, locale, t } = useI18n();
   const [amountCoins, setAmountCoins] = useState('50');
   const [payType, setPayType] = useState<RechargePayType>('alipay');
   const [rechargeStep, setRechargeStep] = useState<RechargeStep>('amount');
@@ -121,14 +135,15 @@ export function WalletRechargePanel({
   const shownOrders = ordersOpen ? orders : collapsedOrders.slice(0, 3);
   const amountNumber = Number(amountCoins);
   const amountValid = Number.isFinite(amountNumber) && amountNumber > 0;
-  const payTypeLabel = payType === 'alipay' ? '支付宝' : '微信';
+  const payTypeLabel =
+    payType === 'alipay' ? t('pages.wallet.alipay') : t('pages.wallet.wechat');
   const activeStepIndex = RECHARGE_STEPS.findIndex(
     (step) => step.key === rechargeStep,
   );
 
   const goToPayment = () => {
     if (!amountValid) {
-      setError('充值金额需要大于 0');
+      setError(t('pages.wallet.amountPositive'));
       return;
     }
     setError('');
@@ -137,7 +152,7 @@ export function WalletRechargePanel({
 
   async function createOrder() {
     if (!amountValid) {
-      setError('充值金额需要大于 0');
+      setError(t('pages.wallet.amountPositive'));
       setRechargeStep('amount');
       return;
     }
@@ -151,7 +166,7 @@ export function WalletRechargePanel({
       setActiveOrder(result.order);
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建充值单失败');
+      setError(err instanceof Error ? err.message : t('pages.wallet.createOrderFailed'));
     } finally {
       setCreating(false);
     }
@@ -165,7 +180,7 @@ export function WalletRechargePanel({
       setActiveOrder(order);
       await onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '刷新充值单失败');
+      setError(err instanceof Error ? err.message : t('pages.wallet.syncOrderFailed'));
     } finally {
       setSyncingTradeId(null);
     }
@@ -178,13 +193,13 @@ export function WalletRechargePanel({
           <div>
             <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
               <Banknote size={14} className="text-primary" />
-              账户充值
+              {t('pages.wallet.rechargeTitle')}
             </div>
             <div className="mt-2 text-3xl font-extrabold tracking-tight tabular-nums">
-              {formatCoins(stats?.total_recharge_coins ?? 0)}
+              {formatCoins(stats?.total_recharge_coins ?? 0, locale)}
             </div>
             <div className="mt-1 text-[11px] text-muted">
-              累计充值 · 余额用于模型 Token 消耗
+              {t('pages.wallet.rechargeSubtitle')}
             </div>
           </div>
           <button
@@ -192,8 +207,8 @@ export function WalletRechargePanel({
             onClick={() => void onChanged()}
             disabled={refreshing}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-hairline bg-surface-card/70 text-muted transition-colors hover:text-ink disabled:opacity-50"
-            title="刷新"
-            aria-label="刷新充值数据"
+            title={t('pages.common.refresh')}
+            aria-label={t('pages.wallet.refreshRecharge')}
           >
             <RefreshCw
               size={14}
@@ -207,7 +222,7 @@ export function WalletRechargePanel({
         <div
           className="grid grid-cols-3 gap-1 rounded-xl border border-hairline bg-canvas/55 p-1"
           role="tablist"
-          aria-label="充值步骤"
+          aria-label={t('pages.wallet.rechargeSteps')}
         >
           {RECHARGE_STEPS.map((step, index) => (
             <button
@@ -227,7 +242,7 @@ export function WalletRechargePanel({
               aria-selected={rechargeStep === step.key}
               role="tab"
             >
-              {index + 1}. {step.label}
+              {index + 1}. {t(step.labelKey)}
             </button>
           ))}
         </div>
@@ -236,9 +251,11 @@ export function WalletRechargePanel({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] font-semibold text-muted">
-                选择充值金额
+                {t('pages.wallet.chooseAmount')}
               </span>
-              <span className="text-[10px] text-muted">软妹币</span>
+              <span className="text-[10px] text-muted">
+                {t('currency.soft', { amount: '' }).trim()}
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {AMOUNT_PRESETS.map((preset) => (
@@ -257,14 +274,14 @@ export function WalletRechargePanel({
                       amountCoins === preset ? 'text-primary' : 'text-ink'
                     }`}
                   >
-                    充值
+                    {t('pages.wallet.recharge')}
                   </span>
                   <span className="mt-1 flex items-baseline justify-center gap-1">
                     <span className="text-[10px] font-medium text-muted">
-                      软妹币
+                      {t('currency.soft', { amount: '' }).trim()}
                     </span>
                     <span className="text-[15px] font-semibold tabular-nums text-ink">
-                      {formatPresetAmount(preset)}
+                      {formatPresetAmount(preset, formatNumber)}
                     </span>
                   </span>
                 </button>
@@ -272,16 +289,18 @@ export function WalletRechargePanel({
             </div>
             <label className="block">
               <span className="mb-1.5 block text-[11px] font-semibold text-muted">
-                自定义金额
+                {t('pages.wallet.customAmount')}
               </span>
               <div className="flex h-11 items-center rounded-xl border border-hairline bg-canvas px-3 focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/20">
-                <span className="mr-2 text-[12px] text-muted">软妹币</span>
+                <span className="mr-2 text-[12px] text-muted">
+                  {t('currency.soft', { amount: '' }).trim()}
+                </span>
                 <input
                   value={amountCoins}
                   onChange={(event) => setAmountCoins(event.target.value)}
                   inputMode="decimal"
                   className="h-full min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums outline-none"
-                  placeholder="输入其他金额"
+                  placeholder={t('pages.wallet.amountPlaceholder')}
                 />
               </div>
             </label>
@@ -290,7 +309,7 @@ export function WalletRechargePanel({
               onClick={goToPayment}
               className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
             >
-              选择支付方式
+              {t('pages.wallet.choosePayment')}
               <ArrowRight size={14} />
             </button>
           </div>
@@ -300,21 +319,21 @@ export function WalletRechargePanel({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
               <span className="text-[11px] font-medium text-muted">
-                充值金额
+                {t('pages.wallet.rechargeAmount')}
               </span>
               <span className="text-[13px] font-semibold tabular-nums text-ink">
-                {formatRechargeCoins(amountCoins)}
+                {formatRechargeCoins(amountCoins, locale)}
               </span>
             </div>
             <div>
               <div className="mb-2 text-[11px] font-semibold text-muted">
-                选择支付方式
+                {t('pages.wallet.choosePayment')}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {(
                   [
-                    ['alipay', '支付宝'],
-                    ['wechat', '微信'],
+                    ['alipay', t('pages.wallet.alipay')],
+                    ['wechat', t('pages.wallet.wechat')],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -339,14 +358,14 @@ export function WalletRechargePanel({
                 className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-hairline px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink"
               >
                 <ArrowLeft size={14} />
-                返回
+                {t('pages.wallet.back')}
               </button>
               <button
                 type="button"
                 onClick={() => setRechargeStep('confirm')}
                 className="flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
               >
-                确认充值信息
+                {t('pages.wallet.confirmRecharge')}
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -358,15 +377,15 @@ export function WalletRechargePanel({
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
                 <div className="text-[10px] font-medium text-muted">
-                  充值金额
+                  {t('pages.wallet.rechargeAmount')}
                 </div>
                 <div className="mt-1 text-[14px] font-semibold tabular-nums text-ink">
-                  {formatRechargeCoins(amountCoins)}
+                  {formatRechargeCoins(amountCoins, locale)}
                 </div>
               </div>
               <div className="rounded-xl border border-hairline bg-canvas/55 px-3 py-2.5">
                 <div className="text-[10px] font-medium text-muted">
-                  支付方式
+                  {t('pages.wallet.payType')}
                 </div>
                 <div className="mt-1 text-[14px] font-semibold text-ink">
                   {payTypeLabel}
@@ -384,11 +403,11 @@ export function WalletRechargePanel({
               ) : (
                 <CreditCard size={15} />
               )}
-              创建充值单
+              {t('pages.wallet.createOrder')}
             </button>
             <div className="flex items-center gap-1.5 text-[10px] text-muted">
               <ShieldCheck size={11} />
-              支付成功后自动入账，也可手动刷新到账状态
+              {t('pages.wallet.paymentHint')}
             </div>
             <button
               type="button"
@@ -396,7 +415,7 @@ export function WalletRechargePanel({
               className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-muted transition-colors hover:bg-canvas/55 hover:text-ink"
             >
               <ArrowLeft size={13} />
-              返回修改支付方式
+              {t('pages.wallet.backToPayment')}
             </button>
           </div>
         )}
@@ -412,14 +431,14 @@ export function WalletRechargePanel({
         <div className="mx-4 mb-4 flex flex-col gap-3 rounded-xl border border-primary/25 bg-primary/8 px-3 py-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold text-primary">
-              待支付订单
+              {t('pages.wallet.pendingOrder')}
             </div>
             <div className="mt-0.5 truncate font-mono text-[12px] font-medium">
               {pendingOrder.trade_id}
             </div>
             <div className="text-[10px] text-muted">
-              {formatCoinsLabel(pendingOrder.amount_coins)} ·{' '}
-              {statusLabel(pendingOrder.status)}
+              {formatCoinsLabel(pendingOrder.amount_coins, locale)} ·{' '}
+              {statusLabel(pendingOrder.status, t)}
             </div>
           </div>
           <div className="flex gap-2">
@@ -430,7 +449,7 @@ export function WalletRechargePanel({
               className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary"
             >
               <ExternalLink size={12} />
-              打开收银台
+              {t('pages.wallet.openCashier')}
             </a>
             <button
               type="button"
@@ -444,7 +463,7 @@ export function WalletRechargePanel({
                   syncingTradeId === pendingOrder.trade_id ? 'animate-spin' : ''
                 }
               />
-              刷新到账
+              {t('pages.wallet.syncPaid')}
             </button>
           </div>
         </div>
@@ -458,9 +477,11 @@ export function WalletRechargePanel({
             className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[12px] font-semibold text-ink transition-colors hover:bg-canvas/55 sm:px-5"
             aria-expanded={ordersOpen}
           >
-            <span>历史订单</span>
+            <span>{t('pages.wallet.historyOrders')}</span>
             <span className="flex items-center gap-2 text-[11px] font-normal text-muted">
-              {orders.length.toLocaleString()} 笔
+              {t('pages.common.countOrders', {
+                count: formatNumber(orders.length),
+              })}
               <ChevronDown
                 size={14}
                 className={`transition-transform ${ordersOpen ? 'rotate-180' : ''}`}
@@ -477,10 +498,10 @@ export function WalletRechargePanel({
                   <div className="flex items-center gap-1.5">
                     {statusIcon(order.status)}
                     <span className="truncate text-[12px] font-medium">
-                      {formatCoinsLabel(order.amount_coins)}
+                      {formatCoinsLabel(order.amount_coins, locale)}
                     </span>
                     <span className="text-[10px] text-muted">
-                      {statusLabel(order.status)}
+                      {statusLabel(order.status, t)}
                     </span>
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] text-muted">
@@ -494,7 +515,7 @@ export function WalletRechargePanel({
                     disabled={syncingTradeId === order.trade_id}
                     className="shrink-0 rounded-lg border border-hairline px-2.5 py-1.5 text-[11px] text-muted hover:text-ink disabled:opacity-50"
                   >
-                    刷新
+                    {t('pages.common.refresh')}
                   </button>
                 )}
               </div>
@@ -505,7 +526,9 @@ export function WalletRechargePanel({
                 onClick={() => setOrdersOpen(true)}
                 className="h-9 w-full rounded-lg text-[12px] font-medium text-primary transition-colors hover:bg-primary/8"
               >
-                展开全部 {orders.length.toLocaleString()} 笔订单
+                {t('pages.wallet.expandAllOrders', {
+                  count: formatNumber(orders.length),
+                })}
               </button>
             )}
           </div>

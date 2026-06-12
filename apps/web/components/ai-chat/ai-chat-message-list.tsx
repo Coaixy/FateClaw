@@ -10,6 +10,7 @@ import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
 import { Message } from '@/features/chat/api';
+import { useI18n } from '@/lib/i18n';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
@@ -54,15 +55,17 @@ export function AiChatMessageList({
   emptyStateFrameClassName?: string;
   emptyStateMaxWidthClassName?: string;
 }) {
+  const { t } = useI18n();
+
   if (showCenteredComposer) {
-    const title = emptyStateTitle ?? '可以直接问，也可以手动排盘';
+    const title = emptyStateTitle ?? t('aiChat.empty.defaultTitle');
     const description =
-      emptyStateDescription ?? '输入问题直接对话，或从下方进入手动排盘';
+      emptyStateDescription ?? t('aiChat.empty.defaultDescription');
     const hint =
       emptyStateHint ??
       (selectedSession
-        ? '发送一条消息开始对话 · / 查看指令'
-        : '发送即可开始对话 · 也可手动排盘 · / 查看指令');
+        ? t('aiChat.empty.selectedHint')
+        : t('aiChat.empty.newHint'));
 
     return (
       <div
@@ -207,6 +210,7 @@ function AiChatMessageRow({
   animationIndex: number;
   selectedSession: string;
 }) {
+  const { locale, t } = useI18n();
   const isBot = !!message.is_bot_message;
   const messageMetadata =
     !!message.metadata &&
@@ -221,9 +225,9 @@ function AiChatMessageRow({
     ? splitFinalTurnMarker(message.content)
     : { body: message.content, marker: null };
   const durationLabel = isBot
-    ? formatChatDuration(messageMetadata?.duration_ms)
+    ? formatChatDuration(messageMetadata?.duration_ms, t)
     : null;
-  const costLabels = isBot ? formatChatCostLabels(messageMetadata) : [];
+  const costLabels = isBot ? formatChatCostLabels(messageMetadata, locale, t) : [];
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
@@ -331,14 +335,14 @@ function AiChatMessageRow({
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
               >
                 <Wallet size={12} />
-                去充值
+                {t('aiChat.messageList.recharge')}
               </Link>
               <Link
                 href="/membership"
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/15"
               >
                 <Crown size={12} />
-                会员中心
+                {t('aiChat.messageList.membershipCenter')}
               </Link>
             </div>
           ) : null}
@@ -377,7 +381,8 @@ function ThinkingMessageBox({
   content: string;
   animationIndex: number;
 }) {
-  const displayContent = content.trim() || '正在思考...';
+  const { t } = useI18n();
+  const displayContent = content.trim() || t('aiChat.messageList.thinkingFallback');
 
   return (
     <div
@@ -388,7 +393,7 @@ function ThinkingMessageBox({
         <div className="max-w-full overflow-hidden rounded-lg border border-hairline bg-surface-card/80 px-2.5 py-2 shadow-sm">
           <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium leading-4 text-muted-soft">
             <Brain size={11} strokeWidth={1.8} aria-hidden="true" />
-            <span>思考</span>
+            <span>{t('aiChat.messageList.thinking')}</span>
           </div>
           <div className="thinking-scrollbar max-h-24 overflow-y-auto overscroll-contain pr-1 text-[11px] leading-5 text-muted whitespace-pre-wrap break-words">
             {displayContent}
@@ -453,10 +458,10 @@ function MessageFooter({
 type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
 
 function getToolTraceStatusLabel(status: ToolTraceStatus) {
-  if (status === 'running') return '运行中';
-  if (status === 'completed') return '完成';
-  if (status === 'failed') return '失败';
-  return '未知';
+  if (status === 'running') return 'aiChat.messageList.toolStatusRunning';
+  if (status === 'completed') return 'aiChat.messageList.toolStatusCompleted';
+  if (status === 'failed') return 'aiChat.messageList.toolStatusFailed';
+  return 'aiChat.messageList.toolStatusUnknown';
 }
 
 function ToolTraceList({
@@ -466,6 +471,7 @@ function ToolTraceList({
   messages: Message[];
   forceComplete?: boolean;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const traces = messages.map((message) => {
     const metadata =
@@ -502,12 +508,12 @@ function ToolTraceList({
   const latestTrace = traces[traces.length - 1];
   const statusSummary =
     runningCount > 0
-      ? `${runningCount} 运行中`
+      ? t('aiChat.messageList.runningCount', { count: runningCount })
       : failedCount > 0
-        ? `${failedCount} 失败`
+        ? t('aiChat.messageList.failedCount', { count: failedCount })
         : completedCount > 0
-          ? `${completedCount} 完成`
-          : '待更新';
+          ? t('aiChat.messageList.completedCount', { count: completedCount })
+          : t('aiChat.messageList.toolStatusPending');
 
   return (
     <div className="mt-1 max-w-full">
@@ -523,7 +529,7 @@ function ToolTraceList({
           aria-hidden="true"
           className="shrink-0 text-muted-soft group-hover:text-primary"
         />
-        <span className="shrink-0">工具轨迹</span>
+        <span className="shrink-0">{t('aiChat.messageList.toolTrace')}</span>
         <span className="shrink-0 rounded-full bg-surface-soft px-1.5 py-0.5 tabular-nums text-muted-soft">
           {traces.length}
         </span>
@@ -559,7 +565,7 @@ function ToolTraceList({
             <div key={trace.id} className="flex min-w-0">
               <div className="min-w-0 flex flex-wrap items-center gap-1.5 text-[10px]">
                 <ToolTraceLabel label="Tool" value={trace.label} />
-                <ToolTraceLabel label="Status" value={trace.statusLabel} />
+                <ToolTraceLabel label="Status" value={t(trace.statusLabel)} />
                 {trace.path && (
                   <ToolTraceLabel
                     label="Path"
@@ -604,7 +610,10 @@ function ThinkingIndicator({
   progressLabel: string | null;
   toolTraces: Message[];
 }) {
-  const statusLabel = progressLabel ? `${progressLabel}中...` : 'AI 正在回复...';
+  const { t } = useI18n();
+  const statusLabel = progressLabel
+    ? t('aiChat.messageList.progressSuffix', { label: progressLabel })
+    : t('aiChat.messageList.aiReplying');
 
   return (
     <div className="max-w-2xl mx-auto flex justify-start animate-message-in">

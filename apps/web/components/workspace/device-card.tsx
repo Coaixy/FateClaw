@@ -3,6 +3,7 @@
 import { Circle, Smartphone, Trash2 } from 'lucide-react';
 
 import type { Account } from '@/features/accounts/api';
+import { useI18n } from '@/lib/i18n';
 
 /**
  * 微信设备状态卡片。
@@ -16,6 +17,8 @@ export function DeviceCard({
   account: Account;
   onRemove: () => void;
 }) {
+  const { formatDate, t } = useI18n();
+
   return (
     <div className="rounded-2xl border border-hairline/50 bg-[color-mix(in_srgb,var(--color-surface-card)_60%,transparent)] px-4 py-3.5 backdrop-blur-xl transition-colors hover:border-hairline">
       <div className="flex items-center justify-between gap-3">
@@ -53,19 +56,27 @@ export function DeviceCard({
                     : 'border-red-500/20 bg-red-500/10 text-red-400'
                 }`}
               >
-                {account.enabled ? 'Online' : 'Offline'}
+                {account.enabled
+                  ? t('pages.common.enabled')
+                  : t('pages.common.disabled')}
               </span>
             </div>
             <p className="mt-0.5 truncate whitespace-nowrap font-mono text-[11px] text-muted">
-              {account.id} · 接入于{' '}
-              {new Date(account.created_at).toLocaleDateString('zh-CN')}
+              {account.id} ·{' '}
+              {t('pages.devices.connectedAt', {
+                date: formatDate(account.created_at, {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                }),
+              })}
             </p>
           </div>
         </div>
         <button
           onClick={onRemove}
           className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-500"
-          aria-label="解绑"
+          aria-label={t('pages.devices.unbind')}
         >
           <Trash2 size={14} />
         </button>

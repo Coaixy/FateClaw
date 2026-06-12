@@ -1,5 +1,8 @@
+'use client';
+
 import { AppShell } from '@/components/app-shell';
 import { UserSoulCard } from '@/components/workspace/user-soul-card';
+import { useI18n } from '@/lib/i18n';
 
 /**
  * 人格设置页面。
@@ -7,13 +10,17 @@ import { UserSoulCard } from '@/components/workspace/user-soul-card';
  * @returns 独立的人格设置工作区，避免微信对话入口承载过多账户设置能力。
  */
 export default function PersonaPage() {
+  const { t } = useI18n();
+
   return (
     <AppShell>
       <div className="min-h-[70vh] space-y-5">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">人格设置</h2>
+          <h2 className="text-xl font-semibold tracking-tight">
+            {t('pages.persona.title')}
+          </h2>
           <p className="mt-1 text-[12px] text-muted">
-            维护统一注入站内 AI Chat 和微信对话的 Soul。
+            {t('pages.persona.description')}
           </p>
         </div>
 

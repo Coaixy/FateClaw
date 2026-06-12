@@ -58,6 +58,7 @@ import {
   type OfficialModel,
 } from '@/features/model-settings/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { useI18n } from '@/lib/i18n';
 import { buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
@@ -71,28 +72,18 @@ type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
 const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
-const AI_CHAT_PLUS_REQUIRED_MESSAGE =
-  '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus。';
 const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
 const THINKING_LEVEL_OPTIONS: Array<{
   value: ModelThinkingLevel;
-  label: string;
+  labelKey: string;
 }> = [
-  { value: 'off', label: '关闭' },
-  { value: 'minimal', label: '极简' },
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'xhigh', label: '极高' },
+  { value: 'off', labelKey: 'aiChat.thinkingLevels.off' },
+  { value: 'minimal', labelKey: 'aiChat.thinkingLevels.minimal' },
+  { value: 'low', labelKey: 'aiChat.thinkingLevels.low' },
+  { value: 'medium', labelKey: 'aiChat.thinkingLevels.medium' },
+  { value: 'high', labelKey: 'aiChat.thinkingLevels.high' },
+  { value: 'xhigh', labelKey: 'aiChat.thinkingLevels.xhigh' },
 ];
-const THINKING_LEVEL_LABELS: Record<ModelThinkingLevel, string> = {
-  off: '关闭',
-  minimal: '极简',
-  low: '低',
-  medium: '中',
-  high: '高',
-  xhigh: '极高',
-};
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
@@ -193,6 +184,7 @@ export function AiChatWorkspace() {
 }
 
 function AiChatWorkspaceContent() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -261,7 +253,7 @@ function AiChatWorkspaceContent() {
   const continuationBlockedMessage =
     continuationBlocked && selectedSession
       ? chatMessages.continuationBlockMessage ||
-        '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。'
+        t('aiChat.continuationBlockedFallback')
       : '';
   const onboardingGuide = useOnboardingGuideStatus({
     enabled: chatAvailable && !authLoading,
@@ -314,14 +306,14 @@ function AiChatWorkspaceContent() {
       if (modelSettingsRequestIdRef.current !== requestId) return;
       setModelOverview(null);
       setModelSettingsError(
-        error instanceof Error ? error.message : '加载模型设置失败',
+        error instanceof Error ? error.message : t('aiChat.loadModelSettingsFailed'),
       );
     } finally {
       if (modelSettingsRequestIdRef.current === requestId) {
         setModelSettingsLoading(false);
       }
     }
-  }, [authLoading, chatAvailable]);
+  }, [authLoading, chatAvailable, t]);
 
   useEffect(() => {
     if (!chatAvailable || authLoading) {
@@ -356,7 +348,7 @@ function AiChatWorkspaceContent() {
           setPaipanCatalog([]);
           toast(
             'error',
-            error instanceof Error ? error.message : '加载排盘术数失败',
+            error instanceof Error ? error.message : t('aiChat.loadPaipanFailed'),
           );
         })
         .finally(() => {
@@ -370,7 +362,7 @@ function AiChatWorkspaceContent() {
       cancelled = true;
       cancelIdleTask();
     };
-  }, [toast]);
+  }, [t, toast]);
 
   const handleSend = useCallback(
     async (overrideText?: string) => {
@@ -383,7 +375,7 @@ function AiChatWorkspaceContent() {
         return;
       }
       if (aiChatPlusLocked) {
-        toast('error', AI_CHAT_PLUS_REQUIRED_MESSAGE);
+        toast('error', t('aiChat.plusRequired'));
         return;
       }
 
@@ -396,7 +388,7 @@ function AiChatWorkspaceContent() {
       } catch (error) {
         toast(
           'error',
-          error instanceof Error ? error.message : '发送失败，请稍后重试',
+          error instanceof Error ? error.message : t('aiChat.sendFailed'),
         );
       }
     },
@@ -408,6 +400,7 @@ function AiChatWorkspaceContent() {
       aiChatPlusLocked,
       input,
       requestLogin,
+      t,
       toast,
     ],
   );
@@ -505,11 +498,11 @@ function AiChatWorkspaceContent() {
       }
 
       if (chatMessages.sending) {
-        toast('error', '上一条消息仍在处理中，请稍后再试');
+        toast('error', t('aiChat.previousMessageProcessing'));
         return;
       }
       if (aiChatPlusLocked) {
-        toast('error', AI_CHAT_PLUS_REQUIRED_MESSAGE);
+        toast('error', t('aiChat.plusRequired'));
         return;
       }
 
@@ -522,7 +515,7 @@ function AiChatWorkspaceContent() {
             ? () => setInput('')
             : undefined,
         onSendFailure: () => {
-          toast('error', '盘面发送失败，请稍后重试');
+          toast('error', t('aiChat.boardSendFailed'));
         },
       });
     },
@@ -536,13 +529,14 @@ function AiChatWorkspaceContent() {
       continuationBlockedMessage,
       pastedBoardDraftSource,
       requestLogin,
+      t,
       toast,
     ],
   );
 
   const displayMessages = filterProgressMessages(chatMessages.messages);
   const progressLabel = chatMessages.sending
-    ? getLatestProgressLabel(chatMessages.messages)
+    ? getLatestProgressLabel(chatMessages.messages, t)
     : null;
   const switchingSession =
     Boolean(selectedSession) &&
@@ -644,7 +638,7 @@ function AiChatWorkspaceContent() {
         (model) => model.id === officialModelId,
       );
       if (!nextModel) {
-        toast('error', '只能选择可用官方模型');
+        toast('error', t('aiChat.onlyAvailableOfficialModel'));
         return;
       }
 
@@ -667,7 +661,10 @@ function AiChatWorkspaceContent() {
         await loadModelSettings();
         void onboardingGuide.refresh();
       } catch (error) {
-        toast('error', error instanceof Error ? error.message : '切换模型失败');
+        toast(
+          'error',
+          error instanceof Error ? error.message : t('aiChat.switchModelFailed'),
+        );
       } finally {
         setModelToolbarBusy('');
       }
@@ -677,6 +674,7 @@ function AiChatWorkspaceContent() {
       modelOverview,
       modelToolbarBusy,
       onboardingGuide,
+      t,
       toast,
     ],
   );
@@ -699,7 +697,7 @@ function AiChatWorkspaceContent() {
           : null;
 
       if (modelOverview.selection.source === 'official' && !officialModelId) {
-        toast('error', '当前没有可用官方模型');
+        toast('error', t('aiChat.noAvailableOfficialModel'));
         return;
       }
 
@@ -715,7 +713,7 @@ function AiChatWorkspaceContent() {
       } catch (error) {
         toast(
           'error',
-          error instanceof Error ? error.message : '切换思考等级失败',
+          error instanceof Error ? error.message : t('aiChat.switchThinkingFailed'),
         );
       } finally {
         setModelToolbarBusy('');
@@ -726,6 +724,7 @@ function AiChatWorkspaceContent() {
       modelOverview,
       modelToolbarBusy,
       onboardingGuide,
+      t,
       toast,
     ],
   );
@@ -819,16 +818,18 @@ function AiChatWorkspaceContent() {
   const canSelectThinkingLevel =
     !modelSettingsError && Boolean(modelOverview?.selection);
   const aiControlTitle = aiChatPlusLocked
-    ? AI_CHAT_PLUS_REQUIRED_MESSAGE
+    ? t('aiChat.plusRequired')
     : modelSettingsError;
   const modelSwitchLabel = modelSettingsLoading
-    ? '加载中'
+    ? t('aiChat.toolbar.loading')
     : modelSettingsError
-      ? '不可用'
+      ? t('aiChat.toolbar.unavailable')
       : (selectedOfficialModel?.display_name ??
-        (availableOfficialModels.length > 0 ? '官方模型' : '无官方'));
+        (availableOfficialModels.length > 0
+          ? t('aiChat.toolbar.officialModel')
+          : t('aiChat.toolbar.noOfficialModel')));
   const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
-  const thinkingSwitchLabel = THINKING_LEVEL_LABELS[thinkingLevel];
+  const thinkingSwitchLabel = t(`aiChat.thinkingLevels.${thinkingLevel}`);
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
@@ -875,7 +876,7 @@ function AiChatWorkspaceContent() {
             aiChatPlusLocked ||
             !canSelectOfficialModel
           }
-          modelTitle={aiControlTitle || '切换官方模型'}
+          modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
           selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
           officialModels={availableOfficialModels}
           onSelectModel={selectOfficialModel}
@@ -888,7 +889,7 @@ function AiChatWorkspaceContent() {
             aiChatPlusLocked ||
             !canSelectThinkingLevel
           }
-          thinkingTitle={aiControlTitle || '切换思考等级'}
+          thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
           thinkingLevel={thinkingLevel}
           onSelectThinking={selectThinkingLevel}
         />
@@ -934,11 +935,11 @@ function AiChatWorkspaceContent() {
   );
   const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
   const emptyStateTitle =
-    !selectedSession && homeMode !== 'expert' ? '' : '专业模式';
+    !selectedSession && homeMode !== 'expert' ? '' : t('aiChat.empty.expertTitle');
   const emptyStateDescription =
     !selectedSession && homeMode !== 'expert'
       ? ''
-      : '直接输入问题，或使用手动排盘、自贴盘面和 Skill';
+      : t('aiChat.empty.expertDescription');
   const emptyStateHint =
     !selectedSession && homeMode !== 'expert' ? '' : undefined;
   const emptyStateFrameClassName =
@@ -1000,7 +1001,9 @@ function AiChatWorkspaceContent() {
                   aiChatPlusLocked ||
                   !canSelectOfficialModel
                 }
-                modelTitle={aiControlTitle || '切换官方模型'}
+                modelTitle={
+                  aiControlTitle || t('aiChat.toolbar.switchOfficialModel')
+                }
                 selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
                 officialModels={availableOfficialModels}
                 onSelectModel={selectOfficialModel}
@@ -1013,14 +1016,16 @@ function AiChatWorkspaceContent() {
                   aiChatPlusLocked ||
                   !canSelectThinkingLevel
                 }
-                thinkingTitle={aiControlTitle || '切换思考等级'}
+                thinkingTitle={
+                  aiControlTitle || t('aiChat.toolbar.switchThinking')
+                }
                 thinkingLevel={thinkingLevel}
                 onSelectThinking={selectThinkingLevel}
               />
             </div>
             {composer}
             <p className="block text-[10px] text-muted/50 text-center mt-1.5 select-none">
-              Enter 发送 · Shift+Enter 换行
+              {t('aiChat.composer.shortcutHint')}
             </p>
           </div>
         </div>
@@ -1094,13 +1099,17 @@ function HomeModeSelector({
   onOpenSimple: () => void;
   onOpenExpert: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-2.5">
       <div className="text-center">
         <h1 className="font-display text-[28px] font-semibold tracking-tight text-ink sm:text-[34px]">
-          FateClaw · 守义
+          {t('common.productTitle')}
         </h1>
-        <p className="mt-1 text-[12px] text-muted">AI 排盘与对话工作台</p>
+        <p className="mt-1 text-[12px] text-muted">
+          {t('aiChat.home.subtitle')}
+        </p>
       </div>
 
       {loginRequired && (
@@ -1112,10 +1121,10 @@ function HomeModeSelector({
               </span>
               <span className="min-w-0">
                 <span className="block text-[16px] font-semibold tracking-tight text-ink">
-                  登录后开始体验
+                  {t('aiChat.home.loginTitle')}
                 </span>
                 <span className="mt-1 block text-[12px] leading-5 text-muted">
-                  登录后可进入专业模式、保存对话记录，并查看可用余额和用量。
+                  {t('aiChat.home.loginDescription')}
                 </span>
               </span>
             </span>
@@ -1125,7 +1134,7 @@ function HomeModeSelector({
               className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
             >
               <LogIn size={14} />
-              立即登录
+              {t('aiChat.home.loginNow')}
             </button>
           </div>
         </div>
@@ -1143,21 +1152,21 @@ function HomeModeSelector({
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary shadow-sm">
               <Sparkles size={11} strokeWidth={2} />
-              推荐入口
+              {t('aiChat.home.recommended')}
             </span>
           </span>
 
           <span className="mt-5 block space-y-1">
             <span className="block text-[18px] font-semibold text-ink">
-              快速模式
+              {t('aiChat.home.quickMode')}
             </span>
             <span className="block text-[12px] leading-5 text-body">
-              适合新手和非从业者，先把问题讲清楚，再由流程完成排盘。
+              {t('aiChat.home.quickDescription')}
             </span>
           </span>
 
           <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-on-primary shadow-sm transition-colors duration-200 group-hover:bg-primary-active">
-            先从这里开始
+            {t('aiChat.home.quickAction')}
             <ChevronRight
               size={13}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
@@ -1176,21 +1185,21 @@ function HomeModeSelector({
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-primary">
               <CheckCircle2 size={11} strokeWidth={2} />
-              排盘可用 · AI Plus
+              {t('aiChat.home.expertBadge')}
             </span>
           </span>
 
           <span className="mt-5 block space-y-1">
             <span className="block text-[17px] font-semibold text-ink">
-              专业模式
+              {t('aiChat.home.expertMode')}
             </span>
             <span className="block text-[12px] leading-5 text-muted">
-              适合懂术数、从业者和专业人士，可直接使用完整对话与排盘能力。
+              {t('aiChat.home.expertDescription')}
             </span>
           </span>
 
           <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-primary">
-            进入专业模式
+            {t('aiChat.home.expertAction')}
             <ChevronRight
               size={13}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
@@ -1209,6 +1218,8 @@ function ExpertModeFrame({
   children: ReactNode;
   onBack: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-2.5">
       <div className="flex justify-start">
@@ -1218,7 +1229,7 @@ function ExpertModeFrame({
           className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
         >
           <ArrowLeft size={13} />
-          返回模式选择
+          {t('aiChat.home.backToMode')}
         </button>
       </div>
       {children}
@@ -1227,7 +1238,11 @@ function ExpertModeFrame({
 }
 
 function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
-  const statusLabel = status === 'completed' ? '回答完成' : '已停止输出';
+  const { t } = useI18n();
+  const statusLabel =
+    status === 'completed'
+      ? t('aiChat.home.answerCompleted')
+      : t('aiChat.home.outputStopped');
   const StatusIcon = status === 'completed' ? CheckCircle2 : CircleStop;
 
   return (
@@ -1241,6 +1256,8 @@ function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
 }
 
 function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n();
+
   return (
     <button
       type="button"
@@ -1251,10 +1268,10 @@ function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
         <Sparkles size={14} className="shrink-0 text-primary" />
         <span className="min-w-0">
           <span className="block text-[12px] font-semibold text-ink">
-            继续完成启动向导
+            {t('aiChat.guideEntry.title')}
           </span>
           <span className="block truncate text-[10px] text-muted">
-            选择官方模型，并启用一个 Skill 后即可开始
+            {t('aiChat.guideEntry.description')}
           </span>
         </span>
       </span>
@@ -1302,6 +1319,7 @@ function ChatToolStrip({
   thinkingLevel: ModelThinkingLevel;
   onSelectThinking: (thinkingLevel: ModelThinkingLevel) => void;
 }) {
+  const { t } = useI18n();
   const [openPicker, setOpenPicker] = useState<'model' | 'thinking' | null>(
     null,
   );
@@ -1339,16 +1357,18 @@ function ChatToolStrip({
         type="button"
         onClick={onOpenAll}
         disabled={buttonDisabled}
-        title="合参术数"
+        title={t('aiChat.toolbar.jointPaipan')}
         className={chipClass}
-        aria-label="合参术数"
+        aria-label={t('aiChat.toolbar.jointPaipan')}
       >
         {loading ? (
           <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
         ) : (
           <Sparkles size={13} className="shrink-0 text-primary" />
         )}
-        <span className="whitespace-nowrap">合参术数</span>
+        <span className="whitespace-nowrap">
+          {t('aiChat.toolbar.jointPaipan')}
+        </span>
         <ChevronRight
           size={12}
           className="shrink-0 text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary group-disabled:translate-x-0 group-disabled:text-muted"
@@ -1366,14 +1386,18 @@ function ChatToolStrip({
           className={chipClass}
           aria-haspopup="menu"
           aria-expanded={openPicker === 'model'}
-          aria-label={`选择官方模型，当前 ${modelLabel}`}
+          aria-label={t('aiChat.toolbar.selectOfficialModel', {
+            model: modelLabel,
+          })}
         >
           {modelLoading || modelBusy ? (
             <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
           ) : (
             <Bot size={13} className="shrink-0 text-primary" />
           )}
-          <span className="whitespace-nowrap">模型</span>
+          <span className="whitespace-nowrap">
+            {t('aiChat.toolbar.model')}
+          </span>
           <span className="min-w-0 max-w-[min(24vw,96px)] truncate text-muted group-hover:text-primary">
             {modelLabel}
           </span>
@@ -1390,7 +1414,7 @@ function ChatToolStrip({
             role="menu"
           >
             <div className="border-b border-hairline/70 px-3 py-2 text-[10px] font-medium text-muted">
-              官方模型
+              {t('aiChat.toolbar.officialModels')}
             </div>
             <div className="max-h-64 overflow-y-auto p-1.5">
               {officialModels.map((model) => {
@@ -1438,14 +1462,18 @@ function ChatToolStrip({
           className={chipClass}
           aria-haspopup="menu"
           aria-expanded={openPicker === 'thinking'}
-          aria-label={`选择思考等级，当前 ${thinkingLabel}`}
+          aria-label={t('aiChat.toolbar.selectThinking', {
+            level: thinkingLabel,
+          })}
         >
           {thinkingBusy ? (
             <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
           ) : (
             <Brain size={13} className="shrink-0 text-primary" />
           )}
-          <span className="whitespace-nowrap">思考</span>
+          <span className="whitespace-nowrap">
+            {t('aiChat.toolbar.thinking')}
+          </span>
           <span className="text-muted group-hover:text-primary">
             {thinkingLabel}
           </span>
@@ -1479,7 +1507,7 @@ function ChatToolStrip({
                       : 'text-ink hover:bg-surface-cream-strong'
                   }`}
                 >
-                  <span>{option.label}</span>
+                  <span>{t(option.labelKey)}</span>
                   {selected && <CheckCircle2 size={13} className="shrink-0" />}
                 </button>
               );

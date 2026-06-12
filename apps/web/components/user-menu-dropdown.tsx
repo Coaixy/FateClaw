@@ -19,6 +19,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { billingApi, type DailySignInStatus } from '@/features/billing/api';
+import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useToast } from '@/lib/use-toast';
 import { getUserIdentityLabel } from '@/lib/user-identity';
@@ -53,6 +54,7 @@ export function UserMenuDropdown({
   onLogout: () => void;
   avatar: React.ReactNode;
 }) {
+  const { locale, t } = useI18n();
   const { toast } = useToast();
   const [dailyStatus, setDailyStatus] = useState<DailySignInStatus | null>(
     null,
@@ -68,11 +70,13 @@ export function UserMenuDropdown({
     try {
       setDailyStatus(await billingApi.dailySignInStatus());
     } catch (err) {
-      setDailyError(err instanceof Error ? err.message : '签到状态加载失败');
+      setDailyError(
+        err instanceof Error ? err.message : t('userMenu.dailyStatusLoadFailed'),
+      );
     } finally {
       setDailyLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadDailyStatus();
@@ -84,16 +88,18 @@ export function UserMenuDropdown({
   const canClaimDaily =
     dailyEnabled && !dailySignedIn && dailyRewardCoins > 0 && !dailyError;
   const dailySecondary = dailyLoading
-    ? '加载中'
+    ? t('userMenu.dailyLoading')
     : dailyError
-      ? '重试'
+      ? t('userMenu.dailyRetry')
       : !dailyEnabled
-        ? '未开启'
+        ? t('userMenu.dailyDisabled')
         : dailySignedIn
-          ? '已签到'
+          ? t('userMenu.dailySigned')
           : dailyRewardCoins > 0
-            ? `可领 ${formatCoins(dailyRewardCoins)}`
-            : '未配置';
+            ? t('userMenu.dailyClaimable', {
+                coins: formatCoins(dailyRewardCoins, locale),
+              })
+            : t('userMenu.dailyUnconfigured');
 
   const claimDailySignIn = async () => {
     if (dailyLoading || dailyBusy) return;
@@ -107,10 +113,15 @@ export function UserMenuDropdown({
     try {
       const result = await billingApi.claimDailySignIn();
       setDailyStatus(result);
-      toast('success', `已领取 ${formatCoins(result.received_coins)}`);
+      toast('success', t('userMenu.dailyClaimed', {
+        coins: formatCoins(result.received_coins, locale),
+      }));
       await onBillingChanged();
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : '签到失败');
+      toast(
+        'error',
+        err instanceof Error ? err.message : t('userMenu.dailyClaimFailed'),
+      );
       await loadDailyStatus();
     } finally {
       setDailyBusy(false);
@@ -124,7 +135,7 @@ export function UserMenuDropdown({
           {avatar}
           <div className="min-w-0">
             <div className="text-[12px] font-medium text-ink truncate">
-              {getUserIdentityLabel(user)}
+              {getUserIdentityLabel(user, locale)}
             </div>
             <div className="text-[10px] text-muted tabular-nums mt-0.5">
               {balanceLabel}
@@ -133,62 +144,62 @@ export function UserMenuDropdown({
         </div>
       </div>
       <div className="p-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
-        <MenuSection label="微信对话">
+        <MenuSection label={t('userMenu.sections.wechat')}>
           <MenuItem
             href="/dashboard"
             icon={Bot}
-            label="连接微信"
+            label={t('userMenu.connectWechat')}
             onNavigate={onNavigate}
           />
         </MenuSection>
-        <MenuSection label="市场">
+        <MenuSection label={t('userMenu.sections.market')}>
           <MenuItem
             href="/discover"
             icon={Compass}
-            label="技能市场"
+            label={t('userMenu.skillMarket')}
             onNavigate={onNavigate}
           />
           <MenuItem
             href="/studio"
             icon={Sparkle}
-            label="术数开发"
+            label={t('userMenu.studio')}
             onNavigate={onNavigate}
           />
         </MenuSection>
-        <MenuSection label="账户">
+        <MenuSection label={t('userMenu.sections.account')}>
           <MenuItem
             href="/membership"
             icon={Crown}
-            label="会员中心"
+            label={t('topBar.membershipCenter')}
             onNavigate={onNavigate}
           />
           <MenuItem
             href="/referrals"
             icon={Gift}
-            label="邀请中心"
+            label={t('userMenu.referrals')}
             onNavigate={onNavigate}
           />
           <MenuItem
             href="/wallet"
             icon={Wallet}
-            label="钱包"
+            label={t('userMenu.wallet')}
             onNavigate={onNavigate}
           />
           <MenuItem
             href="/persona"
             icon={Sparkles}
-            label="人格设置"
+            label={t('userMenu.persona')}
             onNavigate={onNavigate}
           />
           <MenuItem
             href="/settings/advanced"
             icon={ServerCog}
-            label="模型设置"
+            label={t('userMenu.modelSettings')}
             onNavigate={onNavigate}
           />
           <MenuActionItem
             icon={CalendarCheck}
-            label="每日签到"
+            label={t('userMenu.dailySignIn')}
             secondary={dailySecondary}
             busy={dailyBusy}
             disabled={!canClaimDaily && !dailyError}
@@ -197,7 +208,7 @@ export function UserMenuDropdown({
           <MenuItem
             href="/profile"
             icon={UserIcon}
-            label="个人资料"
+            label={t('userMenu.profile')}
             onNavigate={onNavigate}
           />
         </MenuSection>
@@ -210,7 +221,9 @@ export function UserMenuDropdown({
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-error/8 text-error transition-colors group-hover:bg-error/14">
             <LogOut size={14} />
           </span>
-          <span className="min-w-0 flex-1 text-left">退出登录</span>
+          <span className="min-w-0 flex-1 text-left">
+            {t('userMenu.logout')}
+          </span>
           <ChevronRight
             size={13}
             className="shrink-0 opacity-35 transition-transform group-hover:translate-x-0.5 group-hover:opacity-70"

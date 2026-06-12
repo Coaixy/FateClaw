@@ -36,6 +36,7 @@ import {
 } from '@/features/skills/skill-zip';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useConfirm } from '@/lib/use-confirm';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 export default function StudioPage() {
@@ -43,6 +44,7 @@ export default function StudioPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { confirm: confirmDialog } = useConfirm();
+  const { formatNumber, t } = useI18n();
 
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function StudioPage() {
         if (cancelled) return;
         toast(
           'error',
-          err instanceof Error ? err.message : '加载创作者数据失败',
+          err instanceof Error ? err.message : t('pages.studio.loadFailed'),
         );
       })
       .finally(() => {
@@ -121,17 +123,17 @@ export default function StudioPage() {
 
   const handleDelete = async (id: string) => {
     const ok = await confirmDialog({
-      title: '删除技能',
-      message: '确定删除此技能？',
-      confirmLabel: '删除',
+      title: t('pages.studio.deleteSkillTitle'),
+      message: t('pages.studio.deleteSkillMessage'),
+      confirmLabel: t('pages.studio.delete'),
       variant: 'danger',
     });
     if (!ok) return;
     const success = await runWithToast(async () => {
       await skillsApi.userDelete(id);
       await loadUserSkills();
-    }, '删除失败');
-    if (success) toast('success', '已删除');
+    }, t('pages.studio.deleteFailed'));
+    if (success) toast('success', t('pages.studio.deleted'));
   };
 
   const handleImportSkillZip = async (file: File | undefined) => {
@@ -144,8 +146,8 @@ export default function StudioPage() {
         files: imported.files,
       });
       await loadUserSkills();
-      toast('success', 'Skill ZIP 已导入');
-    }, '导入 Skill ZIP 失败');
+      toast('success', t('pages.studio.skillZipImported'));
+    }, t('pages.studio.importZipFailed'));
     setImportingSkill(false);
   };
 
@@ -153,7 +155,10 @@ export default function StudioPage() {
     try {
       downloadSkillBundleZip(skill.skill_name, skill.files, skillLimits);
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : '导出 Skill ZIP 失败');
+      toast(
+        'error',
+        err instanceof Error ? err.message : t('pages.studio.exportZipFailed'),
+      );
     }
   };
 
@@ -161,7 +166,7 @@ export default function StudioPage() {
     await runWithToast(async () => {
       await skillsApi.userToggle(id);
       await loadUserSkills();
-    }, '切换状态失败');
+    }, t('pages.studio.toggleFailed'));
   };
 
   const handleShare = async (id: string) => {
@@ -173,13 +178,13 @@ export default function StudioPage() {
         shareToken = res.share_token;
         await loadUserSkills();
       }
-      if (!shareToken) throw new Error('分享链接生成失败');
+      if (!shareToken) throw new Error(t('pages.studio.shareLinkMissing'));
       const url = `${window.location.origin}/skills/install?token=${encodeURIComponent(shareToken)}`;
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
-      toast('success', '私密链接已复制到剪贴板');
+      toast('success', t('pages.studio.privateLinkCopied'));
       setTimeout(() => setCopiedId(null), 2000);
-    }, '复制链接失败');
+    }, t('pages.studio.copyLinkFailed'));
   };
 
   const handleSkillAccessInvite = async (id: string) => {
@@ -190,69 +195,69 @@ export default function StudioPage() {
       });
       const url = `${window.location.origin}${res.install_url}`;
       await navigator.clipboard.writeText(url);
-      toast('success', '作者授权链接已复制到剪贴板');
-    }, '生成授权链接失败');
+      toast('success', t('pages.studio.authorInviteCopied'));
+    }, t('pages.studio.authorInviteFailed'));
   };
 
   const handleUnshare = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.unshare(id);
       await loadUserSkills();
-    }, '关闭私密链接分享失败');
-    if (success) toast('success', '已关闭私密链接分享');
+    }, t('pages.studio.unshareFailed'));
+    if (success) toast('success', t('pages.studio.unshared'));
   };
 
   const handlePublish = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.publish(id);
       await loadUserSkills();
-    }, '公开上架失败');
-    if (success) toast('success', '已公开上架');
+    }, t('pages.studio.publishFailed'));
+    if (success) toast('success', t('pages.studio.published'));
   };
 
   const handleUnpublish = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.unpublish(id);
       await loadUserSkills();
-    }, '取消公开失败');
-    if (success) toast('success', '已取消公开，保留私密链接');
+    }, t('pages.studio.unpublishFailed'));
+    if (success) toast('success', t('pages.studio.unpublished'));
   };
 
   const handleSubscriptionToggle = async (subId: string) => {
     await runWithToast(async () => {
       await skillsApi.subscriptionToggle(subId);
       await loadUserSkills();
-    }, '切换订阅状态失败');
+    }, t('pages.studio.toggleFailed'));
   };
 
   const handleUnsubscribe = async (subId: string) => {
     const ok = await confirmDialog({
-      title: '取消订阅',
-      message: '确定取消订阅此技能？',
-      confirmLabel: '取消订阅',
+      title: t('pages.studio.unsubscribeTitle'),
+      message: t('pages.studio.unsubscribeMessage'),
+      confirmLabel: t('pages.studio.unsubscribeConfirm'),
       variant: 'danger',
     });
     if (!ok) return;
     const success = await runWithToast(async () => {
       await skillsApi.unsubscribe(subId);
       await loadUserSkills();
-    }, '取消订阅失败');
-    if (success) toast('success', '已取消订阅');
+    }, t('pages.studio.unsubscribeFailed'));
+    if (success) toast('success', t('pages.studio.unsubscribed'));
   };
 
   const handleBundleUnsubscribe = async (bundleId: string) => {
     const ok = await confirmDialog({
-      title: '取消整包订阅',
-      message: '确定取消这个捆绑包下的全部订阅？',
-      confirmLabel: '整包取消',
+      title: t('pages.studio.bundleUnsubscribeTitle'),
+      message: t('pages.studio.bundleUnsubscribeMessage'),
+      confirmLabel: t('pages.studio.bundleUnsubscribeConfirm'),
       variant: 'danger',
     });
     if (!ok) return;
     const success = await runWithToast(async () => {
       await skillsApi.bundleUnsubscribe(bundleId);
       await loadUserSkills();
-    }, '取消捆绑包订阅失败');
-    if (success) toast('success', '已取消捆绑包订阅');
+    }, t('pages.studio.bundleUnsubscribeFailed'));
+    if (success) toast('success', t('pages.studio.bundleUnsubscribed'));
   };
 
   const handleBundleUpdate = async (
@@ -262,22 +267,22 @@ export default function StudioPage() {
     await skillsApi.bundleUpdate(editingBundle.id, data);
     setEditingBundle(null);
     await loadBundles();
-    toast('success', '捆绑包已更新');
+    toast('success', t('pages.studio.bundleUpdated'));
   };
 
   const handleBundleDelete = async (id: string) => {
     const ok = await confirmDialog({
-      title: '删除捆绑包',
-      message: '删除后分享链接立即失效（已订阅的技能不受影响）',
-      confirmLabel: '删除',
+      title: t('pages.studio.bundleDeleteTitle'),
+      message: t('pages.studio.bundleDeleteMessage'),
+      confirmLabel: t('pages.studio.delete'),
       variant: 'danger',
     });
     if (!ok) return;
     const success = await runWithToast(async () => {
       await skillsApi.bundleDelete(id);
       await loadBundles();
-    }, '删除失败');
-    if (success) toast('success', '已删除');
+    }, t('pages.studio.deleteFailed'));
+    if (success) toast('success', t('pages.studio.deleted'));
   };
 
   const handleBundleShare = async (id: string) => {
@@ -289,13 +294,13 @@ export default function StudioPage() {
         bundleToken = res.bundle_token;
         await loadBundles();
       }
-      if (!bundleToken) throw new Error('分享链接生成失败');
+      if (!bundleToken) throw new Error(t('pages.studio.shareLinkMissing'));
       const url = `${window.location.origin}/skills/bundle/install?token=${encodeURIComponent(bundleToken)}`;
       await navigator.clipboard.writeText(url);
       setCopiedBundleId(id);
-      toast('success', '私密链接已复制到剪贴板');
+      toast('success', t('pages.studio.privateLinkCopied'));
       setTimeout(() => setCopiedBundleId(null), 2000);
-    }, '复制链接失败');
+    }, t('pages.studio.copyLinkFailed'));
   };
 
   const handleBundleAccessInvite = async (id: string) => {
@@ -306,32 +311,32 @@ export default function StudioPage() {
       });
       const url = `${window.location.origin}${res.install_url}`;
       await navigator.clipboard.writeText(url);
-      toast('success', '作者授权链接已复制到剪贴板');
-    }, '生成授权链接失败');
+      toast('success', t('pages.studio.authorInviteCopied'));
+    }, t('pages.studio.authorInviteFailed'));
   };
 
   const handleBundleUnshare = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.bundleUnshare(id);
       await loadBundles();
-    }, '关闭私密链接分享失败');
-    if (success) toast('success', '已关闭私密链接分享');
+    }, t('pages.studio.unshareFailed'));
+    if (success) toast('success', t('pages.studio.unshared'));
   };
 
   const handleBundlePublish = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.bundlePublish(id);
       await loadBundles();
-    }, '公开上架失败');
-    if (success) toast('success', '已公开上架');
+    }, t('pages.studio.publishFailed'));
+    if (success) toast('success', t('pages.studio.published'));
   };
 
   const handleBundleUnpublish = async (id: string) => {
     const success = await runWithToast(async () => {
       await skillsApi.bundleUnpublish(id);
       await loadBundles();
-    }, '取消公开失败');
-    if (success) toast('success', '已取消公开，保留私密链接');
+    }, t('pages.studio.unpublishFailed'));
+    if (success) toast('success', t('pages.studio.unpublished'));
   };
 
   return (
@@ -340,9 +345,11 @@ export default function StudioPage() {
         {/* Header */}
         <header className="flex items-end justify-between gap-4 flex-wrap">
           <div className="hidden lg:block">
-            <h1 className="text-2xl font-bold tracking-tight">术数开发</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {t('pages.studio.title')}
+            </h1>
             <p className="mt-1 text-sm text-muted">
-              打造可分享、可复用的命理术数技能
+              {t('pages.studio.description')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -358,7 +365,7 @@ export default function StudioPage() {
               ) : (
                 <Upload className="w-4 h-4" />
               )}
-              导入 Skill
+              {t('pages.studio.importSkill')}
               <input
                 type="file"
                 accept=".zip,application/zip"
@@ -376,14 +383,14 @@ export default function StudioPage() {
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-hairline bg-surface-card text-sm font-medium text-ink transition-colors hover:bg-surface-cream-strong"
             >
               <Layers className="w-4 h-4" />
-              创建捆绑包
+              {t('pages.studio.createBundle')}
             </Link>
             <Link
               href="/studio/skills/new"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Plus className="w-4 h-4" />
-              开发术数
+              {t('pages.studio.createSkill')}
             </Link>
           </div>
         </header>
@@ -391,24 +398,24 @@ export default function StudioPage() {
         {/* Stat cards */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard
-            label="已共享技能"
-            value={String(stats.sharedCount)}
+            label={t('pages.studio.sharedSkills')}
+            value={formatNumber(stats.sharedCount)}
             Icon={Puzzle}
-            hint="链接分享或公开上架"
+            hint={t('pages.studio.sharedSkillsHint')}
           />
           <StatCard
-            label="技能捆绑包"
-            value={String(stats.bundleCount)}
+            label={t('pages.studio.skillBundles')}
+            value={formatNumber(stats.bundleCount)}
             Icon={Layers}
           />
           <StatCard
-            label="总订阅人数"
-            value={String(stats.totalSubs)}
+            label={t('pages.studio.totalSubscribers')}
+            value={formatNumber(stats.totalSubs)}
             Icon={Users}
           />
           <StatCard
-            label="自有技能"
-            value={String(ownSkills.length)}
+            label={t('pages.studio.ownSkills')}
+            value={formatNumber(ownSkills.length)}
             Icon={BookOpen}
           />
         </section>
@@ -417,9 +424,9 @@ export default function StudioPage() {
         <section>
           <SectionTitle
             icon={Puzzle}
-            title="我的知识技能"
+            title={t('pages.studio.ownSkillsTitle')}
             count={loading ? undefined : ownSkills.length}
-            subtitle="沉淀你的流派、规则和解读方法"
+            subtitle={t('pages.studio.ownSkillsSubtitle')}
           />
 
           <div className="mt-5 space-y-3">
@@ -439,10 +446,10 @@ export default function StudioPage() {
                     />
                   </div>
                   <p className="max-w-[18rem] text-[14px] text-muted font-medium group-hover:text-ink transition-colors">
-                    开发你的第一个术数技能
+                    {t('pages.studio.ownSkillsEmptyTitle')}
                   </p>
                   <p className="mt-1.5 max-w-[22rem] text-[12px] text-muted opacity-60">
-                    把排盘经验、解读规则和流派方法封装起来
+                    {t('pages.studio.ownSkillsEmptyDescription')}
                   </p>
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                     <Link
@@ -450,7 +457,7 @@ export default function StudioPage() {
                       className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
                     >
                       <Plus size={13} />
-                      新建 Skill
+                      {t('pages.studio.newSkill')}
                     </Link>
                     <label
                       className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[12px] font-semibold text-ink transition-colors ${
@@ -464,7 +471,7 @@ export default function StudioPage() {
                       ) : (
                         <Upload size={13} />
                       )}
-                      上传 ZIP
+                      {t('pages.studio.importZip')}
                       <input
                         type="file"
                         accept=".zip,application/zip"
@@ -512,7 +519,7 @@ export default function StudioPage() {
               <Layers size={14} className="text-primary" />
             </div>
             <h3 className="text-[13px] font-semibold tracking-tight">
-              我的捆绑包
+              {t('pages.studio.bundlesTitle')}
             </h3>
             {!loading && (
               <span className="text-[11px] text-muted tabular-nums bg-surface-card px-1.5 py-0.5 rounded-md">
@@ -525,7 +532,7 @@ export default function StudioPage() {
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
             >
               <Plus size={12} />
-              新建
+              {t('pages.studio.newBundle')}
             </Link>
           </div>
 
@@ -536,7 +543,7 @@ export default function StudioPage() {
               <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
                 <p className="relative text-[12px] text-muted opacity-70">
-                  把多个技能组合成一个捆绑包，一次分享即可全部订阅
+                  {t('pages.studio.bundlesEmpty')}
                 </p>
               </div>
             ) : (
@@ -562,9 +569,9 @@ export default function StudioPage() {
         <section>
           <SectionTitle
             icon={Share2}
-            title="已订阅"
+            title={t('pages.studio.subscribedTitle')}
             count={loading ? undefined : subscribedSkills.length}
-            subtitle="通过分享链接订阅的他人技能"
+            subtitle={t('pages.studio.subscribedSubtitle')}
           />
 
           <div className="mt-5 space-y-3">
@@ -574,7 +581,7 @@ export default function StudioPage() {
               <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.02),transparent_70%)] pointer-events-none" />
                 <p className="relative text-[12px] text-muted opacity-60">
-                  通过技能市场或分享链接订阅他人的术数技能
+                  {t('pages.studio.subscribedEmpty')}
                 </p>
               </div>
             ) : (

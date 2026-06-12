@@ -42,6 +42,7 @@ import {
   DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
   findLowestPricedOfficialModel,
 } from './model-pricing';
+import { useI18n } from '@/lib/i18n';
 
 const CONTROL =
   'h-11 w-full rounded-md border border-hairline/80 bg-canvas/70 text-[15px] text-ink outline-none transition-all duration-150 placeholder:text-muted-soft/75 hover:border-primary/30 hover:bg-canvas focus:border-primary/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgba(204,120,92,0.13)] disabled:cursor-not-allowed disabled:opacity-50';
@@ -50,24 +51,23 @@ const ICON_INPUT_CONTROL = `${CONTROL} pl-10 pr-3`;
 const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
 const THINKING_LEVEL_OPTIONS: Array<{
   value: ModelThinkingLevel;
-  label: string;
 }> = [
-  { value: 'off', label: '关闭' },
-  { value: 'minimal', label: '极简' },
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'xhigh', label: '极高' },
+  { value: 'off' },
+  { value: 'minimal' },
+  { value: 'low' },
+  { value: 'medium' },
+  { value: 'high' },
+  { value: 'xhigh' },
 ];
 
-const THINKING_LEVEL_LABELS: Record<ModelThinkingLevel, string> = {
-  off: '关闭',
-  minimal: '极简',
-  low: '低',
-  medium: '中',
-  high: '高',
-  xhigh: '极高',
-};
+function thinkingLevelLabel(value: ModelThinkingLevel, t: TranslationFn) {
+  return t(`aiChat.thinkingLevels.${value}`);
+}
+
+type TranslationFn = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
 
 function resolveSelectionThinkingLevel(
   selection: ModelSettingsOverview['selection'],
@@ -155,6 +155,7 @@ function buildDefaultOfficialSelection(
 }
 
 export function ModelSettingsPanel() {
+  const { locale, t } = useI18n();
   const [overview, setOverview] = useState<ModelSettingsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -181,7 +182,9 @@ export function ModelSettingsPanel() {
           ...data,
           selection: buildDefaultOfficialSelection(data, defaultOfficialModel),
         };
-        defaultSelectionMessage = `默认使用价格最低的官方模型：${defaultOfficialModel.display_name}`;
+        defaultSelectionMessage = t('pages.modelSettings.defaultOfficialMessage', {
+          model: defaultOfficialModel.display_name,
+        });
       }
       setOverview(nextOverview);
       setCustom(customDraftFromOverview(nextOverview));
@@ -189,7 +192,9 @@ export function ModelSettingsPanel() {
         setMessage(defaultSelectionMessage);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '加载模型设置失败');
+      setMessage(
+        error instanceof Error ? error.message : t('pages.modelSettings.loadFailed'),
+      );
     } finally {
       setLoading(false);
     }
@@ -210,10 +215,12 @@ export function ModelSettingsPanel() {
         context_window_tokens: custom.context_window_tokens || null,
         api_key: custom.api_key.trim(),
       });
-      setMessage('自配模型已保存');
+      setMessage(t('pages.modelSettings.customSaved'));
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败');
+      setMessage(
+        error instanceof Error ? error.message : t('pages.modelSettings.saveFailed'),
+      );
     } finally {
       setBusy('');
     }
@@ -230,10 +237,12 @@ export function ModelSettingsPanel() {
           overview?.selection ?? null,
         ),
       });
-      setMessage('已选择官方模型');
+      setMessage(t('pages.modelSettings.officialSelected'));
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '选择失败');
+      setMessage(
+        error instanceof Error ? error.message : t('pages.modelSettings.selectFailed'),
+      );
     } finally {
       setBusy('');
     }
@@ -249,10 +258,12 @@ export function ModelSettingsPanel() {
           overview?.selection ?? null,
         ),
       });
-      setMessage('已选择自配模型');
+      setMessage(t('pages.modelSettings.customSelected'));
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '选择失败');
+      setMessage(
+        error instanceof Error ? error.message : t('pages.modelSettings.selectFailed'),
+      );
     } finally {
       setBusy('');
     }
@@ -295,14 +306,16 @@ export function ModelSettingsPanel() {
             : prev,
         );
       }
-      setMessage(error instanceof Error ? error.message : '保存失败');
+      setMessage(
+        error instanceof Error ? error.message : t('pages.modelSettings.saveFailed'),
+      );
     }
   };
 
   if (loading) {
     return (
       <div className="rounded-lg border border-hairline bg-surface-card px-4 py-8 text-center text-[13px] text-muted">
-        加载中…
+        {t('pages.modelSettings.loading')}
       </div>
     );
   }
@@ -314,16 +327,16 @@ export function ModelSettingsPanel() {
     DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS;
   const selectedSourceLabel =
     selection?.source === 'custom'
-      ? '自配供应商'
+      ? t('pages.modelSettings.customSource')
       : selection?.source === 'official'
-        ? '官方模型'
-        : '未选择';
+        ? t('pages.modelSettings.officialSource')
+        : t('pages.modelSettings.noSelection');
   const selectedModelLabel =
     selection?.source === 'custom'
-      ? custom.model_name.trim() || '自配模型'
+      ? custom.model_name.trim() || t('pages.modelSettings.customModel')
       : officialModels.find(
           (model) => model.id === selection?.official_model_id,
-        )?.display_name ?? '未选择模型';
+        )?.display_name ?? t('pages.modelSettings.noModel');
   const availableOfficialModels = officialModels.filter(
     (model) => model.enabled && model.has_secret,
   ).length;
@@ -338,7 +351,7 @@ export function ModelSettingsPanel() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
                   <Check size={13} className="text-primary" />
-                  当前模型
+                  {t('pages.modelSettings.currentModel')}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-[22px] font-semibold leading-tight text-ink">
@@ -349,7 +362,7 @@ export function ModelSettingsPanel() {
                   </span>
                 </div>
                 <div className="mt-2 max-w-2xl text-[12px] leading-5 text-muted">
-                  未选择或当前选择失效时，会默认使用价格最低的可用官方模型。
+                  {t('pages.modelSettings.fallbackDescription')}
                 </div>
               </div>
               <button
@@ -358,30 +371,34 @@ export function ModelSettingsPanel() {
                 className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-hairline px-3 text-[12px] text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
               >
                 <RefreshCw size={13} />
-                刷新
+                {t('pages.modelSettings.refresh')}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-2 border-t border-hairline bg-canvas/45 lg:border-l lg:border-t-0">
-            <SummaryTile label="模型来源" value={selectedSourceLabel} />
             <SummaryTile
-              label="官方可用"
+              label={t('pages.modelSettings.summarySource')}
+              value={selectedSourceLabel}
+            />
+            <SummaryTile
+              label={t('pages.modelSettings.summaryOfficialAvailable')}
               value={`${availableOfficialModels}/${officialModels.length}`}
             />
             <SummaryTile
-              label="自配协议"
-              value={custom.pi_api || '未配置'}
+              label={t('pages.modelSettings.summaryProtocol')}
+              value={custom.pi_api || t('pages.modelSettings.unconfigured')}
             />
             <SummaryTile
-              label="平台服务费"
+              label={t('pages.modelSettings.summaryPlatformFee')}
               value={customModelPlatformFeeAmountLabel(
                 customModelPlatformFeeCoins,
+                locale,
               )}
             />
             <SummaryTile
-              label="思考等级"
-              value={THINKING_LEVEL_LABELS[thinkingLevel]}
+              label={t('pages.modelSettings.summaryThinking')}
+              value={thinkingLevelLabel(thinkingLevel, t)}
             />
           </div>
         </div>
@@ -396,12 +413,14 @@ export function ModelSettingsPanel() {
       <ThinkingLevelSection
         value={thinkingLevel}
         onChange={saveThinkingLevel}
+        t={t}
       />
 
       <OfficialModelsSection
         busy={busy}
         models={officialModels}
         selection={selection ?? null}
+        t={t}
         onSelectOfficial={selectOfficial}
       />
 
@@ -409,8 +428,10 @@ export function ModelSettingsPanel() {
         busy={busy}
         custom={custom}
         customModelPlatformFeeCoins={customModelPlatformFeeCoins}
+        locale={locale}
         selected={selection?.source === 'custom'}
         setCustom={setCustom}
+        t={t}
         onSaveCustom={saveCustom}
         onSelectCustom={selectCustom}
       />
@@ -421,9 +442,11 @@ export function ModelSettingsPanel() {
 function ThinkingLevelSection({
   value,
   onChange,
+  t,
 }: {
   value: ModelThinkingLevel;
   onChange: (value: ModelThinkingLevel) => Promise<void>;
+  t: TranslationFn;
 }) {
   const [draftPosition, setDraftPosition] = useState(() =>
     resolveThinkingLevelIndex(value),
@@ -437,6 +460,7 @@ function ThinkingLevelSection({
   const draftOption =
     THINKING_LEVEL_OPTIONS[draftIndex] ??
     THINKING_LEVEL_OPTIONS[resolveThinkingLevelIndex(DEFAULT_THINKING_LEVEL)];
+  const draftLabel = thinkingLevelLabel(draftOption.value, t);
   const rangeMax = THINKING_LEVEL_OPTIONS.length - 1;
   const progressPercent = rangeMax > 0 ? (draftPosition / rangeMax) * 100 : 0;
 
@@ -464,13 +488,15 @@ function ThinkingLevelSection({
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm font-semibold text-ink">思考等级</div>
+              <div className="text-sm font-semibold text-ink">
+                {t('pages.modelSettings.thinkingTitle')}
+              </div>
               <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                {draftOption.label}
+                {draftLabel}
               </span>
             </div>
             <div className="mt-1 text-[12px] leading-5 text-muted">
-              当前会话默认使用中等思考，可按偏好调低响应成本或调高推理深度。
+              {t('pages.modelSettings.thinkingDescription')}
             </div>
           </div>
         </div>
@@ -488,8 +514,8 @@ function ThinkingLevelSection({
                 max={rangeMax}
                 step={0.01}
                 value={draftPosition}
-                aria-label="思考等级"
-                aria-valuetext={draftOption.label}
+                aria-label={t('pages.modelSettings.thinkingAria')}
+                aria-valuetext={draftLabel}
                 onChange={(event) =>
                   setDraftPosition(Number.parseFloat(event.target.value))
                 }
@@ -529,7 +555,7 @@ function ThinkingLevelSection({
                   index === draftIndex ? 'text-primary' : 'text-muted'
                 }`}
               >
-                {option.label}
+                {thinkingLevelLabel(option.value, t)}
               </span>
             ))}
           </div>
@@ -556,16 +582,20 @@ function CustomModelSection({
   busy,
   custom,
   customModelPlatformFeeCoins,
+  locale,
   selected,
   setCustom,
+  t,
   onSaveCustom,
   onSelectCustom,
 }: {
   busy: string;
   custom: CustomDraft;
   customModelPlatformFeeCoins: number;
+  locale: Parameters<typeof customModelPlatformFeeAmountLabel>[1];
   selected: boolean;
   setCustom: Dispatch<SetStateAction<CustomDraft>>;
+  t: TranslationFn;
   onSaveCustom: () => Promise<void>;
   onSelectCustom: () => Promise<void>;
 }) {
@@ -584,34 +614,38 @@ function CustomModelSection({
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-              自配模型
+              {t('pages.modelSettings.customTitle')}
               {selected && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
                   <Check size={11} />
-                  当前
+                  {t('pages.modelSettings.current')}
                 </span>
               )}
             </div>
             <div className="mt-1 text-[12px] leading-5 text-muted">
-              接入自有供应商账号，按网站平台服务费另行扣费。
+              {t('pages.modelSettings.customDescription')}
             </div>
           </div>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-          {customModelPlatformFeeLabel(customModelPlatformFeeCoins)}
+          {customModelPlatformFeeLabel(customModelPlatformFeeCoins, locale, t)}
         </span>
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="p-4 sm:p-5">
           <div className="mb-4 text-[12px] leading-5 text-muted">
-            模型商原始费用由你的供应商账号收取；网站统一按输入与输出 Token
-            合计收取平台服务费，每百万 Token{' '}
-            {customModelPlatformFeeAmountLabel(customModelPlatformFeeCoins)}。
+            {t('pages.modelSettings.customBillingDescription', {
+              fee: customModelPlatformFeeAmountLabel(
+                customModelPlatformFeeCoins,
+                locale,
+              ),
+            })}
           </div>
           <CustomModelFields
             custom={custom}
             setCustom={setCustom}
+            t={t}
           />
           <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-end">
             <FormField
@@ -627,7 +661,7 @@ function CustomModelSection({
                     api_key: event.target.value,
                   }))
                 }
-                placeholder="输入 API Key"
+                placeholder={t('pages.modelSettings.apiKeyPlaceholder')}
                 className={ICON_INPUT_CONTROL}
               />
             </FormField>
@@ -646,37 +680,40 @@ function CustomModelSection({
               ) : (
                 <Save size={14} />
               )}
-              保存模型
+              {t('pages.modelSettings.saveModel')}
             </button>
           </div>
         </div>
 
         <aside className="border-t border-hairline/70 bg-canvas/45 p-4 sm:p-5 lg:border-l lg:border-t-0">
           <div className="text-[11px] font-semibold text-muted">
-            接入状态
+            {t('pages.modelSettings.connectionStatus')}
           </div>
           <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-ink">
             <ShieldCheck size={15} className="text-primary" />
-            {selected ? '当前使用自配模型' : '未启用自配模型'}
+            {selected
+              ? t('pages.modelSettings.usingCustom')
+              : t('pages.modelSettings.customNotEnabled')}
           </div>
           <div className="mt-4 space-y-3 border-y border-hairline/70 py-4">
             <div>
               <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
                 <BadgeDollarSign size={12} className="text-primary" />
-                平台服务费
+                {t('pages.modelSettings.summaryPlatformFee')}
               </div>
               <div className="mt-1 text-[13px] font-semibold text-ink">
                 {customModelPlatformFeeAmountLabel(
                   customModelPlatformFeeCoins,
+                  locale,
                 )}
               </div>
             </div>
             <div>
               <div className="text-[10px] font-medium text-muted">
-                当前模型名
+                {t('pages.modelSettings.currentModelName')}
               </div>
               <div className="mt-1 truncate text-[13px] font-semibold text-ink">
-                {custom.model_name.trim() || '未填写'}
+                {custom.model_name.trim() || t('pages.modelSettings.notFilled')}
               </div>
             </div>
           </div>
@@ -691,7 +728,9 @@ function CustomModelSection({
             }`}
           >
             <Check size={14} />
-            {selected ? '当前选择自配模型' : '选择自配模型'}
+            {selected
+              ? t('pages.modelSettings.selectCustomCurrent')
+              : t('pages.modelSettings.selectCustom')}
           </button>
         </aside>
       </div>
@@ -702,14 +741,17 @@ function CustomModelSection({
 function CustomModelFields({
   custom,
   setCustom,
+  t,
 }: {
   custom: CustomDraft;
   setCustom: Dispatch<SetStateAction<CustomDraft>>;
+  t: TranslationFn;
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <ProtocolSelectField
         value={custom.pi_api}
+        t={t}
         onChange={(value) =>
           setCustom((prev) => ({
             ...prev,
@@ -718,7 +760,7 @@ function CustomModelFields({
         }
       />
       <TextField
-        label="模型名"
+        label={t('pages.modelSettings.modelName')}
         icon={<Brain size={15} />}
         value={custom.model_name}
         onChange={(value) =>
@@ -726,7 +768,7 @@ function CustomModelFields({
         }
       />
       <TextField
-        label="上下文窗口 Token（0 为自动）"
+        label={t('pages.modelSettings.contextWindow')}
         icon={<Hash size={15} />}
         value={String(custom.context_window_tokens)}
         onChange={(value) =>
@@ -740,7 +782,7 @@ function CustomModelFields({
         label="Base URL"
         icon={<Link2 size={15} />}
         value={custom.base_url}
-        placeholder="可选"
+        placeholder={t('pages.modelSettings.optional')}
         onChange={(value) =>
           setCustom((prev) => ({ ...prev, base_url: value }))
         }
@@ -751,9 +793,11 @@ function CustomModelFields({
 
 function ProtocolSelectField({
   value,
+  t,
   onChange,
 }: {
   value: ModelPiApi;
+  t: TranslationFn;
   onChange: (value: ModelPiApi) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -787,7 +831,7 @@ function ProtocolSelectField({
   return (
     <div ref={rootRef} className="group relative min-w-0 space-y-1.5">
       <span className="text-[12px] font-medium text-muted">
-        协议类型
+        {t('pages.modelSettings.protocolType')}
       </span>
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-muted-soft transition-colors group-focus-within:text-primary">
@@ -797,7 +841,9 @@ function ProtocolSelectField({
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
-          aria-label={`协议类型，当前 ${selectedOption.label}`}
+          aria-label={t('pages.modelSettings.protocolCurrent', {
+            protocol: selectedOption.label,
+          })}
           onClick={() => setOpen((current) => !current)}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -825,7 +871,7 @@ function ProtocolSelectField({
           <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-hairline bg-surface-card shadow-[0_14px_34px_rgba(0,0,0,0.12)] animate-scale-in">
             <div
               role="listbox"
-              aria-label="选择协议类型"
+              aria-label={t('pages.modelSettings.chooseProtocol')}
               className="space-y-1 p-1.5"
             >
               {PI_API_OPTIONS.map((option) => {
@@ -896,11 +942,13 @@ function OfficialModelsSection({
   busy,
   models,
   selection,
+  t,
   onSelectOfficial,
 }: {
   busy: string;
   models: OfficialModel[];
   selection: ModelSettingsOverview['selection'];
+  t: TranslationFn;
   onSelectOfficial: (modelId: string) => Promise<void>;
 }) {
   const availableCount = models.filter(
@@ -916,20 +964,23 @@ function OfficialModelsSection({
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-ink">
-              官方模型
+              {t('pages.modelSettings.officialTitle')}
             </div>
             <div className="mt-1 text-[12px] leading-5 text-muted">
-              由平台统一维护密钥和扣费价格，适合不想自行配置供应商账号的用户。
+              {t('pages.modelSettings.officialDescription')}
             </div>
           </div>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-          {availableCount} 可用 / {models.length} 个
+          {t('pages.modelSettings.officialAvailableCount', {
+            available: availableCount,
+            total: models.length,
+          })}
         </span>
       </div>
       {models.length === 0 ? (
         <div className="mt-4 rounded-lg border border-hairline bg-canvas/55 px-4 py-6 text-[13px] text-muted">
-          管理员尚未配置官方模型。
+          {t('pages.modelSettings.noOfficialModels')}
         </div>
       ) : (
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -942,6 +993,7 @@ function OfficialModelsSection({
                 selection?.source === 'official' &&
                 selection.official_model_id === model.id
               }
+              t={t}
               onSelect={() => onSelectOfficial(model.id)}
             />
           ))}
@@ -955,17 +1007,19 @@ function OfficialModelOption({
   busy,
   model,
   selected,
+  t,
   onSelect,
 }: {
   busy: boolean;
   model: OfficialModel;
   selected: boolean;
+  t: TranslationFn;
   onSelect: () => Promise<void>;
 }) {
   const available = model.enabled && model.has_secret;
   const description =
     model.description ||
-    '管理员尚未填写说明，可根据展示名称和价格选择。';
+    t('pages.modelSettings.defaultOfficialDescription');
   return (
     <button
       type="button"
@@ -985,12 +1039,12 @@ function OfficialModelOption({
           {selected && (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-on-primary">
               <Check size={11} />
-              当前
+              {t('pages.modelSettings.current')}
             </span>
           )}
           {!available && (
             <span className="rounded-full bg-surface-card px-2 py-0.5 text-[10px] text-muted">
-              暂不可用
+              {t('pages.modelSettings.unavailable')}
             </span>
           )}
         </div>

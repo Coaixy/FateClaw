@@ -8,6 +8,7 @@ import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useDeviceBinding } from '@/features/accounts/hooks/use-device-binding';
 import { useToast } from '@/lib/use-toast';
 import { useConfirm } from '@/lib/use-confirm';
+import { useI18n } from '@/lib/i18n';
 import { AlertTriangle, Plus, Smartphone, RefreshCw, Lock } from 'lucide-react';
 import { DeviceCard } from '@/components/workspace/device-card';
 import { DeviceBindSheet } from '@/components/workspace/device-bind-sheet';
@@ -23,6 +24,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const { toast } = useToast();
   const { confirm } = useConfirm();
+  const { formatNumber, t } = useI18n();
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
   const [membershipError, setMembershipError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
       .catch((err) => {
         if (cancelled) return;
         setMembershipError(
-          err instanceof Error ? err.message : '会员状态加载失败',
+          err instanceof Error ? err.message : t('pages.devices.membershipLoadFailed'),
         );
         setMembership(null);
       })
@@ -71,26 +73,26 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
   }, []);
 
   const bindStatusText = membershipLoading
-    ? '正在确认会员状态'
+    ? t('pages.devices.statusLoading')
     : membershipError
-      ? '会员状态暂时无法确认'
+      ? t('pages.devices.statusUnknown')
       : membershipActive
         ? bindingLimitReached
-          ? '会员最多绑定 1 个微信 Claw'
-          : 'FateClaw Plus 可扫码绑定微信 Claw'
-        : '微信 Claw 仅 FateClaw Plus 会员可绑定';
+          ? t('pages.devices.limitReached')
+          : t('pages.devices.bindReady')
+        : t('pages.devices.plusOnly');
 
   const bindButtonLabel = membershipLoading
-    ? '确认中'
+    ? t('pages.devices.confirming')
     : membershipError
-      ? '暂不可用'
+      ? t('pages.devices.unavailable')
       : !membership?.enabled
-        ? '暂未开放'
+        ? t('pages.devices.notOpen')
         : membershipActive
         ? bindingLimitReached
-          ? '已达上限'
-          : '扫码接入'
-        : '开通会员';
+          ? t('pages.devices.reachedLimit')
+          : t('pages.devices.scanBind')
+        : t('pages.devices.openMembership');
 
   const handleBindAction = () => {
     if (canBindWeixin) {
@@ -104,18 +106,18 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
 
   const removeAccount = async (acc: Account) => {
     const ok = await confirm({
-      title: '解除绑定',
-      message: `确定要解除「${acc.name}」的绑定吗？\n\n该设备的对话消息将被立即且永久删除。`,
-      confirmLabel: '解除绑定',
+      title: t('pages.devices.unbindTitle'),
+      message: t('pages.devices.unbindMessage', { name: acc.name }),
+      confirmLabel: t('pages.devices.unbindConfirm'),
       variant: 'danger',
     });
     if (!ok) return;
     try {
       await accountsApi.remove(acc.id);
       await load();
-      notify('success', `「${acc.name}」已解除绑定`);
+      notify('success', t('pages.devices.unbound', { name: acc.name }));
     } catch (err) {
-      notify('error', err instanceof Error ? err.message : '解绑失败');
+      notify('error', err instanceof Error ? err.message : t('pages.devices.unbindFailed'));
     }
   };
 
@@ -127,19 +129,21 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
         {embedded ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center h-8 px-3 rounded-full border border-hairline bg-canvas/60 text-[12px] font-medium text-ink">
-              {deviceAccounts.length}
-              台设备
+              {t('pages.common.countDevices', {
+                count: formatNumber(deviceAccounts.length),
+              })}
             </span>
             <span className="text-[12px] text-muted">{bindStatusText}</span>
           </div>
         ) : (
           <div className="hidden lg:block">
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-ink to-muted">
-              宿主设备
+              {t('pages.devices.title')}
             </h2>
             <p className="text-[12px] text-muted font-medium mt-0.5">
-              {deviceAccounts.length}
-              台接入 · {bindStatusText}
+              {t('pages.common.countDevices', {
+                count: formatNumber(deviceAccounts.length),
+              })} · {bindStatusText}
             </p>
           </div>
         )}
@@ -150,7 +154,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             onClick={refresh}
             disabled={refreshing || loading}
             className={`flex items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-surface-card)_60%,transparent)] border border-hairline/50 backdrop-blur-sm text-muted hover:text-ink hover:border-hairline hover:bg-surface-cream-strong disabled:opacity-30 transition-all duration-300 shadow-sm cursor-pointer group ${embedded ? 'w-9 h-9' : 'w-10 h-10'}`}
-            aria-label="刷新数据"
+            aria-label={t('pages.devices.refreshData')}
           >
             <RefreshCw
               size={embedded ? 14 : 16}
@@ -186,9 +190,9 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
         <div className="rounded-[32px] border border-dashed border-hairline bg-[color-mix(in_srgb,var(--color-surface-card)_30%,transparent)] backdrop-blur-sm">
           <EmptyState
             icon={AlertTriangle}
-            title="设备列表加载失败"
+            title={t('pages.devices.loadFailed')}
             description={loadError}
-            action={{ label: '重新加载', onClick: () => void load() }}
+            action={{ label: t('pages.devices.reload'), onClick: () => void load() }}
           />
         </div>
       ) : deviceAccounts.length > 0 ? (
@@ -212,19 +216,19 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
           </div>
           <h3 className="text-[18px] font-bold mb-2 tracking-tight">
             {membershipLoading
-              ? '正在确认会员状态'
+              ? t('pages.devices.emptyLoadingTitle')
               : membershipActive
-                ? '尚未接入微信设备'
-                : '微信 Claw 会员专属'}
+                ? t('pages.devices.emptyActiveTitle')
+                : t('pages.devices.emptyPlusTitle')}
           </h3>
           <p className="text-[14px] text-muted mb-8 max-w-sm leading-relaxed">
             {membershipLoading
-              ? '会员状态确认完成后，Plus 会员可扫码绑定微信 Claw。'
+              ? t('pages.devices.emptyLoadingDescription')
               : membershipError
-                ? '会员状态暂时无法确认，请稍后刷新后重试；站内 AI Chat 和手动排盘仍可继续使用。'
+                ? t('pages.devices.emptyUnknownDescription')
                 : membershipActive
-                  ? '使用移动端微信扫码绑定微信 Claw，绑定后即可在微信中进行文本对话。'
-                  : '开通 FateClaw Plus 后可扫码绑定微信 Claw；站内 AI Chat 和手动排盘仍可继续使用。'}
+                  ? t('pages.devices.emptyActiveDescription')
+                  : t('pages.devices.emptyPlusDescription')}
           </p>
           <button
             onClick={handleBindAction}

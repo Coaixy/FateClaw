@@ -11,23 +11,33 @@ import type {
   ResetScope,
 } from '@/components/settings/data-management/data-management-types';
 import { useConfirm } from '@/lib/use-confirm';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 export function TabData() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
+  const { t } = useI18n();
   const [resettingScope, setResettingScope] = useState<ResetScope | null>(null);
 
   const handleReset = async (scope: ResetScope) => {
     const labels: Record<ResetScope, string> = {
-      all: '全部数据（消息、记忆）',
-      messages: '所有消息记录',
-      memories: '所有账号的长期记忆',
+      all: t('pages.dataManagement.allData'),
+      messages: t('pages.dataManagement.messagesData'),
+      memories: t('pages.dataManagement.memoriesData'),
     };
     const ok = await confirm({
-      title: scope === 'all' ? '重置全部数据' : '清除数据',
-      message: `确定要清除${labels[scope]}吗？\n\n数据保留归档以满足审查要求。`,
-      confirmLabel: scope === 'all' ? '重置' : '清除',
+      title:
+        scope === 'all'
+          ? t('pages.dataManagement.resetAllData')
+          : t('pages.dataManagement.clearData'),
+      message: t('pages.dataManagement.confirmMessage', {
+        target: labels[scope],
+      }),
+      confirmLabel:
+        scope === 'all'
+          ? t('pages.dataManagement.reset')
+          : t('pages.dataManagement.clear'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -36,10 +46,15 @@ export function TabData() {
       await billingApi.reset(scope);
       toast(
         'success',
-        scope === 'all' ? '数据已重置' : `${labels[scope]}已清除`,
+        scope === 'all'
+          ? t('pages.dataManagement.resetDone')
+          : t('pages.dataManagement.clearDone', { target: labels[scope] }),
       );
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : '操作失败');
+      toast(
+        'error',
+        err instanceof Error ? err.message : t('pages.dataManagement.failed'),
+      );
     }
     setResettingScope(null);
   };
@@ -48,14 +63,14 @@ export function TabData() {
     {
       scope: 'messages',
       icon: MessageSquare,
-      label: '消息记录',
-      desc: '清除所有聊天消息历史',
+      label: t('pages.dataManagement.messages'),
+      desc: t('pages.dataManagement.messagesDescription'),
     },
     {
       scope: 'memories',
       icon: Brain,
-      label: '长期记忆',
-      desc: '清除所有 Soul 记忆',
+      label: t('pages.dataManagement.memories'),
+      desc: t('pages.dataManagement.memoriesDescription'),
     },
   ];
 
@@ -79,14 +94,18 @@ export function TabData() {
           <DataManagementItem
             item={{ scope, icon: Icon, label, desc }}
             resettingScope={resettingScope}
-            onReset={(nextScope) => void handleReset(nextScope)}
-          />
+        onReset={(nextScope) => void handleReset(nextScope)}
+        clearLabel={t('pages.dataManagement.clear')}
+      />
         </div>
       ))}
 
       <DataManagementResetAll
         resettingScope={resettingScope}
         onReset={(scope) => void handleReset(scope)}
+        resetLabel={t('pages.dataManagement.reset')}
+        title={t('pages.dataManagement.resetAll')}
+        description={t('pages.dataManagement.resetAllDescription')}
       />
     </div>
   );

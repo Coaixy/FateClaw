@@ -8,10 +8,12 @@ export function DataManagementItem({
   item,
   resettingScope,
   onReset,
+  clearLabel,
 }: {
   item: ResetItem;
   resettingScope: ResetScope | null;
   onReset: (scope: ResetScope) => void;
+  clearLabel: string;
 }) {
   const Icon = item.icon;
 
@@ -34,7 +36,7 @@ export function DataManagementItem({
         ) : (
           <Trash2 size={11} />
         )}
-        清除
+        {clearLabel}
       </button>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import type { WalletTransaction } from '@/features/billing/api';
+import { useI18n } from '@/lib/i18n';
 import { formatSignedCoins, formatCoins } from '@/lib/soft-currency';
 
 import {
@@ -23,6 +24,7 @@ export function WalletTransactionsPanel({
 }: {
   transactions: WalletTransaction[];
 }) {
+  const { formatDate, formatNumber, locale, t } = useI18n();
   const [transactionsOpen, setTransactionsOpen] = useState(false);
   const visibleTransactions = transactions.filter(isWalletTransactionVisible);
   const canToggleTransactions =
@@ -35,21 +37,31 @@ export function WalletTransactionsPanel({
     <section className="rounded-2xl border border-hairline bg-surface-card overflow-hidden">
       {visibleTransactions.length === 0 ? (
         <div className="py-12 text-center text-[13px] text-muted">
-          暂无交易记录
+          {t('pages.wallet.noTransactions')}
         </div>
       ) : (
         <>
           <div className="divide-y divide-hairline/50">
             {shownTransactions.map((transaction) => {
-              const badgeLabel = walletTransactionBadgeLabel(transaction);
+              const badgeLabel = walletTransactionBadgeLabel(transaction, t);
               const amountCoins = transaction.amount_coins;
               const amountText =
                 amountCoins !== 0
-                  ? formatSignedCoins(amountCoins)
+                  ? formatSignedCoins(amountCoins, locale)
                   : transaction.reserved_delta_coins > 0
-                    ? `预留 ${formatCoins(transaction.reserved_delta_coins)}`
+                    ? t('pages.wallet.reserved', {
+                        coins: formatCoins(
+                          transaction.reserved_delta_coins,
+                          locale,
+                        ),
+                      })
                     : transaction.reserved_delta_coins < 0
-                      ? `释放 ${formatCoins(Math.abs(transaction.reserved_delta_coins))}`
+                      ? t('pages.wallet.released', {
+                          coins: formatCoins(
+                            Math.abs(transaction.reserved_delta_coins),
+                            locale,
+                          ),
+                        })
                       : '';
 
               return (
@@ -62,7 +74,7 @@ export function WalletTransactionsPanel({
                       <span className="text-[13px] font-medium truncate">
                         {transaction.note ||
                           (transaction.kind === 'recharge_topup'
-                            ? '充值到账'
+                            ? t('pages.wallet.rechargeReceived')
                             : transaction.kind)}
                       </span>
                       {badgeLabel && (
@@ -72,9 +84,13 @@ export function WalletTransactionsPanel({
                       )}
                     </div>
                     <div className="text-[10px] text-muted font-mono mt-0.5">
-                      {new Date(transaction.created_at).toLocaleString(
-                        'zh-CN',
-                      )}
+                      {formatDate(transaction.created_at, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </div>
                   </div>
                   <div
@@ -98,8 +114,10 @@ export function WalletTransactionsPanel({
                 aria-expanded={transactionsOpen}
               >
                 {transactionsOpen
-                  ? '收起流水'
-                  : `展开全部 ${visibleTransactions.length} 条流水`}
+                  ? t('pages.wallet.collapseTransactions')
+                  : t('pages.wallet.expandTransactions', {
+                      count: formatNumber(visibleTransactions.length),
+                    })}
               </button>
             </div>
           )}

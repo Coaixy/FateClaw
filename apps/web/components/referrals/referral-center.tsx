@@ -16,6 +16,7 @@ import {
 
 import { AppShell } from '@/components/app-shell';
 import { referralsApi, type MyReferralSummary } from '@/features/referrals/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 function referralLink(summary: MyReferralSummary): string {
@@ -86,6 +87,7 @@ function ReferralCenterSkeleton() {
  */
 export function ReferralCenter() {
   const { toast } = useToast();
+  const { formatDate, t } = useI18n();
   const [summary, setSummary] = useState<MyReferralSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -100,7 +102,7 @@ export function ReferralCenter() {
     try {
       setSummary(await referralsApi.me());
     } catch (err) {
-      setError(err instanceof Error ? err.message : '邀请信息加载失败');
+      setError(err instanceof Error ? err.message : t('pages.referrals.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -117,10 +119,10 @@ export function ReferralCenter() {
       if (await writeClipboardText(value)) {
         toast('success', successMessage);
       } else {
-        toast('error', '复制失败');
+        toast('error', t('pages.referrals.copyFailed'));
       }
     } catch {
-      toast('error', '复制失败');
+      toast('error', t('pages.referrals.copyFailed'));
     } finally {
       setBusy(false);
     }
@@ -134,10 +136,10 @@ export function ReferralCenter() {
     try {
       await referralsApi.redeem(code);
       setRedeemCode('');
-      toast('success', '邀请码已绑定');
+      toast('success', t('pages.referrals.inviteCodeBound'));
       await load();
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : '绑定邀请码失败');
+      toast('error', err instanceof Error ? err.message : t('pages.referrals.bindInviteFailed'));
     } finally {
       setRedeeming(false);
     }
@@ -149,11 +151,13 @@ export function ReferralCenter() {
     <AppShell>
       <div className="mb-4 space-y-1.5">
         <div className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-2.5 py-1 text-[10px] font-medium text-muted">
-          Referral Center
+          {t('pages.referrals.badge')}
         </div>
-        <h2 className="text-[15px] font-semibold tracking-tight">邀请中心</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight">
+          {t('pages.referrals.title')}
+        </h2>
         <p className="max-w-[520px] text-[11px] leading-5 text-muted">
-          分享邀请码给好友。好友首次使用充值余额开通会员后，你会获得会员天数奖励。
+          {t('pages.referrals.description')}
         </p>
       </div>
 
@@ -165,10 +169,10 @@ export function ReferralCenter() {
             <div>
               <div className="flex items-center gap-2 text-[13px] font-semibold">
                 <Gift size={15} className="text-error" />
-                邀请信息加载失败
+                {t('pages.referrals.loadFailed')}
               </div>
               <div className="mt-1 text-[12px] leading-5 text-error">
-                {error || '请稍后重试'}
+                {error || t('common.retryLater')}
               </div>
             </div>
             <button
@@ -177,7 +181,7 @@ export function ReferralCenter() {
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-hairline px-3 text-[12px] font-medium text-muted"
             >
               <RefreshCw size={13} />
-              重试
+              {t('pages.common.retry')}
             </button>
           </div>
         </section>
@@ -189,7 +193,7 @@ export function ReferralCenter() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[13px] font-semibold">
                     <Gift size={15} className="text-primary" />
-                    我的邀请码
+                    {t('pages.referrals.myCode')}
                   </div>
                   <div className="mt-3 break-all font-mono text-4xl font-extrabold tracking-wide text-primary">
                     {summary.invite_code}
@@ -199,24 +203,27 @@ export function ReferralCenter() {
                   <button
                     type="button"
                     onClick={() =>
-                      void copyText(summary.invite_code, '邀请码已复制到剪贴板')
+                      void copyText(
+                        summary.invite_code,
+                        t('pages.referrals.copyCodeSuccess'),
+                      )
                     }
                     disabled={busy}
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-muted hover:text-ink disabled:opacity-40"
                   >
                     <Copy size={13} />
-                    复制邀请码
+                    {t('pages.referrals.copyCode')}
                   </button>
                   <button
                     type="button"
                     onClick={() =>
-                      void copyText(link, '邀请链接已复制到剪贴板')
+                      void copyText(link, t('pages.referrals.copyLinkSuccess'))
                     }
                     disabled={busy}
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary disabled:opacity-40"
                   >
                     <Share2 size={13} />
-                    复制邀请链接
+                    {t('pages.referrals.copyLink')}
                   </button>
                 </div>
               </div>
@@ -231,24 +238,30 @@ export function ReferralCenter() {
                       size={14}
                       className="mt-0.5 shrink-0 text-primary"
                     />
-                    <span>已绑定邀请人，绑定后不可更换。</span>
+                    <span>{t('pages.referrals.boundHint')}</span>
                   </div>
                   <div className="shrink-0 pl-6 text-[11px] font-medium text-muted sm:pl-0">
-                    {new Intl.DateTimeFormat('zh-CN', {
+                    {formatDate(summary.bound_referral.created_at, {
                       year: 'numeric',
                       month: '2-digit',
                       day: '2-digit',
-                    }).format(new Date(summary.bound_referral.created_at))}
+                    })}
                   </div>
                 </div>
               ) : null}
             </div>
 
             <div className="grid bg-canvas/35 sm:grid-cols-3">
-              <InviteMetric label="已邀请" value={summary.invited_count} />
-              <InviteMetric label="已奖励" value={summary.rewarded_count} />
               <InviteMetric
-                label="累计会员天数"
+                label={t('pages.referrals.invited')}
+                value={summary.invited_count}
+              />
+              <InviteMetric
+                label={t('pages.referrals.rewarded')}
+                value={summary.rewarded_count}
+              />
+              <InviteMetric
+                label={t('pages.referrals.totalRewardDays')}
                 value={summary.total_reward_days}
               />
             </div>
@@ -261,10 +274,10 @@ export function ReferralCenter() {
                   <div>
                     <div className="flex items-center gap-2 text-[13px] font-semibold">
                       <PlusCircle size={15} className="text-primary" />
-                      绑定邀请码
+                      {t('pages.referrals.bindCode')}
                     </div>
                     <div className="mt-1 text-[12px] leading-5 text-muted">
-                      已注册用户可以在这里绑定邀请人。每个账号只能绑定一次。
+                      {t('pages.referrals.bindCodeDescription')}
                     </div>
                   </div>
                 </div>
@@ -281,7 +294,7 @@ export function ReferralCenter() {
                     autoCapitalize="characters"
                     autoCorrect="off"
                     spellCheck={false}
-                    placeholder="输入好友的邀请码"
+                    placeholder={t('pages.referrals.bindCodePlaceholder')}
                     className="h-11 rounded-xl border border-hairline bg-canvas px-3 text-sm font-medium outline-none transition-colors focus:border-primary"
                   />
                   <button
@@ -292,7 +305,7 @@ export function ReferralCenter() {
                     {redeeming ? (
                       <Loader2 size={14} className="animate-spin" />
                     ) : null}
-                    绑定
+                    {t('pages.referrals.bind')}
                   </button>
                 </form>
               </div>
@@ -307,13 +320,19 @@ export function ReferralCenter() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold">奖励规则</div>
+                    <div className="text-[13px] font-semibold">
+                      {t('pages.referrals.rewardRules')}
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
-                        {summary.config.enabled ? '已开启' : '已关闭'}
+                        {summary.config.enabled
+                          ? t('pages.common.enabled')
+                          : t('pages.common.disabled')}
                       </span>
                       <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
-                        奖励 {summary.config.inviter_reward_days} 天会员
+                        {t('pages.referrals.rewardDays', {
+                          days: summary.config.inviter_reward_days,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -324,7 +343,9 @@ export function ReferralCenter() {
                     onClick={() => setRulesExpanded((expanded) => !expanded)}
                     className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink"
                   >
-                    {rulesExpanded ? '收起' : '展开'}
+                    {rulesExpanded
+                      ? t('pages.referrals.collapse')
+                      : t('pages.referrals.expand')}
                     <ChevronDown
                       size={14}
                       className={
@@ -341,29 +362,40 @@ export function ReferralCenter() {
                     className="mt-3 divide-y divide-hairline rounded-xl border border-hairline bg-canvas/45 px-3"
                   >
                     <RuleRow
-                      label="邀请功能"
-                      value={summary.config.enabled ? '已开启' : '已关闭'}
-                    />
-                    <RuleRow
-                      label="邀请者奖励"
-                      value={`${summary.config.inviter_reward_days} 天会员`}
-                    />
-                    <RuleRow
-                      label="每月奖励上限"
-                      value={`${summary.config.monthly_reward_cap_days} 天会员`}
-                    />
-                    <RuleRow
-                      label="奖励触发"
+                      label={t('pages.referrals.ruleEnabled')}
                       value={
-                        summary.config.reward_first_membership_only
-                          ? '仅首次会员购买'
-                          : '符合条件的会员购买'
+                        summary.config.enabled
+                          ? t('pages.common.enabled')
+                          : t('pages.common.disabled')
                       }
                     />
-                    <RuleRow label="支付条件" value="仅纯充值余额支付会员" />
                     <RuleRow
-                      label="绑定规则"
-                      value="绑定后不可更换，不允许自邀或循环绑定"
+                      label={t('pages.referrals.ruleInviterReward')}
+                      value={t('pages.common.daysMember', {
+                        days: summary.config.inviter_reward_days,
+                      })}
+                    />
+                    <RuleRow
+                      label={t('pages.referrals.ruleMonthlyCap')}
+                      value={t('pages.common.daysMember', {
+                        days: summary.config.monthly_reward_cap_days,
+                      })}
+                    />
+                    <RuleRow
+                      label={t('pages.referrals.ruleTrigger')}
+                      value={
+                        summary.config.reward_first_membership_only
+                          ? t('pages.referrals.ruleTriggerFirst')
+                          : t('pages.referrals.ruleTriggerAny')
+                      }
+                    />
+                    <RuleRow
+                      label={t('pages.referrals.rulePayment')}
+                      value={t('pages.referrals.rulePaymentValue')}
+                    />
+                    <RuleRow
+                      label={t('pages.referrals.ruleBinding')}
+                      value={t('pages.referrals.ruleBindingValue')}
                     />
                   </div>
                 ) : null}

@@ -5,45 +5,61 @@ type WalletTransactionBadgeInput = Pick<
   'kind' | 'amount_coins' | 'balance_source'
 >;
 
+type TranslationFn = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
+
+function translate(
+  t: TranslationFn | undefined,
+  key: string,
+  fallback: string,
+): string {
+  return t?.(key) ?? fallback;
+}
+
 function positiveBalanceSourceLabel(
   source: WalletTransaction['balance_source'],
+  t?: TranslationFn,
   kind?: string,
 ): string | null {
   if (kind === 'bonus_grant') {
-    return '奖励';
+    return translate(t, 'pages.wallet.badgeReward', '奖励');
   }
   switch (source) {
     case 'purchased':
-      return '充值';
+      return translate(t, 'pages.wallet.badgePurchased', '充值');
     case 'bonus':
-      return '赠送';
+      return translate(t, 'pages.wallet.badgeBonus', '赠送');
     case 'mixed':
-      return '混合';
+      return translate(t, 'pages.wallet.badgeMixed', '混合');
     default:
       return null;
   }
 }
 
-function negativeTransactionLabel(kind: string): string {
+function negativeTransactionLabel(kind: string, t?: TranslationFn): string {
   switch (kind) {
     case 'overage_charge':
-      return '扣费';
+      return translate(t, 'pages.wallet.badgeCharge', '扣费');
     case 'manual_adjustment':
-      return '扣减';
+      return translate(t, 'pages.wallet.badgeDeduct', '扣减');
     default:
-      return '支出';
+      return translate(t, 'pages.wallet.badgeExpense', '支出');
   }
 }
 
 export function walletTransactionBadgeLabel(
   transaction: WalletTransactionBadgeInput,
+  t?: TranslationFn,
 ): string | null {
   if (transaction.amount_coins < 0) {
-    return negativeTransactionLabel(transaction.kind);
+    return negativeTransactionLabel(transaction.kind, t);
   }
 
   return positiveBalanceSourceLabel(
     transaction.balance_source,
+    t,
     transaction.kind,
   );
 }

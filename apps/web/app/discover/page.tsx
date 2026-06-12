@@ -6,6 +6,7 @@ import { Layers, Puzzle, Users, Search } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { useSkillMarket } from '@/features/skills/hooks/use-skill-market';
+import { useI18n } from '@/lib/i18n';
 import { appendGuideResume, buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
@@ -33,6 +34,7 @@ const DISCOVER_RETURN_QUERY = new URLSearchParams({
 
 export default function DiscoverPage() {
   const { toast } = useToast();
+  const { formatNumber, t } = useI18n();
   const [guideReturnQuery, setGuideReturnQuery] = useState('');
   const [guideReturnHref, setGuideReturnHref] = useState<string | null>(null);
   const notify = useCallback(
@@ -60,10 +62,10 @@ export default function DiscoverPage() {
         <header className="flex flex-col gap-3 px-0.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl lg:text-3xl">
-              技能市场
+              {t('pages.discover.title')}
             </h1>
             <p className="mt-1 text-[12px] text-muted sm:text-sm">
-              发现并订阅命理师发布的术数技能
+              {t('pages.discover.description')}
             </p>
           </div>
           {guideReturnHref && (
@@ -71,7 +73,7 @@ export default function DiscoverPage() {
               href={guideReturnHref}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
             >
-              返回 AI Chat 继续向导
+              {t('pages.common.returnAiChatGuide')}
             </Link>
           )}
         </header>
@@ -86,7 +88,7 @@ export default function DiscoverPage() {
               type="text"
               value={market.search}
               onChange={(e) => market.setSearch(e.target.value)}
-              placeholder="搜索技能..."
+              placeholder={t('pages.discover.searchPlaceholder')}
               className="w-full h-10 pl-9 pr-3 rounded-xl border border-hairline bg-surface-card text-[13px] placeholder:text-muted focus:border-primary focus:outline-none transition-all"
             />
           </div>
@@ -94,11 +96,11 @@ export default function DiscoverPage() {
 
         {market.loading ? (
           <div className="py-16 text-center text-sm text-muted">
-            加载中…
+            {t('common.loading')}…
           </div>
         ) : market.filteredBundles.length + market.filteredSkills.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted">
-            暂无公开内容
+            {t('pages.discover.empty')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -107,14 +109,16 @@ export default function DiscoverPage() {
                 <div className="flex items-end justify-between gap-3 px-1">
                   <div>
                     <p className="text-[13px] font-semibold text-ink">
-                      优先推荐 · 公开捆绑包
+                      {t('pages.discover.bundlesTitle')}
                     </p>
                     <p className="mt-1 text-[11px] text-muted">
-                      一次订阅整组技能，适合直接整包使用
+                      {t('pages.discover.bundlesDescription')}
                     </p>
                   </div>
                   <span className="text-[10px] text-muted">
-                    {market.filteredBundles.length} 个捆绑包
+                    {t('pages.common.countBundles', {
+                      count: formatNumber(market.filteredBundles.length),
+                    })}
                   </span>
                 </div>
 
@@ -146,27 +150,34 @@ export default function DiscoverPage() {
                             {bundle.name}
                           </h3>
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] leading-tight text-primary">
-                            捆绑包
+                            {t('pages.discover.bundleBadge')}
                           </span>
                         </div>
                         <p className="mt-0.5 truncate text-[12px] text-muted">
-                          {bundle.description || '整组技能打包订阅'}
+                          {bundle.description ||
+                            t('pages.discover.bundleFallbackDescription')}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
-                          <span className="font-bold text-ink">一键订阅</span>
+                          <span className="font-bold text-ink">
+                            {t('pages.discover.subscribeAll')}
+                          </span>
                           <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
                             <Layers size={11} className="text-muted" />
-                            {bundle.skill_count} 个技能
+                            {t('pages.common.countSkills', {
+                              count: formatNumber(bundle.skill_count),
+                            })}
                           </span>
                         </div>
                       </div>
                       <div className="hidden shrink-0 text-right sm:block">
                         <span className="block text-[13px] font-bold text-ink">
-                          一键订阅
+                          {t('pages.discover.subscribeAll')}
                         </span>
                         <span className="mt-0.5 flex items-center justify-end gap-0.5 text-[10px] text-muted">
                           <Layers size={10} />
-                          {bundle.skill_count} 个技能
+                          {t('pages.common.countSkills', {
+                            count: formatNumber(bundle.skill_count),
+                          })}
                         </span>
                       </div>
                     </Link>
@@ -180,14 +191,16 @@ export default function DiscoverPage() {
                 <div className="flex items-end justify-between gap-3 px-1">
                   <div>
                     <p className="text-[13px] font-semibold text-ink">
-                      技能热度榜
+                      {t('pages.discover.skillsTitle')}
                     </p>
                     <p className="mt-1 text-[11px] text-muted">
-                      默认按订阅热度排行，越靠前说明越受欢迎
+                      {t('pages.discover.skillsDescription')}
                     </p>
                   </div>
                   <span className="text-[10px] text-muted">
-                    {market.filteredSkills.length} 个技能
+                    {t('pages.common.countSkills', {
+                      count: formatNumber(market.filteredSkills.length),
+                    })}
                   </span>
                 </div>
 
@@ -223,29 +236,33 @@ export default function DiscoverPage() {
                             {s.skill_name}
                           </h3>
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-primary">
-                            Skill
+                            {t('pages.discover.skillBadge')}
                           </span>
                           <span className="shrink-0 rounded-md border border-hairline/70 bg-canvas px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-body-strong tabular-nums">
                             TOP {rank}
                           </span>
                         </div>
                         <p className="mt-1 truncate text-[12px] leading-5 text-body">
-                          {s.description || '暂无描述'}
+                          {s.description || t('pages.discover.noDescription')}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
                           <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
                             <Users size={11} className="text-muted" />
-                            热度 {s.stat_subscriber_count.toLocaleString()}
+                            {t('pages.common.heat', {
+                              count: formatNumber(s.stat_subscriber_count),
+                            })}
                           </span>
                         </div>
                       </div>
                       <div className="hidden min-w-[72px] shrink-0 text-right sm:block">
                         <span className="block text-[14px] font-bold text-ink">
-                          订阅
+                          {t('pages.discover.subscribe')}
                         </span>
                         <span className="mt-1 inline-flex items-center justify-end gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-body-strong whitespace-nowrap">
                           <Users size={11} className="text-muted" />
-                          热度 {s.stat_subscriber_count.toLocaleString()}
+                          {t('pages.common.heat', {
+                            count: formatNumber(s.stat_subscriber_count),
+                          })}
                         </span>
                       </div>
                     </Link>

@@ -27,44 +27,53 @@ import { useState, useEffect } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 import { ThemeMode, useTheme } from '@/lib/use-theme';
+import { LanguageSwitcher } from './language-switcher';
 import { TopBar } from './top-bar';
 
-function formatSessionTime(ts: string) {
+function formatSessionTime(
+  ts: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  formatDate: (
+    value: string | number | Date,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string,
+) {
   const d = new Date(ts);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   const days = Math.floor(diff / 86400000);
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return `${days}天前`;
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  if (days === 0) return t('sidebar.today');
+  if (days === 1) return t('sidebar.yesterday');
+  if (days < 7) return t('sidebar.daysAgo', { days });
+  return formatDate(d, { month: 'short', day: 'numeric' });
 }
 
 type SessionDateFilter = 'all' | 'today' | '7d' | '30d' | 'older';
 
 const SESSION_DATE_FILTERS: readonly {
   value: SessionDateFilter;
-  label: string;
+  labelKey: string;
 }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'today', label: '今天' },
-  { value: '7d', label: '近7天' },
-  { value: '30d', label: '近30天' },
-  { value: 'older', label: '更早' },
+  { value: 'all', labelKey: 'sidebar.filters.all' },
+  { value: 'today', labelKey: 'sidebar.filters.today' },
+  { value: '7d', labelKey: 'sidebar.filters.sevenDays' },
+  { value: '30d', labelKey: 'sidebar.filters.thirtyDays' },
+  { value: 'older', labelKey: 'sidebar.filters.older' },
 ];
 const SIDEBAR_SESSION_PREVIEW_LIMIT = 10;
 const SESSION_PANEL_PAGE_SIZE = 6;
 
 const SIDEBAR_THEME_OPTIONS: readonly {
   mode: ThemeMode;
-  label: string;
+  labelKey: string;
   icon: typeof Monitor;
 }[] = [
-  { mode: 'system', label: '跟随', icon: Monitor },
-  { mode: 'light', label: '浅色', icon: Sun },
-  { mode: 'dark', label: '深色', icon: Moon },
+  { mode: 'system', labelKey: 'sidebar.themes.system', icon: Monitor },
+  { mode: 'light', labelKey: 'sidebar.themes.light', icon: Sun },
+  { mode: 'dark', labelKey: 'sidebar.themes.dark', icon: Moon },
 ];
 
 function matchSessionDateFilter(
@@ -104,15 +113,16 @@ function matchSessionDateFilter(
 }
 
 function SidebarSessionSkeleton() {
+  const { t } = useI18n();
   const rows = ['w-28', 'w-36', 'w-24', 'w-32', 'w-28'];
 
   return (
     <div
       className="space-y-1.5 px-1 py-1"
       role="status"
-      aria-label="正在加载对话记录"
+      aria-label={t('sidebar.loadingSessions')}
     >
-      <span className="sr-only">正在加载对话记录</span>
+      <span className="sr-only">{t('sidebar.loadingSessions')}</span>
       {rows.map((widthClass, index) => (
         <div
           key={`${widthClass}-${index}`}
@@ -132,6 +142,8 @@ function SidebarSessionSkeleton() {
 }
 
 function Logo({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
+
   return (
     <div className="flex items-center gap-2.5">
       <div className="relative">
@@ -148,7 +160,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="flex flex-col">
           <span className="text-[15px] font-bold tracking-tight text-ink">
-            守义AI
+            {t('common.appName')}
           </span>
           <span className="text-[9px] text-primary/70 tracking-[0.2em] font-medium">
             FATECLAW
@@ -160,6 +172,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
 }
 
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
+  const { formatDate, formatNumber, t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -182,6 +195,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     SIDEBAR_THEME_OPTIONS.find((item) => item.mode === themeMode) ??
     SIDEBAR_THEME_OPTIONS[0];
   const ActiveThemeIcon = activeThemeOption.icon;
+  const activeThemeLabel = t(activeThemeOption.labelKey);
   const cycleThemeMode = () => {
     const currentIndex = SIDEBAR_THEME_OPTIONS.findIndex(
       (item) => item.mode === themeMode,
@@ -289,32 +303,37 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     currentSessionPanelPage * SESSION_PANEL_PAGE_SIZE,
   );
   const activeDateFilterLabel =
-    SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)?.label ??
-    '全部';
+    t(
+      SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)
+        ?.labelKey ?? 'sidebar.filters.all',
+    );
   const emptyStateMessage = normalizedSearch
     ? dateFilter === 'all'
-      ? `没有匹配“${search.trim()}”的对话`
-      : `没有匹配“${search.trim()}”且属于${activeDateFilterLabel}的对话`
+      ? t('sidebar.noMatchedSearch', { query: search.trim() })
+      : t('sidebar.noMatchedSearchInFilter', {
+          query: search.trim(),
+          filter: activeDateFilterLabel,
+        })
     : dateFilter === 'all'
-      ? '暂无对话'
-      : `没有属于${activeDateFilterLabel}的对话`;
+      ? t('sidebar.noSessions')
+      : t('sidebar.noSessionsInFilter', { filter: activeDateFilterLabel });
   const showSessionSkeleton =
     sessions.length === 0 && (authLoading || sessionsLoading);
   const contactQr =
     contactQrType === 'wechat'
       ? {
-          title: '名誉站长',
-          subtitle: '微信联系',
+          title: t('sidebar.contact.stationmasterTitle'),
+          subtitle: t('sidebar.contact.stationmasterSubtitle'),
           src: '/contact/honorary-stationmaster-wechat.jpg',
-          alt: '名誉站长微信二维码',
-          helper: '扫码添加微信',
+          alt: t('sidebar.contact.stationmasterAlt'),
+          helper: t('sidebar.contact.stationmasterHelper'),
         }
       : {
-          title: '守义AI内测群',
-          subtitle: 'QQ群号：2163031185',
+          title: t('sidebar.contact.groupTitle'),
+          subtitle: t('sidebar.contact.groupSubtitle'),
           src: '/contact/shouyi-ai-qq-group.jpg',
-          alt: '守义AI内测QQ群二维码',
-          helper: '扫码加入QQ群',
+          alt: t('sidebar.contact.groupAlt'),
+          helper: t('sidebar.contact.groupHelper'),
         };
 
   useEffect(() => {
@@ -360,11 +379,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       const token = await shareSession(sessionId);
       const url = `${window.location.origin}/ai-chat/share?token=${encodeURIComponent(token)}`;
       await navigator.clipboard.writeText(url);
-      toast('success', '分享链接已复制');
+      toast('success', t('sidebar.shareCopied'));
     } catch (error) {
       toast(
         'error',
-        error instanceof Error ? error.message : '生成分享链接失败，请稍后重试',
+        error instanceof Error ? error.message : t('sidebar.shareFailed'),
       );
     } finally {
       setSharingSessionId('');
@@ -374,13 +393,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const saveSessionTitle = async (sessionId: string) => {
     const normalizedTitle = editingTitle.trim();
     if (!normalizedTitle) {
-      toast('error', '标题不能为空');
+      toast('error', t('sidebar.emptyTitle'));
       return;
     }
 
     const currentSession = sessions.find((session) => session.id === sessionId);
     if (!currentSession) {
-      toast('error', '会话不存在或已被删除');
+      toast('error', t('sidebar.sessionMissing'));
       resetEditingState();
       return;
     }
@@ -394,13 +413,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
     try {
       await renameSession(sessionId, normalizedTitle);
-      toast('success', '标题已更新');
+      toast('success', t('sidebar.titleUpdated'));
       resetEditingState();
     } catch (error) {
       setRenamingSessionId('');
       toast(
         'error',
-        error instanceof Error ? error.message : '更新标题失败，请稍后重试',
+        error instanceof Error ? error.message : t('sidebar.titleUpdateFailed'),
       );
     }
   };
@@ -421,7 +440,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   ? 'border-primary/30 bg-primary/12 text-primary'
                   : 'border-hairline/70 bg-surface-card/80 text-ink hover:border-primary/30 hover:bg-primary/8'
               }`}
-              aria-label={open ? '收起菜单' : '打开菜单'}
+              aria-label={
+                open ? t('sidebar.mobileMenuClose') : t('sidebar.mobileMenuOpen')
+              }
               aria-expanded={open}
             >
               {open ? (
@@ -429,7 +450,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               ) : (
                 <Menu size={16} strokeWidth={1.8} />
               )}
-              <span>{open ? '收起' : '菜单'}</span>
+              <span>{open ? t('sidebar.collapse') : t('sidebar.menu')}</span>
             </button>
           </div>
           <TopBar compact onLogout={onLogout} />
@@ -456,7 +477,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           <button
             onClick={closeSidebar}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-surface-card transition-all duration-200 cursor-pointer lg:hidden"
-            aria-label="关闭菜单"
+            aria-label={t('sidebar.closeMenu')}
           >
             <X size={16} />
           </button>
@@ -473,7 +494,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   ? 'border-primary/30 bg-primary/12 text-ink shadow-primary/5'
                   : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
               }`}
-              aria-label="打开归档面板"
+              aria-label={t('sidebar.openArchivePanel')}
               aria-expanded={sessionsPanelOpen}
               aria-haspopup="dialog"
             >
@@ -483,11 +504,12 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[11px] font-semibold leading-tight text-ink">
-                    归档
+                    {t('sidebar.archive')}
                   </span>
                   <span className="mt-0.5 block truncate text-[10px] leading-none text-muted">
-                    {filteredSessions.length}/{sessions.length} · {activeDateFilterLabel}
-                    {normalizedSearch ? ' · 搜索中' : ''}
+                    {formatNumber(filteredSessions.length)}/
+                    {formatNumber(sessions.length)} · {activeDateFilterLabel}
+                    {normalizedSearch ? ` · ${t('sidebar.searchActive')}` : ''}
                   </span>
                 </span>
               </span>
@@ -503,26 +525,26 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <button
               onClick={goNewChat}
               className="flex h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-2.5 text-[13px] font-semibold text-ink shadow-sm transition-all duration-200 hover:border-primary/40 hover:bg-primary/14"
-              aria-label="新建对话"
+              aria-label={t('sidebar.newChat')}
             >
               <SquarePen size={15} className="shrink-0 text-primary" />
-              <span className="truncate">新建对话</span>
+              <span className="truncate">{t('sidebar.newChat')}</span>
             </button>
           </div>
 
           {sessionsPanelOpen && (
             <div
               role="dialog"
-              aria-label="对话归档"
+              aria-label={t('sidebar.archivePanel')}
               className="absolute left-3 right-3 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-hairline/70 bg-canvas shadow-2xl"
             >
               <div className="flex items-center justify-between gap-2 border-b border-hairline/50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-semibold text-ink">
-                    对话归档
+                    {t('sidebar.archivePanel')}
                   </p>
                   <p className="text-[10px] leading-tight text-muted">
-                    共 {sessions.length.toLocaleString()} 个
+                    {t('common.count', { count: formatNumber(sessions.length) })}
                   </p>
                 </div>
                 <Link
@@ -532,11 +554,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     closeSidebar();
                   }}
                   className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-hairline/60 bg-surface-card px-2 text-[11px] font-medium text-muted transition-all duration-200 hover:border-primary/25 hover:text-ink"
-                  aria-label="查看归档对话"
-                  title="归档"
+                  aria-label={t('sidebar.viewArchived')}
+                  title={t('sidebar.archive')}
                 >
                   <Archive size={12} strokeWidth={1.8} />
-                  已归档
+                  {t('sidebar.archived')}
                 </Link>
               </div>
 
@@ -550,7 +572,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     type="text"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="搜索对话标题..."
+                    placeholder={t('sidebar.searchPlaceholder')}
                     className="h-9 w-full rounded-xl border border-hairline bg-canvas pl-9 pr-8 text-[12px] text-ink placeholder:text-muted/75 transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                   />
                   {search && (
@@ -558,7 +580,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                       type="button"
                       onClick={() => setSearch('')}
                       className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted/70 transition-all duration-200 hover:bg-surface-card hover:text-ink"
-                      aria-label="清空搜索"
+                      aria-label={t('sidebar.clearSearch')}
                     >
                       <X size={12} />
                     </button>
@@ -578,7 +600,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                       }`}
                       aria-pressed={dateFilter === item.value}
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -593,7 +615,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                       <MessageCircle size={16} className="text-muted/40" />
                     </div>
                     <p className="text-[11px] text-muted/60">
-                      {chatAvailable ? '暂无对话' : '登录后查看对话记录'}
+                      {chatAvailable
+                        ? t('sidebar.noSessions')
+                        : t('sidebar.loginToViewSessions')}
                     </p>
                   </div>
                 ) : filteredSessions.length === 0 ? (
@@ -635,7 +659,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                               {session.title}
                             </p>
                             <p className="mt-0.5 text-[10px] leading-tight text-muted/50">
-                              {formatSessionTime(session.updated_at)}
+                              {formatSessionTime(
+                                session.updated_at,
+                                t,
+                                formatDate,
+                              )}
                             </p>
                           </div>
                         </button>
@@ -648,8 +676,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               <div className="flex items-center justify-between gap-2 border-t border-hairline/50 px-3 py-2">
                 <span className="text-[10px] text-muted">
                   {filteredSessions.length === 0
-                    ? '0 / 0'
-                    : `${currentSessionPanelPage} / ${sessionPanelPageCount}`}
+                    ? t('common.pageStatus', { current: 0, total: 0 })
+                    : t('common.pageStatus', {
+                        current: formatNumber(currentSessionPanelPage),
+                        total: formatNumber(sessionPanelPageCount),
+                      })}
                 </span>
                 <div className="flex items-center gap-1">
                   <button
@@ -659,7 +690,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     }
                     disabled={currentSessionPanelPage <= 1}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-                    aria-label="上一页"
+                    aria-label={t('sidebar.previousPage')}
                   >
                     <ChevronLeft size={13} strokeWidth={1.8} />
                   </button>
@@ -672,7 +703,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     }
                     disabled={currentSessionPanelPage >= sessionPanelPageCount}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-                    aria-label="下一页"
+                    aria-label={t('sidebar.nextPage')}
                   >
                     <ChevronRight size={13} strokeWidth={1.8} />
                   </button>
@@ -693,7 +724,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   <MessageCircle size={16} className="text-muted/40" />
                 </div>
                 <p className="text-[11px] text-muted/60">
-                  {chatAvailable ? '暂无对话' : '登录后查看对话记录'}
+                  {chatAvailable
+                    ? t('sidebar.noSessions')
+                    : t('sidebar.loginToViewSessions')}
                 </p>
                 {!chatAvailable && (
                   <button
@@ -702,7 +735,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[11px] font-medium text-ink transition-colors hover:border-primary/35 hover:bg-primary/10"
                   >
                     <LogIn size={12} className="text-primary" />
-                    登录
+                    {t('common.login')}
                   </button>
                 )}
               </div>
@@ -769,11 +802,15 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                                 }
                               }}
                               className="w-full h-9 rounded-lg border border-hairline bg-canvas px-3 text-[12px] text-ink placeholder:text-muted focus:border-primary focus:ring-1 focus:ring-primary/20 focus:outline-none transition-all"
-                              aria-label="编辑对话标题"
+                              aria-label={t('sidebar.editTitle')}
                             />
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-[10px] text-muted/55 leading-tight">
-                                {formatSessionTime(session.updated_at)}
+                                {formatSessionTime(
+                                  session.updated_at,
+                                  t,
+                                  formatDate,
+                                )}
                               </p>
                               <div className="flex items-center gap-1.5">
                                 <button
@@ -782,14 +819,16 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                                   className="h-7 px-2.5 rounded-lg flex items-center gap-1 text-[11px] font-medium bg-primary/12 text-primary hover:bg-primary/18 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                                 >
                                   <Check size={12} />
-                                  {isRenaming ? '保存中...' : '保存'}
+                                  {isRenaming
+                                    ? t('common.saving')
+                                    : t('common.save')}
                                 </button>
                                 <button
                                   onClick={resetEditingState}
                                   disabled={isRenaming}
                                   className="h-7 px-2.5 rounded-lg text-[11px] font-medium text-muted hover:text-ink hover:bg-surface-card transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  取消
+                                  {t('common.cancel')}
                                 </button>
                               </div>
                             </div>
@@ -831,7 +870,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                           {session.title}
                         </p>
                         <p className="text-[10px] text-muted/50 leading-tight mt-0.5">
-                          {formatSessionTime(session.updated_at)}
+                          {formatSessionTime(
+                            session.updated_at,
+                            t,
+                            formatDate,
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -842,7 +885,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                           }}
                           disabled={Boolean(sharingSessionId)}
                           className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-40"
-                          aria-label="复制分享链接"
+                          aria-label={t('sidebar.copyShareLink')}
                         >
                           {isSharing ? (
                             <Loader2 size={11} className="animate-spin" />
@@ -856,7 +899,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                             startEditingSession(session.id, session.title);
                           }}
                           className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
-                          aria-label="修改标题"
+                          aria-label={t('sidebar.modifyTitle')}
                         >
                           <Pencil size={11} />
                         </button>
@@ -864,19 +907,21 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             void archiveSession(session.id)
-                              .then(() => toast('success', '已归档'))
+                              .then(() =>
+                                toast('success', t('sidebar.archivedToast')),
+                              )
                               .catch((error) => {
                                 toast(
                                   'error',
                                   error instanceof Error
                                     ? error.message
-                                    : '归档对话失败，请稍后重试',
+                                    : t('sidebar.archiveFailed'),
                                 );
                               });
                           }}
                           className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
-                          aria-label="归档对话"
-                          title="归档对话"
+                          aria-label={t('sidebar.archiveChat')}
+                          title={t('sidebar.archiveChat')}
                         >
                           <Archive size={11} />
                         </button>
@@ -893,10 +938,14 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
+          <div className="mb-2">
+            <LanguageSwitcher compact />
+          </div>
+
           <div
             className="grid grid-cols-4 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
             role="group"
-            aria-label="侧栏快捷入口和主题切换"
+            aria-label={t('sidebar.shortcutsAndTheme')}
           >
             <Link
               href="/status"
@@ -906,15 +955,17 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   ? 'bg-primary/10 text-ink'
                   : 'text-muted hover:text-ink hover:bg-surface-card'
               }`}
-              aria-label="查看平台状态"
-              title="状态"
+              aria-label={t('sidebar.viewStatus')}
+              title={t('sidebar.status')}
             >
               <Activity
                 size={14}
                 strokeWidth={1.8}
                 className="group-hover:text-primary"
               />
-              <span className="max-w-full truncate leading-tight">状态</span>
+              <span className="max-w-full truncate leading-tight">
+                {t('sidebar.status')}
+              </span>
             </Link>
 
             <Link
@@ -925,42 +976,48 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   ? 'bg-primary/10 text-ink'
                   : 'text-muted hover:text-ink hover:bg-surface-card'
               }`}
-              aria-label="查看关于我们"
-              title="关于我们"
+              aria-label={t('sidebar.aboutUs')}
+              title={t('sidebar.aboutUs')}
             >
               <Info
                 size={14}
                 strokeWidth={1.8}
                 className="group-hover:text-primary"
               />
-              <span className="max-w-full truncate leading-tight">关于</span>
+              <span className="max-w-full truncate leading-tight">
+                {t('sidebar.about')}
+              </span>
             </Link>
 
             <button
               type="button"
               onClick={() => setContactOpen(true)}
               className="group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
-              aria-label="联系名誉站长"
-              title="联系名誉站长"
+              aria-label={t('sidebar.contactStationmaster')}
+              title={t('sidebar.contactStationmaster')}
             >
               <MessageCircle
                 size={14}
                 strokeWidth={1.8}
                 className="group-hover:text-primary"
               />
-              <span className="max-w-full truncate leading-tight">联系</span>
+              <span className="max-w-full truncate leading-tight">
+                {t('sidebar.contactShort')}
+              </span>
             </button>
 
             <button
               type="button"
               onClick={cycleThemeMode}
               className="flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg bg-primary/12 text-[10px] font-medium text-primary shadow-sm transition-all duration-200 hover:bg-primary/18"
-              aria-label={`切换主题，当前${activeThemeOption.label}`}
-              title={`当前主题：${activeThemeOption.label}`}
+              aria-label={t('sidebar.switchTheme', {
+                theme: activeThemeLabel,
+              })}
+              title={t('sidebar.currentTheme', { theme: activeThemeLabel })}
             >
               <ActiveThemeIcon size={14} strokeWidth={1.8} />
               <span className="max-w-full truncate leading-tight">
-                {activeThemeOption.label}
+                {activeThemeLabel}
               </span>
             </button>
           </div>
@@ -995,7 +1052,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 type="button"
                 onClick={() => setContactOpen(false)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
-                aria-label="关闭联系方式"
+                aria-label={t('sidebar.contact.close')}
               >
                 <X size={16} />
               </button>
@@ -1004,7 +1061,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <div
               className="mt-4 grid grid-cols-2 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
               role="group"
-              aria-label="选择联系方式"
+              aria-label={t('sidebar.contact.choose')}
             >
               <button
                 type="button"
@@ -1016,7 +1073,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 }`}
                 aria-pressed={contactQrType === 'wechat'}
               >
-                名誉站长
+                {t('sidebar.contact.stationmasterTab')}
               </button>
               <button
                 type="button"
@@ -1028,7 +1085,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 }`}
                 aria-pressed={contactQrType === 'qq'}
               >
-                QQ群
+                {t('sidebar.contact.qqGroupTab')}
               </button>
             </div>
 

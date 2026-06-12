@@ -140,6 +140,36 @@ describe('chat display message state helpers', () => {
     ).toEqual([ordinaryUserMessage, boardResult]);
   });
 
+  it('hides simple workflow startup request messages', () => {
+    const workflowRequest = createMessage({
+      id: 'simple-workflow-request',
+      isBot: false,
+      content: '简易模式：占卜问事',
+      metadata: {
+        kind: 'board_request',
+        workflow: 'simple_workflow',
+      },
+    });
+    const boardResult = createMessage({
+      id: 'simple-workflow-board',
+      isBot: true,
+      content: '已生成大衍筮法。',
+      metadata: {
+        kind: 'board_result',
+        workflow: 'simple_workflow',
+      },
+    });
+    const firstQuestion = createMessage({
+      id: 'first-question',
+      isBot: false,
+      content: 'Can she and I get back together?',
+    });
+
+    expect(
+      filterProgressMessages([workflowRequest, boardResult, firstQuestion]),
+    ).toEqual([boardResult, firstQuestion]);
+  });
+
   it('does not attach tool footers to transient thinking messages', () => {
     expect(
       canHostToolTraceFooter(

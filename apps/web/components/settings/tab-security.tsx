@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { authApi, type CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { setAuthToken } from '@/lib/auth-scoped-cache';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 type SecurityMode = 'change' | 'recover';
@@ -22,6 +23,8 @@ type SecurityMode = 'change' | 'recover';
 interface PasswordInputProps {
   label: string;
   placeholder: string;
+  hideLabel: string;
+  showLabel: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -36,6 +39,8 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function PasswordInput({
   label,
   placeholder,
+  hideLabel,
+  showLabel,
   value,
   onChange,
   disabled = false,
@@ -61,7 +66,7 @@ function PasswordInput({
           onClick={() => setShowPassword((current) => !current)}
           disabled={disabled}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-          aria-label={showPassword ? '隐藏密码' : '显示密码'}
+          aria-label={showPassword ? hideLabel : showLabel}
         >
           {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
@@ -85,6 +90,7 @@ function InlineMessage({ message }: { message: string }) {
 export function TabSecurity() {
   const { user, refresh } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [mode, setMode] = useState<SecurityMode>('change');
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -108,18 +114,18 @@ export function TabSecurity() {
   const phoneVerified = user?.phone_verified ?? false;
   const canUsePhoneSecurity = Boolean(phone && phoneVerified);
   const phoneStatusLabel = !phone
-    ? '未绑定'
+    ? t('pages.profile.statusUnbound')
     : phoneVerified
-      ? '已验证'
-      : '已绑定';
+      ? t('pages.profile.statusVerified')
+      : t('pages.profile.statusBound');
   const phoneStatusTone = phoneVerified
     ? 'border-primary/20 bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-primary'
     : 'border-hairline bg-canvas text-muted';
   const phoneSecurityHint = !phone
-    ? '需要先绑定手机号'
+    ? t('pages.profile.phoneNeedsBinding')
     : phoneVerified
-      ? '可用于短信验证'
-      : '已绑定，等待验证状态同步';
+      ? t('pages.profile.phoneUsable')
+      : t('pages.profile.phoneWaiting');
 
   const refreshCaptcha = useCallback(async () => {
     setCaptchaLoading(true);
@@ -128,7 +134,7 @@ export function TabSecurity() {
       const challenge = await authApi.captcha();
       setCaptcha(challenge);
     } catch (error) {
-      setRecoverError(getErrorMessage(error, '图形验证码加载失败'));
+      setRecoverError(getErrorMessage(error, t('pages.login.captchaLoadFailed')));
     } finally {
       setCaptchaLoading(false);
     }
@@ -154,10 +160,10 @@ export function TabSecurity() {
     confirmation: string,
   ): string | null {
     if (password.length < PASSWORD_MIN_LENGTH) {
-      return `新密码至少 ${PASSWORD_MIN_LENGTH} 位`;
+      return t('pages.profile.passwordMin', { min: PASSWORD_MIN_LENGTH });
     }
     if (password !== confirmation) {
-      return '两次输入的新密码不一致';
+      return t('pages.profile.passwordMismatch');
     }
     return null;
   }
@@ -167,7 +173,7 @@ export function TabSecurity() {
     setChangeError('');
 
     if (!currentPassword) {
-      setChangeError('请输入当前密码');
+      setChangeError(t('pages.profile.enterCurrentPassword'));
       return;
     }
     const validationError = validatePasswordPair(nextPassword, confirmPassword);
@@ -182,9 +188,9 @@ export function TabSecurity() {
       setCurrentPassword('');
       setNextPassword('');
       setConfirmPassword('');
-      toast('success', '密码已更新');
+      toast('success', t('pages.profile.passwordUpdated'));
     } catch (error) {
-      setChangeError(getErrorMessage(error, '修改密码失败'));
+      setChangeError(getErrorMessage(error, t('pages.profile.changePasswordFailed')));
     } finally {
       setChangeSubmitting(false);
     }
@@ -193,15 +199,19 @@ export function TabSecurity() {
   async function handleSendSMSCaptcha() {
     setRecoverError('');
     if (!canUsePhoneSecurity) {
-      setRecoverError(phone ? '当前账号手机号尚未完成验证' : '当前账号尚未绑定手机号');
+      setRecoverError(
+        phone
+          ? t('pages.profile.phoneNotVerified')
+          : t('pages.profile.accountPhoneUnbound'),
+      );
       return;
     }
     if (!captcha) {
-      setRecoverError('请先加载图形验证码');
+      setRecoverError(t('pages.profile.loadCaptchaFirst'));
       return;
     }
     if (!captchaInput.trim()) {
-      setRecoverError('请输入图形验证码');
+      setRecoverError(t('pages.profile.enterImageCaptcha'));
       return;
     }
 
@@ -212,9 +222,9 @@ export function TabSecurity() {
         captchaInput.trim(),
       );
       setSMSCooldown(180);
-      toast('success', '短信验证码已发送');
+      toast('success', t('pages.profile.smsSent'));
     } catch (error) {
-      setRecoverError(getErrorMessage(error, '短信发送失败'));
+      setRecoverError(getErrorMessage(error, t('pages.profile.smsSendFailed')));
     } finally {
       setSMSSending(false);
       await refreshCaptcha();
@@ -226,11 +236,15 @@ export function TabSecurity() {
     setRecoverError('');
 
     if (!canUsePhoneSecurity) {
-      setRecoverError(phone ? '当前账号手机号尚未完成验证' : '当前账号尚未绑定手机号');
+      setRecoverError(
+        phone
+          ? t('pages.profile.phoneNotVerified')
+          : t('pages.profile.accountPhoneUnbound'),
+      );
       return;
     }
     if (!smsCode.trim()) {
-      setRecoverError('请输入短信验证码');
+      setRecoverError(t('pages.profile.enterSmsCaptcha'));
       return;
     }
     const validationError = validatePasswordPair(
@@ -253,9 +267,9 @@ export function TabSecurity() {
       setSMSCode('');
       setRecoverPassword('');
       setRecoverConfirmPassword('');
-      toast('success', '密码已重置');
+      toast('success', t('pages.profile.passwordReset'));
     } catch (error) {
-      setRecoverError(getErrorMessage(error, '重置密码失败'));
+      setRecoverError(getErrorMessage(error, t('pages.profile.resetPasswordFailed')));
     } finally {
       setRecoverSubmitting(false);
     }
@@ -271,9 +285,11 @@ export function TabSecurity() {
         <div className="flex items-center gap-2.5">
           <ShieldCheck size={14} className="text-muted" />
           <div>
-            <p className="text-[12px] font-medium">账号安全</p>
+            <p className="text-[12px] font-medium">
+              {t('pages.profile.securityTitle')}
+            </p>
             <p className="text-[10px] text-muted">
-              手机号验证、修改密码与短信找回
+              {t('pages.profile.securityDescription')}
             </p>
           </div>
         </div>
@@ -286,7 +302,9 @@ export function TabSecurity() {
               <div className="flex h-[26px] w-[26px] items-center justify-center rounded-lg bg-surface-card/90">
                 <Smartphone size={13} className="text-muted" />
               </div>
-              <p className="text-[11px] font-medium">手机号验证</p>
+              <p className="text-[11px] font-medium">
+                {t('pages.profile.phoneVerification')}
+              </p>
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-medium tracking-[0.02em] ${phoneStatusTone}`}
               >
@@ -294,7 +312,7 @@ export function TabSecurity() {
               </span>
             </div>
             <p className="text-[10px] leading-5 text-muted">
-              {phone || '尚未绑定手机号'}
+              {phone || t('pages.profile.unboundPhone')}
             </p>
           </div>
           <span className="inline-flex h-9 items-center justify-center rounded-lg border border-hairline bg-surface-card/85 px-3 text-[11px] font-medium text-muted">
@@ -313,9 +331,13 @@ export function TabSecurity() {
                 )}
               </div>
               <div>
-                <p className="text-[11px] font-medium">密码操作</p>
+                <p className="text-[11px] font-medium">
+                  {t('pages.profile.passwordOperation')}
+                </p>
                 <p className="text-[10px] text-muted">
-                  {mode === 'change' ? '使用当前密码更新' : '使用短信验证码重置'}
+                  {mode === 'change'
+                    ? t('pages.profile.passwordChangeDescription')
+                    : t('pages.profile.passwordRecoverDescription')}
                 </p>
               </div>
             </div>
@@ -336,7 +358,9 @@ export function TabSecurity() {
                       : 'border-transparent text-muted hover:bg-canvas hover:text-ink'
                   }`}
                 >
-                  {item === 'change' ? '修改密码' : '找回密码'}
+                  {item === 'change'
+                    ? t('pages.profile.changePassword')
+                    : t('pages.profile.recoverPassword')}
                 </button>
               ))}
             </div>
@@ -351,23 +375,29 @@ export function TabSecurity() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <PasswordInput
-                    label="当前密码"
-                    placeholder="输入当前登录密码"
+                    label={t('pages.profile.currentPassword')}
+                    placeholder={t('pages.profile.currentPasswordPlaceholder')}
+                    hideLabel={t('pages.profile.hidePassword')}
+                    showLabel={t('pages.profile.showPassword')}
                     value={currentPassword}
                     onChange={setCurrentPassword}
                     disabled={changeSubmitting}
                   />
                 </div>
                 <PasswordInput
-                  label="新密码"
-                  placeholder="至少 8 位"
+                  label={t('pages.profile.newPassword')}
+                  placeholder={t('pages.profile.newPasswordPlaceholder')}
+                  hideLabel={t('pages.profile.hidePassword')}
+                  showLabel={t('pages.profile.showPassword')}
                   value={nextPassword}
                   onChange={setNextPassword}
                   disabled={changeSubmitting}
                 />
                 <PasswordInput
-                  label="确认新密码"
-                  placeholder="再次输入新密码"
+                  label={t('pages.profile.confirmNewPassword')}
+                  placeholder={t('pages.profile.confirmNewPasswordPlaceholder')}
+                  hideLabel={t('pages.profile.hidePassword')}
+                  showLabel={t('pages.profile.showPassword')}
                   value={confirmPassword}
                   onChange={setConfirmPassword}
                   disabled={changeSubmitting}
@@ -381,7 +411,7 @@ export function TabSecurity() {
                   className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
                   {changeSubmitting && <Loader2 size={13} className="animate-spin" />}
-                  保存新密码
+                  {t('pages.profile.saveNewPassword')}
                 </button>
               </div>
             </form>
@@ -393,36 +423,42 @@ export function TabSecurity() {
               <InlineMessage message={recoverError} />
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-medium text-muted">
-                  找回手机号
+                  {t('pages.profile.recoverPhone')}
                 </span>
                 <input
                   type="tel"
                   value={phone}
                   disabled
                   className="h-10 w-full rounded-lg border border-hairline bg-canvas/92 px-3 text-[13px] text-muted opacity-80 cursor-not-allowed"
-                  placeholder="待找回的手机号"
+                  placeholder={t('pages.profile.recoverPhonePlaceholder')}
                 />
               </label>
 
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1.5 block text-[11px] font-medium text-muted">
-                    图形验证码
+                    {t('pages.profile.imageCaptcha')}
                   </span>
                   <input
                     value={captchaInput}
                     onChange={(event) => setCaptchaInput(event.target.value)}
                     disabled={captchaLoading || smsSending}
                     className="h-10 w-full rounded-lg border border-hairline bg-canvas/92 px-3 text-[13px] transition-all duration-150 placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/18 disabled:cursor-not-allowed disabled:opacity-70"
-                    placeholder="输入图中字符"
+                    placeholder={t('pages.profile.imageCaptchaPlaceholder')}
                   />
                 </label>
                 <div className="flex items-center gap-2">
                   <div className="flex h-10 w-[104px] items-center justify-center overflow-hidden rounded-lg border border-hairline bg-canvas">
                     {captchaSrc ? (
-                      <img src={captchaSrc} alt="图形验证码" className="h-full w-full object-cover" />
+                      <img
+                        src={captchaSrc}
+                        alt={t('pages.profile.captchaAlt')}
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
-                      <span className="text-[11px] text-muted">未加载</span>
+                      <span className="text-[11px] text-muted">
+                        {t('pages.profile.captchaUnloaded')}
+                      </span>
                     )}
                   </div>
                   <button
@@ -430,7 +466,7 @@ export function TabSecurity() {
                     onClick={() => void refreshCaptcha()}
                     disabled={captchaLoading}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-hairline text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                    aria-label="刷新图形验证码"
+                    aria-label={t('pages.profile.refreshImageCaptcha')}
                   >
                     {captchaLoading ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -444,14 +480,14 @@ export function TabSecurity() {
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1.5 block text-[11px] font-medium text-muted">
-                    短信验证码
+                    {t('pages.profile.smsCaptcha')}
                   </span>
                   <input
                     value={smsCode}
                     onChange={(event) => setSMSCode(event.target.value)}
                     disabled={recoverSubmitting}
                     className="h-10 w-full rounded-lg border border-hairline bg-canvas/92 px-3 text-[13px] transition-all duration-150 placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/18 disabled:cursor-not-allowed disabled:opacity-70"
-                    placeholder="6 位验证码"
+                    placeholder={t('pages.profile.smsCaptchaPlaceholder')}
                   />
                 </label>
                 <button
@@ -466,21 +502,27 @@ export function TabSecurity() {
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-card/82 px-4 text-[12px] font-medium text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                 >
                   {smsSending && <Loader2 size={13} className="animate-spin" />}
-                  {smsCooldown > 0 ? `${smsCooldown}s` : '发送验证码'}
+                  {smsCooldown > 0
+                    ? `${smsCooldown}s`
+                    : t('pages.profile.sendCaptcha')}
                 </button>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <PasswordInput
-                  label="新密码"
-                  placeholder="至少 8 位"
+                  label={t('pages.profile.newPassword')}
+                  placeholder={t('pages.profile.newPasswordPlaceholder')}
+                  hideLabel={t('pages.profile.hidePassword')}
+                  showLabel={t('pages.profile.showPassword')}
                   value={recoverPassword}
                   onChange={setRecoverPassword}
                   disabled={recoverSubmitting}
                 />
                 <PasswordInput
-                  label="确认新密码"
-                  placeholder="再次输入新密码"
+                  label={t('pages.profile.confirmNewPassword')}
+                  placeholder={t('pages.profile.confirmNewPasswordPlaceholder')}
+                  hideLabel={t('pages.profile.hidePassword')}
+                  showLabel={t('pages.profile.showPassword')}
                   value={recoverConfirmPassword}
                   onChange={setRecoverConfirmPassword}
                   disabled={recoverSubmitting}
@@ -494,7 +536,7 @@ export function TabSecurity() {
                   className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
                   {recoverSubmitting && <Loader2 size={13} className="animate-spin" />}
-                  重置密码
+                  {t('pages.profile.resetPassword')}
                 </button>
               </div>
             </form>

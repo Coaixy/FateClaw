@@ -2,15 +2,32 @@
 
 import { Monitor, Moon, Palette, Sun } from 'lucide-react';
 
+import { useI18n } from '@/lib/i18n';
 import { ThemeMode, useTheme } from '@/lib/use-theme';
 
 export function TabAppearance() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { t } = useI18n();
 
   const options = [
-    { mode: 'system' as ThemeMode, icon: Monitor, label: '跟随系统', desc: '自动匹配系统外观' },
-    { mode: 'light' as ThemeMode, icon: Sun, label: '浅色模式', desc: '明亮的界面主题' },
-    { mode: 'dark' as ThemeMode, icon: Moon, label: '深色模式', desc: '护眼暗色主题' },
+    {
+      mode: 'system' as ThemeMode,
+      icon: Monitor,
+      label: t('pages.profile.themeSystem'),
+      desc: t('pages.profile.themeSystemDescription'),
+    },
+    {
+      mode: 'light' as ThemeMode,
+      icon: Sun,
+      label: t('pages.profile.themeLight'),
+      desc: t('pages.profile.themeLightDescription'),
+    },
+    {
+      mode: 'dark' as ThemeMode,
+      icon: Moon,
+      label: t('pages.profile.themeDark'),
+      desc: t('pages.profile.themeDarkDescription'),
+    },
   ];
 
   return (
@@ -19,8 +36,12 @@ export function TabAppearance() {
         <div className="flex items-center gap-2.5">
           <Palette size={14} className="text-muted" />
           <div>
-            <p className="text-[12px] font-medium">外观偏好</p>
-            <p className="text-[10px] text-muted">选择你在工作台里的主题展示方式</p>
+            <p className="text-[12px] font-medium">
+              {t('pages.profile.appearanceTitle')}
+            </p>
+            <p className="text-[10px] text-muted">
+              {t('pages.profile.appearanceDescription')}
+            </p>
           </div>
         </div>
       </div>

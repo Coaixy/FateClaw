@@ -8,6 +8,7 @@ import type {
 } from 'react';
 import { useLayoutEffect } from 'react';
 import { ClipboardPaste, Send, Square, X } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 const MAX_TEXTAREA_HEIGHT = 96;
 
@@ -88,6 +89,7 @@ export function AiChatComposer({
   onSend: () => void;
   onStop: () => void;
 }) {
+  const { t } = useI18n();
   const composerDisabled = sending || Boolean(disabled);
   const actionDisabled = sending ? false : !input.trim() || Boolean(disabled);
 
@@ -127,12 +129,16 @@ export function AiChatComposer({
           onKeyDown={onKeyDown}
           placeholder={
             disabled
-              ? '此对话无法继续追问'
+              ? t('aiChat.composer.disabledPlaceholder')
               : selectedSession
-                ? '输入消息...'
-                : '有什么想问的？'
+                ? t('aiChat.composer.messagePlaceholder')
+                : t('aiChat.composer.initialPlaceholder')
           }
-          aria-label={sending ? 'AI 正在回复' : '输入消息'}
+          aria-label={
+            sending
+              ? t('aiChat.composer.replyingLabel')
+              : t('aiChat.composer.inputLabel')
+          }
           disabled={composerDisabled}
           rows={1}
           className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
@@ -147,7 +153,9 @@ export function AiChatComposer({
           className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${
             sending ? 'scale-110' : 'hover:scale-105'
           }`}
-          aria-label={sending ? '停止' : '发送'}
+          aria-label={
+            sending ? t('aiChat.composer.stop') : t('aiChat.composer.send')
+          }
         >
           {sending ? (
             <Square size={13} className="fill-current" />
@@ -166,6 +174,8 @@ function PasteChoicePanel({
   onKeepPasteAsMessage,
   onDismissPasteChoice,
 }: PasteChoicePanelProps) {
+  const { t } = useI18n();
+
   return (
     <div className="mb-1.5 rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-2 text-[12px] text-ink">
       <div className="flex items-start gap-2">
@@ -175,7 +185,7 @@ function PasteChoicePanel({
           type="button"
           onClick={onDismissPasteChoice}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
-          aria-label="关闭粘贴选项"
+          aria-label={t('aiChat.composer.closePasteOptions')}
         >
           <X size={12} />
         </button>
@@ -186,14 +196,14 @@ function PasteChoicePanel({
           onClick={onKeepPasteAsMessage}
           className="h-9 rounded-md border border-hairline bg-surface-card px-2.5 text-[12px] text-muted transition-colors hover:border-primary/30 hover:text-ink"
         >
-          作为消息
+          {t('aiChat.composer.keepAsMessage')}
         </button>
         <button
           type="button"
           onClick={onUsePasteAsBoard}
           className="h-9 rounded-md bg-primary px-2.5 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active"
         >
-          作为盘面
+          {t('aiChat.composer.useAsBoard')}
         </button>
       </div>
     </div>

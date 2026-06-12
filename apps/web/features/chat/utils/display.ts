@@ -1,5 +1,6 @@
 import type { Message } from '@/features/chat/api';
 import { formatCoins } from '../../../lib/soft-currency';
+import type { Locale } from '@/lib/i18n';
 
 export const AUTO_SCROLL_THRESHOLD = 80;
 
@@ -33,8 +34,25 @@ export type ProgressMessage = Message & {
   };
 };
 
-export function formatChatTime(ts: string) {
-  return new Date(ts).toLocaleTimeString('zh-CN', {
+function resolveIntlLocale(locale?: Locale): string {
+  if (locale === 'zh-TW') {
+    return 'zh-TW';
+  }
+  if (locale === 'en') {
+    return 'en';
+  }
+  return 'zh-CN';
+}
+
+/**
+ * 格式化聊天消息时间。
+ *
+ * @param ts 消息时间戳。
+ * @param locale 当前前端展示语言；缺省时保持简中旧行为。
+ * @returns 本地化后的小时分钟。
+ */
+export function formatChatTime(ts: string, locale?: Locale) {
+  return new Date(ts).toLocaleTimeString(resolveIntlLocale(locale), {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -46,33 +64,37 @@ export function formatChatTime(ts: string) {
  * @param value 后端写入 metadata.duration_ms 的毫秒数。
  * @returns 可直接展示的中文耗时标签；非法或缺失时返回 null。
  */
-export function formatChatDuration(value: unknown): string | null {
+export function formatChatDuration(
+  value: unknown,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     return null;
   }
 
+  const prefix = t?.('format.chatDurationPrefix') ?? '耗时';
   if (value < 10_000) {
-    return `耗时 ${(value / 1000).toFixed(1)}s`;
+    return `${prefix} ${(value / 1000).toFixed(1)}s`;
   }
 
   const seconds = Math.round(value / 1000);
   if (seconds < 60) {
-    return `耗时 ${seconds}s`;
+    return `${prefix} ${seconds}s`;
   }
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   if (minutes < 60) {
     return remainingSeconds > 0
-      ? `耗时 ${minutes}m ${remainingSeconds}s`
-      : `耗时 ${minutes}m`;
+      ? `${prefix} ${minutes}m ${remainingSeconds}s`
+      : `${prefix} ${minutes}m`;
   }
 
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes > 0
-    ? `耗时 ${hours}h ${remainingMinutes}m`
-    : `耗时 ${hours}h`;
+    ? `${prefix} ${hours}h ${remainingMinutes}m`
+    : `${prefix} ${hours}h`;
 }
 
 /**
@@ -81,7 +103,11 @@ export function formatChatDuration(value: unknown): string | null {
  * @param metadata 后端写入消息 metadata 的计费明细。
  * @returns 可直接展示的中文软妹币标签列表；非法或缺失时返回空列表。
  */
-export function formatChatCostLabels(metadata: unknown): string[] {
+export function formatChatCostLabels(
+  metadata: unknown,
+  locale?: Locale,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string[] {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return [];
   }
@@ -97,7 +123,8 @@ export function formatChatCostLabels(metadata: unknown): string[] {
     Number.isFinite(data.membership_covered_coins) &&
     data.membership_covered_coins > 0
   ) {
-    labels.push(`会员抵扣 ${formatCoins(data.membership_covered_coins)}`);
+    const coins = formatCoins(data.membership_covered_coins, locale);
+    labels.push(t?.('format.membershipCovered', { coins }) ?? `会员抵扣 ${coins}`);
   }
 
   if (
@@ -105,7 +132,8 @@ export function formatChatCostLabels(metadata: unknown): string[] {
     Number.isFinite(data.actual_charge_coins) &&
     data.actual_charge_coins >= 0
   ) {
-    labels.push(`钱包实扣 ${formatCoins(data.actual_charge_coins)}`);
+    const coins = formatCoins(data.actual_charge_coins, locale);
+    labels.push(t?.('format.walletCharged', { coins }) ?? `钱包实扣 ${coins}`);
   }
 
   return labels;
@@ -117,22 +145,43 @@ export function formatChatCostLabels(metadata: unknown): string[] {
  * @param value 后端写入 metadata.actual_charge_coins 的软妹币金额。
  * @returns 可直接展示的中文软妹币标签；非法或缺失时返回 null。
  */
-export function formatChatCost(value: unknown): string | null {
-  const labels = formatChatCostLabels({ actual_charge_coins: value });
+export function formatChatCost(
+  value: unknown,
+  locale?: Locale,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string | null {
+  const labels = formatChatCostLabels(
+    { actual_charge_coins: value },
+    locale,
+    t,
+  );
+  if (!labels[0]) {
+    return null;
+  }
+  if (t) {
+    return t('format.consumed', { coins: formatCoins(value as number, locale) });
+  }
   return labels[0]?.replace('钱包实扣', '消耗') ?? null;
 }
 
-export function formatRelativeDateLabel(ts: string) {
+export function formatRelativeDateLabel(
+  ts: string,
+  locale?: Locale,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+) {
   const date = new Date(ts);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / 86400000);
 
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return `${days} 天前`;
+  if (days === 0) return t?.('format.today') ?? '今天';
+  if (days === 1) return t?.('format.yesterday') ?? '昨天';
+  if (days < 7) return t?.('format.daysAgoSpaced', { days }) ?? `${days} 天前`;
 
-  return date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
+  return date.toLocaleDateString(resolveIntlLocale(locale), {
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
 export function groupMessagesByDate(messages: Message[]): MessageGroup[] {
@@ -204,16 +253,27 @@ export function isProgressMessage(
   );
 }
 
-export function getProgressStageLabel(stage?: string) {
-  if (!stage) return '处理中';
-  if (stage.startsWith('tool_')) return '查阅';
-  if (stage === 'knowledge_hit') return '命中知识库';
-  if (stage === 'knowledge_retrieving') return '开始解读';
-  if (stage === 'knowledge_section') return '检索章节';
-  if (stage.startsWith('board_')) return '排盘';
-  if (stage.startsWith('interpret_')) return '解读';
-  if (stage.startsWith('general_')) return '处理';
-  return '处理中';
+export function getProgressStageLabel(
+  stage?: string,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (!stage) return t?.('format.progressProcessing') ?? '处理中';
+  if (stage.startsWith('tool_')) return t?.('format.progressReading') ?? '查阅';
+  if (stage === 'knowledge_hit') {
+    return t?.('format.progressKnowledgeHit') ?? '命中知识库';
+  }
+  if (stage === 'knowledge_retrieving') {
+    return t?.('format.progressStartInterpret') ?? '开始解读';
+  }
+  if (stage === 'knowledge_section') {
+    return t?.('format.progressKnowledgeSection') ?? '检索章节';
+  }
+  if (stage.startsWith('board_')) return t?.('format.progressPaipan') ?? '排盘';
+  if (stage.startsWith('interpret_')) {
+    return t?.('format.progressInterpret') ?? '解读';
+  }
+  if (stage.startsWith('general_')) return t?.('format.progressHandle') ?? '处理';
+  return t?.('format.progressProcessing') ?? '处理中';
 }
 
 /** 知识检索轨迹 stage 集合：这些进度消息应在聊天流中实时展示。 */
@@ -243,11 +303,12 @@ function isHiddenDisplayMessage(message: Message): boolean {
     return false;
   }
 
-  // 直接排盘会写入一条只用于记录操作的用户消息；聊天流里保留盘面结果即可。
+  // 直接排盘和简易模式都会写入一条只用于记录操作的用户消息；聊天流里保留盘面结果即可。
   return (
     !message.is_bot_message &&
     metadata.kind === 'board_request' &&
-    metadata.workflow === 'direct_paipan'
+    (metadata.workflow === 'direct_paipan' ||
+      metadata.workflow === 'simple_workflow')
   );
 }
 
@@ -276,11 +337,15 @@ export function filterProgressMessages(messages: Message[]) {
   );
 }
 
-export function getLatestProgressLabel(messages: Message[]) {
+export function getLatestProgressLabel(
+  messages: Message[],
+  t?: (key: string, params?: Record<string, string | number>) => string,
+) {
   const progressMessages = messages.filter(isProgressMessage);
   if (progressMessages.length === 0) return null;
   return getProgressStageLabel(
     progressMessages[progressMessages.length - 1].metadata.stage,
+    t,
   );
 }
 

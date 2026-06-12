@@ -6,9 +6,11 @@ import { ArrowLeft } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { ModelSettingsPanel } from '@/components/settings/model-settings-panel';
+import { useI18n } from '@/lib/i18n';
 import { appendGuideResume, normalizeReturnTo } from '@/lib/return-to';
 
 export function AdvancedSettingsWorkspace() {
+  const { t } = useI18n();
   const [guideReturnHref, setGuideReturnHref] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,13 +37,13 @@ export function AdvancedSettingsWorkspace() {
               className="inline-flex h-9 items-center gap-1.5 rounded-lg px-1 text-[12px] text-muted transition-colors hover:text-ink"
             >
               <ArrowLeft size={13} />
-              返回个人资料
+              {t('pages.modelSettings.backProfile')}
             </Link>
             <h2 className="font-display mt-2 text-xl font-semibold tracking-tight text-ink">
-              模型设置
+              {t('pages.modelSettings.title')}
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-muted">
-              配置官方模型或自配供应商模型，当前选择会用于 AI 对话回复。
+              {t('pages.modelSettings.description')}
             </p>
           </div>
           {guideReturnHref && (
@@ -49,7 +51,7 @@ export function AdvancedSettingsWorkspace() {
               href={guideReturnHref}
               className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
             >
-              返回 AI Chat 继续向导
+              {t('pages.common.returnAiChatGuide')}
             </Link>
           )}
         </div>

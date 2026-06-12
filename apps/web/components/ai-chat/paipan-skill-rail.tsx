@@ -11,6 +11,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
+import { useI18n } from '@/lib/i18n';
 
 export interface EnabledSkillSummary {
   id: string;
@@ -56,6 +57,7 @@ export function PaipanSkillRail({
   onOpenSkillMarket,
   onOpenPastedBoard,
 }: PaipanSkillRailProps) {
+  const { formatNumber, t } = useI18n();
   const isEmpty = !loading && catalog.length === 0;
   const hasEnabledSkills = enabledSkills.length > 0;
   const shouldShowEnabledSkills =
@@ -71,10 +73,10 @@ export function PaipanSkillRail({
             </div>
             <div>
               <p className="text-[14px] font-semibold tracking-tight text-ink">
-                选择术数开始排盘
+                {t('aiChat.paipanRail.title')}
               </p>
               <p className="mt-0.5 text-[10px] text-muted">
-                先生成盘面，再决定是否发给 AI 解读
+                {t('aiChat.paipanRail.description')}
               </p>
             </div>
           </div>
@@ -89,7 +91,7 @@ export function PaipanSkillRail({
             icon={<ClipboardPaste size={13} />}
             className="h-9 rounded-lg px-2.5"
           >
-            自贴盘面
+            {t('aiChat.paipanRail.pasteBoard')}
           </Button>
           <Button
             size="sm"
@@ -98,7 +100,7 @@ export function PaipanSkillRail({
             disabled={disabled || loading || isEmpty}
             className="h-9 rounded-lg px-3"
           >
-            更多术数
+            {t('aiChat.paipanRail.moreSkills')}
           </Button>
         </div>
       </div>
@@ -111,17 +113,17 @@ export function PaipanSkillRail({
         <div className="min-w-0 rounded-xl border border-primary/20 bg-[color-mix(in_srgb,var(--color-surface-card)_72%,var(--color-canvas))] p-2.5 shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_4%,transparent)_inset]">
           {isEmpty ? (
             <div className="rounded-xl border border-dashed border-primary/25 bg-surface-card/45 px-3 py-3 text-[11px] leading-5 text-muted">
-              当前还没有可用的系统排盘术数。
+              {t('aiChat.paipanRail.noSystems')}
             </div>
           ) : (
             <>
               <div className="mb-2.5 flex items-center justify-between gap-1.5 px-0.5">
                 <span className="text-[11px] font-semibold text-primary">
-                  可用术数
+                  {t('aiChat.paipanRail.availableSkills')}
                 </span>
                 {!loading && catalog.length > 0 && (
                   <span className="rounded-full border border-primary/20 bg-primary/8 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    {catalog.length} 个
+                    {t('common.count', { count: formatNumber(catalog.length) })}
                   </span>
                 )}
               </div>
@@ -139,13 +141,13 @@ export function PaipanSkillRail({
                         className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-primary/20 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface-cream-strong)_86%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)))] px-3 text-left shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_7%,transparent)_inset] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,var(--color-surface-card))] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary">
-                          术
+                          {t('aiChat.paipanRail.skillGlyph')}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-ink">
                           {item.name}
                         </span>
                         <span className="hidden shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary sm:inline-flex">
-                          开始
+                          {t('aiChat.paipanRail.start')}
                         </span>
                         <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-surface-card)_74%,var(--color-canvas))] text-muted transition-all duration-200 group-hover:translate-x-0.5 group-hover:bg-primary group-hover:text-on-primary">
                           <ChevronRight size={13} />
@@ -156,7 +158,7 @@ export function PaipanSkillRail({
               {loading && (
                 <div className="mt-2.5 flex items-center gap-1.5 px-0.5 text-[11px] text-muted">
                   <Loader2 size={12} className="animate-spin" />
-                  正在加载可用术数...
+                  {t('aiChat.paipanRail.loading')}
                 </div>
               )}
             </>
@@ -172,11 +174,13 @@ export function PaipanSkillRail({
                 ) : (
                   <Share2 size={11} className="shrink-0" />
                 )}
-                <span>已开启 Skill</span>
+                <span>{t('aiChat.paipanRail.enabledSkill')}</span>
               </div>
               {!enabledSkillsLoading && hasEnabledSkills && (
                 <span className="rounded-full border border-hairline bg-surface-card/55 px-2 py-0.5 text-[10px] text-muted">
-                  {enabledSkills.length} 个
+                  {t('common.count', {
+                    count: formatNumber(enabledSkills.length),
+                  })}
                 </span>
               )}
             </div>
@@ -201,7 +205,7 @@ export function PaipanSkillRail({
                         </span>
                         {skill.source === 'subscribed' && (
                           <span className="shrink-0 text-[9px] text-muted">
-                            订阅
+                            {t('aiChat.paipanRail.subscribed')}
                           </span>
                         )}
                       </span>
@@ -211,7 +215,7 @@ export function PaipanSkillRail({
               <div className="rounded-xl border border-dashed border-hairline bg-surface-card/35 px-3 py-3">
                 <div className="flex flex-col gap-2">
                   <p className="min-w-0 text-[10px] leading-5 text-muted sm:text-[11px]">
-                    Skill 是给 AI Chat 补充专门术数流程、规则和解读偏好的能力包。去技能市场订阅后，可在对话里启用。
+                    {t('aiChat.paipanRail.skillDescription')}
                   </p>
                   <Button
                     type="button"
@@ -221,7 +225,7 @@ export function PaipanSkillRail({
                     icon={<Store size={12} />}
                     className="h-8 w-full rounded-lg px-2.5"
                   >
-                    去技能市场
+                    {t('aiChat.paipanRail.skillMarket')}
                   </Button>
                 </div>
               </div>

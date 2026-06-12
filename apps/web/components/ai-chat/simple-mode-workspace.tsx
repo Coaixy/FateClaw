@@ -13,6 +13,7 @@ import {
   simpleWorkflowsApi,
   type SimpleWorkflowStartResponse,
 } from '@/features/simple-workflows/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 type SimpleModePanel = 'home' | 'divination' | 'natal';
@@ -58,6 +59,8 @@ function SimpleModeCard({
   onClick: () => void;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <button
       type="button"
@@ -70,7 +73,7 @@ function SimpleModeCard({
           {icon}
         </span>
         <span className="rounded-full border border-hairline bg-surface-card px-2 py-0.5 text-[10px] font-medium text-muted">
-          快速
+          {t('aiChat.simpleMode.quick')}
         </span>
       </span>
       <span className="mt-5 block">
@@ -99,6 +102,8 @@ function SimpleModeHeader({
   title: string;
   onBack: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="flex items-center justify-between gap-3">
       <Button
@@ -109,7 +114,7 @@ function SimpleModeHeader({
         icon={<ArrowLeft size={14} />}
         className="rounded-lg px-2.5"
       >
-        返回
+        {t('aiChat.simpleMode.back')}
       </Button>
       <h2 className="text-[16px] font-semibold tracking-tight text-ink">
         {title}
@@ -126,6 +131,7 @@ export function SimpleModeWorkspace({
   onAuthRequired,
   onStarted,
 }: SimpleModeWorkspaceProps) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [panel, setPanel] = useState<SimpleModePanel>('home');
   const [submitting, setSubmitting] = useState(false);
@@ -139,7 +145,7 @@ export function SimpleModeWorkspace({
   const submitDivination = async () => {
     const normalizedQuestion = question.trim();
     if (!normalizedQuestion) {
-      toast('error', '请先写下你想问的事情');
+      toast('error', t('aiChat.simpleMode.missingQuestion'));
       return;
     }
     if (!chatAvailable) {
@@ -160,7 +166,9 @@ export function SimpleModeWorkspace({
     } catch (error) {
       toast(
         'error',
-        error instanceof Error ? error.message : '简易占卜启动失败',
+        error instanceof Error
+          ? error.message
+          : t('aiChat.simpleMode.divinationStartFailed'),
       );
     } finally {
       setSubmitting(false);
@@ -170,15 +178,15 @@ export function SimpleModeWorkspace({
   const submitNatal = async () => {
     const direction = questionDirection.trim();
     if (!birthDate) {
-      toast('error', '请填写有效的公历出生日期');
+      toast('error', t('aiChat.simpleMode.missingBirthDate'));
       return;
     }
     if (!gender) {
-      toast('error', '请选择性别');
+      toast('error', t('aiChat.simpleMode.missingGender'));
       return;
     }
     if (!direction) {
-      toast('error', '请填写想看的问题方向');
+      toast('error', t('aiChat.simpleMode.missingDirection'));
       return;
     }
     if (!chatAvailable) {
@@ -203,7 +211,9 @@ export function SimpleModeWorkspace({
     } catch (error) {
       toast(
         'error',
-        error instanceof Error ? error.message : '简易命理启动失败',
+        error instanceof Error
+          ? error.message
+          : t('aiChat.simpleMode.natalStartFailed'),
       );
     } finally {
       setSubmitting(false);
@@ -213,30 +223,33 @@ export function SimpleModeWorkspace({
   if (panel === 'divination') {
     return (
       <div className="space-y-3">
-        <SimpleModeHeader title="占卜问事" onBack={() => setPanel('home')} />
+        <SimpleModeHeader
+          title={t('aiChat.simpleMode.divinationTitle')}
+          onBack={() => setPanel('home')}
+        />
         <div className="rounded-2xl border border-hairline bg-surface-card/65 p-4 shadow-sm sm:p-5">
           <div className="space-y-3">
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-medium text-ink">
-                问题
+                {t('aiChat.simpleMode.question')}
               </span>
               <textarea
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 disabled={disabled || submitting}
-                placeholder="例如：我该不该换工作？"
+                placeholder={t('aiChat.simpleMode.questionPlaceholder')}
                 className={textareaClassName()}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-medium text-ink">
-                背景补充
+                {t('aiChat.simpleMode.background')}
               </span>
               <textarea
                 value={background}
                 onChange={(event) => setBackground(event.target.value)}
                 disabled={disabled || submitting}
-                placeholder="可简单写下当前处境、时间范围或纠结点"
+                placeholder={t('aiChat.simpleMode.backgroundPlaceholder')}
                 className={textareaClassName()}
               />
             </label>
@@ -249,7 +262,7 @@ export function SimpleModeWorkspace({
               icon={<Send size={15} />}
               className="w-full rounded-xl"
             >
-              立即起卦
+              {t('aiChat.simpleMode.startDivination')}
             </Button>
           </div>
         </div>
@@ -260,12 +273,15 @@ export function SimpleModeWorkspace({
   if (panel === 'natal') {
     return (
       <div className="space-y-3">
-        <SimpleModeHeader title="命理分析" onBack={() => setPanel('home')} />
+        <SimpleModeHeader
+          title={t('aiChat.simpleMode.natalTitle')}
+          onBack={() => setPanel('home')}
+        />
         <div className="rounded-2xl border border-hairline bg-surface-card/65 p-4 shadow-sm sm:p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-medium text-ink">
-                出生日期
+                {t('aiChat.simpleMode.birthDate')}
               </span>
               <input
                 type="date"
@@ -277,7 +293,7 @@ export function SimpleModeWorkspace({
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-medium text-ink">
-                出生时间
+                {t('aiChat.simpleMode.birthTime')}
               </span>
               <input
                 type="time"
@@ -291,7 +307,7 @@ export function SimpleModeWorkspace({
 
           <div className="mt-3">
             <span className="mb-1.5 block text-[12px] font-medium text-ink">
-              性别
+              {t('aiChat.simpleMode.gender')}
             </span>
             <div className="grid grid-cols-2 gap-2">
               {(['男', '女'] as const).map((item) => (
@@ -306,7 +322,9 @@ export function SimpleModeWorkspace({
                       : 'border-hairline bg-surface-card text-ink hover:border-primary/35'
                   }`}
                 >
-                  {item}
+                  {item === '男'
+                    ? t('aiChat.simpleMode.male')
+                    : t('aiChat.simpleMode.female')}
                 </button>
               ))}
             </div>
@@ -314,13 +332,13 @@ export function SimpleModeWorkspace({
 
           <label className="mt-3 block">
             <span className="mb-1.5 block text-[12px] font-medium text-ink">
-              问题方向
+              {t('aiChat.simpleMode.direction')}
             </span>
             <textarea
               value={questionDirection}
               onChange={(event) => setQuestionDirection(event.target.value)}
               disabled={disabled || submitting}
-              placeholder="例如：事业方向、感情模式、近年运势"
+              placeholder={t('aiChat.simpleMode.directionPlaceholder')}
               className={textareaClassName()}
             />
           </label>
@@ -334,7 +352,7 @@ export function SimpleModeWorkspace({
             icon={<Send size={15} />}
             className="mt-4 w-full rounded-xl"
           >
-            开始分析
+            {t('aiChat.simpleMode.startAnalysis')}
           </Button>
         </div>
       </div>
@@ -343,21 +361,21 @@ export function SimpleModeWorkspace({
 
   return (
     <div className="space-y-3">
-      <SimpleModeHeader title="快速模式" onBack={onBack} />
+      <SimpleModeHeader title={t('aiChat.simpleMode.title')} onBack={onBack} />
       <div className="grid gap-2.5 sm:grid-cols-2">
         <SimpleModeCard
           icon={<HelpCircle size={19} />}
-          title="占卜问事"
-          description="单件事、近期选择、关系走向和工作决策。"
-          action="进入占卜"
+          title={t('aiChat.simpleMode.divinationTitle')}
+          description={t('aiChat.simpleMode.divinationDescription')}
+          action={t('aiChat.simpleMode.divinationAction')}
           disabled={disabled || submitting}
           onClick={() => setPanel('divination')}
         />
         <SimpleModeCard
           icon={<CalendarClock size={19} />}
-          title="命理分析"
-          description="长期性格、事业方向、关系模式和人生阶段。"
-          action="进入命理"
+          title={t('aiChat.simpleMode.natalTitle')}
+          description={t('aiChat.simpleMode.natalDescription')}
+          action={t('aiChat.simpleMode.natalAction')}
           disabled={disabled || submitting}
           onClick={() => setPanel('natal')}
         />

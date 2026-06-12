@@ -1,4 +1,5 @@
 import { formatCoins } from '../../lib/soft-currency';
+import type { Locale } from '@/lib/i18n';
 
 export const DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS = 2;
 
@@ -15,12 +16,20 @@ export type OfficialModelPricePart = {
 /**
  * 将模型计费单价格式化为和钱包一致的软妹币展示。
  */
-export function officialModelCoinsLabel(coins: number): string {
-  return formatCoins(coins);
+export function officialModelCoinsLabel(
+  coins: number,
+  locale?: Locale,
+): string {
+  return formatCoins(coins, locale);
 }
 
-function tokenPricePart(label: string, coins: number): string {
-  return `${label} ${officialModelCoinsLabel(coins)} / 百万 Token`;
+function tokenPricePart(
+  label: string,
+  coins: number,
+  perMillionTokenLabel: string,
+  locale?: Locale,
+): string {
+  return `${label} ${officialModelCoinsLabel(coins, locale)} / ${perMillionTokenLabel}`;
 }
 
 function officialModelTotalPriceCoins(
@@ -61,18 +70,22 @@ export function findLowestPricedOfficialModel<
 
 export function officialModelPriceParts(
   input: OfficialModelPricingInput,
+  locale?: Locale,
+  t?: (key: string) => string,
 ): OfficialModelPricePart[] {
   return [
     {
-      label: '输入',
+      label: t?.('pages.modelSettings.inputToken') ?? '输入',
       coins: officialModelCoinsLabel(
         input.input_token_price_per_million_coins,
+        locale,
       ),
     },
     {
-      label: '输出',
+      label: t?.('pages.modelSettings.outputToken') ?? '输出',
       coins: officialModelCoinsLabel(
         input.output_token_price_per_million_coins,
+        locale,
       ),
     },
   ];
@@ -80,23 +93,50 @@ export function officialModelPriceParts(
 
 export function officialModelPriceLabel(
   input: OfficialModelPricingInput,
+  locale?: Locale,
+  t?: (key: string) => string,
 ): string {
+  const inputLabel = t?.('pages.modelSettings.inputToken') ?? '输入';
+  const outputLabel = t?.('pages.modelSettings.outputToken') ?? '输出';
+  const perMillionTokenLabel =
+    t?.('pages.modelSettings.perMillionToken') ?? '百万 Token';
   return [
-    tokenPricePart('输入', input.input_token_price_per_million_coins),
-    tokenPricePart('输出', input.output_token_price_per_million_coins),
+    tokenPricePart(
+      inputLabel,
+      input.input_token_price_per_million_coins,
+      perMillionTokenLabel,
+      locale,
+    ),
+    tokenPricePart(
+      outputLabel,
+      input.output_token_price_per_million_coins,
+      perMillionTokenLabel,
+      locale,
+    ),
   ].join(' · ');
 }
 
 /**
  * 返回自配模型平台服务费的金额展示。
  */
-export function customModelPlatformFeeAmountLabel(coins: number): string {
-  return officialModelCoinsLabel(coins);
+export function customModelPlatformFeeAmountLabel(
+  coins: number,
+  locale?: Locale,
+): string {
+  return officialModelCoinsLabel(coins, locale);
 }
 
 /**
  * 返回自配模型平台服务费的完整标签。
  */
-export function customModelPlatformFeeLabel(coins: number): string {
-  return `平台 Token 服务费 ${customModelPlatformFeeAmountLabel(coins)} / 百万 Token`;
+export function customModelPlatformFeeLabel(
+  coins: number,
+  locale?: Locale,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const fee = customModelPlatformFeeAmountLabel(coins, locale);
+  return (
+    t?.('pages.modelSettings.customFeeLabel', { fee }) ??
+    `平台 Token 服务费 ${fee} / 百万 Token`
+  );
 }

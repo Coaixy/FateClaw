@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Save, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { accountsApi } from '@/features/accounts/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 /**
@@ -13,6 +14,7 @@ import { useToast } from '@/lib/use-toast';
  */
 export function UserSoulCard() {
   const { toast } = useToast();
+  const { formatNumber, t } = useI18n();
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
   const [editEnabled, setEditEnabled] = useState(true);
@@ -36,7 +38,7 @@ export function UserSoulCard() {
         setEditEnabled(result.edit_enabled);
       } catch (err) {
         if (!alive) return;
-        setError(err instanceof Error ? err.message : '加载自定义人格失败');
+        setError(err instanceof Error ? err.message : t('pages.persona.loadFailed'));
       } finally {
         if (alive) setLoading(false);
       }
@@ -55,9 +57,9 @@ export function UserSoulCard() {
     try {
       await accountsApi.updateUserSoul(content, editEnabled);
       setSavedContent(content);
-      toast('success', '自定义人格已保存并注入运行时');
+      toast('success', t('pages.persona.saved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存自定义人格失败');
+      setError(err instanceof Error ? err.message : t('pages.persona.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -71,10 +73,17 @@ export function UserSoulCard() {
     setError('');
     try {
       await accountsApi.updateUserSoulEditEnabled(nextValue);
-      toast('success', nextValue ? '对话记忆编辑已开启' : '对话记忆编辑已关闭');
+      toast(
+        'success',
+        nextValue
+          ? t('pages.persona.editEnabledToast')
+          : t('pages.persona.editDisabledToast'),
+      );
     } catch (err) {
       setEditEnabled(!nextValue);
-      setError(err instanceof Error ? err.message : '保存记忆开关失败');
+      setError(
+        err instanceof Error ? err.message : t('pages.persona.editToggleFailed'),
+      );
     } finally {
       setSavingEditEnabled(false);
     }
@@ -86,10 +95,10 @@ export function UserSoulCard() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
             <Sparkles size={15} className="text-primary" />
-            自定义人格 Soul
+            {t('pages.persona.soulTitle')}
           </div>
           <p className="mt-1 text-[12px] leading-5 text-muted">
-            统一注入站内 AI Chat 和微信对话的 Pi Runtime。
+            {t('pages.persona.soulDescription')}
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
@@ -108,7 +117,9 @@ export function UserSoulCard() {
             ) : (
               <ToggleLeft size={20} className="text-muted" />
             )}
-            {editEnabled ? '对话可编辑记忆' : '对话不可编辑记忆'}
+            {editEnabled
+              ? t('pages.persona.editEnabled')
+              : t('pages.persona.editDisabled')}
           </button>
           <button
             type="button"
@@ -121,7 +132,7 @@ export function UserSoulCard() {
             ) : (
               <Save size={14} />
             )}
-            部署至运行时
+            {t('pages.persona.deploy')}
           </button>
         </div>
       </div>
@@ -134,7 +145,7 @@ export function UserSoulCard() {
             value={content}
             onChange={(event) => setContent(event.target.value)}
             className="h-[220px] w-full resize-y rounded-xl border border-hairline bg-surface-card/70 px-3.5 py-3 pr-20 font-mono text-[12px] leading-[1.7] text-ink transition-colors focus:border-primary/60 focus:bg-surface-card/90 focus:outline-none"
-            placeholder="输入自定义人格、沟通风格、禁忌、固定背景或长期记忆..."
+            placeholder={t('pages.persona.placeholder')}
             spellCheck={false}
           />
           <div className="pointer-events-none absolute right-2 top-2 rounded-md border border-hairline/60 bg-canvas/80 px-1.5 py-0.5 font-mono text-[10px] text-muted">
@@ -145,9 +156,12 @@ export function UserSoulCard() {
 
       <div className="flex flex-col gap-1 text-[11px] text-muted sm:flex-row sm:items-center sm:justify-between">
         <span className={error ? 'text-error' : ''}>
-          {error || (dirty ? '有未保存修改' : '已同步')}
+          {error ||
+            (dirty ? t('pages.persona.dirty') : t('pages.persona.synced'))}
         </span>
-        <span className="font-mono">{content.length} chars</span>
+        <span className="font-mono">
+          {t('pages.persona.chars', { count: formatNumber(content.length) })}
+        </span>
       </div>
     </div>
   );

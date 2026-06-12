@@ -3,6 +3,7 @@
 import { AppShell } from '@/components/app-shell';
 import { TabData } from '@/components/settings/tab-data';
 import { DevicesPanel } from '@/components/workspace/devices-panel';
+import { useI18n } from '@/lib/i18n';
 
 /**
  * 微信对话工作区。
@@ -10,22 +11,24 @@ import { DevicesPanel } from '@/components/workspace/devices-panel';
  * @returns 仅包含微信连接和数据管理能力的工作区页面。
  */
 export function WorkspaceDashboard() {
+  const { t } = useI18n();
+
   return (
     <AppShell wide>
       <div className="max-w-6xl mx-auto w-full">
         <div className="space-y-5 lg:space-y-6">
           <DashboardSection
             id="weixin-connect"
-            title="连接微信"
-            description="查看微信对话接入状态。"
+            title={t('pages.devices.connectTitle')}
+            description={t('pages.devices.connectDescription')}
           >
             <DevicesPanel embedded />
           </DashboardSection>
 
           <DashboardSection
             id="data-management"
-            title="数据管理"
-            description="清理微信对话消息和长期记忆。"
+            title={t('pages.devices.dataTitle')}
+            description={t('pages.devices.dataDescription')}
           >
             <TabData />
           </DashboardSection>

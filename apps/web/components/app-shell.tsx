@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { ChatSessionsProvider } from '@/features/chat/hooks/use-chat-sessions';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { useI18n } from '@/lib/i18n';
 import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
@@ -29,6 +30,7 @@ export function AppShell({
   noPadding?: boolean;
   requireAuth?: boolean;
 }) {
+  const { t } = useI18n();
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -52,7 +54,7 @@ export function AppShell({
       <div className="min-h-dvh flex items-center justify-center px-6">
         <div className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface-card px-5 py-4 text-sm text-ink shadow-sm">
           <div className="w-4 h-4 border-2 border-muted border-t-transparent rounded-full animate-spin shrink-0" />
-          <span>未检测到登录状态，正在跳转到登录页...</span>
+          <span>{t('shell.redirectingLogin')}</span>
         </div>
       </div>
     );
@@ -72,7 +74,7 @@ export function AppShell({
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[999] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-ink focus:text-canvas focus:text-sm focus:font-medium"
         >
-          跳到主要内容
+          {t('shell.skipMain')}
         </a>
 
         {/* Global background grid & subtle glow */}
@@ -114,9 +116,11 @@ function SiteComplianceFooter({
   wide?: boolean;
   noPadding?: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <footer
-      aria-label="备案信息"
+      aria-label={t('shell.complianceLabel')}
       className={`mx-auto ${
         wide ? 'max-w-[1400px] px-4 lg:px-8' : 'max-w-3xl px-4 lg:px-10'
       } ${noPadding ? 'py-4 lg:py-5' : 'pb-8 lg:pb-10'} text-center`}
@@ -135,7 +139,7 @@ function SiteComplianceFooter({
           aria-hidden="true"
         />
         <span className="inline-flex min-h-6 items-center">
-          大模型备案：网信算备110108970550101240011号等
+          {t('shell.modelFiling')}
         </span>
       </div>
     </footer>

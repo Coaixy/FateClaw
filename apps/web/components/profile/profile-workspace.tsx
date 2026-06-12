@@ -7,17 +7,22 @@ import { AppShell } from '@/components/app-shell';
 import { TabAccount } from '@/components/settings/tab-account';
 import { TabAppearance } from '@/components/settings/tab-appearance';
 import { TabSecurity } from '@/components/settings/tab-security';
+import { useI18n } from '@/lib/i18n';
 
 export function ProfileWorkspace() {
+  const { t } = useI18n();
+
   return (
     <AppShell>
       <div className="mb-4 space-y-1.5">
         <div className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-2.5 py-1 text-[10px] font-medium text-muted">
-          Profile Settings
+          {t('pages.profile.badge')}
         </div>
-        <h2 className="text-[15px] font-semibold tracking-tight">个人资料</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight">
+          {t('pages.profile.title')}
+        </h2>
         <p className="max-w-[440px] text-[11px] leading-5 text-muted">
-          集中管理账号资料、账号安全和界面偏好。
+          {t('pages.profile.description')}
         </p>
       </div>
 
@@ -33,8 +38,12 @@ export function ProfileWorkspace() {
             <div className="flex items-center gap-2.5">
               <ServerCog size={14} className="text-muted" />
               <div>
-                <p className="text-[12px] font-medium">模型设置</p>
-                <p className="text-[10px] text-muted">模型 Provider、密钥和默认模型</p>
+                <p className="text-[12px] font-medium">
+                  {t('pages.profile.modelTitle')}
+                </p>
+                <p className="text-[10px] text-muted">
+                  {t('pages.profile.modelDescription')}
+                </p>
               </div>
             </div>
           </div>
@@ -46,8 +55,12 @@ export function ProfileWorkspace() {
                   <ServerCog size={13} className="text-muted" />
                 </div>
                 <div className="text-left">
-                  <p className="text-[11px] font-medium">进入模型设置</p>
-                  <p className="text-[10px] text-muted">继续配置模型调用</p>
+                  <p className="text-[11px] font-medium">
+                    {t('pages.profile.modelEntryTitle')}
+                  </p>
+                  <p className="text-[10px] text-muted">
+                    {t('pages.profile.modelEntryDescription')}
+                  </p>
                 </div>
               </div>
               <div className="flex h-7 w-7 items-center justify-center rounded-full border border-hairline bg-surface-card/70 transition-colors group-hover:border-primary/35 group-hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]">

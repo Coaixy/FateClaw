@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, QrCode, XCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { useI18n } from '@/lib/i18n';
 
 type BindStep = 'idle' | 'loading' | 'scanning' | 'scanned' | 'done' | 'error';
 
@@ -22,6 +23,8 @@ export function DeviceBindSheet({
   onClose: () => void;
   onRetry: () => void;
 }) {
+  const { t } = useI18n();
+
   if (!open) return null;
 
   return (
@@ -33,20 +36,20 @@ export function DeviceBindSheet({
       title={
         <span className="inline-flex items-center gap-2">
           <QrCode size={16} className="text-primary" />
-          扫码接入微信
+          {t('pages.devices.sheetTitle')}
         </span>
       }
     >
       <div className="px-6 pt-4 pb-8 flex flex-col items-center text-center">
         <p className="text-[13px] text-muted mb-6 font-medium">
-          请使用移动端微信扫描下方二维码，授权登录
+          {t('pages.devices.sheetDescription')}
         </p>
 
         {bindStep === 'loading' && (
           <div className="flex flex-col items-center justify-center h-[240px] w-full rounded-2xl bg-canvas/50 border border-hairline/50 border-dashed">
             <Loader2 size={32} className="animate-spin text-primary" />
             <p className="text-[13px] font-medium text-muted mt-4">
-              初始化网关连接...
+              {t('pages.devices.initializing')}
             </p>
           </div>
         )}
@@ -64,7 +67,7 @@ export function DeviceBindSheet({
                       className="text-success mb-3 drop-shadow-sm"
                     />
                     <p className="text-[15px] font-bold text-black tracking-tight">
-                      已扫码，请在手机端确认
+                      {t('pages.devices.scanned')}
                     </p>
                   </div>
                 )}
@@ -75,7 +78,7 @@ export function DeviceBindSheet({
               <div className="flex items-center gap-2 mt-6 px-4 py-2 rounded-full bg-canvas border border-hairline">
                 <div className="w-2 h-2 rounded-full bg-primary animate-ping" />
                 <span className="text-[12px] font-bold text-primary uppercase tracking-wider">
-                  等待扫码
+                  {t('pages.devices.waitingScan')}
                 </span>
               </div>
             )}
@@ -88,9 +91,11 @@ export function DeviceBindSheet({
               <div className="absolute inset-0 rounded-full bg-success/20 animate-ping" />
               <CheckCircle2 size={40} className="text-success relative z-10" />
             </div>
-            <p className="text-[18px] font-bold tracking-tight">授权成功</p>
+            <p className="text-[18px] font-bold tracking-tight">
+              {t('pages.devices.authSuccess')}
+            </p>
             <p className="text-[13px] text-muted mt-2">
-              设备已就绪，正在同步状态...
+              {t('pages.devices.syncing')}
             </p>
           </div>
         )}
@@ -98,7 +103,9 @@ export function DeviceBindSheet({
         {bindStep === 'error' && (
           <div className="flex flex-col items-center justify-center h-[240px] w-full rounded-2xl bg-red-500/5 border border-red-500/20">
             <XCircle size={32} className="text-red-500 mb-4" />
-            <p className="text-[14px] font-bold text-red-500 mb-1">连接中断</p>
+            <p className="text-[14px] font-bold text-red-500 mb-1">
+              {t('pages.devices.connectionInterrupted')}
+            </p>
             <p className="text-[12px] text-muted mb-5 max-w-[200px]">
               {bindError}
             </p>
@@ -106,7 +113,7 @@ export function DeviceBindSheet({
               onClick={onRetry}
               className="h-9 px-6 rounded-xl bg-red-500 text-white text-[13px] font-bold hover:bg-red-600 transition-colors shadow-sm cursor-pointer"
             >
-              重新获取
+              {t('pages.devices.retryQr')}
             </button>
           </div>
         )}

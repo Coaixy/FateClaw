@@ -14,6 +14,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import type { OnboardingGuideStep } from '@/components/ai-chat/use-onboarding-guide-status';
+import { useI18n } from '@/lib/i18n';
 
 interface OnboardingGuideDialogProps {
   open: boolean;
@@ -34,11 +35,11 @@ interface OnboardingGuideDialogProps {
   onComplete: () => void;
 }
 
-const steps: Array<{ key: OnboardingGuideStep; label: string }> = [
-  { key: 'welcome', label: '欢迎' },
-  { key: 'model', label: '官方模型' },
-  { key: 'skill', label: 'Skill' },
-  { key: 'done', label: '完成' },
+const steps: Array<{ key: OnboardingGuideStep; labelKey: string }> = [
+  { key: 'welcome', labelKey: 'aiChat.onboarding.steps.welcome' },
+  { key: 'model', labelKey: 'aiChat.onboarding.steps.model' },
+  { key: 'skill', labelKey: 'aiChat.onboarding.steps.skill' },
+  { key: 'done', labelKey: 'aiChat.onboarding.steps.done' },
 ];
 
 function getStepIndex(step: OnboardingGuideStep) {
@@ -55,6 +56,8 @@ function getStepIndex(step: OnboardingGuideStep) {
  * @returns 当前向导步骤对应的对话框。
  */
 export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
+  const { t } = useI18n();
+
   if (!props.open) return null;
 
   const currentIndex = getStepIndex(props.step);
@@ -84,24 +87,18 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted">
-                  AI Chat Guide
+                  {t('aiChat.onboarding.eyebrow')}
                 </p>
                 <h1
                   id="ai-chat-onboarding-title"
                   className="mt-1 text-lg font-semibold leading-tight text-ink sm:text-xl"
                 >
-                  {props.step === 'welcome'
-                    ? '启动 AI Chat'
-                    : props.step === 'model'
-                      ? '选择官方模型'
-                      : props.step === 'skill'
-                        ? '启用一个 Skill'
-                        : '可以开始提问了'}
+                  {t(`aiChat.onboarding.titles.${props.step}`)}
                 </h1>
               </div>
               <button
                 type="button"
-                aria-label="关闭启动向导"
+                aria-label={t('aiChat.onboarding.close')}
                 onClick={props.onClose}
                 className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-card hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
               >
@@ -125,7 +122,7 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
                     }`}
                     aria-current={active ? 'step' : undefined}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </div>
                 );
               })}
@@ -161,13 +158,13 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
             {props.step === 'welcome' ? (
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="ghost" onClick={props.onClose}>
-                  稍后再说
+                  {t('aiChat.onboarding.later')}
                 </Button>
                 <Button
                   icon={<ArrowRight size={14} />}
                   onClick={goNextFromWelcome}
                 >
-                  开始配置
+                  {t('aiChat.onboarding.startConfig')}
                 </Button>
               </div>
             ) : props.step === 'model' ? (
@@ -193,7 +190,9 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
               />
             ) : (
               <div className="flex justify-end">
-                <Button onClick={props.onComplete}>开始提问</Button>
+                <Button onClick={props.onComplete}>
+                  {t('aiChat.onboarding.startAsking')}
+                </Button>
               </div>
             )}
           </div>
@@ -210,20 +209,22 @@ function WelcomeStep({
   modelReady: boolean;
   skillReady: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-3">
       <p className="text-[13px] leading-6 text-body">
-        完成两个前置项后，就能在 AI Chat 里稳定开始对话：先选择官方模型，再启用一个可用于对话的 Skill。
+        {t('aiChat.onboarding.welcomeDescription')}
       </p>
       <div className="grid gap-2">
         <StatusCard
-          title="官方模型"
-          description="使用平台维护的官方模型，不需要填写自备 API Key。"
+          title={t('aiChat.onboarding.officialModel')}
+          description={t('aiChat.onboarding.officialModelDescription')}
           ready={modelReady}
         />
         <StatusCard
-          title="Skill"
-          description="从技能市场订阅并启用至少一个 Skill。"
+          title={t('aiChat.onboarding.skill')}
+          description={t('aiChat.onboarding.skillDescription')}
           ready={skillReady}
         />
       </div>
@@ -242,14 +243,16 @@ function ModelStep({
   error: string;
   availableOfficialModelCount: number;
 }) {
+  const { t } = useI18n();
+
   if (loading) {
-    return <LoadingState label="正在读取官方模型状态..." />;
+    return <LoadingState label={t('aiChat.onboarding.modelLoading')} />;
   }
 
   if (error) {
     return (
       <AlertState
-        title="暂时无法读取官方模型"
+        title={t('aiChat.onboarding.modelErrorTitle')}
         description={error}
       />
     );
@@ -258,8 +261,8 @@ function ModelStep({
   if (ready) {
     return (
       <StatusCard
-        title="模型已就绪"
-        description="当前账号已经有可用于对话的模型，可以继续配置 Skill。"
+        title={t('aiChat.onboarding.modelReadyTitle')}
+        description={t('aiChat.onboarding.modelReadyDescription')}
         ready={ready}
       />
     );
@@ -268,16 +271,18 @@ function ModelStep({
   if (availableOfficialModelCount === 0) {
     return (
       <AlertState
-        title="当前暂无可用官方模型"
-        description="管理员还没有配置可用于对话的官方模型，请稍后再试或联系管理员。"
+        title={t('aiChat.onboarding.noOfficialModelTitle')}
+        description={t('aiChat.onboarding.noOfficialModelDescription')}
       />
     );
   }
 
   return (
     <StatusCard
-      title="还需要选择官方模型"
-      description={`当前有 ${availableOfficialModelCount} 个官方模型可用，请去模型设置页选择一个。`}
+      title={t('aiChat.onboarding.needOfficialModelTitle')}
+      description={t('aiChat.onboarding.needOfficialModelDescription', {
+        count: availableOfficialModelCount,
+      })}
       ready={false}
     />
   );
@@ -294,14 +299,16 @@ function SkillStep({
   error: string;
   hasAnyInstalledSkill: boolean;
 }) {
+  const { t } = useI18n();
+
   if (loading) {
-    return <LoadingState label="正在检查已启用 Skill..." />;
+    return <LoadingState label={t('aiChat.onboarding.skillLoading')} />;
   }
 
   if (error) {
     return (
       <AlertState
-        title="Skill 市场暂时不可用"
+        title={t('aiChat.onboarding.skillErrorTitle')}
         description={error}
       />
     );
@@ -309,13 +316,17 @@ function SkillStep({
 
   return (
     <StatusCard
-      title={ready ? 'Skill 已启用' : '还需要启用一个 Skill'}
+      title={
+        ready
+          ? t('aiChat.onboarding.skillReadyTitle')
+          : t('aiChat.onboarding.skillNeedTitle')
+      }
       description={
         ready
-          ? '当前账号已经有可用于 AI Chat 的 Skill。'
+          ? t('aiChat.onboarding.skillReadyDescription')
           : hasAnyInstalledSkill
-            ? '你已经安装了 Skill，但需要启用后才会进入对话链路。'
-            : '去技能市场挑选并订阅一个 Skill，订阅成功后回到 AI Chat 继续。'
+            ? t('aiChat.onboarding.skillInstalledDescription')
+            : t('aiChat.onboarding.skillNeedDescription')
       }
       ready={ready}
     />
@@ -323,14 +334,18 @@ function SkillStep({
 }
 
 function DoneStep() {
+  const { t } = useI18n();
+
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/8 px-3 py-3">
       <div className="flex items-start gap-2.5">
         <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-primary" />
         <div>
-          <p className="text-sm font-semibold text-ink">启动配置已完成</p>
+          <p className="text-sm font-semibold text-ink">
+            {t('aiChat.onboarding.doneTitle')}
+          </p>
           <p className="mt-1 text-[12px] leading-5 text-muted">
-            官方模型和 Skill 都已准备好。关闭向导后，可以直接在输入框里开始第一次提问。
+            {t('aiChat.onboarding.doneDescription')}
           </p>
         </div>
       </div>
@@ -423,14 +438,16 @@ function ModelActions({
   onNext: () => void;
   onOpenModelSettings: () => void;
 }) {
+  const { t } = useI18n();
+
   if (loading) {
-    return <Button loading>检查中</Button>;
+    return <Button loading>{t('aiChat.onboarding.checking')}</Button>;
   }
   if (ready) {
     return (
       <div className="flex justify-end">
         <Button icon={<ArrowRight size={14} />} onClick={onNext}>
-          下一步
+          {t('common.next')}
         </Button>
       </div>
     );
@@ -439,10 +456,10 @@ function ModelActions({
     return (
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button variant="ghost" onClick={onClose}>
-          跳过本次
+          {t('common.skipNow')}
         </Button>
         <Button icon={<RefreshCw size={14} />} onClick={onRetry}>
-          稍后重试
+          {t('common.retryLater')}
         </Button>
       </div>
     );
@@ -450,7 +467,7 @@ function ModelActions({
   return (
     <div className="flex justify-end">
       <Button icon={<Settings2 size={14} />} onClick={onOpenModelSettings}>
-        去选择官方模型
+        {t('aiChat.onboarding.chooseOfficialModel')}
       </Button>
     </div>
   );
@@ -473,17 +490,19 @@ function SkillActions({
   onNext: () => void;
   onOpenSkillMarket: () => void;
 }) {
+  const { t } = useI18n();
+
   if (loading) {
-    return <Button loading>检查中</Button>;
+    return <Button loading>{t('aiChat.onboarding.checking')}</Button>;
   }
   if (error) {
     return (
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button variant="ghost" onClick={onClose}>
-          跳过本次
+          {t('common.skipNow')}
         </Button>
         <Button icon={<RefreshCw size={14} />} onClick={onRetry}>
-          稍后重试
+          {t('common.retryLater')}
         </Button>
       </div>
     );
@@ -491,14 +510,14 @@ function SkillActions({
   if (ready) {
     return (
       <div className="flex justify-end">
-        <Button onClick={onNext}>完成</Button>
+        <Button onClick={onNext}>{t('common.done')}</Button>
       </div>
     );
   }
   return (
     <div className="flex justify-end">
       <Button icon={<Store size={14} />} onClick={onOpenSkillMarket}>
-        去 Skill 市场
+        {t('aiChat.onboarding.goSkillMarket')}
       </Button>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   billingApi,
   type DailySignInStatus,
 } from '@/features/billing/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 import { formatCoins } from '@/lib/soft-currency';
 
@@ -20,6 +21,7 @@ export function WalletDailySignInPanel({
   onChanged: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
+  const { locale, t } = useI18n();
   const [busy, setBusy] = useState(false);
 
   const enabled = Boolean(status?.enabled);
@@ -31,10 +33,18 @@ export function WalletDailySignInPanel({
     setBusy(true);
     try {
       const result = await billingApi.claimDailySignIn();
-      toast('success', `已领取 ${formatCoins(result.received_coins)}`);
+      toast(
+        'success',
+        t('pages.dailySignIn.claimed', {
+          coins: formatCoins(result.received_coins, locale),
+        }),
+      );
       await onChanged();
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : '签到失败');
+      toast(
+        'error',
+        err instanceof Error ? err.message : t('pages.dailySignIn.claimFailed'),
+      );
       await onChanged();
     } finally {
       setBusy(false);
@@ -42,12 +52,14 @@ export function WalletDailySignInPanel({
   };
 
   const statusText = !enabled
-    ? '暂未开启'
+    ? t('pages.dailySignIn.disabled')
     : signedIn
-      ? '今日已签到'
+      ? t('pages.dailySignIn.signedToday')
       : rewardCoins > 0
-        ? `今日可领 ${formatCoins(rewardCoins)}`
-        : '奖励未配置';
+        ? t('pages.dailySignIn.claimable', {
+            coins: formatCoins(rewardCoins, locale),
+          })
+        : t('pages.dailySignIn.rewardMissing');
 
   return (
     <section className="rounded-2xl border border-hairline bg-surface-card px-4 py-4">
@@ -57,7 +69,9 @@ export function WalletDailySignInPanel({
             <CalendarCheck size={18} />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-semibold">每日签到</div>
+            <div className="text-sm font-semibold">
+              {t('pages.dailySignIn.title')}
+            </div>
             <div className="mt-1 text-[12px] text-muted">{statusText}</div>
           </div>
         </div>
@@ -68,7 +82,9 @@ export function WalletDailySignInPanel({
           className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-medium text-on-primary disabled:cursor-not-allowed disabled:opacity-45"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-          {signedIn ? '已签到' : '签到'}
+          {signedIn
+            ? t('pages.dailySignIn.signedButton')
+            : t('pages.dailySignIn.signButton')}
         </button>
       </div>
     </section>

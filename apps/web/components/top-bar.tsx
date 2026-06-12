@@ -9,11 +9,15 @@ import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import { buildLoginHref } from '@/lib/auth-redirect';
+import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 
-function formatBalanceAmount(coins: number): string {
+function formatBalanceAmount(
+  coins: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
   const amount = Number.isFinite(coins) ? coins : 0;
-  return amount.toLocaleString('zh-CN', {
+  return formatNumber(amount, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -50,15 +54,16 @@ function BillingPillSkeleton({ compact = false }: { compact?: boolean }) {
 }
 
 function TopBarSkeleton({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
   const avatarClass = compact ? 'h-7 w-7' : 'h-9 w-9';
 
   return (
     <div
       className="flex min-w-0 items-center gap-2"
       role="status"
-      aria-label="正在加载用户信息"
+      aria-label={t('topBar.loadingUser')}
     >
-      <span className="sr-only">正在加载用户信息</span>
+      <span className="sr-only">{t('topBar.loadingUser')}</span>
       <BillingPillSkeleton compact={compact} />
       <div
         className={`${avatarClass} shrink-0 animate-pulse rounded-full border border-primary/15 bg-primary/10`}
@@ -82,6 +87,7 @@ export function TopBar({
   compact?: boolean;
   onLogout: () => void;
 }) {
+  const { formatNumber, locale, t } = useI18n();
   const { user, loading } = useAuth();
   const router = useRouter();
   const {
@@ -109,15 +115,17 @@ export function TopBar({
 
   if (!user) {
     return (
-      <button
-        type="button"
-        onClick={() => router.push(buildLoginHref())}
-        className={`inline-flex items-center justify-center rounded-full border border-hairline bg-surface-card/80 text-ink backdrop-blur-sm transition-colors hover:border-primary/40 hover:bg-primary/10 ${compact ? 'h-8 px-2.5 gap-1.5 text-[11px]' : 'h-9 px-3.5 gap-2 text-[12px]'}`}
-        aria-label="登录"
-      >
-        <LogIn size={compact ? 13 : 14} className="text-primary" />
-        <span className="font-medium">登录</span>
-      </button>
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => router.push(buildLoginHref())}
+          className={`inline-flex items-center justify-center rounded-full border border-hairline bg-surface-card/80 text-ink backdrop-blur-sm transition-colors hover:border-primary/40 hover:bg-primary/10 ${compact ? 'h-8 px-2.5 gap-1.5 text-[11px]' : 'h-9 px-3.5 gap-2 text-[12px]'}`}
+          aria-label={t('common.login')}
+        >
+          <LogIn size={compact ? 13 : 14} className="text-primary" />
+          <span className="font-medium">{t('common.login')}</span>
+        </button>
+      </div>
     );
   }
 
@@ -126,7 +134,7 @@ export function TopBar({
   const balanceLabel =
     balanceCoins === null
       ? '—'
-      : formatBalanceAmount(balanceCoins);
+      : formatBalanceAmount(balanceCoins, formatNumber);
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
@@ -135,8 +143,10 @@ export function TopBar({
     : 'h-9 px-3 gap-1.5 text-[12px]';
   const dropdownBalanceLabel =
     billingLoading || balanceCoins === null
-      ? '加载中…'
-      : `${formatCoins(balanceCoins)} 可用`;
+      ? `${t('common.loading')}…`
+      : t('topBar.dropdownBalanceAvailable', {
+          balance: formatCoins(balanceCoins, locale),
+        });
   const plusActive = Boolean(
     status?.membership.enabled && status.membership.active,
   );
@@ -146,8 +156,8 @@ export function TopBar({
       {/* 余额胶囊只承载钱包信息，会员入口保持独立。 */}
       <div className="relative min-w-0">
         {billingLoading ? (
-          <div role="status" aria-label="正在加载余额">
-            <span className="sr-only">正在加载余额</span>
+          <div role="status" aria-label={t('topBar.loadingBalance')}>
+            <span className="sr-only">{t('topBar.loadingBalance')}</span>
             <BillingPillSkeleton compact={compact} />
           </div>
         ) : (
@@ -159,13 +169,17 @@ export function TopBar({
             className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
             aria-label={
               balanceCoins === null
-                ? '余额加载中'
-                : `可用余额 ${formatBalanceAmount(balanceCoins)}`
+                ? t('topBar.balanceLoading')
+                : t('topBar.availableBalanceValue', {
+                    amount: formatBalanceAmount(balanceCoins, formatNumber),
+                  })
             }
             aria-expanded={usageOpen}
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-            <span className="whitespace-nowrap font-medium">可用余额</span>
+            <span className="whitespace-nowrap font-medium">
+              {t('topBar.availableBalance')}
+            </span>
             <span className="tabular-nums font-medium">{balanceLabel}</span>
           </button>
         )}
@@ -199,12 +213,13 @@ export function TopBar({
             ? 'border-primary/25 bg-primary/12'
             : 'border-hairline/60 bg-surface-card/80'
         } ${membershipPillClass}`}
-        aria-label="会员中心"
+        aria-label={t('topBar.membershipCenter')}
       >
         <Crown size={compact ? 12 : 14} />
-        <span className="whitespace-nowrap font-medium">会员中心</span>
+        <span className="whitespace-nowrap font-medium">
+          {t('topBar.membershipCenter')}
+        </span>
       </button>
-
       {/* 头像 + 菜单 */}
       <div className="relative">
         <button
@@ -217,11 +232,11 @@ export function TopBar({
               ? 'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 pr-2 text-[11px] font-medium'
               : 'inline-flex h-9 items-center gap-1.5 rounded-full p-0'
           }`}
-          aria-label="个人菜单"
+          aria-label={t('topBar.personalMenu')}
           aria-expanded={menuOpen}
         >
           <AvatarBadge compact={compact} />
-          {compact && <span>我的</span>}
+          {compact && <span>{t('common.my')}</span>}
         </button>
 
         {menuOpen && (

@@ -1,4 +1,5 @@
 import { officialModelPriceParts } from './model-pricing';
+import { useI18n } from '@/lib/i18n';
 
 type OfficialModelPriceTagsProps = {
   model: {
@@ -12,9 +13,11 @@ export function OfficialModelPriceTags({
   model,
   compact = false,
 }: OfficialModelPriceTagsProps) {
+  const { locale, t } = useI18n();
+
   return (
     <div className="flex flex-wrap gap-1.5">
-      {officialModelPriceParts(model).map((part) => (
+      {officialModelPriceParts(model, locale, t).map((part) => (
         <span
           key={part.label}
           className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 font-medium text-primary ${
@@ -24,7 +27,7 @@ export function OfficialModelPriceTags({
           <span>{part.label}</span>
           <span className="tabular-nums">{part.coins}</span>
           <span className="text-primary/70">
-            / 百万 Token
+            / {t('pages.modelSettings.perMillionToken')}
           </span>
         </span>
       ))}
