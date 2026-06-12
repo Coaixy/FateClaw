@@ -273,7 +273,7 @@ export const enMessages = {
       badge: 'Referral Center',
       title: 'Referrals',
       description:
-        'Share your invite code. When a friend first buys membership with recharge balance, you receive membership-day rewards.',
+        'Share your invite code. You receive membership-day rewards when friends first buy membership with recharge balance or when invite-count milestones are reached.',
       loadFailed: 'Failed to load referral information',
       copyFailed: 'Copy failed',
       inviteCodeBound: 'Invite code bound',
@@ -294,6 +294,7 @@ export const enMessages = {
       bind: 'Bind',
       rewardRules: 'Reward rules',
       rewardDays: 'Reward {days} membership days',
+      countRewardSummary: 'Reward {days} days per {count} invites',
       expand: 'Expand',
       collapse: 'Collapse',
       ruleEnabled: 'Referral feature',
@@ -304,6 +305,9 @@ export const enMessages = {
       ruleTriggerAny: 'Eligible membership purchase',
       rulePayment: 'Payment condition',
       rulePaymentValue: 'Membership paid only with recharge balance',
+      ruleInviteCountReward: 'Invite-count reward',
+      ruleInviteCountRewardValue:
+        'Reward {days} membership days for every {count} invites, up to {max} invites',
       ruleBinding: 'Binding rule',
       ruleBindingValue:
         'Cannot change inviter after binding; self or circular referrals are not allowed',

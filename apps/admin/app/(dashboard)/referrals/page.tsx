@@ -138,6 +138,9 @@ type ReferralConfigDraft = {
   enabled: boolean;
   inviter_reward_days: string;
   monthly_reward_cap_days: string;
+  invite_count_reward_threshold: string;
+  invite_count_reward_days: string;
+  invite_count_reward_max_invites: string;
 };
 
 function draftFromConfig(
@@ -147,6 +150,13 @@ function draftFromConfig(
     enabled: config?.enabled ?? true,
     inviter_reward_days: String(config?.inviter_reward_days ?? 7),
     monthly_reward_cap_days: String(config?.monthly_reward_cap_days ?? 30),
+    invite_count_reward_threshold: String(
+      config?.invite_count_reward_threshold ?? 10,
+    ),
+    invite_count_reward_days: String(config?.invite_count_reward_days ?? 7),
+    invite_count_reward_max_invites: String(
+      config?.invite_count_reward_max_invites ?? 50,
+    ),
   };
 }
 
@@ -181,7 +191,7 @@ function ConfigPanel({
         <div>
           <div className="text-sm font-semibold">邀请返会员</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            被邀请人首次使用充值余额开通会员后，邀请者获得会员天数。
+            配置首购奖励和累计邀请人数奖励。
           </div>
         </div>
         <label className="inline-flex items-center gap-2 text-[13px] text-muted">
@@ -199,7 +209,9 @@ function ConfigPanel({
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <label className="space-y-1.5">
-          <div className="text-[12px] font-medium text-muted">单次奖励天数</div>
+          <div className="text-[12px] font-medium text-muted">
+            首购单次奖励天数
+          </div>
           <input
             value={draft.inviter_reward_days}
             onChange={(event) =>
@@ -226,6 +238,60 @@ function ConfigPanel({
             className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
           />
         </label>
+      </div>
+
+      <div className="mt-4 border-t border-hairline pt-4">
+        <div className="text-[12px] font-semibold text-ink">
+          累计邀请人数奖励
+        </div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          <label className="space-y-1.5">
+            <div className="text-[12px] font-medium text-muted">
+              邀请人数门槛
+            </div>
+            <input
+              value={draft.invite_count_reward_threshold}
+              onChange={(event) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  invite_count_reward_threshold: event.target.value,
+                }))
+              }
+              inputMode="numeric"
+              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <div className="text-[12px] font-medium text-muted">奖励天数</div>
+            <input
+              value={draft.invite_count_reward_days}
+              onChange={(event) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  invite_count_reward_days: event.target.value,
+                }))
+              }
+              inputMode="numeric"
+              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <div className="text-[12px] font-medium text-muted">
+              计数人数上限
+            </div>
+            <input
+              value={draft.invite_count_reward_max_invites}
+              onChange={(event) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  invite_count_reward_max_invites: event.target.value,
+                }))
+              }
+              inputMode="numeric"
+              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-3 border-t border-hairline pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -400,6 +466,18 @@ export default function AdminReferralsPage() {
           Math.trunc(Number(draft.monthly_reward_cap_days || 0)),
         ),
         reward_first_membership_only: true,
+        invite_count_reward_threshold: Math.max(
+          0,
+          Math.trunc(Number(draft.invite_count_reward_threshold || 0)),
+        ),
+        invite_count_reward_days: Math.max(
+          0,
+          Math.trunc(Number(draft.invite_count_reward_days || 0)),
+        ),
+        invite_count_reward_max_invites: Math.max(
+          0,
+          Math.trunc(Number(draft.invite_count_reward_max_invites || 0)),
+        ),
       });
       setConfig(saved);
     } catch (err) {

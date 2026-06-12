@@ -240,6 +240,9 @@ export interface AdminReferralConfigView {
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
+  invite_count_reward_threshold: number;
+  invite_count_reward_days: number;
+  invite_count_reward_max_invites: number;
   updated_at: string;
 }
 
@@ -253,6 +256,9 @@ export async function getAdminReferralConfig(): Promise<AdminReferralConfigView>
     inviter_reward_days: config.inviter_reward_days,
     monthly_reward_cap_days: config.monthly_reward_cap_days,
     reward_first_membership_only: config.reward_first_membership_only,
+    invite_count_reward_threshold: config.invite_count_reward_threshold,
+    invite_count_reward_days: config.invite_count_reward_days,
+    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
     updated_at: config.updated_at,
   };
 }
@@ -265,6 +271,9 @@ export async function updateAdminReferralConfig(input: {
   inviterRewardDays: number;
   monthlyRewardCapDays: number;
   rewardFirstMembershipOnly: boolean;
+  inviteCountRewardThreshold: number;
+  inviteCountRewardDays: number;
+  inviteCountRewardMaxInvites: number;
 }): Promise<AdminReferralConfigView> {
   const config = await updateReferralConfig(input);
   return {
@@ -272,6 +281,9 @@ export async function updateAdminReferralConfig(input: {
     inviter_reward_days: config.inviter_reward_days,
     monthly_reward_cap_days: config.monthly_reward_cap_days,
     reward_first_membership_only: config.reward_first_membership_only,
+    invite_count_reward_threshold: config.invite_count_reward_threshold,
+    invite_count_reward_days: config.invite_count_reward_days,
+    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
     updated_at: config.updated_at,
   };
 }

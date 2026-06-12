@@ -9,6 +9,8 @@ import type { UserMembership } from '../../shared/types.js';
 
 const MEMBERSHIP_PLAN_KEY = 'fateclaw_plus';
 const DEFAULT_MAX_REDEMPTIONS = 1_000_000;
+const PAID_MEMBERSHIP_REWARD_REASON = 'first_paid_membership';
+const INVITE_COUNT_REWARD_REASON = 'invite_count_milestone';
 
 type ReferralQueryable = DbQueryable | pg.PoolClient;
 
@@ -29,6 +31,9 @@ export interface ReferralConfigRow {
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
+  invite_count_reward_threshold: number;
+  invite_count_reward_days: number;
+  invite_count_reward_max_invites: number;
   updated_at: string;
 }
 
@@ -130,6 +135,9 @@ function normalizeReferralConfigRow(row: ReferralConfigRow): ReferralConfigRow {
     ...row,
     inviter_reward_days: toInt(row.inviter_reward_days),
     monthly_reward_cap_days: toInt(row.monthly_reward_cap_days),
+    invite_count_reward_threshold: toInt(row.invite_count_reward_threshold),
+    invite_count_reward_days: toInt(row.invite_count_reward_days),
+    invite_count_reward_max_invites: toInt(row.invite_count_reward_max_invites),
   };
 }
 
@@ -206,18 +214,25 @@ export async function updateReferralConfig(input: {
   inviterRewardDays: number;
   monthlyRewardCapDays: number;
   rewardFirstMembershipOnly: boolean;
+  inviteCountRewardThreshold: number;
+  inviteCountRewardDays: number;
+  inviteCountRewardMaxInvites: number;
 }): Promise<ReferralConfigRow> {
   const { rows } = await getDbPool().query(
     `INSERT INTO referral_config (
        id, enabled, inviter_reward_days, monthly_reward_cap_days,
-       reward_first_membership_only, updated_at
+       reward_first_membership_only, invite_count_reward_threshold,
+       invite_count_reward_days, invite_count_reward_max_invites, updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
        inviter_reward_days = EXCLUDED.inviter_reward_days,
        monthly_reward_cap_days = EXCLUDED.monthly_reward_cap_days,
        reward_first_membership_only = EXCLUDED.reward_first_membership_only,
+       invite_count_reward_threshold = EXCLUDED.invite_count_reward_threshold,
+       invite_count_reward_days = EXCLUDED.invite_count_reward_days,
+       invite_count_reward_max_invites = EXCLUDED.invite_count_reward_max_invites,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -225,6 +240,9 @@ export async function updateReferralConfig(input: {
       input.inviterRewardDays,
       input.monthlyRewardCapDays,
       input.rewardFirstMembershipOnly,
+      input.inviteCountRewardThreshold,
+      input.inviteCountRewardDays,
+      input.inviteCountRewardMaxInvites,
     ],
   );
   return normalizeReferralConfigRow(rows[0] as ReferralConfigRow);
@@ -355,6 +373,66 @@ export async function getBoundReferralForUser(
   return getReferralByInviteeUsing(getDbPool(), userId);
 }
 
+async function getInviteCountForInviterUsing(
+  client: pg.PoolClient,
+  inviterId: string,
+): Promise<number> {
+  const row = await queryOne<{ invite_count: string | number }>(
+    client,
+    `SELECT COUNT(*)::int AS invite_count
+     FROM user_referrals
+     WHERE inviter_id = $1`,
+    [inviterId],
+  );
+  return toInt(row?.invite_count);
+}
+
+function resolveInviteCountReward(
+  config: ReferralConfigRow,
+  inviteCount: number,
+): { rewardDays: number } | null {
+  const threshold = config.invite_count_reward_threshold;
+  const rewardDays = config.invite_count_reward_days;
+  const maxInvites = config.invite_count_reward_max_invites;
+  if (!config.enabled || threshold <= 0 || rewardDays <= 0 || maxInvites <= 0) {
+    return null;
+  }
+  if (inviteCount > maxInvites || inviteCount % threshold !== 0) {
+    return null;
+  }
+  return { rewardDays };
+}
+
+async function settleReferralInviteCountRewardUsing(
+  client: pg.PoolClient,
+  input: {
+    referral: UserReferralRow;
+    config: ReferralConfigRow;
+  },
+): Promise<ReferralRewardEventRow | null> {
+  const inviteCount = await getInviteCountForInviterUsing(
+    client,
+    input.referral.inviter_id,
+  );
+  const reward = resolveInviteCountReward(input.config, inviteCount);
+  if (!reward) return null;
+
+  // 这个奖励以第 N 个成功绑定的邀请关系作为触发点，与首购奖励用 reason 隔离。
+  const result = await createReferralRewardEventUsing(client, {
+    referral: input.referral,
+    rewardDays: reward.rewardDays,
+    status: 'granted',
+    reason: INVITE_COUNT_REWARD_REASON,
+  });
+  if (!result.created) return result.event;
+
+  await grantReferralMembershipDaysUsing(client, {
+    userId: input.referral.inviter_id,
+    rewardDays: reward.rewardDays,
+  });
+  return result.event;
+}
+
 async function wouldCreateReferralCycleUsing(
   queryable: ReferralQueryable,
   input: {
@@ -473,9 +551,14 @@ export async function redeemReferralInviteCodeUsing(
      WHERE id = $1`,
     [invite.id],
   );
+  const referral = normalizeReferralRow(rows[0] as UserReferralRow);
+  await settleReferralInviteCountRewardUsing(client, {
+    referral,
+    config,
+  });
 
   return {
-    referral: normalizeReferralRow(rows[0] as UserReferralRow),
+    referral,
     created: true,
   };
 }
@@ -540,12 +623,21 @@ export async function getReferralSummaryForUser(userId: string): Promise<{
   }>(
     getDbPool(),
     `SELECT
-       COUNT(*)::int AS invited_count,
-       COUNT(*) FILTER (WHERE reward_status = 'granted')::int AS rewarded_count,
-       COALESCE(SUM(reward_days) FILTER (WHERE reward_status = 'granted'), 0)::int
-         AS total_reward_days
-     FROM user_referrals
-     WHERE inviter_id = $1`,
+       (
+         SELECT COUNT(*)::int
+         FROM user_referrals
+         WHERE inviter_id = $1
+       ) AS invited_count,
+       (
+         SELECT COUNT(*)::int
+         FROM referral_reward_events
+         WHERE inviter_id = $1 AND status = 'granted'
+       ) AS rewarded_count,
+       (
+         SELECT COALESCE(SUM(reward_days), 0)::int
+         FROM referral_reward_events
+         WHERE inviter_id = $1 AND status = 'granted'
+       ) AS total_reward_days`,
     [userId],
   );
   return {
@@ -556,7 +648,7 @@ export async function getReferralSummaryForUser(userId: string): Promise<{
   };
 }
 
-async function insertReferralRewardEventUsing(
+async function createReferralRewardEventUsing(
   client: pg.PoolClient,
   input: {
     referral: UserReferralRow;
@@ -565,7 +657,7 @@ async function insertReferralRewardEventUsing(
     reason: string;
     triggerWalletTransactionId?: string | null;
   },
-): Promise<ReferralRewardEventRow> {
+): Promise<{ event: ReferralRewardEventRow; created: boolean }> {
   const { rows } = await client.query(
     `INSERT INTO referral_reward_events (
        id, referral_id, inviter_id, invitee_id, reward_days,
@@ -586,20 +678,34 @@ async function insertReferralRewardEventUsing(
     ],
   );
   const inserted = rows[0] as ReferralRewardEventRow | undefined;
-  if (inserted) return inserted;
+  if (inserted) return { event: inserted, created: true };
 
   const existing = await queryOne<ReferralRewardEventRow>(
     client,
     `SELECT *
      FROM referral_reward_events
-     WHERE referral_id = $1 AND status = 'granted'
+     WHERE referral_id = $1 AND status = $2 AND reason = $3
      LIMIT 1`,
-    [input.referral.id],
+    [input.referral.id, input.status, input.reason],
   );
   if (!existing) {
     throw new Error('邀请奖励事件写入失败');
   }
-  return existing;
+  return { event: existing, created: false };
+}
+
+async function insertReferralRewardEventUsing(
+  client: pg.PoolClient,
+  input: {
+    referral: UserReferralRow;
+    rewardDays: number;
+    status: 'granted' | 'skipped' | 'ineligible';
+    reason: string;
+    triggerWalletTransactionId?: string | null;
+  },
+): Promise<ReferralRewardEventRow> {
+  const result = await createReferralRewardEventUsing(client, input);
+  return result.event;
 }
 
 async function getCurrentMembershipForUserUsing(
@@ -663,9 +769,15 @@ async function getMonthlyRewardedDaysUsing(
      FROM referral_reward_events
      WHERE inviter_id = $1
        AND status = 'granted'
+       AND reason = $4
        AND created_at >= $2
        AND created_at < $3`,
-    [inviterId, monthStartIso(), nextMonthStartIso()],
+    [
+      inviterId,
+      monthStartIso(),
+      nextMonthStartIso(),
+      PAID_MEMBERSHIP_REWARD_REASON,
+    ],
   );
   return toInt(row?.total_days);
 }
@@ -758,7 +870,7 @@ export async function settleReferralMembershipRewardUsing(
     referral,
     rewardDays,
     status: 'granted',
-    reason: 'first_paid_membership',
+    reason: PAID_MEMBERSHIP_REWARD_REASON,
     triggerWalletTransactionId: input.triggerWalletTransactionId,
   });
   await markReferral('granted', rewardDays, event.id, null);

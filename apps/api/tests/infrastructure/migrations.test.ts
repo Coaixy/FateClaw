@@ -182,6 +182,13 @@ describe('runDatabaseMigrations', () => {
         '增加后台默认思考等级配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0033_referral_invite_count_reward',
+        '增加累计邀请人数会员奖励配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -245,6 +252,9 @@ describe('runDatabaseMigrations', () => {
       ),
     ).toBe(true);
     expect(
+      calls.some((call) => call.sql.includes('invite_count_reward_threshold')),
+    ).toBe(true);
+    expect(
       calls.some((call) => call.sql.includes('skill_bundle_max_files')),
     ).toBe(true);
     expect(
@@ -305,6 +315,7 @@ describe('runDatabaseMigrations', () => {
       '0030_user_referrals',
       '0031_default_official_model_runtime_config',
       '0032_default_thinking_level_runtime_config',
+      '0033_referral_invite_count_reward',
     ]);
 
     await runDatabaseMigrations(client as never);

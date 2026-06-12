@@ -2,7 +2,7 @@ import type { DatabaseMigration } from '../types.js';
 import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0020-0031。
+ * 数据库迁移分段：0020-0033。
  */
 export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
@@ -408,6 +408,9 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
           inviter_reward_days INTEGER NOT NULL DEFAULT 7,
           monthly_reward_cap_days INTEGER NOT NULL DEFAULT 30,
           reward_first_membership_only BOOLEAN NOT NULL DEFAULT true,
+          invite_count_reward_threshold INTEGER NOT NULL DEFAULT 10,
+          invite_count_reward_days INTEGER NOT NULL DEFAULT 7,
+          invite_count_reward_max_invites INTEGER NOT NULL DEFAULT 50,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
@@ -476,8 +479,8 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
         )
       `);
       await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_reward_events_referral_granted
-          ON referral_reward_events(referral_id)
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_reward_events_referral_reason_granted
+          ON referral_reward_events(referral_id, reason)
           WHERE status = 'granted'
       `);
       await client.query(`
@@ -580,6 +583,37 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
                      SET default_thinking_level = 'medium'
                      WHERE default_thinking_level NOT IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
       });
+    },
+  },
+  {
+    id: '0033_referral_invite_count_reward',
+    description: '增加累计邀请人数会员奖励配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE referral_config
+          ADD COLUMN IF NOT EXISTS invite_count_reward_threshold INTEGER NOT NULL DEFAULT 10,
+          ADD COLUMN IF NOT EXISTS invite_count_reward_days INTEGER NOT NULL DEFAULT 7,
+          ADD COLUMN IF NOT EXISTS invite_count_reward_max_invites INTEGER NOT NULL DEFAULT 50
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_referral_config_invite_count_reward_valid',
+        tableName: 'referral_config',
+        expression:
+          'invite_count_reward_threshold >= 0 AND invite_count_reward_threshold <= 1000000 AND invite_count_reward_days >= 0 AND invite_count_reward_days <= 366 AND invite_count_reward_max_invites >= 0 AND invite_count_reward_max_invites <= 1000000',
+        cleanupSql: `UPDATE referral_config
+                     SET invite_count_reward_threshold = LEAST(GREATEST(invite_count_reward_threshold, 0), 1000000),
+                         invite_count_reward_days = LEAST(GREATEST(invite_count_reward_days, 0), 366),
+                         invite_count_reward_max_invites = LEAST(GREATEST(invite_count_reward_max_invites, 0), 1000000)`,
+      });
+      // 计数奖励和首购奖励可能由同一个邀请关系触发，唯一键需要按奖励原因隔离。
+      await client.query(`
+        DROP INDEX IF EXISTS idx_referral_reward_events_referral_granted
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_referral_reward_events_referral_reason_granted
+          ON referral_reward_events(referral_id, reason)
+          WHERE status = 'granted'
+      `);
     },
   },
 ];

@@ -261,7 +261,7 @@ export const zhTWMessages = {
       badge: '邀請中心',
       title: '邀請中心',
       description:
-        '分享邀請碼給好友。好友首次使用充值餘額開通會員後，你會獲得會員天數獎勵。',
+        '分享邀請碼給好友。好友首次使用充值餘額開通會員，或累計邀請人數達標後，你會獲得會員天數獎勵。',
       loadFailed: '邀請資訊載入失敗',
       copyFailed: '複製失敗',
       inviteCodeBound: '邀請碼已綁定',
@@ -282,6 +282,7 @@ export const zhTWMessages = {
       bind: '綁定',
       rewardRules: '獎勵規則',
       rewardDays: '獎勵 {days} 天會員',
+      countRewardSummary: '每邀請 {count} 人獎勵 {days} 天會員',
       expand: '展開',
       collapse: '收起',
       ruleEnabled: '邀請功能',
@@ -292,6 +293,9 @@ export const zhTWMessages = {
       ruleTriggerAny: '符合條件的會員購買',
       rulePayment: '支付條件',
       rulePaymentValue: '僅純充值餘額支付會員',
+      ruleInviteCountReward: '累計邀請獎勵',
+      ruleInviteCountRewardValue:
+        '每累計邀請 {count} 人獎勵 {days} 天會員，最多計 {max} 人',
       ruleBinding: '綁定規則',
       ruleBindingValue: '綁定後不可更換，不允許自邀或循環綁定',
     },

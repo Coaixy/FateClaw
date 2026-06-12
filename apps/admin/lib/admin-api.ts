@@ -542,6 +542,9 @@ export interface AdminReferralConfig {
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
+  invite_count_reward_threshold: number;
+  invite_count_reward_days: number;
+  invite_count_reward_max_invites: number;
   updated_at: string;
 }
 
@@ -604,7 +607,13 @@ export interface AdminRuntimeConfig {
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
   default_official_model_id: string | null;
-  default_thinking_level: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  default_thinking_level:
+    | 'off'
+    | 'minimal'
+    | 'low'
+    | 'medium'
+    | 'high'
+    | 'xhigh';
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
@@ -779,6 +788,9 @@ export const admin = {
     inviter_reward_days: number;
     monthly_reward_cap_days: number;
     reward_first_membership_only?: boolean;
+    invite_count_reward_threshold?: number;
+    invite_count_reward_days?: number;
+    invite_count_reward_max_invites?: number;
   }) =>
     adminRequest<AdminReferralConfig>('/api/admin/referrals/config', {
       method: 'PUT',

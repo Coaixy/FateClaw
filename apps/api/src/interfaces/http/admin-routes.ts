@@ -538,6 +538,24 @@ const ReferralConfigSchema = z.object({
     .min(0, '月度封顶天数不能小于 0')
     .max(3660, '月度封顶天数不能超过 3660'),
   reward_first_membership_only: z.boolean().optional(),
+  invite_count_reward_threshold: z
+    .number()
+    .int('累计邀请门槛必须是整数')
+    .min(0, '累计邀请门槛不能小于 0')
+    .max(1_000_000, '累计邀请门槛过大')
+    .optional(),
+  invite_count_reward_days: z
+    .number()
+    .int('累计邀请奖励天数必须是整数')
+    .min(0, '累计邀请奖励天数不能小于 0')
+    .max(366, '累计邀请奖励天数不能超过 366')
+    .optional(),
+  invite_count_reward_max_invites: z
+    .number()
+    .int('累计邀请人数上限必须是整数')
+    .min(0, '累计邀请人数上限不能小于 0')
+    .max(1_000_000, '累计邀请人数上限过大')
+    .optional(),
 });
 
 const AdminReferralsQuerySchema = z.object({
@@ -787,6 +805,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       monthlyRewardCapDays: parsed.data.monthly_reward_cap_days,
       rewardFirstMembershipOnly:
         parsed.data.reward_first_membership_only ?? true,
+      inviteCountRewardThreshold:
+        parsed.data.invite_count_reward_threshold ?? 10,
+      inviteCountRewardDays: parsed.data.invite_count_reward_days ?? 7,
+      inviteCountRewardMaxInvites:
+        parsed.data.invite_count_reward_max_invites ?? 50,
     });
   });
 

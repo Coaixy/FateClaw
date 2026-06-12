@@ -261,7 +261,7 @@ export const zhCNMessages = {
       badge: '邀请中心',
       title: '邀请中心',
       description:
-        '分享邀请码给好友。好友首次使用充值余额开通会员后，你会获得会员天数奖励。',
+        '分享邀请码给好友。好友首次使用充值余额开通会员，或累计邀请人数达标后，你会获得会员天数奖励。',
       loadFailed: '邀请信息加载失败',
       copyFailed: '复制失败',
       inviteCodeBound: '邀请码已绑定',
@@ -282,6 +282,7 @@ export const zhCNMessages = {
       bind: '绑定',
       rewardRules: '奖励规则',
       rewardDays: '奖励 {days} 天会员',
+      countRewardSummary: '每邀请 {count} 人奖励 {days} 天会员',
       expand: '展开',
       collapse: '收起',
       ruleEnabled: '邀请功能',
@@ -292,6 +293,9 @@ export const zhCNMessages = {
       ruleTriggerAny: '符合条件的会员购买',
       rulePayment: '支付条件',
       rulePaymentValue: '仅纯充值余额支付会员',
+      ruleInviteCountReward: '累计邀请奖励',
+      ruleInviteCountRewardValue:
+        '每累计邀请 {count} 人奖励 {days} 天会员，最多计 {max} 人',
       ruleBinding: '绑定规则',
       ruleBindingValue: '绑定后不可更换，不允许自邀或循环绑定',
     },

@@ -102,7 +102,9 @@ export function ReferralCenter() {
     try {
       setSummary(await referralsApi.me());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('pages.referrals.loadFailed'));
+      setError(
+        err instanceof Error ? err.message : t('pages.referrals.loadFailed'),
+      );
     } finally {
       setLoading(false);
     }
@@ -139,13 +141,23 @@ export function ReferralCenter() {
       toast('success', t('pages.referrals.inviteCodeBound'));
       await load();
     } catch (err) {
-      toast('error', err instanceof Error ? err.message : t('pages.referrals.bindInviteFailed'));
+      toast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : t('pages.referrals.bindInviteFailed'),
+      );
     } finally {
       setRedeeming(false);
     }
   };
 
   const link = summary ? referralLink(summary) : '';
+  const countRewardEnabled = summary
+    ? summary.config.invite_count_reward_threshold > 0 &&
+      summary.config.invite_count_reward_days > 0 &&
+      summary.config.invite_count_reward_max_invites > 0
+    : false;
 
   return (
     <AppShell>
@@ -334,6 +346,14 @@ export function ReferralCenter() {
                           days: summary.config.inviter_reward_days,
                         })}
                       </span>
+                      {countRewardEnabled ? (
+                        <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
+                          {t('pages.referrals.countRewardSummary', {
+                            count: summary.config.invite_count_reward_threshold,
+                            days: summary.config.invite_count_reward_days,
+                          })}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button
@@ -392,6 +412,20 @@ export function ReferralCenter() {
                     <RuleRow
                       label={t('pages.referrals.rulePayment')}
                       value={t('pages.referrals.rulePaymentValue')}
+                    />
+                    <RuleRow
+                      label={t('pages.referrals.ruleInviteCountReward')}
+                      value={
+                        countRewardEnabled
+                          ? t('pages.referrals.ruleInviteCountRewardValue', {
+                              count:
+                                summary.config.invite_count_reward_threshold,
+                              days: summary.config.invite_count_reward_days,
+                              max: summary.config
+                                .invite_count_reward_max_invites,
+                            })
+                          : t('pages.common.disabled')
+                      }
                     />
                     <RuleRow
                       label={t('pages.referrals.ruleBinding')}

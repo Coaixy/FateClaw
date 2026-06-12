@@ -48,6 +48,9 @@ export async function getMyReferralSummary(
       inviter_reward_days: config.inviter_reward_days,
       monthly_reward_cap_days: config.monthly_reward_cap_days,
       reward_first_membership_only: config.reward_first_membership_only,
+      invite_count_reward_threshold: config.invite_count_reward_threshold,
+      invite_count_reward_days: config.invite_count_reward_days,
+      invite_count_reward_max_invites: config.invite_count_reward_max_invites,
       updated_at: config.updated_at,
     },
   });

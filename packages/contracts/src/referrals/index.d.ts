@@ -18,6 +18,9 @@ export interface ReferralConfigDto {
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
+  invite_count_reward_threshold: number;
+  invite_count_reward_days: number;
+  invite_count_reward_max_invites: number;
   updated_at: string;
 }
 
