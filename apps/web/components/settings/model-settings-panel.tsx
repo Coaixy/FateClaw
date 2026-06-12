@@ -124,9 +124,15 @@ function hasUsableOfficialSelection(data: ModelSettingsOverview): boolean {
 function resolveDefaultOfficialModel(
   data: ModelSettingsOverview,
 ): OfficialModel | null {
-  const defaultOfficialModel = findLowestPricedOfficialModel(
-    data.official_models,
+  const configuredDefaultModel = data.official_models.find(
+    (model) =>
+      model.id === data.default_official_model_id &&
+      model.enabled &&
+      model.has_secret,
   );
+  const defaultOfficialModel =
+    configuredDefaultModel ??
+    findLowestPricedOfficialModel(data.official_models);
   if (!defaultOfficialModel) {
     return null;
   }

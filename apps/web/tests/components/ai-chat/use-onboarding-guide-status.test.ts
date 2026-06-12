@@ -29,6 +29,7 @@ const baseModelOverview: ModelSettingsOverview = {
   custom: null,
   selection: null,
   official_models: [],
+  default_official_model_id: null,
   custom_model_platform_price_per_million_coins: 0,
 };
 

@@ -123,6 +123,7 @@ export default function AdminModelConfigPage() {
 
       <RuntimeConfigPanel
         runtime={overview.runtime}
+        providers={overview.providers}
         busy={busyId === 'runtime'}
         onSave={async (config) =>
           withBusy('runtime', async () => {
@@ -185,7 +186,9 @@ export default function AdminModelConfigPage() {
                 key={provider.id}
                 provider={provider}
                 busy={busyId === provider.id}
-                isActive={false}
+                isActive={
+                  overview.runtime.default_official_model_id === provider.id
+                }
                 onSave={async (id, draft) =>
                   withBusy(id, async () => {
                     await admin.updateOfficialModel(id, {
@@ -197,7 +200,14 @@ export default function AdminModelConfigPage() {
                     });
                   })
                 }
-                onSetDefault={async () => undefined}
+                onSetDefault={async (id) =>
+                  withBusy(id, async () => {
+                    await admin.updateRuntimeConfig({
+                      ...overview.runtime,
+                      default_official_model_id: id,
+                    });
+                  })
+                }
                 onDelete={async (id) =>
                   withBusy(id, async () => {
                     await admin.deleteOfficialModel(id);

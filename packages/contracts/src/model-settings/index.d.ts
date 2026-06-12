@@ -69,5 +69,6 @@ export interface ModelSettingsOverviewDto {
   custom: UserCustomModelConfigDto | null;
   selection: UserModelSelectionDto | null;
   official_models: OfficialModelDto[];
+  default_official_model_id: string | null;
   custom_model_platform_price_per_million_coins: number;
 }

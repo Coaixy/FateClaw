@@ -116,6 +116,7 @@ export interface UserModelSettingsOverview {
     | null;
   selection: UserModelSelection | null;
   official_models: AdminOfficialModelView[];
+  default_official_model_id: string | null;
   custom_model_platform_price_per_million_coins: number;
 }
 
@@ -502,6 +503,31 @@ async function resolveLowestPricedOfficialRuntime(
     : null;
 }
 
+async function resolveConfiguredDefaultOfficialRuntime(
+  thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
+): Promise<EffectiveLlmRuntimeConfig | null> {
+  const runtime = await getRuntimeConfig();
+  const defaultOfficialModelId = runtime.default_official_model_id?.trim();
+  if (!defaultOfficialModelId) return null;
+
+  const model = await getOfficialModelConfig(defaultOfficialModelId);
+  if (!model) return null;
+
+  const candidate = await resolveUsableOfficialModelCandidate(model);
+  return candidate
+    ? buildOfficialRuntime(candidate.model, candidate.secret, thinkingLevel)
+    : null;
+}
+
+async function resolveFallbackOfficialRuntime(
+  thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
+): Promise<EffectiveLlmRuntimeConfig | null> {
+  return (
+    (await resolveConfiguredDefaultOfficialRuntime(thinkingLevel)) ??
+    (await resolveLowestPricedOfficialRuntime(thinkingLevel))
+  );
+}
+
 async function resolveOfficialRuntime(
   selection: UserModelSelection,
 ): Promise<EffectiveLlmRuntimeConfig> {
@@ -586,7 +612,7 @@ export async function resolveUserLlmRuntime(
 ): Promise<EffectiveLlmRuntimeConfig> {
   const selection = await getUserModelSelection(userId);
   if (!selection) {
-    const fallbackRuntime = await resolveLowestPricedOfficialRuntime();
+    const fallbackRuntime = await resolveFallbackOfficialRuntime();
     if (fallbackRuntime) {
       return fallbackRuntime;
     }
@@ -598,7 +624,7 @@ export async function resolveUserLlmRuntime(
       return await resolveCustomRuntime(userId, thinkingLevel);
     } catch (error) {
       const fallbackRuntime =
-        await resolveLowestPricedOfficialRuntime(thinkingLevel);
+        await resolveFallbackOfficialRuntime(thinkingLevel);
       if (fallbackRuntime) {
         return fallbackRuntime;
       }
@@ -608,7 +634,7 @@ export async function resolveUserLlmRuntime(
   try {
     return await resolveOfficialRuntime(selection);
   } catch (error) {
-    const fallbackRuntime = await resolveLowestPricedOfficialRuntime(
+    const fallbackRuntime = await resolveFallbackOfficialRuntime(
       normalizeThinkingLevel(selection.thinking_level),
     );
     if (fallbackRuntime) {
@@ -659,7 +685,7 @@ export async function resolveSimpleWorkflowLlmRuntime(
       return await resolveUserLlmRuntime(userId);
     } catch (error) {
       const fallbackRuntime =
-        await resolveLowestPricedOfficialRuntime(thinkingLevel);
+        await resolveFallbackOfficialRuntime(thinkingLevel);
       if (fallbackRuntime) return fallbackRuntime;
       throw error;
     }
@@ -673,8 +699,7 @@ export async function resolveSimpleWorkflowLlmRuntime(
     if (fixedRuntime) return fixedRuntime;
   }
 
-  const fallbackRuntime =
-    await resolveLowestPricedOfficialRuntime(thinkingLevel);
+  const fallbackRuntime = await resolveFallbackOfficialRuntime(thinkingLevel);
   if (fallbackRuntime) return fallbackRuntime;
   throw new Error('当前没有可用官方模型，请联系管理员');
 }
@@ -727,6 +752,7 @@ export async function getSystemConfigOverview(): Promise<{
     agent_concurrency_limit: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
+    default_official_model_id: string | null;
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
@@ -757,6 +783,7 @@ export async function getSystemConfigOverview(): Promise<{
       agent_concurrency_limit: runtime.agent_concurrency_limit,
       local_agent_max_processes: runtime.local_agent_max_processes,
       local_agent_idle_ttl_ms: runtime.local_agent_idle_ttl_ms,
+      default_official_model_id: runtime.default_official_model_id ?? null,
       pi_session_health_enabled: runtime.pi_session_health_enabled,
       pi_session_inactive_cleanup_days:
         runtime.pi_session_inactive_cleanup_days,
@@ -884,6 +911,7 @@ export async function updateRuntimeSettings(args: {
   agentConcurrencyLimit: number;
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
+  defaultOfficialModelId?: string | null;
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
@@ -896,6 +924,7 @@ export async function updateRuntimeSettings(args: {
   agent_concurrency_limit: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
+  default_official_model_id: string | null;
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
@@ -907,10 +936,19 @@ export async function updateRuntimeSettings(args: {
 }> {
   const actor = args.actor ?? 'admin';
   const before = await getRuntimeConfig();
+  if (args.defaultOfficialModelId) {
+    const defaultModel = await getOfficialModelConfig(
+      args.defaultOfficialModelId,
+    );
+    if (!defaultModel) {
+      throw new Error('默认官方模型不存在');
+    }
+  }
   const updated = await updateRuntimeConfig({
     agentConcurrencyLimit: args.agentConcurrencyLimit,
     localAgentMaxProcesses: args.localAgentMaxProcesses,
     localAgentIdleTtlMs: args.localAgentIdleTtlMs,
+    defaultOfficialModelId: args.defaultOfficialModelId,
     piSessionHealthEnabled: args.piSessionHealthEnabled,
     piSessionInactiveCleanupDays: args.piSessionInactiveCleanupDays,
     piSessionOrphanGraceDays: args.piSessionOrphanGraceDays,
@@ -933,6 +971,7 @@ export async function updateRuntimeSettings(args: {
     agent_concurrency_limit: updated.agent_concurrency_limit,
     local_agent_max_processes: updated.local_agent_max_processes,
     local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
+    default_official_model_id: updated.default_official_model_id ?? null,
     pi_session_health_enabled: updated.pi_session_health_enabled,
     pi_session_inactive_cleanup_days: updated.pi_session_inactive_cleanup_days,
     pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
@@ -1102,12 +1141,14 @@ export async function removeOfficialModel(
 export async function getUserModelSettingsOverview(
   userId: string,
 ): Promise<UserModelSettingsOverview> {
-  const [custom, selection, officialModels, modelBilling] = await Promise.all([
-    getUserModelConfig(userId),
-    getUserModelSelection(userId),
-    listOfficialModelViews(),
-    getModelBillingConfig(),
-  ]);
+  const [custom, selection, officialModels, modelBilling, runtime] =
+    await Promise.all([
+      getUserModelConfig(userId),
+      getUserModelSelection(userId),
+      listOfficialModelViews(),
+      getModelBillingConfig(),
+      getRuntimeConfig(),
+    ]);
   const customSecret = custom
     ? await resolveSecret({
         secretKey: custom.api_key_secret_key,
@@ -1137,6 +1178,7 @@ export async function getUserModelSettingsOverview(
         }
       : null,
     official_models: officialModels,
+    default_official_model_id: runtime.default_official_model_id ?? null,
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
   };

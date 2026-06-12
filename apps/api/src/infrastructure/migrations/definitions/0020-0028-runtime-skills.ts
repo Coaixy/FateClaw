@@ -2,7 +2,7 @@ import type { DatabaseMigration } from '../types.js';
 import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0020-0029。
+ * 数据库迁移分段：0020-0031。
  */
 export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
@@ -532,6 +532,35 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
                      SET status = 'skipped'
                      WHERE status NOT IN ('granted', 'skipped', 'ineligible')`,
       });
+    },
+  },
+
+  {
+    id: '0031_default_official_model_runtime_config',
+    description: '增加后台系统默认官方模型配置',
+    async up(client) {
+      // 为 runtime_config 增加后台系统默认官方模型列，缺省 NULL 表示沿用最低价兜底。
+      await client.query(`
+        ALTER TABLE runtime_config
+          ADD COLUMN IF NOT EXISTS default_official_model_id TEXT DEFAULT NULL
+      `);
+      // 老库可能没有外键，使用 DO 块在缺失时补建，ON DELETE SET NULL 让管理员删默认模型不会破坏配置。
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'fk_runtime_config_default_official_model'
+          ) THEN
+            ALTER TABLE runtime_config
+              ADD CONSTRAINT fk_runtime_config_default_official_model
+              FOREIGN KEY (default_official_model_id)
+              REFERENCES official_model_configs(id)
+              ON DELETE SET NULL
+              ON UPDATE CASCADE;
+          END IF;
+        END $$
+      `);
     },
   },
 ];

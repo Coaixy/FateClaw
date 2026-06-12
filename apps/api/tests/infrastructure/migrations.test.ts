@@ -168,6 +168,13 @@ describe('runDatabaseMigrations', () => {
         '增加简易模式 Workflow preset 配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0031_default_official_model_runtime_config',
+        '增加后台系统默认官方模型配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -288,6 +295,8 @@ describe('runDatabaseMigrations', () => {
       '0027_user_auth_token_version',
       '0028_skill_bundle_runtime_limits',
       '0029_simple_workflow_presets',
+      '0030_user_referrals',
+      '0031_default_official_model_runtime_config',
     ]);
 
     await runDatabaseMigrations(client as never);

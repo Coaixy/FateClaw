@@ -378,6 +378,13 @@ const RuntimeConfigSchema = z
       .min(30_000, '空闲回收时间不能少于 30 秒')
       .max(86_400_000, '空闲回收时间不能超过 24 小时')
       .optional(),
+    default_official_model_id: z
+      .string()
+      .trim()
+      .min(1, '默认官方模型不能为空')
+      .max(120, '默认官方模型 ID 过长')
+      .nullable()
+      .optional(),
     pi_session_health_enabled: z.boolean().optional(),
     pi_session_inactive_cleanup_days: z
       .number()
@@ -655,20 +662,27 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send({ error: parsed.error.issues[0]?.message || '参数错误' });
     }
-    return updateRuntimeSettings({
-      agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
-      localAgentMaxProcesses: parsed.data.local_agent_max_processes,
-      localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
-      piSessionHealthEnabled: parsed.data.pi_session_health_enabled,
-      piSessionInactiveCleanupDays:
-        parsed.data.pi_session_inactive_cleanup_days,
-      piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
-      skillBundleMaxFiles: parsed.data.skill_bundle_max_files,
-      skillBundleMaxFileChars: parsed.data.skill_bundle_max_file_chars,
-      skillBundleMaxTotalChars: parsed.data.skill_bundle_max_total_chars,
-      skillBundleMaxZipBytes: parsed.data.skill_bundle_max_zip_bytes,
-      actor: 'manager',
-    });
+    try {
+      return await updateRuntimeSettings({
+        agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
+        localAgentMaxProcesses: parsed.data.local_agent_max_processes,
+        localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
+        defaultOfficialModelId: parsed.data.default_official_model_id,
+        piSessionHealthEnabled: parsed.data.pi_session_health_enabled,
+        piSessionInactiveCleanupDays:
+          parsed.data.pi_session_inactive_cleanup_days,
+        piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
+        skillBundleMaxFiles: parsed.data.skill_bundle_max_files,
+        skillBundleMaxFileChars: parsed.data.skill_bundle_max_file_chars,
+        skillBundleMaxTotalChars: parsed.data.skill_bundle_max_total_chars,
+        skillBundleMaxZipBytes: parsed.data.skill_bundle_max_zip_bytes,
+        actor: 'manager',
+      });
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : '更新运行时配置失败',
+      });
+    }
   });
 
   // GET /api/admin/recharge-config — 读取数据库中的充值配置

@@ -133,6 +133,7 @@ describe('resolveUserLlmRuntime', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -186,6 +187,97 @@ describe('resolveUserLlmRuntime', () => {
       thinkingLevel: 'medium',
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 3,
+    });
+  });
+
+  it('uses the configured default official model before the lowest priced fallback', async () => {
+    mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: 'configured-default',
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetOfficialModelConfig.mockResolvedValue(
+      official({
+        id: 'configured-default',
+        model_key: 'configured-default',
+        display_name: 'Configured Default',
+        model_name: 'gpt-configured',
+        input_token_price_per_million_coins: 100,
+        output_token_price_per_million_coins: 100,
+      }),
+    );
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'cheapest',
+        model_key: 'cheapest',
+        display_name: 'Cheapest',
+        model_name: 'gpt-cheapest',
+        input_token_price_per_million_coins: 1,
+        output_token_price_per_million_coins: 1,
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'configured-default',
+      providerKey: 'configured-default',
+      model: 'gpt-configured',
+    });
+  });
+
+  it('falls back to the lowest priced model when the configured default is unusable', async () => {
+    mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: 'configured-default',
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetOfficialModelConfig.mockResolvedValue(
+      official({
+        id: 'configured-default',
+        enabled: false,
+        model_key: 'configured-default',
+        display_name: 'Configured Default',
+        model_name: 'gpt-configured',
+      }),
+    );
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'fallback',
+        model_key: 'fallback',
+        display_name: 'Fallback',
+        model_name: 'gpt-fallback',
+        input_token_price_per_million_coins: 1,
+        output_token_price_per_million_coins: 1,
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'fallback',
+      providerKey: 'fallback',
+      model: 'gpt-fallback',
     });
   });
 
@@ -380,6 +472,7 @@ describe('getLocalAgentRuntimePolicy', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 999,
       local_agent_idle_ttl_ms: 1,
+      default_official_model_id: null,
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -408,6 +501,7 @@ describe('getPiSessionHealthPolicy', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
       pi_session_health_enabled: true,
       pi_session_inactive_cleanup_days: 0,
       pi_session_orphan_grace_days: 5000,
@@ -437,6 +531,7 @@ describe('getSkillBundleLimitsPolicy', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -575,6 +670,7 @@ describe('listOfficialModelViews', () => {
       agent_concurrency_limit: 10,
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,

@@ -593,6 +593,7 @@ CREATE TABLE IF NOT EXISTS runtime_config (
   agent_concurrency_limit INTEGER NOT NULL DEFAULT 10,
   local_agent_max_processes INTEGER NOT NULL DEFAULT 4,
   local_agent_idle_ttl_ms INTEGER NOT NULL DEFAULT 600000,
+  default_official_model_id TEXT DEFAULT NULL REFERENCES official_model_configs(id) ON DELETE SET NULL,
   pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
   pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
   pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,
@@ -608,6 +609,7 @@ ON CONFLICT (id) DO NOTHING;
 ALTER TABLE runtime_config
   ADD COLUMN IF NOT EXISTS local_agent_max_processes INTEGER NOT NULL DEFAULT 4,
   ADD COLUMN IF NOT EXISTS local_agent_idle_ttl_ms INTEGER NOT NULL DEFAULT 600000,
+  ADD COLUMN IF NOT EXISTS default_official_model_id TEXT DEFAULT NULL REFERENCES official_model_configs(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
   ADD COLUMN IF NOT EXISTS pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,

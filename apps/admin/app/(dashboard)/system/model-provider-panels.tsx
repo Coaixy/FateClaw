@@ -16,6 +16,7 @@ import {
   Power,
   PowerOff,
   Save,
+  Star,
   Trash2,
 } from 'lucide-react';
 import {
@@ -54,6 +55,11 @@ function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
 export function resolveRuntimeProvider(
   overview: AdminSystemConfigOverview | null,
 ): AdminModelProvider | null {
+  const defaultModelId = overview?.runtime.default_official_model_id;
+  const configuredDefault = overview?.providers.find(
+    (model) => model.id === defaultModelId && model.enabled && model.has_secret,
+  );
+  if (configuredDefault) return configuredDefault;
   return (
     overview?.providers.find((model) => model.enabled && model.has_secret) ??
     null
@@ -69,13 +75,26 @@ export function RuntimeSummary({
   const availableCount = overview.providers.filter(
     (model) => model.enabled && model.has_secret,
   ).length;
+  const runtimeProvider = resolveRuntimeProvider(overview);
+  const configuredDefault = overview.providers.find(
+    (model) => model.id === overview.runtime.default_official_model_id,
+  );
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm font-semibold">官方模型池</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            用户未选择、选择失效或自配模型不可用时，系统会回退到价格最低的可用官方模型。
+            用户未选择、选择失效或自配模型不可用时，系统会优先使用后台默认官方模型；默认不可用时回退到价格最低的可用官方模型。
+          </div>
+          <div className="mt-2 text-[12px] leading-5 text-muted">
+            当前默认：
+            <span className="font-medium text-ink">
+              {runtimeProvider?.display_name ?? '未配置可用默认模型'}
+            </span>
+            {configuredDefault && !runtimeProvider ? (
+              <span className="ml-2 text-error">已配置但不可用</span>
+            ) : null}
           </div>
         </div>
         <div className="rounded-full bg-canvas px-2.5 py-1 text-[11px] text-muted">
@@ -158,15 +177,18 @@ export function ModelBillingPanel({
  */
 export function RuntimeConfigPanel({
   runtime,
+  providers,
   busy,
   onSave,
 }: {
   runtime: AdminRuntimeConfig;
+  providers: AdminModelProvider[];
   busy: boolean;
   onSave: (config: {
     agent_concurrency_limit: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
+    default_official_model_id: string | null;
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
@@ -182,6 +204,9 @@ export function RuntimeConfigPanel({
   );
   const [idleSeconds, setIdleSeconds] = useState(
     Math.round(runtime.local_agent_idle_ttl_ms / 1000),
+  );
+  const [defaultOfficialModelId, setDefaultOfficialModelId] = useState(
+    runtime.default_official_model_id ?? '',
   );
   const [piHealthEnabled, setPiHealthEnabled] = useState(
     runtime.pi_session_health_enabled,
@@ -209,6 +234,7 @@ export function RuntimeConfigPanel({
     setLimit(runtime.agent_concurrency_limit);
     setMaxProcesses(runtime.local_agent_max_processes);
     setIdleSeconds(Math.round(runtime.local_agent_idle_ttl_ms / 1000));
+    setDefaultOfficialModelId(runtime.default_official_model_id ?? '');
     setPiHealthEnabled(runtime.pi_session_health_enabled);
     setPiInactiveDays(runtime.pi_session_inactive_cleanup_days);
     setPiOrphanGraceDays(runtime.pi_session_orphan_grace_days);
@@ -220,6 +246,7 @@ export function RuntimeConfigPanel({
     );
   }, [
     runtime.agent_concurrency_limit,
+    runtime.default_official_model_id,
     runtime.local_agent_idle_ttl_ms,
     runtime.local_agent_max_processes,
     runtime.pi_session_health_enabled,
@@ -245,6 +272,7 @@ export function RuntimeConfigPanel({
       86_400_000,
       Math.max(30_000, Math.floor(idleSeconds) * 1000),
     ),
+    default_official_model_id: defaultOfficialModelId || null,
     pi_session_health_enabled: piHealthEnabled,
     pi_session_inactive_cleanup_days: Math.min(
       3650,
@@ -271,6 +299,8 @@ export function RuntimeConfigPanel({
     normalized.local_agent_max_processes !==
       runtime.local_agent_max_processes ||
     normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms ||
+    normalized.default_official_model_id !==
+      (runtime.default_official_model_id ?? null) ||
     normalized.pi_session_health_enabled !==
       runtime.pi_session_health_enabled ||
     normalized.pi_session_inactive_cleanup_days !==
@@ -340,6 +370,29 @@ export function RuntimeConfigPanel({
                 max={86_400}
               />
             </div>
+          </div>
+
+          <div className="border-t border-hairline/70 pt-4">
+            <div className="mb-2 text-[12px] font-medium text-muted">
+              默认官方模型
+            </div>
+            <label className="block space-y-1.5">
+              <select
+                value={defaultOfficialModelId}
+                onChange={(event) =>
+                  setDefaultOfficialModelId(event.target.value)
+                }
+                className={CONTROL}
+              >
+                <option value="">未指定，使用最低价兜底</option>
+                {providers.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.display_name}
+                    {model.enabled && model.has_secret ? '' : '（不可用）'}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className="border-t border-hairline/70 pt-4">
@@ -438,7 +491,9 @@ export function RuntimeConfigPanel({
 export function ProviderRow({
   provider,
   busy,
+  isActive,
   onSave,
+  onSetDefault,
   onDelete,
 }: {
   provider: AdminModelProvider;
@@ -460,6 +515,7 @@ export function ProviderRow({
   const toggledDraft = setProviderDraftEnabled(draft, !provider.enabled);
   const description =
     provider.description || '未填写说明，用户侧会显示默认提示。';
+  const canSetDefault = provider.enabled && provider.has_secret;
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
@@ -501,12 +557,31 @@ export function ProviderRow({
 
         <div className="flex min-w-0 flex-col gap-2 xl:items-end">
           <div className="flex min-w-0 flex-wrap gap-1.5 xl:justify-end">
+            {isActive && (
+              <span className="inline-flex whitespace-nowrap rounded-full bg-primary/10 px-2 py-1 text-[10px] text-primary">
+                默认
+              </span>
+            )}
             {!provider.enabled && (
               <span className="whitespace-nowrap rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
                 停用
               </span>
             )}
+            {!provider.has_secret && (
+              <span className="whitespace-nowrap rounded-full bg-canvas px-2 py-1 text-[10px] text-muted">
+                缺少密钥
+              </span>
+            )}
           </div>
+          <button
+            type="button"
+            onClick={() => void onSetDefault(provider.id)}
+            disabled={busy || isActive || !canSetDefault}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-hairline px-3 text-[12px] font-medium hover:bg-surface-cream-strong disabled:opacity-40"
+          >
+            <Star size={13} />
+            设为默认
+          </button>
           <button
             type="button"
             onClick={() => void onSave(provider.id, toggledDraft)}

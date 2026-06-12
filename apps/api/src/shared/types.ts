@@ -313,6 +313,8 @@ export interface RuntimeConfig {
   agent_concurrency_limit: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
+  /** 后台指定的系统默认官方模型；为空时按价格最低的可用官方模型兜底。 */
+  default_official_model_id: string | null;
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
