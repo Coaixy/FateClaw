@@ -70,9 +70,13 @@ type TranslationFn = (
 ) => string;
 
 function resolveSelectionThinkingLevel(
-  selection: ModelSettingsOverview['selection'],
+  data: Pick<ModelSettingsOverview, 'selection' | 'default_thinking_level'> | null,
 ): ModelThinkingLevel {
-  return selection?.thinking_level ?? DEFAULT_THINKING_LEVEL;
+  return (
+    data?.selection?.thinking_level ??
+    data?.default_thinking_level ??
+    DEFAULT_THINKING_LEVEL
+  );
 }
 
 function resolveThinkingLevelIndex(value: ModelThinkingLevel): number {
@@ -154,7 +158,7 @@ function buildDefaultOfficialSelection(
     user_id: data.selection?.user_id ?? data.custom?.user_id ?? '',
     source: 'official',
     official_model_id: model.id,
-    thinking_level: resolveSelectionThinkingLevel(data.selection),
+    thinking_level: resolveSelectionThinkingLevel(data),
     created_at: data.selection?.created_at ?? '',
     updated_at: data.selection?.updated_at ?? '',
   };
@@ -240,7 +244,7 @@ export function ModelSettingsPanel() {
         source: 'official',
         official_model_id: modelId,
         thinking_level: resolveSelectionThinkingLevel(
-          overview?.selection ?? null,
+          overview,
         ),
       });
       setMessage(t('pages.modelSettings.officialSelected'));
@@ -261,7 +265,7 @@ export function ModelSettingsPanel() {
       await modelSettingsApi.select({
         source: 'custom',
         thinking_level: resolveSelectionThinkingLevel(
-          overview?.selection ?? null,
+          overview,
         ),
       });
       setMessage(t('pages.modelSettings.customSelected'));
@@ -278,7 +282,7 @@ export function ModelSettingsPanel() {
   const saveThinkingLevel = async (thinkingLevel: ModelThinkingLevel) => {
     const selection = overview?.selection;
     if (!selection) return;
-    const previousThinkingLevel = resolveSelectionThinkingLevel(selection);
+    const previousThinkingLevel = resolveSelectionThinkingLevel(overview);
     const saveVersion = thinkingSaveVersion.current + 1;
     thinkingSaveVersion.current = saveVersion;
     setOverview((prev) =>
@@ -346,7 +350,7 @@ export function ModelSettingsPanel() {
   const availableOfficialModels = officialModels.filter(
     (model) => model.enabled && model.has_secret,
   ).length;
-  const thinkingLevel = resolveSelectionThinkingLevel(selection ?? null);
+  const thinkingLevel = resolveSelectionThinkingLevel(overview);
 
   return (
     <div className="space-y-5">

@@ -15,6 +15,7 @@ const {
   mockUpdateRuntimeConfig,
   mockUpsertSystemSecret,
   mockUpsertUserModelConfig,
+  mockUpsertUserModelSelection,
 } = vi.hoisted(() => ({
   mockGetOfficialModelConfig: vi.fn(),
   mockGetModelBillingConfig: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockUpdateRuntimeConfig: vi.fn(),
   mockUpsertSystemSecret: vi.fn(),
   mockUpsertUserModelConfig: vi.fn(),
+  mockUpsertUserModelSelection: vi.fn(),
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
@@ -51,7 +53,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   updateRuntimeConfig: mockUpdateRuntimeConfig,
   upsertSystemSecret: mockUpsertSystemSecret,
   upsertUserModelConfig: mockUpsertUserModelConfig,
-  upsertUserModelSelection: vi.fn(),
+  upsertUserModelSelection: mockUpsertUserModelSelection,
 }));
 
 import {
@@ -65,6 +67,7 @@ import {
   removeOfficialModel,
   resolveUserLlmRuntime,
   saveUserCustomModelConfig,
+  setUserModelSelection,
   updateOfficialModel,
 } from '../../../src/modules/system/system-config.js';
 import type {
@@ -134,6 +137,7 @@ describe('resolveUserLlmRuntime', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: null,
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -198,6 +202,7 @@ describe('resolveUserLlmRuntime', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: 'configured-default',
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -236,6 +241,40 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
+  it('uses the configured default thinking level when the user has no selection', async () => {
+    mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
+      default_thinking_level: 'high',
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'fallback',
+        model_key: 'fallback',
+        display_name: 'Fallback',
+        model_name: 'gpt-fallback',
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'fallback',
+      thinkingLevel: 'high',
+    });
+  });
+
   it('falls back to the lowest priced model when the configured default is unusable', async () => {
     mockGetUserModelSelection.mockResolvedValue(undefined);
     mockGetRuntimeConfig.mockResolvedValue({
@@ -244,6 +283,7 @@ describe('resolveUserLlmRuntime', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: 'configured-default',
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -473,6 +513,7 @@ describe('getLocalAgentRuntimePolicy', () => {
       local_agent_max_processes: 999,
       local_agent_idle_ttl_ms: 1,
       default_official_model_id: null,
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -502,6 +543,7 @@ describe('getPiSessionHealthPolicy', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: null,
+      default_thinking_level: 'medium',
       pi_session_health_enabled: true,
       pi_session_inactive_cleanup_days: 0,
       pi_session_orphan_grace_days: 5000,
@@ -532,6 +574,7 @@ describe('getSkillBundleLimitsPolicy', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: null,
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -671,6 +714,7 @@ describe('listOfficialModelViews', () => {
       local_agent_max_processes: 4,
       local_agent_idle_ttl_ms: 600_000,
       default_official_model_id: null,
+      default_thinking_level: 'medium',
       pi_session_health_enabled: false,
       pi_session_inactive_cleanup_days: 30,
       pi_session_orphan_grace_days: 30,
@@ -744,6 +788,53 @@ describe('updateOfficialModel', () => {
     expect(mockUpdateOfficialModelConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKeySecretKey: 'official-model:official-1:secret',
+      }),
+    );
+  });
+});
+
+describe('setUserModelSelection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockGetRuntimeConfig.mockResolvedValue({
+      id: 'default',
+      agent_concurrency_limit: 10,
+      local_agent_max_processes: 4,
+      local_agent_idle_ttl_ms: 600_000,
+      default_official_model_id: null,
+      default_thinking_level: 'high',
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockUpsertUserModelSelection.mockResolvedValue({
+      user_id: 'user-1',
+      source: 'custom',
+      official_model_id: null,
+      thinking_level: 'high',
+      created_at: '2026-05-04T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+  });
+
+  it('uses the configured default thinking level for first-time selections', async () => {
+    await setUserModelSelection({
+      userId: 'user-1',
+      source: 'custom',
+    });
+
+    expect(mockUpsertUserModelSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        source: 'custom',
+        officialModelId: null,
+        thinkingLevel: 'high',
       }),
     );
   });

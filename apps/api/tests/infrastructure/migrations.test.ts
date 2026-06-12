@@ -175,6 +175,13 @@ describe('runDatabaseMigrations', () => {
         '增加后台系统默认官方模型配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0032_default_thinking_level_runtime_config',
+        '增加后台默认思考等级配置',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -297,6 +304,7 @@ describe('runDatabaseMigrations', () => {
       '0029_simple_workflow_presets',
       '0030_user_referrals',
       '0031_default_official_model_runtime_config',
+      '0032_default_thinking_level_runtime_config',
     ]);
 
     await runDatabaseMigrations(client as never);

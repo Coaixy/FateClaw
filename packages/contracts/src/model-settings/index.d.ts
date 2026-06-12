@@ -70,5 +70,6 @@ export interface ModelSettingsOverviewDto {
   selection: UserModelSelectionDto | null;
   official_models: OfficialModelDto[];
   default_official_model_id: string | null;
+  default_thinking_level: ModelThinkingLevelDto;
   custom_model_platform_price_per_million_coins: number;
 }

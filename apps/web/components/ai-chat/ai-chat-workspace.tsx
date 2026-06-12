@@ -143,7 +143,11 @@ function getAvailableOfficialModels(
 function resolveToolbarThinkingLevel(
   overview: ModelSettingsOverview | null,
 ): ModelThinkingLevel {
-  return overview?.selection?.thinking_level ?? DEFAULT_THINKING_LEVEL;
+  return (
+    overview?.selection?.thinking_level ??
+    overview?.default_thinking_level ??
+    DEFAULT_THINKING_LEVEL
+  );
 }
 
 function findSelectedOfficialModel(

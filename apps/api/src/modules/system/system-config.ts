@@ -117,6 +117,7 @@ export interface UserModelSettingsOverview {
   selection: UserModelSelection | null;
   official_models: AdminOfficialModelView[];
   default_official_model_id: string | null;
+  default_thinking_level: PiThinkingLevel;
   custom_model_platform_price_per_million_coins: number;
 }
 
@@ -157,6 +158,10 @@ function normalizeThinkingLevel(value: unknown): PiThinkingLevel {
   return PI_THINKING_LEVELS.includes(value as PiThinkingLevel)
     ? (value as PiThinkingLevel)
     : DEFAULT_PI_THINKING_LEVEL;
+}
+
+function normalizeRuntimeDefaultThinkingLevel(value: unknown): PiThinkingLevel {
+  return normalizeThinkingLevel(value ?? DEFAULT_PI_THINKING_LEVEL);
 }
 
 function normalizeModelContextWindowTokens(
@@ -611,8 +616,15 @@ export async function resolveUserLlmRuntime(
   userId: string,
 ): Promise<EffectiveLlmRuntimeConfig> {
   const selection = await getUserModelSelection(userId);
+  const runtimeDefaultThinkingLevel = selection
+    ? DEFAULT_PI_THINKING_LEVEL
+    : normalizeRuntimeDefaultThinkingLevel(
+        (await getRuntimeConfig()).default_thinking_level,
+      );
   if (!selection) {
-    const fallbackRuntime = await resolveFallbackOfficialRuntime();
+    const fallbackRuntime = await resolveFallbackOfficialRuntime(
+      runtimeDefaultThinkingLevel,
+    );
     if (fallbackRuntime) {
       return fallbackRuntime;
     }
@@ -753,6 +765,7 @@ export async function getSystemConfigOverview(): Promise<{
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
     default_official_model_id: string | null;
+    default_thinking_level: PiThinkingLevel;
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
@@ -784,6 +797,9 @@ export async function getSystemConfigOverview(): Promise<{
       local_agent_max_processes: runtime.local_agent_max_processes,
       local_agent_idle_ttl_ms: runtime.local_agent_idle_ttl_ms,
       default_official_model_id: runtime.default_official_model_id ?? null,
+      default_thinking_level: normalizeRuntimeDefaultThinkingLevel(
+        runtime.default_thinking_level,
+      ),
       pi_session_health_enabled: runtime.pi_session_health_enabled,
       pi_session_inactive_cleanup_days:
         runtime.pi_session_inactive_cleanup_days,
@@ -912,6 +928,7 @@ export async function updateRuntimeSettings(args: {
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
   defaultOfficialModelId?: string | null;
+  defaultThinkingLevel?: PiThinkingLevel;
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
@@ -925,6 +942,7 @@ export async function updateRuntimeSettings(args: {
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
   default_official_model_id: string | null;
+  default_thinking_level: PiThinkingLevel;
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
@@ -949,6 +967,7 @@ export async function updateRuntimeSettings(args: {
     localAgentMaxProcesses: args.localAgentMaxProcesses,
     localAgentIdleTtlMs: args.localAgentIdleTtlMs,
     defaultOfficialModelId: args.defaultOfficialModelId,
+    defaultThinkingLevel: args.defaultThinkingLevel,
     piSessionHealthEnabled: args.piSessionHealthEnabled,
     piSessionInactiveCleanupDays: args.piSessionInactiveCleanupDays,
     piSessionOrphanGraceDays: args.piSessionOrphanGraceDays,
@@ -972,6 +991,9 @@ export async function updateRuntimeSettings(args: {
     local_agent_max_processes: updated.local_agent_max_processes,
     local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
     default_official_model_id: updated.default_official_model_id ?? null,
+    default_thinking_level: normalizeRuntimeDefaultThinkingLevel(
+      updated.default_thinking_level,
+    ),
     pi_session_health_enabled: updated.pi_session_health_enabled,
     pi_session_inactive_cleanup_days: updated.pi_session_inactive_cleanup_days,
     pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
@@ -1179,6 +1201,9 @@ export async function getUserModelSettingsOverview(
       : null,
     official_models: officialModels,
     default_official_model_id: runtime.default_official_model_id ?? null,
+    default_thinking_level: normalizeRuntimeDefaultThinkingLevel(
+      runtime.default_thinking_level,
+    ),
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
   };
@@ -1228,8 +1253,11 @@ export async function setUserModelSelection(args: {
   thinkingLevel?: PiThinkingLevel;
 }): Promise<UserModelSelection> {
   const existing = await getUserModelSelection(args.userId);
+  const runtime = await getRuntimeConfig();
   const thinkingLevel = normalizeThinkingLevel(
-    args.thinkingLevel ?? existing?.thinking_level,
+    args.thinkingLevel ??
+      existing?.thinking_level ??
+      runtime.default_thinking_level,
   );
   if (args.source === 'official') {
     if (!args.officialModelId) {

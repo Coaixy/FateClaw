@@ -69,6 +69,7 @@ import {
   MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS,
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
+import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 type AdminRole = 'owner' | 'user_manager';
@@ -385,6 +386,7 @@ const RuntimeConfigSchema = z
       .max(120, '默认官方模型 ID 过长')
       .nullable()
       .optional(),
+    default_thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
     pi_session_health_enabled: z.boolean().optional(),
     pi_session_inactive_cleanup_days: z
       .number()
@@ -668,6 +670,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         localAgentMaxProcesses: parsed.data.local_agent_max_processes,
         localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
         defaultOfficialModelId: parsed.data.default_official_model_id,
+        defaultThinkingLevel: parsed.data.default_thinking_level,
         piSessionHealthEnabled: parsed.data.pi_session_health_enabled,
         piSessionInactiveCleanupDays:
           parsed.data.pi_session_inactive_cleanup_days,

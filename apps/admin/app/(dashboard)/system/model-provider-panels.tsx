@@ -32,6 +32,17 @@ import { setProviderDraftEnabled, type ProviderDraft } from './provider-draft';
 
 const CONTROL =
   'h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none';
+const THINKING_LEVEL_OPTIONS: Array<{
+  value: AdminRuntimeConfig['default_thinking_level'];
+  label: string;
+}> = [
+  { value: 'off', label: '关闭' },
+  { value: 'minimal', label: '极低' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '极高' },
+];
 
 function providerDraftFrom(model: AdminModelProvider): ProviderDraft {
   return {
@@ -189,6 +200,7 @@ export function RuntimeConfigPanel({
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
     default_official_model_id: string | null;
+    default_thinking_level: AdminRuntimeConfig['default_thinking_level'];
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
@@ -207,6 +219,9 @@ export function RuntimeConfigPanel({
   );
   const [defaultOfficialModelId, setDefaultOfficialModelId] = useState(
     runtime.default_official_model_id ?? '',
+  );
+  const [defaultThinkingLevel, setDefaultThinkingLevel] = useState(
+    runtime.default_thinking_level,
   );
   const [piHealthEnabled, setPiHealthEnabled] = useState(
     runtime.pi_session_health_enabled,
@@ -235,6 +250,7 @@ export function RuntimeConfigPanel({
     setMaxProcesses(runtime.local_agent_max_processes);
     setIdleSeconds(Math.round(runtime.local_agent_idle_ttl_ms / 1000));
     setDefaultOfficialModelId(runtime.default_official_model_id ?? '');
+    setDefaultThinkingLevel(runtime.default_thinking_level);
     setPiHealthEnabled(runtime.pi_session_health_enabled);
     setPiInactiveDays(runtime.pi_session_inactive_cleanup_days);
     setPiOrphanGraceDays(runtime.pi_session_orphan_grace_days);
@@ -247,6 +263,7 @@ export function RuntimeConfigPanel({
   }, [
     runtime.agent_concurrency_limit,
     runtime.default_official_model_id,
+    runtime.default_thinking_level,
     runtime.local_agent_idle_ttl_ms,
     runtime.local_agent_max_processes,
     runtime.pi_session_health_enabled,
@@ -273,6 +290,7 @@ export function RuntimeConfigPanel({
       Math.max(30_000, Math.floor(idleSeconds) * 1000),
     ),
     default_official_model_id: defaultOfficialModelId || null,
+    default_thinking_level: defaultThinkingLevel,
     pi_session_health_enabled: piHealthEnabled,
     pi_session_inactive_cleanup_days: Math.min(
       3650,
@@ -301,6 +319,7 @@ export function RuntimeConfigPanel({
     normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms ||
     normalized.default_official_model_id !==
       (runtime.default_official_model_id ?? null) ||
+    normalized.default_thinking_level !== runtime.default_thinking_level ||
     normalized.pi_session_health_enabled !==
       runtime.pi_session_health_enabled ||
     normalized.pi_session_inactive_cleanup_days !==
@@ -372,11 +391,11 @@ export function RuntimeConfigPanel({
             </div>
           </div>
 
-          <div className="border-t border-hairline/70 pt-4">
-            <div className="mb-2 text-[12px] font-medium text-muted">
-              默认官方模型
-            </div>
+          <div className="grid gap-3 border-t border-hairline/70 pt-4 md:grid-cols-2">
             <label className="block space-y-1.5">
+              <div className="text-[12px] font-medium text-muted">
+                默认官方模型
+              </div>
               <select
                 value={defaultOfficialModelId}
                 onChange={(event) =>
@@ -389,6 +408,26 @@ export function RuntimeConfigPanel({
                   <option key={model.id} value={model.id}>
                     {model.display_name}
                     {model.enabled && model.has_secret ? '' : '（不可用）'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <div className="text-[12px] font-medium text-muted">
+                默认思考等级
+              </div>
+              <select
+                value={defaultThinkingLevel}
+                onChange={(event) =>
+                  setDefaultThinkingLevel(
+                    event.target.value as AdminRuntimeConfig['default_thinking_level'],
+                  )
+                }
+                className={CONTROL}
+              >
+                {THINKING_LEVEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>

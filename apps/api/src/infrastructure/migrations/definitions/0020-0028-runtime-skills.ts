@@ -563,4 +563,23 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0032_default_thinking_level_runtime_config',
+    description: '增加后台默认思考等级配置',
+    async up(client) {
+      // 新增后台默认思考等级，只影响没有用户模型选择记录的新用户兜底。
+      await client.query(`
+        ALTER TABLE runtime_config
+          ADD COLUMN IF NOT EXISTS default_thinking_level TEXT NOT NULL DEFAULT 'medium'
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_default_thinking_level_valid',
+        tableName: 'runtime_config',
+        expression: `default_thinking_level IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
+        cleanupSql: `UPDATE runtime_config
+                     SET default_thinking_level = 'medium'
+                     WHERE default_thinking_level NOT IN ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')`,
+      });
+    },
+  },
 ];

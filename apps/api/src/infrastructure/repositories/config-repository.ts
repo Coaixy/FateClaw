@@ -257,13 +257,13 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
-       local_agent_idle_ttl_ms, default_official_model_id,
+       local_agent_idle_ttl_ms, default_official_model_id, default_thinking_level,
        pi_session_health_enabled,
        pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
        skill_bundle_max_files, skill_bundle_max_file_chars,
        skill_bundle_max_total_chars, skill_bundle_max_zip_bytes
      )
-     VALUES ('default', 10, 4, 600000, NULL, false, 30, 30, $1, $2, $3, $4)
+     VALUES ('default', 10, 4, 600000, NULL, 'medium', false, 30, 30, $1, $2, $3, $4)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
     [
@@ -284,6 +284,7 @@ export async function updateRuntimeConfig(input: {
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
   defaultOfficialModelId?: string | null;
+  defaultThinkingLevel?: RuntimeConfig['default_thinking_level'];
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
@@ -317,6 +318,8 @@ export async function updateRuntimeConfig(input: {
     input.defaultOfficialModelId === undefined
       ? current.default_official_model_id
       : (input.defaultOfficialModelId?.trim() ?? null) || null;
+  const defaultThinkingLevel =
+    input.defaultThinkingLevel ?? current.default_thinking_level ?? 'medium';
   const piSessionHealthEnabled =
     input.piSessionHealthEnabled ?? current.pi_session_health_enabled;
   const piSessionInactiveCleanupDays = Math.min(
@@ -366,19 +369,20 @@ export async function updateRuntimeConfig(input: {
   const { rows } = await getDbPool().query(
     `INSERT INTO runtime_config (
        id, agent_concurrency_limit, local_agent_max_processes,
-       local_agent_idle_ttl_ms, default_official_model_id,
+       local_agent_idle_ttl_ms, default_official_model_id, default_thinking_level,
        pi_session_health_enabled,
        pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
        skill_bundle_max_files, skill_bundle_max_file_chars,
        skill_bundle_max_total_chars, skill_bundle_max_zip_bytes,
        updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
        local_agent_max_processes = EXCLUDED.local_agent_max_processes,
        local_agent_idle_ttl_ms = EXCLUDED.local_agent_idle_ttl_ms,
        default_official_model_id = EXCLUDED.default_official_model_id,
+       default_thinking_level = EXCLUDED.default_thinking_level,
        pi_session_health_enabled = EXCLUDED.pi_session_health_enabled,
        pi_session_inactive_cleanup_days = EXCLUDED.pi_session_inactive_cleanup_days,
        pi_session_orphan_grace_days = EXCLUDED.pi_session_orphan_grace_days,
@@ -393,6 +397,7 @@ export async function updateRuntimeConfig(input: {
       localAgentMaxProcesses,
       localAgentIdleTtlMs,
       defaultOfficialModelId,
+      defaultThinkingLevel,
       piSessionHealthEnabled,
       piSessionInactiveCleanupDays,
       piSessionOrphanGraceDays,
