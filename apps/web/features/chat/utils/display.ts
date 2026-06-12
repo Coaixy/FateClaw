@@ -237,6 +237,20 @@ export function isToolTraceMessage(message: Message): boolean {
   return message.metadata?.kind === 'tool_trace';
 }
 
+function isHiddenDisplayMessage(message: Message): boolean {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return false;
+  }
+
+  // 直接排盘会写入一条只用于记录操作的用户消息；聊天流里保留盘面结果即可。
+  return (
+    !message.is_bot_message &&
+    metadata.kind === 'board_request' &&
+    metadata.workflow === 'direct_paipan'
+  );
+}
+
 /**
  * 判断 tool trace 是否能挂到这条 AI 回复的底部。
  *
@@ -255,9 +269,10 @@ export function canHostToolTraceFooter(message: Message): boolean {
 export function filterProgressMessages(messages: Message[]) {
   return messages.filter(
     (message) =>
-      !isProgressMessage(message) ||
-      isKnowledgeTrajectoryMessage(message) ||
-      isToolTraceMessage(message),
+      !isHiddenDisplayMessage(message) &&
+      (!isProgressMessage(message) ||
+        isKnowledgeTrajectoryMessage(message) ||
+        isToolTraceMessage(message)),
   );
 }
 

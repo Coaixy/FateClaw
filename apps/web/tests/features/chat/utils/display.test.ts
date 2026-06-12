@@ -104,6 +104,42 @@ describe('chat display message state helpers', () => {
     ]);
   });
 
+  it('hides direct paipan request messages but keeps ordinary matching text', () => {
+    const boardRequest = createMessage({
+      id: 'board-request',
+      isBot: false,
+      content: '大六壬排盘',
+      metadata: {
+        kind: 'board_request',
+        workflow: 'direct_paipan',
+        board_skill: 'liuren-paipan',
+      },
+    });
+    const ordinaryUserMessage = createMessage({
+      id: 'ordinary-user',
+      isBot: false,
+      content: '大六壬排盘',
+    });
+    const boardResult = createMessage({
+      id: 'board-result',
+      isBot: true,
+      content: '已生成大六壬排盘。',
+      metadata: {
+        kind: 'board_result',
+        workflow: 'direct_paipan',
+        board_skill: 'liuren-paipan',
+      },
+    });
+
+    expect(
+      filterProgressMessages([
+        boardRequest,
+        ordinaryUserMessage,
+        boardResult,
+      ]),
+    ).toEqual([ordinaryUserMessage, boardResult]);
+  });
+
   it('does not attach tool footers to transient thinking messages', () => {
     expect(
       canHostToolTraceFooter(
@@ -174,10 +210,12 @@ describe('chat display message state helpers', () => {
 function createMessage({
   id,
   isBot,
+  content = id,
   metadata = null,
 }: {
   id: string;
   isBot: boolean;
+  content?: string;
   metadata?: Message['metadata'];
 }): Message {
   return {
@@ -185,7 +223,7 @@ function createMessage({
     account_id: 'account-1',
     sender: isBot ? 'assistant' : 'user',
     sender_name: '',
-    content: id,
+    content,
     timestamp: '2026-05-28T00:00:00.000Z',
     is_from_me: isBot,
     is_bot_message: isBot,
