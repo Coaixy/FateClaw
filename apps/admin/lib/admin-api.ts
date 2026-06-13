@@ -681,26 +681,25 @@ export interface AdminSimpleWorkflowPresetUpdate {
   entry_description?: string;
   paipan_input_defaults?: Record<string, unknown>;
   model_policy?: SimpleModelPolicyDto;
-  skill_bundle_ids?: string[];
+  skill_ids?: string[];
   prompt_template?: string;
   sort_order?: number;
 }
 
-export interface AdminWorkflowSkillBundleSummary {
+export interface AdminWorkflowSkillSummary {
   id: string;
   user_id: string;
   owner_phone: string | null;
-  name: string;
+  skill_name: string;
+  dir_name: string;
   description: string;
-  skill_ids: string[];
-  skill_names: string[];
   visibility: 'private' | 'link_shared' | 'shared';
   created_at: string;
   updated_at: string;
 }
 
 export interface AdminSimpleWorkflowResourcesResponse {
-  skill_bundles: AdminWorkflowSkillBundleSummary[];
+  skills: AdminWorkflowSkillSummary[];
 }
 
 /**

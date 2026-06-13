@@ -205,6 +205,8 @@ function buildSimpleWorkflowBoardMessages(args: {
       simple_workflow_preset_id: args.preset.id,
       model_policy: args.preset.model_policy,
       skill_bundle_ids: args.preset.skill_bundle_ids,
+      skill_ids: args.preset.skill_ids,
+      skill_snapshot_ids: args.preset.skill_snapshot_ids,
     },
   };
   return { requestMessage, resultMessage };
@@ -308,7 +310,11 @@ async function enqueueSimpleWorkflowFirstTurn(args: {
         userMessageId: args.userMessageId,
         llmRuntimeOverride: llmRuntime,
         runtimeUserMessageOverride: args.prepared.runtimePrompt,
-        authorizedSkillBundleIds: args.preset.skill_bundle_ids,
+        authorizedSkillBundleIds:
+          args.preset.skill_snapshot_ids.length > 0
+            ? undefined
+            : args.preset.skill_bundle_ids,
+        authorizedWorkflowSkillIds: args.preset.skill_snapshot_ids,
         plusGateBypass: 'simple_workflow_first_turn',
       },
     );

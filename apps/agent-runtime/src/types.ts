@@ -71,8 +71,10 @@ export interface ContainerInput {
   assistantName?: string;
   /** 请求级 Persona 覆盖层；不是 Dashboard 维护的用户 Soul。 */
   personaPrompt?: string;
-  /** 本轮明确授权可读取的 Skill Bundle；为空时保持用户全部有效 Skill 可见。 */
+  /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
+  /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
+  authorizedWorkflowSkillIds?: string[];
   /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
   outboxQueue?: string;
 }
@@ -109,8 +111,10 @@ export interface ChatTaskInboxRequest {
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
-  /** 本轮明确授权可读取的 Skill Bundle；为空时保持用户全部有效 Skill 可见。 */
+  /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
+  /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
+  authorizedWorkflowSkillIds?: string[];
   /** 指定响应写入的 outbox 队列（不指定则用默认队列） */
   outboxQueue?: string;
 }

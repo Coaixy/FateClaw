@@ -2,7 +2,7 @@ import type { DatabaseMigration } from '../types.js';
 import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0020-0033。
+ * 数据库迁移分段：0020-0035。
  */
 export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
@@ -299,6 +299,8 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
           paipan_input_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
           model_policy JSONB NOT NULL DEFAULT '{"mode":"system-default"}'::jsonb,
           skill_bundle_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+          skill_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+          skill_snapshot_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
           prompt_template TEXT NOT NULL DEFAULT '',
           sort_order INTEGER NOT NULL DEFAULT 0,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -714,6 +716,17 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_announcements_updated_at
           ON announcements (updated_at DESC, created_at DESC)
+      `);
+    },
+  },
+  {
+    id: '0035_simple_workflow_skill_snapshots',
+    description: '为简易模式 Workflow 增加绑定 Skill 快照',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE simple_workflow_presets
+          ADD COLUMN IF NOT EXISTS skill_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+          ADD COLUMN IF NOT EXISTS skill_snapshot_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]
       `);
     },
   },

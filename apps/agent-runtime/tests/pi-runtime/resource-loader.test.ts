@@ -215,7 +215,57 @@ describe('createPiResourceLoader', () => {
     );
   });
 
-  it('loads all effective user skills when workflow bundle scope is empty', async () => {
+  it('loads workflow skill snapshots before falling back to bundle scopes', async () => {
+    const snapshotSkill: EffectiveUserSkill = {
+      id: 'snapshot-bazi-id',
+      dir: 'workflow-bazi',
+      name: 'Workflow 八字快照',
+      description: '固定快照入口',
+      bundle_uri: createTextSkillBundleFixture('workflow-bazi'),
+      checksum: null,
+      install_status: 'installed',
+      visibility: 'private',
+      source: 'workflow',
+      source_bundle_ids: [],
+    };
+    const listEffectiveUserSkills = vi.fn(async () => []);
+    const listWorkflowBundleSkills = vi.fn(async () => []);
+    const listWorkflowSnapshotSkills = vi.fn(async () => [snapshotSkill]);
+    const deps: AgentRuntimeDeps = {
+      soulStore: {
+        read: vi.fn(),
+        canEdit: vi.fn(async () => true),
+        update: vi.fn(),
+      },
+      skillCatalog: {
+        listEffectiveUserSkills,
+        listWorkflowBundleSkills,
+        listWorkflowSnapshotSkills,
+      },
+    };
+
+    const loader = await createPiResourceLoader({
+      deps,
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput: {
+        ...containerInput,
+        authorizedSkillBundleIds: ['bundle-bazi'],
+        authorizedWorkflowSkillIds: ['snapshot-bazi-id'],
+      },
+    });
+
+    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
+      'workflow-bazi',
+    ]);
+    expect(listWorkflowSnapshotSkills).toHaveBeenCalledWith([
+      'snapshot-bazi-id',
+    ]);
+    expect(listWorkflowBundleSkills).not.toHaveBeenCalled();
+    expect(listEffectiveUserSkills).not.toHaveBeenCalled();
+  });
+
+  it('loads no effective user skills when workflow bundle scope is empty', async () => {
     const deps = createDeps();
     const loader = await createPiResourceLoader({
       deps,
@@ -227,12 +277,10 @@ describe('createPiResourceLoader', () => {
       },
     });
 
-    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
+    expect(loader.getSkills().skills).toEqual([]);
+    expect(deps.skillCatalog.listEffectiveUserSkills).not.toHaveBeenCalled();
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
       'private-bazi',
-    ]);
-    expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
-      'user-1',
     );
-    expect(loader.getAppendSystemPrompt().join('\n')).toContain('private-bazi');
   });
 });

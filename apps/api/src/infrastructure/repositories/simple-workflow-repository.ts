@@ -1,19 +1,44 @@
+import crypto from 'node:crypto';
+import type pg from 'pg';
+
 import type {
   SimpleModelPolicy,
   SimpleWorkflowKind,
   SimpleWorkflowPaipanSkill,
   SimpleWorkflowPreset,
 } from '../../shared/types.js';
+import {
+  calculateTextSkillBundleChecksum,
+  readTextSkillBundleFiles,
+  writeTextSkillBundleFiles,
+} from '../../modules/skills/text-skill-bundle-store.js';
 import { getDbPool } from '../db-pool.js';
 
 type SimpleWorkflowPresetRow = Omit<
   SimpleWorkflowPreset,
-  'paipan_input_defaults' | 'model_policy' | 'skill_bundle_ids'
+  | 'paipan_input_defaults'
+  | 'model_policy'
+  | 'skill_bundle_ids'
+  | 'skill_ids'
+  | 'skill_snapshot_ids'
 > & {
   paipan_input_defaults: unknown;
   model_policy: unknown;
   skill_bundle_ids: unknown;
+  skill_ids: unknown;
+  skill_snapshot_ids: unknown;
 };
+
+interface WorkflowSkillSourceRow {
+  skill_id: string;
+  user_id: string;
+  skill_name: string;
+  dir_name: string;
+  description: string;
+  bundle_uri: string;
+}
+
+const WORKFLOW_SNAPSHOT_AUDIT_SOURCE = 'simple_workflow_snapshot';
 
 export interface SimpleWorkflowPresetUpdateInput {
   id: string;
@@ -25,6 +50,7 @@ export interface SimpleWorkflowPresetUpdateInput {
   paipanInputDefaults?: Record<string, unknown>;
   modelPolicy?: SimpleModelPolicy;
   skillBundleIds?: string[];
+  skillIds?: string[];
   promptTemplate?: string;
   sortOrder?: number;
 }
@@ -83,7 +109,170 @@ function mapSimpleWorkflowPresetRow(
       : {},
     model_policy: normalizeModelPolicy(row.model_policy),
     skill_bundle_ids: normalizeStringArray(row.skill_bundle_ids),
+    skill_ids: normalizeStringArray(row.skill_ids),
+    skill_snapshot_ids: normalizeStringArray(row.skill_snapshot_ids),
   };
+}
+
+function workflowSnapshotSkillId(
+  presetId: string,
+  sourceSkillId: string,
+): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${presetId}:${sourceSkillId}`)
+    .digest('hex')
+    .slice(0, 16);
+  return `workflow-snapshot-${hash}`;
+}
+
+function workflowSnapshotDirName(
+  presetId: string,
+  sourceDirName: string,
+  sourceSkillId: string,
+  contentChecksum: string,
+): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${presetId}:${sourceSkillId}:${contentChecksum}`)
+    .digest('hex')
+    .slice(0, 10);
+  return `workflow-${sourceDirName}-${hash}`.slice(0, 120);
+}
+
+async function listWorkflowSkillSources(
+  client: pg.PoolClient,
+  skillIds: string[],
+): Promise<WorkflowSkillSourceRow[]> {
+  if (skillIds.length === 0) return [];
+  const { rows } = await client.query<WorkflowSkillSourceRow>(
+    `SELECT
+       s.id AS skill_id,
+       s.user_id,
+       s.skill_name,
+       s.dir_name,
+       s.description,
+       s.bundle_uri
+     FROM user_custom_skills s
+     WHERE s.id = ANY($1::text[])
+       AND s.deleted_at IS NULL
+       AND s.install_status = 'installed'
+       AND COALESCE(s.audit_metadata->>'source', '') <> $2
+     ORDER BY array_position($1::text[], s.id), s.dir_name`,
+    [skillIds, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+  );
+  return rows;
+}
+
+async function deleteWorkflowSnapshotSkills(
+  client: pg.PoolClient,
+  presetId: string,
+  exceptIds: string[],
+): Promise<void> {
+  await client.query(
+    `UPDATE user_custom_skills
+     SET deleted_at = NOW(),
+         enabled = false,
+         updated_at = NOW()
+     WHERE audit_metadata->>'source' = $1
+       AND audit_metadata->>'workflow_preset_id' = $2
+       AND NOT (id = ANY($3::text[]))
+       AND deleted_at IS NULL`,
+    [WORKFLOW_SNAPSHOT_AUDIT_SOURCE, presetId, exceptIds],
+  );
+}
+
+async function upsertWorkflowSnapshotSkill(args: {
+  client: pg.PoolClient;
+  presetId: string;
+  source: WorkflowSkillSourceRow;
+}): Promise<string> {
+  const snapshotId = workflowSnapshotSkillId(
+    args.presetId,
+    args.source.skill_id,
+  );
+  const files = readTextSkillBundleFiles(args.source.bundle_uri);
+  if (!files.some((file) => file.path === 'SKILL.md')) {
+    throw new Error(
+      `workflow 绑定的 skill 缺少 SKILL.md：${args.source.skill_name}`,
+    );
+  }
+  const contentChecksum = calculateTextSkillBundleChecksum(files);
+  const dirName = workflowSnapshotDirName(
+    args.presetId,
+    args.source.dir_name,
+    args.source.skill_id,
+    contentChecksum,
+  );
+  const bundle = writeTextSkillBundleFiles({
+    skillId: snapshotId,
+    ownerId: args.source.user_id,
+    dirName,
+    fallbackSkillName: args.source.skill_name,
+    files,
+  });
+  const auditMetadata = {
+    source: WORKFLOW_SNAPSHOT_AUDIT_SOURCE,
+    workflow_preset_id: args.presetId,
+    source_skill_id: args.source.skill_id,
+    source_checksum: bundle.checksum,
+    snapshotted_at: new Date().toISOString(),
+  };
+  await args.client.query(
+    `INSERT INTO user_custom_skills
+       (id, user_id, skill_name, dir_name, description,
+        version, bundle_uri, checksum, install_status, acl, billing_policy,
+        audit_metadata, visibility, enabled)
+     VALUES ($1, $2, $3, $4, $5, '1.0.0', $6, $7, 'installed',
+             '{}'::jsonb, '{}'::jsonb, $8::jsonb, 'private', true)
+     ON CONFLICT (id) DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       skill_name = EXCLUDED.skill_name,
+       dir_name = EXCLUDED.dir_name,
+       description = EXCLUDED.description,
+       bundle_uri = EXCLUDED.bundle_uri,
+       checksum = EXCLUDED.checksum,
+       install_status = 'installed',
+       audit_metadata = EXCLUDED.audit_metadata,
+       visibility = 'private',
+       enabled = true,
+       deleted_at = NULL,
+       updated_at = NOW()`,
+    [
+      snapshotId,
+      args.source.user_id,
+      args.source.skill_name,
+      dirName,
+      args.source.description,
+      bundle.bundleUri,
+      bundle.checksum,
+      JSON.stringify(auditMetadata),
+    ],
+  );
+  return snapshotId;
+}
+
+async function createWorkflowSkillSnapshots(
+  client: pg.PoolClient,
+  presetId: string,
+  skillIds: string[],
+): Promise<string[]> {
+  const normalizedSkillIds = Array.from(new Set(skillIds));
+  const sources = await listWorkflowSkillSources(client, normalizedSkillIds);
+  if (sources.length !== normalizedSkillIds.length) {
+    throw new Error('workflow 绑定的 skill 不存在或不可用');
+  }
+  const sourceSkillIds = new Set<string>();
+  const snapshotIds: string[] = [];
+  for (const source of sources) {
+    if (sourceSkillIds.has(source.skill_id)) continue;
+    sourceSkillIds.add(source.skill_id);
+    snapshotIds.push(
+      await upsertWorkflowSnapshotSkill({ client, presetId, source }),
+    );
+  }
+  await deleteWorkflowSnapshotSkills(client, presetId, snapshotIds);
+  return snapshotIds;
 }
 
 /**
@@ -157,6 +346,11 @@ export async function updateSimpleWorkflowPreset(
   }
 
   const nextIsDefault = input.isDefault ?? current.is_default;
+  const nextSkillIds = input.skillIds ?? current.skill_ids;
+  const shouldRefreshSnapshots = input.skillIds !== undefined;
+  const nextSkillBundleIds = shouldRefreshSnapshots
+    ? []
+    : input.skillBundleIds ?? current.skill_bundle_ids;
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
@@ -169,6 +363,10 @@ export async function updateSimpleWorkflowPreset(
       );
     }
 
+    const nextSkillSnapshotIds = shouldRefreshSnapshots
+      ? await createWorkflowSkillSnapshots(client, input.id, nextSkillIds)
+      : current.skill_snapshot_ids;
+
     const { rows } = await client.query(
       `UPDATE simple_workflow_presets
        SET name = $2,
@@ -179,8 +377,10 @@ export async function updateSimpleWorkflowPreset(
            paipan_input_defaults = $7::jsonb,
            model_policy = $8::jsonb,
            skill_bundle_ids = $9::text[],
-           prompt_template = $10,
-           sort_order = $11,
+           skill_ids = $10::text[],
+           skill_snapshot_ids = $11::text[],
+           prompt_template = $12,
+           sort_order = $13,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
@@ -195,7 +395,9 @@ export async function updateSimpleWorkflowPreset(
           input.paipanInputDefaults ?? current.paipan_input_defaults,
         ),
         JSON.stringify(input.modelPolicy ?? current.model_policy),
-        input.skillBundleIds ?? current.skill_bundle_ids,
+        nextSkillBundleIds,
+        nextSkillIds,
+        nextSkillSnapshotIds,
         input.promptTemplate ?? current.prompt_template,
         input.sortOrder ?? current.sort_order,
       ],

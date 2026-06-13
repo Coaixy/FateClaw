@@ -310,6 +310,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       sessionId: 'session-1',
       llmRuntime: effectiveRuntime,
       authorizedSkillBundleIds: ['bundle-bazi'],
+      authorizedWorkflowSkillIds: ['snapshot-bazi'],
       waitForResponse: false,
     });
 
@@ -323,6 +324,10 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     expect(mockLpush).toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
+    );
+    expect(mockLpush).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('"authorizedWorkflowSkillIds":["snapshot-bazi"]'),
     );
     expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
       expect.objectContaining({

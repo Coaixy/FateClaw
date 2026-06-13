@@ -38,7 +38,7 @@ import {
   cleanupPiSessionFilesForAdmin,
   scanPiSessionOrphanFilesForAdmin,
   listAdminGlobalSkills,
-  listAdminSkillBundleSummaries,
+  listAdminWorkflowSkillSummaries,
   listAdminUsersWithStats,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
@@ -229,6 +229,7 @@ const SimpleWorkflowPresetUpdateSchema = z.object({
   paipan_input_defaults: z.record(z.string(), z.unknown()).optional(),
   model_policy: SimpleModelPolicySchema.optional(),
   skill_bundle_ids: z.array(z.string().trim().min(1)).max(50).optional(),
+  skill_ids: z.array(z.string().trim().min(1)).max(100).optional(),
   prompt_template: z.string().trim().min(1).max(4000).optional(),
   sort_order: z.number().int().min(0).max(10000).optional(),
 });
@@ -984,7 +985,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/admin/simple-workflows/resources — 简易模式配置可选资源
   app.get('/simple-workflows/resources', async () => {
-    return { skill_bundles: await listAdminSkillBundleSummaries() };
+    return { skills: await listAdminWorkflowSkillSummaries() };
   });
 
   // PATCH /api/admin/simple-workflows/:id — 更新简易模式 workflow preset
@@ -1005,6 +1006,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       paipanInputDefaults: parsed.data.paipan_input_defaults,
       modelPolicy: parsed.data.model_policy,
       skillBundleIds: parsed.data.skill_bundle_ids,
+      skillIds: parsed.data.skill_ids,
       promptTemplate: parsed.data.prompt_template,
       sortOrder: parsed.data.sort_order,
     });

@@ -58,9 +58,22 @@ function normalizeAuthorizedSkillBundleIds(input: ContainerInput): string[] {
   );
 }
 
+function normalizeAuthorizedWorkflowSkillIds(input: ContainerInput): string[] {
+  return Array.from(
+    new Set(
+      (input.authorizedWorkflowSkillIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  );
+}
+
 function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
-  // 只有非空 Bundle 白名单才代表 workflow 显式收窄授权范围。
-  return normalizeAuthorizedSkillBundleIds(input).length > 0;
+  // 内部 workflow 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
+  return (
+    input.authorizedWorkflowSkillIds !== undefined ||
+    input.authorizedSkillBundleIds !== undefined
+  );
 }
 
 async function loadRequestScopedSkills(
@@ -73,12 +86,20 @@ async function loadRequestScopedSkills(
   const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
     options.containerInput,
   );
+  const authorizedWorkflowSkillIds = normalizeAuthorizedWorkflowSkillIds(
+    options.containerInput,
+  );
   const explicitSkillBundleScope = hasExplicitSkillBundleScope(
     options.containerInput,
   );
   const effectivePrivateKnowledge =
     explicitSkillBundleScope
-      ? authorizedSkillBundleIds.length > 0
+      ? authorizedWorkflowSkillIds.length > 0 &&
+        options.deps.skillCatalog.listWorkflowSnapshotSkills
+        ? await options.deps.skillCatalog.listWorkflowSnapshotSkills(
+            authorizedWorkflowSkillIds,
+          )
+        : authorizedSkillBundleIds.length > 0
         ? options.deps.skillCatalog.listWorkflowBundleSkills
           ? await options.deps.skillCatalog.listWorkflowBundleSkills(
               authorizedSkillBundleIds,
@@ -121,6 +142,7 @@ async function loadRequestScopedSkills(
       type: 'pi_resource_loader_prepared',
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
       authorizedSkillBundleCount: authorizedSkillBundleIds.length,
+      authorizedWorkflowSkillCount: authorizedWorkflowSkillIds.length,
       isolation: 'request_scoped',
     },
     options.requestScope,

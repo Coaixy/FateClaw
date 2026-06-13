@@ -7,6 +7,7 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const WEB_CHAT_RUNTIME_PREFIX = 'web:';
+const WORKFLOW_SNAPSHOT_AUDIT_SOURCE = 'simple_workflow_snapshot';
 
 let pool: pg.Pool | null = null;
 
@@ -95,6 +96,7 @@ export async function queryEffectiveUserSkills(
             ) as source_bundle_ids
      FROM user_custom_skills s
      WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
+       AND COALESCE(s.audit_metadata->>'source', '') <> $3
        AND (
          $2::text[] IS NULL OR EXISTS (
            SELECT 1
@@ -124,6 +126,7 @@ export async function queryEffectiveUserSkills(
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
        AND s.deleted_at IS NULL
+       AND COALESCE(s.audit_metadata->>'source', '') <> $3
        AND (
          s.visibility IN ('link_shared', 'shared')
          OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
@@ -139,7 +142,7 @@ export async function queryEffectiveUserSkills(
              AND src.bundle_id = ANY($2::text[])
          )
        )`,
-    [userId, skillBundleFilter],
+    [userId, skillBundleFilter, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
   );
   return rows as EffectiveUserSkill[];
 }
@@ -179,10 +182,49 @@ export async function queryWorkflowBundleSkills(
        AND s.enabled = true
        AND s.deleted_at IS NULL
        AND s.install_status = 'installed'
+       AND COALESCE(s.audit_metadata->>'source', '') <> $2
      GROUP BY s.id, s.dir_name, s.skill_name, s.description, s.bundle_uri,
               s.checksum, s.install_status, s.visibility
      ORDER BY MIN(array_position($1::text[], sbi.bundle_id)), MIN(sbi.sort_order), s.dir_name`,
-    [normalized],
+    [normalized, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+  );
+  return rows as EffectiveUserSkill[];
+}
+
+/**
+ * 按 workflow 保存时生成的 Skill 快照 ID 读取 Skill。
+ *
+ * @param skillIds 管理后台 workflow 保存时固定下来的快照 Skill ID。
+ * @returns 对应快照 Skill；不再依赖原始 Bundle 分享状态或成员列表。
+ */
+export async function queryWorkflowSnapshotSkills(
+  skillIds: string[],
+): Promise<EffectiveUserSkill[]> {
+  const normalized = Array.from(
+    new Set(skillIds.map((id) => id.trim()).filter(Boolean)),
+  );
+  if (normalized.length === 0) return [];
+
+  const { rows } = await getPool().query(
+    `SELECT
+       s.id,
+       s.dir_name as dir,
+       s.skill_name as name,
+       s.description,
+       s.bundle_uri,
+       s.checksum,
+       s.install_status,
+       s.visibility,
+       'workflow' as source,
+       ARRAY[]::text[] as source_bundle_ids
+     FROM user_custom_skills s
+     WHERE s.id = ANY($1::text[])
+       AND s.audit_metadata->>'source' = $2
+       AND s.deleted_at IS NULL
+       AND s.enabled = true
+       AND s.install_status = 'installed'
+     ORDER BY array_position($1::text[], s.id), s.dir_name`,
+    [normalized, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
   );
   return rows as EffectiveUserSkill[];
 }

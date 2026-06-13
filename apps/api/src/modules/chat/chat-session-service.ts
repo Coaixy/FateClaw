@@ -123,6 +123,8 @@ export interface OwnedChatSessionTurnOptions {
   runtimeUserMessageOverride?: string;
   /** 本轮 AI 请求明确授权可读取的 Skill Bundle；不传时保持用户全部有效 Skill 可见，传空数组时不加载用户级 Skill。 */
   authorizedSkillBundleIds?: string[];
+  /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
+  authorizedWorkflowSkillIds?: string[];
   /** 简易模式首轮由服务端内部豁免 Plus 门禁；不要暴露到 HTTP 请求体。 */
   plusGateBypass?: 'simple_workflow_first_turn';
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
@@ -149,6 +151,7 @@ interface PreparedOwnedChatSessionTurn {
   structured: StructuredInput;
   sessionBoardContexts: SessionBoardContextDto[];
   authorizedSkillBundleIds?: string[];
+  authorizedWorkflowSkillIds?: string[];
   sessionTitle: string;
 }
 
@@ -164,7 +167,7 @@ function createAiChatRequestId(): string {
   return `aichat-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
 }
 
-function normalizeAuthorizedSkillBundleIds(ids?: string[]): string[] {
+function normalizeAuthorizedIds(ids?: string[]): string[] {
   return Array.from(
     new Set((ids ?? []).map((id) => id.trim()).filter((id) => id.length > 0)),
   );
@@ -835,7 +838,11 @@ async function prepareOwnedChatSessionTurn(
     const authorizedSkillBundleIds =
       options.authorizedSkillBundleIds === undefined
         ? undefined
-        : normalizeAuthorizedSkillBundleIds(options.authorizedSkillBundleIds);
+        : normalizeAuthorizedIds(options.authorizedSkillBundleIds);
+    const authorizedWorkflowSkillIds =
+      options.authorizedWorkflowSkillIds === undefined
+        ? undefined
+        : normalizeAuthorizedIds(options.authorizedWorkflowSkillIds);
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -909,6 +916,7 @@ async function prepareOwnedChatSessionTurn(
       structured,
       sessionBoardContexts,
       authorizedSkillBundleIds,
+      authorizedWorkflowSkillIds,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -949,6 +957,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       requestId,
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
+      authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
       waitForResponse: false,
     });
 
@@ -1004,6 +1013,7 @@ async function completeOwnedChatSessionTurn(
       requestId,
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
+      authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
     });
 
     if (output.status === 'error') {

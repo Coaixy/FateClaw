@@ -52,7 +52,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   hasOfficialSkill: vi.fn(),
   listAdminGlobalSkills: vi.fn(),
   listAdminAnnouncements: vi.fn(),
-  listAdminSkillBundleSummaries: vi.fn(),
+  listAdminWorkflowSkillSummaries: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
   listBillingRequestReservationsPageForAdmin: vi.fn(),
@@ -97,7 +97,7 @@ import {
   listAdminAnnouncements,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
-  listAdminSkillBundleSummaries,
+  listAdminWorkflowSkillSummaries,
   listAdminUsersWithStats,
   listWalletTransactionsForAdmin,
   scanPiSessionOrphanFilesForAdmin,
@@ -143,7 +143,7 @@ describe('adminRoutes authentication throttling', () => {
     } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
     vi.mocked(listAdminAnnouncements).mockResolvedValue([]);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
-    vi.mocked(listAdminSkillBundleSummaries).mockResolvedValue([]);
+    vi.mocked(listAdminWorkflowSkillSummaries).mockResolvedValue([]);
     vi.mocked(listBillingRequestReservationsPageForAdmin).mockResolvedValue({
       reservations: [],
       total: 0,
@@ -850,15 +850,14 @@ describe('adminRoutes authentication throttling', () => {
   });
 
   it('returns simple workflow selectable resources for owner admins', async () => {
-    vi.mocked(listAdminSkillBundleSummaries).mockResolvedValueOnce([
+    vi.mocked(listAdminWorkflowSkillSummaries).mockResolvedValueOnce([
       {
-        id: 'bundle-1',
+        id: 'skill-1',
         user_id: 'user-1',
         owner_phone: '13800000000',
-        name: '新手入门套件',
+        skill_name: '六爻入门',
+        dir_name: 'liuyao-basic',
         description: '六爻基础',
-        skill_ids: ['skill-1'],
-        skill_names: ['六爻入门'],
         visibility: 'private',
         created_at: '2026-06-09T00:00:00.000Z',
         updated_at: '2026-06-09T00:00:00.000Z',
@@ -875,11 +874,10 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      skill_bundles: [
+      skills: [
         expect.objectContaining({
-          id: 'bundle-1',
-          name: '新手入门套件',
-          skill_names: ['六爻入门'],
+          id: 'skill-1',
+          skill_name: '六爻入门',
         }),
       ],
     });
@@ -902,6 +900,8 @@ describe('adminRoutes authentication throttling', () => {
         thinkingLevel: 'xhigh',
       },
       skill_bundle_ids: [],
+      skill_ids: [],
+      skill_snapshot_ids: [],
       prompt_template: '模板',
       sort_order: 10,
       created_at: '2026-06-09T00:00:00.000Z',

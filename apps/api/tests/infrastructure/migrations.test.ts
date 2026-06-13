@@ -193,6 +193,13 @@ describe('runDatabaseMigrations', () => {
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
       params: ['0034_announcements', '增加运营公告系统 schema'],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0035_simple_workflow_skill_snapshots',
+        '为简易模式 Workflow 增加绑定 Skill 快照',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -331,6 +338,7 @@ describe('runDatabaseMigrations', () => {
       '0032_default_thinking_level_runtime_config',
       '0033_referral_invite_count_reward',
       '0034_announcements',
+      '0035_simple_workflow_skill_snapshots',
     ]);
 
     await runDatabaseMigrations(client as never);

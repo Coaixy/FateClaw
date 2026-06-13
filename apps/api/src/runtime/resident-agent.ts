@@ -37,6 +37,7 @@ export async function dispatchAiChatPrompt(input: {
   assistantName?: string;
   personaPrompt?: string;
   authorizedSkillBundleIds?: string[];
+  authorizedWorkflowSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
   waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
@@ -57,6 +58,7 @@ export async function dispatchAiChatPrompt(input: {
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,
     authorizedSkillBundleIds: input.authorizedSkillBundleIds,
+    authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
     llmRuntime: input.llmRuntime,
     waitForResponse: input.waitForResponse,
   });

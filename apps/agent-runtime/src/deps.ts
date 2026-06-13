@@ -3,6 +3,7 @@ import {
   querySoulEditEnabled,
   querySoulContent,
   queryWorkflowBundleSkills,
+  queryWorkflowSnapshotSkills,
   updateSoulContentDb,
   type EffectiveUserSkill,
 } from './agent-db.js';
@@ -40,6 +41,10 @@ export interface SkillCatalog {
   listWorkflowBundleSkills?(
     skillBundleIds: string[],
   ): Promise<EffectiveUserSkill[]>;
+  /** 读取后端 workflow 保存时生成的 Skill 快照，不再跟随原 Bundle 变化。 */
+  listWorkflowSnapshotSkills?(
+    skillIds: string[],
+  ): Promise<EffectiveUserSkill[]>;
 }
 
 /**
@@ -71,6 +76,9 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
     },
     listWorkflowBundleSkills(skillBundleIds) {
       return queryWorkflowBundleSkills(skillBundleIds);
+    },
+    listWorkflowSnapshotSkills(skillIds) {
+      return queryWorkflowSnapshotSkills(skillIds);
     },
   },
 };

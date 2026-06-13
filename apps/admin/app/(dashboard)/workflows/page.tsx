@@ -17,7 +17,7 @@ import {
   type AdminModelProvider,
   type AdminSimpleWorkflowPreset,
   type AdminSimpleWorkflowPresetUpdate,
-  type AdminWorkflowSkillBundleSummary,
+  type AdminWorkflowSkillSummary,
 } from '@/lib/admin-api';
 import {
   Bot,
@@ -37,7 +37,7 @@ type WorkflowDraft = {
   thinkingLevel: SimpleModelThinkingLevelDto;
   ichingMethod: string;
   baziIncludes: string[];
-  skillBundleIds: string[];
+  skillIds: string[];
 };
 
 type WorkflowSelectOption<T extends string> = {
@@ -101,7 +101,7 @@ function draftFromPreset(preset: AdminSimpleWorkflowPreset): WorkflowDraft {
       Array.isArray(include) && include.length > 0
         ? include.map(String)
         : ['bazi', 'fortune', 'pattern'],
-    skillBundleIds: preset.skill_bundle_ids,
+    skillIds: preset.skill_ids,
   };
 }
 
@@ -129,6 +129,11 @@ function toggleValue(values: string[], value: string): string[] {
     : [...values, value];
 }
 
+function sameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
 function buildUpdatePayload(
   preset: AdminSimpleWorkflowPreset,
   draft: WorkflowDraft,
@@ -142,19 +147,23 @@ function buildUpdatePayload(
     return { ok: false, error: '请选择固定模型' };
   }
 
+  const value: AdminSimpleWorkflowPresetUpdate = {
+    enabled: draft.enabled,
+    entry_title: draft.entryTitle.trim(),
+    entry_description: draft.entryDescription.trim(),
+    paipan_input_defaults:
+      preset.kind === 'divination'
+        ? { method: draft.ichingMethod }
+        : { include: draft.baziIncludes },
+    model_policy: buildModelPolicy(draft),
+  };
+  if (!sameStringArray(preset.skill_ids, draft.skillIds)) {
+    value.skill_ids = draft.skillIds;
+  }
+
   return {
     ok: true,
-    value: {
-      enabled: draft.enabled,
-      entry_title: draft.entryTitle.trim(),
-      entry_description: draft.entryDescription.trim(),
-      paipan_input_defaults:
-        preset.kind === 'divination'
-          ? { method: draft.ichingMethod }
-          : { include: draft.baziIncludes },
-      model_policy: buildModelPolicy(draft),
-      skill_bundle_ids: draft.skillBundleIds,
-    },
+    value,
   };
 }
 
@@ -325,34 +334,34 @@ function OptionPill({
   );
 }
 
-function BundleSelector({
-  bundles,
+function SkillSelector({
+  skills,
   selectedIds,
   disabled,
   onChange,
 }: {
-  bundles: AdminWorkflowSkillBundleSummary[];
+  skills: AdminWorkflowSkillSummary[];
   selectedIds: string[];
   disabled: boolean;
   onChange: (ids: string[]) => void;
 }) {
-  if (bundles.length === 0) {
+  if (skills.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-hairline px-3 py-6 text-center text-[12px] text-muted">
-        暂无可绑定的 Skill Bundle。
+        暂无可绑定的 Skill。
       </div>
     );
   }
 
   return (
     <div className="grid gap-2 lg:grid-cols-2">
-      {bundles.map((bundle) => {
-        const selected = selectedIds.includes(bundle.id);
+      {skills.map((skill) => {
+        const selected = selectedIds.includes(skill.id);
         return (
           <button
-            key={bundle.id}
+            key={skill.id}
             type="button"
-            onClick={() => onChange(toggleValue(selectedIds, bundle.id))}
+            onClick={() => onChange(toggleValue(selectedIds, skill.id))}
             disabled={disabled}
             className={`min-h-20 rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               selected
@@ -372,15 +381,13 @@ function BundleSelector({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[13px] font-medium text-ink">
-                  {bundle.name}
+                  {skill.skill_name}
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted">
-                  {bundle.owner_phone || bundle.user_id}
+                  {skill.owner_phone || skill.user_id}
                 </span>
                 <span className="mt-1 block text-[11px] leading-5 text-muted">
-                  {bundle.skill_names.length > 0
-                    ? bundle.skill_names.join('、')
-                    : '未包含可用 skill'}
+                  {skill.description || skill.dir_name}
                 </span>
               </span>
             </span>
@@ -394,13 +401,13 @@ function BundleSelector({
 function WorkflowPresetPanel({
   preset,
   officialModels,
-  bundles,
+  skills,
   busy,
   onSave,
 }: {
   preset: AdminSimpleWorkflowPreset;
   officialModels: AdminModelProvider[];
-  bundles: AdminWorkflowSkillBundleSummary[];
+  skills: AdminWorkflowSkillSummary[];
   busy: boolean;
   onSave: (
     id: string,
@@ -584,12 +591,15 @@ function WorkflowPresetPanel({
       </div>
 
       <div className="mt-5">
-        <FieldLabel>绑定 Skill Bundle</FieldLabel>
-        <BundleSelector
-          bundles={bundles}
-          selectedIds={draft.skillBundleIds}
+        <FieldLabel>绑定 Skill</FieldLabel>
+        <p className="mb-2 text-[11px] leading-5 text-muted">
+          可选择用户的私有 Skill。保存后会复制当前 Skill 文件作为 Workflow 固定快照，后续原作者修改、删除或取消分享不会影响已保存配置。
+        </p>
+        <SkillSelector
+          skills={skills}
+          selectedIds={draft.skillIds}
           disabled={busy}
-          onChange={(ids) => updateDraft('skillBundleIds', ids)}
+          onChange={(ids) => updateDraft('skillIds', ids)}
         />
       </div>
     </section>
@@ -606,7 +616,7 @@ export default function AdminWorkflowsPage() {
   const [officialModels, setOfficialModels] = useState<AdminModelProvider[]>(
     [],
   );
-  const [bundles, setBundles] = useState<AdminWorkflowSkillBundleSummary[]>([]);
+  const [skills, setSkills] = useState<AdminWorkflowSkillSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
@@ -622,7 +632,7 @@ export default function AdminWorkflowsPage() {
       ]);
       setPresets(workflowData.presets);
       setOfficialModels(systemData.official_models);
-      setBundles(resourceData.skill_bundles);
+      setSkills(resourceData.skills);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -697,7 +707,7 @@ export default function AdminWorkflowsPage() {
             <h2 className="text-lg font-semibold">Workflow 配置</h2>
           </div>
           <p className="mt-1 text-[13px] leading-6 text-muted">
-            管理简易模式入口、模型、排盘方式和可见 Skill Bundle。
+            管理简易模式入口、模型、排盘方式和可见 Skill。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -734,7 +744,7 @@ export default function AdminWorkflowsPage() {
               key={preset.id}
               preset={preset}
               officialModels={officialModels}
-              bundles={bundles}
+              skills={skills}
               busy={busyId === preset.id}
               onSave={handleSave}
             />

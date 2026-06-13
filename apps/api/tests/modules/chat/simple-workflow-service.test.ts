@@ -70,6 +70,8 @@ const divinationPreset = {
     thinkingLevel: 'medium' as const,
   },
   skill_bundle_ids: ['bundle-liuyao'],
+  skill_ids: ['skill-liuyao'],
+  skill_snapshot_ids: ['snapshot-liuyao'],
   prompt_template: '占卜模板',
   sort_order: 10,
   created_at: '2026-06-09T00:00:00.000Z',
@@ -90,6 +92,8 @@ const natalPreset = {
   },
   prompt_template: '命理模板',
   skill_bundle_ids: ['bundle-bazi'],
+  skill_ids: ['skill-bazi'],
+  skill_snapshot_ids: ['snapshot-bazi'],
   sort_order: 20,
 };
 
@@ -169,7 +173,8 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         ),
       }),
       expect.objectContaining({
-        authorizedSkillBundleIds: ['bundle-liuyao'],
+        authorizedSkillBundleIds: undefined,
+        authorizedWorkflowSkillIds: ['snapshot-liuyao'],
         llmRuntimeOverride: { model: 'gpt-test' },
         plusGateBypass: 'simple_workflow_first_turn',
         runtimeUserMessageOverride: [
@@ -265,7 +270,8 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         content: '命理分析：事业方向',
       }),
       expect.objectContaining({
-        authorizedSkillBundleIds: ['bundle-bazi'],
+        authorizedSkillBundleIds: undefined,
+        authorizedWorkflowSkillIds: ['snapshot-bazi'],
         runtimeUserMessageOverride: '事业方向',
       }),
     );
@@ -289,5 +295,30 @@ describe('startSimpleWorkflowForOwnedUser', () => {
 
     expect(result.ok).toBe(false);
     expect(mockExecuteDirectPaipan).not.toHaveBeenCalled();
+  });
+
+  it('falls back to workflow bundle ids before a preset has saved snapshots', async () => {
+    mockGetDefaultSimpleWorkflowPreset.mockResolvedValue({
+      ...divinationPreset,
+      skill_snapshot_ids: [],
+    });
+
+    const result = await startSimpleWorkflowForOwnedUser('user-1', {
+      kind: 'divination',
+      question: '我该不该换工作？',
+    });
+
+    expect(result.ok).toBe(true);
+    await vi.waitFor(() => {
+      expect(mockSendOwnedChatSessionMessage).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          authorizedSkillBundleIds: ['bundle-liuyao'],
+          authorizedWorkflowSkillIds: [],
+        }),
+      );
+    });
   });
 });

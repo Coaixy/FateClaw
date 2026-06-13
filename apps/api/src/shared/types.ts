@@ -390,6 +390,8 @@ export interface SimpleWorkflowPreset {
   paipan_input_defaults: Record<string, unknown>;
   model_policy: SimpleModelPolicy;
   skill_bundle_ids: string[];
+  skill_ids: string[];
+  skill_snapshot_ids: string[];
   prompt_template: string;
   sort_order: number;
   created_at: string;
