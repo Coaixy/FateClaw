@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import {
+  CheckCircle2,
+  Crown,
   Loader2,
   MessageSquare,
   Sparkles,
@@ -13,9 +15,11 @@ import { useMembershipOverview } from '@/features/billing/hooks/use-membership-o
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
+import { useToast } from '@/lib/use-toast';
 import type { BillingStatus } from '@/features/billing/api';
 
 type MembershipStatus = BillingStatus['membership'];
+type MembershipPlan = BillingStatus['membership_plans'][number];
 type TranslationFn = (
   key: string,
   params?: Record<string, string | number>,
@@ -130,6 +134,11 @@ function displayPercent(ratio: number) {
   if (percent < 0.1) return `${percent.toFixed(2)}%`;
   if (percent < 10) return `${percent.toFixed(1)}%`;
   return `${Math.round(percent)}%`;
+}
+
+function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
+  if (plan.plan_key === 'fateclaw_pro' || /pro/i.test(plan.name)) return 'Pro';
+  return 'Plus';
 }
 
 function TaijiIcon({
@@ -251,11 +260,13 @@ function AmpMetric({
 }
 
 function AmpMembershipCard({
+  planShortName,
   monthlyMessages,
   monthlyTokens,
   formatNumber,
   t,
 }: {
+  planShortName: string;
   monthlyMessages: number;
   monthlyTokens: number;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
@@ -331,7 +342,7 @@ function AmpMembershipCard({
             <TaijiIcon size={1.25} className="text-on-primary drop-shadow-sm" />
           </div>
           <div className="mt-4 text-[52px] font-extrabold leading-none text-ink sm:mt-5 sm:text-[64px]">
-            Plus
+            {planShortName}
           </div>
         </div>
 
@@ -475,33 +486,144 @@ function FreeMembershipCard({
   );
 }
 
+function MembershipPlanCards({
+  plans,
+  activePlanKey,
+  busyPlanKey,
+  locale,
+  onSubscribe,
+  t,
+}: {
+  plans: MembershipPlan[];
+  activePlanKey: string | null;
+  busyPlanKey: string | null;
+  locale: Parameters<typeof formatCoins>[1];
+  onSubscribe: (plan: MembershipPlan) => void;
+  t: TranslationFn;
+}) {
+  if (plans.length === 0) return null;
+
+  const benefitLabels = [
+    t('pages.membership.planBenefitAiChat'),
+    t('pages.membership.planBenefitPaipan'),
+    t('pages.membership.planBenefitAllowance'),
+  ];
+
+  return (
+    <section
+      aria-label={t('pages.membership.planCardsAria')}
+      className="grid gap-3 lg:grid-cols-2"
+    >
+      {plans.map((plan) => {
+        const isCurrentPlan = activePlanKey === plan.plan_key;
+        const busy = busyPlanKey === plan.plan_key;
+        const planShortName = resolvePlanShortName(plan);
+        const actionLabel = isCurrentPlan
+          ? t('pages.membership.renewPlan', { plan: planShortName })
+          : t('pages.membership.subscribePlan', { plan: planShortName });
+
+        return (
+          <article
+            key={plan.plan_key}
+            className={`overflow-hidden rounded-lg border bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] ${
+              isCurrentPlan ? 'border-primary/45' : 'border-hairline'
+            }`}
+          >
+            <div className="flex min-h-[146px] flex-col justify-between gap-4 p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Crown size={16} className="shrink-0 text-primary" />
+                    <h3 className="text-[18px] font-extrabold leading-tight text-ink">
+                      {plan.name}
+                    </h3>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-baseline gap-2">
+                    <span className="text-[30px] font-extrabold leading-none text-ink tabular-nums">
+                      {formatCoins(plan.monthly_price_coins, locale)}
+                    </span>
+                    <span className="text-[12px] font-medium text-muted">
+                      {t('pages.membership.perMonth')}
+                    </span>
+                    {plan.display_price_coins > plan.monthly_price_coins && (
+                      <span className="text-[12px] text-muted-soft line-through">
+                        {formatCoins(plan.display_price_coins, locale)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {isCurrentPlan && (
+                  <span className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
+                    <CheckCircle2 size={12} aria-hidden="true" />
+                    {t('pages.membership.currentPlan')}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                {benefitLabels.map((benefit) => (
+                  <div
+                    key={benefit}
+                    className="flex min-h-6 items-center gap-2 text-[12px] leading-5 text-muted"
+                  >
+                    <CheckCircle2
+                      size={13}
+                      aria-hidden="true"
+                      className="shrink-0 text-accent-teal"
+                    />
+                    <span>{benefit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-hairline/70 p-3">
+              <button
+                type="button"
+                onClick={() => onSubscribe(plan)}
+                disabled={busy || !plan.enabled}
+                aria-label={actionLabel}
+                className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-[14px] font-semibold transition-colors disabled:opacity-40 ${
+                  isCurrentPlan
+                    ? 'border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15'
+                    : 'bg-primary text-on-primary hover:bg-primary-active'
+                }`}
+              >
+                {busy ? (
+                  <Loader2 size={15} className="shrink-0 animate-spin" />
+                ) : (
+                  <Sparkles size={15} className="shrink-0" />
+                )}
+                {plan.enabled ? actionLabel : t('pages.membership.planDisabled')}
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
 function MembershipDetailPanel({
   membership,
   monthlyMessages,
   monthlyTokens,
-  busy,
   formatDate,
   formatNumber,
   locale,
-  onSubscribe,
   t,
 }: {
   membership: MembershipStatus;
   monthlyMessages: number;
   monthlyTokens: number;
-  busy: boolean;
   formatDate: (
     value: string | number | Date,
     options?: Intl.DateTimeFormatOptions,
   ) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   locale: Parameters<typeof formatCoins>[1];
-  onSubscribe: () => void;
   t: TranslationFn;
 }) {
-  const label = membership.active
-    ? t('pages.membership.renew')
-    : t('pages.membership.subscribe');
   const usedPercent = progressPercent(membership.allowance_used_ratio);
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const detailItems = [
@@ -586,22 +708,6 @@ function MembershipDetailPanel({
             </div>
           </div>
         </div>
-        <div className="border-t border-hairline/70 p-3 sm:flex sm:items-center sm:border-l sm:border-t-0">
-          <button
-            type="button"
-            onClick={onSubscribe}
-            disabled={busy || !membership.enabled}
-            aria-label={`${label} FateClaw Plus`}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 text-[14px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40 sm:w-[132px]"
-          >
-            {busy ? (
-              <Loader2 size={15} className="shrink-0 animate-spin" />
-            ) : (
-              <Sparkles size={15} className="shrink-0" />
-            )}
-            {label}
-          </button>
-        </div>
       </div>
     </section>
   );
@@ -614,6 +720,7 @@ function MembershipDetailPanel({
  */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();
+  const { toast } = useToast();
   const { formatDate, formatNumber, locale, t } = useI18n();
   const {
     billingInfo,
@@ -622,39 +729,47 @@ export function MembershipWorkspace() {
     error,
     refresh,
   } = useMembershipOverview();
-  const [membershipBusy, setMembershipBusy] = useState(false);
-  const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [membershipBusyPlanKey, setMembershipBusyPlanKey] =
+    useState<string | null>(null);
 
-  const handleSubscribeMembership = async () => {
+  const handleSubscribeMembership = async (plan: MembershipPlan) => {
     const membership = billingInfo?.membership;
-    if (!membership || membershipBusy || !membership.enabled) return;
+    if (!membership || membershipBusyPlanKey || !plan.enabled) return;
 
-    const priceText = formatCoins(membership.monthly_price_coins, locale);
+    const priceText = formatCoins(plan.monthly_price_coins, locale);
+    const planShortName = resolvePlanShortName(plan);
+    const isCurrentPlan = membership.plan_key === plan.plan_key;
     const ok = await confirm({
-      title: membership.active
+      title: isCurrentPlan
         ? t('pages.membership.confirmRenewTitle')
         : t('pages.membership.confirmSubscribeTitle'),
-      message: membership.active
-        ? t('pages.membership.confirmRenewMessage', { price: priceText })
-        : t('pages.membership.confirmSubscribeMessage', { price: priceText }),
-      confirmLabel: membership.active
+      message: isCurrentPlan
+        ? t('pages.membership.confirmRenewPlanMessage', {
+            plan: planShortName,
+            price: priceText,
+          })
+        : t('pages.membership.confirmSubscribePlanMessage', {
+            plan: planShortName,
+            price: priceText,
+          }),
+      confirmLabel: isCurrentPlan
         ? t('pages.membership.confirmRenew')
         : t('pages.membership.confirmSubscribe'),
       cancelLabel: t('common.cancel'),
     });
     if (!ok) return;
 
-    setMembershipBusy(true);
-    setMembershipError(null);
+    setMembershipBusyPlanKey(plan.plan_key);
     try {
-      await billingApi.subscribeMembership();
+      await billingApi.subscribeMembership({ plan_key: plan.plan_key });
       await refresh();
     } catch (err) {
-      setMembershipError(
+      toast(
+        'error',
         err instanceof Error ? err.message : t('pages.membership.subscribeFailed'),
       );
     } finally {
-      setMembershipBusy(false);
+      setMembershipBusyPlanKey(null);
     }
   };
 
@@ -673,6 +788,14 @@ export function MembershipWorkspace() {
   const monthlyMessages = usage?.monthly_messages ?? 0;
   const availableCoins = billingInfo?.available_coins ?? 0;
   const membership = billingInfo?.membership;
+  const membershipPlans = billingInfo?.membership_plans ?? [];
+  const activePlan =
+    membership && membership.plan_key
+      ? membershipPlans.find((plan) => plan.plan_key === membership.plan_key)
+      : null;
+  const activePlanShortName = activePlan
+    ? resolvePlanShortName(activePlan)
+    : 'Plus';
 
   return (
     <AppShell>
@@ -686,6 +809,7 @@ export function MembershipWorkspace() {
         {membership ? (
           membership.active ? (
             <AmpMembershipCard
+              planShortName={activePlanShortName}
               monthlyMessages={monthlyMessages}
               monthlyTokens={monthlyTokens}
               formatNumber={formatNumber}
@@ -702,16 +826,22 @@ export function MembershipWorkspace() {
             />
           )
         ) : null}
+        <MembershipPlanCards
+          plans={membershipPlans}
+          activePlanKey={membership?.active ? membership.plan_key : null}
+          busyPlanKey={membershipBusyPlanKey}
+          locale={locale}
+          onSubscribe={(plan) => void handleSubscribeMembership(plan)}
+          t={t}
+        />
         {membership ? (
           <MembershipDetailPanel
             membership={membership}
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
-            busy={membershipBusy}
             formatDate={formatDate}
             formatNumber={formatNumber}
             locale={locale}
-            onSubscribe={() => void handleSubscribeMembership()}
             t={t}
           />
         ) : null}
@@ -719,11 +849,6 @@ export function MembershipWorkspace() {
         {error && (
           <div className="rounded-xl border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">
             {error}
-          </div>
-        )}
-        {membershipError && (
-          <div className="rounded-xl border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">
-            {membershipError}
           </div>
         )}
       </div>

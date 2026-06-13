@@ -15,6 +15,7 @@ const {
   mockGetConversationLogByRequestId,
   mockGetPiSessionHealthPolicy,
   mockGetMembershipConfig,
+  mockGetMembershipPlanConfigs,
   mockGetPiSessionCleanupCursor,
   mockGetAdminAnnouncementById,
   mockGetRecentMessages,
@@ -49,6 +50,7 @@ const {
   mockGetConversationLogByRequestId: vi.fn(),
   mockGetPiSessionHealthPolicy: vi.fn(),
   mockGetMembershipConfig: vi.fn(),
+  mockGetMembershipPlanConfigs: vi.fn(),
   mockGetPiSessionCleanupCursor: vi.fn(),
   mockGetAdminAnnouncementById: vi.fn(),
   mockGetRecentMessages: vi.fn(),
@@ -83,6 +85,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
   getAdminAnnouncementById: mockGetAdminAnnouncementById,
   getMembershipConfig: mockGetMembershipConfig,
+  getMembershipPlanConfigs: mockGetMembershipPlanConfigs,
   getPiSessionCleanupCursor: mockGetPiSessionCleanupCursor,
   getRecentMessages: mockGetRecentMessages,
   getUserByPhone: mockGetUserByPhone,
@@ -141,6 +144,34 @@ import {
   updateAdminRewardConfig,
 } from '../../../src/modules/admin/admin-service.js';
 
+function plusMembershipConfig(overrides = {}) {
+  return {
+    id: 'default',
+    name: 'FateClaw Plus',
+    enabled: true,
+    monthly_price_coins: 30,
+    display_price_coins: 30,
+    monthly_allowance_units: 3000000,
+    standard_price_per_million_units_coins: 10,
+    updated_at: '2026-05-30T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function proMembershipConfig(overrides = {}) {
+  return {
+    id: 'fateclaw_pro',
+    name: 'FateClaw Pro',
+    enabled: true,
+    monthly_price_coins: 100,
+    display_price_coins: 120,
+    monthly_allowance_units: 3000000,
+    standard_price_per_million_units_coins: 10,
+    updated_at: '2026-05-30T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('createAdminUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -158,22 +189,18 @@ describe('createAdminUser', () => {
       reward_coins: 10,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
-    mockGetMembershipConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      monthly_price_coins: 30,
-      monthly_allowance_units: 3000000,
-      standard_price_per_million_units_coins: 10,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
-    mockUpdateMembershipConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      monthly_price_coins: 30,
-      monthly_allowance_units: 5000000,
-      standard_price_per_million_units_coins: 12,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
+    mockGetMembershipConfig.mockResolvedValue(plusMembershipConfig());
+    mockGetMembershipPlanConfigs.mockResolvedValue([
+      plusMembershipConfig(),
+      proMembershipConfig(),
+    ]);
+    mockUpdateMembershipConfig.mockResolvedValue(
+      plusMembershipConfig({
+        monthly_allowance_units: 5000000,
+        standard_price_per_million_units_coins: 12,
+        updated_at: '2026-05-30T01:00:00.000Z',
+      }),
+    );
   });
 
   it('normalizes phone and persists a hashed admin-created user', async () => {
@@ -221,22 +248,18 @@ describe('createAdminUser', () => {
 describe('admin reward config', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetMembershipConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      monthly_price_coins: 30,
-      monthly_allowance_units: 3000000,
-      standard_price_per_million_units_coins: 10,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
-    mockUpdateMembershipConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      monthly_price_coins: 30,
-      monthly_allowance_units: 5000000,
-      standard_price_per_million_units_coins: 12,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
+    mockGetMembershipConfig.mockResolvedValue(plusMembershipConfig());
+    mockGetMembershipPlanConfigs.mockResolvedValue([
+      plusMembershipConfig(),
+      proMembershipConfig(),
+    ]);
+    mockUpdateMembershipConfig.mockResolvedValue(
+      plusMembershipConfig({
+        monthly_allowance_units: 5000000,
+        standard_price_per_million_units_coins: 12,
+        updated_at: '2026-05-30T01:00:00.000Z',
+      }),
+    );
   });
 
   it('reads daily sign-in reward config', async () => {
@@ -254,12 +277,37 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T00:00:00.000Z',
       },
       membership: {
+        plan_key: 'fateclaw_plus',
+        name: 'FateClaw Plus',
         enabled: true,
         monthly_price_coins: 30,
+        display_price_coins: 30,
         monthly_allowance_units: 3000000,
         standard_price_per_million_units_coins: 10,
         updated_at: '2026-05-30T00:00:00.000Z',
       },
+      membership_plans: [
+        {
+          plan_key: 'fateclaw_plus',
+          name: 'FateClaw Plus',
+          enabled: true,
+          monthly_price_coins: 30,
+          display_price_coins: 30,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+          updated_at: '2026-05-30T00:00:00.000Z',
+        },
+        {
+          plan_key: 'fateclaw_pro',
+          name: 'FateClaw Pro',
+          enabled: true,
+          monthly_price_coins: 100,
+          display_price_coins: 120,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+          updated_at: '2026-05-30T00:00:00.000Z',
+        },
+      ],
     });
   });
 
@@ -270,6 +318,14 @@ describe('admin reward config', () => {
       reward_coins: 10,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
+    mockGetMembershipPlanConfigs.mockResolvedValue([
+      plusMembershipConfig({
+        monthly_allowance_units: 5000000,
+        standard_price_per_million_units_coins: 12,
+        updated_at: '2026-05-30T01:00:00.000Z',
+      }),
+      proMembershipConfig(),
+    ]);
 
     await expect(
       updateAdminRewardConfig({
@@ -291,12 +347,37 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T01:00:00.000Z',
       },
       membership: {
+        plan_key: 'fateclaw_plus',
+        name: 'FateClaw Plus',
         enabled: true,
         monthly_price_coins: 30,
+        display_price_coins: 30,
         monthly_allowance_units: 5000000,
         standard_price_per_million_units_coins: 12,
         updated_at: '2026-05-30T01:00:00.000Z',
       },
+      membership_plans: [
+        {
+          plan_key: 'fateclaw_plus',
+          name: 'FateClaw Plus',
+          enabled: true,
+          monthly_price_coins: 30,
+          display_price_coins: 30,
+          monthly_allowance_units: 5000000,
+          standard_price_per_million_units_coins: 12,
+          updated_at: '2026-05-30T01:00:00.000Z',
+        },
+        {
+          plan_key: 'fateclaw_pro',
+          name: 'FateClaw Pro',
+          enabled: true,
+          monthly_price_coins: 100,
+          display_price_coins: 120,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+          updated_at: '2026-05-30T00:00:00.000Z',
+        },
+      ],
     });
 
     expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
@@ -304,8 +385,11 @@ describe('admin reward config', () => {
       rewardCoins: 10,
     });
     expect(mockUpdateMembershipConfig).toHaveBeenCalledWith({
+      planKey: undefined,
+      name: undefined,
       enabled: true,
       monthlyPriceCoins: 30,
+      displayPriceCoins: undefined,
       monthlyAllowanceUnits: 5000000,
       standardPricePerMillionUnitsCoins: 12,
     });

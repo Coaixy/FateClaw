@@ -521,12 +521,25 @@ export interface AdminRewardConfig {
     updated_at: string;
   };
   membership: {
+    plan_key: string;
+    name: string;
     enabled: boolean;
     monthly_price_coins: number;
+    display_price_coins: number;
     monthly_allowance_units: number;
     standard_price_per_million_units_coins: number;
     updated_at: string;
   };
+  membership_plans: Array<{
+    plan_key: string;
+    name: string;
+    enabled: boolean;
+    monthly_price_coins: number;
+    display_price_coins: number;
+    monthly_allowance_units: number;
+    standard_price_per_million_units_coins: number;
+    updated_at: string;
+  }>;
 }
 
 /** 管理后台邀请奖励状态。 */
@@ -818,6 +831,15 @@ export const admin = {
       monthly_allowance_units: number;
       standard_price_per_million_units_coins: number;
     };
+    membership_plans?: Array<{
+      plan_key: string;
+      name: string;
+      enabled: boolean;
+      monthly_price_coins: number;
+      display_price_coins: number;
+      monthly_allowance_units: number;
+      standard_price_per_million_units_coins: number;
+    }>;
   }) =>
     adminRequest<AdminRewardConfig>('/api/admin/reward-config', {
       method: 'PUT',

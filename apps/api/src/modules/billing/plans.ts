@@ -1,5 +1,6 @@
 import {
   getBillingRequestReservationByRequestId,
+  getMembershipPlanConfigs,
   getMembershipOverview,
   getMonthlyModelChargeCoins,
   getUserById,
@@ -35,6 +36,7 @@ export interface MembershipBillingSummary {
   active: boolean;
   planKey: string | null;
   monthlyPriceCoins: number;
+  displayPriceCoins: number;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   allowanceResetAt: string | null;
@@ -46,6 +48,17 @@ export interface MembershipBillingSummary {
     | 'tight'
     | 'almost_used'
     | 'used_up';
+}
+
+export interface MembershipPlanSummary {
+  planKey: string;
+  name: string;
+  enabled: boolean;
+  monthlyPriceCoins: number;
+  displayPriceCoins: number;
+  monthlyAllowanceUnits: number;
+  standardPricePerMillionUnitsCoins: number;
+  updatedAt: string;
 }
 
 /**
@@ -227,6 +240,7 @@ export async function getMembershipBillingSummary(
     active: overview.active,
     planKey: overview.membership?.plan_key ?? null,
     monthlyPriceCoins: overview.config.monthly_price_coins,
+    displayPriceCoins: overview.config.display_price_coins,
     currentPeriodStart: overview.active
       ? (overview.membership?.current_period_start ?? null)
       : null,
@@ -239,6 +253,23 @@ export async function getMembershipBillingSummary(
     allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
     allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
   };
+}
+
+export async function getMembershipPlanSummaries(): Promise<
+  MembershipPlanSummary[]
+> {
+  const configs = await getMembershipPlanConfigs();
+  return configs.map((config) => ({
+    planKey: config.id === 'fateclaw_pro' ? 'fateclaw_pro' : 'fateclaw_plus',
+    name: config.name,
+    enabled: config.enabled,
+    monthlyPriceCoins: config.monthly_price_coins,
+    displayPriceCoins: config.display_price_coins,
+    monthlyAllowanceUnits: config.monthly_allowance_units,
+    standardPricePerMillionUnitsCoins:
+      config.standard_price_per_million_units_coins,
+    updatedAt: config.updated_at,
+  }));
 }
 
 export async function getWalletBalanceSummary(

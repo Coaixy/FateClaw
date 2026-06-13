@@ -17,6 +17,25 @@ type RewardConfigPayload = {
     monthly_allowance_units: number;
     standard_price_per_million_units_coins: number;
   };
+  membership_plans?: Array<{
+    plan_key: string;
+    name: string;
+    enabled: boolean;
+    monthly_price_coins: number;
+    display_price_coins: number;
+    monthly_allowance_units: number;
+    standard_price_per_million_units_coins: number;
+  }>;
+};
+
+type MembershipPlanDraft = {
+  plan_key: string;
+  name: string;
+  enabled: boolean;
+  monthly_price_coins: string;
+  display_price_coins: string;
+  monthly_allowance_units: string;
+  standard_price_per_million_units_coins: string;
 };
 
 type RewardDraft = {
@@ -24,13 +43,47 @@ type RewardDraft = {
     enabled: boolean;
     reward_coins: string;
   };
-  membership: {
-    enabled: boolean;
-    monthly_price_coins: string;
-    monthly_allowance_units: string;
-    standard_price_per_million_units_coins: string;
-  };
+  membership_plans: MembershipPlanDraft[];
 };
+
+function defaultMembershipPlans(): MembershipPlanDraft[] {
+  return [
+    {
+      plan_key: 'fateclaw_plus',
+      name: 'FateClaw Plus',
+      enabled: true,
+      monthly_price_coins: '30',
+      display_price_coins: '30',
+      monthly_allowance_units: '3000000',
+      standard_price_per_million_units_coins: '10',
+    },
+    {
+      plan_key: 'fateclaw_pro',
+      name: 'FateClaw Pro',
+      enabled: true,
+      monthly_price_coins: '100',
+      display_price_coins: '120',
+      monthly_allowance_units: '3000000',
+      standard_price_per_million_units_coins: '10',
+    },
+  ];
+}
+
+function planDraftFromConfig(
+  plan: AdminRewardConfig['membership_plans'][number],
+): MembershipPlanDraft {
+  return {
+    plan_key: plan.plan_key,
+    name: plan.name,
+    enabled: plan.enabled,
+    monthly_price_coins: String(plan.monthly_price_coins),
+    display_price_coins: String(plan.display_price_coins),
+    monthly_allowance_units: String(plan.monthly_allowance_units),
+    standard_price_per_million_units_coins: String(
+      plan.standard_price_per_million_units_coins,
+    ),
+  };
+}
 
 function draftFromConfig(config: AdminRewardConfig | null): RewardDraft {
   return {
@@ -38,16 +91,27 @@ function draftFromConfig(config: AdminRewardConfig | null): RewardDraft {
       enabled: config?.daily_sign_in.enabled ?? false,
       reward_coins: String(config?.daily_sign_in.reward_coins ?? 0),
     },
-    membership: {
-      enabled: config?.membership.enabled ?? true,
-      monthly_price_coins: String(config?.membership.monthly_price_coins ?? 30),
-      monthly_allowance_units: String(
-        config?.membership.monthly_allowance_units ?? 3000000,
-      ),
-      standard_price_per_million_units_coins: String(
-        config?.membership.standard_price_per_million_units_coins ?? 10,
-      ),
-    },
+    membership_plans:
+      config?.membership_plans?.map(planDraftFromConfig) ??
+      defaultMembershipPlans(),
+  };
+}
+
+function roundCurrency(value: string) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function payloadPlanFromDraft(plan: MembershipPlanDraft) {
+  return {
+    plan_key: plan.plan_key,
+    name: plan.name.trim() || plan.plan_key,
+    enabled: plan.enabled,
+    monthly_price_coins: roundCurrency(plan.monthly_price_coins),
+    display_price_coins: roundCurrency(plan.display_price_coins),
+    monthly_allowance_units: Number(plan.monthly_allowance_units || 0),
+    standard_price_per_million_units_coins: roundCurrency(
+      plan.standard_price_per_million_units_coins,
+    ),
   };
 }
 
@@ -90,15 +154,21 @@ export function RewardConfigPanel({
       },
     }));
   };
-  const updateMembership = (value: Partial<RewardDraft['membership']>) => {
+  const updateMembershipPlan = (
+    planKey: string,
+    value: Partial<MembershipPlanDraft>,
+  ) => {
     setDraft((prev) => ({
       ...prev,
-      membership: {
-        ...prev.membership,
-        ...value,
-      },
+      membership_plans: prev.membership_plans.map((plan) =>
+        plan.plan_key === planKey ? { ...plan, ...value } : plan,
+      ),
     }));
   };
+  const plusPlan =
+    draft.membership_plans.find((plan) => plan.plan_key === 'fateclaw_plus') ??
+    draft.membership_plans[0] ??
+    defaultMembershipPlans()[0];
 
   return (
     <div className="space-y-4">
@@ -153,73 +223,120 @@ export function RewardConfigPanel({
         </div>
       </div>
 
-      <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="text-sm font-semibold">FateClaw Plus</div>
-            <div className="mt-1 text-[12px] leading-5 text-muted">
-              管理会员月费、后台额度池和额度进度条的成本折算口径。
+      <div className="space-y-3">
+        {draft.membership_plans.map((plan) => (
+          <div
+            key={plan.plan_key}
+            className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <input
+                  value={plan.name}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      name: event.target.value,
+                    })
+                  }
+                  className="h-8 w-full rounded-md border border-transparent bg-transparent px-0 text-sm font-semibold text-ink focus:border-hairline focus:bg-canvas focus:px-2 focus:outline-none sm:w-[220px]"
+                />
+                <div className="mt-1 text-[12px] leading-5 text-muted">
+                  管理会员月费、展示原价、后台额度池和额度进度条的成本折算口径。
+                </div>
+              </div>
+              <label className="inline-flex items-center gap-2 text-[13px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={plan.enabled}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      enabled: event.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 accent-primary"
+                />
+                开放套餐
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-4">
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted">
+                  实收月费（软妹币）
+                </div>
+                <input
+                  value={plan.monthly_price_coins}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      monthly_price_coins: event.target.value,
+                    })
+                  }
+                  inputMode="decimal"
+                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted">
+                  展示原价（软妹币）
+                </div>
+                <input
+                  value={plan.display_price_coins}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      display_price_coins: event.target.value,
+                    })
+                  }
+                  inputMode="decimal"
+                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted">
+                  月度标准额度
+                </div>
+                <input
+                  value={plan.monthly_allowance_units}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      monthly_allowance_units: event.target.value,
+                    })
+                  }
+                  inputMode="numeric"
+                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <div className="text-[12px] font-medium text-muted">
+                  百万标准额度成本
+                </div>
+                <input
+                  value={plan.standard_price_per_million_units_coins}
+                  onChange={(event) =>
+                    updateMembershipPlan(plan.plan_key, {
+                      standard_price_per_million_units_coins:
+                        event.target.value,
+                    })
+                  }
+                  inputMode="decimal"
+                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+                />
+              </label>
+            </div>
+            <div className="mt-3 rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
+              当前展示：
+              <span className="font-medium text-ink">
+                {formatCoins(Number(plan.monthly_price_coins) || 0)}
+              </span>
+              {Number(plan.display_price_coins) >
+                Number(plan.monthly_price_coins) && (
+                <span>
+                  {' '}
+                  / 原价 {formatCoins(Number(plan.display_price_coins) || 0)}
+                </span>
+              )}
             </div>
           </div>
-          <label className="inline-flex items-center gap-2 text-[13px] text-muted">
-            <input
-              type="checkbox"
-              checked={draft.membership.enabled}
-              onChange={(event) =>
-                updateMembership({ enabled: event.target.checked })
-              }
-              className="h-4 w-4 accent-primary"
-            />
-            开放会员
-          </label>
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          <label className="space-y-1.5">
-            <div className="text-[12px] font-medium text-muted">
-              月费（软妹币）
-            </div>
-            <input
-              value={draft.membership.monthly_price_coins}
-              onChange={(event) =>
-                updateMembership({ monthly_price_coins: event.target.value })
-              }
-              inputMode="decimal"
-              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-            />
-          </label>
-          <label className="space-y-1.5">
-            <div className="text-[12px] font-medium text-muted">
-              月度标准额度
-            </div>
-            <input
-              value={draft.membership.monthly_allowance_units}
-              onChange={(event) =>
-                updateMembership({ monthly_allowance_units: event.target.value })
-              }
-              inputMode="numeric"
-              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-            />
-          </label>
-          <label className="space-y-1.5">
-            <div className="text-[12px] font-medium text-muted">
-              百万标准额度成本
-            </div>
-            <input
-              value={draft.membership.standard_price_per_million_units_coins}
-              onChange={(event) =>
-                updateMembership({
-                  standard_price_per_million_units_coins: event.target.value,
-                })
-              }
-              inputMode="decimal"
-              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-            />
-          </label>
-        </div>
-        <div className="mt-3 rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
-          用户侧只显示进度条；这里的额度和折算价格用于后台运营调整。
-        </div>
+        ))}
       </div>
 
       <div className="flex flex-col gap-3 rounded-lg border border-hairline bg-surface-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
@@ -240,22 +357,18 @@ export function RewardConfigPanel({
                   100,
               },
               membership: {
-                enabled: draft.membership.enabled,
-                monthly_price_coins:
-                  Math.round(
-                    Number(draft.membership.monthly_price_coins || 0) * 100,
-                  ) / 100,
-                monthly_allowance_units: Number(
-                  draft.membership.monthly_allowance_units || 0,
+                enabled: plusPlan.enabled,
+                monthly_price_coins: roundCurrency(
+                  plusPlan.monthly_price_coins,
                 ),
-                standard_price_per_million_units_coins:
-                  Math.round(
-                    Number(
-                      draft.membership.standard_price_per_million_units_coins ||
-                        0,
-                    ) * 100,
-                  ) / 100,
+                monthly_allowance_units: Number(
+                  plusPlan.monthly_allowance_units || 0,
+                ),
+                standard_price_per_million_units_coins: roundCurrency(
+                  plusPlan.standard_price_per_million_units_coins,
+                ),
               },
+              membership_plans: draft.membership_plans.map(payloadPlanFromDraft),
             })
           }
           disabled={busy}

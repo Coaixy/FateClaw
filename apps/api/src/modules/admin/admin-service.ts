@@ -35,6 +35,7 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getMembershipConfig,
+  getMembershipPlanConfigs,
   getBalanceGrantsByUserId,
   getDailySignInConfig,
   getReferralConfig,
@@ -168,11 +169,42 @@ export interface AdminRewardConfigView {
     updated_at: string;
   };
   membership: {
+    plan_key: string;
+    name: string;
     enabled: boolean;
     monthly_price_coins: number;
+    display_price_coins: number;
     monthly_allowance_units: number;
     standard_price_per_million_units_coins: number;
     updated_at: string;
+  };
+  membership_plans: Array<{
+    plan_key: string;
+    name: string;
+    enabled: boolean;
+    monthly_price_coins: number;
+    display_price_coins: number;
+    monthly_allowance_units: number;
+    standard_price_per_million_units_coins: number;
+    updated_at: string;
+  }>;
+}
+
+function membershipPlanKeyFromConfigId(configId: string) {
+  return configId === 'fateclaw_pro' ? 'fateclaw_pro' : 'fateclaw_plus';
+}
+
+function membershipConfigToAdminView(config: Awaited<ReturnType<typeof getMembershipConfig>>) {
+  return {
+    plan_key: membershipPlanKeyFromConfigId(config.id),
+    name: config.name,
+    enabled: config.enabled,
+    monthly_price_coins: config.monthly_price_coins,
+    display_price_coins: config.display_price_coins,
+    monthly_allowance_units: config.monthly_allowance_units,
+    standard_price_per_million_units_coins:
+      config.standard_price_per_million_units_coins,
+    updated_at: config.updated_at,
   };
 }
 
@@ -180,24 +212,20 @@ export interface AdminRewardConfigView {
  * 读取后台软妹币奖励配置。
  */
 export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
-  const [dailySignIn, membership] = await Promise.all([
+  const [dailySignIn, membership, membershipPlans] = await Promise.all([
     getDailySignInConfig(),
     getMembershipConfig(),
+    getMembershipPlanConfigs(),
   ]);
+  const membershipView = membershipConfigToAdminView(membership);
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
       reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
     },
-    membership: {
-      enabled: membership.enabled,
-      monthly_price_coins: membership.monthly_price_coins,
-      monthly_allowance_units: membership.monthly_allowance_units,
-      standard_price_per_million_units_coins:
-        membership.standard_price_per_million_units_coins,
-      updated_at: membership.updated_at,
-    },
+    membership: membershipView,
+    membership_plans: membershipPlans.map(membershipConfigToAdminView),
   };
 }
 
@@ -210,39 +238,60 @@ export async function updateAdminRewardConfig(input: {
     rewardCoins: number;
   };
   membership: {
+    planKey?: string;
+    name?: string;
     enabled: boolean;
     monthlyPriceCoins: number;
+    displayPriceCoins?: number;
     monthlyAllowanceUnits: number;
     standardPricePerMillionUnitsCoins: number;
   };
+  membershipPlans?: Array<{
+    planKey: string;
+    name: string;
+    enabled: boolean;
+    monthlyPriceCoins: number;
+    displayPriceCoins: number;
+    monthlyAllowanceUnits: number;
+    standardPricePerMillionUnitsCoins: number;
+  }>;
 }): Promise<AdminRewardConfigView> {
-  const [dailySignIn, membership] = await Promise.all([
+  const membershipInputs =
+    input.membershipPlans && input.membershipPlans.length > 0
+      ? input.membershipPlans
+      : [input.membership];
+  const [dailySignIn] = await Promise.all([
     updateDailySignInConfig({
       enabled: input.dailySignIn.enabled,
       rewardCoins: input.dailySignIn.rewardCoins,
     }),
-    updateMembershipConfig({
-      enabled: input.membership.enabled,
-      monthlyPriceCoins: input.membership.monthlyPriceCoins,
-      monthlyAllowanceUnits: input.membership.monthlyAllowanceUnits,
-      standardPricePerMillionUnitsCoins:
-        input.membership.standardPricePerMillionUnitsCoins,
-    }),
   ]);
+  await Promise.all(
+    membershipInputs.map((membershipInput) =>
+      updateMembershipConfig({
+        planKey: membershipInput.planKey,
+        name: membershipInput.name,
+        enabled: membershipInput.enabled,
+        monthlyPriceCoins: membershipInput.monthlyPriceCoins,
+        displayPriceCoins: membershipInput.displayPriceCoins,
+        monthlyAllowanceUnits: membershipInput.monthlyAllowanceUnits,
+        standardPricePerMillionUnitsCoins:
+          membershipInput.standardPricePerMillionUnitsCoins,
+      }),
+    ),
+  );
+  const membershipPlans = await getMembershipPlanConfigs();
+  const membership =
+    membershipPlans.find((plan) => plan.id === 'default') ?? membershipPlans[0];
+  const membershipView = membershipConfigToAdminView(membership);
   return {
     daily_sign_in: {
       enabled: dailySignIn.enabled,
       reward_coins: dailySignIn.reward_coins,
       updated_at: dailySignIn.updated_at,
     },
-    membership: {
-      enabled: membership.enabled,
-      monthly_price_coins: membership.monthly_price_coins,
-      monthly_allowance_units: membership.monthly_allowance_units,
-      standard_price_per_million_units_coins:
-        membership.standard_price_per_million_units_coins,
-      updated_at: membership.updated_at,
-    },
+    membership: membershipView,
+    membership_plans: membershipPlans.map(membershipConfigToAdminView),
   };
 }
 

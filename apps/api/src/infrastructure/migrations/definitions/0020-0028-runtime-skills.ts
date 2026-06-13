@@ -741,4 +741,55 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0037_membership_pro_plan',
+    description: '增加 FateClaw Pro 会员套餐配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE membership_config
+          ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'FateClaw Plus',
+          ADD COLUMN IF NOT EXISTS display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 30
+      `);
+      await client.query(`
+        UPDATE membership_config
+        SET name = CASE
+              WHEN id = 'fateclaw_pro' THEN 'FateClaw Pro'
+              ELSE 'FateClaw Plus'
+            END,
+            display_price_coins = CASE
+              WHEN id = 'fateclaw_pro' THEN 120
+              ELSE GREATEST(display_price_coins, monthly_price_coins)
+            END
+        WHERE name = 'FateClaw Plus'
+           OR display_price_coins < monthly_price_coins
+      `);
+      await client.query(`
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        SELECT
+          'fateclaw_pro',
+          enabled,
+          'FateClaw Pro',
+          100,
+          120,
+          monthly_allowance_units,
+          standard_price_per_million_units_coins,
+          NOW()
+        FROM membership_config
+        WHERE id = 'default'
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_membership_config_display_price_nonnegative',
+        tableName: 'membership_config',
+        expression: 'display_price_coins >= 0',
+        cleanupSql: `UPDATE membership_config
+                     SET display_price_coins = GREATEST(monthly_price_coins, 0)
+                     WHERE display_price_coins < 0`,
+      });
+    },
+  },
 ];

@@ -583,6 +583,7 @@ describe('billing repository', () => {
         [reservation],
         [],
         [monthlyState],
+        [],
         [disabledConfig],
         [],
         [updated],
@@ -602,7 +603,10 @@ describe('billing repository', () => {
     });
 
     expect(clientCalls[3]?.sql).toContain('billed_overage_cost_coins');
-    expect(clientCalls[7]?.params).toEqual([
+    const monthlyUpdate = clientCalls.find((call) =>
+      call.sql.includes('UPDATE monthly_billing_state'),
+    );
+    expect(monthlyUpdate?.params).toEqual([
       141_873,
       3.03,
       'user-1',
@@ -683,8 +687,8 @@ describe('billing repository', () => {
         [reservation],
         [],
         [monthlyState],
-        [config],
         [membership],
+        [config],
         [allowance],
         [{ ...allowance, used_units: 63000 }],
         [],
@@ -964,6 +968,7 @@ describe('billing repository', () => {
       used_units: 42,
     };
     const { calls } = createMockPool([
+      [membership],
       [
         {
           id: 'default',
@@ -973,7 +978,6 @@ describe('billing repository', () => {
           standard_price_per_million_units_coins: 10,
         },
       ],
-      [membership],
       [allowance],
     ]);
 

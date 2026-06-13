@@ -60,6 +60,7 @@ export interface BillingStatusDto {
   reserved_coins: number;
   available_coins: number;
   membership: MembershipStatusDto;
+  membership_plans: MembershipPlanDto[];
 }
 
 export interface MembershipStatusDto {
@@ -67,6 +68,7 @@ export interface MembershipStatusDto {
   active: boolean;
   plan_key: string | null;
   monthly_price_coins: number;
+  display_price_coins: number;
   current_period_start: string | null;
   current_period_end: string | null;
   allowance_reset_at: string | null;
@@ -78,6 +80,17 @@ export interface MembershipStatusDto {
     | 'tight'
     | 'almost_used'
     | 'used_up';
+}
+
+export interface MembershipPlanDto {
+  plan_key: string;
+  name: string;
+  enabled: boolean;
+  monthly_price_coins: number;
+  display_price_coins: number;
+  monthly_allowance_units: number;
+  standard_price_per_million_units_coins: number;
+  updated_at: string;
 }
 
 export interface MembershipSubscribeResultDto {

@@ -38,6 +38,7 @@ import {
 import {
   getMonthlyMeteredBillingSummary,
   getMembershipBillingSummary,
+  getMembershipPlanSummaries,
   getWalletBalanceSummary,
 } from './plans.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
@@ -63,6 +64,7 @@ export async function getBillingOverview(
   const billing = await getMonthlyMeteredBillingSummary(user.id);
   const wallet = await getWalletBalanceSummary(user.id);
   const membership = await getMembershipBillingSummary(user.id);
+  const membershipPlans = await getMembershipPlanSummaries();
 
   return ok(
     toBillingStatusDto({
@@ -77,25 +79,38 @@ export async function getBillingOverview(
         active: membership.active,
         plan_key: membership.planKey,
         monthly_price_coins: membership.monthlyPriceCoins,
+        display_price_coins: membership.displayPriceCoins,
         current_period_start: membership.currentPeriodStart,
         current_period_end: membership.currentPeriodEnd,
         allowance_reset_at: membership.allowanceResetAt,
         allowance_used_ratio: membership.allowanceUsedRatio,
         allowance_status: membership.allowanceStatus,
       },
+      membership_plans: membershipPlans.map((plan) => ({
+        plan_key: plan.planKey,
+        name: plan.name,
+        enabled: plan.enabled,
+        monthly_price_coins: plan.monthlyPriceCoins,
+        display_price_coins: plan.displayPriceCoins,
+        monthly_allowance_units: plan.monthlyAllowanceUnits,
+        standard_price_per_million_units_coins:
+          plan.standardPricePerMillionUnitsCoins,
+        updated_at: plan.updatedAt,
+      })),
     }),
   );
 }
 
 export async function subscribeCurrentUserMembership(
   userId: string,
+  planKey?: string,
 ): Promise<ServiceResult<MembershipSubscribeResultDto>> {
   const user = await getUserById(userId);
   if (!user) {
     return fail(404, '用户不存在');
   }
   try {
-    const result = await subscribeMembershipWithWallet(user.id);
+    const result = await subscribeMembershipWithWallet(user.id, planKey);
     const wallet = await getWalletBalanceSummary(result.user.id);
     const membership = await getMembershipBillingSummary(result.user.id);
     return ok({
@@ -104,6 +119,7 @@ export async function subscribeCurrentUserMembership(
         active: membership.active,
         plan_key: membership.planKey,
         monthly_price_coins: membership.monthlyPriceCoins,
+        display_price_coins: membership.displayPriceCoins,
         current_period_start: membership.currentPeriodStart,
         current_period_end: membership.currentPeriodEnd,
         allowance_reset_at: membership.allowanceResetAt,

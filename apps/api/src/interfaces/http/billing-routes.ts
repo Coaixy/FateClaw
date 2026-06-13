@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 
 import {
   claimDailySignInReward,
@@ -19,6 +20,12 @@ import {
   syncRechargeOrderForUser,
 } from '../../modules/billing/recharge-service.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
+
+const MembershipSubscribeSchema = z
+  .object({
+    plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']).optional(),
+  })
+  .optional();
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/billing — 钱包余额与 Token 计费概览
@@ -90,10 +97,17 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // POST /api/billing/membership/subscribe — 使用钱包余额开通或续费 FateClaw Plus
+  // POST /api/billing/membership/subscribe — 使用钱包余额开通或续费会员套餐
   app.post('/membership/subscribe', async (request, reply) => {
     await request.requireAuth();
-    const result = await subscribeCurrentUserMembership(request.user.userId);
+    const parsed = MembershipSubscribeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: '会员套餐参数无效' });
+    }
+    const result = await subscribeCurrentUserMembership(
+      request.user.userId,
+      parsed.data?.plan_key,
+    );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

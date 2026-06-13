@@ -77,9 +77,10 @@ export const billingApi = {
     requestJson<DailySignInResult>('/api/billing/daily-sign-in', {
       method: 'POST',
     }).finally(clearBillingCache),
-  subscribeMembership: () =>
+  subscribeMembership: (data?: { plan_key?: string }) =>
     requestJson<MembershipSubscribeResult>('/api/billing/membership/subscribe', {
       method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
     }).finally(clearBillingCache),
   rechargeOrders: () =>
     requestJson<RechargeOrder[]>('/api/billing/recharge/orders'),

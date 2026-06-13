@@ -24,8 +24,36 @@ const pool = {
 };
 
 const COIN_CENTS = 100;
-const MEMBERSHIP_PLAN_KEY = 'fateclaw_plus';
+const MEMBERSHIP_PLUS_PLAN_KEY = 'fateclaw_plus';
+const MEMBERSHIP_PLUS_CONFIG_ID = 'default';
+const MEMBERSHIP_PRO_PLAN_KEY = 'fateclaw_pro';
+const MEMBERSHIP_PLAN_KEYS = [
+  MEMBERSHIP_PLUS_PLAN_KEY,
+  MEMBERSHIP_PRO_PLAN_KEY,
+] as const;
 const MEMBERSHIP_UNIT_DENOMINATOR = 1_000_000;
+
+export type MembershipPlanKey = (typeof MEMBERSHIP_PLAN_KEYS)[number];
+
+function isMembershipPlanKey(value: string): value is MembershipPlanKey {
+  return (MEMBERSHIP_PLAN_KEYS as readonly string[]).includes(value);
+}
+
+function resolveMembershipConfigId(planKey: string): string {
+  return planKey === MEMBERSHIP_PRO_PLAN_KEY
+    ? MEMBERSHIP_PRO_PLAN_KEY
+    : MEMBERSHIP_PLUS_CONFIG_ID;
+}
+
+function resolveMembershipPlanKey(configId: string): MembershipPlanKey {
+  return configId === MEMBERSHIP_PRO_PLAN_KEY
+    ? MEMBERSHIP_PRO_PLAN_KEY
+    : MEMBERSHIP_PLUS_PLAN_KEY;
+}
+
+function resolveMembershipPlanName(planKey: string): string {
+  return planKey === MEMBERSHIP_PRO_PLAN_KEY ? 'FateClaw Pro' : 'FateClaw Plus';
+}
 
 function toCoins(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -155,9 +183,16 @@ function normalizeMonthlyBillingStateRow(
 }
 
 function normalizeMembershipConfigRow(row: MembershipConfig): MembershipConfig {
+  const planKey = resolveMembershipPlanKey(row.id);
+  const monthlyPriceCoins = toCoins(row.monthly_price_coins);
   return {
     ...row,
-    monthly_price_coins: toCoins(row.monthly_price_coins),
+    name: row.name || resolveMembershipPlanName(planKey),
+    monthly_price_coins: monthlyPriceCoins,
+    display_price_coins: Math.max(
+      monthlyPriceCoins,
+      toCoins(row.display_price_coins),
+    ),
     monthly_allowance_units: roundAllowanceUnits(
       Number(row.monthly_allowance_units ?? 0),
     ),
@@ -349,12 +384,23 @@ export interface MembershipOverviewRow {
 
 async function getMembershipConfigUsing(input: {
   query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
+  planKey?: string;
 }): Promise<MembershipConfigRow> {
+  const planKey = isMembershipPlanKey(input.planKey ?? '')
+    ? (input.planKey as MembershipPlanKey)
+    : MEMBERSHIP_PLUS_PLAN_KEY;
+  const configId = resolveMembershipConfigId(planKey);
+  const name = resolveMembershipPlanName(planKey);
+  const monthlyPriceCoins = planKey === MEMBERSHIP_PRO_PLAN_KEY ? 100 : 30;
+  const displayPriceCoins = planKey === MEMBERSHIP_PRO_PLAN_KEY ? 120 : 30;
   const { rows } = await input.query(
-    `INSERT INTO membership_config (id)
-     VALUES ('default')
+    `INSERT INTO membership_config (
+       id, name, monthly_price_coins, display_price_coins
+     )
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
+    [configId, name, monthlyPriceCoins, displayPriceCoins],
   );
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
 }
@@ -362,36 +408,75 @@ async function getMembershipConfigUsing(input: {
 /**
  * 读取会员全局配置；首次访问时补齐默认 FateClaw Plus 配置。
  */
-export async function getMembershipConfig(): Promise<MembershipConfigRow> {
-  return getMembershipConfigUsing(pool);
+export async function getMembershipConfig(
+  planKey: string = MEMBERSHIP_PLUS_PLAN_KEY,
+): Promise<MembershipConfigRow> {
+  return getMembershipConfigUsing({
+    query: pool.query,
+    planKey,
+  });
+}
+
+/**
+ * 读取所有会员套餐配置；首次访问时补齐 Plus 和 Pro 默认配置。
+ */
+export async function getMembershipPlanConfigs(): Promise<
+  MembershipConfigRow[]
+> {
+  const configs = await Promise.all(
+    MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
+  );
+  return configs.sort((a, b) => {
+    return (
+      MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(a.id)) -
+      MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(b.id))
+    );
+  });
 }
 
 /**
  * 更新会员价格和每周期标准额度。
  */
 export async function updateMembershipConfig(input: {
+  planKey?: string;
   enabled: boolean;
+  name?: string;
   monthlyPriceCoins: number;
+  displayPriceCoins?: number;
   monthlyAllowanceUnits: number;
   standardPricePerMillionUnitsCoins: number;
 }): Promise<MembershipConfigRow> {
+  const planKey = isMembershipPlanKey(input.planKey ?? '')
+    ? (input.planKey as MembershipPlanKey)
+    : MEMBERSHIP_PLUS_PLAN_KEY;
+  const configId = resolveMembershipConfigId(planKey);
+  const monthlyPriceCoins = roundCoinsToCents(input.monthlyPriceCoins);
+  const displayPriceCoins = roundCoinsToCents(
+    input.displayPriceCoins ?? input.monthlyPriceCoins,
+  );
   const { rows } = await pool.query(
     `INSERT INTO membership_config (
-       id, enabled, monthly_price_coins, monthly_allowance_units,
-       standard_price_per_million_units_coins, updated_at
+       id, enabled, name, monthly_price_coins, display_price_coins,
+       monthly_allowance_units, standard_price_per_million_units_coins,
+       updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
+       name = EXCLUDED.name,
        monthly_price_coins = EXCLUDED.monthly_price_coins,
+       display_price_coins = EXCLUDED.display_price_coins,
        monthly_allowance_units = EXCLUDED.monthly_allowance_units,
        standard_price_per_million_units_coins =
          EXCLUDED.standard_price_per_million_units_coins,
        updated_at = NOW()
      RETURNING *`,
     [
+      configId,
       input.enabled,
-      roundCoinsToCents(input.monthlyPriceCoins),
+      input.name?.trim() || resolveMembershipPlanName(planKey),
+      monthlyPriceCoins,
+      Math.max(monthlyPriceCoins, displayPriceCoins),
       roundAllowanceUnits(input.monthlyAllowanceUnits),
       roundCoinsToCents(input.standardPricePerMillionUnitsCoins),
     ],
@@ -468,19 +553,18 @@ async function consumeMembershipAllowanceUsing(
     userId: string;
     chargeCoins: number;
     config: MembershipConfigRow;
+    membership?: UserMembershipRow;
   },
 ): Promise<{
   consumedUnits: number;
   coveredCoins: number;
   allowance: MembershipAllowanceRow | null;
 }> {
-  const membership = await getActiveMembershipForUserUsing(
-    client,
-    input.userId,
-    {
+  const membership =
+    input.membership ??
+    (await getActiveMembershipForUserUsing(client, input.userId, {
       forUpdate: true,
-    },
-  );
+    }));
   if (!membership) {
     return { consumedUnits: 0, coveredCoins: 0, allowance: null };
   }
@@ -531,7 +615,6 @@ async function consumeMembershipAllowanceUsing(
 export async function getMembershipOverview(
   userId: string,
 ): Promise<MembershipOverviewRow> {
-  const config = await getMembershipConfig();
   const { rows: membershipRows } = await pool.query(
     `SELECT *
      FROM user_memberships
@@ -542,6 +625,7 @@ export async function getMembershipOverview(
   );
   const membership =
     (membershipRows[0] as UserMembershipRow | undefined) ?? null;
+  const config = await getMembershipConfig(membership?.plan_key);
   const period = membership
     ? resolveMembershipAllowancePeriod(membership)
     : null;
@@ -570,15 +654,22 @@ export async function getMembershipOverview(
 }
 
 /**
- * 使用钱包余额开通或续费一个月 FateClaw Plus。
+ * 使用钱包余额开通或续费一个月指定 FateClaw 会员套餐。
  */
 export async function subscribeMembershipWithWallet(
   userId: string,
+  planKey: string = MEMBERSHIP_PLUS_PLAN_KEY,
 ): Promise<{ user: User; overview: MembershipOverviewRow }> {
+  const normalizedPlanKey = isMembershipPlanKey(planKey)
+    ? planKey
+    : MEMBERSHIP_PLUS_PLAN_KEY;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const config = await getMembershipConfigUsing(client);
+    const config = await getMembershipConfigUsing({
+      query: client.query.bind(client),
+      planKey: normalizedPlanKey,
+    });
     if (!config.enabled) {
       throw new Error('会员暂未开放');
     }
@@ -630,7 +721,7 @@ export async function subscribeMembershipWithWallet(
        RETURNING *`,
       [
         userId,
-        MEMBERSHIP_PLAN_KEY,
+        normalizedPlanKey,
         periodStart.toISOString(),
         periodEnd.toISOString(),
       ],
@@ -646,9 +737,9 @@ export async function subscribeMembershipWithWallet(
       kind: 'membership_subscription',
       amountCoins: -priceCoins,
       balanceSource: deduction.balanceSource,
-      note: 'FateClaw Plus 会员月费',
+      note: `${resolveMembershipPlanName(normalizedPlanKey)} 会员月费`,
       metadata: {
-        planKey: MEMBERSHIP_PLAN_KEY,
+        planKey: normalizedPlanKey,
         periodStart: membership.current_period_start,
         periodEnd: membership.current_period_end,
         allowanceUnits: allowance.allowance_units,
@@ -2121,14 +2212,26 @@ export async function settleUserModelChargeCoins(
     );
     const previousChargeCoins = toCoins(monthlyState.billed_overage_cost_coins);
     const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
-    const membershipConfig = await getMembershipConfigUsing(client);
-    const membershipDeduction = membershipConfig.enabled
-      ? await consumeMembershipAllowanceUsing(client, {
-          userId: reservation.user_id,
-          chargeCoins: rawChargeCoins,
-          config: membershipConfig,
+    const activeMembership = await getActiveMembershipForUserUsing(
+      client,
+      reservation.user_id,
+      { forUpdate: true },
+    );
+    const membershipConfig = activeMembership
+      ? await getMembershipConfigUsing({
+          query: client.query.bind(client),
+          planKey: activeMembership.plan_key,
         })
-      : { consumedUnits: 0, coveredCoins: 0, allowance: null };
+      : await getMembershipConfigUsing(client);
+    const membershipDeduction =
+      activeMembership && membershipConfig.enabled
+        ? await consumeMembershipAllowanceUsing(client, {
+            userId: reservation.user_id,
+            chargeCoins: rawChargeCoins,
+            config: membershipConfig,
+            membership: activeMembership,
+          })
+        : { consumedUnits: 0, coveredCoins: 0, allowance: null };
     const actualChargeCoins = roundCoinsToCents(
       Math.max(0, rawChargeCoins - membershipDeduction.coveredCoins),
     );

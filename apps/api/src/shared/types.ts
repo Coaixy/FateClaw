@@ -30,7 +30,9 @@ export type BalanceGrantStatus = 'active' | 'exhausted' | 'expired' | 'revoked';
 export interface MembershipConfig {
   id: 'default' | string;
   enabled: boolean;
+  name: string;
   monthly_price_coins: number;
+  display_price_coins: number;
   monthly_allowance_units: number;
   standard_price_per_million_units_coins: number;
   updated_at: string;

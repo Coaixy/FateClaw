@@ -506,6 +506,28 @@ const RechargePaymentConfigSchema = z
     }
   });
 
+const RewardMembershipPlanSchema = z.object({
+  plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']),
+  name: z.string().trim().min(1, '套餐名称不能为空').max(80),
+  enabled: z.boolean(),
+  monthly_price_coins: SoftCurrencyNumberSchema.refine(
+    (value) => value >= 0 && value <= 1_000_000,
+    '会员月费必须在 0 到 1000000 之间',
+  ),
+  display_price_coins: SoftCurrencyNumberSchema.refine(
+    (value) => value >= 0 && value <= 1_000_000,
+    '会员展示原价必须在 0 到 1000000 之间',
+  ),
+  monthly_allowance_units: z
+    .number()
+    .min(1, '会员额度必须大于 0')
+    .max(1_000_000_000_000, '会员额度过大'),
+  standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
+    (value) => value > 0 && value <= 1_000_000,
+    '标准额度折算价格必须在 0 到 1000000 之间',
+  ),
+});
+
 const RewardConfigSchema = z.object({
   daily_sign_in: z.object({
     enabled: z.boolean(),
@@ -529,6 +551,7 @@ const RewardConfigSchema = z.object({
       '标准额度折算价格必须在 0 到 1000000 之间',
     ),
   }),
+  membership_plans: z.array(RewardMembershipPlanSchema).optional(),
 });
 
 const ReferralConfigSchema = z.object({
@@ -931,6 +954,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         standardPricePerMillionUnitsCoins:
           parsed.data.membership.standard_price_per_million_units_coins,
       },
+      membershipPlans: parsed.data.membership_plans?.map((plan) => ({
+        planKey: plan.plan_key,
+        name: plan.name,
+        enabled: plan.enabled,
+        monthlyPriceCoins: plan.monthly_price_coins,
+        displayPriceCoins: plan.display_price_coins,
+        monthlyAllowanceUnits: plan.monthly_allowance_units,
+        standardPricePerMillionUnitsCoins:
+          plan.standard_price_per_million_units_coins,
+      })),
     });
   });
 
