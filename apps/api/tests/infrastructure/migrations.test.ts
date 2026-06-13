@@ -200,6 +200,13 @@ describe('runDatabaseMigrations', () => {
         '为简易模式 Workflow 增加绑定 Skill 快照',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0036_repair_simple_workflow_skill_snapshot_columns',
+        '修复简易模式 Workflow Skill 快照列缺失',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -339,6 +346,7 @@ describe('runDatabaseMigrations', () => {
       '0033_referral_invite_count_reward',
       '0034_announcements',
       '0035_simple_workflow_skill_snapshots',
+      '0036_repair_simple_workflow_skill_snapshot_columns',
     ]);
 
     await runDatabaseMigrations(client as never);

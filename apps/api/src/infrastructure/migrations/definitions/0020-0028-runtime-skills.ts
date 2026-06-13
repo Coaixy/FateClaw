@@ -2,7 +2,7 @@ import type { DatabaseMigration } from '../types.js';
 import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0020-0035。
+ * 数据库迁移分段：0020-0036。
  */
 export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
@@ -722,6 +722,17 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
   {
     id: '0035_simple_workflow_skill_snapshots',
     description: '为简易模式 Workflow 增加绑定 Skill 快照',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE simple_workflow_presets
+          ADD COLUMN IF NOT EXISTS skill_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+          ADD COLUMN IF NOT EXISTS skill_snapshot_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]
+      `);
+    },
+  },
+  {
+    id: '0036_repair_simple_workflow_skill_snapshot_columns',
+    description: '修复简易模式 Workflow Skill 快照列缺失',
     async up(client) {
       await client.query(`
         ALTER TABLE simple_workflow_presets
