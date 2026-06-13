@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
+import { AnnouncementBanner } from './announcements/announcement-banner';
 
 /**
  * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和底部备案信息。
@@ -98,6 +99,7 @@ export function AppShell({
                 : `mx-auto max-w-3xl px-4 ${noPadding ? 'pb-0' : 'pb-10'} lg:px-10 lg:pt-20 lg:pb-10 animate-page-enter`
             }
           >
+            <AnnouncementBanner embedded wide={wide} />
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
           {showComplianceFooter ? (

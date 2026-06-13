@@ -616,4 +616,105 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0034_announcements',
+    description: '增加运营公告系统 schema',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS announcements (
+          id TEXT PRIMARY KEY,
+          slug TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          body_markdown TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          priority INTEGER NOT NULL DEFAULT 0,
+          starts_at TIMESTAMPTZ DEFAULT NULL,
+          ends_at TIMESTAMPTZ DEFAULT NULL,
+          cta_label TEXT DEFAULT NULL,
+          cta_href TEXT DEFAULT NULL,
+          published_at TIMESTAMPTZ DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_status_valid',
+        tableName: 'announcements',
+        expression: `status IN ('draft', 'published', 'archived')`,
+        cleanupSql: `UPDATE announcements
+                     SET status = 'draft'
+                     WHERE status NOT IN ('draft', 'published', 'archived')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_slug_format',
+        tableName: 'announcements',
+        expression: `char_length(slug) BETWEEN 1 AND 80 AND slug ~ '^[a-z0-9][a-z0-9-]*$'`,
+        cleanupSql: `UPDATE announcements
+                     SET slug = lower(regexp_replace(slug, '[^a-zA-Z0-9]+', '-', 'g'))
+                     WHERE char_length(slug) = 0
+                        OR char_length(slug) > 80
+                        OR slug !~ '^[a-z0-9][a-z0-9-]*$'`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_content_lengths',
+        tableName: 'announcements',
+        expression:
+          'char_length(title) BETWEEN 1 AND 120 AND char_length(summary) <= 280 AND char_length(body_markdown) BETWEEN 1 AND 20000 AND (cta_label IS NULL OR char_length(cta_label) BETWEEN 1 AND 40)',
+        cleanupSql: `UPDATE announcements
+                     SET title = left(COALESCE(NULLIF(title, ''), '公告'), 120),
+                         summary = left(COALESCE(summary, ''), 280),
+                         body_markdown = left(COALESCE(NULLIF(body_markdown, ''), title), 20000),
+                         cta_label = CASE
+                           WHEN cta_label IS NULL OR btrim(cta_label) = '' THEN NULL
+                           ELSE left(cta_label, 40)
+                         END`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_time_window',
+        tableName: 'announcements',
+        expression:
+          'ends_at IS NULL OR starts_at IS NULL OR ends_at > starts_at',
+        cleanupSql: `UPDATE announcements
+                     SET ends_at = NULL
+                     WHERE ends_at IS NOT NULL
+                       AND starts_at IS NOT NULL
+                       AND ends_at <= starts_at`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_cta_pair',
+        tableName: 'announcements',
+        expression:
+          '(cta_label IS NULL AND cta_href IS NULL) OR (cta_label IS NOT NULL AND cta_href IS NOT NULL)',
+        cleanupSql: `UPDATE announcements
+                     SET cta_label = NULL,
+                         cta_href = NULL
+                     WHERE (cta_label IS NULL AND cta_href IS NOT NULL)
+                        OR (cta_label IS NOT NULL AND cta_href IS NULL)`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_announcements_cta_href_safe',
+        tableName: 'announcements',
+        expression: `cta_href IS NULL OR (cta_href LIKE '/%' AND cta_href NOT LIKE '//%') OR cta_href LIKE 'https://%'`,
+        cleanupSql: `UPDATE announcements
+                     SET cta_label = NULL,
+                         cta_href = NULL
+                     WHERE cta_href IS NOT NULL
+                       AND (cta_href NOT LIKE '/%' OR cta_href LIKE '//%')
+                       AND cta_href NOT LIKE 'https://%'`,
+      });
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_announcements_status_window_priority
+          ON announcements (status, priority DESC, published_at DESC, updated_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_announcements_published_at
+          ON announcements (published_at DESC, updated_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_announcements_updated_at
+          ON announcements (updated_at DESC, created_at DESC)
+      `);
+    },
+  },
 ];

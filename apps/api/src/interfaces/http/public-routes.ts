@@ -1,15 +1,44 @@
 import { FastifyInstance } from 'fastify';
 
-import { listPublicFinancialLedgerEntries } from '../../infrastructure/db.js';
+import {
+  getActiveAnnouncement,
+  getPublicAnnouncementBySlug,
+  listPublicAnnouncements,
+  listPublicFinancialLedgerEntries,
+} from '../../infrastructure/db.js';
 
 /**
  * 注册无需登录的公开接口。
  *
- * 当前仅暴露关于页面收支流水，避免公开页面依赖管理端鉴权接口。
+ * 公开页面不依赖登录态，所有接口都必须只返回可公开展示的数据。
  */
 export async function publicRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/public/financial-ledger — 关于页面公开收支流水
   app.get('/financial-ledger', async () => {
     return { entries: await listPublicFinancialLedgerEntries() };
   });
+
+  // GET /api/public/announcements/active — 当前顶部横幅公告
+  app.get('/announcements/active', async () => {
+    return { announcement: await getActiveAnnouncement() };
+  });
+
+  // GET /api/public/announcements — 公开公告列表
+  app.get('/announcements', async () => {
+    return { announcements: await listPublicAnnouncements() };
+  });
+
+  // GET /api/public/announcements/:slug — 公开公告详情
+  app.get<{ Params: { slug: string } }>(
+    '/announcements/:slug',
+    async (request, reply) => {
+      const announcement = await getPublicAnnouncementBySlug(
+        request.params.slug,
+      );
+      if (!announcement) {
+        return reply.code(404).send({ error: '公告不存在或尚未发布' });
+      }
+      return { announcement };
+    },
+  );
 }

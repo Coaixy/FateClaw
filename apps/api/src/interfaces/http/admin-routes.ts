@@ -10,10 +10,13 @@ import {
 } from '../../infrastructure/config.js';
 import {
   adjustUserPurchasedBalance,
+  createAnnouncement,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
+  deleteDraftAnnouncement,
   deleteUser,
   getAdminGlobalStats,
+  getAdminAnnouncementById,
   getAdminRechargePaymentConfig,
   getChatSessionsForAdmin,
   getConversationLogById,
@@ -56,7 +59,9 @@ import {
   getAdminUserDetail,
   createPublicFinancialLedgerEntry,
   deletePublicFinancialLedgerEntry,
+  listAdminAnnouncements,
   listPublicFinancialLedgerEntries,
+  updateAnnouncement,
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
 } from '../../modules/admin/admin-service.js';
@@ -578,6 +583,148 @@ const PublicFinancialLedgerEntrySchema = z.object({
   ),
 });
 
+function nullableDateTimeSchema(label: string) {
+  return z
+    .string()
+    .trim()
+    .datetime({ offset: true, message: `${label}格式不正确` })
+    .nullable()
+    .optional();
+}
+
+function isSafeAnnouncementCtaHref(value: string): boolean {
+  return (
+    (value.startsWith('/') && !value.startsWith('//')) ||
+    value.startsWith('https://')
+  );
+}
+
+function isUniqueAnnouncementSlugConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  return (
+    record.code === '23505' &&
+    (record.constraint === 'announcements_slug_key' ||
+      String(record.detail ?? '').includes('slug'))
+  );
+}
+
+function validateAnnouncementCta(
+  value: { cta_label?: string | null; cta_href?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  const hasLabel = Boolean(value.cta_label);
+  const hasHref = Boolean(value.cta_href);
+  if (hasLabel !== hasHref) {
+    ctx.addIssue({
+      code: 'custom',
+      path: hasLabel ? ['cta_href'] : ['cta_label'],
+      message: 'CTA 文案和链接必须同时填写或同时留空',
+    });
+    return;
+  }
+  if (value.cta_href && !isSafeAnnouncementCtaHref(value.cta_href)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['cta_href'],
+      message: 'CTA 链接只允许站内路径或 https:// 外链',
+    });
+  }
+}
+
+function validateAnnouncementWindow(
+  value: { starts_at?: string | null; ends_at?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (!value.starts_at || !value.ends_at) return;
+  if (
+    new Date(value.ends_at).getTime() <= new Date(value.starts_at).getTime()
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ends_at'],
+      message: '结束时间必须晚于开始时间',
+    });
+  }
+}
+
+const AnnouncementBaseSchema = z.object({
+  title: z.string().trim().min(1, '标题不能为空').max(120, '标题最多 120 字'),
+  summary: z.string().trim().max(280, '摘要最多 280 字').default(''),
+  body_markdown: z
+    .string()
+    .trim()
+    .min(1, 'Markdown 正文不能为空')
+    .max(20_000, 'Markdown 正文最多 20000 字'),
+  status: z.enum(['draft', 'published', 'archived']).default('draft'),
+  priority: z.number().int('优先级必须是整数').min(0).max(1_000_000).default(0),
+  starts_at: nullableDateTimeSchema('开始时间'),
+  ends_at: nullableDateTimeSchema('结束时间'),
+  cta_label: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40, 'CTA 文案最多 40 字')
+    .nullable()
+    .optional(),
+  cta_href: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500, 'CTA 链接最多 500 字')
+    .nullable()
+    .optional(),
+});
+
+const AnnouncementCreateSchema = AnnouncementBaseSchema.superRefine(
+  (value, ctx) => {
+    validateAnnouncementWindow(value, ctx);
+    validateAnnouncementCta(value, ctx);
+  },
+);
+
+const AnnouncementUpdateSchema = z
+  .object({
+    title: AnnouncementBaseSchema.shape.title,
+    summary: z.string().trim().max(280, '摘要最多 280 字'),
+    body_markdown: AnnouncementBaseSchema.shape.body_markdown,
+    status: z.enum(['draft', 'published', 'archived']),
+    priority: z.number().int('优先级必须是整数').min(0).max(1_000_000),
+    starts_at: nullableDateTimeSchema('开始时间'),
+    ends_at: nullableDateTimeSchema('结束时间'),
+    cta_label: AnnouncementBaseSchema.shape.cta_label,
+    cta_href: AnnouncementBaseSchema.shape.cta_href,
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: '至少需要提供一个更新字段',
+  });
+
+function getAnnouncementStateError(value: {
+  starts_at?: string | null;
+  ends_at?: string | null;
+  cta_label?: string | null;
+  cta_href?: string | null;
+}): string | null {
+  if (
+    value.starts_at &&
+    value.ends_at &&
+    new Date(value.ends_at).getTime() <= new Date(value.starts_at).getTime()
+  ) {
+    return '结束时间必须晚于开始时间';
+  }
+
+  const hasLabel = Boolean(value.cta_label);
+  const hasHref = Boolean(value.cta_href);
+  if (hasLabel !== hasHref) {
+    return 'CTA 文案和链接必须同时填写或同时留空';
+  }
+  if (value.cta_href && !isSafeAnnouncementCtaHref(value.cta_href)) {
+    return 'CTA 链接只允许站内路径或 https:// 外链';
+  }
+  return null;
+}
+
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // 所有 admin 路由需要验证后台密钥，并对失败鉴权统一做指数退避限流。
   app.addHook('onRequest', async (request, reply) => {
@@ -865,6 +1012,129 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: '简易模式 workflow 不存在' });
     }
     return updated;
+  });
+
+  // GET /api/admin/announcements — 公告管理列表
+  app.get('/announcements', async () => {
+    return { announcements: await listAdminAnnouncements() };
+  });
+
+  // POST /api/admin/announcements — 创建公告
+  app.post('/announcements', async (request, reply) => {
+    const parsed = AnnouncementCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    try {
+      const announcement = await createAnnouncement({
+        title: parsed.data.title,
+        summary: parsed.data.summary,
+        bodyMarkdown: parsed.data.body_markdown,
+        status: parsed.data.status,
+        priority: parsed.data.priority,
+        startsAt: parsed.data.starts_at ?? null,
+        endsAt: parsed.data.ends_at ?? null,
+        ctaLabel: parsed.data.cta_label ?? null,
+        ctaHref: parsed.data.cta_href ?? null,
+      });
+      return reply.code(201).send(announcement);
+    } catch (error) {
+      if (isUniqueAnnouncementSlugConflict(error)) {
+        return reply.code(409).send({ error: '公告 slug 已存在' });
+      }
+      throw error;
+    }
+  });
+
+  // PATCH /api/admin/announcements/:id — 更新公告
+  app.patch('/announcements/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const parsed = AnnouncementUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+
+    const current = await getAdminAnnouncementById(id);
+    if (!current) {
+      return reply.code(404).send({ error: '公告不存在' });
+    }
+    const finalStateError = getAnnouncementStateError({
+      starts_at:
+        'starts_at' in parsed.data
+          ? (parsed.data.starts_at ?? null)
+          : current.starts_at,
+      ends_at:
+        'ends_at' in parsed.data
+          ? (parsed.data.ends_at ?? null)
+          : current.ends_at,
+      cta_label:
+        'cta_label' in parsed.data
+          ? (parsed.data.cta_label ?? null)
+          : current.cta_label,
+      cta_href:
+        'cta_href' in parsed.data
+          ? (parsed.data.cta_href ?? null)
+          : current.cta_href,
+    });
+    if (finalStateError) {
+      return reply.code(400).send({ error: finalStateError });
+    }
+
+    try {
+      const announcement = await updateAnnouncement(id, {
+        title: parsed.data.title,
+        summary: parsed.data.summary,
+        bodyMarkdown: parsed.data.body_markdown,
+        status: parsed.data.status,
+        priority: parsed.data.priority,
+        startsAt:
+          'starts_at' in parsed.data
+            ? (parsed.data.starts_at ?? null)
+            : undefined,
+        endsAt:
+          'ends_at' in parsed.data ? (parsed.data.ends_at ?? null) : undefined,
+        ctaLabel:
+          'cta_label' in parsed.data
+            ? (parsed.data.cta_label ?? null)
+            : undefined,
+        ctaHref:
+          'cta_href' in parsed.data
+            ? (parsed.data.cta_href ?? null)
+            : undefined,
+      });
+      if (!announcement) {
+        return reply.code(404).send({ error: '公告不存在' });
+      }
+      return announcement;
+    } catch (error) {
+      if (isUniqueAnnouncementSlugConflict(error)) {
+        return reply.code(409).send({ error: '公告 slug 已存在' });
+      }
+      throw error;
+    }
+  });
+
+  // DELETE /api/admin/announcements/:id — 删除草稿公告
+  app.delete('/announcements/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const current = await getAdminAnnouncementById(id);
+    if (!current) {
+      return reply.code(404).send({ error: '公告不存在' });
+    }
+    const result = await deleteDraftAnnouncement(id);
+    if (result.blockedStatus) {
+      return reply
+        .code(400)
+        .send({ error: '已发布或已归档公告请使用归档，不允许硬删除' });
+    }
+    if (!result.deleted) {
+      return reply.code(404).send({ error: '公告不存在' });
+    }
+    return { success: true };
   });
 
   // GET /api/admin/about-ledger — 关于页面公开收支流水

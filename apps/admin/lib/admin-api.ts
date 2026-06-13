@@ -596,6 +596,49 @@ export type AdminAboutLedgerEntryDraft = Pick<
   'entry_type' | 'occurred_at' | 'content' | 'amount_yuan'
 >;
 
+/** 管理后台公告状态。 */
+export type AdminAnnouncementStatus = 'draft' | 'published' | 'archived';
+
+/** 管理后台公告记录。 */
+export interface AdminAnnouncement {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  body_markdown: string;
+  status: AdminAnnouncementStatus;
+  priority: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  cta_label: string | null;
+  cta_href: string | null;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 管理后台公告列表响应。 */
+export interface AdminAnnouncementsResponse {
+  announcements: AdminAnnouncement[];
+}
+
+/** 管理后台公告写入数据。 */
+export type AdminAnnouncementDraft = Pick<
+  AdminAnnouncement,
+  | 'title'
+  | 'summary'
+  | 'body_markdown'
+  | 'status'
+  | 'priority'
+  | 'starts_at'
+  | 'ends_at'
+  | 'cta_label'
+  | 'cta_href'
+>;
+
+/** 管理后台公告更新数据。 */
+export type AdminAnnouncementUpdate = Partial<AdminAnnouncementDraft>;
+
 /** 后台模型计费配置视图，单位是软妹币 / 百万 Token。 */
 export interface AdminModelBillingConfig {
   custom_model_platform_price_per_million_coins: number;
@@ -832,6 +875,26 @@ export const admin = {
   deleteAboutLedgerEntry: (id: string) =>
     adminRequest<{ success: boolean }>(
       `/api/admin/about-ledger/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
+  announcements: () =>
+    adminRequest<AdminAnnouncementsResponse>('/api/admin/announcements'),
+  createAnnouncement: (data: AdminAnnouncementDraft) =>
+    adminRequest<AdminAnnouncement>('/api/admin/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateAnnouncement: (id: string, data: AdminAnnouncementUpdate) =>
+    adminRequest<AdminAnnouncement>(
+      `/api/admin/announcements/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    ),
+  deleteAnnouncement: (id: string) =>
+    adminRequest<{ success: boolean }>(
+      `/api/admin/announcements/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
     ),
   updateModelBilling: (data: {

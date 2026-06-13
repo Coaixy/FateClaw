@@ -189,6 +189,10 @@ describe('runDatabaseMigrations', () => {
         '增加累计邀请人数会员奖励配置',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0034_announcements', '增加运营公告系统 schema'],
+    });
     expect(
       calls.some(
         (call) =>
@@ -259,6 +263,16 @@ describe('runDatabaseMigrations', () => {
     ).toBe(true);
     expect(
       calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS announcements'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_announcements_cta_href_safe'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
         call.sql.includes(
           'chk_runtime_config_skill_bundle_total_chars_at_least_file_chars',
         ),
@@ -316,6 +330,7 @@ describe('runDatabaseMigrations', () => {
       '0031_default_official_model_runtime_config',
       '0032_default_thinking_level_runtime_config',
       '0033_referral_invite_count_reward',
+      '0034_announcements',
     ]);
 
     await runDatabaseMigrations(client as never);

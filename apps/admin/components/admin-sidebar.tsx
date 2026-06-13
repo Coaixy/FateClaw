@@ -20,6 +20,7 @@ import {
   WalletCards,
   Workflow,
   UserPlus,
+  Megaphone,
   LogOut,
   Menu,
   X,
@@ -37,6 +38,12 @@ const navItems = [
     href: '/billing',
     label: '账单管理',
     icon: ReceiptText,
+    roles: ['owner'],
+  },
+  {
+    href: '/announcements',
+    label: '公告',
+    icon: Megaphone,
     roles: ['owner'],
   },
   {
