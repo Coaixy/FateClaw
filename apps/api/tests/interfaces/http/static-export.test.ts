@@ -26,6 +26,23 @@ describe('resolveStaticExportRequest', () => {
     });
   });
 
+  it('maps generated announcement slugs to the exported placeholder page', () => {
+    expect(
+      resolveStaticExportRequest(
+        '/announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646',
+      ),
+    ).toEqual({
+      kind: 'page',
+      candidateFiles: [
+        'announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646/index.html',
+        'announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646.html',
+        'announcements/detail/index.html',
+        'announcements/detail.html',
+      ],
+      fallbackToIndexHtml: false,
+    });
+  });
+
   it('maps announcement route data shortcuts to the exported placeholder data', () => {
     expect(
       resolveStaticExportRequest('/announcements/summer-maintenance.txt'),

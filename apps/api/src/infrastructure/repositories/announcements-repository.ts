@@ -141,9 +141,9 @@ export async function getActiveAnnouncement(): Promise<AnnouncementRow | null> {
 }
 
 /**
- * 通过 slug 读取公开公告详情。
+ * 通过公开标识读取公告详情。
  *
- * @param slug 公开详情页路径标识。
+ * @param slug 公开详情页路径标识；兼容误用公告 ID 的既有链接。
  * @returns 已发布且已到开始时间的公告；不存在或未公开时返回 null。
  */
 export async function getPublicAnnouncementBySlug(
@@ -152,9 +152,10 @@ export async function getPublicAnnouncementBySlug(
   const { rows } = await getDbPool().query<AnnouncementRow>(
     `SELECT ${ANNOUNCEMENT_COLUMNS}
      FROM announcements
-     WHERE slug = $1
+     WHERE (slug = $1 OR id = $1)
        AND status = 'published'
        AND (starts_at IS NULL OR starts_at <= NOW())
+     ORDER BY CASE WHEN slug = $1 THEN 0 ELSE 1 END
      LIMIT 1`,
     [slug],
   );

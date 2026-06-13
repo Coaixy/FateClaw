@@ -12,6 +12,7 @@ import {
   createAnnouncement,
   deleteDraftAnnouncement,
   getActiveAnnouncement,
+  getPublicAnnouncementBySlug,
   listPublicAnnouncements,
   updateAnnouncement,
 } from '../../../src/infrastructure/repositories/announcements-repository.js';
@@ -95,6 +96,22 @@ describe('announcements repository', () => {
     expect(calls[0]?.sql).toContain('ends_at IS NULL OR ends_at > NOW()');
     expect(calls[0]?.sql).toContain('ORDER BY priority DESC');
     expect(calls[0]?.sql).toContain('LIMIT 1');
+  });
+
+  it('loads public announcement details by slug or id', async () => {
+    const { calls } = createMockPool([[announcementRow()]]);
+
+    await expect(
+      getPublicAnnouncementBySlug('announcement-1'),
+    ).resolves.toMatchObject({
+      id: 'announcement-1',
+      slug: 'maintenance',
+    });
+
+    expect(calls[0]?.sql).toContain('(slug = $1 OR id = $1)');
+    expect(calls[0]?.sql).toContain("status = 'published'");
+    expect(calls[0]?.sql).toContain('CASE WHEN slug = $1');
+    expect(calls[0]?.params).toEqual(['announcement-1']);
   });
 
   it('creates published announcements with generated ids and published time', async () => {

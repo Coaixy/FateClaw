@@ -148,6 +148,16 @@ server {
     try_files $uri =404;
   }
 
+  location ~ ^/announcements/[a-z0-9-]+\.txt$ {
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    try_files $uri /announcements/detail/index.txt =404;
+  }
+
+  location ~ ^/announcements/[a-z0-9-]+/?$ {
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    try_files $uri $uri/ /announcements/detail/index.html =404;
+  }
+
   location / {
     add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
     try_files $uri $uri/ /index.html;
