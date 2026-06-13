@@ -18,23 +18,36 @@ import {
 
 import { AppShell } from '@/components/app-shell';
 import { billingApi, type PublicStatusStats } from '@/features/billing/api';
+import { useI18n } from '@/lib/i18n';
 
 type TokenUsagePoint = PublicStatusStats['token_usage_series'][number];
+type NumberFormatter = ReturnType<typeof useI18n>['formatNumber'];
+type DateFormatter = ReturnType<typeof useI18n>['formatDate'];
 
-function formatCompactNumber(value: number): string {
-  if (value < 10000) return value.toLocaleString('zh-CN');
-  if (value < 100000000) {
-    return `${(value / 10000).toFixed(1).replace(/\.0$/, '')} 万`;
+function formatCompactNumber(
+  value: number,
+  formatNumber: NumberFormatter,
+): string {
+  if (value < 10000) {
+    return formatNumber(value);
   }
-  return `${(value / 100000000).toFixed(2).replace(/\.0+$/, '')} 亿`;
+
+  return formatNumber(value, {
+    notation: 'compact',
+    maximumFractionDigits: value < 100000000 ? 1 : 2,
+  });
 }
 
-function formatStatusTime(date: Date | null): string {
+function formatStatusTime(
+  date: Date | null,
+  fallback: string,
+  formatDate: DateFormatter,
+): string {
   if (!date) {
-    return '等待同步';
+    return fallback;
   }
 
-  return date.toLocaleTimeString('zh-CN', {
+  return formatDate(date, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -46,21 +59,22 @@ function formatStatusTime(date: Date | null): string {
  * 平台状态工作台，展示公开运行指标和最近 Token 消耗趋势。
  */
 export function StatusWorkspace() {
+  const { t, formatDate, formatNumber } = useI18n();
   const [stats, setStats] = useState<PublicStatusStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
     setRefreshing(true);
-    setError('');
+    setLoadFailed(false);
     try {
       setStats(await billingApi.publicStatus());
       setUpdatedAt(new Date());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '状态数据加载失败');
+    } catch {
+      setLoadFailed(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -77,15 +91,17 @@ export function StatusWorkspace() {
         <StatusHero
           loading={loading}
           refreshing={refreshing}
-          error={error}
+          loadFailed={loadFailed}
           updatedAt={updatedAt}
           todayTokens={stats?.today_total_tokens ?? 0}
+          formatDate={formatDate}
+          formatNumber={formatNumber}
           onRefresh={() => void load(false)}
         />
 
-        {error && (
+        {loadFailed && (
           <div className="rounded-lg border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">
-            {error}
+            {t('pages.status.loadFailed')}
           </div>
         )}
 
@@ -96,34 +112,43 @@ export function StatusWorkspace() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
               <StatusCard
                 icon={<MessageSquareText size={16} />}
-                label="今日对话数"
-                code="MSG"
-                value={formatCompactNumber(stats?.today_messages ?? 0)}
-                caption="全站今日请求"
+                label={t('pages.status.todayMessagesLabel')}
+                code={t('pages.status.todayMessagesCode')}
+                value={formatCompactNumber(stats?.today_messages ?? 0, formatNumber)}
+                caption={t('pages.status.todayMessagesCaption')}
               />
               <StatusCard
                 icon={<LoaderCircle size={16} />}
-                label="正在处理会话"
-                code="RUN"
-                value={formatCompactNumber(stats?.processing_sessions ?? 0)}
-                caption="实时执行队列"
+                label={t('pages.status.processingLabel')}
+                code={t('pages.status.processingCode')}
+                value={formatCompactNumber(
+                  stats?.processing_sessions ?? 0,
+                  formatNumber,
+                )}
+                caption={t('pages.status.processingCaption')}
               />
               <StatusCard
                 icon={<Users size={16} />}
-                label="注册用户数"
-                code="USR"
-                value={formatCompactNumber(stats?.registered_users ?? 0)}
-                caption="累计账户"
+                label={t('pages.status.registeredUsersLabel')}
+                code={t('pages.status.registeredUsersCode')}
+                value={formatCompactNumber(
+                  stats?.registered_users ?? 0,
+                  formatNumber,
+                )}
+                caption={t('pages.status.registeredUsersCaption')}
               />
               <StatusCard
                 icon={<Sparkles size={16} />}
-                label="今日总 Token 消耗"
-                code="TOK"
-                value={formatCompactNumber(stats?.today_total_tokens ?? 0)}
-                caption="输入 + 输出"
+                label={t('pages.status.todayTokensLabel')}
+                code={t('pages.status.todayTokensCode')}
+                value={formatCompactNumber(
+                  stats?.today_total_tokens ?? 0,
+                  formatNumber,
+                )}
+                caption={t('pages.status.todayTokensCaption')}
               />
             </div>
-            <TokenUsagePanel stats={stats} />
+            <TokenUsagePanel stats={stats} formatNumber={formatNumber} />
           </>
         )}
       </div>
@@ -134,28 +159,33 @@ export function StatusWorkspace() {
 function StatusHero({
   loading,
   refreshing,
-  error,
+  loadFailed,
   updatedAt,
   todayTokens,
+  formatDate,
+  formatNumber,
   onRefresh,
 }: {
   loading: boolean;
   refreshing: boolean;
-  error: string;
+  loadFailed: boolean;
   updatedAt: Date | null;
   todayTokens: number;
+  formatDate: DateFormatter;
+  formatNumber: NumberFormatter;
   onRefresh: () => void;
 }) {
-  const statusLabel = error
-    ? 'DATA LINK DEGRADED'
+  const { t } = useI18n();
+  const statusLabel = loadFailed
+    ? t('pages.status.stateDegraded')
     : loading
-      ? 'CONNECTING'
-      : 'SYSTEM ONLINE';
-  const statusText = error
-    ? '状态数据暂时异常'
+      ? t('pages.status.stateConnecting')
+      : t('pages.status.stateOnline');
+  const statusText = loadFailed
+    ? t('pages.status.signalError')
     : loading
-      ? '正在接入运行指标'
-      : '公开状态指标正常同步';
+      ? t('pages.status.signalLoading')
+      : t('pages.status.signalOnline');
 
   return (
     <section className="relative overflow-hidden rounded-lg border border-primary/20 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-soft)_70%,var(--color-canvas)))] shadow-[0_18px_48px_rgba(15,23,42,0.1)]">
@@ -172,26 +202,32 @@ function StatusHero({
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-primary/35 bg-primary/15 px-2.5 text-[11px] font-semibold text-primary">
               <RadioTower size={13} />
-              LIVE OPS
+              {t('pages.status.liveBadge')}
             </span>
             <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-hairline bg-canvas/65 px-2.5 text-[11px] text-muted shadow-sm">
               <Clock3 size={12} />
-              {formatStatusTime(updatedAt)}
+              {formatStatusTime(
+                updatedAt,
+                t('pages.status.waitingSync'),
+                formatDate,
+              )}
             </span>
           </div>
 
           <h1 className="mt-3 text-[22px] font-semibold leading-tight tracking-tight text-ink sm:text-[28px] md:mt-4 md:text-[40px]">
-            FateClaw Live Ops
+            {t('pages.status.title')}
           </h1>
           <p className="mt-1.5 hidden max-w-2xl text-[13px] leading-6 text-muted sm:block md:mt-2 md:text-[14px]">
-            平台对话、排队会话、用户规模与 Token 遥测的公开运行面板。
+            {t('pages.status.description')}
           </p>
 
           <div className="mt-3 flex flex-wrap gap-1.5 md:mt-4 md:gap-2">
             <StatusChip icon={<ShieldCheck size={13} />} label={statusLabel} />
             <StatusChip
               icon={<Zap size={13} />}
-              label={`今日 ${formatCompactNumber(todayTokens)} Token`}
+              label={t('pages.status.todayTokensChip', {
+                tokens: formatCompactNumber(todayTokens, formatNumber),
+              })}
             />
           </div>
         </div>
@@ -200,7 +236,7 @@ function StatusHero({
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                SIGNAL
+                {t('pages.status.signalLabel')}
               </div>
               <div className="mt-1 text-[13px] font-semibold text-ink">
                 {statusText}
@@ -222,7 +258,9 @@ function StatusHero({
               size={13}
               className={refreshing ? 'animate-spin text-primary' : ''}
             />
-            {refreshing ? '同步中' : '刷新状态'}
+            {refreshing
+              ? t('pages.status.refreshing')
+              : t('pages.status.refresh')}
           </button>
         </div>
       </div>
@@ -305,7 +343,14 @@ function sortTokenUsageByDate(
   );
 }
 
-function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
+function TokenUsagePanel({
+  stats,
+  formatNumber,
+}: {
+  stats: PublicStatusStats | null;
+  formatNumber: NumberFormatter;
+}) {
+  const { t } = useI18n();
   const rows = stats?.token_usage_series ?? [];
   // 过滤无实际消耗的日期，避免 0 Token 记录占用趋势图和明细表空间。
   const tokenRows = rows.filter((row) => row.total_tokens > 0);
@@ -327,24 +372,31 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
         <div>
           <div className="flex items-center gap-2 text-[13px] font-semibold">
             <Cpu size={14} className="text-primary" />
-            Token Telemetry
+            {t('pages.status.telemetryTitle')}
           </div>
           <div className="mt-0.5 text-[11px] text-muted">
-            最近 7 天全站输入 / 输出消耗
+            {t('pages.status.telemetryDescription')}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-1.5 text-[10px] text-muted sm:flex sm:items-center sm:gap-2">
-          <TelemetryPill label="7日总计" value={formatCompactNumber(totalTokens)} />
           <TelemetryPill
-            label="峰值"
-            value={peakRow ? formatCompactNumber(peakRow.total_tokens) : '—'}
+            label={t('pages.status.sevenDayTotal')}
+            value={formatCompactNumber(totalTokens, formatNumber)}
+          />
+          <TelemetryPill
+            label={t('pages.status.peak')}
+            value={
+              peakRow
+                ? formatCompactNumber(peakRow.total_tokens, formatNumber)
+                : '—'
+            }
           />
         </div>
       </div>
 
       {tokenRows.length === 0 ? (
         <div className="flex h-36 items-center justify-center rounded-lg border border-hairline bg-canvas/45 px-4 text-[12px] text-muted md:h-48">
-          暂无 Token 消耗记录
+          {t('pages.status.noTokenRecords')}
         </div>
       ) : (
         <>
@@ -367,7 +419,10 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
                   <div
                     className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-t-md border border-ink/10 bg-hairline/70 shadow-[0_0_22px_rgba(204,120,92,0.16)]"
                     style={{ height: `${totalHeight}%` }}
-                    title={`${row.date}：${formatCompactNumber(row.total_tokens)} Token`}
+                    title={t('pages.status.chartBarTitle', {
+                      date: row.date,
+                      tokens: formatCompactNumber(row.total_tokens, formatNumber),
+                    })}
                   >
                     <div
                       className="bg-primary"
@@ -386,11 +441,11 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted">
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-primary" />
-              输入 Token
+              {t('pages.status.inputToken')}
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm bg-accent-teal" />
-              输出 Token
+              {t('pages.status.outputToken')}
             </span>
           </div>
 
@@ -402,13 +457,17 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
               >
                 <div className="font-mono text-muted">{row.date}</div>
                 <div className="text-right font-semibold tabular-nums text-ink">
-                  {formatCompactNumber(row.total_tokens)}
+                  {formatCompactNumber(row.total_tokens, formatNumber)}
                 </div>
                 <div className="text-muted">
-                  输入 {formatCompactNumber(row.input_tokens)}
+                  {t('pages.status.inputTokenValue', {
+                    tokens: formatCompactNumber(row.input_tokens, formatNumber),
+                  })}
                 </div>
                 <div className="text-right text-muted">
-                  输出 {formatCompactNumber(row.output_tokens)}
+                  {t('pages.status.outputTokenValue', {
+                    tokens: formatCompactNumber(row.output_tokens, formatNumber),
+                  })}
                 </div>
               </div>
             ))}
@@ -418,10 +477,18 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
             <table className="w-full min-w-[480px] text-left text-[11px]">
               <thead className="text-muted">
                 <tr className="border-b border-hairline">
-                  <th className="px-3 py-2 font-medium">日期</th>
-                  <th className="px-3 py-2 text-right font-medium">输入 Token</th>
-                  <th className="px-3 py-2 text-right font-medium">输出 Token</th>
-                  <th className="px-3 py-2 text-right font-medium">总计</th>
+                  <th className="px-3 py-2 font-medium">
+                    {t('pages.status.date')}
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    {t('pages.status.inputToken')}
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    {t('pages.status.outputToken')}
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    {t('pages.status.total')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -431,13 +498,13 @@ function TokenUsagePanel({ stats }: { stats: PublicStatusStats | null }) {
                       {row.date}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {formatCompactNumber(row.input_tokens)}
+                      {formatCompactNumber(row.input_tokens, formatNumber)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {formatCompactNumber(row.output_tokens)}
+                      {formatCompactNumber(row.output_tokens, formatNumber)}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                      {formatCompactNumber(row.total_tokens)}
+                      {formatCompactNumber(row.total_tokens, formatNumber)}
                     </td>
                   </tr>
                 ))}

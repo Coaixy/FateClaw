@@ -1,8 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { Brain, ChevronDown, Crown, Wallet, Wrench } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  Brain,
+  ChevronDown,
+  Crown,
+  Wallet,
+  Wrench,
+} from 'lucide-react';
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
@@ -26,6 +33,8 @@ import {
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
 
+type AiChatBillingNotice = 'arrears' | 'plus-required';
+
 export function AiChatMessageList({
   messages,
   loading,
@@ -34,6 +43,7 @@ export function AiChatMessageList({
   selectedSession,
   switchingSession,
   showCenteredComposer,
+  latestMessageNotice,
   composer,
   emptyStateTitle,
   emptyStateDescription,
@@ -48,6 +58,7 @@ export function AiChatMessageList({
   selectedSession: string;
   switchingSession: boolean;
   showCenteredComposer: boolean;
+  latestMessageNotice?: AiChatBillingNotice | null;
   composer: React.ReactNode;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
@@ -56,6 +67,17 @@ export function AiChatMessageList({
   emptyStateMaxWidthClassName?: string;
 }) {
   const { t } = useI18n();
+  const latestMessageNoticeRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!latestMessageNotice) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      latestMessageNoticeRef.current?.scrollIntoView({ block: 'nearest' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [latestMessageNotice]);
 
   if (showCenteredComposer) {
     const title = emptyStateTitle ?? t('aiChat.empty.defaultTitle');
@@ -134,6 +156,13 @@ export function AiChatMessageList({
         />
       ))}
 
+      {rows.length > 0 && latestMessageNotice && (
+        <LatestMessageBillingNotice
+          notice={latestMessageNotice}
+          containerRef={latestMessageNoticeRef}
+        />
+      )}
+
       {showThinkingIndicator && (
         <ThinkingIndicator
           progressLabel={progressLabel}
@@ -193,6 +222,85 @@ function buildDisplayRows(messages: Message[]) {
   attachPendingToolTracesToLatestHost();
 
   return { rows, pendingToolTraces };
+}
+
+function LatestMessageBillingNotice({
+  notice,
+  containerRef,
+}: {
+  notice: AiChatBillingNotice;
+  containerRef: React.Ref<HTMLDivElement>;
+}) {
+  const { t } = useI18n();
+  const isArrears = notice === 'arrears';
+  const titleKey = isArrears
+    ? 'aiChat.messageList.billingNoticeArrearsTitle'
+    : 'aiChat.messageList.billingNoticePlusTitle';
+  const descriptionKey = isArrears
+    ? 'aiChat.messageList.billingNoticeArrearsDescription'
+    : 'aiChat.messageList.billingNoticePlusDescription';
+
+  return (
+    <div
+      ref={containerRef}
+      className="max-w-2xl mx-auto flex justify-start animate-message-in"
+    >
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+        <div
+          role="status"
+          aria-live="polite"
+          className={`max-w-full rounded-xl border px-3 py-2 shadow-sm ${
+            isArrears
+              ? 'border-error/25 bg-error/8 text-error'
+              : 'border-primary/25 bg-primary/8 text-primary'
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle
+              size={15}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className="mt-1 shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold leading-5">
+                {t(titleKey)}
+              </p>
+              <p className="mt-0.5 text-[12px] leading-5 text-ink/70">
+                {t(descriptionKey)}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {isArrears && (
+                  <Link
+                    href="/wallet"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
+                  >
+                    <Wallet size={12} aria-hidden="true" />
+                    {t('aiChat.messageList.recharge')}
+                  </Link>
+                )}
+                <Link
+                  href="/membership"
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-medium shadow-sm transition-colors ${
+                    isArrears
+                      ? 'border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15'
+                      : 'bg-primary text-on-primary hover:bg-primary-active'
+                  }`}
+                >
+                  <Crown size={12} aria-hidden="true" />
+                  {t(
+                    isArrears
+                      ? 'aiChat.messageList.membershipCenter'
+                      : 'aiChat.messageList.openPlus',
+                  )}
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function shouldShowWalletRecovery(content: string) {

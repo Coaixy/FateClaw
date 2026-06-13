@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Info,
   Loader2,
   LogIn,
   MessageCircle,
@@ -943,7 +942,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
 
           <div
-            className="grid grid-cols-4 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+            className="grid grid-cols-3 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
@@ -965,27 +964,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               />
               <span className="max-w-full truncate leading-tight">
                 {t('sidebar.status')}
-              </span>
-            </Link>
-
-            <Link
-              href="/about"
-              onClick={closeSidebar}
-              className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
-                pathname === '/about'
-                  ? 'bg-primary/10 text-ink'
-                  : 'text-muted hover:text-ink hover:bg-surface-card'
-              }`}
-              aria-label={t('sidebar.aboutUs')}
-              title={t('sidebar.aboutUs')}
-            >
-              <Info
-                size={14}
-                strokeWidth={1.8}
-                className="group-hover:text-primary"
-              />
-              <span className="max-w-full truncate leading-tight">
-                {t('sidebar.about')}
               </span>
             </Link>
 

@@ -7,7 +7,14 @@ import type {
   RefObject,
 } from 'react';
 import { useLayoutEffect } from 'react';
-import { ClipboardPaste, Send, Square, X } from 'lucide-react';
+import {
+  ClipboardPaste,
+  Loader2,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 
 const MAX_TEXTAREA_HEIGHT = 96;
@@ -17,6 +24,13 @@ interface PasteChoicePanelProps {
   onUsePasteAsBoard: () => void;
   onKeepPasteAsMessage: () => void;
   onDismissPasteChoice: () => void;
+}
+
+interface ComposerPaipanAction {
+  loading: boolean;
+  disabled?: boolean;
+  title: string;
+  onOpen: () => void;
 }
 
 function syncTextareaHeight(textarea: HTMLTextAreaElement | null, value: string) {
@@ -42,6 +56,7 @@ function syncTextareaHeight(textarea: HTMLTextAreaElement | null, value: string)
  * @param props.disabled 是否因业务规则禁用继续追问。
  * @param props.disabledMessage 禁用时展示在输入框上方的说明。
  * @param props.selectedSession 当前会话 ID，空值表示还未进入具体会话。
+ * @param props.paipanAction 会话内排盘入口；未传入时不展示。
  * @param props.pasteChoiceOpen 是否展示粘贴内容处理选项。
  * @param props.pasteChoicePreview 粘贴内容预览。
  * @param props.onInputChange 输入内容变化回调。
@@ -61,6 +76,7 @@ export function AiChatComposer({
   disabled,
   disabledMessage,
   selectedSession,
+  paipanAction,
   pasteChoiceOpen,
   pasteChoicePreview,
   onInputChange,
@@ -78,6 +94,7 @@ export function AiChatComposer({
   disabled?: boolean;
   disabledMessage?: string;
   selectedSession: string;
+  paipanAction?: ComposerPaipanAction;
   pasteChoiceOpen: boolean;
   pasteChoicePreview?: string;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -121,6 +138,22 @@ export function AiChatComposer({
             : 'border-hairline focus-within:shadow-lg focus-within:shadow-primary/10'
         }`}
       >
+        {paipanAction && (
+          <button
+            type="button"
+            onClick={paipanAction.onOpen}
+            disabled={paipanAction.disabled || paipanAction.loading}
+            title={paipanAction.title}
+            aria-label={paipanAction.title}
+            className="m-1 mr-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-hairline/70 bg-surface-cream-strong text-primary transition-all duration-200 hover:border-primary/30 hover:bg-primary/8 active:scale-95 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
+          >
+            {paipanAction.loading ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Sparkles size={15} />
+            )}
+          </button>
+        )}
         <textarea
           ref={inputRef}
           value={input}

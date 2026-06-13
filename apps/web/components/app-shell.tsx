@@ -3,7 +3,10 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
-import { ChatSessionsProvider } from '@/features/chat/hooks/use-chat-sessions';
+import {
+  ChatSessionsProvider,
+  useChatSessions,
+} from '@/features/chat/hooks/use-chat-sessions';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { Sidebar } from './sidebar';
@@ -12,13 +15,13 @@ import { ErrorBoundary } from './error-boundary';
 import { AnnouncementBanner } from './announcements/announcement-banner';
 
 /**
- * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和底部备案信息。
+ * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和合规备案页脚。
  *
  * @param props.children 页面主体内容。
  * @param props.wide 是否使用宽版内容容器。
  * @param props.noPadding 是否移除主内容底部内边距，常用于占满视口的聊天界面。
  * @param props.requireAuth 是否要求登录后访问；公开页面可关闭。
- * @returns 带全局导航、错误边界与首页备案页脚的页面框架。
+ * @returns 带全局导航、错误边界与合规备案页脚的页面框架。
  */
 export function AppShell({
   children,
@@ -65,7 +68,6 @@ export function AppShell({
     logout();
     router.replace('/login');
   };
-  const showComplianceFooter = pathname === '/' || pathname === '/ai-chat';
 
   return (
     <ChatSessionsProvider>
@@ -102,13 +104,36 @@ export function AppShell({
             <AnnouncementBanner embedded wide={wide} />
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
-          {showComplianceFooter ? (
-            <SiteComplianceFooter wide={wide} noPadding={noPadding} />
-          ) : null}
+          <ComplianceFooterSlot
+            pathname={pathname}
+            wide={wide}
+            noPadding={noPadding}
+          />
         </div>
       </div>
     </ChatSessionsProvider>
   );
+}
+
+function ComplianceFooterSlot({
+  pathname,
+  wide,
+  noPadding,
+}: {
+  pathname: string | null;
+  wide?: boolean;
+  noPadding?: boolean;
+}) {
+  const { selectedSession } = useChatSessions();
+  // 具体会话页已经进入盘面/解读上下文，隐藏备案页脚以免占用移动端输入区下方空间。
+  const showComplianceFooter =
+    pathname === '/' || (pathname === '/ai-chat' && !selectedSession);
+
+  if (!showComplianceFooter) {
+    return null;
+  }
+
+  return <SiteComplianceFooter wide={wide} noPadding={noPadding} />;
 }
 
 function SiteComplianceFooter({

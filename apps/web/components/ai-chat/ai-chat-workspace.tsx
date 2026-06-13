@@ -542,6 +542,18 @@ function AiChatWorkspaceContent() {
   const progressLabel = chatMessages.sending
     ? getLatestProgressLabel(chatMessages.messages, t)
     : null;
+  const billingStatusReady = Boolean(user && !billingLoading && billingStatus);
+  const billingArrears = Boolean(
+    billingStatusReady && billingStatus && billingStatus.available_coins < 0,
+  );
+  const latestMessageNotice =
+    selectedSession && displayMessages.length > 0 && billingStatusReady
+      ? billingArrears
+        ? 'arrears'
+        : aiChatPlusLocked
+          ? 'plus-required'
+          : null
+      : null;
   const switchingSession =
     Boolean(selectedSession) &&
     chatMessages.loading &&
@@ -834,6 +846,7 @@ function AiChatWorkspaceContent() {
           : t('aiChat.toolbar.noOfficialModel')));
   const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
   const thinkingSwitchLabel = t(`aiChat.thinkingLevels.${thinkingLevel}`);
+  const paipanActionTitle = t('aiChat.toolbar.jointPaipan');
   const composer = (
     <AiChatComposer
       inputRef={chatMessages.inputRef}
@@ -842,6 +855,21 @@ function AiChatWorkspaceContent() {
       disabled={continuationBlocked}
       disabledMessage={continuationBlockedMessage}
       selectedSession={selectedSession}
+      paipanAction={
+        selectedSession
+          ? {
+              loading: paipanCatalogLoading,
+              disabled:
+                authLoading ||
+                chatMessages.sending ||
+                continuationBlocked ||
+                paipanCatalogLoading ||
+                paipanCatalog.length === 0,
+              title: paipanActionTitle,
+              onOpen: () => openCurrentSessionPaipan(),
+            }
+          : undefined
+      }
       pasteChoiceOpen={Boolean(pasteChoiceText)}
       pasteChoicePreview={pasteChoiceText}
       onInputChange={handleInputChange}
@@ -866,10 +894,6 @@ function AiChatWorkspaceContent() {
       )}
       {selectedSession ? (
         <ChatToolStrip
-          catalog={paipanCatalog}
-          loading={paipanCatalogLoading}
-          disabled={authLoading || chatMessages.sending || continuationBlocked}
-          onOpenAll={() => openCurrentSessionPaipan()}
           modelLabel={modelSwitchLabel}
           modelLoading={modelSettingsLoading}
           modelBusy={modelToolbarBusy === 'model'}
@@ -965,6 +989,7 @@ function AiChatWorkspaceContent() {
           selectedSession={selectedSession}
           switchingSession={switchingSession}
           showCenteredComposer={showCenteredComposer}
+          latestMessageNotice={latestMessageNotice}
           composer={showCenteredComposer ? centeredContent : composer}
           emptyStateTitle={emptyStateTitle}
           emptyStateDescription={emptyStateDescription}
@@ -986,15 +1011,6 @@ function AiChatWorkspaceContent() {
           <div className="max-w-2xl mx-auto px-2.5 sm:px-3">
             <div className="mb-1.5">
               <ChatToolStrip
-                catalog={paipanCatalog}
-                loading={paipanCatalogLoading}
-                disabled={
-                  authLoading ||
-                  chatMessages.sending ||
-                  continuationBlocked ||
-                  !selectedSession
-                }
-                onOpenAll={() => openCurrentSessionPaipan()}
                 modelLabel={modelSwitchLabel}
                 modelLoading={modelSettingsLoading}
                 modelBusy={modelToolbarBusy === 'model'}
@@ -1285,10 +1301,6 @@ function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
 }
 
 function ChatToolStrip({
-  catalog,
-  loading,
-  disabled,
-  onOpenAll,
   modelLabel,
   modelLoading,
   modelBusy,
@@ -1304,10 +1316,6 @@ function ChatToolStrip({
   thinkingLevel,
   onSelectThinking,
 }: {
-  catalog: PaipanCatalogItem[];
-  loading: boolean;
-  disabled?: boolean;
-  onOpenAll: () => void;
   modelLabel: string;
   modelLoading: boolean;
   modelBusy: boolean;
@@ -1328,8 +1336,6 @@ function ChatToolStrip({
     null,
   );
   const stripRef = useRef<HTMLDivElement | null>(null);
-  const isEmpty = !loading && catalog.length === 0;
-  const buttonDisabled = disabled || loading || isEmpty;
   const chipClass =
     'group inline-flex h-8 min-w-0 max-w-full shrink items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] px-2.5 text-[12px] font-medium text-ink shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors duration-150 hover:border-primary/30 hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:bg-surface-card/40 disabled:text-muted disabled:opacity-60';
 
@@ -1357,28 +1363,6 @@ function ChatToolStrip({
 
   return (
     <div ref={stripRef} className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onOpenAll}
-        disabled={buttonDisabled}
-        title={t('aiChat.toolbar.jointPaipan')}
-        className={chipClass}
-        aria-label={t('aiChat.toolbar.jointPaipan')}
-      >
-        {loading ? (
-          <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
-        ) : (
-          <Sparkles size={13} className="shrink-0 text-primary" />
-        )}
-        <span className="whitespace-nowrap">
-          {t('aiChat.toolbar.jointPaipan')}
-        </span>
-        <ChevronRight
-          size={12}
-          className="shrink-0 text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary group-disabled:translate-x-0 group-disabled:text-muted"
-        />
-      </button>
-
       <div className="relative min-w-0 shrink">
         <button
           type="button"
