@@ -223,7 +223,7 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.sql).toContain("'self' as source");
     expect(calls[0]?.sql).toContain("'subscribed' as source");
     expect(calls[0]?.sql).toContain(
-      "sub.source_kind IN ('invite', 'bundle_invite')",
+      "sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')",
     );
     expect(calls[0]?.params).toEqual(['user-1']);
   });
@@ -236,7 +236,7 @@ describe('skills repository official skill settings', () => {
     await getSubscribedSkills('user-1');
 
     expect(calls[0]?.sql).toContain(
-      "sub.source_kind IN ('invite', 'bundle_invite')",
+      "sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')",
     );
     expect(calls[0]?.params).toEqual(['user-1']);
   });

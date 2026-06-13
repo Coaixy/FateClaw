@@ -123,7 +123,12 @@ export async function queryEffectiveUserSkills(
      JOIN user_custom_skills s ON s.id = sub.skill_id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared') AND s.install_status = 'installed'
+       AND s.deleted_at IS NULL
+       AND (
+         s.visibility IN ('link_shared', 'shared')
+         OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
+       )
+       AND s.install_status = 'installed'
        AND (
          $2::text[] IS NULL OR EXISTS (
            SELECT 1

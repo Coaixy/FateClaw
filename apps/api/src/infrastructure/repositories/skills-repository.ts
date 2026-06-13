@@ -179,7 +179,7 @@ export async function getEffectiveUserSkills(
        AND s.deleted_at IS NULL
        AND (
          s.visibility IN ('link_shared', 'shared')
-         OR sub.source_kind IN ('invite', 'bundle_invite')
+         OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
        )
        AND s.install_status = 'installed'`,
     [userId],
@@ -1259,7 +1259,7 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
        AND s.deleted_at IS NULL
        AND (
          s.visibility IN ('link_shared', 'shared')
-         OR sub.source_kind IN ('invite', 'bundle_invite')
+         OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
        )`,
     [subscriberId],
   );

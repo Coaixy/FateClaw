@@ -215,7 +215,7 @@ describe('createPiResourceLoader', () => {
     );
   });
 
-  it('does not fall back to user skills when an explicit empty workflow bundle scope is provided', async () => {
+  it('loads all effective user skills when workflow bundle scope is empty', async () => {
     const deps = createDeps();
     const loader = await createPiResourceLoader({
       deps,
@@ -227,10 +227,12 @@ describe('createPiResourceLoader', () => {
       },
     });
 
-    expect(loader.getSkills().skills).toEqual([]);
-    expect(deps.skillCatalog.listEffectiveUserSkills).not.toHaveBeenCalled();
-    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
       'private-bazi',
+    ]);
+    expect(deps.skillCatalog.listEffectiveUserSkills).toHaveBeenCalledWith(
+      'user-1',
     );
+    expect(loader.getAppendSystemPrompt().join('\n')).toContain('private-bazi');
   });
 });

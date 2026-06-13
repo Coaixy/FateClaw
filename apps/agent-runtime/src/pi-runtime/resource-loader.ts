@@ -59,7 +59,8 @@ function normalizeAuthorizedSkillBundleIds(input: ContainerInput): string[] {
 }
 
 function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
-  return Array.isArray(input.authorizedSkillBundleIds);
+  // 只有非空 Bundle 白名单才代表 workflow 显式收窄授权范围。
+  return normalizeAuthorizedSkillBundleIds(input).length > 0;
 }
 
 async function loadRequestScopedSkills(
