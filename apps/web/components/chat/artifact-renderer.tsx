@@ -109,6 +109,10 @@ function ResponsiveArtifactFrame({
         fitViewportHeight &&
         (typeof window === 'undefined' ||
           window.matchMedia('(min-width: 640px)').matches);
+      const shouldFitMobileChatHeight =
+        !fitViewportHeight &&
+        typeof window !== 'undefined' &&
+        window.matchMedia('(max-width: 639px)').matches;
 
       if (shouldFitHeight) {
         const probeHeight =
@@ -129,6 +133,13 @@ function ResponsiveArtifactFrame({
         heightScale =
           naturalHeight > 0
             ? Math.min(1, availableHeight / naturalHeight)
+            : 1;
+      } else if (shouldFitMobileChatHeight) {
+        // 聊天流移动端不按滚动位置计算，只给高密度盘面一个固定上限，方便一屏查看完整盘面。
+        const mobileChartMaxHeight = window.innerHeight * 0.64;
+        heightScale =
+          naturalHeight > 0
+            ? Math.min(1, mobileChartMaxHeight / naturalHeight)
             : 1;
       }
 

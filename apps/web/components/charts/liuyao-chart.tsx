@@ -252,14 +252,17 @@ function GuaYaoCell({
   yao,
   isYang,
   dimmed,
+  compact = false,
 }: {
   yao: IchingYao;
   isYang: boolean;
   dimmed?: boolean;
+  compact?: boolean;
 }) {
   const shiYingLabel = getShiYingLabel(yao.shiYing);
   const subLine = formatYaoSubLine(yao);
   const mainExtra = formatYaoMainExtra(yao);
+  const visibleMainExtra = compact ? '' : mainExtra;
   const naJiaWuXing = `${yao.naJia ?? ''}${yao.wuXing}`;
   const title = [yao.liuQin, naJiaWuXing, mainExtra, subLine]
     .filter(Boolean)
@@ -270,7 +273,7 @@ function GuaYaoCell({
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 sm:gap-x-2">
         <div
           className={cn(
-            YAO_TEXT_CLASS,
+            compact ? 'text-[12px]' : YAO_TEXT_CLASS,
             'min-w-0 break-all font-semibold leading-tight sm:whitespace-nowrap sm:break-normal',
             CHART.ink,
           )}
@@ -278,7 +281,7 @@ function GuaYaoCell({
           <span>{shortLiuQin(yao.liuQin)}</span>
           <span>
             {naJiaWuXing}
-            {mainExtra}
+            {visibleMainExtra}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-x-0.5 sm:gap-x-1">
@@ -295,7 +298,7 @@ function GuaYaoCell({
       </div>
       <div
         className={cn(
-          YAO_SUB_TEXT_CLASS,
+          compact ? 'text-[10px]' : YAO_SUB_TEXT_CLASS,
           'mt-0.5 min-h-[1em] whitespace-normal break-keep leading-tight',
           CHART.body,
         )}
@@ -375,8 +378,8 @@ function MobileYaoRow({
   const mainFuShenRows = fuShenRows.filter((item) => item.kind === '伏');
 
   return (
-    <div className="border-b border-hairline-soft px-3 py-2.5 last:border-0">
-      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-tight">
+    <div className="border-b border-hairline-soft px-1.5 py-1 last:border-0">
+      <div className="mb-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-tight">
         <span className={cn('shrink-0 font-semibold', CHART.ink)}>
           {benYao.liuShou}
         </span>
@@ -386,15 +389,16 @@ function MobileYaoRow({
           </span>
         )}
       </div>
-      <div className="grid min-w-0 grid-cols-2 gap-2">
-        <div className="min-w-0 rounded-lg border border-hairline-soft bg-canvas/60 px-2 py-2">
-          <GuaYaoCell yao={benYao} isYang={benIsYang} />
+      <div className="grid min-w-0 grid-cols-2 gap-1.5">
+        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1">
+          <GuaYaoCell yao={benYao} isYang={benIsYang} compact />
         </div>
-        <div className="min-w-0 rounded-lg border border-hairline-soft bg-canvas/60 px-2 py-2">
+        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1">
           <GuaYaoCell
             yao={bianYao}
             isYang={bianIsYang}
             dimmed={dimBianYao}
+            compact
           />
         </div>
       </div>
@@ -416,13 +420,13 @@ function MobileFuShenRow({
   fuRows: FuShenDisplay[];
 }) {
   const groups = [
-    { label: '伏神', rows: fuRows },
-    { label: '旁伏神', rows: pangRows },
+    { label: '伏', rows: fuRows },
+    { label: '旁', rows: pangRows },
   ].filter((group) => group.rows.length > 0);
 
   return (
-    <div className="mt-2 min-w-0 rounded-lg border border-hairline-soft bg-surface-soft px-2.5 py-1.5 text-[11px] leading-snug">
-      <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1">
+    <div className="mt-0.5 min-w-0 rounded-md border border-hairline-soft bg-surface-soft px-1.5 py-0.5 text-[10px] leading-tight">
+      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-0.5">
         {groups.map((group) => (
           <div key={group.label} className="min-w-0 max-w-full">
             <span className="mr-1 font-medium text-chart-earth">
@@ -522,8 +526,8 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
     <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans">
       {/* 起卦副信息 */}
       {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
-        <div className="px-2 sm:px-5 py-2 sm:py-3 border-b border-hairline bg-surface-soft">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[clamp(11px,2cqw,13px)]">
+        <div className="border-b border-hairline bg-surface-soft px-1.5 py-1 sm:px-5 sm:py-3">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] sm:gap-x-3 sm:gap-y-1 sm:text-[clamp(11px,2cqw,13px)]">
             {methodDisplay && (
               <div className="flex items-baseline gap-1 whitespace-nowrap">
                 <span className="text-chart-earth font-medium">起卦</span>
@@ -555,37 +559,37 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       {/* 1. 干支 / 空亡 / 神煞 表 */}
       {hasSizhu && (
         <div className="border-b border-hairline">
-          <div className="flex divide-x divide-hairline border-b border-hairline text-center text-[clamp(12px,2.35cqw,15px)]">
-            <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
+          <div className="flex divide-x divide-hairline border-b border-hairline text-center text-[10px] sm:text-[clamp(12px,2.35cqw,15px)]">
+            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth sm:w-12 sm:py-1.5">
               干支
             </div>
             {sizhu.map((bz, i) => (
-              <div key={i} className="flex-1 py-1.5 font-bold text-ink bg-canvas">
+              <div key={i} className="flex-1 bg-canvas py-1 font-bold text-ink sm:py-1.5">
                 {bz || '-'}
               </div>
             ))}
           </div>
-          <div className="flex divide-x divide-hairline text-center text-[clamp(12px,2.35cqw,15px)] bg-canvas">
-            <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
+          <div className="flex divide-x divide-hairline bg-canvas text-center text-[10px] sm:text-[clamp(12px,2.35cqw,15px)]">
+            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth sm:w-12 sm:py-1.5">
               空亡
             </div>
             {kongCell.map((v, i) => (
-              <div key={i} className="flex-1 py-1.5 text-muted">
+              <div key={i} className="flex-1 py-1 text-muted sm:py-1.5">
                 {v || '-'}
               </div>
             ))}
           </div>
           {shenShaItems.length > 0 && (
-            <div className="flex divide-x divide-hairline border-t border-hairline text-[clamp(12px,2.35cqw,15px)] bg-canvas">
-              <div className="w-10 sm:w-12 py-1.5 font-medium text-chart-earth bg-surface-soft flex items-center justify-center shrink-0">
+            <div className="flex divide-x divide-hairline border-t border-hairline bg-canvas text-[10px] sm:text-[clamp(12px,2.35cqw,15px)]">
+              <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth sm:w-12 sm:py-1.5">
                 神煞
               </div>
-              <div className="flex-1 px-1.5 sm:px-2 py-1.5">
-                <div className="flex flex-wrap items-center gap-1 text-[clamp(11px,2cqw,13px)]">
+              <div className="flex-1 px-1 py-1 sm:px-2 sm:py-1.5">
+                <div className="flex flex-wrap items-center gap-0.5 text-[10px] sm:gap-1 sm:text-[clamp(11px,2cqw,13px)]">
                   {shenShaItems.map((item) => (
                     <span
                       key={item.name}
-                      className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1.5 py-0.5"
+                      className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1 py-0.5 sm:px-1.5"
                     >
                       <span className="text-chart-earth font-medium">
                         {item.name}
@@ -656,14 +660,14 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       </div>
 
       {/* 移动端改为分块布局，避免五列表格在窄屏挤压本卦、变卦和伏神文本。 */}
-      <div className="grid grid-cols-2 gap-2 border-b border-hairline-soft bg-canvas px-3 py-2 sm:hidden">
+      <div className="grid grid-cols-2 gap-2 border-b border-hairline-soft bg-canvas px-2 py-1.5 sm:hidden">
         <div className="min-w-0 text-center">
-          <div className="break-keep text-[14px] font-bold leading-tight text-ink">
+          <div className="break-keep text-[13px] font-bold leading-tight text-ink">
             {guaHeaderLabel(benGua, '本卦')}
           </div>
         </div>
         <div className={cn('min-w-0 text-center', dimStaticZhiGua && 'opacity-[0.55]')}>
-          <div className="break-keep text-[14px] font-bold leading-tight text-ink">
+          <div className="break-keep text-[13px] font-bold leading-tight text-ink">
             {guaHeaderLabel(zhiGua, '变卦')}
           </div>
         </div>
