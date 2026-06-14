@@ -13,9 +13,9 @@ import {
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
-import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
+import { MessageFooter } from '@/components/chat/message-footer';
 import { Message } from '@/features/chat/api';
 import { useI18n } from '@/lib/i18n';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
@@ -152,7 +152,6 @@ export function AiChatMessageList({
           message={message}
           toolTraces={toolTraces}
           animationIndex={index}
-          selectedSession={selectedSession}
         />
       ))}
 
@@ -311,12 +310,10 @@ function AiChatMessageRow({
   message,
   toolTraces,
   animationIndex,
-  selectedSession,
 }: {
   message: Message;
   toolTraces: Message[];
   animationIndex: number;
-  selectedSession: string;
 }) {
   const { locale, t } = useI18n();
   const isBot = !!message.is_bot_message;
@@ -329,9 +326,9 @@ function AiChatMessageRow({
   const isErrorMessage = isBot && messageMetadata?.kind === 'error';
   const isThinkingBubble = isBot && isThinkingMessage(message);
   const isFinalMessage = messageMetadata?.kind === 'final' || isErrorMessage;
-  const { body: displayContent, marker: finalMarker } = isBot
+  const { body: displayContent } = isBot
     ? splitFinalTurnMarker(message.content)
-    : { body: message.content, marker: null };
+    : { body: message.content };
   const durationLabel = isBot
     ? formatChatDuration(messageMetadata?.duration_ms, t)
     : null;
@@ -339,12 +336,6 @@ function AiChatMessageRow({
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
-  const rendersTextBubble = !hasChart || isFinalMessage;
-  const showAiGeneratedLabel =
-    !isErrorMessage &&
-    rendersTextBubble &&
-    displayContent.trim().length > 0 &&
-    canHostToolTraceFooter(message);
   const showWalletRecovery =
     isErrorMessage && shouldShowWalletRecovery(displayContent);
 
@@ -399,8 +390,6 @@ function AiChatMessageRow({
         {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
         <MessageFooter
           isBot={isBot}
-          showAiGeneratedLabel={showAiGeneratedLabel}
-          finalMarker={finalMarker}
           durationLabel={durationLabel}
           costLabels={costLabels}
         />
@@ -472,8 +461,6 @@ function AiChatMessageRow({
 
         <MessageFooter
           isBot={isBot}
-          showAiGeneratedLabel={showAiGeneratedLabel}
-          finalMarker={finalMarker}
           durationLabel={durationLabel}
           costLabels={costLabels}
         />
@@ -508,57 +495,6 @@ function ThinkingMessageBox({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function MessageFooter({
-  isBot,
-  showAiGeneratedLabel,
-  finalMarker,
-  durationLabel,
-  costLabels,
-}: {
-  isBot: boolean;
-  showAiGeneratedLabel: boolean;
-  finalMarker: string | null;
-  durationLabel: string | null;
-  costLabels: string[];
-}) {
-  if (
-    !showAiGeneratedLabel &&
-    !finalMarker &&
-    !durationLabel &&
-    costLabels.length === 0
-  ) {
-    return null;
-  }
-
-  return (
-    <div
-      className={`mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[10px] tabular-nums ${
-        isBot ? 'justify-start text-left' : 'justify-end text-right'
-      }`}
-    >
-      {showAiGeneratedLabel && <AiGeneratedLabel />}
-      {finalMarker && (
-        <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
-          {finalMarker}
-        </span>
-      )}
-      {durationLabel && (
-        <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm">
-          {durationLabel}
-        </span>
-      )}
-      {costLabels.map((costLabel) => (
-        <span
-          key={costLabel}
-          className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-1.5 py-0.5 font-medium text-muted shadow-sm"
-        >
-          {costLabel}
-        </span>
-      ))}
     </div>
   );
 }

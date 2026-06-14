@@ -204,7 +204,6 @@ function AiChatWorkspaceContent() {
     setSelectedSession,
     createSession,
     touchSession,
-    loading: sessionsLoading,
   } = useChatSessions();
   const [input, setInput] = useState('');
   const [paipanSheetMode, setPaipanSheetMode] =
@@ -1017,8 +1016,9 @@ function AiChatWorkspaceContent() {
               />
             </div>
             {composer}
-            <p className="block text-[10px] text-muted/50 text-center mt-1.5 select-none">
-              {t('aiChat.composer.shortcutHint')}
+            <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[10px] text-muted/50 select-none">
+              <Sparkles size={10} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('aiChat.composer.aiDisclaimer')}</span>
             </p>
           </div>
         </div>

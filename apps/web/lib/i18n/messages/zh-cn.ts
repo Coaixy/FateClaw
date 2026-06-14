@@ -771,6 +771,7 @@ export const zhCNMessages = {
       keepAsMessage: '作为消息',
       useAsBoard: '作为盘面',
       shortcutHint: 'Enter 发送 · Shift+Enter 换行',
+      aiDisclaimer: 'AI 生成内容，仅供参考',
     },
     home: {
       subtitle: 'AI 排盘与对话工作台',

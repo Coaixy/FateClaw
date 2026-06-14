@@ -9,7 +9,6 @@ import {
   User,
 } from 'lucide-react';
 
-import { AiGeneratedLabel } from '@/components/chat/ai-generated-label';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { ChatDateDivider } from '@/components/chat/chat-date-divider';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
@@ -168,9 +167,9 @@ function ChatHistoryMessageRow({
 }) {
   const isBot = !!message.is_bot_message;
   const isOptimistic = message.id.startsWith('optimistic-');
-  const { body: displayContent, marker: finalMarker } = isBot
+  const { body: displayContent } = isBot
     ? splitFinalTurnMarker(message.content)
-    : { body: message.content, marker: null };
+    : { body: message.content };
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
 
   return (
@@ -212,21 +211,6 @@ function ChatHistoryMessageRow({
               isBot={isBot}
             />
           </div>
-
-          {(isBot || finalMarker) && (
-            <div
-              className={`mt-1.5 flex flex-wrap items-center gap-1.5 px-1.5 ${
-                isBot ? 'justify-start' : 'justify-end'
-              }`}
-            >
-              {isBot && <AiGeneratedLabel />}
-              {finalMarker && (
-                <span className="inline-flex items-center rounded-full border border-hairline bg-surface-card px-2 py-1 text-[10px] font-medium tabular-nums text-muted shadow-sm">
-                  {finalMarker}
-                </span>
-              )}
-            </div>
-          )}
 
           <p
             className={`text-[10px] mt-1 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 tabular-nums ${

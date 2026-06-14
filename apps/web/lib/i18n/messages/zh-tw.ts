@@ -771,6 +771,7 @@ export const zhTWMessages = {
       keepAsMessage: '作為訊息',
       useAsBoard: '作為盤面',
       shortcutHint: 'Enter 發送 · Shift+Enter 換行',
+      aiDisclaimer: 'AI 生成內容，僅供參考',
     },
     home: {
       subtitle: 'AI 排盤與對話工作台',

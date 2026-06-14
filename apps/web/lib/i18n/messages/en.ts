@@ -801,6 +801,7 @@ export const enMessages = {
       keepAsMessage: 'Use as message',
       useAsBoard: 'Use as chart',
       shortcutHint: 'Enter to send · Shift+Enter for new line',
+      aiDisclaimer: 'AI-generated content, for reference only',
     },
     home: {
       subtitle: 'AI charting and chat workspace',
