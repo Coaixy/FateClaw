@@ -153,6 +153,11 @@ server {
     try_files $uri /announcements/detail/index.txt =404;
   }
 
+  location ~ ^/(.+)\.txt$ {
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    try_files $uri /$1/index.txt =404;
+  }
+
   location ~ ^/announcements/[a-z0-9-]+/?$ {
     add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
     try_files $uri $uri/ /announcements/detail/index.html =404;
@@ -173,6 +178,11 @@ server {
   location ^~ /_next/static/ {
     add_header Cache-Control "public, max-age=31536000, immutable" always;
     try_files $uri =404;
+  }
+
+  location ~ ^/(.+)\.txt$ {
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    try_files $uri /$1/index.txt =404;
   }
 
   location / {

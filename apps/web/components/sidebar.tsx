@@ -966,7 +966,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
-            <Link
+            <a
               href="/status"
               onClick={closeSidebar}
               className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
@@ -985,7 +985,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               <span className="max-w-full truncate leading-tight">
                 {t('sidebar.status')}
               </span>
-            </Link>
+            </a>
 
             <button
               type="button"
