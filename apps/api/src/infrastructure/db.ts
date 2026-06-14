@@ -59,6 +59,7 @@ import type {
 } from './repositories/announcements-repository.js';
 import {
   adjustUserPurchasedBalance,
+  cancelUserMembershipsForAdmin,
   claimFreeProfessionalAiTurn,
   createDailySignInReward,
   expireBonusBalance,
@@ -93,6 +94,7 @@ import {
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
   settleUserModelChargeCoins,
+  setUserMembershipForAdmin,
   subscribeMembershipWithWallet,
   updateDailySignInConfig,
   updateFreeProfessionalAiQuotaConfig,
@@ -310,6 +312,7 @@ export {
   adjustUserPurchasedBalance,
   archiveChatSession,
   bindAccountToUser,
+  cancelUserMembershipsForAdmin,
   claimFreeProfessionalAiTurn,
   createAccount,
   createAnnouncement,
@@ -465,6 +468,7 @@ export {
   settleRechargeOrderPaid,
   settleReferralMembershipRewardUsing,
   settleUserModelChargeCoins,
+  setUserMembershipForAdmin,
   subscribeMembershipWithWallet,
   subscribeToBundle,
   subscribeToSkill,

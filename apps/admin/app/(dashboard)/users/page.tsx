@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   admin,
   adminLogs,
+  type AdminMembershipState,
   type AdminUser,
   type UserDetail,
   type WalletTransaction,
@@ -13,9 +14,14 @@ import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
 import {
   Activity,
   AlertTriangle,
+  BadgeCheck,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   Coins,
+  Eye,
+  EyeOff,
+  KeyRound,
   Loader2,
   MessageSquare,
   Plus,
@@ -57,6 +63,35 @@ function shortDate(iso: string | null) {
   });
 }
 
+function dateInputValue(iso: string | null) {
+  if (!iso) return '';
+  const parsed = new Date(iso);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function defaultMembershipEndDate() {
+  const next = new Date();
+  next.setMonth(next.getMonth() + 1);
+  return [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, '0'),
+    String(next.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function endOfChinaDateIso(date: string) {
+  return new Date(`${date}T23:59:59.999+08:00`).toISOString();
+}
+
+function percent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
 function displayUser(user: AdminUser) {
   return user.phone;
 }
@@ -71,6 +106,30 @@ const USER_ROLE_OPTIONS: Array<{ value: AdminUser['role']; label: string }> = [
   { value: 'both', label: '消费者 + 创作者' },
   { value: 'admin', label: '管理员' },
 ];
+
+const ALLOWANCE_STATUS_LABELS: Record<
+  UserDetail['membership']['allowance_status'],
+  string
+> = {
+  inactive: '未生效',
+  plenty: '充足',
+  normal: '正常',
+  tight: '偏紧',
+  almost_used: '将用尽',
+  used_up: '已用尽',
+};
+
+function membershipPlanLabel(
+  planKey: string | null,
+  plans: UserDetail['membership_plans'],
+) {
+  if (!planKey) return '—';
+  const configuredName = plans.find((plan) => plan.plan_key === planKey)?.name;
+  if (configuredName) return configuredName;
+  if (planKey === 'fateclaw_pro') return 'FateClaw Pro';
+  if (planKey === 'fateclaw_plus') return 'FateClaw Plus';
+  return planKey;
+}
 
 // ─── 小组件 ───
 
@@ -268,8 +327,12 @@ function UserRow({
   const [loading, setLoading] = useState(false);
   const [adjustingBalance, setAdjustingBalance] = useState(false);
   const [grantingBonus, setGrantingBonus] = useState(false);
+  const [updatingMembership, setUpdatingMembership] = useState(false);
+  const [cancellingMembership, setCancellingMembership] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmCancelMembership, setConfirmCancelMembership] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [msg, setMsg] = useState('');
@@ -278,6 +341,11 @@ function UserRow({
   const [bonusAmount, setBonusAmount] = useState('');
   const [bonusNote, setBonusNote] = useState('');
   const [bonusExpiresAt, setBonusExpiresAt] = useState('');
+  const [membershipPlan, setMembershipPlan] = useState('');
+  const [membershipEndDate, setMembershipEndDate] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
 
   const loadDetail = useCallback(async () => {
@@ -301,6 +369,36 @@ function UserRow({
     const next = !expanded;
     setExpanded(next);
     if (next && !detail) void loadDetail();
+  };
+
+  useEffect(() => {
+    if (!detail) return;
+    setMembershipPlan(
+      detail.membership.plan_key ??
+        detail.membership_plans.find((plan) => plan.enabled)?.plan_key ??
+        detail.membership_plans[0]?.plan_key ??
+        'fateclaw_plus',
+    );
+    setMembershipEndDate(
+      dateInputValue(detail.membership.current_period_end) ||
+        defaultMembershipEndDate(),
+    );
+    setConfirmCancelMembership(false);
+  }, [detail]);
+
+  const applyMembershipState = (state: AdminMembershipState) => {
+    setDetail((current) =>
+      current
+        ? {
+            ...current,
+            ...state,
+            user: {
+              ...current.user,
+              membership: state.membership,
+            },
+          }
+        : current,
+    );
   };
 
   const handleDelete = async () => {
@@ -384,6 +482,88 @@ function UserRow({
     }
   };
 
+  const handleSetMembership = async () => {
+    if (!membershipPlan) {
+      setMsg('请选择会员套餐');
+      return;
+    }
+    if (!membershipEndDate) {
+      setMsg('请选择会员有效期');
+      return;
+    }
+    let currentPeriodEnd: string;
+    try {
+      currentPeriodEnd = endOfChinaDateIso(membershipEndDate);
+    } catch {
+      setMsg('会员有效期格式不正确');
+      return;
+    }
+    if (new Date(currentPeriodEnd).getTime() <= Date.now()) {
+      setMsg('会员有效期必须晚于当前时间');
+      return;
+    }
+
+    setUpdatingMembership(true);
+    setMsg('');
+    try {
+      const state = await admin.setUserMembership(user.id, {
+        plan_key: membershipPlan,
+        current_period_end: currentPeriodEnd,
+      });
+      applyMembershipState(state);
+      setMsg('会员状态已更新');
+      void onRefresh();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : '设置会员失败');
+    } finally {
+      setUpdatingMembership(false);
+    }
+  };
+
+  const handleCancelMembership = async () => {
+    if (!confirmCancelMembership) {
+      setConfirmCancelMembership(true);
+      return;
+    }
+    setCancellingMembership(true);
+    setMsg('');
+    try {
+      const state = await admin.cancelUserMembership(user.id);
+      applyMembershipState(state);
+      setConfirmCancelMembership(false);
+      setMsg('会员已停用');
+      void onRefresh();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : '停用会员失败');
+    } finally {
+      setCancellingMembership(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (resetPassword.length < 8) {
+      setMsg('新密码至少 8 位');
+      return;
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      setMsg('两次输入的新密码不一致');
+      return;
+    }
+
+    setResettingPassword(true);
+    setMsg('');
+    try {
+      await admin.resetUserPassword(user.id, resetPassword);
+      setResetPassword('');
+      setResetPasswordConfirm('');
+      setMsg('密码已重置，旧登录态已失效');
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : '重置密码失败');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const handleClearLogs = async () => {
     if (!confirmClearLogs) {
       setConfirmClearLogs(true);
@@ -423,6 +603,12 @@ function UserRow({
               <span className="truncate text-sm font-semibold">
                 {displayUser(user)}
               </span>
+              {user.membership?.active && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-hairline bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-success">
+                  <BadgeCheck size={11} />
+                  {membershipPlanLabel(user.membership.plan_key, [])}
+                </span>
+              )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
               <span>注册 {shortDate(user.created_at)}</span>
@@ -452,10 +638,7 @@ function UserRow({
         <div className="border-t border-hairline bg-canvas/35 px-4 py-4">
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2
-                size={16}
-                className="animate-spin text-muted"
-              />
+              <Loader2 size={16} className="animate-spin text-muted" />
             </div>
           ) : detail ? (
             <div className="space-y-5">
@@ -479,10 +662,7 @@ function UserRow({
 
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center gap-2">
-                      <WalletCards
-                        size={14}
-                        className="text-muted"
-                      />
+                      <WalletCards size={14} className="text-muted" />
                       <h4 className="text-[13px] font-semibold">账户余额</h4>
                     </div>
                     <div className="mb-3 grid overflow-hidden rounded-lg border border-hairline bg-hairline [gap:1px] sm:grid-cols-3">
@@ -598,10 +778,7 @@ function UserRow({
 
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center gap-2">
-                      <Activity
-                        size={14}
-                        className="text-muted"
-                      />
+                      <Activity size={14} className="text-muted" />
                       <h4 className="text-[13px] font-semibold">用量统计</h4>
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -665,9 +842,7 @@ function UserRow({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[13px] text-muted">
-                        暂无可展示流水
-                      </p>
+                      <p className="text-[13px] text-muted">暂无可展示流水</p>
                     )}
                   </section>
                 </div>
@@ -676,10 +851,231 @@ function UserRow({
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <Smartphone
-                          size={14}
-                          className="text-muted"
+                        <BadgeCheck size={14} className="text-muted" />
+                        <h4 className="text-[13px] font-semibold">会员管理</h4>
+                      </div>
+                      <span
+                        className={`text-[12px] ${
+                          detail.membership.active
+                            ? 'text-success'
+                            : 'text-muted'
+                        }`}
+                      >
+                        {detail.membership.active ? '有效' : '未开通'}
+                      </span>
+                    </div>
+
+                    <div className="mb-3 grid grid-cols-2 gap-2 text-[12px]">
+                      <DataCell
+                        label="套餐"
+                        value={membershipPlanLabel(
+                          detail.membership.plan_key,
+                          detail.membership_plans,
+                        )}
+                      />
+                      <DataCell
+                        label="到期"
+                        value={formatDate(detail.membership.current_period_end)}
+                      />
+                      <DataCell
+                        label="额度"
+                        value={`${ALLOWANCE_STATUS_LABELS[detail.membership.allowance_status]} · ${percent(
+                          detail.membership.allowance_used_ratio,
+                        )}`}
+                      />
+                      <DataCell
+                        label="重置"
+                        value={formatDate(detail.membership.allowance_reset_at)}
+                      />
+                    </div>
+
+                    {detail.membership_entitlements.length > 0 && (
+                      <div className="mb-3 divide-y divide-hairline rounded-lg border border-hairline">
+                        {detail.membership_entitlements.map((item) => (
+                          <div
+                            key={`${item.plan_key}:${item.effective_start}`}
+                            className="grid gap-1 px-3 py-2 text-[12px]"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium">{item.name}</span>
+                              {item.is_current && (
+                                <span className="text-[11px] text-success">
+                                  当前
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] text-muted">
+                              <CalendarDays size={11} />
+                              <span>
+                                {shortDate(item.effective_start)} -{' '}
+                                {shortDate(item.effective_end)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid gap-2">
+                      <label className="min-w-0">
+                        <span className="mb-1 block text-[12px] text-muted">
+                          套餐
+                        </span>
+                        <select
+                          value={membershipPlan}
+                          onChange={(event) =>
+                            setMembershipPlan(event.target.value)
+                          }
+                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                        >
+                          {detail.membership_plans.length === 0 ? (
+                            <option value="fateclaw_plus">FateClaw Plus</option>
+                          ) : (
+                            detail.membership_plans.map((plan) => (
+                              <option
+                                key={plan.plan_key}
+                                value={plan.plan_key}
+                                disabled={!plan.enabled}
+                              >
+                                {plan.name}
+                                {plan.enabled ? '' : '（停用）'}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </label>
+
+                      <label className="min-w-0">
+                        <span className="mb-1 block text-[12px] text-muted">
+                          有效期至
+                        </span>
+                        <input
+                          type="date"
+                          value={membershipEndDate}
+                          onChange={(event) =>
+                            setMembershipEndDate(event.target.value)
+                          }
+                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
                         />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleSetMembership()}
+                        disabled={updatingMembership || !membershipPlan}
+                        className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {updatingMembership && (
+                          <Loader2 size={12} className="animate-spin" />
+                        )}
+                        设置 / 续期会员
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleCancelMembership()}
+                        disabled={
+                          cancellingMembership || !detail.membership.active
+                        }
+                        className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          confirmCancelMembership
+                            ? 'bg-error text-white'
+                            : 'border border-hairline text-muted hover:text-ink'
+                        }`}
+                      >
+                        {cancellingMembership ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <AlertTriangle size={12} />
+                        )}
+                        {confirmCancelMembership
+                          ? '确认停用全部会员'
+                          : '停用会员'}
+                      </button>
+                      {confirmCancelMembership && !cancellingMembership && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmCancelMembership(false)}
+                          className="cursor-pointer text-[12px] text-muted hover:text-ink"
+                        >
+                          取消停用
+                        </button>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="border-b border-hairline pb-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <KeyRound size={14} className="text-muted" />
+                      <h4 className="text-[13px] font-semibold">密码管理</h4>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="min-w-0">
+                        <span className="mb-1 block text-[12px] text-muted">
+                          新密码
+                        </span>
+                        <div className="relative">
+                          <input
+                            type={showResetPassword ? 'text' : 'password'}
+                            value={resetPassword}
+                            onChange={(event) =>
+                              setResetPassword(event.target.value)
+                            }
+                            placeholder="至少 8 位"
+                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 pr-9 text-[13px] outline-none focus:border-hairline"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowResetPassword((current) => !current)
+                            }
+                            className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted hover:text-ink"
+                            aria-label={
+                              showResetPassword ? '隐藏密码' : '显示密码'
+                            }
+                          >
+                            {showResetPassword ? (
+                              <EyeOff size={13} />
+                            ) : (
+                              <Eye size={13} />
+                            )}
+                          </button>
+                        </div>
+                      </label>
+                      <label className="min-w-0">
+                        <span className="mb-1 block text-[12px] text-muted">
+                          确认新密码
+                        </span>
+                        <input
+                          type={showResetPassword ? 'text' : 'password'}
+                          value={resetPasswordConfirm}
+                          onChange={(event) =>
+                            setResetPasswordConfirm(event.target.value)
+                          }
+                          placeholder="再次输入"
+                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void handleResetPassword()}
+                        disabled={resettingPassword}
+                        className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline px-4 text-[13px] font-medium text-ink transition-opacity hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {resettingPassword ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <KeyRound size={12} />
+                        )}
+                        重置密码
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="border-b border-hairline pb-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Smartphone size={14} className="text-muted" />
                         <h4 className="text-[13px] font-semibold">绑定账号</h4>
                       </div>
                       <span className="text-[12px] text-muted">
@@ -687,9 +1083,7 @@ function UserRow({
                       </span>
                     </div>
                     {detail.accounts.length === 0 ? (
-                      <p className="text-[13px] text-muted">
-                        无绑定账号
-                      </p>
+                      <p className="text-[13px] text-muted">无绑定账号</p>
                     ) : (
                       <div className="divide-y divide-hairline">
                         {detail.accounts.map((acc) => (
@@ -702,9 +1096,7 @@ function UserRow({
                             </span>
                             <span
                               className={`shrink-0 text-[11px] ${
-                                acc.enabled
-                                  ? 'text-success'
-                                  : 'text-muted'
+                                acc.enabled ? 'text-success' : 'text-muted'
                               }`}
                             >
                               {acc.enabled ? '启用' : '停用'}
@@ -717,10 +1109,7 @@ function UserRow({
 
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center gap-2">
-                      <ShieldCheck
-                        size={14}
-                        className="text-muted"
-                      />
+                      <ShieldCheck size={14} className="text-muted" />
                       <h4 className="text-[13px] font-semibold">快捷查看</h4>
                     </div>
                     <div className="grid gap-2">
@@ -738,10 +1127,7 @@ function UserRow({
 
                   <section>
                     <div className="mb-3 flex items-center gap-2">
-                      <AlertTriangle
-                        size={14}
-                        className="text-error"
-                      />
+                      <AlertTriangle size={14} className="text-error" />
                       <h4 className="text-[13px] font-semibold text-error">
                         危险操作
                       </h4>
@@ -762,7 +1148,9 @@ function UserRow({
                         ) : (
                           <Trash2 size={12} />
                         )}
-                        {confirmClearLogs ? '确认清空该用户日志' : '清空用户日志'}
+                        {confirmClearLogs
+                          ? '确认清空该用户日志'
+                          : '清空用户日志'}
                       </button>
                       {confirmClearLogs && !clearingLogs && (
                         <button
@@ -789,7 +1177,9 @@ function UserRow({
                         ) : (
                           <Trash2 size={12} />
                         )}
-                        {confirmDelete ? '确认删除该用户及所有数据' : '删除用户'}
+                        {confirmDelete
+                          ? '确认删除该用户及所有数据'
+                          : '删除用户'}
                       </button>
                       {confirmDelete && !deleting && (
                         <button
@@ -865,6 +1255,7 @@ export default function AdminUsersPage() {
       totalAccounts,
       totalAvailableCoins,
       todayMessages,
+      activeMembers: users.filter((u) => u.membership?.active).length,
       chargedCoins: users.reduce(
         (sum, u) => sum + u.estimated_monthly_total_coins,
         0,
@@ -919,7 +1310,7 @@ export default function AdminUsersPage() {
             </button>
           </div>
           <p className="mt-1 text-[12px] text-muted">
-            管理账户余额、绑定账号和用户级操作
+            管理账户余额、会员、密码、绑定账号和用户级操作
           </p>
         </div>
 
@@ -945,7 +1336,7 @@ export default function AdminUsersPage() {
           icon={Users}
           label="用户"
           value={fmt(users.length)}
-          sub={`当前显示 ${fmt(filtered.length)}`}
+          sub={`当前显示 ${fmt(filtered.length)}，会员 ${fmt(summary.activeMembers)}`}
         />
         <SummaryCard
           icon={Coins}

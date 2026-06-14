@@ -2,6 +2,11 @@ import type {
   SimpleModelPolicyDto,
   SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
+import type {
+  MembershipEntitlementDto,
+  MembershipPlanDto,
+  MembershipStatusDto,
+} from '@fateclaw/contracts/billing';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 const ADMIN_KEY_STORAGE_KEY = 'admin_key';
@@ -161,6 +166,7 @@ export interface AdminUser {
   created_at: string;
   account_count: number;
   usage: UsageStats;
+  membership: MembershipStatusDto;
   monthly_tokens_used: number;
   estimated_monthly_total_coins: number;
   purchased_coins: number;
@@ -226,7 +232,15 @@ export interface UserDetail {
   user: AdminUser;
   accounts: AdminAccount[];
   usage: UsageStats;
+  membership: MembershipStatusDto;
+  membership_entitlements: MembershipEntitlementDto[];
+  membership_plans: MembershipPlanDto[];
 }
+
+export type AdminMembershipState = Pick<
+  UserDetail,
+  'membership' | 'membership_entitlements' | 'membership_plans'
+>;
 
 export interface GlobalStats {
   total_users: number;
@@ -1036,6 +1050,30 @@ export const admin = {
     }),
   userDetail: (id: string) =>
     adminRequest<UserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
+  resetUserPassword: (id: string, password: string) =>
+    adminRequest<{ id: string; auth_token_version: number }>(
+      `/api/admin/users/${encodeURIComponent(id)}/password`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      },
+    ),
+  setUserMembership: (
+    id: string,
+    data: { plan_key: string; current_period_end: string },
+  ) =>
+    adminRequest<AdminMembershipState>(
+      `/api/admin/users/${encodeURIComponent(id)}/membership`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+  cancelUserMembership: (id: string) =>
+    adminRequest<AdminMembershipState>(
+      `/api/admin/users/${encodeURIComponent(id)}/membership`,
+      { method: 'DELETE' },
+    ),
   adjustPurchasedBalance: (
     id: string,
     data: { amount_coins: number; note?: string },

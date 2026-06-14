@@ -1050,6 +1050,131 @@ export async function subscribeMembershipWithWallet(
 }
 
 /**
+ * 管理员直接设置用户会员有效期，不扣减用户钱包余额。
+ *
+ * @param input.userId 目标用户 ID。
+ * @param input.planKey 要设置的会员套餐 key，未知值会按历史规则回落到 Plus。
+ * @param input.currentPeriodEnd 会员有效期结束时间，必须晚于当前时间。
+ * @returns 写入后的会员周期记录。
+ * @remarks 仅供管理后台人工处理补偿、续期或纠错；正常购买仍应使用钱包订阅流程。
+ */
+export async function setUserMembershipForAdmin(input: {
+  userId: string;
+  planKey: string;
+  currentPeriodEnd: string;
+}): Promise<UserMembershipRow> {
+  const normalizedPlanKey = normalizeMembershipPlanKey(input.planKey);
+  const periodEnd = new Date(input.currentPeriodEnd);
+  if (!Number.isFinite(periodEnd.getTime())) {
+    throw new Error('会员有效期格式不正确');
+  }
+  if (periodEnd.getTime() <= Date.now()) {
+    throw new Error('会员有效期必须晚于当前时间');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const config = await getMembershipConfigUsing({
+      query: client.query.bind(client),
+      planKey: normalizedPlanKey,
+    });
+    if (!config.enabled) {
+      throw new Error('会员套餐未启用');
+    }
+
+    const user = await getUserByIdUsing(client, input.userId, {
+      forUpdate: true,
+    });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    const now = new Date();
+    const { rows: existingRows } = await client.query(
+      `SELECT *
+       FROM user_memberships
+       WHERE user_id = $1 AND plan_key = $2
+       FOR UPDATE`,
+      [input.userId, normalizedPlanKey],
+    );
+    const existing = existingRows[0] as UserMembershipRow | undefined;
+    const existingEnd = existing
+      ? new Date(existing.current_period_end).getTime()
+      : 0;
+    // 同套餐续期保留原周期锚点，避免重置当前周期已使用的会员额度。
+    const periodStart =
+      existing?.status === 'active' && existingEnd > now.getTime()
+        ? existing.current_period_start
+        : now.toISOString();
+
+    const { rows: membershipRows } = await client.query(
+      `INSERT INTO user_memberships (
+         user_id, plan_key, status, current_period_start,
+         current_period_end, created_at, updated_at
+       )
+       VALUES ($1, $2, 'active', $3, $4, NOW(), NOW())
+       ON CONFLICT (user_id, plan_key) DO UPDATE SET
+         status = 'active',
+         current_period_start = EXCLUDED.current_period_start,
+         current_period_end = EXCLUDED.current_period_end,
+         updated_at = NOW()
+       RETURNING *`,
+      [input.userId, normalizedPlanKey, periodStart, periodEnd.toISOString()],
+    );
+    const membership = membershipRows[0] as UserMembershipRow;
+    await ensureMembershipAllowanceForUserUsing(client, {
+      membership,
+      config,
+    });
+    await client.query('COMMIT');
+    return membership;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 管理员立即停用用户当前和未来的会员权益。
+ *
+ * @param userId 目标用户 ID。
+ * @returns 被停用的会员记录数量。
+ * @remarks 不删除历史额度流水，只将有效会员周期标记为 cancelled 以保留审计线索。
+ */
+export async function cancelUserMembershipsForAdmin(
+  userId: string,
+): Promise<{ cancelledCount: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await getUserByIdUsing(client, userId, { forUpdate: true });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+    const result = await client.query(
+      `UPDATE user_memberships
+       SET status = 'cancelled',
+           current_period_end = LEAST(current_period_end, NOW()),
+           updated_at = NOW()
+       WHERE user_id = $1
+         AND status = 'active'
+         AND current_period_end > NOW()`,
+      [userId],
+    );
+    await client.query('COMMIT');
+    return { cancelledCount: result.rowCount ?? 0 };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * 判断用户是否处于有效会员周期。
  */
 export async function hasActiveMembership(userId: string): Promise<boolean> {

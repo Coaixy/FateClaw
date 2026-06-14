@@ -10,6 +10,7 @@ import {
 } from '../../infrastructure/config.js';
 import {
   adjustUserPurchasedBalance,
+  cancelAdminUserMembership,
   createAnnouncement,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
@@ -48,6 +49,8 @@ import {
   listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
   removeOfficialModel,
+  resetAdminUserPassword,
+  setAdminUserMembership,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
   updateModelBillingSettings,
@@ -201,6 +204,34 @@ const AdminCreateUserSchema = z.object({
   role: z.enum(['consumer', 'creator', 'both', 'admin']).default('consumer'),
   phone_verified: z.boolean().default(true),
 });
+
+const AdminResetUserPasswordSchema = z.object({
+  password: z.string().min(8, '密码至少 8 位').max(128),
+});
+
+const AdminSetUserMembershipSchema = z
+  .object({
+    plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']),
+    current_period_end: z.string().datetime({ offset: true }),
+  })
+  .superRefine((value, ctx) => {
+    const end = new Date(value.current_period_end);
+    if (!Number.isFinite(end.getTime())) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['current_period_end'],
+        message: '会员有效期格式不正确',
+      });
+      return;
+    }
+    if (end.getTime() <= Date.now()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['current_period_end'],
+        message: '会员有效期必须晚于当前时间',
+      });
+    }
+  });
 
 const PiSessionCleanupSchema = z.object({
   mode: z.enum(['soft_deleted', 'inactive']),
@@ -1371,6 +1402,54 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: '用户不存在' });
     }
     return detail;
+  });
+
+  // POST /api/admin/users/:id/password — 管理员重置用户密码并撤销旧登录态
+  app.post('/users/:id/password', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = AdminResetUserPasswordSchema.parse(request.body);
+    try {
+      return await resetAdminUserPassword({
+        userId: id,
+        password: body.password,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '重置密码失败';
+      return reply
+        .code(message === '用户不存在' ? 404 : 400)
+        .send({ error: message });
+    }
+  });
+
+  // POST /api/admin/users/:id/membership — 管理员设置用户会员套餐与有效期
+  app.post('/users/:id/membership', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = AdminSetUserMembershipSchema.parse(request.body);
+    try {
+      return await setAdminUserMembership({
+        userId: id,
+        planKey: body.plan_key,
+        currentPeriodEnd: body.current_period_end,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '设置会员失败';
+      return reply
+        .code(message === '用户不存在' ? 404 : 400)
+        .send({ error: message });
+    }
+  });
+
+  // DELETE /api/admin/users/:id/membership — 管理员停用用户全部有效会员周期
+  app.delete('/users/:id/membership', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return await cancelAdminUserMembership(id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '停用会员失败';
+      return reply
+        .code(message === '用户不存在' ? 404 : 400)
+        .send({ error: message });
+    }
   });
 
   // GET /api/admin/users/:id/transactions — 最近余额流水

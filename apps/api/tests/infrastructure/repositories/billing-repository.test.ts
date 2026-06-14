@@ -39,7 +39,9 @@ import {
   releaseFreeProfessionalAiTurn,
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
+  setUserMembershipForAdmin,
   subscribeMembershipWithWallet,
+  cancelUserMembershipsForAdmin,
   updateFreeProfessionalAiQuotaConfig,
 } from '../../../src/infrastructure/repositories/billing-repository.js';
 
@@ -1166,6 +1168,95 @@ describe('billing repository', () => {
       '2026-06-10T00:00:00.000Z',
       '2026-07-10T00:00:00.000Z',
     ]);
+  });
+
+  it('lets admins set membership without charging wallet balance', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
+
+    mockGetUserByIdUsing.mockResolvedValueOnce({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
+    const membership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-15T00:00:00.000Z',
+      current_period_end: '2026-07-31T15:59:59.999Z',
+      created_at: '2026-06-15T00:00:00.000Z',
+    };
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [
+          {
+            id: 'default',
+            enabled: true,
+            monthly_price_coins: 30,
+            monthly_allowance_units: 3000000,
+            standard_price_per_million_units_coins: 10,
+          },
+        ],
+        [],
+        [membership],
+        [
+          {
+            id: 'allowance-plus',
+            user_id: 'user-1',
+            plan_key: 'fateclaw_plus',
+            period_start: '2026-06-15T00:00:00.000Z',
+            period_end: '2026-07-15T00:00:00.000Z',
+            allowance_units: 3000000,
+            used_units: 0,
+          },
+        ],
+        [],
+      ],
+    );
+
+    await expect(
+      setUserMembershipForAdmin({
+        userId: 'user-1',
+        planKey: 'fateclaw_plus',
+        currentPeriodEnd: '2026-07-31T15:59:59.999Z',
+      }),
+    ).resolves.toEqual(membership);
+
+    const membershipInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO user_memberships'),
+    );
+    expect(membershipInsert?.params).toEqual([
+      'user-1',
+      'fateclaw_plus',
+      '2026-06-15T00:00:00.000Z',
+      '2026-07-31T15:59:59.999Z',
+    ]);
+    expect(
+      clientCalls.some((call) =>
+        call.sql.includes('INSERT INTO wallet_transactions'),
+      ),
+    ).toBe(false);
+  });
+
+  it('lets admins cancel all active membership periods immediately', async () => {
+    mockGetUserByIdUsing.mockResolvedValueOnce({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
+    const { clientCalls } = createMockPool([], [[], { rowCount: 2 }, []]);
+
+    await expect(cancelUserMembershipsForAdmin('user-1')).resolves.toEqual({
+      cancelledCount: 2,
+    });
+
+    expect(clientCalls[1]?.sql).toContain("status = 'cancelled'");
+    expect(clientCalls[1]?.params).toEqual(['user-1']);
   });
 
   it('falls back to Plus after the Pro overlay expires', async () => {

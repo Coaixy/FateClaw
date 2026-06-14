@@ -22,6 +22,7 @@ vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
 
 vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   adjustUserPurchasedBalance: vi.fn(),
+  cancelAdminUserMembership: vi.fn(),
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
   createAnnouncement: vi.fn(),
@@ -62,6 +63,8 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listSimpleWorkflowPresets: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
+  resetAdminUserPassword: vi.fn(),
+  setAdminUserMembership: vi.fn(),
   scanPiSessionOrphanFilesForAdmin: vi.fn(),
   setSkillGlobalEnabled: vi.fn(),
   setUserCustomSkillAdminState: vi.fn(),
@@ -85,6 +88,7 @@ vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
 import { adminRoutes } from '../../../src/interfaces/http/admin-routes.js';
 import {
   adjustUserPurchasedBalance,
+  cancelAdminUserMembership,
   cleanupPiSessionFilesForAdmin,
   createAnnouncement,
   deleteDraftAnnouncement,
@@ -100,7 +104,9 @@ import {
   listAdminWorkflowSkillSummaries,
   listAdminUsersWithStats,
   listWalletTransactionsForAdmin,
+  resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
+  setAdminUserMembership,
   updateAnnouncement,
   updateSimpleWorkflowPreset,
   updateRuntimeSettings,
@@ -510,6 +516,34 @@ describe('adminRoutes authentication throttling', () => {
         amount_coins: 1,
       },
     });
+    const passwordResponse = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/password',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        password: 'new-password',
+      },
+    });
+    const setMembershipResponse = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/membership',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        plan_key: 'fateclaw_plus',
+        current_period_end: '2026-07-01T00:00:00.000+08:00',
+      },
+    });
+    const cancelMembershipResponse = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1/membership',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
     const clearLogsResponse = await app.inject({
       method: 'DELETE',
       url: '/users/user-1/logs',
@@ -527,10 +561,16 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(grantResponse.statusCode).toBe(403);
     expect(adjustResponse.statusCode).toBe(403);
+    expect(passwordResponse.statusCode).toBe(403);
+    expect(setMembershipResponse.statusCode).toBe(403);
+    expect(cancelMembershipResponse.statusCode).toBe(403);
     expect(clearLogsResponse.statusCode).toBe(403);
     expect(deleteResponse.statusCode).toBe(403);
     expect(grantBonusBalance).not.toHaveBeenCalled();
     expect(adjustUserPurchasedBalance).not.toHaveBeenCalled();
+    expect(resetAdminUserPassword).not.toHaveBeenCalled();
+    expect(setAdminUserMembership).not.toHaveBeenCalled();
+    expect(cancelAdminUserMembership).not.toHaveBeenCalled();
     expect(deleteConversationLogsForAdminUser).not.toHaveBeenCalled();
     expect(deleteUser).not.toHaveBeenCalled();
   });

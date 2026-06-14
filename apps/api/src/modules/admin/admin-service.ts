@@ -8,9 +8,15 @@
 import crypto from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
+import type {
+  MembershipEntitlementDto,
+  MembershipPlanDto,
+  MembershipStatusDto,
+} from '@fateclaw/contracts/billing';
 
 import {
   adjustUserPurchasedBalance,
+  cancelUserMembershipsForAdmin,
   createAnnouncement,
   createPublicFinancialLedgerEntry,
   createUser,
@@ -36,6 +42,7 @@ import {
   getMessagesForAdmin,
   getFreeProfessionalAiQuotaConfig,
   getMembershipConfig,
+  getMembershipEntitlements,
   getMembershipPlanConfigs,
   getBalanceGrantsByUserId,
   getDailySignInConfig,
@@ -61,10 +68,12 @@ import {
   resetPiSessionCleanupCursor,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  setUserMembershipForAdmin,
   upsertPiSessionCleanupCursor,
   updateDailySignInConfig,
   updateFreeProfessionalAiQuotaConfig,
   updateMembershipConfig,
+  updateUserPasswordHash,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
   updateReferralConfig,
@@ -85,6 +94,8 @@ import {
   updateOfficialModel,
 } from '../system/system-config.js';
 import {
+  getMembershipBillingSummary,
+  getMembershipPlanSummaries,
   getMonthlyMeteredBillingSummary,
   getWalletBalanceSummary,
 } from '../billing/plans.js';
@@ -115,6 +126,7 @@ const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 
 export {
   adjustUserPurchasedBalance,
+  cancelUserMembershipsForAdmin,
   createAnnouncement,
   createOfficialModel,
   createPublicFinancialLedgerEntry,
@@ -153,6 +165,7 @@ export {
   removeOfficialModel,
   setSkillGlobalEnabled,
   setUserCustomSkillAdminState,
+  setUserMembershipForAdmin,
   updateModelBillingSettings,
   updateAnnouncement,
   updateRuntimeSettings,
@@ -162,6 +175,13 @@ export {
   updateReferralConfig,
   updateSimpleWorkflowPreset,
 };
+
+/** 管理后台用户会员状态组合视图。 */
+export interface AdminUserMembershipState {
+  membership: MembershipStatusDto;
+  membership_entitlements: MembershipEntitlementDto[];
+  membership_plans: MembershipPlanDto[];
+}
 
 /** 管理后台软妹币奖励配置视图。 */
 export interface AdminRewardConfigView {
@@ -213,6 +233,54 @@ function membershipConfigToAdminView(
     standard_price_per_million_units_coins:
       config.standard_price_per_million_units_coins,
     updated_at: config.updated_at,
+  };
+}
+
+function membershipStatusToAdminView(
+  membership: Awaited<ReturnType<typeof getMembershipBillingSummary>>,
+): MembershipStatusDto {
+  return {
+    enabled: membership.enabled,
+    active: membership.active,
+    plan_key: membership.planKey,
+    monthly_price_coins: membership.monthlyPriceCoins,
+    display_price_coins: membership.displayPriceCoins,
+    current_period_start: membership.currentPeriodStart,
+    current_period_end: membership.currentPeriodEnd,
+    allowance_reset_at: membership.allowanceResetAt,
+    allowance_used_ratio: membership.allowanceUsedRatio,
+    allowance_status: membership.allowanceStatus,
+  };
+}
+
+function membershipPlanToAdminView(
+  plan: Awaited<ReturnType<typeof getMembershipPlanSummaries>>[number],
+): MembershipPlanDto {
+  return {
+    plan_key: plan.planKey,
+    name: plan.name,
+    enabled: plan.enabled,
+    monthly_price_coins: plan.monthlyPriceCoins,
+    display_price_coins: plan.displayPriceCoins,
+    monthly_allowance_units: plan.monthlyAllowanceUnits,
+    standard_price_per_million_units_coins:
+      plan.standardPricePerMillionUnitsCoins,
+    updated_at: plan.updatedAt,
+  };
+}
+
+async function getAdminUserMembershipState(
+  userId: string,
+): Promise<AdminUserMembershipState> {
+  const [membership, entitlements, plans] = await Promise.all([
+    getMembershipBillingSummary(userId),
+    getMembershipEntitlements(userId),
+    getMembershipPlanSummaries(),
+  ]);
+  return {
+    membership: membershipStatusToAdminView(membership),
+    membership_entitlements: entitlements,
+    membership_plans: plans.map(membershipPlanToAdminView),
   };
 }
 
@@ -923,6 +991,71 @@ export async function createAdminUser(input: {
 }
 
 /**
+ * 管理员重置用户密码，并撤销旧登录态。
+ *
+ * @param input.userId 目标用户 ID。
+ * @param input.password 新密码，至少 8 位。
+ * @returns 更新后的用户 ID 和认证令牌版本。
+ * @remarks 该能力不校验旧密码，必须只暴露给 owner 级后台密钥。
+ */
+export async function resetAdminUserPassword(input: {
+  userId: string;
+  password: string;
+}): Promise<{ id: string; auth_token_version: number }> {
+  if (input.password.length < ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH) {
+    throw new Error(`密码至少 ${ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH} 位`);
+  }
+  const user = await getUserById(input.userId);
+  if (!user) {
+    throw new Error('用户不存在');
+  }
+  const updated = await updateUserPasswordHash(
+    input.userId,
+    await bcrypt.hash(input.password, ADMIN_CREATE_USER_SALT_ROUNDS),
+  );
+  return {
+    id: updated.id,
+    auth_token_version: updated.auth_token_version ?? 0,
+  };
+}
+
+/**
+ * 管理员设置用户会员套餐与有效期。
+ *
+ * @param input.userId 目标用户 ID。
+ * @param input.planKey 会员套餐 key。
+ * @param input.currentPeriodEnd 会员有效期结束时间。
+ * @returns 最新会员状态、权益时间轴和可用套餐。
+ * @remarks 正常用户购买不要调用此函数，它不会扣减钱包余额。
+ */
+export async function setAdminUserMembership(input: {
+  userId: string;
+  planKey: string;
+  currentPeriodEnd: string;
+}): Promise<AdminUserMembershipState> {
+  await setUserMembershipForAdmin({
+    userId: input.userId,
+    planKey: input.planKey,
+    currentPeriodEnd: input.currentPeriodEnd,
+  });
+  return getAdminUserMembershipState(input.userId);
+}
+
+/**
+ * 管理员停用用户全部有效会员周期。
+ *
+ * @param userId 目标用户 ID。
+ * @returns 最新会员状态、权益时间轴和可用套餐。
+ * @remarks 会保留历史会员与额度记录，只让当前权益立即失效。
+ */
+export async function cancelAdminUserMembership(
+  userId: string,
+): Promise<AdminUserMembershipState> {
+  await cancelUserMembershipsForAdmin(userId);
+  return getAdminUserMembershipState(userId);
+}
+
+/**
  * 聚合用户列表页需要的统计信息。
  */
 export async function listAdminUsersWithStats(): Promise<
@@ -936,18 +1069,21 @@ export async function listAdminUsersWithStats(): Promise<
       bonus_coins: number;
       reserved_coins: number;
       available_coins: number;
+      membership: MembershipStatusDto;
     }
   >
 > {
   const users = await getAllUsers();
   return Promise.all(
     users.map(async ({ password_hash: _passwordHash, ...safe }) => {
-      const [accounts, usage, monthlyBilling, wallet] = await Promise.all([
-        getAccountsByUserId(safe.id),
-        getUsageStats(safe.id),
-        getMonthlyMeteredBillingSummary(safe.id),
-        getWalletBalanceSummary(safe.id),
-      ]);
+      const [accounts, usage, monthlyBilling, wallet, membership] =
+        await Promise.all([
+          getAccountsByUserId(safe.id),
+          getUsageStats(safe.id),
+          getMonthlyMeteredBillingSummary(safe.id),
+          getWalletBalanceSummary(safe.id),
+          getMembershipBillingSummary(safe.id),
+        ]);
       return {
         ...safe,
         account_count: accounts.length,
@@ -958,6 +1094,7 @@ export async function listAdminUsersWithStats(): Promise<
         bonus_coins: wallet.bonusCoins,
         reserved_coins: wallet.reservedCoins,
         available_coins: wallet.availableCoins,
+        membership: membershipStatusToAdminView(membership),
       };
     }),
   );
@@ -979,9 +1116,13 @@ export async function getAdminUserDetail(userId: string): Promise<{
     bonus_coins: number;
     reserved_coins: number;
     available_coins: number;
+    membership: MembershipStatusDto;
   };
   accounts: Array<Record<string, unknown>>;
   usage: Awaited<ReturnType<typeof getUsageStats>>;
+  membership: MembershipStatusDto;
+  membership_entitlements: MembershipEntitlementDto[];
+  membership_plans: MembershipPlanDto[];
 } | null> {
   const user = await getUserById(userId);
   if (!user) {
@@ -989,12 +1130,14 @@ export async function getAdminUserDetail(userId: string): Promise<{
   }
 
   const { password_hash: _passwordHash, ...safe } = user;
-  const [accounts, usage, monthlyBilling, wallet] = await Promise.all([
-    getAccountsByUserId(userId),
-    getUsageStats(userId),
-    getMonthlyMeteredBillingSummary(userId),
-    getWalletBalanceSummary(userId),
-  ]);
+  const [accounts, usage, monthlyBilling, wallet, membershipState] =
+    await Promise.all([
+      getAccountsByUserId(userId),
+      getUsageStats(userId),
+      getMonthlyMeteredBillingSummary(userId),
+      getWalletBalanceSummary(userId),
+      getAdminUserMembershipState(userId),
+    ]);
 
   return {
     user: {
@@ -1007,9 +1150,11 @@ export async function getAdminUserDetail(userId: string): Promise<{
       bonus_coins: wallet.bonusCoins,
       reserved_coins: wallet.reservedCoins,
       available_coins: wallet.availableCoins,
+      membership: membershipState.membership,
     },
     accounts: accounts.map(({ bot_token: _botToken, ...rest }) => rest),
     usage,
+    ...membershipState,
   };
 }
 

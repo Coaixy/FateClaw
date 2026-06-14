@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockCreateUser,
+  mockCancelUserMembershipsForAdmin,
   mockCreateAnnouncement,
   mockCreatePublicFinancialLedgerEntry,
   mockDeleteDraftAnnouncement,
@@ -16,10 +17,12 @@ const {
   mockGetPiSessionHealthPolicy,
   mockGetFreeProfessionalAiQuotaConfig,
   mockGetMembershipConfig,
+  mockGetMembershipEntitlements,
   mockGetMembershipPlanConfigs,
   mockGetPiSessionCleanupCursor,
   mockGetAdminAnnouncementById,
   mockGetRecentMessages,
+  mockGetUserById,
   mockGetUserByPhone,
   mockListBillingRequestReservationsPageForAdmin,
   mockListAdminAnnouncements,
@@ -30,15 +33,18 @@ const {
   mockReadPiSessionArchiveForSession,
   mockResetPiSessionCleanupCursor,
   mockScanPiSessionOrphanFiles,
+  mockSetUserMembershipForAdmin,
   mockWritePiSessionSnapshotArchiveToFiles,
   mockUpdateDailySignInConfig,
   mockUpdateFreeProfessionalAiQuotaConfig,
   mockUpdateAnnouncement,
   mockUpdateMembershipConfig,
   mockUpdatePublicFinancialLedgerEntry,
+  mockUpdateUserPasswordHash,
   mockUpsertPiSessionCleanupCursor,
 } = vi.hoisted(() => ({
   mockCreateUser: vi.fn(),
+  mockCancelUserMembershipsForAdmin: vi.fn(),
   mockCreateAnnouncement: vi.fn(),
   mockCreatePublicFinancialLedgerEntry: vi.fn(),
   mockDeleteDraftAnnouncement: vi.fn(),
@@ -53,10 +59,12 @@ const {
   mockGetPiSessionHealthPolicy: vi.fn(),
   mockGetFreeProfessionalAiQuotaConfig: vi.fn(),
   mockGetMembershipConfig: vi.fn(),
+  mockGetMembershipEntitlements: vi.fn(),
   mockGetMembershipPlanConfigs: vi.fn(),
   mockGetPiSessionCleanupCursor: vi.fn(),
   mockGetAdminAnnouncementById: vi.fn(),
   mockGetRecentMessages: vi.fn(),
+  mockGetUserById: vi.fn(),
   mockGetUserByPhone: vi.fn(),
   mockListBillingRequestReservationsPageForAdmin: vi.fn(),
   mockListAdminAnnouncements: vi.fn(),
@@ -67,16 +75,19 @@ const {
   mockReadPiSessionArchiveForSession: vi.fn(),
   mockResetPiSessionCleanupCursor: vi.fn(),
   mockScanPiSessionOrphanFiles: vi.fn(),
+  mockSetUserMembershipForAdmin: vi.fn(),
   mockWritePiSessionSnapshotArchiveToFiles: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
   mockUpdateFreeProfessionalAiQuotaConfig: vi.fn(),
   mockUpdateAnnouncement: vi.fn(),
   mockUpdateMembershipConfig: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
+  mockUpdateUserPasswordHash: vi.fn(),
   mockUpsertPiSessionCleanupCursor: vi.fn(),
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
+  cancelUserMembershipsForAdmin: mockCancelUserMembershipsForAdmin,
   createAnnouncement: mockCreateAnnouncement,
   createPublicFinancialLedgerEntry: mockCreatePublicFinancialLedgerEntry,
   createUser: mockCreateUser,
@@ -90,9 +101,11 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getAdminAnnouncementById: mockGetAdminAnnouncementById,
   getFreeProfessionalAiQuotaConfig: mockGetFreeProfessionalAiQuotaConfig,
   getMembershipConfig: mockGetMembershipConfig,
+  getMembershipEntitlements: mockGetMembershipEntitlements,
   getMembershipPlanConfigs: mockGetMembershipPlanConfigs,
   getPiSessionCleanupCursor: mockGetPiSessionCleanupCursor,
   getRecentMessages: mockGetRecentMessages,
+  getUserById: mockGetUserById,
   getUserByPhone: mockGetUserByPhone,
   listBillingRequestReservationsPageForAdmin:
     mockListBillingRequestReservationsPageForAdmin,
@@ -102,11 +115,13 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   listWalletTransactionsForAdmin: mockListWalletTransactionsForAdmin,
   markChatSessionPiSessionArchived: mockMarkChatSessionPiSessionArchived,
   resetPiSessionCleanupCursor: mockResetPiSessionCleanupCursor,
+  setUserMembershipForAdmin: mockSetUserMembershipForAdmin,
   updateDailySignInConfig: mockUpdateDailySignInConfig,
   updateFreeProfessionalAiQuotaConfig: mockUpdateFreeProfessionalAiQuotaConfig,
   updateAnnouncement: mockUpdateAnnouncement,
   updateMembershipConfig: mockUpdateMembershipConfig,
   updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
+  updateUserPasswordHash: mockUpdateUserPasswordHash,
   upsertPiSessionCleanupCursor: mockUpsertPiSessionCleanupCursor,
 }));
 
@@ -146,6 +161,7 @@ import {
   cleanupPiSessionFilesForAdmin,
   createAdminUser,
   getAdminRewardConfig,
+  resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
   updateAdminRewardConfig,
 } from '../../../src/modules/admin/admin-service.js';
@@ -268,6 +284,56 @@ describe('createAdminUser', () => {
     ).rejects.toThrow('该手机号已存在');
 
     expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('resetAdminUserPassword', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      password_hash: 'old-hash',
+      auth_token_version: 2,
+    });
+    mockUpdateUserPasswordHash.mockResolvedValue({
+      id: 'user-1',
+      password_hash: 'next-hash',
+      auth_token_version: 3,
+    });
+  });
+
+  it('hashes the new password and returns the bumped auth token version', async () => {
+    await expect(
+      resetAdminUserPassword({
+        userId: 'user-1',
+        password: 'new-password',
+      }),
+    ).resolves.toEqual({
+      id: 'user-1',
+      auth_token_version: 3,
+    });
+
+    expect(mockGetUserById).toHaveBeenCalledWith('user-1');
+    expect(mockUpdateUserPasswordHash).toHaveBeenCalledWith(
+      'user-1',
+      expect.stringMatching(/^\$2/),
+    );
+    expect(mockUpdateUserPasswordHash.mock.calls[0]?.[1]).not.toBe(
+      'new-password',
+    );
+  });
+
+  it('rejects missing users before hashing', async () => {
+    mockGetUserById.mockResolvedValue(undefined);
+
+    await expect(
+      resetAdminUserPassword({
+        userId: 'missing-user',
+        password: 'new-password',
+      }),
+    ).rejects.toThrow('用户不存在');
+
+    expect(mockUpdateUserPasswordHash).not.toHaveBeenCalled();
   });
 });
 
