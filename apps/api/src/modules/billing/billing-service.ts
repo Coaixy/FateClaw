@@ -23,6 +23,7 @@ import {
   getAccountsByUserId,
   getDailySignInConfig,
   getDailySignInRecordByDate,
+  getMembershipEntitlements,
   getUserById,
   getVisibleWalletTransactionsByUserId,
   resetUserData,
@@ -63,8 +64,12 @@ export async function getBillingOverview(
 
   const billing = await getMonthlyMeteredBillingSummary(user.id);
   const wallet = await getWalletBalanceSummary(user.id);
-  const membership = await getMembershipBillingSummary(user.id);
-  const membershipPlans = await getMembershipPlanSummaries();
+  const [membership, membershipEntitlements, membershipPlans] =
+    await Promise.all([
+      getMembershipBillingSummary(user.id),
+      getMembershipEntitlements(user.id),
+      getMembershipPlanSummaries(),
+    ]);
 
   return ok(
     toBillingStatusDto({
@@ -86,6 +91,13 @@ export async function getBillingOverview(
         allowance_used_ratio: membership.allowanceUsedRatio,
         allowance_status: membership.allowanceStatus,
       },
+      membership_entitlements: membershipEntitlements.map((entitlement) => ({
+        plan_key: entitlement.plan_key,
+        name: entitlement.name,
+        effective_start: entitlement.effective_start,
+        effective_end: entitlement.effective_end,
+        is_current: entitlement.is_current,
+      })),
       membership_plans: membershipPlans.map((plan) => ({
         plan_key: plan.planKey,
         name: plan.name,

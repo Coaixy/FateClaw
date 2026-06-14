@@ -60,7 +60,17 @@ export interface BillingStatusDto {
   reserved_coins: number;
   available_coins: number;
   membership: MembershipStatusDto;
+  membership_entitlements: MembershipEntitlementDto[];
   membership_plans: MembershipPlanDto[];
+}
+
+/** 会员权益时间轴片段，按实际生效顺序返回给前端展示。 */
+export interface MembershipEntitlementDto {
+  plan_key: string;
+  name: string;
+  effective_start: string;
+  effective_end: string;
+  is_current: boolean;
 }
 
 export interface MembershipStatusDto {

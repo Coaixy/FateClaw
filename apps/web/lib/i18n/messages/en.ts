@@ -459,6 +459,10 @@ export const enMessages = {
       allowanceUsageAria: 'Monthly membership allowance usage',
       usedPercent: '{percent} used',
       progressAfterSubscribe: 'Allowance progress appears after subscribing',
+      entitlementTimeline: 'Entitlement timeline',
+      entitlementCurrent: 'Current',
+      entitlementUpcoming: 'Upcoming',
+      entitlementFallbackHint: 'Then returns to {plan} until {date}',
       activeHint:
         '{reset}; wallet balance continues after allowance is used up.',
       inactiveHint:

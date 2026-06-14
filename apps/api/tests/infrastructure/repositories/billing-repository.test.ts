@@ -27,6 +27,7 @@ import {
   deductBalanceCoins,
   deductModelChargeCoinsAllowDebt,
   getMembershipOverview,
+  getMembershipEntitlements,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
   listBillingRequestReservations,
@@ -1060,6 +1061,73 @@ describe('billing repository', () => {
       'user-1',
       'fateclaw_plus',
       '2026-07-01T00:00:00.000Z',
+    ]);
+  });
+
+  it('returns the effective membership entitlement timeline after a Pro overlay', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
+
+    const plusMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00.000Z',
+      current_period_end: '2027-07-01T00:00:00.000Z',
+      created_at: '2026-06-01T00:00:00.000Z',
+    };
+    const proMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_pro',
+      status: 'active',
+      current_period_start: '2026-06-10T00:00:00.000Z',
+      current_period_end: '2026-07-10T00:00:00.000Z',
+      created_at: '2026-06-10T00:00:00.000Z',
+    };
+    const { calls } = createMockPool([
+      [plusMembership, proMembership],
+      [
+        {
+          id: 'default',
+          enabled: true,
+          name: 'FateClaw Plus',
+          monthly_price_coins: 30,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [
+        {
+          id: 'fateclaw_pro',
+          enabled: true,
+          name: 'FateClaw Pro',
+          monthly_price_coins: 100,
+          monthly_allowance_units: 10000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+    ]);
+
+    await expect(getMembershipEntitlements('user-1')).resolves.toEqual([
+      {
+        plan_key: 'fateclaw_pro',
+        name: 'FateClaw Pro',
+        effective_start: '2026-06-10T00:00:00.000Z',
+        effective_end: '2026-07-10T00:00:00.000Z',
+        is_current: true,
+      },
+      {
+        plan_key: 'fateclaw_plus',
+        name: 'FateClaw Plus',
+        effective_start: '2026-07-10T00:00:00.000Z',
+        effective_end: '2027-07-01T00:00:00.000Z',
+        is_current: false,
+      },
+    ]);
+    expect(calls[0]?.sql).toContain('FROM user_memberships');
+    expect(calls[0]?.params).toEqual([
+      'user-1',
+      '2026-06-15T00:00:00.000Z',
     ]);
   });
 

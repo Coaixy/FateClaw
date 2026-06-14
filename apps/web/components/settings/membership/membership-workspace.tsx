@@ -19,6 +19,7 @@ import { useToast } from '@/lib/use-toast';
 import type { BillingStatus } from '@/features/billing/api';
 
 type MembershipStatus = BillingStatus['membership'];
+type MembershipEntitlement = BillingStatus['membership_entitlements'][number];
 type MembershipPlan = BillingStatus['membership_plans'][number];
 type TranslationFn = (
   key: string,
@@ -139,6 +140,29 @@ function displayPercent(ratio: number) {
 function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
   if (plan.plan_key === 'fateclaw_pro' || /pro/i.test(plan.name)) return 'Pro';
   return 'Plus';
+}
+
+function resolveEntitlementShortName(
+  entitlement: Pick<MembershipEntitlement, 'name' | 'plan_key'>,
+) {
+  if (entitlement.plan_key === 'fateclaw_pro' || /pro/i.test(entitlement.name)) {
+    return 'Pro';
+  }
+  return 'Plus';
+}
+
+function formatEntitlementRange(
+  entitlement: MembershipEntitlement,
+  formatDate: (
+    value: string | number | Date,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string,
+) {
+  const options = { year: 'numeric', month: '2-digit', day: '2-digit' } as const;
+  return `${formatDate(entitlement.effective_start, options)} - ${formatDate(
+    entitlement.effective_end,
+    options,
+  )}`;
 }
 
 function TaijiIcon({
@@ -606,6 +630,7 @@ function MembershipPlanCards({
 
 function MembershipDetailPanel({
   membership,
+  entitlements,
   monthlyMessages,
   monthlyTokens,
   formatDate,
@@ -614,6 +639,7 @@ function MembershipDetailPanel({
   t,
 }: {
   membership: MembershipStatus;
+  entitlements: MembershipEntitlement[];
   monthlyMessages: number;
   monthlyTokens: number;
   formatDate: (
@@ -652,6 +678,10 @@ function MembershipDetailPanel({
       )}`
     : t('pages.membership.progressAfterSubscribe');
   const progressValue = membership.active ? usedPercent : 0;
+  const futureEntitlements = entitlements.filter(
+    (entitlement) => !entitlement.is_current,
+  );
+  const nextEntitlement = futureEntitlements[0] ?? null;
 
   return (
     <section
@@ -707,6 +737,62 @@ function MembershipDetailPanel({
                 : t('pages.membership.disabledHint')}
             </div>
           </div>
+          {entitlements.length > 0 && (
+            <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] font-medium text-muted">
+                  {t('pages.membership.entitlementTimeline')}
+                </div>
+                {nextEntitlement && (
+                  <div className="text-[11px] text-muted">
+                    {t('pages.membership.entitlementFallbackHint', {
+                      plan: resolveEntitlementShortName(nextEntitlement),
+                      date: formatMembershipDate(
+                        nextEntitlement.effective_end,
+                        formatDate,
+                        t,
+                      ),
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {entitlements.map((entitlement) => {
+                  const planShortName = resolveEntitlementShortName(entitlement);
+                  return (
+                    <div
+                      key={`${entitlement.plan_key}-${entitlement.effective_start}-${entitlement.effective_end}`}
+                      className={`rounded-md border px-3 py-2 ${
+                        entitlement.is_current
+                          ? 'border-primary/35 bg-primary/8'
+                          : 'border-hairline bg-canvas/45'
+                      }`}
+                    >
+                      <div className="flex min-h-5 items-center justify-between gap-2">
+                        <span className="text-[12px] font-semibold text-ink">
+                          {planShortName}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            entitlement.is_current
+                              ? 'bg-primary/12 text-primary'
+                              : 'bg-surface-card text-muted'
+                          }`}
+                        >
+                          {entitlement.is_current
+                            ? t('pages.membership.entitlementCurrent')
+                            : t('pages.membership.entitlementUpcoming')}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] leading-5 text-muted">
+                        {formatEntitlementRange(entitlement, formatDate)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -788,6 +874,7 @@ export function MembershipWorkspace() {
   const monthlyMessages = usage?.monthly_messages ?? 0;
   const availableCoins = billingInfo?.available_coins ?? 0;
   const membership = billingInfo?.membership;
+  const membershipEntitlements = billingInfo?.membership_entitlements ?? [];
   const membershipPlans = billingInfo?.membership_plans ?? [];
   const activePlan =
     membership && membership.plan_key
@@ -837,6 +924,7 @@ export function MembershipWorkspace() {
         {membership ? (
           <MembershipDetailPanel
             membership={membership}
+            entitlements={membershipEntitlements}
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
             formatDate={formatDate}

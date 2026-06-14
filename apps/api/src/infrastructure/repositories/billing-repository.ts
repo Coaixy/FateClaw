@@ -390,6 +390,15 @@ export interface MembershipOverviewRow {
   active: boolean;
 }
 
+/** 前端展示用的会员权益时间轴片段，已按高档套餐覆盖关系裁剪。 */
+export interface MembershipEntitlementRow {
+  plan_key: MembershipPlanKey;
+  name: string;
+  effective_start: string;
+  effective_end: string;
+  is_current: boolean;
+}
+
 async function getMembershipConfigUsing(input: {
   query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
   planKey?: string;
@@ -538,6 +547,85 @@ async function getActiveMembershipsForUserUsing(
     [userId],
   );
   return rows as UserMembershipRow[];
+}
+
+async function getEffectiveMembershipEntitlementsUsing(input: {
+  query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
+  userId: string;
+  now: Date;
+}): Promise<MembershipEntitlementRow[]> {
+  const { rows } = await input.query(
+    `SELECT *
+     FROM user_memberships
+     WHERE user_id = $1
+       AND status = 'active'
+       AND current_period_end > $2
+     ORDER BY current_period_start ASC, current_period_end ASC`,
+    [input.userId, input.now.toISOString()],
+  );
+  const configs = new Map(
+    (
+      await Promise.all(
+        MEMBERSHIP_PLAN_KEYS.map((planKey) =>
+          getMembershipConfigUsing({ query: input.query, planKey }),
+        ),
+      )
+    ).map((config) => [resolveMembershipPlanKey(config.id), config]),
+  );
+  const activeMemberships = (rows as UserMembershipRow[])
+    .filter((membership) => {
+      const planKey = isMembershipPlanKey(membership.plan_key)
+        ? membership.plan_key
+        : null;
+      return Boolean(planKey && configs.get(planKey)?.enabled);
+    })
+    .map((membership) => ({
+      planKey: membership.plan_key as MembershipPlanKey,
+      startMs: new Date(membership.current_period_start).getTime(),
+      endMs: new Date(membership.current_period_end).getTime(),
+      rank: resolveMembershipPlanRank(membership.plan_key),
+    }))
+    .filter((entry) => entry.endMs > entry.startMs);
+
+  const boundaries = Array.from(
+    new Set(
+      activeMemberships.flatMap((entry) => [entry.startMs, entry.endMs]),
+    ),
+  ).sort((a, b) => a - b);
+  const entitlements: MembershipEntitlementRow[] = [];
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const startMs = boundaries[index] ?? 0;
+    const endMs = boundaries[index + 1] ?? 0;
+    if (endMs <= startMs || endMs <= input.now.getTime()) continue;
+
+    const effective = activeMemberships
+      .filter((entry) => entry.startMs < endMs && entry.endMs > startMs)
+      .sort((a, b) => {
+        const rankDelta = b.rank - a.rank;
+        if (rankDelta !== 0) return rankDelta;
+        return b.endMs - a.endMs;
+      })[0];
+    if (!effective) continue;
+
+    const previous = entitlements.at(-1);
+    if (previous?.plan_key === effective.planKey) {
+      previous.effective_end = new Date(endMs).toISOString();
+      continue;
+    }
+
+    // 时间轴只表达用户实际会享受到的套餐，低档被高档覆盖的区间不单独展示。
+    entitlements.push({
+      plan_key: effective.planKey,
+      name:
+        configs.get(effective.planKey)?.name ??
+        resolveMembershipPlanName(effective.planKey),
+      effective_start: new Date(startMs).toISOString(),
+      effective_end: new Date(endMs).toISOString(),
+      is_current: startMs <= input.now.getTime() && input.now.getTime() < endMs,
+    });
+  }
+
+  return entitlements;
 }
 
 async function resolveEffectiveMembershipUsing(input: {
@@ -772,6 +860,19 @@ export async function getMembershipOverview(
       : null;
 
   return { config, membership, allowance, active };
+}
+
+/**
+ * 读取用户当前及未来会实际生效的会员权益时间轴。
+ */
+export async function getMembershipEntitlements(
+  userId: string,
+): Promise<MembershipEntitlementRow[]> {
+  return getEffectiveMembershipEntitlementsUsing({
+    query: pool.query,
+    userId,
+    now: new Date(),
+  });
 }
 
 /**

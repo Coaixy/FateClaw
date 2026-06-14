@@ -529,9 +529,30 @@ Authorization: Bearer <token>
     "allowance_reset_at": null,
     "allowance_used_ratio": 0,
     "allowance_status": "inactive"
-  }
+  },
+  "membership_entitlements": [
+    {
+      "plan_key": "fateclaw_pro",
+      "name": "FateClaw Pro",
+      "effective_start": "2026-06-10T00:00:00.000Z",
+      "effective_end": "2026-07-10T00:00:00.000Z",
+      "is_current": true
+    },
+    {
+      "plan_key": "fateclaw_plus",
+      "name": "FateClaw Plus",
+      "effective_start": "2026-07-10T00:00:00.000Z",
+      "effective_end": "2027-07-01T00:00:00.000Z",
+      "is_current": false
+    }
+  ],
+  "membership_plans": []
 }
 ```
+
+**会员权益时间轴**
+
+`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。Plus 与 Pro 同时存在时，Pro 覆盖期间只返回 Pro 片段，之后再返回回落的 Plus 片段，例如 Plus 延长到 `2027-07-01`。
 
 ---
 
