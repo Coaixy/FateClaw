@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import type { NextConfig } from 'next';
@@ -6,6 +7,37 @@ import type { NextConfig } from 'next';
 const isDev = process.env.NODE_ENV === 'development';
 const webRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(path.dirname(webRoot));
+
+/**
+ * 只从仓库根 .env 读取前端明确需要公开的变量，避免把服务端密钥注入 Web bundle。
+ *
+ * @param name 需要读取的环境变量名。
+ * @returns 已解析的变量值；未配置时返回 undefined。
+ */
+function readRepoRootEnvValue(name: string): string | undefined {
+  const valueFromProcess = process.env[name]?.trim();
+  if (valueFromProcess) return valueFromProcess;
+
+  const envPath = path.join(repoRoot, '.env');
+  if (!fs.existsSync(envPath)) return undefined;
+
+  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex < 0) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    if (key !== name) continue;
+
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    return rawValue.replace(/^['"]|['"]$/g, '');
+  }
+
+  return undefined;
+}
 
 const nextConfig: NextConfig = {
   // Web 依赖在 workspace 下会提升到仓库根 node_modules，
@@ -35,6 +67,10 @@ const nextConfig: NextConfig = {
       }),
   images: {
     unoptimized: true,
+  },
+  env: {
+    NEXT_PUBLIC_TELEGRAM_CHANNEL_URL:
+      readRepoRootEnvValue('NEXT_PUBLIC_TELEGRAM_CHANNEL_URL') ?? '',
   },
   // 把 Next 开发指示器移到右下角，避免遮住移动端顶部菜单。
   devIndicators: {

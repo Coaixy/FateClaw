@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FateClaw 命枢 — 东方玄学智能体</title>
+<meta name="description" content="FateClaw 是一个玄学 Agent 系统，核心能力是本地排盘 + 用户知识库检索 + AI 解读。">
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<style>
+/* ============================================================
+   Geist 字体 (Variable)
+   ============================================================ */
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/font/woff2/Geist-Regular.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/font/woff2/Geist-Medium.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/font/woff2/Geist-SemiBold.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 600;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/font/woff2/Geist-Bold.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  src: url('https://fonts.gstatic.com/s/notoserifsc/v33/H4c8BXePl9DZ0Xe7gG9cyOj7mm63SzZBEtERe7Y.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2EBEF;
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  src: url('https://fonts.gstatic.com/s/notoserifsc/v33/H4cBXePl9DZ0Xe7gG9cyOj7mm63SzZBEtERe7Y.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 600;
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2EBEF;
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  src: url('https://fonts.gstatic.com/s/notoserifsc/v33/H4cBXePl9DZ0Xe7gG9cyOj7mm63SzZBEtERe7Y.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 700;
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2EBEF;
+}
+
+/* ============================================================
+   CSS 自定义属性
+   ============================================================ */
+:root {
+  --color-bg: #07060e;
+  --color-bg-surface: #0d0b1a;
+  --color-bg-card: rgba(255, 255, 255, 0.03);
+  --color-bg-card-hover: rgba(255, 255, 255, 0.06);
+  --color-gold: #d4a047;
+  --color-gold-light: #f0c86a;
+  --color-gold-dark: #b8862d;
+  --color-gold-subtle: rgba(212, 160, 71, 0.12);
+  --color-text: #f0ece4;
+  --color-text-secondary: #a09888;
+  --color-text-muted: #6b6558;
+  --color-border: rgba(212, 160, 71, 0.15);
+  --color-border-light: rgba(212, 160, 71, 0.08);
+
+  --font-display: 'Noto Serif SC', serif;
+  --font-body: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-en-display: 'Geist', 'SF Pro Display', sans-serif;
+
+  --nav-height: 72px;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --transition: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--color-gold-light);
+  text-decoration: none;
+  transition: var(--transition);
+}
+a:hover { color: var(--color-gold); }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(212, 160, 71, 0.25); border-radius: 3px; }
+
+/* ============================================================
+   背景 — 大光斑散布 + 可见星点
+   ============================================================ */
+#starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* 底层: 大面积柔焦光斑，肉眼可见的呼吸光 */
+  background-image:
+    /* Hero 上方主光晕 */
+    radial-gradient(ellipse 90% 50% at 50% 30%, rgba(212, 160, 71, 0.12), transparent 65%),
+    /* 左上暖光 */
+    radial-gradient(circle 300px at 15% 20%, rgba(240, 200, 106, 0.10), transparent),
+    /* 右下暖光 */
+    radial-gradient(circle 250px at 85% 75%, rgba(212, 160, 71, 0.08), transparent),
+    /* 中间偏左 */
+    radial-gradient(circle 200px at 30% 50%, rgba(240, 200, 106, 0.06), transparent),
+    /* 右上角 */
+    radial-gradient(circle 180px at 92% 15%, rgba(240, 200, 106, 0.07), transparent),
+    /* 底部中 */
+    radial-gradient(circle 220px at 55% 90%, rgba(212, 160, 71, 0.06), transparent),
+    /* 左侧中下 */
+    radial-gradient(circle 160px at 8% 70%, rgba(240, 200, 106, 0.07), transparent),
+    /* 中层: 中号星点 4–6px */
+    radial-gradient(5px 5px at 12% 18%, rgba(240, 200, 106, 0.6), transparent),
+    radial-gradient(4px 4px at 38% 10%, rgba(240, 200, 106, 0.5), transparent),
+    radial-gradient(6px 6px at 65% 22%, rgba(255, 220, 140, 0.55), transparent),
+    radial-gradient(4.5px 4.5px at 82% 8%, rgba(240, 200, 106, 0.5), transparent),
+    radial-gradient(5px 5px at 6% 42%, rgba(255, 220, 140, 0.45), transparent),
+    radial-gradient(4px 4px at 28% 35%, rgba(240, 200, 106, 0.5), transparent),
+    radial-gradient(5.5px 5.5px at 48% 55%, rgba(255, 220, 140, 0.55), transparent),
+    radial-gradient(4px 4px at 70% 44%, rgba(240, 200, 106, 0.45), transparent),
+    radial-gradient(5px 5px at 88% 35%, rgba(240, 200, 106, 0.5), transparent),
+    radial-gradient(6px 6px at 22% 75%, rgba(255, 220, 140, 0.6), transparent),
+    radial-gradient(4px 4px at 44% 80%, rgba(240, 200, 106, 0.45), transparent),
+    radial-gradient(5px 5px at 60% 68%, rgba(240, 200, 106, 0.55), transparent),
+    radial-gradient(4.5px 4.5px at 78% 72%, rgba(255, 220, 140, 0.5), transparent),
+    radial-gradient(5px 5px at 92% 60%, rgba(240, 200, 106, 0.5), transparent),
+    radial-gradient(4px 4px at 16% 92%, rgba(255, 220, 140, 0.45), transparent),
+    radial-gradient(5.5px 5.5px at 36% 85%, rgba(240, 200, 106, 0.55), transparent),
+    radial-gradient(4px 4px at 54% 92%, rgba(240, 200, 106, 0.45), transparent),
+    radial-gradient(5px 5px at 74% 88%, rgba(255, 220, 140, 0.5), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  animation: bgBreath 6s ease-in-out infinite alternate;
+}
+
+/* 上层: 亮星点缀 2–3px */
+#starfield::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2.5px 2.5px at 18% 25%, rgba(255, 230, 160, 0.65), transparent),
+    radial-gradient(2px 2px at 45% 16%, rgba(255, 230, 160, 0.55), transparent),
+    radial-gradient(3px 3px at 72% 30%, rgba(255, 230, 160, 0.6), transparent),
+    radial-gradient(2px 2px at 10% 55%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(2.8px 2.8px at 55% 48%, rgba(255, 230, 160, 0.7), transparent),
+    radial-gradient(2px 2px at 80% 55%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(2.5px 2.5px at 32% 40%, rgba(255, 230, 160, 0.55), transparent),
+    radial-gradient(3px 3px at 90% 48%, rgba(255, 230, 160, 0.6), transparent),
+    radial-gradient(2px 2px at 58% 28%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(2.5px 2.5px at 68% 60%, rgba(255, 230, 160, 0.55), transparent),
+    radial-gradient(2px 2px at 24% 68%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(3px 3px at 42% 72%, rgba(255, 230, 160, 0.6), transparent),
+    radial-gradient(2px 2px at 85% 78%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(2.8px 2.8px at 15% 85%, rgba(255, 230, 160, 0.55), transparent),
+    radial-gradient(2px 2px at 52% 82%, rgba(255, 230, 160, 0.5), transparent),
+    radial-gradient(2.5px 2.5px at 76% 85%, rgba(255, 230, 160, 0.6), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  animation: starFlicker 4s ease-in-out infinite alternate;
+}
+
+@keyframes bgBreath {
+  0% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+@keyframes starFlicker {
+  0% { opacity: 0.5; }
+  30% { opacity: 0.9; }
+  70% { opacity: 0.55; }
+  100% { opacity: 0.85; }
+}
+
+/* ============================================================
+   导航栏
+   ============================================================ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 max(24px, calc((100% - 1200px) / 2));
+  background: rgba(7, 6, 14, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background var(--transition);
+}
+
+nav.scrolled {
+  background: rgba(7, 6, 14, 0.92);
+  border-bottom-color: var(--color-border);
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-en-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-gold-light);
+  letter-spacing: 0.02em;
+}
+
+.nav-logo .mark {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.nav-logo .cn {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: var(--transition);
+  position: relative;
+}
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 1.5px;
+  background: var(--color-gold);
+  transition: width 0.3s var(--ease-out-expo);
+}
+.nav-links a:hover { color: var(--color-gold-light); }
+.nav-links a:hover::after { width: 100%; }
+
+.lang-switcher {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 3px;
+  margin-left: 12px;
+}
+
+.lang-btn {
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: var(--transition);
+  font-weight: 500;
+}
+.lang-btn:hover { color: var(--color-text-secondary); }
+.lang-btn.active {
+  background: var(--color-gold-subtle);
+  color: var(--color-gold-light);
+}
+
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+.menu-toggle span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--color-text);
+  border-radius: 2px;
+  transition: var(--transition);
+}
+
+/* ============================================================
+   Hero - 左右分割
+   ============================================================ */
+.hero {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: calc(var(--nav-height) + 24px) max(24px, calc((100% - 1200px) / 2)) 60px;
+}
+
+/* 删除右侧星盘后，文字内容居中全宽展示 */
+.hero-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 760px;
+}
+
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 5vw, 4.2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.hero h1 .gold {
+  background: linear-gradient(135deg, var(--color-gold-light), var(--color-gold-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero .sub-en {
+  font-family: var(--font-en-display);
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.hero .sub-cn {
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 1.4vw, 1.15rem);
+  color: var(--color-text-muted);
+  margin-bottom: 28px;
+  font-weight: 400;
+}
+
+.hero p {
+  max-width: 560px;
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  margin-bottom: 36px;
+  line-height: 1.7;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 28px;
+  border-radius: 100px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+  border: none;
+  white-space: nowrap;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-gold), var(--color-gold-dark));
+  color: #07060e;
+  box-shadow: 0 4px 20px rgba(212, 160, 71, 0.25);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(212, 160, 71, 0.4);
+  color: #07060e;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--color-gold-light);
+  border: 1px solid var(--color-border);
+}
+.btn-secondary:hover {
+  background: var(--color-gold-subtle);
+  transform: translateY(-2px);
+  color: var(--color-gold-light);
+}
+
+/* ============================================================
+   通用 Section
+   ============================================================ */
+section {
+  position: relative;
+  z-index: 1;
+  padding: 100px max(24px, calc((100% - 1100px) / 2));
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 700;
+  margin-bottom: 16px;
+  line-height: 1.2;
+}
+
+.section-subtitle {
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  max-width: 600px;
+  line-height: 1.7;
+  margin-bottom: 56px;
+}
+
+/* ============================================================
+   功能特性 - Bento 非对称网格
+   ============================================================ */
+#features {
+  padding-top: 60px;
+}
+
+.features-header {
+  margin-bottom: 48px;
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-rows: auto;
+  gap: 20px;
+}
+
+.bento-wide {
+  grid-column: span 2;
+}
+
+.feature-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card:hover {
+  background: var(--color-bg-card-hover);
+  border-color: var(--color-border);
+  transform: translateY(-3px);
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(212, 160, 71, 0.04), transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.feature-card:hover::before {
+  opacity: 1;
+}
+
+.feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--color-gold-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.feature-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--color-gold-light);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.feature-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--color-text);
+}
+
+.feature-card p {
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+.feature-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.feature-tags span {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text-muted);
+}
+
+
+/* ============================================================
+   系统架构
+   ============================================================ */
+#architecture {
+  padding-top: 60px;
+}
+
+.arch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.arch-layer {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 22px;
+  transition: all var(--transition);
+}
+.arch-layer:hover {
+  background: var(--color-bg-card-hover);
+  border-color: var(--color-border);
+  transform: translateY(-3px);
+}
+
+.arch-layer .layer-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+.layer-badge.client { background: rgba(212, 160, 71, 0.12); color: var(--color-gold-light); }
+.layer-badge.host { background: rgba(100, 200, 200, 0.12); color: #64c8c8; }
+.layer-badge.agent { background: rgba(200, 120, 200, 0.12); color: #c878c8; }
+.layer-badge.data { background: rgba(100, 180, 120, 0.12); color: #64b478; }
+
+.arch-layer h4 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.arch-layer ul {
+  list-style: none;
+  padding: 0;
+}
+
+.arch-layer li {
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+  padding: 4px 0;
+  padding-left: 14px;
+  position: relative;
+}
+.arch-layer li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  opacity: 0.4;
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+footer {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--color-border-light);
+  padding: 40px max(24px, calc((100% - 1100px) / 2));
+  margin-top: 40px;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+}
+
+.footer-logo {
+  font-family: var(--font-en-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-gold-light);
+}
+
+.footer-logo .cn {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+.footer-copy {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   滚动动画
+   ============================================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s var(--ease-out-expo), transform 0.7s var(--ease-out-expo);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.16s; }
+.reveal-delay-3 { transition-delay: 0.24s; }
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 1024px) {
+  .arch-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .nav-links {
+    display: none;
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    background: rgba(7, 6, 14, 0.97);
+    backdrop-filter: blur(12px);
+    flex-direction: column;
+    padding: 24px;
+    gap: 20px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .nav-links.open { display: flex; }
+  .menu-toggle { display: flex; }
+
+  .hero {
+    padding-top: calc(var(--nav-height) + 16px);
+  }
+  .hero p { max-width: 100%; }
+
+  .bento-grid { grid-template-columns: 1fr; }
+  .bento-wide { grid-column: span 1; }
+  .arch-grid { grid-template-columns: 1fr; }
+
+  section { padding: 60px 20px; }
+
+  .footer-content { flex-direction: column; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  :root { --nav-height: 60px; }
+  .nav-logo { font-size: 1.1rem; }
+  .nav-logo .cn { font-size: 0.92rem; }
+  .hero h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
+  .hero-actions { flex-direction: column; align-items: center; }
+  .btn { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+
+<div id="starfield"></div>
+
+<!-- ============================================================
+     导航栏
+     ============================================================ -->
+<nav id="navbar" role="navigation" aria-label="Main navigation">
+  <div class="nav-logo">
+    <svg class="mark" viewBox="0 0 28 28" fill="none">
+      <polygon points="14,2 26,14 14,26 2,14" stroke="currentColor" stroke-width="1.5" fill="rgba(240,200,106,0.08)"/>
+      <circle cx="14" cy="14" r="6" stroke="currentColor" stroke-width="1.2" fill="none"/>
+      <circle cx="14" cy="14" r="2" fill="currentColor"/>
+    </svg>
+    FateClaw <span class="cn" data-i18n="nav.logoCn">命枢</span>
+  </div>
+
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#features" data-i18n="nav.features">核心能力</a></li>
+    <li><a href="#architecture" data-i18n="nav.architecture">系统架构</a></li>
+    <li>
+      <div class="lang-switcher">
+        <button class="lang-btn active" data-lang="zh-CN" onclick="switchLang('zh-CN')">简体</button>
+        <button class="lang-btn" data-lang="zh-TW" onclick="switchLang('zh-TW')">繁體</button>
+        <button class="lang-btn" data-lang="en" onclick="switchLang('en')">EN</button>
+      </div>
+    </li>
+  </ul>
+
+  <button class="menu-toggle" onclick="toggleMenu()" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- ============================================================
+     Hero
+     ============================================================ -->
+<header class="hero">
+  <div class="hero-content">
+    <h1 class="reveal">
+      FateClaw <span class="gold" data-i18n="hero.titleGold">命枢</span>
+    </h1>
+    <div class="sub-en reveal reveal-delay-1" data-i18n="hero.subEn">The Eastern Metaphysics Agent</div>
+    <div class="sub-cn reveal reveal-delay-1" data-i18n="hero.subCn">东方玄学智能体</div>
+    <p class="reveal reveal-delay-2" data-i18n="hero.description">
+      融合本地确定性排盘、用户知识库检索与 AI 智能解读的玄学 Agent，拥有 Skill 垂类工具等现代 Agent 能力。
+    </p>
+    <div class="hero-actions reveal reveal-delay-3">
+      <a href="#features" class="btn btn-primary" data-i18n="hero.cta1">探索核心能力</a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     功能特性 - Bento
+     ============================================================ -->
+<section id="features">
+  <div class="features-header">
+    <h2 class="section-title reveal" data-i18n="features.title">现代架构的东方玄学引擎</h2>
+    <p class="section-subtitle reveal reveal-delay-1" data-i18n="features.subtitle">将传统术数与现代 Agent 架构深度融合，提供可观测、可扩展、可信任的智能解读体验。</p>
+  </div>
+
+  <div class="bento-grid">
+    <!-- 1. 排盘 - 跨 2 列 -->
+    <div class="feature-card bento-wide reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="4"/></svg>
+      </div>
+      <h3 data-i18n="features.f1Title">多术数确定性排盘</h3>
+      <p data-i18n="features.f1Desc">内置八字、紫微斗数、奇门遁甲、六爻纳甲、周易经占五大术数。确定性排盘，生成结构化盘面供 Agent 解读。</p>
+      <div class="feature-tags">
+        <span>BaZi</span><span>ZiWei</span><span>QiMen</span><span>LiuYao</span><span>JingZhan</span>
+      </div>
+    </div>
+
+    <!-- 2. 知识库 -->
+    <div class="feature-card reveal reveal-delay-1">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </div>
+      <h3 data-i18n="features.f2Title">用户知识库 (Skill)</h3>
+      <p data-i18n="features.f2Desc">创作者将流派规则、案例边界沉淀为 Skill。运行时按需调用，模型精准读取授权知识。</p>
+      <div class="feature-tags">
+        <span data-i18n="features.f2Tag1">Skill</span>
+        <span data-i18n="features.f2Tag2">按需加载</span>
+        <span data-i18n="features.f2Tag3">授权隔离</span>
+      </div>
+    </div>
+
+    <!-- 3. Tool 系统 -->
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </div>
+      <h3 data-i18n="features.f3Title">垂类 Tool 系统</h3>
+      <p data-i18n="features.f3Desc">内置历法、干支转换、Skill 检索、命盘读取等垂类工具。Agent 自主选择调用，实现复杂推理链路。</p>
+      <div class="feature-tags">
+        <span data-i18n="features.f3Tag1">历法</span>
+        <span data-i18n="features.f3Tag2">干支</span>
+        <span data-i18n="features.f3Tag3">Skill 检索</span>
+        <span data-i18n="features.f3Tag4">命盘</span>
+      </div>
+    </div>
+
+    <!-- 4. 智能引擎 - 跨 2 列 -->
+    <div class="feature-card bento-wide reveal reveal-delay-1">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <h3 data-i18n="features.f4Title">智能编排引擎</h3>
+      <p data-i18n="features.f4Desc">模型循环、工具调用、知识读取与最终回复均由 智能编排引擎统一调度，全程可观测、可追溯。</p>
+      <div class="feature-tags">
+        <span data-i18n="features.f4Tag1">统一编排</span>
+        <span data-i18n="features.f4Tag2">工具调用</span>
+        <span data-i18n="features.f4Tag3">可观测</span>
+      </div>
+    </div>
+
+    <!-- 5. 多模型 -->
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <h3 data-i18n="features.f5Title">多模型 Provider</h3>
+      <p data-i18n="features.f5Desc">支持 OpenAI、Anthropic、Gemini 及兼容协议，可按需灵活切换模型。</p>
+      <div class="feature-tags">
+        <span>OpenAI</span><span>Anthropic</span><span>Gemini</span><span data-i18n="features.f5Tag4">Compatible</span>
+      </div>
+    </div>
+
+    <!-- 6. Agent Runtime -->
+    <div class="feature-card reveal reveal-delay-3">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <h3 data-i18n="features.f6Title">常驻 Agent Runtime</h3>
+      <p data-i18n="features.f6Desc">常驻 Agent 进程持续在线，消息处理可靠稳定，无需每次重新初始化。</p>
+      <div class="feature-tags">
+        <span data-i18n="features.f6Tag1">常驻进程</span>
+        <span data-i18n="features.f6Tag2">高可靠</span>
+        <span data-i18n="features.f6Tag3">低延迟</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     Agent 流程图 - 简版 SVG
+     ============================================================ -->
+<section id="architecture">
+  <h2 class="section-title reveal" data-i18n="arch.title">清晰分层的运行时边界</h2>
+  <p class="section-subtitle reveal reveal-delay-1" data-i18n="arch.subtitle">FateClaw 将术数排盘、知识沉淀、模型调用、工具执行拆分为独立运行时，每层职责单一，边界清晰。</p>
+
+  <div class="arch-grid">
+    <div class="arch-layer reveal">
+      <span class="layer-badge client" data-i18n="arch.l1Badge">用户层</span>
+      <h4 data-i18n="arch.l1Title">Client</h4>
+      <ul data-i18n="arch.l1Items">
+        <li>Web AI Chat 交互界面</li>
+        <li>手动排盘 / 简易模式</li>
+        <li>技能市场 / 创作者 Studio</li>
+        <li>知识库管理 / 设置</li>
+      </ul>
+    </div>
+
+    <div class="arch-layer reveal reveal-delay-1">
+      <span class="layer-badge host" data-i18n="arch.l2Badge">宿主层</span>
+      <h4 data-i18n="arch.l2Title">Host</h4>
+      <ul data-i18n="arch.l2Items">
+        <li>Fastify HTTP 服务</li>
+        <li>PostgreSQL + Redis 编排</li>
+        <li>模型配置 / llmRuntime 快照</li>
+        <li>Redis IPC Worker / 调度</li>
+        <li>计费结算 / 日志持久化</li>
+      </ul>
+    </div>
+
+    <div class="arch-layer reveal reveal-delay-2">
+      <span class="layer-badge agent" data-i18n="arch.l3Badge">智能体层</span>
+      <h4 data-i18n="arch.l3Title">Agent</h4>
+      <ul data-i18n="arch.l3Items">
+        <li>账号级常驻 daemon 进程</li>
+        <li>模型智能循环编排</li>
+        <li>Tool 工具调用路由</li>
+        <li>Text Skill ResourceLoader</li>
+        <li>transcript / trace / graph</li>
+      </ul>
+    </div>
+
+    <div class="arch-layer reveal reveal-delay-3">
+      <span class="layer-badge data" data-i18n="arch.l4Badge">能力层</span>
+      <h4 data-i18n="arch.l4Title">Data & Capability</h4>
+      <ul data-i18n="arch.l4Items">
+        <li>PostgreSQL 持久化存储</li>
+        <li>Redis 消息队列 / PubSub</li>
+        <li>排盘引擎 (五大术数 runner)</li>
+        <li>模型 Provider 适配层</li>
+        <li>用户 Text Skill Bundle FS</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     Footer
+     ============================================================ -->
+<footer>
+  <div class="footer-content">
+    <div class="footer-logo">
+      <svg width="18" height="18" viewBox="0 0 28 28" fill="none" style="vertical-align:middle;margin-right:4px;">
+        <polygon points="14,2 26,14 14,26 2,14" stroke="currentColor" stroke-width="1.5" fill="rgba(240,200,106,0.08)"/>
+        <circle cx="14" cy="14" r="2" fill="currentColor"/>
+      </svg>
+      FateClaw <span class="cn" data-i18n="footer.logoCn">命枢</span>
+    </div>
+    <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 FateClaw。东方玄学智能体。</div>
+  </div>
+</footer>
+
+<!-- ============================================================
+     JavaScript
+     ============================================================ -->
+<script>
+// ================================================================
+// 多语言
+// ================================================================
+const i18n = {
+  'zh-CN': {
+    nav: { logoCn: '命枢', features: '核心能力', architecture: '系统架构' },
+    hero: {
+      titleGold: '命枢',
+      subEn: 'The Eastern Metaphysics Agent',
+      subCn: '东方玄学智能体',
+      description: '融合本地确定性排盘、用户知识库检索与 AI 智能解读的玄学 Agent，拥有 Skill 垂类工具等现代 Agent 能力。',
+      cta1: '探索核心能力',
+    },
+    features: {
+      title: '现代架构的东方玄学引擎',
+      subtitle: '将传统术数与现代 Agent 架构深度融合，提供可观测、可扩展、可信任的智能解读体验。',
+      f1Title: '多术数确定性排盘',
+      f1Desc: '内置八字、紫微斗数、奇门遁甲、六爻纳甲、周易经占五大术数。确定性排盘，生成结构化盘面供 Agent 解读。',
+      f2Title: '用户知识库 (Skill)',
+      f2Desc: '创作者将流派规则、案例边界沉淀为 Skill。运行时按需调用，模型精准读取授权知识。',
+      f2Tag1: 'Skill', f2Tag2: '按需加载', f2Tag3: '授权隔离',
+      f3Title: '垂类 Tool 系统',
+      f3Desc: '内置历法、干支转换、Skill 检索、命盘读取等垂类工具。Agent 自主选择调用，实现复杂推理链路。',
+      f3Tag1: '历法', f3Tag2: '干支', f3Tag3: 'Skill 检索', f3Tag4: '命盘',
+      f4Title: '智能编排引擎',
+      f4Desc: '模型循环、工具调用、知识读取与最终回复均由 智能编排引擎统一调度，全程可观测、可追溯。',
+      f4Tag1: '统一编排', f4Tag2: '工具调用', f4Tag3: '可观测',
+      f5Title: '多模型 Provider',
+      f5Desc: '支持 OpenAI、Anthropic、Gemini 及兼容协议，可按需灵活切换模型。',
+      f5Tag4: 'Compatible',
+      f6Title: '常驻 Agent Runtime',
+      f6Desc: '常驻 Agent 进程持续在线，消息处理可靠稳定，无需每次重新初始化。',
+      f6Tag1: '常驻进程', f6Tag2: '高可靠', f6Tag3: '低延迟',
+    },
+    arch: {
+      title: '清晰分层的运行时边界',
+      subtitle: 'FateClaw 将术数排盘、知识沉淀、模型调用、工具执行拆分为独立运行时，每层职责单一，边界清晰。',
+      l1Badge: '用户层', l1Title: 'Client',
+      l1Items: ['Web AI Chat 交互界面', '手动排盘 / 简易模式', '技能市场 / 创作者 Studio', '知识库管理 / 设置'],
+      l2Badge: '宿主层', l2Title: 'Host',
+      l2Items: ['Fastify HTTP 服务', 'PostgreSQL + Redis 编排', '模型配置 / llmRuntime 快照', 'Redis IPC Worker / 调度', '计费结算 / 日志持久化'],
+      l3Badge: '智能体层', l3Title: 'Agent',
+      l3Items: ['账号级常驻 daemon 进程', '模型智能循环编排', 'Tool 工具调用路由', 'Text Skill ResourceLoader', 'transcript / trace / graph'],
+      l4Badge: '能力层', l4Title: 'Data & Capability',
+      l4Items: ['PostgreSQL 持久化存储', 'Redis 消息队列 / PubSub', '排盘引擎 (五大术数 runner)', '模型 Provider 适配层', '用户 Text Skill Bundle FS'],
+    },
+    footer: { logoCn: '命枢', copy: '© 2026 FateClaw。东方玄学智能体。' },
+  },
+
+  'zh-TW': {
+    nav: { logoCn: '命樞', features: '核心能力', architecture: '系統架構' },
+    hero: {
+      titleGold: '命樞',
+      subEn: 'The Eastern Metaphysics Agent',
+      subCn: '東方玄學智能體',
+      description: '融合本地確定性排盤、用戶知識庫檢索與 AI 智能解讀的玄學 Agent，擁有 Skill 垂類工具等現代 Agent 能力。',
+      cta1: '探索核心能力',
+    },
+    features: {
+      title: '現代架構的東方玄學引擎',
+      subtitle: '將傳統術數與現代 Agent 架構深度融合，提供可觀測、可擴展、可信任的智能解讀體驗。',
+      f1Title: '多術數確定性排盤',
+      f1Desc: '內建八字、紫微斗數、奇門遁甲、六爻納甲、周易經占五大術數。確定性排盤，生成結構化盤面供 Agent 解讀。',
+      f2Title: '用戶知識庫 (Skill)',
+      f2Desc: '創作者將流派規則、案例邊界沉澱為 Skill。運行時按需呼叫，模型精準讀取授權知識。',
+      f2Tag1: 'Skill', f2Tag2: '按需載入', f2Tag3: '授權隔離',
+      f3Title: '垂類 Tool 系統',
+      f3Desc: '內建曆法、干支轉換、Skill 檢索、命盤讀取等垂類工具。Agent 自主選擇呼叫，實現複雜推理鏈路。',
+      f3Tag1: '曆法', f3Tag2: '干支', f3Tag3: 'Skill 檢索', f3Tag4: '命盤',
+      f4Title: '智能編排引擎',
+      f4Desc: '模型循環、工具呼叫、知識讀取與最終回覆均由智能編排引擎統一調度，全程可觀測、可追溯。',
+      f4Tag1: '統一編排', f4Tag2: '工具呼叫', f4Tag3: '可觀測',
+      f5Title: '多模型 Provider',
+      f5Desc: '支援 OpenAI、Anthropic、Gemini 及相容協議，可按需靈活切換模型。',
+      f5Tag4: 'Compatible',
+      f6Title: '常駐 Agent Runtime',
+      f6Desc: '常駐 Agent 程序持續在線，訊息處理可靠穩定，無需每次重新初始化。',
+      f6Tag1: '常駐程序', f6Tag2: '高可靠', f6Tag3: '低延遲',
+    },
+    arch: {
+      title: '清晰分層的運行時邊界',
+      subtitle: 'FateClaw 將術數排盤、知識沉澱、模型呼叫、工具執行拆分為獨立運行時，每層職責單一，邊界清晰。',
+      l1Badge: '用戶層', l1Title: 'Client',
+      l1Items: ['Web AI Chat 交互介面', '手動排盤 / 簡易模式', '技能市場 / 創作者 Studio', '知識庫管理 / 設定'],
+      l2Badge: '宿主層', l2Title: 'Host',
+      l2Items: ['Fastify HTTP 服務', 'PostgreSQL + Redis 編排', '模型配置 / llmRuntime 快照', 'Redis IPC Worker / 排程', '計費結算 / 日誌持久化'],
+      l3Badge: '智能體層', l3Title: 'Agent',
+      l3Items: ['帳號級常駐 daemon 程序', '模型智能循環編排', 'Tool 工具呼叫路由', 'Text Skill ResourceLoader', 'transcript / trace / graph'],
+      l4Badge: '能力層', l4Title: 'Data & Capability',
+      l4Items: ['PostgreSQL 持久化儲存', 'Redis 訊息佇列 / PubSub', '排盤引擎 (五大術數 runner)', '模型 Provider 適配層', '用戶 Text Skill Bundle FS'],
+    },
+    footer: { logoCn: '命樞', copy: '© 2026 FateClaw。東方玄學智能體。' },
+  },
+
+  'en': {
+    nav: { logoCn: '', features: 'Features', architecture: 'Architecture' },
+    hero: {
+      titleGold: '',
+      subEn: 'The Eastern Metaphysics Agent',
+      subCn: 'AI-Powered Chinese Metaphysics',
+      description: 'A metaphysics Agent system that fuses deterministic divination engines, user knowledge base retrieval, and AI intelligence with modern Skills and Tools.',
+      cta1: 'Explore Features',
+    },
+    features: {
+      title: 'Modern Engine for Ancient Arts',
+      subtitle: 'Deeply integrating traditional Chinese divination with modern Agent architecture for observable, extensible, and trustworthy AI interpretations.',
+      f1Title: 'Deterministic Divination',
+      f1Desc: 'Built-in support for BaZi, ZiWei, QiMen, LiuYao, and JingZhan. Deterministic charting produces structured boards for the Agent to interpret.',
+      f2Title: 'User Knowledge (Skill)',
+      f2Desc: 'Authors distill school rules and case boundaries into Skills. Loaded on demand at runtime so the model reads only authorized knowledge.',
+      f2Tag1: 'Skill', f2Tag2: 'On-demand', f2Tag3: 'Scoped Access',
+      f3Title: 'Vertical Tool System',
+      f3Desc: 'Built-in calendar, GanZhi conversion, Skill search, chart reading and more. The Agent autonomously selects tools for complex reasoning.',
+      f3Tag1: 'Calendar', f3Tag2: 'GanZhi', f3Tag3: 'Skill Search', f3Tag4: 'Charts',
+      f4Title: 'Orchestration Engine',
+      f4Desc: 'LLM loop, tool calls, knowledge retrieval and replies are all orchestrated by the engine — fully observable and traceable.',
+      f4Tag1: 'Orchestration', f4Tag2: 'Tool Calls', f4Tag3: 'Observable',
+      f5Title: 'Multi-Model Support',
+      f5Desc: 'Support for OpenAI, Anthropic, Gemini and compatible protocols, with flexible model switching on demand.',
+      f5Tag4: 'Compatible',
+      f6Title: 'Persistent Runtime',
+      f6Desc: 'Persistent Agent processes stay online, delivering reliable message handling with no re-initialization each time.',
+      f6Tag1: 'Persistent', f6Tag2: 'Reliable', f6Tag3: 'Low Latency',
+    },
+    arch: {
+      title: 'Clean Layered Boundaries',
+      subtitle: 'FateClaw separates divination, knowledge, model calls, and tool execution into independent runtimes with single responsibilities and clear interfaces.',
+      l1Badge: 'CLIENT', l1Title: 'Client',
+      l1Items: ['Web AI Chat', 'Manual Divination / Simple Mode', 'Skill Marketplace / Creator Studio', 'Knowledge Base / Settings'],
+      l2Badge: 'HOST', l2Title: 'Host',
+      l2Items: ['Fastify HTTP Server', 'PostgreSQL + Redis', 'Model Config / llmRuntime', 'IPC Worker / Scheduling', 'Billing / Logging'],
+      l3Badge: 'AGENT', l3Title: 'Agent',
+      l3Items: ['Account-level Daemon', 'LLM Loop', 'Tool Routing and Execution', 'Text Skill ResourceLoader', 'transcript / trace / graph'],
+      l4Badge: 'DATA', l4Title: 'Data & Capability',
+      l4Items: ['PostgreSQL Persistent Storage', 'Redis Queue / PubSub', 'Divination (5 systems)', 'Model Provider Adapters', 'Text Skill Bundle FS'],
+    },
+    footer: { logoCn: '', copy: '© 2026 FateClaw. AI-Powered Chinese Metaphysics.' },
+  },
+};
+
+let currentLang = localStorage.getItem('fateclaw-lang') || 'zh-CN';
+
+function switchLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('fateclaw-lang', lang);
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  document.documentElement.lang = lang === 'en' ? 'en' : lang;
+  applyTranslations(lang);
+}
+
+function applyTranslations(lang) {
+  const dict = i18n[lang];
+  if (!dict) return;
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const parts = el.dataset.i18n.split('.');
+    let value = dict;
+    for (const part of parts) { value = value?.[part]; }
+    if (value == null) return;
+    if (Array.isArray(value)) {
+      el.innerHTML = value.map(v => '<li>' + v + '</li>').join('');
+    } else {
+      el.textContent = value;
+    }
+  });
+
+  document.querySelectorAll('[data-i18n-svg]').forEach(el => {
+    const parts = el.dataset.i18nSvg.split('.');
+    let value = dict;
+    for (const part of parts) { value = value?.[part]; }
+    if (value) el.textContent = value;
+  });
+}
+
+// Nav scroll
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 40);
+}, { passive: true });
+
+// Mobile menu toggle
+function toggleMenu() {
+  document.getElementById('navLinks').classList.toggle('open');
+}
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => document.getElementById('navLinks').classList.remove('open'));
+});
+
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+document.addEventListener('DOMContentLoaded', () => switchLang(currentLang));
+</script>
+</body>
+</html>

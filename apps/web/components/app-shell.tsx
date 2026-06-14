@@ -69,9 +69,21 @@ export function AppShell({
     router.replace('/login');
   };
 
+  const shellClassName = noPadding ? 'h-dvh overflow-hidden' : 'min-h-dvh';
+  const contentFrameClassName = noPadding
+    ? 'h-full overflow-hidden pt-14 lg:ml-[260px] lg:pt-0'
+    : 'pt-14 lg:pt-0 lg:ml-[260px]';
+  const mainClassName = wide
+    ? noPadding
+      ? 'mx-auto flex h-full min-h-0 max-w-[1400px] flex-col overflow-hidden px-4 pb-0 lg:px-8 lg:pt-16 animate-page-enter'
+      : 'mx-auto max-w-[1400px] px-4 pb-10 lg:px-8 lg:pt-20 lg:pb-10 animate-page-enter'
+    : noPadding
+      ? 'mx-auto flex h-full min-h-0 max-w-3xl flex-col overflow-hidden px-4 pb-0 lg:px-10 lg:pt-16 animate-page-enter'
+      : 'mx-auto max-w-3xl px-4 pb-10 lg:px-10 lg:pt-20 lg:pb-10 animate-page-enter';
+
   return (
     <ChatSessionsProvider>
-      <div className="min-h-dvh">
+      <div className={shellClassName}>
         {/* Skip to main content — visible on focus */}
         <a
           href="#main-content"
@@ -92,16 +104,12 @@ export function AppShell({
           <TopBar onLogout={handleLogout} />
         </div>
         {/* pt-14 for mobile top bar, lg: sidebar offset */}
-        <div className="pt-14 lg:pt-0 lg:ml-[260px]">
+        <div className={contentFrameClassName}>
           <main
             id="main-content"
-            className={
-              wide
-                ? `mx-auto max-w-[1400px] px-4 ${noPadding ? 'pb-0' : 'pb-10'} lg:px-8 lg:pt-20 lg:pb-10 animate-page-enter`
-                : `mx-auto max-w-3xl px-4 ${noPadding ? 'pb-0' : 'pb-10'} lg:px-10 lg:pt-20 lg:pb-10 animate-page-enter`
-            }
+            className={mainClassName}
           >
-            <AnnouncementBanner embedded wide={wide} />
+            {!noPadding && <AnnouncementBanner embedded wide={wide} />}
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
           <ComplianceFooterSlot
@@ -127,7 +135,8 @@ function ComplianceFooterSlot({
   const { selectedSession } = useChatSessions();
   // 具体会话页已经进入盘面/解读上下文，隐藏备案页脚以免占用移动端输入区下方空间。
   const showComplianceFooter =
-    pathname === '/' || (pathname === '/ai-chat' && !selectedSession);
+    !noPadding &&
+    (pathname === '/' || (pathname === '/ai-chat' && !selectedSession));
 
   if (!showComplianceFooter) {
     return null;

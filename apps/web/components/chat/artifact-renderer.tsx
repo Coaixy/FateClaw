@@ -68,19 +68,32 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
   'bazi-paipan': 'lg:max-w-[880px] xl:max-w-[940px]',
 };
 
+// 六爻盘信息密度高，移动端聊天流优先占满横向阅读宽度，不再为了“一屏看全”整体缩小。
+const FIT_MOBILE_CHAT_HEIGHT_SKILLS = new Set<SkillContextEntry['skill']>([
+  'bazi-paipan',
+  'ziwei-paipan',
+  'qimen-paipan',
+  'liuren-paipan',
+  'meihua-paipan',
+  'jingzhan-paipan',
+]);
+
 /**
  * 盘面自适应外壳默认只按容器宽度缩放；固定视窗场景可额外按可用高度缩放。
  *
  * @param props.children 实际盘面节点。
  * @param props.fitViewportHeight 是否把当前视口剩余高度纳入缩放计算。
+ * @param props.fitMobileChatHeight 移动端聊天流是否允许按固定高度上限等比缩放。
  * @returns 自动适配展示区域的盘面容器。
  */
 function ResponsiveArtifactFrame({
   children,
   fitViewportHeight = false,
+  fitMobileChatHeight = true,
 }: {
   children: ReactNode;
   fitViewportHeight?: boolean;
+  fitMobileChatHeight?: boolean;
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -111,6 +124,7 @@ function ResponsiveArtifactFrame({
           window.matchMedia('(min-width: 640px)').matches);
       const shouldFitMobileChatHeight =
         !fitViewportHeight &&
+        fitMobileChatHeight &&
         typeof window !== 'undefined' &&
         window.matchMedia('(max-width: 639px)').matches;
 
@@ -178,7 +192,7 @@ function ResponsiveArtifactFrame({
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateFit);
     };
-  }, [fitViewportHeight]);
+  }, [fitMobileChatHeight, fitViewportHeight]);
 
   const contentWidth = fit.width || undefined;
   const visualWidth = fit.width ? fit.width * fit.scale : undefined;
@@ -254,6 +268,7 @@ function ArtifactBlock({
   const title = entry.artifactTitle ?? entry.skill;
   const shellClassName =
     CHART_SHELL_CLASSNAME[entry.skill] ?? 'lg:max-w-[880px] xl:max-w-[940px]';
+  const fitMobileChatHeight = FIT_MOBILE_CHAT_HEIGHT_SKILLS.has(entry.skill);
 
   return (
     <div className="mt-1">
@@ -265,7 +280,10 @@ function ArtifactBlock({
             shellClassName,
           )}
         >
-          <ResponsiveArtifactFrame fitViewportHeight={fitViewportHeight}>
+          <ResponsiveArtifactFrame
+            fitMobileChatHeight={fitMobileChatHeight}
+            fitViewportHeight={fitViewportHeight}
+          >
             {chart}
           </ResponsiveArtifactFrame>
         </div>
