@@ -32,6 +32,10 @@ const MEMBERSHIP_PLAN_KEYS = [
   MEMBERSHIP_PRO_PLAN_KEY,
 ] as const;
 const MEMBERSHIP_UNIT_DENOMINATOR = 1_000_000;
+const MEMBERSHIP_PLAN_RANKS: Record<MembershipPlanKey, number> = {
+  [MEMBERSHIP_PLUS_PLAN_KEY]: 1,
+  [MEMBERSHIP_PRO_PLAN_KEY]: 2,
+};
 
 export type MembershipPlanKey = (typeof MEMBERSHIP_PLAN_KEYS)[number];
 
@@ -53,6 +57,10 @@ function resolveMembershipPlanKey(configId: string): MembershipPlanKey {
 
 function resolveMembershipPlanName(planKey: string): string {
   return planKey === MEMBERSHIP_PRO_PLAN_KEY ? 'FateClaw Pro' : 'FateClaw Plus';
+}
+
+function resolveMembershipPlanRank(planKey: string): number {
+  return isMembershipPlanKey(planKey) ? MEMBERSHIP_PLAN_RANKS[planKey] : 0;
 }
 
 function toCoins(value: unknown): number {
@@ -500,16 +508,118 @@ async function getActiveMembershipForUserUsing(
   userId: string,
   opts?: { forUpdate?: boolean },
 ): Promise<UserMembershipRow | null> {
+  const memberships = await getActiveMembershipsForUserUsing(
+    client,
+    userId,
+    opts,
+  );
+  const { membership } = await resolveEffectiveMembershipUsing({
+    query: client.query.bind(client),
+    memberships,
+  });
+  return membership;
+}
+
+async function getActiveMembershipsForUserUsing(
+  client: pg.PoolClient,
+  userId: string,
+  opts?: { forUpdate?: boolean },
+): Promise<UserMembershipRow[]> {
   const { rows } = await client.query(
     `SELECT *
      FROM user_memberships
      WHERE user_id = $1
        AND status = 'active'
        AND current_period_end > NOW()
+     ORDER BY plan_key = 'fateclaw_pro' DESC,
+     plan_key = 'fateclaw_plus' DESC,
+     current_period_end DESC
      ${opts?.forUpdate ? 'FOR UPDATE' : ''}`,
     [userId],
   );
-  return (rows[0] as UserMembershipRow | undefined) ?? null;
+  return rows as UserMembershipRow[];
+}
+
+async function resolveEffectiveMembershipUsing(input: {
+  query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
+  memberships: UserMembershipRow[];
+}): Promise<{
+  membership: UserMembershipRow | null;
+  config: MembershipConfigRow;
+}> {
+  const sortedMemberships = [...input.memberships]
+    .filter(
+      (membership) =>
+        membership.status === 'active' &&
+        new Date(membership.current_period_end).getTime() > Date.now(),
+    )
+    .sort((a, b) => {
+      const rankDelta =
+        resolveMembershipPlanRank(b.plan_key) -
+        resolveMembershipPlanRank(a.plan_key);
+      if (rankDelta !== 0) return rankDelta;
+      return (
+        new Date(b.current_period_end).getTime() -
+        new Date(a.current_period_end).getTime()
+      );
+    });
+
+  for (const membership of sortedMemberships) {
+    const config = await getMembershipConfigUsing({
+      query: input.query,
+      planKey: membership.plan_key,
+    });
+    if (config.enabled) {
+      return { membership, config };
+    }
+  }
+
+  return {
+    membership: sortedMemberships[0] ?? null,
+    config: await getMembershipConfigUsing({
+      query: input.query,
+      planKey: sortedMemberships[0]?.plan_key,
+    }),
+  };
+}
+
+async function extendLowerTierMembershipsForOverlayUsing(
+  client: pg.PoolClient,
+  input: {
+    userId: string;
+    planKey: MembershipPlanKey;
+    overlayStart: Date;
+    overlayEnd: Date;
+    memberships: UserMembershipRow[];
+  },
+): Promise<void> {
+  const targetRank = resolveMembershipPlanRank(input.planKey);
+  for (const membership of input.memberships) {
+    if (resolveMembershipPlanRank(membership.plan_key) >= targetRank) {
+      continue;
+    }
+    const lowerStart = new Date(membership.current_period_start);
+    const lowerEnd = new Date(membership.current_period_end);
+    const overlapStart = Math.max(
+      lowerStart.getTime(),
+      input.overlayStart.getTime(),
+    );
+    const overlapEnd = Math.min(lowerEnd.getTime(), input.overlayEnd.getTime());
+    const coveredMilliseconds = overlapEnd - overlapStart;
+    if (coveredMilliseconds <= 0) {
+      continue;
+    }
+
+    // 高档权益插队期间低档权益暂停消耗，因此把被覆盖的低档时长顺延到末尾。
+    await client.query(
+      `UPDATE user_memberships
+       SET current_period_end =
+             current_period_end + ($3::double precision * INTERVAL '1 millisecond'),
+           updated_at = NOW()
+       WHERE user_id = $1 AND plan_key = $2`,
+      [input.userId, membership.plan_key, coveredMilliseconds],
+    );
+  }
 }
 
 async function ensureMembershipAllowanceForUserUsing(
@@ -527,7 +637,7 @@ async function ensureMembershipAllowanceForUserUsing(
        allowance_units, used_units, created_at, updated_at
      )
      VALUES ($1, $2, $3, $4, $5, $6, 0, NOW(), NOW())
-     ON CONFLICT (user_id, period_start) DO UPDATE
+     ON CONFLICT (user_id, plan_key, period_start) DO UPDATE
        SET period_end = EXCLUDED.period_end,
            allowance_units = GREATEST(
              membership_allowances.allowance_units,
@@ -619,13 +729,24 @@ export async function getMembershipOverview(
     `SELECT *
      FROM user_memberships
      WHERE user_id = $1
-     ORDER BY updated_at DESC
-     LIMIT 1`,
+     ORDER BY CASE
+       WHEN status = 'active' AND current_period_end > NOW() THEN 1
+       ELSE 0
+     END DESC,
+     CASE plan_key
+       WHEN 'fateclaw_pro' THEN 2
+       WHEN 'fateclaw_plus' THEN 1
+       ELSE 0
+     END DESC,
+     current_period_end DESC,
+     updated_at DESC`,
     [userId],
   );
-  const membership =
-    (membershipRows[0] as UserMembershipRow | undefined) ?? null;
-  const config = await getMembershipConfig(membership?.plan_key);
+  const memberships = membershipRows as UserMembershipRow[];
+  const { membership, config } = await resolveEffectiveMembershipUsing({
+    query: pool.query,
+    memberships,
+  });
   const period = membership
     ? resolveMembershipAllowancePeriod(membership)
     : null;
@@ -636,14 +757,14 @@ export async function getMembershipOverview(
     new Date(membership.current_period_end).getTime() > Date.now(),
   );
   const allowance =
-    active && period
+    active && membership && period
       ? await (async () => {
           const { rows } = await pool.query(
             `SELECT *
            FROM membership_allowances
-           WHERE user_id = $1 AND period_start = $2
+           WHERE user_id = $1 AND plan_key = $2 AND period_start = $3
            LIMIT 1`,
-            [userId, period.start],
+            [userId, membership.plan_key, period.start],
           );
           const row = rows[0] as MembershipAllowanceRow | undefined;
           return row ? normalizeMembershipAllowanceRow(row) : null;
@@ -691,29 +812,59 @@ export async function subscribeMembershipWithWallet(
       throw new Error('用户不存在');
     }
 
-    const current = await getActiveMembershipForUserUsing(client, userId, {
-      forUpdate: true,
-    });
-    const now = new Date();
-    const currentActive = Boolean(
-      current && new Date(current.current_period_end).getTime() > now.getTime(),
+    const activeMemberships = await getActiveMembershipsForUserUsing(
+      client,
+      userId,
+      { forUpdate: true },
     );
-    const periodStart =
-      currentActive && current
-        ? new Date(resolveMembershipAllowancePeriod(current, now).anchor)
+    const currentSamePlan =
+      activeMemberships.find(
+        (membership) => membership.plan_key === normalizedPlanKey,
+      ) ?? null;
+    const currentHigherTier = activeMemberships.find(
+      (membership) =>
+        resolveMembershipPlanRank(membership.plan_key) >
+        resolveMembershipPlanRank(normalizedPlanKey),
+    );
+    const now = new Date();
+    const currentSamePlanActive = Boolean(
+      currentSamePlan &&
+      new Date(currentSamePlan.current_period_end).getTime() > now.getTime(),
+    );
+    const baseStart =
+      !currentSamePlanActive && currentHigherTier
+        ? new Date(currentHigherTier.current_period_end)
         : now;
+    const periodStart =
+      currentSamePlanActive && currentSamePlan
+        ? new Date(
+            resolveMembershipAllowancePeriod(currentSamePlan, now).anchor,
+          )
+        : baseStart;
+    const overlayStart =
+      currentSamePlanActive && currentSamePlan
+        ? new Date(currentSamePlan.current_period_end)
+        : baseStart;
     const periodEnd = addMonths(
-      currentActive && current ? new Date(current.current_period_end) : now,
+      currentSamePlanActive && currentSamePlan
+        ? new Date(currentSamePlan.current_period_end)
+        : baseStart,
       1,
     );
+    await extendLowerTierMembershipsForOverlayUsing(client, {
+      userId,
+      planKey: normalizedPlanKey,
+      overlayStart,
+      overlayEnd: periodEnd,
+      memberships: activeMemberships,
+    });
     const { rows: membershipRows } = await client.query(
       `INSERT INTO user_memberships (
          user_id, plan_key, status, current_period_start,
          current_period_end, created_at, updated_at
        )
        VALUES ($1, $2, 'active', $3, $4, NOW(), NOW())
-       ON CONFLICT (user_id) DO UPDATE SET
-         plan_key = EXCLUDED.plan_key,
+       ON CONFLICT (user_id, plan_key) DO UPDATE SET
          status = 'active',
          current_period_start = EXCLUDED.current_period_start,
          current_period_end = EXCLUDED.current_period_end,
@@ -2212,17 +2363,18 @@ export async function settleUserModelChargeCoins(
     );
     const previousChargeCoins = toCoins(monthlyState.billed_overage_cost_coins);
     const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
-    const activeMembership = await getActiveMembershipForUserUsing(
+    const activeMemberships = await getActiveMembershipsForUserUsing(
       client,
       reservation.user_id,
-      { forUpdate: true },
+      {
+        forUpdate: true,
+      },
     );
-    const membershipConfig = activeMembership
-      ? await getMembershipConfigUsing({
-          query: client.query.bind(client),
-          planKey: activeMembership.plan_key,
-        })
-      : await getMembershipConfigUsing(client);
+    const { membership: activeMembership, config: membershipConfig } =
+      await resolveEffectiveMembershipUsing({
+        query: client.query.bind(client),
+        memberships: activeMemberships,
+      });
     const membershipDeduction =
       activeMembership && membershipConfig.enabled
         ? await consumeMembershipAllowanceUsing(client, {

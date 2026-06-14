@@ -643,7 +643,7 @@ export async function getAdminGlobalStats(
       rechargeStatsParams,
     ),
     pool.query(
-      `SELECT COUNT(*) FILTER (
+      `SELECT COUNT(DISTINCT user_id) FILTER (
          WHERE status = 'active' AND current_period_end > NOW()
        )::int AS active
        FROM user_memberships`,

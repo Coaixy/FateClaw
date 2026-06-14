@@ -8,6 +8,7 @@ import type { DbQueryable } from '../db-pool.js';
 import type { UserMembership } from '../../shared/types.js';
 
 const MEMBERSHIP_PLAN_KEY = 'fateclaw_plus';
+const PRO_MEMBERSHIP_PLAN_KEY = 'fateclaw_pro';
 const DEFAULT_MAX_REDEMPTIONS = 1_000_000;
 const PAID_MEMBERSHIP_REWARD_REASON = 'first_paid_membership';
 const INVITE_COUNT_REWARD_REASON = 'invite_count_milestone';
@@ -715,9 +716,26 @@ async function getCurrentMembershipForUserUsing(
   const { rows } = await client.query(
     `SELECT *
      FROM user_memberships
-     WHERE user_id = $1
+     WHERE user_id = $1 AND plan_key = $2
      FOR UPDATE`,
-    [userId],
+    [userId, MEMBERSHIP_PLAN_KEY],
+  );
+  return (rows[0] as UserMembership | undefined) ?? null;
+}
+
+async function getCurrentHigherMembershipForUserUsing(
+  client: pg.PoolClient,
+  userId: string,
+): Promise<UserMembership | null> {
+  const { rows } = await client.query(
+    `SELECT *
+     FROM user_memberships
+     WHERE user_id = $1
+       AND plan_key = $2
+       AND status = 'active'
+       AND current_period_end > NOW()
+     FOR UPDATE`,
+    [userId, PRO_MEMBERSHIP_PLAN_KEY],
   );
   return (rows[0] as UserMembership | undefined) ?? null;
 }
@@ -731,15 +749,28 @@ async function grantReferralMembershipDaysUsing(
 ): Promise<UserMembership> {
   const now = new Date();
   const current = await getCurrentMembershipForUserUsing(client, input.userId);
+  const currentHigher = await getCurrentHigherMembershipForUserUsing(
+    client,
+    input.userId,
+  );
+  const higherEnd = currentHigher
+    ? new Date(currentHigher.current_period_end)
+    : null;
+  // Pro 覆盖期内发放 Plus 奖励时，Plus 天数排到 Pro 之后，避免奖励被高档权益覆盖消耗。
   const activeBase =
     current && new Date(current.current_period_end).getTime() > now.getTime()
-      ? new Date(current.current_period_end)
-      : now;
+      ? new Date(
+          Math.max(
+            new Date(current.current_period_end).getTime(),
+            higherEnd?.getTime() ?? 0,
+          ),
+        )
+      : new Date(Math.max(now.getTime(), higherEnd?.getTime() ?? 0));
   const periodEnd = addDays(activeBase, input.rewardDays);
   const periodStart =
     current && new Date(current.current_period_end).getTime() > now.getTime()
       ? current.current_period_start
-      : now.toISOString();
+      : activeBase.toISOString();
 
   const { rows } = await client.query(
     `INSERT INTO user_memberships (
@@ -747,8 +778,7 @@ async function grantReferralMembershipDaysUsing(
        current_period_end, created_at, updated_at
      )
      VALUES ($1, $2, 'active', $3, $4, NOW(), NOW())
-     ON CONFLICT (user_id) DO UPDATE SET
-       plan_key = EXCLUDED.plan_key,
+     ON CONFLICT (user_id, plan_key) DO UPDATE SET
        status = 'active',
        current_period_start = EXCLUDED.current_period_start,
        current_period_end = EXCLUDED.current_period_end,

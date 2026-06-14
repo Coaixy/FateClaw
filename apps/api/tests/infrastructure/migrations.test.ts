@@ -207,6 +207,17 @@ describe('runDatabaseMigrations', () => {
         '修复简易模式 Workflow Skill 快照列缺失',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0037_membership_pro_plan', '增加 FateClaw Pro 会员套餐配置'],
+    });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0038_membership_plan_timeline',
+        '允许同一用户同时持有不同档位会员权益',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -347,6 +358,8 @@ describe('runDatabaseMigrations', () => {
       '0034_announcements',
       '0035_simple_workflow_skill_snapshots',
       '0036_repair_simple_workflow_skill_snapshot_columns',
+      '0037_membership_pro_plan',
+      '0038_membership_plan_timeline',
     ]);
 
     await runDatabaseMigrations(client as never);

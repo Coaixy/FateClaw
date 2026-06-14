@@ -792,4 +792,47 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0038_membership_plan_timeline',
+    description: '允许同一用户同时持有不同档位会员权益',
+    async up(client) {
+      await client.query(`
+        DELETE FROM user_memberships a
+        USING user_memberships b
+        WHERE a.ctid < b.ctid
+          AND a.user_id = b.user_id
+          AND a.plan_key = b.plan_key
+      `);
+      await client.query(`
+        ALTER TABLE user_memberships
+          DROP CONSTRAINT IF EXISTS user_memberships_pkey
+      `);
+      await client.query(`
+        ALTER TABLE user_memberships
+          ADD CONSTRAINT user_memberships_pkey PRIMARY KEY (user_id, plan_key)
+      `);
+      await client.query(`
+        DELETE FROM membership_allowances a
+        USING membership_allowances b
+        WHERE a.ctid < b.ctid
+          AND a.user_id = b.user_id
+          AND a.plan_key = b.plan_key
+          AND a.period_start = b.period_start
+      `);
+      await client.query(`
+        ALTER TABLE membership_allowances
+          DROP CONSTRAINT IF EXISTS membership_allowances_user_id_period_start_key,
+          DROP CONSTRAINT IF EXISTS membership_allowances_user_plan_period_key
+      `);
+      await client.query(`
+        ALTER TABLE membership_allowances
+          ADD CONSTRAINT membership_allowances_user_plan_period_key
+            UNIQUE (user_id, plan_key, period_start)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_memberships_user_effective
+          ON user_memberships(user_id, status, current_period_end DESC)
+      `);
+    },
+  },
 ];

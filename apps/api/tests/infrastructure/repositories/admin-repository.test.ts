@@ -213,6 +213,7 @@ describe('admin repository', () => {
     expect(rechargeStatsSql).toContain('SUM(amount_coins)');
     expect(rechargeStatsSql).toContain('AS period_coins\n       FROM');
     expect(rechargeStatsSql).not.toContain('amount_cents');
+    expect(calls[7]?.sql).toContain('COUNT(DISTINCT user_id)');
     expect(calls[6]?.params).toEqual([
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       '2026-05-01',

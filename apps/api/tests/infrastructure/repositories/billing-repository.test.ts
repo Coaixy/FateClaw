@@ -176,13 +176,7 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('hold_state = $2');
     expect(calls[0]?.sql).toContain('charge_state = $3');
     expect(calls[0]?.sql).toContain('LIMIT $4 OFFSET $5');
-    expect(calls[0]?.params).toEqual([
-      'user-1',
-      'held',
-      'pending',
-      200,
-      0,
-    ]);
+    expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200, 0]);
   });
 
   it('lists admin billing reservations with filters and total count', async () => {
@@ -225,13 +219,7 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('hold_state = $2');
     expect(calls[0]?.sql).toContain('charge_state = $3');
     expect(calls[1]?.sql).toContain('LIMIT $4 OFFSET $5');
-    expect(calls[1]?.params).toEqual([
-      'user-1',
-      'held',
-      'pending',
-      20,
-      40,
-    ]);
+    expect(calls[1]?.params).toEqual(['user-1', 'held', 'pending', 20, 40]);
   });
 
   it('lists admin recharge orders with filters and total count', async () => {
@@ -273,13 +261,7 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('ro.pay_type = $3');
     expect(calls[1]?.sql).toContain('LEFT JOIN users u ON u.id = ro.user_id');
     expect(calls[1]?.sql).toContain('LIMIT $4 OFFSET $5');
-    expect(calls[1]?.params).toEqual([
-      'user-1',
-      'paid',
-      'wechat',
-      200,
-      10,
-    ]);
+    expect(calls[1]?.params).toEqual(['user-1', 'paid', 'wechat', 200, 10]);
   });
 
   it('lists admin wallet transactions with filters and total count', async () => {
@@ -606,12 +588,7 @@ describe('billing repository', () => {
     const monthlyUpdate = clientCalls.find((call) =>
       call.sql.includes('UPDATE monthly_billing_state'),
     );
-    expect(monthlyUpdate?.params).toEqual([
-      141_873,
-      3.03,
-      'user-1',
-      '2026-05',
-    ]);
+    expect(monthlyUpdate?.params).toEqual([141_873, 3.03, 'user-1', '2026-05']);
     expect(
       clientCalls.some(
         (call) =>
@@ -946,6 +923,212 @@ describe('billing repository', () => {
     ]);
   });
 
+  it('inserts a Pro overlay and pauses the existing Plus period', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-10T00:00:00.000Z'));
+
+    const user = {
+      id: 'user-1',
+      purchased_coins: 200,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const plusMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00.000Z',
+      current_period_end: '2027-06-01T00:00:00.000Z',
+      created_at: '2026-06-01T00:00:00.000Z',
+    };
+    mockGetUserByIdUsing
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, purchased_coins: 100 });
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [
+          {
+            id: 'fateclaw_pro',
+            enabled: true,
+            monthly_price_coins: 100,
+            monthly_allowance_units: 10000000,
+            standard_price_per_million_units_coins: 10,
+          },
+        ],
+        [],
+        [],
+        [plusMembership],
+        [],
+        [
+          {
+            user_id: 'user-1',
+            plan_key: 'fateclaw_pro',
+            status: 'active',
+            current_period_start: '2026-06-10T00:00:00.000Z',
+            current_period_end: '2026-07-10T00:00:00.000Z',
+          },
+        ],
+        [
+          {
+            id: 'allowance-pro',
+            user_id: 'user-1',
+            plan_key: 'fateclaw_pro',
+            period_start: '2026-06-10T00:00:00.000Z',
+            period_end: '2026-07-10T00:00:00.000Z',
+            allowance_units: 10000000,
+            used_units: 0,
+          },
+        ],
+        [],
+      ],
+    );
+
+    await subscribeMembershipWithWallet('user-1', 'fateclaw_pro');
+
+    const plusExtend = clientCalls.find(
+      (call) =>
+        call.sql.includes('UPDATE user_memberships') &&
+        call.sql.includes("INTERVAL '1 millisecond'"),
+    );
+    expect(plusExtend?.params).toEqual(['user-1', 'fateclaw_plus', 2592000000]);
+
+    const membershipInsert = clientCalls.find((call) =>
+      call.sql.includes('INSERT INTO user_memberships'),
+    );
+    expect(membershipInsert?.params).toEqual([
+      'user-1',
+      'fateclaw_pro',
+      '2026-06-10T00:00:00.000Z',
+      '2026-07-10T00:00:00.000Z',
+    ]);
+  });
+
+  it('falls back to Plus after the Pro overlay expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T00:00:01.000Z'));
+
+    const plusMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00.000Z',
+      current_period_end: '2027-07-01T00:00:00.000Z',
+      created_at: '2026-06-01T00:00:00.000Z',
+    };
+    const expiredProMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_pro',
+      status: 'active',
+      current_period_start: '2026-06-10T00:00:00.000Z',
+      current_period_end: '2026-07-10T00:00:00.000Z',
+      created_at: '2026-06-10T00:00:00.000Z',
+    };
+    const allowance = {
+      id: 'allowance-plus',
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      period_start: '2026-07-01T00:00:00.000Z',
+      period_end: '2026-08-01T00:00:00.000Z',
+      allowance_units: 3000000,
+      used_units: 0,
+    };
+    const { calls } = createMockPool([
+      [expiredProMembership, plusMembership],
+      [
+        {
+          id: 'default',
+          enabled: true,
+          monthly_price_coins: 30,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [allowance],
+    ]);
+
+    await expect(getMembershipOverview('user-1')).resolves.toMatchObject({
+      active: true,
+      membership: {
+        plan_key: 'fateclaw_plus',
+        current_period_end: '2027-07-01T00:00:00.000Z',
+      },
+      allowance,
+    });
+    expect(calls[2]?.params).toEqual([
+      'user-1',
+      'fateclaw_plus',
+      '2026-07-01T00:00:00.000Z',
+    ]);
+  });
+
+  it('falls back to Plus when the active Pro plan is disabled', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
+
+    const plusMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00.000Z',
+      current_period_end: '2027-07-01T00:00:00.000Z',
+      created_at: '2026-06-01T00:00:00.000Z',
+    };
+    const proMembership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_pro',
+      status: 'active',
+      current_period_start: '2026-06-10T00:00:00.000Z',
+      current_period_end: '2026-07-10T00:00:00.000Z',
+      created_at: '2026-06-10T00:00:00.000Z',
+    };
+    const allowance = {
+      id: 'allowance-plus',
+      user_id: 'user-1',
+      plan_key: 'fateclaw_plus',
+      period_start: '2026-06-01T00:00:00.000Z',
+      period_end: '2026-07-01T00:00:00.000Z',
+      allowance_units: 3000000,
+      used_units: 0,
+    };
+    const { calls } = createMockPool([
+      [proMembership, plusMembership],
+      [
+        {
+          id: 'fateclaw_pro',
+          enabled: false,
+          monthly_price_coins: 100,
+          monthly_allowance_units: 10000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [
+        {
+          id: 'default',
+          enabled: true,
+          monthly_price_coins: 30,
+          monthly_allowance_units: 3000000,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [allowance],
+    ]);
+
+    await expect(getMembershipOverview('user-1')).resolves.toMatchObject({
+      active: true,
+      membership: {
+        plan_key: 'fateclaw_plus',
+      },
+      allowance,
+    });
+    expect(calls[3]?.params).toEqual([
+      'user-1',
+      'fateclaw_plus',
+      '2026-06-01T00:00:00.000Z',
+    ]);
+  });
+
   it('reads the current personal allowance cycle even after historical renewal moved membership period start forward', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
@@ -985,6 +1168,10 @@ describe('billing repository', () => {
       active: true,
       allowance,
     });
-    expect(calls[2]?.params).toEqual(['user-1', '2026-05-30T00:00:00.000Z']);
+    expect(calls[2]?.params).toEqual([
+      'user-1',
+      'fateclaw_plus',
+      '2026-05-30T00:00:00.000Z',
+    ]);
   });
 });
