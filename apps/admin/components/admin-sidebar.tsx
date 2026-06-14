@@ -9,6 +9,7 @@ import {
   toAdminDocumentHref,
 } from '@/lib/admin-navigation';
 import {
+  Activity,
   LayoutDashboard,
   Users,
   MessageSquare,
@@ -32,6 +33,12 @@ const navItems = [
     href: '/overview',
     label: '总览',
     icon: LayoutDashboard,
+    roles: ['owner'],
+  },
+  {
+    href: '/status',
+    label: '运行状态',
+    icon: Activity,
     roles: ['owner'],
   },
   {

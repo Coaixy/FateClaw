@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
 import type {
+  AdminStatusStatsDto,
   MembershipEntitlementDto,
   MembershipPlanDto,
   MembershipStatusDto,
@@ -83,7 +84,10 @@ import type {
   AdminReferralListResult,
   ReferralRewardStatus,
 } from '../../infrastructure/db.js';
-import { getUsageStats } from '../../infrastructure/daily-usage.js';
+import {
+  getAdminStatusStats,
+  getUsageStats,
+} from '../../infrastructure/daily-usage.js';
 import {
   createOfficialModel,
   getPiSessionHealthPolicy,
@@ -214,6 +218,15 @@ export interface AdminRewardConfigView {
     daily_turn_limit: number;
     updated_at: string;
   };
+}
+
+/**
+ * 读取管理后台完整运行状态统计。
+ *
+ * @returns 全站消息、用户、队列和 Token 趋势指标。
+ */
+export async function getAdminStatusOverview(): Promise<AdminStatusStatsDto> {
+  return getAdminStatusStats();
 }
 
 function membershipPlanKeyFromConfigId(configId: string) {

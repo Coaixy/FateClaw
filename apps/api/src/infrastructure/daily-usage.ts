@@ -22,7 +22,8 @@ export interface UsageStats {
   today_total_tokens: number;
 }
 
-export interface PublicStatusStats {
+/** 管理后台完整状态页统计，不对公开接口暴露。 */
+export interface AdminStatusStats {
   today_messages: number;
   registered_users: number;
   today_total_tokens: number;
@@ -292,7 +293,12 @@ export async function getDailyUsageRows(
   });
 }
 
-export async function getPublicStatusStats(): Promise<PublicStatusStats> {
+/**
+ * 汇总管理后台完整运行状态统计。
+ *
+ * @returns 今日消息、用户规模、处理队列和最近 Token 趋势。
+ */
+export async function getAdminStatusStats(): Promise<AdminStatusStats> {
   const today = new Date().toISOString().slice(0, 10);
   const [userCount, todayUsage, processingSessions, tokenUsageSeries] =
     await Promise.all([

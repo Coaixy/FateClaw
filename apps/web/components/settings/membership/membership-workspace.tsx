@@ -546,11 +546,11 @@ function MembershipPlanCards({
         return (
           <article
             key={plan.plan_key}
-            className={`overflow-hidden rounded-lg border bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] ${
+            className={`flex h-full flex-col overflow-hidden rounded-lg border bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] ${
               isCurrentPlan ? 'border-primary/45' : 'border-hairline'
             }`}
           >
-            <div className="flex min-h-[146px] flex-col justify-between gap-4 p-4 sm:p-5">
+            <div className="flex min-h-[146px] flex-1 flex-col justify-between gap-4 p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -598,7 +598,7 @@ function MembershipPlanCards({
               </div>
             </div>
 
-            <div className="border-t border-hairline/70 p-3">
+            <div className="shrink-0 border-t border-hairline/70 p-3">
               <button
                 type="button"
                 onClick={() => onSubscribe(plan)}

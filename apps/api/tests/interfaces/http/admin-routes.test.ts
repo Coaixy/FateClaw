@@ -36,6 +36,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   getAdminAnnouncementById: vi.fn(),
   getAdminRechargePaymentConfig: vi.fn(),
   getAdminRewardConfig: vi.fn(),
+  getAdminStatusOverview: vi.fn(),
   getAdminUserDetail: vi.fn(),
   getBalanceGrantsByUserId: vi.fn(),
   getChatSessionsForAdmin: vi.fn(),
@@ -96,6 +97,7 @@ import {
   deleteUser,
   getAdminAnnouncementById,
   getAdminGlobalStats,
+  getAdminStatusOverview,
   grantBonusBalance,
   getMessagesForAdmin,
   listAdminAnnouncements,
@@ -143,6 +145,13 @@ describe('adminRoutes authentication throttling', () => {
     vi.mocked(getAdminGlobalStats).mockResolvedValue(
       {} as Awaited<ReturnType<typeof getAdminGlobalStats>>,
     );
+    vi.mocked(getAdminStatusOverview).mockResolvedValue({
+      today_messages: 12,
+      registered_users: 34,
+      today_total_tokens: 5600,
+      processing_sessions: 2,
+      token_usage_series: [],
+    } as Awaited<ReturnType<typeof getAdminStatusOverview>>);
     vi.mocked(getMessagesForAdmin).mockResolvedValue({
       messages: [],
       total: 0,
@@ -226,16 +235,25 @@ describe('adminRoutes authentication throttling', () => {
   });
 
   it('allows the owner key to access owner-only endpoints', async () => {
-    const response = await app.inject({
+    const statsResponse = await app.inject({
       method: 'GET',
       url: '/stats',
       headers: {
         'x-admin-key': 'test-manager-key',
       },
     });
+    const statusResponse = await app.inject({
+      method: 'GET',
+      url: '/status',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
 
-    expect(response.statusCode).toBe(200);
+    expect(statsResponse.statusCode).toBe(200);
+    expect(statusResponse.statusCode).toBe(200);
     expect(getAdminGlobalStats).toHaveBeenCalledTimes(1);
+    expect(getAdminStatusOverview).toHaveBeenCalledTimes(1);
   });
 
   it('allows the owner key to manage announcements', async () => {
@@ -632,12 +650,21 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
     });
+    const statusResponse = await app.inject({
+      method: 'GET',
+      url: '/status',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
 
     expect(statsResponse.statusCode).toBe(403);
     expect(logsResponse.statusCode).toBe(403);
     expect(billingResponse.statusCode).toBe(403);
     expect(announcementsResponse.statusCode).toBe(403);
+    expect(statusResponse.statusCode).toBe(403);
     expect(getAdminGlobalStats).not.toHaveBeenCalled();
+    expect(getAdminStatusOverview).not.toHaveBeenCalled();
     expect(listRechargeOrdersForAdmin).not.toHaveBeenCalled();
     expect(listAdminAnnouncements).not.toHaveBeenCalled();
   });

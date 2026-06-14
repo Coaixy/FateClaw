@@ -3,6 +3,7 @@ import type {
   SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
 import type {
+  AdminStatusStatsDto,
   MembershipEntitlementDto,
   MembershipPlanDto,
   MembershipStatusDto,
@@ -103,6 +104,9 @@ export interface AdminSession {
   scopes: AdminScope[];
   home_path: AdminHomePath;
 }
+
+/** 管理后台完整运行状态统计。 */
+export type AdminStatusStats = AdminStatusStatsDto;
 
 async function adminRequest<T>(
   path: string,
@@ -774,6 +778,7 @@ export const admin = {
       `/api/admin/stats${query ? `?${query}` : ''}`,
     );
   },
+  status: () => adminRequest<AdminStatusStats>('/api/admin/status'),
   rechargeOrders: (opts?: {
     user_id?: string;
     status?: AdminRechargeOrderStatus;

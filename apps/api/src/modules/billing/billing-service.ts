@@ -11,7 +11,8 @@ import type {
   DailySignInResultDto,
   DailySignInStatusDto,
   MembershipSubscribeResultDto,
-  PublicStatusStatsDto,
+  PublicStatusOverviewDto,
+  PublicStatusServiceKeyDto,
   UsageStatsDto,
   WalletTransactionDto,
 } from '@fateclaw/contracts/billing';
@@ -33,7 +34,6 @@ import {
 } from '../../infrastructure/db.js';
 import {
   getDailyUsageRows,
-  getPublicStatusStats,
   getUsageStats,
 } from '../../infrastructure/daily-usage.js';
 import {
@@ -53,6 +53,13 @@ import {
 function todaySignInDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+const PUBLIC_STATUS_SERVICE_KEYS: PublicStatusServiceKeyDto[] = [
+  'ai_chat',
+  'wallet',
+  'membership',
+  'wechat_binding',
+];
 
 export async function getBillingOverview(
   userId: string,
@@ -167,10 +174,22 @@ export async function getBillingDailyUsage(
   return ok(toDailyUsageRowsDto(await getDailyUsageRows(user.id)));
 }
 
+/**
+ * 读取公开系统状态页的轻量服务可用性信息。
+ *
+ * @returns 不含用户规模、队列和 Token 消耗的公开状态概览。
+ */
 export async function getPublicStatusOverview(): Promise<
-  ServiceResult<PublicStatusStatsDto>
+  ServiceResult<PublicStatusOverviewDto>
 > {
-  return ok(await getPublicStatusStats());
+  return ok({
+    updated_at: new Date().toISOString(),
+    overall_status: 'operational',
+    services: PUBLIC_STATUS_SERVICE_KEYS.map((key) => ({
+      key,
+      status: 'operational',
+    })),
+  });
 }
 
 export async function getBillingTransactions(

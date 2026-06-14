@@ -21,7 +21,31 @@ export interface PublicStatusTokenUsagePointDto {
   total_tokens: number;
 }
 
-export interface PublicStatusStatsDto {
+/** 公开状态页服务级别。 */
+export type PublicStatusLevelDto = 'operational' | 'degraded' | 'maintenance';
+
+/** 公开状态页展示的服务标识。 */
+export type PublicStatusServiceKeyDto =
+  | 'ai_chat'
+  | 'wallet'
+  | 'membership'
+  | 'wechat_binding';
+
+/** 公开状态页服务状态。 */
+export interface PublicStatusServiceDto {
+  key: PublicStatusServiceKeyDto;
+  status: PublicStatusLevelDto;
+}
+
+/** 公开状态页轻量概览，不包含业务规模和消耗指标。 */
+export interface PublicStatusOverviewDto {
+  updated_at: string;
+  overall_status: PublicStatusLevelDto;
+  services: PublicStatusServiceDto[];
+}
+
+/** 管理后台完整运行状态统计。 */
+export interface AdminStatusStatsDto {
   today_messages: number;
   registered_users: number;
   today_total_tokens: number;

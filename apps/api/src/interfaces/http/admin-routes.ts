@@ -64,6 +64,7 @@ import {
   deletePublicFinancialLedgerEntry,
   listAdminAnnouncements,
   listPublicFinancialLedgerEntries,
+  getAdminStatusOverview,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
@@ -864,6 +865,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       rechargeEndDate: parsed.data.recharge_end_date,
     });
   });
+
+  // GET /api/admin/status — 管理后台完整运行状态统计
+  app.get('/status', async () => getAdminStatusOverview());
 
   // GET /api/admin/system-config — 官方模型池 / 审计
   app.get('/system-config', async () => {
