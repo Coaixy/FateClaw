@@ -16,12 +16,26 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 - **可观测对话链路**：每次请求返回 transcript、trace events、agent graph 和 token usage，后台可回看工具调用、知识命中和模型链路。
 - **OpenClaw/iLink 保留接入**：微信账号、消息转换、轮询和发送路径仍在仓库内；正式入口会启动符合条件的既有账号，Web 新绑定入口当前关闭。
 
+## 接手速记
+
+后续维护时先按下面几条建立上下文，避免把旧链路和主链路混在一起：
+
+- 当前主产品面是 `apps/web` 的 `/ai-chat`：AI Chat、手动排盘、自贴盘面、简易模式 workflow 和用户知识库都围绕站内会话运行。
+- `apps/api` 是宿主进程，不只是 HTTP 层。它负责 PostgreSQL/Redis、模型配置解析、账务预留与结算、排盘 runner、Text Skill Bundle 写入、Redis IPC 和生产静态站点托管。
+- `apps/agent-runtime` 只有 `daemon.ts` 常驻入口。宿主通过 `local-runner.ts` 拉起本地子进程，通过 Redis inbox/outbox 调度，不存在 one-shot/stdin 运行方式。
+- AI 请求使用请求级 `llmRuntime` 快照。模型 provider、model、secret、价格和上下文窗口在 API 入队前解析并随 IPC payload 下发，agent 子进程不依赖全局模型密钥。
+- 系统排盘不是 Pi Skill。排盘由 API 侧 `paipan-registry.ts` 和 `paipan-runners/*.ts` 确定性执行，结果作为盘面 artifact 写入会话；Pi Runtime 只负责基于盘面、问题和授权知识推理。
+- 用户知识正文不存数据库，写在 `.fateclaw/text-skills/<owner>/<dir>-<id>/`。数据库保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时只通过 request-scoped ResourceLoader 暴露本轮授权 Bundle。
+- 站内 AI Chat 默认是异步体验：`POST /api/chat-sessions/s/:sessionId/messages` 入队后返回 `accepted` 和 `request_id`，Web 通过短期 stream ticket 建 WebSocket，最终回复由 `ai-chat:outbox` handler 落库、结算并推流。
+- 简易模式 `POST /api/simple-workflows/start` 会先按 preset 直接排盘并创建会话，再异步发起首轮 AI 解读，可绑定指定模型策略和 workflow Skill 快照。
+- 微信 OpenClaw/iLink 是保留链路：正式 API 会为已启用且会员有效的既有账号启动轮询和 listener，但 Web 新扫码绑定入口仍关闭。恢复前要重新确认外部平台协议、风控和部署边界。
+
 ## 系统总览
 
 ```mermaid
 flowchart LR
   subgraph Client["用户入口"]
-    Web["Web 控台<br/>AI Chat / 手动排盘 / 知识库"]
+    Web["Web 控台<br/>AI Chat / 手动排盘 / 简易模式 / 知识库"]
     WeChat["微信 OpenClaw/iLink<br/>新绑定暂未开放"]
   end
 
@@ -131,8 +145,9 @@ sequenceDiagram
 | 排盘 | Web/API 调用 `apps/api/src/modules/chat/paipan-runners/*.ts`，返回结构化 artifact |
 | 解读 | Pi Runtime 基于当前盘面、问题和授权用户知识直接回复 |
 | 用户知识库 | Web 创建 Text Skill Bundle，DB 只存 metadata、权限、版本和 `bundle_uri` |
+| 简易模式 | API 读取 simple workflow preset，先直接排盘创建会话，再异步入队首轮 AI 解读 |
 | Agent 调度 | `apps/agent-runtime/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop 和授权 Skill 文件读取 |
-| IPC | Redis list 队列：inbox、outbox、ai-chat outbox、tasks |
+| IPC | Redis list 队列：inbox、member inbox、outbox、ai-chat outbox、cancel；WebSocket 流走 Redis pub/sub |
 | 模型 | AI 请求使用请求级 `llmRuntime` 快照，由 Pi Runtime 适配 OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
 | 可观测性 | `conversation_logs` 保存元数据、计数、摘要和 usage；`conversation_log_payloads` 保存 transcript、traceEvents、agentGraph 正文 |
 | 微信接入 | OpenClaw/iLink 代码路径保留；正式入口启动已启用会员账号轮询，Web 新绑定暂未开放 |
@@ -152,7 +167,8 @@ FateClaw/
 ├── apps/
 │   ├── api/                 # 宿主运行时、Fastify API、数据库和 Redis 编排
 │   ├── agent-runtime/       # 常驻 Agent 执行进程、模型循环、工具和 Skill 调用
-│   └── web/                 # Next.js 控台
+│   ├── web/                 # www 用户前端静态站点
+│   └── admin/               # admin 管理后台静态站点
 ├── packages/
 │   ├── backend-shared/      # API 与 Agent Runtime 共用的后端静态资源
 │   └── contracts/           # 前后端共享 DTO 类型

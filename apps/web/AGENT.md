@@ -74,7 +74,7 @@ apps/web/
 
 ### 路由页面
 
-- `app/page.tsx`: 首页 / 入口页
+- `app/page.tsx`: 根路径入口，当前直接重定向到 `/ai-chat`
 - `app/login/page.tsx`: 登录注册
 - `app/dashboard/page.tsx`: 账号总览、绑定、Soul、计划和主要入口
 - `app/chat/page.tsx`: 聊天记录页
@@ -93,10 +93,22 @@ apps/web/
 
 - `features/*/api.ts`: 普通用户各业务域 API client
 - `features/paipan/api.ts`: 直排盘 API client
+- `features/simple-workflows/api.ts`: 简易模式 workflow 启动 API client
 - `features/auth/hooks/use-auth.ts`: 登录态 hook
 - `features/auth/providers/auth-provider.tsx`: 认证上下文
 
 如果后端接口变更，前端这里通常要同步改。
+
+### AI Chat 工作区
+
+当前主产品入口是 `components/ai-chat/ai-chat-workspace.tsx`：
+
+- 普通聊天、自贴盘面、手动排盘、简易模式都围绕 AI Chat 会话运行。
+- `chatSessionsApi.send()` 成功通常只表示后端已入队，返回 `accepted` 和 `request_id`；不要把它当最终回复。
+- 实时输出先调用 `chatSessionsApi.createStreamTicket()`，再通过 `buildChatSessionStreamUrl()` 连接 WebSocket。
+- 最终消息仍以服务端落库为准；WebSocket 断开时应能通过重新拉取消息列表恢复展示。
+- `PaipanSheet` 调 `/api/paipan/preview` 和 `/api/paipan/commit`，排盘结果以消息 `tool_context` 形式进入会话。
+- `SimpleModeWorkspace` 调 `/api/simple-workflows/start`，后端会先创建会话和盘面，再后台启动首轮 AI 解读。
 
 ## UI 特征
 

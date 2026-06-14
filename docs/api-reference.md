@@ -13,15 +13,27 @@
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
+- `/api/referrals`
 - `/api/skills`
+- `/api/simple-workflows`
 - `/api/billing`
 - `/api/admin`
 - `/api/health`
 - `/api/ready`
 
+## 运行模式速记
+
+当前稳定主链路是站内 AI Chat、手动排盘、简易模式 workflow 和 Text Skill Bundle 知识库。微信 OpenClaw/iLink 后端轮询与发送链路仍保留，但 Web 新扫码绑定入口暂未开放。
+
+- AI Chat 请求会由 API 写入用户消息、解析请求级 `llmRuntime`、抢占会话 busy 锁，再通过 Redis IPC 投递到 `web:{userId}` 对应的本地 agent-runtime。
+- `POST /api/chat-sessions/s/:sessionId/messages` 通常只表示请求已入队；最终 assistant 消息由 `ipc:{runtimeId}:ai-chat:outbox` handler 异步落库、结算并通过 WebSocket 推送。
+- 手动排盘不调用模型。API 侧直接执行 `paipan-runners/*.ts`，把结构化盘面作为 `tool_context/artifactData` 写入会话。
+- Text Skill Bundle 正文写在 `.fateclaw/text-skills` 文件系统目录，数据库只保存 metadata、权限、版本和 `bundle_uri`。agent-runtime 每轮只读取本次请求授权的 Bundle。
+- 简易模式会先按后台 preset 直接排盘并创建会话，再异步启动首轮 AI 解读。
+
 ## 认证
 
-除明确标注为公开接口的路由外，业务接口需要在请求头中携带 JWT。公开接口包括图形验证码、登录注册/找回密码、分享预览、排盘 catalog/preview、公开市场、状态页、支付通知、健康检查和 `/api/public/*`。
+除明确标注为公开接口的路由外，业务接口需要在请求头中携带 JWT。公开接口包括图形验证码、登录注册/找回密码、分享预览、排盘 catalog/preview、公开市场、邀请预览、状态页、支付通知、健康检查和 `/api/public/*`。
 
 ```
 Authorization: Bearer <token>
@@ -331,15 +343,94 @@ Authorization: Bearer <token>
 | 方法   | 路径                                                                 | 说明                       |
 | ------ | -------------------------------------------------------------------- | -------------------------- |
 | GET    | `/api/chat-sessions`                                                 | 列出站内 AI Chat 会话      |
+| GET    | `/api/chat-sessions/archived`                                        | 列出已归档会话             |
 | POST   | `/api/chat-sessions`                                                 | 创建会话，可传 `{ "title": "..." }` |
 | PATCH  | `/api/chat-sessions/s/:sessionId`                                    | 更新会话标题               |
-| DELETE | `/api/chat-sessions/s/:sessionId`                                    | 删除会话                   |
+| DELETE | `/api/chat-sessions/s/:sessionId`                                    | 归档会话并清理本地 Pi session 文件 |
+| POST   | `/api/chat-sessions/s/:sessionId/restore`                            | 恢复已归档会话             |
 | POST   | `/api/chat-sessions/s/:sessionId/share`                              | 生成或复用会话私密分享链接 |
 | GET    | `/api/chat-sessions/shared/:token`                                   | 通过分享令牌只读查看会话，无需认证 |
 | GET    | `/api/chat-sessions/s/:sessionId/messages`                           | 获取消息，支持 `limit` 和 `before` |
 | POST   | `/api/chat-sessions/s/:sessionId/messages`                           | 发送消息，传 `content` 和可选 `selected_board_message_id` |
 | POST   | `/api/chat-sessions/s/:sessionId/messages/cancel`                    | 中断当前会话正在处理的 AI Chat 输出 |
+| POST   | `/api/chat-sessions/s/:sessionId/stream-ticket`                      | 签发一次性 WebSocket stream ticket |
 | GET    | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process`  | 获取脱敏后的查询过程时间线 |
+
+### POST /api/chat-sessions/s/:sessionId/messages
+
+发送一轮站内 AI Chat。服务端会先写入用户消息、解析模型 runtime、构造历史上下文和当前盘面上下文，再异步投递给 `web:{userId}` 对应的 agent-runtime。
+
+**Request Body**
+
+普通消息：
+
+```json
+{
+  "content": "这个盘面怎么看事业？",
+  "selected_board_message_id": "paipan-res-...",
+  "input_kind": "normal"
+}
+```
+
+自贴盘面：
+
+```json
+{
+  "input_kind": "user_pasted_board",
+  "pasted_board": {
+    "category": "bazi",
+    "content": "用户粘贴的盘面正文",
+    "question": "请看事业方向"
+  }
+}
+```
+
+**Response 200**
+
+异步模式下通常返回：
+
+```json
+{
+  "text": "",
+  "accepted": true,
+  "request_id": "aichat-1770000000000-abcdef",
+  "session_title": "八字排盘"
+}
+```
+
+`accepted: true` 只表示后台已接收请求，不表示最终回复已生成。最终 assistant 消息会由 outbox handler 写入消息表；前端应连接 WebSocket 或轮询消息列表刷新结果。
+
+### AI Chat WebSocket Stream
+
+WebSocket 不能直接复用长期 JWT。前端需要先调用：
+
+```http
+POST /api/chat-sessions/s/:sessionId/stream-ticket
+Authorization: Bearer <token>
+```
+
+响应：
+
+```json
+{
+  "ticket": "single-use-ticket",
+  "expiresAt": "2026-06-14T10:00:00.000Z"
+}
+```
+
+然后连接：
+
+```text
+ws://localhost:3000/api/chat-sessions/s/:sessionId/stream?ticket=single-use-ticket
+```
+
+票据有效期 60 秒，单次消费，并绑定当前用户与会话。事件类型包括 `connected`、`agent_start`、`turn_start`、`thinking_delta`、`assistant_delta`、`tool_start`、`tool_update`、`tool_end`、`progress`、`final`、`error` 和 `usage`。
+
+### 会话继续与取消
+
+- 同一会话同一时间只允许一个处理中请求，Redis key 为 `session:processing:{sessionId}`。
+- `POST /api/chat-sessions/s/:sessionId/messages/cancel` 会释放 pending、释放并发槽位和本地 agent 租约，并向 `ipc:{runtimeId}:cancel` 写入取消请求。
+- 如果会话长期未活跃且本地 Pi session 文件缺失，消息列表会返回 `continuation_blocked`，前端应阻止继续追问并提示用户新建对话。
 
 ---
 
@@ -354,6 +445,85 @@ Authorization: Bearer <token>
 | POST | `/api/paipan/commit`  | 需认证，把预览或即时排盘结果提交到 AI Chat        |
 
 `commit.target` 支持 `new_session_from_preview` 和 `current_session`。提交到当前会话时传 `sessionId`；也可以直接传 `skill` + `input` 让服务端即时排盘并写入。
+
+当前内置系统排盘目录由 `apps/api/src/modules/chat/paipan-registry.ts` 维护，常见 `skill` 值包括：
+
+- `bazi-paipan`：八字排盘
+- `ziwei-paipan`：紫微斗数排盘
+- `qimen-paipan`：奇门遁甲排盘
+- `iching-paipan`：六爻纳甲排盘
+- `jingzhan-paipan`：周易经占排盘
+- `meihua-paipan`：梅花易数排盘
+- `liuren-paipan`：大六壬排盘
+
+`preview` 响应中的 `skillContextEntry` 会包含：
+
+```json
+{
+  "previewId": "uuid",
+  "skillContextEntry": {
+    "skill": "bazi-paipan",
+    "output": "格式化后的盘面摘要",
+    "artifactType": "skill.bazi-paipan",
+    "artifactTitle": "八字排盘",
+    "artifactData": {}
+  },
+  "expiresAt": "2026-06-14T10:30:00.000Z"
+}
+```
+
+`artifactData` 是结构化盘面数据，提交到会话后会保存在消息 `tool_context` 中，后续 AI Chat 会把它作为盘面上下文，而不是重新排盘。
+
+---
+
+## Simple Workflows 简易模式
+
+简易模式是面向普通用户的组合入口，当前后端路由只有启动接口。它会读取后台默认 preset，先执行确定性排盘并创建 AI Chat 会话，再异步入队首轮 AI 解读。
+
+### POST /api/simple-workflows/start
+
+需认证。
+
+占卜问事请求：
+
+```json
+{
+  "kind": "divination",
+  "question": "这个项目下个月适合推进吗？",
+  "background": "可选背景"
+}
+```
+
+命理分析请求：
+
+```json
+{
+  "kind": "natal",
+  "solarDate": "1998-08-16",
+  "hour": 8,
+  "minute": 30,
+  "gender": "男",
+  "questionDirection": "事业方向"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "session": {
+    "id": "session-...",
+    "account_id": "web:user-id",
+    "title": "占卜问事：这个项目下个月适合推进吗？",
+    "created_at": "2026-06-14T10:00:00.000Z",
+    "updated_at": "2026-06-14T10:00:00.000Z"
+  },
+  "boardMessageId": "simple-workflow-board-...",
+  "assistantMessageId": "simple-workflow-user-..._reply"
+}
+```
+
+首轮 AI 解读是后台异步启动的。若模型请求没有成功入队，服务端会保留会话和盘面，并写入一条失败说明消息；用户仍可在该会话里追问。
 
 ---
 
@@ -370,58 +540,9 @@ Authorization: Bearer <token>
 
 ## Skills 商店与创作者
 
-### GET /api/skills/catalog
+`/api/skills` 当前只承载用户 Text Skill Bundle、Bundle 组合、市场和授权邀请。系统排盘目录不在这里维护：普通用户直接看 `/api/paipan/catalog`，管理端全局开关在 `/api/admin/skills/global`。
 
-公开系统排盘兼容目录。无需认证。
-
-### GET /api/skills
-
-获取所有系统排盘兼容列表，合并全局状态、默认值和当前用户启用状态。需认证。
-
-**Response 200**
-
-```json
-[
-  {
-    "name": "health-check",
-    "description": "系统健康检查 — 验证 agent 运行环境是否正常。",
-    "trigger": "当用户说「系统检查」「自检」时触发",
-    "enabled": true
-  }
-]
-```
-
----
-
-### PATCH /api/skills/:name/toggle
-
-切换某个系统排盘的启用状态。需认证。
-
-**Path Params**
-
-| 参数 | 说明       |
-| ---- | ---------- |
-| name | 系统排盘名称 |
-
-**Request Body**
-
-```json
-{ "enabled": true }
-```
-
-**Response 200**
-
-```json
-{ "success": true }
-```
-
-**Error 404**
-
-```json
-{ "error": "Skill 不存在" }
-```
-
----
+Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-<id>/`，数据库只保存 metadata、权限、版本、安装状态、checksum 和 `bundle_uri`。agent-runtime 每轮只读取当前请求授权的 Bundle，不扫描 Pi 全局 Skill 目录。
 
 ### 用户自定义 Skill
 
@@ -500,6 +621,18 @@ Authorization: Bearer <token>
 - `GET /api/skills/market`：公开 Skill 市场
 - `GET /api/skills/bundles/market`：公开 Bundle 市场
 - `GET /api/skills/subscriptions/mine`：我的订阅
+
+---
+
+## Referrals 邀请
+
+用户侧邀请接口。邀请预览无需认证，其他接口需认证。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/referrals/me` | 当前用户邀请概览、邀请码和奖励状态 |
+| GET | `/api/referrals/invites/:code/preview` | 公开预览邀请码 |
+| POST | `/api/referrals/invites/:code/redeem` | 登录后绑定邀请码 |
 
 ---
 

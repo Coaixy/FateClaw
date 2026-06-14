@@ -56,7 +56,9 @@ apps/api/src/interfaces/http/
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
+- `/api/referrals`
 - `/api/skills`
+- `/api/simple-workflows`
 - `/api/billing`
 - `/api/health`
 - `/api/ready`
@@ -87,6 +89,20 @@ apps/api/src/interfaces/http/
 - 真实缺失的静态资源返回 404，不再错误兜底到首页
 
 这意味着 API 层同时承担了前端生产站点托管职责。
+
+### AI Chat 异步链路
+
+站内 AI Chat 的发送接口不是同步拿最终回复：
+
+- `POST /api/chat-sessions/s/:sessionId/messages` 由 `chat-session-service.ts` 写入用户消息、抢占会话锁、解析 `llmRuntime` 后入队。
+- 正常响应通常是 `accepted: true` 和 `request_id`，最终 assistant 消息由 `runtime/ipc-ai-chat-outbox-handler.ts` 从 `ipc:{runtimeId}:ai-chat:outbox` 异步落库。
+- 前端实时展示走 `runtime/ai-chat-stream.ts`：先 `POST /api/chat-sessions/s/:sessionId/stream-ticket`，再连 `/api/chat-sessions/s/:sessionId/stream` WebSocket。
+- 取消接口会释放 pending、会话锁、全局并发槽和本地 agent 租约，并向 `ipc:{runtimeId}:cancel` 写入取消请求。
+
+### 排盘与简易模式
+
+- `/api/paipan/*` 是 API 内部 TypeScript runner 的确定性排盘，不需要模型 runtime。
+- `/api/simple-workflows/start` 先按后台 preset 直接排盘创建会话和盘面消息，再异步启动首轮 AI Chat；preset 可以限制模型策略和本轮授权 Skill。
 
 ### 健康探针
 

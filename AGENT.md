@@ -9,6 +9,7 @@
 - 宿主在 `apps/api/src/`
 - agent-runtime 在 `apps/agent-runtime/`
 - 前端在 `apps/web/`
+- 管理后台在 `apps/admin/`
 - 系统排盘实现内置在 `apps/api/src/modules/chat/paipan-runners/`
 
 ## 建议阅读顺序
@@ -92,10 +93,20 @@ Web 负责：
 
 - 用户登录注册
 - 账号管理和 Soul 编辑
-- 聊天、日志、任务、技能、设置
-- 管理后台
+- AI Chat、手动排盘、自贴盘面、简易模式入口
+- 技能市场、创作者 Studio、钱包、设置
 
 开发态独立运行在 `3001`，生产态是静态导出后由宿主托管。
+
+### Admin `apps/admin/`
+
+Admin 是独立管理后台静态站点，负责：
+
+- 管理登录和权限范围识别
+- 用户、消息、会话、日志和 Skill 检索
+- 官方模型 Provider、运行时、充值、奖励、会员、公告、workflow preset 配置
+
+开发态独立运行在 `3002`，生产态建议独立部署到 admin 域名；安全边界仍在后端 `/api/admin/*` 的 `X-Admin-Key` 校验和反向代理入口保护。
 
 ## 关键认知
 
@@ -121,7 +132,28 @@ Web 负责：
 
 实际注入 agent-runtime 的环境变量统一由 `apps/api/src/runtime/agent-env.ts` 生成。排查模型调用问题时优先看宿主解析出的 `llmRuntime`、数据库 provider 配置和 IPC payload。
 
-### 5. 测试按改动范围聚焦运行
+### 5. 站内 AI Chat 是异步入队 + 流式推送
+
+`sendOwnedChatSessionMessage()` 会先写入用户消息、抢占 `session:processing:{sessionId}` 锁、解析模型 runtime 和盘面上下文，然后 `dispatchAiChatPrompt()` 入队。HTTP 响应通常只返回 `accepted` 和 `request_id`；最终 assistant 消息由 `ipc-ai-chat-outbox-handler.ts` 落库、结算、写 conversation log，并通过 `ai-chat-stream.ts` 的 WebSocket 推送给前端。
+
+排查“前端没显示回复”时不要只看 POST 返回值，要同时看：
+
+- `pendingAiChatRequests`
+- `ipc:{runtimeId}:inbox` / `ipc:{runtimeId}:ai-chat:outbox`
+- session busy 锁
+- WebSocket stream ticket 和 Redis pub/sub
+- `messages.metadata.request_id`
+- `conversation_logs` / `conversation_log_payloads`
+
+### 6. 排盘和知识库不是一类东西
+
+系统排盘由 API 侧确定性 runner 执行，目录和参数 schema 在 `paipan-registry.ts`；用户知识库是 Text Skill Bundle，正文在 `.fateclaw/text-skills` 文件系统目录。Pi Runtime 不应自行“调用排盘工具”，只读取本轮授权 Markdown Skill，并结合已写入会话的盘面 artifact 推理。
+
+### 7. 简易模式是 preset 驱动的组合 workflow
+
+`/api/simple-workflows/start` 会读取后台 preset，先调用直接排盘创建会话和盘面消息，再异步发送首轮 AI Chat。它可能覆盖模型策略，并把 preset 绑定的 `skill_bundle_ids` 或 `skill_snapshot_ids` 限定为本轮授权知识来源。
+
+### 8. 测试按改动范围聚焦运行
 
 仓库保留了 Vitest 测试源文件。验证改动时优先运行对应范围的测试，再补类型检查和构建：
 
@@ -132,7 +164,7 @@ Web 负责：
 
 根级 `pnpm test` 使用 Vitest；大改动不要只依赖 `--passWithNoTests` 的空覆盖结果。
 
-### 6. 微信链路是“既有账号后端可跑，新绑定前端关闭”
+### 9. 微信链路是“既有账号后端可跑，新绑定前端关闭”
 
 `apps/api/src/app/index.ts` 当前会初始化 DB、Redis、系统排盘开关、IPC worker、retention worker 和 Fastify API，并为已启用且会员有效的既有微信账号启动 `startAccountPolling()` 与对应 IPC listener。`activateAccount()` 也会热激活绑定账号。
 
@@ -144,6 +176,9 @@ Web 负责：
 - `apps/api/src/modules/skills/`: Text Skill Bundle 写入和技能 HTTP 服务
 - `apps/api/src/modules/chat/paipan-registry.ts`: 系统排盘目录清单、参数 schema 和 runner 绑定
 - `apps/api/src/modules/chat/paipan-runners/`: 系统排盘 TypeScript 确定性实现
+- `apps/api/src/modules/chat/simple-workflow-service.ts`: 简易模式 preset、直接排盘和首轮 AI Chat 编排
+- `apps/api/src/runtime/ai-chat-stream.ts`: AI Chat WebSocket stream ticket 与 Redis pub/sub
+- `apps/api/src/runtime/ipc-ai-chat-outbox-handler.ts`: 站内 AI Chat 最终回复落库、结算、日志和推流
 - `apps/agent-runtime/src/request-boundary.ts`: 单次请求的边界、错误映射和 trace 汇总
 - `apps/agent-runtime/src/pi-runtime/`: Pi Runtime、ResourceLoader、custom tools 和 Skill 文件读取
 - `apps/agent-runtime/src/text-skill-bundle.ts`: 用户 Text Skill Bundle 文件读取边界
@@ -159,6 +194,7 @@ Web 负责：
 - 不要只根据 `paipan-registry.ts` 判断系统排盘是否对用户生效，还要结合 `skill_global_config` 和用户启用状态
 - 不要把用户私有知识写到 `.pi/skills`、`~/.pi/agent/skills` 或任何全局扫描目录；私有知识必须是 request-scoped Text Skill Bundle
 - 不要把 `dev:api-only` 和正式启动混为一谈，它明确跳过轮询、IPC worker、调度和 runtime 激活
+- 不要把 AI Chat 的 HTTP `accepted` 当成最终回复；最终消息由 ai-chat outbox handler 异步写入，前端靠 WebSocket 和消息重载展示
 - 不要在 agent-runtime 里找 one-shot/stdin 入口或 Dockerfile，它们已移除。当前仅保留 `daemon.ts` 入口 + Redis IPC，唯一消费宿主注入 env 的路径是 `src/context.ts`
 - 系统排盘不再依赖旧版说明文件或独立脚本目录；用户知识正文在文件系统 Text Skill Bundle 中，DB 只保存 metadata 和 bundle 地址
 
