@@ -115,6 +115,8 @@ function toModelSettingsOverviewDto(
     official_models: overview.official_models.map(toOfficialModelDto),
     default_official_model_id: overview.default_official_model_id,
     default_thinking_level: overview.default_thinking_level,
+    custom_model_membership_required: overview.custom_model_membership_required,
+    custom_model_membership_entitled: overview.custom_model_membership_entitled,
     custom_model_platform_price_per_million_coins:
       overview.custom_model_platform_price_per_million_coins,
   };

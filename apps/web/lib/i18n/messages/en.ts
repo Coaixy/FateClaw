@@ -521,7 +521,7 @@ export const enMessages = {
       backProfile: 'Back to profile',
       title: 'Model settings',
       description:
-        'Configure official models or custom provider models. The current selection is used for AI replies.',
+        'Configure official models or member-only custom models. The current selection is used for AI replies.',
       loading: 'Loading…',
       defaultOfficialMessage:
         'Defaulting to the lowest-priced official model: {model}',
@@ -543,7 +543,7 @@ export const enMessages = {
       summarySource: 'Source',
       summaryOfficialAvailable: 'Official available',
       summaryProtocol: 'Custom protocol',
-      summaryPlatformFee: 'Platform fee',
+      summaryCustomAccess: 'Custom access',
       summaryThinking: 'Thinking level',
       unconfigured: 'Not configured',
       thinkingTitle: 'Thinking level',
@@ -553,9 +553,13 @@ export const enMessages = {
       customTitle: 'Custom model',
       current: 'Current',
       customDescription:
-        'Connect your own provider account. Site platform fees are charged separately.',
+        'Connect your own provider account. This capability is member-only.',
       customBillingDescription:
-        'Provider charges are billed by your provider account. The site charges a platform fee on combined input and output tokens: {fee} per million tokens.',
+        'Provider charges are billed by your provider account. The site does not add per-token charges for custom models.',
+      customMemberOnly: 'Member only',
+      customMemberActive: 'Member access',
+      customIncluded: 'Available',
+      openMembership: 'Open membership',
       apiKeyPlaceholder: 'Enter API key',
       saveModel: 'Save model',
       connectionStatus: 'Connection status',
@@ -582,7 +586,6 @@ export const enMessages = {
       inputToken: 'Input',
       outputToken: 'Output',
       perMillionToken: 'million tokens',
-      customFeeLabel: 'Platform token service fee {fee} / million tokens',
     },
     dataManagement: {
       allData: 'all data (messages and memories)',

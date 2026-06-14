@@ -6,6 +6,7 @@ import {
   createOfficialModelConfig,
   deleteOfficialModelConfig,
   deleteUserModelSelectionsByOfficialModelId,
+  getMembershipOverview,
   getOfficialModelConfig,
   getModelBillingConfig,
   getRuntimeConfig,
@@ -42,6 +43,7 @@ import {
   MAX_SKILL_BUNDLE_ZIP_BYTES,
   type SkillBundleLimitsDto,
 } from '@fateclaw/contracts/skills';
+import { hasBaseMembershipEntitlement } from '../../shared/membership-plans.js';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export type ProviderAuthMode =
@@ -70,6 +72,8 @@ export const DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS = MAX_SKILL_BUNDLE_FILE_LENGTH;
 export const DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS =
   MAX_SKILL_BUNDLE_TOTAL_LENGTH;
 export const DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES = MAX_SKILL_BUNDLE_ZIP_BYTES;
+const CUSTOM_MODEL_MEMBERSHIP_REQUIRED_MESSAGE =
+  '自配模型为会员专属，请开通会员后使用';
 
 export type SkillBundleLimitsPolicy = SkillBundleLimitsDto;
 
@@ -118,6 +122,8 @@ export interface UserModelSettingsOverview {
   official_models: AdminOfficialModelView[];
   default_official_model_id: string | null;
   default_thinking_level: PiThinkingLevel;
+  custom_model_membership_required: boolean;
+  custom_model_membership_entitled: boolean;
   custom_model_platform_price_per_million_coins: number;
 }
 
@@ -158,6 +164,22 @@ function normalizeThinkingLevel(value: unknown): PiThinkingLevel {
   return PI_THINKING_LEVELS.includes(value as PiThinkingLevel)
     ? (value as PiThinkingLevel)
     : DEFAULT_PI_THINKING_LEVEL;
+}
+
+async function hasCustomModelMembershipEntitlement(
+  userId: string,
+): Promise<boolean> {
+  const membership = await getMembershipOverview(userId);
+  return hasBaseMembershipEntitlement(membership);
+}
+
+async function assertCustomModelMembershipEntitlement(
+  userId: string,
+): Promise<void> {
+  // 自配模型现在作为会员项目控制，避免过期会员继续沿用历史选择。
+  if (!(await hasCustomModelMembershipEntitlement(userId))) {
+    throw new Error(CUSTOM_MODEL_MEMBERSHIP_REQUIRED_MESSAGE);
+  }
 }
 
 function normalizeRuntimeDefaultThinkingLevel(value: unknown): PiThinkingLevel {
@@ -565,6 +587,7 @@ async function resolveCustomRuntime(
   userId: string,
   thinkingLevel: PiThinkingLevel = DEFAULT_PI_THINKING_LEVEL,
 ): Promise<EffectiveLlmRuntimeConfig> {
+  await assertCustomModelMembershipEntitlement(userId);
   const config = await getUserModelConfig(userId);
   if (!config) {
     throw new Error('当前选择了自配模型，但尚未保存模型配置');
@@ -578,7 +601,6 @@ async function resolveCustomRuntime(
     throw new Error('当前选择了自配模型，但尚未保存 API Key');
   }
   const modelName = requireModelName(config.model_name, '自配模型');
-  const billingConfig = await getModelBillingConfig();
   const contextWindowTokens = resolveContextWindow({
     model: modelName,
     configured: normalizeModelContextWindowTokens(
@@ -601,10 +623,8 @@ async function resolveCustomRuntime(
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
     thinkingLevel,
-    inputTokenPricePerMillionCoins:
-      billingConfig.custom_model_platform_price_per_million_coins,
-    outputTokenPricePerMillionCoins:
-      billingConfig.custom_model_platform_price_per_million_coins,
+    inputTokenPricePerMillionCoins: 0,
+    outputTokenPricePerMillionCoins: 0,
   };
 }
 
@@ -1163,13 +1183,14 @@ export async function removeOfficialModel(
 export async function getUserModelSettingsOverview(
   userId: string,
 ): Promise<UserModelSettingsOverview> {
-  const [custom, selection, officialModels, modelBilling, runtime] =
+  const [custom, selection, officialModels, modelBilling, runtime, membership] =
     await Promise.all([
       getUserModelConfig(userId),
       getUserModelSelection(userId),
       listOfficialModelViews(),
       getModelBillingConfig(),
       getRuntimeConfig(),
+      getMembershipOverview(userId),
     ]);
   const customSecret = custom
     ? await resolveSecret({
@@ -1204,6 +1225,8 @@ export async function getUserModelSettingsOverview(
     default_thinking_level: normalizeRuntimeDefaultThinkingLevel(
       runtime.default_thinking_level,
     ),
+    custom_model_membership_required: true,
+    custom_model_membership_entitled: hasBaseMembershipEntitlement(membership),
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
   };
@@ -1218,6 +1241,7 @@ export async function saveUserCustomModelConfig(args: {
   contextWindowTokens?: number | null;
   secretValue?: string;
 }): Promise<UserModelConfig> {
+  await assertCustomModelMembershipEntitlement(args.userId);
   const existing = await getUserModelConfig(args.userId);
   const baseUrl = normalizeCustomModelBaseUrl(args.baseUrl);
   const secretKey = args.secretValue
@@ -1267,6 +1291,8 @@ export async function setUserModelSelection(args: {
     if (!model || !model.enabled) {
       throw new Error('选择的官方模型不可用');
     }
+  } else {
+    await assertCustomModelMembershipEntitlement(args.userId);
   }
   return upsertUserModelSelection({
     userId: args.userId,

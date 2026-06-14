@@ -86,6 +86,8 @@ function hasUsableOfficialSelection(data: ModelSettingsOverview | null) {
 function hasUsableCustomSelection(data: ModelSettingsOverview | null) {
   return Boolean(
     data?.selection?.source === 'custom' &&
+      (!data.custom_model_membership_required ||
+        data.custom_model_membership_entitled) &&
       data.custom?.model_name.trim() &&
       data.custom.has_secret,
   );

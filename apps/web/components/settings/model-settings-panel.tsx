@@ -10,7 +10,6 @@ import {
   type SetStateAction,
 } from 'react';
 import {
-  BadgeDollarSign,
   Brain,
   ChevronDown,
   Check,
@@ -25,6 +24,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import Link from 'next/link';
 
 import {
   modelSettingsApi,
@@ -36,12 +36,7 @@ import {
 } from '@/features/model-settings/api';
 import { PI_API_OPTIONS } from '../../features/model-settings/pi-api-options';
 import { OfficialModelPriceTags } from './official-model-price-tags';
-import {
-  customModelPlatformFeeAmountLabel,
-  customModelPlatformFeeLabel,
-  DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS,
-  findLowestPricedOfficialModel,
-} from './model-pricing';
+import { findLowestPricedOfficialModel } from './model-pricing';
 import { useI18n } from '@/lib/i18n';
 
 const CONTROL =
@@ -112,7 +107,12 @@ function customDraftFromOverview(data: ModelSettingsOverview): CustomDraft {
 }
 
 function hasUsableCustomModel(data: ModelSettingsOverview): boolean {
-  return Boolean(data.custom?.model_name.trim() && data.custom.has_secret);
+  return Boolean(
+    (!data.custom_model_membership_required ||
+      data.custom_model_membership_entitled) &&
+      data.custom?.model_name.trim() &&
+      data.custom.has_secret,
+  );
 }
 
 function hasUsableOfficialSelection(data: ModelSettingsOverview): boolean {
@@ -165,7 +165,7 @@ function buildDefaultOfficialSelection(
 }
 
 export function ModelSettingsPanel() {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [overview, setOverview] = useState<ModelSettingsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -332,9 +332,15 @@ export function ModelSettingsPanel() {
 
   const selection = overview?.selection;
   const officialModels = overview?.official_models ?? [];
-  const customModelPlatformFeeCoins =
-    overview?.custom_model_platform_price_per_million_coins ??
-    DEFAULT_CUSTOM_MODEL_PLATFORM_PRICE_PER_MILLION_COINS;
+  const customModelMembershipRequired =
+    overview?.custom_model_membership_required ?? true;
+  const customModelMembershipEntitled =
+    overview?.custom_model_membership_entitled ?? false;
+  const customModelAccessLabel = customModelMembershipRequired
+    ? customModelMembershipEntitled
+      ? t('pages.modelSettings.customMemberActive')
+      : t('pages.modelSettings.customMemberOnly')
+    : t('pages.modelSettings.customIncluded');
   const selectedSourceLabel =
     selection?.source === 'custom'
       ? t('pages.modelSettings.customSource')
@@ -400,11 +406,8 @@ export function ModelSettingsPanel() {
               value={custom.pi_api || t('pages.modelSettings.unconfigured')}
             />
             <SummaryTile
-              label={t('pages.modelSettings.summaryPlatformFee')}
-              value={customModelPlatformFeeAmountLabel(
-                customModelPlatformFeeCoins,
-                locale,
-              )}
+              label={t('pages.modelSettings.summaryCustomAccess')}
+              value={customModelAccessLabel}
             />
             <SummaryTile
               label={t('pages.modelSettings.summaryThinking')}
@@ -437,8 +440,8 @@ export function ModelSettingsPanel() {
       <CustomModelSection
         busy={busy}
         custom={custom}
-        customModelPlatformFeeCoins={customModelPlatformFeeCoins}
-        locale={locale}
+        membershipEntitled={customModelMembershipEntitled}
+        membershipRequired={customModelMembershipRequired}
         selected={selection?.source === 'custom'}
         setCustom={setCustom}
         t={t}
@@ -591,8 +594,8 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 function CustomModelSection({
   busy,
   custom,
-  customModelPlatformFeeCoins,
-  locale,
+  membershipEntitled,
+  membershipRequired,
   selected,
   setCustom,
   t,
@@ -601,14 +604,21 @@ function CustomModelSection({
 }: {
   busy: string;
   custom: CustomDraft;
-  customModelPlatformFeeCoins: number;
-  locale: Parameters<typeof customModelPlatformFeeAmountLabel>[1];
+  membershipEntitled: boolean;
+  membershipRequired: boolean;
   selected: boolean;
   setCustom: Dispatch<SetStateAction<CustomDraft>>;
   t: TranslationFn;
   onSaveCustom: () => Promise<void>;
   onSelectCustom: () => Promise<void>;
 }) {
+  const membershipBlocked = membershipRequired && !membershipEntitled;
+  const membershipBadge = membershipRequired
+    ? membershipEntitled
+      ? t('pages.modelSettings.customMemberActive')
+      : t('pages.modelSettings.customMemberOnly')
+    : t('pages.modelSettings.customIncluded');
+
   return (
     <section
       className={`overflow-hidden rounded-lg border ${
@@ -638,19 +648,14 @@ function CustomModelSection({
           </div>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-          {customModelPlatformFeeLabel(customModelPlatformFeeCoins, locale, t)}
+          {membershipBadge}
         </span>
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="p-4 sm:p-5">
           <div className="mb-4 text-[12px] leading-5 text-muted">
-            {t('pages.modelSettings.customBillingDescription', {
-              fee: customModelPlatformFeeAmountLabel(
-                customModelPlatformFeeCoins,
-                locale,
-              ),
-            })}
+            {t('pages.modelSettings.customBillingDescription')}
           </div>
           <CustomModelFields
             custom={custom}
@@ -680,6 +685,7 @@ function CustomModelSection({
               onClick={() => void onSaveCustom()}
               disabled={
                 busy === 'custom' ||
+                membershipBlocked ||
                 !custom.model_name.trim() ||
                 !custom.api_key.trim()
               }
@@ -708,14 +714,11 @@ function CustomModelSection({
           <div className="mt-4 space-y-3 border-y border-hairline/70 py-4">
             <div>
               <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
-                <BadgeDollarSign size={12} className="text-primary" />
-                {t('pages.modelSettings.summaryPlatformFee')}
+                <Sparkles size={12} className="text-primary" />
+                {t('pages.modelSettings.summaryCustomAccess')}
               </div>
               <div className="mt-1 text-[13px] font-semibold text-ink">
-                {customModelPlatformFeeAmountLabel(
-                  customModelPlatformFeeCoins,
-                  locale,
-                )}
+                {membershipBadge}
               </div>
             </div>
             <div>
@@ -730,8 +733,8 @@ function CustomModelSection({
           <button
             type="button"
             onClick={() => void onSelectCustom()}
-            disabled={busy === 'select-custom'}
-            className={`mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-3 text-[13px] transition-colors ${
+            disabled={busy === 'select-custom' || membershipBlocked}
+            className={`mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-3 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               selected
                 ? 'bg-primary/15 text-primary'
                 : 'border border-hairline bg-surface-card text-muted hover:bg-surface-cream-strong hover:text-ink'
@@ -742,6 +745,14 @@ function CustomModelSection({
               ? t('pages.modelSettings.selectCustomCurrent')
               : t('pages.modelSettings.selectCustom')}
           </button>
+          {membershipBlocked && (
+            <Link
+              href="/membership"
+              className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/40 hover:bg-primary/15"
+            >
+              {t('pages.modelSettings.openMembership')}
+            </Link>
+          )}
         </aside>
       </div>
     </section>

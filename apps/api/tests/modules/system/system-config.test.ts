@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockGetOfficialModelConfig,
   mockGetModelBillingConfig,
+  mockGetMembershipOverview,
   mockGetRuntimeConfig,
   mockGetSystemSecret,
   mockGetUserModelConfig,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetOfficialModelConfig: vi.fn(),
   mockGetModelBillingConfig: vi.fn(),
+  mockGetMembershipOverview: vi.fn(),
   mockGetRuntimeConfig: vi.fn(),
   mockGetSystemSecret: vi.fn(),
   mockGetUserModelConfig: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   deleteUserModelSelectionsByOfficialModelId:
     mockDeleteUserModelSelectionsByOfficialModelId,
   getModelBillingConfig: mockGetModelBillingConfig,
+  getMembershipOverview: mockGetMembershipOverview,
   getOfficialModelConfig: mockGetOfficialModelConfig,
   getRuntimeConfig: mockGetRuntimeConfig,
   getSystemSecret: mockGetSystemSecret,
@@ -121,6 +124,13 @@ function custom(overrides: Partial<UserModelConfig> = {}): UserModelConfig {
   };
 }
 
+function membership(active = true) {
+  return {
+    active,
+    membership: active ? { plan_key: 'fateclaw_plus' } : null,
+  };
+}
+
 describe('resolveUserLlmRuntime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -131,6 +141,7 @@ describe('resolveUserLlmRuntime', () => {
       custom_model_platform_price_per_million_coins: 2,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
+    mockGetMembershipOverview.mockResolvedValue(membership());
     mockGetRuntimeConfig.mockResolvedValue({
       id: 'default',
       agent_concurrency_limit: 10,
@@ -377,7 +388,7 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
-  it('resolves selected custom model with platform token billing', async () => {
+  it('resolves selected custom model as a member-only model without platform token billing', async () => {
     mockGetUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
       source: 'custom',
@@ -396,12 +407,12 @@ describe('resolveUserLlmRuntime', () => {
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
       thinkingLevel: 'medium',
-      inputTokenPricePerMillionCoins: 2,
-      outputTokenPricePerMillionCoins: 2,
+      inputTokenPricePerMillionCoins: 0,
+      outputTokenPricePerMillionCoins: 0,
     });
   });
 
-  it('uses configured platform price for selected custom model billing', async () => {
+  it('ignores configured platform price for selected custom model billing', async () => {
     mockGetModelBillingConfig.mockResolvedValue({
       id: 'default',
       custom_model_platform_price_per_million_coins: 9,
@@ -417,8 +428,33 @@ describe('resolveUserLlmRuntime', () => {
     mockGetUserModelConfig.mockResolvedValue(custom());
 
     await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
-      inputTokenPricePerMillionCoins: 9,
-      outputTokenPricePerMillionCoins: 9,
+      inputTokenPricePerMillionCoins: 0,
+      outputTokenPricePerMillionCoins: 0,
+    });
+  });
+
+  it('falls back to official models when a selected custom model lacks membership entitlement', async () => {
+    mockGetMembershipOverview.mockResolvedValue(membership(false));
+    mockGetUserModelSelection.mockResolvedValue({
+      user_id: 'user-1',
+      source: 'custom',
+      official_model_id: null,
+      created_at: '2026-05-04T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserModelConfig.mockResolvedValue(custom());
+    mockListOfficialModelConfigs.mockResolvedValue([
+      official({
+        id: 'fallback',
+        model_key: 'fallback',
+        display_name: 'Fallback',
+        model_name: 'gpt-4o-mini',
+      }),
+    ]);
+
+    await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
+      source: 'official',
+      modelConfigId: 'fallback',
     });
   });
 
@@ -435,6 +471,8 @@ describe('resolveUserLlmRuntime', () => {
           api_key_preview: '...cret',
         },
         official_models: [],
+        custom_model_membership_required: true,
+        custom_model_membership_entitled: true,
       },
     );
   });
@@ -637,6 +675,7 @@ describe('saveUserCustomModelConfig', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserModelConfig.mockResolvedValue(undefined);
+    mockGetMembershipOverview.mockResolvedValue(membership());
     mockUpsertSystemSecret.mockResolvedValue(
       secret('user-model:user-1:secret'),
     );
@@ -695,6 +734,23 @@ describe('saveUserCustomModelConfig', () => {
         apiKeySecretKey: 'user-model:user-1:secret',
       }),
     );
+  });
+
+  it('rejects custom model saves without membership entitlement', async () => {
+    mockGetMembershipOverview.mockResolvedValue(membership(false));
+
+    await expect(
+      saveUserCustomModelConfig({
+        userId: 'user-1',
+        piApi: 'openai-completions',
+        baseUrl: 'https://models.example.com/v1',
+        modelName: 'gpt-4o',
+        secretValue: 'plain-secret',
+      }),
+    ).rejects.toThrow('自配模型为会员专属，请开通会员后使用');
+
+    expect(mockUpsertUserModelConfig).not.toHaveBeenCalled();
+    expect(mockUpsertSystemSecret).not.toHaveBeenCalled();
   });
 });
 
@@ -797,6 +853,7 @@ describe('setUserModelSelection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserModelSelection.mockResolvedValue(undefined);
+    mockGetMembershipOverview.mockResolvedValue(membership());
     mockGetRuntimeConfig.mockResolvedValue({
       id: 'default',
       agent_concurrency_limit: 10,
@@ -837,6 +894,19 @@ describe('setUserModelSelection', () => {
         thinkingLevel: 'high',
       }),
     );
+  });
+
+  it('rejects custom selections without membership entitlement', async () => {
+    mockGetMembershipOverview.mockResolvedValue(membership(false));
+
+    await expect(
+      setUserModelSelection({
+        userId: 'user-1',
+        source: 'custom',
+      }),
+    ).rejects.toThrow('自配模型为会员专属，请开通会员后使用');
+
+    expect(mockUpsertUserModelSelection).not.toHaveBeenCalled();
   });
 });
 

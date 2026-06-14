@@ -31,6 +31,8 @@ const baseModelOverview: ModelSettingsOverview = {
   official_models: [],
   default_official_model_id: null,
   default_thinking_level: 'medium',
+  custom_model_membership_required: true,
+  custom_model_membership_entitled: true,
   custom_model_platform_price_per_million_coins: 0,
 };
 
@@ -139,6 +141,37 @@ describe('onboarding guide status helpers', () => {
         },
       }),
     ).toBe(true);
+  });
+
+  it('does not treat custom selections as ready without membership entitlement', () => {
+    expect(
+      hasUsableModelForGuide({
+        ...baseModelOverview,
+        custom_model_membership_entitled: false,
+        custom: {
+          user_id: 'user-1',
+          pi_api: 'openai-responses',
+          base_url: null,
+          model_name: 'custom-model',
+          context_window_tokens: null,
+          has_secret: true,
+          api_key_preview: null,
+          api_key_fingerprint: null,
+          api_key: null,
+          auth_mode: 'openai_api_key',
+          created_at: '2026-06-06T00:00:00.000Z',
+          updated_at: '2026-06-06T00:00:00.000Z',
+        },
+        selection: {
+          user_id: 'user-1',
+          source: 'custom',
+          official_model_id: null,
+          thinking_level: 'medium',
+          created_at: '2026-06-06T00:00:00.000Z',
+          updated_at: '2026-06-06T00:00:00.000Z',
+        },
+      }),
+    ).toBe(false);
   });
 
   it('filters enabled own and subscribed skills for AI Chat summaries', () => {

@@ -71,5 +71,9 @@ export interface ModelSettingsOverviewDto {
   official_models: OfficialModelDto[];
   default_official_model_id: string | null;
   default_thinking_level: ModelThinkingLevelDto;
+  /** 自配模型是否要求会员权益。 */
+  custom_model_membership_required: boolean;
+  /** 当前用户是否具备自配模型会员权益。 */
+  custom_model_membership_entitled: boolean;
   custom_model_platform_price_per_million_coins: number;
 }
