@@ -15,6 +15,7 @@ import {
   ServerCog,
   Sparkle,
   Sparkles,
+  TicketPercent,
   User as UserIcon,
   Wallet,
 } from 'lucide-react';
@@ -183,6 +184,12 @@ export function UserMenuDropdown({
             href="/wallet"
             icon={Wallet}
             label={t('userMenu.wallet')}
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/gifts"
+            icon={TicketPercent}
+            label={t('userMenu.gifts')}
             onNavigate={onNavigate}
           />
           <MenuItem

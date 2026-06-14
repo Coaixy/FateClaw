@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { billingApi, type BillingStatus } from '@/features/billing/api';
+import {
+  BILLING_CHANGED_EVENT,
+  billingApi,
+  type BillingStatus,
+} from '@/features/billing/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 /**
@@ -42,6 +46,20 @@ export function useBillingSnapshot() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const refreshAfterBillingChanged = () => {
+      void load();
+    };
+    window.addEventListener(BILLING_CHANGED_EVENT, refreshAfterBillingChanged);
+    return () => {
+      window.removeEventListener(
+        BILLING_CHANGED_EVENT,
+        refreshAfterBillingChanged,
+      );
+    };
+  }, [load, userId]);
 
   return {
     status,

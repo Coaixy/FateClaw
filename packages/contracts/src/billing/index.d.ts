@@ -148,6 +148,56 @@ export interface DailySignInResultDto extends DailySignInStatusDto {
   available_coins: number;
 }
 
+export type GiftCodeBalanceTypeDto = 'purchased' | 'bonus';
+export type GiftCodeUsageTypeDto = 'single' | 'multi';
+export type GiftCodeStatusDto = 'active' | 'disabled' | 'expired' | 'exhausted';
+
+export interface GiftCodeDto {
+  id: string;
+  code: string;
+  name: string;
+  balance_type: GiftCodeBalanceTypeDto;
+  usage_type: GiftCodeUsageTypeDto;
+  amount_coins: number;
+  max_redemptions: number;
+  redeemed_count: number;
+  enabled: boolean;
+  expires_at: string | null;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  status: GiftCodeStatusDto;
+}
+
+export interface GiftCodeRedemptionDto {
+  id: string;
+  gift_code_id: string;
+  user_id: string;
+  wallet_transaction_id: string | null;
+  balance_grant_id: string | null;
+  balance_type: GiftCodeBalanceTypeDto;
+  amount_coins: number;
+  redeemed_at: string;
+}
+
+export interface GiftCodeRedeemResultDto {
+  gift_code: GiftCodeDto;
+  redemption: GiftCodeRedemptionDto;
+  purchased_coins: number;
+  bonus_coins: number;
+  available_coins: number;
+}
+
+export interface AdminGiftCodesResponseDto {
+  gift_codes: GiftCodeDto[];
+  total: number;
+}
+
+export interface AdminCreateGiftCodesResponseDto {
+  gift_codes: GiftCodeDto[];
+}
+
 export type RechargePayTypeDto = 'alipay' | 'wechat';
 export type RechargeOrderStatusDto = 'pending' | 'paid' | 'failed';
 

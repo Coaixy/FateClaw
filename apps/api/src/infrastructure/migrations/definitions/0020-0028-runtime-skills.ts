@@ -884,4 +884,102 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0040_billing_gift_codes',
+    description: '增加软妹币礼品码和兑换记录',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gift_codes (
+          id TEXT PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL DEFAULT '',
+          balance_type TEXT NOT NULL,
+          usage_type TEXT NOT NULL,
+          amount_coins NUMERIC(14,2) NOT NULL,
+          max_redemptions INTEGER NOT NULL DEFAULT 1,
+          redeemed_count INTEGER NOT NULL DEFAULT 0,
+          enabled BOOLEAN NOT NULL DEFAULT true,
+          expires_at TIMESTAMPTZ DEFAULT NULL,
+          created_by TEXT DEFAULT NULL,
+          note TEXT DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gift_code_redemptions (
+          id TEXT PRIMARY KEY,
+          gift_code_id TEXT NOT NULL REFERENCES gift_codes(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          wallet_transaction_id TEXT DEFAULT NULL,
+          balance_grant_id TEXT DEFAULT NULL,
+          balance_type TEXT NOT NULL,
+          amount_coins NUMERIC(14,2) NOT NULL,
+          redeemed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (gift_code_id, user_id)
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_codes_balance_type_valid',
+        tableName: 'gift_codes',
+        expression: `balance_type IN ('purchased', 'bonus')`,
+        cleanupSql: `UPDATE gift_codes
+                     SET balance_type = 'bonus'
+                     WHERE balance_type NOT IN ('purchased', 'bonus')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_codes_usage_type_valid',
+        tableName: 'gift_codes',
+        expression: `usage_type IN ('single', 'multi')`,
+        cleanupSql: `UPDATE gift_codes
+                     SET usage_type = 'single'
+                     WHERE usage_type NOT IN ('single', 'multi')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_codes_amount_positive',
+        tableName: 'gift_codes',
+        expression: 'amount_coins > 0',
+        cleanupSql: `UPDATE gift_codes
+                     SET amount_coins = 1
+                     WHERE amount_coins <= 0`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_codes_redemptions_valid',
+        tableName: 'gift_codes',
+        expression:
+          'max_redemptions > 0 AND redeemed_count >= 0 AND redeemed_count <= max_redemptions',
+        cleanupSql: `UPDATE gift_codes
+                     SET max_redemptions = GREATEST(max_redemptions, 1),
+                         redeemed_count = LEAST(GREATEST(redeemed_count, 0), GREATEST(max_redemptions, 1))`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_code_redemptions_balance_type_valid',
+        tableName: 'gift_code_redemptions',
+        expression: `balance_type IN ('purchased', 'bonus')`,
+        cleanupSql: `UPDATE gift_code_redemptions
+                     SET balance_type = 'bonus'
+                     WHERE balance_type NOT IN ('purchased', 'bonus')`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_gift_code_redemptions_amount_positive',
+        tableName: 'gift_code_redemptions',
+        expression: 'amount_coins > 0',
+        cleanupSql: `UPDATE gift_code_redemptions
+                     SET amount_coins = 1
+                     WHERE amount_coins <= 0`,
+      });
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_gift_codes_created_at
+          ON gift_codes(created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_gift_codes_status_lookup
+          ON gift_codes(enabled, expires_at, redeemed_count, max_redemptions)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_gift_redemptions_user_time
+          ON gift_code_redemptions(user_id, redeemed_at DESC)
+      `);
+    },
+  },
 ];

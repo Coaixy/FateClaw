@@ -9,6 +9,7 @@ import {
   getBillingUsage,
   getDailySignInStatus,
   getPublicStatusOverview,
+  redeemCurrentUserGiftCode,
   resetBillingScope,
   subscribeCurrentUserMembership,
 } from '../../modules/billing/billing-service.js';
@@ -26,6 +27,10 @@ const MembershipSubscribeSchema = z
     plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']).optional(),
   })
   .optional();
+
+const GiftCodeRedeemSchema = z.object({
+  code: z.string().trim().min(1, '礼品码不能为空').max(80, '礼品码过长'),
+});
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/billing — 钱包余额与 Token 计费概览
@@ -91,6 +96,25 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/daily-sign-in', async (request, reply) => {
     await request.requireAuth();
     const result = await claimDailySignInReward(request.user.userId);
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // POST /api/billing/gifts/redeem — 兑换软妹币礼品码
+  app.post('/gifts/redeem', async (request, reply) => {
+    await request.requireAuth();
+    const parsed = GiftCodeRedeemSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '礼品码参数无效' });
+    }
+    const result = await redeemCurrentUserGiftCode(
+      request.user.userId,
+      parsed.data.code,
+    );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

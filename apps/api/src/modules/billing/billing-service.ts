@@ -10,6 +10,7 @@ import type {
   DailyUsageRowDto,
   DailySignInResultDto,
   DailySignInStatusDto,
+  GiftCodeRedeemResultDto,
   MembershipSubscribeResultDto,
   PublicStatusOverviewDto,
   PublicStatusServiceKeyDto,
@@ -27,6 +28,7 @@ import {
   getMembershipEntitlements,
   getUserById,
   getVisibleWalletTransactionsByUserId,
+  redeemGiftCodeForUser,
   resetUserData,
   resetUserMessages,
   updateSoulContent,
@@ -282,6 +284,27 @@ export async function claimDailySignInReward(
     bonus_coins: updated.bonus_coins,
     available_coins: updated.purchased_coins + updated.bonus_coins,
   });
+}
+
+/**
+ * 兑换当前用户输入的软妹币礼品码。
+ *
+ * 充值余额礼品会进入 purchased_coins；奖励余额礼品会进入 bonus_coins 并创建可追溯批次。
+ */
+export async function redeemCurrentUserGiftCode(
+  userId: string,
+  code: string,
+): Promise<ServiceResult<GiftCodeRedeemResultDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+
+  try {
+    return ok(await redeemGiftCodeForUser({ userId: user.id, code }));
+  } catch (err) {
+    return fail(400, err instanceof Error ? err.message : '礼品码兑换失败');
+  }
 }
 
 export async function resetBillingScope(

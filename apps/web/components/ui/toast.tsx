@@ -20,6 +20,12 @@ const styles: Record<ToastType, string> = {
   info: 'bg-surface-card text-ink border border-primary/30',
 };
 
+/**
+ * 提供全局轻量提示。
+ *
+ * @param children 页面内容。
+ * @returns 带 toast 容器的上下文 Provider。
+ */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
@@ -48,7 +54,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div
         // toast 是临时反馈，需要覆盖 BottomSheet(z=100) 和 ConfirmDialog(z=200)，否则弹层内触发的提示会被遮住。
-        className="fixed bottom-5 left-1/2 z-[300] flex w-[calc(100vw-2rem)] max-w-[520px] -translate-x-1/2 flex-col-reverse items-center gap-2 pointer-events-none"
+        className="fixed bottom-5 left-1/2 z-[300] flex w-[calc(100vw-2rem)] max-w-[360px] -translate-x-1/2 flex-col-reverse items-center gap-2 pointer-events-none"
         role="alert"
         aria-live="assertive"
       >
@@ -57,11 +63,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex w-full items-center justify-center gap-2.5 rounded-2xl px-5 py-3.5 text-center text-[14px] font-medium leading-relaxed shadow-2xl backdrop-blur-sm ${styles[t.type]} ${
+              className={`pointer-events-auto flex min-w-[180px] max-w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-center text-[13px] font-medium leading-normal shadow-lg backdrop-blur-sm ${styles[t.type]} ${
                 t.exiting ? 'animate-toast-exit' : 'animate-toast-enter'
               }`}
             >
-              <Icon size={18} className="shrink-0" />
+              <Icon size={16} className="shrink-0" />
               {t.message}
             </div>
           );

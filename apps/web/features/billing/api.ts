@@ -4,6 +4,7 @@ import type {
   DailyUsageRowDto,
   DailySignInResultDto,
   DailySignInStatusDto,
+  GiftCodeRedeemResultDto,
   MembershipSubscribeResultDto,
   PublicStatusOverviewDto,
   RechargeOrderDto,
@@ -24,6 +25,7 @@ export type UsageStats = UsageStatsDto;
 export type DailyUsageRow = DailyUsageRowDto;
 export type DailySignInStatus = DailySignInStatusDto;
 export type DailySignInResult = DailySignInResultDto;
+export type GiftCodeRedeemResult = GiftCodeRedeemResultDto;
 export type PublicStatusOverview = PublicStatusOverviewDto;
 export type RechargePayType = RechargePayTypeDto;
 export type RechargeOrder = RechargeOrderDto;
@@ -45,6 +47,7 @@ export interface BalanceGrant {
 
 const billingStatusRequestCache = createAuthScopedInFlightCache<BillingStatus>();
 const usageRequestCache = createAuthScopedInFlightCache<UsageStats>();
+export const BILLING_CHANGED_EVENT = 'fateclaw:billing-changed';
 
 /**
  * 清理账单概览和用量的 in-flight 请求缓存。
@@ -54,6 +57,9 @@ const usageRequestCache = createAuthScopedInFlightCache<UsageStats>();
 export function clearBillingCache() {
   billingStatusRequestCache.clear();
   usageRequestCache.clear();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(BILLING_CHANGED_EVENT));
+  }
 }
 
 export const billingApi = {
@@ -76,6 +82,11 @@ export const billingApi = {
   claimDailySignIn: () =>
     requestJson<DailySignInResult>('/api/billing/daily-sign-in', {
       method: 'POST',
+    }).finally(clearBillingCache),
+  redeemGiftCode: (code: string) =>
+    requestJson<GiftCodeRedeemResult>('/api/billing/gifts/redeem', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
     }).finally(clearBillingCache),
   subscribeMembership: (data?: { plan_key?: string }) =>
     requestJson<MembershipSubscribeResult>('/api/billing/membership/subscribe', {

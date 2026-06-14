@@ -3,7 +3,13 @@ import type {
   SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
 import type {
+  AdminCreateGiftCodesResponseDto,
+  AdminGiftCodesResponseDto,
   AdminStatusStatsDto,
+  GiftCodeBalanceTypeDto,
+  GiftCodeDto,
+  GiftCodeStatusDto,
+  GiftCodeUsageTypeDto,
   MembershipEntitlementDto,
   MembershipPlanDto,
   MembershipStatusDto,
@@ -344,6 +350,26 @@ export interface AdminWalletTransaction extends WalletTransaction {
 export interface AdminWalletTransactionsResponse {
   transactions: AdminWalletTransaction[];
   total: number;
+}
+
+export type AdminGiftCodeBalanceType = GiftCodeBalanceTypeDto;
+export type AdminGiftCodeUsageType = GiftCodeUsageTypeDto;
+export type AdminGiftCodeStatus = GiftCodeStatusDto;
+export type AdminGiftCode = GiftCodeDto;
+export type AdminGiftCodesResponse = AdminGiftCodesResponseDto;
+export type AdminCreateGiftCodesResponse = AdminCreateGiftCodesResponseDto;
+
+export interface AdminCreateGiftCodesPayload {
+  name?: string;
+  balance_type: AdminGiftCodeBalanceType;
+  usage_type: AdminGiftCodeUsageType;
+  amount_coins: number;
+  max_redemptions?: number;
+  quantity: number;
+  expires_at?: string | null;
+  note?: string;
+  code_prefix?: string;
+  code?: string;
 }
 
 export interface AdminMessage {
@@ -813,6 +839,27 @@ export const admin = {
       `/api/admin/billing/wallet-transactions${query ? `?${query}` : ''}`,
     );
   },
+  giftCodes: (opts?: {
+    status?: AdminGiftCodeStatus;
+    balance_type?: AdminGiftCodeBalanceType;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.balance_type) params.set('balance_type', opts.balance_type);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.offset) params.set('offset', String(opts.offset));
+    const query = params.toString();
+    return adminRequest<AdminGiftCodesResponse>(
+      `/api/admin/billing/gift-codes${query ? `?${query}` : ''}`,
+    );
+  },
+  createGiftCodes: (data: AdminCreateGiftCodesPayload) =>
+    adminRequest<AdminCreateGiftCodesResponse>('/api/admin/billing/gift-codes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   billingReservations: (opts?: {
     user_id?: string;
     hold_state?: AdminBillingHoldState;

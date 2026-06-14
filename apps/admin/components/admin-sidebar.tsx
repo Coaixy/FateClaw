@@ -16,6 +16,7 @@ import {
   Puzzle,
   ScrollText,
   Bot,
+  Gift,
   Landmark,
   ReceiptText,
   WalletCards,
@@ -45,6 +46,12 @@ const navItems = [
     href: '/billing',
     label: '账单管理',
     icon: ReceiptText,
+    roles: ['owner'],
+  },
+  {
+    href: '/gifts',
+    label: '礼品码',
+    icon: Gift,
     roles: ['owner'],
   },
   {

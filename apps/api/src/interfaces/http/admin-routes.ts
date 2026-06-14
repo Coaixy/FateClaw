@@ -12,6 +12,7 @@ import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
   createAnnouncement,
+  createGiftCodesForAdmin,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
   deleteDraftAnnouncement,
@@ -43,6 +44,7 @@ import {
   listAdminUsersWithStats,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
+  listGiftCodesForAdmin,
   listRechargeOrdersForAdmin,
   listAdminReferrals,
   listWalletTransactionsForAdmin,
@@ -331,6 +333,71 @@ const AdminWalletTransactionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
+
+const AdminGiftCodesQuerySchema = z.object({
+  status: z.enum(['active', 'disabled', 'expired', 'exhausted']).optional(),
+  balance_type: z.enum(['purchased', 'bonus']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const AdminCreateGiftCodesSchema = z
+  .object({
+    name: z.string().trim().max(80).optional(),
+    balance_type: z.enum(['purchased', 'bonus']),
+    usage_type: z.enum(['single', 'multi']),
+    amount_coins: SoftCurrencyNumberSchema.refine(
+      (value) => value > 0 && value <= 1_000_000,
+      '礼品金额必须在 0 到 1000000 之间',
+    ),
+    max_redemptions: z.number().int().min(1).max(100000).optional(),
+    quantity: z.number().int().min(1).max(100).default(1),
+    expires_at: z.string().datetime({ offset: true }).nullable().optional(),
+    note: z.string().trim().max(200).optional(),
+    code_prefix: z
+      .string()
+      .trim()
+      .max(12)
+      .regex(/^[a-z0-9]*$/i, '礼品码前缀只能包含英文和数字')
+      .optional(),
+    code: z
+      .string()
+      .trim()
+      .min(4, '自定义礼品码至少 4 位')
+      .max(80, '自定义礼品码过长')
+      .regex(/^[a-z0-9-]+$/i, '自定义礼品码只能包含英文、数字和横线')
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.usage_type === 'single' && value.max_redemptions && value.max_redemptions !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max_redemptions'],
+        message: '单次使用礼品码最大兑换次数必须为 1',
+      });
+    }
+    if (value.usage_type === 'multi' && !value.max_redemptions) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max_redemptions'],
+        message: '多次使用礼品码需要设置最大兑换次数',
+      });
+    }
+    if (value.code && value.quantity !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['code'],
+        message: '自定义礼品码只能在生成数量为 1 时使用',
+      });
+    }
+    if (value.expires_at && new Date(value.expires_at).getTime() <= Date.now()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['expires_at'],
+        message: '过期时间必须晚于当前时间',
+      });
+    }
+  });
 
 const AdminBillingReservationsQuerySchema = z.object({
   user_id: z.string().trim().min(1).max(120).optional(),
@@ -971,6 +1038,56 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       limit: parsed.data.limit,
       offset: parsed.data.offset,
     });
+  });
+
+  // GET /api/admin/billing/gift-codes — 查询软妹币礼品码
+  app.get('/billing/gift-codes', async (request, reply) => {
+    const parsed = AdminGiftCodesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    return listGiftCodesForAdmin({
+      status: parsed.data.status,
+      balanceType: parsed.data.balance_type,
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
+    });
+  });
+
+  // POST /api/admin/billing/gift-codes — 生成软妹币礼品码
+  app.post('/billing/gift-codes', async (request, reply) => {
+    const parsed = AdminCreateGiftCodesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    try {
+      const giftCodes = await createGiftCodesForAdmin({
+        name: parsed.data.name,
+        balanceType: parsed.data.balance_type,
+        usageType: parsed.data.usage_type,
+        amountCoins: parsed.data.amount_coins,
+        maxRedemptions:
+          parsed.data.usage_type === 'single'
+            ? 1
+            : (parsed.data.max_redemptions ?? 1),
+        quantity: parsed.data.quantity,
+        expiresAt: parsed.data.expires_at ?? null,
+        note: parsed.data.note,
+        createdBy: 'admin',
+        codePrefix: parsed.data.code_prefix,
+        code: parsed.data.code,
+      });
+      return reply.code(201).send({ gift_codes: giftCodes });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '生成礼品码失败';
+      return reply
+        .code(message.includes('duplicate') ? 409 : 400)
+        .send({ error: message });
+    }
   });
 
   // GET /api/admin/reward-config — 读取软妹币奖励配置

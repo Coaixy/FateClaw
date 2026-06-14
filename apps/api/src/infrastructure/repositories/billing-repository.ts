@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import pg from 'pg';
 
 import { getDbPool } from '../db-pool.js';
@@ -162,6 +164,45 @@ function normalizeRechargeStatsRow(row: RechargeStatsRow): RechargeStatsRow {
   };
 }
 
+function normalizeGiftCodeRow(row: GiftCodeRow): GiftCodeRow {
+  const amountCoins = toCoins(row.amount_coins);
+  const maxRedemptions = Math.max(
+    1,
+    Math.trunc(Number(row.max_redemptions ?? 1)),
+  );
+  const redeemedCount = Math.min(
+    maxRedemptions,
+    Math.max(0, Math.trunc(Number(row.redeemed_count ?? 0))),
+  );
+  const expired = row.expires_at
+    ? new Date(row.expires_at).getTime() <= Date.now()
+    : false;
+  const status: GiftCodeStatus =
+    !row.enabled
+      ? 'disabled'
+      : expired
+        ? 'expired'
+        : redeemedCount >= maxRedemptions
+          ? 'exhausted'
+          : 'active';
+  return {
+    ...row,
+    amount_coins: amountCoins,
+    max_redemptions: maxRedemptions,
+    redeemed_count: redeemedCount,
+    status,
+  };
+}
+
+function normalizeGiftCodeRedemptionRow(
+  row: GiftCodeRedemptionRow,
+): GiftCodeRedemptionRow {
+  return {
+    ...row,
+    amount_coins: toCoins(row.amount_coins),
+  };
+}
+
 function normalizeBillingRequestReservationRow(
   row: BillingRequestReservationRow,
 ): BillingRequestReservationRow {
@@ -257,6 +298,8 @@ function inferBalanceSourceFromKind(
     case 'manual_topup':
     case 'manual_adjustment':
       return 'purchased';
+    case 'gift_redeem':
+      return null;
     case 'overage_charge':
       return 'mixed';
     case 'reservation_release':
@@ -359,6 +402,56 @@ export interface RechargePaymentConfigRow {
   notify_url: string;
   return_url: string;
   updated_at: string;
+}
+
+export type GiftCodeBalanceType = 'purchased' | 'bonus';
+export type GiftCodeUsageType = 'single' | 'multi';
+export type GiftCodeStatus = 'active' | 'disabled' | 'expired' | 'exhausted';
+
+/** 软妹币礼品码主表行，status 为运行时派生状态。 */
+export interface GiftCodeRow {
+  id: string;
+  code: string;
+  name: string;
+  balance_type: GiftCodeBalanceType;
+  usage_type: GiftCodeUsageType;
+  amount_coins: number;
+  max_redemptions: number;
+  redeemed_count: number;
+  enabled: boolean;
+  expires_at: string | null;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  status: GiftCodeStatus;
+}
+
+/** 礼品码兑换记录，用于防止同一用户重复兑换同一个多次码。 */
+export interface GiftCodeRedemptionRow {
+  id: string;
+  gift_code_id: string;
+  user_id: string;
+  wallet_transaction_id: string | null;
+  balance_grant_id: string | null;
+  balance_type: GiftCodeBalanceType;
+  amount_coins: number;
+  redeemed_at: string;
+}
+
+/** 管理后台礼品码列表分页响应。 */
+export interface AdminGiftCodeListResult {
+  gift_codes: GiftCodeRow[];
+  total: number;
+}
+
+/** 用户兑换礼品码后的余额结果。 */
+export interface GiftCodeRedeemResult {
+  gift_code: GiftCodeRow;
+  redemption: GiftCodeRedemptionRow;
+  purchased_coins: number;
+  bonus_coins: number;
+  available_coins: number;
 }
 
 /** 每日签到软妹币奖励的全局配置行。 */
@@ -1516,6 +1609,332 @@ export async function updateRechargePaymentConfig(input: {
     ],
   );
   return rows[0] as RechargePaymentConfigRow;
+}
+
+function normalizeGiftCodeText(code: string): string {
+  return code.replace(/\s+/g, '').trim().toUpperCase();
+}
+
+function generateGiftCodeText(prefix?: string): string {
+  const normalizedPrefix =
+    prefix?.replace(/[^a-z0-9]/gi, '').slice(0, 12).toUpperCase() || 'GIFT';
+  return `${normalizedPrefix}-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+}
+
+function isUniqueGiftCodeConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  return (
+    record.code === '23505' &&
+    (record.constraint === 'gift_codes_code_key' ||
+      String(record.detail ?? '').includes('code'))
+  );
+}
+
+/**
+ * 管理员批量生成软妹币礼品码。
+ *
+ * @param input 礼品码金额、余额类型、使用方式、生成数量和运营备注。
+ * @returns 已创建的礼品码行，包含可复制给用户的 code。
+ * @remarks 单次码会强制最大兑换次数为 1；多次码按 maxRedemptions 控制总兑换人数。
+ */
+export async function createGiftCodesForAdmin(input: {
+  name?: string | null;
+  balanceType: GiftCodeBalanceType;
+  usageType: GiftCodeUsageType;
+  amountCoins: number;
+  maxRedemptions: number;
+  quantity: number;
+  expiresAt?: string | null;
+  note?: string | null;
+  createdBy?: string | null;
+  codePrefix?: string | null;
+  code?: string | null;
+}): Promise<GiftCodeRow[]> {
+  if (input.amountCoins <= 0) {
+    throw new Error('礼品金额必须为正');
+  }
+  const quantity = Math.max(1, Math.min(100, Math.trunc(input.quantity || 1)));
+  const maxRedemptions =
+    input.usageType === 'single'
+      ? 1
+      : Math.max(1, Math.trunc(input.maxRedemptions || 1));
+  const amountCoins = roundCoinsToCents(input.amountCoins);
+  const created: GiftCodeRow[] = [];
+
+  for (let index = 0; index < quantity; index += 1) {
+    const id = `gift-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const explicitCode =
+      input.code && quantity === 1 ? normalizeGiftCodeText(input.code) : null;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code =
+        explicitCode ?? generateGiftCodeText(input.codePrefix ?? undefined);
+      try {
+        const { rows } = await pool.query(
+          `INSERT INTO gift_codes (
+             id, code, name, balance_type, usage_type, amount_coins,
+             max_redemptions, redeemed_count, enabled, expires_at,
+             created_by, note, created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, $8, $9, $10, NOW(), NOW())
+           RETURNING *`,
+          [
+            id,
+            code,
+            input.name?.trim() || '',
+            input.balanceType,
+            input.usageType,
+            amountCoins,
+            maxRedemptions,
+            input.expiresAt ?? null,
+            input.createdBy ?? null,
+            input.note?.trim() || null,
+          ],
+        );
+        created.push(normalizeGiftCodeRow(rows[0] as GiftCodeRow));
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (explicitCode || !isUniqueGiftCodeConflict(error)) {
+          throw error;
+        }
+      }
+    }
+    if (lastError) {
+      throw lastError;
+    }
+  }
+
+  return created;
+}
+
+/**
+ * 分页查询后台礼品码列表。
+ *
+ * @param opts 可按派生状态和余额类型过滤，分页上限 200。
+ * @returns 管理后台礼品码分页数据。
+ */
+export async function listGiftCodesForAdmin(opts?: {
+  status?: GiftCodeStatus;
+  balanceType?: GiftCodeBalanceType;
+  limit?: number;
+  offset?: number;
+}): Promise<AdminGiftCodeListResult> {
+  const where: string[] = ['true'];
+  const params: unknown[] = [];
+
+  if (opts?.balanceType) {
+    params.push(opts.balanceType);
+    where.push(`balance_type = $${params.length}`);
+  }
+  if (opts?.status === 'active') {
+    where.push(`enabled = true`);
+    where.push(`(expires_at IS NULL OR expires_at > NOW())`);
+    where.push(`redeemed_count < max_redemptions`);
+  } else if (opts?.status === 'disabled') {
+    where.push(`enabled = false`);
+  } else if (opts?.status === 'expired') {
+    where.push(`enabled = true`);
+    where.push(`expires_at IS NOT NULL AND expires_at <= NOW()`);
+  } else if (opts?.status === 'exhausted') {
+    where.push(`enabled = true`);
+    where.push(`(expires_at IS NULL OR expires_at > NOW())`);
+    where.push(`redeemed_count >= max_redemptions`);
+  }
+
+  const limit = Math.min(opts?.limit ?? 50, 200);
+  const offset = Math.max(opts?.offset ?? 0, 0);
+  const whereSql = where.join(' AND ');
+
+  const [listResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT *
+       FROM gift_codes
+       WHERE ${whereSql}
+       ORDER BY created_at DESC
+       LIMIT $${params.length + 1}
+       OFFSET $${params.length + 2}`,
+      [...params, limit, offset],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM gift_codes
+       WHERE ${whereSql}`,
+      params,
+    ),
+  ]);
+
+  return {
+    gift_codes: (listResult.rows as GiftCodeRow[]).map(normalizeGiftCodeRow),
+    total: Number(countResult.rows[0]?.total ?? 0),
+  };
+}
+
+/**
+ * 用户兑换礼品码并原子入账。
+ *
+ * @param input 当前用户和用户输入的礼品码。
+ * @returns 兑换记录、礼品码摘要和兑换后的余额。
+ * @remarks 事务内锁定礼品码行，兑换记录唯一键兜底防止同一用户重复兑换。
+ */
+export async function redeemGiftCodeForUser(input: {
+  userId: string;
+  code: string;
+}): Promise<GiftCodeRedeemResult> {
+  const code = normalizeGiftCodeText(input.code);
+  if (!code) {
+    throw new Error('请输入礼品码');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: giftRows } = await client.query(
+      `SELECT *
+       FROM gift_codes
+       WHERE code = $1
+       FOR UPDATE`,
+      [code],
+    );
+    const giftCode = giftRows[0]
+      ? normalizeGiftCodeRow(giftRows[0] as GiftCodeRow)
+      : null;
+    if (!giftCode) {
+      throw new Error('礼品码不存在');
+    }
+    if (giftCode.status === 'disabled') {
+      throw new Error('礼品码已停用');
+    }
+    if (giftCode.status === 'expired') {
+      throw new Error('礼品码已过期');
+    }
+    if (giftCode.status === 'exhausted') {
+      throw new Error('礼品码已被领完');
+    }
+
+    const user = await getUserByIdUsing(client, input.userId, {
+      forUpdate: true,
+    });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    const redemptionId = `giftred-${Date.now()}-${crypto
+      .randomBytes(4)
+      .toString('hex')}`;
+    const { rows: redemptionRows } = await client.query(
+      `INSERT INTO gift_code_redemptions (
+         id, gift_code_id, user_id, balance_type, amount_coins, redeemed_at
+       )
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (gift_code_id, user_id) DO NOTHING
+       RETURNING *`,
+      [
+        redemptionId,
+        giftCode.id,
+        input.userId,
+        giftCode.balance_type,
+        giftCode.amount_coins,
+      ],
+    );
+    const insertedRedemption = redemptionRows[0] as
+      | GiftCodeRedemptionRow
+      | undefined;
+    if (!insertedRedemption) {
+      throw new Error('你已经兑换过这个礼品码');
+    }
+
+    let balanceGrantId: string | null = null;
+    let updatedUser: User;
+    const note = giftCode.name
+      ? `礼品码兑换：${giftCode.name}`
+      : '礼品码兑换';
+
+    if (giftCode.balance_type === 'bonus') {
+      balanceGrantId = `bg-${Date.now()}-${crypto
+        .randomBytes(4)
+        .toString('hex')}`;
+      await client.query(
+        `INSERT INTO balance_grants
+           (id, user_id, source, granted_by, amount_coins, remaining_coins,
+            note, expires_at, status, created_at, updated_at)
+         VALUES ($1, $2, 'gift_code', NULL, $3, $3, $4, NULL, 'active', NOW(), NOW())`,
+        [balanceGrantId, input.userId, giftCode.amount_coins, note],
+      );
+      const { rows: updatedRows } = await client.query(
+        `UPDATE users
+         SET bonus_coins = bonus_coins + $1
+         WHERE id = $2
+         RETURNING *`,
+        [giftCode.amount_coins, input.userId],
+      );
+      updatedUser = normalizeUserCoins(updatedRows[0] as User);
+    } else {
+      const { rows: updatedRows } = await client.query(
+        `UPDATE users
+         SET purchased_coins = purchased_coins + $1
+         WHERE id = $2
+         RETURNING *`,
+        [giftCode.amount_coins, input.userId],
+      );
+      updatedUser = normalizeUserCoins(updatedRows[0] as User);
+    }
+
+    const walletTransactionId = await insertWalletTransaction(client, {
+      userId: input.userId,
+      kind: 'gift_redeem',
+      amountCoins: giftCode.amount_coins,
+      balanceSource: giftCode.balance_type,
+      balanceGrantId,
+      note,
+      metadata: {
+        source: 'gift_code',
+        giftCodeId: giftCode.id,
+        giftCodeName: giftCode.name,
+        usageType: giftCode.usage_type,
+      },
+    });
+
+    await client.query(
+      `UPDATE gift_code_redemptions
+       SET wallet_transaction_id = $1,
+           balance_grant_id = $2
+       WHERE id = $3`,
+      [walletTransactionId, balanceGrantId, redemptionId],
+    );
+    const { rows: updatedGiftRows } = await client.query(
+      `UPDATE gift_codes
+       SET redeemed_count = redeemed_count + 1,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [giftCode.id],
+    );
+    const { rows: finalRedemptionRows } = await client.query(
+      `SELECT *
+       FROM gift_code_redemptions
+       WHERE id = $1`,
+      [redemptionId],
+    );
+
+    await client.query('COMMIT');
+    return {
+      gift_code: normalizeGiftCodeRow(updatedGiftRows[0] as GiftCodeRow),
+      redemption: normalizeGiftCodeRedemptionRow(
+        finalRedemptionRows[0] as GiftCodeRedemptionRow,
+      ),
+      purchased_coins: updatedUser.purchased_coins,
+      bonus_coins: updatedUser.bonus_coins,
+      available_coins: updatedUser.purchased_coins + updatedUser.bonus_coins,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

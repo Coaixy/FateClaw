@@ -36,6 +36,7 @@ const WALLET_KIND_OPTIONS = [
   { value: 'manual_topup', label: '人工充值' },
   { value: 'manual_adjustment', label: '人工调整' },
   { value: 'bonus_grant', label: '赠送发放' },
+  { value: 'gift_redeem', label: '礼品兑换' },
   { value: 'bonus_expire', label: '赠送过期' },
   { value: 'membership_subscription', label: '会员月费' },
   { value: 'overage_charge', label: '模型扣费' },

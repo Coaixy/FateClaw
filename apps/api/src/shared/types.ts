@@ -22,6 +22,7 @@ export type BalanceSource = 'purchased' | 'bonus' | 'mixed';
 export type BalanceGrantSource =
   | 'new_user_gift'
   | 'sign_in'
+  | 'gift_code'
   | 'admin_grant'
   | 'promotion';
 

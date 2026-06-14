@@ -26,6 +26,9 @@ function positiveBalanceSourceLabel(
   if (kind === 'bonus_grant') {
     return translate(t, 'pages.wallet.badgeReward', '奖励');
   }
+  if (kind === 'gift_redeem') {
+    return translate(t, 'pages.wallet.badgeGift', '礼品');
+  }
   switch (source) {
     case 'purchased':
       return translate(t, 'pages.wallet.badgePurchased', '充值');

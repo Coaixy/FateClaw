@@ -35,6 +35,16 @@ describe('walletTransactionBadgeLabel', () => {
       }),
     ).toBe('奖励');
   });
+
+  it('labels gift redemptions as gifts', () => {
+    expect(
+      walletTransactionBadgeLabel({
+        kind: 'gift_redeem',
+        amount_coins: 20,
+        balance_source: 'bonus',
+      }),
+    ).toBe('礼品');
+  });
 });
 
 describe('isWalletTransactionVisible', () => {
