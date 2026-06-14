@@ -229,6 +229,20 @@ function getPathSegments(path: string): string[] {
   return normalizeRawZipPath(path).split('/').filter(Boolean);
 }
 
+function isRootSkillMarkdownFileName(fileName: string): boolean {
+  return fileName.toLowerCase() === 'skill.md';
+}
+
+function canonicalizeRootBundlePath(path: string): string {
+  const segments = path.split('/');
+  if (segments.length !== 1) return path;
+  const lower = segments[0]?.toLowerCase();
+  if (lower === 'skill.md') return 'SKILL.md';
+  if (lower === 'skill.json') return 'skill.json';
+  if (lower === 'index.md') return 'index.md';
+  return path;
+}
+
 function shouldIgnoreForRootDetection(segments: string[]): boolean {
   return (
     segments.length === 0 ||
@@ -243,10 +257,13 @@ function detectCommonRoot(paths: string[]): string | null {
     .filter((segments) => !shouldIgnoreForRootDetection(segments));
 
   if (candidates.length === 0) return null;
-  if (candidates.some((segments) => segments[0] === 'SKILL.md')) return null;
+  if (candidates.some((segments) => isRootSkillMarkdownFileName(segments[0] ?? ''))) {
+    return null;
+  }
 
   const skillRoot = candidates.find(
-    (segments) => segments.length >= 2 && segments[1] === 'SKILL.md',
+    (segments) =>
+      segments.length >= 2 && isRootSkillMarkdownFileName(segments[1] ?? ''),
   )?.[0];
   if (!skillRoot) return null;
 
@@ -292,7 +309,7 @@ function normalizeBundleTextPath(
   const extension =
     extensionIndex >= 0 ? fileName.slice(extensionIndex).toLowerCase() : '';
   if (!ALLOWED_TEXT_EXTENSIONS.has(extension)) return null;
-  return value;
+  return canonicalizeRootBundlePath(value);
 }
 
 function parseSkillNameFromMarkdown(content: string, fallbackName: string): string {

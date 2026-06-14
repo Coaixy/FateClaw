@@ -176,6 +176,15 @@ function createDefaultFiles(name = DEFAULT_SKILL_NAME): TextSkillBundleFile[] {
   ];
 }
 
+function canonicalizeRootBundlePath(path: string): string {
+  if (path.includes('/')) return path;
+  const lower = path.toLowerCase();
+  if (lower === 'skill.md') return 'SKILL.md';
+  if (lower === 'skill.json') return 'skill.json';
+  if (lower === 'index.md') return 'index.md';
+  return path;
+}
+
 export function createDefaultSkillBundleFiles(
   name = DEFAULT_SKILL_NAME,
 ): TextSkillBundleFile[] {
@@ -186,7 +195,8 @@ function normalizeFiles(files?: TextSkillBundleFile[]): TextSkillBundleFile[] {
   const incoming = files && files.length > 0 ? files : createDefaultFiles();
   const byPath = new Map<string, TextSkillBundleFile>();
   for (const file of incoming) {
-    byPath.set(file.path, { path: file.path, content: file.content ?? '' });
+    const path = canonicalizeRootBundlePath(file.path);
+    byPath.set(path, { path, content: file.content ?? '' });
   }
   if (!byPath.has('SKILL.md')) {
     byPath.set('SKILL.md', {
@@ -223,7 +233,7 @@ function validateRelativeTextPath(rawPath: string): string {
   if (!ALLOWED_TEXT_FILE_EXTENSIONS.has(extension)) {
     throw new Error('只能创建安全文本文件');
   }
-  return value;
+  return canonicalizeRootBundlePath(value);
 }
 
 function MarkdownBundlePreview({

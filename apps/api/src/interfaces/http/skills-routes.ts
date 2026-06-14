@@ -82,6 +82,18 @@ function createMarketPaginationSchema(defaultLimit: number, maxLimit: number) {
 
 const MarketSkillQuerySchema = createMarketPaginationSchema(50, 100);
 const MarketBundleQuerySchema = createMarketPaginationSchema(20, 50);
+const USER_SKILL_DIR_CONFLICT_MESSAGE =
+  '当前账号已存在同名 Skill，请改名后再创建，或先删除旧 Skill';
+
+function isUserSkillDirConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  return (
+    record.code === '23505' &&
+    (record.constraint === 'idx_ucs_user_dir_active' ||
+      String(record.detail ?? '').includes('(user_id, dir_name)'))
+  );
+}
 
 async function parseBundleFilesPayload(
   files: unknown,
@@ -210,6 +222,9 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
 
       return skill;
     } catch (err) {
+      if (isUserSkillDirConflict(err)) {
+        return reply.code(409).send({ error: USER_SKILL_DIR_CONFLICT_MESSAGE });
+      }
       return reply
         .code(400)
         .send({ error: err instanceof Error ? err.message : '创建失败' });

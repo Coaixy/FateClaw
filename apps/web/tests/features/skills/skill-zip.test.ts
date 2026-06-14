@@ -13,6 +13,32 @@ async function blobToFile(blob: Blob, name: string): Promise<File> {
   });
 }
 
+async function renameZipPath(
+  blob: Blob,
+  from: string,
+  to: string,
+): Promise<File> {
+  const fromBytes = new TextEncoder().encode(from);
+  const toBytes = new TextEncoder().encode(to);
+  if (fromBytes.length !== toBytes.length) {
+    throw new Error('测试 ZIP 文件名替换必须保持相同长度');
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let replacementCount = 0;
+  for (let offset = 0; offset <= bytes.length - fromBytes.length; offset += 1) {
+    const matched = fromBytes.every(
+      (byte, index) => bytes[offset + index] === byte,
+    );
+    if (!matched) continue;
+    bytes.set(toBytes, offset);
+    replacementCount += 1;
+  }
+  if (replacementCount === 0) {
+    throw new Error('测试 ZIP 内没有找到待替换文件名');
+  }
+  return blobToFile(new Blob([bytes], { type: 'application/zip' }), 'skill.zip');
+}
+
 describe('skill zip import/export', () => {
   it('round-trips text skill files through zip', async () => {
     const blob = createSkillBundleZipBlob([
@@ -76,6 +102,41 @@ describe('skill zip import/export', () => {
           '---',
           '',
           '# 六爻测试 Skill',
+        ].join('\n'),
+      },
+    ]);
+  });
+
+  it('normalizes lowercase root skill markdown during import', async () => {
+    const blob = createSkillBundleZipBlob([
+      {
+        path: 'SKILL.md',
+        content: [
+          '---',
+          'name: "小写入口 Skill"',
+          'description: ""',
+          '---',
+          '',
+          '# 小写入口 Skill',
+        ].join('\n'),
+      },
+    ]);
+
+    const imported = await importSkillBundleFromZip(
+      await renameZipPath(blob, 'SKILL.md', 'skill.md'),
+    );
+
+    expect(imported.skillName).toBe('小写入口 Skill');
+    expect(imported.files).toEqual([
+      {
+        path: 'SKILL.md',
+        content: [
+          '---',
+          'name: "小写入口 Skill"',
+          'description: ""',
+          '---',
+          '',
+          '# 小写入口 Skill',
         ].join('\n'),
       },
     ]);

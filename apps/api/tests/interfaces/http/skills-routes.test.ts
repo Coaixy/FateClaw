@@ -7,7 +7,6 @@ const {
   mockGetSkillAccessInvitePreviewByToken,
   mockListSkillAccessInvites,
   mockRedeemSkillAccessInvite,
-  mockRevokeSkillAccessInvite,
   serviceMocks,
 } = vi.hoisted(() => {
   const mockCreateSkillAccessInvite = vi.fn();
@@ -21,7 +20,6 @@ const {
     mockGetSkillAccessInvitePreviewByToken,
     mockListSkillAccessInvites,
     mockRedeemSkillAccessInvite,
-    mockRevokeSkillAccessInvite,
     serviceMocks: {
       createSkillAccessInvite: mockCreateSkillAccessInvite,
       getSkillAccessInvitePreviewByToken:
@@ -153,6 +151,48 @@ describe('skillsRoutes access invites', () => {
       max_total_chars: 500000,
       max_zip_bytes: 8 * 1024 * 1024,
     });
+  });
+
+  it('returns a readable conflict when creating a duplicate own skill', async () => {
+    const token = app.jwt.sign({ userId: 'user-1' });
+    serviceMocks.getUserCustomSkillCount.mockResolvedValueOnce(0);
+    serviceMocks.createUserCustomSkill.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          'duplicate key value violates unique constraint "idx_ucs_user_dir_active"',
+        ),
+        {
+          code: '23505',
+          constraint: 'idx_ucs_user_dir_active',
+        },
+      ),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/user',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        skill_name: '我的 Skill',
+        files: [
+          {
+            path: 'SKILL.md',
+            content: '---\nname: 我的 Skill\ndescription: desc\n---\n',
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: '当前账号已存在同名 Skill，请改名后再创建，或先删除旧 Skill',
+    });
+    expect(serviceMocks.createUserCustomSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: 'user-1',
+        dir_name: 'user-我的 Skill',
+      }),
+    );
   });
 
   it('previews access invite links without authentication', async () => {

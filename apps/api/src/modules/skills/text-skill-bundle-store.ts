@@ -115,6 +115,15 @@ export interface SkillMarkdownMetadata {
   description: string;
 }
 
+function canonicalizeRootBundlePath(bundlePath: string): string {
+  if (bundlePath.includes('/')) return bundlePath;
+  const lower = bundlePath.toLowerCase();
+  if (lower === 'skill.md') return 'SKILL.md';
+  if (lower === 'skill.json') return 'skill.json';
+  if (lower === 'index.md') return 'index.md';
+  return bundlePath;
+}
+
 export function resolveTextSkillBundleDir(args: {
   ownerId: string;
   skillId: string;
@@ -167,7 +176,7 @@ export function normalizeTextSkillBundlePath(rawPath: string): string {
     throw new Error('Skill Bundle 只支持安全文本文件');
   }
 
-  return normalized;
+  return canonicalizeRootBundlePath(normalized);
 }
 
 function createDefaultSkillMarkdown(

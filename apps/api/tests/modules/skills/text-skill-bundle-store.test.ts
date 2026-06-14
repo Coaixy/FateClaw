@@ -70,6 +70,34 @@ describe('text skill bundle store', () => {
     ]);
   });
 
+  it('normalizes reserved root file names case-insensitively', async () => {
+    const { readTextSkillBundleFiles, writeTextSkillBundleFiles } =
+      await import('../../../src/modules/skills/text-skill-bundle-store.js');
+
+    const result = writeTextSkillBundleFiles({
+      skillId: 'skill-1',
+      ownerId: 'user-1',
+      dirName: 'my-skill',
+      files: [
+        {
+          path: 'skill.md',
+          content: '---\nname: Lower Skill\ndescription: Desc\n---\n',
+        },
+        { path: 'INDEX.MD', content: '# Index' },
+        { path: 'Skill.JSON', content: '{"name":"Lower Skill"}' },
+      ],
+    });
+
+    expect(readTextSkillBundleFiles(result.bundleUri)).toEqual([
+      { path: 'index.md', content: '# Index' },
+      { path: 'skill.json', content: '{"name":"Lower Skill"}' },
+      {
+        path: 'SKILL.md',
+        content: '---\nname: Lower Skill\ndescription: Desc\n---\n',
+      },
+    ]);
+  });
+
   it('rejects unsafe or unsupported bundle paths', async () => {
     const { writeTextSkillBundleFiles } =
       await import('../../../src/modules/skills/text-skill-bundle-store.js');
