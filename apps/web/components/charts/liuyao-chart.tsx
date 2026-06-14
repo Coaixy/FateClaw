@@ -271,7 +271,7 @@ function GuaYaoCell({
         <div
           className={cn(
             YAO_TEXT_CLASS,
-            'min-w-0 whitespace-nowrap font-semibold leading-tight',
+            'min-w-0 break-all font-semibold leading-tight sm:whitespace-nowrap sm:break-normal',
             CHART.ink,
           )}
         >
@@ -354,6 +354,103 @@ function YaoRow({
   );
 }
 
+function MobileYaoRow({
+  benYao,
+  bianYao,
+  fuShen,
+  hasMovingGua,
+}: {
+  benYao: IchingYao;
+  bianYao: IchingYao;
+  fuShen?: FuShenDisplay[];
+  hasMovingGua: boolean;
+}) {
+  const isMoving = isMovingYao(benYao, bianYao);
+  const benIsYang = benYao.yaoValue === 7 || benYao.yaoValue === 9;
+  const bianIsYang = bianYao.yaoValue === 7 || bianYao.yaoValue === 9;
+  const fuShenRows = fuShen ?? [];
+  const dimBianYao = !hasMovingGua || !isMoving;
+  const mark = movingMark(benYao, isMoving);
+  const pangFuShenRows = fuShenRows.filter((item) => item.kind === '旁');
+  const mainFuShenRows = fuShenRows.filter((item) => item.kind === '伏');
+
+  return (
+    <div className="border-b border-hairline-soft px-3 py-2.5 last:border-0">
+      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-tight">
+        <span className={cn('shrink-0 font-semibold', CHART.ink)}>
+          {benYao.liuShou}
+        </span>
+        {mark && (
+          <span className={cn('ml-auto shrink-0 text-[13px] font-bold', CHART.ink)}>
+            {mark}
+          </span>
+        )}
+      </div>
+      <div className="grid min-w-0 grid-cols-2 gap-2">
+        <div className="min-w-0 rounded-lg border border-hairline-soft bg-canvas/60 px-2 py-2">
+          <GuaYaoCell yao={benYao} isYang={benIsYang} />
+        </div>
+        <div className="min-w-0 rounded-lg border border-hairline-soft bg-canvas/60 px-2 py-2">
+          <GuaYaoCell
+            yao={bianYao}
+            isYang={bianIsYang}
+            dimmed={dimBianYao}
+          />
+        </div>
+      </div>
+      {fuShenRows.length > 0 && (
+        <MobileFuShenRow
+          pangRows={pangFuShenRows}
+          fuRows={mainFuShenRows}
+        />
+      )}
+    </div>
+  );
+}
+
+function MobileFuShenRow({
+  pangRows,
+  fuRows,
+}: {
+  pangRows: FuShenDisplay[];
+  fuRows: FuShenDisplay[];
+}) {
+  const groups = [
+    { label: '伏神', rows: fuRows },
+    { label: '旁伏神', rows: pangRows },
+  ].filter((group) => group.rows.length > 0);
+
+  return (
+    <div className="mt-2 min-w-0 rounded-lg border border-hairline-soft bg-surface-soft px-2.5 py-1.5 text-[11px] leading-snug">
+      <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1">
+        {groups.map((group) => (
+          <div key={group.label} className="min-w-0 max-w-full">
+            <span className="mr-1 font-medium text-chart-earth">
+              {group.label}
+            </span>
+            {group.rows.map((item, index) => (
+              <span
+                key={`${item.kind}-${index}-${item.naJiaWuXing}`}
+                className="mr-2 inline-block min-w-0 max-w-full"
+                title={formatFuShenMobileDetail(item)}
+              >
+                <span className="font-semibold text-ink">
+                  {item.liuQin}
+                  {item.naJiaWuXing}
+                </span>
+                {item.naYin && (
+                  <span className="ml-1 text-body">
+                    {item.naYin}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function gzLabel(g?: GanZhi): string {
   if (!g) return '';
   if (g.gz) return g.gz;
@@ -505,11 +602,11 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
         </div>
       )}
 
-      {/* 2. 列头：和六爻主体共用列轨，确保标题、伏神、本卦、变卦一眼对齐。 */}
+      {/* 2. 列头：桌面端和六爻主体共用列轨，确保标题、伏神、本卦、变卦一眼对齐。 */}
       <div
         className={cn(
           YAO_BOARD_GRID_CLASS,
-          'w-full items-start border-b border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.65rem,1.8cqw,0.75rem)]',
+          'hidden w-full items-start border-b border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.65rem,1.8cqw,0.75rem)] sm:grid',
         )}
       >
         <div
@@ -558,8 +655,22 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
         </div>
       </div>
 
+      {/* 移动端改为分块布局，避免五列表格在窄屏挤压本卦、变卦和伏神文本。 */}
+      <div className="grid grid-cols-2 gap-2 border-b border-hairline-soft bg-canvas px-3 py-2 sm:hidden">
+        <div className="min-w-0 text-center">
+          <div className="break-keep text-[14px] font-bold leading-tight text-ink">
+            {guaHeaderLabel(benGua, '本卦')}
+          </div>
+        </div>
+        <div className={cn('min-w-0 text-center', dimStaticZhiGua && 'opacity-[0.55]')}>
+          <div className="break-keep text-[14px] font-bold leading-tight text-ink">
+            {guaHeaderLabel(zhiGua, '变卦')}
+          </div>
+        </div>
+      </div>
+
       {/* 3. 六爻主体 */}
-      <div className="w-full pb-3 sm:pb-4">
+      <div className="hidden w-full pb-3 sm:block sm:pb-4">
         <div className="w-full px-[clamp(0.5rem,2.6cqw,1.25rem)]">
           {indexOrder.map((i) => {
             const benYao = benGua.yaoList[i];
@@ -578,12 +689,28 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           })}
         </div>
       </div>
+      <div className="w-full pb-2 sm:hidden">
+        {indexOrder.map((i) => {
+          const benYao = benGua.yaoList[i];
+          const bianYao = zhiGua.yaoList[i];
+          if (!benYao || !bianYao) return null;
+          return (
+            <MobileYaoRow
+              key={i}
+              benYao={benYao}
+              bianYao={bianYao}
+              fuShen={fuShenByHost[benYao.position - 1]}
+              hasMovingGua={hasMovingGua}
+            />
+          );
+        })}
+      </div>
 
       {/* 4. Footer 本卦 / 变卦 */}
       <div
         className={cn(
           YAO_BOARD_GRID_CLASS,
-          'w-full items-center border-t border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.4rem,1.2cqw,0.5rem)] text-[clamp(9px,1.8cqw,14px)] font-bold text-ink',
+          'hidden w-full items-center border-t border-hairline-soft bg-canvas px-[clamp(0.5rem,2.6cqw,1.25rem)] py-[clamp(0.4rem,1.2cqw,0.5rem)] text-[clamp(9px,1.8cqw,14px)] font-bold text-ink sm:grid',
         )}
       >
         <div aria-hidden="true" />

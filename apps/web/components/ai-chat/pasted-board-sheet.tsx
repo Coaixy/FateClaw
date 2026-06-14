@@ -7,6 +7,7 @@ import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import type { UserPastedBoardInput } from '@/features/chat/pasted-board-input';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
+import { useToast } from '@/lib/use-toast';
 
 const DEFAULT_PASTED_BOARD_QUESTION = '请基于这份自贴盘面进行解读。';
 
@@ -14,17 +15,30 @@ interface PastedBoardSheetProps {
   open: boolean;
   initialContent: string;
   catalog: PaipanCatalogItem[];
+  submitBlockedMessage?: string;
   onClose: () => void;
   onSubmit: (input: UserPastedBoardInput) => Promise<void> | void;
 }
 
+/**
+ * 渲染自贴盘面输入弹层。
+ *
+ * @param props.open 是否打开弹层。
+ * @param props.initialContent 初始盘面原文，通常来自输入框或粘贴内容。
+ * @param props.catalog 可选术数目录，用于提供类型候选。
+ * @param props.submitBlockedMessage 提交被业务权限拦截时展示的提示；为空时按表单校验和提交流程继续。
+ * @param props.onClose 关闭弹层回调；提交中会被阻止，避免丢失正在发送的盘面。
+ * @param props.onSubmit 通过基础校验后的提交回调。
+ */
 export function PastedBoardSheet({
   open,
   initialContent,
   catalog,
+  submitBlockedMessage = '',
   onClose,
   onSubmit,
 }: PastedBoardSheetProps) {
+  const { toast } = useToast();
   const categoryOptions = useMemo(() => {
     return catalog.map((item) => item.name);
   }, [catalog]);
@@ -49,13 +63,21 @@ export function PastedBoardSheet({
   const trimmedCategory = category.trim();
   const trimmedContent = content.trim();
   const busy = submitting;
-  const canSubmit =
-    Boolean(trimmedCategory) &&
-    Boolean(trimmedContent) &&
-    !busy;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (busy) return;
+    if (submitBlockedMessage) {
+      toast('error', submitBlockedMessage);
+      return;
+    }
+    if (!trimmedCategory) {
+      toast('error', '请先填写术数类型');
+      return;
+    }
+    if (!trimmedContent) {
+      toast('error', '请先填写盘面原文');
+      return;
+    }
     setSubmitting(true);
     try {
       await onSubmit({
@@ -89,7 +111,7 @@ export function PastedBoardSheet({
         type="button"
         size="sm"
         loading={busy}
-        disabled={!canSubmit}
+        disabled={busy}
         icon={<ClipboardPaste size={14} />}
         onClick={() => void handleSubmit()}
         className="h-9 flex-1 rounded-xl text-[12px] sm:flex-none sm:rounded-lg"

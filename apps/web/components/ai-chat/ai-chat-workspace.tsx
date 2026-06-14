@@ -1080,6 +1080,9 @@ function AiChatWorkspaceContent() {
         open={pastedBoardSheetOpen}
         initialContent={pastedBoardDraft}
         catalog={paipanCatalog}
+        submitBlockedMessage={
+          aiChatPlusLocked ? t('aiChat.plusRequired') : undefined
+        }
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
       />

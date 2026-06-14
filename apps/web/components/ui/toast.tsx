@@ -47,7 +47,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext value={{ toast }}>
       {children}
       <div
-        className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[100] flex flex-col-reverse items-center gap-2 pointer-events-none"
+        // toast 是临时反馈，需要覆盖 BottomSheet(z=100) 和 ConfirmDialog(z=200)，否则弹层内触发的提示会被遮住。
+        className="fixed bottom-5 left-1/2 z-[300] flex w-[calc(100vw-2rem)] max-w-[520px] -translate-x-1/2 flex-col-reverse items-center gap-2 pointer-events-none"
         role="alert"
         aria-live="assertive"
       >
@@ -56,11 +57,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-xl text-[12px] font-medium shadow-lg backdrop-blur-sm whitespace-nowrap ${styles[t.type]} ${
+              className={`pointer-events-auto flex w-full items-center justify-center gap-2.5 rounded-2xl px-5 py-3.5 text-center text-[14px] font-medium leading-relaxed shadow-2xl backdrop-blur-sm ${styles[t.type]} ${
                 t.exiting ? 'animate-toast-exit' : 'animate-toast-enter'
               }`}
             >
-              <Icon size={14} className="shrink-0" />
+              <Icon size={18} className="shrink-0" />
               {t.message}
             </div>
           );

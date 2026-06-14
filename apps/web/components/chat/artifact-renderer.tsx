@@ -104,7 +104,13 @@ function ResponsiveArtifactFrame({
         naturalWidth > 0 ? Math.min(1, shellWidth / naturalWidth) : 1;
       let heightScale = 1;
 
-      if (fitViewportHeight) {
+      // 小屏弹层本身可纵向滚动，强行按高度缩放会让六爻等信息密集盘面变得难读。
+      const shouldFitHeight =
+        fitViewportHeight &&
+        (typeof window === 'undefined' ||
+          window.matchMedia('(min-width: 640px)').matches);
+
+      if (shouldFitHeight) {
         const probeHeight =
           heightProbeRef.current?.getBoundingClientRect().height ?? 0;
         const shellTop = shell.getBoundingClientRect().top;
