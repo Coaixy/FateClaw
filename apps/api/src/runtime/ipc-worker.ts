@@ -10,6 +10,7 @@ import {
   getUserByAccountId,
   getUserById,
 } from '../infrastructure/db.js';
+import { hasBaseMembershipEntitlement } from '../shared/membership-plans.js';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 
@@ -109,7 +110,7 @@ async function resolveInboxPriority(
   userId: string,
 ): Promise<'member' | 'normal'> {
   const membership = await getMembershipOverview(userId);
-  return membership.active ? 'member' : 'normal';
+  return hasBaseMembershipEntitlement(membership) ? 'member' : 'normal';
 }
 
 async function enqueueInboxPayload(

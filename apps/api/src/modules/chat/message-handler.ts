@@ -16,6 +16,7 @@ import {
   WeixinMessage,
 } from '../../infrastructure/ilink.js';
 import { logger } from '../../infrastructure/logger.js';
+import { hasBaseMembershipEntitlement } from '../../shared/membership-plans.js';
 import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
 import { getSoulContent } from '../../infrastructure/db.js';
 import {
@@ -75,7 +76,7 @@ export async function processWeixinMessage(
 
   const owner = await getUserByAccountId(account.id);
   const membership = owner ? await getMembershipOverview(owner.id) : null;
-  if (isWechatDeviceBindingDisabled(Boolean(membership?.active))) {
+  if (isWechatDeviceBindingDisabled(hasBaseMembershipEntitlement(membership))) {
     await ilinkSendMessage(
       {
         id: account.id,

@@ -26,6 +26,7 @@ import {
   getChatSessionPiSessionArchive,
   getChatSessionsByUserId,
   getConversationLogByRequestId,
+  claimFreeProfessionalAiTurn,
   getMembershipOverview,
   getRecentMessages,
   getSessionMessageById,
@@ -36,6 +37,7 @@ import {
   hasFinalAiChatSessionReply,
   markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
+  releaseFreeProfessionalAiTurn,
   restoreArchivedChatSession,
   shareOwnedChatSession,
   storeMessage,
@@ -51,6 +53,7 @@ import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
 } from '../../runtime/ipc-payloads.js';
+import { hasBaseMembershipEntitlement } from '../../shared/membership-plans.js';
 import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
   normalizeOwnedChatSessionTitle,
@@ -94,8 +97,8 @@ const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
-const PLUS_REQUIRED_AI_CHAT_MESSAGE =
-  '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus';
+const FREE_PROFESSIONAL_AI_QUOTA_EXHAUSTED_MESSAGE =
+  '今日免费专业模式 AI 次数已用完，请开通 FateClaw Plus 后继续。';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
 
 /**
@@ -153,6 +156,7 @@ interface PreparedOwnedChatSessionTurn {
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   sessionTitle: string;
+  freeProfessionalAiUsageDate?: string;
 }
 
 function isPaymentRequiredError(errorMessage: string): boolean {
@@ -195,6 +199,30 @@ async function releaseChatSessionProcessing(
   requestId: string,
 ): Promise<void> {
   await releaseSessionProcessingLock(sessionId, requestId);
+}
+
+async function compensateFreeProfessionalAiTurn(
+  prepared: Pick<
+    PreparedOwnedChatSessionTurn,
+    'userId' | 'freeProfessionalAiUsageDate'
+  >,
+): Promise<void> {
+  if (!prepared.freeProfessionalAiUsageDate) return;
+  try {
+    await releaseFreeProfessionalAiTurn({
+      userId: prepared.userId,
+      usageDate: prepared.freeProfessionalAiUsageDate,
+    });
+  } catch (err) {
+    logger.warn(
+      {
+        userId: prepared.userId,
+        usageDate: prepared.freeProfessionalAiUsageDate,
+        err,
+      },
+      'AI 对话: Free 专业模式次数退回失败',
+    );
+  }
 }
 
 function buildSelectedBoardContext(message: NewMessage): boolean {
@@ -775,10 +803,11 @@ async function prepareOwnedChatSessionTurn(
   if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
+  let freeQuotaRequired = false;
   if (!options.plusGateBypass) {
     const membership = await getMembershipOverview(userId);
-    if (!membership.active) {
-      return fail(403, PLUS_REQUIRED_AI_CHAT_MESSAGE);
+    if (!hasBaseMembershipEntitlement(membership)) {
+      freeQuotaRequired = true;
     }
   }
   const msgId =
@@ -822,6 +851,15 @@ async function prepareOwnedChatSessionTurn(
   );
   if (!processingClaimed) {
     return fail(409, SESSION_PROCESSING_BUSY_ERROR);
+  }
+  let freeProfessionalAiUsageDate: string | undefined;
+  if (freeQuotaRequired) {
+    const quota = await claimFreeProfessionalAiTurn({ userId });
+    if (!quota.allowed) {
+      await releaseChatSessionProcessing(session.id, requestId);
+      return fail(403, FREE_PROFESSIONAL_AI_QUOTA_EXHAUSTED_MESSAGE);
+    }
+    freeProfessionalAiUsageDate = quota.usage_date;
   }
   try {
     await options.onProcessingClaimed?.();
@@ -920,10 +958,15 @@ async function prepareOwnedChatSessionTurn(
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
+      freeProfessionalAiUsageDate,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
+    await compensateFreeProfessionalAiTurn({
+      userId,
+      freeProfessionalAiUsageDate,
+    });
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: 请求准备失败',
@@ -965,6 +1008,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       const errorMessage =
         output.publicErrorText || output.text || output.error || 'AI 处理失败';
       await releaseChatSessionProcessing(session.id, requestId);
+      await compensateFreeProfessionalAiTurn(prepared);
       return fail(
         isPaymentRequiredError(errorMessage) ? 402 : 502,
         errorMessage,
@@ -980,6 +1024,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
+    await compensateFreeProfessionalAiTurn(prepared);
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: 请求入队失败',
@@ -1027,6 +1072,7 @@ async function completeOwnedChatSessionTurn(
         },
         'AI 对话: agent 返回错误',
       );
+      await compensateFreeProfessionalAiTurn(prepared);
       return fail(
         isPaymentRequiredError(errorMessage) ? 402 : 502,
         errorMessage,
@@ -1081,6 +1127,7 @@ async function completeOwnedChatSessionTurn(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
+    await compensateFreeProfessionalAiTurn(prepared);
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: agent 调用失败',

@@ -218,6 +218,13 @@ describe('runDatabaseMigrations', () => {
         '允许同一用户同时持有不同档位会员权益',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0039_free_professional_ai_quota',
+        '增加 Free 用户专业模式 AI 每日次数配置和用量表',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -360,6 +367,7 @@ describe('runDatabaseMigrations', () => {
       '0036_repair_simple_workflow_skill_snapshot_columns',
       '0037_membership_pro_plan',
       '0038_membership_plan_timeline',
+      '0039_free_professional_ai_quota',
     ]);
 
     await runDatabaseMigrations(client as never);

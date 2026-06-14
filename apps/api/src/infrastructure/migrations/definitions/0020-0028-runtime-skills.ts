@@ -835,4 +835,53 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0039_free_professional_ai_quota',
+    description: '增加 Free 用户专业模式 AI 每日次数配置和用量表',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ai_chat_free_quota_config (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          daily_professional_turn_limit INTEGER NOT NULL DEFAULT 5,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO ai_chat_free_quota_config (id)
+        VALUES ('default')
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ai_chat_free_daily_usage (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          usage_date TEXT NOT NULL,
+          professional_turn_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, usage_date)
+        )
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_ai_chat_free_quota_limit_range',
+        tableName: 'ai_chat_free_quota_config',
+        expression:
+          'daily_professional_turn_limit >= 0 AND daily_professional_turn_limit <= 1000000',
+        cleanupSql: `UPDATE ai_chat_free_quota_config
+                     SET daily_professional_turn_limit = LEAST(
+                       GREATEST(daily_professional_turn_limit, 0),
+                       1000000
+                     )`,
+      });
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_ai_chat_free_daily_usage_turn_count_nonnegative',
+        tableName: 'ai_chat_free_daily_usage',
+        expression: 'professional_turn_count >= 0',
+        cleanupSql: `UPDATE ai_chat_free_daily_usage
+                     SET professional_turn_count = GREATEST(
+                       professional_turn_count,
+                       0
+                     )`,
+      });
+    },
+  },
 ];

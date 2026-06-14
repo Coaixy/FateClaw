@@ -13,6 +13,19 @@ import type {
 } from '../../shared/types.js';
 import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
+import {
+  MEMBERSHIP_PLUS_PLAN_KEY,
+  MEMBERSHIP_PRO_PLAN_KEY,
+  MEMBERSHIP_PLAN_KEYS,
+  type MembershipPlanKey,
+  hasBaseMembershipEntitlement,
+  isMembershipPlanKey,
+  normalizeMembershipPlanKey,
+  resolveMembershipConfigId,
+  resolveMembershipPlanKey,
+  resolveMembershipPlanName,
+  resolveMembershipPlanRank,
+} from '../../shared/membership-plans.js';
 
 const pool = {
   query(sql: string, params?: unknown[]) {
@@ -24,44 +37,7 @@ const pool = {
 };
 
 const COIN_CENTS = 100;
-const MEMBERSHIP_PLUS_PLAN_KEY = 'fateclaw_plus';
-const MEMBERSHIP_PLUS_CONFIG_ID = 'default';
-const MEMBERSHIP_PRO_PLAN_KEY = 'fateclaw_pro';
-const MEMBERSHIP_PLAN_KEYS = [
-  MEMBERSHIP_PLUS_PLAN_KEY,
-  MEMBERSHIP_PRO_PLAN_KEY,
-] as const;
 const MEMBERSHIP_UNIT_DENOMINATOR = 1_000_000;
-const MEMBERSHIP_PLAN_RANKS: Record<MembershipPlanKey, number> = {
-  [MEMBERSHIP_PLUS_PLAN_KEY]: 1,
-  [MEMBERSHIP_PRO_PLAN_KEY]: 2,
-};
-
-export type MembershipPlanKey = (typeof MEMBERSHIP_PLAN_KEYS)[number];
-
-function isMembershipPlanKey(value: string): value is MembershipPlanKey {
-  return (MEMBERSHIP_PLAN_KEYS as readonly string[]).includes(value);
-}
-
-function resolveMembershipConfigId(planKey: string): string {
-  return planKey === MEMBERSHIP_PRO_PLAN_KEY
-    ? MEMBERSHIP_PRO_PLAN_KEY
-    : MEMBERSHIP_PLUS_CONFIG_ID;
-}
-
-function resolveMembershipPlanKey(configId: string): MembershipPlanKey {
-  return configId === MEMBERSHIP_PRO_PLAN_KEY
-    ? MEMBERSHIP_PRO_PLAN_KEY
-    : MEMBERSHIP_PLUS_PLAN_KEY;
-}
-
-function resolveMembershipPlanName(planKey: string): string {
-  return planKey === MEMBERSHIP_PRO_PLAN_KEY ? 'FateClaw Pro' : 'FateClaw Plus';
-}
-
-function resolveMembershipPlanRank(planKey: string): number {
-  return isMembershipPlanKey(planKey) ? MEMBERSHIP_PLAN_RANKS[planKey] : 0;
-}
 
 function toCoins(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -135,6 +111,30 @@ function normalizeDailySignInRecordRow(
   return {
     ...row,
     reward_coins: toCoins(row.reward_coins),
+  };
+}
+
+function normalizeFreeProfessionalAiQuotaConfigRow(
+  row: FreeProfessionalAiQuotaConfigRow,
+): FreeProfessionalAiQuotaConfigRow {
+  return {
+    ...row,
+    daily_professional_turn_limit: Math.max(
+      0,
+      Math.trunc(Number(row.daily_professional_turn_limit ?? 0)),
+    ),
+  };
+}
+
+function normalizeFreeProfessionalAiDailyUsageRow(
+  row: FreeProfessionalAiDailyUsageRow,
+): FreeProfessionalAiDailyUsageRow {
+  return {
+    ...row,
+    professional_turn_count: Math.max(
+      0,
+      Math.trunc(Number(row.professional_turn_count ?? 0)),
+    ),
   };
 }
 
@@ -379,6 +379,38 @@ export interface DailySignInRecordRow {
   created_at: string;
 }
 
+/** Free 用户专业模式 AI 每日次数的全局配置行。 */
+export interface FreeProfessionalAiQuotaConfigRow {
+  id: 'default' | string;
+  daily_professional_turn_limit: number;
+  updated_at: string;
+}
+
+/** Free 用户专业模式 AI 单日已消耗次数。 */
+export interface FreeProfessionalAiDailyUsageRow {
+  user_id: string;
+  usage_date: string;
+  professional_turn_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Free 专业模式 AI 配额占用结果。 */
+export interface FreeProfessionalAiTurnClaimResult {
+  allowed: boolean;
+  usage_date: string;
+  limit: number;
+  used: number;
+  remaining: number;
+}
+
+/** Free 专业模式 AI 配额退回结果。 */
+export interface FreeProfessionalAiTurnReleaseResult {
+  released: boolean;
+  usage_date: string;
+  used: number;
+}
+
 export type MembershipConfigRow = MembershipConfig;
 export type UserMembershipRow = UserMembership;
 export type MembershipAllowanceRow = MembershipAllowance;
@@ -403,9 +435,7 @@ async function getMembershipConfigUsing(input: {
   query(sql: string, params?: unknown[]): Promise<pg.QueryResult>;
   planKey?: string;
 }): Promise<MembershipConfigRow> {
-  const planKey = isMembershipPlanKey(input.planKey ?? '')
-    ? (input.planKey as MembershipPlanKey)
-    : MEMBERSHIP_PLUS_PLAN_KEY;
+  const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
   const monthlyPriceCoins = planKey === MEMBERSHIP_PRO_PLAN_KEY ? 100 : 30;
@@ -463,9 +493,7 @@ export async function updateMembershipConfig(input: {
   monthlyAllowanceUnits: number;
   standardPricePerMillionUnitsCoins: number;
 }): Promise<MembershipConfigRow> {
-  const planKey = isMembershipPlanKey(input.planKey ?? '')
-    ? (input.planKey as MembershipPlanKey)
-    : MEMBERSHIP_PLUS_PLAN_KEY;
+  const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const monthlyPriceCoins = roundCoinsToCents(input.monthlyPriceCoins);
   const displayPriceCoins = roundCoinsToCents(
@@ -588,9 +616,7 @@ async function getEffectiveMembershipEntitlementsUsing(input: {
     .filter((entry) => entry.endMs > entry.startMs);
 
   const boundaries = Array.from(
-    new Set(
-      activeMemberships.flatMap((entry) => [entry.startMs, entry.endMs]),
-    ),
+    new Set(activeMemberships.flatMap((entry) => [entry.startMs, entry.endMs])),
   ).sort((a, b) => a - b);
   const entitlements: MembershipEntitlementRow[] = [];
   for (let index = 0; index < boundaries.length - 1; index += 1) {
@@ -882,9 +908,7 @@ export async function subscribeMembershipWithWallet(
   userId: string,
   planKey: string = MEMBERSHIP_PLUS_PLAN_KEY,
 ): Promise<{ user: User; overview: MembershipOverviewRow }> {
-  const normalizedPlanKey = isMembershipPlanKey(planKey)
-    ? planKey
-    : MEMBERSHIP_PLUS_PLAN_KEY;
+  const normalizedPlanKey = normalizeMembershipPlanKey(planKey);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1030,7 +1054,7 @@ export async function subscribeMembershipWithWallet(
  */
 export async function hasActiveMembership(userId: string): Promise<boolean> {
   const overview = await getMembershipOverview(userId);
-  return overview.active;
+  return hasBaseMembershipEntitlement(overview);
 }
 
 /**
@@ -1066,6 +1090,187 @@ export async function updateDailySignInConfig(input: {
     [input.enabled, input.rewardCoins],
   );
   return normalizeDailySignInConfigRow(rows[0] as DailySignInConfigRow);
+}
+
+/**
+ * 读取 Free 用户专业模式 AI 每日次数配置；首次访问时补齐默认 5 次。
+ *
+ * @returns 当前全局配置行。
+ */
+export async function getFreeProfessionalAiQuotaConfig(): Promise<FreeProfessionalAiQuotaConfigRow> {
+  const { rows } = await pool.query(
+    `INSERT INTO ai_chat_free_quota_config (id)
+     VALUES ('default')
+     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     RETURNING *`,
+  );
+  return normalizeFreeProfessionalAiQuotaConfigRow(
+    rows[0] as FreeProfessionalAiQuotaConfigRow,
+  );
+}
+
+/**
+ * 更新 Free 用户专业模式 AI 每日可用次数。
+ *
+ * @param input.dailyProfessionalTurnLimit 每个 Free 用户每天可发起的专业模式 AI 轮数；0 表示关闭免费额度。
+ * @returns 更新后的配置行。
+ */
+export async function updateFreeProfessionalAiQuotaConfig(input: {
+  dailyProfessionalTurnLimit: number;
+}): Promise<FreeProfessionalAiQuotaConfigRow> {
+  const dailyProfessionalTurnLimit = Math.max(
+    0,
+    Math.trunc(input.dailyProfessionalTurnLimit),
+  );
+  const { rows } = await pool.query(
+    `INSERT INTO ai_chat_free_quota_config (
+       id, daily_professional_turn_limit, updated_at
+     )
+     VALUES ('default', $1, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       daily_professional_turn_limit = EXCLUDED.daily_professional_turn_limit,
+       updated_at = NOW()
+     RETURNING *`,
+    [dailyProfessionalTurnLimit],
+  );
+  return normalizeFreeProfessionalAiQuotaConfigRow(
+    rows[0] as FreeProfessionalAiQuotaConfigRow,
+  );
+}
+
+/**
+ * 原子占用 Free 用户一次专业模式 AI 使用次数。
+ *
+ * @param input.userId 用户 ID。
+ * @param input.usageDate 统计日期，默认沿用现有每日用量的 UTC YYYY-MM-DD 口径。
+ * @returns allowed=false 表示当天次数已用尽；allowed=true 时已完成次数递增。
+ */
+export async function claimFreeProfessionalAiTurn(input: {
+  userId: string;
+  usageDate?: string;
+}): Promise<FreeProfessionalAiTurnClaimResult> {
+  const usageDate = input.usageDate ?? new Date().toISOString().slice(0, 10);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: configRows } = await client.query(
+      `INSERT INTO ai_chat_free_quota_config (id)
+       VALUES ('default')
+       ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+       RETURNING *`,
+    );
+    const config = normalizeFreeProfessionalAiQuotaConfigRow(
+      configRows[0] as FreeProfessionalAiQuotaConfigRow,
+    );
+    const limit = config.daily_professional_turn_limit;
+    if (limit <= 0) {
+      const { rows: usageRows } = await client.query(
+        `SELECT *
+         FROM ai_chat_free_daily_usage
+         WHERE user_id = $1 AND usage_date = $2`,
+        [input.userId, usageDate],
+      );
+      await client.query('COMMIT');
+      const usage = usageRows[0]
+        ? normalizeFreeProfessionalAiDailyUsageRow(
+            usageRows[0] as FreeProfessionalAiDailyUsageRow,
+          )
+        : null;
+      return {
+        allowed: false,
+        usage_date: usageDate,
+        limit,
+        used: usage?.professional_turn_count ?? 0,
+        remaining: 0,
+      };
+    }
+
+    const { rows: claimRows } = await client.query(
+      `INSERT INTO ai_chat_free_daily_usage (
+         user_id, usage_date, professional_turn_count, created_at, updated_at
+       )
+       VALUES ($1, $2, 1, NOW(), NOW())
+       ON CONFLICT (user_id, usage_date) DO UPDATE SET
+         professional_turn_count =
+           ai_chat_free_daily_usage.professional_turn_count + 1,
+         updated_at = NOW()
+       WHERE ai_chat_free_daily_usage.professional_turn_count < $3
+       RETURNING *`,
+      [input.userId, usageDate, limit],
+    );
+
+    if (claimRows[0]) {
+      await client.query('COMMIT');
+      const usage = normalizeFreeProfessionalAiDailyUsageRow(
+        claimRows[0] as FreeProfessionalAiDailyUsageRow,
+      );
+      return {
+        allowed: true,
+        usage_date: usageDate,
+        limit,
+        used: usage.professional_turn_count,
+        remaining: Math.max(0, limit - usage.professional_turn_count),
+      };
+    }
+
+    const { rows: usageRows } = await client.query(
+      `SELECT *
+       FROM ai_chat_free_daily_usage
+       WHERE user_id = $1 AND usage_date = $2`,
+      [input.userId, usageDate],
+    );
+    await client.query('COMMIT');
+    const usage = usageRows[0]
+      ? normalizeFreeProfessionalAiDailyUsageRow(
+          usageRows[0] as FreeProfessionalAiDailyUsageRow,
+        )
+      : null;
+    return {
+      allowed: false,
+      usage_date: usageDate,
+      limit,
+      used: usage?.professional_turn_count ?? 0,
+      remaining: 0,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 退回 Free 用户一次专业模式 AI 使用次数。
+ *
+ * @param input.userId 用户 ID。
+ * @param input.usageDate 需要退回的统计日期，必须与占用结果的 usage_date 保持一致。
+ * @returns released=false 表示没有可退回的次数，通常说明占用未成功或已被补偿。
+ */
+export async function releaseFreeProfessionalAiTurn(input: {
+  userId: string;
+  usageDate: string;
+}): Promise<FreeProfessionalAiTurnReleaseResult> {
+  const { rows } = await pool.query(
+    `UPDATE ai_chat_free_daily_usage
+     SET professional_turn_count = GREATEST(professional_turn_count - 1, 0),
+         updated_at = NOW()
+     WHERE user_id = $1
+       AND usage_date = $2
+       AND professional_turn_count > 0
+     RETURNING *`,
+    [input.userId, input.usageDate],
+  );
+  const usage = rows[0]
+    ? normalizeFreeProfessionalAiDailyUsageRow(
+        rows[0] as FreeProfessionalAiDailyUsageRow,
+      )
+    : null;
+  return {
+    released: Boolean(usage),
+    usage_date: input.usageDate,
+    used: usage?.professional_turn_count ?? 0,
+  };
 }
 
 /**

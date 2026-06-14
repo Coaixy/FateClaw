@@ -26,6 +26,9 @@ type RewardConfigPayload = {
     monthly_allowance_units: number;
     standard_price_per_million_units_coins: number;
   }>;
+  free_professional_ai: {
+    daily_turn_limit: number;
+  };
 };
 
 type MembershipPlanDraft = {
@@ -42,6 +45,9 @@ type RewardDraft = {
   daily_sign_in: {
     enabled: boolean;
     reward_coins: string;
+  };
+  free_professional_ai: {
+    daily_turn_limit: string;
   };
   membership_plans: MembershipPlanDraft[];
 };
@@ -90,6 +96,11 @@ function draftFromConfig(config: AdminRewardConfig | null): RewardDraft {
     daily_sign_in: {
       enabled: config?.daily_sign_in.enabled ?? false,
       reward_coins: String(config?.daily_sign_in.reward_coins ?? 0),
+    },
+    free_professional_ai: {
+      daily_turn_limit: String(
+        config?.free_professional_ai.daily_turn_limit ?? 5,
+      ),
     },
     membership_plans:
       config?.membership_plans?.map(planDraftFromConfig) ??
@@ -150,6 +161,17 @@ export function RewardConfigPanel({
       ...prev,
       daily_sign_in: {
         ...prev.daily_sign_in,
+        ...value,
+      },
+    }));
+  };
+  const updateFreeProfessionalAi = (
+    value: Partial<RewardDraft['free_professional_ai']>,
+  ) => {
+    setDraft((prev) => ({
+      ...prev,
+      free_professional_ai: {
+        ...prev.free_professional_ai,
         ...value,
       },
     }));
@@ -218,6 +240,48 @@ export function RewardConfigPanel({
               <span className="font-medium text-ink">
                 {formatCoins(Number(draft.daily_sign_in.reward_coins) || 0)}
               </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+        <div>
+          <div className="text-sm font-semibold">Free 专业模式 AI</div>
+          <div className="mt-1 text-[12px] leading-5 text-muted">
+            控制未开通 Plus / Pro 的用户每天可发起的专业模式 AI 轮数，追问同样计入。
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <label className="space-y-1.5">
+            <div className="text-[12px] font-medium text-muted">
+              每日免费次数
+            </div>
+            <input
+              value={draft.free_professional_ai.daily_turn_limit}
+              onChange={(event) =>
+                updateFreeProfessionalAi({
+                  daily_turn_limit: event.target.value,
+                })
+              }
+              inputMode="numeric"
+              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+            />
+          </label>
+          <div className="flex items-end">
+            <div className="min-h-11 w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
+              当前设置：
+              <span className="font-medium text-ink">
+                {Math.max(
+                  0,
+                  Math.trunc(
+                    Number(draft.free_professional_ai.daily_turn_limit) || 0,
+                  ),
+                )}
+              </span>
+              {' '}
+              次 / 天
             </div>
           </div>
         </div>
@@ -368,7 +432,16 @@ export function RewardConfigPanel({
                   plusPlan.standard_price_per_million_units_coins,
                 ),
               },
-              membership_plans: draft.membership_plans.map(payloadPlanFromDraft),
+              membership_plans:
+                draft.membership_plans.map(payloadPlanFromDraft),
+              free_professional_ai: {
+                daily_turn_limit: Math.max(
+                  0,
+                  Math.trunc(
+                    Number(draft.free_professional_ai.daily_turn_limit) || 0,
+                  ),
+                ),
+              },
             })
           }
           disabled={busy}

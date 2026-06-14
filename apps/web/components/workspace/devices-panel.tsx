@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { accountsApi, type Account } from '@/features/accounts/api';
 import { billingApi, type BillingStatus } from '@/features/billing/api';
+import { hasBaseMembershipEntitlement } from '@/features/billing/membership-plans';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useDeviceBinding } from '@/features/accounts/hooks/use-device-binding';
 import { useToast } from '@/lib/use-toast';
@@ -37,7 +38,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
     useAccounts();
   const binding = useDeviceBinding(load);
   const deviceAccounts = accountList;
-  const membershipActive = Boolean(membership?.enabled && membership.active);
+  const membershipActive = hasBaseMembershipEntitlement(membership);
   const bindingLimitReached = deviceAccounts.length >= 1;
   const canBindWeixin =
     membershipActive && !bindingLimitReached && !membershipLoading;

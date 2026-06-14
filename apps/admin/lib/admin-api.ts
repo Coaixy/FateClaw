@@ -540,6 +540,10 @@ export interface AdminRewardConfig {
     standard_price_per_million_units_coins: number;
     updated_at: string;
   }>;
+  free_professional_ai: {
+    daily_turn_limit: number;
+    updated_at: string;
+  };
 }
 
 /** 管理后台邀请奖励状态。 */
@@ -840,6 +844,9 @@ export const admin = {
       monthly_allowance_units: number;
       standard_price_per_million_units_coins: number;
     }>;
+    free_professional_ai?: {
+      daily_turn_limit: number;
+    };
   }) =>
     adminRequest<AdminRewardConfig>('/api/admin/reward-config', {
       method: 'PUT',

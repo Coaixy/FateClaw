@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
+import { hasBaseMembershipEntitlement } from '@/features/billing/membership-plans';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
@@ -147,9 +148,7 @@ export function TopBar({
       : t('topBar.dropdownBalanceAvailable', {
           balance: formatCoins(balanceCoins, locale),
         });
-  const plusActive = Boolean(
-    status?.membership.enabled && status.membership.active,
-  );
+  const baseMembershipActive = hasBaseMembershipEntitlement(status?.membership);
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
@@ -209,7 +208,7 @@ export function TopBar({
           router.push('/membership');
         }}
         className={`inline-flex shrink-0 items-center justify-center rounded-full border text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
-          plusActive
+          baseMembershipActive
             ? 'border-primary/25 bg-primary/12'
             : 'border-hairline/60 bg-surface-card/80'
         } ${membershipPillClass}`}

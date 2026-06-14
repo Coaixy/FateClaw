@@ -12,6 +12,8 @@ const {
   mockGetSessionMessagesWithToolContext,
   mockGetSharedChatSessionByToken,
   mockGetMembershipOverview,
+  mockClaimFreeProfessionalAiTurn,
+  mockReleaseFreeProfessionalAiTurn,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
@@ -47,6 +49,8 @@ const {
   mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetSharedChatSessionByToken: vi.fn(),
   mockGetMembershipOverview: vi.fn(),
+  mockClaimFreeProfessionalAiTurn: vi.fn(),
+  mockReleaseFreeProfessionalAiTurn: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
@@ -83,6 +87,8 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getSharedChatSessionByToken: mockGetSharedChatSessionByToken,
   getMembershipOverview: mockGetMembershipOverview,
+  claimFreeProfessionalAiTurn: mockClaimFreeProfessionalAiTurn,
+  releaseFreeProfessionalAiTurn: mockReleaseFreeProfessionalAiTurn,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
@@ -204,6 +210,18 @@ describe('chat-session-service selected board context', () => {
     mockGetUserById.mockResolvedValue({ id: 'user-1' });
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
+    });
+    mockClaimFreeProfessionalAiTurn.mockResolvedValue({
+      allowed: true,
+      usage_date: '2026-04-26',
+      limit: 5,
+      used: 1,
+      remaining: 4,
+    });
+    mockReleaseFreeProfessionalAiTurn.mockResolvedValue({
+      released: true,
+      usage_date: '2026-04-26',
+      used: 0,
     });
     mockGetAccountsByUserId.mockResolvedValue([
       {
@@ -411,8 +429,15 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('rejects non-Plus professional AI turns before writing messages or claiming the session', async () => {
+  it('rejects Free professional AI turns after the daily quota is exhausted', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+      allowed: false,
+      usage_date: '2026-04-26',
+      limit: 5,
+      used: 5,
+      remaining: 0,
+    });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
@@ -423,11 +448,142 @@ describe('chat-session-service selected board context', () => {
     expect(result).toEqual({
       ok: false,
       statusCode: 403,
-      error: '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus',
+      error: '今日免费专业模式 AI 次数已用完，请开通 FateClaw Plus 后继续。',
+    });
+    expect(mockClaimFreeProfessionalAiTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
     });
     expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockRedisEval).not.toHaveBeenCalled();
+    expect(mockRedisEval).toHaveBeenCalledTimes(2);
+    expect(mockRedisEval).toHaveBeenLastCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-1',
+      expect.stringMatching(/^aichat-/),
+    );
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+  });
+
+  it('allows Free professional AI turns while quota remains and consumes one turn', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+      allowed: true,
+      usage_date: '2026-04-26',
+      limit: 5,
+      used: 4,
+      remaining: 1,
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '请解读这张盘',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockClaimFreeProfessionalAiTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+    });
+    expect(mockStoreMessage).toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('refunds a consumed Free professional AI turn when request preparation fails', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+      allowed: true,
+      usage_date: '2026-04-26',
+      limit: 5,
+      used: 4,
+      remaining: 1,
+    });
+    mockBuildStructuredInputForSession.mockRejectedValueOnce(
+      new Error('structured input unavailable'),
+    );
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '请解读这张盘',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 502,
+      error: 'structured input unavailable',
+    });
+    expect(mockReleaseFreeProfessionalAiTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+      usageDate: '2026-04-26',
+    });
+    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+  });
+
+  it('refunds a consumed Free professional AI turn when enqueueing fails', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+      allowed: true,
+      usage_date: '2026-04-26',
+      limit: 5,
+      used: 4,
+      remaining: 1,
+    });
+    mockDispatchAiChatPrompt.mockResolvedValueOnce({
+      status: 'error',
+      publicErrorText: 'AI 处理失败',
+      text: '',
+      error: 'runtime unavailable',
+    });
+
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '请解读这张盘',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 502,
+      error: 'AI 处理失败',
+    });
+    expect(mockStoreMessage).toHaveBeenCalled();
+    expect(mockReleaseFreeProfessionalAiTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+      usageDate: '2026-04-26',
+    });
+  });
+
+  it('keeps member professional AI turns unlimited without consuming Free quota', async () => {
+    await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '请解读这张盘',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+
+    expect(mockClaimFreeProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not consume Free quota for simple workflow first-turn bypass', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+
+    const result = await sendOwnedChatSessionMessage(
+      'user-1',
+      'session-1',
+      {
+        content: '简易模式首轮',
+        inputKind: 'normal',
+        pastedBoard: undefined,
+      },
+      {
+        plusGateBypass: 'simple_workflow_first_turn',
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mockGetMembershipOverview).not.toHaveBeenCalled();
+    expect(mockClaimFreeProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {

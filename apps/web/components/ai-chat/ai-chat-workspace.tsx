@@ -206,13 +206,6 @@ function AiChatWorkspaceContent() {
     touchSession,
     loading: sessionsLoading,
   } = useChatSessions();
-  const plusActive = Boolean(
-    billingStatus?.membership.enabled && billingStatus.membership.active,
-  );
-  const aiChatPlusLocked = Boolean(
-    user && !billingLoading && billingStatus && !plusActive,
-  );
-
   const [input, setInput] = useState('');
   const [paipanSheetMode, setPaipanSheetMode] =
     useState<PaipanSheetMode | null>(null);
@@ -378,11 +371,6 @@ function AiChatWorkspaceContent() {
         requestLogin(text);
         return;
       }
-      if (aiChatPlusLocked) {
-        toast('error', t('aiChat.plusRequired'));
-        return;
-      }
-
       if (!overrideText) {
         setInput('');
       }
@@ -401,7 +389,6 @@ function AiChatWorkspaceContent() {
       chatMessages,
       continuationBlocked,
       authLoading,
-      aiChatPlusLocked,
       input,
       requestLogin,
       t,
@@ -505,11 +492,6 @@ function AiChatWorkspaceContent() {
         toast('error', t('aiChat.previousMessageProcessing'));
         return;
       }
-      if (aiChatPlusLocked) {
-        toast('error', t('aiChat.plusRequired'));
-        return;
-      }
-
       startUserPastedBoardSubmission({
         pastedBoard,
         sendMessage: chatMessages.sendMessageWithOptions,
@@ -529,7 +511,6 @@ function AiChatWorkspaceContent() {
       continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
-      aiChatPlusLocked,
       continuationBlockedMessage,
       pastedBoardDraftSource,
       requestLogin,
@@ -550,9 +531,7 @@ function AiChatWorkspaceContent() {
     selectedSession && displayMessages.length > 0 && billingStatusReady
       ? billingArrears
         ? 'arrears'
-        : aiChatPlusLocked
-          ? 'plus-required'
-          : null
+        : null
       : null;
   const switchingSession =
     Boolean(selectedSession) &&
@@ -833,9 +812,7 @@ function AiChatWorkspaceContent() {
     !modelSettingsError && availableOfficialModels.length > 0;
   const canSelectThinkingLevel =
     !modelSettingsError && Boolean(modelOverview?.selection);
-  const aiControlTitle = aiChatPlusLocked
-    ? t('aiChat.plusRequired')
-    : modelSettingsError;
+  const aiControlTitle = modelSettingsError;
   const modelSwitchLabel = modelSettingsLoading
     ? t('aiChat.toolbar.loading')
     : modelSettingsError
@@ -901,7 +878,6 @@ function AiChatWorkspaceContent() {
             modelControlsDisabled ||
             modelSettingsLoading ||
             Boolean(modelToolbarBusy) ||
-            aiChatPlusLocked ||
             !canSelectOfficialModel
           }
           modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
@@ -914,7 +890,6 @@ function AiChatWorkspaceContent() {
             modelControlsDisabled ||
             modelSettingsLoading ||
             Boolean(modelToolbarBusy) ||
-            aiChatPlusLocked ||
             !canSelectThinkingLevel
           }
           thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
@@ -1018,7 +993,6 @@ function AiChatWorkspaceContent() {
                   modelControlsDisabled ||
                   modelSettingsLoading ||
                   Boolean(modelToolbarBusy) ||
-                  aiChatPlusLocked ||
                   !canSelectOfficialModel
                 }
                 modelTitle={
@@ -1033,7 +1007,6 @@ function AiChatWorkspaceContent() {
                   modelControlsDisabled ||
                   modelSettingsLoading ||
                   Boolean(modelToolbarBusy) ||
-                  aiChatPlusLocked ||
                   !canSelectThinkingLevel
                 }
                 thinkingTitle={
@@ -1080,9 +1053,6 @@ function AiChatWorkspaceContent() {
         open={pastedBoardSheetOpen}
         initialContent={pastedBoardDraft}
         catalog={paipanCatalog}
-        submitBlockedMessage={
-          aiChatPlusLocked ? t('aiChat.plusRequired') : undefined
-        }
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
       />

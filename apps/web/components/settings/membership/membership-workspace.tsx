@@ -12,6 +12,7 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
+import { resolveMembershipPlanShortName } from '@/features/billing/membership-plans';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
@@ -138,17 +139,13 @@ function displayPercent(ratio: number) {
 }
 
 function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
-  if (plan.plan_key === 'fateclaw_pro' || /pro/i.test(plan.name)) return 'Pro';
-  return 'Plus';
+  return resolveMembershipPlanShortName(plan);
 }
 
 function resolveEntitlementShortName(
   entitlement: Pick<MembershipEntitlement, 'name' | 'plan_key'>,
 ) {
-  if (entitlement.plan_key === 'fateclaw_pro' || /pro/i.test(entitlement.name)) {
-    return 'Pro';
-  }
-  return 'Plus';
+  return resolveMembershipPlanShortName(entitlement);
 }
 
 function formatEntitlementRange(
