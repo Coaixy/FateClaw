@@ -33,7 +33,7 @@ const GiftCodeRedeemSchema = z.object({
 });
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/billing — 钱包余额与 Token 计费概览
+  // GET /api/billing — 积分余额与 Token 计费概览
   app.get('/', async (request, reply) => {
     await request.requireAuth();
     const result = await getBillingOverview(request.user.userId);
@@ -92,7 +92,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // POST /api/billing/daily-sign-in — 领取每日签到软妹币奖励
+  // POST /api/billing/daily-sign-in — 领取每日签到积分奖励
   app.post('/daily-sign-in', async (request, reply) => {
     await request.requireAuth();
     const result = await claimDailySignInReward(request.user.userId);
@@ -102,7 +102,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // POST /api/billing/gifts/redeem — 兑换软妹币礼品码
+  // POST /api/billing/gifts/redeem — 兑换积分礼品码
   app.post('/gifts/redeem', async (request, reply) => {
     await request.requireAuth();
     const parsed = GiftCodeRedeemSchema.safeParse(request.body);
@@ -121,7 +121,7 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // POST /api/billing/membership/subscribe — 使用钱包余额开通或续费会员套餐
+  // POST /api/billing/membership/subscribe — 使用积分余额开通或续费会员套餐
   app.post('/membership/subscribe', async (request, reply) => {
     await request.requireAuth();
     const parsed = MembershipSubscribeSchema.safeParse(request.body);

@@ -11,13 +11,13 @@ import type { BillingStatus } from '@/features/billing/api';
 import { formatCoins } from '@/lib/soft-currency';
 
 /**
- * 渲染顶部余额入口的展开面板。
+ * 渲染顶部积分入口的展开面板。
  *
- * @param props.status 当前账单余额状态。
- * @param props.refreshing 是否正在刷新余额。
- * @param props.onRefresh 用户手动刷新余额时的回调。
+ * @param props.status 当前账单积分状态。
+ * @param props.refreshing 是否正在刷新积分。
+ * @param props.onRefresh 用户手动刷新积分时的回调。
  * @param props.onNavigate 点击面板内路由入口后的关闭回调。
- * @returns 仅包含钱包余额概览和钱包/会员分流入口的弹层。
+ * @returns 仅包含积分概览和积分/会员分流入口的弹层。
  */
 export function UsagePanel({
   status,
@@ -44,10 +44,10 @@ export function UsagePanel({
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <div className="text-[12px] font-semibold text-ink">
-              钱包概览
+              积分概览
             </div>
             <div className="mt-1 max-w-[250px] text-[10px] leading-4 text-muted">
-              余额用于模型服务费、会员续费和充值后的扣费结算
+              会员免费额度优先抵扣，超出后继续使用积分余额
             </div>
           </div>
           <button
@@ -65,7 +65,7 @@ export function UsagePanel({
         <section className="rounded-lg border border-hairline/50 bg-canvas/50 p-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] font-medium text-muted">
-              可用余额
+              积分余额
             </span>
             <Wallet size={14} className="text-primary" />
           </div>
@@ -73,8 +73,8 @@ export function UsagePanel({
             {formatCoins(status.available_coins)}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <BalanceChip label="充值余额" value={status.purchased_coins} />
-            <BalanceChip label="赠送余额" value={status.bonus_coins} />
+            <BalanceChip label="充值积分" value={status.purchased_coins} />
+            <BalanceChip label="奖励积分" value={status.bonus_coins} />
           </div>
         </section>
       </div>
@@ -86,7 +86,7 @@ export function UsagePanel({
           className="flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
         >
           <Wallet size={12} />
-          钱包充值
+          补充积分
         </Link>
         <Link
           href="/membership"

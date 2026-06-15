@@ -101,7 +101,7 @@ export function formatChatDuration(
  * 将 AI 回复计费明细格式化为聊天气泡下方的紧凑标签。
  *
  * @param metadata 后端写入消息 metadata 的计费明细。
- * @returns 可直接展示的中文软妹币标签列表；非法或缺失时返回空列表。
+ * @returns 可直接展示的中文积分标签列表；非法或缺失时返回空列表。
  */
 export function formatChatCostLabels(
   metadata: unknown,
@@ -124,7 +124,10 @@ export function formatChatCostLabels(
     data.membership_covered_coins > 0
   ) {
     const coins = formatCoins(data.membership_covered_coins, locale);
-    labels.push(t?.('format.membershipCovered', { coins }) ?? `会员抵扣 ${coins}`);
+    labels.push(
+      t?.('format.membershipCovered', { coins }) ??
+        `会员免费额度抵扣 ${coins}`,
+    );
   }
 
   if (
@@ -133,7 +136,7 @@ export function formatChatCostLabels(
     data.actual_charge_coins >= 0
   ) {
     const coins = formatCoins(data.actual_charge_coins, locale);
-    labels.push(t?.('format.walletCharged', { coins }) ?? `钱包实扣 ${coins}`);
+    labels.push(t?.('format.walletCharged', { coins }) ?? `积分实扣 ${coins}`);
   }
 
   return labels;
@@ -142,8 +145,8 @@ export function formatChatCostLabels(
 /**
  * 将 AI 回复实际扣费金额格式化为聊天气泡下方的紧凑标签。
  *
- * @param value 后端写入 metadata.actual_charge_coins 的软妹币金额。
- * @returns 可直接展示的中文软妹币标签；非法或缺失时返回 null。
+ * @param value 后端写入 metadata.actual_charge_coins 的积分金额。
+ * @returns 可直接展示的中文积分标签；非法或缺失时返回 null。
  */
 export function formatChatCost(
   value: unknown,
@@ -161,7 +164,7 @@ export function formatChatCost(
   if (t) {
     return t('format.consumed', { coins: formatCoins(value as number, locale) });
   }
-  return labels[0]?.replace('钱包实扣', '消耗') ?? null;
+  return labels[0]?.replace('积分实扣', '消耗') ?? null;
 }
 
 export function formatRelativeDateLabel(

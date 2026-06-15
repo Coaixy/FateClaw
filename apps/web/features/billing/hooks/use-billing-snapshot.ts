@@ -12,7 +12,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 /**
  * 读取当前登录用户的账单快照。
  *
- * @returns 钱包余额、初始加载态、刷新态和手动刷新函数。
+ * @returns 积分余额、初始加载态、刷新态和手动刷新函数。
  * @remarks 接口失败时会结束初始加载态并保留已有快照，避免界面一直显示骨架。
  */
 export function useBillingSnapshot() {

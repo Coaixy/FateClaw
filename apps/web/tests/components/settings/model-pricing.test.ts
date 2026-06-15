@@ -6,14 +6,14 @@ import {
 } from '../../../components/settings/model-pricing';
 
 describe('officialModelPriceLabel', () => {
-  it('shows soft currency token prices', () => {
+  it('shows credit token prices', () => {
     expect(
       officialModelPriceLabel({
         input_token_price_per_million_coins: 1000,
         output_token_price_per_million_coins: 5000,
       }),
     ).toBe(
-      '输入 软妹币 1,000.00 / 百万 Token · 输出 软妹币 5,000.00 / 百万 Token',
+      '输入 1,000.00 积分 / 百万 Token · 输出 5,000.00 积分 / 百万 Token',
     );
   });
 });

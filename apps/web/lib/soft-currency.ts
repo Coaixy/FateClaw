@@ -5,26 +5,30 @@ function resolveNumberLocale(locale?: Locale): string {
 }
 
 /**
- * 将内部软妹币金额格式化为统一展示文案。
+ * 将内部积分金额格式化为统一展示文案。
  *
- * @param coins 内部软妹币金额。
+ * @param coins 内部积分金额。
  * @param locale 当前前端展示语言；缺省时保持简中旧行为。
- * @returns 用于余额和扣费标签的本地化金额文案。
+ * @returns 用于积分余额和扣费标签的本地化金额文案。
  */
 export function formatCoins(coins: number, locale?: Locale): string {
   const amount = Number.isFinite(coins) ? coins : 0;
-  const label =
-    locale === 'en' ? 'CNY' : locale === 'zh-TW' ? '軟妹幣' : '软妹币';
-  return `${label} ${amount.toLocaleString(resolveNumberLocale(locale), {
+  const formattedAmount = amount.toLocaleString(resolveNumberLocale(locale), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
+  if (locale === 'en') {
+    return `${formattedAmount} credits`;
+  }
+  return locale === 'zh-TW'
+    ? `${formattedAmount} 積分`
+    : `${formattedAmount} 积分`;
 }
 
 /**
- * 将带正负号的软妹币变动格式化为统一展示文案。
+ * 将带正负号的积分变动格式化为统一展示文案。
  *
- * @param coins 内部软妹币变动金额。
+ * @param coins 内部积分变动金额。
  * @param locale 当前前端展示语言；缺省时保持简中旧行为。
  * @returns 带符号的本地化金额文案。
  */

@@ -16,7 +16,7 @@ function membershipStatusText(status: MembershipStatus['allowance_status']) {
     case 'almost_used':
       return '即将用完';
     case 'used_up':
-      return '本月会员额度已用完';
+      return '本月会员免费额度已用完';
     case 'inactive':
     default:
       return '未开通';
@@ -75,11 +75,11 @@ export function WalletMembershipCard({
             FateClaw Plus
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            {formatCoins(membership.monthly_price_coins)} / 月 · 会员额度优先抵扣
+            {formatCoins(membership.monthly_price_coins)} / 月 · 会员免费额度优先抵扣
             AI Chat 消耗
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {['AI Chat 会员额度', '高峰优先响应', '持续追问', '微信 Claw'].map(
+            {['AI Chat 会员免费额度', '高峰优先响应', '持续追问', '微信 Claw'].map(
               (item) => (
                 <span
                   key={item}
@@ -106,7 +106,7 @@ export function WalletMembershipCard({
         <div className="mb-2 flex items-center justify-between gap-3 text-[12px]">
           <span className="font-medium">{membershipStatusText(membership.allowance_status)}</span>
           <span className="text-muted">
-            {active ? `已使用 ${usedPercentText}` : '会员额度进度'}
+            {active ? `已使用 ${usedPercentText}` : '会员免费额度进度'}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-hairline">
@@ -118,9 +118,9 @@ export function WalletMembershipCard({
         <div className="mt-2 text-[11px] leading-5 text-muted">
           {membership.enabled
             ? active
-              ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用钱包余额。`
-              : '开通后会员额度优先抵扣 AI Chat 消耗；额度用完后继续使用钱包余额。'
-            : 'Plus 暂未开放购买，当前仍按钱包余额扣费。'}
+              ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
+              : '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
+            : 'Plus 暂未开放购买，当前仍按积分余额扣费。'}
         </div>
       </div>
     </section>

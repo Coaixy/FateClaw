@@ -218,9 +218,9 @@ describe('chat display message state helpers', () => {
     expect(formatChatDuration(-1)).toBeNull();
   });
 
-  it('formats assistant response soft currency cost labels', () => {
-    expect(formatChatCost(0)).toBe('消耗 软妹币 0.00');
-    expect(formatChatCost(1.236)).toBe('消耗 软妹币 1.24');
+  it('formats assistant response credit cost labels', () => {
+    expect(formatChatCost(0)).toBe('消耗 0.00 积分');
+    expect(formatChatCost(1.236)).toBe('消耗 1.24 积分');
     expect(formatChatCost(-1)).toBeNull();
   });
 
@@ -230,9 +230,9 @@ describe('chat display message state helpers', () => {
         actual_charge_coins: 0,
         membership_covered_coins: 0.63,
       }),
-    ).toEqual(['会员抵扣 软妹币 0.63', '钱包实扣 软妹币 0.00']);
+    ).toEqual(['会员免费额度抵扣 0.63 积分', '积分实扣 0.00 积分']);
     expect(formatChatCostLabels({ actual_charge_coins: 1.236 })).toEqual([
-      '钱包实扣 软妹币 1.24',
+      '积分实扣 1.24 积分',
     ]);
   });
 });

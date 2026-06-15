@@ -303,7 +303,9 @@ function LatestMessageBillingNotice({
 }
 
 function shouldShowWalletRecovery(content: string) {
-  return /余额已欠费|充值后继续使用|余额不足|欠费/.test(content);
+  return /余额已欠费|积分已欠费|充值后继续使用|补充积分后继续使用|余额不足|积分不足|欠费/.test(
+    content,
+  );
 }
 
 function AiChatMessageRow({

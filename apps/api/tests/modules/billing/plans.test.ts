@@ -111,7 +111,7 @@ describe('metered billing plans', () => {
           billingMode: 'metered',
         } as never,
       }),
-    ).rejects.toThrow('余额已欠费，请充值后继续使用');
+    ).rejects.toThrow('积分已欠费，请补充积分后继续使用');
     expect(mockReserveUserBalanceCoins).not.toHaveBeenCalled();
   });
 

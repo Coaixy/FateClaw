@@ -191,7 +191,7 @@ export interface AdminUserMembershipState {
   membership_plans: MembershipPlanDto[];
 }
 
-/** 管理后台软妹币奖励配置视图。 */
+/** 管理后台积分奖励配置视图。 */
 export interface AdminRewardConfigView {
   daily_sign_in: {
     enabled: boolean;
@@ -302,7 +302,7 @@ async function getAdminUserMembershipState(
 }
 
 /**
- * 读取后台软妹币奖励配置。
+ * 读取后台积分奖励配置。
  */
 export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
   const [dailySignIn, membership, membershipPlans, freeProfessionalAi] =
@@ -329,7 +329,7 @@ export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
 }
 
 /**
- * 更新后台软妹币奖励配置。
+ * 更新后台积分奖励配置。
  */
 export async function updateAdminRewardConfig(input: {
   dailySignIn: {
@@ -1043,7 +1043,7 @@ export async function resetAdminUserPassword(input: {
  * @param input.planKey 会员套餐 key。
  * @param input.currentPeriodEnd 会员有效期结束时间。
  * @returns 最新会员状态、权益时间轴和可用套餐。
- * @remarks 正常用户购买不要调用此函数，它不会扣减钱包余额。
+ * @remarks 正常用户购买不要调用此函数，它不会扣减积分余额。
  */
 export async function setAdminUserMembership(input: {
   userId: string;

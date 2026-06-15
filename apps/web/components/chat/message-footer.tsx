@@ -2,14 +2,28 @@
 
 import type { ReactNode } from 'react';
 
-const COMPACT_COST_RE =
+const LEGACY_COMPACT_COST_RE =
   /^(会员抵扣|會員抵扣|Membership covered|钱包实扣|錢包實扣|Wallet charged)\s+(软妹币|軟妹幣|CNY)\s+(.+)$/;
+const CURRENT_COMPACT_COST_RE =
+  /^(会员免费额度抵扣|會員免費額度抵扣|Included allowance covered|积分实扣|積分實扣|Credits charged)\s+(.+)$/;
 
 function compactCostLabel(label: string): string {
-  const match = label.match(COMPACT_COST_RE);
-  if (!match) return label;
-  const action = match[1];
-  const amount = match[3];
+  const currentMatch = label.match(CURRENT_COMPACT_COST_RE);
+  if (currentMatch) {
+    const action = currentMatch[1];
+    const amount = currentMatch[2];
+    if (action === 'Included allowance covered') return `Covered ${amount}`;
+    if (action === 'Credits charged') return `Charged ${amount}`;
+    if (action === '會員免費額度抵扣') return `抵扣 ${amount}`;
+    if (action === '積分實扣') return `實扣 ${amount}`;
+    if (action === '会员免费额度抵扣') return `抵扣 ${amount}`;
+    return `实扣 ${amount}`;
+  }
+
+  const legacyMatch = label.match(LEGACY_COMPACT_COST_RE);
+  if (!legacyMatch) return label;
+  const action = legacyMatch[1];
+  const amount = legacyMatch[3];
   if (action === 'Membership covered') return `Covered ${amount}`;
   if (action === 'Wallet charged') return `Charged ${amount}`;
   if (action === '會員抵扣') return `抵扣 ${amount}`;

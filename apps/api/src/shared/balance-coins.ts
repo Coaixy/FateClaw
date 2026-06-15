@@ -1,4 +1,4 @@
-export const INSUFFICIENT_BALANCE_MESSAGE = '余额不足，请充值后继续使用';
+export const INSUFFICIENT_BALANCE_MESSAGE = '积分不足，请补充积分后继续使用';
 
 export interface SpendableBalanceState {
   readonly purchased_coins: number;

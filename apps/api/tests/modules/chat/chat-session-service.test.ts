@@ -789,7 +789,7 @@ describe('chat-session-service selected board context', () => {
     expect(result).toEqual({
       ok: false,
       statusCode: 402,
-      error: '余额已欠费，请充值后继续使用',
+      error: '积分已欠费，请补充积分后继续使用',
     });
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });

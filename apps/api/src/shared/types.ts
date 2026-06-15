@@ -9,8 +9,8 @@ export interface User {
   password_hash: string | null;
   auth_token_version?: number; // 认证令牌版本，改密后递增以撤销旧 JWT
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
-  purchased_coins: number; // 充值余额（不过期，可消费）
-  bonus_coins: number; // 赠送余额（可过期，消费优先扣）
+  purchased_coins: number; // 充值积分（不过期，可消费）
+  bonus_coins: number; // 赠送积分（可过期，消费优先扣）
   reserved_coins: number; // 历史冻结余额字段，当前模型扣费不再使用
   soul_content?: string; // 用户级 Soul 自定义人格，供站内 AI Chat 注入
   soul_edit_enabled?: boolean; // 是否允许 Pi 在对话中编辑用户级 Soul
@@ -298,7 +298,7 @@ export interface OfficialModelConfig {
 /**
  * 自配模型平台服务费的全局配置。
  *
- * @remarks 价格单位是软妹币 / 百万 Token，输入和输出 Token 使用同一价格。
+ * @remarks 价格单位是积分 / 百万 Token，输入和输出 Token 使用同一价格。
  */
 export interface ModelBillingConfig {
   id: 'default' | string;

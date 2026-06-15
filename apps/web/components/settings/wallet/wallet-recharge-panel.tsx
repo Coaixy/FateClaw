@@ -96,13 +96,13 @@ function isFreshPendingOrder(order: RechargeOrder): boolean {
 }
 
 /**
- * 渲染钱包充值面板。
+ * 渲染补充积分面板。
  *
- * @param props.orders 最近充值订单。
- * @param props.stats 充值统计数据。
- * @param props.refreshing 是否正在刷新充值状态。
- * @param props.onChanged 充值订单变化后的刷新回调。
- * @returns 分步充值表单、待支付订单和可折叠历史订单。
+ * @param props.orders 最近补充积分订单。
+ * @param props.stats 补充积分统计数据。
+ * @param props.refreshing 是否正在刷新补充积分状态。
+ * @param props.onChanged 补充积分订单变化后的刷新回调。
+ * @returns 分步补充积分表单、待支付订单和可折叠历史订单。
  */
 export function WalletRechargePanel({
   orders,

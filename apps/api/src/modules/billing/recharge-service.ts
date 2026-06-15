@@ -154,13 +154,13 @@ function parseRechargeAmount(
         ? raw.trim()
         : '';
   if (!/^\d+(\.\d{1,2})?$/.test(source)) {
-    return '充值金额必须是正数软妹币，最多 2 位小数';
+    return '补充积分金额必须是正数，最多 2 位小数';
   }
 
   const numericAmount = Number(source);
   const amountCoins = roundCoinsToCents(numericAmount);
   if (amountCoins <= 0) {
-    return '充值金额必须是正数软妹币，最多 2 位小数';
+    return '补充积分金额必须是正数，最多 2 位小数';
   }
   const minCoins = Number(paymentConfig.min_coins);
   const maxCoins = Number(paymentConfig.max_coins);
@@ -170,7 +170,7 @@ function parseRechargeAmount(
     opts.enforceRange !== false &&
     (amountCoins < minCoins || amountCoins > maxCoins)
   ) {
-    return `充值金额仅支持软妹币 ${paymentConfig.min_coins} - ${paymentConfig.max_coins}`;
+    return `补充积分金额仅支持 ${paymentConfig.min_coins} - ${paymentConfig.max_coins} 积分`;
   }
 
   return {
@@ -224,7 +224,7 @@ function validateProviderAmount(
     return fail(400, '支付平台返回的金额格式异常');
   }
   if (parsed.amountCoins !== roundCoinsToCents(order.amount_coins)) {
-    return fail(409, '支付金额和充值单不一致，请联系管理员处理');
+    return fail(409, '支付金额和补充积分订单不一致，请联系管理员处理');
   }
   return ok(null);
 }
@@ -298,7 +298,7 @@ export async function createRechargeOrderForUser(input: {
   const paymentConfig = await getRechargePaymentConfig();
   const config = resolveEpayConfig(paymentConfig, input.callbackUrls);
   if (!config) {
-    return fail(503, '充值暂未开放，请联系管理员配置支付');
+    return fail(503, '补充积分暂未开放，请联系管理员配置支付');
   }
 
   const payType = normalizePayType(input.payType);
@@ -331,7 +331,7 @@ export async function createRechargeOrderForUser(input: {
   try {
     const response = await createEpayPayment(config, {
       tradeId,
-      name: `命枢充值 ${parsedAmount.amountCoins} 软妹币`,
+      name: `命枢补充积分 ${parsedAmount.amountCoins} 积分`,
       money: parsedAmount.providerMoney,
       payType,
       clientIp: input.clientIp || '127.0.0.1',
@@ -407,7 +407,7 @@ export async function syncRechargeOrderForUser(input: {
     input.tradeId,
   );
   if (!order) {
-    return fail(404, '充值单不存在');
+    return fail(404, '补充积分订单不存在');
   }
   if (order.status === 'paid') {
     return ok(toRechargeOrderDto(order));
@@ -470,7 +470,7 @@ export async function handleRechargeNotification(
   const paymentConfig = await getRechargePaymentConfig();
   const config = resolveEpayBaseConfig(paymentConfig);
   if (!config) {
-    return fail(503, '充值暂未开放');
+    return fail(503, '补充积分暂未开放');
   }
 
   const payload = ensureStringRecord(rawPayload);
@@ -488,7 +488,7 @@ export async function handleRechargeNotification(
 
   const order = await getRechargeOrderByTradeId(tradeId);
   if (!order) {
-    return fail(404, '充值单不存在');
+    return fail(404, '补充积分订单不存在');
   }
 
   if (!isSuccessfulEpayNotification(payload)) {

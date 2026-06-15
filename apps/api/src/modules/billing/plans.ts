@@ -62,7 +62,7 @@ export interface MembershipPlanSummary {
 }
 
 /**
- * 单次计费结算摘要，用于前端展示钱包实扣和会员抵扣。
+ * 单次计费结算摘要，用于前端展示积分实扣和会员免费额度抵扣。
  */
 export interface BillingSettlementSummary {
   actualChargeCoins: number;
@@ -73,7 +73,7 @@ export interface BillingSettlementSummary {
 
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
 const COIN_CENTS = 100;
-export const BILLING_ARREARS_MESSAGE = '余额已欠费，请充值后继续使用';
+export const BILLING_ARREARS_MESSAGE = '积分已欠费，请补充积分后继续使用';
 
 function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -140,7 +140,7 @@ export async function reserveBillingForRequest(input: {
 }
 
 /**
- * 按模型 Token 用量完成计费结算，并返回原始费用、会员抵扣和钱包实扣明细。
+ * 按模型 Token 用量完成计费结算，并返回原始费用、会员免费额度抵扣和积分实扣明细。
  */
 export async function settleBillingReservationDetailed(input: {
   requestId: string;

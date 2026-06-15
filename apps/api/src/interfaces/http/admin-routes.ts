@@ -184,7 +184,7 @@ const SoftCurrencyNumberSchema = z
 const GrantBonusBalanceSchema = z.object({
   amount_coins: SoftCurrencyNumberSchema.refine(
     (value) => value > 0,
-    '赠送余额必须为正数软妹币',
+    '赠送积分必须为正数',
   ),
   source: z
     .enum(['new_user_gift', 'sign_in', 'admin_grant', 'promotion'])
@@ -619,8 +619,8 @@ const RewardMembershipPlanSchema = z.object({
   ),
   monthly_allowance_units: z
     .number()
-    .min(1, '会员额度必须大于 0')
-    .max(1_000_000_000_000, '会员额度过大'),
+    .min(1, '会员免费额度必须大于 0')
+    .max(1_000_000_000_000, '会员免费额度过大'),
   standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
     (value) => value > 0 && value <= 1_000_000,
     '标准额度折算价格必须在 0 到 1000000 之间',
@@ -652,8 +652,8 @@ const RewardConfigSchema = z.object({
     ),
     monthly_allowance_units: z
       .number()
-      .min(1, '会员额度必须大于 0')
-      .max(1_000_000_000_000, '会员额度过大'),
+      .min(1, '会员免费额度必须大于 0')
+      .max(1_000_000_000_000, '会员免费额度过大'),
     standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
       (value) => value > 0 && value <= 1_000_000,
       '标准额度折算价格必须在 0 到 1000000 之间',
@@ -1040,7 +1040,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // GET /api/admin/billing/gift-codes — 查询软妹币礼品码
+  // GET /api/admin/billing/gift-codes — 查询积分礼品码
   app.get('/billing/gift-codes', async (request, reply) => {
     const parsed = AdminGiftCodesQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -1056,7 +1056,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /api/admin/billing/gift-codes — 生成软妹币礼品码
+  // POST /api/admin/billing/gift-codes — 生成积分礼品码
   app.post('/billing/gift-codes', async (request, reply) => {
     const parsed = AdminCreateGiftCodesSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -1090,12 +1090,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // GET /api/admin/reward-config — 读取软妹币奖励配置
+  // GET /api/admin/reward-config — 读取积分奖励配置
   app.get('/reward-config', async () => {
     return getAdminRewardConfig();
   });
 
-  // PUT /api/admin/reward-config — 更新软妹币奖励配置
+  // PUT /api/admin/reward-config — 更新积分奖励配置
   app.put('/reward-config', async (request, reply) => {
     const parsed = RewardConfigSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -1583,7 +1583,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return getWalletTransactionsByUserId(id, 50);
   });
 
-  // POST /api/admin/users/:id/balance/grant — 管理员发放赠送余额（带过期时间）
+  // POST /api/admin/users/:id/balance/grant — 管理员发放赠送积分（带过期时间）
   app.post('/users/:id/balance/grant', async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = GrantBonusBalanceSchema.parse(request.body);
@@ -1608,7 +1608,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // POST /api/admin/users/:id/balance/adjust — 管理员调整用户充值余额（正数=充值，负数=扣减）
+  // POST /api/admin/users/:id/balance/adjust — 管理员调整用户充值积分（正数=补充，负数=扣减）
   app.post('/users/:id/balance/adjust', async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = AdjustPurchasedBalanceSchema.parse(request.body);
@@ -1630,7 +1630,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // GET /api/admin/users/:id/balance/grants — 查看用户赠送余额批次
+  // GET /api/admin/users/:id/balance/grants — 查看用户赠送积分批次
   app.get('/users/:id/balance/grants', async (request, reply) => {
     const { id } = request.params as { id: string };
     const query = request.query as {

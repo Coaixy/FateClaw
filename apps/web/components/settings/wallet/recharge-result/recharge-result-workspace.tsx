@@ -95,9 +95,9 @@ function statusCopy(status: ResultStatus): {
   switch (status) {
     case 'paid':
       return {
-        badge: '充值已到账',
+        badge: '积分已到账',
         title: '支付完成',
-        description: '余额已经更新，可以继续使用模型服务。',
+        description: '积分余额已经更新，可以继续使用 AI 解读。',
       };
     case 'pending':
       return {
@@ -108,8 +108,8 @@ function statusCopy(status: ResultStatus): {
     case 'failed':
       return {
         badge: '订单已关闭',
-        title: '本次充值未完成',
-        description: '没有产生到账记录，可以返回钱包重新创建充值单。',
+        title: '本次补充积分未完成',
+        description: '没有产生到账记录，可以返回积分与账单重新创建订单。',
       };
     case 'error':
       return {
@@ -120,8 +120,8 @@ function statusCopy(status: ResultStatus): {
     case 'missing':
       return {
         badge: '缺少订单号',
-        title: '未找到本次充值单',
-        description: '可以回到钱包查看最近订单和余额变化。',
+        title: '未找到本次补充积分订单',
+        description: '可以回到积分与账单查看最近订单和积分变化。',
       };
     case 'loading':
     default:
@@ -182,9 +182,9 @@ function DetailRow({
 }
 
 /**
- * 渲染充值支付返回后的结果通知页。
+ * 渲染补充积分支付返回后的结果通知页。
  *
- * @returns 自动同步订单状态的充值结果视图。
+ * @returns 自动同步订单状态的补充积分结果视图。
  */
 export function RechargeResultWorkspace() {
   const searchParams = useSearchParams();
@@ -287,7 +287,7 @@ export function RechargeResultWorkspace() {
   return (
     <AppShell>
       <h2 className="font-display mb-5 hidden text-base font-semibold lg:block">
-        充值结果
+        补充积分结果
       </h2>
       <div className="flex min-h-[70vh] items-start justify-center py-2 sm:py-6">
         <section
@@ -315,7 +315,7 @@ export function RechargeResultWorkspace() {
 
           <div className="px-5 py-5 sm:px-6">
             <div className="rounded-xl border border-hairline bg-canvas/55 px-4">
-              <DetailRow label="充值金额" value={amountLabel} />
+              <DetailRow label="补充金额" value={amountLabel} />
               <DetailRow label="支付方式" value={formatPayType(order?.pay_type)} />
               <DetailRow label="订单号" value={tradeIdLabel} mono />
               {providerTradeId && (
@@ -343,7 +343,7 @@ export function RechargeResultWorkspace() {
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
                 >
                   <Wallet size={15} />
-                  查看钱包
+                  查看积分与账单
                 </Link>
               ) : (
                 <button
@@ -365,7 +365,7 @@ export function RechargeResultWorkspace() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-hairline bg-canvas/60 px-4 text-[13px] font-medium text-muted transition-colors hover:text-ink"
               >
                 <ArrowLeft size={15} />
-                返回钱包
+                返回积分与账单
               </Link>
             </div>
 

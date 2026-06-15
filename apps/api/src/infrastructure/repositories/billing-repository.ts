@@ -342,7 +342,7 @@ export interface BillingRequestReservationListResult {
 }
 
 /**
- * 单次模型请求结算结果，包含钱包实扣和会员额度抵扣明细。
+ * 单次模型请求结算结果，包含积分实扣和会员免费额度抵扣明细。
  */
 export interface ModelChargeSettlementResult {
   actualChargeCoins: number;
@@ -408,7 +408,7 @@ export type GiftCodeBalanceType = 'purchased' | 'bonus';
 export type GiftCodeUsageType = 'single' | 'multi';
 export type GiftCodeStatus = 'active' | 'disabled' | 'expired' | 'exhausted';
 
-/** 软妹币礼品码主表行，status 为运行时派生状态。 */
+/** 积分礼品码主表行，status 为运行时派生状态。 */
 export interface GiftCodeRow {
   id: string;
   code: string;
@@ -454,7 +454,7 @@ export interface GiftCodeRedeemResult {
   available_coins: number;
 }
 
-/** 每日签到软妹币奖励的全局配置行。 */
+/** 每日签到积分奖励的全局配置行。 */
 export interface DailySignInConfigRow {
   id: 'default' | string;
   enabled: boolean;
@@ -995,7 +995,7 @@ export async function getMembershipEntitlements(
 }
 
 /**
- * 使用钱包余额开通或续费一个月指定 FateClaw 会员套餐。
+ * 使用积分余额开通或续费一个月指定 FateClaw 会员套餐。
  */
 export async function subscribeMembershipWithWallet(
   userId: string,
@@ -1143,7 +1143,7 @@ export async function subscribeMembershipWithWallet(
 }
 
 /**
- * 管理员直接设置用户会员有效期，不扣减用户钱包余额。
+ * 管理员直接设置用户会员有效期，不扣减用户积分余额。
  *
  * @param input.userId 目标用户 ID。
  * @param input.planKey 要设置的会员套餐 key，未知值会按历史规则回落到 Plus。
@@ -1195,7 +1195,7 @@ export async function setUserMembershipForAdmin(input: {
     const existingEnd = existing
       ? new Date(existing.current_period_end).getTime()
       : 0;
-    // 同套餐续期保留原周期锚点，避免重置当前周期已使用的会员额度。
+    // 同套餐续期保留原周期锚点，避免重置当前周期已使用的会员免费额度。
     const periodStart =
       existing?.status === 'active' && existingEnd > now.getTime()
         ? existing.current_period_start
@@ -1289,7 +1289,7 @@ export async function getDailySignInConfig(): Promise<DailySignInConfigRow> {
 }
 
 /**
- * 更新每日签到开关和每次奖励的软妹币数量。
+ * 更新每日签到开关和每次奖励的积分数量。
  */
 export async function updateDailySignInConfig(input: {
   enabled: boolean;
@@ -1632,7 +1632,7 @@ function isUniqueGiftCodeConflict(error: unknown): boolean {
 }
 
 /**
- * 管理员批量生成软妹币礼品码。
+ * 管理员批量生成积分礼品码。
  *
  * @param input 礼品码金额、余额类型、使用方式、生成数量和运营备注。
  * @returns 已创建的礼品码行，包含可复制给用户的 code。
@@ -1940,8 +1940,8 @@ export async function redeemGiftCodeForUser(input: {
 /**
  * 为用户创建每日签到奖励。
  *
- * 该函数在同一事务内创建签到记录、赠送余额批次、用户余额和钱包流水；
- * 如果当天已经签到，直接返回已有记录而不重复发放软妹币。
+ * 该函数在同一事务内创建签到记录、赠送积分批次、用户积分和钱包流水；
+ * 如果当天已经签到，直接返回已有记录而不重复发放积分。
  */
 export async function createDailySignInReward(input: {
   userId: string;
@@ -2081,7 +2081,7 @@ export async function markRechargeOrderPaymentCreated(input: {
     ],
   );
   if (rows.length === 0) {
-    throw new Error('充值单不存在');
+    throw new Error('补充积分订单不存在');
   }
   return normalizeRechargeOrderRow(rows[0] as RechargeOrderRow);
 }
@@ -2235,7 +2235,7 @@ export async function settleRechargeOrderPaid(input: {
       ? normalizeRechargeOrderRow(orderRows[0] as RechargeOrderRow)
       : undefined;
     if (!order) {
-      throw new Error('充值单不存在');
+      throw new Error('补充积分订单不存在');
     }
 
     // 支付平台通知可能重复到达，已入账订单直接返回，保证幂等。
@@ -2260,7 +2260,7 @@ export async function settleRechargeOrderPaid(input: {
       amountCoins: order.amount_coins,
       balanceSource: 'purchased',
       requestId: order.trade_id,
-      note: `充值到账软妹币 ${order.amount_coins}`,
+      note: `积分到账 ${order.amount_coins}`,
       metadata: {
         trade_id: order.trade_id,
         provider: order.provider,
@@ -2609,7 +2609,7 @@ export interface BalanceGrantRow {
 }
 
 /**
- * 查询用户当前活跃的赠送余额批次，按"最快过期的在前"排序。
+ * 查询用户当前活跃的赠送积分批次，按"最快过期的在前"排序。
  * 永不过期（expires_at IS NULL）排在最后，保证临期批次优先扣减。
  *
  * 调用方必须已在事务中并持有 users 行的 FOR UPDATE 锁；
@@ -2705,7 +2705,7 @@ export async function deductBalanceCoins(
     user.bonus_coins < bonusDeducted ||
     user.purchased_coins < purchasedDeducted
   ) {
-    throw new Error('余额不足，请充值后继续使用');
+    throw new Error('积分不足，请补充积分后继续使用');
   }
 
   // 更新 users 表的桶字段
@@ -2732,7 +2732,7 @@ export async function deductBalanceCoins(
 }
 
 /**
- * 模型请求结束后扣费，允许充值余额被扣成负数。
+ * 模型请求结束后扣费，允许充值积分被扣成负数。
  * 只有后续请求入口会因为欠费被拦截，当前请求的实际 Token 成本仍完整入账。
  */
 export async function deductModelChargeCoinsAllowDebt(
@@ -2779,7 +2779,7 @@ export async function deductModelChargeCoinsAllowDebt(
 }
 
 /**
- * 赠送余额（新用户礼包、签到奖励、活动余额、管理员手动发放）。
+ * 赠送积分（新用户礼包、签到奖励、活动余额、管理员手动发放）。
  * 原子操作：创建 balance_grants 行 → 更新 users.bonus_coins → 写流水。
  */
 export async function grantBonusBalance(input: {
@@ -2791,7 +2791,7 @@ export async function grantBonusBalance(input: {
   grantedBy?: string | null;
 }): Promise<{ user: User; grantId: string }> {
   if (input.amountCoins <= 0) {
-    throw new Error('赠送余额必须为正');
+    throw new Error('赠送积分必须为正');
   }
   const grantId = `bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const client = await pool.connect();
@@ -2832,7 +2832,7 @@ export async function grantBonusBalance(input: {
       amountCoins: input.amountCoins,
       balanceSource: 'bonus',
       balanceGrantId: grantId,
-      note: input.note ?? `赠送余额（${input.source}）`,
+      note: input.note ?? `赠送积分（${input.source}）`,
       metadata: {
         source: input.source,
         grantedBy: input.grantedBy ?? null,
@@ -2922,7 +2922,7 @@ export async function expireBonusBalance(
           amountCoins: -remaining,
           balanceSource: 'bonus',
           balanceGrantId: batch.id,
-          note: `赠送余额过期（批次 ${batch.id}）`,
+          note: `赠送积分过期（批次 ${batch.id}）`,
           metadata: {
             batch_source: batch.source,
             expires_at: batch.expires_at,
@@ -2936,7 +2936,7 @@ export async function expireBonusBalance(
       totalCoinsExpired += remaining;
     } catch (err) {
       await client.query('ROLLBACK');
-      logger.warn({ grantId, err }, '赠送余额过期处理失败');
+      logger.warn({ grantId, err }, '赠送积分过期处理失败');
     } finally {
       client.release();
     }
@@ -2964,7 +2964,7 @@ export async function getBalanceGrantsByUserId(
 }
 
 /**
- * 管理员调整用户的充值余额（purchased_coins）。
+ * 管理员调整用户的充值积分（purchased_coins）。
  */
 export async function adjustUserPurchasedBalance(
   userId: string,
@@ -3241,7 +3241,7 @@ export async function settleUserModelChargeCoins(
       previousChargeCoins + actualChargeCoins,
     );
 
-    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值余额扣成负数。
+    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值积分扣成负数。
     const deduction = await deductModelChargeCoinsAllowDebt(
       client,
       normalizeUserCoins(user),

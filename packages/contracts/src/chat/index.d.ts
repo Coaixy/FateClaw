@@ -19,13 +19,13 @@ export interface MessageMetadataDto {
   request_id?: string;
   /** 本轮 AI 回复从提交到最终响应的耗时，单位毫秒。 */
   duration_ms?: number;
-  /** 本轮 AI 回复实际结算的软妹币金额。 */
+  /** 本轮 AI 回复实际结算的积分金额。 */
   actual_charge_coins?: number;
-  /** 本轮 AI 回复按模型价格计算的原始软妹币金额。 */
+  /** 本轮 AI 回复按模型价格计算的原始积分金额。 */
   raw_charge_coins?: number;
-  /** 本轮 AI 回复被会员额度抵扣的软妹币金额。 */
+  /** 本轮 AI 回复被会员免费额度抵扣的积分金额。 */
   membership_covered_coins?: number;
-  /** 本轮 AI 回复消耗的会员额度单位。 */
+  /** 本轮 AI 回复消耗的会员免费额度单位。 */
   membership_consumed_units?: number;
 }
 

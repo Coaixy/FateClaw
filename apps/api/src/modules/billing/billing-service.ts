@@ -238,9 +238,9 @@ export async function getDailySignInStatus(
 }
 
 /**
- * 领取每日签到软妹币奖励。
+ * 领取每日签到积分奖励。
  *
- * 奖励以赠送余额入账；同一用户同一日期只允许成功领取一次。
+ * 奖励以赠送积分入账；同一用户同一日期只允许成功领取一次。
  */
 export async function claimDailySignInReward(
   userId: string,
@@ -287,9 +287,9 @@ export async function claimDailySignInReward(
 }
 
 /**
- * 兑换当前用户输入的软妹币礼品码。
+ * 兑换当前用户输入的积分礼品码。
  *
- * 充值余额礼品会进入 purchased_coins；奖励余额礼品会进入 bonus_coins 并创建可追溯批次。
+ * 充值积分礼品会进入 purchased_coins；奖励积分礼品会进入 bonus_coins 并创建可追溯批次。
  */
 export async function redeemCurrentUserGiftCode(
   userId: string,

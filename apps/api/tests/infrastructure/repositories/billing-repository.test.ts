@@ -770,7 +770,7 @@ describe('billing repository', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('uses active membership allowance before charging wallet balance', async () => {
+  it('uses active membership allowance before charging credit balance', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
 
@@ -872,7 +872,7 @@ describe('billing repository', () => {
     ).toBe(false);
   });
 
-  it('opens membership by deducting wallet balance and creating a monthly allowance', async () => {
+  it('opens membership by deducting credit balance and creating a monthly allowance', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-31T00:00:00.000Z'));
 
@@ -1170,7 +1170,7 @@ describe('billing repository', () => {
     ]);
   });
 
-  it('lets admins set membership without charging wallet balance', async () => {
+  it('lets admins set membership without charging credit balance', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 

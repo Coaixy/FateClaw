@@ -799,7 +799,7 @@ function MembershipDetailPanel({
 /**
  * 渲染会员中心页面。
  *
- * @returns 会员订阅和会员额度用量视图。
+ * @returns 会员订阅和会员免费额度用量视图。
  */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();

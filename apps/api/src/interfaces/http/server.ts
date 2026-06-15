@@ -216,7 +216,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api/')) return;
 
-    // 用户态 API 数据不能被 CDN 或浏览器复用，否则会出现删除会话、充值余额等状态回退。
+    // 用户态 API 数据不能被 CDN 或浏览器复用，否则会出现删除会话、充值积分等状态回退。
     setNoStoreHeaders(reply);
     reply.header('Vary', 'Origin, Authorization, Cookie');
   });

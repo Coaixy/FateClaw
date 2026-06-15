@@ -20,9 +20,9 @@ async function fetchWalletOverviewSnapshot() {
 }
 
 /**
- * 钱包概览数据 Hook。
+ * 积分与账单概览数据 Hook。
  *
- * 只聚合钱包余额、充值和流水；会员订阅与 Token 用量由会员中心承载。
+ * 只聚合积分余额、补充积分订单和流水；会员订阅与 Token 用量由会员中心承载。
  */
 export function useWalletOverview() {
   const [billingInfo, setBillingInfo] = useState<BillingStatus | null>(null);

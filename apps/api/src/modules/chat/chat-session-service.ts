@@ -162,6 +162,7 @@ interface PreparedOwnedChatSessionTurn {
 function isPaymentRequiredError(errorMessage: string): boolean {
   return (
     errorMessage.includes('余额不足') ||
+    errorMessage.includes('积分不足') ||
     errorMessage.includes('免费对话额度') ||
     errorMessage.includes('欠费')
   );

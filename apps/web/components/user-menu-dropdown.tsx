@@ -33,9 +33,9 @@ type UserInfo = {
  * 渲染右上角用户菜单，并承载菜单内可即时完成的账户动作。
  *
  * @param props.user 当前登录用户的展示信息。
- * @param props.balanceLabel 钱包余额文案。
+ * @param props.balanceLabel 积分余额文案。
  * @param props.onNavigate 跳转菜单项后的关闭回调。
- * @param props.onBillingChanged 余额或签到状态变化后的刷新回调。
+ * @param props.onBillingChanged 积分或签到状态变化后的刷新回调。
  * @param props.onLogout 退出登录回调。
  * @param props.avatar 菜单头部头像节点。
  * @returns 用户菜单下拉层。
