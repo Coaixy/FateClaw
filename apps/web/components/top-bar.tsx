@@ -244,7 +244,6 @@ export function TopBar({
             balanceLabel={dropdownBalanceLabel}
             avatar={<AvatarBadge />}
             onNavigate={() => setMenuOpen(false)}
-            onBillingChanged={refresh}
             onLogout={() => {
               setMenuOpen(false);
               onLogout();

@@ -673,17 +673,17 @@ function MembershipDetailPanel({
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const detailItems = [
     {
-      className: 'border-r border-hairline/70',
+      className: 'border-b border-hairline/70 sm:border-b-0 sm:border-r',
       label: t('pages.membership.expiresAt'),
       value: formatMembershipDate(membership.current_period_end, formatDate, t),
     },
     {
-      className: 'sm:border-r sm:border-hairline/70',
+      className: 'border-b border-hairline/70 sm:border-b-0 sm:border-r',
       label: t('pages.membership.monthlyUsage'),
       value: formatMembershipUsage(monthlyMessages, monthlyTokens, formatNumber, t),
     },
     {
-      className: 'col-span-2 border-t border-hairline/70 sm:col-span-1 sm:border-t-0',
+      className: '',
       label: t('pages.membership.membershipPrice'),
       value: t('pages.membership.pricePerMonth', {
         price: formatCoins(membership.monthly_price_coins, locale),
@@ -709,7 +709,7 @@ function MembershipDetailPanel({
     >
       <div className="grid sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
-          <div className="grid grid-cols-2 sm:grid-cols-3">
+          <div className="grid sm:grid-cols-3">
             {detailItems.map((item) => (
               <div
                 key={item.label}
@@ -718,18 +718,18 @@ function MembershipDetailPanel({
                 <div className="text-[11px] font-medium text-muted">
                   {item.label}
                 </div>
-                <div className="mt-1 min-h-5 whitespace-nowrap text-[13px] font-semibold leading-5 text-ink">
+                <div className="mt-1 min-h-5 break-words text-[13px] font-semibold leading-5 text-ink sm:whitespace-nowrap">
                   {item.value}
                 </div>
               </div>
             ))}
           </div>
-          <div className="border-t border-hairline/70 py-3 pl-14 pr-3 sm:px-4">
-            <div className="mb-2 flex items-center justify-between gap-3 text-[12px] leading-5">
+          <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
+            <div className="mb-2 flex flex-col gap-1 text-[12px] leading-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <span className="font-medium text-muted">
                 {t('pages.membership.allowanceProgress')}
               </span>
-              <span className="min-w-0 text-right text-ink">
+              <span className="min-w-0 text-ink sm:text-right">
                 {progressLabel}
               </span>
             </div>
@@ -758,12 +758,12 @@ function MembershipDetailPanel({
           </div>
           {entitlements.length > 0 && (
             <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                 <div className="text-[11px] font-medium text-muted">
                   {t('pages.membership.entitlementTimeline')}
                 </div>
                 {nextEntitlement && (
-                  <div className="text-[11px] text-muted">
+                  <div className="text-[11px] leading-5 text-muted sm:text-right">
                     {t('pages.membership.entitlementFallbackHint', {
                       plan: resolveEntitlementShortName(nextEntitlement),
                       date: formatMembershipDate(

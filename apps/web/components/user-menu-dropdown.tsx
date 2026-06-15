@@ -1,17 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
-  CalendarCheck,
   ChevronRight,
   Compass,
   Crown,
   Gift,
   LogOut,
-  Loader2,
   ServerCog,
   Sparkle,
   Sparkles,
@@ -19,10 +16,7 @@ import {
   User as UserIcon,
   Wallet,
 } from 'lucide-react';
-import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { useI18n } from '@/lib/i18n';
-import { formatCoins } from '@/lib/soft-currency';
-import { useToast } from '@/lib/use-toast';
 import { getUserIdentityLabel } from '@/lib/user-identity';
 
 type UserInfo = {
@@ -35,7 +29,6 @@ type UserInfo = {
  * @param props.user 当前登录用户的展示信息。
  * @param props.balanceLabel 积分余额文案。
  * @param props.onNavigate 跳转菜单项后的关闭回调。
- * @param props.onBillingChanged 积分或签到状态变化后的刷新回调。
  * @param props.onLogout 退出登录回调。
  * @param props.avatar 菜单头部头像节点。
  * @returns 用户菜单下拉层。
@@ -44,90 +37,16 @@ export function UserMenuDropdown({
   user,
   balanceLabel,
   onNavigate,
-  onBillingChanged,
   onLogout,
   avatar,
 }: {
   user: UserInfo;
   balanceLabel: string;
   onNavigate: () => void;
-  onBillingChanged: () => Promise<void> | void;
   onLogout: () => void;
   avatar: React.ReactNode;
 }) {
   const { locale, t } = useI18n();
-  const { toast } = useToast();
-  const [dailyStatus, setDailyStatus] = useState<DailySignInStatus | null>(
-    null,
-  );
-  const [dailyLoading, setDailyLoading] = useState(true);
-  const [dailyBusy, setDailyBusy] = useState(false);
-  const [dailyError, setDailyError] = useState('');
-
-  const loadDailyStatus = useCallback(async () => {
-    setDailyLoading(true);
-    setDailyError('');
-
-    try {
-      setDailyStatus(await billingApi.dailySignInStatus());
-    } catch (err) {
-      setDailyError(
-        err instanceof Error ? err.message : t('userMenu.dailyStatusLoadFailed'),
-      );
-    } finally {
-      setDailyLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    void loadDailyStatus();
-  }, [loadDailyStatus]);
-
-  const dailyEnabled = Boolean(dailyStatus?.enabled);
-  const dailySignedIn = Boolean(dailyStatus?.signed_in_today);
-  const dailyRewardCoins = dailyStatus?.reward_coins ?? 0;
-  const canClaimDaily =
-    dailyEnabled && !dailySignedIn && dailyRewardCoins > 0 && !dailyError;
-  const dailySecondary = dailyLoading
-    ? t('userMenu.dailyLoading')
-    : dailyError
-      ? t('userMenu.dailyRetry')
-      : !dailyEnabled
-        ? t('userMenu.dailyDisabled')
-        : dailySignedIn
-          ? t('userMenu.dailySigned')
-          : dailyRewardCoins > 0
-            ? t('userMenu.dailyClaimable', {
-                coins: formatCoins(dailyRewardCoins, locale),
-              })
-            : t('userMenu.dailyUnconfigured');
-
-  const claimDailySignIn = async () => {
-    if (dailyLoading || dailyBusy) return;
-    if (dailyError) {
-      await loadDailyStatus();
-      return;
-    }
-    if (!canClaimDaily) return;
-
-    setDailyBusy(true);
-    try {
-      const result = await billingApi.claimDailySignIn();
-      setDailyStatus(result);
-      toast('success', t('userMenu.dailyClaimed', {
-        coins: formatCoins(result.received_coins, locale),
-      }));
-      await onBillingChanged();
-    } catch (err) {
-      toast(
-        'error',
-        err instanceof Error ? err.message : t('userMenu.dailyClaimFailed'),
-      );
-      await loadDailyStatus();
-    } finally {
-      setDailyBusy(false);
-    }
-  };
 
   return (
     <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-hairline/70 bg-surface-card/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
@@ -204,14 +123,6 @@ export function UserMenuDropdown({
             label={t('userMenu.modelSettings')}
             onNavigate={onNavigate}
           />
-          <MenuActionItem
-            icon={CalendarCheck}
-            label={t('userMenu.dailySignIn')}
-            secondary={dailySecondary}
-            busy={dailyBusy}
-            disabled={!canClaimDaily && !dailyError}
-            onClick={() => void claimDailySignIn()}
-          />
           <MenuItem
             href="/profile"
             icon={UserIcon}
@@ -284,56 +195,5 @@ function MenuItem({
         className="shrink-0 text-primary opacity-35 transition-transform group-hover:translate-x-0.5 group-hover:opacity-80"
       />
     </Link>
-  );
-}
-
-function MenuActionItem({
-  icon: Icon,
-  label,
-  secondary,
-  busy,
-  disabled,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  secondary: string;
-  busy: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  const actionable = !disabled && !busy;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || busy}
-      className={`group flex min-h-11 w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold shadow-sm transition-all active:translate-y-0 ${
-        actionable
-          ? 'cursor-pointer border-primary/25 bg-primary/12 text-ink hover:-translate-y-0.5 hover:bg-primary/16 hover:shadow-md'
-          : 'cursor-not-allowed border-hairline/45 bg-canvas/38 text-muted/80'
-      }`}
-    >
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-          actionable ? 'bg-primary/14 text-primary' : 'bg-muted/8 text-muted'
-        }`}
-      >
-        {busy ? (
-          <Loader2 size={14} className="animate-spin" />
-        ) : (
-          <Icon size={14} />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span
-        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-          actionable ? 'bg-primary/14 text-primary' : 'bg-muted/8 text-muted/70'
-        }`}
-      >
-        {secondary}
-      </span>
-    </button>
   );
 }

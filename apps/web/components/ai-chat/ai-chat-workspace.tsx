@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Bot,
   Brain,
+  CalendarCheck,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -46,6 +47,7 @@ import {
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import {
   paipanApi,
@@ -61,6 +63,7 @@ import {
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { buildGuideReturnQuery } from '@/lib/return-to';
+import { formatCoins } from '@/lib/soft-currency';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
@@ -918,6 +921,9 @@ function AiChatWorkspaceContent() {
   const centeredContent = showHomeModeSelector ? (
     <HomeModeSelector
       loginRequired={!authLoading && !user}
+      dailySignInEntry={
+        !authLoading && user ? <DailySignInHomeEntry /> : null
+      }
       onLogin={() => requestLogin()}
       onOpenSimple={() => setHomeMode('simple')}
       onOpenExpert={() => setHomeMode('expert')}
@@ -1089,11 +1095,13 @@ function AiChatWorkspaceContent() {
 
 function HomeModeSelector({
   loginRequired,
+  dailySignInEntry,
   onLogin,
   onOpenSimple,
   onOpenExpert,
 }: {
   loginRequired: boolean;
+  dailySignInEntry: ReactNode;
   onLogin: () => void;
   onOpenSimple: () => void;
   onOpenExpert: () => void;
@@ -1138,6 +1146,8 @@ function HomeModeSelector({
           </div>
         </div>
       )}
+
+      {dailySignInEntry}
 
       <div className="grid gap-2.5 sm:grid-cols-2">
         <button
@@ -1207,6 +1217,94 @@ function HomeModeSelector({
         </button>
       </div>
     </div>
+  );
+}
+
+function DailySignInHomeEntry() {
+  const { locale, t } = useI18n();
+  const { toast } = useToast();
+  const [status, setStatus] = useState<DailySignInStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      setStatus(await billingApi.dailySignInStatus());
+    } catch {
+      setStatus(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+
+  const enabled = Boolean(status?.enabled);
+  const signedIn = Boolean(status?.signed_in_today);
+  const rewardCoins = status?.reward_coins ?? 0;
+  const canClaim = enabled && !signedIn && rewardCoins > 0;
+
+  const claim = async () => {
+    if (!canClaim || busy) return;
+
+    setBusy(true);
+    try {
+      const result = await billingApi.claimDailySignIn();
+      setStatus(result);
+      toast(
+        'success',
+        t('pages.dailySignIn.claimed', {
+          coins: formatCoins(result.received_coins, locale),
+        }),
+      );
+    } catch (err) {
+      toast(
+        'error',
+        err instanceof Error ? err.message : t('pages.dailySignIn.claimFailed'),
+      );
+      await loadStatus();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading || !canClaim) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void claim()}
+      disabled={busy}
+      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/12 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 disabled:cursor-wait disabled:opacity-70"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/14 text-primary">
+          {busy ? (
+            <Loader2 size={17} className="animate-spin" />
+          ) : (
+            <CalendarCheck size={17} />
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-ink">
+            {t('pages.dailySignIn.title')}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted">
+            {t('pages.dailySignIn.claimable', {
+              coins: formatCoins(rewardCoins, locale),
+            })}
+          </span>
+        </span>
+      </span>
+      <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-primary px-3 text-[12px] font-semibold text-on-primary transition-colors group-hover:bg-primary-active">
+        {t('pages.dailySignIn.signButton')}
+      </span>
+    </button>
   );
 }
 
