@@ -1001,7 +1001,7 @@ describe('billing repository', () => {
       ],
     );
 
-    await subscribeMembershipWithWallet('user-1');
+    await subscribeMembershipWithWallet('user-1', 'fateclaw_insight');
 
     const membershipInsert = clientCalls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
@@ -1077,7 +1077,7 @@ describe('billing repository', () => {
       ],
     );
 
-    await subscribeMembershipWithWallet('user-1');
+    await subscribeMembershipWithWallet('user-1', 'fateclaw_insight');
 
     const membershipInsert = clientCalls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
@@ -1164,7 +1164,7 @@ describe('billing repository', () => {
     );
     expect(membershipInsert?.params).toEqual([
       'user-1',
-      'fateclaw_pro',
+      'fateclaw_deep',
       '2026-06-10T00:00:00.000Z',
       '2026-07-10T00:00:00.000Z',
     ]);
@@ -1182,7 +1182,7 @@ describe('billing repository', () => {
     });
     const membership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       status: 'active',
       current_period_start: '2026-06-15T00:00:00.000Z',
       current_period_end: '2026-07-31T15:59:59.999Z',
@@ -1207,7 +1207,7 @@ describe('billing repository', () => {
           {
             id: 'allowance-plus',
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             period_start: '2026-06-15T00:00:00.000Z',
             period_end: '2026-07-15T00:00:00.000Z',
             allowance_units: 3000000,
@@ -1231,7 +1231,7 @@ describe('billing repository', () => {
     );
     expect(membershipInsert?.params).toEqual([
       'user-1',
-      'fateclaw_plus',
+      'fateclaw_insight',
       '2026-06-15T00:00:00.000Z',
       '2026-07-31T15:59:59.999Z',
     ]);
@@ -1317,33 +1317,43 @@ describe('billing repository', () => {
     ]);
   });
 
-  it('returns the effective membership entitlement timeline after a Pro overlay', async () => {
+  it('returns the effective membership entitlement timeline after a Deep overlay', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 
-    const plusMembership = {
+    const insightMembership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       status: 'active',
       current_period_start: '2026-06-01T00:00:00.000Z',
       current_period_end: '2027-07-01T00:00:00.000Z',
       created_at: '2026-06-01T00:00:00.000Z',
     };
-    const proMembership = {
+    const deepMembership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_pro',
+      plan_key: 'fateclaw_deep',
       status: 'active',
       current_period_start: '2026-06-10T00:00:00.000Z',
       current_period_end: '2026-07-10T00:00:00.000Z',
       created_at: '2026-06-10T00:00:00.000Z',
     };
     const { calls } = createMockPool([
-      [plusMembership, proMembership],
+      [insightMembership, deepMembership],
       [
         {
-          id: 'default',
+          id: 'fateclaw_clarity',
           enabled: true,
-          name: 'FateClaw Plus',
+          name: 'FateClaw Clarity',
+          monthly_price_coins: 10,
+          monthly_allowance_units: 0,
+          standard_price_per_million_units_coins: 10,
+        },
+      ],
+      [
+        {
+          id: 'fateclaw_insight',
+          enabled: true,
+          name: 'FateClaw Insight',
           monthly_price_coins: 30,
           monthly_allowance_units: 3000000,
           standard_price_per_million_units_coins: 10,
@@ -1351,9 +1361,9 @@ describe('billing repository', () => {
       ],
       [
         {
-          id: 'fateclaw_pro',
+          id: 'fateclaw_deep',
           enabled: true,
-          name: 'FateClaw Pro',
+          name: 'FateClaw Deep',
           monthly_price_coins: 100,
           monthly_allowance_units: 10000000,
           standard_price_per_million_units_coins: 10,
@@ -1363,15 +1373,15 @@ describe('billing repository', () => {
 
     await expect(getMembershipEntitlements('user-1')).resolves.toEqual([
       {
-        plan_key: 'fateclaw_pro',
-        name: 'FateClaw Pro',
+        plan_key: 'fateclaw_deep',
+        name: 'FateClaw Deep',
         effective_start: '2026-06-10T00:00:00.000Z',
         effective_end: '2026-07-10T00:00:00.000Z',
         is_current: true,
       },
       {
-        plan_key: 'fateclaw_plus',
-        name: 'FateClaw Plus',
+        plan_key: 'fateclaw_insight',
+        name: 'FateClaw Insight',
         effective_start: '2026-07-10T00:00:00.000Z',
         effective_end: '2027-07-01T00:00:00.000Z',
         is_current: false,

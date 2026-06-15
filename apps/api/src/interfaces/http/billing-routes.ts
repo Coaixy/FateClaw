@@ -22,9 +22,17 @@ import {
 } from '../../modules/billing/recharge-service.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
+const MembershipPlanKeySchema = z.enum([
+  'fateclaw_clarity',
+  'fateclaw_insight',
+  'fateclaw_deep',
+  'fateclaw_plus',
+  'fateclaw_pro',
+]);
+
 const MembershipSubscribeSchema = z
   .object({
-    plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']).optional(),
+    plan_key: MembershipPlanKeySchema.optional(),
   })
   .optional();
 

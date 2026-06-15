@@ -125,6 +125,7 @@ import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
 } from '../user/phone.js';
+import { resolveMembershipPlanKey } from '../../shared/membership-plans.js';
 import type { User, UserRole } from '../../shared/types.js';
 
 const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
@@ -234,7 +235,7 @@ export async function getAdminStatusOverview(): Promise<AdminStatusStatsDto> {
 }
 
 function membershipPlanKeyFromConfigId(configId: string) {
-  return configId === 'fateclaw_pro' ? 'fateclaw_pro' : 'fateclaw_plus';
+  return resolveMembershipPlanKey(configId);
 }
 
 function membershipConfigToAdminView(
@@ -388,8 +389,7 @@ export async function updateAdminRewardConfig(input: {
     ),
   );
   const membershipPlans = await getMembershipPlanConfigs();
-  const membership =
-    membershipPlans.find((plan) => plan.id === 'default') ?? membershipPlans[0];
+  const membership = membershipPlans[0];
   const membershipView = membershipConfigToAdminView(membership);
   return {
     daily_sign_in: {

@@ -126,8 +126,13 @@ function membershipPlanLabel(
   if (!planKey) return '—';
   const configuredName = plans.find((plan) => plan.plan_key === planKey)?.name;
   if (configuredName) return configuredName;
-  if (planKey === 'fateclaw_pro') return 'FateClaw Pro';
-  if (planKey === 'fateclaw_plus') return 'FateClaw Plus';
+  if (planKey === 'fateclaw_deep' || planKey === 'fateclaw_pro') {
+    return 'FateClaw Deep';
+  }
+  if (planKey === 'fateclaw_insight' || planKey === 'fateclaw_plus') {
+    return 'FateClaw Insight';
+  }
+  if (planKey === 'fateclaw_clarity') return 'FateClaw Clarity';
   return planKey;
 }
 
@@ -377,7 +382,7 @@ function UserRow({
       detail.membership.plan_key ??
         detail.membership_plans.find((plan) => plan.enabled)?.plan_key ??
         detail.membership_plans[0]?.plan_key ??
-        'fateclaw_plus',
+        'fateclaw_clarity',
     );
     setMembershipEndDate(
       dateInputValue(detail.membership.current_period_end) ||
@@ -929,7 +934,9 @@ function UserRow({
                           className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
                         >
                           {detail.membership_plans.length === 0 ? (
-                            <option value="fateclaw_plus">FateClaw Plus</option>
+                            <option value="fateclaw_clarity">
+                              FateClaw Clarity
+                            </option>
                           ) : (
                             detail.membership_plans.map((plan) => (
                               <option

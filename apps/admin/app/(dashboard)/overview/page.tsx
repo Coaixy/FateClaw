@@ -100,11 +100,7 @@ function StatCard({
         <span className="text-[12px] text-muted">{label}</span>
       </div>
       <div className="text-xl font-semibold tracking-tight">{value}</div>
-      {sub && (
-        <div className="mt-0.5 text-[11px] text-muted">
-          {sub}
-        </div>
-      )}
+      {sub && <div className="mt-0.5 text-[11px] text-muted">{sub}</div>}
     </div>
   );
 }
@@ -262,7 +258,7 @@ export default function AdminOverviewPage() {
             icon={WalletCards}
             label="活跃会员"
             value={fmt(stats.active_subscriptions)}
-            sub="FateClaw Plus 有效周期"
+            sub="FateClaw 会员有效周期"
           />
           <StatCard
             icon={CreditCard}
@@ -292,10 +288,7 @@ export default function AdminOverviewPage() {
                   <CreditCard size={15} className="text-muted" />
                   <h3 className="text-[15px] font-semibold">充值收入</h3>
                   {refreshing && (
-                    <Loader2
-                      size={13}
-                      className="animate-spin text-muted"
-                    />
+                    <Loader2 size={13} className="animate-spin text-muted" />
                   )}
                 </div>
                 <p className="mt-1 text-[12px] text-muted">
@@ -407,16 +400,11 @@ export default function AdminOverviewPage() {
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-xl border border-hairline bg-surface-card px-4 py-3">
-            <div className="mb-2 text-[12px] text-muted">
-              Token 明细
-            </div>
+            <div className="mb-2 text-[12px] text-muted">Token 明细</div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[13px]">
-                  <ArrowUpRight
-                    size={12}
-                    className="text-primary"
-                  />
+                  <ArrowUpRight size={12} className="text-primary" />
                   输入 Token
                 </div>
                 <span className="text-[13px] font-medium">
@@ -425,10 +413,7 @@ export default function AdminOverviewPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[13px]">
-                  <ArrowDownLeft
-                    size={12}
-                    className="text-warning"
-                  />
+                  <ArrowDownLeft size={12} className="text-warning" />
                   输出 Token
                 </div>
                 <span className="text-[13px] font-medium">
@@ -436,9 +421,7 @@ export default function AdminOverviewPage() {
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-hairline pt-1.5">
-                <span className="text-[12px] text-muted">
-                  今日输入 / 输出
-                </span>
+                <span className="text-[12px] text-muted">今日输入 / 输出</span>
                 <span className="text-[12px] text-muted">
                   {fmt(stats.today_input_tokens)} /{' '}
                   {fmt(stats.today_output_tokens)}
@@ -448,9 +431,7 @@ export default function AdminOverviewPage() {
           </div>
 
           <div className="rounded-xl border border-hairline bg-surface-card px-4 py-3">
-            <div className="mb-2 text-[12px] text-muted">
-              模型选择分布
-            </div>
+            <div className="mb-2 text-[12px] text-muted">模型选择分布</div>
             <div className="space-y-1.5">
               {stats.model_selection_distribution.map((p) => {
                 const pct =

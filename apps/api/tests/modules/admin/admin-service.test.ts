@@ -168,8 +168,8 @@ import {
 
 function plusMembershipConfig(overrides = {}) {
   return {
-    id: 'default',
-    name: 'FateClaw Plus',
+    id: 'fateclaw_insight',
+    name: 'FateClaw Insight',
     enabled: true,
     monthly_price_coins: 30,
     display_price_coins: 30,
@@ -182,8 +182,8 @@ function plusMembershipConfig(overrides = {}) {
 
 function proMembershipConfig(overrides = {}) {
   return {
-    id: 'fateclaw_pro',
-    name: 'FateClaw Pro',
+    id: 'fateclaw_deep',
+    name: 'FateClaw Deep',
     enabled: true,
     monthly_price_coins: 100,
     display_price_coins: 120,
@@ -369,8 +369,8 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T00:00:00.000Z',
       },
       membership: {
-        plan_key: 'fateclaw_plus',
-        name: 'FateClaw Plus',
+        plan_key: 'fateclaw_insight',
+        name: 'FateClaw Insight',
         enabled: true,
         monthly_price_coins: 30,
         display_price_coins: 30,
@@ -380,8 +380,8 @@ describe('admin reward config', () => {
       },
       membership_plans: [
         {
-          plan_key: 'fateclaw_plus',
-          name: 'FateClaw Plus',
+          plan_key: 'fateclaw_insight',
+          name: 'FateClaw Insight',
           enabled: true,
           monthly_price_coins: 30,
           display_price_coins: 30,
@@ -390,8 +390,8 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T00:00:00.000Z',
         },
         {
-          plan_key: 'fateclaw_pro',
-          name: 'FateClaw Pro',
+          plan_key: 'fateclaw_deep',
+          name: 'FateClaw Deep',
           enabled: true,
           monthly_price_coins: 100,
           display_price_coins: 120,
@@ -446,8 +446,8 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T01:00:00.000Z',
       },
       membership: {
-        plan_key: 'fateclaw_plus',
-        name: 'FateClaw Plus',
+        plan_key: 'fateclaw_insight',
+        name: 'FateClaw Insight',
         enabled: true,
         monthly_price_coins: 30,
         display_price_coins: 30,
@@ -457,8 +457,8 @@ describe('admin reward config', () => {
       },
       membership_plans: [
         {
-          plan_key: 'fateclaw_plus',
-          name: 'FateClaw Plus',
+          plan_key: 'fateclaw_insight',
+          name: 'FateClaw Insight',
           enabled: true,
           monthly_price_coins: 30,
           display_price_coins: 30,
@@ -467,8 +467,8 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T01:00:00.000Z',
         },
         {
-          plan_key: 'fateclaw_pro',
-          name: 'FateClaw Pro',
+          plan_key: 'fateclaw_deep',
+          name: 'FateClaw Deep',
           enabled: true,
           monthly_price_coins: 100,
           display_price_coins: 120,

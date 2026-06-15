@@ -12,10 +12,10 @@ import { logger } from '../../infrastructure/logger.js';
 import { Account } from '../../shared/types.js';
 
 export const WECHAT_DEVICE_BINDING_DISABLED_MESSAGE =
-  '微信 Claw 仅支持 FateClaw Plus 会员使用。';
+  '微信 Claw 仅支持 FateClaw Deep 会员使用。';
 
 export const FREE_WECHAT_UNSUPPORTED_MESSAGE =
-  '微信 Claw 仅支持 FateClaw Plus 会员使用，请开通会员后继续。';
+  '微信 Claw 仅支持 FateClaw Deep 会员使用，请升级后继续。';
 
 export function isWechatDeviceBindingDisabled(isMember = false): boolean {
   return !isMember;

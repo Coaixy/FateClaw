@@ -1,6 +1,7 @@
 import { Crown, Loader2 } from 'lucide-react';
 
 import type { BillingStatus } from '@/features/billing/api';
+import { resolveMembershipPlanDisplayName } from '@/features/billing/membership-plans';
 import { formatCoins } from '@/lib/soft-currency';
 
 type MembershipStatus = BillingStatus['membership'];
@@ -46,12 +47,12 @@ function displayPercent(ratio: number) {
 }
 
 /**
- * 渲染 FateClaw Plus 订阅卡片。
+ * 渲染 FateClaw 会员订阅卡片。
  *
  * @param props.membership 当前会员状态和额度进度。
  * @param props.busy 是否正在提交开通或续费请求。
  * @param props.onSubscribe 用户点击开通或续费会员时的回调。
- * @returns Plus 订阅信息、权益标签、额度进度和订阅按钮。
+ * @returns 当前会员订阅信息、权益标签、额度进度和订阅按钮。
  */
 export function WalletMembershipCard({
   membership,
@@ -65,6 +66,9 @@ export function WalletMembershipCard({
   const usedPercent = progressPercent(membership.allowance_used_ratio);
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const active = membership.active;
+  const planDisplayName = resolveMembershipPlanDisplayName({
+    plan_key: membership.plan_key ?? 'fateclaw_clarity',
+  });
 
   return (
     <section className="rounded-2xl border border-hairline bg-surface-card p-5">
@@ -72,23 +76,21 @@ export function WalletMembershipCard({
         <div>
           <div className="flex items-center gap-2 text-[13px] font-semibold">
             <Crown size={15} className="text-primary" />
-            FateClaw Plus
+            {planDisplayName}
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            {formatCoins(membership.monthly_price_coins)} / 月 · 会员免费额度优先抵扣
-            AI Chat 消耗
+            {formatCoins(membership.monthly_price_coins)} / 月 ·
+            会员免费额度优先抵扣 AI Chat 消耗
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {['AI Chat 会员免费额度', '高峰优先响应', '持续追问', '微信 Claw'].map(
-              (item) => (
-                <span
-                  key={item}
-                  className="rounded-full border border-hairline bg-surface-cream-strong px-2 py-1 text-[10px] font-medium text-muted"
-                >
-                  {item}
-                </span>
-              ),
-            )}
+            {['专家模式', '每日专家次数', '会员额度优先抵扣'].map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-hairline bg-surface-cream-strong px-2 py-1 text-[10px] font-medium text-muted"
+              >
+                {item}
+              </span>
+            ))}
           </div>
         </div>
         <button
@@ -104,7 +106,9 @@ export function WalletMembershipCard({
 
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between gap-3 text-[12px]">
-          <span className="font-medium">{membershipStatusText(membership.allowance_status)}</span>
+          <span className="font-medium">
+            {membershipStatusText(membership.allowance_status)}
+          </span>
           <span className="text-muted">
             {active ? `已使用 ${usedPercentText}` : '会员免费额度进度'}
           </span>
@@ -120,7 +124,7 @@ export function WalletMembershipCard({
             ? active
               ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
               : '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
-            : 'Plus 暂未开放购买，当前仍按积分余额扣费。'}
+            : '会员暂未开放购买，当前仍按积分余额扣费。'}
         </div>
       </div>
     </section>

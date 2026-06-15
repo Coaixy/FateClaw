@@ -391,6 +391,7 @@ describe('runDatabaseMigrations', () => {
       '0039_free_professional_ai_quota',
       '0040_billing_gift_codes',
       '0041_oauth_user_identities',
+      '0042_membership_tier_rekey',
     ]);
 
     await runDatabaseMigrations(client as never);

@@ -212,9 +212,17 @@ const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
 
+const MembershipPlanKeySchema = z.enum([
+  'fateclaw_clarity',
+  'fateclaw_insight',
+  'fateclaw_deep',
+  'fateclaw_plus',
+  'fateclaw_pro',
+]);
+
 const AdminSetUserMembershipSchema = z
   .object({
-    plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']),
+    plan_key: MembershipPlanKeySchema,
     current_period_end: z.string().datetime({ offset: true }),
   })
   .superRefine((value, ctx) => {
@@ -369,7 +377,11 @@ const AdminCreateGiftCodesSchema = z
       .optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.usage_type === 'single' && value.max_redemptions && value.max_redemptions !== 1) {
+    if (
+      value.usage_type === 'single' &&
+      value.max_redemptions &&
+      value.max_redemptions !== 1
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['max_redemptions'],
@@ -390,7 +402,10 @@ const AdminCreateGiftCodesSchema = z
         message: '自定义礼品码只能在生成数量为 1 时使用',
       });
     }
-    if (value.expires_at && new Date(value.expires_at).getTime() <= Date.now()) {
+    if (
+      value.expires_at &&
+      new Date(value.expires_at).getTime() <= Date.now()
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['expires_at'],
@@ -606,7 +621,7 @@ const RechargePaymentConfigSchema = z
   });
 
 const RewardMembershipPlanSchema = z.object({
-  plan_key: z.enum(['fateclaw_plus', 'fateclaw_pro']),
+  plan_key: MembershipPlanKeySchema,
   name: z.string().trim().min(1, '套餐名称不能为空').max(80),
   enabled: z.boolean(),
   monthly_price_coins: SoftCurrencyNumberSchema.refine(
@@ -619,7 +634,7 @@ const RewardMembershipPlanSchema = z.object({
   ),
   monthly_allowance_units: z
     .number()
-    .min(1, '会员免费额度必须大于 0')
+    .min(0, '会员免费额度不能小于 0')
     .max(1_000_000_000_000, '会员免费额度过大'),
   standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
     (value) => value > 0 && value <= 1_000_000,
@@ -639,9 +654,9 @@ const RewardConfigSchema = z.object({
     .object({
       daily_turn_limit: z
         .number()
-        .int('Free 专业模式每日次数必须是整数')
-        .min(0, 'Free 专业模式每日次数不能小于 0')
-        .max(1_000_000, 'Free 专业模式每日次数过大'),
+        .int('专家模式每日次数必须是整数')
+        .min(0, '专家模式每日次数不能小于 0')
+        .max(1_000_000, '专家模式每日次数过大'),
     })
     .optional(),
   membership: z.object({
@@ -652,7 +667,7 @@ const RewardConfigSchema = z.object({
     ),
     monthly_allowance_units: z
       .number()
-      .min(1, '会员免费额度必须大于 0')
+      .min(0, '会员免费额度不能小于 0')
       .max(1_000_000_000_000, '会员免费额度过大'),
     standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
       (value) => value > 0 && value <= 1_000_000,

@@ -36,7 +36,7 @@ import {
 } from '../runtime/pi-session-health-worker.js';
 import { logger } from '../infrastructure/logger.js';
 import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
-import { hasBaseMembershipEntitlement } from '../shared/membership-plans.js';
+import { hasWechatClawEntitlement } from '../shared/membership-plans.js';
 
 // Re-export for CLI and external consumers
 export {
@@ -73,7 +73,7 @@ export async function main(): Promise<void> {
   for (const account of enabledAccounts) {
     if (!account.owner_id) continue;
     const membership = await getMembershipOverview(account.owner_id);
-    if (!hasBaseMembershipEntitlement(membership)) continue;
+    if (!hasWechatClawEntitlement(membership)) continue;
     memberAccounts.push(account.id);
     void startAccountPolling(account).catch((err) => {
       logger.error({ accountId: account.id, err }, '微信 Claw 轮询启动失败');

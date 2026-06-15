@@ -32,7 +32,7 @@ import { stopLocalAgent } from '../../runtime/local-runner.js';
 import { stopAccountPolling } from '../../runtime/poller.js';
 import { activateAccount } from '../../app/index.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { hasBaseMembershipEntitlement } from '../../shared/membership-plans.js';
+import { hasWechatClawEntitlement } from '../../shared/membership-plans.js';
 import {
   toAccountDto,
   toAccountSoulDto,
@@ -44,7 +44,7 @@ export async function checkAccountBindingLimit(
   const user = await getUserById(userId);
   if (!user) return '用户不存在';
   const membership = await getMembershipOverview(user.id);
-  if (!hasBaseMembershipEntitlement(membership)) {
+  if (!hasWechatClawEntitlement(membership)) {
     return WECHAT_DEVICE_BINDING_DISABLED_MESSAGE;
   }
   const accounts = await getAccountsByUserId(user.id);

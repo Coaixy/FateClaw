@@ -43,7 +43,7 @@ import {
   MAX_SKILL_BUNDLE_ZIP_BYTES,
   type SkillBundleLimitsDto,
 } from '@fateclaw/contracts/skills';
-import { hasBaseMembershipEntitlement } from '../../shared/membership-plans.js';
+import { hasCustomModelEntitlement } from '../../shared/membership-plans.js';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export type ProviderAuthMode =
@@ -170,7 +170,7 @@ async function hasCustomModelMembershipEntitlement(
   userId: string,
 ): Promise<boolean> {
   const membership = await getMembershipOverview(userId);
-  return hasBaseMembershipEntitlement(membership);
+  return hasCustomModelEntitlement(membership);
 }
 
 async function assertCustomModelMembershipEntitlement(
@@ -1226,7 +1226,7 @@ export async function getUserModelSettingsOverview(
       runtime.default_thinking_level,
     ),
     custom_model_membership_required: true,
-    custom_model_membership_entitled: hasBaseMembershipEntitlement(membership),
+    custom_model_membership_entitled: hasCustomModelEntitlement(membership),
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
   };

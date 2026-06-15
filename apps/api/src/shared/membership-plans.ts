@@ -1,89 +1,127 @@
+export const MEMBERSHIP_CLARITY_PLAN_KEY = 'fateclaw_clarity';
+export const MEMBERSHIP_INSIGHT_PLAN_KEY = 'fateclaw_insight';
+export const MEMBERSHIP_DEEP_PLAN_KEY = 'fateclaw_deep';
+
+/** @deprecated 仅用于识别迁移前的 Insight 旧 key。 */
 export const MEMBERSHIP_PLUS_PLAN_KEY = 'fateclaw_plus';
+/** @deprecated 仅用于识别迁移前的 Deep 旧 key。 */
 export const MEMBERSHIP_PRO_PLAN_KEY = 'fateclaw_pro';
+/** @deprecated 仅用于识别迁移前的 Insight 配置行。 */
 export const MEMBERSHIP_PLUS_CONFIG_ID = 'default';
 
 export const MEMBERSHIP_PLAN_KEYS = [
-  MEMBERSHIP_PLUS_PLAN_KEY,
-  MEMBERSHIP_PRO_PLAN_KEY,
+  MEMBERSHIP_CLARITY_PLAN_KEY,
+  MEMBERSHIP_INSIGHT_PLAN_KEY,
+  MEMBERSHIP_DEEP_PLAN_KEY,
 ] as const;
 
 export type MembershipPlanKey = (typeof MEMBERSHIP_PLAN_KEYS)[number];
 
 const MEMBERSHIP_PLAN_RANKS: Record<MembershipPlanKey, number> = {
-  [MEMBERSHIP_PLUS_PLAN_KEY]: 1,
-  [MEMBERSHIP_PRO_PLAN_KEY]: 2,
+  [MEMBERSHIP_CLARITY_PLAN_KEY]: 1,
+  [MEMBERSHIP_INSIGHT_PLAN_KEY]: 2,
+  [MEMBERSHIP_DEEP_PLAN_KEY]: 3,
+};
+
+const LEGACY_MEMBERSHIP_PLAN_KEY_MAP: Record<string, MembershipPlanKey> = {
+  [MEMBERSHIP_PLUS_PLAN_KEY]: MEMBERSHIP_INSIGHT_PLAN_KEY,
+  [MEMBERSHIP_PRO_PLAN_KEY]: MEMBERSHIP_DEEP_PLAN_KEY,
 };
 
 /**
  * 判断传入值是否是当前系统支持的会员套餐 key。
  *
  * @param value 待检查的字符串。
- * @returns 如果值是 Plus 或 Pro 套餐 key，则返回 true。
- * @remarks 后续增加新档位时，应先扩展 MEMBERSHIP_PLAN_KEYS 和 rank。
+ * @returns 如果值是 Clarity、Insight 或 Deep 套餐 key，则返回 true。
  */
 export function isMembershipPlanKey(value: string): value is MembershipPlanKey {
   return (MEMBERSHIP_PLAN_KEYS as readonly string[]).includes(value);
 }
 
 /**
+ * 判断传入值是否是迁移前遗留的会员套餐 key。
+ *
+ * @param value 待检查的字符串。
+ * @returns 如果值是旧 Plus 或 Pro key，则返回 true。
+ */
+export function isLegacyMembershipPlanKey(value: string): boolean {
+  return Object.prototype.hasOwnProperty.call(
+    LEGACY_MEMBERSHIP_PLAN_KEY_MAP,
+    value,
+  );
+}
+
+/**
  * 将外部输入规范化为已知套餐 key。
  *
  * @param planKey 外部传入的套餐 key，可以为空或未知。
- * @returns 已知套餐 key；未知值按历史默认行为回落到 Plus。
- * @remarks 保留未知值回落 Plus，是为了兼容旧接口默认开通 Plus 的行为。
+ * @param fallback 未知或空值时使用的回退套餐，默认回落到最低付费档 Clarity。
+ * @returns 已知套餐 key；旧 Plus/Pro 会映射到 Insight/Deep。
  */
 export function normalizeMembershipPlanKey(
   planKey?: string | null,
+  fallback: MembershipPlanKey = MEMBERSHIP_CLARITY_PLAN_KEY,
 ): MembershipPlanKey {
-  return isMembershipPlanKey(planKey ?? '')
-    ? (planKey as MembershipPlanKey)
-    : MEMBERSHIP_PLUS_PLAN_KEY;
+  if (isMembershipPlanKey(planKey ?? '')) {
+    return planKey as MembershipPlanKey;
+  }
+  const legacy = LEGACY_MEMBERSHIP_PLAN_KEY_MAP[planKey ?? ''];
+  return legacy ?? fallback;
 }
 
 /**
  * 根据套餐 key 解析 membership_config 表中的配置 ID。
  *
  * @param planKey 套餐 key。
- * @returns Pro 使用自身 key，Plus 沿用历史 default 配置行。
+ * @returns 新版三档套餐直接使用自身 key；旧 key 会先映射到新 key。
  */
 export function resolveMembershipConfigId(planKey: string): string {
-  return planKey === MEMBERSHIP_PRO_PLAN_KEY
-    ? MEMBERSHIP_PRO_PLAN_KEY
-    : MEMBERSHIP_PLUS_CONFIG_ID;
+  return normalizeMembershipPlanKey(planKey);
 }
 
 /**
  * 根据配置 ID 反解套餐 key。
  *
  * @param configId membership_config.id。
- * @returns 已知套餐 key；非 Pro 配置按 Plus 处理。
+ * @returns 已知套餐 key；旧 default/Pro 配置会映射到 Insight/Deep。
  */
 export function resolveMembershipPlanKey(configId: string): MembershipPlanKey {
-  return configId === MEMBERSHIP_PRO_PLAN_KEY
-    ? MEMBERSHIP_PRO_PLAN_KEY
-    : MEMBERSHIP_PLUS_PLAN_KEY;
+  if (configId === MEMBERSHIP_PLUS_CONFIG_ID) {
+    return MEMBERSHIP_INSIGHT_PLAN_KEY;
+  }
+  return normalizeMembershipPlanKey(configId);
 }
 
 /**
  * 返回套餐的默认展示名称。
  *
  * @param planKey 套餐 key。
- * @returns FateClaw Plus 或 FateClaw Pro。
+ * @returns FateClaw Clarity、FateClaw Insight 或 FateClaw Deep。
  */
 export function resolveMembershipPlanName(planKey: string): string {
-  return planKey === MEMBERSHIP_PRO_PLAN_KEY ? 'FateClaw Pro' : 'FateClaw Plus';
+  switch (normalizeMembershipPlanKey(planKey)) {
+    case MEMBERSHIP_DEEP_PLAN_KEY:
+      return 'FateClaw Deep';
+    case MEMBERSHIP_INSIGHT_PLAN_KEY:
+      return 'FateClaw Insight';
+    case MEMBERSHIP_CLARITY_PLAN_KEY:
+    default:
+      return 'FateClaw Clarity';
+  }
 }
 
 /**
  * 返回套餐档位等级。
  *
  * @param planKey 套餐 key。
- * @returns Plus 为 1，Pro 为 2，未知套餐为 0。
+ * @returns Clarity 为 1，Insight 为 2，Deep 为 3，未知套餐为 0。
  */
 export function resolveMembershipPlanRank(planKey?: string | null): number {
-  return isMembershipPlanKey(planKey ?? '')
-    ? MEMBERSHIP_PLAN_RANKS[planKey as MembershipPlanKey]
-    : 0;
+  if (!planKey) return 0;
+  const normalizedPlanKey = isMembershipPlanKey(planKey)
+    ? planKey
+    : LEGACY_MEMBERSHIP_PLAN_KEY_MAP[planKey];
+  return normalizedPlanKey ? MEMBERSHIP_PLAN_RANKS[normalizedPlanKey] : 0;
 }
 
 /**
@@ -117,20 +155,20 @@ export function membershipOverviewMeetsPlan(
   } | null,
   requiredPlanKey: MembershipPlanKey,
 ): boolean {
+  if (!membership?.active || !membership.membership?.plan_key) {
+    return false;
+  }
   const currentPlanKey = normalizeMembershipPlanKey(
-    membership?.membership?.plan_key,
+    membership.membership.plan_key,
   );
-  return Boolean(
-    membership?.active && membershipPlanMeets(currentPlanKey, requiredPlanKey),
-  );
+  return membershipPlanMeets(currentPlanKey, requiredPlanKey);
 }
 
 /**
- * 判断当前会员是否拥有现有通用会员权益。
+ * 判断当前会员是否拥有付费会员基础身份。
  *
  * @param membership 当前会员概览。
- * @returns Plus 及以上套餐有效时返回 true。
- * @remarks 当前产品权益尚未拆分，AI Chat、微信绑定等都以 Plus 及以上为准。
+ * @returns Clarity 及以上套餐有效时返回 true。
  */
 export function hasBaseMembershipEntitlement(
   membership: {
@@ -138,5 +176,96 @@ export function hasBaseMembershipEntitlement(
     membership: { plan_key: string | null } | null;
   } | null,
 ): boolean {
-  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_PLUS_PLAN_KEY);
+  return hasPaidMembershipEntitlement(membership);
+}
+
+/**
+ * 判断当前会员是否拥有付费会员基础身份。
+ *
+ * @param membership 当前会员概览。
+ * @returns Clarity 及以上套餐有效时返回 true。
+ */
+export function hasPaidMembershipEntitlement(
+  membership: {
+    active: boolean;
+    membership: { plan_key: string | null } | null;
+  } | null,
+): boolean {
+  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_CLARITY_PLAN_KEY);
+}
+
+/**
+ * 判断当前会员是否可使用专家模式。
+ *
+ * @param membership 当前会员概览。
+ * @returns Clarity 及以上套餐有效时返回 true。
+ */
+export function hasExpertModeEntitlement(
+  membership: {
+    active: boolean;
+    membership: { plan_key: string | null } | null;
+  } | null,
+): boolean {
+  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_CLARITY_PLAN_KEY);
+}
+
+/**
+ * 判断当前会员是否进入 runtime 会员优先队列。
+ *
+ * @param membership 当前会员概览。
+ * @returns Insight 及以上套餐有效时返回 true。
+ */
+export function hasPriorityQueueEntitlement(
+  membership: {
+    active: boolean;
+    membership: { plan_key: string | null } | null;
+  } | null,
+): boolean {
+  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_INSIGHT_PLAN_KEY);
+}
+
+/**
+ * 判断当前会员是否可使用自定义模型。
+ *
+ * @param membership 当前会员概览。
+ * @returns Insight 及以上套餐有效时返回 true。
+ */
+export function hasCustomModelEntitlement(
+  membership: {
+    active: boolean;
+    membership: { plan_key: string | null } | null;
+  } | null,
+): boolean {
+  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_INSIGHT_PLAN_KEY);
+}
+
+/**
+ * 判断当前会员是否可使用微信 Claw。
+ *
+ * @param membership 当前会员概览。
+ * @returns Deep 套餐有效时返回 true。
+ */
+export function hasWechatClawEntitlement(
+  membership: {
+    active: boolean;
+    membership: { plan_key: string | null } | null;
+  } | null,
+): boolean {
+  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_DEEP_PLAN_KEY);
+}
+
+/**
+ * 解析套餐对应的专家 AI 每日可用次数。
+ *
+ * @param planKey 当前套餐 key；为空或未知时按 Free 处理。
+ * @returns Free 为 0，Clarity 为 10，Insight 为 30，Deep 为 100。
+ */
+export function resolveProfessionalAiDailyTurnLimit(
+  planKey?: string | null,
+): number {
+  const rank = resolveMembershipPlanRank(planKey);
+  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_DEEP_PLAN_KEY]) return 100;
+  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_INSIGHT_PLAN_KEY]) return 30;
+  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_CLARITY_PLAN_KEY]) return 10;
+  return 0;
 }

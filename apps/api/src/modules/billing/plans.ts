@@ -10,6 +10,10 @@ import {
 import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
+import {
+  normalizeMembershipPlanKey,
+  resolveMembershipPlanKey,
+} from '../../shared/membership-plans.js';
 
 export interface BillingReservation {
   userId: string;
@@ -238,7 +242,9 @@ export async function getMembershipBillingSummary(
   return {
     enabled: overview.config.enabled,
     active: overview.active,
-    planKey: overview.membership?.plan_key ?? null,
+    planKey: overview.membership?.plan_key
+      ? normalizeMembershipPlanKey(overview.membership.plan_key)
+      : null,
     monthlyPriceCoins: overview.config.monthly_price_coins,
     displayPriceCoins: overview.config.display_price_coins,
     currentPeriodStart: overview.active
@@ -260,7 +266,7 @@ export async function getMembershipPlanSummaries(): Promise<
 > {
   const configs = await getMembershipPlanConfigs();
   return configs.map((config) => ({
-    planKey: config.id === 'fateclaw_pro' ? 'fateclaw_pro' : 'fateclaw_plus',
+    planKey: resolveMembershipPlanKey(config.id),
     name: config.name,
     enabled: config.enabled,
     monthlyPriceCoins: config.monthly_price_coins,

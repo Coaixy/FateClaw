@@ -304,7 +304,7 @@ describe('referrals repository', () => {
     ).toBe(true);
   });
 
-  it('starts Plus referral rewards after an active Pro overlay', async () => {
+  it('starts Insight referral rewards after an active Deep overlay', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 
@@ -335,7 +335,7 @@ describe('referrals repository', () => {
       [
         {
           user_id: 'inviter-1',
-          plan_key: 'fateclaw_pro',
+          plan_key: 'fateclaw_deep',
           status: 'active',
           current_period_start: '2026-06-10T00:00:00.000Z',
           current_period_end: '2026-07-10T00:00:00.000Z',
@@ -344,7 +344,7 @@ describe('referrals repository', () => {
       [
         {
           user_id: 'inviter-1',
-          plan_key: 'fateclaw_plus',
+          plan_key: 'fateclaw_insight',
           status: 'active',
           current_period_start: '2026-07-10T00:00:00.000Z',
           current_period_end: '2026-07-17T00:00:00.000Z',
@@ -382,7 +382,7 @@ describe('referrals repository', () => {
     );
     expect(membershipInsert?.params).toEqual([
       'inviter-1',
-      'fateclaw_plus',
+      'fateclaw_insight',
       '2026-07-10T00:00:00.000Z',
       '2026-07-17T00:00:00.000Z',
     ]);
@@ -391,8 +391,8 @@ describe('referrals repository', () => {
         .filter((call) => call.sql.includes('FROM user_memberships'))
         .map((call) => call.params),
     ).toEqual([
-      ['inviter-1', 'fateclaw_plus'],
-      ['inviter-1', 'fateclaw_pro'],
+      ['inviter-1', 'fateclaw_insight'],
+      ['inviter-1', 'fateclaw_deep'],
     ]);
 
     vi.useRealTimers();

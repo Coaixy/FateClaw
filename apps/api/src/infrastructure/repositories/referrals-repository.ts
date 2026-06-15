@@ -6,9 +6,13 @@ import { getDbPool } from '../db-pool.js';
 import { queryOne } from '../typed-query.js';
 import type { DbQueryable } from '../db-pool.js';
 import type { UserMembership } from '../../shared/types.js';
+import {
+  MEMBERSHIP_DEEP_PLAN_KEY,
+  MEMBERSHIP_INSIGHT_PLAN_KEY,
+} from '../../shared/membership-plans.js';
 
-const MEMBERSHIP_PLAN_KEY = 'fateclaw_plus';
-const PRO_MEMBERSHIP_PLAN_KEY = 'fateclaw_pro';
+const MEMBERSHIP_PLAN_KEY = MEMBERSHIP_INSIGHT_PLAN_KEY;
+const PRO_MEMBERSHIP_PLAN_KEY = MEMBERSHIP_DEEP_PLAN_KEY;
 const DEFAULT_MAX_REDEMPTIONS = 1_000_000;
 const PAID_MEMBERSHIP_REWARD_REASON = 'first_paid_membership';
 const INVITE_COUNT_REWARD_REASON = 'invite_count_milestone';
@@ -756,7 +760,7 @@ async function grantReferralMembershipDaysUsing(
   const higherEnd = currentHigher
     ? new Date(currentHigher.current_period_end)
     : null;
-  // Pro 覆盖期内发放 Plus 奖励时，Plus 天数排到 Pro 之后，避免奖励被高档权益覆盖消耗。
+  // Deep 覆盖期内发放 Insight 奖励时，Insight 天数排到 Deep 之后，避免奖励被高档权益覆盖消耗。
   const activeBase =
     current && new Date(current.current_period_end).getTime() > now.getTime()
       ? new Date(

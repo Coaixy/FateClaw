@@ -16,12 +16,12 @@ import type {
 import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
-  MEMBERSHIP_PLUS_PLAN_KEY,
-  MEMBERSHIP_PRO_PLAN_KEY,
+  MEMBERSHIP_CLARITY_PLAN_KEY,
+  MEMBERSHIP_DEEP_PLAN_KEY,
+  MEMBERSHIP_INSIGHT_PLAN_KEY,
   MEMBERSHIP_PLAN_KEYS,
   type MembershipPlanKey,
-  hasBaseMembershipEntitlement,
-  isMembershipPlanKey,
+  hasPaidMembershipEntitlement,
   normalizeMembershipPlanKey,
   resolveMembershipConfigId,
   resolveMembershipPlanKey,
@@ -128,9 +128,9 @@ function normalizeFreeProfessionalAiQuotaConfigRow(
   };
 }
 
-function normalizeFreeProfessionalAiDailyUsageRow(
-  row: FreeProfessionalAiDailyUsageRow,
-): FreeProfessionalAiDailyUsageRow {
+function normalizeProfessionalAiDailyUsageRow(
+  row: ProfessionalAiDailyUsageRow,
+): ProfessionalAiDailyUsageRow {
   return {
     ...row,
     professional_turn_count: Math.max(
@@ -138,6 +138,12 @@ function normalizeFreeProfessionalAiDailyUsageRow(
       Math.trunc(Number(row.professional_turn_count ?? 0)),
     ),
   };
+}
+
+function normalizeFreeProfessionalAiDailyUsageRow(
+  row: FreeProfessionalAiDailyUsageRow,
+): FreeProfessionalAiDailyUsageRow {
+  return normalizeProfessionalAiDailyUsageRow(row);
 }
 
 function normalizeRechargeOrderRow(row: RechargeOrderRow): RechargeOrderRow {
@@ -177,14 +183,13 @@ function normalizeGiftCodeRow(row: GiftCodeRow): GiftCodeRow {
   const expired = row.expires_at
     ? new Date(row.expires_at).getTime() <= Date.now()
     : false;
-  const status: GiftCodeStatus =
-    !row.enabled
-      ? 'disabled'
-      : expired
-        ? 'expired'
-        : redeemedCount >= maxRedemptions
-          ? 'exhausted'
-          : 'active';
+  const status: GiftCodeStatus = !row.enabled
+    ? 'disabled'
+    : expired
+      ? 'expired'
+      : redeemedCount >= maxRedemptions
+        ? 'exhausted'
+        : 'active';
   return {
     ...row,
     amount_coins: amountCoins,
@@ -479,8 +484,8 @@ export interface FreeProfessionalAiQuotaConfigRow {
   updated_at: string;
 }
 
-/** Free 用户专业模式 AI 单日已消耗次数。 */
-export interface FreeProfessionalAiDailyUsageRow {
+/** 专家模式 AI 单日已消耗次数。 */
+export interface ProfessionalAiDailyUsageRow {
   user_id: string;
   usage_date: string;
   professional_turn_count: number;
@@ -488,8 +493,8 @@ export interface FreeProfessionalAiDailyUsageRow {
   updated_at: string;
 }
 
-/** Free 专业模式 AI 配额占用结果。 */
-export interface FreeProfessionalAiTurnClaimResult {
+/** 专家模式 AI 每日次数占用结果。 */
+export interface ProfessionalAiTurnClaimResult {
   allowed: boolean;
   usage_date: string;
   limit: number;
@@ -497,12 +502,20 @@ export interface FreeProfessionalAiTurnClaimResult {
   remaining: number;
 }
 
-/** Free 专业模式 AI 配额退回结果。 */
-export interface FreeProfessionalAiTurnReleaseResult {
+/** 专家模式 AI 每日次数退回结果。 */
+export interface ProfessionalAiTurnReleaseResult {
   released: boolean;
   usage_date: string;
   used: number;
 }
+
+/** @deprecated 仅供旧 Free quota 代码兼容，新逻辑使用 ProfessionalAiDailyUsageRow。 */
+export type FreeProfessionalAiDailyUsageRow = ProfessionalAiDailyUsageRow;
+/** @deprecated 仅供旧 Free quota 代码兼容，新逻辑使用 ProfessionalAiTurnClaimResult。 */
+export type FreeProfessionalAiTurnClaimResult = ProfessionalAiTurnClaimResult;
+/** @deprecated 仅供旧 Free quota 代码兼容，新逻辑使用 ProfessionalAiTurnReleaseResult。 */
+export type FreeProfessionalAiTurnReleaseResult =
+  ProfessionalAiTurnReleaseResult;
 
 export type MembershipConfigRow = MembershipConfig;
 export type UserMembershipRow = UserMembership;
@@ -531,25 +544,40 @@ async function getMembershipConfigUsing(input: {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
-  const monthlyPriceCoins = planKey === MEMBERSHIP_PRO_PLAN_KEY ? 100 : 30;
-  const displayPriceCoins = planKey === MEMBERSHIP_PRO_PLAN_KEY ? 120 : 30;
+  const monthlyPriceCoins =
+    planKey === MEMBERSHIP_DEEP_PLAN_KEY
+      ? 100
+      : planKey === MEMBERSHIP_INSIGHT_PLAN_KEY
+        ? 30
+        : 10;
+  const displayPriceCoins =
+    planKey === MEMBERSHIP_DEEP_PLAN_KEY ? 120 : monthlyPriceCoins;
+  const monthlyAllowanceUnits =
+    planKey === MEMBERSHIP_CLARITY_PLAN_KEY ? 0 : 3_000_000;
   const { rows } = await input.query(
     `INSERT INTO membership_config (
-       id, name, monthly_price_coins, display_price_coins
+       id, name, monthly_price_coins, display_price_coins,
+       monthly_allowance_units
      )
-     VALUES ($1, $2, $3, $4)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
-    [configId, name, monthlyPriceCoins, displayPriceCoins],
+    [
+      configId,
+      name,
+      monthlyPriceCoins,
+      displayPriceCoins,
+      monthlyAllowanceUnits,
+    ],
   );
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
 }
 
 /**
- * 读取会员全局配置；首次访问时补齐默认 FateClaw Plus 配置。
+ * 读取会员全局配置；首次访问时补齐默认 FateClaw Clarity 配置。
  */
 export async function getMembershipConfig(
-  planKey: string = MEMBERSHIP_PLUS_PLAN_KEY,
+  planKey: string = MEMBERSHIP_CLARITY_PLAN_KEY,
 ): Promise<MembershipConfigRow> {
   return getMembershipConfigUsing({
     query: pool.query,
@@ -558,7 +586,7 @@ export async function getMembershipConfig(
 }
 
 /**
- * 读取所有会员套餐配置；首次访问时补齐 Plus 和 Pro 默认配置。
+ * 读取所有会员套餐配置；首次访问时补齐 Clarity、Insight 和 Deep 默认配置。
  */
 export async function getMembershipPlanConfigs(): Promise<
   MembershipConfigRow[]
@@ -615,7 +643,7 @@ export async function updateMembershipConfig(input: {
       input.name?.trim() || resolveMembershipPlanName(planKey),
       monthlyPriceCoins,
       Math.max(monthlyPriceCoins, displayPriceCoins),
-      roundAllowanceUnits(input.monthlyAllowanceUnits),
+      Math.max(0, roundAllowanceUnits(input.monthlyAllowanceUnits)),
       roundCoinsToCents(input.standardPricePerMillionUnitsCoins),
     ],
   );
@@ -661,8 +689,14 @@ async function getActiveMembershipsForUserUsing(
      WHERE user_id = $1
        AND status = 'active'
        AND current_period_end > NOW()
-     ORDER BY plan_key = 'fateclaw_pro' DESC,
-     plan_key = 'fateclaw_plus' DESC,
+     ORDER BY CASE plan_key
+       WHEN 'fateclaw_deep' THEN 3
+       WHEN 'fateclaw_pro' THEN 3
+       WHEN 'fateclaw_insight' THEN 2
+       WHEN 'fateclaw_plus' THEN 2
+       WHEN 'fateclaw_clarity' THEN 1
+       ELSE 0
+     END DESC,
      current_period_end DESC
      ${opts?.forUpdate ? 'FOR UPDATE' : ''}`,
     [userId],
@@ -695,17 +729,18 @@ async function getEffectiveMembershipEntitlementsUsing(input: {
   );
   const activeMemberships = (rows as UserMembershipRow[])
     .filter((membership) => {
-      const planKey = isMembershipPlanKey(membership.plan_key)
-        ? membership.plan_key
-        : null;
-      return Boolean(planKey && configs.get(planKey)?.enabled);
+      const planKey = normalizeMembershipPlanKey(membership.plan_key);
+      return Boolean(configs.get(planKey)?.enabled);
     })
-    .map((membership) => ({
-      planKey: membership.plan_key as MembershipPlanKey,
-      startMs: new Date(membership.current_period_start).getTime(),
-      endMs: new Date(membership.current_period_end).getTime(),
-      rank: resolveMembershipPlanRank(membership.plan_key),
-    }))
+    .map((membership) => {
+      const planKey = normalizeMembershipPlanKey(membership.plan_key);
+      return {
+        planKey,
+        startMs: new Date(membership.current_period_start).getTime(),
+        endMs: new Date(membership.current_period_end).getTime(),
+        rank: resolveMembershipPlanRank(planKey),
+      };
+    })
     .filter((entry) => entry.endMs > entry.startMs);
 
   const boundaries = Array.from(
@@ -941,8 +976,11 @@ export async function getMembershipOverview(
        ELSE 0
      END DESC,
      CASE plan_key
-       WHEN 'fateclaw_pro' THEN 2
-       WHEN 'fateclaw_plus' THEN 1
+       WHEN 'fateclaw_deep' THEN 3
+       WHEN 'fateclaw_pro' THEN 3
+       WHEN 'fateclaw_insight' THEN 2
+       WHEN 'fateclaw_plus' THEN 2
+       WHEN 'fateclaw_clarity' THEN 1
        ELSE 0
      END DESC,
      current_period_end DESC,
@@ -999,7 +1037,7 @@ export async function getMembershipEntitlements(
  */
 export async function subscribeMembershipWithWallet(
   userId: string,
-  planKey: string = MEMBERSHIP_PLUS_PLAN_KEY,
+  planKey: string = MEMBERSHIP_CLARITY_PLAN_KEY,
 ): Promise<{ user: User; overview: MembershipOverviewRow }> {
   const normalizedPlanKey = normalizeMembershipPlanKey(planKey);
   const client = await pool.connect();
@@ -1037,7 +1075,8 @@ export async function subscribeMembershipWithWallet(
     );
     const currentSamePlan =
       activeMemberships.find(
-        (membership) => membership.plan_key === normalizedPlanKey,
+        (membership) =>
+          normalizeMembershipPlanKey(membership.plan_key) === normalizedPlanKey,
       ) ?? null;
     const currentHigherTier = activeMemberships.find(
       (membership) =>
@@ -1272,7 +1311,7 @@ export async function cancelUserMembershipsForAdmin(
  */
 export async function hasActiveMembership(userId: string): Promise<boolean> {
   const overview = await getMembershipOverview(userId);
-  return hasBaseMembershipEntitlement(overview);
+  return hasPaidMembershipEntitlement(overview);
 }
 
 /**
@@ -1354,6 +1393,134 @@ export async function updateFreeProfessionalAiQuotaConfig(input: {
   return normalizeFreeProfessionalAiQuotaConfigRow(
     rows[0] as FreeProfessionalAiQuotaConfigRow,
   );
+}
+
+/**
+ * 原子占用用户一次专家模式 AI 使用次数。
+ *
+ * @param input.userId 用户 ID。
+ * @param input.dailyTurnLimit 当前套餐对应的每日专家模式上限；0 表示不可用。
+ * @param input.usageDate 统计日期，默认沿用现有每日用量的 UTC YYYY-MM-DD 口径。
+ * @returns allowed=false 表示当天次数已用尽或当前档位不可使用专家模式。
+ */
+export async function claimProfessionalAiTurn(input: {
+  userId: string;
+  dailyTurnLimit: number;
+  usageDate?: string;
+}): Promise<ProfessionalAiTurnClaimResult> {
+  const usageDate = input.usageDate ?? new Date().toISOString().slice(0, 10);
+  const limit = Math.max(0, Math.trunc(input.dailyTurnLimit));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (limit <= 0) {
+      const { rows: usageRows } = await client.query(
+        `SELECT *
+         FROM ai_chat_professional_daily_usage
+         WHERE user_id = $1 AND usage_date = $2`,
+        [input.userId, usageDate],
+      );
+      await client.query('COMMIT');
+      const usage = usageRows[0]
+        ? normalizeProfessionalAiDailyUsageRow(
+            usageRows[0] as ProfessionalAiDailyUsageRow,
+          )
+        : null;
+      return {
+        allowed: false,
+        usage_date: usageDate,
+        limit,
+        used: usage?.professional_turn_count ?? 0,
+        remaining: 0,
+      };
+    }
+
+    const { rows: claimRows } = await client.query(
+      `INSERT INTO ai_chat_professional_daily_usage (
+         user_id, usage_date, professional_turn_count, created_at, updated_at
+       )
+       VALUES ($1, $2, 1, NOW(), NOW())
+       ON CONFLICT (user_id, usage_date) DO UPDATE SET
+         professional_turn_count =
+           ai_chat_professional_daily_usage.professional_turn_count + 1,
+         updated_at = NOW()
+       WHERE ai_chat_professional_daily_usage.professional_turn_count < $3
+       RETURNING *`,
+      [input.userId, usageDate, limit],
+    );
+
+    if (claimRows[0]) {
+      await client.query('COMMIT');
+      const usage = normalizeProfessionalAiDailyUsageRow(
+        claimRows[0] as ProfessionalAiDailyUsageRow,
+      );
+      return {
+        allowed: true,
+        usage_date: usageDate,
+        limit,
+        used: usage.professional_turn_count,
+        remaining: Math.max(0, limit - usage.professional_turn_count),
+      };
+    }
+
+    const { rows: usageRows } = await client.query(
+      `SELECT *
+       FROM ai_chat_professional_daily_usage
+       WHERE user_id = $1 AND usage_date = $2`,
+      [input.userId, usageDate],
+    );
+    await client.query('COMMIT');
+    const usage = usageRows[0]
+      ? normalizeProfessionalAiDailyUsageRow(
+          usageRows[0] as ProfessionalAiDailyUsageRow,
+        )
+      : null;
+    return {
+      allowed: false,
+      usage_date: usageDate,
+      limit,
+      used: usage?.professional_turn_count ?? 0,
+      remaining: 0,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 退回用户一次专家模式 AI 使用次数。
+ *
+ * @param input.userId 用户 ID。
+ * @param input.usageDate 需要退回的统计日期，必须与占用结果的 usage_date 保持一致。
+ * @returns released=false 表示没有可退回的次数，通常说明占用未成功或已被补偿。
+ */
+export async function releaseProfessionalAiTurn(input: {
+  userId: string;
+  usageDate: string;
+}): Promise<ProfessionalAiTurnReleaseResult> {
+  const { rows } = await pool.query(
+    `UPDATE ai_chat_professional_daily_usage
+     SET professional_turn_count = GREATEST(professional_turn_count - 1, 0),
+         updated_at = NOW()
+     WHERE user_id = $1
+       AND usage_date = $2
+       AND professional_turn_count > 0
+     RETURNING *`,
+    [input.userId, input.usageDate],
+  );
+  const usage = rows[0]
+    ? normalizeProfessionalAiDailyUsageRow(
+        rows[0] as ProfessionalAiDailyUsageRow,
+      )
+    : null;
+  return {
+    released: Boolean(usage),
+    usage_date: input.usageDate,
+    used: usage?.professional_turn_count ?? 0,
+  };
 }
 
 /**
@@ -1617,7 +1784,10 @@ function normalizeGiftCodeText(code: string): string {
 
 function generateGiftCodeText(prefix?: string): string {
   const normalizedPrefix =
-    prefix?.replace(/[^a-z0-9]/gi, '').slice(0, 12).toUpperCase() || 'GIFT';
+    prefix
+      ?.replace(/[^a-z0-9]/gi, '')
+      .slice(0, 12)
+      .toUpperCase() || 'GIFT';
   return `${normalizedPrefix}-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
 }
 
@@ -1848,9 +2018,7 @@ export async function redeemGiftCodeForUser(input: {
 
     let balanceGrantId: string | null = null;
     let updatedUser: User;
-    const note = giftCode.name
-      ? `礼品码兑换：${giftCode.name}`
-      : '礼品码兑换';
+    const note = giftCode.name ? `礼品码兑换：${giftCode.name}` : '礼品码兑换';
 
     if (giftCode.balance_type === 'bonus') {
       balanceGrantId = `bg-${Date.now()}-${crypto

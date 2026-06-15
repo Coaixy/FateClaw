@@ -49,6 +49,7 @@ import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
+import { hasPaidMembershipEntitlement } from '@/features/billing/membership-plans';
 import {
   paipanApi,
   type PaipanCatalogItem,
@@ -197,10 +198,8 @@ function AiChatWorkspaceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-  const {
-    status: billingStatus,
-    loading: billingLoading,
-  } = useBillingSnapshot();
+  const { status: billingStatus, loading: billingLoading } =
+    useBillingSnapshot();
   const {
     chatAvailable,
     sessions,
@@ -307,7 +306,9 @@ function AiChatWorkspaceContent() {
       if (modelSettingsRequestIdRef.current !== requestId) return;
       setModelOverview(null);
       setModelSettingsError(
-        error instanceof Error ? error.message : t('aiChat.loadModelSettingsFailed'),
+        error instanceof Error
+          ? error.message
+          : t('aiChat.loadModelSettingsFailed'),
       );
     } finally {
       if (modelSettingsRequestIdRef.current === requestId) {
@@ -349,7 +350,9 @@ function AiChatWorkspaceContent() {
           setPaipanCatalog([]);
           toast(
             'error',
-            error instanceof Error ? error.message : t('aiChat.loadPaipanFailed'),
+            error instanceof Error
+              ? error.message
+              : t('aiChat.loadPaipanFailed'),
           );
         })
         .finally(() => {
@@ -528,6 +531,12 @@ function AiChatWorkspaceContent() {
     ? getLatestProgressLabel(chatMessages.messages, t)
     : null;
   const billingStatusReady = Boolean(user && !billingLoading && billingStatus);
+  const expertModeLocked = Boolean(
+    user &&
+    !billingLoading &&
+    billingStatus &&
+    !hasPaidMembershipEntitlement(billingStatus.membership),
+  );
   const billingArrears = Boolean(
     billingStatusReady && billingStatus && billingStatus.available_coins < 0,
   );
@@ -662,7 +671,9 @@ function AiChatWorkspaceContent() {
       } catch (error) {
         toast(
           'error',
-          error instanceof Error ? error.message : t('aiChat.switchModelFailed'),
+          error instanceof Error
+            ? error.message
+            : t('aiChat.switchModelFailed'),
         );
       } finally {
         setModelToolbarBusy('');
@@ -712,7 +723,9 @@ function AiChatWorkspaceContent() {
       } catch (error) {
         toast(
           'error',
-          error instanceof Error ? error.message : t('aiChat.switchThinkingFailed'),
+          error instanceof Error
+            ? error.message
+            : t('aiChat.switchThinkingFailed'),
         );
       } finally {
         setModelToolbarBusy('');
@@ -921,12 +934,17 @@ function AiChatWorkspaceContent() {
   const centeredContent = showHomeModeSelector ? (
     <HomeModeSelector
       loginRequired={!authLoading && !user}
-      dailySignInEntry={
-        !authLoading && user ? <DailySignInHomeEntry /> : null
-      }
+      dailySignInEntry={!authLoading && user ? <DailySignInHomeEntry /> : null}
       onLogin={() => requestLogin()}
       onOpenSimple={() => setHomeMode('simple')}
-      onOpenExpert={() => setHomeMode('expert')}
+      expertLocked={expertModeLocked}
+      onOpenExpert={() => {
+        if (expertModeLocked) {
+          router.push('/membership');
+          return;
+        }
+        setHomeMode('expert');
+      }}
     />
   ) : !selectedSession && homeMode === 'simple' ? (
     <SimpleModeWorkspace
@@ -946,7 +964,9 @@ function AiChatWorkspaceContent() {
   const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
   const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
   const emptyStateTitle =
-    !selectedSession && homeMode !== 'expert' ? '' : t('aiChat.empty.expertTitle');
+    !selectedSession && homeMode !== 'expert'
+      ? ''
+      : t('aiChat.empty.expertTitle');
   const emptyStateDescription =
     !selectedSession && homeMode !== 'expert'
       ? ''
@@ -964,9 +984,7 @@ function AiChatWorkspaceContent() {
         ref={chatMessages.scrollRef}
         className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 scroll-smooth"
       >
-        {showAnnouncementBanner ? (
-          <AnnouncementBanner embedded wide />
-        ) : null}
+        {showAnnouncementBanner ? <AnnouncementBanner embedded wide /> : null}
         <AiChatMessageList
           messages={displayMessages}
           loading={chatMessages.loading}
@@ -1099,12 +1117,14 @@ function HomeModeSelector({
   onLogin,
   onOpenSimple,
   onOpenExpert,
+  expertLocked,
 }: {
   loginRequired: boolean;
   dailySignInEntry: ReactNode;
   onLogin: () => void;
   onOpenSimple: () => void;
   onOpenExpert: () => void;
+  expertLocked: boolean;
 }) {
   const { t } = useI18n();
 
@@ -1194,7 +1214,9 @@ function HomeModeSelector({
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-primary">
               <CheckCircle2 size={11} strokeWidth={2} />
-              {t('aiChat.home.expertBadge')}
+              {expertLocked
+                ? t('aiChat.home.expertLockedBadge')
+                : t('aiChat.home.expertBadge')}
             </span>
           </span>
 
@@ -1208,7 +1230,9 @@ function HomeModeSelector({
           </span>
 
           <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-primary">
-            {t('aiChat.home.expertAction')}
+            {expertLocked
+              ? t('aiChat.home.expertUpgradeAction')
+              : t('aiChat.home.expertAction')}
             <ChevronRight
               size={13}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
@@ -1439,7 +1463,10 @@ function ChatToolStrip({
   }, [openPicker]);
 
   return (
-    <div ref={stripRef} className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5">
+    <div
+      ref={stripRef}
+      className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5"
+    >
       <div className="relative min-w-0 shrink">
         <button
           type="button"
@@ -1460,9 +1487,7 @@ function ChatToolStrip({
           ) : (
             <Bot size={13} className="shrink-0 text-primary" />
           )}
-          <span className="whitespace-nowrap">
-            {t('aiChat.toolbar.model')}
-          </span>
+          <span className="whitespace-nowrap">{t('aiChat.toolbar.model')}</span>
           <span className="min-w-0 max-w-[min(24vw,96px)] truncate text-muted group-hover:text-primary">
             {modelLabel}
           </span>

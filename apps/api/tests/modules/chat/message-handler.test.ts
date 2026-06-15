@@ -107,7 +107,10 @@ describe('processWeixinMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserByAccountId.mockResolvedValue({ id: 'user-1' });
-    mockGetMembershipOverview.mockResolvedValue({ active: true });
+    mockGetMembershipOverview.mockResolvedValue({
+      active: true,
+      membership: { plan_key: 'fateclaw_deep' },
+    });
     mockHandleWechatChatCommand.mockResolvedValue({ handled: false });
     mockRunWechatChatSessionTurn.mockImplementation(async (input) => {
       await input.onAccepted?.();
@@ -263,7 +266,7 @@ describe('processWeixinMessage', () => {
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: account.id }),
       sender,
-      expect.stringContaining('Plus'),
+      expect.stringContaining('Deep'),
       'ctx-4',
     );
   });

@@ -1033,4 +1033,288 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0042_membership_tier_rekey',
+    description:
+      '迁移会员等级为 Clarity、Insight、Deep 并新增专家 AI 每日次数表',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE membership_config
+          DROP CONSTRAINT IF EXISTS chk_membership_config_allowance_positive
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_membership_config_allowance_nonnegative',
+        tableName: 'membership_config',
+        expression: 'monthly_allowance_units >= 0',
+        cleanupSql: `UPDATE membership_config
+                     SET monthly_allowance_units = 0
+                     WHERE monthly_allowance_units < 0`,
+      });
+      await client.query(`
+        ALTER TABLE membership_allowances
+          DROP CONSTRAINT IF EXISTS chk_membership_allowances_units_valid
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_membership_allowances_units_nonnegative',
+        tableName: 'membership_allowances',
+        expression: 'allowance_units >= 0 AND used_units >= 0',
+        cleanupSql: `UPDATE membership_allowances
+                     SET allowance_units = GREATEST(allowance_units, 0),
+                         used_units = GREATEST(used_units, 0)
+                     WHERE allowance_units < 0 OR used_units < 0`,
+      });
+      await client.query(`
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        SELECT
+          'fateclaw_insight',
+          enabled,
+          'FateClaw Insight',
+          monthly_price_coins,
+          display_price_coins,
+          monthly_allowance_units,
+          standard_price_per_million_units_coins,
+          NOW()
+        FROM membership_config
+        WHERE id = 'default'
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          updated_at = NOW()
+      `);
+      await client.query(`
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        SELECT
+          'fateclaw_clarity',
+          enabled,
+          'FateClaw Clarity',
+          10,
+          10,
+          0,
+          standard_price_per_million_units_coins,
+          NOW()
+        FROM membership_config
+        WHERE id = 'fateclaw_insight'
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          updated_at = NOW()
+      `);
+      await client.query(`
+        WITH source AS (
+          SELECT *
+          FROM membership_config
+          WHERE id = 'fateclaw_pro'
+          UNION ALL
+          SELECT *
+          FROM membership_config
+          WHERE id = 'fateclaw_insight'
+          LIMIT 1
+        )
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        SELECT
+          'fateclaw_deep',
+          enabled,
+          'FateClaw Deep',
+          100,
+          120,
+          monthly_allowance_units,
+          standard_price_per_million_units_coins,
+          NOW()
+        FROM source
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          updated_at = NOW()
+      `);
+      await client.query(`
+        UPDATE user_memberships current
+        SET current_period_start = LEAST(
+              current.current_period_start,
+              legacy.current_period_start
+            ),
+            current_period_end = GREATEST(
+              current.current_period_end,
+              legacy.current_period_end
+            ),
+            status = CASE
+              WHEN current.status = 'active' OR legacy.status = 'active'
+                THEN 'active'
+              ELSE current.status
+            END,
+            updated_at = NOW()
+        FROM user_memberships legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.plan_key = 'fateclaw_insight'
+          AND legacy.plan_key = 'fateclaw_plus'
+      `);
+      await client.query(`
+        DELETE FROM user_memberships legacy
+        USING user_memberships current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.plan_key = 'fateclaw_plus'
+          AND current.plan_key = 'fateclaw_insight'
+      `);
+      await client.query(`
+        UPDATE user_memberships
+        SET plan_key = 'fateclaw_insight',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_plus'
+      `);
+      await client.query(`
+        UPDATE user_memberships current
+        SET current_period_start = LEAST(
+              current.current_period_start,
+              legacy.current_period_start
+            ),
+            current_period_end = GREATEST(
+              current.current_period_end,
+              legacy.current_period_end
+            ),
+            status = CASE
+              WHEN current.status = 'active' OR legacy.status = 'active'
+                THEN 'active'
+              ELSE current.status
+            END,
+            updated_at = NOW()
+        FROM user_memberships legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.plan_key = 'fateclaw_deep'
+          AND legacy.plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        DELETE FROM user_memberships legacy
+        USING user_memberships current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.plan_key = 'fateclaw_pro'
+          AND current.plan_key = 'fateclaw_deep'
+      `);
+      await client.query(`
+        UPDATE user_memberships
+        SET plan_key = 'fateclaw_deep',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        UPDATE membership_allowances current
+        SET period_end = GREATEST(current.period_end, legacy.period_end),
+            allowance_units = GREATEST(
+              current.allowance_units,
+              legacy.allowance_units
+            ),
+            used_units = GREATEST(current.used_units, legacy.used_units),
+            updated_at = NOW()
+        FROM membership_allowances legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.period_start = legacy.period_start
+          AND current.plan_key = 'fateclaw_insight'
+          AND legacy.plan_key = 'fateclaw_plus'
+      `);
+      await client.query(`
+        DELETE FROM membership_allowances legacy
+        USING membership_allowances current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.period_start = current.period_start
+          AND legacy.plan_key = 'fateclaw_plus'
+          AND current.plan_key = 'fateclaw_insight'
+      `);
+      await client.query(`
+        UPDATE membership_allowances
+        SET plan_key = 'fateclaw_insight',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_plus'
+      `);
+      await client.query(`
+        UPDATE membership_allowances current
+        SET period_end = GREATEST(current.period_end, legacy.period_end),
+            allowance_units = GREATEST(
+              current.allowance_units,
+              legacy.allowance_units
+            ),
+            used_units = GREATEST(current.used_units, legacy.used_units),
+            updated_at = NOW()
+        FROM membership_allowances legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.period_start = legacy.period_start
+          AND current.plan_key = 'fateclaw_deep'
+          AND legacy.plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        DELETE FROM membership_allowances legacy
+        USING membership_allowances current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.period_start = current.period_start
+          AND legacy.plan_key = 'fateclaw_pro'
+          AND current.plan_key = 'fateclaw_deep'
+      `);
+      await client.query(`
+        UPDATE membership_allowances
+        SET plan_key = 'fateclaw_deep',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        UPDATE wallet_transactions
+        SET metadata = jsonb_set(
+              metadata,
+              '{planKey}',
+              '"fateclaw_insight"'::jsonb,
+              false
+            )
+        WHERE metadata->>'planKey' = 'fateclaw_plus'
+      `);
+      await client.query(`
+        UPDATE wallet_transactions
+        SET metadata = jsonb_set(
+              metadata,
+              '{planKey}',
+              '"fateclaw_deep"'::jsonb,
+              false
+            )
+        WHERE metadata->>'planKey' = 'fateclaw_pro'
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ai_chat_professional_daily_usage (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          usage_date TEXT NOT NULL,
+          professional_turn_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, usage_date)
+        )
+      `);
+      await client.query(`
+        INSERT INTO ai_chat_professional_daily_usage (
+          user_id, usage_date, professional_turn_count, created_at, updated_at
+        )
+        SELECT user_id, usage_date, professional_turn_count, created_at, updated_at
+        FROM ai_chat_free_daily_usage
+        ON CONFLICT (user_id, usage_date) DO UPDATE SET
+          professional_turn_count = GREATEST(
+            ai_chat_professional_daily_usage.professional_turn_count,
+            EXCLUDED.professional_turn_count
+          ),
+          updated_at = NOW()
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName:
+          'chk_ai_chat_professional_daily_usage_turn_count_nonnegative',
+        tableName: 'ai_chat_professional_daily_usage',
+        expression: 'professional_turn_count >= 0',
+        cleanupSql: `UPDATE ai_chat_professional_daily_usage
+                     SET professional_turn_count = GREATEST(
+                       professional_turn_count,
+                       0
+                     )`,
+      });
+    },
+  },
 ];

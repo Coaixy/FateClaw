@@ -431,7 +431,7 @@ export const zhCNMessages = {
       monthlyToken: '本月 Token',
       freeAccount: '当前为免费账户',
       freeDescription:
-        '未开通会员时，AI Chat 消耗会直接使用积分余额；开通后会员免费额度会优先抵扣。',
+        '可使用简易模式与手动排盘；专家模式和追问需开通 Clarity 或更高等级。',
       freeBadgeWallet: '积分余额计费',
       freeBadgeUpgrade: '可随时升级',
       freeBadgeInactive: '会员免费额度未启用',
@@ -454,6 +454,9 @@ export const zhCNMessages = {
       planDisabled: '暂未开放',
       perMonth: '/ 月',
       planCardsAria: '会员套餐',
+      planBenefitClarityExpert: '解锁专家模式',
+      planBenefitClarityDaily: '每日 10 次专家 AI',
+      planBenefitClarityCharting: '保留简易模式与手动排盘',
       planBenefitInsightExpert: 'Insight 解锁专家权限',
       planBenefitInsightTools: '手动排盘与合参术数',
       planBenefitInsightAllowance: '会员免费额度优先抵扣',
@@ -599,8 +602,8 @@ export const zhCNMessages = {
       statusLoading: '正在确认会员状态',
       statusUnknown: '会员状态暂时无法确认',
       limitReached: '会员最多绑定 1 个微信 Claw',
-      bindReady: 'FateClaw Plus 可扫码绑定微信 Claw',
-      plusOnly: '微信 Claw 仅 FateClaw Plus 会员可绑定',
+      bindReady: 'FateClaw Deep 可扫码绑定微信 Claw',
+      plusOnly: '微信 Claw 仅 FateClaw Deep 会员可绑定',
       confirming: '确认中',
       unavailable: '暂不可用',
       notOpen: '暂未开放',
@@ -621,13 +624,13 @@ export const zhCNMessages = {
       emptyActiveTitle: '尚未接入微信设备',
       emptyPlusTitle: '微信 Claw 会员专属',
       emptyLoadingDescription:
-        '会员状态确认完成后，Plus 会员可扫码绑定微信 Claw。',
+        '会员状态确认完成后，Deep 会员可扫码绑定微信 Claw。',
       emptyUnknownDescription:
         '会员状态暂时无法确认，请稍后刷新后重试；站内 AI Chat 和手动排盘仍可继续使用。',
       emptyActiveDescription:
         '使用移动端微信扫码绑定微信 Claw，绑定后即可在微信中进行文本对话。',
       emptyPlusDescription:
-        '开通 FateClaw Plus 后可扫码绑定微信 Claw；站内 AI Chat 和手动排盘仍可继续使用。',
+        '开通 FateClaw Deep 后可扫码绑定微信 Claw；站内 AI Chat 和手动排盘仍可继续使用。',
       connectedAt: '接入于 {date}',
       unbind: '解绑',
       sheetTitle: '扫码接入微信',
@@ -767,7 +770,8 @@ export const zhCNMessages = {
     submitLogin: '登入天机',
   },
   aiChat: {
-    plusRequired: '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Plus。',
+    plusRequired:
+      '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Clarity 或更高等级。',
     thinkingLevels: {
       off: '关闭',
       minimal: '极简',
@@ -834,11 +838,13 @@ export const zhCNMessages = {
       quickDescription:
         '适合新手和非从业者，先把问题讲清楚，再由流程完成排盘。',
       quickAction: '先从这里开始',
-      expertBadge: '排盘可用 · AI Plus',
+      expertBadge: 'Clarity 起可用',
+      expertLockedBadge: '需开通 Clarity',
       expertMode: '专业模式',
       expertDescription:
         '适合懂术数、从业者和专业人士，可直接使用完整对话与排盘能力。',
       expertAction: '进入专业模式',
+      expertUpgradeAction: '开通 Clarity',
       backToMode: '返回模式选择',
       answerCompleted: '回答完成',
       outputStopped: '已停止输出',
@@ -850,13 +856,13 @@ export const zhCNMessages = {
     messageList: {
       recharge: '补充积分',
       membershipCenter: '会员中心',
-      openPlus: '开通 Plus',
+      openPlus: '开通 Clarity',
       billingNoticeArrearsTitle: '当前积分已欠费',
       billingNoticeArrearsDescription:
-        '手动排盘可继续使用；发送 AI 解读前请先补充积分，或进入会员中心处理 Plus。',
-      billingNoticePlusTitle: 'AI 解读需要 FateClaw Plus',
+        '手动排盘可继续使用；发送 AI 解读前请先补充积分，或进入会员中心处理 Clarity。',
+      billingNoticePlusTitle: 'AI 解读需要 FateClaw Clarity',
       billingNoticePlusDescription:
-        '手动排盘可继续使用；开通 Plus 后即可继续发送 AI 解读。',
+        '手动排盘可继续使用；开通 Clarity 后即可继续发送 AI 解读。',
       thinkingFallback: '正在思考...',
       thinking: '思考',
       toolTrace: '工具轨迹',

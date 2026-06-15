@@ -26,7 +26,7 @@ type RewardConfigPayload = {
     monthly_allowance_units: number;
     standard_price_per_million_units_coins: number;
   }>;
-  free_professional_ai: {
+  free_professional_ai?: {
     daily_turn_limit: number;
   };
 };
@@ -55,8 +55,17 @@ type RewardDraft = {
 function defaultMembershipPlans(): MembershipPlanDraft[] {
   return [
     {
-      plan_key: 'fateclaw_plus',
-      name: 'FateClaw Plus',
+      plan_key: 'fateclaw_clarity',
+      name: 'FateClaw Clarity',
+      enabled: true,
+      monthly_price_coins: '10',
+      display_price_coins: '10',
+      monthly_allowance_units: '0',
+      standard_price_per_million_units_coins: '10',
+    },
+    {
+      plan_key: 'fateclaw_insight',
+      name: 'FateClaw Insight',
       enabled: true,
       monthly_price_coins: '30',
       display_price_coins: '30',
@@ -64,8 +73,8 @@ function defaultMembershipPlans(): MembershipPlanDraft[] {
       standard_price_per_million_units_coins: '10',
     },
     {
-      plan_key: 'fateclaw_pro',
-      name: 'FateClaw Pro',
+      plan_key: 'fateclaw_deep',
+      name: 'FateClaw Deep',
       enabled: true,
       monthly_price_coins: '100',
       display_price_coins: '120',
@@ -154,24 +163,11 @@ export function RewardConfigPanel({
     );
   }
 
-  const updateDailySignIn = (
-    value: Partial<RewardDraft['daily_sign_in']>,
-  ) => {
+  const updateDailySignIn = (value: Partial<RewardDraft['daily_sign_in']>) => {
     setDraft((prev) => ({
       ...prev,
       daily_sign_in: {
         ...prev.daily_sign_in,
-        ...value,
-      },
-    }));
-  };
-  const updateFreeProfessionalAi = (
-    value: Partial<RewardDraft['free_professional_ai']>,
-  ) => {
-    setDraft((prev) => ({
-      ...prev,
-      free_professional_ai: {
-        ...prev.free_professional_ai,
         ...value,
       },
     }));
@@ -188,7 +184,9 @@ export function RewardConfigPanel({
     }));
   };
   const plusPlan =
-    draft.membership_plans.find((plan) => plan.plan_key === 'fateclaw_plus') ??
+    draft.membership_plans.find(
+      (plan) => plan.plan_key === 'fateclaw_clarity',
+    ) ??
     draft.membership_plans[0] ??
     defaultMembershipPlans()[0];
 
@@ -240,48 +238,6 @@ export function RewardConfigPanel({
               <span className="font-medium text-ink">
                 {formatCoins(Number(draft.daily_sign_in.reward_coins) || 0)}
               </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
-        <div>
-          <div className="text-sm font-semibold">Free 专业模式 AI</div>
-          <div className="mt-1 text-[12px] leading-5 text-muted">
-            控制未开通 Plus / Pro 的用户每天可发起的专业模式 AI 轮数，追问同样计入。
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          <label className="space-y-1.5">
-            <div className="text-[12px] font-medium text-muted">
-              每日免费次数
-            </div>
-            <input
-              value={draft.free_professional_ai.daily_turn_limit}
-              onChange={(event) =>
-                updateFreeProfessionalAi({
-                  daily_turn_limit: event.target.value,
-                })
-              }
-              inputMode="numeric"
-              className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-            />
-          </label>
-          <div className="flex items-end">
-            <div className="min-h-11 w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-[12px] text-muted">
-              当前设置：
-              <span className="font-medium text-ink">
-                {Math.max(
-                  0,
-                  Math.trunc(
-                    Number(draft.free_professional_ai.daily_turn_limit) || 0,
-                  ),
-                )}
-              </span>
-              {' '}
-              次 / 天
             </div>
           </div>
         </div>
@@ -417,8 +373,9 @@ export function RewardConfigPanel({
               daily_sign_in: {
                 ...draft.daily_sign_in,
                 reward_coins:
-                  Math.round(Number(draft.daily_sign_in.reward_coins || 0) * 100) /
-                  100,
+                  Math.round(
+                    Number(draft.daily_sign_in.reward_coins || 0) * 100,
+                  ) / 100,
               },
               membership: {
                 enabled: plusPlan.enabled,
@@ -434,14 +391,6 @@ export function RewardConfigPanel({
               },
               membership_plans:
                 draft.membership_plans.map(payloadPlanFromDraft),
-              free_professional_ai: {
-                daily_turn_limit: Math.max(
-                  0,
-                  Math.trunc(
-                    Number(draft.free_professional_ai.daily_turn_limit) || 0,
-                  ),
-                ),
-              },
             })
           }
           disabled={busy}

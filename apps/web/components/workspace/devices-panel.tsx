@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { accountsApi, type Account } from '@/features/accounts/api';
 import { billingApi, type BillingStatus } from '@/features/billing/api';
-import { hasBaseMembershipEntitlement } from '@/features/billing/membership-plans';
+import { hasWechatClawEntitlement } from '@/features/billing/membership-plans';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useDeviceBinding } from '@/features/accounts/hooks/use-device-binding';
 import { useToast } from '@/lib/use-toast';
@@ -38,7 +38,7 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
     useAccounts();
   const binding = useDeviceBinding(load);
   const deviceAccounts = accountList;
-  const membershipActive = hasBaseMembershipEntitlement(membership);
+  const membershipActive = hasWechatClawEntitlement(membership);
   const bindingLimitReached = deviceAccounts.length >= 1;
   const canBindWeixin =
     membershipActive && !bindingLimitReached && !membershipLoading;
@@ -61,7 +61,9 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
       .catch((err) => {
         if (cancelled) return;
         setMembershipError(
-          err instanceof Error ? err.message : t('pages.devices.membershipLoadFailed'),
+          err instanceof Error
+            ? err.message
+            : t('pages.devices.membershipLoadFailed'),
         );
         setMembership(null);
       })
@@ -90,10 +92,10 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
       : !membership?.enabled
         ? t('pages.devices.notOpen')
         : membershipActive
-        ? bindingLimitReached
-          ? t('pages.devices.reachedLimit')
-          : t('pages.devices.scanBind')
-        : t('pages.devices.openMembership');
+          ? bindingLimitReached
+            ? t('pages.devices.reachedLimit')
+            : t('pages.devices.scanBind')
+          : t('pages.devices.openMembership');
 
   const handleBindAction = () => {
     if (canBindWeixin) {
@@ -118,7 +120,10 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
       await load();
       notify('success', t('pages.devices.unbound', { name: acc.name }));
     } catch (err) {
-      notify('error', err instanceof Error ? err.message : t('pages.devices.unbindFailed'));
+      notify(
+        'error',
+        err instanceof Error ? err.message : t('pages.devices.unbindFailed'),
+      );
     }
   };
 
@@ -144,7 +149,8 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             <p className="text-[12px] text-muted font-medium mt-0.5">
               {t('pages.common.countDevices', {
                 count: formatNumber(deviceAccounts.length),
-              })} · {bindStatusText}
+              })}{' '}
+              · {bindStatusText}
             </p>
           </div>
         )}
@@ -193,7 +199,10 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
             icon={AlertTriangle}
             title={t('pages.devices.loadFailed')}
             description={loadError}
-            action={{ label: t('pages.devices.reload'), onClick: () => void load() }}
+            action={{
+              label: t('pages.devices.reload'),
+              onClick: () => void load(),
+            }}
           />
         </div>
       ) : deviceAccounts.length > 0 ? (

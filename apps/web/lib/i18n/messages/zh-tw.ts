@@ -431,7 +431,7 @@ export const zhTWMessages = {
       monthlyToken: '本月 Token',
       freeAccount: '目前為免費帳戶',
       freeDescription:
-        '未開通會員時，AI Chat 消耗會直接使用積分餘額；開通後會員免費額度會優先抵扣。',
+        '可使用簡易模式與手動排盤；專家模式和追問需開通 Clarity 或更高等級。',
       freeBadgeWallet: '積分餘額計費',
       freeBadgeUpgrade: '可隨時升級',
       freeBadgeInactive: '會員免費額度未啟用',
@@ -454,6 +454,9 @@ export const zhTWMessages = {
       planDisabled: '暫未開放',
       perMonth: '/ 月',
       planCardsAria: '會員套餐',
+      planBenefitClarityExpert: '解鎖專家模式',
+      planBenefitClarityDaily: '每日 10 次專家 AI',
+      planBenefitClarityCharting: '保留簡易模式與手動排盤',
       planBenefitInsightExpert: 'Insight 解鎖專家權限',
       planBenefitInsightTools: '手動排盤與合參術數',
       planBenefitInsightAllowance: '會員免費額度優先抵扣',
@@ -599,8 +602,8 @@ export const zhTWMessages = {
       statusLoading: '正在確認會員狀態',
       statusUnknown: '會員狀態暫時無法確認',
       limitReached: '會員最多綁定 1 個微信 Claw',
-      bindReady: 'FateClaw Plus 可掃碼綁定微信 Claw',
-      plusOnly: '微信 Claw 僅 FateClaw Plus 會員可綁定',
+      bindReady: 'FateClaw Deep 可掃碼綁定微信 Claw',
+      plusOnly: '微信 Claw 僅 FateClaw Deep 會員可綁定',
       confirming: '確認中',
       unavailable: '暫不可用',
       notOpen: '暫未開放',
@@ -621,13 +624,13 @@ export const zhTWMessages = {
       emptyActiveTitle: '尚未接入微信設備',
       emptyPlusTitle: '微信 Claw 會員專屬',
       emptyLoadingDescription:
-        '會員狀態確認完成後，Plus 會員可掃碼綁定微信 Claw。',
+        '會員狀態確認完成後，Deep 會員可掃碼綁定微信 Claw。',
       emptyUnknownDescription:
         '會員狀態暫時無法確認，請稍後重新整理後重試；站內 AI Chat 和手動排盤仍可繼續使用。',
       emptyActiveDescription:
         '使用移動端微信掃碼綁定微信 Claw，綁定後即可在微信中進行文字對話。',
       emptyPlusDescription:
-        '開通 FateClaw Plus 後可掃碼綁定微信 Claw；站內 AI Chat 和手動排盤仍可繼續使用。',
+        '開通 FateClaw Deep 後可掃碼綁定微信 Claw；站內 AI Chat 和手動排盤仍可繼續使用。',
       connectedAt: '接入於 {date}',
       unbind: '解綁',
       sheetTitle: '掃碼接入微信',
@@ -767,7 +770,8 @@ export const zhTWMessages = {
     submitLogin: '登入天機',
   },
   aiChat: {
-    plusRequired: '手動排盤可繼續使用；發送 AI 解讀需開通 FateClaw Plus。',
+    plusRequired:
+      '手動排盤可繼續使用；發送 AI 解讀需開通 FateClaw Clarity 或更高等級。',
     thinkingLevels: {
       off: '關閉',
       minimal: '極簡',
@@ -834,11 +838,13 @@ export const zhTWMessages = {
       quickDescription:
         '適合新手和非從業者，先把問題講清楚，再由流程完成排盤。',
       quickAction: '先從這裡開始',
-      expertBadge: '排盤可用 · AI Plus',
+      expertBadge: 'Clarity 起可用',
+      expertLockedBadge: '需開通 Clarity',
       expertMode: '專業模式',
       expertDescription:
         '適合懂術數、從業者和專業人士，可直接使用完整對話與排盤能力。',
       expertAction: '進入專業模式',
+      expertUpgradeAction: '開通 Clarity',
       backToMode: '返回模式選擇',
       answerCompleted: '回答完成',
       outputStopped: '已停止輸出',
@@ -850,13 +856,13 @@ export const zhTWMessages = {
     messageList: {
       recharge: '補充積分',
       membershipCenter: '會員中心',
-      openPlus: '開通 Plus',
+      openPlus: '開通 Clarity',
       billingNoticeArrearsTitle: '目前積分已欠費',
       billingNoticeArrearsDescription:
-        '手動排盤可繼續使用；發送 AI 解讀前請先補充積分，或進入會員中心處理 Plus。',
-      billingNoticePlusTitle: 'AI 解讀需要 FateClaw Plus',
+        '手動排盤可繼續使用；發送 AI 解讀前請先補充積分，或進入會員中心處理 Clarity。',
+      billingNoticePlusTitle: 'AI 解讀需要 FateClaw Clarity',
       billingNoticePlusDescription:
-        '手動排盤可繼續使用；開通 Plus 後即可繼續發送 AI 解讀。',
+        '手動排盤可繼續使用；開通 Clarity 後即可繼續發送 AI 解讀。',
       thinkingFallback: '正在思考...',
       thinking: '思考',
       toolTrace: '工具軌跡',

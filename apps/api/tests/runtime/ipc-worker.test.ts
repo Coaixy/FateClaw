@@ -299,6 +299,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     vi.mocked(getUserByAccountId).mockResolvedValue({ id: 'user-1' } as never);
     vi.mocked(getMembershipOverview).mockResolvedValue({
       active: true,
+      membership: { plan_key: 'fateclaw_insight' },
     } as never);
   });
 

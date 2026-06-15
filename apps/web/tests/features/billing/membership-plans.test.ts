@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  MEMBERSHIP_PLUS_PLAN_KEY,
-  MEMBERSHIP_PRO_PLAN_KEY,
+  MEMBERSHIP_CLARITY_PLAN_KEY,
+  MEMBERSHIP_DEEP_PLAN_KEY,
+  MEMBERSHIP_INSIGHT_PLAN_KEY,
   hasBaseMembershipEntitlement,
+  hasCustomModelEntitlement,
+  hasWechatClawEntitlement,
   membershipStatusMeetsPlan,
   resolveMembershipPlanDisplayName,
   resolveMembershipPlanShortName,
@@ -12,7 +15,7 @@ import {
 const baseMembership = {
   enabled: true,
   active: true,
-  plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
+  plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
   monthly_price_coins: 30,
   display_price_coins: 30,
   current_period_start: '2026-06-01T00:00:00.000Z',
@@ -23,44 +26,54 @@ const baseMembership = {
 };
 
 describe('membership plan helpers', () => {
-  it('keeps base membership available to Plus and Pro', () => {
+  it('keeps base membership available to all paid tiers', () => {
     expect(
       hasBaseMembershipEntitlement({
         ...baseMembership,
-        plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
+        plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
       }),
     ).toBe(true);
     expect(
       hasBaseMembershipEntitlement({
         ...baseMembership,
-        plan_key: MEMBERSHIP_PRO_PLAN_KEY,
+        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
         monthly_price_coins: 100,
         display_price_coins: 120,
       }),
     ).toBe(true);
   });
 
-  it('can express Pro-only requirements', () => {
-    const plusMembership = {
+  it('can express Insight and Deep requirements', () => {
+    const clarityMembership = {
       ...baseMembership,
-      plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
+      plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
     };
-    const proMembership = {
-      ...plusMembership,
-      plan_key: MEMBERSHIP_PRO_PLAN_KEY,
+    const insightMembership = {
+      ...clarityMembership,
+      plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
+      monthly_price_coins: 30,
+      display_price_coins: 30,
+    };
+    const deepMembership = {
+      ...clarityMembership,
+      plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
       monthly_price_coins: 100,
       display_price_coins: 120,
     };
 
     expect(
-      membershipStatusMeetsPlan(plusMembership, MEMBERSHIP_PRO_PLAN_KEY),
+      membershipStatusMeetsPlan(clarityMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
     ).toBe(false);
     expect(
-      membershipStatusMeetsPlan(proMembership, MEMBERSHIP_PRO_PLAN_KEY),
+      membershipStatusMeetsPlan(insightMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
     ).toBe(true);
+    expect(hasCustomModelEntitlement(clarityMembership)).toBe(false);
+    expect(hasCustomModelEntitlement(insightMembership)).toBe(true);
+    expect(hasWechatClawEntitlement(insightMembership)).toBe(false);
+    expect(hasWechatClawEntitlement(deepMembership)).toBe(true);
   });
 
-  it('keeps unknown active plan rows compatible with the Plus baseline', () => {
+  it('keeps unknown active plan rows at the Clarity baseline', () => {
     const legacyMembership = {
       ...baseMembership,
       plan_key: 'legacy_plan',
@@ -68,36 +81,48 @@ describe('membership plan helpers', () => {
 
     expect(hasBaseMembershipEntitlement(legacyMembership)).toBe(true);
     expect(
-      membershipStatusMeetsPlan(legacyMembership, MEMBERSHIP_PRO_PLAN_KEY),
+      membershipStatusMeetsPlan(legacyMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
     ).toBe(false);
   });
 
   it('formats known short names by plan key first', () => {
     expect(
       resolveMembershipPlanShortName({
-        plan_key: MEMBERSHIP_PRO_PLAN_KEY,
+        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
         name: 'Custom Name',
       }),
     ).toBe('Deep');
     expect(
       resolveMembershipPlanShortName({
-        plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
-        name: 'FateClaw Plus',
+        plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
+        name: 'FateClaw Insight',
       }),
     ).toBe('Insight');
+    expect(
+      resolveMembershipPlanShortName({
+        plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
+        name: 'FateClaw Clarity',
+      }),
+    ).toBe('Clarity');
   });
 
   it('formats known display names for the current membership branding', () => {
     expect(
       resolveMembershipPlanDisplayName({
-        plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
-        name: 'FateClaw Plus',
+        plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
+        name: 'FateClaw Clarity',
+      }),
+    ).toBe('FateClaw Clarity');
+    expect(
+      resolveMembershipPlanDisplayName({
+        plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
+        name: 'FateClaw Insight',
       }),
     ).toBe('FateClaw Insight');
     expect(
       resolveMembershipPlanDisplayName({
-        plan_key: MEMBERSHIP_PRO_PLAN_KEY,
-        name: 'FateClaw Pro',
+        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
+        name: 'FateClaw Deep',
       }),
     ).toBe('FateClaw Deep');
   });

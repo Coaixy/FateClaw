@@ -74,7 +74,11 @@ function formatMembershipDate(
   t: TranslationFn,
 ) {
   if (!value) return t('pages.membership.notSubscribed');
-  return formatDate(value, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return formatDate(value, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
 }
 
 function formatMembershipUsage(
@@ -120,7 +124,11 @@ function resetText(
 ) {
   if (!value) return t('pages.membership.resetPending');
   return t('pages.membership.resetAt', {
-    date: formatDate(value, { year: 'numeric', month: '2-digit', day: '2-digit' }),
+    date: formatDate(value, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }),
   });
 }
 
@@ -145,7 +153,9 @@ function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
   return resolveMembershipPlanShortName(plan);
 }
 
-function resolvePlanDisplayName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
+function resolvePlanDisplayName(
+  plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
+) {
   return resolveMembershipPlanDisplayName(plan);
 }
 
@@ -160,6 +170,13 @@ function resolvePlanBenefitLabels(
   t: TranslationFn,
 ) {
   const planShortName = resolvePlanShortName(plan);
+  if (planShortName === 'Clarity') {
+    return [
+      t('pages.membership.planBenefitClarityExpert'),
+      t('pages.membership.planBenefitClarityDaily'),
+      t('pages.membership.planBenefitClarityCharting'),
+    ];
+  }
   if (planShortName === 'Deep') {
     return [
       t('pages.membership.planBenefitDeepAllowance'),
@@ -181,7 +198,11 @@ function formatEntitlementRange(
     options?: Intl.DateTimeFormatOptions,
   ) => string,
 ) {
-  const options = { year: 'numeric', month: '2-digit', day: '2-digit' } as const;
+  const options = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  } as const;
   return `${formatDate(entitlement.effective_start, options)} - ${formatDate(
     entitlement.effective_end,
     options,
@@ -229,10 +250,7 @@ function shouldReduceMotion() {
   );
 }
 
-function setCardMotionVars(
-  element: HTMLElement,
-  vars: Record<string, string>,
-) {
+function setCardMotionVars(element: HTMLElement, vars: Record<string, string>) {
   for (const [key, value] of Object.entries(vars)) {
     element.style.setProperty(key, value);
   }
@@ -364,7 +382,8 @@ function AmpMembershipCard({
         style={{
           backgroundImage:
             'repeating-conic-gradient(from 20deg, color-mix(in srgb, var(--color-primary) 42%, transparent) 0deg 2deg, transparent 2deg 8deg), repeating-radial-gradient(circle, color-mix(in srgb, var(--color-accent-teal) 36%, transparent) 0 1px, transparent 1px 10px)',
-          maskImage: 'radial-gradient(ellipse at center, black, transparent 72%)',
+          maskImage:
+            'radial-gradient(ellipse at center, black, transparent 72%)',
         }}
         aria-hidden="true"
       />
@@ -553,7 +572,7 @@ function MembershipPlanCards({
   return (
     <section
       aria-label={t('pages.membership.planCardsAria')}
-      className="grid gap-3 lg:grid-cols-2"
+      className="grid gap-3 lg:grid-cols-3"
     >
       {plans.map((plan) => {
         const isCurrentPlan = activePlanKey === plan.plan_key;
@@ -637,7 +656,9 @@ function MembershipPlanCards({
                 ) : (
                   <Sparkles size={15} className="shrink-0" />
                 )}
-                {plan.enabled ? actionLabel : t('pages.membership.planDisabled')}
+                {plan.enabled
+                  ? actionLabel
+                  : t('pages.membership.planDisabled')}
               </button>
             </div>
           </article>
@@ -680,7 +701,12 @@ function MembershipDetailPanel({
     {
       className: 'border-b border-hairline/70 sm:border-b-0 sm:border-r',
       label: t('pages.membership.monthlyUsage'),
-      value: formatMembershipUsage(monthlyMessages, monthlyTokens, formatNumber, t),
+      value: formatMembershipUsage(
+        monthlyMessages,
+        monthlyTokens,
+        formatNumber,
+        t,
+      ),
     },
     {
       className: '',
@@ -750,7 +776,11 @@ function MembershipDetailPanel({
               {membership.enabled
                 ? membership.active
                   ? t('pages.membership.activeHint', {
-                      reset: resetText(membership.allowance_reset_at, formatDate, t),
+                      reset: resetText(
+                        membership.allowance_reset_at,
+                        formatDate,
+                        t,
+                      ),
                     })
                   : t('pages.membership.inactiveHint')
                 : t('pages.membership.disabledHint')}
@@ -777,7 +807,8 @@ function MembershipDetailPanel({
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {entitlements.map((entitlement) => {
-                  const planShortName = resolveEntitlementShortName(entitlement);
+                  const planShortName =
+                    resolveEntitlementShortName(entitlement);
                   return (
                     <div
                       key={`${entitlement.plan_key}-${entitlement.effective_start}-${entitlement.effective_end}`}
@@ -827,15 +858,11 @@ export function MembershipWorkspace() {
   const { confirm } = useConfirm();
   const { toast } = useToast();
   const { formatDate, formatNumber, locale, t } = useI18n();
-  const {
-    billingInfo,
-    usage,
-    loading,
-    error,
-    refresh,
-  } = useMembershipOverview();
-  const [membershipBusyPlanKey, setMembershipBusyPlanKey] =
-    useState<string | null>(null);
+  const { billingInfo, usage, loading, error, refresh } =
+    useMembershipOverview();
+  const [membershipBusyPlanKey, setMembershipBusyPlanKey] = useState<
+    string | null
+  >(null);
 
   const handleSubscribeMembership = async (plan: MembershipPlan) => {
     const membership = billingInfo?.membership;
@@ -871,7 +898,9 @@ export function MembershipWorkspace() {
     } catch (err) {
       toast(
         'error',
-        err instanceof Error ? err.message : t('pages.membership.subscribeFailed'),
+        err instanceof Error
+          ? err.message
+          : t('pages.membership.subscribeFailed'),
       );
     } finally {
       setMembershipBusyPlanKey(null);
@@ -901,7 +930,7 @@ export function MembershipWorkspace() {
       : null;
   const activePlanShortName = activePlan
     ? resolvePlanShortName(activePlan)
-    : 'Insight';
+    : 'Clarity';
 
   return (
     <AppShell>

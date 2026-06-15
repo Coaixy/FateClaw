@@ -12,8 +12,8 @@ const {
   mockGetSessionMessagesWithToolContext,
   mockGetSharedChatSessionByToken,
   mockGetMembershipOverview,
-  mockClaimFreeProfessionalAiTurn,
-  mockReleaseFreeProfessionalAiTurn,
+  mockClaimProfessionalAiTurn,
+  mockReleaseProfessionalAiTurn,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
@@ -49,8 +49,8 @@ const {
   mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetSharedChatSessionByToken: vi.fn(),
   mockGetMembershipOverview: vi.fn(),
-  mockClaimFreeProfessionalAiTurn: vi.fn(),
-  mockReleaseFreeProfessionalAiTurn: vi.fn(),
+  mockClaimProfessionalAiTurn: vi.fn(),
+  mockReleaseProfessionalAiTurn: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
@@ -87,8 +87,8 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getSharedChatSessionByToken: mockGetSharedChatSessionByToken,
   getMembershipOverview: mockGetMembershipOverview,
-  claimFreeProfessionalAiTurn: mockClaimFreeProfessionalAiTurn,
-  releaseFreeProfessionalAiTurn: mockReleaseFreeProfessionalAiTurn,
+  claimProfessionalAiTurn: mockClaimProfessionalAiTurn,
+  releaseProfessionalAiTurn: mockReleaseProfessionalAiTurn,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
@@ -210,15 +210,16 @@ describe('chat-session-service selected board context', () => {
     mockGetUserById.mockResolvedValue({ id: 'user-1' });
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
+      membership: { plan_key: 'fateclaw_deep' },
     });
-    mockClaimFreeProfessionalAiTurn.mockResolvedValue({
+    mockClaimProfessionalAiTurn.mockResolvedValue({
       allowed: true,
       usage_date: '2026-04-26',
-      limit: 5,
+      limit: 100,
       used: 1,
-      remaining: 4,
+      remaining: 99,
     });
-    mockReleaseFreeProfessionalAiTurn.mockResolvedValue({
+    mockReleaseProfessionalAiTurn.mockResolvedValue({
       released: true,
       usage_date: '2026-04-26',
       used: 0,
@@ -429,13 +430,13 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('rejects Free professional AI turns after the daily quota is exhausted', async () => {
+  it('rejects Free professional AI turns because Free has no expert turns', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
-    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
       allowed: false,
       usage_date: '2026-04-26',
-      limit: 5,
-      used: 5,
+      limit: 0,
+      used: 0,
       remaining: 0,
     });
 
@@ -448,10 +449,11 @@ describe('chat-session-service selected board context', () => {
     expect(result).toEqual({
       ok: false,
       statusCode: 403,
-      error: '今日免费专业模式 AI 次数已用完，请开通 FateClaw Plus 后继续。',
+      error: '今日专家模式 AI 次数已用完，请开通或升级 FateClaw 会员后继续。',
     });
-    expect(mockClaimFreeProfessionalAiTurn).toHaveBeenCalledWith({
+    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
+      dailyTurnLimit: 0,
     });
     expect(mockStoreMessage).not.toHaveBeenCalled();
     expect(mockRedisEval).toHaveBeenCalledTimes(2);
@@ -464,14 +466,17 @@ describe('chat-session-service selected board context', () => {
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
-  it('allows Free professional AI turns while quota remains and consumes one turn', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
-    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+  it('allows Clarity professional AI turns while daily turns remain and consumes one turn', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({
+      active: true,
+      membership: { plan_key: 'fateclaw_clarity' },
+    });
+    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
       allowed: true,
       usage_date: '2026-04-26',
-      limit: 5,
+      limit: 10,
       used: 4,
-      remaining: 1,
+      remaining: 6,
     });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
@@ -481,21 +486,25 @@ describe('chat-session-service selected board context', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(mockClaimFreeProfessionalAiTurn).toHaveBeenCalledWith({
+    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
+      dailyTurnLimit: 10,
     });
     expect(mockStoreMessage).toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 
-  it('refunds a consumed Free professional AI turn when request preparation fails', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
-    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+  it('refunds a consumed Clarity professional AI turn when request preparation fails', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({
+      active: true,
+      membership: { plan_key: 'fateclaw_clarity' },
+    });
+    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
       allowed: true,
       usage_date: '2026-04-26',
-      limit: 5,
+      limit: 10,
       used: 4,
-      remaining: 1,
+      remaining: 6,
     });
     mockBuildStructuredInputForSession.mockRejectedValueOnce(
       new Error('structured input unavailable'),
@@ -512,21 +521,24 @@ describe('chat-session-service selected board context', () => {
       statusCode: 502,
       error: 'structured input unavailable',
     });
-    expect(mockReleaseFreeProfessionalAiTurn).toHaveBeenCalledWith({
+    expect(mockReleaseProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
       usageDate: '2026-04-26',
     });
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
-  it('refunds a consumed Free professional AI turn when enqueueing fails', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
-    mockClaimFreeProfessionalAiTurn.mockResolvedValueOnce({
+  it('refunds a consumed Clarity professional AI turn when enqueueing fails', async () => {
+    mockGetMembershipOverview.mockResolvedValueOnce({
+      active: true,
+      membership: { plan_key: 'fateclaw_clarity' },
+    });
+    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
       allowed: true,
       usage_date: '2026-04-26',
-      limit: 5,
+      limit: 10,
       used: 4,
-      remaining: 1,
+      remaining: 6,
     });
     mockDispatchAiChatPrompt.mockResolvedValueOnce({
       status: 'error',
@@ -547,24 +559,27 @@ describe('chat-session-service selected board context', () => {
       error: 'AI 处理失败',
     });
     expect(mockStoreMessage).toHaveBeenCalled();
-    expect(mockReleaseFreeProfessionalAiTurn).toHaveBeenCalledWith({
+    expect(mockReleaseProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
       usageDate: '2026-04-26',
     });
   });
 
-  it('keeps member professional AI turns unlimited without consuming Free quota', async () => {
+  it('consumes Deep professional AI turns with the Deep daily limit', async () => {
     await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
       inputKind: 'normal',
       pastedBoard: undefined,
     });
 
-    expect(mockClaimFreeProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+      dailyTurnLimit: 100,
+    });
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 
-  it('does not consume Free quota for simple workflow first-turn bypass', async () => {
+  it('does not consume professional AI turns for simple workflow first-turn bypass', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
 
     const result = await sendOwnedChatSessionMessage(
@@ -582,7 +597,7 @@ describe('chat-session-service selected board context', () => {
 
     expect(result.ok).toBe(true);
     expect(mockGetMembershipOverview).not.toHaveBeenCalled();
-    expect(mockClaimFreeProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 

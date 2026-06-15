@@ -360,8 +360,7 @@ export const enMessages = {
       purchasedBalance: 'Purchased credits',
       bonusBalance: 'Reward credits',
       rechargeTitle: 'Add credits',
-      rechargeSubtitle:
-        'Total added · Credits are used for AI reading usage',
+      rechargeSubtitle: 'Total added · Credits are used for AI reading usage',
       refreshRecharge: 'Refresh credit orders',
       stepsAmount: 'Amount',
       stepsPayment: 'Payment',
@@ -448,7 +447,7 @@ export const enMessages = {
       monthlyToken: 'Monthly tokens',
       freeAccount: 'Free account',
       freeDescription:
-        'Without membership, AI Chat usage uses credit balance directly. After subscribing, included member allowance is used first.',
+        'Simple mode and manual charting remain available. Expert mode and follow-up questions require Clarity or higher.',
       freeBadgeWallet: 'Credit balance billing',
       freeBadgeUpgrade: 'Upgrade anytime',
       freeBadgeInactive: 'Included allowance inactive',
@@ -471,6 +470,9 @@ export const enMessages = {
       planDisabled: 'Not available',
       perMonth: '/ month',
       planCardsAria: 'Membership plans',
+      planBenefitClarityExpert: 'Unlocks expert mode',
+      planBenefitClarityDaily: '10 expert AI turns per day',
+      planBenefitClarityCharting: 'Simple mode and manual charting included',
       planBenefitInsightExpert: 'Insight unlocks expert access',
       planBenefitInsightTools: 'Manual charting and chart tools',
       planBenefitInsightAllowance: 'Included member allowance used first',
@@ -490,8 +492,7 @@ export const enMessages = {
       entitlementCurrent: 'Current',
       entitlementUpcoming: 'Upcoming',
       entitlementFallbackHint: 'Then returns to {plan} until {date}',
-      activeHint:
-        '{reset}; credit balance is used after allowance is used up.',
+      activeHint: '{reset}; credit balance is used after allowance is used up.',
       inactiveHint:
         'Included member allowance is used before credit balance after subscribing.',
       disabledHint:
@@ -623,9 +624,9 @@ export const enMessages = {
       statusLoading: 'Checking membership status',
       statusUnknown: 'Membership status cannot be confirmed',
       limitReached: 'Members can bind at most 1 WeChat Claw',
-      bindReady: 'FateClaw Plus can bind WeChat Claw by QR code',
+      bindReady: 'FateClaw Deep can bind WeChat Claw by QR code',
       plusOnly:
-        'WeChat Claw binding is available only to FateClaw Plus members',
+        'WeChat Claw binding is available only to FateClaw Deep members',
       confirming: 'Checking',
       unavailable: 'Unavailable',
       notOpen: 'Not open',
@@ -646,13 +647,13 @@ export const enMessages = {
       emptyActiveTitle: 'No WeChat device connected',
       emptyPlusTitle: 'WeChat Claw is for members',
       emptyLoadingDescription:
-        'After membership status is confirmed, Plus members can bind WeChat Claw by QR code.',
+        'After membership status is confirmed, Deep members can bind WeChat Claw by QR code.',
       emptyUnknownDescription:
         'Membership status cannot be confirmed. Refresh later and retry. AI Chat and manual charting remain available.',
       emptyActiveDescription:
         'Scan the QR code with mobile WeChat to bind WeChat Claw, then chat by text in WeChat.',
       emptyPlusDescription:
-        'Open FateClaw Plus to bind WeChat Claw by QR code. AI Chat and manual charting remain available.',
+        'Open FateClaw Deep to bind WeChat Claw by QR code. AI Chat and manual charting remain available.',
       connectedAt: 'Connected on {date}',
       unbind: 'Unbind',
       sheetTitle: 'Connect WeChat by QR code',
@@ -794,7 +795,7 @@ export const enMessages = {
   },
   aiChat: {
     plusRequired:
-      'Manual charting remains available. FateClaw Plus is required for AI interpretation.',
+      'Manual charting remains available. FateClaw Clarity or higher is required for AI interpretation.',
     thinkingLevels: {
       off: 'Off',
       minimal: 'Minimal',
@@ -865,11 +866,13 @@ export const enMessages = {
       quickDescription:
         'Best for beginners. Explain the question first, then let the workflow create the chart.',
       quickAction: 'Start here',
-      expertBadge: 'Charting available · AI Plus',
+      expertBadge: 'Available from Clarity',
+      expertLockedBadge: 'Requires Clarity',
       expertMode: 'Expert mode',
       expertDescription:
         'For practitioners and advanced users who want full chat and charting controls.',
       expertAction: 'Enter expert mode',
+      expertUpgradeAction: 'Open Clarity',
       backToMode: 'Back to mode selection',
       answerCompleted: 'Answer complete',
       outputStopped: 'Output stopped',
@@ -881,13 +884,13 @@ export const enMessages = {
     messageList: {
       recharge: 'Add credits',
       membershipCenter: 'Membership',
-      openPlus: 'Open Plus',
+      openPlus: 'Open Clarity',
       billingNoticeArrearsTitle: 'Your balance is overdue',
       billingNoticeArrearsDescription:
-        'Manual charting remains available. Add credits before sending AI interpretation, or manage Plus in membership.',
-      billingNoticePlusTitle: 'AI interpretation requires FateClaw Plus',
+        'Manual charting remains available. Add credits before sending AI interpretation, or manage Clarity in membership.',
+      billingNoticePlusTitle: 'AI interpretation requires FateClaw Clarity',
       billingNoticePlusDescription:
-        'Manual charting remains available. Open Plus to keep sending AI interpretation.',
+        'Manual charting remains available. Open Clarity to keep sending AI interpretation.',
       thinkingFallback: 'Thinking...',
       thinking: 'Thinking',
       toolTrace: 'Tool trace',
