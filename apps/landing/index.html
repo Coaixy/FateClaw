@@ -167,7 +167,7 @@ a:hover { color: var(--color-gold); }
 }
 
 /* ============================================================
-   Canvas 天干地支飘字
+   Canvas 天干地支与八卦飘字
    ============================================================ */
 #particles {
   position: fixed;
@@ -177,9 +177,9 @@ a:hover { color: var(--color-gold); }
 }
 
 /* ============================================================
-   Hero 旋转曼陀罗
+   Hero 奇门九宫背景
    ============================================================ */
-.hero-mandala {
+.hero-qimen {
   position: absolute;
   inset: 0;
   display: flex;
@@ -188,29 +188,57 @@ a:hover { color: var(--color-gold); }
   pointer-events: none;
   overflow: hidden;
 }
-.hero-mandala svg {
+.hero-qimen svg {
   width: min(680px, 95vw);
   height: min(680px, 95vw);
-  opacity: 0.18;
+  opacity: 0.20;
 }
-.mandala-outer {
+.qimen-compass,
+.qimen-ring {
   transform-origin: center;
-  animation: spinSlow 80s linear infinite;
 }
-.mandala-mid {
-  transform-origin: center;
-  animation: spinSlow 50s linear infinite reverse;
+.qimen-ring {
+  animation: spinSlow 132s linear infinite reverse;
 }
-.mandala-inner {
-  transform-origin: center;
-  animation: spinSlow 30s linear infinite;
+.qimen-main {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  fill: rgba(255, 217, 102, 0.72);
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.qimen-sub {
+  font-family: var(--font-body);
+  font-size: 12px;
+  fill: rgba(245, 240, 232, 0.50);
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.qimen-direction {
+  font-family: var(--font-display);
+  font-size: 18px;
+  fill: rgba(94, 234, 212, 0.50);
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.xiu-mark line {
+  stroke: rgba(255, 217, 102, 0.38);
+  stroke-width: 0.65;
+}
+.xiu-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  fill: rgba(255, 217, 102, 0.54);
+  text-anchor: middle;
+  dominant-baseline: middle;
 }
 @keyframes spinSlow {
   to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mandala-outer, .mandala-mid, .mandala-inner { animation: none; }
+  .qimen-ring { animation: none; }
   #particles { display: none; }
   @keyframes auroraShift { to {} }
 }
@@ -568,7 +596,7 @@ section {
 
 
 /* ============================================================
-   占卜与命理
+   命与运
    ============================================================ */
 #architecture {
   padding-top: 60px;
@@ -588,6 +616,25 @@ section {
   transition: all var(--transition);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  position: relative;
+  overflow: hidden;
+}
+
+.compare-card::after {
+  content: attr(data-symbol);
+  position: absolute;
+  right: 22px;
+  top: 14px;
+  font-family: var(--font-display);
+  font-size: 5.5rem;
+  line-height: 1;
+  color: rgba(240, 180, 41, 0.07);
+  pointer-events: none;
+}
+
+.compare-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .compare-card:hover {
@@ -795,11 +842,24 @@ footer {
    ============================================================ */
 @media (max-width: 1024px) {
   .process-flow {
-    grid-template-columns: 1fr;
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 14px;
+  }
+  .process-step {
+    flex: 0 0 min(320px, 72vw);
+    min-height: 210px;
+    scroll-snap-align: start;
   }
   .flow-arrow {
-    justify-self: center;
-    transform: rotate(90deg);
+    flex: 0 0 28px;
+    justify-self: auto;
+    text-align: center;
+    transform: none;
   }
   .flow-arrow.bidirectional {
     transform: none;
@@ -832,6 +892,20 @@ footer {
 
   section { padding: 60px 20px; }
 
+  .process-flow {
+    margin-right: -20px;
+    padding-right: 20px;
+  }
+  .process-step {
+    flex-basis: min(320px, 78vw);
+    min-height: 180px;
+    padding: 22px;
+    border-radius: 16px;
+  }
+  .flow-arrow {
+    font-size: 1.6rem;
+  }
+
   .footer-content { flex-direction: column; text-align: center; }
 }
 
@@ -842,6 +916,22 @@ footer {
   .hero h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
   .hero-actions { flex-direction: column; align-items: center; }
   .btn { width: 100%; justify-content: center; }
+  .process-step {
+    flex-basis: 82vw;
+    min-height: 168px;
+    padding: 20px;
+  }
+  .process-label {
+    margin-bottom: 8px;
+  }
+  .process-step h3 {
+    font-size: 1.35rem;
+    margin-bottom: 10px;
+  }
+  .process-step p {
+    font-size: 0.86rem;
+    line-height: 1.65;
+  }
 }
 </style>
 </head>
@@ -861,7 +951,7 @@ footer {
 
   <ul class="nav-links" id="navLinks">
     <li><a href="#features" data-i18n="nav.features">核心能力</a></li>
-    <li><a href="#architecture" data-i18n="nav.architecture">占卜命理</a></li>
+    <li><a href="#architecture" data-i18n="nav.architecture">命与运</a></li>
     <li><a href="#faq" data-i18n="nav.faq">FAQs</a></li>
     <li>
       <div class="lang-switcher">
@@ -881,50 +971,91 @@ footer {
      Hero
      ============================================================ -->
 <header class="hero">
-  <!-- 旋转曼陀罗背景装饰 -->
-  <div class="hero-mandala" aria-hidden="true">
+  <!-- 奇门九宫背景装饰 -->
+  <div class="hero-qimen" aria-hidden="true">
     <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- 外圈旋转层 -->
-      <g class="mandala-outer">
-        <circle cx="300" cy="300" r="290" stroke="rgba(240,185,41,0.5)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="278" stroke="rgba(240,185,41,0.2)" stroke-width="0.5" stroke-dasharray="4 8"/>
-        <!-- 8 根辐射线 -->
-        <line x1="300" y1="10" x2="300" y2="590" stroke="rgba(240,185,41,0.18)" stroke-width="0.6"/>
-        <line x1="10" y1="300" x2="590" y2="300" stroke="rgba(240,185,41,0.18)" stroke-width="0.6"/>
-        <line x1="94" y1="94" x2="506" y2="506" stroke="rgba(240,185,41,0.12)" stroke-width="0.6"/>
-        <line x1="506" y1="94" x2="94" y2="506" stroke="rgba(240,185,41,0.12)" stroke-width="0.6"/>
-        <!-- 外八角 -->
-        <polygon points="300,12 506,94 588,300 506,506 300,588 94,506 12,300 94,94" stroke="rgba(240,185,41,0.35)" stroke-width="0.8" fill="none"/>
-        <!-- 8 个小菱形装饰 -->
-        <polygon points="300,30 316,46 300,62 284,46" stroke="rgba(255,215,100,0.7)" stroke-width="0.8" fill="rgba(255,215,100,0.08)"/>
-        <polygon points="570,300 554,316 538,300 554,284" stroke="rgba(255,215,100,0.7)" stroke-width="0.8" fill="rgba(255,215,100,0.08)"/>
-        <polygon points="300,570 284,554 300,538 316,554" stroke="rgba(255,215,100,0.7)" stroke-width="0.8" fill="rgba(255,215,100,0.08)"/>
-        <polygon points="30,300 46,284 62,300 46,316" stroke="rgba(255,215,100,0.7)" stroke-width="0.8" fill="rgba(255,215,100,0.08)"/>
-        <polygon points="88,88 104,80 112,96 96,104" stroke="rgba(255,215,100,0.5)" stroke-width="0.7" fill="rgba(255,215,100,0.06)"/>
-        <polygon points="512,88 520,104 504,112 496,96" stroke="rgba(255,215,100,0.5)" stroke-width="0.7" fill="rgba(255,215,100,0.06)"/>
-        <polygon points="512,512 496,504 504,488 520,496" stroke="rgba(255,215,100,0.5)" stroke-width="0.7" fill="rgba(255,215,100,0.06)"/>
-        <polygon points="88,512 96,496 112,504 104,520" stroke="rgba(255,215,100,0.5)" stroke-width="0.7" fill="rgba(255,215,100,0.06)"/>
+      <!-- 罗盘线条保持稳定，九宫本体便于识别；外侧二十八星宿环负责旋转动效 -->
+      <g class="qimen-compass">
+        <circle cx="300" cy="300" r="286" stroke="rgba(240,185,41,0.42)" stroke-width="0.8"/>
+        <circle cx="300" cy="300" r="270" stroke="rgba(240,185,41,0.18)" stroke-width="0.5" stroke-dasharray="4 8"/>
+        <circle cx="300" cy="300" r="236" stroke="rgba(94,234,212,0.16)" stroke-width="0.5" stroke-dasharray="2 9"/>
+        <line x1="300" y1="18" x2="300" y2="92" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
+        <line x1="300" y1="508" x2="300" y2="582" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
+        <line x1="18" y1="300" x2="92" y2="300" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
+        <line x1="508" y1="300" x2="582" y2="300" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
+        <line x1="100" y1="100" x2="152" y2="152" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
+        <line x1="500" y1="100" x2="448" y2="152" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
+        <line x1="500" y1="500" x2="448" y2="448" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
+        <line x1="100" y1="500" x2="152" y2="448" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
       </g>
-      <!-- 中圈 -->
-      <g class="mandala-mid">
-        <circle cx="300" cy="300" r="210" stroke="rgba(240,185,41,0.40)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="196" stroke="rgba(240,185,41,0.15)" stroke-width="0.5" stroke-dasharray="3 6"/>
-        <!-- 六角形 -->
-        <polygon points="300,90 474,195 474,405 300,510 126,405 126,195" stroke="rgba(240,185,41,0.28)" stroke-width="0.8" fill="none"/>
-        <!-- 内八角星 -->
-        <polygon points="300,105 342,195 438,195 364,253 390,349 300,295 210,349 236,253 162,195 258,195" stroke="rgba(240,185,41,0.20)" stroke-width="0.7" fill="none"/>
+      <g class="qimen-ring">
+        <circle cx="300" cy="300" r="258" stroke="rgba(240,185,41,0.28)" stroke-width="0.8"/>
+        <circle cx="300" cy="300" r="228" stroke="rgba(94,234,212,0.14)" stroke-width="0.6" stroke-dasharray="2 10"/>
+        <!-- 二十八星宿从角宿开始顺时针排布，作为九宫外层天象环 -->
+        <g class="xiu-mark" transform="rotate(0 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">角</text></g>
+        <g class="xiu-mark" transform="rotate(12.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">亢</text></g>
+        <g class="xiu-mark" transform="rotate(25.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">氐</text></g>
+        <g class="xiu-mark" transform="rotate(38.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">房</text></g>
+        <g class="xiu-mark" transform="rotate(51.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">心</text></g>
+        <g class="xiu-mark" transform="rotate(64.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">尾</text></g>
+        <g class="xiu-mark" transform="rotate(77.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">箕</text></g>
+        <g class="xiu-mark" transform="rotate(90 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">斗</text></g>
+        <g class="xiu-mark" transform="rotate(102.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">牛</text></g>
+        <g class="xiu-mark" transform="rotate(115.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">女</text></g>
+        <g class="xiu-mark" transform="rotate(128.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">虚</text></g>
+        <g class="xiu-mark" transform="rotate(141.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">危</text></g>
+        <g class="xiu-mark" transform="rotate(154.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">室</text></g>
+        <g class="xiu-mark" transform="rotate(167.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">壁</text></g>
+        <g class="xiu-mark" transform="rotate(180 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">奎</text></g>
+        <g class="xiu-mark" transform="rotate(192.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">娄</text></g>
+        <g class="xiu-mark" transform="rotate(205.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">胃</text></g>
+        <g class="xiu-mark" transform="rotate(218.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">昴</text></g>
+        <g class="xiu-mark" transform="rotate(231.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">毕</text></g>
+        <g class="xiu-mark" transform="rotate(244.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">觜</text></g>
+        <g class="xiu-mark" transform="rotate(257.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">参</text></g>
+        <g class="xiu-mark" transform="rotate(270 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">井</text></g>
+        <g class="xiu-mark" transform="rotate(282.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">鬼</text></g>
+        <g class="xiu-mark" transform="rotate(295.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">柳</text></g>
+        <g class="xiu-mark" transform="rotate(308.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">星</text></g>
+        <g class="xiu-mark" transform="rotate(321.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">张</text></g>
+        <g class="xiu-mark" transform="rotate(334.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">翼</text></g>
+        <g class="xiu-mark" transform="rotate(347.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">轸</text></g>
       </g>
-      <!-- 内圈 -->
-      <g class="mandala-inner">
-        <circle cx="300" cy="300" r="130" stroke="rgba(240,185,41,0.45)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="118" stroke="rgba(240,185,41,0.18)" stroke-width="0.5" stroke-dasharray="2 5"/>
-        <!-- 内八角 -->
-        <polygon points="300,172 357,214 378,280 357,346 300,388 243,346 222,280 243,214" stroke="rgba(240,185,41,0.40)" stroke-width="0.8" fill="rgba(240,185,41,0.02)"/>
-        <!-- 中心圆 -->
-        <circle cx="300" cy="300" r="42" stroke="rgba(240,185,41,0.55)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="28" stroke="rgba(240,185,41,0.35)" stroke-width="0.6"/>
-        <circle cx="300" cy="300" r="12" fill="rgba(240,185,41,0.18)"/>
-        <circle cx="300" cy="300" r="6" fill="rgba(255,215,100,0.5)"/>
+      <!-- 洛书九宫：上南下北，左东右西，是奇门盘面常见的展示方向 -->
+      <g class="qimen-grid">
+        <rect x="135" y="135" width="330" height="330" stroke="rgba(240,185,41,0.50)" stroke-width="1" fill="rgba(7,6,14,0.12)"/>
+        <rect x="245" y="245" width="110" height="110" fill="rgba(240,185,41,0.055)" stroke="rgba(255,217,102,0.32)" stroke-width="0.8"/>
+        <line x1="245" y1="135" x2="245" y2="465" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
+        <line x1="355" y1="135" x2="355" y2="465" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
+        <line x1="135" y1="245" x2="465" y2="245" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
+        <line x1="135" y1="355" x2="465" y2="355" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
+
+        <text class="qimen-main" x="190" y="178">巽</text>
+        <text class="qimen-sub" x="190" y="212">四 · 东南</text>
+        <text class="qimen-main" x="300" y="178">离</text>
+        <text class="qimen-sub" x="300" y="212">九 · 南</text>
+        <text class="qimen-main" x="410" y="178">坤</text>
+        <text class="qimen-sub" x="410" y="212">二 · 西南</text>
+
+        <text class="qimen-main" x="190" y="288">震</text>
+        <text class="qimen-sub" x="190" y="322">三 · 东</text>
+        <text class="qimen-main" x="300" y="288">中</text>
+        <text class="qimen-sub" x="300" y="322">五 · 奇门</text>
+        <text class="qimen-main" x="410" y="288">兑</text>
+        <text class="qimen-sub" x="410" y="322">七 · 西</text>
+
+        <text class="qimen-main" x="190" y="398">艮</text>
+        <text class="qimen-sub" x="190" y="432">八 · 东北</text>
+        <text class="qimen-main" x="300" y="398">坎</text>
+        <text class="qimen-sub" x="300" y="432">一 · 北</text>
+        <text class="qimen-main" x="410" y="398">乾</text>
+        <text class="qimen-sub" x="410" y="432">六 · 西北</text>
+      </g>
+      <g>
+        <text class="qimen-direction" x="300" y="84">南</text>
+        <text class="qimen-direction" x="300" y="516">北</text>
+        <text class="qimen-direction" x="84" y="300">东</text>
+        <text class="qimen-direction" x="516" y="300">西</text>
       </g>
     </svg>
   </div>
@@ -985,49 +1116,49 @@ footer {
 </section>
 
 <!-- ============================================================
-     占卜与命理
+     命与运
      ============================================================ -->
 <section id="architecture">
-  <h2 class="section-title reveal" data-i18n="arch.title">占卜与命理怎么分工</h2>
-  <p class="section-subtitle reveal reveal-delay-1" data-i18n="arch.subtitle">命理看长期结构，占卜看具体问题。FateClaw 将两类方法分开建模，再按用户问题选择合适路径。</p>
+  <h2 class="section-title reveal" data-i18n="arch.title">命、运与选择怎么分工</h2>
+  <p class="section-subtitle reveal reveal-delay-1" data-i18n="arch.subtitle">命像车，运像路。FateClaw 先看车的结构，再看路况、时机和岔路，把占卜与选择放在可行动的位置。</p>
 
   <div class="compare-grid">
-    <article class="compare-card reveal">
-      <span class="compare-label" data-i18n="arch.destinyLabel">命理</span>
-      <h3 data-i18n="arch.destinyTitle">看长期结构与周期</h3>
-      <p data-i18n="arch.destinyDesc">命理通常以出生时间等稳定信息起盘，关注一个人的结构、倾向、阶段变化与长期规划。</p>
+    <article class="compare-card reveal" data-symbol="车">
+      <span class="compare-label" data-i18n="arch.destinyLabel">命</span>
+      <h3 data-i18n="arch.destinyTitle">命是车：结构与承载</h3>
+      <p data-i18n="arch.destinyDesc">命更像车的底盘、发动机和载重上限，描述一个人先天结构、惯性、优势和容易消耗的地方。</p>
       <div class="compare-points">
         <div class="compare-point">
-          <strong data-i18n="arch.destinyProsTitle">优势</strong>
-          <p data-i18n="arch.destinyPros">稳定、可反复对照，适合看长期趋势、人生主题、性格结构和阶段节律。</p>
+          <strong data-i18n="arch.destinyProsTitle">看什么</strong>
+          <p data-i18n="arch.destinyPros">看底层配置、性格结构、长期倾向与阶段节律，适合回答“我这辆车适合怎么开”。</p>
         </div>
         <div class="compare-point">
-          <strong data-i18n="arch.destinyConsTitle">局限</strong>
-          <p data-i18n="arch.destinyCons">对具体短期事件不一定直接，且很依赖出生时间准确性，容易被过度决定论误用。</p>
+          <strong data-i18n="arch.destinyConsTitle">边界</strong>
+          <p data-i18n="arch.destinyCons">车的结构不是全部结果，同一辆车在不同路况、速度和选择下，会走出很不一样的体验。</p>
         </div>
       </div>
     </article>
 
-    <article class="compare-card reveal reveal-delay-1">
-      <span class="compare-label" data-i18n="arch.divinationLabel">占卜</span>
-      <h3 data-i18n="arch.divinationTitle">看当下问题与选择</h3>
-      <p data-i18n="arch.divinationDesc">占卜围绕一个具体问题展开，重视提问时点、卦象或局势，适合讨论选择、时机与事件走向。</p>
+    <article class="compare-card reveal reveal-delay-1" data-symbol="路">
+      <span class="compare-label" data-i18n="arch.divinationLabel">运</span>
+      <h3 data-i18n="arch.divinationTitle">运是路：路况与岔口</h3>
+      <p data-i18n="arch.divinationDesc">运更像正在走的路，包含外部环境、阶段机会、阻力、时机和那些需要当下判断的岔口。</p>
       <div class="compare-points">
         <div class="compare-point">
-          <strong data-i18n="arch.divinationProsTitle">优势</strong>
-          <p data-i18n="arch.divinationPros">针对性强，能把问题收束到当下情境，适合辅助判断不同方案的风险和机会。</p>
+          <strong data-i18n="arch.divinationProsTitle">占卜看路</strong>
+          <p data-i18n="arch.divinationPros">占卜把问题收束到当前路口，帮助判断路况、时机、风险和不同路线的机会成本。</p>
         </div>
         <div class="compare-point">
-          <strong data-i18n="arch.divinationConsTitle">局限</strong>
-          <p data-i18n="arch.divinationCons">问法和时点影响很大，适合辅助思考，不应替代现实行动、专业建议或责任判断。</p>
+          <strong data-i18n="arch.divinationConsTitle">选择改路</strong>
+          <p data-i18n="arch.divinationCons">选择不会凭空换一辆车，但会影响何时出发、在哪变道、避开什么坑，以及把车开到哪条路上。</p>
         </div>
       </div>
     </article>
   </div>
 
   <div class="compare-choice reveal reveal-delay-2">
-    <h3 data-i18n="arch.choiceTitle">怎么选</h3>
-    <p data-i18n="arch.choiceDesc">问“我长期适合什么方向”更偏命理；问“这件事现在该不该做”更偏占卜。两者可以互补，但不应混成同一种答案。</p>
+    <h3 data-i18n="arch.choiceTitle">占卜不是改命，是帮助选路</h3>
+    <p data-i18n="arch.choiceDesc">命盘给出车的结构，占卜给出此刻路口的信号。真正改变“运”的，往往是看清路况之后做出的选择、节奏和行动。</p>
   </div>
 </section>
 
@@ -1093,7 +1224,7 @@ footer {
 // ================================================================
 const i18n = {
   'zh-CN': {
-    nav: { logoCn: '命枢', features: '核心流程', architecture: '占卜命理', faq: 'FAQs' },
+    nav: { logoCn: '命枢', features: '核心流程', architecture: '命与运', faq: 'FAQs' },
     hero: {
       headline: '东方玄学智能体',
       subEn: 'The Eastern Metaphysics Agent',
@@ -1119,24 +1250,24 @@ const i18n = {
       note: '核心关系是 LLM 与 Tool Skill 双向协作：模型提出需求，工具返回可验证材料，模型再组织为可读结果。',
     },
     arch: {
-      title: '占卜与命理怎么分工',
-      subtitle: '命理看长期结构，占卜看具体问题。FateClaw 将两类方法分开建模，再按用户问题选择合适路径。',
-      destinyLabel: '命理',
-      destinyTitle: '看长期结构与周期',
-      destinyDesc: '命理通常以出生时间等稳定信息起盘，关注一个人的结构、倾向、阶段变化与长期规划。',
-      destinyProsTitle: '优势',
-      destinyPros: '稳定、可反复对照，适合看长期趋势、人生主题、性格结构和阶段节律。',
-      destinyConsTitle: '局限',
-      destinyCons: '对具体短期事件不一定直接，且很依赖出生时间准确性，容易被过度决定论误用。',
-      divinationLabel: '占卜',
-      divinationTitle: '看当下问题与选择',
-      divinationDesc: '占卜围绕一个具体问题展开，重视提问时点、卦象或局势，适合讨论选择、时机与事件走向。',
-      divinationProsTitle: '优势',
-      divinationPros: '针对性强，能把问题收束到当下情境，适合辅助判断不同方案的风险和机会。',
-      divinationConsTitle: '局限',
-      divinationCons: '问法和时点影响很大，适合辅助思考，不应替代现实行动、专业建议或责任判断。',
-      choiceTitle: '怎么选',
-      choiceDesc: '问“我长期适合什么方向”更偏命理；问“这件事现在该不该做”更偏占卜。两者可以互补，但不应混成同一种答案。',
+      title: '命、运与选择怎么分工',
+      subtitle: '命像车，运像路。FateClaw 先看车的结构，再看路况、时机和岔路，把占卜与选择放在可行动的位置。',
+      destinyLabel: '命',
+      destinyTitle: '命是车：结构与承载',
+      destinyDesc: '命更像车的底盘、发动机和载重上限，描述一个人先天结构、惯性、优势和容易消耗的地方。',
+      destinyProsTitle: '看什么',
+      destinyPros: '看底层配置、性格结构、长期倾向与阶段节律，适合回答“我这辆车适合怎么开”。',
+      destinyConsTitle: '边界',
+      destinyCons: '车的结构不是全部结果，同一辆车在不同路况、速度和选择下，会走出很不一样的体验。',
+      divinationLabel: '运',
+      divinationTitle: '运是路：路况与岔口',
+      divinationDesc: '运更像正在走的路，包含外部环境、阶段机会、阻力、时机和那些需要当下判断的岔口。',
+      divinationProsTitle: '占卜看路',
+      divinationPros: '占卜把问题收束到当前路口，帮助判断路况、时机、风险和不同路线的机会成本。',
+      divinationConsTitle: '选择改路',
+      divinationCons: '选择不会凭空换一辆车，但会影响何时出发、在哪变道、避开什么坑，以及把车开到哪条路上。',
+      choiceTitle: '占卜不是改命，是帮助选路',
+      choiceDesc: '命盘给出车的结构，占卜给出此刻路口的信号。真正改变“运”的，往往是看清路况之后做出的选择、节奏和行动。',
     },
     faq: {
       title: 'FAQs',
@@ -1158,7 +1289,7 @@ const i18n = {
   },
 
   'zh-TW': {
-    nav: { logoCn: '命樞', features: '核心流程', architecture: '占卜命理', faq: 'FAQs' },
+    nav: { logoCn: '命樞', features: '核心流程', architecture: '命與運', faq: 'FAQs' },
     hero: {
       headline: '東方玄學智能體',
       subEn: 'The Eastern Metaphysics Agent',
@@ -1184,24 +1315,24 @@ const i18n = {
       note: '核心關係是 LLM 與 Tool Skill 雙向協作：模型提出需求，工具返回可驗證材料，模型再組織為可讀結果。',
     },
     arch: {
-      title: '占卜與命理怎麼分工',
-      subtitle: '命理看長期結構，占卜看具體問題。FateClaw 將兩類方法分開建模，再按用戶問題選擇合適路徑。',
-      destinyLabel: '命理',
-      destinyTitle: '看長期結構與週期',
-      destinyDesc: '命理通常以出生時間等穩定資訊起盤，關注一個人的結構、傾向、階段變化與長期規劃。',
-      destinyProsTitle: '優勢',
-      destinyPros: '穩定、可反覆對照，適合看長期趨勢、人生主題、性格結構和階段節律。',
-      destinyConsTitle: '局限',
-      destinyCons: '對具體短期事件不一定直接，且很依賴出生時間準確性，容易被過度決定論誤用。',
-      divinationLabel: '占卜',
-      divinationTitle: '看當下問題與選擇',
-      divinationDesc: '占卜圍繞一個具體問題展開，重視提問時點、卦象或局勢，適合討論選擇、時機與事件走向。',
-      divinationProsTitle: '優勢',
-      divinationPros: '針對性強，能把問題收束到當下情境，適合輔助判斷不同方案的風險和機會。',
-      divinationConsTitle: '局限',
-      divinationCons: '問法和時點影響很大，適合輔助思考，不應替代現實行動、專業建議或責任判斷。',
-      choiceTitle: '怎麼選',
-      choiceDesc: '問「我長期適合什麼方向」更偏命理；問「這件事現在該不該做」更偏占卜。兩者可以互補，但不應混成同一種答案。',
+      title: '命、運與選擇怎麼分工',
+      subtitle: '命像車，運像路。FateClaw 先看車的結構，再看路況、時機和岔路，把占卜與選擇放在可行動的位置。',
+      destinyLabel: '命',
+      destinyTitle: '命是車：結構與承載',
+      destinyDesc: '命更像車的底盤、引擎和載重上限，描述一個人先天結構、慣性、優勢和容易消耗的地方。',
+      destinyProsTitle: '看什麼',
+      destinyPros: '看底層配置、性格結構、長期傾向與階段節律，適合回答「我這輛車適合怎麼開」。',
+      destinyConsTitle: '邊界',
+      destinyCons: '車的結構不是全部結果，同一輛車在不同路況、速度和選擇下，會走出很不一樣的體驗。',
+      divinationLabel: '運',
+      divinationTitle: '運是路：路況與岔口',
+      divinationDesc: '運更像正在走的路，包含外部環境、階段機會、阻力、時機和那些需要當下判斷的岔口。',
+      divinationProsTitle: '占卜看路',
+      divinationPros: '占卜把問題收束到當前路口，幫助判斷路況、時機、風險和不同路線的機會成本。',
+      divinationConsTitle: '選擇改路',
+      divinationCons: '選擇不會憑空換一輛車，但會影響何時出發、在哪變道、避開什麼坑，以及把車開到哪條路上。',
+      choiceTitle: '占卜不是改命，是幫助選路',
+      choiceDesc: '命盤給出車的結構，占卜給出此刻路口的信號。真正改變「運」的，往往是看清路況之後做出的選擇、節奏和行動。',
     },
     faq: {
       title: 'FAQs',
@@ -1223,7 +1354,7 @@ const i18n = {
   },
 
   'en': {
-    nav: { logoCn: '', features: 'Flow', architecture: 'Methods', faq: 'FAQs' },
+    nav: { logoCn: '', features: 'Flow', architecture: 'Fate / Fortune', faq: 'FAQs' },
     hero: {
       headline: 'AI-Powered Chinese Metaphysics',
       subEn: 'The Eastern Metaphysics Agent',
@@ -1249,24 +1380,24 @@ const i18n = {
       note: 'The core loop is bidirectional: the LLM asks, Tools and Skills return verifiable material, and the model turns it into a readable result.',
     },
     arch: {
-      title: 'Divination vs. Destiny Analysis',
-      subtitle: 'Destiny analysis reads long-term structure. Divination answers a concrete present question. FateClaw keeps them separate and routes by intent.',
-      destinyLabel: 'Destiny analysis',
-      destinyTitle: 'Long-term structure and cycles',
-      destinyDesc: 'Destiny systems usually start from stable birth data and focus on structure, tendency, life phases, and longer planning.',
-      destinyProsTitle: 'Strengths',
-      destinyPros: 'Stable and reusable. Best for long-term tendencies, life themes, personality structure, and phase rhythms.',
-      destinyConsTitle: 'Limits',
-      destinyCons: 'Less direct for short-term events, highly sensitive to birth-time accuracy, and easy to misuse as determinism.',
-      divinationLabel: 'Divination',
-      divinationTitle: 'Present questions and choices',
-      divinationDesc: 'Divination starts from a concrete question and emphasizes timing, symbols, or the current situation.',
-      divinationProsTitle: 'Strengths',
-      divinationPros: 'Highly specific. Useful for narrowing a current situation and comparing risks or openings across choices.',
-      divinationConsTitle: 'Limits',
-      divinationCons: 'Question wording and timing matter. It can support reflection, but should not replace action, professional advice, or responsibility.',
-      choiceTitle: 'How to choose',
-      choiceDesc: 'Ask destiny analysis for long-term direction. Ask divination about whether to act on a specific current matter. They can complement each other, but they should not become the same answer.',
+      title: 'Fate, Fortune, and Choice',
+      subtitle: 'Fate is the vehicle. Fortune is the road. FateClaw reads the structure first, then looks at road conditions, timing, and forks where choice matters.',
+      destinyLabel: 'Fate',
+      destinyTitle: 'Fate is the vehicle',
+      destinyDesc: 'Fate is closer to the chassis, engine, and carrying capacity: the base structure, inertia, strengths, and points of easy depletion.',
+      destinyProsTitle: 'What it reads',
+      destinyPros: 'It reads configuration, temperament, long-term tendency, and phase rhythm. It answers how this vehicle is best driven.',
+      destinyConsTitle: 'Boundary',
+      destinyCons: 'The vehicle is not the full outcome. The same vehicle can feel very different across roads, speeds, and choices.',
+      divinationLabel: 'Fortune',
+      divinationTitle: 'Fortune is the road',
+      divinationDesc: 'Fortune is the road being traveled: environment, phase openings, resistance, timing, and forks that need present judgment.',
+      divinationProsTitle: 'Divination reads the road',
+      divinationPros: 'Divination narrows the question to the current junction and helps compare road conditions, timing, risks, and opportunity costs.',
+      divinationConsTitle: 'Choice changes the route',
+      divinationCons: 'Choice does not magically replace the vehicle, but it affects when to start, where to turn, what to avoid, and which road the vehicle enters.',
+      choiceTitle: 'Divination does not rewrite fate. It helps choose the route.',
+      choiceDesc: 'The chart gives the vehicle structure. Divination gives the signal at the current junction. Fortune often changes through the choices, rhythm, and actions made after the road is seen clearly.',
     },
     faq: {
       title: 'FAQs',
@@ -1288,18 +1419,89 @@ const i18n = {
   },
 };
 
-let currentLang = localStorage.getItem('fateclaw-lang') || 'zh-CN';
+const SUPPORTED_LANGS = ['zh-CN', 'zh-TW', 'en'];
 
-function switchLang(lang) {
-  currentLang = lang;
-  localStorage.setItem('fateclaw-lang', lang);
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.lang === lang);
-  });
-  document.documentElement.lang = lang === 'en' ? 'en' : lang;
-  applyTranslations(lang);
+/**
+ * 标准化语言代码，确保浏览器和缓存里的输入只映射到页面已有文案。
+ * @param {string | null | undefined} lang 浏览器或本地缓存中的语言代码。
+ * @returns {string | null} 可用语言代码；无法识别时返回 null。
+ */
+function normalizeLang(lang) {
+  if (!lang) return null;
+
+  const value = String(lang).trim().replace('_', '-');
+  if (SUPPORTED_LANGS.includes(value)) return value;
+
+  const lower = value.toLowerCase();
+  if (lower === 'zh' || lower.startsWith('zh-cn') || lower.startsWith('zh-hans') || lower.startsWith('zh-sg')) {
+    return 'zh-CN';
+  }
+  if (lower.startsWith('zh-tw') || lower.startsWith('zh-hant') || lower.startsWith('zh-hk') || lower.startsWith('zh-mo')) {
+    return 'zh-TW';
+  }
+  if (lower === 'en' || lower.startsWith('en-')) return 'en';
+
+  return null;
 }
 
+/**
+ * 根据浏览器语言列表选择最接近的页面语言，无法匹配时回落到简体中文。
+ * @returns {string} 初始化时可直接应用的语言代码。
+ */
+function detectPreferredLang() {
+  const browserLangs = navigator.languages?.length ? navigator.languages : [navigator.language];
+
+  for (const browserLang of browserLangs) {
+    const normalizedLang = normalizeLang(browserLang);
+    if (normalizedLang) return normalizedLang;
+  }
+
+  return 'zh-CN';
+}
+
+/**
+ * 决定页面初始语言：用户手动选择优先，其次浏览器自动识别，最后回落到简体中文。
+ * @returns {string} 页面初始语言代码。
+ */
+function getInitialLang() {
+  return normalizeLang(localStorage.getItem('fateclaw-lang')) || detectPreferredLang();
+}
+
+let currentLang = getInitialLang();
+
+/**
+ * 应用语言到页面，并按需记录用户的手动选择。
+ * @param {string} lang 目标语言代码。
+ * @param {boolean} shouldPersist 是否写入本地缓存。
+ * @returns {void}
+ */
+function setLang(lang, shouldPersist) {
+  const nextLang = normalizeLang(lang) || 'zh-CN';
+  currentLang = nextLang;
+  if (shouldPersist) {
+    localStorage.setItem('fateclaw-lang', nextLang);
+  }
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === nextLang);
+  });
+  document.documentElement.lang = nextLang === 'en' ? 'en' : nextLang;
+  applyTranslations(nextLang);
+}
+
+/**
+ * 切换页面语言，并记录用户主动选择，供后续访问继续使用。
+ * @param {string} lang 目标语言代码。
+ * @returns {void}
+ */
+function switchLang(lang) {
+  setLang(lang, true);
+}
+
+/**
+ * 将语言字典里的文案同步到带有 data-i18n 标记的页面节点。
+ * @param {string} lang 目标语言代码。
+ * @returns {void}
+ */
 function applyTranslations(lang) {
   const dict = i18n[lang];
   if (!dict) return;
@@ -1351,7 +1553,7 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
 // ================================================================
-// Canvas - 天干地支 飘字
+// Canvas - 天干地支与八卦飘字
 // ================================================================
 (function () {
   const canvas = document.getElementById('particles');
@@ -1368,37 +1570,48 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
   const TIANGAN = ['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
   const DIZHI   = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+  const BAGUA   = ['☰','☱','☲','☳','☴','☵','☶','☷'];
+  const ALL_SYMBOLS = [
+    ...TIANGAN.map(char => ({ char, kind: 'tiangan' })),
+    ...DIZHI.map(char => ({ char, kind: 'dizhi' })),
+    ...BAGUA.map(char => ({ char, kind: 'bagua' })),
+  ];
 
-  // 每个字符生成多个漂浮实例，总数约 38 个
-  // 天干 × 2, 地支 × 1 = 32，再补 6 个随机
+  // 每个字符生成多个漂浮实例，总数约 46 个
+  // 天干 × 2, 地支 × 1, 八卦 × 1 = 40，再补 6 个随机远景符号
   const instances = [];
 
-  function makeChar(char, isTian) {
+  function makeChar(char, kind) {
+    const isTian = kind === 'tiangan';
+    const isBagua = kind === 'bagua';
+
     return {
       char,
-      isTian,
+      kind,
       x: Math.random() * W,
       y: Math.random() * H,
       // 非常缓慢的随机飘动方向
       vx: (Math.random() - 0.5) * 0.22,
       vy: (Math.random() - 0.5) * 0.18 - 0.06, // 略微向上
-      size: isTian
-        ? 18 + Math.random() * 16   // 天干 18-34px，稍大
-        : 14 + Math.random() * 14,  // 地支 14-28px
+      size: isBagua
+        ? 22 + Math.random() * 18   // 八卦 22-40px，作为背景符号更稳重
+        : isTian
+          ? 18 + Math.random() * 16 // 天干 18-34px，稍大
+          : 14 + Math.random() * 14, // 地支 14-28px
       // 基础透明度较低，营造虚实感
-      base: 0.06 + Math.random() * 0.18,
+      base: isBagua ? 0.035 + Math.random() * 0.11 : 0.06 + Math.random() * 0.18,
       phase: Math.random() * Math.PI * 2,
-      freq:  0.12 + Math.random() * 0.28,
+      freq:  isBagua ? 0.08 + Math.random() * 0.18 : 0.12 + Math.random() * 0.28,
     };
   }
 
-  TIANGAN.forEach(c => { instances.push(makeChar(c, true)); instances.push(makeChar(c, true)); });
-  DIZHI.forEach(c =>   { instances.push(makeChar(c, false)); });
-  // 再补几个大字作为远景点缀
+  TIANGAN.forEach(c => { instances.push(makeChar(c, 'tiangan')); instances.push(makeChar(c, 'tiangan')); });
+  DIZHI.forEach(c =>   { instances.push(makeChar(c, 'dizhi')); });
+  BAGUA.forEach(c =>   { instances.push(makeChar(c, 'bagua')); });
+  // 再补几个大符号作为远景点缀，让天干地支与八卦的比例更自然
   for (let i = 0; i < 6; i++) {
-    const all = [...TIANGAN, ...DIZHI];
-    const c = all[Math.floor(Math.random() * all.length)];
-    const inst = makeChar(c, TIANGAN.includes(c));
+    const symbol = ALL_SYMBOLS[Math.floor(Math.random() * ALL_SYMBOLS.length)];
+    const inst = makeChar(symbol.char, symbol.kind);
     inst.size = 32 + Math.random() * 24;  // 32-56px 大字
     inst.base = 0.04 + Math.random() * 0.08;
     instances.push(inst);
@@ -1428,10 +1641,12 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
       // 呼吸透明度
       const alpha = Math.max(0.02, c.base + Math.sin(t * c.freq + c.phase) * c.base * 0.8);
 
-      // 天干：暖金色  地支：略冷的金铜色
-      const color = c.isTian
+      // 天干：暖金色  地支：金铜色  八卦：青绿色，区分术数层次但保持低调
+      const color = c.kind === 'tiangan'
         ? `hsla(44, 82%, 72%, ${alpha})`
-        : `hsla(36, 70%, 62%, ${alpha})`;
+        : c.kind === 'bagua'
+          ? `hsla(172, 58%, 66%, ${alpha})`
+          : `hsla(36, 70%, 62%, ${alpha})`;
 
       ctx.globalAlpha = 1;
       ctx.font = `${c.size}px 'Noto Serif SC', serif`;
@@ -1447,7 +1662,7 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
   requestAnimationFrame(frame);
 })();
 
-document.addEventListener('DOMContentLoaded', () => switchLang(currentLang));
+document.addEventListener('DOMContentLoaded', () => setLang(currentLang, false));
 </script>
 </body>
 </html>
