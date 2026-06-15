@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FateClaw 命枢 | 东方玄学智能体</title>
+<title>小奕想要三合木</title>
 <meta name="description" content="FateClaw 是一个玄学 Agent 系统，核心能力是本地排盘 + 用户知识库检索 + AI 解读。">
 
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -815,9 +815,18 @@ footer {
   color: var(--color-text-secondary);
 }
 
-.footer-copy {
+.footer-copy,
+.footer-icp {
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+
+.footer-icp:hover {
+  color: var(--color-gold-light);
+}
+
+.footer-icp:empty {
+  display: none;
 }
 
 /* ============================================================
@@ -1212,6 +1221,7 @@ footer {
       FateClaw <span class="cn" data-i18n="footer.logoCn">命枢</span>
     </div>
     <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 FateClaw。东方玄学智能体。</div>
+    <a class="footer-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-i18n="footer.icp">浙ICP备2024132053号</a>
   </div>
 </footer>
 
@@ -1224,6 +1234,7 @@ footer {
 // ================================================================
 const i18n = {
   'zh-CN': {
+    pageTitle: '小奕想要三合木',
     nav: { logoCn: '命枢', features: '核心流程', architecture: '命与运', faq: 'FAQs' },
     hero: {
       headline: '东方玄学智能体',
@@ -1285,10 +1296,11 @@ const i18n = {
       q6: '目前支持哪些术数？',
       a6: '当前页面展示的核心方向包括八字、紫微斗数、奇门遁甲、六爻纳甲和周易经占，后续能力以实际产品开放为准。',
     },
-    footer: { logoCn: '命枢', copy: '© 2026 FateClaw。东方玄学智能体。' },
+    footer: { logoCn: '命枢', copy: '© 2026 FateClaw。东方玄学智能体。', icp: '浙ICP备2024132053号' },
   },
 
   'zh-TW': {
+    pageTitle: '小奕想要三合木',
     nav: { logoCn: '命樞', features: '核心流程', architecture: '命與運', faq: 'FAQs' },
     hero: {
       headline: '東方玄學智能體',
@@ -1350,10 +1362,11 @@ const i18n = {
       q6: '目前支援哪些術數？',
       a6: '當前頁面展示的核心方向包括八字、紫微斗數、奇門遁甲、六爻納甲和周易經占，後續能力以實際產品開放為準。',
     },
-    footer: { logoCn: '命樞', copy: '© 2026 FateClaw。東方玄學智能體。' },
+    footer: { logoCn: '命樞', copy: '© 2026 FateClaw。東方玄學智能體。', icp: '浙ICP备2024132053号' },
   },
 
   'en': {
+    pageTitle: 'FateClaw | AI-Powered Chinese Metaphysics',
     nav: { logoCn: '', features: 'Flow', architecture: 'Fate / Fortune', faq: 'FAQs' },
     hero: {
       headline: 'AI-Powered Chinese Metaphysics',
@@ -1415,7 +1428,7 @@ const i18n = {
       q6: 'Which systems are supported?',
       a6: 'The current direction shown here includes BaZi, ZiWei DouShu, QiMen Dunjia, LiuYao Najia, and Zhouyi JingZhan. Actual availability follows the live product.',
     },
-    footer: { logoCn: '', copy: '© 2026 FateClaw. AI-Powered Chinese Metaphysics.' },
+    footer: { logoCn: '', copy: '© 2026 FateClaw. AI-Powered Chinese Metaphysics.', icp: '' },
   },
 };
 
@@ -1485,6 +1498,7 @@ function setLang(lang, shouldPersist) {
     btn.classList.toggle('active', btn.dataset.lang === nextLang);
   });
   document.documentElement.lang = nextLang === 'en' ? 'en' : nextLang;
+  document.title = i18n[nextLang]?.pageTitle || '小奕想要三合木';
   applyTranslations(nextLang);
 }
 
