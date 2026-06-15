@@ -187,8 +187,8 @@ importers:
         specifier: ^5.8.5
         version: 5.8.5
       iching-shifa:
-        specifier: ^1.7.0
-        version: 1.7.0
+        specifier: ^1.7.1
+        version: 1.7.1
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
@@ -2727,8 +2727,8 @@ packages:
   i18next@23.16.8:
     resolution: {integrity: sha512-06r/TitrM88Mg5FdUXAKL96dJMzgqLE5dv3ryBAra4KCwD9mJ4ndOTS95ZuymIGoE+2hzfdaMak2X11/es7ZWg==}
 
-  iching-shifa@1.7.0:
-    resolution: {integrity: sha512-4GY5jQonFOotODeyUlqyDCu9iKDoX2mozjoBC/niklitDqJd7Mygpq65J2sCmcqNE2O2WWE43wIxeZ1S0ggDGA==}
+  iching-shifa@1.7.1:
+    resolution: {integrity: sha512-F764oLm4K/KA30WUCqdcvDHHnQdfD4rpdG7I2ckS/jvFkGTny8BiNHT+TLySEi19CcC/fSDK2nOeAKTHlPHcqQ==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -4135,6 +4135,9 @@ packages:
 
   tyme4ts@1.5.1:
     resolution: {integrity: sha512-GzL9rP4k5vFdj/8iLnlGrC3jPop4Og2oAE9aBTj2JbOKuZ22+iMlpD+4Ekke4FylHn5BO9V6XRJOgJtFVDFDqQ==}
+
+  tyme4ts@1.5.2:
+    resolution: {integrity: sha512-vVAjUv1ieXleS7hCOgjAoHaZ0BdNJIza0uDOhXNpndegqWQh9ytKMR0fjkG869yqLtpXAHnzNSouBg28nrIaAg==}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -7355,9 +7358,9 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.2
 
-  iching-shifa@1.7.0:
+  iching-shifa@1.7.1:
     dependencies:
-      tyme4ts: 1.5.1
+      tyme4ts: 1.5.2
 
   ieee754@1.2.1: {}
 
@@ -9066,6 +9069,8 @@ snapshots:
   tyme4ts@1.5.0: {}
 
   tyme4ts@1.5.1: {}
+
+  tyme4ts@1.5.2: {}
 
   type-check@0.4.0:
     dependencies:

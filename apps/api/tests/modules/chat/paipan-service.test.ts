@@ -185,7 +185,9 @@ describe('commitDirectPaipanForOwnedUser', () => {
     if (!result.ok) return;
     expect(result.data.session.title).toBe('六爻排盘');
     expect(result.data.requestMessage.content).toBe('六爻排盘');
-    expect(result.data.resultMessage.content).toBe('已生成：六爻排盘');
+    expect(result.data.resultMessage.content).toBe(
+      '已生成六爻排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
+    );
     expect(JSON.parse(result.data.resultMessage.tool_context || '[]')).toEqual([
       expect.objectContaining({
         artifactTitle: '六爻排盘',
