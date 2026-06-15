@@ -12,8 +12,10 @@ import {
   createUser,
   getUserByAccountId,
   getUserByIdUsing,
+  getUserByOAuthIdentityUsing,
   promoteUserToCreator,
   updateUserPasswordHash,
+  upsertOAuthIdentityUsing,
 } from '../../../src/infrastructure/repositories/users-repository.js';
 import type { User } from '../../../src/shared/types.js';
 
@@ -123,6 +125,47 @@ describe('users repository', () => {
 
     expect(calls[0]?.sql).toContain('JOIN accounts a ON a.owner_id = u.id');
     expect(calls[0]?.params).toEqual(['account-1']);
+  });
+
+  it('looks up a user through an oauth identity', async () => {
+    const { calls, pool } = createMockPool([
+      { match: 'JOIN user_oauth_identities', rows: [user()] },
+    ]);
+
+    await expect(
+      getUserByOAuthIdentityUsing(pool as never, 'google', 'google-sub-1'),
+    ).resolves.toMatchObject({ id: 'user-1' });
+
+    expect(calls[0]?.sql).toContain('JOIN user_oauth_identities');
+    expect(calls[0]?.params).toEqual(['google', 'google-sub-1']);
+  });
+
+  it('upserts oauth identity profile without rebinding user id on conflict', async () => {
+    const { calls, pool } = createMockPool();
+
+    await upsertOAuthIdentityUsing(pool as never, {
+      provider: 'google',
+      providerUserId: 'google-sub-1',
+      userId: 'user-1',
+      email: 'person@example.com',
+      emailVerified: true,
+      displayName: 'Person',
+      avatarUrl: 'https://example.com/avatar.png',
+      profileJson: { sub: 'google-sub-1' },
+    });
+
+    expect(calls[0]?.sql).toContain('ON CONFLICT (provider, provider_user_id)');
+    expect(calls[0]?.sql).not.toContain('user_id = EXCLUDED.user_id');
+    expect(calls[0]?.params).toEqual([
+      'google',
+      'google-sub-1',
+      'user-1',
+      'person@example.com',
+      true,
+      'Person',
+      'https://example.com/avatar.png',
+      JSON.stringify({ sub: 'google-sub-1' }),
+    ]);
   });
 
   it('promotes consumers to both role while preserving admin role', async () => {

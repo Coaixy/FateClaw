@@ -24,6 +24,18 @@ describe('toUserDto', () => {
 
     expect(dto.phone).toBe('138****8000');
     expect(dto.phone_masked).toBe('138****8000');
+    expect(dto.has_password).toBe(true);
     expect(JSON.stringify(dto)).not.toContain('13800138000');
+  });
+
+  it('supports oauth-only users without phone or local password', () => {
+    const dto = toUserDto(
+      user({ phone: null, phone_verified: false, password_hash: null }),
+    );
+
+    expect(dto.phone).toBeNull();
+    expect(dto.phone_masked).toBeNull();
+    expect(dto.phone_verified).toBe(false);
+    expect(dto.has_password).toBe(false);
   });
 });

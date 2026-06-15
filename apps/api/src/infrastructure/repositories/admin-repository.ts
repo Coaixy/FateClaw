@@ -384,7 +384,7 @@ export async function resetPiSessionCleanupCursor(
 export interface AdminCustomSkillRow {
   id: string;
   user_id: string;
-  phone: string;
+  phone: string | null;
   skill_name: string;
   description: string;
   bundle_uri: string;

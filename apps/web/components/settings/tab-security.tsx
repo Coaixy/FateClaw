@@ -112,6 +112,7 @@ export function TabSecurity() {
 
   const phone = user?.phone_masked ?? user?.phone ?? '';
   const phoneVerified = user?.phone_verified ?? false;
+  const canChangePassword = user?.has_password ?? true;
   const canUsePhoneSecurity = Boolean(phone && phoneVerified);
   const phoneStatusLabel = !phone
     ? t('pages.profile.statusUnbound')
@@ -134,11 +135,11 @@ export function TabSecurity() {
       const challenge = await authApi.captcha();
       setCaptcha(challenge);
     } catch (error) {
-      setRecoverError(getErrorMessage(error, t('pages.login.captchaLoadFailed')));
+      setRecoverError(getErrorMessage(error, t('login.captchaLoadFailed')));
     } finally {
       setCaptchaLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (mode === 'recover') {
@@ -172,6 +173,10 @@ export function TabSecurity() {
     event.preventDefault();
     setChangeError('');
 
+    if (!canChangePassword) {
+      setChangeError(t('pages.profile.passwordNotSet'));
+      return;
+    }
     if (!currentPassword) {
       setChangeError(t('pages.profile.enterCurrentPassword'));
       return;
@@ -190,7 +195,9 @@ export function TabSecurity() {
       setConfirmPassword('');
       toast('success', t('pages.profile.passwordUpdated'));
     } catch (error) {
-      setChangeError(getErrorMessage(error, t('pages.profile.changePasswordFailed')));
+      setChangeError(
+        getErrorMessage(error, t('pages.profile.changePasswordFailed')),
+      );
     } finally {
       setChangeSubmitting(false);
     }
@@ -269,7 +276,9 @@ export function TabSecurity() {
       setRecoverConfirmPassword('');
       toast('success', t('pages.profile.passwordReset'));
     } catch (error) {
-      setRecoverError(getErrorMessage(error, t('pages.profile.resetPasswordFailed')));
+      setRecoverError(
+        getErrorMessage(error, t('pages.profile.resetPasswordFailed')),
+      );
     } finally {
       setRecoverSubmitting(false);
     }
@@ -371,7 +380,12 @@ export function TabSecurity() {
               className="space-y-3 rounded-xl border border-hairline bg-canvas/36 p-3.5"
               onSubmit={handleChangePassword}
             >
-              <InlineMessage message={changeError} />
+              <InlineMessage
+                message={
+                  changeError ||
+                  (!canChangePassword ? t('pages.profile.passwordNotSet') : '')
+                }
+              />
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <PasswordInput
@@ -381,7 +395,7 @@ export function TabSecurity() {
                     showLabel={t('pages.profile.showPassword')}
                     value={currentPassword}
                     onChange={setCurrentPassword}
-                    disabled={changeSubmitting}
+                    disabled={changeSubmitting || !canChangePassword}
                   />
                 </div>
                 <PasswordInput
@@ -391,7 +405,7 @@ export function TabSecurity() {
                   showLabel={t('pages.profile.showPassword')}
                   value={nextPassword}
                   onChange={setNextPassword}
-                  disabled={changeSubmitting}
+                  disabled={changeSubmitting || !canChangePassword}
                 />
                 <PasswordInput
                   label={t('pages.profile.confirmNewPassword')}
@@ -400,17 +414,19 @@ export function TabSecurity() {
                   showLabel={t('pages.profile.showPassword')}
                   value={confirmPassword}
                   onChange={setConfirmPassword}
-                  disabled={changeSubmitting}
+                  disabled={changeSubmitting || !canChangePassword}
                 />
               </div>
 
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={changeSubmitting}
+                  disabled={changeSubmitting || !canChangePassword}
                   className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
-                  {changeSubmitting && <Loader2 size={13} className="animate-spin" />}
+                  {changeSubmitting && (
+                    <Loader2 size={13} className="animate-spin" />
+                  )}
                   {t('pages.profile.saveNewPassword')}
                 </button>
               </div>
@@ -535,7 +551,9 @@ export function TabSecurity() {
                   disabled={!canUsePhoneSecurity || recoverSubmitting}
                   className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
-                  {recoverSubmitting && <Loader2 size={13} className="animate-spin" />}
+                  {recoverSubmitting && (
+                    <Loader2 size={13} className="animate-spin" />
+                  )}
                   {t('pages.profile.resetPassword')}
                 </button>
               </div>

@@ -9,6 +9,7 @@ async function createInvalidPhoneUserDeleteSet(
     DO $$
     DECLARE
       has_phone BOOLEAN;
+      has_oauth_identities BOOLEAN;
     BEGIN
       IF EXISTS (
         SELECT 1
@@ -23,6 +24,9 @@ async function createInvalidPhoneUserDeleteSet(
           WHERE table_name = 'users' AND column_name = 'phone'
         ) INTO has_phone;
 
+        SELECT to_regclass('public.user_oauth_identities') IS NOT NULL
+          INTO has_oauth_identities;
+
         CREATE TEMP TABLE ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} AS
           SELECT id FROM users WHERE NOT has_phone;
 
@@ -32,6 +36,13 @@ async function createInvalidPhoneUserDeleteSet(
           FROM users
           WHERE phone IS NULL
              OR phone !~ '^1[3-9][0-9]{9}$';
+
+          -- OAuth 上线后，手机号为空不再代表脏用户；有第三方身份的账号必须保留。
+          IF has_oauth_identities THEN
+            DELETE FROM ${INVALID_PHONE_USER_DELETE_TEMP_TABLE} doomed
+            USING user_oauth_identities identity
+            WHERE identity.user_id = doomed.id;
+          END IF;
         END IF;
       END IF;
     END $$;

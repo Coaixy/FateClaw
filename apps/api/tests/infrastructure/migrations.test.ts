@@ -225,6 +225,17 @@ describe('runDatabaseMigrations', () => {
         '增加 Free 用户专业模式 AI 每日次数配置和用量表',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: ['0040_billing_gift_codes', '增加软妹币礼品码和兑换记录'],
+    });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0041_oauth_user_identities',
+        '增加第三方登录身份并允许用户无手机号注册',
+      ],
+    });
     expect(
       calls.some(
         (call) =>
@@ -322,6 +333,16 @@ describe('runDatabaseMigrations', () => {
         call.sql.includes('chk_runtime_config_local_agent_max_processes_range'),
       ),
     ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS user_oauth_identities'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('ALTER COLUMN password_hash DROP NOT NULL'),
+      ),
+    ).toBe(true);
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
@@ -368,6 +389,8 @@ describe('runDatabaseMigrations', () => {
       '0037_membership_pro_plan',
       '0038_membership_plan_timeline',
       '0039_free_professional_ai_quota',
+      '0040_billing_gift_codes',
+      '0041_oauth_user_identities',
     ]);
 
     await runDatabaseMigrations(client as never);

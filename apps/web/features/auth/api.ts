@@ -10,7 +10,7 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
-import { requestJson } from '@/lib/http/client';
+import { getApiBase, requestJson } from '@/lib/http/client';
 
 export type AuthResponse = AuthResponseDto;
 export type User = UserDto;
@@ -18,6 +18,25 @@ export type CaptchaChallenge = CaptchaChallengeDto;
 export type SendSMSCaptchaResponse = SendSMSCaptchaResponseDto;
 
 const meRequestCache = createAuthScopedInFlightCache<User>();
+
+/**
+ * 构造 Google OAuth 发起地址。
+ *
+ * @param next 登录完成后的站内回跳路径。
+ * @param inviteCode 可选邀请码；仅新建 OAuth 用户时使用。
+ * @returns 可用于浏览器整页跳转的 API 地址。
+ */
+export function buildGoogleOAuthStartUrl(
+  next: string,
+  inviteCode?: string | null,
+): string {
+  const params = new URLSearchParams({ next });
+  const normalizedInviteCode = inviteCode?.trim();
+  if (normalizedInviteCode) {
+    params.set('invite_code', normalizedInviteCode);
+  }
+  return `${getApiBase()}/api/auth/google/start?${params.toString()}`;
+}
 
 /**
  * 清理当前用户信息的 in-flight 请求缓存。
@@ -29,6 +48,7 @@ export function clearAuthCache() {
 }
 
 export const authApi = {
+  googleOAuthStartUrl: buildGoogleOAuthStartUrl,
   captcha: () => requestJson<CaptchaChallenge>('/api/auth/captcha'),
   sendSMSCaptcha: (
     type: 0 | 1,

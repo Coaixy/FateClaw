@@ -5,12 +5,24 @@ import { Check, ChevronDown, Languages } from 'lucide-react';
 
 import { LOCALE_OPTIONS, useI18n } from '@/lib/i18n';
 
+type LanguageSwitcherMenuPlacement = 'top' | 'bottom';
+
+interface LanguageSwitcherProps {
+  compact?: boolean;
+  menuPlacement?: LanguageSwitcherMenuPlacement;
+}
+
 /**
  * 渲染紧凑语言切换器，供侧边栏等全局入口复用。
  *
+ * @param props.compact 是否使用更紧凑的尺寸。
+ * @param props.menuPlacement 菜单展开方向；侧边栏底部默认向上，登录页顶部可改为向下。
  * @returns 当前语言选择控件。
  */
-export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
+export function LanguageSwitcher({
+  compact = false,
+  menuPlacement = 'top',
+}: LanguageSwitcherProps) {
   const { locale, setLocale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -18,6 +30,8 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
     LOCALE_OPTIONS.find((option) => option.value === locale)?.labelKey ??
       'language.zhCN',
   );
+  const menuPositionClass =
+    menuPlacement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
 
   useEffect(() => {
     if (!open) {
@@ -81,7 +95,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-50 mb-2 w-full min-w-[168px] overflow-hidden rounded-xl border border-hairline bg-surface-card p-1.5 shadow-xl"
+          className={`absolute left-0 z-50 w-full min-w-[168px] overflow-hidden rounded-xl border border-hairline bg-surface-card p-1.5 shadow-xl ${menuPositionClass}`}
         >
           {LOCALE_OPTIONS.map((option) => {
             const selected = option.value === locale;

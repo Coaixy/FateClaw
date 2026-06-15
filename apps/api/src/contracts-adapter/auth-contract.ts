@@ -9,12 +9,13 @@ import { maskPhoneNumber } from '../modules/user/phone.js';
  * 普通用户态只暴露脱敏手机号，完整手机号仅留在后端认证域内部使用。
  */
 export function toUserDto(user: User): UserDto {
-  const phoneMasked = maskPhoneNumber(user.phone);
+  const phoneMasked = user.phone ? maskPhoneNumber(user.phone) : null;
   return {
     id: user.id,
     phone: phoneMasked,
     phone_masked: phoneMasked,
     phone_verified: user.phone_verified,
+    has_password: Boolean(user.password_hash),
     role: user.role,
     purchased_coins: user.purchased_coins,
     bonus_coins: user.bonus_coins,

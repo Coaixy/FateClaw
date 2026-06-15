@@ -92,6 +92,9 @@ export async function loginUser(
   if (!user) {
     throw new Error('手机号或密码错误');
   }
+  if (!user.password_hash) {
+    throw new Error('手机号或密码错误');
+  }
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
@@ -117,6 +120,9 @@ export async function changePassword(params: {
   const user = await getUserById(params.userId);
   if (!user) {
     throw new Error('用户不存在');
+  }
+  if (!user.password_hash) {
+    throw new Error('当前账号尚未设置密码');
   }
 
   const valid = await bcrypt.compare(
@@ -177,6 +183,9 @@ export async function getCurrentUserVerifiedPhone(
   }
   if (!user.phone_verified) {
     throw new Error('当前账号手机号尚未完成验证');
+  }
+  if (!user.phone) {
+    throw new Error('当前账号尚未绑定手机号');
   }
   return user.phone;
 }

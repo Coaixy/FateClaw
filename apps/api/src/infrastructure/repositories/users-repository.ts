@@ -18,6 +18,19 @@ const USER_SELECT_COLUMNS = `
   u.created_at
 `;
 
+export type OAuthProvider = 'google';
+
+export interface OAuthIdentityInput {
+  provider: OAuthProvider;
+  providerUserId: string;
+  userId: string;
+  email: string | null;
+  emailVerified: boolean;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileJson: Record<string, unknown>;
+}
+
 export async function getUserByIdUsing(
   queryable: DbQueryable,
   id: string,
@@ -43,6 +56,30 @@ export async function getUserByPhoneUsing(
      FROM users u
      WHERE u.phone = $1`,
     [phone],
+  );
+}
+
+/**
+ * 按第三方身份读取绑定的用户。
+ *
+ * @param queryable 查询执行器；可传事务 client 保证 OAuth 回调内的一致性。
+ * @param provider 第三方登录提供方，目前仅支持 Google。
+ * @param providerUserId 提供方稳定用户 ID，例如 Google `sub`。
+ * @returns 已绑定用户；未绑定时返回 undefined。
+ */
+export async function getUserByOAuthIdentityUsing(
+  queryable: DbQueryable,
+  provider: OAuthProvider,
+  providerUserId: string,
+): Promise<User | undefined> {
+  return queryOne<User>(
+    queryable,
+    `SELECT ${USER_SELECT_COLUMNS}
+     FROM users u
+     JOIN user_oauth_identities identity ON identity.user_id = u.id
+     WHERE identity.provider = $1
+       AND identity.provider_user_id = $2`,
+    [provider, providerUserId],
   );
 }
 
@@ -75,6 +112,44 @@ export async function createUserUsing(
       user.bonus_coins,
       user.reserved_coins,
       user.created_at,
+    ],
+  );
+}
+
+/**
+ * 写入或刷新第三方身份资料。
+ *
+ * @param queryable 查询执行器；OAuth 注册时应传事务 client。
+ * @param input 第三方身份资料和本地用户绑定。
+ * @returns 无返回值。
+ * @remarks 冲突更新时不改 user_id，避免并发或异常请求把身份转绑到其他用户。
+ */
+export async function upsertOAuthIdentityUsing(
+  queryable: DbQueryable,
+  input: OAuthIdentityInput,
+): Promise<void> {
+  await queryable.query(
+    `INSERT INTO user_oauth_identities (
+       provider, provider_user_id, user_id, email, email_verified,
+       display_name, avatar_url, profile_json, created_at, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW(), NOW())
+     ON CONFLICT (provider, provider_user_id) DO UPDATE SET
+       email = EXCLUDED.email,
+       email_verified = EXCLUDED.email_verified,
+       display_name = EXCLUDED.display_name,
+       avatar_url = EXCLUDED.avatar_url,
+       profile_json = EXCLUDED.profile_json,
+       updated_at = NOW()`,
+    [
+      input.provider,
+      input.providerUserId,
+      input.userId,
+      input.email,
+      input.emailVerified,
+      input.displayName,
+      input.avatarUrl,
+      JSON.stringify(input.profileJson),
     ],
   );
 }

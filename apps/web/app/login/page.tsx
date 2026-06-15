@@ -59,11 +59,12 @@ export default function LoginPage() {
 }
 
 function LoginContent() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading, login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
+  const phoneAuthEnabled = locale === 'zh-CN';
   const requiresSMSCaptcha = mode === 'register';
 
   useEffect(() => {
@@ -78,6 +79,7 @@ function LoginContent() {
   const [phoneError, setPhoneError] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [oauthStarting, setOAuthStarting] = useState(false);
   const [smsSending, setSMSSending] = useState(false);
   const [smsCaptchaCode, setSMSCaptchaCode] = useState('');
   const [smsCooldown, setSMSCooldown] = useState(0);
@@ -101,8 +103,13 @@ function LoginContent() {
   }, [t]);
 
   useEffect(() => {
-    refreshCaptcha();
-  }, [refreshCaptcha]);
+    if (!phoneAuthEnabled) {
+      setCaptcha(null);
+      setCaptchaInput('');
+      return;
+    }
+    void refreshCaptcha();
+  }, [phoneAuthEnabled, refreshCaptcha]);
 
   useEffect(() => {
     const fromQuery = inviteCodeFromSearchParams(searchParams);
@@ -219,6 +226,17 @@ function LoginContent() {
     }
   };
 
+  const handleGoogleOAuthStart = () => {
+    setError('');
+    setOAuthStarting(true);
+    window.location.assign(
+      authApi.googleOAuthStartUrl(
+        readLoginRedirect('/dashboard'),
+        inviteCode.trim() || null,
+      ),
+    );
+  };
+
   // 将 SVG 字符串包装成 data URL 供 <img> 使用：浏览器沙箱渲染，避免 XSS
   const captchaSrc = captcha
     ? `data:image/svg+xml;utf8,${encodeURIComponent(captcha.svg)}`
@@ -235,59 +253,75 @@ function LoginContent() {
 
       <div className="w-full max-w-[340px] px-4 sm:px-0">
         <div className="mb-5 flex justify-center">
-          <LanguageSwitcher />
+          <LanguageSwitcher menuPlacement="bottom" />
         </div>
-        <LoginHeader mode={mode} />
-        <ModeTabs mode={mode} onSwitch={switchMode} />
+        <LoginHeader mode={mode} phoneAuthEnabled={phoneAuthEnabled} />
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <PhoneField
-            value={phone}
-            error={phoneError}
-            onChange={setPhone}
-            onErrorChange={setPhoneError}
-          />
-          <PasswordField
-            value={password}
-            visible={showPassword}
-            onChange={setPassword}
-            onVisibilityChange={setShowPassword}
-          />
-          <CaptchaField
-            value={captchaInput}
-            captchaSrc={captchaSrc}
-            loading={captchaLoading}
-            requiresSMSCaptcha={requiresSMSCaptcha}
-            onChange={setCaptchaInput}
-            onRefresh={refreshCaptcha}
-          />
-          {requiresSMSCaptcha ? (
-            <>
-              <InviteCodeField value={inviteCode} onChange={setInviteCode} />
-            </>
-          ) : null}
-          {requiresSMSCaptcha ? (
-            <SMSCaptchaField
-              value={smsCaptchaCode}
-              sending={smsSending}
-              captchaReady={Boolean(captcha)}
-              captchaLoading={captchaLoading}
-              cooldown={smsCooldown}
-              onChange={setSMSCaptchaCode}
-              onSend={handleSendSMSCaptcha}
+        {phoneAuthEnabled ? (
+          <>
+            <ModeTabs mode={mode} onSwitch={switchMode} />
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <PhoneField
+                value={phone}
+                error={phoneError}
+                onChange={setPhone}
+                onErrorChange={setPhoneError}
+              />
+              <PasswordField
+                value={password}
+                visible={showPassword}
+                onChange={setPassword}
+                onVisibilityChange={setShowPassword}
+              />
+              <CaptchaField
+                value={captchaInput}
+                captchaSrc={captchaSrc}
+                loading={captchaLoading}
+                requiresSMSCaptcha={requiresSMSCaptcha}
+                onChange={setCaptchaInput}
+                onRefresh={refreshCaptcha}
+              />
+              {requiresSMSCaptcha ? (
+                <>
+                  <InviteCodeField
+                    value={inviteCode}
+                    onChange={setInviteCode}
+                  />
+                </>
+              ) : null}
+              {requiresSMSCaptcha ? (
+                <SMSCaptchaField
+                  value={smsCaptchaCode}
+                  sending={smsSending}
+                  captchaReady={Boolean(captcha)}
+                  captchaLoading={captchaLoading}
+                  cooldown={smsCooldown}
+                  onChange={setSMSCaptchaCode}
+                  onSend={handleSendSMSCaptcha}
+                />
+              ) : null}
+
+              {error && <p className="text-[13px] text-error">{error}</p>}
+
+              <SubmitButton
+                mode={mode}
+                submitting={submitting}
+                captchaReady={Boolean(captcha)}
+                requiresSMSCaptcha={requiresSMSCaptcha}
+                smsCaptchaCode={smsCaptchaCode}
+              />
+            </form>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <GoogleOAuthButton
+              starting={oauthStarting}
+              onStart={handleGoogleOAuthStart}
             />
-          ) : null}
-
-          {error && <p className="text-[13px] text-error">{error}</p>}
-
-          <SubmitButton
-            mode={mode}
-            submitting={submitting}
-            captchaReady={Boolean(captcha)}
-            requiresSMSCaptcha={requiresSMSCaptcha}
-            smsCaptchaCode={smsCaptchaCode}
-          />
-        </form>
+            {error && <p className="text-[13px] text-error">{error}</p>}
+          </div>
+        )}
 
         <div className="mt-6 pt-4 border-t border-hairline">
           <p className="text-[12px] text-muted text-center leading-6">
@@ -296,6 +330,34 @@ function LoginContent() {
         </div>
       </div>
     </div>
+  );
+}
+
+function GoogleOAuthButton({
+  starting,
+  onStart,
+}: {
+  starting: boolean;
+  onStart: () => void;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={starting}
+      className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-canvas text-sm font-semibold text-ink transition-all duration-150 hover:border-primary/40 hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
+    >
+      {starting ? (
+        <Loader2 size={14} className="animate-spin" />
+      ) : (
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline bg-white text-[12px] font-bold text-[#4285f4]">
+          G
+        </span>
+      )}
+      {starting ? t('login.googleStarting') : t('login.googleContinue')}
+    </button>
   );
 }
 
@@ -328,7 +390,13 @@ function InviteCodeField({
   );
 }
 
-function LoginHeader({ mode }: { mode: AuthMode }) {
+function LoginHeader({
+  mode,
+  phoneAuthEnabled,
+}: {
+  mode: AuthMode;
+  phoneAuthEnabled: boolean;
+}) {
   const { t } = useI18n();
 
   return (
@@ -343,14 +411,18 @@ function LoginHeader({ mode }: { mode: AuthMode }) {
         <span className="ml-2 text-sm text-muted">FateClaw</span>
       </div>
       <h1 className="text-lg font-semibold tracking-tight">
-        {mode === 'register'
-          ? t('login.createPhoneAccount')
-          : t('login.phoneLogin')}
+        {phoneAuthEnabled
+          ? mode === 'register'
+            ? t('login.createPhoneAccount')
+            : t('login.phoneLogin')
+          : t('login.googleLogin')}
       </h1>
       <p className="text-[13px] text-muted mt-1">
-        {mode === 'register'
-          ? t('login.registerSubtitle')
-          : t('login.loginSubtitle')}
+        {phoneAuthEnabled
+          ? mode === 'register'
+            ? t('login.registerSubtitle')
+            : t('login.loginSubtitle')
+          : t('login.googleSubtitle')}
       </p>
     </div>
   );

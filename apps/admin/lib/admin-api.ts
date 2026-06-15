@@ -170,7 +170,7 @@ async function adminRequest<T>(
 
 export interface AdminUser {
   id: string;
-  phone: string;
+  phone: string | null;
   phone_verified: boolean;
   role: 'consumer' | 'creator' | 'both' | 'admin';
   created_at: string;
@@ -856,10 +856,13 @@ export const admin = {
     );
   },
   createGiftCodes: (data: AdminCreateGiftCodesPayload) =>
-    adminRequest<AdminCreateGiftCodesResponse>('/api/admin/billing/gift-codes', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    adminRequest<AdminCreateGiftCodesResponse>(
+      '/api/admin/billing/gift-codes',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
   billingReservations: (opts?: {
     user_id?: string;
     hold_state?: AdminBillingHoldState;

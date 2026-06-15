@@ -982,4 +982,55 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0041_oauth_user_identities',
+    description: '增加第三方登录身份并允许用户无手机号注册',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE users
+          ALTER COLUMN phone DROP NOT NULL,
+          ALTER COLUMN password_hash DROP NOT NULL
+      `);
+      await client.query(
+        `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_phone_key`,
+      );
+      await client.query(`DROP INDEX IF EXISTS idx_users_phone_unique`);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique
+          ON users(phone)
+          WHERE phone IS NOT NULL
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_oauth_identities (
+          provider TEXT NOT NULL,
+          provider_user_id TEXT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          email TEXT DEFAULT NULL,
+          email_verified BOOLEAN NOT NULL DEFAULT false,
+          display_name TEXT DEFAULT NULL,
+          avatar_url TEXT DEFAULT NULL,
+          profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, provider_user_id)
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_oauth_identities_user_provider
+          ON user_oauth_identities(user_id, provider)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_oauth_identities_email
+          ON user_oauth_identities(LOWER(email))
+          WHERE email IS NOT NULL
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_user_oauth_identities_provider_valid',
+        tableName: 'user_oauth_identities',
+        expression: `provider IN ('google')`,
+        cleanupSql: `DELETE FROM user_oauth_identities
+                     WHERE provider NOT IN ('google')`,
+      });
+    },
+  },
 ];

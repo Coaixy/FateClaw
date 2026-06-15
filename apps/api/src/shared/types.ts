@@ -4,9 +4,9 @@ export type UserRole = 'consumer' | 'creator' | 'both' | 'admin';
 
 export interface User {
   id: string;
-  phone: string;
+  phone: string | null;
   phone_verified: boolean;
-  password_hash: string;
+  password_hash: string | null;
   auth_token_version?: number; // 认证令牌版本，改密后递增以撤销旧 JWT
   role: UserRole; // 'consumer'（默认） | 'creator' | 'both' | 'admin'
   purchased_coins: number; // 充值余额（不过期，可消费）

@@ -222,6 +222,7 @@ import {
   getAllUsers,
   getUserByAccountId,
   getUserById,
+  getUserByOAuthIdentityUsing,
   getUserByPhone,
   getUserByPhoneUsing,
   getUserSoulEditEnabled,
@@ -231,6 +232,7 @@ import {
   updateUserPasswordHash,
   updateUserRole,
   updateUserSoulContent,
+  upsertOAuthIdentityUsing,
 } from './repositories/users-repository.js';
 import {
   createSkillBundle,
@@ -416,6 +418,7 @@ export {
   getSystemSecret,
   getUserByAccountId,
   getUserById,
+  getUserByOAuthIdentityUsing,
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
@@ -511,6 +514,7 @@ export {
   updateUserRole,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
+  upsertOAuthIdentityUsing,
   unpublishSkillBundle,
   unpublishUserCustomSkill,
   unsubscribeFromBundle,

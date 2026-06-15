@@ -93,7 +93,7 @@ function percent(value: number) {
 }
 
 function displayUser(user: AdminUser) {
-  return user.phone;
+  return user.phone || user.id;
 }
 
 function totalTokens(user: AdminUser) {
@@ -1236,7 +1236,8 @@ export default function AdminUsersPage() {
     const query = search.trim().toLowerCase();
     if (!query) return users;
     return users.filter(
-      (u) => u.phone.includes(query) || u.id.toLowerCase().includes(query),
+      (u) =>
+        (u.phone || '').includes(query) || u.id.toLowerCase().includes(query),
     );
   }, [search, users]);
 
