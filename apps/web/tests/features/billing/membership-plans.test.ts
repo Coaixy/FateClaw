@@ -71,6 +71,12 @@ describe('membership plan helpers', () => {
     expect(hasCustomModelEntitlement(insightMembership)).toBe(true);
     expect(hasWechatClawEntitlement(insightMembership)).toBe(false);
     expect(hasWechatClawEntitlement(deepMembership)).toBe(true);
+    expect(
+      hasWechatClawEntitlement({
+        ...deepMembership,
+        enabled: false,
+      }),
+    ).toBe(true);
   });
 
   it('keeps unknown active plan rows at the Clarity baseline', () => {

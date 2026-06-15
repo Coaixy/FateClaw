@@ -93,14 +93,13 @@ export function membershipPlanMeets(
  *
  * @param membership 账单接口返回的当前会员状态。
  * @param requiredPlanKey 目标最低套餐档位。
- * @returns 会员开关开启、有效，且当前套餐达到目标档位时返回 true。
- * @remarks 历史状态缺少 plan_key 但 active=true 时，按底层 Plus 兼容。
+ * @returns 当前会员周期有效，且当前套餐达到目标档位时返回 true。
  */
 export function membershipStatusMeetsPlan(
   membership: MembershipStatus | null | undefined,
   requiredPlanKey: MembershipPlanKey,
 ): boolean {
-  if (!membership?.enabled || !membership.active || !membership.plan_key) {
+  if (!membership?.active || !membership.plan_key) {
     return false;
   }
   const currentPlanKey = normalizeMembershipPlanKey(membership.plan_key);

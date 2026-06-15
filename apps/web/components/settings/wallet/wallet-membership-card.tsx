@@ -120,11 +120,11 @@ export function WalletMembershipCard({
           />
         </div>
         <div className="mt-2 text-[11px] leading-5 text-muted">
-          {membership.enabled
-            ? active
-              ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
-              : '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
-            : '会员暂未开放购买，当前仍按积分余额扣费。'}
+          {active
+            ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
+            : membership.enabled
+              ? '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
+              : '会员暂未开放购买，当前仍按积分余额扣费。'}
         </div>
       </div>
     </section>

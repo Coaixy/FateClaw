@@ -1391,7 +1391,7 @@ describe('billing repository', () => {
     expect(calls[0]?.params).toEqual(['user-1', '2026-06-15T00:00:00.000Z']);
   });
 
-  it('falls back to Plus when the active Pro plan is disabled', async () => {
+  it('keeps historical Pro entitlement even when the Deep plan is disabled for new purchases', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 
@@ -1412,12 +1412,12 @@ describe('billing repository', () => {
       created_at: '2026-06-10T00:00:00.000Z',
     };
     const allowance = {
-      id: 'allowance-plus',
+      id: 'allowance-pro',
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
-      period_start: '2026-06-01T00:00:00.000Z',
-      period_end: '2026-07-01T00:00:00.000Z',
-      allowance_units: 3000000,
+      plan_key: 'fateclaw_pro',
+      period_start: '2026-06-10T00:00:00.000Z',
+      period_end: '2026-07-10T00:00:00.000Z',
+      allowance_units: 10000000,
       used_units: 0,
     };
     const { calls } = createMockPool([
@@ -1431,29 +1431,20 @@ describe('billing repository', () => {
           standard_price_per_million_units_coins: 10,
         },
       ],
-      [
-        {
-          id: 'default',
-          enabled: true,
-          monthly_price_coins: 30,
-          monthly_allowance_units: 3000000,
-          standard_price_per_million_units_coins: 10,
-        },
-      ],
       [allowance],
     ]);
 
     await expect(getMembershipOverview('user-1')).resolves.toMatchObject({
       active: true,
       membership: {
-        plan_key: 'fateclaw_plus',
+        plan_key: 'fateclaw_pro',
       },
       allowance,
     });
-    expect(calls[3]?.params).toEqual([
+    expect(calls[2]?.params).toEqual([
       'user-1',
-      'fateclaw_plus',
-      '2026-06-01T00:00:00.000Z',
+      'fateclaw_pro',
+      '2026-06-10T00:00:00.000Z',
     ]);
   });
 

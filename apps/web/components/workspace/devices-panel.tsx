@@ -89,12 +89,12 @@ export function DevicesPanel({ embedded = false }: { embedded?: boolean }) {
     ? t('pages.devices.confirming')
     : membershipError
       ? t('pages.devices.unavailable')
-      : !membership?.enabled
-        ? t('pages.devices.notOpen')
-        : membershipActive
-          ? bindingLimitReached
-            ? t('pages.devices.reachedLimit')
-            : t('pages.devices.scanBind')
+      : membershipActive
+        ? bindingLimitReached
+          ? t('pages.devices.reachedLimit')
+          : t('pages.devices.scanBind')
+        : !membership?.enabled
+          ? t('pages.devices.notOpen')
           : t('pages.devices.openMembership');
 
   const handleBindAction = () => {

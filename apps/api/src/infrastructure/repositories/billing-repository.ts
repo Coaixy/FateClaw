@@ -728,10 +728,6 @@ async function getEffectiveMembershipEntitlementsUsing(input: {
     ).map((config) => [resolveMembershipPlanKey(config.id), config]),
   );
   const activeMemberships = (rows as UserMembershipRow[])
-    .filter((membership) => {
-      const planKey = normalizeMembershipPlanKey(membership.plan_key);
-      return Boolean(configs.get(planKey)?.enabled);
-    })
     .map((membership) => {
       const planKey = normalizeMembershipPlanKey(membership.plan_key);
       return {
@@ -806,21 +802,12 @@ async function resolveEffectiveMembershipUsing(input: {
       );
     });
 
-  for (const membership of sortedMemberships) {
-    const config = await getMembershipConfigUsing({
-      query: input.query,
-      planKey: membership.plan_key,
-    });
-    if (config.enabled) {
-      return { membership, config };
-    }
-  }
-
+  const membership = sortedMemberships[0] ?? null;
   return {
-    membership: sortedMemberships[0] ?? null,
+    membership,
     config: await getMembershipConfigUsing({
       query: input.query,
-      planKey: sortedMemberships[0]?.plan_key,
+      planKey: membership?.plan_key,
     }),
   };
 }
@@ -996,7 +983,6 @@ export async function getMembershipOverview(
     ? resolveMembershipAllowancePeriod(membership)
     : null;
   const active = Boolean(
-    config.enabled &&
     membership &&
     membership.status === 'active' &&
     new Date(membership.current_period_end).getTime() > Date.now(),
