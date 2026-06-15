@@ -454,9 +454,12 @@ export const zhTWMessages = {
       planDisabled: '暫未開放',
       perMonth: '/ 月',
       planCardsAria: '會員套餐',
-      planBenefitAiChat: 'AI Chat 解讀權限',
-      planBenefitPaipan: '手動排盤與合參術數',
-      planBenefitAllowance: '會員免費額度優先抵扣',
+      planBenefitInsightExpert: 'Insight 解鎖專家權限',
+      planBenefitInsightTools: '手動排盤與合參術數',
+      planBenefitInsightAllowance: '會員免費額度優先抵扣',
+      planBenefitDeepAllowance: 'Deep 擁有更多配額',
+      planBenefitDeepSupport: '優先客服支援',
+      planBenefitDeepExpert: '包含 Insight 專家權限',
       expiresAt: '到期時間',
       monthlyUsage: '本月用量',
       membershipPrice: '會員價格',
@@ -472,13 +475,13 @@ export const zhTWMessages = {
       entitlementFallbackHint: '之後回到 {plan}，到 {date}',
       activeHint: '{reset}；額度用完後繼續使用積分餘額。',
       inactiveHint: '開通後會員免費額度優先抵扣 AI Chat 消耗。',
-      disabledHint: 'Plus 暫未開放購買，目前仍按積分餘額扣費。',
+      disabledHint: 'Insight 暫未開放購買，目前仍按積分餘額扣費。',
       confirmRenewTitle: '確認續費會員',
       confirmSubscribeTitle: '確認開通會員',
       confirmRenewMessage:
         '將從積分餘額扣除 {price}，會員有效期將在目前週期結束後順延 1 個月。',
       confirmSubscribeMessage:
-        '將從積分餘額扣除 {price}，開通 FateClaw Plus 會員 1 個月。',
+        '將從積分餘額扣除 {price}，開通 FateClaw Insight 會員 1 個月。',
       confirmRenewPlanMessage:
         '將從積分餘額扣除 {price}，{plan} 有效期將在目前週期結束後順延 1 個月。',
       confirmSubscribePlanMessage:

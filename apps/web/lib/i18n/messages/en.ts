@@ -471,9 +471,12 @@ export const enMessages = {
       planDisabled: 'Not available',
       perMonth: '/ month',
       planCardsAria: 'Membership plans',
-      planBenefitAiChat: 'AI Chat interpretation access',
-      planBenefitPaipan: 'Manual charting and chart tools',
-      planBenefitAllowance: 'Included member allowance used first',
+      planBenefitInsightExpert: 'Insight unlocks expert access',
+      planBenefitInsightTools: 'Manual charting and chart tools',
+      planBenefitInsightAllowance: 'Included member allowance used first',
+      planBenefitDeepAllowance: 'Deep includes more allowance',
+      planBenefitDeepSupport: 'Priority support',
+      planBenefitDeepExpert: 'Includes Insight expert access',
       expiresAt: 'Expires at',
       monthlyUsage: 'Monthly usage',
       membershipPrice: 'Membership price',
@@ -492,13 +495,13 @@ export const enMessages = {
       inactiveHint:
         'Included member allowance is used before credit balance after subscribing.',
       disabledHint:
-        'Plus purchase is not open yet. Credit balance billing remains active.',
+        'Insight purchase is not open yet. Credit balance billing remains active.',
       confirmRenewTitle: 'Confirm renewal',
       confirmSubscribeTitle: 'Confirm subscription',
       confirmRenewMessage:
         '{price} will be deducted from credit balance. Membership validity will extend by 1 month after the current period.',
       confirmSubscribeMessage:
-        '{price} will be deducted from credit balance for 1 month of FateClaw Plus.',
+        '{price} will be deducted from credit balance for 1 month of FateClaw Insight.',
       confirmRenewPlanMessage:
         '{price} will be deducted from credit balance. {plan} validity will extend by 1 month after the current period.',
       confirmSubscribePlanMessage:

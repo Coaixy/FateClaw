@@ -21,7 +21,7 @@ const MEMBERSHIP_PLAN_RANKS: Record<MembershipPlanKey, number> = {
  * 判断传入值是否是前端已知的会员套餐 key。
  *
  * @param value 待检查字符串。
- * @returns 如果值是 Plus 或 Pro 套餐 key，则返回 true。
+ * @returns 如果值是底层 Plus 或 Pro 套餐 key，则返回 true。
  */
 export function isMembershipPlanKey(value: string): value is MembershipPlanKey {
   return (MEMBERSHIP_PLAN_KEYS as readonly string[]).includes(value);
@@ -31,7 +31,7 @@ export function isMembershipPlanKey(value: string): value is MembershipPlanKey {
  * 返回套餐档位等级。
  *
  * @param planKey 套餐 key。
- * @returns Plus 为 1，Pro 为 2，未知套餐为 0。
+ * @returns 底层 Plus 为 1，Pro 为 2，未知套餐为 0。
  */
 export function resolveMembershipPlanRank(planKey?: string | null): number {
   return isMembershipPlanKey(planKey ?? '')
@@ -76,7 +76,7 @@ export function membershipPlanMeets(
  * @param membership 账单接口返回的当前会员状态。
  * @param requiredPlanKey 目标最低套餐档位。
  * @returns 会员开关开启、有效，且当前套餐达到目标档位时返回 true。
- * @remarks 历史状态缺少 plan_key 但 active=true 时，按 Plus 兼容。
+ * @remarks 历史状态缺少 plan_key 但 active=true 时，按底层 Plus 兼容。
  */
 export function membershipStatusMeetsPlan(
   membership: MembershipStatus | null | undefined,
@@ -94,7 +94,7 @@ export function membershipStatusMeetsPlan(
  * 判断当前会员是否拥有现有通用会员权益。
  *
  * @param membership 账单接口返回的当前会员状态。
- * @returns Plus 及以上套餐有效时返回 true。
+ * @returns Insight 及以上套餐有效时返回 true。
  */
 export function hasBaseMembershipEntitlement(
   membership: MembershipStatus | null | undefined,
@@ -106,14 +106,32 @@ export function hasBaseMembershipEntitlement(
  * 返回套餐在界面中的短名称。
  *
  * @param plan 套餐或权益片段。
- * @returns Pro 或 Plus。
+ * @returns Deep 或 Insight。
  */
 export function resolveMembershipPlanShortName(plan: {
-  name: string;
+  name?: string | null;
   plan_key: string;
-}): 'Plus' | 'Pro' {
-  if (plan.plan_key === MEMBERSHIP_PRO_PLAN_KEY || /pro/i.test(plan.name)) {
-    return 'Pro';
+}): 'Insight' | 'Deep' {
+  if (
+    plan.plan_key === MEMBERSHIP_PRO_PLAN_KEY ||
+    /pro|deep/i.test(plan.name ?? '')
+  ) {
+    return 'Deep';
   }
-  return 'Plus';
+  return 'Insight';
+}
+
+/**
+ * 返回套餐在界面中的完整展示名。
+ *
+ * @param plan 套餐或权益片段。
+ * @returns FateClaw Insight 或 FateClaw Deep。
+ */
+export function resolveMembershipPlanDisplayName(plan: {
+  name?: string | null;
+  plan_key: string;
+}): 'FateClaw Insight' | 'FateClaw Deep' {
+  return resolveMembershipPlanShortName(plan) === 'Deep'
+    ? 'FateClaw Deep'
+    : 'FateClaw Insight';
 }

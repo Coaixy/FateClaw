@@ -12,7 +12,10 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
-import { resolveMembershipPlanShortName } from '@/features/billing/membership-plans';
+import {
+  resolveMembershipPlanDisplayName,
+  resolveMembershipPlanShortName,
+} from '@/features/billing/membership-plans';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
@@ -142,10 +145,33 @@ function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
   return resolveMembershipPlanShortName(plan);
 }
 
+function resolvePlanDisplayName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
+  return resolveMembershipPlanDisplayName(plan);
+}
+
 function resolveEntitlementShortName(
   entitlement: Pick<MembershipEntitlement, 'name' | 'plan_key'>,
 ) {
   return resolveMembershipPlanShortName(entitlement);
+}
+
+function resolvePlanBenefitLabels(
+  plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
+  t: TranslationFn,
+) {
+  const planShortName = resolvePlanShortName(plan);
+  if (planShortName === 'Deep') {
+    return [
+      t('pages.membership.planBenefitDeepAllowance'),
+      t('pages.membership.planBenefitDeepSupport'),
+      t('pages.membership.planBenefitDeepExpert'),
+    ];
+  }
+  return [
+    t('pages.membership.planBenefitInsightExpert'),
+    t('pages.membership.planBenefitInsightTools'),
+    t('pages.membership.planBenefitInsightAllowance'),
+  ];
 }
 
 function formatEntitlementRange(
@@ -524,12 +550,6 @@ function MembershipPlanCards({
 }) {
   if (plans.length === 0) return null;
 
-  const benefitLabels = [
-    t('pages.membership.planBenefitAiChat'),
-    t('pages.membership.planBenefitPaipan'),
-    t('pages.membership.planBenefitAllowance'),
-  ];
-
   return (
     <section
       aria-label={t('pages.membership.planCardsAria')}
@@ -539,6 +559,8 @@ function MembershipPlanCards({
         const isCurrentPlan = activePlanKey === plan.plan_key;
         const busy = busyPlanKey === plan.plan_key;
         const planShortName = resolvePlanShortName(plan);
+        const planDisplayName = resolvePlanDisplayName(plan);
+        const benefitLabels = resolvePlanBenefitLabels(plan, t);
         const actionLabel = isCurrentPlan
           ? t('pages.membership.renewPlan', { plan: planShortName })
           : t('pages.membership.subscribePlan', { plan: planShortName });
@@ -556,7 +578,7 @@ function MembershipPlanCards({
                   <div className="flex items-center gap-2">
                     <Crown size={16} className="shrink-0 text-primary" />
                     <h3 className="text-[18px] font-extrabold leading-tight text-ink">
-                      {plan.name}
+                      {planDisplayName}
                     </h3>
                   </div>
                   <div className="mt-2 flex flex-wrap items-baseline gap-2">
@@ -879,7 +901,7 @@ export function MembershipWorkspace() {
       : null;
   const activePlanShortName = activePlan
     ? resolvePlanShortName(activePlan)
-    : 'Plus';
+    : 'Insight';
 
   return (
     <AppShell>

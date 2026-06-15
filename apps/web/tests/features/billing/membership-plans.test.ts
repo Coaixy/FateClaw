@@ -5,6 +5,7 @@ import {
   MEMBERSHIP_PRO_PLAN_KEY,
   hasBaseMembershipEntitlement,
   membershipStatusMeetsPlan,
+  resolveMembershipPlanDisplayName,
   resolveMembershipPlanShortName,
 } from '../../../features/billing/membership-plans';
 
@@ -77,12 +78,27 @@ describe('membership plan helpers', () => {
         plan_key: MEMBERSHIP_PRO_PLAN_KEY,
         name: 'Custom Name',
       }),
-    ).toBe('Pro');
+    ).toBe('Deep');
     expect(
       resolveMembershipPlanShortName({
         plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
         name: 'FateClaw Plus',
       }),
-    ).toBe('Plus');
+    ).toBe('Insight');
+  });
+
+  it('formats known display names for the current membership branding', () => {
+    expect(
+      resolveMembershipPlanDisplayName({
+        plan_key: MEMBERSHIP_PLUS_PLAN_KEY,
+        name: 'FateClaw Plus',
+      }),
+    ).toBe('FateClaw Insight');
+    expect(
+      resolveMembershipPlanDisplayName({
+        plan_key: MEMBERSHIP_PRO_PLAN_KEY,
+        name: 'FateClaw Pro',
+      }),
+    ).toBe('FateClaw Deep');
   });
 });

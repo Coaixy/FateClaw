@@ -454,9 +454,12 @@ export const zhCNMessages = {
       planDisabled: '暂未开放',
       perMonth: '/ 月',
       planCardsAria: '会员套餐',
-      planBenefitAiChat: 'AI Chat 解读权限',
-      planBenefitPaipan: '手动排盘与合参术数',
-      planBenefitAllowance: '会员免费额度优先抵扣',
+      planBenefitInsightExpert: 'Insight 解锁专家权限',
+      planBenefitInsightTools: '手动排盘与合参术数',
+      planBenefitInsightAllowance: '会员免费额度优先抵扣',
+      planBenefitDeepAllowance: 'Deep 拥有更多配额',
+      planBenefitDeepSupport: '优先客服支持',
+      planBenefitDeepExpert: '包含 Insight 专家权限',
       expiresAt: '到期时间',
       monthlyUsage: '本月用量',
       membershipPrice: '会员价格',
@@ -472,13 +475,13 @@ export const zhCNMessages = {
       entitlementFallbackHint: '之后回到 {plan}，到 {date}',
       activeHint: '{reset}；额度用完后继续使用积分余额。',
       inactiveHint: '开通后会员免费额度优先抵扣 AI Chat 消耗。',
-      disabledHint: 'Plus 暂未开放购买，当前仍按积分余额扣费。',
+      disabledHint: 'Insight 暂未开放购买，当前仍按积分余额扣费。',
       confirmRenewTitle: '确认续费会员',
       confirmSubscribeTitle: '确认开通会员',
       confirmRenewMessage:
         '将从积分余额扣除 {price}，会员有效期将在当前周期结束后顺延 1 个月。',
       confirmSubscribeMessage:
-        '将从积分余额扣除 {price}，开通 FateClaw Plus 会员 1 个月。',
+        '将从积分余额扣除 {price}，开通 FateClaw Insight 会员 1 个月。',
       confirmRenewPlanMessage:
         '将从积分余额扣除 {price}，{plan} 有效期将在当前周期结束后顺延 1 个月。',
       confirmSubscribePlanMessage:
