@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
+import { AnnouncementBanner } from '@/components/announcements/announcement-banner';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
@@ -191,6 +192,7 @@ function AiChatWorkspaceContent() {
   const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const {
     status: billingStatus,
@@ -936,6 +938,7 @@ function AiChatWorkspaceContent() {
     expertCenteredComposer
   );
   const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
+  const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
   const emptyStateTitle =
     !selectedSession && homeMode !== 'expert' ? '' : t('aiChat.empty.expertTitle');
   const emptyStateDescription =
@@ -955,6 +958,9 @@ function AiChatWorkspaceContent() {
         ref={chatMessages.scrollRef}
         className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 scroll-smooth"
       >
+        {showAnnouncementBanner ? (
+          <AnnouncementBanner embedded wide />
+        ) : null}
         <AiChatMessageList
           messages={displayMessages}
           loading={chatMessages.loading}

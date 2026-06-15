@@ -12,7 +12,6 @@ import { useI18n } from '@/lib/i18n';
 import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
-import { AnnouncementBanner } from './announcements/announcement-banner';
 
 /**
  * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和合规备案页脚。
@@ -109,7 +108,6 @@ export function AppShell({
             id="main-content"
             className={mainClassName}
           >
-            {!noPadding && <AnnouncementBanner embedded wide={wide} />}
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
           <ComplianceFooterSlot

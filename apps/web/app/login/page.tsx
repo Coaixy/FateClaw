@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AnnouncementBanner } from '@/components/announcements/announcement-banner';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -47,20 +46,15 @@ function inviteCodeFromSearchParams(searchParams: {
 
 export default function LoginPage() {
   return (
-    <>
-      <div className="bg-canvas pt-4">
-        <AnnouncementBanner />
-      </div>
-      <Suspense
-        fallback={
-          <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas">
-            <Loader2 size={24} className="animate-spin text-muted" />
-          </div>
-        }
-      >
-        <LoginContent />
-      </Suspense>
-    </>
+    <Suspense
+      fallback={
+        <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas">
+          <Loader2 size={24} className="animate-spin text-muted" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
 
