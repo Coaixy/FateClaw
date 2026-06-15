@@ -60,6 +60,10 @@ function branchText(
   return key && record ? textField(record, key) : undefined;
 }
 
+function formatDunGan(value: string | undefined): string {
+  return value && value !== '无' ? value : '空';
+}
+
 function splitKePair(value?: string): { upper?: string; lower?: string } {
   const chars = Array.from(value ?? '').filter(Boolean);
   return {
@@ -90,7 +94,7 @@ function formatKe(
     formatLowerShen(lower),
     dayJiang ? `昼将：${dayJiang}` : undefined,
     upperNightJiang ? `夜将：${upperNightJiang}` : undefined,
-    upperDunGan ? `上神遁干：${upperDunGan}` : undefined,
+    upperDunGan ? `上神遁干：${formatDunGan(upperDunGan)}` : undefined,
   ]);
 
   return parts ? `${label}：${parts}` : undefined;
@@ -110,7 +114,7 @@ function formatChuan(
   const parts = joinList([
     branch ? `传支：${branch}` : undefined,
     relation ? `六亲：${relation}` : undefined,
-    `遁干：${dunGan || fallbackDunGan || '无'}`,
+    `遁干：${formatDunGan(dunGan || fallbackDunGan)}`,
     dayJiang ? `昼将：${dayJiang}` : undefined,
     nightJiang ? `夜将：${nightJiang}` : undefined,
   ]);
@@ -122,21 +126,44 @@ function palaceLines(root: Record<string, unknown>): string[] {
   const tianDiPan = recordField(root, 'tianDiPan');
   if (!tianDiPan) return [];
   const tianPan = recordField(tianDiPan, 'tianPan');
-  const tianJiang = recordField(tianDiPan, 'tianJiang');
+  const fallbackNightJiang = recordField(tianDiPan, 'tianJiang');
+  const yinYangGuiRen = recordField(root, 'yinYangGuiRen');
+  const dayJiang = yinYangGuiRen
+    ? recordField(yinYangGuiRen, 'yangGuiRen')
+    : undefined;
+  const nightJiang = yinYangGuiRen
+    ? recordField(yinYangGuiRen, 'yinGuiRen')
+    : undefined;
   const dunGan = recordField(root, 'dunGan');
-  const jianChu = recordField(root, 'jianChu');
-  if (!tianPan || !tianJiang) return [];
+  if (!tianPan) return [];
 
   return BRANCH_KEYS.map((key) => {
+    const dunGanText = dunGan ? textField(dunGan, key) : undefined;
+    const nightJiangText =
+      (nightJiang ? textField(nightJiang, key) : undefined) ??
+      (fallbackNightJiang ? textField(fallbackNightJiang, key) : undefined);
     const parts = joinList([
-      textField(tianJiang, key) ? `天将：${textField(tianJiang, key)}` : undefined,
-      textField(tianPan, key) ? `天盘：${textField(tianPan, key)}` : undefined,
-      `遁干：${dunGan && textField(dunGan, key) ? textField(dunGan, key) : '无'}`,
-      jianChu && textField(jianChu, key)
-        ? `建除：${textField(jianChu, key)}`
+      dayJiang && textField(dayJiang, key)
+        ? `昼将：${textField(dayJiang, key)}`
         : undefined,
+      nightJiangText ? `夜将：${nightJiangText}` : undefined,
+      textField(tianPan, key) ? `天盘：${textField(tianPan, key)}` : undefined,
+      `遁干：${formatDunGan(dunGanText)}`,
     ]);
     return parts ? `${BRANCH_LABELS[key]}宫：${parts}` : undefined;
+  }).filter((line): line is string => Boolean(line));
+}
+
+function jianChuLines(root: Record<string, unknown>): string[] {
+  const jianChu = recordField(root, 'jianChu');
+  if (!jianChu) return [];
+  const tianDiPan = recordField(root, 'tianDiPan');
+  const tianPan = tianDiPan ? recordField(tianDiPan, 'tianPan') : undefined;
+
+  return BRANCH_KEYS.map((key) => {
+    const value = textField(jianChu, key);
+    if (!value) return undefined;
+    return `${textField(tianPan ?? {}, key) ?? BRANCH_LABELS[key]}：${value}`;
   }).filter((line): line is string => Boolean(line));
 }
 
@@ -147,12 +174,12 @@ function formatShenSha(root: Record<string, unknown>): string[] {
     .map((item) => {
       const name = textField(item, 'name');
       const value = textField(item, 'value');
-      return name && value ? `${name}-${value}` : undefined;
+      return name && value ? `${name}：${value}` : undefined;
     })
     .filter((line): line is string => Boolean(line));
 }
 
-/** 大六壬 formatter：压缩输出起课概要、四课、三传、天地盘和神煞。 */
+/** 大六壬 formatter：压缩输出起课概要、四课、三传、天地盘、建除和神煞。 */
 export const formatLiurenPaipan: PaipanFormatter = (artifactData) => {
   const root = asRecord(artifactData);
   if (!root) return formatGenericPaipan(artifactData);
@@ -198,6 +225,7 @@ export const formatLiurenPaipan: PaipanFormatter = (artifactData) => {
   ]);
 
   pushSection(lines, '天地盘', palaceLines(root));
+  pushSection(lines, '建除', jianChuLines(root));
   pushSection(lines, '神煞', formatShenSha(root));
 
   return lines.join('\n').trim();
