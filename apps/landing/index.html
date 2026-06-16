@@ -9,9 +9,10 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/learning.css">
 <link rel="stylesheet" href="css/responsive.css">
 </head>
-<body>
+<body data-page="home">
 
 <div id="starfield"></div>
 <canvas id="particles"></canvas>
@@ -20,13 +21,13 @@
      导航栏
      ============================================================ -->
 <nav id="navbar" role="navigation" aria-label="Main navigation">
-  <div class="nav-logo">
+  <a class="nav-logo" href="index.html" aria-label="FateClaw home">
     <img class="mark" src="assets/fateclaw-mark.png" alt="" width="34" height="34" aria-hidden="true">
     FateClaw <span class="cn" data-i18n="nav.logoCn">命枢</span>
-  </div>
+  </a>
 
   <ul class="nav-links" id="navLinks">
-    <li><a href="#features" data-i18n="nav.features">核心能力</a></li>
+    <li><a href="#systems" data-i18n="nav.systems">术数入门</a></li>
     <li><a href="#architecture" data-i18n="nav.architecture">命与运</a></li>
     <li><a href="#faq" data-i18n="nav.faq">FAQs</a></li>
     <li>
@@ -138,9 +139,9 @@
   <div class="hero-content">
     <h1 class="reveal" data-i18n="hero.headline">东方玄学智能体</h1>
     <div class="sub-en reveal reveal-delay-1" data-i18n="hero.subEn">The Eastern Metaphysics Agent</div>
-    <div class="sub-cn reveal reveal-delay-1" data-i18n="hero.subCn">排盘、Tool、Skill 与 LLM 协同</div>
+    <div class="sub-cn reveal reveal-delay-1" data-i18n="hero.subCn">排盘、解读与追问，一次说清楚</div>
     <p class="reveal reveal-delay-2" data-i18n="hero.description">
-      融合本地确定性排盘、用户知识库检索与 AI 智能解读的玄学 Agent，拥有 Skill 垂类工具等现代 Agent 能力。
+      FateClaw 把传统术数变成可交互的智能解读体验：先排盘，再结合你的问题给出清晰建议。
     </p>
     <div class="hero-actions reveal reveal-delay-3">
       <a href="https://ai.letfate.com" class="btn btn-primary" data-i18n="hero.cta1">探索核心能力</a>
@@ -149,46 +150,102 @@
 </header>
 
 <!-- ============================================================
-     功能特性 - 流程
+     Agent 能力概览
      ============================================================ -->
-<section id="features">
-  <div class="features-header">
-    <h2 class="section-title reveal" data-i18n="features.title">一次解读的真实流转</h2>
-    <p class="section-subtitle reveal reveal-delay-1" data-i18n="features.subtitle">先由排盘引擎确定盘面，再由 LLM 围绕问题调用 Tool 与 Skill，最后生成可复盘结果。</p>
+<section id="agent-capabilities" class="agent-overview">
+  <div class="agent-overview-header">
+    <h2 class="section-title reveal" data-i18n="agent.title">把玄学解读做成真正能用的助手</h2>
+    <p class="section-subtitle reveal reveal-delay-1" data-i18n="agent.subtitle">FateClaw 先把盘排准，再结合你的问题与资料，把复杂术数转成清晰、可追问的答案。</p>
   </div>
 
-  <div class="process-flow" aria-label="FateClaw interpretation flow">
-    <article class="process-step reveal">
-      <span class="process-label" data-i18n="features.flow1Label">排盘</span>
-      <h3 data-i18n="features.flow1Title">确定盘面</h3>
-      <p data-i18n="features.flow1Desc">八字、紫微、奇门、六爻、经占先由确定性引擎计算，输出结构化盘面。</p>
+  <div class="agent-overview-layout">
+    <article class="agent-panel agent-panel-main reveal">
+      <span class="agent-panel-label" data-i18n="agent.chartLabel">排得准</span>
+      <h3 data-i18n="agent.chartTitle">先把盘面算清楚</h3>
+      <p data-i18n="agent.chartDesc">八字、紫微、奇门、六爻等先由确定规则排盘，基础信息更稳。</p>
     </article>
 
-    <div class="flow-arrow reveal reveal-delay-1" aria-hidden="true">→</div>
+    <div class="agent-panel-stack">
+      <article class="agent-panel reveal reveal-delay-1">
+        <span class="agent-panel-label" data-i18n="agent.contextLabel">更懂你</span>
+        <h3 data-i18n="agent.contextTitle">不止给通用答案</h3>
+        <p data-i18n="agent.contextDesc">可以结合你的资料、偏好和历史问题，让解读更贴近真实处境。</p>
+      </article>
 
-    <article class="process-step reveal reveal-delay-1">
-      <span class="process-label" data-i18n="features.flow2Label">LLM</span>
-      <h3 data-i18n="features.flow2Title">理解问题</h3>
-      <p data-i18n="features.flow2Desc">模型围绕用户问题拆解推理路径，决定需要读取哪些盘面、规则与上下文。</p>
-    </article>
-
-    <div class="flow-arrow bidirectional reveal reveal-delay-2" aria-hidden="true">↔</div>
-
-    <article class="process-step reveal reveal-delay-2">
-      <span class="process-label" data-i18n="features.flow3Label">Tool Skill</span>
-      <h3 data-i18n="features.flow3Title">调用能力</h3>
-      <p data-i18n="features.flow3Desc">Tool 负责历法、干支、命盘读取等确定性动作；Skill 负责读取授权流派规则。</p>
-    </article>
-
-    <div class="flow-arrow reveal reveal-delay-3" aria-hidden="true">→</div>
-
-    <article class="process-step reveal reveal-delay-3">
-      <span class="process-label" data-i18n="features.flow4Label">Result</span>
-      <h3 data-i18n="features.flow4Title">生成结果</h3>
-      <p data-i18n="features.flow4Desc">最终输出结论、依据与可复盘轨迹，让解读不是一段黑箱文案。</p>
-    </article>
+      <article class="agent-panel reveal reveal-delay-2">
+        <span class="agent-panel-label" data-i18n="agent.readingLabel">讲得清</span>
+        <h3 data-i18n="agent.readingTitle">复杂术数变成白话建议</h3>
+        <p data-i18n="agent.readingDesc">把关键依据、提醒和可选行动说清楚，看完还能继续追问。</p>
+      </article>
+    </div>
   </div>
-  <p class="process-note reveal reveal-delay-2" data-i18n="features.note">核心关系是 LLM 与 Tool Skill 双向协作：模型提出需求，工具返回可验证材料，模型再组织为可读结果。</p>
+
+  <div class="agent-advantage-strip reveal reveal-delay-2">
+    <div>
+      <strong data-i18n="agent.advantage1Title">更省心</strong>
+      <p data-i18n="agent.advantage1Desc">不用自己切换术数、整理规则，直接从问题进入解读。</p>
+    </div>
+    <div>
+      <strong data-i18n="agent.advantage2Title">更可靠</strong>
+      <p data-i18n="agent.advantage2Desc">先有盘面，再谈解释，避免凭空给出玄而又玄的判断。</p>
+    </div>
+    <div>
+      <strong data-i18n="agent.advantage3Title">更能追问</strong>
+      <p data-i18n="agent.advantage3Desc">一次解读之后，还能继续聊选择、时机、风险和下一步。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     术数入门
+     ============================================================ -->
+<section id="systems" class="systems-overview">
+  <div class="systems-header">
+    <h2 class="section-title reveal" data-i18n="systems.title">术数不是同一套工具</h2>
+    <p class="section-subtitle reveal reveal-delay-1" data-i18n="systems.subtitle">奇门、八字、紫微、六爻和梅花易数各自回答不同层级的问题。先分清方法，解读才有边界。</p>
+  </div>
+
+  <div class="system-card-grid" aria-label="Chinese metaphysics systems">
+    <a class="system-card reveal" href="pages/qimen.html">
+      <span class="system-card-symbol" aria-hidden="true">奇</span>
+      <span class="system-card-label" data-i18n="systems.qimenLabel">奇门遁甲</span>
+      <h3 data-i18n="systems.qimenTitle">时空格局与取用</h3>
+      <p data-i18n="systems.qimenDesc">以时间、方位、九宫和门星神组合成局，适合看情势、取势和行动窗口。</p>
+      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
+    </a>
+
+    <a class="system-card reveal reveal-delay-1" href="pages/bazi.html">
+      <span class="system-card-symbol" aria-hidden="true">八</span>
+      <span class="system-card-label" data-i18n="systems.baziLabel">八字</span>
+      <h3 data-i18n="systems.baziTitle">命局结构与阶段节律</h3>
+      <p data-i18n="systems.baziDesc">以出生年月日时组成四柱，看五行、十神和大运流年之间的长期结构。</p>
+      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
+    </a>
+
+    <a class="system-card reveal reveal-delay-2" href="pages/ziwei.html">
+      <span class="system-card-symbol" aria-hidden="true">紫</span>
+      <span class="system-card-label" data-i18n="systems.ziweiLabel">紫微斗数</span>
+      <h3 data-i18n="systems.ziweiTitle">宫位、星曜与人生议题</h3>
+      <p data-i18n="systems.ziweiDesc">以十二宫与星曜组合观察人生主题，擅长把命局拆成关系、事业、财帛等场景。</p>
+      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
+    </a>
+
+    <a class="system-card reveal" href="pages/liuyao.html">
+      <span class="system-card-symbol" aria-hidden="true">爻</span>
+      <span class="system-card-label" data-i18n="systems.liuyaoLabel">六爻</span>
+      <h3 data-i18n="systems.liuyaoTitle">一事一占的变化判断</h3>
+      <p data-i18n="systems.liuyaoDesc">从六个爻位、动变、世应和用神入手，围绕一个具体问题判断过程与结果。</p>
+      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
+    </a>
+
+    <a class="system-card system-card-wide reveal reveal-delay-1" href="pages/meihua.html">
+      <span class="system-card-symbol" aria-hidden="true">梅</span>
+      <span class="system-card-label" data-i18n="systems.meihuaLabel">梅花易数</span>
+      <h3 data-i18n="systems.meihuaTitle">象、数、时机的快速取象</h3>
+      <p data-i18n="systems.meihuaDesc">重视当下触发的象与数，用更轻量的方式把事件转成卦象和判断线索。</p>
+      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
+    </a>
+  </div>
 </section>
 
 <!-- ============================================================
@@ -273,7 +330,7 @@
 
     <details class="faq-item reveal reveal-delay-2">
       <summary data-i18n="faq.q6">目前支持哪些术数？</summary>
-      <p data-i18n="faq.a6">当前页面展示的核心方向包括八字、紫微斗数、奇门遁甲、六爻纳甲和周易经占，后续能力以实际产品开放为准。</p>
+      <p data-i18n="faq.a6">当前页面展示的核心方向包括奇门遁甲、八字、紫微斗数、六爻和梅花易数，后续能力以实际产品开放为准。</p>
     </details>
   </div>
 </section>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>六爻入门 | FateClaw</title>
+<meta name="description" content="了解六爻的历史脉络、纳甲与用神的基本原理，以及 FateClaw 如何处理一事一占的结构化解读。">
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/components.css">
+<link rel="stylesheet" href="../css/learning.css">
+<link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body data-page="liuyao">
+
+<div id="starfield"></div>
+<canvas id="particles"></canvas>
+
+<nav id="navbar" role="navigation" aria-label="Main navigation">
+  <a class="nav-logo" href="../index.html" aria-label="FateClaw home">
+    <img class="mark" src="../assets/fateclaw-mark.png" alt="" width="34" height="34" aria-hidden="true">
+    FateClaw <span class="cn" data-i18n="nav.logoCn">命枢</span>
+  </a>
+
+  <ul class="nav-links" id="navLinks">
+    <li><a href="../index.html#systems" data-i18n="nav.systems">术数入门</a></li>
+    <li><a href="../index.html#architecture" data-i18n="nav.architecture">命与运</a></li>
+    <li><a href="../index.html#faq" data-i18n="nav.faq">FAQs</a></li>
+    <li>
+      <div class="lang-switcher">
+        <button class="lang-btn active" type="button" data-lang="zh-CN" aria-pressed="true">简体</button>
+        <button class="lang-btn" type="button" data-lang="zh-TW" aria-pressed="false">繁體</button>
+        <button class="lang-btn" type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </li>
+  </ul>
+
+  <button class="menu-toggle" type="button" aria-label="Toggle menu" aria-controls="navLinks" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<main class="system-page">
+  <section class="system-hero">
+    <a class="system-back" href="../index.html#systems" data-i18n="page.back">返回术数入门</a>
+    <div class="system-hero-grid">
+      <div>
+        <div class="system-kicker reveal" data-i18n="page.kicker">Liu Yao</div>
+        <h1 class="reveal reveal-delay-1" data-i18n="page.title">六爻</h1>
+        <p class="reveal reveal-delay-2" data-i18n="page.subtitle">六爻围绕一个明确问题起卦，通过六个爻位的动静、亲属、世应和用神来判断过程与结果。</p>
+      </div>
+      <div class="system-visual reveal reveal-delay-2" data-symbol="爻">
+        <span data-i18n="page.visual">一事一占的变化链</span>
+      </div>
+    </div>
+  </section>
+
+  <ul class="system-switcher" aria-label="Metaphysics systems">
+    <li><a href="qimen.html" data-i18n="systems.qimenLabel">奇门遁甲</a></li>
+    <li><a href="bazi.html" data-i18n="systems.baziLabel">八字</a></li>
+    <li><a href="ziwei.html" data-i18n="systems.ziweiLabel">紫微斗数</a></li>
+    <li><a href="liuyao.html" aria-current="page" data-i18n="systems.liuyaoLabel">六爻</a></li>
+    <li><a href="meihua.html" data-i18n="systems.meihuaLabel">梅花易数</a></li>
+  </ul>
+
+  <div class="system-content">
+    <section class="system-section reveal">
+      <h2 data-i18n="page.whatTitle">它在看什么</h2>
+      <p data-i18n="page.whatBody">六爻适合问具体事件。它把一个问题转成卦象，再通过动爻、变卦、纳甲、六亲、世应、用神和日月关系判断事情如何发展。</p>
+    </section>
+
+    <section class="system-section reveal">
+      <h2 data-i18n="page.historyTitle">历史脉络</h2>
+      <ul data-i18n="page.history">
+        <li>六爻根基来自《易》卦占传统，后世纳甲法把干支、六亲和五行关系纳入卦爻判断。</li>
+      </ul>
+    </section>
+
+    <section class="system-section reveal">
+      <h2 data-i18n="page.principleTitle">基本原理</h2>
+      <ul data-i18n="page.principles">
+        <li>一个问题只取一个主要用神，避免把所有信息都强行解释成答案。</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <aside class="system-note reveal">
+    <h2 data-i18n="page.boundaryTitle">使用边界</h2>
+    <p data-i18n="page.boundary">六爻强调一事一占。问题越含糊，卦象越容易被过度解释；现实决策仍应结合事实、证据和专业意见。</p>
+  </aside>
+</main>
+
+<footer>
+  <div class="footer-content">
+    <div class="footer-logo">
+      <img class="mark" src="../assets/fateclaw-mark.png" alt="" width="24" height="24" aria-hidden="true">
+      FateClaw <span class="cn" data-i18n="footer.logoCn">命枢</span>
+    </div>
+    <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 FateClaw。东方玄学智能体。</div>
+    <a class="footer-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-i18n="footer.icp">浙ICP备2024132053号</a>
+  </div>
+</footer>
+
+<script src="../js/systems-i18n.js" defer></script>
+<script src="../js/i18n.js" defer></script>
+<script src="../js/particles.js" defer></script>
+<script src="../js/main.js" defer></script>
+</body>
+</html>

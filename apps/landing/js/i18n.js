@@ -5,30 +5,52 @@
 const i18n = {
   'zh-CN': {
     pageTitle: '小奕想要三合木',
-    nav: { logoCn: '命枢', features: '核心流程', architecture: '命与运', faq: 'FAQs' },
+    nav: { logoCn: '命枢', systems: '术数入门', architecture: '命与运', faq: 'FAQs' },
     hero: {
       headline: '东方玄学智能体',
       subEn: 'The Eastern Metaphysics Agent',
-      subCn: '排盘、Tool、Skill 与 LLM 协同',
-      description: '融合本地确定性排盘、用户知识库检索与 AI 智能解读的玄学 Agent，拥有 Skill 垂类工具等现代 Agent 能力。',
+      subCn: '排盘、解读与追问，一次说清楚',
+      description: 'FateClaw 把传统术数变成可交互的智能解读体验：先排盘，再结合你的问题给出清晰建议。',
       cta1: '马上体验',
     },
-    features: {
-      title: '一次解读的真实流转',
-      subtitle: '先由排盘引擎确定盘面，再由 LLM 围绕问题调用 Tool 与 Skill，最后生成可复盘结果。',
-      flow1Label: '排盘',
-      flow1Title: '确定盘面',
-      flow1Desc: '八字、紫微、奇门、六爻、经占先由确定性引擎计算，输出结构化盘面。',
-      flow2Label: 'LLM',
-      flow2Title: '理解问题',
-      flow2Desc: '模型围绕用户问题拆解推理路径，决定需要读取哪些盘面、规则与上下文。',
-      flow3Label: 'Tool Skill',
-      flow3Title: '调用能力',
-      flow3Desc: 'Tool 负责历法、干支、命盘读取等确定性动作；Skill 负责读取授权流派规则。',
-      flow4Label: 'Result',
-      flow4Title: '生成结果',
-      flow4Desc: '最终输出结论、依据与可复盘轨迹，让解读不是一段黑箱文案。',
-      note: '核心关系是 LLM 与 Tool Skill 双向协作：模型提出需求，工具返回可验证材料，模型再组织为可读结果。',
+    agent: {
+      title: '把玄学解读做成真正能用的助手',
+      subtitle: 'FateClaw 先把盘排准，再结合你的问题与资料，把复杂术数转成清晰、可追问的答案。',
+      chartLabel: '排得准',
+      chartTitle: '先把盘面算清楚',
+      chartDesc: '八字、紫微、奇门、六爻等先由确定规则排盘，基础信息更稳。',
+      contextLabel: '更懂你',
+      contextTitle: '不止给通用答案',
+      contextDesc: '可以结合你的资料、偏好和历史问题，让解读更贴近真实处境。',
+      readingLabel: '讲得清',
+      readingTitle: '复杂术数变成白话建议',
+      readingDesc: '把关键依据、提醒和可选行动说清楚，看完还能继续追问。',
+      advantage1Title: '更省心',
+      advantage1Desc: '不用自己切换术数、整理规则，直接从问题进入解读。',
+      advantage2Title: '更可靠',
+      advantage2Desc: '先有盘面，再谈解释，避免凭空给出玄而又玄的判断。',
+      advantage3Title: '更能追问',
+      advantage3Desc: '一次解读之后，还能继续聊选择、时机、风险和下一步。',
+    },
+    systems: {
+      title: '术数不是同一套工具',
+      subtitle: '奇门、八字、紫微、六爻和梅花易数各自回答不同层级的问题。先分清方法，解读才有边界。',
+      qimenLabel: '奇门遁甲',
+      qimenTitle: '时空格局与取用',
+      qimenDesc: '以时间、方位、九宫和门星神组合成局，适合看情势、取势和行动窗口。',
+      baziLabel: '八字',
+      baziTitle: '命局结构与阶段节律',
+      baziDesc: '以出生年月日时组成四柱，看五行、十神和大运流年之间的长期结构。',
+      ziweiLabel: '紫微斗数',
+      ziweiTitle: '宫位、星曜与人生议题',
+      ziweiDesc: '以十二宫与星曜组合观察人生主题，擅长把命局拆成关系、事业、财帛等场景。',
+      liuyaoLabel: '六爻',
+      liuyaoTitle: '一事一占的变化判断',
+      liuyaoDesc: '从六个爻位、动变、世应和用神入手，围绕一个具体问题判断过程与结果。',
+      meihuaLabel: '梅花易数',
+      meihuaTitle: '象、数、时机的快速取象',
+      meihuaDesc: '重视当下触发的象与数，用更轻量的方式把事件转成卦象和判断线索。',
+      readMore: '查看入门',
     },
     arch: {
       title: '命、运与选择怎么分工',
@@ -64,37 +86,59 @@ const i18n = {
       q5: '结果能直接用于现实决策吗？',
       a5: '不建议。结果适合作为自我观察、问题拆解和备选视角，不能替代法律、医疗、财务、投资等专业建议。',
       q6: '目前支持哪些术数？',
-      a6: '当前页面展示的核心方向包括八字、紫微斗数、奇门遁甲、六爻纳甲和周易经占，后续能力以实际产品开放为准。',
+      a6: '当前页面展示的核心方向包括奇门遁甲、八字、紫微斗数、六爻和梅花易数，后续能力以实际产品开放为准。',
     },
     footer: { logoCn: '命枢', copy: '© 2026 FateClaw。东方玄学智能体。', icp: '浙ICP备2024132053号' },
   },
 
   'zh-TW': {
     pageTitle: '小奕想要三合木',
-    nav: { logoCn: '命樞', features: '核心流程', architecture: '命與運', faq: 'FAQs' },
+    nav: { logoCn: '命樞', systems: '術數入門', architecture: '命與運', faq: 'FAQs' },
     hero: {
       headline: '東方玄學智能體',
       subEn: 'The Eastern Metaphysics Agent',
-      subCn: '排盤、Tool、Skill 與 LLM 協同',
-      description: '融合本地確定性排盤、用戶知識庫檢索與 AI 智能解讀的玄學 Agent，擁有 Skill 垂類工具等現代 Agent 能力。',
+      subCn: '排盤、解讀與追問，一次說清楚',
+      description: 'FateClaw 把傳統術數變成可互動的智能解讀體驗：先排盤，再結合你的問題給出清晰建議。',
       cta1: '馬上體驗',
     },
-    features: {
-      title: '一次解讀的真實流轉',
-      subtitle: '先由排盤引擎確定盤面，再由 LLM 圍繞問題呼叫 Tool 與 Skill，最後生成可復盤結果。',
-      flow1Label: '排盤',
-      flow1Title: '確定盤面',
-      flow1Desc: '八字、紫微、奇門、六爻、經占先由確定性引擎計算，輸出結構化盤面。',
-      flow2Label: 'LLM',
-      flow2Title: '理解問題',
-      flow2Desc: '模型圍繞用戶問題拆解推理路徑，決定需要讀取哪些盤面、規則與上下文。',
-      flow3Label: 'Tool Skill',
-      flow3Title: '呼叫能力',
-      flow3Desc: 'Tool 負責曆法、干支、命盤讀取等確定性動作；Skill 負責讀取授權流派規則。',
-      flow4Label: 'Result',
-      flow4Title: '生成結果',
-      flow4Desc: '最終輸出結論、依據與可復盤軌跡，讓解讀不是一段黑箱文案。',
-      note: '核心關係是 LLM 與 Tool Skill 雙向協作：模型提出需求，工具返回可驗證材料，模型再組織為可讀結果。',
+    agent: {
+      title: '把玄學解讀做成真正能用的助手',
+      subtitle: 'FateClaw 先把盤排準，再結合你的問題與資料，把複雜術數轉成清晰、可追問的答案。',
+      chartLabel: '排得準',
+      chartTitle: '先把盤面算清楚',
+      chartDesc: '八字、紫微、奇門、六爻等先由確定規則排盤，基礎資訊更穩。',
+      contextLabel: '更懂你',
+      contextTitle: '不止給通用答案',
+      contextDesc: '可以結合你的資料、偏好和歷史問題，讓解讀更貼近真實處境。',
+      readingLabel: '講得清',
+      readingTitle: '複雜術數變成白話建議',
+      readingDesc: '把關鍵依據、提醒和可選行動說清楚，看完還能繼續追問。',
+      advantage1Title: '更省心',
+      advantage1Desc: '不用自己切換術數、整理規則，直接從問題進入解讀。',
+      advantage2Title: '更可靠',
+      advantage2Desc: '先有盤面，再談解釋，避免憑空給出玄而又玄的判斷。',
+      advantage3Title: '更能追問',
+      advantage3Desc: '一次解讀之後，還能繼續聊選擇、時機、風險和下一步。',
+    },
+    systems: {
+      title: '術數不是同一套工具',
+      subtitle: '奇門、八字、紫微、六爻和梅花易數各自回答不同層級的問題。先分清方法，解讀才有邊界。',
+      qimenLabel: '奇門遁甲',
+      qimenTitle: '時空格局與取用',
+      qimenDesc: '以時間、方位、九宮和門星神組合成局，適合看情勢、取勢和行動窗口。',
+      baziLabel: '八字',
+      baziTitle: '命局結構與階段節律',
+      baziDesc: '以出生年月日時組成四柱，看五行、十神和大運流年之間的長期結構。',
+      ziweiLabel: '紫微斗數',
+      ziweiTitle: '宮位、星曜與人生議題',
+      ziweiDesc: '以十二宮與星曜組合觀察人生主題，擅長把命局拆成關係、事業、財帛等場景。',
+      liuyaoLabel: '六爻',
+      liuyaoTitle: '一事一占的變化判斷',
+      liuyaoDesc: '從六個爻位、動變、世應和用神入手，圍繞一個具體問題判斷過程與結果。',
+      meihuaLabel: '梅花易數',
+      meihuaTitle: '象、數、時機的快速取象',
+      meihuaDesc: '重視當下觸發的象與數，用更輕量的方式把事件轉成卦象和判斷線索。',
+      readMore: '查看入門',
     },
     arch: {
       title: '命、運與選擇怎麼分工',
@@ -130,75 +174,97 @@ const i18n = {
       q5: '結果能直接用於現實決策嗎？',
       a5: '不建議。結果適合作為自我觀察、問題拆解和備選視角，不能替代法律、醫療、財務、投資等專業建議。',
       q6: '目前支援哪些術數？',
-      a6: '當前頁面展示的核心方向包括八字、紫微斗數、奇門遁甲、六爻納甲和周易經占，後續能力以實際產品開放為準。',
+      a6: '當前頁面展示的核心方向包括奇門遁甲、八字、紫微斗數、六爻和梅花易數，後續能力以實際產品開放為準。',
     },
     footer: { logoCn: '命樞', copy: '© 2026 FateClaw。東方玄學智能體。', icp: '浙ICP备2024132053号' },
   },
 
   'en': {
-    pageTitle: 'FateClaw | AI-Powered Chinese Metaphysics',
-    nav: { logoCn: '', features: 'Flow', architecture: 'Fate / Fortune', faq: 'FAQs' },
+    pageTitle: 'FateClaw | Eastern Divination AI',
+    nav: { logoCn: '', systems: 'Methods', architecture: 'Fate & Timing', faq: 'FAQs' },
     hero: {
-      headline: 'AI-Powered Chinese Metaphysics',
-      subEn: 'The Eastern Metaphysics Agent',
-      subCn: 'Charting, Tools, Skills, and LLM in one loop',
-      description: 'A metaphysics Agent system that fuses deterministic charting, user knowledge retrieval, and AI interpretation with modern Skills and Tools.',
-      cta1: 'Try It Now',
+      headline: 'Eastern Divination, Made Interactive',
+      subEn: 'Ask a real question. Get a chart-backed reading.',
+      subCn: 'BaZi, Zi Wei, Qi Men, Liu Yao, and Mei Hua in one experience',
+      description: 'FateClaw turns classical Chinese systems into clear guidance for love, career, timing, and personal direction.',
+      cta1: 'Start a Reading',
     },
-    features: {
-      title: 'How One Reading Moves',
-      subtitle: 'The charting engine fixes the board first. The LLM then calls Tools and Skills around the question, and returns a traceable result.',
-      flow1Label: 'Charting',
-      flow1Title: 'Fix the board',
-      flow1Desc: 'BaZi, ZiWei, QiMen, LiuYao, and JingZhan are computed by deterministic engines into structured chart data.',
-      flow2Label: 'LLM',
-      flow2Title: 'Read the question',
-      flow2Desc: 'The model breaks down the user question and decides which charts, rules, and context it needs to inspect.',
-      flow3Label: 'Tool Skill',
-      flow3Title: 'Call capabilities',
-      flow3Desc: 'Tools handle calendar, GanZhi, and chart lookups. Skills load authorized school rules and interpretation boundaries.',
-      flow4Label: 'Result',
-      flow4Title: 'Return the reading',
-      flow4Desc: 'The final answer carries conclusions, reasoning, and traceable material instead of opaque generated copy.',
-      note: 'The core loop is bidirectional: the LLM asks, Tools and Skills return verifiable material, and the model turns it into a readable result.',
+    agent: {
+      title: 'From ancient charts to answers you can use',
+      subtitle: 'Start with what is on your mind. FateClaw picks the right lens, explains the signals, and lets you keep digging.',
+      chartLabel: 'Step 01',
+      chartTitle: 'Ask in plain English',
+      chartDesc: 'No need to know BaZi or Qi Men first. Start with a question about work, love, timing, or direction.',
+      contextLabel: 'Step 02',
+      contextTitle: 'Match the right method',
+      contextDesc: 'Different questions need different systems. FateClaw helps choose the lens before giving a reading.',
+      readingLabel: 'Step 03',
+      readingTitle: 'Get a reading you can actually use',
+      readingDesc: 'The answer explains key signals, likely pressure points, and possible next moves in plain language.',
+      advantage1Title: 'No terminology wall',
+      advantage1Desc: 'You can explore classical Chinese systems without studying years of jargon first.',
+      advantage2Title: 'Not a random horoscope',
+      advantage2Desc: 'The reading starts from a structured chart, then explains what matters for your question.',
+      advantage3Title: 'Built for follow-up',
+      advantage3Desc: 'Keep asking about timing, alternatives, tradeoffs, and what to watch next.',
+    },
+    systems: {
+      title: 'Five classic systems, one readable experience',
+      subtitle: 'Each method answers a different kind of question. FateClaw helps people pick the right lens without memorizing the terminology.',
+      qimenLabel: 'Qi Men',
+      qimenTitle: 'Strategy, timing, direction',
+      qimenDesc: 'For decisions that depend on when to act, where to move, and how the situation is shifting.',
+      baziLabel: 'BaZi',
+      baziTitle: 'Personality, patterns, life timing',
+      baziDesc: 'Uses your birth time to map long-term tendencies, strengths, pressure points, and life phases.',
+      ziweiLabel: 'Zi Wei',
+      ziweiTitle: 'A life map by domains',
+      ziweiDesc: 'Breaks life into relationships, career, wealth, family, travel, and other concrete areas.',
+      liuyaoLabel: 'Liu Yao',
+      liuyaoTitle: 'One question, practical signal',
+      liuyaoDesc: 'For specific questions with a near-term outcome, from relationships and offers to lost items and decisions.',
+      meihuaLabel: 'Mei Hua',
+      meihuaTitle: 'Quick omen from the moment',
+      meihuaDesc: 'Turns a number, time, direction, sound, or event trigger into a compact reading.',
+      readMore: 'Explore method',
     },
     arch: {
-      title: 'Fate, Fortune, and Choice',
-      subtitle: 'Fate is the vehicle. Fortune is the road. FateClaw reads the structure first, then looks at road conditions, timing, and forks where choice matters.',
-      destinyLabel: 'Fate',
-      destinyTitle: 'Fate is the vehicle',
-      destinyDesc: 'Fate is closer to the chassis, engine, and carrying capacity: the base structure, inertia, strengths, and points of easy depletion.',
-      destinyProsTitle: 'What it reads',
-      destinyPros: 'It reads configuration, temperament, long-term tendency, and phase rhythm. It answers how this vehicle is best driven.',
+      title: 'Know the pattern. Choose the move.',
+      subtitle: 'FateClaw treats destiny analysis as context and divination as timing. The point is not blind belief. The point is a better frame for decisions.',
+      destinyLabel: 'Pattern',
+      destinyTitle: 'What stays with you',
+      destinyDesc: 'Long-term charts reveal tendencies, strengths, recurring pressure points, and the seasons when certain themes become louder.',
+      destinyProsTitle: 'Good for',
+      destinyPros: 'Self-understanding, life phases, relationship patterns, career style, and the kinds of situations that repeat.',
       destinyConsTitle: 'Boundary',
-      destinyCons: 'The vehicle is not the full outcome. The same vehicle can feel very different across roads, speeds, and choices.',
-      divinationLabel: 'Fortune',
-      divinationTitle: 'Fortune is the road',
-      divinationDesc: 'Fortune is the road being traveled: environment, phase openings, resistance, timing, and forks that need present judgment.',
-      divinationProsTitle: 'Divination reads the road',
-      divinationPros: 'Divination narrows the question to the current junction and helps compare road conditions, timing, risks, and opportunity costs.',
-      divinationConsTitle: 'Choice changes the route',
-      divinationCons: 'Choice does not magically replace the vehicle, but it affects when to start, where to turn, what to avoid, and which road the vehicle enters.',
-      choiceTitle: 'Divination does not rewrite fate. It helps choose the route.',
-      choiceDesc: 'The chart gives the vehicle structure. Divination gives the signal at the current junction. Fortune often changes through the choices, rhythm, and actions made after the road is seen clearly.',
+      destinyCons: 'A chart is not a prison. Environment, timing, and choices still shape what happens next.',
+      divinationLabel: 'Moment',
+      divinationTitle: 'What is changing now',
+      divinationDesc: 'Divination narrows the focus to a current question, helping compare timing, risks, options, and signals in motion.',
+      divinationProsTitle: 'Good for',
+      divinationPros: 'Specific questions, near-term decisions, timing windows, negotiation dynamics, and what to watch next.',
+      divinationConsTitle: 'Choice still matters',
+      divinationCons: 'A reading can highlight the road conditions, but the route still depends on what you do with the information.',
+      choiceTitle: 'The reading is not a verdict',
+      choiceDesc: 'Use it as a map of signals, pressure, and timing. The best outcome is not certainty. It is clearer choice.',
     },
     faq: {
       title: 'FAQs',
-      subtitle: 'Clear boundaries matter: FateClaw charts and assists interpretation. It does not turn metaphysics into an absolute verdict.',
-      q1: 'Is FateClaw a fortune-telling tool or an AI chat?',
-      a1: 'It first computes charts through deterministic engines, then lets the LLM interpret with Tools, Skills, and the user question. The AI works from structured material instead of inventing charts.',
+      subtitle: 'Clear boundaries matter: FateClaw helps you explore patterns and timing. It does not sell absolute certainty.',
+      q1: 'Is FateClaw fortune telling or an AI chat?',
+      a1: 'It is neither a random horoscope nor a blank chatbot. FateClaw creates structured charts first, then turns them into readable guidance around your question.',
       q2: 'Can divination and destiny analysis be used together?',
-      a2: 'Yes. Destiny analysis gives long-term background, while divination handles the present question. The key is to keep clear which method answers which part.',
-      q3: 'Can the LLM hallucinate conclusions?',
-      a3: 'FateClaw is designed to make charting, tool calls, and Skill sources traceable, which narrows free-form model output. The reading is still a reference, not absolute fact.',
-      q4: 'What is a Skill here?',
-      a4: 'A Skill stores school rules, case experience, and interpretation boundaries from creators. The LLM loads authorized Skills when needed.',
+      a2: 'Yes. Destiny analysis gives the long-term pattern, while divination focuses on the current question. Keeping that difference clear makes the reading more useful.',
+      q3: 'Can the reading be wrong?',
+      a3: 'Yes. Treat it as reflective guidance, not a guaranteed prediction. Its value is in framing the situation, surfacing signals, and helping you ask better questions.',
+      q4: 'Do I need to understand BaZi or Qi Men first?',
+      a4: 'No. The page explains each method in plain language, and the product direction is to let people start from real questions rather than terminology.',
       q5: 'Can I use results for real-world decisions?',
-      a5: 'Not directly. Results are useful for reflection and alternative framing, but they do not replace legal, medical, financial, investment, or other professional advice.',
+      a5: 'Use them as one perspective, not as professional advice. Legal, medical, financial, investment, and other high-stakes decisions still need qualified experts.',
       q6: 'Which systems are supported?',
-      a6: 'The current direction shown here includes BaZi, ZiWei DouShu, QiMen Dunjia, LiuYao Najia, and Zhouyi JingZhan. Actual availability follows the live product.',
+      a6: 'The site introduces Qi Men, BaZi, Zi Wei, Liu Yao, and Mei Hua. Actual product availability follows the live release.',
     },
-    footer: { logoCn: '', copy: '© 2026 FateClaw. AI-Powered Chinese Metaphysics.', icp: '' },
+    footer: { logoCn: '', copy: '© 2026 FateClaw. Eastern divination, made interactive.', icp: '' },
   },
 };
 
@@ -253,6 +319,44 @@ function getInitialLang() {
 let currentLang = getInitialLang();
 
 /**
+ * 深合并基础字典和页面字典，让详情页复用导航、页脚等公共文案。
+ * @param {Record<string, unknown>} base 基础语言字典。
+ * @param {Record<string, unknown>} override 当前页面的语言字典。
+ * @returns {Record<string, unknown>} 合并后的语言字典。
+ */
+function mergeDict(base, override) {
+  const result = { ...base };
+
+  Object.entries(override || {}).forEach(([key, value]) => {
+    const baseValue = result[key];
+    const shouldMerge = value
+      && !Array.isArray(value)
+      && typeof value === 'object'
+      && baseValue
+      && !Array.isArray(baseValue)
+      && typeof baseValue === 'object';
+
+    result[key] = shouldMerge ? mergeDict(baseValue, value) : value;
+  });
+
+  return result;
+}
+
+/**
+ * 读取当前页面对应的语言字典，详情页通过 body[data-page] 追加自己的内容。
+ * @param {string} lang 目标语言代码。
+ * @returns {Record<string, unknown> | null} 当前页面可用的语言字典。
+ */
+function getDict(lang) {
+  const baseDict = i18n[lang];
+  if (!baseDict) return null;
+
+  const pageKey = document.body?.dataset.page;
+  const pageDict = window.FateClawPageI18n?.[pageKey]?.[lang];
+  return pageDict ? mergeDict(baseDict, pageDict) : baseDict;
+}
+
+/**
  * 应用语言到页面，并按需记录用户的手动选择。
  * @param {string} lang 目标语言代码。
  * @param {boolean} shouldPersist 是否写入本地缓存。
@@ -260,6 +364,7 @@ let currentLang = getInitialLang();
  */
 function setLang(lang, shouldPersist) {
   const nextLang = normalizeLang(lang) || 'zh-CN';
+  const dict = getDict(nextLang);
   currentLang = nextLang;
   if (shouldPersist) {
     localStorage.setItem('fateclaw-lang', nextLang);
@@ -270,7 +375,7 @@ function setLang(lang, shouldPersist) {
     btn.setAttribute('aria-pressed', String(isActive));
   });
   document.documentElement.lang = nextLang === 'en' ? 'en' : nextLang;
-  document.title = i18n[nextLang]?.pageTitle || '小奕想要三合木';
+  document.title = dict?.pageTitle || '小奕想要三合木';
   applyTranslations(nextLang);
 }
 
@@ -289,7 +394,7 @@ function switchLang(lang) {
  * @returns {void}
  */
 function applyTranslations(lang) {
-  const dict = i18n[lang];
+  const dict = getDict(lang);
   if (!dict) return;
 
   document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -298,7 +403,12 @@ function applyTranslations(lang) {
     for (const part of parts) { value = value?.[part]; }
     if (value == null) return;
     if (Array.isArray(value)) {
-      el.innerHTML = value.map(v => '<li>' + v + '</li>').join('');
+      const listItems = value.map(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        return li;
+      });
+      el.replaceChildren(...listItems);
     } else {
       el.textContent = value;
     }
