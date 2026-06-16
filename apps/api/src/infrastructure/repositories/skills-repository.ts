@@ -291,7 +291,6 @@ export async function listMarketBundles(opts: {
      LEFT JOIN user_custom_skills s
        ON s.id = sbi.skill_id
       AND s.deleted_at IS NULL
-      AND s.visibility IN ('link_shared', 'shared')
       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
      WHERE ${conditions.join(' AND ')}
      GROUP BY b.id, b.name, b.description, b.bundle_token, b.created_at
@@ -1711,7 +1710,7 @@ export async function getBundleByToken(
   const { rows: skillRows } = await pool.query(
     `SELECT s.id, s.skill_name, s.description, s.bundle_uri
      FROM user_custom_skills s
-     WHERE s.id = ANY($1) AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
+     WHERE s.id = ANY($1) AND s.deleted_at IS NULL
        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
     [bundle.skill_ids],
   );
@@ -1752,7 +1751,7 @@ export async function subscribeToBundle(
   if (info.bundle.user_id === subscriberId) return null; // 非自订
 
   const skillIdsValid = info.skills.map((s) => s.id);
-  // getBundleByToken 内部已过滤失效（deleted_at / visibility）。
+  // getBundleByToken 内部已过滤失效（deleted_at / workflow 快照）。
   // bundle.skill_ids 原始长度 - 有效长度 = 静默跳过的失效条数
   let skippedCount = info.bundle.skill_ids.length - skillIdsValid.length;
   let subscribedCount = 0;

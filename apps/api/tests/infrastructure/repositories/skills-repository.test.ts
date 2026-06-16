@@ -268,6 +268,7 @@ describe('skills repository official skill settings', () => {
     await listMarketBundles({ limit: 500, offset: 10 });
 
     expect(calls[0]?.sql).toContain("b.visibility = 'shared'");
+    expect(calls[0]?.sql).not.toContain('s.visibility');
     expect(calls[0]?.sql).not.toContain('s2.category');
     expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
     expect(calls[0]?.params).toEqual([50, 10]);
@@ -346,7 +347,7 @@ describe('skills repository official skill settings', () => {
     mockGetTextSkillBundleContentLength.mockImplementation((uri: string) =>
       uri === 'text-skill://skill-2' ? 5 : 2,
     );
-    createSequencedMockPool([
+    const { calls } = createSequencedMockPool([
       [
         {
           id: 'bundle-1',
@@ -380,6 +381,7 @@ describe('skills repository official skill settings', () => {
         { id: 'skill-1', content_length: 2 },
       ],
     });
+    expect(calls[1]?.sql).not.toContain('s.visibility');
   });
 
   it('creates access invites for owned skills only', async () => {
