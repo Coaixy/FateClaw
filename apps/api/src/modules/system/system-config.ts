@@ -310,8 +310,8 @@ export function normalizeCustomModelBaseUrl(
   let parsed: URL;
   try {
     parsed = new URL(raw);
-  } catch {
-    throw new Error('Base URL 格式不正确');
+  } catch (err) {
+    throw new Error('Base URL 格式不正确', { cause: err });
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Base URL 仅支持 http 或 https');

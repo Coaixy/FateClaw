@@ -41,6 +41,24 @@ export interface PublicStatusTokenUsagePoint {
 const PROCESSING_SESSION_KEY_PATTERN = 'session:processing:*';
 const PUBLIC_STATUS_TOKEN_USAGE_DAYS = 7;
 
+function resolveMonthRange(yearMonth: string): { start: string; end: string } {
+  const match = /^(\d{4})-(\d{2})$/.exec(yearMonth);
+  if (!match) {
+    throw new Error('月份格式必须为 YYYY-MM');
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) {
+    throw new Error('月份格式必须为 YYYY-MM');
+  }
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
+
 function recentUtcDateKeys(days: number): string[] {
   return Array.from({ length: days }, (_, index) => {
     const date = new Date();
@@ -164,17 +182,55 @@ export async function getMonthlyTokenUsage(
   yearMonth?: string,
 ): Promise<number> {
   const ym = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const range = resolveMonthRange(ym);
   const { rows } = await getDbPool().query(
     `SELECT COALESCE(SUM(total_tokens), 0) AS total
-     FROM daily_usage WHERE user_id = $1 AND date LIKE $2`,
-    [userId, `${ym}%`],
+     FROM daily_usage
+     WHERE user_id = $1
+       AND date >= $2
+       AND date < $3`,
+    [userId, range.start, range.end],
   );
   return Number((rows[0] as { total: string | number }).total);
+}
+
+/**
+ * 批量读取用户当月 token 用量。
+ *
+ * @param userIds 需要统计的用户 ID 列表。
+ * @param yearMonth 月份，格式为 YYYY-MM；不传时使用当前 UTC 月份。
+ * @returns userId 到当月 token 总量的映射；无记录的用户返回 0。
+ */
+export async function getMonthlyTokenUsageByUserIds(
+  userIds: string[],
+  yearMonth?: string,
+): Promise<Map<string, number>> {
+  const result = new Map(userIds.map((userId) => [userId, 0]));
+  if (userIds.length === 0) return result;
+  const ym = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const range = resolveMonthRange(ym);
+  const { rows } = await getDbPool().query(
+    `SELECT user_id, COALESCE(SUM(total_tokens), 0) AS total
+     FROM daily_usage
+     WHERE user_id = ANY($1::text[])
+       AND date >= $2
+       AND date < $3
+     GROUP BY user_id`,
+    [userIds, range.start, range.end],
+  );
+  for (const row of rows as Array<{
+    user_id: string;
+    total: string | number;
+  }>) {
+    result.set(row.user_id, Number(row.total));
+  }
+  return result;
 }
 
 export async function getUsageStats(userId: string): Promise<UsageStats> {
   const today = new Date().toISOString().slice(0, 10);
   const yearMonth = today.slice(0, 7);
+  const monthRange = resolveMonthRange(yearMonth);
 
   const { rows: totalRows } = await getDbPool().query(
     `SELECT COALESCE(SUM(msg_count), 0) AS total_messages,
@@ -194,8 +250,11 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
 
   const { rows: monthlyRows } = await getDbPool().query(
     `SELECT COALESCE(SUM(msg_count), 0) AS monthly_messages
-     FROM daily_usage WHERE user_id = $1 AND date LIKE $2`,
-    [userId, `${yearMonth}%`],
+     FROM daily_usage
+     WHERE user_id = $1
+       AND date >= $2
+       AND date < $3`,
+    [userId, monthRange.start, monthRange.end],
   );
 
   const monthly = monthlyRows[0] as {
@@ -232,6 +291,69 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     today_total_tokens: todayRow?.today_total_tokens ?? 0,
   };
 }
+
+/**
+ * 批量读取用户列表页需要的用量统计，避免管理后台逐用户查询。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @returns userId 到用量统计的映射；无用量记录时填充 0。
+ */
+export async function getUsageStatsByUserIds(
+  userIds: string[],
+): Promise<Map<string, UsageStats>> {
+  const emptyStats = (): UsageStats => ({
+    total_messages: 0,
+    total_input_tokens: 0,
+    total_output_tokens: 0,
+    total_tokens: 0,
+    monthly_messages: 0,
+    today_messages: 0,
+    today_input_tokens: 0,
+    today_output_tokens: 0,
+    today_total_tokens: 0,
+  });
+  const result = new Map(userIds.map((userId) => [userId, emptyStats()]));
+  if (userIds.length === 0) return result;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const monthRange = resolveMonthRange(today.slice(0, 7));
+  const { rows } = await getDbPool().query(
+    `SELECT user_id,
+            COALESCE(SUM(msg_count), 0) AS total_messages,
+            COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+            COALESCE(SUM(total_tokens), 0) AS total_tokens,
+            COALESCE(SUM(msg_count) FILTER (
+              WHERE date >= $2 AND date < $3
+            ), 0) AS monthly_messages,
+            COALESCE(SUM(msg_count) FILTER (WHERE date = $4), 0) AS today_messages,
+            COALESCE(SUM(input_tokens) FILTER (WHERE date = $4), 0) AS today_input_tokens,
+            COALESCE(SUM(output_tokens) FILTER (WHERE date = $4), 0) AS today_output_tokens,
+            COALESCE(SUM(total_tokens) FILTER (WHERE date = $4), 0) AS today_total_tokens
+     FROM daily_usage
+     WHERE user_id = ANY($1::text[])
+     GROUP BY user_id`,
+    [userIds, monthRange.start, monthRange.end, today],
+  );
+
+  for (const row of rows as Array<Record<string, string | number>>) {
+    const userId = String(row.user_id);
+    result.set(userId, {
+      total_messages: Number(row.total_messages),
+      total_input_tokens: Number(row.total_input_tokens),
+      total_output_tokens: Number(row.total_output_tokens),
+      total_tokens: Number(row.total_tokens),
+      monthly_messages: Number(row.monthly_messages),
+      today_messages: Number(row.today_messages),
+      today_input_tokens: Number(row.today_input_tokens),
+      today_output_tokens: Number(row.today_output_tokens),
+      today_total_tokens: Number(row.today_total_tokens),
+    });
+  }
+  return result;
+}
+
+export const __resolveMonthRangeForTests = resolveMonthRange;
 
 export async function getDailyUsageRows(
   userId: string,
@@ -302,17 +424,17 @@ export async function getAdminStatusStats(): Promise<AdminStatusStats> {
   const today = new Date().toISOString().slice(0, 10);
   const [userCount, todayUsage, processingSessions, tokenUsageSeries] =
     await Promise.all([
-    getDbPool().query(`SELECT COUNT(*) AS cnt FROM users`),
-    getDbPool().query(
-      `SELECT COALESCE(SUM(msg_count), 0) AS today_messages,
+      getDbPool().query(`SELECT COUNT(*) AS cnt FROM users`),
+      getDbPool().query(
+        `SELECT COALESCE(SUM(msg_count), 0) AS today_messages,
               COALESCE(SUM(total_tokens), 0) AS today_total_tokens
        FROM daily_usage
        WHERE date = $1`,
-      [today],
-    ),
-    countProcessingSessions(),
-    getPublicStatusTokenUsageSeries(),
-  ]);
+        [today],
+      ),
+      countProcessingSessions(),
+      getPublicStatusTokenUsageSeries(),
+    ]);
   const usage = todayUsage.rows[0] as {
     today_messages: string | number;
     today_total_tokens: string | number;

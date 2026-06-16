@@ -1006,6 +1006,104 @@ export async function getMembershipOverview(
 }
 
 /**
+ * 批量读取用户会员状态和当前周期额度。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @returns userId 到会员 overview 的映射；无有效会员时使用默认套餐配置。
+ */
+export async function getMembershipOverviewsByUserIds(
+  userIds: string[],
+): Promise<Map<string, MembershipOverviewRow>> {
+  const configs = await getMembershipPlanConfigs();
+  const configsByPlan = new Map(
+    configs.map((config) => [resolveMembershipPlanKey(config.id), config]),
+  );
+  const defaultConfig =
+    configsByPlan.get(MEMBERSHIP_CLARITY_PLAN_KEY) ?? configs[0];
+  if (!defaultConfig) {
+    return new Map();
+  }
+  const result = new Map<string, MembershipOverviewRow>(
+    userIds.map((userId) => [
+      userId,
+      {
+        config: defaultConfig,
+        membership: null,
+        allowance: null,
+        active: false,
+      },
+    ]),
+  );
+  if (userIds.length === 0) return result;
+
+  const { rows: membershipRows } = await pool.query(
+    `SELECT *
+     FROM user_memberships
+     WHERE user_id = ANY($1::text[])
+       AND status = 'active'
+       AND current_period_end > NOW()`,
+    [userIds],
+  );
+  const membershipsByUser = new Map<string, UserMembershipRow[]>();
+  for (const membership of membershipRows as UserMembershipRow[]) {
+    const items = membershipsByUser.get(membership.user_id) ?? [];
+    items.push(membership);
+    membershipsByUser.set(membership.user_id, items);
+  }
+
+  const selectedMemberships = new Map<string, UserMembershipRow>();
+  const periodStarts = new Set<string>();
+  for (const userId of userIds) {
+    const membership = (membershipsByUser.get(userId) ?? []).sort((a, b) => {
+      const rankDelta =
+        resolveMembershipPlanRank(b.plan_key) -
+        resolveMembershipPlanRank(a.plan_key);
+      if (rankDelta !== 0) return rankDelta;
+      return (
+        new Date(b.current_period_end).getTime() -
+        new Date(a.current_period_end).getTime()
+      );
+    })[0];
+    if (!membership) continue;
+    selectedMemberships.set(userId, membership);
+    periodStarts.add(resolveMembershipAllowancePeriod(membership).start);
+  }
+
+  const allowanceByKey = new Map<string, MembershipAllowanceRow>();
+  if (periodStarts.size > 0) {
+    const { rows: allowanceRows } = await pool.query(
+      `SELECT *
+       FROM membership_allowances
+       WHERE user_id = ANY($1::text[])
+         AND period_start = ANY($2::text[])`,
+      [userIds, [...periodStarts]],
+    );
+    for (const allowance of allowanceRows as MembershipAllowanceRow[]) {
+      allowanceByKey.set(
+        `${allowance.user_id}:${allowance.plan_key}:${allowance.period_start}`,
+        normalizeMembershipAllowanceRow(allowance),
+      );
+    }
+  }
+
+  for (const [userId, membership] of selectedMemberships) {
+    const planKey = normalizeMembershipPlanKey(membership.plan_key);
+    const period = resolveMembershipAllowancePeriod(membership);
+    result.set(userId, {
+      config: configsByPlan.get(planKey) ?? defaultConfig,
+      membership,
+      allowance:
+        allowanceByKey.get(
+          `${userId}:${membership.plan_key}:${period.start}`,
+        ) ?? null,
+      active: true,
+    });
+  }
+
+  return result;
+}
+
+/**
  * 读取用户当前及未来会实际生效的会员权益时间轴。
  */
 export async function getMembershipEntitlements(
@@ -3502,4 +3600,34 @@ export async function getMonthlyModelChargeCoins(
   return Number(
     (rows[0] as { total: string | number } | undefined)?.total ?? 0,
   );
+}
+
+/**
+ * 批量读取用户指定月份的官方模型扣费。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @param yearMonth 月份，格式为 YYYY-MM；不传时使用当前 UTC 月份。
+ * @returns userId 到本月扣费积分的映射；无记录的用户返回 0。
+ */
+export async function getMonthlyModelChargeCoinsByUserIds(
+  userIds: string[],
+  yearMonth?: string,
+): Promise<Map<string, number>> {
+  const result = new Map(userIds.map((userId) => [userId, 0]));
+  if (userIds.length === 0) return result;
+  const ym = yearMonth ?? new Date().toISOString().slice(0, 7);
+  const { rows } = await pool.query(
+    `SELECT user_id, COALESCE(billed_overage_cost_coins, 0) AS total
+     FROM monthly_billing_state
+     WHERE user_id = ANY($1::text[])
+       AND year_month = $2`,
+    [userIds, ym],
+  );
+  for (const row of rows as Array<{
+    user_id: string;
+    total: string | number;
+  }>) {
+    result.set(row.user_id, Number(row.total));
+  }
+  return result;
 }

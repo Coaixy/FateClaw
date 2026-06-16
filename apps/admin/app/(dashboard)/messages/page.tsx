@@ -254,8 +254,8 @@ function AdminMessagesContent() {
 
   const loadUsers = useCallback(async () => {
     try {
-      const u = await admin.users();
-      setUsers(u);
+      const result = await admin.users({ page_size: 100 });
+      setUsers(result.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {

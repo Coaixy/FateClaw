@@ -9,6 +9,7 @@ vi.mock('../../src/infrastructure/db.js', () => ({
 }));
 
 import {
+  __resolveMonthRangeForTests,
   getDailyUsageRows,
   getMonthlyTokenUsage,
   incrementDailyTokens,
@@ -83,5 +84,17 @@ describe('daily usage repository', () => {
       9_000_000,
     );
     expect(query.mock.calls[0]?.[0]).toContain('SUM(total_tokens)');
+    expect(query).toHaveBeenCalledWith(expect.any(String), [
+      'user-1',
+      '2026-05-01',
+      '2026-06-01',
+    ]);
+  });
+
+  it('resolves December month range across year boundary', () => {
+    expect(__resolveMonthRangeForTests('2026-12')).toEqual({
+      start: '2026-12-01',
+      end: '2027-01-01',
+    });
   });
 });

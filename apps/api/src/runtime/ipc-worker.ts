@@ -28,6 +28,9 @@ const GLOBAL_AGENT_MEMBER_WAIT_QUEUE = 'agent:concurrency:wait:member';
 const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:wait:normal';
 const GLOBAL_AGENT_GATE_POLL_MS = 500;
 const GLOBAL_AGENT_LIMIT_CACHE_MS = 2_000;
+const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
+const IPC_LISTENER_RESTART_MAX_MS = 30_000;
+const IPC_LISTENER_STABLE_MS = 60_000;
 import {
   type CancelInboxRequestPayload,
   claimOrRefreshSessionProcessingLock,
@@ -101,6 +104,8 @@ const pendingInboxRequests = new Map<string, PendingInboxRequest>();
 /** AI Chat 专属的 pending 请求 Map（完全隔离） */
 const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<string, { running: boolean; redis: Redis }>();
+const desiredAccountListeners = new Set<string>();
+const listenerSupervisors = new Map<string, { running: boolean }>();
 let cachedGlobalAgentConcurrencyLimit: {
   value: number;
   expiresAtMs: number;
@@ -145,27 +150,55 @@ async function resolveGlobalAgentConcurrencyLimit(): Promise<number> {
   }
 }
 
-async function tryAcquireGlobalAgentSlot(
-  slotId: string,
-  limit: number,
-): Promise<boolean> {
-  const acquired = await getRedis().eval(
+async function tryAcquireQueuedGlobalAgentSlot(input: {
+  requestId: string;
+  limit: number;
+}): Promise<{ acquired: boolean; reason: string }> {
+  const result = await getRedis().eval(
     `
     redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[3])
     if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) then
-      return 0
+      return {0, 'busy'}
     end
-    redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
-    return 1
+    local memberTail = redis.call('LINDEX', KEYS[2], -1)
+    if memberTail then
+      if memberTail ~= ARGV[4] then
+        return {0, 'not_turn'}
+      end
+      redis.call('RPOP', KEYS[2])
+      redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
+      return {1, 'member'}
+    end
+    local normalTail = redis.call('LINDEX', KEYS[3], -1)
+    if normalTail then
+      if normalTail ~= ARGV[4] then
+        return {0, 'not_turn'}
+      end
+      redis.call('RPOP', KEYS[3])
+      redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
+      return {1, 'normal'}
+    end
+    return {0, 'missing'}
     `,
-    1,
+    3,
     GLOBAL_AGENT_CONCURRENCY_KEY,
-    limit,
+    GLOBAL_AGENT_MEMBER_WAIT_QUEUE,
+    GLOBAL_AGENT_NORMAL_WAIT_QUEUE,
+    input.limit,
     Date.now(),
     Date.now() - Math.max(AGENT_REQUEST_TIMEOUT, AI_CHAT_REQUEST_TIMEOUT),
-    slotId,
+    input.requestId,
   );
-  return acquired === 1;
+  if (Array.isArray(result)) {
+    return {
+      acquired: result[0] === 1,
+      reason: typeof result[1] === 'string' ? result[1] : 'unknown',
+    };
+  }
+  if (result === 1) {
+    return { acquired: true, reason: 'legacy_success' };
+  }
+  return { acquired: false, reason: 'unknown' };
 }
 
 function waitQueueForPriority(priority: 'member' | 'normal'): string {
@@ -220,6 +253,7 @@ async function acquireGlobalAgentSlot(input: {
   requestId: string;
   priority: 'member' | 'normal';
   shouldContinue?: () => boolean;
+  onAcquired?: (slotId: string) => void;
 }): Promise<string> {
   const queue = waitQueueForPriority(input.priority);
   const assertActive = () => {
@@ -228,31 +262,22 @@ async function acquireGlobalAgentSlot(input: {
     }
   };
   assertActive();
-  const initialLimit = await resolveGlobalAgentConcurrencyLimit();
-  const memberQueueSize = await getRedis().llen(GLOBAL_AGENT_MEMBER_WAIT_QUEUE);
-  if (
-    (input.priority === 'member' || memberQueueSize <= 0) &&
-    (await tryAcquireGlobalAgentSlot(input.requestId, initialLimit))
-  ) {
-    return input.requestId;
-  }
-
   await getRedis().lpush(queue, input.requestId);
   try {
     while (true) {
       assertActive();
-      const nextRequestId = await dequeueGlobalAgentWaiter();
-      if (nextRequestId !== input.requestId) {
-        await delay(GLOBAL_AGENT_GATE_POLL_MS);
-        continue;
-      }
-      if (
-        await tryAcquireGlobalAgentSlot(
-          input.requestId,
-          await resolveGlobalAgentConcurrencyLimit(),
-        )
-      ) {
-        await getRedis().rpop(queue);
+      const acquired = await tryAcquireQueuedGlobalAgentSlot({
+        requestId: input.requestId,
+        limit: await resolveGlobalAgentConcurrencyLimit(),
+      });
+      if (acquired.acquired) {
+        input.onAcquired?.(input.requestId);
+        try {
+          assertActive();
+        } catch (err) {
+          await releaseGlobalAgentSlot(input.requestId);
+          throw err;
+        }
         return input.requestId;
       }
       await delay(GLOBAL_AGENT_GATE_POLL_MS);
@@ -281,6 +306,24 @@ async function releaseLocalAgentLeaseForPending(
     logger.warn(
       {
         accountId: context.accountId ?? pending.accountId,
+        requestId: context.requestId,
+        reason: context.reason,
+        err,
+      },
+      '释放本地 agent-runtime 租约失败',
+    );
+  });
+}
+
+async function releaseLocalAgentLeaseByAccountId(
+  leaseAccountId: string | undefined,
+  context: { accountId?: string; requestId?: string; reason: string },
+): Promise<void> {
+  if (!leaseAccountId) return;
+  await releaseLocalAgent(leaseAccountId).catch((err) => {
+    logger.warn(
+      {
+        accountId: context.accountId ?? leaseAccountId,
         requestId: context.requestId,
         reason: context.reason,
         err,
@@ -499,6 +542,50 @@ async function listenForAccount(accountId: string): Promise<void> {
   }
 }
 
+function startAccountListenerSupervisor(accountId: string): void {
+  if (listenerSupervisors.has(accountId)) {
+    logger.debug({ accountId }, 'Redis IPC 监听 supervisor 已存在，跳过');
+    return;
+  }
+  const supervisor = { running: true };
+  listenerSupervisors.set(accountId, supervisor);
+  void (async () => {
+    let failures = 0;
+    try {
+      while (supervisor.running && desiredAccountListeners.has(accountId)) {
+        const startedAt = Date.now();
+        try {
+          await listenForAccount(accountId);
+          if (!desiredAccountListeners.has(accountId)) {
+            break;
+          }
+          logger.warn({ accountId }, 'Redis IPC 监听意外停止，准备重启');
+        } catch (err) {
+          if (!desiredAccountListeners.has(accountId)) {
+            break;
+          }
+          logger.error(
+            { accountId, err, retry: failures + 1 },
+            'Redis IPC 监听异常退出，准备重启',
+          );
+        }
+        if (Date.now() - startedAt >= IPC_LISTENER_STABLE_MS) {
+          failures = 0;
+        } else {
+          failures += 1;
+        }
+        const backoffMs = Math.min(
+          IPC_LISTENER_RESTART_MAX_MS,
+          IPC_LISTENER_RESTART_INITIAL_MS * 2 ** Math.max(0, failures - 1),
+        );
+        await delay(backoffMs);
+      }
+    } finally {
+      listenerSupervisors.delete(accountId);
+    }
+  })();
+}
+
 export function submitInboxRequest(input: {
   accountId: string;
   type: 'chat' | 'task';
@@ -560,7 +647,9 @@ export function submitInboxRequest(input: {
               () => {},
             );
           }
-          void releaseGlobalAgentSlot(pending?.concurrencySlotId);
+          void releaseGlobalAgentSlot(
+            pending?.concurrencySlotId ?? concurrencySlotId,
+          );
           void releaseLocalAgentLeaseForPending(pending, {
             accountId: input.accountId,
             requestId,
@@ -599,10 +688,16 @@ export function submitInboxRequest(input: {
           requestId,
           priority,
           shouldContinue: () => pendingInboxRequests.has(requestId),
+          onAcquired: (slotId) => {
+            concurrencySlotId = slotId;
+            const pending = pendingInboxRequests.get(requestId);
+            if (pending) {
+              pending.concurrencySlotId = slotId;
+            }
+          },
         });
-        const pendingAfterSlot = pendingInboxRequests.get(requestId);
-        if (pendingAfterSlot) {
-          pendingAfterSlot.concurrencySlotId = concurrencySlotId;
+        if (!pendingInboxRequests.has(requestId)) {
+          throw new Error('请求已取消或超时');
         }
 
         const payload = JSON.stringify({
@@ -631,9 +726,12 @@ export function submitInboxRequest(input: {
         }
 
         const pending = pendingInboxRequests.get(requestId);
+        if (!pending) {
+          throw new Error('请求已取消或超时');
+        }
         await enqueueInboxPayload(
           input.accountId,
-          pending?.priority ?? 'normal',
+          pending.priority ?? 'normal',
           payload,
         );
         logger.info(
@@ -644,7 +742,7 @@ export function submitInboxRequest(input: {
             autoDeliver: input.autoDeliver ?? true,
             toUserId: input.toUserId,
             billingRecorded: Boolean(billingReservation),
-            priority: pending?.priority ?? 'normal',
+            priority: pending.priority ?? 'normal',
             concurrencySlotId,
           },
           '已提交收件箱请求到 Redis',
@@ -661,11 +759,19 @@ export function submitInboxRequest(input: {
           );
         }
         void releaseGlobalAgentSlot(concurrencySlotId);
-        void releaseLocalAgentLeaseForPending(pending, {
-          accountId: input.accountId,
-          requestId,
-          reason: 'submit_error',
-        });
+        if (pending) {
+          void releaseLocalAgentLeaseForPending(pending, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'submit_error',
+          });
+        } else {
+          void releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'submit_error',
+          });
+        }
         reject(
           err instanceof Error
             ? err
@@ -689,23 +795,22 @@ export function startIpcWorker(enabledAccountIds: string[]): void {
   );
 
   for (const accountId of enabledAccountIds) {
-    listenForAccount(accountId).catch((err) => {
-      logger.error({ accountId, err }, 'Redis IPC 监听异常退出');
-    });
+    desiredAccountListeners.add(accountId);
+    startAccountListenerSupervisor(accountId);
   }
 }
 
 export function addAccountListener(accountId: string): void {
-  if (accountListeners.has(accountId)) {
-    logger.debug({ accountId }, 'Redis IPC 监听已存在，跳过');
-    return;
-  }
-  listenForAccount(accountId).catch((err) => {
-    logger.error({ accountId, err }, 'Redis IPC 监听异常退出');
-  });
+  desiredAccountListeners.add(accountId);
+  startAccountListenerSupervisor(accountId);
 }
 
 export function removeAccountListener(accountId: string): void {
+  desiredAccountListeners.delete(accountId);
+  const supervisor = listenerSupervisors.get(accountId);
+  if (supervisor) {
+    supervisor.running = false;
+  }
   const listener = accountListeners.get(accountId);
   if (listener) {
     listener.running = false;
@@ -726,6 +831,11 @@ export function _resetIpcWorkerForTests(): void {
     listener.running = false;
   }
   accountListeners.clear();
+  desiredAccountListeners.clear();
+  for (const supervisor of listenerSupervisors.values()) {
+    supervisor.running = false;
+  }
+  listenerSupervisors.clear();
   ipcWorkerRunning = false;
 }
 
@@ -830,7 +940,9 @@ export function submitAiChatInboxRequest(input: {
           void releaseSessionProcessingLock(input.sessionId, requestId).catch(
             () => {},
           );
-          void releaseGlobalAgentSlot(pending?.concurrencySlotId);
+          void releaseGlobalAgentSlot(
+            pending?.concurrencySlotId ?? concurrencySlotId,
+          );
           void releaseLocalAgentLeaseForPending(pending, {
             accountId: input.accountId,
             requestId,
@@ -875,10 +987,16 @@ export function submitAiChatInboxRequest(input: {
           requestId,
           priority,
           shouldContinue: () => pendingAiChatRequests.has(requestId),
+          onAcquired: (slotId) => {
+            concurrencySlotId = slotId;
+            const pending = pendingAiChatRequests.get(requestId);
+            if (pending) {
+              pending.concurrencySlotId = slotId;
+            }
+          },
         });
-        const pendingAfterSlot = pendingAiChatRequests.get(requestId);
-        if (pendingAfterSlot) {
-          pendingAfterSlot.concurrencySlotId = concurrencySlotId;
+        if (!pendingAiChatRequests.has(requestId)) {
+          throw new Error('请求已取消或超时');
         }
 
         const payload = JSON.stringify({
@@ -914,9 +1032,12 @@ export function submitAiChatInboxRequest(input: {
         }
 
         const pending = pendingAiChatRequests.get(requestId);
+        if (!pending) {
+          throw new Error('请求已取消或超时');
+        }
         await enqueueInboxPayload(
           input.accountId,
-          pending?.priority ?? 'normal',
+          pending.priority ?? 'normal',
           payload,
         );
         logger.info(
@@ -926,7 +1047,7 @@ export function submitAiChatInboxRequest(input: {
             sessionId: input.sessionId,
             outboxQueue: aiChatOutboxQueue,
             billingRecorded: Boolean(billingReservation),
-            priority: pending?.priority ?? 'normal',
+            priority: pending.priority ?? 'normal',
             concurrencySlotId,
           },
           'AI Chat 请求已提交到 Redis',
@@ -948,11 +1069,19 @@ export function submitAiChatInboxRequest(input: {
           () => {},
         );
         void releaseGlobalAgentSlot(concurrencySlotId);
-        void releaseLocalAgentLeaseForPending(pending, {
-          accountId: input.accountId,
-          requestId,
-          reason: 'submit_error',
-        });
+        if (pending) {
+          void releaseLocalAgentLeaseForPending(pending, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'submit_error',
+          });
+        } else {
+          void releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+            accountId: input.accountId,
+            requestId,
+            reason: 'submit_error',
+          });
+        }
         reject(
           err instanceof Error
             ? err

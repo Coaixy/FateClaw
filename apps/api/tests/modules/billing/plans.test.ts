@@ -27,13 +27,22 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
 
 vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
   getMonthlyTokenUsage: vi.fn(),
+  getMonthlyTokenUsageByUserIds: vi.fn(),
+}));
+
+vi.mock('../../../src/infrastructure/logger.js', () => ({
+  logger: {
+    warn: vi.fn(),
+  },
 }));
 
 import {
   getMembershipBillingSummary,
   reserveBillingForRequest,
   settleBillingReservation,
+  settleBillingReservationDetailed,
 } from '../../../src/modules/billing/plans.js';
+import { logger } from '../../../src/infrastructure/logger.js';
 
 describe('metered billing plans', () => {
   beforeEach(() => {
@@ -134,6 +143,38 @@ describe('metered billing plans', () => {
       141_873,
       0.63,
     );
+  });
+
+  it('marks metered settlement as missing when reservation is absent', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce(
+      undefined,
+    );
+
+    await expect(
+      settleBillingReservationDetailed({
+        requestId: 'request-missing',
+        runtime: {
+          billingMode: 'metered',
+          source: 'official',
+          modelConfigId: 'model-1',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
+        } as never,
+        promptTokens: 1,
+        completionTokens: 1,
+      }),
+    ).resolves.toMatchObject({
+      actualChargeCoins: 0,
+      missingReservation: true,
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'request-missing',
+        modelConfigId: 'model-1',
+      }),
+      '计费结算缺失待结算记录',
+    );
+    expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
   });
 
   it('reports personal allowance reset instead of membership expiration', async () => {

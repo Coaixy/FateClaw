@@ -185,6 +185,13 @@ export interface AdminUser {
   available_coins: number;
 }
 
+export interface AdminUsersPageResult {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface WalletTransaction {
   id: string;
   user_id: string;
@@ -214,6 +221,7 @@ export interface UsageStats {
   total_input_tokens: number;
   total_output_tokens: number;
   total_tokens: number;
+  monthly_messages: number;
   today_messages: number;
   today_input_tokens: number;
   today_output_tokens: number;
@@ -1092,7 +1100,17 @@ export const admin = {
         method: 'DELETE',
       },
     ),
-  users: () => adminRequest<AdminUser[]>('/api/admin/users'),
+  users: (params?: { page?: number; page_size?: number; q?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.page != null) search.set('page', String(params.page));
+    if (params?.page_size != null)
+      search.set('page_size', String(params.page_size));
+    if (params?.q?.trim()) search.set('q', params.q.trim());
+    const query = search.toString();
+    return adminRequest<AdminUsersPageResult>(
+      `/api/admin/users${query ? `?${query}` : ''}`,
+    );
+  },
   createUser: (data: {
     phone: string;
     password: string;

@@ -1,8 +1,8 @@
 /**
  * iLink 长轮询：每个账号一个独立的轮询循环。
  *
- * 消息处理与轮询解耦：收到消息后 fire-and-forget 交给 processWeixinMessage。
- * 同一网页 AI Chat session 的互斥由 session processing lock 负责；微信侧不做排队。
+ * 消息处理与轮询解耦：收到消息后交给账号级有界执行器。
+ * 同一网页 AI Chat session 的互斥由 session processing lock 负责；微信侧限制并发和待处理积压。
  */
 
 import { updateAccount } from '../infrastructure/db.js';
@@ -16,6 +16,96 @@ function sleep(ms: number): Promise<void> {
 }
 
 const pollingAccounts = new Map<string, AbortController>();
+const messageLimiters = new Map<string, AccountMessageLimiter>();
+const MAX_WEIXIN_MESSAGE_CONCURRENCY_PER_ACCOUNT = 3;
+const MAX_WEIXIN_MESSAGE_BACKLOG_PER_ACCOUNT = 100;
+
+class AccountMessageLimiter {
+  private active = 0;
+  private stopped = false;
+  private readonly queue: Array<() => Promise<void>> = [];
+
+  constructor(
+    private readonly accountId: string,
+    private readonly log: typeof logger,
+  ) {}
+
+  enqueue(task: () => Promise<void>, msgId?: string): boolean {
+    if (this.stopped) return false;
+    if (this.active < MAX_WEIXIN_MESSAGE_CONCURRENCY_PER_ACCOUNT) {
+      this.run(task);
+      return true;
+    }
+    if (this.queue.length >= MAX_WEIXIN_MESSAGE_BACKLOG_PER_ACCOUNT) {
+      this.log.warn(
+        {
+          accountId: this.accountId,
+          msgId,
+          backlog: this.queue.length,
+          limit: MAX_WEIXIN_MESSAGE_BACKLOG_PER_ACCOUNT,
+        },
+        'iLink 消息处理积压已满，丢弃新消息',
+      );
+      return false;
+    }
+    this.queue.push(task);
+    return true;
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.queue.length = 0;
+  }
+
+  private run(task: () => Promise<void>): void {
+    this.active += 1;
+    void task()
+      .catch((err) => {
+        this.log.error({ err }, '消息处理失败');
+      })
+      .finally(() => {
+        this.active -= 1;
+        this.drain();
+      });
+  }
+
+  private drain(): void {
+    while (
+      !this.stopped &&
+      this.active < MAX_WEIXIN_MESSAGE_CONCURRENCY_PER_ACCOUNT
+    ) {
+      const next = this.queue.shift();
+      if (!next) return;
+      this.run(next);
+    }
+  }
+}
+
+function getMessageLimiter(
+  accountId: string,
+  log: typeof logger,
+): AccountMessageLimiter {
+  const existing = messageLimiters.get(accountId);
+  if (existing) return existing;
+  const limiter = new AccountMessageLimiter(accountId, log);
+  messageLimiters.set(accountId, limiter);
+  return limiter;
+}
+
+export function __createAccountMessageLimiterForTests(
+  accountId: string,
+  log: typeof logger,
+): {
+  enqueue(task: () => Promise<void>, msgId?: string): boolean;
+  stop(): void;
+} {
+  return new AccountMessageLimiter(accountId, log);
+}
+
+export const __getWeixinMessageLimiterConfigForTests = () => ({
+  maxConcurrency: MAX_WEIXIN_MESSAGE_CONCURRENCY_PER_ACCOUNT,
+  maxBacklog: MAX_WEIXIN_MESSAGE_BACKLOG_PER_ACCOUNT,
+});
 
 /**
  * 停止指定账号的轮询循环。删除账号 / 禁用账号时调用。
@@ -26,6 +116,11 @@ export function stopAccountPolling(accountId: string): void {
   if (controller) {
     controller.abort();
     pollingAccounts.delete(accountId);
+  }
+  const limiter = messageLimiters.get(accountId);
+  if (limiter) {
+    limiter.stop();
+    messageLimiters.delete(accountId);
   }
 }
 
@@ -43,6 +138,7 @@ export async function startAccountPolling(account: Account): Promise<void> {
   pollingAccounts.set(account.id, abortController);
 
   const log = logger.child({ accountId: account.id });
+  const limiter = getMessageLimiter(account.id, log);
   log.info('开始 iLink 长轮询');
 
   const ilinkAccount: IlinkAccount = {
@@ -73,6 +169,8 @@ export async function startAccountPolling(account: Account): Promise<void> {
           log.warn('会话已过期，禁用账号并停止轮询');
           await updateAccount(account.id, { enabled: false });
           pollingAccounts.delete(account.id);
+          limiter.stop();
+          messageLimiters.delete(account.id);
           return;
         }
 
@@ -89,9 +187,13 @@ export async function startAccountPolling(account: Account): Promise<void> {
         log.info({ count: resp.msgs.length }, '收到消息');
         for (const msg of resp.msgs) {
           if (msg.message_type === 1) {
-            void processWeixinMessage(account, msg).catch((err) => {
-              log.error({ err, msgId: msg.message_id }, '消息处理失败');
-            });
+            limiter.enqueue(
+              () =>
+                processWeixinMessage(account, msg).catch((err) => {
+                  log.error({ err, msgId: msg.message_id }, '消息处理失败');
+                }),
+              String(msg.message_id),
+            );
           }
         }
       }
@@ -101,5 +203,10 @@ export async function startAccountPolling(account: Account): Promise<void> {
     }
   }
   pollingAccounts.delete(account.id);
+  const stoppedLimiter = messageLimiters.get(account.id);
+  if (stoppedLimiter === limiter) {
+    stoppedLimiter.stop();
+    messageLimiters.delete(account.id);
+  }
   log.info('iLink 长轮询已停止');
 }

@@ -327,6 +327,12 @@ const AdminStatsQuerySchema = z
     }
   });
 
+const AdminUsersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(100).default(50),
+  q: z.string().trim().max(120).optional(),
+});
+
 const AdminRechargeOrdersQuerySchema = z.object({
   user_id: z.string().trim().min(1).max(120).optional(),
   status: z.enum(['pending', 'paid', 'failed']).optional(),
@@ -1507,9 +1513,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // GET /api/admin/users — 获取所有用户（附带用量和账号数）
-  app.get('/users', async () => {
-    return listAdminUsersWithStats();
+  // GET /api/admin/users — 分页获取用户（附带用量和账号数）
+  app.get('/users', async (request) => {
+    const query = AdminUsersQuerySchema.parse(request.query);
+    return listAdminUsersWithStats({
+      page: query.page,
+      pageSize: query.page_size,
+      query: query.q,
+    });
   });
 
   // POST /api/admin/users — 管理员直接创建用户，不走短信验证码

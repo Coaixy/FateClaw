@@ -61,6 +61,7 @@ export function startRetentionWorker(): void {
       /* 同上 */
     });
   }, RETENTION_INTERVAL_MS);
+  retentionTimer.unref();
 }
 
 /** 停止保留策略任务，用于测试或优雅关闭。 */

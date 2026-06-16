@@ -1,7 +1,4 @@
-import {
-  getContextWindow,
-  resolveContextWindow,
-} from './model-context-window.js';
+import { resolveContextWindow } from './model-context-window.js';
 import { getDefaultMaxOutputTokens } from './output-token-policy.js';
 export { getContextWindow } from './model-context-window.js';
 

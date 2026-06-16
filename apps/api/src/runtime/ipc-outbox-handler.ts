@@ -10,7 +10,6 @@ import {
 } from '../infrastructure/db.js';
 import { incrementDailyTokens } from '../infrastructure/daily-usage.js';
 import { sendMessage as ilinkSendMessage } from '../infrastructure/ilink.js';
-import { getRedis } from '../infrastructure/redis.js';
 import {
   PendingInboxRequest,
   ProgressIpcPayload,

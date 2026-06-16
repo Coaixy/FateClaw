@@ -12,15 +12,23 @@ function clampAutoOutputTokens(tokens: number): number {
   );
 }
 
-export function getDefaultMaxOutputTokens(model: string): number {
+export function getDefaultMaxOutputTokens(
+  model: string,
+  contextWindowTokens?: number | null,
+): number {
+  const contextWindow = contextWindowTokens ?? getContextWindowForModel(model);
   return clampAutoOutputTokens(
-    Math.floor(getContextWindowForModel(model) * AUTO_OUTPUT_CONTEXT_RATIO),
+    Math.floor(contextWindow * AUTO_OUTPUT_CONTEXT_RATIO),
   );
 }
 
 export function resolveCompletionMaxOutputTokens(args: {
   model: string;
+  contextWindowTokens?: number | null;
   configured?: number;
 }): number {
-  return args.configured ?? getDefaultMaxOutputTokens(args.model);
+  return (
+    args.configured ??
+    getDefaultMaxOutputTokens(args.model, args.contextWindowTokens)
+  );
 }

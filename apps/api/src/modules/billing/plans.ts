@@ -2,12 +2,18 @@ import {
   getBillingRequestReservationByRequestId,
   getMembershipPlanConfigs,
   getMembershipOverview,
+  getMembershipOverviewsByUserIds,
   getMonthlyModelChargeCoins,
+  getMonthlyModelChargeCoinsByUserIds,
   getUserById,
   reserveUserBalanceCoins,
   settleUserModelChargeCoins,
 } from '../../infrastructure/db.js';
-import { getMonthlyTokenUsage } from '../../infrastructure/daily-usage.js';
+import {
+  getMonthlyTokenUsage,
+  getMonthlyTokenUsageByUserIds,
+} from '../../infrastructure/daily-usage.js';
+import { logger } from '../../infrastructure/logger.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
@@ -73,6 +79,7 @@ export interface BillingSettlementSummary {
   rawChargeCoins: number;
   membershipCoveredCoins: number;
   membershipConsumedUnits: number;
+  missingReservation?: boolean;
 }
 
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
@@ -119,7 +126,7 @@ export async function reserveBillingForRequest(input: {
     throw new Error(BILLING_ARREARS_MESSAGE);
   }
   const yearMonth = currentYearMonth();
-  const reservation = await reserveUserBalanceCoins({
+  await reserveUserBalanceCoins({
     userId: input.userId,
     amountCoins: 0,
     requestId: input.requestId,
@@ -164,11 +171,20 @@ export async function settleBillingReservationDetailed(input: {
     input.requestId,
   );
   if (!reservation) {
+    logger.warn(
+      {
+        requestId: input.requestId,
+        modelConfigId: input.runtime.modelConfigId,
+        runtimeSource: input.runtime.source,
+      },
+      '计费结算缺失待结算记录',
+    );
     return {
       actualChargeCoins: 0,
       rawChargeCoins: 0,
       membershipCoveredCoins: 0,
       membershipConsumedUnits: 0,
+      missingReservation: true,
     };
   }
   const totalTokens = input.promptTokens + input.completionTokens;
@@ -211,6 +227,30 @@ export async function getMonthlyMeteredBillingSummary(
     getMonthlyModelChargeCoins(userId),
   ]);
   return { usedTokens, chargedCoins };
+}
+
+/**
+ * 批量读取用户当月 metered 模型用量与扣费。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @returns userId 到月用量/扣费汇总的映射。
+ */
+export async function getMonthlyMeteredBillingSummariesByUserIds(
+  userIds: string[],
+): Promise<Map<string, MonthlyMeteredBillingSummary>> {
+  const [usedTokensByUser, chargedCoinsByUser] = await Promise.all([
+    getMonthlyTokenUsageByUserIds(userIds),
+    getMonthlyModelChargeCoinsByUserIds(userIds),
+  ]);
+  return new Map(
+    userIds.map((userId) => [
+      userId,
+      {
+        usedTokens: usedTokensByUser.get(userId) ?? 0,
+        chargedCoins: chargedCoinsByUser.get(userId) ?? 0,
+      },
+    ]),
+  );
 }
 
 function resolveAllowanceStatus(
@@ -259,6 +299,76 @@ export async function getMembershipBillingSummary(
     allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
     allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
   };
+}
+
+function membershipOverviewToBillingSummary(
+  overview: Awaited<ReturnType<typeof getMembershipOverview>>,
+): MembershipBillingSummary {
+  const allowancePeriod = overview.membership
+    ? resolveMembershipAllowancePeriod(overview.membership)
+    : null;
+  const allowanceUnits =
+    overview.allowance?.allowance_units ??
+    (overview.active ? overview.config.monthly_allowance_units : 0);
+  const usedUnits = overview.allowance?.used_units ?? 0;
+  const usedRatio =
+    allowanceUnits > 0 ? Math.min(1, usedUnits / allowanceUnits) : 0;
+
+  return {
+    enabled: overview.config.enabled,
+    active: overview.active,
+    planKey: overview.membership?.plan_key
+      ? normalizeMembershipPlanKey(overview.membership.plan_key)
+      : null,
+    monthlyPriceCoins: overview.config.monthly_price_coins,
+    displayPriceCoins: overview.config.display_price_coins,
+    currentPeriodStart: overview.active
+      ? (overview.membership?.current_period_start ?? null)
+      : null,
+    currentPeriodEnd: overview.active
+      ? (overview.membership?.current_period_end ?? null)
+      : null,
+    allowanceResetAt: overview.active
+      ? (overview.allowance?.period_end ?? allowancePeriod?.end ?? null)
+      : null,
+    allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
+    allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
+  };
+}
+
+/**
+ * 批量读取用户会员结算摘要。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @returns userId 到会员状态摘要的映射。
+ */
+export async function getMembershipBillingSummariesByUserIds(
+  userIds: string[],
+): Promise<Map<string, MembershipBillingSummary>> {
+  const overviews = await getMembershipOverviewsByUserIds(userIds);
+  return new Map(
+    userIds.map((userId) => {
+      const overview = overviews.get(userId);
+      if (!overview) {
+        return [
+          userId,
+          {
+            enabled: false,
+            active: false,
+            planKey: null,
+            monthlyPriceCoins: 0,
+            displayPriceCoins: 0,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            allowanceResetAt: null,
+            allowanceUsedRatio: 0,
+            allowanceStatus: 'inactive',
+          } satisfies MembershipBillingSummary,
+        ] as const;
+      }
+      return [userId, membershipOverviewToBillingSummary(overview)] as const;
+    }),
+  );
 }
 
 export async function getMembershipPlanSummaries(): Promise<

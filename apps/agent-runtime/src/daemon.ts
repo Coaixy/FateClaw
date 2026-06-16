@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { closeAgentDb } from './agent-db.js';
 import { getContext, initContext } from './context.js';
 import { executeContainerInput } from './request-boundary.js';
@@ -19,9 +21,28 @@ type CancelQueueRedis = {
   rpop: (key: string) => Promise<string | null>;
 };
 
-function isLlmRuntimeSnapshot(
-  value: unknown,
-): value is LlmRuntimeSnapshot {
+const PENDING_CANCEL_TTL_MS = 35 * 60 * 1000;
+const AGENT_RUNTIME_ACCOUNT_CONCURRENCY = Math.max(
+  1,
+  Math.trunc(Number(process.env.AGENT_RUNTIME_ACCOUNT_CONCURRENCY ?? '1')) || 1,
+);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function cleanupExpiredPendingCancelRequests(
+  pendingCancelRequests: Map<string, number>,
+  now = Date.now(),
+): void {
+  for (const [requestId, createdAt] of pendingCancelRequests) {
+    if (now - createdAt > PENDING_CANCEL_TTL_MS) {
+      pendingCancelRequests.delete(requestId);
+    }
+  }
+}
+
+function isLlmRuntimeSnapshot(value: unknown): value is LlmRuntimeSnapshot {
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<LlmRuntimeSnapshot>;
   return (
@@ -80,11 +101,7 @@ function parseInboxRequest(raw: string): InboxRequest {
 
 function parseCancelInboxRequest(raw: string): CancelInboxRequest | null {
   const parsed = JSON.parse(raw) as Partial<CancelInboxRequest>;
-  if (
-    parsed.type !== 'cancel' ||
-    !parsed.requestId ||
-    !parsed.accountId
-  ) {
+  if (parsed.type !== 'cancel' || !parsed.requestId || !parsed.accountId) {
     return null;
   }
 
@@ -94,9 +111,10 @@ function parseCancelInboxRequest(raw: string): CancelInboxRequest | null {
 async function drainCancelRequests(
   accountId: string,
   activeSessions: Map<string, { abort: () => Promise<void> }>,
-  pendingCancelRequests: Set<string>,
+  pendingCancelRequests: Map<string, number>,
   redis: CancelQueueRedis = getRedis(),
 ): Promise<void> {
+  cleanupExpiredPendingCancelRequests(pendingCancelRequests);
   while (true) {
     const raw = await redis.rpop(`ipc:${accountId}:cancel`);
     if (typeof raw !== 'string') {
@@ -123,7 +141,7 @@ async function drainCancelRequests(
           `已中断收件箱请求 requestId=${cancelRequest.requestId} reason=${cancelRequest.reason ?? 'user_stop'}`,
         );
       } else {
-        pendingCancelRequests.add(cancelRequest.requestId);
+        pendingCancelRequests.set(cancelRequest.requestId, Date.now());
         log(
           `收到中断请求，等待活动会话就绪 requestId=${cancelRequest.requestId}`,
         );
@@ -141,13 +159,13 @@ async function drainCancelRequests(
  *
  * @param accountId 当前 agent-runtime 账号 ID。
  * @param activeSessions 正在执行的 session 控制表。
- * @param pendingCancelRequests 尚未等到 session ready 的取消请求 ID 集合。
+ * @param pendingCancelRequests 尚未等到 session ready 的取消请求 ID 与接收时间。
  * @param redis 只需实现 rpop 的测试替身。
  */
 export async function __drainCancelRequestsForTests(
   accountId: string,
   activeSessions: Map<string, { abort: () => Promise<void> }>,
-  pendingCancelRequests: Set<string>,
+  pendingCancelRequests: Map<string, number>,
   redis: { rpop: (key: string) => Promise<string | null> },
 ): Promise<void> {
   await drainCancelRequests(
@@ -158,11 +176,22 @@ export async function __drainCancelRequestsForTests(
   );
 }
 
+export function __cleanupPendingCancelRequestsForTests(
+  pendingCancelRequests: Map<string, number>,
+  now?: number,
+): void {
+  cleanupExpiredPendingCancelRequests(pendingCancelRequests, now);
+}
+
+export function __getAgentRuntimeAccountConcurrencyForTests(): number {
+  return AGENT_RUNTIME_ACCOUNT_CONCURRENCY;
+}
+
 async function processInboxMessage(
   accountId: string,
   raw: string,
   activeSessions: Map<string, { abort: () => Promise<void> }>,
-  pendingCancelRequests: Set<string>,
+  pendingCancelRequests: Map<string, number>,
 ): Promise<void> {
   let request: InboxRequest | undefined;
   const requestScope = createRequestScope();
@@ -278,7 +307,8 @@ async function processInboxMessage(
           },
         };
         // 写入指定的 outbox 队列（或默认队列）
-        const errorOutboxQueue = request.outboxQueue ?? `ipc:${accountId}:outbox`;
+        const errorOutboxQueue =
+          request.outboxQueue ?? `ipc:${accountId}:outbox`;
         await getRedis().lpush(errorOutboxQueue, JSON.stringify(errorResponse));
       } catch (pushError) {
         log(
@@ -295,6 +325,18 @@ async function processInboxMessage(
   }
 }
 
+function readInboxRequestIdForTask(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { requestId?: unknown };
+    if (typeof parsed.requestId === 'string' && parsed.requestId.trim()) {
+      return parsed.requestId;
+    }
+  } catch {
+    // 无效 JSON 会在 processInboxMessage 中生成错误响应；这里只需要 task key。
+  }
+  return `unknown-${randomUUID()}`;
+}
+
 async function cleanup(): Promise<void> {
   log('正在关闭连接...');
   await closeAgentDb();
@@ -309,19 +351,21 @@ async function loop(): Promise<void> {
   // 退出协调：收到信号后停止接收新消息，等待正在处理的请求完成（最多 N 秒），
   // 然后清理 Redis/DB 连接。避免 in-flight 请求被强杀导致响应丢失。
   let shuttingDown = false;
-  let inFlight: Promise<void> | null = null;
+  const activeTasks = new Map<string, Promise<void>>();
   const activeSessions = new Map<string, { abort: () => Promise<void> }>();
-  const pendingCancelRequests = new Set<string>();
+  const pendingCancelRequests = new Map<string, number>();
   const SHUTDOWN_DRAIN_MS = 30_000;
 
   const onExit = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log(`收到 ${signal}，等待 in-flight 请求完成（最多 ${SHUTDOWN_DRAIN_MS}ms）...`);
-    if (inFlight) {
+    log(
+      `收到 ${signal}，等待 in-flight 请求完成（最多 ${SHUTDOWN_DRAIN_MS}ms）...`,
+    );
+    if (activeTasks.size > 0) {
       await Promise.race([
-        inFlight,
-        new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS)),
+        Promise.allSettled([...activeTasks.values()]),
+        sleep(SHUTDOWN_DRAIN_MS),
       ]);
     }
     try {
@@ -339,10 +383,37 @@ async function loop(): Promise<void> {
     void onExit('SIGTERM');
   });
 
-  log(`常驻 agent 已启动，账号 ${ctx.accountId}，通过 Redis BRPOP 监听`);
+  const cancelDrainLoop = (async () => {
+    while (!shuttingDown) {
+      try {
+        await drainCancelRequests(
+          ctx.accountId,
+          activeSessions,
+          pendingCancelRequests,
+        );
+        cleanupExpiredPendingCancelRequests(pendingCancelRequests);
+      } catch (error) {
+        log(
+          `cancel drain 循环出错，将继续重试: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      await sleep(250);
+    }
+  })();
+
+  log(
+    `常驻 agent 已启动，账号 ${ctx.accountId}，通过 Redis BRPOP 监听，并发=${AGENT_RUNTIME_ACCOUNT_CONCURRENCY}`,
+  );
 
   while (!shuttingDown) {
     try {
+      while (
+        activeTasks.size >= AGENT_RUNTIME_ACCOUNT_CONCURRENCY &&
+        !shuttingDown
+      ) {
+        await Promise.race([...activeTasks.values(), sleep(250)]);
+      }
+      if (shuttingDown) break;
       // 30s timeout 让退出信号能在合理时间内被察觉，并允许 ioredis 自动重连
       const result = await redis.brpop(
         `ipc:${ctx.accountId}:inbox:member`,
@@ -352,45 +423,42 @@ async function loop(): Promise<void> {
       if (!result || shuttingDown) continue;
 
       const [, raw] = result;
-      inFlight = processInboxMessage(
+      const requestId = readInboxRequestIdForTask(raw);
+      const task = processInboxMessage(
         ctx.accountId,
         raw,
         activeSessions,
         pendingCancelRequests,
-      );
-      let processingCurrent = true;
-      try {
-        await Promise.race([
-          inFlight.finally(() => {
-            processingCurrent = false;
-          }),
-          (async () => {
-            while (processingCurrent && !shuttingDown) {
-              await drainCancelRequests(
-                ctx.accountId,
-                activeSessions,
-                pendingCancelRequests,
-              );
-              await new Promise((resolve) => setTimeout(resolve, 250));
-            }
-          })(),
-        ]);
-      } finally {
-        inFlight = null;
-      }
+      )
+        .catch((error) => {
+          log(
+            `收件箱任务异常结束: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        })
+        .finally(() => {
+          activeTasks.delete(requestId);
+        });
+      activeTasks.set(requestId, task);
     } catch (error) {
       log(
         `常驻循环出错: ${error instanceof Error ? error.message : String(error)}`,
       );
       // 短暂等待后重试，避免紧密循环
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
     }
   }
+  await cancelDrainLoop.catch((error) => {
+    log(
+      `cancel drain 循环退出: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
 }
 
-loop().catch((error) => {
-  log(
-    `常驻 agent 致命错误: ${error instanceof Error ? error.message : String(error)}`,
-  );
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test') {
+  loop().catch((error) => {
+    log(
+      `常驻 agent 致命错误: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
+  });
+}

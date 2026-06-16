@@ -26,11 +26,11 @@ import {
   deletePublicFinancialLedgerEntry,
   deleteConversationLogsByAccountIds,
   deleteUser,
+  getAccountCountsByOwnerIds,
   getAccountsByUserId,
   getAdminGlobalStats,
   getAdminAnnouncementById,
   getAllSkillGlobalConfigs,
-  getAllUsers,
   getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
   getChatSessionPiSessionArchive,
@@ -59,6 +59,7 @@ import {
   listAdminAnnouncements,
   listAdminSkillBundleSummaries,
   listAdminWorkflowSkillSummaries,
+  listUsersPageForAdmin,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
@@ -89,6 +90,7 @@ import type {
 import {
   getAdminStatusStats,
   getUsageStats,
+  getUsageStatsByUserIds,
 } from '../../infrastructure/daily-usage.js';
 import {
   createOfficialModel,
@@ -101,8 +103,10 @@ import {
 } from '../system/system-config.js';
 import {
   getMembershipBillingSummary,
+  getMembershipBillingSummariesByUserIds,
   getMembershipPlanSummaries,
   getMonthlyMeteredBillingSummary,
+  getMonthlyMeteredBillingSummariesByUserIds,
   getWalletBalanceSummary,
 } from '../billing/plans.js';
 import {
@@ -224,6 +228,34 @@ export interface AdminRewardConfigView {
     updated_at: string;
   };
 }
+
+export interface AdminUserListOptions {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
+export type AdminUserListItem = Omit<User, 'password_hash'> & {
+  account_count: number;
+  usage: Awaited<ReturnType<typeof getUsageStats>>;
+  monthly_tokens_used: number;
+  estimated_monthly_total_coins: number;
+  purchased_coins: number;
+  bonus_coins: number;
+  reserved_coins: number;
+  available_coins: number;
+  membership: MembershipStatusDto;
+};
+
+export interface AdminUsersPageResult {
+  items: AdminUserListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+const ADMIN_USERS_DEFAULT_PAGE_SIZE = 50;
+const ADMIN_USERS_MAX_PAGE_SIZE = 100;
 
 /**
  * 读取管理后台完整运行状态统计。
@@ -999,7 +1031,7 @@ export async function createAdminUser(input: {
       'code' in err &&
       err.code === '23505'
     ) {
-      throw new Error('该手机号已存在');
+      throw new Error('该手机号已存在', { cause: err });
     }
     throw err;
   }
@@ -1075,46 +1107,79 @@ export async function cancelAdminUserMembership(
 /**
  * 聚合用户列表页需要的统计信息。
  */
-export async function listAdminUsersWithStats(): Promise<
-  Array<
-    Omit<Awaited<ReturnType<typeof getAllUsers>>[number], 'password_hash'> & {
-      account_count: number;
-      usage: Awaited<ReturnType<typeof getUsageStats>>;
-      monthly_tokens_used: number;
-      estimated_monthly_total_coins: number;
-      purchased_coins: number;
-      bonus_coins: number;
-      reserved_coins: number;
-      available_coins: number;
-      membership: MembershipStatusDto;
-    }
-  >
-> {
-  const users = await getAllUsers();
-  return Promise.all(
-    users.map(async ({ password_hash: _passwordHash, ...safe }) => {
-      const [accounts, usage, monthlyBilling, wallet, membership] =
-        await Promise.all([
-          getAccountsByUserId(safe.id),
-          getUsageStats(safe.id),
-          getMonthlyMeteredBillingSummary(safe.id),
-          getWalletBalanceSummary(safe.id),
-          getMembershipBillingSummary(safe.id),
-        ]);
+export async function listAdminUsersWithStats(
+  options: AdminUserListOptions = {},
+): Promise<AdminUsersPageResult> {
+  const page = Math.max(1, Math.trunc(options.page ?? 1));
+  const pageSize = Math.min(
+    ADMIN_USERS_MAX_PAGE_SIZE,
+    Math.max(1, Math.trunc(options.pageSize ?? ADMIN_USERS_DEFAULT_PAGE_SIZE)),
+  );
+  const { users, total } = await listUsersPageForAdmin({
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    query: options.query,
+  });
+  const userIds = users.map((user) => user.id);
+  const [accountCounts, usageStats, monthlyBillings, memberships] =
+    await Promise.all([
+      getAccountCountsByOwnerIds(userIds),
+      getUsageStatsByUserIds(userIds),
+      getMonthlyMeteredBillingSummariesByUserIds(userIds),
+      getMembershipBillingSummariesByUserIds(userIds),
+    ]);
+
+  return {
+    items: users.map(({ password_hash: _passwordHash, ...safe }) => {
+      const monthlyBilling = monthlyBillings.get(safe.id) ?? {
+        usedTokens: 0,
+        chargedCoins: 0,
+      };
       return {
         ...safe,
-        account_count: accounts.length,
-        usage,
+        account_count: accountCounts.get(safe.id) ?? 0,
+        usage:
+          usageStats.get(safe.id) ??
+          ({
+            total_messages: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            monthly_messages: 0,
+            today_messages: 0,
+            today_input_tokens: 0,
+            today_output_tokens: 0,
+            today_total_tokens: 0,
+          } satisfies Awaited<ReturnType<typeof getUsageStats>>),
         monthly_tokens_used: monthlyBilling.usedTokens,
         estimated_monthly_total_coins: monthlyBilling.chargedCoins,
-        purchased_coins: wallet.purchasedCoins,
-        bonus_coins: wallet.bonusCoins,
-        reserved_coins: wallet.reservedCoins,
-        available_coins: wallet.availableCoins,
-        membership: membershipStatusToAdminView(membership),
+        purchased_coins: safe.purchased_coins,
+        bonus_coins: safe.bonus_coins,
+        reserved_coins: safe.reserved_coins,
+        available_coins: safe.purchased_coins + safe.bonus_coins,
+        membership: membershipStatusToAdminView(
+          memberships.get(safe.id) ??
+            ({
+              enabled: false,
+              active: false,
+              planKey: null,
+              monthlyPriceCoins: 0,
+              displayPriceCoins: 0,
+              currentPeriodStart: null,
+              currentPeriodEnd: null,
+              allowanceResetAt: null,
+              allowanceUsedRatio: 0,
+              allowanceStatus: 'inactive',
+            } satisfies Awaited<
+              ReturnType<typeof getMembershipBillingSummary>
+            >),
+        ),
       };
     }),
-  );
+    total,
+    page,
+    page_size: pageSize,
+  };
 }
 
 /**

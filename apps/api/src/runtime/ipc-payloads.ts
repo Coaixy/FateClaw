@@ -3,7 +3,7 @@
  * 所有 IPC payload 接口和 type guard 集中在此模块。
  */
 
-import { getAllAccounts } from '../infrastructure/db.js';
+import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
 import type { PiThinkingLevel } from '../shared/types.js';
@@ -309,10 +309,5 @@ export async function resolveAccountId(
     return fallbackAccountId;
   }
 
-  const accounts = await getAllAccounts();
-  if (accounts.length === 1) {
-    return accounts[0].id;
-  }
-
-  return null;
+  return getSingleAccountIdIfOnlyOne();
 }

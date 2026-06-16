@@ -163,6 +163,64 @@ export async function getAllUsers(): Promise<User[]> {
   );
 }
 
+export interface AdminUsersPageRow {
+  users: User[];
+  total: number;
+}
+
+/**
+ * 管理后台分页查询用户，并支持按手机号或用户 ID 搜索。
+ *
+ * @param opts.limit 每页数量，调用方负责限制上限。
+ * @param opts.offset 起始偏移。
+ * @param opts.query 搜索关键词；匹配手机号或用户 ID。
+ * @returns 当前页用户和匹配总数。
+ */
+export async function listUsersPageForAdmin(opts: {
+  limit: number;
+  offset: number;
+  query?: string;
+}): Promise<AdminUsersPageRow> {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  let index = 1;
+  const trimmedQuery = opts.query?.trim();
+  if (trimmedQuery) {
+    where.push(`(u.phone ILIKE $${index} OR u.id ILIKE $${index})`);
+    values.push(`%${trimmedQuery}%`);
+    index += 1;
+  }
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const countValues = [...values];
+  values.push(opts.limit, opts.offset);
+  const { rows } = await getDbPool().query(
+    `SELECT ${USER_SELECT_COLUMNS},
+            COUNT(*) OVER()::int AS __total
+     FROM users u
+     ${whereClause}
+     ORDER BY u.created_at DESC
+     LIMIT $${index} OFFSET $${index + 1}`,
+    values,
+  );
+  let total =
+    rows.length > 0 ? Number((rows[0] as { __total: number }).__total) : 0;
+  if (rows.length === 0 && opts.offset > 0) {
+    const count = await getDbPool().query(
+      `SELECT COUNT(*)::int AS total
+       FROM users u
+       ${whereClause}`,
+      countValues,
+    );
+    total = Number((count.rows[0] as { total: number }).total);
+  }
+  return {
+    users: (rows as Array<User & { __total: number }>).map(
+      ({ __total: _total, ...user }) => user,
+    ),
+    total,
+  };
+}
+
 export async function getUserById(id: string): Promise<User | undefined> {
   return getUserByIdUsing(getDbPool(), id);
 }

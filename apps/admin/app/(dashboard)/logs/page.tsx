@@ -248,9 +248,9 @@ export default function AdminLogsPage() {
 
   useEffect(() => {
     admin
-      .users()
-      .then((u) => {
-        setUsers(u);
+      .users({ page_size: 100 })
+      .then((result) => {
+        setUsers(result.items);
         setLoading(false);
       })
       .catch((err) => {

@@ -27,7 +27,10 @@ vi.mock('../src/request-boundary.js', () => ({
   executeContainerInput: vi.fn(),
 }));
 
-import { __drainCancelRequestsForTests } from '../src/daemon.js';
+import {
+  __cleanupPendingCancelRequestsForTests,
+  __drainCancelRequestsForTests,
+} from '../src/daemon.js';
 
 describe('daemon cancel queue', () => {
   beforeEach(() => {
@@ -55,7 +58,7 @@ describe('daemon cancel queue', () => {
     await __drainCancelRequestsForTests(
       'web:user-1',
       activeSessions,
-      new Set(),
+      new Map(),
       redis,
     );
 
@@ -64,7 +67,7 @@ describe('daemon cancel queue', () => {
   });
 
   it('keeps early cancel requests pending until the session is ready', async () => {
-    const pendingCancelRequests = new Set<string>();
+    const pendingCancelRequests = new Map<string, number>();
     const redis = {
       rpop: vi
         .fn()
@@ -87,5 +90,18 @@ describe('daemon cancel queue', () => {
     );
 
     expect(pendingCancelRequests.has('req-early')).toBe(true);
+  });
+
+  it('removes pending cancel requests after their TTL', () => {
+    const now = 1_000 + 36 * 60 * 1000;
+    const pendingCancelRequests = new Map<string, number>([
+      ['req-old', 1_000],
+      ['req-new', now - 10 * 60 * 1000],
+    ]);
+
+    __cleanupPendingCancelRequestsForTests(pendingCancelRequests, now);
+
+    expect(pendingCancelRequests.has('req-old')).toBe(false);
+    expect(pendingCancelRequests.has('req-new')).toBe(true);
   });
 });

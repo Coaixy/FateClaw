@@ -17,7 +17,6 @@ import {
   incrementDailyMessageCount,
   incrementDailyTokens,
 } from '../infrastructure/daily-usage.js';
-import { getRedis } from '../infrastructure/redis.js';
 import {
   PendingInboxRequest,
   ProgressIpcPayload,

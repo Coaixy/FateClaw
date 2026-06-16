@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Duplex } from 'node:stream';
 
 const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
@@ -19,6 +20,9 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
 }));
 
 import {
+  __getAiChatStreamWebSocketLimitsForTests,
+  __parseClientFramesForTests,
+  __shouldCloseForPongTimeoutForTests,
   aiChatStreamChannel,
   consumeAiChatStreamTicket,
   getAiChatStreamTicketTtlSeconds,
@@ -27,6 +31,35 @@ import {
   streamEventFromProgressPayload,
   streamEventFromResponsePayload,
 } from '../../src/runtime/ai-chat-stream.js';
+
+function createMaskedFrame(opcode: number, payload = Buffer.alloc(0)): Buffer {
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const header = Buffer.alloc(2);
+  header[0] = 0x80 | opcode;
+  header[1] = 0x80 | payload.length;
+  const masked = Buffer.from(payload);
+  for (let index = 0; index < masked.length; index += 1) {
+    masked[index] ^= mask[index % 4];
+  }
+  return Buffer.concat([header, mask, masked]);
+}
+
+function createHugeDeclaredFrame(): Buffer {
+  const { maxClientFrameBufferBytes } =
+    __getAiChatStreamWebSocketLimitsForTests();
+  const frame = Buffer.alloc(14);
+  frame[0] = 0x82;
+  frame[1] = 0x80 | 127;
+  frame.writeBigUInt64BE(BigInt(maxClientFrameBufferBytes + 1), 2);
+  frame.set([1, 2, 3, 4], 10);
+  return frame;
+}
+
+function createSocketStub() {
+  return {
+    write: vi.fn(),
+  } as unknown as Duplex & { write: ReturnType<typeof vi.fn> };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -219,5 +252,58 @@ describe('AI Chat stream tickets', () => {
     await expect(
       consumeAiChatStreamTicket('expired-ticket', 'session-1'),
     ).rejects.toThrow('invalid_ticket');
+  });
+});
+
+describe('AI Chat WebSocket client frames', () => {
+  it('responds to client ping frames with pong frames', () => {
+    const socket = createSocketStub();
+    const result = __parseClientFramesForTests(
+      createMaskedFrame(0x9, Buffer.from('hi')),
+      socket,
+    );
+
+    expect(result.closeRequested).toBe(false);
+    expect(result.consumed).toBeGreaterThan(0);
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        0: 0x8a,
+      }),
+    );
+  });
+
+  it('marks pong frames so heartbeat state can be refreshed', () => {
+    const socket = createSocketStub();
+    const result = __parseClientFramesForTests(createMaskedFrame(0xa), socket);
+
+    expect(result).toMatchObject({
+      closeRequested: false,
+      pongReceived: true,
+    });
+  });
+
+  it('closes immediately when the declared payload is too large', () => {
+    const socket = createSocketStub();
+    const result = __parseClientFramesForTests(
+      createHugeDeclaredFrame(),
+      socket,
+    );
+
+    expect(result).toMatchObject({
+      closeRequested: true,
+      closeCode: 1009,
+      closeReason: 'frame too large',
+    });
+  });
+
+  it('detects pong timeout at the configured threshold', () => {
+    const { pongTimeoutMs } = __getAiChatStreamWebSocketLimitsForTests();
+
+    expect(
+      __shouldCloseForPongTimeoutForTests(1_000, 1_000 + pongTimeoutMs),
+    ).toBe(true);
+    expect(
+      __shouldCloseForPongTimeoutForTests(1_000, 1_000 + pongTimeoutMs - 1),
+    ).toBe(false);
   });
 });

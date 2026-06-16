@@ -34,6 +34,18 @@ export async function getAllAccounts(): Promise<Account[]> {
   return rows as Account[];
 }
 
+/**
+ * 当系统内只有一个账号时返回该账号 ID。
+ *
+ * @returns 唯一账号 ID；账号数量为 0 或超过 1 时返回 null。
+ */
+export async function getSingleAccountIdIfOnlyOne(): Promise<string | null> {
+  const { rows } = await getDbPool().query(
+    'SELECT id FROM accounts ORDER BY created_at LIMIT 2',
+  );
+  return rows.length === 1 ? String((rows[0] as { id: string }).id) : null;
+}
+
 export async function getEnabledAccounts(): Promise<Account[]> {
   const { rows } = await getDbPool().query(
     'SELECT * FROM accounts WHERE enabled = true ORDER BY created_at',
@@ -47,6 +59,33 @@ export async function getAccountsByUserId(userId: string): Promise<Account[]> {
     [userId],
   );
   return rows as Account[];
+}
+
+/**
+ * 批量统计用户绑定账号数，供管理后台分页列表复用。
+ *
+ * @param userIds 当前页用户 ID 列表。
+ * @returns owner_id 到账号数量的映射；无账号的用户返回 0。
+ */
+export async function getAccountCountsByOwnerIds(
+  userIds: string[],
+): Promise<Map<string, number>> {
+  const result = new Map(userIds.map((userId) => [userId, 0]));
+  if (userIds.length === 0) return result;
+  const { rows } = await getDbPool().query(
+    `SELECT owner_id, COUNT(*)::int AS account_count
+     FROM accounts
+     WHERE owner_id = ANY($1::text[])
+     GROUP BY owner_id`,
+    [userIds],
+  );
+  for (const row of rows as Array<{
+    owner_id: string;
+    account_count: number;
+  }>) {
+    result.set(row.owner_id, Number(row.account_count));
+  }
+  return result;
 }
 
 export async function getSoulContent(accountId: string): Promise<string> {

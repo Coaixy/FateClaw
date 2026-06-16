@@ -17,6 +17,7 @@ import {
   BadgeCheck,
   CalendarDays,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Coins,
   Eye,
@@ -1221,32 +1222,32 @@ export default function AdminUsersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [total, setTotal] = useState(0);
 
   const fetchUsers = useCallback(async () => {
     setRefreshing(true);
     setError('');
     try {
-      setUsers(await admin.users());
+      const result = await admin.users({
+        page,
+        page_size: pageSize,
+        q: search,
+      });
+      setUsers(result.items);
+      setTotal(result.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [page, pageSize, search]);
 
   useEffect(() => {
     void fetchUsers();
   }, [fetchUsers]);
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return users;
-    return users.filter(
-      (u) =>
-        (u.phone || '').includes(query) || u.id.toLowerCase().includes(query),
-    );
-  }, [search, users]);
 
   const summary = useMemo(() => {
     const totalAccounts = users.reduce((sum, u) => sum + u.account_count, 0);
@@ -1270,6 +1271,7 @@ export default function AdminUsersPage() {
       ),
     };
   }, [users]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   if (loading) {
     return (
@@ -1302,7 +1304,7 @@ export default function AdminUsersPage() {
             <Users size={16} className="text-muted" />
             <h2 className="text-lg font-semibold">用户管理</h2>
             <span className="text-[12px] text-muted">
-              {filtered.length} / {users.length}
+              {fmt(users.length)} / {fmt(total)}
             </span>
             <button
               type="button"
@@ -1330,7 +1332,10 @@ export default function AdminUsersPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="搜索手机号或 ID"
             className="h-9 w-full rounded-md border border-hairline bg-canvas pl-8 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted focus:border-hairline"
           />
@@ -1343,8 +1348,8 @@ export default function AdminUsersPage() {
         <SummaryCard
           icon={Users}
           label="用户"
-          value={fmt(users.length)}
-          sub={`当前显示 ${fmt(filtered.length)}，会员 ${fmt(summary.activeMembers)}`}
+          value={fmt(total)}
+          sub={`当前页 ${fmt(users.length)}，会员 ${fmt(summary.activeMembers)}`}
         />
         <SummaryCard
           icon={Coins}
@@ -1356,7 +1361,7 @@ export default function AdminUsersPage() {
           icon={Smartphone}
           label="绑定账号"
           value={fmt(summary.totalAccounts)}
-          sub="全部用户账号数"
+          sub="当前页账号数"
         />
         <SummaryCard
           icon={WalletCards}
@@ -1366,7 +1371,7 @@ export default function AdminUsersPage() {
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {users.length === 0 ? (
         <div className="rounded-xl border border-hairline bg-surface-card py-12 text-center">
           <p className="text-[13px] text-muted">
             {search ? '无匹配用户' : '暂无用户'}
@@ -1374,11 +1379,36 @@ export default function AdminUsersPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((user) => (
+          {users.map((user) => (
             <UserRow key={user.id} user={user} onRefresh={fetchUsers} />
           ))}
         </div>
       )}
+      <div className="mt-4 flex items-center justify-between text-[12px] text-muted">
+        <span>
+          第 {fmt(page)} / {fmt(totalPages)} 页
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            disabled={page <= 1 || refreshing}
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-hairline px-2 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft size={13} />
+            上一页
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            disabled={page >= totalPages || refreshing}
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-hairline px-2 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            下一页
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      </div>
     </>
   );
 }

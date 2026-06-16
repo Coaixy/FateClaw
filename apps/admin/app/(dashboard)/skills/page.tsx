@@ -444,13 +444,13 @@ function AdminSkillsContent() {
     setError('');
     try {
       const [u, s, g] = await Promise.all([
-        admin.users(),
+        admin.users({ page_size: 100 }),
         admin.customSkills({
           user_id: selectedUserId || undefined,
         }),
         admin.globalSkills(),
       ]);
-      setUsers(u);
+      setUsers(u.items);
       setCustomSkills(s);
       setGlobalConfigs(g);
     } catch (err) {
