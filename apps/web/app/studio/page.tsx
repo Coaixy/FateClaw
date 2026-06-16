@@ -5,10 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   Layers,
   Loader2,
   Plus,
   Puzzle,
+  Search,
   Share2,
   Upload,
   Users,
@@ -23,13 +26,17 @@ import { SubscribedBundleGroup } from '@/components/skills/subscribed-bundle-gro
 import { SubscribedSkillCard } from '@/components/skills/subscribed-skill-card';
 import {
   DEFAULT_SKILL_BUNDLE_LIMITS,
-  SkillBundle,
-  UserCustomSkill,
+  type SkillBundle,
+  type SubscribedSkill,
+  type UserCustomSkill,
   skillsApi,
 } from '@/features/skills/api';
 import { useBundles } from '@/features/skills/hooks/use-bundles';
 import { useUserSkills } from '@/features/skills/hooks/use-user-skills';
-import { groupSubscribedSkills } from '@/features/skills/subscription-groups';
+import {
+  type SkillSubscriptionGroup,
+  groupSubscribedSkills,
+} from '@/features/skills/subscription-groups';
 import {
   downloadSkillBundleZip,
   importSkillBundleFromZip,
@@ -38,6 +45,45 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useConfirm } from '@/lib/use-confirm';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
+
+const STUDIO_LIST_PAGE_SIZE = 4;
+
+type SubscribedListItem =
+  | {
+      type: 'bundle';
+      key: string;
+      group: SkillSubscriptionGroup;
+    }
+  | {
+      type: 'skill';
+      key: string;
+      skill: SubscribedSkill;
+    };
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function matchesSearch(
+  fields: Array<string | number | null | undefined>,
+  query: string,
+) {
+  if (!query) return true;
+  return fields.some((field) =>
+    String(field ?? '').toLowerCase().includes(query),
+  );
+}
+
+function paginateItems<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+  const start = (currentPage - 1) * pageSize;
+  return {
+    currentPage,
+    totalPages,
+    items: items.slice(start, start + pageSize),
+  };
+}
 
 export default function StudioPage() {
   const router = useRouter();
@@ -52,6 +98,12 @@ export default function StudioPage() {
   const [copiedBundleId, setCopiedBundleId] = useState<string | null>(null);
   const [importingSkill, setImportingSkill] = useState(false);
   const [skillLimits, setSkillLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
+  const [subscriptionSearch, setSubscriptionSearch] = useState('');
+  const [bundleSearch, setBundleSearch] = useState('');
+  const [skillSearch, setSkillSearch] = useState('');
+  const [subscriptionPage, setSubscriptionPage] = useState(1);
+  const [bundlePage, setBundlePage] = useState(1);
+  const [skillPage, setSkillPage] = useState(1);
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
@@ -107,6 +159,101 @@ export default function StudioPage() {
     () => groupSubscribedSkills(subscribedSkills),
     [subscribedSkills],
   );
+
+  const subscribedItems = useMemo<SubscribedListItem[]>(
+    () => [
+      ...subscribedGroups.bundles.map((group) => ({
+        type: 'bundle' as const,
+        key: `bundle:${group.bundleId}`,
+        group,
+      })),
+      ...subscribedGroups.direct.map((skill) => ({
+        type: 'skill' as const,
+        key: `skill:${skill.subscription_id}`,
+        skill,
+      })),
+    ],
+    [subscribedGroups],
+  );
+
+  const filteredSubscribedItems = useMemo(() => {
+    const query = normalizeSearch(subscriptionSearch);
+    return subscribedItems.filter((item) => {
+      if (item.type === 'bundle') {
+        return matchesSearch(
+          [
+            item.group.bundleName,
+            ...item.group.skills.flatMap((skill) => [
+              skill.skill_name,
+              skill.description,
+              skill.author_label,
+            ]),
+          ],
+          query,
+        );
+      }
+
+      return matchesSearch(
+        [item.skill.skill_name, item.skill.description, item.skill.author_label],
+        query,
+      );
+    });
+  }, [subscribedItems, subscriptionSearch]);
+
+  const filteredBundles = useMemo(() => {
+    const query = normalizeSearch(bundleSearch);
+    return bundles.filter((bundle) =>
+      matchesSearch(
+        [bundle.name, bundle.description, bundle.skill_ids.length],
+        query,
+      ),
+    );
+  }, [bundleSearch, bundles]);
+
+  const filteredOwnSkills = useMemo(() => {
+    const query = normalizeSearch(skillSearch);
+    return ownSkills.filter((skill) =>
+      matchesSearch(
+        [
+          skill.skill_name,
+          skill.description,
+          skill.content_length,
+          skill.stat_subscriber_count,
+        ],
+        query,
+      ),
+    );
+  }, [ownSkills, skillSearch]);
+
+  const pagedSubscribedItems = useMemo(
+    () =>
+      paginateItems(
+        filteredSubscribedItems,
+        subscriptionPage,
+        STUDIO_LIST_PAGE_SIZE,
+      ),
+    [filteredSubscribedItems, subscriptionPage],
+  );
+  const pagedBundles = useMemo(
+    () => paginateItems(filteredBundles, bundlePage, STUDIO_LIST_PAGE_SIZE),
+    [bundlePage, filteredBundles],
+  );
+  const pagedOwnSkills = useMemo(
+    () => paginateItems(filteredOwnSkills, skillPage, STUDIO_LIST_PAGE_SIZE),
+    [filteredOwnSkills, skillPage],
+  );
+
+  useEffect(() => {
+    setSubscriptionPage(1);
+  }, [subscriptionSearch]);
+
+  useEffect(() => {
+    setBundlePage(1);
+  }, [bundleSearch]);
+
+  useEffect(() => {
+    setSkillPage(1);
+  }, [skillSearch]);
 
   const runWithToast = async (
     fn: () => Promise<void>,
@@ -420,6 +567,148 @@ export default function StudioPage() {
           />
         </section>
 
+        {/* 别人的订阅 */}
+        <section>
+          <SectionTitle
+            icon={Share2}
+            title={t('pages.studio.subscribedTitle')}
+            count={loading ? undefined : subscribedSkills.length}
+            subtitle={t('pages.studio.subscribedSubtitle')}
+          />
+
+          <div className="mt-5 space-y-3">
+            {loading ? (
+              <SkillSkeleton />
+            ) : subscribedSkills.length === 0 ? (
+              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.02),transparent_70%)] pointer-events-none" />
+                <p className="relative text-[12px] text-muted opacity-60">
+                  {t('pages.studio.subscribedEmpty')}
+                </p>
+              </div>
+            ) : (
+              <>
+                <ListSearch
+                  value={subscriptionSearch}
+                  onChange={setSubscriptionSearch}
+                  placeholder={t('pages.studio.subscribedSearchPlaceholder')}
+                />
+                {filteredSubscribedItems.length === 0 ? (
+                  <ListEmptyMessage
+                    message={t('pages.studio.noSearchResults', {
+                      query: subscriptionSearch.trim(),
+                    })}
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {pagedSubscribedItems.items.map((item) =>
+                        item.type === 'bundle' ? (
+                          <SubscribedBundleGroup
+                            key={item.key}
+                            group={item.group}
+                            onUnsubscribeBundle={handleBundleUnsubscribe}
+                          />
+                        ) : (
+                          <SubscribedSkillCard
+                            key={item.key}
+                            sk={item.skill}
+                            onToggle={handleSubscriptionToggle}
+                            onUnsubscribe={handleUnsubscribe}
+                          />
+                        ),
+                      )}
+                    </div>
+                    <PaginationControls
+                      currentPage={pagedSubscribedItems.currentPage}
+                      totalPages={pagedSubscribedItems.totalPages}
+                      totalItems={filteredSubscribedItems.length}
+                      pageSize={STUDIO_LIST_PAGE_SIZE}
+                      onPageChange={setSubscriptionPage}
+                      formatNumber={formatNumber}
+                      t={t}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* 我的捆绑包 */}
+        <section>
+          <div className="flex items-start justify-between gap-3">
+            <SectionTitle
+              icon={Layers}
+              title={t('pages.studio.bundlesTitle')}
+              count={loading ? undefined : bundles.length}
+            />
+            <Link
+              href="/studio/bundles/new"
+              className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
+            >
+              <Plus size={12} />
+              {t('pages.studio.newBundle')}
+            </Link>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {loading ? (
+              <SkillSkeleton />
+            ) : bundles.length === 0 ? (
+              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
+                <p className="relative text-[12px] text-muted opacity-70">
+                  {t('pages.studio.bundlesEmpty')}
+                </p>
+              </div>
+            ) : (
+              <>
+                <ListSearch
+                  value={bundleSearch}
+                  onChange={setBundleSearch}
+                  placeholder={t('pages.studio.bundlesSearchPlaceholder')}
+                />
+                {filteredBundles.length === 0 ? (
+                  <ListEmptyMessage
+                    message={t('pages.studio.noSearchResults', {
+                      query: bundleSearch.trim(),
+                    })}
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {pagedBundles.items.map((b) => (
+                        <BundleCard
+                          key={b.id}
+                          bundle={b}
+                          copiedId={copiedBundleId}
+                          onCopyLink={handleBundleShare}
+                          onCopyInviteLink={handleBundleAccessInvite}
+                          onUnshare={handleBundleUnshare}
+                          onPublish={handleBundlePublish}
+                          onUnpublish={handleBundleUnpublish}
+                          onEdit={setEditingBundle}
+                          onDelete={handleBundleDelete}
+                        />
+                      ))}
+                    </div>
+                    <PaginationControls
+                      currentPage={pagedBundles.currentPage}
+                      totalPages={pagedBundles.totalPages}
+                      totalItems={filteredBundles.length}
+                      pageSize={STUDIO_LIST_PAGE_SIZE}
+                      onPageChange={setBundlePage}
+                      formatNumber={formatNumber}
+                      t={t}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
         {/* 我的知识技能 */}
         <section>
           <SectionTitle
@@ -488,119 +777,53 @@ export default function StudioPage() {
                 </div>
               </div>
             ) : (
-              ownSkills.map((sk) => (
-                <OwnSkillCard
-                  key={sk.id}
-                  sk={sk}
-                  copiedId={copiedId}
-                  onToggle={handleToggle}
-                  onCopyLink={handleShare}
-                  onCopyInviteLink={handleSkillAccessInvite}
-                  onUnshare={handleUnshare}
-                  onPublish={handlePublish}
-                  onUnpublish={handleUnpublish}
-                  onEdit={(skill) =>
-                    router.push(
-                      `/studio/skills/edit?skillId=${encodeURIComponent(skill.id)}`,
-                    )
-                  }
-                  onExport={handleExportSkillZip}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* 我的捆绑包 */}
-        <section>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden sm:flex w-8 h-8 rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] items-center justify-center shrink-0">
-              <Layers size={14} className="text-primary" />
-            </div>
-            <h3 className="text-[13px] font-semibold tracking-tight">
-              {t('pages.studio.bundlesTitle')}
-            </h3>
-            {!loading && (
-              <span className="text-[11px] text-muted tabular-nums bg-surface-card px-1.5 py-0.5 rounded-md">
-                {bundles.length}
-              </span>
-            )}
-            <div className="flex-1" />
-            <Link
-              href="/studio/bundles/new"
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
-            >
-              <Plus size={12} />
-              {t('pages.studio.newBundle')}
-            </Link>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {loading ? (
-              <SkillSkeleton />
-            ) : bundles.length === 0 ? (
-              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
-                <p className="relative text-[12px] text-muted opacity-70">
-                  {t('pages.studio.bundlesEmpty')}
-                </p>
-              </div>
-            ) : (
-              bundles.map((b) => (
-                <BundleCard
-                  key={b.id}
-                  bundle={b}
-                  copiedId={copiedBundleId}
-                  onCopyLink={handleBundleShare}
-                  onCopyInviteLink={handleBundleAccessInvite}
-                  onUnshare={handleBundleUnshare}
-                  onPublish={handleBundlePublish}
-                  onUnpublish={handleBundleUnpublish}
-                  onEdit={setEditingBundle}
-                  onDelete={handleBundleDelete}
-                />
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* 已订阅 */}
-        <section>
-          <SectionTitle
-            icon={Share2}
-            title={t('pages.studio.subscribedTitle')}
-            count={loading ? undefined : subscribedSkills.length}
-            subtitle={t('pages.studio.subscribedSubtitle')}
-          />
-
-          <div className="mt-5 space-y-3">
-            {loading ? (
-              <SkillSkeleton />
-            ) : subscribedSkills.length === 0 ? (
-              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.02),transparent_70%)] pointer-events-none" />
-                <p className="relative text-[12px] text-muted opacity-60">
-                  {t('pages.studio.subscribedEmpty')}
-                </p>
-              </div>
-            ) : (
               <>
-                {subscribedGroups.bundles.map((group) => (
-                  <SubscribedBundleGroup
-                    key={group.bundleId}
-                    group={group}
-                    onUnsubscribeBundle={handleBundleUnsubscribe}
+                <ListSearch
+                  value={skillSearch}
+                  onChange={setSkillSearch}
+                  placeholder={t('pages.studio.ownSkillsSearchPlaceholder')}
+                />
+                {filteredOwnSkills.length === 0 ? (
+                  <ListEmptyMessage
+                    message={t('pages.studio.noSearchResults', {
+                      query: skillSearch.trim(),
+                    })}
                   />
-                ))}
-                {subscribedGroups.direct.map((sk) => (
-                  <SubscribedSkillCard
-                    key={sk.subscription_id}
-                    sk={sk}
-                    onToggle={handleSubscriptionToggle}
-                    onUnsubscribe={handleUnsubscribe}
-                  />
-                ))}
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {pagedOwnSkills.items.map((sk) => (
+                        <OwnSkillCard
+                          key={sk.id}
+                          sk={sk}
+                          copiedId={copiedId}
+                          onToggle={handleToggle}
+                          onCopyLink={handleShare}
+                          onCopyInviteLink={handleSkillAccessInvite}
+                          onUnshare={handleUnshare}
+                          onPublish={handlePublish}
+                          onUnpublish={handleUnpublish}
+                          onEdit={(skill) =>
+                            router.push(
+                              `/studio/skills/edit?skillId=${encodeURIComponent(skill.id)}`,
+                            )
+                          }
+                          onExport={handleExportSkillZip}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                    <PaginationControls
+                      currentPage={pagedOwnSkills.currentPage}
+                      totalPages={pagedOwnSkills.totalPages}
+                      totalItems={filteredOwnSkills.length}
+                      pageSize={STUDIO_LIST_PAGE_SIZE}
+                      onPageChange={setSkillPage}
+                      formatNumber={formatNumber}
+                      t={t}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -645,6 +868,107 @@ function StatCard({
   );
 }
 
+function ListSearch({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search
+        size={15}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+      />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="w-full h-10 pl-9 pr-3 rounded-xl border border-hairline bg-surface-card text-[13px] placeholder:text-muted focus:border-primary focus:outline-none transition-all"
+      />
+    </div>
+  );
+}
+
+function ListEmptyMessage({ message }: { message: string }) {
+  return (
+    <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
+      <div className="relative flex flex-col items-center gap-2">
+        <Search size={18} className="text-muted/55" />
+        <p className="text-[12px] text-muted opacity-70">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPageChange,
+  formatNumber,
+  t,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  formatNumber: (value: number) => string;
+  t: (
+    key: string,
+    params?: Record<string, string | number | boolean | null | undefined>,
+  ) => string;
+}) {
+  if (totalItems <= pageSize) return null;
+
+  const start = (currentPage - 1) * pageSize + 1;
+  const end = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-2 rounded-2xl border border-hairline/60 bg-surface-card/60 px-3 py-2 sm:flex-row">
+      <span className="text-[11px] text-muted tabular-nums">
+        {t('pages.studio.paginationRange', {
+          start: formatNumber(start),
+          end: formatNumber(end),
+          total: formatNumber(totalItems),
+        })}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage <= 1}
+          className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] text-muted transition-all hover:bg-surface-cream-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <ChevronLeft size={13} />
+          {t('pages.studio.previousPage')}
+        </button>
+        <span className="inline-flex h-8 min-w-14 items-center justify-center rounded-full bg-surface-cream-strong px-2 text-[11px] tabular-nums text-ink">
+          {t('pages.studio.pageIndicator', {
+            page: formatNumber(currentPage),
+            total: formatNumber(totalPages),
+          })}
+        </span>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+          className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] text-muted transition-all hover:bg-surface-cream-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          {t('pages.studio.nextPage')}
+          <ChevronRight size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({
   icon: Icon,
   title,
@@ -657,7 +981,7 @@ function SectionTitle({
   subtitle?: string;
 }) {
   return (
-    <div className="flex items-start gap-3 sm:gap-4">
+    <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
       <div className="mt-0.5 hidden sm:flex w-8 h-8 rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] items-center justify-center shrink-0">
         <Icon size={14} className="text-primary" />
       </div>

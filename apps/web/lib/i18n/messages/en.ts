@@ -171,13 +171,22 @@ export const enMessages = {
       ownSkillsEmptyTitle: 'Create your first skill',
       ownSkillsEmptyDescription:
         'Package charting experience, interpretation rules, and school methods',
+      ownSkillsSearchPlaceholder: 'Search skill name or description...',
       bundlesTitle: 'My bundles',
       bundlesEmpty:
         'Combine multiple skills into a bundle and share them together',
-      subscribedTitle: 'Subscribed',
-      subscribedSubtitle: 'Skills subscribed through share links',
+      bundlesSearchPlaceholder: 'Search bundle name or description...',
+      subscribedTitle: "Other creators' subscriptions",
+      subscribedSubtitle:
+        'Skills and bundles you subscribed to from share links or the market',
       subscribedEmpty:
         'Subscribe to other creators’ skills from the market or share links',
+      subscribedSearchPlaceholder: 'Search subscribed skills or bundles...',
+      noSearchResults: 'No content matches "{query}"',
+      paginationRange: '{start}-{end} / {total}',
+      pageIndicator: '{page} / {total}',
+      previousPage: 'Previous',
+      nextPage: 'Next',
       deleteSkillTitle: 'Delete skill',
       deleteSkillMessage: 'Delete this skill?',
       delete: 'Delete',
