@@ -10,5 +10,5 @@ import type { PaipanFlowProps } from '../types';
  * @returns 复用出生信息步骤的紫微排盘表单；保留独立出口便于后续扩展紫微专属步骤。
  */
 export function ZiweiFlow(props: PaipanFlowProps) {
-  return <BaziFlow {...props} />;
+  return <BaziFlow {...props} enableGanzhiReverse={false} />;
 }

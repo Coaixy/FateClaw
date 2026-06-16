@@ -177,6 +177,45 @@ export interface PaipanPreviewResponseDto {
   expiresAt: string;
 }
 
+/**
+ * 八字干支反推请求。
+ *
+ * year/month/day 为必填三柱；hour 为空时只反推公历日期，传入时反推具体时间。
+ */
+export interface PaipanGanzhiReverseRequestDto {
+  year: string;
+  month: string;
+  day: string;
+  hour?: string;
+  startYear: number;
+  endYear: number;
+  limit?: number;
+}
+
+/**
+ * 干支反推命中的单个公历候选。
+ */
+export interface PaipanGanzhiReverseMatchDto {
+  solar: string;
+  year: number;
+  month: number;
+  day: number;
+  hour?: number;
+  minute?: number;
+  second?: number;
+}
+
+/**
+ * 八字干支反推响应。
+ */
+export interface PaipanGanzhiReverseResponseDto {
+  mode: 'three_pillars' | 'eight_char';
+  input: PaipanGanzhiReverseRequestDto;
+  matches: PaipanGanzhiReverseMatchDto[];
+  total: number;
+  truncated: boolean;
+}
+
 export interface PaipanCommitRequestDto {
   target: 'new_session_from_preview' | 'current_session';
   previewId?: string;

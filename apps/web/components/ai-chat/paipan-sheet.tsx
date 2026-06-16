@@ -28,6 +28,7 @@ import {
   type PaipanSchema,
   paipanApi,
 } from '@/features/paipan/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
@@ -273,12 +274,16 @@ function CompactPickerMonthGrid({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="min-w-0">
-      <span className="mb-1 block text-[10px] text-muted">月份</span>
+      <span className="mb-1 block text-[10px] text-muted">
+        {t('aiChat.paipanSheet.dateTime.month')}
+      </span>
       <div
         role="radiogroup"
-        aria-label="月份"
+        aria-label={t('aiChat.paipanSheet.dateTime.month')}
         className="grid grid-cols-4 gap-1.5"
       >
         {MONTH_OPTIONS.map((month) => {
@@ -296,7 +301,7 @@ function CompactPickerMonthGrid({
                   : 'border-hairline bg-surface-card/55 text-muted hover:border-primary/35 hover:text-ink'
               }`}
             >
-              {month} 月
+              {t('aiChat.paipanSheet.dateTime.monthValue', { month })}
             </button>
           );
         })}
@@ -320,6 +325,7 @@ function PaipanDateTimePicker({
   mode: PaipanDateTimePickerMode;
   onChange: (value: { date?: string; hour?: number; minute?: number }) => void;
 }) {
+  const { t } = useI18n();
   const now = getCurrentLocalDateParts();
   const selectedDateParts = parseDateValue(value.date);
   const fallbackDateParts = parseDateValue(now.date) ?? {
@@ -340,8 +346,12 @@ function PaipanDateTimePicker({
   const displayMinute = selectedMinute ?? 0;
   const selectedDate = typeof value.date === 'string' ? value.date : '';
   const selectedTimeLabel =
-    selectedHour === undefined ? '请选择时间' : `${pad2(selectedHour)}:${pad2(selectedMinute ?? 0)}`;
-  const selectedDateLabel = selectedDate ? `${selectedDate}（公历）` : '请选择公历日期';
+    selectedHour === undefined
+      ? t('aiChat.paipanSheet.dateTime.chooseTime')
+      : `${pad2(selectedHour)}:${pad2(selectedMinute ?? 0)}`;
+  const selectedDateLabel = selectedDate
+    ? t('aiChat.paipanSheet.dateTime.solarDateSuffix', { date: selectedDate })
+    : t('aiChat.paipanSheet.dateTime.chooseDate');
   const selectedMonthDays = getDaysInMonth(dateParts.year, dateParts.month);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -394,7 +404,7 @@ function PaipanDateTimePicker({
             )}
           </span>
           <span className="shrink-0 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
-            选择
+            {t('aiChat.paipanSheet.dateTime.choose')}
           </span>
         </button>
         <PropertyDescription text={description} />
@@ -414,14 +424,16 @@ function PaipanDateTimePicker({
               onClick={commitCurrentMoment}
               className="h-8 flex-1 rounded-lg border border-primary/20 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 sm:flex-none"
             >
-              {mode === 'date' ? '今天' : '现在'}
+              {mode === 'date'
+                ? t('aiChat.paipanSheet.dateTime.today')
+                : t('aiChat.paipanSheet.dateTime.now')}
             </button>
             <button
               type="button"
               onClick={() => setPickerOpen(false)}
               className="h-8 flex-1 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active sm:flex-none"
             >
-              完成
+              {t('aiChat.paipanSheet.dateTime.done')}
             </button>
           </div>
         }
@@ -446,20 +458,20 @@ function PaipanDateTimePicker({
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <CompactPickerNumberInput
-                  label="年份"
+                  label={t('aiChat.paipanSheet.dateTime.year')}
                   value={dateParts.year}
                   min={1900}
                   max={2100}
-                  suffix="年"
+                  suffix={t('aiChat.paipanSheet.dateTime.yearSuffix')}
                   onChange={(year) => commitDate(year, dateParts.month, dateParts.day)}
                 />
 
                 <CompactPickerNumberInput
-                  label="日期"
+                  label={t('aiChat.paipanSheet.dateTime.date')}
                   value={dateParts.day}
                   min={1}
                   max={selectedMonthDays}
-                  suffix="日"
+                  suffix={t('aiChat.paipanSheet.dateTime.daySuffix')}
                   onChange={(day) => commitDate(dateParts.year, dateParts.month, day)}
                 />
               </div>
@@ -475,7 +487,7 @@ function PaipanDateTimePicker({
             <div className={showDate ? 'space-y-3 border-t border-hairline pt-4' : 'space-y-3'}>
               <div className="grid grid-cols-2 gap-2">
                 <CompactPickerNumberInput
-                  label="小时"
+                  label={t('aiChat.paipanSheet.dateTime.hour')}
                   value={displayHour}
                   min={0}
                   max={23}
@@ -484,11 +496,11 @@ function PaipanDateTimePicker({
                 />
 
                 <CompactPickerNumberInput
-                  label="分钟"
+                  label={t('aiChat.paipanSheet.dateTime.minute')}
                   value={displayMinute}
                   min={0}
                   max={59}
-                  suffix="分"
+                  suffix={t('aiChat.paipanSheet.dateTime.minuteSuffix')}
                   onChange={(minute) => commitTime(displayHour, minute)}
                 />
               </div>
@@ -617,6 +629,8 @@ function ChoiceGrid({
   columns?: 2 | 3;
   onChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <FieldCard>
       <FieldLabel title={title} required={required} />
@@ -642,7 +656,7 @@ function ChoiceGrid({
                 <span className="text-[11px] sm:text-[12px] font-medium">{option.label}</span>
                 {option.recommended && (
                   <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[9px] text-primary">
-                    推荐
+                    {t('aiChat.paipanSheet.recommended')}
                   </span>
                 )}
               </div>
@@ -665,12 +679,14 @@ function SchemaFields({
   draft,
   pathPrefix = [],
   hiddenPaths,
+  t,
   onChange,
 }: {
   schema?: PaipanSchema;
   draft: Record<string, unknown>;
   pathPrefix?: string[];
   hiddenPaths: Set<string>;
+  t: ReturnType<typeof useI18n>['t'];
   onChange: (path: string[], value: unknown) => void;
 }) {
   if (!schema) return null;
@@ -711,7 +727,7 @@ function SchemaFields({
         const value = getValueAtPath(draft, path);
         const type = getPrimaryType(property);
         const required = schema.required?.includes(key);
-        const copy = getFieldCopy(fieldPathKey, key, property.description);
+        const copy = getFieldCopy(fieldPathKey, key, property.description, t);
 
         if (type === 'object' && property.properties) {
           return (
@@ -731,6 +747,7 @@ function SchemaFields({
                   draft={draft}
                   pathPrefix={path}
                   hiddenPaths={hiddenPaths}
+                  t={t}
                   onChange={onChange}
                 />
               </div>
@@ -773,7 +790,7 @@ function SchemaFields({
               <PropertyDescription text={copy.description} />
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {property.items.enum.map((option) => {
-                  const label = getOptionLabel(fieldPathKey, option);
+                  const label = getOptionLabel(fieldPathKey, option, t);
                   const checked = selectedValues.includes(option);
                   return (
                     <label
@@ -814,13 +831,15 @@ function SchemaFields({
                 }
                 className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none"
               >
-                <option value="">请选择</option>
+                <option value="">
+                  {t('aiChat.paipanSheet.selectPlaceholder')}
+                </option>
                 {property.enum.map((option) => (
                   <option
                     key={`${fieldPathKey}-${String(option)}`}
                     value={String(option)}
                   >
-                    {getOptionLabel(fieldPathKey, option)}
+                  {getOptionLabel(fieldPathKey, option, t)}
                   </option>
                 ))}
               </select>
@@ -846,7 +865,9 @@ function SchemaFields({
                   )
                 }
                 className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none"
-                placeholder={copy.placeholder ?? '多个值用逗号分隔'}
+                placeholder={
+                  copy.placeholder ?? t('aiChat.paipanSheet.arrayPlaceholder')
+                }
               />
               <PropertyDescription text={copy.description} />
             </div>
@@ -918,6 +939,7 @@ export function PaipanSheet({
   onCommitted,
 }: PaipanSheetProps) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [selectedSkill, setSelectedSkill] = useState('');
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [previewResult, setPreviewResult] = useState<PaipanPreviewResponse | null>(null);
@@ -1023,7 +1045,11 @@ export function PaipanSheet({
       return null;
     }
 
-    const validationError = validateDraftForSkill(selectedCatalogItem.skill, draft);
+    const validationError = validateDraftForSkill(
+      selectedCatalogItem.skill,
+      draft,
+      t,
+    );
     if (validationError) {
       toast('error', validationError);
       return null;
@@ -1034,7 +1060,7 @@ export function PaipanSheet({
 
   const handlePreview = async () => {
     if (!selectedCatalogItem) {
-      toast('error', '请先选择排盘类型');
+      toast('error', t('aiChat.paipanSheet.toast.missingSkill'));
       return;
     }
 
@@ -1052,7 +1078,12 @@ export function PaipanSheet({
       setPreviewResult(result);
       setPreviewSkillName(selectedCatalogItem.name);
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '排盘预览失败');
+      toast(
+        'error',
+        error instanceof Error
+          ? error.message
+          : t('aiChat.paipanSheet.toast.previewFailed'),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1065,7 +1096,7 @@ export function PaipanSheet({
     }
 
     if (!selectedCatalogItem || !sessionId) {
-      toast('error', '当前会话不存在');
+      toast('error', t('aiChat.paipanSheet.toast.missingSession'));
       return;
     }
 
@@ -1085,7 +1116,12 @@ export function PaipanSheet({
       await onCommitted(result);
       onClose();
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '插入盘面失败');
+      toast(
+        'error',
+        error instanceof Error
+          ? error.message
+          : t('aiChat.paipanSheet.toast.insertFailed'),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1098,7 +1134,7 @@ export function PaipanSheet({
     }
 
     if (!previewResult) {
-      toast('error', '请先完成排盘预览');
+      toast('error', t('aiChat.paipanSheet.toast.missingPreview'));
       return;
     }
     setSubmitting(true);
@@ -1110,7 +1146,12 @@ export function PaipanSheet({
       await onCommitted(result);
       onClose();
     } catch (error) {
-      toast('error', error instanceof Error ? error.message : '创建排盘会话失败');
+      toast(
+        'error',
+        error instanceof Error
+          ? error.message
+          : t('aiChat.paipanSheet.toast.createSessionFailed'),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1123,7 +1164,7 @@ export function PaipanSheet({
       icon={<Sparkles size={14} />}
       className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
     >
-      生成盘面预览
+      {t('aiChat.paipanSheet.actions.generatePreview')}
     </Button>;
   const flowResultAction =
     mode === 'pre-chat' ? (
@@ -1133,7 +1174,9 @@ export function PaipanSheet({
         icon={<MessageCircle size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
-        {canCommit ? '基于此盘开始对话' : '登录后开始对话'}
+        {canCommit
+          ? t('aiChat.paipanSheet.actions.startChat')
+          : t('aiChat.paipanSheet.actions.loginStartChat')}
       </Button>
     ) : (
       <Button
@@ -1142,7 +1185,9 @@ export function PaipanSheet({
         icon={<Sparkles size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
-        {canCommit ? '插入到当前对话' : '登录后插入对话'}
+        {canCommit
+          ? t('aiChat.paipanSheet.actions.insertCurrent')
+          : t('aiChat.paipanSheet.actions.loginInsertCurrent')}
       </Button>
     );
   const flowResultContent = previewResult ? (
@@ -1176,10 +1221,12 @@ export function PaipanSheet({
       onClose={onClose}
       variant="fullscreen-sheet"
       size="lg"
-      title="手动排盘"
+      title={t('aiChat.paipanSheet.title')}
       titleExtra={
         <span className="rounded-full border border-hairline bg-surface-card/70 px-2.5 py-1 text-[10px] text-muted">
-          {mode === 'pre-chat' ? '可选入口' : '当前会话'}
+          {mode === 'pre-chat'
+            ? t('aiChat.paipanSheet.preChatMode')
+            : t('aiChat.paipanSheet.currentSessionMode')}
         </span>
       }
       footer={resultFooter}
@@ -1188,11 +1235,11 @@ export function PaipanSheet({
         {catalogLoading ? (
           <div className="flex items-center gap-2 rounded-2xl border border-hairline bg-surface-card/60 px-4 py-4 text-[13px] text-muted">
             <Loader2 size={15} className="animate-spin" />
-            正在加载可用排盘类型...
+            {t('aiChat.paipanSheet.loadingCatalog')}
           </div>
         ) : catalog.length === 0 ? (
           <div className="rounded-2xl border border-hairline bg-surface-card/60 px-4 py-4 text-[13px] text-muted">
-            当前没有可用的系统排盘。
+            {t('aiChat.paipanSheet.noSystems')}
           </div>
         ) : (
           <>
@@ -1200,7 +1247,7 @@ export function PaipanSheet({
               (lockSkill && selectedCatalogItem ? (
                 <div className="rounded-[24px] border border-hairline bg-surface-card/45 px-4 py-4">
                   <p className="text-[11px] font-medium tracking-[0.08em] text-muted">
-                    已选术数
+                    {t('aiChat.paipanSheet.selectedSkill')}
                   </p>
                   <div className="mt-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1209,13 +1256,16 @@ export function PaipanSheet({
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">
-                      快捷入口
+                      {t('aiChat.paipanSheet.quickEntry')}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <FieldLabel title="排盘类型" required />
+                  <FieldLabel
+                    title={t('aiChat.paipanSheet.skillType')}
+                    required
+                  />
                   <select
                     value={selectedSkill}
                     onChange={(event) =>
@@ -1247,7 +1297,7 @@ export function PaipanSheet({
                   />
                 ) : (
                   <div className="rounded-2xl border border-hairline bg-surface-card/35 px-4 py-3 text-[12px] leading-5 text-muted">
-                    当前术数暂未配置引导式填写，请使用下方高级设置填写参数。
+                    {t('aiChat.paipanSheet.guidedFallback')}
                   </div>
                 )}
 
@@ -1260,10 +1310,10 @@ export function PaipanSheet({
                     >
                       <div>
                         <p className="text-[12px] sm:text-[13px] font-medium text-ink">
-                          高级设置
+                          {t('aiChat.paipanSheet.advancedTitle')}
                         </p>
                         <p className="mt-1 text-[11px] leading-5 text-muted">
-                          一般不用填，只有你明确知道自己要改什么时再展开。
+                          {t('aiChat.paipanSheet.advancedDescription')}
                         </p>
                       </div>
                       <ChevronDown
@@ -1280,6 +1330,7 @@ export function PaipanSheet({
                           schema={selectedCatalogItem.parameters}
                           draft={draft}
                           hiddenPaths={hiddenPaths}
+                          t={t}
                           onChange={handleChange}
                         />
                       </div>

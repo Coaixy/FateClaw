@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 
 const CONFIRM_STEP_ID = '__paipan-confirm';
 const RESULT_STEP_ID = '__paipan-result';
@@ -43,6 +44,7 @@ export function PaipanStepper({
   resultAction,
   onResultStepChange,
 }: PaipanStepperProps) {
+  const { t } = useI18n();
   const visibleSteps = useMemo(() => {
     const baseSteps = steps.filter(
       (step) => step.content !== null && step.content !== undefined,
@@ -52,8 +54,8 @@ export function PaipanStepper({
         ? [
             {
               id: CONFIRM_STEP_ID,
-              title: '确认信息',
-              description: '确认无误后生成盘面预览。',
+              title: t('aiChat.paipanStepper.confirmTitle'),
+              description: t('aiChat.paipanStepper.confirmDescription'),
               status: 'optional' as const,
               content: finalContent,
             },
@@ -61,17 +63,17 @@ export function PaipanStepper({
         : [];
     const resultStep = resultContent
       ? [
-          {
-            id: RESULT_STEP_ID,
-            title: '查看盘面',
-            description: '确认预览无误后，就可以基于这张盘继续对话。',
-            status: 'complete' as const,
-            content: resultContent,
+            {
+              id: RESULT_STEP_ID,
+              title: t('aiChat.paipanStepper.resultTitle'),
+              description: t('aiChat.paipanStepper.resultDescription'),
+              status: 'complete' as const,
+              content: resultContent,
           },
         ]
       : [];
     return [...baseSteps, ...confirmStep, ...resultStep];
-  }, [finalAction, finalContent, resultContent, steps]);
+  }, [finalAction, finalContent, resultContent, steps, t]);
   const [activeIndex, setActiveIndex] = useState(0);
   const hadResultContentRef = useRef(false);
   const activeStep = visibleSteps[activeIndex];
@@ -123,7 +125,10 @@ export function PaipanStepper({
         <div className="rounded-2xl border border-hairline bg-surface-card/45 px-3 py-3">
           <div className="min-w-0">
             <p className="text-[10px] font-medium text-muted">
-              第 {activeIndex + 1} 步 / 共 {visibleSteps.length} 步
+              {t('aiChat.paipanStepper.progress', {
+                current: activeIndex + 1,
+                total: visibleSteps.length,
+              })}
             </p>
             <p className="mt-1 text-[14px] font-semibold tracking-tight text-ink">
               {activeStep.title}
@@ -142,7 +147,10 @@ export function PaipanStepper({
                 type="button"
                 onClick={() => setActiveIndex(index)}
                 className={`h-1.5 flex-1 rounded-full transition-colors ${getStepIndicatorClassName(step, index)}`}
-                aria-label={`跳到第 ${index + 1} 步：${step.title}`}
+                aria-label={t('aiChat.paipanStepper.jumpToStep', {
+                  step: index + 1,
+                  title: step.title,
+                })}
               />
             ))}
           </div>
@@ -150,15 +158,15 @@ export function PaipanStepper({
           <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-primary/45" />
-              已完成
+              {t('aiChat.paipanStepper.complete')}
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-rose-400/60" />
-              需补充
+              {t('aiChat.paipanStepper.incomplete')}
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-hairline/80" />
-              未到达
+              {t('aiChat.paipanStepper.notReached')}
             </span>
           </div>
         </div>
@@ -179,7 +187,7 @@ export function PaipanStepper({
             className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-hairline bg-surface-card px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-35 sm:rounded-lg"
           >
             <ChevronLeft size={14} />
-            上一步
+            {t('aiChat.paipanStepper.previous')}
           </button>
 
           {showFinalAction ? (
@@ -196,7 +204,7 @@ export function PaipanStepper({
               }
               className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
             >
-              下一步
+              {t('aiChat.paipanStepper.next')}
               <ChevronRight size={14} />
             </button>
           )}

@@ -7,9 +7,8 @@ import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import type { UserPastedBoardInput } from '@/features/chat/pasted-board-input';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
+import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
-
-const DEFAULT_PASTED_BOARD_QUESTION = '请基于这份自贴盘面进行解读。';
 
 interface PastedBoardSheetProps {
   open: boolean;
@@ -38,6 +37,7 @@ export function PastedBoardSheet({
   onClose,
   onSubmit,
 }: PastedBoardSheetProps) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const categoryOptions = useMemo(() => {
     return catalog.map((item) => item.name);
@@ -71,11 +71,11 @@ export function PastedBoardSheet({
       return;
     }
     if (!trimmedCategory) {
-      toast('error', '请先填写术数类型');
+      toast('error', t('aiChat.pastedBoard.missingCategory'));
       return;
     }
     if (!trimmedContent) {
-      toast('error', '请先填写盘面原文');
+      toast('error', t('aiChat.pastedBoard.missingContent'));
       return;
     }
     setSubmitting(true);
@@ -83,7 +83,7 @@ export function PastedBoardSheet({
       await onSubmit({
         category: trimmedCategory,
         content: trimmedContent,
-        question: DEFAULT_PASTED_BOARD_QUESTION,
+        question: t('aiChat.pastedBoard.defaultQuestion'),
       });
     } finally {
       setSubmitting(false);
@@ -105,7 +105,7 @@ export function PastedBoardSheet({
         onClick={handleClose}
         className="h-9 flex-1 rounded-xl text-[12px] sm:flex-none sm:rounded-lg"
       >
-        取消
+        {t('common.cancel')}
       </Button>
       <Button
         type="button"
@@ -116,7 +116,7 @@ export function PastedBoardSheet({
         onClick={() => void handleSubmit()}
         className="h-9 flex-1 rounded-xl text-[12px] sm:flex-none sm:rounded-lg"
       >
-        提交盘面
+        {t('aiChat.pastedBoard.submit')}
       </Button>
     </div>
   );
@@ -128,7 +128,7 @@ export function PastedBoardSheet({
       closeOnOverlay={!busy}
       variant="fullscreen-sheet"
       size="md"
-      title="自贴盘面"
+      title={t('aiChat.pastedBoard.title')}
       footer={footer}
     >
       <div className="space-y-3.5 px-4 py-3.5 sm:space-y-4 sm:px-6 sm:py-5">
@@ -137,7 +137,7 @@ export function PastedBoardSheet({
             htmlFor="pasted-board-category"
             className="mb-1.5 block text-[12px] font-medium text-ink"
           >
-            术数类型
+            {t('aiChat.pastedBoard.categoryLabel')}
           </label>
           <input
             id="pasted-board-category"
@@ -149,7 +149,7 @@ export function PastedBoardSheet({
             value={category}
             onChange={(event) => setCategory(event.currentTarget.value)}
             disabled={busy}
-            placeholder="系统建议会在下拉里显示，其他术数可直接输入"
+            placeholder={t('aiChat.pastedBoard.categoryPlaceholder')}
             className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none disabled:opacity-50"
           />
           {categoryOptions.length > 0 && (
@@ -160,7 +160,7 @@ export function PastedBoardSheet({
             </datalist>
           )}
           <p className="mt-1 text-[10px] leading-relaxed text-muted/80">
-            系统可用的排盘类型会优先出现在候选里；没有候选时也可以直接输入其他术数。
+            {t('aiChat.pastedBoard.categoryHint')}
           </p>
         </div>
 
@@ -169,7 +169,7 @@ export function PastedBoardSheet({
             htmlFor="pasted-board-content"
             className="mb-1.5 block text-[12px] font-medium text-ink"
           >
-            盘面原文
+            {t('aiChat.pastedBoard.contentLabel')}
           </label>
           <textarea
             id="pasted-board-content"

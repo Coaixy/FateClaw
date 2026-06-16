@@ -12,7 +12,7 @@ export function SubscribedBundleGroup({
   onUnsubscribeBundle: (bundleId: string) => void;
 }) {
   return (
-    <div className="group relative rounded-2xl border border-hairline bg-surface-card hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))] transition-all duration-300">
+    <div className="group relative overflow-hidden rounded-2xl border border-hairline bg-surface-card hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))] transition-all duration-300">
       <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.04),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
       <div className="relative p-3.5 sm:p-4">
@@ -41,17 +41,19 @@ export function SubscribedBundleGroup({
           </button>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-hairline/50">
-          <div className="grid gap-2">
+        <div className="mt-4 min-w-0 overflow-hidden pt-3 border-t border-hairline/50">
+          <div className="grid min-w-0 gap-2">
             {group.skills.map((sk) => (
               <div
                 key={`${group.bundleId}-${sk.subscription_id}`}
-                className="flex items-center gap-2 text-[12px] text-muted"
+                className="flex min-w-0 items-center gap-2 text-[12px] text-muted"
               >
-                <span className="inline-flex h-5 items-center px-2 rounded-md bg-surface-cream-strong text-ink truncate max-w-[220px]">
-                  {sk.skill_name}
+                <span className="inline-flex h-5 max-w-[45%] shrink-0 items-center rounded-md bg-surface-cream-strong px-2 text-ink sm:max-w-[220px]">
+                  <span className="min-w-0 truncate">{sk.skill_name}</span>
                 </span>
-                <span className="truncate">{sk.description || '无简介'}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {sk.description || '无简介'}
+                </span>
               </div>
             ))}
           </div>

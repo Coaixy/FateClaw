@@ -2,6 +2,8 @@ import type {
   PaipanCatalogItemDto,
   PaipanCommitRequestDto,
   PaipanCommitResponseDto,
+  PaipanGanzhiReverseRequestDto,
+  PaipanGanzhiReverseResponseDto,
   PaipanPreviewResponseDto,
   SkillParametersSchemaDto,
 } from '@fateclaw/contracts/chat';
@@ -12,6 +14,8 @@ export type PaipanCatalogItem = PaipanCatalogItemDto;
 export type PaipanPreviewResponse = PaipanPreviewResponseDto;
 export type PaipanCommitResponse = PaipanCommitResponseDto;
 export type PaipanCommitRequest = PaipanCommitRequestDto;
+export type PaipanGanzhiReverseRequest = PaipanGanzhiReverseRequestDto;
+export type PaipanGanzhiReverseResponse = PaipanGanzhiReverseResponseDto;
 export type PaipanSchema = SkillParametersSchemaDto;
 
 export const paipanApi = {
@@ -21,6 +25,11 @@ export const paipanApi = {
     input: Record<string, unknown>;
   }) =>
     requestJson<PaipanPreviewResponse>('/api/paipan/preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  ganzhiReverse: (input: PaipanGanzhiReverseRequest) =>
+    requestJson<PaipanGanzhiReverseResponse>('/api/paipan/ganzhi-reverse', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

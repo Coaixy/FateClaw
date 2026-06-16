@@ -3,54 +3,119 @@
 import { PaipanStepFrame } from '../shared/paipan-step-frame';
 import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
 import type { ChoiceGridOption, PaipanFlowProps } from '../types';
+import { useI18n } from '@/lib/i18n';
 
-const MEIHUA_METHOD_OPTIONS: ChoiceGridOption[] = [
-  {
-    value: 'time',
-    label: '时间起卦',
-    hint: '按当前或指定公历时间起卦',
-    recommended: true,
-  },
-  {
-    value: 'counts',
-    label: '数值起卦',
-    hint: '报数、字数、外应等统一换算为数字',
-  },
-  {
-    value: 'trigrams',
-    label: '指定上下卦',
-    hint: '已经知道上下卦和动爻时使用',
-  },
-];
+type TranslateFn = ReturnType<typeof useI18n>['t'];
 
-const COUNT_METHOD_OPTIONS: ChoiceGridOption[] = [
-  { value: 'number', label: '报数', hint: '直接输入数字', recommended: true },
-  { value: 'word', label: '字数', hint: '姓名、字句等换算' },
-  { value: 'sound', label: '声音', hint: '声数或响动' },
-  { value: 'object', label: '物数', hint: '物件数量' },
-  { value: 'direction', label: '方位', hint: '方位外应取数' },
-  { value: 'external', label: '外应', hint: '其他外应取数' },
-];
+function buildMeihuaMethodOptions(t: TranslateFn): ChoiceGridOption[] {
+  return [
+    {
+      value: 'time',
+      label: t('aiChat.paipanFlows.meihua.methods.time.label'),
+      hint: t('aiChat.paipanFlows.meihua.methods.time.hint'),
+      recommended: true,
+    },
+    {
+      value: 'counts',
+      label: t('aiChat.paipanFlows.meihua.methods.counts.label'),
+      hint: t('aiChat.paipanFlows.meihua.methods.counts.hint'),
+    },
+    {
+      value: 'trigrams',
+      label: t('aiChat.paipanFlows.meihua.methods.trigrams.label'),
+      hint: t('aiChat.paipanFlows.meihua.methods.trigrams.hint'),
+    },
+  ];
+}
 
-const TRIGRAM_OPTIONS: ChoiceGridOption[] = [
-  { value: '乾', label: '乾', hint: '天 · 金' },
-  { value: '兑', label: '兑', hint: '泽 · 金' },
-  { value: '离', label: '离', hint: '火 · 火' },
-  { value: '震', label: '震', hint: '雷 · 木' },
-  { value: '巽', label: '巽', hint: '风 · 木' },
-  { value: '坎', label: '坎', hint: '水 · 水' },
-  { value: '艮', label: '艮', hint: '山 · 土' },
-  { value: '坤', label: '坤', hint: '地 · 土' },
-];
+function buildCountMethodOptions(t: TranslateFn): ChoiceGridOption[] {
+  return [
+    {
+      value: 'number',
+      label: t('aiChat.paipanFlows.meihua.countMethods.number.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.number.hint'),
+      recommended: true,
+    },
+    {
+      value: 'word',
+      label: t('aiChat.paipanFlows.meihua.countMethods.word.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.word.hint'),
+    },
+    {
+      value: 'sound',
+      label: t('aiChat.paipanFlows.meihua.countMethods.sound.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.sound.hint'),
+    },
+    {
+      value: 'object',
+      label: t('aiChat.paipanFlows.meihua.countMethods.object.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.object.hint'),
+    },
+    {
+      value: 'direction',
+      label: t('aiChat.paipanFlows.meihua.countMethods.direction.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.direction.hint'),
+    },
+    {
+      value: 'external',
+      label: t('aiChat.paipanFlows.meihua.countMethods.external.label'),
+      hint: t('aiChat.paipanFlows.meihua.countMethods.external.hint'),
+    },
+  ];
+}
 
-const MOVING_LINE_OPTIONS: ChoiceGridOption[] = [
-  { value: '1', label: '初爻', hint: '第一爻' },
-  { value: '2', label: '二爻', hint: '第二爻' },
-  { value: '3', label: '三爻', hint: '第三爻' },
-  { value: '4', label: '四爻', hint: '第四爻' },
-  { value: '5', label: '五爻', hint: '第五爻' },
-  { value: '6', label: '上爻', hint: '第六爻' },
-];
+function buildTrigramOptions(t: TranslateFn): ChoiceGridOption[] {
+  return [
+    {
+      value: '乾',
+      label: t('aiChat.paipanFlows.meihua.trigrams.qian.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.qian.hint'),
+    },
+    {
+      value: '兑',
+      label: t('aiChat.paipanFlows.meihua.trigrams.dui.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.dui.hint'),
+    },
+    {
+      value: '离',
+      label: t('aiChat.paipanFlows.meihua.trigrams.li.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.li.hint'),
+    },
+    {
+      value: '震',
+      label: t('aiChat.paipanFlows.meihua.trigrams.zhen.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.zhen.hint'),
+    },
+    {
+      value: '巽',
+      label: t('aiChat.paipanFlows.meihua.trigrams.xun.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.xun.hint'),
+    },
+    {
+      value: '坎',
+      label: t('aiChat.paipanFlows.meihua.trigrams.kan.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.kan.hint'),
+    },
+    {
+      value: '艮',
+      label: t('aiChat.paipanFlows.meihua.trigrams.gen.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.gen.hint'),
+    },
+    {
+      value: '坤',
+      label: t('aiChat.paipanFlows.meihua.trigrams.kun.label'),
+      hint: t('aiChat.paipanFlows.meihua.trigrams.kun.hint'),
+    },
+  ];
+}
+
+function buildMovingLineOptions(t: TranslateFn): ChoiceGridOption[] {
+  return ['1', '2', '3', '4', '5', '6'].map((value) => ({
+    value,
+    label: t(`aiChat.paipanFlows.meihua.movingLines.${value}.label`),
+    hint: t(`aiChat.paipanFlows.meihua.movingLines.${value}.hint`),
+  }));
+}
 
 function formatIntegerValue(value: unknown): string {
   return typeof value === 'number' && Number.isInteger(value)
@@ -93,6 +158,7 @@ export function MeihuaFlow({
   resultAction,
   onResultStepChange,
 }: PaipanFlowProps) {
+  const { t } = useI18n();
   const { DateTimeField, ChoiceGrid, FieldTextInput } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts, fromDateTimeLocalValue } =
     helpers;
@@ -130,19 +196,23 @@ export function MeihuaFlow({
     typeof upperTrigram === 'string' &&
     typeof lowerTrigram === 'string' &&
     Boolean(movingLineValue);
+  const methodOptions = buildMeihuaMethodOptions(t);
+  const countMethodOptions = buildCountMethodOptions(t);
+  const trigramOptions = buildTrigramOptions(t);
+  const movingLineOptions = buildMovingLineOptions(t);
 
   const steps: PaipanStep[] = [
     {
       id: 'method',
-      title: '起卦方式',
-      description: '不确定时使用当前时间起卦。',
+      title: t('aiChat.paipanFlows.meihua.methodTitle'),
+      description: t('aiChat.paipanFlows.meihua.methodDescription'),
       status: method ? 'complete' : 'incomplete',
       content: (
-        <PaipanStepFrame title="起卦方式">
+        <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.methodTitle')}>
           <ChoiceGrid
-            title="起卦方式"
+            title={t('aiChat.paipanFlows.meihua.methodTitle')}
             value={method}
-            options={MEIHUA_METHOD_OPTIONS}
+            options={methodOptions}
             onChange={(value) => onChange(['method'], value)}
           />
         </PaipanStepFrame>
@@ -150,26 +220,26 @@ export function MeihuaFlow({
     },
     {
       id: 'time',
-      title: '起卦时间（公历）',
-      description: '当前时间适合现场起卦；复盘旧事时可指定公历时刻。',
+      title: t('aiChat.paipanFlows.meihua.timeTitle'),
+      description: t('aiChat.paipanFlows.meihua.timeDescription'),
       status: hasValidTime ? 'complete' : 'incomplete',
       content:
         method === 'time' ? (
-          <PaipanStepFrame title="起卦时间（公历）">
+          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.timeTitle')}>
             <ChoiceGrid
-              title="起卦时间（公历）"
+              title={t('aiChat.paipanFlows.meihua.timeTitle')}
               value={useCurrentTime ? 'now' : 'custom'}
               options={[
                 {
                   value: 'now',
-                  label: '当前时间（公历）',
-                  hint: '按提交时刻起卦',
+                  label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+                  hint: t('aiChat.paipanFlows.meihua.nowHint'),
                   recommended: true,
                 },
                 {
                   value: 'custom',
-                  label: '指定时间（公历）',
-                  hint: '手动选择年月日时',
+                  label: t('aiChat.paipanFlows.common.customTimeSolar'),
+                  hint: t('aiChat.paipanFlows.meihua.customHint'),
                 },
               ]}
               onChange={(value) => {
@@ -196,7 +266,7 @@ export function MeihuaFlow({
 
             {!useCurrentTime && (
               <DateTimeField
-                title="指定起卦时刻（公历）"
+                title={t('aiChat.paipanFlows.meihua.customTimeField')}
                 required
                 value={getValueAtPath(draft, ['datetime'])}
                 onChange={(value) => onChange(['datetime'], value)}
@@ -207,51 +277,51 @@ export function MeihuaFlow({
     },
     {
       id: 'counts',
-      title: '数值参数',
-      description: '上卦、下卦和动爻按梅花取数规则自动取余。',
+      title: t('aiChat.paipanFlows.meihua.countsTitle'),
+      description: t('aiChat.paipanFlows.meihua.countsDescription'),
       status: hasValidCounts ? 'complete' : 'incomplete',
       content:
         method === 'counts' ? (
-          <PaipanStepFrame title="数值起卦">
+          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.countsFrameTitle')}>
             <ChoiceGrid
-              title="取数来源"
+              title={t('aiChat.paipanFlows.meihua.countSource')}
               value={countMethod}
-              options={COUNT_METHOD_OPTIONS}
+              options={countMethodOptions}
               columns={3}
               onChange={(value) => onChange(['countMethod'], value)}
             />
             <div className="grid gap-3 sm:grid-cols-3">
               <FieldTextInput
-                title="上卦取数"
+                title={t('aiChat.paipanFlows.meihua.upper')}
                 required
                 value={formatIntegerValue(upper)}
-                placeholder="例如 9"
+                placeholder={t('aiChat.paipanFlows.meihua.upperPlaceholder')}
                 onChange={(value) =>
                   onChange(['upper'], parseIntegerValue(value))
                 }
               />
               <FieldTextInput
-                title="下卦取数"
+                title={t('aiChat.paipanFlows.meihua.lower')}
                 required
                 value={formatIntegerValue(lower)}
-                placeholder="例如 10"
+                placeholder={t('aiChat.paipanFlows.meihua.lowerPlaceholder')}
                 onChange={(value) =>
                   onChange(['lower'], parseIntegerValue(value))
                 }
               />
               <FieldTextInput
-                title="动爻取数"
+                title={t('aiChat.paipanFlows.meihua.moving')}
                 value={formatIntegerValue(moving)}
-                placeholder="可不填"
+                placeholder={t('aiChat.paipanFlows.meihua.movingPlaceholder')}
                 onChange={(value) =>
                   onChange(['moving'], parseIntegerValue(value))
                 }
               />
             </div>
             <FieldTextInput
-              title="备注"
+              title={t('aiChat.paipanFlows.common.remark')}
               value={label}
-              placeholder="例如 原始报数 9、10、10"
+              placeholder={t('aiChat.paipanFlows.meihua.countRemarkPlaceholder')}
               onChange={(value) => onChange(['label'], value)}
             />
           </PaipanStepFrame>
@@ -259,44 +329,44 @@ export function MeihuaFlow({
     },
     {
       id: 'trigrams',
-      title: '上下卦与动爻',
-      description: '适合已经有明确卦象，只需要生成梅花盘面时使用。',
+      title: t('aiChat.paipanFlows.meihua.trigramsTitle'),
+      description: t('aiChat.paipanFlows.meihua.trigramsDescription'),
       status: hasValidTrigrams ? 'complete' : 'incomplete',
       content:
         method === 'trigrams' ? (
-          <PaipanStepFrame title="指定上下卦">
+          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.trigramsFrameTitle')}>
             <ChoiceGrid
-              title="上卦"
+              title={t('aiChat.paipanFlows.meihua.upperTrigram')}
               required
               value={
                 typeof upperTrigram === 'string' ? upperTrigram : undefined
               }
-              options={TRIGRAM_OPTIONS}
+              options={trigramOptions}
               onChange={(value) => onChange(['upperTrigram'], value)}
             />
             <ChoiceGrid
-              title="下卦"
+              title={t('aiChat.paipanFlows.meihua.lowerTrigram')}
               required
               value={
                 typeof lowerTrigram === 'string' ? lowerTrigram : undefined
               }
-              options={TRIGRAM_OPTIONS}
+              options={trigramOptions}
               onChange={(value) => onChange(['lowerTrigram'], value)}
             />
             <ChoiceGrid
-              title="动爻"
+              title={t('aiChat.paipanFlows.meihua.movingLine')}
               required
               value={movingLineValue}
-              options={MOVING_LINE_OPTIONS}
+              options={movingLineOptions}
               columns={3}
               onChange={(value) =>
                 onChange(['movingLine'], Number.parseInt(value, 10))
               }
             />
             <FieldTextInput
-              title="备注"
+              title={t('aiChat.paipanFlows.common.remark')}
               value={label}
-              placeholder="例如 乾上兑下四爻动"
+              placeholder={t('aiChat.paipanFlows.meihua.trigramRemarkPlaceholder')}
               onChange={(value) => onChange(['label'], value)}
             />
           </PaipanStepFrame>

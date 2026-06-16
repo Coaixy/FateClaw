@@ -4,6 +4,7 @@ import { ArrowUpRight, Loader2, Sparkles } from 'lucide-react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import type { PaipanCatalogItem } from '@/features/paipan/api';
+import { useI18n } from '@/lib/i18n';
 
 interface PaipanSkillPickerSheetProps {
   open: boolean;
@@ -33,16 +34,18 @@ export function PaipanSkillPickerSheet({
   onClose,
   onSelectSkill,
 }: PaipanSkillPickerSheetProps) {
+  const { t } = useI18n();
+
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
       variant="fullscreen-sheet"
       size="lg"
-      title="手动排盘"
+      title={t('aiChat.paipanPicker.title')}
       titleExtra={
         <span className="rounded-full border border-hairline bg-surface-card/70 px-2.5 py-1 text-[10px] text-muted">
-          可选入口
+          {t('aiChat.paipanPicker.optionalEntry')}
         </span>
       }
     >
@@ -54,26 +57,38 @@ export function PaipanSkillPickerSheet({
             </div>
             <div className="min-w-0">
               <p className="text-[12px] sm:text-[14px] font-semibold tracking-tight text-ink">
-                选择一种术数
+                {t('aiChat.paipanPicker.selectTitle')}
               </p>
               <p className="mt-0.5 text-[10px] leading-4 text-muted">
-                你也可以返回上一层，直接输入问题开始对话
+                {t('aiChat.paipanPicker.selectDescription')}
               </p>
             </div>
           </div>
 
           <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
             <div className="rounded-xl border border-hairline bg-surface-card/55 px-2 py-2 sm:px-3 sm:py-2.5">
-              <p className="text-[9px] text-muted">步骤</p>
-              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">1. 选术数</p>
+              <p className="text-[9px] text-muted">
+                {t('aiChat.paipanPicker.step')}
+              </p>
+              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">
+                {t('aiChat.paipanPicker.stepSkill')}
+              </p>
             </div>
             <div className="rounded-xl border border-hairline bg-surface-card/45 px-2 py-2 opacity-75 sm:px-3 sm:py-2.5">
-              <p className="text-[9px] text-muted">步骤</p>
-              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">2. 填信息</p>
+              <p className="text-[9px] text-muted">
+                {t('aiChat.paipanPicker.step')}
+              </p>
+              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">
+                {t('aiChat.paipanPicker.stepInfo')}
+              </p>
             </div>
             <div className="rounded-xl border border-hairline bg-surface-card/45 px-2 py-2 opacity-75 sm:px-3 sm:py-2.5">
-              <p className="text-[9px] text-muted">步骤</p>
-              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">3. 看盘面</p>
+              <p className="text-[9px] text-muted">
+                {t('aiChat.paipanPicker.step')}
+              </p>
+              <p className="mt-0.5 text-[11px] sm:text-[12px] font-medium text-ink">
+                {t('aiChat.paipanPicker.stepPreview')}
+              </p>
             </div>
           </div>
         </div>
@@ -82,7 +97,7 @@ export function PaipanSkillPickerSheet({
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-[10px] text-muted">
               <Loader2 size={12} className="animate-spin" />
-              正在加载可用术数...
+              {t('aiChat.paipanPicker.loading')}
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -92,7 +107,7 @@ export function PaipanSkillPickerSheet({
           </div>
         ) : catalog.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-hairline bg-surface-card/35 px-3 py-4 text-[10px] sm:text-[11px] leading-5 text-muted">
-            当前没有可用的系统排盘术数。
+            {t('aiChat.paipanPicker.empty')}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
@@ -105,7 +120,7 @@ export function PaipanSkillPickerSheet({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-primary/10 px-2 text-[9px] font-medium text-primary">
-                    术数
+                    {t('aiChat.paipanPicker.systemBadge')}
                   </span>
                   <ArrowUpRight
                     size={15}
@@ -116,7 +131,7 @@ export function PaipanSkillPickerSheet({
                   {item.name}
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted">
-                  进入手动填写
+                  {t('aiChat.paipanPicker.enterManual')}
                 </p>
               </button>
             ))}

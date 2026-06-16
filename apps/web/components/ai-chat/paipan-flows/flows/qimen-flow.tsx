@@ -3,6 +3,7 @@
 import { PaipanStepFrame } from '../shared/paipan-step-frame';
 import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
 import type { PaipanFlowProps } from '../types';
+import { useI18n } from '@/lib/i18n';
 
 const QIMEN_RANDOM_SHICHEN_START_HOURS = [
   23, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21,
@@ -33,6 +34,7 @@ export function QimenFlow({
   resultAction,
   onResultStepChange,
 }: PaipanFlowProps) {
+  const { t } = useI18n();
   const { DateField, TimeField, ChoiceGrid } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts } = helpers;
   const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
@@ -51,31 +53,31 @@ export function QimenFlow({
   const steps: PaipanStep[] = [
     {
       id: 'time-mode',
-      title: '起盘时间（公历）',
-      description: '新手直接用当前公历时间即可；想随机取今日时辰或回看某个时刻时再切换。',
+      title: t('aiChat.paipanFlows.qimen.timeTitle'),
+      description: t('aiChat.paipanFlows.qimen.timeDescription'),
       status: useCurrentTime ? 'complete' : 'optional',
       content: (
-        <PaipanStepFrame title="起盘时间（公历）">
+        <PaipanStepFrame title={t('aiChat.paipanFlows.qimen.timeTitle')}>
           <ChoiceGrid
-            title="起盘时间（公历）"
+            title={t('aiChat.paipanFlows.qimen.timeTitle')}
             value={timeMode}
             columns={3}
             options={[
               {
                 value: 'now',
-                label: '当前时间（公历）',
-                hint: '最省事，适合直接起局',
+                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+                hint: t('aiChat.paipanFlows.qimen.nowHint'),
                 recommended: true,
               },
               {
                 value: 'random',
-                label: '随机时辰（今日）',
-                hint: '在今天 12 个时辰里随机抽一个',
+                label: t('aiChat.paipanFlows.qimen.randomToday'),
+                hint: t('aiChat.paipanFlows.qimen.randomHint'),
               },
               {
                 value: 'custom',
-                label: '指定时间（公历）',
-                hint: '想回看某个时刻再选这个',
+                label: t('aiChat.paipanFlows.common.customTimeSolar'),
+                hint: t('aiChat.paipanFlows.qimen.customHint'),
               },
             ]}
             onChange={(value) => {
@@ -132,23 +134,23 @@ export function QimenFlow({
     },
     {
       id: 'custom-time',
-      title: '指定时刻（公历）',
+      title: t('aiChat.paipanFlows.qimen.customTitle'),
       description:
         timeMode === 'random'
-          ? '已随机抽取今日时辰；需要时也可以在这里微调。'
-          : '只有选择“指定时间（公历）”时需要填写。',
+          ? t('aiChat.paipanFlows.qimen.customRandomDescription')
+          : t('aiChat.paipanFlows.qimen.customDescription'),
       status: startDate && hasStartHour ? 'complete' : 'incomplete',
       content: useCurrentTime ? null : (
-        <PaipanStepFrame title="指定时刻（公历）">
+        <PaipanStepFrame title={t('aiChat.paipanFlows.qimen.customTitle')}>
           <DateField
-            title="起盘日期（公历）"
+            title={t('aiChat.paipanFlows.qimen.dateTitle')}
             required
             value={startDate}
             onChange={(value) => onChange(['solarDate'], value)}
           />
 
           <TimeField
-            title="起盘时间（公历）"
+            title={t('aiChat.paipanFlows.qimen.timeFieldTitle')}
             required
             hour={getValueAtPath(draft, ['hour'])}
             minute={getValueAtPath(draft, ['minute'])}

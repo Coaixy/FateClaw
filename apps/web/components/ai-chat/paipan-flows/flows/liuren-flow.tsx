@@ -4,6 +4,9 @@ import { Shuffle } from 'lucide-react';
 import { PaipanStepFrame } from '../shared/paipan-step-frame';
 import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
 import type { PaipanFlowProps } from '../types';
+import { useI18n } from '@/lib/i18n';
+
+type TranslateFn = ReturnType<typeof useI18n>['t'];
 
 const LIUREN_RANDOM_SHICHEN_START_HOURS = [
   23, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21,
@@ -24,10 +27,15 @@ function normalizeRandomNumber(value: string | undefined): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function formatLiurenShichen(hour: unknown): string {
-  if (typeof hour !== 'number' || Number.isNaN(hour)) return '未抽取';
+function formatLiurenShichen(hour: unknown, t: TranslateFn): string {
+  if (typeof hour !== 'number' || Number.isNaN(hour)) {
+    return t('aiChat.paipanFlows.liuren.notDrawn');
+  }
   const labels = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰', '巳', '巳', '午', '午', '未', '未', '申', '申', '酉', '酉', '戌', '戌', '亥', '亥', '子'];
-  return `${labels[hour] ?? '-'}时 ${String(hour).padStart(2, '0')}:00`;
+  return t('aiChat.paipanFlows.liuren.shichenFormat', {
+    branch: labels[hour] ?? '-',
+    hour: String(hour).padStart(2, '0'),
+  });
 }
 
 /**
@@ -48,6 +56,7 @@ export function LiurenFlow({
   resultAction,
   onResultStepChange,
 }: PaipanFlowProps) {
+  const { t } = useI18n();
   const { DateField, TimeField, ChoiceGrid, FieldTextInput } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts } = helpers;
   const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
@@ -71,31 +80,31 @@ export function LiurenFlow({
   const steps: PaipanStep[] = [
     {
       id: 'time-mode',
-      title: '起课时间（公历）',
-      description: '新手直接用当前公历时间；也可以随机抽今日时辰，或指定一个确切时刻。',
+      title: t('aiChat.paipanFlows.liuren.timeTitle'),
+      description: t('aiChat.paipanFlows.liuren.timeDescription'),
       status: useCurrentTime ? 'complete' : 'optional',
       content: (
-        <PaipanStepFrame title="起课时间（公历）">
+        <PaipanStepFrame title={t('aiChat.paipanFlows.liuren.timeTitle')}>
           <ChoiceGrid
-            title="起课时间（公历）"
+            title={t('aiChat.paipanFlows.liuren.timeTitle')}
             value={timeMode}
             columns={3}
             options={[
               {
                 value: 'now',
-                label: '当前时间（公历）',
-                hint: '适合直接起课',
+                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+                hint: t('aiChat.paipanFlows.liuren.nowHint'),
                 recommended: true,
               },
               {
                 value: 'random',
-                label: '随机时辰（今日）',
-                hint: '可填数字固定随机结果',
+                label: t('aiChat.paipanFlows.liuren.randomToday'),
+                hint: t('aiChat.paipanFlows.liuren.randomHint'),
               },
               {
                 value: 'custom',
-                label: '指定时间（公历）',
-                hint: '复盘某个时刻时使用',
+                label: t('aiChat.paipanFlows.common.customTimeSolar'),
+                hint: t('aiChat.paipanFlows.liuren.customHint'),
               },
             ]}
             onChange={(value) => {
@@ -159,10 +168,10 @@ export function LiurenFlow({
           {timeMode === 'random' && (
             <div className="space-y-3">
               <FieldTextInput
-                title="随机数字"
-                description="可不填；填写后会稳定映射到今日 12 个时辰之一。"
+                title={t('aiChat.paipanFlows.liuren.randomNumber')}
+                description={t('aiChat.paipanFlows.liuren.randomNumberDescription')}
                 value={randomNumber === undefined ? '' : String(randomNumber)}
-                placeholder="例如 8848"
+                placeholder={t('aiChat.paipanFlows.liuren.randomNumberPlaceholder')}
                 onChange={(value) => {
                   const now = getCurrentLocalDateParts();
                   const nextRandomNumber = normalizeRandomNumber(value);
@@ -181,10 +190,10 @@ export function LiurenFlow({
               <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-[11px] font-medium text-muted">
-                    已抽取时辰
+                    {t('aiChat.paipanFlows.liuren.selectedShichen')}
                   </div>
                   <div className="mt-1 text-[14px] font-semibold text-ink">
-                    {startDate || getCurrentLocalDateParts().date} · {formatLiurenShichen(selectedHour)}
+                    {startDate || getCurrentLocalDateParts().date} · {formatLiurenShichen(selectedHour, t)}
                   </div>
                 </div>
                 <button
@@ -202,7 +211,7 @@ export function LiurenFlow({
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
                 >
                   <Shuffle size={14} />
-                  重抽时辰
+                  {t('aiChat.paipanFlows.liuren.reroll')}
                 </button>
               </div>
             </div>
@@ -212,23 +221,23 @@ export function LiurenFlow({
     },
     {
       id: 'custom-time',
-      title: '指定时刻（公历）',
+      title: t('aiChat.paipanFlows.liuren.customTitle'),
       description:
         timeMode === 'random'
-          ? '已抽取今日时辰；需要时也可以在这里微调日期和时间。'
-          : '只有选择“指定时间（公历）”时需要填写。',
+          ? t('aiChat.paipanFlows.liuren.customRandomDescription')
+          : t('aiChat.paipanFlows.liuren.customDescription'),
       status: startDate && hasStartHour ? 'complete' : 'incomplete',
       content: useCurrentTime ? null : (
-        <PaipanStepFrame title="指定时刻（公历）">
+        <PaipanStepFrame title={t('aiChat.paipanFlows.liuren.customTitle')}>
           <DateField
-            title="起课日期（公历）"
+            title={t('aiChat.paipanFlows.liuren.dateTitle')}
             required
             value={startDate}
             onChange={(value) => onChange(['solarDate'], value)}
           />
 
           <TimeField
-            title="起课时间（公历）"
+            title={t('aiChat.paipanFlows.liuren.timeFieldTitle')}
             required
             hour={getValueAtPath(draft, ['hour'])}
             minute={getValueAtPath(draft, ['minute'])}

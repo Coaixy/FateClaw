@@ -5,6 +5,7 @@ import {
   listDirectPaipanCatalogForOwnedUser,
   previewDirectPaipanForOwnedUser,
 } from '../../modules/chat/paipan-service.js';
+import { reverseGanzhiForPaipan } from '../../modules/chat/ganzhi-reverse-service.js';
 import { getUserById } from '../../infrastructure/db.js';
 
 function isJwtVerificationError(error: unknown): boolean {
@@ -82,6 +83,16 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       skill,
       input,
     });
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  app.post<{
+    Body: unknown;
+  }>('/ganzhi-reverse', async (request, reply) => {
+    const result = reverseGanzhiForPaipan(request.body);
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }
