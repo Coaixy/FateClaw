@@ -236,6 +236,34 @@ describe('runDatabaseMigrations', () => {
         '增加第三方登录身份并允许用户无手机号注册',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0043_repair_legacy_pro_to_deep_memberships',
+        '修复旧 Pro 会员迁移后被低档 Insight 覆盖的问题',
+      ],
+    });
+    expect(
+      calls.some((call) => call.sql.includes('membership-repair-deep-')),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO user_memberships') &&
+          call.sql.includes(
+            "metadata->>'planKey' IN ('fateclaw_pro', 'fateclaw_deep')",
+          ) &&
+          call.sql.includes("'fateclaw_deep'"),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO membership_allowances') &&
+          call.sql.includes('membership-repair-deep-') &&
+          call.sql.includes('ON CONFLICT (user_id, plan_key, period_start)'),
+      ),
+    ).toBe(true);
     expect(
       calls.some(
         (call) =>
@@ -392,6 +420,7 @@ describe('runDatabaseMigrations', () => {
       '0040_billing_gift_codes',
       '0041_oauth_user_identities',
       '0042_membership_tier_rekey',
+      '0043_repair_legacy_pro_to_deep_memberships',
     ]);
 
     await runDatabaseMigrations(client as never);

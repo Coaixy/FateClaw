@@ -1317,4 +1317,289 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       });
     },
   },
+  {
+    id: '0043_repair_legacy_pro_to_deep_memberships',
+    description: '修复旧 Pro 会员迁移后被低档 Insight 覆盖的问题',
+    async up(client) {
+      await client.query(`
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        SELECT
+          'fateclaw_deep',
+          enabled,
+          'FateClaw Deep',
+          100,
+          120,
+          monthly_allowance_units,
+          standard_price_per_million_units_coins,
+          NOW()
+        FROM membership_config
+        WHERE id IN ('fateclaw_pro', 'fateclaw_insight')
+        ORDER BY CASE WHEN id = 'fateclaw_pro' THEN 0 ELSE 1 END
+        LIMIT 1
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          updated_at = NOW()
+      `);
+      await client.query(`
+        UPDATE user_memberships current
+        SET current_period_start = LEAST(
+              current.current_period_start,
+              legacy.current_period_start
+            ),
+            current_period_end = GREATEST(
+              current.current_period_end,
+              legacy.current_period_end
+            ),
+            status = CASE
+              WHEN current.status = 'active' OR legacy.status = 'active'
+                THEN 'active'
+              ELSE current.status
+            END,
+            updated_at = NOW()
+        FROM user_memberships legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.plan_key = 'fateclaw_deep'
+          AND legacy.plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        DELETE FROM user_memberships legacy
+        USING user_memberships current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.plan_key = 'fateclaw_pro'
+          AND current.plan_key = 'fateclaw_deep'
+      `);
+      await client.query(`
+        UPDATE user_memberships
+        SET plan_key = 'fateclaw_deep',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        UPDATE membership_allowances current
+        SET period_end = GREATEST(current.period_end, legacy.period_end),
+            allowance_units = GREATEST(
+              current.allowance_units,
+              legacy.allowance_units
+            ),
+            used_units = GREATEST(current.used_units, legacy.used_units),
+            updated_at = NOW()
+        FROM membership_allowances legacy
+        WHERE current.user_id = legacy.user_id
+          AND current.period_start = legacy.period_start
+          AND current.plan_key = 'fateclaw_deep'
+          AND legacy.plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        DELETE FROM membership_allowances legacy
+        USING membership_allowances current
+        WHERE legacy.user_id = current.user_id
+          AND legacy.period_start = current.period_start
+          AND legacy.plan_key = 'fateclaw_pro'
+          AND current.plan_key = 'fateclaw_deep'
+      `);
+      await client.query(`
+        UPDATE membership_allowances
+        SET plan_key = 'fateclaw_deep',
+            updated_at = NOW()
+        WHERE plan_key = 'fateclaw_pro'
+      `);
+      await client.query(`
+        UPDATE wallet_transactions
+        SET metadata = jsonb_set(
+              metadata,
+              '{planKey}',
+              '"fateclaw_deep"'::jsonb,
+              false
+            )
+        WHERE metadata->>'planKey' = 'fateclaw_pro'
+      `);
+      await client.query(`
+        WITH pro_sources AS (
+          SELECT
+            user_id,
+            current_period_start AS period_start,
+            current_period_end AS period_end,
+            NULL::NUMERIC AS allowance_units,
+            NULL::NUMERIC AS used_units
+          FROM user_memberships
+          WHERE plan_key IN ('fateclaw_pro', 'fateclaw_deep')
+            AND status = 'active'
+            AND current_period_end > NOW()
+          UNION ALL
+          SELECT
+            user_id,
+            period_start,
+            period_end,
+            allowance_units,
+            used_units
+          FROM membership_allowances
+          WHERE plan_key IN ('fateclaw_pro', 'fateclaw_deep')
+            AND period_end > NOW()
+          UNION ALL
+          SELECT
+            user_id,
+            (metadata->>'periodStart')::TIMESTAMPTZ AS period_start,
+            (metadata->>'periodEnd')::TIMESTAMPTZ AS period_end,
+            NULLIF(metadata->>'allowanceUnits', '')::NUMERIC AS allowance_units,
+            0::NUMERIC AS used_units
+          FROM wallet_transactions
+          WHERE kind = 'membership_subscription'
+            AND metadata->>'planKey' IN ('fateclaw_pro', 'fateclaw_deep')
+            AND metadata ? 'periodStart'
+            AND metadata ? 'periodEnd'
+            AND (metadata->>'periodEnd')::TIMESTAMPTZ > NOW()
+        ),
+        repair_candidates AS (
+          SELECT
+            source.user_id,
+            MIN(source.period_start) AS period_start,
+            MAX(source.period_end) AS period_end,
+            MAX(source.allowance_units) AS allowance_units,
+            MAX(source.used_units) AS used_units
+          FROM pro_sources source
+          WHERE source.period_start IS NOT NULL
+            AND source.period_end IS NOT NULL
+            AND EXISTS (
+              SELECT 1
+              FROM user_memberships insight
+              WHERE insight.user_id = source.user_id
+                AND insight.plan_key = 'fateclaw_insight'
+                AND insight.status = 'active'
+                AND insight.current_period_end > NOW()
+            )
+          GROUP BY source.user_id
+        )
+        INSERT INTO user_memberships (
+          user_id, plan_key, status, current_period_start,
+          current_period_end, created_at, updated_at
+        )
+        SELECT
+          user_id,
+          'fateclaw_deep',
+          'active',
+          period_start,
+          period_end,
+          NOW(),
+          NOW()
+        FROM repair_candidates
+        ON CONFLICT (user_id, plan_key) DO UPDATE SET
+          status = 'active',
+          current_period_start = LEAST(
+            user_memberships.current_period_start,
+            EXCLUDED.current_period_start
+          ),
+          current_period_end = GREATEST(
+            user_memberships.current_period_end,
+            EXCLUDED.current_period_end
+          ),
+          updated_at = NOW()
+      `);
+      await client.query(`
+        WITH pro_sources AS (
+          SELECT
+            user_id,
+            period_start,
+            period_end,
+            allowance_units,
+            used_units
+          FROM membership_allowances
+          WHERE plan_key IN ('fateclaw_pro', 'fateclaw_deep')
+            AND period_end > NOW()
+          UNION ALL
+          SELECT
+            user_id,
+            (metadata->>'periodStart')::TIMESTAMPTZ AS period_start,
+            (metadata->>'periodEnd')::TIMESTAMPTZ AS period_end,
+            NULLIF(metadata->>'allowanceUnits', '')::NUMERIC AS allowance_units,
+            0::NUMERIC AS used_units
+          FROM wallet_transactions
+          WHERE kind = 'membership_subscription'
+            AND metadata->>'planKey' IN ('fateclaw_pro', 'fateclaw_deep')
+            AND metadata ? 'periodStart'
+            AND metadata ? 'periodEnd'
+            AND (metadata->>'periodEnd')::TIMESTAMPTZ > NOW()
+        ),
+        insight_usage AS (
+          SELECT
+            allowance.user_id,
+            MAX(allowance.used_units) AS used_units
+          FROM membership_allowances allowance
+          WHERE allowance.plan_key = 'fateclaw_insight'
+            AND allowance.period_end > NOW()
+          GROUP BY allowance.user_id
+        ),
+        repair_candidates AS (
+          SELECT
+            membership.user_id,
+            membership.current_period_start AS period_start,
+            membership.current_period_end AS period_end,
+            COALESCE(
+              MAX(source.allowance_units),
+              MAX(config.monthly_allowance_units),
+              0
+            ) AS allowance_units,
+            GREATEST(
+              COALESCE(MAX(source.used_units), 0),
+              COALESCE(MAX(insight_usage.used_units), 0)
+            ) AS used_units
+          FROM user_memberships membership
+          LEFT JOIN pro_sources source
+            ON source.user_id = membership.user_id
+          LEFT JOIN insight_usage
+            ON insight_usage.user_id = membership.user_id
+          LEFT JOIN membership_config config
+            ON config.id = 'fateclaw_deep'
+          WHERE membership.plan_key = 'fateclaw_deep'
+            AND membership.status = 'active'
+            AND membership.current_period_end > NOW()
+            AND EXISTS (
+              SELECT 1
+              FROM user_memberships insight
+              WHERE insight.user_id = membership.user_id
+                AND insight.plan_key = 'fateclaw_insight'
+                AND insight.status = 'active'
+                AND insight.current_period_end > NOW()
+            )
+          GROUP BY
+            membership.user_id,
+            membership.current_period_start,
+            membership.current_period_end
+        )
+        INSERT INTO membership_allowances (
+          id, user_id, plan_key, period_start, period_end,
+          allowance_units, used_units, created_at, updated_at
+        )
+        SELECT
+          'membership-repair-deep-' ||
+            md5(user_id || ':' || period_start::TEXT),
+          user_id,
+          'fateclaw_deep',
+          period_start,
+          period_end,
+          allowance_units,
+          used_units,
+          NOW(),
+          NOW()
+        FROM repair_candidates
+        ON CONFLICT (user_id, plan_key, period_start) DO UPDATE SET
+          period_end = GREATEST(
+            membership_allowances.period_end,
+            EXCLUDED.period_end
+          ),
+          allowance_units = GREATEST(
+            membership_allowances.allowance_units,
+            EXCLUDED.allowance_units
+          ),
+          used_units = GREATEST(
+            membership_allowances.used_units,
+            EXCLUDED.used_units
+          ),
+          updated_at = NOW()
+      `);
+    },
+  },
 ];
