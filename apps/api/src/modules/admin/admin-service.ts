@@ -88,6 +88,11 @@ import type {
   ReferralRewardStatus,
 } from '../../infrastructure/db.js';
 import {
+  MEMBERSHIP_INSIGHT_PLAN_KEY,
+  normalizeMembershipPlanKey,
+  type MembershipPlanKey,
+} from '../../shared/membership-plans.js';
+import {
   getAdminStatusStats,
   getUsageStats,
   getUsageStatsByUserIds,
@@ -441,6 +446,7 @@ export async function updateAdminRewardConfig(input: {
 /** 管理后台邀请配置视图。 */
 export interface AdminReferralConfigView {
   enabled: boolean;
+  reward_membership_plan_key: MembershipPlanKey;
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
@@ -457,6 +463,7 @@ export async function getAdminReferralConfig(): Promise<AdminReferralConfigView>
   const config = await getReferralConfig();
   return {
     enabled: config.enabled,
+    reward_membership_plan_key: config.reward_membership_plan_key,
     inviter_reward_days: config.inviter_reward_days,
     monthly_reward_cap_days: config.monthly_reward_cap_days,
     reward_first_membership_only: config.reward_first_membership_only,
@@ -472,6 +479,7 @@ export async function getAdminReferralConfig(): Promise<AdminReferralConfigView>
  */
 export async function updateAdminReferralConfig(input: {
   enabled: boolean;
+  rewardMembershipPlanKey?: MembershipPlanKey;
   inviterRewardDays: number;
   monthlyRewardCapDays: number;
   rewardFirstMembershipOnly: boolean;
@@ -479,9 +487,16 @@ export async function updateAdminReferralConfig(input: {
   inviteCountRewardDays: number;
   inviteCountRewardMaxInvites: number;
 }): Promise<AdminReferralConfigView> {
-  const config = await updateReferralConfig(input);
+  const config = await updateReferralConfig({
+    ...input,
+    rewardMembershipPlanKey: normalizeMembershipPlanKey(
+      input.rewardMembershipPlanKey,
+      MEMBERSHIP_INSIGHT_PLAN_KEY,
+    ),
+  });
   return {
     enabled: config.enabled,
+    reward_membership_plan_key: config.reward_membership_plan_key,
     inviter_reward_days: config.inviter_reward_days,
     monthly_reward_cap_days: config.monthly_reward_cap_days,
     reward_first_membership_only: config.reward_first_membership_only,

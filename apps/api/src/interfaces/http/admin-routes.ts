@@ -81,6 +81,7 @@ import {
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
+import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 type AdminRole = 'owner' | 'user_manager';
@@ -685,6 +686,7 @@ const RewardConfigSchema = z.object({
 
 const ReferralConfigSchema = z.object({
   enabled: z.boolean(),
+  reward_membership_plan_key: z.enum(MEMBERSHIP_PLAN_KEYS).optional(),
   inviter_reward_days: z
     .number()
     .int('奖励天数必须是整数')
@@ -1169,6 +1171,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     return updateAdminReferralConfig({
       enabled: parsed.data.enabled,
+      rewardMembershipPlanKey: parsed.data.reward_membership_plan_key,
       inviterRewardDays: parsed.data.inviter_reward_days,
       monthlyRewardCapDays: parsed.data.monthly_reward_cap_days,
       rewardFirstMembershipOnly:

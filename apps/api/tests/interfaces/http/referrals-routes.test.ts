@@ -106,6 +106,7 @@ describe('referralsRoutes', () => {
         bound_referral: null,
         config: {
           enabled: true,
+          reward_membership_plan_key: 'fateclaw_insight',
           inviter_reward_days: 7,
           monthly_reward_cap_days: 30,
           reward_first_membership_only: true,

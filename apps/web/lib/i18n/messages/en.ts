@@ -342,8 +342,9 @@ export const enMessages = {
       bindCodePlaceholder: 'Enter a friend’s invite code',
       bind: 'Bind',
       rewardRules: 'Reward rules',
-      rewardDays: 'Reward {days} membership days',
-      countRewardSummary: 'Reward {days} days per {count} invites',
+      rewardDays: 'Reward {days} days of {plan}',
+      rewardPlanDays: '{days} days of {plan}',
+      countRewardSummary: 'Reward {days} days of {plan} per {count} invites',
       expand: 'Expand',
       collapse: 'Collapse',
       ruleEnabled: 'Referral feature',
@@ -356,7 +357,7 @@ export const enMessages = {
       rulePaymentValue: 'Membership paid only with purchased credits',
       ruleInviteCountReward: 'Invite-count reward',
       ruleInviteCountRewardValue:
-        'Reward {days} membership days for every {count} invites, up to {max} invites',
+        'Reward {days} days of {plan} for every {count} invites, up to {max} invites',
       ruleBinding: 'Binding rule',
       ruleBindingValue:
         'Cannot change inviter after binding; self or circular referrals are not allowed',

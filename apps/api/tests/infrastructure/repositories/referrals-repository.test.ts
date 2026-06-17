@@ -48,7 +48,14 @@ describe('referrals repository', () => {
 
   it('rejects referral cycles when redeeming an invite code', async () => {
     const { client } = createMockClient([
-      [{ enabled: true, inviter_reward_days: 7, monthly_reward_cap_days: 30 }],
+      [
+        {
+          enabled: true,
+          reward_membership_plan_key: 'fateclaw_insight',
+          inviter_reward_days: 7,
+          monthly_reward_cap_days: 30,
+        },
+      ],
       [
         {
           id: 'code-1',
@@ -82,6 +89,7 @@ describe('referrals repository', () => {
       [
         {
           enabled: true,
+          reward_membership_plan_key: 'fateclaw_insight',
           inviter_reward_days: 7,
           monthly_reward_cap_days: 30,
           reward_first_membership_only: true,
@@ -133,7 +141,7 @@ describe('referrals repository', () => {
       [
         {
           user_id: 'inviter-1',
-          plan_key: 'fateclaw_plus',
+          plan_key: 'fateclaw_insight',
           status: 'active',
           current_period_start: '2026-01-01T00:00:00.000Z',
           current_period_end: '2026-01-08T00:00:00.000Z',
@@ -174,6 +182,7 @@ describe('referrals repository', () => {
       [
         {
           enabled: true,
+          reward_membership_plan_key: 'fateclaw_insight',
           inviter_reward_days: 7,
           monthly_reward_cap_days: 30,
           reward_first_membership_only: true,
@@ -248,6 +257,7 @@ describe('referrals repository', () => {
       [
         {
           enabled: true,
+          reward_membership_plan_key: 'fateclaw_deep',
           inviter_reward_days: 7,
           monthly_reward_cap_days: 30,
           reward_first_membership_only: true,
@@ -261,7 +271,7 @@ describe('referrals repository', () => {
       [
         {
           user_id: 'inviter-1',
-          plan_key: 'fateclaw_plus',
+          plan_key: 'fateclaw_deep',
           status: 'active',
           current_period_start: '2026-01-01T00:00:00.000Z',
           current_period_end: '2026-01-08T00:00:00.000Z',
@@ -297,7 +307,11 @@ describe('referrals repository', () => {
     });
 
     expect(
-      calls.some((call) => call.sql.includes('INSERT INTO user_memberships')),
+      calls.some(
+        (call) =>
+          call.sql.includes('INSERT INTO user_memberships') &&
+          call.params?.[1] === 'fateclaw_deep',
+      ),
     ).toBe(true);
     expect(
       calls.some((call) => call.sql.includes('UPDATE user_referrals')),
@@ -322,6 +336,7 @@ describe('referrals repository', () => {
       [
         {
           enabled: true,
+          reward_membership_plan_key: 'fateclaw_insight',
           inviter_reward_days: 7,
           monthly_reward_cap_days: 30,
           reward_first_membership_only: true,
@@ -392,7 +407,94 @@ describe('referrals repository', () => {
         .map((call) => call.params),
     ).toEqual([
       ['inviter-1', 'fateclaw_insight'],
-      ['inviter-1', 'fateclaw_deep'],
+      ['inviter-1', 'fateclaw_insight', 2],
+    ]);
+
+    vi.useRealTimers();
+  });
+
+  it('starts lower-tier referral rewards after the latest higher-tier overlay', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
+
+    const { calls, client } = createMockClient([
+      [
+        {
+          id: 'ref-1',
+          invite_code_id: 'code-1',
+          inviter_id: 'inviter-1',
+          invitee_id: 'invitee-1',
+          reward_status: 'pending',
+          reward_days: 0,
+        },
+      ],
+      [
+        {
+          enabled: true,
+          reward_membership_plan_key: 'fateclaw_clarity',
+          inviter_reward_days: 7,
+          monthly_reward_cap_days: 30,
+          reward_first_membership_only: true,
+          invite_count_reward_threshold: 10,
+          invite_count_reward_days: 7,
+          invite_count_reward_max_invites: 50,
+        },
+      ],
+      [{ total_days: 0 }],
+      [],
+      [
+        {
+          user_id: 'inviter-1',
+          plan_key: 'fateclaw_insight',
+          status: 'active',
+          current_period_start: '2026-07-10T00:00:00.000Z',
+          current_period_end: '2026-07-20T00:00:00.000Z',
+        },
+      ],
+      [
+        {
+          user_id: 'inviter-1',
+          plan_key: 'fateclaw_clarity',
+          status: 'active',
+          current_period_start: '2026-07-20T00:00:00.000Z',
+          current_period_end: '2026-07-27T00:00:00.000Z',
+        },
+      ],
+      [
+        {
+          id: 'event-1',
+          referral_id: 'ref-1',
+          inviter_id: 'inviter-1',
+          invitee_id: 'invitee-1',
+          reward_days: 7,
+          status: 'granted',
+          reason: 'first_paid_membership',
+        },
+      ],
+      [],
+    ]);
+
+    await expect(
+      settleReferralMembershipRewardUsing(client, {
+        inviteeId: 'invitee-1',
+        bonusDeducted: 0,
+        purchasedDeducted: 30,
+        priceCoins: 30,
+        triggerWalletTransactionId: 'wtx-1',
+      }),
+    ).resolves.toMatchObject({
+      reward_days: 7,
+      status: 'granted',
+    });
+
+    const membershipInsert = calls.find((call) =>
+      call.sql.includes('INSERT INTO user_memberships'),
+    );
+    expect(membershipInsert?.params).toEqual([
+      'inviter-1',
+      'fateclaw_clarity',
+      '2026-07-20T00:00:00.000Z',
+      '2026-07-27T00:00:00.000Z',
     ]);
 
     vi.useRealTimers();

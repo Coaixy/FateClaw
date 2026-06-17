@@ -12,9 +12,16 @@ export type ReferralRewardStatusDto =
 /** 邀请关系绑定来源。 */
 export type ReferralBindSourceDto = 'register' | 'redeem';
 
+/** 邀请奖励可发放的会员档位。 */
+export type ReferralRewardMembershipPlanKeyDto =
+  | 'fateclaw_clarity'
+  | 'fateclaw_insight'
+  | 'fateclaw_deep';
+
 /** 后台可配置的邀请返会员规则。 */
 export interface ReferralConfigDto {
   enabled: boolean;
+  reward_membership_plan_key: ReferralRewardMembershipPlanKeyDto;
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;

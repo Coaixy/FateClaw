@@ -45,6 +45,7 @@ export async function getMyReferralSummary(
       : null,
     config: {
       enabled: config.enabled,
+      reward_membership_plan_key: config.reward_membership_plan_key,
       inviter_reward_days: config.inviter_reward_days,
       monthly_reward_cap_days: config.monthly_reward_cap_days,
       reward_first_membership_only: config.reward_first_membership_only,

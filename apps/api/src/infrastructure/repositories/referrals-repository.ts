@@ -7,12 +7,13 @@ import { queryOne } from '../typed-query.js';
 import type { DbQueryable } from '../db-pool.js';
 import type { UserMembership } from '../../shared/types.js';
 import {
-  MEMBERSHIP_DEEP_PLAN_KEY,
   MEMBERSHIP_INSIGHT_PLAN_KEY,
+  normalizeMembershipPlanKey,
+  resolveMembershipPlanRank,
+  type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
 
-const MEMBERSHIP_PLAN_KEY = MEMBERSHIP_INSIGHT_PLAN_KEY;
-const PRO_MEMBERSHIP_PLAN_KEY = MEMBERSHIP_DEEP_PLAN_KEY;
+const DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY = MEMBERSHIP_INSIGHT_PLAN_KEY;
 const DEFAULT_MAX_REDEMPTIONS = 1_000_000;
 const PAID_MEMBERSHIP_REWARD_REASON = 'first_paid_membership';
 const INVITE_COUNT_REWARD_REASON = 'invite_count_milestone';
@@ -33,6 +34,7 @@ export type ReferralRewardStatus =
 export interface ReferralConfigRow {
   id: string;
   enabled: boolean;
+  reward_membership_plan_key: MembershipPlanKey;
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
@@ -138,6 +140,10 @@ function toInt(value: unknown): number {
 function normalizeReferralConfigRow(row: ReferralConfigRow): ReferralConfigRow {
   return {
     ...row,
+    reward_membership_plan_key: normalizeMembershipPlanKey(
+      row.reward_membership_plan_key,
+      DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY,
+    ),
     inviter_reward_days: toInt(row.inviter_reward_days),
     monthly_reward_cap_days: toInt(row.monthly_reward_cap_days),
     invite_count_reward_threshold: toInt(row.invite_count_reward_threshold),
@@ -216,6 +222,7 @@ export async function getReferralConfig(): Promise<ReferralConfigRow> {
  */
 export async function updateReferralConfig(input: {
   enabled: boolean;
+  rewardMembershipPlanKey: MembershipPlanKey;
   inviterRewardDays: number;
   monthlyRewardCapDays: number;
   rewardFirstMembershipOnly: boolean;
@@ -225,13 +232,15 @@ export async function updateReferralConfig(input: {
 }): Promise<ReferralConfigRow> {
   const { rows } = await getDbPool().query(
     `INSERT INTO referral_config (
-       id, enabled, inviter_reward_days, monthly_reward_cap_days,
+       id, enabled, reward_membership_plan_key,
+       inviter_reward_days, monthly_reward_cap_days,
        reward_first_membership_only, invite_count_reward_threshold,
        invite_count_reward_days, invite_count_reward_max_invites, updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
+       reward_membership_plan_key = EXCLUDED.reward_membership_plan_key,
        inviter_reward_days = EXCLUDED.inviter_reward_days,
        monthly_reward_cap_days = EXCLUDED.monthly_reward_cap_days,
        reward_first_membership_only = EXCLUDED.reward_first_membership_only,
@@ -242,6 +251,10 @@ export async function updateReferralConfig(input: {
      RETURNING *`,
     [
       input.enabled,
+      normalizeMembershipPlanKey(
+        input.rewardMembershipPlanKey,
+        DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY,
+      ),
       input.inviterRewardDays,
       input.monthlyRewardCapDays,
       input.rewardFirstMembershipOnly,
@@ -433,6 +446,7 @@ async function settleReferralInviteCountRewardUsing(
 
   await grantReferralMembershipDaysUsing(client, {
     userId: input.referral.inviter_id,
+    planKey: input.config.reward_membership_plan_key,
     rewardDays: reward.rewardDays,
   });
   return result.event;
@@ -716,13 +730,14 @@ async function insertReferralRewardEventUsing(
 async function getCurrentMembershipForUserUsing(
   client: pg.PoolClient,
   userId: string,
+  planKey: MembershipPlanKey,
 ): Promise<UserMembership | null> {
   const { rows } = await client.query(
     `SELECT *
      FROM user_memberships
      WHERE user_id = $1 AND plan_key = $2
      FOR UPDATE`,
-    [userId, MEMBERSHIP_PLAN_KEY],
+    [userId, planKey],
   );
   return (rows[0] as UserMembership | undefined) ?? null;
 }
@@ -730,16 +745,31 @@ async function getCurrentMembershipForUserUsing(
 async function getCurrentHigherMembershipForUserUsing(
   client: pg.PoolClient,
   userId: string,
+  planKey: MembershipPlanKey,
 ): Promise<UserMembership | null> {
   const { rows } = await client.query(
     `SELECT *
      FROM user_memberships
      WHERE user_id = $1
-       AND plan_key = $2
+       AND plan_key <> $2
        AND status = 'active'
        AND current_period_end > NOW()
+       AND CASE plan_key
+         WHEN 'fateclaw_deep' THEN 3
+         WHEN 'fateclaw_insight' THEN 2
+         WHEN 'fateclaw_clarity' THEN 1
+         ELSE 0
+       END > $3
+     ORDER BY current_period_end DESC,
+     CASE plan_key
+       WHEN 'fateclaw_deep' THEN 3
+       WHEN 'fateclaw_insight' THEN 2
+       WHEN 'fateclaw_clarity' THEN 1
+       ELSE 0
+     END DESC
+     LIMIT 1
      FOR UPDATE`,
-    [userId, PRO_MEMBERSHIP_PLAN_KEY],
+    [userId, planKey, resolveMembershipPlanRank(planKey)],
   );
   return (rows[0] as UserMembership | undefined) ?? null;
 }
@@ -748,19 +778,29 @@ async function grantReferralMembershipDaysUsing(
   client: pg.PoolClient,
   input: {
     userId: string;
+    planKey: MembershipPlanKey;
     rewardDays: number;
   },
 ): Promise<UserMembership> {
   const now = new Date();
-  const current = await getCurrentMembershipForUserUsing(client, input.userId);
+  const planKey = normalizeMembershipPlanKey(
+    input.planKey,
+    DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY,
+  );
+  const current = await getCurrentMembershipForUserUsing(
+    client,
+    input.userId,
+    planKey,
+  );
   const currentHigher = await getCurrentHigherMembershipForUserUsing(
     client,
     input.userId,
+    planKey,
   );
   const higherEnd = currentHigher
     ? new Date(currentHigher.current_period_end)
     : null;
-  // Deep 覆盖期内发放 Insight 奖励时，Insight 天数排到 Deep 之后，避免奖励被高档权益覆盖消耗。
+  // 高档会员覆盖期内发放低档奖励时，低档天数排到高档之后，避免奖励被覆盖消耗。
   const activeBase =
     current && new Date(current.current_period_end).getTime() > now.getTime()
       ? new Date(
@@ -788,7 +828,7 @@ async function grantReferralMembershipDaysUsing(
        current_period_end = EXCLUDED.current_period_end,
        updated_at = NOW()
      RETURNING *`,
-    [input.userId, MEMBERSHIP_PLAN_KEY, periodStart, periodEnd.toISOString()],
+    [input.userId, planKey, periodStart, periodEnd.toISOString()],
   );
   return rows[0] as UserMembership;
 }
@@ -898,6 +938,7 @@ export async function settleReferralMembershipRewardUsing(
 
   await grantReferralMembershipDaysUsing(client, {
     userId: referral.inviter_id,
+    planKey: config.reward_membership_plan_key,
     rewardDays,
   });
   const event = await insertReferralRewardEventUsing(client, {

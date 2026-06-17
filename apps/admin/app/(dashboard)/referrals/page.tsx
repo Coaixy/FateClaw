@@ -27,6 +27,12 @@ const STATUS_OPTIONS = [
   { value: 'ineligible', label: '不符合' },
 ] as const;
 
+const REWARD_MEMBERSHIP_PLAN_OPTIONS = [
+  { value: 'fateclaw_clarity', label: 'FateClaw Clarity' },
+  { value: 'fateclaw_insight', label: 'FateClaw Insight' },
+  { value: 'fateclaw_deep', label: 'FateClaw Deep' },
+] as const;
+
 function formatDateTime(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('zh-CN', {
@@ -136,6 +142,7 @@ function PaginationControls({
 
 type ReferralConfigDraft = {
   enabled: boolean;
+  reward_membership_plan_key: string;
   inviter_reward_days: string;
   monthly_reward_cap_days: string;
   invite_count_reward_threshold: string;
@@ -148,6 +155,8 @@ function draftFromConfig(
 ): ReferralConfigDraft {
   return {
     enabled: config?.enabled ?? true,
+    reward_membership_plan_key:
+      config?.reward_membership_plan_key ?? 'fateclaw_insight',
     inviter_reward_days: String(config?.inviter_reward_days ?? 7),
     monthly_reward_cap_days: String(config?.monthly_reward_cap_days ?? 30),
     invite_count_reward_threshold: String(
@@ -191,7 +200,7 @@ function ConfigPanel({
         <div>
           <div className="text-sm font-semibold">邀请返会员</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            配置首购奖励和累计邀请人数奖励。
+            配置奖励会员档位、首购奖励和累计邀请人数奖励。
           </div>
         </div>
         <label className="inline-flex items-center gap-2 text-[13px] text-muted">
@@ -207,7 +216,28 @@ function ConfigPanel({
         </label>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <label className="space-y-1.5">
+          <div className="text-[12px] font-medium text-muted">
+            奖励会员档位
+          </div>
+          <select
+            value={draft.reward_membership_plan_key}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                reward_membership_plan_key: event.target.value,
+              }))
+            }
+            className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
+          >
+            {REWARD_MEMBERSHIP_PLAN_OPTIONS.map((plan) => (
+              <option key={plan.value} value={plan.value}>
+                {plan.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="space-y-1.5">
           <div className="text-[12px] font-medium text-muted">
             首购单次奖励天数
@@ -457,6 +487,7 @@ export default function AdminReferralsPage() {
     try {
       const saved = await admin.updateReferralConfig({
         enabled: draft.enabled,
+        reward_membership_plan_key: draft.reward_membership_plan_key,
         inviter_reward_days: Math.max(
           0,
           Math.trunc(Number(draft.inviter_reward_days || 0)),

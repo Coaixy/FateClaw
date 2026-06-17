@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
+import { normalizeMembershipPlanKey } from '@/features/billing/membership-plans';
 import { referralsApi, type MyReferralSummary } from '@/features/referrals/api';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -23,6 +24,16 @@ function referralLink(summary: MyReferralSummary): string {
   if (summary.invite_url.startsWith('http')) return summary.invite_url;
   if (typeof window === 'undefined') return summary.invite_url;
   return new URL(summary.invite_url, window.location.origin).toString();
+}
+
+function referralRewardPlanName(summary: MyReferralSummary): string {
+  const planKey = normalizeMembershipPlanKey(
+    summary.config.reward_membership_plan_key,
+    'fateclaw_insight',
+  );
+  if (planKey === 'fateclaw_deep') return 'FateClaw Deep';
+  if (planKey === 'fateclaw_clarity') return 'FateClaw Clarity';
+  return 'FateClaw Insight';
 }
 
 async function writeClipboardText(value: string): Promise<boolean> {
@@ -153,6 +164,7 @@ export function ReferralCenter() {
   };
 
   const link = summary ? referralLink(summary) : '';
+  const rewardPlanName = summary ? referralRewardPlanName(summary) : '';
   const countRewardEnabled = summary
     ? summary.config.invite_count_reward_threshold > 0 &&
       summary.config.invite_count_reward_days > 0 &&
@@ -344,6 +356,7 @@ export function ReferralCenter() {
                       <span className="rounded-full border border-hairline bg-canvas/55 px-2.5 py-1 text-[11px] font-medium text-muted">
                         {t('pages.referrals.rewardDays', {
                           days: summary.config.inviter_reward_days,
+                          plan: rewardPlanName,
                         })}
                       </span>
                       {countRewardEnabled ? (
@@ -351,6 +364,7 @@ export function ReferralCenter() {
                           {t('pages.referrals.countRewardSummary', {
                             count: summary.config.invite_count_reward_threshold,
                             days: summary.config.invite_count_reward_days,
+                            plan: rewardPlanName,
                           })}
                         </span>
                       ) : null}
@@ -391,8 +405,9 @@ export function ReferralCenter() {
                     />
                     <RuleRow
                       label={t('pages.referrals.ruleInviterReward')}
-                      value={t('pages.common.daysMember', {
+                      value={t('pages.referrals.rewardPlanDays', {
                         days: summary.config.inviter_reward_days,
+                        plan: rewardPlanName,
                       })}
                     />
                     <RuleRow
@@ -421,6 +436,7 @@ export function ReferralCenter() {
                               count:
                                 summary.config.invite_count_reward_threshold,
                               days: summary.config.invite_count_reward_days,
+                              plan: rewardPlanName,
                               max: summary.config
                                 .invite_count_reward_max_invites,
                             })

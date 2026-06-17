@@ -1602,4 +1602,27 @@ export const runtimeSkillMigrations: readonly DatabaseMigration[] = [
       `);
     },
   },
+  {
+    id: '0044_referral_reward_membership_plan',
+    description: '允许后台配置邀请奖励会员档位',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE referral_config
+          ADD COLUMN IF NOT EXISTS reward_membership_plan_key TEXT NOT NULL DEFAULT 'fateclaw_insight'
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_referral_config_reward_membership_plan_valid',
+        tableName: 'referral_config',
+        expression:
+          "reward_membership_plan_key IN ('fateclaw_clarity', 'fateclaw_insight', 'fateclaw_deep')",
+        cleanupSql: `UPDATE referral_config
+                     SET reward_membership_plan_key = 'fateclaw_insight'
+                     WHERE reward_membership_plan_key NOT IN (
+                       'fateclaw_clarity',
+                       'fateclaw_insight',
+                       'fateclaw_deep'
+                     )`,
+      });
+    },
+  },
 ];

@@ -608,6 +608,7 @@ export type AdminReferralRewardStatus =
 /** 管理后台邀请返会员配置。 */
 export interface AdminReferralConfig {
   enabled: boolean;
+  reward_membership_plan_key: string;
   inviter_reward_days: number;
   monthly_reward_cap_days: number;
   reward_first_membership_only: boolean;
@@ -933,6 +934,7 @@ export const admin = {
     adminRequest<AdminReferralConfig>('/api/admin/referrals/config'),
   updateReferralConfig: (data: {
     enabled: boolean;
+    reward_membership_plan_key: string;
     inviter_reward_days: number;
     monthly_reward_cap_days: number;
     reward_first_membership_only?: boolean;

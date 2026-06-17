@@ -243,6 +243,18 @@ describe('runDatabaseMigrations', () => {
         '修复旧 Pro 会员迁移后被低档 Insight 覆盖的问题',
       ],
     });
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0044_referral_reward_membership_plan',
+        '允许后台配置邀请奖励会员档位',
+      ],
+    });
+    expect(
+      calls.some((call) =>
+        call.sql.includes('reward_membership_plan_key TEXT NOT NULL DEFAULT'),
+      ),
+    ).toBe(true);
     expect(
       calls.some((call) => call.sql.includes('membership-repair-deep-')),
     ).toBe(true);
@@ -421,6 +433,7 @@ describe('runDatabaseMigrations', () => {
       '0041_oauth_user_identities',
       '0042_membership_tier_rekey',
       '0043_repair_legacy_pro_to_deep_memberships',
+      '0044_referral_reward_membership_plan',
     ]);
 
     await runDatabaseMigrations(client as never);
