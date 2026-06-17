@@ -1081,7 +1081,7 @@ export async function getMembershipOverviewsByUserIds(
       `SELECT *
        FROM membership_allowances
        WHERE user_id = ANY($1::text[])
-         AND period_start = ANY($2::text[])`,
+         AND period_start = ANY($2::timestamptz[])`,
       [userIds, [...periodStarts]],
     );
     for (const allowance of allowanceRows as MembershipAllowanceRow[]) {

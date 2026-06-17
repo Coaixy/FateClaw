@@ -29,6 +29,7 @@ import {
   deductModelChargeCoinsAllowDebt,
   getFreeProfessionalAiQuotaConfig,
   getMembershipOverview,
+  getMembershipOverviewsByUserIds,
   getMembershipEntitlements,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
@@ -1487,6 +1488,59 @@ describe('billing repository', () => {
       'user-1',
       'fateclaw_plus',
       '2026-05-30T00:00:00.000Z',
+    ]);
+  });
+
+  it('casts batch membership allowance period filters as timestamps', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+
+    const membership = {
+      user_id: 'user-1',
+      plan_key: 'fateclaw_insight',
+      status: 'active',
+      current_period_start: '2026-05-30T00:00:00.000Z',
+      current_period_end: '2026-06-30T00:00:00.000Z',
+      created_at: '2026-05-30T00:00:00.000Z',
+      updated_at: '2026-05-30T00:00:00.000Z',
+    };
+    const allowance = {
+      id: 'allowance-1',
+      user_id: 'user-1',
+      plan_key: 'fateclaw_insight',
+      period_start: '2026-05-30T00:00:00.000Z',
+      period_end: '2026-06-30T00:00:00.000Z',
+      allowance_units: 3000000,
+      used_units: 42,
+      created_at: '2026-05-30T00:00:00.000Z',
+      updated_at: '2026-05-30T00:00:00.000Z',
+    };
+    const config = {
+      id: 'fateclaw_insight',
+      enabled: true,
+      monthly_price_coins: 30,
+      monthly_allowance_units: 3000000,
+      standard_price_per_million_units_coins: 10,
+    };
+    const { calls } = createMockPool([
+      [config],
+      [config],
+      [config],
+      [membership],
+      [allowance],
+    ]);
+
+    const overviews = await getMembershipOverviewsByUserIds(['user-1']);
+
+    expect(overviews.get('user-1')).toMatchObject({
+      active: true,
+      allowance,
+    });
+
+    expect(calls[4]?.sql).toContain('period_start = ANY($2::timestamptz[])');
+    expect(calls[4]?.params).toEqual([
+      ['user-1'],
+      ['2026-05-30T00:00:00.000Z'],
     ]);
   });
 });
