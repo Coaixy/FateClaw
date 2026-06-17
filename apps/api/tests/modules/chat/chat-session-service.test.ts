@@ -78,6 +78,10 @@ const {
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
   archiveChatSession: mockArchiveChatSession,
+  expireUserBonusBalanceBefore: vi.fn(async () => ({
+    expired: 0,
+    totalCoinsExpired: 0,
+  })),
   getArchivedChatSessionsByUserId: mockGetArchivedChatSessionsByUserId,
   getChatSession: mockGetChatSession,
   getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,

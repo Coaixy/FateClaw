@@ -322,7 +322,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const token = crypto.randomUUID();
     const skill = await shareUserCustomSkill(id, request.user.userId, token);
     if (!skill) return reply.code(404).send({ error: '技能不存在' });
-    return { share_token: token, skill };
+    return { share_token: skill.share_token ?? token, skill };
   });
 
   // DELETE /api/skills/user/:id/share — 关闭分享
@@ -601,7 +601,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const token = crypto.randomUUID();
     const bundle = await shareSkillBundle(id, request.user.userId, token);
     if (!bundle) return reply.code(404).send({ error: '捆绑包不存在' });
-    return { bundle_token: token, bundle };
+    return { bundle_token: bundle.bundle_token ?? token, bundle };
   });
 
   // DELETE /api/skills/bundles/:id/share — 取消分享

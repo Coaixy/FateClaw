@@ -1,4 +1,5 @@
 import {
+  expireUserBonusBalanceBefore,
   getBillingRequestReservationByRequestId,
   getMembershipPlanConfigs,
   getMembershipOverview,
@@ -128,6 +129,7 @@ export async function reserveBillingForRequest(input: {
   if (input.runtime.billingMode !== 'metered') {
     return null;
   }
+  await expireUserBonusBalanceBefore(input.userId, new Date().toISOString());
   const user = await getUserById(input.userId);
   if (!user) {
     throw new Error('用户不存在');

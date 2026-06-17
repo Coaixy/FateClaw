@@ -220,5 +220,20 @@ describe('admin repository', () => {
       '2026-05-01',
       '2026-05-31',
     ]);
+
+    const queryCount = calls.length;
+    await expect(
+      getAdminGlobalStats({
+        rechargeRange: 'custom',
+        rechargeStartDate: '2026-05-01',
+        rechargeEndDate: '2026-05-30',
+      }),
+    ).resolves.toMatchObject({
+      paid_recharge_users: 2,
+      recharge_period: {
+        range: 'custom',
+      },
+    });
+    expect(calls).toHaveLength(queryCount);
   });
 });

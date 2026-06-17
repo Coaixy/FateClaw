@@ -27,6 +27,10 @@ const {
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
+  expireUserBonusBalanceBefore: vi.fn(async () => ({
+    expired: 0,
+    totalCoinsExpired: 0,
+  })),
   getMembershipOverview: mockGetMembershipOverview,
   getRecentMessages: mockGetRecentMessages,
   getSoulContent: mockGetSoulContent,

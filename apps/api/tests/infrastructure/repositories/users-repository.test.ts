@@ -13,6 +13,7 @@ import {
   getUserByAccountId,
   getUserByIdUsing,
   getUserByOAuthIdentityUsing,
+  listUsersPageForAdmin,
   promoteUserToCreator,
   updateUserPasswordHash,
   upsertOAuthIdentityUsing,
@@ -178,5 +179,24 @@ describe('users repository', () => {
     expect(calls[0]?.sql).toContain("WHEN 'consumer' THEN 'both'");
     expect(calls[0]?.sql).toContain("WHEN 'admin' THEN 'admin'");
     expect(calls[0]?.params).toEqual(['user-1']);
+  });
+
+  it('uses index-friendly prefix search for admin ASCII user queries', async () => {
+    const { calls } = createMockPool();
+
+    await expect(
+      listUsersPageForAdmin({
+        limit: 20,
+        offset: 0,
+        query: 'user-',
+      }),
+    ).resolves.toEqual({
+      users: [],
+      total: 0,
+    });
+
+    expect(calls[0]?.sql).toContain('u.phone LIKE $1 OR u.id LIKE $1');
+    expect(calls[0]?.sql).not.toContain('ILIKE $1');
+    expect(calls[0]?.params).toEqual(['user-%', 20, 0]);
   });
 });

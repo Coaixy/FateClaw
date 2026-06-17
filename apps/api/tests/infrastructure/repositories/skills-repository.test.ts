@@ -37,6 +37,8 @@ import {
   listMarketBundles,
   listMarketSkills,
   seedOfficialSkills,
+  subscribeToBundle,
+  unsubscribeFromSkill,
 } from '../../../src/infrastructure/repositories/skills-repository.js';
 
 interface QueryCall {
@@ -99,6 +101,40 @@ function createSequencedClientMockPool(clientRows: unknown[][]) {
     async query(sql: string, params?: unknown[]) {
       calls.push({ sql, params });
       return { rows: [], rowCount: 0 };
+    },
+    async connect() {
+      return client;
+    },
+  };
+  mockGetDbPool.mockReturnValue(pool);
+  return { calls, clientCalls, client };
+}
+
+function createSequencedPoolAndClientMockPool(input: {
+  poolRows: unknown[][];
+  clientRows: unknown[][];
+}) {
+  const calls: QueryCall[] = [];
+  const clientCalls: QueryCall[] = [];
+  let poolIdx = 0;
+  let clientIdx = 0;
+  const client = {
+    async query(sql: string, params?: unknown[]) {
+      clientCalls.push({ sql, params });
+      const rows =
+        input.clientRows[Math.min(clientIdx, input.clientRows.length - 1)] ?? [];
+      clientIdx += 1;
+      return { rows, rowCount: rows.length };
+    },
+    release: vi.fn(),
+  };
+  const pool = {
+    async query(sql: string, params?: unknown[]) {
+      calls.push({ sql, params });
+      const rows =
+        input.poolRows[Math.min(poolIdx, input.poolRows.length - 1)] ?? [];
+      poolIdx += 1;
+      return { rows, rowCount: rows.length };
     },
     async connect() {
       return client;
@@ -270,6 +306,8 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.sql).toContain("b.visibility = 'shared'");
     expect(calls[0]?.sql).not.toContain('s.visibility');
     expect(calls[0]?.sql).not.toContain('s2.category');
+    expect(calls[0]?.sql).toContain('b.stat_skill_count::int AS skill_count');
+    expect(calls[0]?.sql).toContain('b.stat_skill_count > 0');
     expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
     expect(calls[0]?.params).toEqual([50, 10]);
   });
@@ -496,5 +534,65 @@ describe('skills repository official skill settings', () => {
     expect(clientCalls[5]?.sql).toContain(
       'INSERT INTO user_skill_subscription_bundle_sources',
     );
+  });
+
+  it('reactivates existing subscriptions when subscribing to public bundles', async () => {
+    const { clientCalls } = createSequencedPoolAndClientMockPool({
+      poolRows: [
+        [
+          {
+            id: 'bundle-1',
+            user_id: 'creator-1',
+            skill_ids: ['skill-1'],
+          },
+        ],
+        [
+          {
+            id: 'skill-1',
+            skill_name: 'Skill',
+            description: '',
+            bundle_uri: 'text-skill://skill-1',
+          },
+        ],
+      ],
+      clientRows: [
+        [],
+        [{ id: 'sub-1', is_insert: false }],
+        [],
+        [],
+        [],
+      ],
+    });
+
+    await subscribeToBundle('user-1', 'bundle-token');
+
+    expect(clientCalls[1]?.sql).toContain(
+      "ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET",
+    );
+    expect(clientCalls[1]?.sql).toContain('enabled = true');
+    expect(clientCalls[1]?.sql).toContain("status = 'active'");
+    expect(clientCalls[2]?.sql).toContain(
+      'INSERT INTO user_skill_subscription_bundle_sources',
+    );
+  });
+
+  it('keeps bundle-sourced access when removing direct skill subscriptions', async () => {
+    const { clientCalls } = createSequencedClientMockPool([
+      [],
+      [{ id: 'sub-1', skill_id: 'skill-1', has_direct_source: true }],
+      [{ exists: 1 }],
+      [],
+      [],
+    ]);
+
+    await expect(unsubscribeFromSkill('sub-1', 'user-1')).resolves.toBe(true);
+
+    expect(clientCalls[1]?.sql).toContain('FOR UPDATE');
+    expect(clientCalls[3]?.sql).toContain('SET has_direct_source = false');
+    expect(
+      clientCalls.some((call) =>
+        call.sql.includes('DELETE FROM user_skill_subscriptions'),
+      ),
+    ).toBe(false);
   });
 });

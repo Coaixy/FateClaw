@@ -450,17 +450,23 @@ export async function getSharedChatSessionByToken(
 export async function resetUserMessages(userId: string): Promise<string[]> {
   const now = new Date().toISOString();
   const userAccounts = await getAccountsByUserId(userId);
-  const accountIds = userAccounts.map((a) => a.id);
+  const accountIds = Array.from(
+    new Set([...userAccounts.map((a) => a.id), `web:${userId}`]),
+  );
 
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    for (const accountId of accountIds) {
-      await client.query(
-        'UPDATE messages SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL',
-        [now, accountId],
-      );
-    }
+    await client.query(
+      `UPDATE messages
+       SET deleted_at = $1
+       WHERE deleted_at IS NULL
+         AND (
+           user_id = $2
+           OR account_id = ANY($3::text[])
+         )`,
+      [now, userId, accountIds],
+    );
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');

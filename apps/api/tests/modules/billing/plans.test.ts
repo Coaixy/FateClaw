@@ -6,12 +6,14 @@ const {
   mockGetUserById,
   mockReserveUserBalanceCoins,
   mockSettleUserModelChargeCoins,
+  mockExpireUserBonusBalanceBefore,
 } = vi.hoisted(() => ({
   mockGetBillingRequestReservationByRequestId: vi.fn(),
   mockGetMembershipOverview: vi.fn(),
   mockGetUserById: vi.fn(),
   mockReserveUserBalanceCoins: vi.fn(),
   mockSettleUserModelChargeCoins: vi.fn(),
+  mockExpireUserBonusBalanceBefore: vi.fn(),
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
@@ -20,6 +22,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getMembershipOverview: mockGetMembershipOverview,
   getMonthlyModelChargeCoins: vi.fn(),
   getUserById: mockGetUserById,
+  expireUserBonusBalanceBefore: mockExpireUserBonusBalanceBefore,
   releaseUserBalanceReservation: vi.fn(),
   reserveUserBalanceCoins: mockReserveUserBalanceCoins,
   settleUserModelChargeCoins: mockSettleUserModelChargeCoins,
@@ -55,6 +58,10 @@ describe('metered billing plans', () => {
     });
     mockReserveUserBalanceCoins.mockResolvedValue({
       reservedCoins: 0,
+    });
+    mockExpireUserBonusBalanceBefore.mockResolvedValue({
+      expired: 0,
+      totalCoinsExpired: 0,
     });
     mockGetBillingRequestReservationByRequestId.mockResolvedValue({
       request_id: 'request-1',

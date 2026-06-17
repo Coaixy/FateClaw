@@ -231,7 +231,7 @@ describe('chat repository', () => {
     expect(calls[0]?.sql).not.toContain('pi_session_archived_at IS NOT NULL');
   });
 
-  it('soft deletes all messages for a user account set transactionally', async () => {
+  it('soft deletes all account and web chat messages for a user transactionally', async () => {
     const { calls, clientCalls, client } = createMockPool([
       { id: 'account-1' },
       { id: 'account-2' },
@@ -240,14 +240,22 @@ describe('chat repository', () => {
     await expect(resetUserMessages('user-1')).resolves.toEqual([
       'account-1',
       'account-2',
+      'web:user-1',
     ]);
 
     expect(calls[0]?.sql).toContain('WHERE owner_id = $1');
     expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(clientCalls[1]?.sql).toContain('UPDATE messages SET deleted_at');
-    expect(clientCalls[1]?.params?.[1]).toBe('account-1');
-    expect(clientCalls[2]?.params?.[1]).toBe('account-2');
-    expect(clientCalls[3]?.sql).toBe('COMMIT');
+    expect(clientCalls[1]?.sql).toContain('UPDATE messages');
+    expect(clientCalls[1]?.sql).toContain('SET deleted_at');
+    expect(clientCalls[1]?.sql).toContain('user_id = $2');
+    expect(clientCalls[1]?.sql).toContain('account_id = ANY($3::text[])');
+    expect(clientCalls[1]?.params?.[1]).toBe('user-1');
+    expect(clientCalls[1]?.params?.[2]).toEqual([
+      'account-1',
+      'account-2',
+      'web:user-1',
+    ]);
+    expect(clientCalls[2]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 });

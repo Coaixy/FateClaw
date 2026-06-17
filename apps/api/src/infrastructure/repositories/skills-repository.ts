@@ -285,17 +285,11 @@ export async function listMarketBundles(opts: {
         b.name,
         b.description,
         b.bundle_token,
-        COUNT(s.id)::int AS skill_count
+        b.stat_skill_count::int AS skill_count
      FROM skill_bundles b
-     LEFT JOIN skill_bundle_items sbi ON sbi.bundle_id = b.id
-     LEFT JOIN user_custom_skills s
-       ON s.id = sbi.skill_id
-      AND s.deleted_at IS NULL
-      AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
      WHERE ${conditions.join(' AND ')}
-     GROUP BY b.id, b.name, b.description, b.bundle_token, b.created_at
-     HAVING COUNT(s.id) > 0
-     ORDER BY COUNT(s.id) DESC, b.created_at DESC
+       AND b.stat_skill_count > 0
+     ORDER BY b.stat_skill_count DESC, b.created_at DESC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );
@@ -1231,18 +1225,66 @@ export async function unsubscribeFromSkill(
   subscriptionId: string,
   subscriberId: string,
 ): Promise<boolean> {
-  const { rows } = await pool.query(
-    'DELETE FROM user_skill_subscriptions WHERE id = $1 AND subscriber_id = $2 RETURNING skill_id',
-    [subscriptionId, subscriberId],
-  );
-  if (rows.length > 0) {
-    await pool.query(
-      `UPDATE user_custom_skills SET stat_subscriber_count = GREATEST(0, stat_subscriber_count - 1), updated_at = NOW() WHERE id = $1`,
-      [(rows[0] as { skill_id: string }).skill_id],
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: subscriptionRows } = await client.query(
+      `SELECT id, skill_id, has_direct_source
+       FROM user_skill_subscriptions
+       WHERE id = $1 AND subscriber_id = $2
+       FOR UPDATE`,
+      [subscriptionId, subscriberId],
     );
+    const subscription = subscriptionRows[0] as
+      | { id: string; skill_id: string; has_direct_source: boolean }
+      | undefined;
+    if (!subscription) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    if (!subscription.has_direct_source) {
+      await client.query('COMMIT');
+      return true;
+    }
+
+    const { rows: sourceRows } = await client.query(
+      `SELECT 1
+       FROM user_skill_subscription_bundle_sources
+       WHERE subscription_id = $1
+       LIMIT 1`,
+      [subscriptionId],
+    );
+    if (sourceRows.length > 0) {
+      // 仍有 Bundle 授权时只移除 direct source，不能删除整条订阅。
+      await client.query(
+        `UPDATE user_skill_subscriptions
+         SET has_direct_source = false
+         WHERE id = $1`,
+        [subscriptionId],
+      );
+      await client.query('COMMIT');
+      return true;
+    }
+
+    await client.query('DELETE FROM user_skill_subscriptions WHERE id = $1', [
+      subscriptionId,
+    ]);
+    await client.query(
+      `UPDATE user_custom_skills
+       SET stat_subscriber_count = GREATEST(0, stat_subscriber_count - 1),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [subscription.skill_id],
+    );
+    await client.query('COMMIT');
     return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-  return false;
 }
 
 export async function toggleSubscription(
@@ -1389,6 +1431,13 @@ async function replaceSkillBundleItemsUsing(
      SELECT $1, items.skill_id, (items.ordinality - 1)::int
      FROM UNNEST($2::text[]) WITH ORDINALITY AS items(skill_id, ordinality)`,
     [bundleId, skillIds],
+  );
+  await client.query(
+    `UPDATE skill_bundles
+     SET stat_skill_count = $2,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [bundleId, skillIds.length],
   );
 }
 
@@ -1767,13 +1816,22 @@ export async function subscribeToBundle(
         `INSERT INTO user_skill_subscriptions
            (id, subscriber_id, skill_id, has_direct_source, source_kind)
          VALUES ($1, $2, $3, false, 'bundle_share')
-         ON CONFLICT (subscriber_id, skill_id) DO NOTHING
-         RETURNING id`,
+         ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET
+           enabled = true,
+           status = 'active',
+           expires_at = NULL,
+           source_kind = CASE
+             WHEN user_skill_subscriptions.source_kind IN ('invite', 'bundle_invite')
+               THEN user_skill_subscriptions.source_kind
+             ELSE 'bundle_share'
+           END
+         RETURNING id, (xmax = 0) AS is_insert`,
         [subId, subscriberId, skillId],
       );
+      const row = rows[0] as { id: string; is_insert: boolean } | undefined;
       const subscriptionId =
-        rowCount && rowCount > 0
-          ? (rows[0] as { id: string }).id
+        rowCount && rowCount > 0 && row
+          ? row.id
           : await getActiveUserSkillSubscriptionIdUsing(
               client,
               subscriberId,
@@ -1790,7 +1848,7 @@ export async function subscribeToBundle(
          ON CONFLICT (subscription_id, bundle_id) DO NOTHING`,
         [subscriptionId, info.bundle.id],
       );
-      if (rowCount && rowCount > 0) {
+      if (row?.is_insert) {
         subscribedCount++;
         subscriptionIds.push(subscriptionId);
         insertedSkillIds.add(skillId);

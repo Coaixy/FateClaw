@@ -65,6 +65,7 @@ import {
   createGiftCodesForAdmin,
   createDailySignInReward,
   expireBonusBalance,
+  expireUserBonusBalanceBefore,
   getBillingRequestReservationByRequestId,
   getDailySignInConfig,
   getDailySignInRecordByDate,
@@ -353,6 +354,7 @@ export {
   deleteUserModelSelectionsByOfficialModelId,
   deleteWechatChatSessionLink,
   expireBonusBalance,
+  expireUserBonusBalanceBefore,
   getAccount,
   getAccountCountsByOwnerIds,
   getAccountsByUserId,
@@ -682,21 +684,29 @@ export async function deleteUser(userId: string): Promise<void> {
       userId,
     ]);
 
+    // 站内 AI Chat 使用 web:{userId}，不再依赖 accounts 行。
+    const webAccountId = `web:${userId}`;
+
     // 删除用户拥有的账号链路
     await client.query(
-      `DELETE FROM conversation_logs WHERE account_id IN
-       (SELECT id FROM accounts WHERE owner_id = $1)`,
-      [userId],
+      `DELETE FROM conversation_logs
+       WHERE account_id = $1
+          OR account_id IN (SELECT id FROM accounts WHERE owner_id = $2)`,
+      [webAccountId, userId],
     );
     await client.query(
-      `DELETE FROM messages WHERE account_id IN
-       (SELECT id FROM accounts WHERE owner_id = $1)`,
-      [userId],
+      `DELETE FROM messages
+       WHERE user_id = $1
+          OR account_id = $2
+          OR account_id IN (SELECT id FROM accounts WHERE owner_id = $1)`,
+      [userId, webAccountId],
     );
     await client.query(
-      `DELETE FROM chat_sessions WHERE account_id IN
-       (SELECT id FROM accounts WHERE owner_id = $1)`,
-      [userId],
+      `DELETE FROM chat_sessions
+       WHERE user_id = $1
+          OR account_id = $2
+          OR account_id IN (SELECT id FROM accounts WHERE owner_id = $1)`,
+      [userId, webAccountId],
     );
     await client.query('DELETE FROM daily_usage WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM accounts WHERE owner_id = $1', [userId]);
@@ -720,18 +730,24 @@ export async function deleteUser(userId: string): Promise<void> {
 export async function resetUserData(userId: string): Promise<string[]> {
   const now = new Date().toISOString();
   const userAccounts = await getAccountsByUserId(userId);
-  const accountIds = userAccounts.map((a) => a.id);
+  const accountIds = Array.from(
+    new Set([...userAccounts.map((a) => a.id), `web:${userId}`]),
+  );
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    for (const accountId of accountIds) {
-      await client.query(
-        'UPDATE messages SET deleted_at = $1 WHERE account_id = $2 AND deleted_at IS NULL',
-        [now, accountId],
-      );
-    }
+    await client.query(
+      `UPDATE messages
+       SET deleted_at = $1
+       WHERE deleted_at IS NULL
+         AND (
+           user_id = $2
+           OR account_id = ANY($3::text[])
+         )`,
+      [now, userId, accountIds],
+    );
 
     await client.query('COMMIT');
   } catch (err) {

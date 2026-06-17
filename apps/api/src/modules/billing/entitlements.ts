@@ -1,4 +1,8 @@
-import { getMembershipOverview, getUserById } from '../../infrastructure/db.js';
+import {
+  expireUserBonusBalanceBefore,
+  getMembershipOverview,
+  getUserById,
+} from '../../infrastructure/db.js';
 import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
@@ -49,6 +53,7 @@ export interface RuntimeEntitlementSnapshot {
 export async function getRuntimeEntitlementSnapshot(
   userId: string,
 ): Promise<RuntimeEntitlementSnapshot> {
+  await expireUserBonusBalanceBefore(userId, new Date().toISOString());
   const [membership, user] = await Promise.all([
     getMembershipOverview(userId),
     getUserById(userId),

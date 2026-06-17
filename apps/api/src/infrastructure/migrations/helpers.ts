@@ -4,6 +4,17 @@ import {
   writeTextSkillBundle,
 } from '../../modules/skills/text-skill-bundle-store.js';
 
+function quoteSqlIdentifier(identifier: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(identifier)) {
+    throw new Error(`非法 SQL 标识符: ${identifier}`);
+  }
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function quoteSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 async function tableExists(
   client: pg.PoolClient,
   tableName: string,
@@ -261,17 +272,23 @@ export async function ensureForeignKey(
   const referencedColumn = input.referencedColumn ?? 'id';
   const onDeleteClause = input.onDelete ? ` ON DELETE ${input.onDelete}` : '';
   const cleanupSql = input.cleanupSql ? `${input.cleanupSql};` : '';
+  const constraintNameLiteral = quoteSqlLiteral(input.constraintName);
+  const constraintName = quoteSqlIdentifier(input.constraintName);
+  const tableName = quoteSqlIdentifier(input.tableName);
+  const columnName = quoteSqlIdentifier(input.columnName);
+  const referencedTable = quoteSqlIdentifier(input.referencedTable);
+  const referencedColumnName = quoteSqlIdentifier(referencedColumn);
   await client.query(`
     DO $$
     BEGIN
       IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = '${input.constraintName}'
+        SELECT 1 FROM pg_constraint WHERE conname = ${constraintNameLiteral}
       ) THEN
         ${cleanupSql}
-        ALTER TABLE ${input.tableName}
-          ADD CONSTRAINT ${input.constraintName}
-          FOREIGN KEY (${input.columnName})
-          REFERENCES ${input.referencedTable}(${referencedColumn})${onDeleteClause};
+        ALTER TABLE ${tableName}
+          ADD CONSTRAINT ${constraintName}
+          FOREIGN KEY (${columnName})
+          REFERENCES ${referencedTable}(${referencedColumnName})${onDeleteClause};
       END IF;
     END $$;
   `);
@@ -295,15 +312,18 @@ export async function ensureCheckConstraint(
   },
 ): Promise<void> {
   const cleanupSql = input.cleanupSql ? `${input.cleanupSql};` : '';
+  const constraintNameLiteral = quoteSqlLiteral(input.constraintName);
+  const constraintName = quoteSqlIdentifier(input.constraintName);
+  const tableName = quoteSqlIdentifier(input.tableName);
   await client.query(`
     DO $$
     BEGIN
       IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = '${input.constraintName}'
+        SELECT 1 FROM pg_constraint WHERE conname = ${constraintNameLiteral}
       ) THEN
         ${cleanupSql}
-        ALTER TABLE ${input.tableName}
-          ADD CONSTRAINT ${input.constraintName}
+        ALTER TABLE ${tableName}
+          ADD CONSTRAINT ${constraintName}
           CHECK (${input.expression});
       END IF;
     END $$;

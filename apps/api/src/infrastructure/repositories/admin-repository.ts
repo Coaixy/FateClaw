@@ -7,6 +7,16 @@ const pool = {
   },
 };
 
+const ADMIN_GLOBAL_STATS_CACHE_TTL_MS = 30_000;
+
+let adminGlobalStatsCache:
+  | {
+      key: string;
+      expiresAt: number;
+      value: AdminGlobalStats;
+    }
+  | undefined;
+
 export interface AdminGlobalStats {
   total_users: number;
   plan_distribution: { plan: string; count: number }[];
@@ -96,10 +106,7 @@ export async function getMessagesForAdmin(opts: {
     whereClause += ` AND (
       m.user_id = $${paramIdx}
       OR m.account_id IN (SELECT id FROM accounts WHERE owner_id = $${paramIdx})
-      OR EXISTS (
-        SELECT 1 FROM chat_sessions s
-        WHERE s.id = m.session_id AND s.user_id = $${paramIdx}
-      )
+      OR m.account_id = 'web:' || $${paramIdx}
     )`;
     params.push(opts.userId);
     paramIdx++;
@@ -169,7 +176,15 @@ export async function getChatSessionsForAdmin(opts: {
   const { rows: countRows } = await pool.query(countQuery, params);
   const total = Number((countRows[0] as { cnt: string }).cnt);
 
-  const dataQuery = `SELECT s.id,
+  const dataQuery = `WITH page_sessions AS (
+      SELECT s.id
+      FROM chat_sessions s
+      LEFT JOIN accounts a ON a.id = s.account_id
+      ${whereClause}
+      ORDER BY (s.deleted_at IS NOT NULL) ASC, s.updated_at DESC
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    )
+    SELECT s.id,
       s.account_id,
       COALESCE(a.name, CASE WHEN s.account_id LIKE 'web:%' THEN '站内 AI Chat' ELSE s.account_id END) AS account_name,
       COALESCE(s.user_id, a.owner_id) AS owner_user_id,
@@ -183,25 +198,26 @@ export async function getChatSessionsForAdmin(opts: {
       COALESCE(mc.message_count, 0)::int AS message_count,
       lm.last_message_at,
       lm.last_message_preview
-    FROM chat_sessions s
+    FROM page_sessions page
+    JOIN chat_sessions s ON s.id = page.id
     LEFT JOIN accounts a ON a.id = s.account_id
     LEFT JOIN users u ON u.id = COALESCE(s.user_id, a.owner_id)
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS message_count
       FROM messages m
       WHERE m.session_id = s.id
+        AND m.deleted_at IS NULL
     ) mc ON true
     LEFT JOIN LATERAL (
       SELECT m.timestamp AS last_message_at,
         LEFT(m.content, 160) AS last_message_preview
       FROM messages m
       WHERE m.session_id = s.id
+        AND m.deleted_at IS NULL
       ORDER BY m.timestamp DESC
       LIMIT 1
     ) lm ON true
-    ${whereClause}
-    ORDER BY (s.deleted_at IS NOT NULL) ASC, COALESCE(lm.last_message_at, s.updated_at) DESC
-    LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    ORDER BY (s.deleted_at IS NOT NULL) ASC, s.updated_at DESC`;
   const { rows } = await pool.query(dataQuery, [...params, limit, offset]);
 
   return { sessions: rows as AdminChatSessionRow[], total };
@@ -234,38 +250,53 @@ export async function getChatSessionPiCleanupCandidates(opts: {
   limit?: number;
   cursor?: string;
 }): Promise<AdminChatSessionPiCleanupCandidate[]> {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let paramIdx = 1;
-
+  const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
   if (opts.softDeleted) {
-    conditions.push('deleted_at IS NOT NULL');
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    if (opts.cursor) params.push(opts.cursor);
+    params.push(limit);
+    const { rows } = await pool.query(
+      `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
+       FROM chat_sessions s
+       WHERE deleted_at IS NOT NULL
+         ${opts.cursor ? `AND id > $${paramIdx++}` : ''}
+         AND (
+           pi_session_archived_at IS NULL
+           OR pi_session_archive_payload IS NOT NULL
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM user_memberships m
+           WHERE m.user_id = s.user_id
+             AND m.status = 'active'
+             AND m.current_period_end > NOW()
+         )
+       ORDER BY id ASC
+       LIMIT $${paramIdx}`,
+      params,
+    );
+    return rows as AdminChatSessionPiCleanupCandidate[];
   }
 
-  if (opts.inactiveBefore) {
-    conditions.push(`(deleted_at IS NULL AND updated_at < $${paramIdx++})`);
-    params.push(opts.inactiveBefore);
-  }
-
-  if (conditions.length === 0) {
+  if (!opts.inactiveBefore) {
     return [];
   }
 
-  const eligibilityClause = conditions
-    .map((condition) => `(${condition})`)
-    .join(' OR ');
-  const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
+  const params: unknown[] = [opts.inactiveBefore];
+  let paramIdx = 2;
   if (opts.cursor) {
     params.push(opts.cursor);
-    conditions.push(`s.id > $${paramIdx++}`);
+    paramIdx += 1;
   }
   params.push(limit);
 
   const { rows } = await pool.query(
     `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
      FROM chat_sessions s
-     WHERE (${eligibilityClause})
-       ${opts.cursor ? `AND ${conditions.at(-1)}` : ''}
+     WHERE deleted_at IS NULL
+       AND updated_at < $1
+       ${opts.cursor ? `AND id > $${paramIdx - 1}` : ''}
        AND (
          pi_session_archived_at IS NULL
          OR pi_session_archive_payload IS NOT NULL
@@ -275,9 +306,9 @@ export async function getChatSessionPiCleanupCandidates(opts: {
          FROM user_memberships m
          WHERE m.user_id = s.user_id
            AND m.status = 'active'
-           AND m.current_period_end > NOW()
-       )
-     ORDER BY id ASC
+         AND m.current_period_end > NOW()
+     )
+     ORDER BY updated_at ASC, id ASC
      LIMIT $${paramIdx}`,
     params,
   );
@@ -572,6 +603,18 @@ export async function getAdminGlobalStats(
     startDate: opts.rechargeStartDate,
     endDate: opts.rechargeEndDate,
   });
+  const cacheKey = JSON.stringify({
+    today,
+    rechargeRange: rechargePeriod.range,
+    rechargeStartDate: rechargePeriod.startDate,
+    rechargeEndDate: rechargePeriod.endDate,
+  });
+  if (
+    adminGlobalStatsCache?.key === cacheKey &&
+    adminGlobalStatsCache.expiresAt > Date.now()
+  ) {
+    return adminGlobalStatsCache.value;
+  }
   const rechargeStatsParams = [
     today,
     rechargePeriod.startDate,
@@ -714,7 +757,7 @@ export async function getAdminGlobalStats(
     count: Number(r.count),
   }));
 
-  return {
+  const stats: AdminGlobalStats = {
     total_users: Number((userCount.rows[0] as { cnt: string }).cnt),
     model_selection_distribution: modelSelectionDistribution,
     plan_distribution: modelSelectionDistribution.map((r) => ({
@@ -758,4 +801,11 @@ export async function getAdminGlobalStats(
     today_total_tokens: Number(td.total),
     recent_signups_7d: Number((recentSignups.rows[0] as { cnt: string }).cnt),
   };
+  // 后台总览包含多张大表聚合，允许 30 秒内复用快照，避免刷新页面时重复压数据库。
+  adminGlobalStatsCache = {
+    key: cacheKey,
+    expiresAt: Date.now() + ADMIN_GLOBAL_STATS_CACHE_TTL_MS,
+    value: stats,
+  };
+  return stats;
 }

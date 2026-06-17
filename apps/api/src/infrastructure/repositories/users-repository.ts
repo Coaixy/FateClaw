@@ -186,9 +186,15 @@ export async function listUsersPageForAdmin(opts: {
   let index = 1;
   const trimmedQuery = opts.query?.trim();
   if (trimmedQuery) {
-    where.push(`(u.phone ILIKE $${index} OR u.id ILIKE $${index})`);
-    values.push(`%${trimmedQuery}%`);
-    index += 1;
+    if (/^[a-z0-9_-]+$/i.test(trimmedQuery)) {
+      where.push(`(u.phone LIKE $${index} OR u.id LIKE $${index})`);
+      values.push(`${trimmedQuery}%`);
+      index += 1;
+    } else {
+      where.push(`(u.phone ILIKE $${index} OR u.id ILIKE $${index})`);
+      values.push(`%${trimmedQuery}%`);
+      index += 1;
+    }
   }
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
   const countValues = [...values];

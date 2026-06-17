@@ -101,6 +101,16 @@ function normalizeAdminWalletTransactionRow(
   };
 }
 
+function numberFromMetadata(
+  metadata: unknown,
+  key: string,
+): number | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const value = (metadata as Record<string, unknown>)[key];
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
 function normalizeDailySignInConfigRow(
   row: DailySignInConfigRow,
 ): DailySignInConfigRow {
@@ -2707,16 +2717,22 @@ export async function reconcileStaleBillingReservations(
   staleBeforeIso: string,
   limit = 100,
 ): Promise<{ released: number; requestIds: string[] }> {
-  const rows = await listBillingRequestReservations({
-    holdState: 'held',
-    chargeState: 'pending',
-    limit,
-  });
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM billing_request_reservations
+     WHERE hold_state = 'held'
+       AND charge_state = 'pending'
+       AND updated_at < $1
+     ORDER BY updated_at ASC
+     LIMIT $2`,
+    [staleBeforeIso, Math.min(Math.max(limit, 1), 200)],
+  );
   let released = 0;
   const requestIds: string[] = [];
 
-  for (const row of rows) {
-    if (new Date(row.updated_at).toISOString() > staleBeforeIso) continue;
+  for (const row of (rows as BillingRequestReservationRow[]).map(
+    normalizeBillingRequestReservationRow,
+  )) {
     try {
       await releaseUserBalanceReservation(row.request_id, '陈旧预留自动释放', {
         source: 'reconcile',
@@ -2729,6 +2745,41 @@ export async function reconcileStaleBillingReservations(
   }
 
   return { released, requestIds };
+}
+
+async function getModelChargeSettlementMetadataUsing(
+  client: pg.PoolClient,
+  requestId: string,
+): Promise<{
+  rawChargeCoins?: number;
+  membershipCoveredCoins?: number;
+  membershipConsumedUnits?: number;
+}> {
+  const { rows } = await client.query(
+    `SELECT metadata
+     FROM wallet_transactions
+     WHERE request_id = $1
+       AND kind IN ('membership_allowance_use', 'overage_charge')
+     ORDER BY CASE kind
+       WHEN 'membership_allowance_use' THEN 0
+       ELSE 1
+     END,
+     created_at ASC
+     LIMIT 1`,
+    [requestId],
+  );
+  const metadata = (rows[0] as { metadata?: unknown } | undefined)?.metadata;
+  return {
+    rawChargeCoins: numberFromMetadata(metadata, 'rawRequestCostCoins'),
+    membershipCoveredCoins: numberFromMetadata(
+      metadata,
+      'membershipCoveredCoins',
+    ),
+    membershipConsumedUnits: numberFromMetadata(
+      metadata,
+      'membershipConsumedUnits',
+    ),
+  };
 }
 
 export async function getWalletTransactionsByUserId(
@@ -2882,16 +2933,36 @@ export interface BalanceGrantRow {
 async function getAvailableBonusBatches(
   client: pg.PoolClient,
   userId: string,
+  chargeCoins: number,
 ): Promise<BalanceGrantRow[]> {
   const { rows } = await client.query(
-    `SELECT * FROM balance_grants
-     WHERE user_id = $1
-       AND status = 'active'
-       AND remaining_coins > 0
-       AND (expires_at IS NULL OR expires_at > NOW())
-     ORDER BY expires_at ASC NULLS LAST, created_at ASC
-     FOR UPDATE`,
-    [userId],
+    `WITH ordered AS (
+       SELECT
+         id,
+         COALESCE(
+           SUM(remaining_coins) OVER (
+             ORDER BY expires_at ASC NULLS LAST, created_at ASC, id ASC
+             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+           ),
+           0
+         ) AS coins_before
+       FROM balance_grants
+       WHERE user_id = $1
+         AND status = 'active'
+         AND remaining_coins > 0
+         AND (expires_at IS NULL OR expires_at > NOW())
+     ),
+     selected AS (
+       SELECT id
+       FROM ordered
+       WHERE coins_before < $2
+     )
+     SELECT bg.*
+     FROM balance_grants bg
+     JOIN selected ON selected.id = bg.id
+     ORDER BY bg.expires_at ASC NULLS LAST, bg.created_at ASC, bg.id ASC
+     FOR UPDATE OF bg`,
+    [userId, chargeCoins],
   );
   return (rows as BalanceGrantRow[]).map(normalizeBalanceGrantRow);
 }
@@ -2915,7 +2986,7 @@ async function deductBonusGrantsBestEffort(
   let bonusLeft = roundCoinsToCents(Math.max(0, chargeCoins));
   const grantDeductions: Array<{ grantId: string; coins: number }> = [];
 
-  const batches = await getAvailableBonusBatches(client, userId);
+  const batches = await getAvailableBonusBatches(client, userId, bonusLeft);
   for (const batch of batches) {
     if (bonusLeft <= 0) break;
     const toDeduct = roundCoinsToCents(
@@ -3209,6 +3280,87 @@ export async function expireBonusBalance(
   return { expired, totalCoinsExpired };
 }
 
+/**
+ * 在读取用户钱包前同步该用户已过期赠送批次。
+ *
+ * 全局过期扫描可能延迟，入口余额判断必须先校准，否则已过期 bonus 会继续掩盖欠费。
+ */
+export async function expireUserBonusBalanceBefore(
+  userId: string,
+  beforeIso: string,
+): Promise<{ expired: number; totalCoinsExpired: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await getUserByIdUsing(client, userId, { forUpdate: true });
+    if (!user) {
+      await client.query('COMMIT');
+      return { expired: 0, totalCoinsExpired: 0 };
+    }
+
+    const { rows } = await client.query(
+      `SELECT * FROM balance_grants
+       WHERE user_id = $1
+         AND status = 'active'
+         AND remaining_coins > 0
+         AND expires_at IS NOT NULL
+         AND expires_at < $2
+       ORDER BY expires_at ASC, created_at ASC
+       FOR UPDATE`,
+      [userId, beforeIso],
+    );
+    const batches = (rows as BalanceGrantRow[]).map(normalizeBalanceGrantRow);
+    const totalCoinsExpired = roundCoinsToCents(
+      batches.reduce((sum, batch) => sum + batch.remaining_coins, 0),
+    );
+    if (batches.length === 0 || totalCoinsExpired <= 0) {
+      await client.query('COMMIT');
+      return { expired: 0, totalCoinsExpired: 0 };
+    }
+
+    const grantIds = batches.map((batch) => batch.id);
+    await client.query(
+      `UPDATE balance_grants
+       SET status = 'expired',
+           remaining_coins = 0,
+           updated_at = NOW()
+       WHERE id = ANY($1::text[])`,
+      [grantIds],
+    );
+    await client.query(
+      `UPDATE users
+       SET bonus_coins = GREATEST(0, bonus_coins - $1)
+       WHERE id = $2`,
+      [totalCoinsExpired, userId],
+    );
+
+    for (const batch of batches) {
+      await insertWalletTransaction(client, {
+        userId,
+        kind: 'bonus_expire',
+        amountCoins: -batch.remaining_coins,
+        balanceSource: 'bonus',
+        balanceGrantId: batch.id,
+        note: `赠送积分过期（批次 ${batch.id}）`,
+        metadata: {
+          batch_source: batch.source,
+          expires_at: batch.expires_at,
+          original_amount: batch.amount_coins,
+          source: 'user_wallet_sync',
+        },
+      });
+    }
+
+    await client.query('COMMIT');
+    return { expired: batches.length, totalCoinsExpired };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getBalanceGrantsByUserId(
   userId: string,
   opts?: { includeExhausted?: boolean; limit?: number },
@@ -3437,12 +3589,20 @@ export async function settleUserModelChargeCoins(
       if (!existingUser) {
         throw new Error('用户不存在');
       }
+      const settlementMetadata = await getModelChargeSettlementMetadataUsing(
+        client,
+        requestId,
+      );
       await client.query('COMMIT');
       return {
         actualChargeCoins: reservation.actual_charge_coins,
-        rawChargeCoins: reservation.total_overage_cost_coins,
-        membershipCoveredCoins: 0,
-        membershipConsumedUnits: 0,
+        rawChargeCoins:
+          settlementMetadata.rawChargeCoins ??
+          reservation.total_overage_cost_coins,
+        membershipCoveredCoins:
+          settlementMetadata.membershipCoveredCoins ?? 0,
+        membershipConsumedUnits:
+          settlementMetadata.membershipConsumedUnits ?? 0,
         user: normalizeUserCoins(existingUser),
       };
     }
@@ -3537,7 +3697,7 @@ export async function settleUserModelChargeCoins(
            charged_at = NOW(),
            updated_at = NOW()
        WHERE request_id = $1`,
-      [requestId, actualChargeCoins, requestTokens, actualChargeCoins],
+      [requestId, actualChargeCoins, requestTokens, rawChargeCoins],
     );
 
     if (actualChargeCoins > 0) {

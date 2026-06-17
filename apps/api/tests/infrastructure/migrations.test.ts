@@ -434,6 +434,7 @@ describe('runDatabaseMigrations', () => {
       '0042_membership_tier_rekey',
       '0043_repair_legacy_pro_to_deep_memberships',
       '0044_referral_reward_membership_plan',
+      '0045_sql_review_indexes_and_bundle_stats',
     ]);
 
     await runDatabaseMigrations(client as never);

@@ -915,6 +915,12 @@ export async function settleReferralMembershipRewardUsing(
     return event;
   }
 
+  // 同一邀请人的月度返利额度必须串行结算，否则并发首购会同时读到旧的已发天数。
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext('referral:membership:' || $1))",
+    [referral.inviter_id],
+  );
+
   const monthlyRewardedDays = await getMonthlyRewardedDaysUsing(
     client,
     referral.inviter_id,

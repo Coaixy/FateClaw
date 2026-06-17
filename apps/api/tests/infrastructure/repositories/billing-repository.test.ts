@@ -33,6 +33,8 @@ import {
   getMembershipEntitlements,
   getVisibleWalletTransactionsByUserId,
   insertRechargeOrder,
+  reconcileStaleBillingReservations,
+  expireUserBonusBalanceBefore,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
@@ -185,6 +187,20 @@ describe('billing repository', () => {
     expect(calls[0]?.sql).toContain('charge_state = $3');
     expect(calls[0]?.sql).toContain('LIMIT $4 OFFSET $5');
     expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200, 0]);
+  });
+
+  it('selects stale billing reservations in SQL before reconciliation', async () => {
+    const { calls } = createMockPool([[]]);
+
+    await expect(
+      reconcileStaleBillingReservations('2026-05-30T00:00:00.000Z', 999),
+    ).resolves.toEqual({ released: 0, requestIds: [] });
+
+    expect(calls[0]?.sql).toContain("hold_state = 'held'");
+    expect(calls[0]?.sql).toContain("charge_state = 'pending'");
+    expect(calls[0]?.sql).toContain('updated_at < $1');
+    expect(calls[0]?.sql).toContain('ORDER BY updated_at ASC');
+    expect(calls[0]?.params).toEqual(['2026-05-30T00:00:00.000Z', 200]);
   });
 
   it('lists admin billing reservations with filters and total count', async () => {
@@ -679,6 +695,49 @@ describe('billing repository', () => {
     expect(clientCalls[1]?.params).toEqual([0, 5, 'user-1']);
   });
 
+  it('expires stale user bonus grants before wallet balance reads', async () => {
+    mockGetUserByIdUsing.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 8,
+      reserved_coins: 0,
+    });
+    const grant = {
+      id: 'grant-1',
+      user_id: 'user-1',
+      source: 'daily_sign_in',
+      granted_by: null,
+      amount_coins: 8,
+      remaining_coins: 5,
+      note: null,
+      expires_at: '2026-05-01T00:00:00.000Z',
+      status: 'active',
+      created_at: '2026-04-01T00:00:00.000Z',
+      updated_at: '2026-04-01T00:00:00.000Z',
+    };
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [grant], [], [], [], []],
+    );
+
+    await expect(
+      expireUserBonusBalanceBefore('user-1', '2026-06-01T00:00:00.000Z'),
+    ).resolves.toEqual({ expired: 1, totalCoinsExpired: 5 });
+
+    expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1', {
+      forUpdate: true,
+    });
+    expect(clientCalls[1]?.sql).toContain('expires_at < $2');
+    expect(clientCalls[2]?.sql).toContain("SET status = 'expired'");
+    expect(clientCalls[2]?.params).toEqual([['grant-1']]);
+    expect(clientCalls[3]?.sql).toContain('SET bonus_coins');
+    expect(clientCalls[3]?.params).toEqual([5, 'user-1']);
+    expect(clientCalls[4]?.sql).toContain('INSERT INTO wallet_transactions');
+    expect(clientCalls[4]?.params?.[2]).toBe('bonus_expire');
+    expect(clientCalls[5]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
   it('charges the rounded per-request model cost directly', async () => {
     const user = {
       id: 'user-1',
@@ -761,6 +820,66 @@ describe('billing repository', () => {
     );
     expect(chargeTransaction?.params?.[3]).toBe(-0.63);
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('returns existing membership settlement metadata for charged requests', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 10,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const reservation = {
+      request_id: 'request-1',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0,
+      hold_state: 'none',
+      charge_state: 'charged',
+      actual_charge_coins: 0,
+      total_overage_tokens: 1000,
+      total_overage_cost_coins: 0.63,
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [reservation],
+        [
+          {
+            metadata: {
+              rawRequestCostCoins: 0.63,
+              membershipCoveredCoins: 0.63,
+              membershipConsumedUnits: 63000,
+            },
+          },
+        ],
+        [],
+      ],
+    );
+
+    const { settleUserModelChargeCoins } =
+      await import('../../../src/infrastructure/repositories/billing-repository.js');
+
+    await expect(
+      settleUserModelChargeCoins('request-1', 1000, 0.63),
+    ).resolves.toMatchObject({
+      actualChargeCoins: 0,
+      rawChargeCoins: 0.63,
+      membershipCoveredCoins: 0.63,
+      membershipConsumedUnits: 63000,
+      user,
+    });
+
+    expect(clientCalls[2]?.sql).toContain('FROM wallet_transactions');
+    expect(clientCalls[2]?.params).toEqual(['request-1']);
+    expect(
+      clientCalls.some((call) =>
+        call.sql.includes('UPDATE billing_request_reservations'),
+      ),
+    ).toBe(false);
   });
 
   it('uses active membership allowance before charging credit balance', async () => {

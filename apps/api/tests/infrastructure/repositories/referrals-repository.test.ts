@@ -266,6 +266,7 @@ describe('referrals repository', () => {
           invite_count_reward_max_invites: 50,
         },
       ],
+      [],
       [{ total_days: 0 }],
       [],
       [
@@ -345,6 +346,7 @@ describe('referrals repository', () => {
           invite_count_reward_max_invites: 50,
         },
       ],
+      [],
       [{ total_days: 0 }],
       [],
       [
@@ -440,6 +442,7 @@ describe('referrals repository', () => {
           invite_count_reward_max_invites: 50,
         },
       ],
+      [],
       [{ total_days: 0 }],
       [],
       [

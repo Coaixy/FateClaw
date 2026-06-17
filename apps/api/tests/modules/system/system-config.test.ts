@@ -44,6 +44,10 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   deleteOfficialModelConfig: mockDeleteOfficialModelConfig,
   deleteUserModelSelectionsByOfficialModelId:
     mockDeleteUserModelSelectionsByOfficialModelId,
+  expireUserBonusBalanceBefore: vi.fn(async () => ({
+    expired: 0,
+    totalCoinsExpired: 0,
+  })),
   getModelBillingConfig: mockGetModelBillingConfig,
   getMembershipOverview: mockGetMembershipOverview,
   getOfficialModelConfig: mockGetOfficialModelConfig,
