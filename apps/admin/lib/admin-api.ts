@@ -3,6 +3,11 @@ import type {
   SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
 import type {
+  AdminSkillCommentDto,
+  AdminSkillCommentsResponseDto,
+  AdminSkillCommentStatusDto,
+} from '@fateclaw/contracts/skills';
+import type {
   AdminCreateGiftCodesResponseDto,
   AdminGiftCodesResponseDto,
   AdminStatusStatsDto,
@@ -547,6 +552,16 @@ export interface AdminCustomSkill {
   created_at: string;
   updated_at: string;
 }
+
+/** 管理后台 Skill 评论审核行。 */
+export type AdminSkillComment = AdminSkillCommentDto;
+
+/** 管理后台 Skill 评论审核状态。 */
+export type AdminSkillCommentStatus = AdminSkillCommentStatusDto;
+
+/** 管理后台 Skill 评论审核列表响应。 */
+export interface AdminSkillCommentsResponse
+  extends AdminSkillCommentsResponseDto {}
 
 export type AdminModelPiApi =
   | 'openai-completions'
@@ -1314,6 +1329,33 @@ export const admin = {
     adminRequest<AdminCustomSkill>(
       `/api/admin/skills/custom/${encodeURIComponent(id)}/state`,
       { method: 'PATCH', body: JSON.stringify(data) },
+    ),
+  skillComments: (opts?: {
+    status?: AdminSkillCommentStatus;
+    skill_id?: string;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.skill_id) params.set('skill_id', opts.skill_id);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return adminRequest<AdminSkillCommentsResponse>(
+      `/api/admin/skills/comments${qs ? `?${qs}` : ''}`,
+    );
+  },
+  reviewSkillComment: (
+    id: string,
+    status: Exclude<AdminSkillCommentStatus, 'pending'>,
+  ) =>
+    adminRequest<AdminSkillComment>(
+      `/api/admin/skills/comments/${encodeURIComponent(id)}/review`,
+      { method: 'PATCH', body: JSON.stringify({ status }) },
+    ),
+  pinSkillComment: (id: string, pinned: boolean) =>
+    adminRequest<AdminSkillComment>(
+      `/api/admin/skills/comments/${encodeURIComponent(id)}/pin`,
+      { method: 'PATCH', body: JSON.stringify({ pinned }) },
     ),
   grantBonusBalance: (
     id: string,

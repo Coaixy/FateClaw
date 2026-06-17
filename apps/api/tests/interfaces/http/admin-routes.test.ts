@@ -54,6 +54,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   hasOfficialSkill: vi.fn(),
   listAdminGlobalSkills: vi.fn(),
   listAdminAnnouncements: vi.fn(),
+  listSkillCommentsForAdmin: vi.fn(),
   listAdminWorkflowSkillSummaries: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
@@ -64,10 +65,12 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listSimpleWorkflowPresets: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
+  reviewSkillCommentForAdmin: vi.fn(),
   resetAdminUserPassword: vi.fn(),
   setAdminUserMembership: vi.fn(),
   scanPiSessionOrphanFilesForAdmin: vi.fn(),
   setSkillGlobalEnabled: vi.fn(),
+  setSkillCommentPinnedForAdmin: vi.fn(),
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),
   updateAdminRewardConfig: vi.fn(),
@@ -106,10 +109,13 @@ import {
   listRechargeOrdersForAdmin,
   listAdminWorkflowSkillSummaries,
   listAdminUsersWithStats,
+  listSkillCommentsForAdmin,
   listWalletTransactionsForAdmin,
+  reviewSkillCommentForAdmin,
   resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
   setAdminUserMembership,
+  setSkillCommentPinnedForAdmin,
   updateAnnouncement,
   updateSimpleWorkflowPreset,
   updateRuntimeSettings,
@@ -129,6 +135,24 @@ function announcementFixture(overrides: Record<string, unknown> = {}) {
     cta_label: null,
     cta_href: null,
     published_at: '2026-06-12T00:00:00.000Z',
+    created_at: '2026-06-12T00:00:00.000Z',
+    updated_at: '2026-06-12T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function skillCommentFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'comment-1',
+    skill_id: 'skill-1',
+    skill_name: '公开 Skill',
+    user_id: 'user-1',
+    user_phone: '13800000000',
+    body: '评论内容',
+    status: 'pending',
+    pinned: false,
+    reviewed_by: null,
+    reviewed_at: null,
     created_at: '2026-06-12T00:00:00.000Z',
     updated_at: '2026-06-12T00:00:00.000Z',
     ...overrides,
@@ -160,6 +184,7 @@ describe('adminRoutes authentication throttling', () => {
     vi.mocked(listAdminAnnouncements).mockResolvedValue([]);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
     vi.mocked(listAdminWorkflowSkillSummaries).mockResolvedValue([]);
+    vi.mocked(listSkillCommentsForAdmin).mockResolvedValue([]);
     vi.mocked(listBillingRequestReservationsPageForAdmin).mockResolvedValue({
       reservations: [],
       total: 0,
@@ -1105,5 +1130,162 @@ describe('adminRoutes authentication throttling', () => {
         },
       }),
     );
+  });
+
+  it('lists Skill comments with review filters for owner admins', async () => {
+    vi.mocked(listSkillCommentsForAdmin).mockResolvedValueOnce([
+      skillCommentFixture({
+        status: 'approved',
+        pinned: true,
+        reviewed_by: 'owner',
+        reviewed_at: '2026-06-13T00:00:00.000Z',
+      }),
+    ] as Awaited<ReturnType<typeof listSkillCommentsForAdmin>>);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/skills/comments?status=approved&skill_id=skill-1&limit=20',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(listSkillCommentsForAdmin).toHaveBeenCalledWith({
+      status: 'approved',
+      skillId: 'skill-1',
+      limit: 20,
+    });
+    expect(response.json()).toEqual({
+      items: [
+        expect.objectContaining({
+          id: 'comment-1',
+          user_phone: '13800000000',
+          status: 'approved',
+          pinned: true,
+        }),
+      ],
+    });
+  });
+
+  it('approves and rejects Skill comments for owner admins', async () => {
+    vi.mocked(reviewSkillCommentForAdmin).mockResolvedValueOnce(
+      skillCommentFixture({
+        status: 'approved',
+        reviewed_by: 'owner',
+        reviewed_at: '2026-06-13T00:00:00.000Z',
+      }) as Awaited<ReturnType<typeof reviewSkillCommentForAdmin>>,
+    );
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/skills/comments/comment-1/review',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        status: 'approved',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(reviewSkillCommentForAdmin).toHaveBeenCalledWith({
+      id: 'comment-1',
+      status: 'approved',
+      reviewedBy: 'owner',
+    });
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        id: 'comment-1',
+        status: 'approved',
+      }),
+    );
+  });
+
+  it('pins approved Skill comments only when repository returns a row', async () => {
+    vi.mocked(setSkillCommentPinnedForAdmin).mockResolvedValueOnce(
+      skillCommentFixture({
+        status: 'approved',
+        pinned: true,
+      }) as Awaited<ReturnType<typeof setSkillCommentPinnedForAdmin>>,
+    );
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/skills/comments/comment-1/pin',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        pinned: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(setSkillCommentPinnedForAdmin).toHaveBeenCalledWith(
+      'comment-1',
+      true,
+    );
+    expect(response.json()).toEqual(
+      expect.objectContaining({
+        id: 'comment-1',
+        pinned: true,
+      }),
+    );
+  });
+
+  it('returns 404 when pinning a missing or unapproved Skill comment', async () => {
+    // 评论不存在或未通过审核时，repository 返回 null，路由应映射为 404
+    vi.mocked(setSkillCommentPinnedForAdmin).mockResolvedValueOnce(null);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/skills/comments/comment-1/pin',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        pinned: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: '评论不存在或尚未通过审核' });
+  });
+
+  it('rejects invalid Skill comment review operations', async () => {
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/skills/comments?status=unknown',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+    const reviewResponse = await app.inject({
+      method: 'PATCH',
+      url: '/skills/comments/comment-1/review',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        status: 'pending',
+      },
+    });
+    const pinResponse = await app.inject({
+      method: 'PATCH',
+      url: '/skills/comments/comment-1/pin',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        pinned: 'yes',
+      },
+    });
+
+    expect(listResponse.statusCode).toBe(400);
+    expect(reviewResponse.statusCode).toBe(400);
+    expect(pinResponse.statusCode).toBe(400);
+    expect(reviewSkillCommentForAdmin).not.toHaveBeenCalled();
+    expect(setSkillCommentPinnedForAdmin).not.toHaveBeenCalled();
   });
 });

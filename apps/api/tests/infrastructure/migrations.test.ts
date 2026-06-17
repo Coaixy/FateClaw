@@ -383,6 +383,32 @@ describe('runDatabaseMigrations', () => {
         call.sql.includes('ALTER COLUMN password_hash DROP NOT NULL'),
       ),
     ).toBe(true);
+    // 0046：公开 Skill 赞踩与匿名评论审核表
+    expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS skill_reactions'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_skill_reactions_kind_valid'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('CREATE TABLE IF NOT EXISTS skill_comments'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_skill_comments_status_valid'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_skill_comments_body_length'),
+      ),
+    ).toBe(true);
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
@@ -435,6 +461,7 @@ describe('runDatabaseMigrations', () => {
       '0043_repair_legacy_pro_to_deep_memberships',
       '0044_referral_reward_membership_plan',
       '0045_sql_review_indexes_and_bundle_stats',
+      '0046_skill_reactions_and_comments',
     ]);
 
     await runDatabaseMigrations(client as never);

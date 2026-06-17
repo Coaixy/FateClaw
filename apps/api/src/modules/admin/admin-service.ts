@@ -59,6 +59,7 @@ import {
   listAdminAnnouncements,
   listAdminSkillBundleSummaries,
   listAdminWorkflowSkillSummaries,
+  listSkillCommentsForAdmin,
   listUsersPageForAdmin,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
@@ -71,7 +72,9 @@ import {
   reconcileStaleBillingReservations,
   resetPiSessionCleanupCursor,
   setSkillGlobalEnabled,
+  setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
+  reviewSkillCommentForAdmin,
   setUserMembershipForAdmin,
   upsertPiSessionCleanupCursor,
   updateDailySignInConfig,
@@ -176,6 +179,7 @@ export {
   listAdminAnnouncements,
   listAdminSkillBundleSummaries,
   listAdminWorkflowSkillSummaries,
+  listSkillCommentsForAdmin,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
   listGiftCodesForAdmin,
@@ -187,6 +191,7 @@ export {
   reconcileStaleBillingReservations,
   removeOfficialModel,
   setSkillGlobalEnabled,
+  setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
   setUserMembershipForAdmin,
   updateModelBillingSettings,
@@ -197,6 +202,7 @@ export {
   updatePublicFinancialLedgerEntry,
   updateReferralConfig,
   updateSimpleWorkflowPreset,
+  reviewSkillCommentForAdmin,
 };
 
 /** 管理后台用户会员状态组合视图。 */

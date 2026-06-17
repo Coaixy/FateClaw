@@ -4,17 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   skillsApi,
+  type SkillReactionKind,
+  type SharedSkillDetail,
   type SharedSkillPreview,
   type SkillAccessInvitePreview,
 } from '@/features/skills/api';
 
 export type SkillInstallMode = 'share' | 'invite';
 
-export type SkillInstallPreview = SharedSkillPreview & {
+export type SkillInstallPreview = (SharedSkillPreview | SharedSkillDetail) & {
   mode: SkillInstallMode;
   access_status?: SkillAccessInvitePreview['status'];
 };
 
+/** 加载 Skill 详情/授权预览，并封装订阅、赞踩和评论提交状态。 */
 export function useSkillInstall(
   params: { token: string | null; invite: string | null },
   onDone: () => void,
@@ -23,11 +26,13 @@ export function useSkillInstall(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [subscribing, setSubscribing] = useState(false);
+  const [reacting, setReacting] = useState(false);
+  const [commenting, setCommenting] = useState(false);
   const [done, setDone] = useState(false);
   const activeToken = params.invite || params.token;
   const mode: SkillInstallMode = params.invite ? 'invite' : 'share';
 
-  useEffect(() => {
+  const loadPreview = useCallback(() => {
     if (!activeToken) {
       setPreview(null);
       setError(mode === 'invite' ? '授权链接无效或已失效' : '分享链接无效或已失效');
@@ -64,6 +69,10 @@ export function useSkillInstall(
       .finally(() => setLoading(false));
   }, [activeToken, mode, params.invite]);
 
+  useEffect(() => {
+    loadPreview();
+  }, [loadPreview]);
+
   const subscribe = useCallback(async () => {
     if (!activeToken) return;
     setSubscribing(true);
@@ -89,5 +98,58 @@ export function useSkillInstall(
     }
   }, [activeToken, mode, onDone]);
 
-  return { preview, loading, error, subscribing, done, mode, subscribe };
+  const react = useCallback(
+    async (kind: SkillReactionKind | null) => {
+      if (!params.token) return;
+      setReacting(true);
+      setError('');
+      try {
+        const result = await skillsApi.setReaction(params.token, kind);
+        setPreview((current) =>
+          current && 'reaction_summary' in current
+            ? {
+                ...current,
+                reaction_summary: result.reaction_summary,
+                my_reaction: result.my_reaction,
+              }
+            : current,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '操作失败');
+      } finally {
+        setReacting(false);
+      }
+    },
+    [params.token],
+  );
+
+  const comment = useCallback(
+    async (body: string) => {
+      if (!params.token) return;
+      setCommenting(true);
+      // 评论错误与订阅/赞踩解耦：不写全局 error，交由调用方在评论区本地提示，
+      // 避免错误同时出现在订阅 sidebar 的告警里造成语义错位。
+      try {
+        await skillsApi.createComment(params.token, body);
+      } finally {
+        setCommenting(false);
+      }
+    },
+    [params.token],
+  );
+
+  return {
+    preview,
+    loading,
+    error,
+    subscribing,
+    reacting,
+    commenting,
+    done,
+    mode,
+    subscribe,
+    react,
+    comment,
+    reload: loadPreview,
+  };
 }

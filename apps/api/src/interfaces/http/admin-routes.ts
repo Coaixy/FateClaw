@@ -41,6 +41,7 @@ import {
   scanPiSessionOrphanFilesForAdmin,
   listAdminGlobalSkills,
   listAdminWorkflowSkillSummaries,
+  listSkillCommentsForAdmin,
   listAdminUsersWithStats,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
@@ -54,7 +55,9 @@ import {
   resetAdminUserPassword,
   setAdminUserMembership,
   setSkillGlobalEnabled,
+  setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
+  reviewSkillCommentForAdmin,
   updateModelBillingSettings,
   updateOfficialModel,
   updateRuntimeSettings,
@@ -71,6 +74,10 @@ import {
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
 } from '../../modules/admin/admin-service.js';
+import {
+  toAdminSkillCommentDto,
+  toAdminSkillCommentDtos,
+} from '../../contracts-adapter/skills-contract.js';
 import {
   rateLimitCheck,
   rateLimitRecordFail,
@@ -1876,6 +1883,71 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: '技能不存在' });
     }
     return updated;
+  });
+
+  // GET /api/admin/skills/comments — 管理员查看 Skill 评论审核列表
+  app.get('/skills/comments', async (request, reply) => {
+    const query = request.query as {
+      status?: string;
+      skill_id?: string;
+      limit?: string;
+    };
+    const status = query.status?.trim();
+    if (status && !['pending', 'approved', 'rejected'].includes(status)) {
+      return reply.code(400).send({ error: 'status 值无效' });
+    }
+    const rawLimit = query.limit ? Number(query.limit) : undefined;
+    if (
+      rawLimit !== undefined &&
+      (!Number.isInteger(rawLimit) || rawLimit < 1)
+    ) {
+      return reply.code(400).send({ error: 'limit 必须是正整数' });
+    }
+
+    const comments = await listSkillCommentsForAdmin({
+      status: status as 'pending' | 'approved' | 'rejected' | undefined,
+      skillId: query.skill_id?.trim() || undefined,
+      limit: rawLimit,
+    });
+    return { items: toAdminSkillCommentDtos(comments) };
+  });
+
+  // PATCH /api/admin/skills/comments/:id/review — 管理员通过或拒绝评论
+  app.patch<{
+    Params: { id: string };
+    Body: { status?: 'pending' | 'approved' | 'rejected' };
+  }>('/skills/comments/:id/review', async (request, reply) => {
+    const status = request.body?.status;
+    if (!['approved', 'rejected'].includes(status ?? '')) {
+      return reply
+        .code(400)
+        .send({ error: 'status 只能是 approved 或 rejected' });
+    }
+    const comment = await reviewSkillCommentForAdmin({
+      id: request.params.id,
+      status: status as 'approved' | 'rejected',
+      reviewedBy: request.adminPrincipal?.role ?? 'admin',
+    });
+    if (!comment) return reply.code(404).send({ error: '评论不存在' });
+    return toAdminSkillCommentDto(comment);
+  });
+
+  // PATCH /api/admin/skills/comments/:id/pin — 管理员置顶或取消置顶已通过评论
+  app.patch<{
+    Params: { id: string };
+    Body: { pinned?: boolean };
+  }>('/skills/comments/:id/pin', async (request, reply) => {
+    if (typeof request.body?.pinned !== 'boolean') {
+      return reply.code(400).send({ error: 'pinned 必须是布尔值' });
+    }
+    const comment = await setSkillCommentPinnedForAdmin(
+      request.params.id,
+      request.body.pinned,
+    );
+    if (!comment) {
+      return reply.code(404).send({ error: '评论不存在或尚未通过审核' });
+    }
+    return toAdminSkillCommentDto(comment);
   });
 
   // GET /api/admin/skills/global — 查看所有系统排盘的全局开关状态

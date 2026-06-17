@@ -1,19 +1,27 @@
 import type {
+  AdminSkillCommentDto,
   BundleSubscriptionSourceDto,
   MarketBundleDto,
+  PublicSkillCommentDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
+  SharedSkillDetailDto,
   SharedSkillPreviewDto,
   SkillAccessInviteDto,
   SkillAccessInvitePreviewDto,
   SkillAccessInviteRedeemResultDto,
+  SkillReactionKindDto,
+  SkillReactionSummaryDto,
   SubscribedSkillDto,
   UserCustomSkillDto,
 } from '@fateclaw/contracts/skills';
 
 import {
+  type AdminSkillCommentRow,
+  type PublicSkillComment,
   resolveSkillAccessInviteStatus,
   type RedeemSkillAccessInviteResult,
+  type SkillReactionSummary,
   type SkillAccessInvitePreviewResult,
 } from '../infrastructure/db.js';
 import type {
@@ -62,6 +70,50 @@ export function toSharedSkillPreviewDto(
     description: skill.description,
     content_length: skill.content_length,
     author_label: PUBLIC_AUTHOR_LABEL,
+  };
+}
+
+/** 转换 Skill 赞踩聚合计数。 */
+export function toSkillReactionSummaryDto(
+  summary: SkillReactionSummary,
+): SkillReactionSummaryDto {
+  return {
+    like_count: summary.like_count,
+    dislike_count: summary.dislike_count,
+  };
+}
+
+/** 转换公开匿名评论，确保不暴露提交者身份字段。 */
+export function toPublicSkillCommentDto(
+  comment: PublicSkillComment,
+): PublicSkillCommentDto {
+  return {
+    id: comment.id,
+    body: comment.body,
+    pinned: comment.pinned,
+    created_at: comment.created_at,
+  };
+}
+
+/** 转换公开 Skill 详情，并仅为公开上架 Skill 暴露互动数据。 */
+export function toSharedSkillDetailDto(source: {
+  skill: UserCustomSkill;
+  reactionSummary: SkillReactionSummary;
+  myReaction: SkillReactionKindDto | null;
+  comments: PublicSkillComment[];
+}): SharedSkillDetailDto {
+  const interactionsEnabled = source.skill.visibility === 'shared';
+  return {
+    ...toSharedSkillPreviewDto(source.skill),
+    reaction_summary: interactionsEnabled
+      ? toSkillReactionSummaryDto(source.reactionSummary)
+      : { like_count: 0, dislike_count: 0 },
+    my_reaction: interactionsEnabled ? source.myReaction : null,
+    comments: interactionsEnabled
+      ? source.comments.map(toPublicSkillCommentDto)
+      : [],
+    comments_enabled: interactionsEnabled,
+    public_interactions_enabled: interactionsEnabled,
   };
 }
 
@@ -216,4 +268,33 @@ export function toMarketBundleDtos(
   bundles: MarketBundleSource[],
 ): MarketBundleDto[] {
   return bundles.map(toMarketBundleDto);
+}
+
+/**
+ * 转换管理端评论审核行。
+ */
+export function toAdminSkillCommentDto(
+  comment: AdminSkillCommentRow,
+): AdminSkillCommentDto {
+  return {
+    id: comment.id,
+    skill_id: comment.skill_id,
+    skill_name: comment.skill_name,
+    user_id: comment.user_id,
+    user_phone: comment.user_phone,
+    body: comment.body,
+    status: comment.status,
+    pinned: comment.pinned,
+    reviewed_by: comment.reviewed_by,
+    reviewed_at: comment.reviewed_at,
+    created_at: comment.created_at,
+    updated_at: comment.updated_at,
+  };
+}
+
+/** 批量转换管理端评论审核行。 */
+export function toAdminSkillCommentDtos(
+  comments: AdminSkillCommentRow[],
+): AdminSkillCommentDto[] {
+  return comments.map(toAdminSkillCommentDto);
 }

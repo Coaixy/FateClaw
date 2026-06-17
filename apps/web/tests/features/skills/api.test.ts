@@ -50,6 +50,40 @@ describe('skillsApi path parameters', () => {
     );
   });
 
+  it('encodes shared skill tokens before updating reactions', async () => {
+    await skillsApi.setReaction('share/token?x=1', 'like');
+    await skillsApi.setReaction('share/token?x=1', null);
+
+    expect(requestJsonMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/skills/shared/share%2Ftoken%3Fx%3D1/reaction',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ kind: 'like' }),
+      },
+    );
+    expect(requestJsonMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/skills/shared/share%2Ftoken%3Fx%3D1/reaction',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ kind: null }),
+      },
+    );
+  });
+
+  it('encodes shared skill tokens before submitting comments', async () => {
+    await skillsApi.createComment('share/token?x=1', '评论内容');
+
+    expect(requestJsonMock).toHaveBeenCalledWith(
+      '/api/skills/shared/share%2Ftoken%3Fx%3D1/comments',
+      {
+        method: 'POST',
+        body: JSON.stringify({ body: '评论内容' }),
+      },
+    );
+  });
+
   it('encodes shared bundle tokens before placing them in path segments', async () => {
     await skillsApi.bundlePreview('bundle/token?x=1');
 

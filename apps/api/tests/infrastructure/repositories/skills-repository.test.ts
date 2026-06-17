@@ -26,18 +26,28 @@ vi.mock('../../../src/modules/skills/text-skill-bundle-store.js', () => ({
 }));
 
 import {
+  checkSkillCommentSubmissionGuard,
+  createPendingSkillComment,
   createSkillAccessInvite,
   createUserCustomSkill,
   getBundleByToken,
   getEffectiveUserSkills,
   getSkillAccessInvitePreviewByToken,
+  getSkillReactionSummary,
+  getUserSkillReaction,
+  listPublicSkillComments,
   getSubscribedSkills,
   redeemSkillAccessInvite,
   getResolvedEnabledOfficialSkillNames,
+  listSkillCommentsForAdmin,
   listMarketBundles,
   listMarketSkills,
+  reviewSkillCommentForAdmin,
   seedOfficialSkills,
+  setSkillCommentPinnedForAdmin,
+  setUserSkillReaction,
   subscribeToBundle,
+  toggleUserSkillReaction,
   unsubscribeFromSkill,
 } from '../../../src/infrastructure/repositories/skills-repository.js';
 
@@ -122,7 +132,8 @@ function createSequencedPoolAndClientMockPool(input: {
     async query(sql: string, params?: unknown[]) {
       clientCalls.push({ sql, params });
       const rows =
-        input.clientRows[Math.min(clientIdx, input.clientRows.length - 1)] ?? [];
+        input.clientRows[Math.min(clientIdx, input.clientRows.length - 1)] ??
+        [];
       clientIdx += 1;
       return { rows, rowCount: rows.length };
     },
@@ -555,19 +566,13 @@ describe('skills repository official skill settings', () => {
           },
         ],
       ],
-      clientRows: [
-        [],
-        [{ id: 'sub-1', is_insert: false }],
-        [],
-        [],
-        [],
-      ],
+      clientRows: [[], [{ id: 'sub-1', is_insert: false }], [], [], []],
     });
 
     await subscribeToBundle('user-1', 'bundle-token');
 
     expect(clientCalls[1]?.sql).toContain(
-      "ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET",
+      'ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET',
     );
     expect(clientCalls[1]?.sql).toContain('enabled = true');
     expect(clientCalls[1]?.sql).toContain("status = 'active'");
@@ -594,5 +599,271 @@ describe('skills repository official skill settings', () => {
         call.sql.includes('DELETE FROM user_skill_subscriptions'),
       ),
     ).toBe(false);
+  });
+
+  it('aggregates public Skill reaction counts', async () => {
+    const { calls } = createMockPool([{ like_count: '3', dislike_count: '1' }]);
+
+    await expect(getSkillReactionSummary('skill-1')).resolves.toEqual({
+      like_count: 3,
+      dislike_count: 1,
+    });
+    expect(calls[0]?.sql).toContain(
+      "COUNT(*) FILTER (WHERE kind = 'like')::int",
+    );
+    expect(calls[0]?.sql).toContain('FROM skill_reactions');
+    expect(calls[0]?.params).toEqual(['skill-1']);
+  });
+
+  it('upserts and clears one reaction per user and Skill', async () => {
+    const { calls } = createSequencedMockPool([[{ kind: 'like' }], []]);
+
+    await expect(
+      setUserSkillReaction('skill-1', 'user-1', 'like'),
+    ).resolves.toBe('like');
+    await expect(
+      setUserSkillReaction('skill-1', 'user-1', null),
+    ).resolves.toBeNull();
+
+    expect(calls[0]?.sql).toContain('ON CONFLICT (skill_id, user_id)');
+    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', 'like']);
+    expect(calls[1]?.sql).toContain('DELETE FROM skill_reactions');
+    expect(calls[1]?.params).toEqual(['skill-1', 'user-1']);
+  });
+
+  it('toggles repeated reactions off before switching reactions', async () => {
+    const repeated = createSequencedMockPool([[{ kind: 'like' }], []]);
+
+    await expect(
+      toggleUserSkillReaction('skill-1', 'user-1', 'like'),
+    ).resolves.toBeNull();
+
+    expect(repeated.calls[0]?.sql).toContain('SELECT kind');
+    expect(repeated.calls[1]?.sql).toContain('DELETE FROM skill_reactions');
+
+    const switched = createSequencedMockPool([
+      [{ kind: 'like' }],
+      [{ kind: 'dislike' }],
+    ]);
+
+    await expect(
+      toggleUserSkillReaction('skill-1', 'user-1', 'dislike'),
+    ).resolves.toBe('dislike');
+
+    expect(switched.calls[1]?.sql).toContain('ON CONFLICT (skill_id, user_id)');
+    expect(switched.calls[1]?.params).toEqual(['skill-1', 'user-1', 'dislike']);
+  });
+
+  it('returns null user reaction without querying when anonymous', async () => {
+    const { calls } = createMockPool();
+
+    await expect(getUserSkillReaction('skill-1', null)).resolves.toBeNull();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('lists only approved public comments with pinned-first ordering', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        body: '公开评论',
+        pinned: true,
+        created_at: '2026-06-12T00:00:00.000Z',
+      },
+    ]);
+
+    await expect(listPublicSkillComments('skill-1', 500)).resolves.toEqual([
+      {
+        id: 'comment-1',
+        body: '公开评论',
+        pinned: true,
+        created_at: '2026-06-12T00:00:00.000Z',
+      },
+    ]);
+
+    expect(calls[0]?.sql).toContain("status = 'approved'");
+    expect(calls[0]?.sql).toContain(
+      'ORDER BY pinned DESC, reviewed_at DESC NULLS LAST, created_at DESC',
+    );
+    expect(calls[0]?.params).toEqual(['skill-1', 100]);
+  });
+
+  it('creates comments as pending rows for later review', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        skill_id: 'skill-1',
+        user_id: 'user-1',
+        body: '评论内容',
+        status: 'pending',
+        pinned: false,
+      },
+    ]);
+
+    await expect(
+      createPendingSkillComment({
+        id: 'comment-1',
+        skillId: 'skill-1',
+        userId: 'user-1',
+        body: '评论内容',
+      }),
+    ).resolves.toMatchObject({
+      id: 'comment-1',
+      status: 'pending',
+    });
+
+    expect(calls[0]?.sql).toContain('INSERT INTO skill_comments');
+    expect(calls[0]?.params).toEqual([
+      'comment-1',
+      'skill-1',
+      'user-1',
+      '评论内容',
+    ]);
+  });
+
+  it('blocks duplicate pending comments in the submission guard', async () => {
+    const { calls } = createMockPool([
+      {
+        duplicate_pending: true,
+        skill_pending_count: '1',
+        user_recent_pending_count: '1',
+      },
+    ]);
+
+    await expect(
+      checkSkillCommentSubmissionGuard({
+        skillId: 'skill-1',
+        userId: 'user-1',
+        body: '重复评论',
+      }),
+    ).resolves.toEqual({
+      allowed: false,
+      reason: 'duplicate_pending',
+    });
+
+    expect(calls[0]?.sql).toContain('duplicate_pending');
+    expect(calls[0]?.sql).toContain("created_at >= NOW() - INTERVAL '1 hour'");
+    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', '重复评论']);
+  });
+
+  it('allows comments when submission guard thresholds are clear', async () => {
+    createMockPool([
+      {
+        duplicate_pending: false,
+        skill_pending_count: '0',
+        user_recent_pending_count: '0',
+      },
+    ]);
+
+    await expect(
+      checkSkillCommentSubmissionGuard({
+        skillId: 'skill-1',
+        userId: 'user-1',
+        body: '新的评论',
+      }),
+    ).resolves.toEqual({
+      allowed: true,
+      reason: null,
+    });
+  });
+
+  it('builds admin comment review filters and returns submitter audit data', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        skill_id: 'skill-1',
+        skill_name: '公开 Skill',
+        user_id: 'user-1',
+        user_phone: '13800000000',
+        body: '评论内容',
+        status: 'pending',
+        pinned: false,
+        reviewed_by: null,
+        reviewed_at: null,
+        created_at: '2026-06-12T00:00:00.000Z',
+        updated_at: '2026-06-12T00:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      listSkillCommentsForAdmin({
+        status: 'pending',
+        skillId: 'skill-1',
+        limit: 250,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        user_id: 'user-1',
+        user_phone: '13800000000',
+      }),
+    ]);
+
+    expect(calls[0]?.sql).toContain('LEFT JOIN users u ON u.id = c.user_id');
+    expect(calls[0]?.sql).toContain('c.status = $1');
+    expect(calls[0]?.sql).toContain('c.skill_id = $2');
+    expect(calls[0]?.params).toEqual(['pending', 'skill-1', 200]);
+  });
+
+  it('reviews comments and clears pinned state when rejected', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        skill_id: 'skill-1',
+        skill_name: '公开 Skill',
+        user_id: 'user-1',
+        user_phone: null,
+        body: '评论内容',
+        status: 'rejected',
+        pinned: false,
+        reviewed_by: 'owner',
+        reviewed_at: '2026-06-13T00:00:00.000Z',
+        created_at: '2026-06-12T00:00:00.000Z',
+        updated_at: '2026-06-13T00:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      reviewSkillCommentForAdmin({
+        id: 'comment-1',
+        status: 'rejected',
+        reviewedBy: 'owner',
+      }),
+    ).resolves.toMatchObject({
+      id: 'comment-1',
+      status: 'rejected',
+      pinned: false,
+    });
+
+    expect(calls[0]?.sql).toContain('pinned = false');
+    expect(calls[0]?.params).toEqual(['comment-1', 'rejected', 'owner']);
+  });
+
+  it('pins only approved comments in the repository update', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        skill_id: 'skill-1',
+        skill_name: '公开 Skill',
+        user_id: 'user-1',
+        user_phone: null,
+        body: '评论内容',
+        status: 'approved',
+        pinned: true,
+        reviewed_by: 'owner',
+        reviewed_at: '2026-06-13T00:00:00.000Z',
+        created_at: '2026-06-12T00:00:00.000Z',
+        updated_at: '2026-06-13T00:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      setSkillCommentPinnedForAdmin('comment-1', true),
+    ).resolves.toMatchObject({
+      id: 'comment-1',
+      pinned: true,
+    });
+
+    expect(calls[0]?.sql).toContain("WHERE id = $1 AND status = 'approved'");
+    expect(calls[0]?.params).toEqual(['comment-1', true]);
   });
 });

@@ -1,7 +1,7 @@
 import type { DatabaseMigration } from '../types.js';
 
 /**
- * 数据库迁移分段：0045。
+ * 数据库迁移分段：0045-0046。
  */
 export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
   {
@@ -87,6 +87,81 @@ export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_users_id_trgm
           ON users USING GIN (id gin_trgm_ops)
+      `);
+    },
+  },
+  {
+    id: '0046_skill_reactions_and_comments',
+    description: '增加公开 Skill 赞踩与匿名评论审核表',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS skill_reactions (
+          skill_id TEXT NOT NULL REFERENCES user_custom_skills(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (skill_id, user_id)
+        )
+      `);
+      await client.query(`
+        ALTER TABLE skill_reactions
+          DROP CONSTRAINT IF EXISTS chk_skill_reactions_kind_valid
+      `);
+      await client.query(`
+        ALTER TABLE skill_reactions
+          ADD CONSTRAINT chk_skill_reactions_kind_valid
+          CHECK (kind IN ('like', 'dislike'))
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_skill_reactions_skill_kind
+          ON skill_reactions(skill_id, kind)
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS skill_comments (
+          id TEXT PRIMARY KEY,
+          skill_id TEXT NOT NULL REFERENCES user_custom_skills(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          body TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          pinned BOOLEAN NOT NULL DEFAULT false,
+          reviewed_by TEXT DEFAULT NULL,
+          reviewed_at TIMESTAMPTZ DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        ALTER TABLE skill_comments
+          DROP CONSTRAINT IF EXISTS chk_skill_comments_status_valid
+      `);
+      await client.query(`
+        ALTER TABLE skill_comments
+          ADD CONSTRAINT chk_skill_comments_status_valid
+          CHECK (status IN ('pending', 'approved', 'rejected'))
+      `);
+      await client.query(`
+        ALTER TABLE skill_comments
+          DROP CONSTRAINT IF EXISTS chk_skill_comments_body_length
+      `);
+      await client.query(`
+        ALTER TABLE skill_comments
+          ADD CONSTRAINT chk_skill_comments_body_length
+          CHECK (char_length(body) BETWEEN 1 AND 500)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_skill_comments_public
+          ON skill_comments(skill_id, pinned DESC, reviewed_at DESC, created_at DESC)
+          WHERE status = 'approved'
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_skill_comments_admin_status
+          ON skill_comments(status, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_skill_comments_admin_skill
+          ON skill_comments(skill_id, created_at DESC)
       `);
     },
   },

@@ -1,15 +1,18 @@
 import crypto from 'crypto';
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type {
   CreateSkillAccessInviteRequestDto,
   SkillBundleLimitsDto,
   SkillAccessInviteTargetTypeDto,
+  SkillReactionKindDto,
 } from '@fateclaw/contracts/skills';
 
 import {
+  checkSkillCommentSubmissionGuard,
   createSkillAccessInvite,
+  createPendingSkillComment,
   createSkillBundle,
   createUserCustomSkill,
   deleteSkillBundle,
@@ -18,10 +21,14 @@ import {
   getSkillBundleLimitsPolicy,
   getSkillAccessInvitePreviewByToken,
   getSkillByShareToken,
+  getSkillReactionSummary,
   getSubscribedSkills,
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
+  getUserSkillReaction,
+  hasActiveMembership,
+  listPublicSkillComments,
   listMarketBundles,
   listMarketSkills,
   listSkillAccessInvites,
@@ -30,6 +37,7 @@ import {
   publishUserCustomSkill,
   redeemSkillAccessInvite,
   revokeSkillAccessInvite,
+  setUserSkillReaction,
   MAX_USER_SKILLS,
   shareSkillBundle,
   shareUserCustomSkill,
@@ -55,7 +63,7 @@ import {
   toSkillAccessInvitePreviewDto,
   toSkillAccessInviteRedeemResultDto,
   toSharedBundlePreviewDto,
-  toSharedSkillPreviewDto,
+  toSharedSkillDetailDto,
   toSubscribedSkillDtos,
 } from '../../contracts-adapter/skills-contract.js';
 import type { TextSkillBundleFile } from '../../shared/types.js';
@@ -84,6 +92,120 @@ const MarketSkillQuerySchema = createMarketPaginationSchema(50, 100);
 const MarketBundleQuerySchema = createMarketPaginationSchema(20, 50);
 const USER_SKILL_DIR_CONFLICT_MESSAGE =
   '当前账号已存在同名 Skill，请改名后再创建，或先删除旧 Skill';
+const MAX_SKILL_COMMENT_LENGTH = 500;
+type SkillCommentSubmissionGuardReason = Awaited<
+  ReturnType<typeof checkSkillCommentSubmissionGuard>
+>['reason'];
+
+function isSkillReactionKind(value: unknown): value is SkillReactionKindDto {
+  return value === 'like' || value === 'dislike';
+}
+
+async function getOptionalUserId(
+  request: FastifyRequest,
+): Promise<string | null> {
+  const authorization = request.headers.authorization;
+  if (typeof authorization !== 'string' || authorization.trim() === '') {
+    return null;
+  }
+  try {
+    await request.requireAuth();
+    return typeof request.user?.userId === 'string'
+      ? request.user.userId
+      : null;
+  } catch (err) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      (err as { statusCode?: unknown }).statusCode === 401
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+function skillCommentSubmissionError(
+  reason: SkillCommentSubmissionGuardReason,
+): string {
+  switch (reason) {
+    case 'duplicate_pending':
+      return '相同评论正在审核中，请勿重复提交';
+    case 'too_many_pending':
+      return '当前 Skill 待审核评论较多，请稍后再试';
+    case 'too_many_recent':
+      return '评论提交过于频繁，请稍后再试';
+    case null:
+    default:
+      return '评论暂时无法提交';
+  }
+}
+
+function skillCommentSubmissionStatus(
+  reason: SkillCommentSubmissionGuardReason,
+): 409 | 429 {
+  switch (reason) {
+    case 'duplicate_pending':
+      return 409;
+    case 'too_many_pending':
+    case 'too_many_recent':
+    case null:
+    default:
+      return 429;
+  }
+}
+
+function retryAfterForSkillCommentSubmission(
+  reason: SkillCommentSubmissionGuardReason,
+): string | null {
+  return reason === 'too_many_recent' ? '3600' : null;
+}
+
+function sendSkillCommentSubmissionBlocked(
+  reply: FastifyReply,
+  reason: SkillCommentSubmissionGuardReason,
+) {
+  const retryAfter = retryAfterForSkillCommentSubmission(reason);
+  if (retryAfter) reply.header('Retry-After', retryAfter);
+  return reply
+    .code(skillCommentSubmissionStatus(reason))
+    .send({ error: skillCommentSubmissionError(reason) });
+}
+
+async function ensureSkillCommentSubmissionAllowed(
+  input: {
+    skillId: string;
+    userId: string;
+    body: string;
+  },
+  reply: FastifyReply,
+): Promise<boolean> {
+  const guard = await checkSkillCommentSubmissionGuard(input);
+  if (guard.allowed) return true;
+  sendSkillCommentSubmissionBlocked(reply, guard.reason);
+  return false;
+}
+
+async function createSkillCommentIfAllowed(
+  input: {
+    id: string;
+    skillId: string;
+    userId: string;
+    body: string;
+  },
+  reply: FastifyReply,
+) {
+  const allowed = await ensureSkillCommentSubmissionAllowed(
+    {
+      skillId: input.skillId,
+      userId: input.userId,
+      body: input.body,
+    },
+    reply,
+  );
+  if (!allowed) return null;
+  return createPendingSkillComment(input);
+}
 
 function isUserSkillDirConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -355,12 +477,91 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     return skill;
   });
 
-  // GET /api/skills/shared/:token — 预览分享 skill（链接可访问，无需认证）
+  // GET /api/skills/shared/:token — 读取公开/分享 skill 详情（链接可访问，无需认证）
   app.get('/shared/:token', async (request, reply) => {
     const { token } = request.params as { token: string };
     const skill = await getSkillByShareToken(token);
     if (!skill) return reply.code(404).send({ error: '分享链接无效' });
-    return toSharedSkillPreviewDto(skill);
+    const userId = await getOptionalUserId(request);
+    const interactionsEnabled = skill.visibility === 'shared';
+    const [reactionSummary, myReaction, comments] = interactionsEnabled
+      ? await Promise.all([
+          getSkillReactionSummary(skill.id),
+          getUserSkillReaction(skill.id, userId),
+          listPublicSkillComments(skill.id),
+        ])
+      : [{ like_count: 0, dislike_count: 0 }, null, []];
+
+    return toSharedSkillDetailDto({
+      skill,
+      reactionSummary,
+      myReaction,
+      comments,
+    });
+  });
+
+  // PUT /api/skills/shared/:token/reaction — 设置赞踩
+  app.put('/shared/:token/reaction', async (request, reply) => {
+    await request.requireAuth();
+    const { token } = request.params as { token: string };
+    const body = (request.body || {}) as { kind?: unknown };
+    if (body.kind !== null && !isSkillReactionKind(body.kind)) {
+      return reply.code(400).send({ error: 'reaction 类型无效' });
+    }
+    const skill = await getSkillByShareToken(token);
+    if (!skill || skill.visibility !== 'shared') {
+      return reply.code(404).send({ error: '分享链接无效' });
+    }
+    const kind = body.kind as SkillReactionKindDto | null;
+    const nextReaction = await setUserSkillReaction(
+      skill.id,
+      request.user.userId,
+      kind,
+    );
+    const summary = await getSkillReactionSummary(skill.id);
+    return {
+      reaction_summary: summary,
+      my_reaction: nextReaction,
+    };
+  });
+
+  // POST /api/skills/shared/:token/comments — 提交匿名评论
+  app.post('/shared/:token/comments', async (request, reply) => {
+    await request.requireAuth();
+    const { token } = request.params as { token: string };
+    const body = (request.body || {}) as { body?: unknown };
+    const skill = await getSkillByShareToken(token);
+    if (!skill || skill.visibility !== 'shared') {
+      return reply.code(404).send({ error: '分享链接无效' });
+    }
+    const userId = request.user.userId;
+    const hasMembership = await hasActiveMembership(userId);
+    if (!hasMembership) {
+      return reply.code(403).send({ error: '仅会员可发表评论' });
+    }
+    const commentBody =
+      typeof body.body === 'string'
+        ? body.body.trim().replace(/\s+/g, ' ')
+        : '';
+    if (!commentBody) {
+      return reply.code(400).send({ error: '评论内容不能为空' });
+    }
+    if (commentBody.length > MAX_SKILL_COMMENT_LENGTH) {
+      return reply
+        .code(400)
+        .send({ error: `评论内容不超过 ${MAX_SKILL_COMMENT_LENGTH} 字` });
+    }
+    const comment = await createSkillCommentIfAllowed(
+      {
+        id: crypto.randomUUID(),
+        skillId: skill.id,
+        userId,
+        body: commentBody,
+      },
+      reply,
+    );
+    if (!comment) return;
+    return { id: comment.id, status: 'pending' as const };
   });
 
   // POST /api/skills/subscribe/:token — 订阅

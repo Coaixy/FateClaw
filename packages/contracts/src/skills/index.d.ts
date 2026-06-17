@@ -93,6 +93,82 @@ export interface SharedSkillPreviewDto {
   author_label: string;
 }
 
+/** Skill 公开赞踩类型。 */
+export type SkillReactionKindDto = 'like' | 'dislike';
+
+/** Skill 公开赞踩汇总。 */
+export interface SkillReactionSummaryDto {
+  like_count: number;
+  dislike_count: number;
+}
+
+/** 公开展示的匿名 Skill 评论。 */
+export interface PublicSkillCommentDto {
+  id: string;
+  body: string;
+  pinned: boolean;
+  created_at: string;
+}
+
+/** 单个公开 Skill 详情。 */
+export interface SharedSkillDetailDto extends SharedSkillPreviewDto {
+  reaction_summary: SkillReactionSummaryDto;
+  my_reaction: SkillReactionKindDto | null;
+  comments: PublicSkillCommentDto[];
+  comments_enabled: boolean;
+  public_interactions_enabled: boolean;
+}
+
+/** 设置当前用户对 Skill 的赞踩。kind 传 null 表示清除当前反应。 */
+export interface SetSkillReactionRequestDto {
+  kind: SkillReactionKindDto | null;
+}
+
+/** 提交 Skill 评论。评论仅支持纯文本。 */
+export interface CreateSkillCommentRequestDto {
+  body: string;
+}
+
+/** 提交 Skill 评论后的状态。 */
+export interface CreateSkillCommentResponseDto {
+  id: string;
+  status: 'pending';
+}
+
+/** 管理后台评论审核状态。 */
+export type AdminSkillCommentStatusDto = 'pending' | 'approved' | 'rejected';
+
+/** 管理后台查看的 Skill 评论。 */
+export interface AdminSkillCommentDto {
+  id: string;
+  skill_id: string;
+  skill_name: string;
+  user_id: string;
+  user_phone: string | null;
+  body: string;
+  status: AdminSkillCommentStatusDto;
+  pinned: boolean;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 管理后台 Skill 评论列表。 */
+export interface AdminSkillCommentsResponseDto {
+  items: AdminSkillCommentDto[];
+}
+
+/** 管理后台更新 Skill 评论审核状态。 */
+export interface AdminSkillCommentReviewRequestDto {
+  status: Exclude<AdminSkillCommentStatusDto, 'pending'>;
+}
+
+/** 管理后台更新 Skill 评论置顶状态。 */
+export interface AdminSkillCommentPinRequestDto {
+  pinned: boolean;
+}
+
 export interface SkillShareResponseDto {
   share_token: string;
   skill: UserCustomSkillDto;

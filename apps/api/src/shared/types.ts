@@ -127,6 +127,39 @@ export interface UserSkillSubscription {
   subscribed_at: string;
 }
 
+/** Skill 公开赞踩类型。 */
+export type SkillReactionKind = 'like' | 'dislike';
+
+/** Skill 评论审核状态。 */
+export type SkillCommentStatus = 'pending' | 'approved' | 'rejected';
+
+/** 用户对公开 Skill 的赞踩记录。 */
+export interface SkillReaction {
+  skill_id: string;
+  user_id: string;
+  kind: SkillReactionKind;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Skill 评论原始行。
+ *
+ * @remarks 公开接口必须通过 DTO 过滤 user_id，避免破坏匿名承诺。
+ */
+export interface SkillComment {
+  id: string;
+  skill_id: string;
+  user_id: string;
+  body: string;
+  status: SkillCommentStatus;
+  pinned: boolean;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** 私密授权链接可绑定的目标类型。 */
 export type SkillAccessInviteTargetType = 'skill' | 'bundle';
 
