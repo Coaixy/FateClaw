@@ -1,4 +1,9 @@
-import type { AdminHomePath, AdminRole } from '@/lib/admin-api';
+import type {
+  AdminHomePath,
+  AdminRole,
+  AdminScope,
+  AdminSession,
+} from '@/lib/admin-api';
 
 function splitHref(href: string): { pathname: string; search: string } {
   const [pathname, ...rest] = href.split('?');
@@ -23,12 +28,16 @@ function toLocalAdminPathname(pathname: string): string {
   return normalized || '/';
 }
 
-// Admin 独立站在生产静态导出下统一当作多页文档站点使用，
-// 这里把路径规范成真实导出产物对应的尾斜杠形式。
+/**
+ * 将后端历史 `/admin/*` 路径转换成独立 admin 站点本地路径。
+ */
 export function normalizeAdminPathname(pathname: string): string {
   return toLocalAdminPathname(pathname);
 }
 
+/**
+ * 将管理后台 href 转成静态导出可直接访问的文档链接。
+ */
 export function toAdminDocumentHref(href: string): string {
   const { pathname, search } = splitHref(href);
   const localPathname = toLocalAdminPathname(pathname);
@@ -41,6 +50,9 @@ export function toAdminDocumentHref(href: string): string {
   return `${normalizedPathname}${search}`;
 }
 
+/**
+ * 使用静态文档路径执行整页替换跳转。
+ */
 export function replaceAdminDocument(href: string) {
   window.location.replace(toAdminDocumentHref(href));
 }
@@ -50,19 +62,53 @@ const ADMIN_ROLE_HOME_PATH: Record<AdminRole, AdminHomePath> = {
   user_manager: '/users',
 };
 
+/**
+ * 按管理员身份返回默认首页；优先使用后端 session.home_path。
+ */
 export function getAdminHomePathForRole(role: AdminRole): AdminHomePath {
   return ADMIN_ROLE_HOME_PATH[role];
 }
 
-export function canAdminRoleAccessPath(
-  role: AdminRole,
+/**
+ * 判断一个管理员 scope 集合是否满足目标能力。
+ */
+export function hasAdminScope(
+  scopes: readonly AdminScope[],
+  required: AdminScope,
+): boolean {
+  return scopes.includes('admin:*') || scopes.includes(required);
+}
+
+/**
+ * 返回本地管理路径所需的最小 scope。
+ */
+export function getRequiredAdminScopeForPath(
+  pathname: string,
+): AdminScope | null {
+  const normalizedPathname = normalizeAdminPathname(pathname);
+  if (normalizedPathname === '/') return null;
+  if (
+    normalizedPathname === '/users' ||
+    normalizedPathname.startsWith('/users/')
+  ) {
+    return 'users:read';
+  }
+  if (
+    normalizedPathname === '/messages' ||
+    normalizedPathname.startsWith('/messages/')
+  ) {
+    return 'messages:read';
+  }
+  return 'admin:*';
+}
+
+/**
+ * 判断当前管理端 session 是否能访问指定本地路径。
+ */
+export function canAdminSessionAccessPath(
+  session: Pick<AdminSession, 'scopes'>,
   pathname: string,
 ): boolean {
-  const normalizedPathname = normalizeAdminPathname(pathname);
-  if (role === 'owner') {
-    return normalizedPathname.startsWith('/');
-  }
-  return (
-    normalizedPathname === '/users' || normalizedPathname === '/messages'
-  );
+  const requiredScope = getRequiredAdminScopeForPath(pathname);
+  return requiredScope ? hasAdminScope(session.scopes, requiredScope) : true;
 }

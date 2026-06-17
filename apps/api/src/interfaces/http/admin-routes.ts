@@ -210,6 +210,9 @@ const AdminCreateUserSchema = z.object({
   phone_verified: z.boolean().default(true),
 });
 
+// 默认执行方案 A：user_manager 只能创建最低权限 consumer 用户。
+const USER_MANAGER_CREATABLE_USER_ROLES = new Set(['consumer']);
+
 const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
@@ -1524,6 +1527,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/admin/users — 管理员直接创建用户，不走短信验证码
   app.post('/users', async (request, reply) => {
     const body = AdminCreateUserSchema.parse(request.body);
+    const principal = request.adminPrincipal;
+    if (
+      principal?.role !== 'owner' &&
+      !USER_MANAGER_CREATABLE_USER_ROLES.has(body.role)
+    ) {
+      return reply
+        .code(403)
+        .send({ error: `user_manager 无权创建 ${body.role} 角色用户` });
+    }
     try {
       const result = await createAdminUser({
         phone: body.phone,

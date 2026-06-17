@@ -96,8 +96,23 @@ export function isAdminForbiddenError(error: unknown): error is AdminApiError {
   return error instanceof AdminApiError && error.status === 403;
 }
 
+/**
+ * 将管理端 API 错误转换成页面可直接展示的中文提示。
+ */
+export function formatAdminErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  if (isAdminForbiddenError(error)) return '无权访问该管理功能';
+  return error instanceof Error ? error.message : fallback;
+}
+
 export type AdminRole = 'owner' | 'user_manager';
-export type AdminScope = 'admin:*' | 'users:*' | 'messages:*';
+export type AdminScope =
+  | 'admin:*'
+  | 'users:read'
+  | 'users:create'
+  | 'messages:read';
 export type AdminHomePath =
   | '/admin/overview'
   | '/admin/users'
@@ -206,6 +221,21 @@ export interface WalletTransaction {
   note: string | null;
   metadata: unknown;
   created_at: string;
+}
+
+/** 管理后台赠送余额批次行。 */
+export interface AdminBalanceGrant {
+  id: string;
+  user_id: string;
+  source: string;
+  granted_by: string | null;
+  amount_coins: number;
+  remaining_coins: number;
+  note: string | null;
+  expires_at: string | null;
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AdminAccount {
@@ -351,6 +381,12 @@ export interface AdminBillingRequestReservation {
 export interface AdminBillingReservationsResponse {
   reservations: AdminBillingRequestReservation[];
   total: number;
+}
+
+/** 手动修复陈旧计费预留后的摘要。 */
+export interface AdminBillingReconcileResult {
+  released: number;
+  requestIds: string[];
 }
 
 /** 管理后台全局余额流水行。 */
@@ -895,6 +931,11 @@ export const admin = {
       `/api/admin/billing/reservations${query ? `?${query}` : ''}`,
     );
   },
+  reconcileBillingReservations: (data?: { stale_ms?: number; limit?: number }) =>
+    adminRequest<AdminBillingReconcileResult>('/api/admin/billing/reconcile', {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    }),
   systemConfig: () =>
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
   rechargeConfig: () =>
@@ -1171,6 +1212,17 @@ export const admin = {
     adminRequest<WalletTransaction[]>(
       `/api/admin/users/${encodeURIComponent(id)}/transactions`,
     ),
+  userBalanceGrants: (
+    id: string,
+    opts?: { include_exhausted?: boolean; limit?: number },
+  ) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(opts?.limit ?? 20));
+    if (opts?.include_exhausted) params.set('include_exhausted', 'true');
+    return adminRequest<AdminBalanceGrant[]>(
+      `/api/admin/users/${encodeURIComponent(id)}/balance/grants?${params.toString()}`,
+    );
+  },
   deleteUser: (id: string) =>
     adminRequest<{ success: boolean }>(
       `/api/admin/users/${encodeURIComponent(id)}`,

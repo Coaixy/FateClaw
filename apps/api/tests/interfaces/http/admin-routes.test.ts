@@ -91,6 +91,7 @@ import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
   cleanupPiSessionFilesForAdmin,
+  createAdminUser,
   createAnnouncement,
   deleteDraftAnnouncement,
   deleteConversationLogsForAdminUser,
@@ -491,6 +492,92 @@ describe('adminRoutes authentication throttling', () => {
     expect(messagesResponse.statusCode).toBe(200);
     expect(listAdminUsersWithStats).toHaveBeenCalledTimes(1);
     expect(getMessagesForAdmin).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows the owner key to create admin users', async () => {
+    vi.mocked(createAdminUser).mockResolvedValueOnce({
+      id: 'created-admin-user',
+    } as Awaited<ReturnType<typeof createAdminUser>>);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/users',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        phone: '13800000001',
+        password: 'password123',
+        role: 'admin',
+        phone_verified: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      success: true,
+      id: 'created-admin-user',
+    });
+    expect(createAdminUser).toHaveBeenCalledWith({
+      phone: '13800000001',
+      password: 'password123',
+      role: 'admin',
+      phoneVerified: true,
+    });
+  });
+
+  it('rejects admin user creation from the user manager key', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/users',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        phone: '13800000002',
+        password: 'password123',
+        role: 'admin',
+        phone_verified: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      error: 'user_manager 无权创建 admin 角色用户',
+    });
+    expect(createAdminUser).not.toHaveBeenCalled();
+  });
+
+  it('allows the user manager key to create consumer users', async () => {
+    vi.mocked(createAdminUser).mockResolvedValueOnce({
+      id: 'created-consumer-user',
+    } as Awaited<ReturnType<typeof createAdminUser>>);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/users',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+      payload: {
+        phone: '13800000003',
+        password: 'password123',
+        role: 'consumer',
+        phone_verified: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      success: true,
+      id: 'created-consumer-user',
+    });
+    expect(createAdminUser).toHaveBeenCalledWith({
+      phone: '13800000003',
+      password: 'password123',
+      role: 'consumer',
+      phoneVerified: true,
+    });
   });
 
   it('matches user manager scopes when admin routes are mounted with the API prefix', async () => {

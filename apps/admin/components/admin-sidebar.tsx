@@ -2,8 +2,9 @@
 
 import { usePathname } from 'next/navigation';
 import { clearAdminKey } from '@/lib/admin-api';
-import type { AdminRole } from '@/lib/admin-api';
+import type { AdminScope, AdminSession } from '@/lib/admin-api';
 import {
+  hasAdminScope,
   normalizeAdminPathname,
   replaceAdminDocument,
   toAdminDocumentHref,
@@ -34,80 +35,90 @@ const navItems = [
     href: '/overview',
     label: '总览',
     icon: LayoutDashboard,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/status',
     label: '运行状态',
     icon: Activity,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/billing',
     label: '账单管理',
     icon: ReceiptText,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/gifts',
     label: '礼品码',
     icon: Gift,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/announcements',
     label: '公告',
     icon: Megaphone,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/users',
     label: '用户',
     icon: Users,
-    roles: ['owner', 'user_manager'],
+    requiredScopes: ['users:read'],
   },
   {
     href: '/referrals',
     label: '邀请管理',
     icon: UserPlus,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/messages',
     label: '消息',
     icon: MessageSquare,
-    roles: ['owner', 'user_manager'],
+    requiredScopes: ['messages:read'],
   },
-  { href: '/skills', label: '技能', icon: Puzzle, roles: ['owner'] },
+  { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
   {
     href: '/workflows',
     label: 'Workflow',
     icon: Workflow,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
-  { href: '/logs', label: '日志', icon: ScrollText, roles: ['owner'] },
-  { href: '/about', label: '关于收支', icon: Landmark, roles: ['owner'] },
+  { href: '/logs', label: '日志', icon: ScrollText, requiredScopes: ['admin:*'] },
+  {
+    href: '/about',
+    label: '关于收支',
+    icon: Landmark,
+    requiredScopes: ['admin:*'],
+  },
   {
     href: '/system/models',
     label: '模型配置',
     icon: Bot,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
   {
     href: '/system/rewards',
     label: '软妹币配置',
     icon: WalletCards,
-    roles: ['owner'],
+    requiredScopes: ['admin:*'],
   },
 ] satisfies {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  roles: AdminRole[];
+  requiredScopes: AdminScope[];
 }[];
 
-export function AdminSidebar({ role }: { role: AdminRole }) {
-  const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
+/**
+ * 根据当前管理员 session 的 scopes 渲染可访问的管理菜单。
+ */
+export function AdminSidebar({ session }: { session: AdminSession }) {
+  const visibleNavItems = navItems.filter((item) =>
+    item.requiredScopes.some((scope) => hasAdminScope(session.scopes, scope)),
+  );
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
