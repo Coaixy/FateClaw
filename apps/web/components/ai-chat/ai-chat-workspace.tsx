@@ -1185,12 +1185,9 @@ function HomeModeSelector({
             </span>
           </span>
 
-          <span className="mt-5 block space-y-1">
-            <span className="block text-[18px] font-semibold text-ink">
+          <span className="mt-5 block">
+            <span className="block text-[18px] font-semibold leading-7 text-ink">
               {t('aiChat.home.quickMode')}
-            </span>
-            <span className="block text-[12px] leading-5 text-body">
-              {t('aiChat.home.quickDescription')}
             </span>
           </span>
 
@@ -1220,12 +1217,9 @@ function HomeModeSelector({
             </span>
           </span>
 
-          <span className="mt-5 block space-y-1">
-            <span className="block text-[17px] font-semibold text-ink">
+          <span className="mt-5 block">
+            <span className="block text-[17px] font-semibold leading-7 text-ink">
               {t('aiChat.home.expertMode')}
-            </span>
-            <span className="block text-[12px] leading-5 text-muted">
-              {t('aiChat.home.expertDescription')}
             </span>
           </span>
 

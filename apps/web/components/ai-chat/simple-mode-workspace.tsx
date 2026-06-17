@@ -46,14 +46,12 @@ function parseTimeValue(value: string): { hour: number; minute: number } {
 
 function SimpleModeCard({
   icon,
-  title,
   description,
   action,
   onClick,
   disabled,
 }: {
   icon: ReactNode;
-  title: string;
   description: string;
   action: string;
   onClick: () => void;
@@ -66,25 +64,22 @@ function SimpleModeCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex min-h-[184px] flex-col justify-between rounded-2xl border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-4 text-left transition-all duration-200 hover:border-primary/35 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-45 sm:p-5"
+      className="group flex min-h-[196px] flex-col justify-between rounded-2xl border border-primary/24 bg-[linear-gradient(135deg,rgba(204,120,92,0.12),rgba(255,255,255,0.04)_58%,rgba(232,165,90,0.08))] p-4 text-left shadow-[0_12px_30px_rgba(69,52,42,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-surface-cream-strong hover:shadow-[0_16px_38px_rgba(69,52,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-45 sm:p-5"
     >
       <span className="flex items-start justify-between gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/12 text-primary">
+        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
           {icon}
         </span>
-        <span className="rounded-full border border-hairline bg-surface-card px-2 py-0.5 text-[10px] font-medium text-muted">
+        <span className="rounded-full border border-primary/20 bg-surface-card/80 px-2 py-0.5 text-[10px] font-medium text-primary">
           {t('aiChat.simpleMode.quick')}
         </span>
       </span>
       <span className="mt-5 block">
-        <span className="block text-[18px] font-semibold tracking-tight text-ink">
-          {title}
-        </span>
-        <span className="mt-2 block text-[12px] leading-5 text-muted">
+        <span className="block text-[20px] font-semibold leading-9 tracking-tight text-ink sm:text-[21px]">
           {description}
         </span>
       </span>
-      <span className="mt-5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary">
+      <span className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1.5 text-[12px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary">
         {action}
         <Send
           size={13}
@@ -365,7 +360,6 @@ export function SimpleModeWorkspace({
       <div className="grid gap-2.5 sm:grid-cols-2">
         <SimpleModeCard
           icon={<HelpCircle size={19} />}
-          title={t('aiChat.simpleMode.divinationTitle')}
           description={t('aiChat.simpleMode.divinationDescription')}
           action={t('aiChat.simpleMode.divinationAction')}
           disabled={disabled || submitting}
@@ -373,7 +367,6 @@ export function SimpleModeWorkspace({
         />
         <SimpleModeCard
           icon={<CalendarClock size={19} />}
-          title={t('aiChat.simpleMode.natalTitle')}
           description={t('aiChat.simpleMode.natalDescription')}
           action={t('aiChat.simpleMode.natalAction')}
           disabled={disabled || submitting}

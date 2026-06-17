@@ -869,22 +869,22 @@ export const enMessages = {
       aiDisclaimer: 'AI-generated content, for reference only',
     },
     home: {
-      subtitle: 'AI charting and chat workspace',
+      subtitle: 'AI divination · fortune telling · life questions',
       loginTitle: 'Log in to start',
       loginDescription:
         'Log in to use expert mode, save conversations, and view your credit balance and usage.',
       loginNow: 'Log in now',
       recommended: 'Recommended',
-      quickMode: 'Quick mode',
+      quickMode: 'Quick reading',
       quickDescription:
-        'Best for beginners. Explain the question first, then let the workflow create the chart.',
-      quickAction: 'Start here',
+        'Fortune telling, divination, and life questions all work here. Ask about love, career, money, or near-term luck.',
+      quickAction: 'Start reading',
       expertBadge: 'Available from Clarity',
       expertLockedBadge: 'Requires Clarity',
-      expertMode: 'Expert mode',
+      expertMode: 'Advanced charting',
       expertDescription:
-        'For practitioners and advanced users who want full chat and charting controls.',
-      expertAction: 'Enter expert mode',
+        'For users who know the methods and want BaZi, Liu Yao, Mei Hua, Zi Wei, and full chart details.',
+      expertAction: 'Enter charting',
       expertUpgradeAction: 'Open Clarity',
       backToMode: 'Back to mode selection',
       answerCompleted: 'Answer complete',
@@ -1334,11 +1334,11 @@ export const enMessages = {
       title: 'Quick mode',
       divinationTitle: 'Divination question',
       divinationDescription:
-        'Single issues, near-term choices, relationship trends, and work decisions.',
+        'Single issues, near-term choices, relationship trends, and work decisions',
       divinationAction: 'Enter divination',
       natalTitle: 'Natal analysis',
       natalDescription:
-        'Long-term personality, career direction, relationship patterns, and life stages.',
+        'Long-term personality, career direction, relationship patterns, and life stages',
       natalAction: 'Enter natal analysis',
       question: 'Question',
       questionPlaceholder: 'Example: Should I change jobs?',
