@@ -190,6 +190,7 @@ describe('admin repository', () => {
         rechargeEndDate: '2026-05-30',
       }),
     ).resolves.toMatchObject({
+      active_memberships: 2,
       active_subscriptions: 2,
       failed_recharge_orders: 1,
       paid_recharge_users: 2,

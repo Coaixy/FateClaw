@@ -27,13 +27,11 @@ import {
   getChatSessionsByUserId,
   getConversationLogByRequestId,
   claimProfessionalAiTurn,
-  getMembershipOverview,
   getRecentMessages,
   getSessionMessageById,
   getSessionMessages,
   getSessionMessagesWithToolContext,
   getSharedChatSessionByToken,
-  getUserById,
   hasFinalAiChatSessionReply,
   markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
@@ -53,11 +51,11 @@ import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
 } from '../../runtime/ipc-payloads.js';
-import { resolveProfessionalAiDailyTurnLimit } from '../../shared/membership-plans.js';
 import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
   normalizeOwnedChatSessionTitle,
 } from '../../shared/chat-session-title-policy.js';
+import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
 import type { ChatSession, NewMessage } from '../../shared/types.js';
 import {
   toChatSessionDto,
@@ -128,8 +126,8 @@ export interface OwnedChatSessionTurnOptions {
   authorizedSkillBundleIds?: string[];
   /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
   authorizedWorkflowSkillIds?: string[];
-  /** 简易模式首轮由服务端内部豁免 Plus 门禁；不要暴露到 HTTP 请求体。 */
-  plusGateBypass?: 'simple_workflow_first_turn';
+  /** 简易模式首轮由服务端内部豁免专家次数占用；不要暴露到 HTTP 请求体。 */
+  professionalAiQuotaBypass?: 'simple_workflow_first_turn';
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -800,16 +798,13 @@ async function prepareOwnedChatSessionTurn(
     );
   }
 
-  const owner = await getUserById(userId);
-  if (owner && owner.purchased_coins + owner.bonus_coins < 0) {
+  const entitlement = await getRuntimeEntitlementSnapshot(userId);
+  if (entitlement.wallet.inArrears) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
   let professionalAiDailyTurnLimit: number | null = null;
-  if (!options.plusGateBypass) {
-    const membership = await getMembershipOverview(userId);
-    professionalAiDailyTurnLimit = resolveProfessionalAiDailyTurnLimit(
-      membership.active ? membership.membership?.plan_key : null,
-    );
+  if (!options.professionalAiQuotaBypass) {
+    professionalAiDailyTurnLimit = entitlement.professionalAiDailyTurnLimit;
   }
   const msgId =
     options.userMessageId ??

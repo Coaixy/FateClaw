@@ -82,6 +82,7 @@ import {
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 type AdminRole = 'owner' | 'user_manager';
@@ -213,13 +214,7 @@ const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
 
-const MembershipPlanKeySchema = z.enum([
-  'fateclaw_clarity',
-  'fateclaw_insight',
-  'fateclaw_deep',
-  'fateclaw_plus',
-  'fateclaw_pro',
-]);
+const MembershipPlanKeySchema = z.enum(MEMBERSHIP_PLAN_KEYS);
 
 const AdminSetUserMembershipSchema = z
   .object({
@@ -1574,7 +1569,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/admin/users/:id/membership — 管理员设置用户会员套餐与有效期
   app.post('/users/:id/membership', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = AdminSetUserMembershipSchema.parse(request.body);
+    const parsed = AdminSetUserMembershipSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '会员参数无效' });
+    }
+    const body = parsed.data;
     try {
       return await setAdminUserMembership({
         userId: id,
@@ -1634,6 +1635,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       bonus_coins: updated.bonus_coins,
       purchased_coins: updated.purchased_coins,
       reserved_coins: updated.reserved_coins,
+      available_coins: calculateAvailableSpendableCoins(updated),
     };
   });
 
@@ -1655,7 +1657,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       purchased_coins: updated.purchased_coins,
       bonus_coins: updated.bonus_coins,
       reserved_coins: updated.reserved_coins,
-      available_coins: updated.purchased_coins + updated.bonus_coins,
+      available_coins: calculateAvailableSpendableCoins(updated),
     };
   });
 

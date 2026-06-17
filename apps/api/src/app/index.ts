@@ -17,7 +17,6 @@ import {
   initDatabase,
   closeDatabase,
   getEnabledAccounts,
-  getMembershipOverview,
 } from '../infrastructure/db.js';
 import {
   cleanupStaleLocalAgentsOnStartup,
@@ -36,7 +35,7 @@ import {
 } from '../runtime/pi-session-health-worker.js';
 import { logger } from '../infrastructure/logger.js';
 import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
-import { hasWechatClawEntitlement } from '../shared/membership-plans.js';
+import { getRuntimeEntitlementSnapshot } from '../modules/billing/entitlements.js';
 
 // Re-export for CLI and external consumers
 export {
@@ -72,8 +71,8 @@ export async function main(): Promise<void> {
   const memberAccounts: string[] = [];
   for (const account of enabledAccounts) {
     if (!account.owner_id) continue;
-    const membership = await getMembershipOverview(account.owner_id);
-    if (!hasWechatClawEntitlement(membership)) continue;
+    const entitlement = await getRuntimeEntitlementSnapshot(account.owner_id);
+    if (!entitlement.canUseWechatClaw) continue;
     memberAccounts.push(account.id);
     void startAccountPolling(account).catch((err) => {
       logger.error({ accountId: account.id, err }, '微信 Claw 轮询启动失败');

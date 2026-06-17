@@ -11,6 +11,8 @@ export interface AdminGlobalStats {
   total_users: number;
   plan_distribution: { plan: string; count: number }[];
   model_selection_distribution: { source: string; count: number }[];
+  active_memberships: number;
+  /** @deprecated 使用 active_memberships。 */
   active_subscriptions: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
@@ -653,7 +655,7 @@ export async function getAdminGlobalStats(
          COALESCE(SUM(purchased_coins), 0)::float8 AS purchased,
          COALESCE(SUM(bonus_coins), 0)::float8 AS bonus,
          COALESCE(SUM(reserved_coins), 0)::float8 AS reserved,
-         COALESCE(SUM(purchased_coins + bonus_coins - reserved_coins), 0)::float8 AS available,
+         COALESCE(SUM(GREATEST(0, purchased_coins + bonus_coins - reserved_coins)), 0)::float8 AS available,
          COUNT(*) FILTER (
            WHERE purchased_coins + bonus_coins - reserved_coins < 0
          )::int AS negative_users
@@ -719,6 +721,7 @@ export async function getAdminGlobalStats(
       plan: r.source,
       count: r.count,
     })),
+    active_memberships: Number(ms.active),
     active_subscriptions: Number(ms.active),
     total_recharge_orders: Number(rs.total_orders),
     paid_recharge_orders: Number(rs.paid_orders),

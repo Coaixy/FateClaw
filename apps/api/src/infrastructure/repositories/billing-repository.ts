@@ -13,7 +13,10 @@ import type {
   User,
   UserMembership,
 } from '../../shared/types.js';
-import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
+import {
+  assertSufficientSpendableCoins,
+  calculateAvailableSpendableCoins,
+} from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
@@ -456,6 +459,7 @@ export interface GiftCodeRedeemResult {
   redemption: GiftCodeRedemptionRow;
   purchased_coins: number;
   bonus_coins: number;
+  reserved_coins: number;
   available_coins: number;
 }
 
@@ -477,7 +481,7 @@ export interface DailySignInRecordRow {
   created_at: string;
 }
 
-/** Free 用户专业模式 AI 每日次数的全局配置行。 */
+/** @deprecated 仅供后台展示旧 Free 专家次数配置兼容，新会员规则不读取该配置。 */
 export interface FreeProfessionalAiQuotaConfigRow {
   id: 'default' | string;
   daily_professional_turn_limit: number;
@@ -690,6 +694,7 @@ async function getActiveMembershipsForUserUsing(
        AND status = 'active'
        AND current_period_end > NOW()
      ORDER BY CASE plan_key
+       -- 旧 Plus/Pro 只用于历史会员行排序兜底，新的写入路径必须使用三档新 key。
        WHEN 'fateclaw_deep' THEN 3
        WHEN 'fateclaw_pro' THEN 3
        WHEN 'fateclaw_insight' THEN 2
@@ -963,6 +968,7 @@ export async function getMembershipOverview(
        ELSE 0
      END DESC,
      CASE plan_key
+       -- 旧 Plus/Pro 只用于历史会员行排序兜底，新的写入路径必须使用三档新 key。
        WHEN 'fateclaw_deep' THEN 3
        WHEN 'fateclaw_pro' THEN 3
        WHEN 'fateclaw_insight' THEN 2
@@ -1224,6 +1230,7 @@ export async function subscribeMembershipWithWallet(
       config,
     });
 
+    // membership_subscription 是历史钱包流水 kind，代表会员购买/续费流水，不是 Skill subscription。
     const membershipTransactionId = await insertWalletTransaction(client, {
       userId,
       kind: 'membership_subscription',
@@ -1269,7 +1276,7 @@ export async function subscribeMembershipWithWallet(
  * 管理员直接设置用户会员有效期，不扣减用户积分余额。
  *
  * @param input.userId 目标用户 ID。
- * @param input.planKey 要设置的会员套餐 key，未知值会按历史规则回落到 Plus。
+ * @param input.planKey 要设置的会员套餐 key；HTTP 写入会拦截未知值，repository 兜底回落到 Clarity。
  * @param input.currentPeriodEnd 会员有效期结束时间，必须晚于当前时间。
  * @returns 写入后的会员周期记录。
  * @remarks 仅供管理后台人工处理补偿、续期或纠错；正常购买仍应使用钱包订阅流程。
@@ -1434,9 +1441,10 @@ export async function updateDailySignInConfig(input: {
 }
 
 /**
- * 读取 Free 用户专业模式 AI 每日次数配置；首次访问时补齐默认 5 次。
+ * 读取旧 Free 用户专业模式 AI 每日次数配置；首次访问时补齐默认 5 次。
  *
  * @returns 当前全局配置行。
+ * @deprecated 仅供后台兼容展示旧配置，新会员体系的每日次数来自套餐能力矩阵。
  */
 export async function getFreeProfessionalAiQuotaConfig(): Promise<FreeProfessionalAiQuotaConfigRow> {
   const { rows } = await pool.query(
@@ -1451,10 +1459,11 @@ export async function getFreeProfessionalAiQuotaConfig(): Promise<FreeProfession
 }
 
 /**
- * 更新 Free 用户专业模式 AI 每日可用次数。
+ * 更新旧 Free 用户专业模式 AI 每日可用次数。
  *
- * @param input.dailyProfessionalTurnLimit 每个 Free 用户每天可发起的专业模式 AI 轮数；0 表示关闭免费额度。
+ * @param input.dailyProfessionalTurnLimit 旧配置里的每日专业模式 AI 轮数；0 表示关闭旧免费额度。
  * @returns 更新后的配置行。
+ * @deprecated 仅供后台兼容写入旧配置，新会员体系的每日次数来自套餐能力矩阵。
  */
 export async function updateFreeProfessionalAiQuotaConfig(input: {
   dailyProfessionalTurnLimit: number;
@@ -1613,6 +1622,7 @@ export async function releaseProfessionalAiTurn(input: {
  * @param input.userId 用户 ID。
  * @param input.usageDate 统计日期，默认沿用现有每日用量的 UTC YYYY-MM-DD 口径。
  * @returns allowed=false 表示当天次数已用尽；allowed=true 时已完成次数递增。
+ * @deprecated 仅供旧 Free quota 兼容测试或历史脚本使用，新逻辑使用 claimProfessionalAiTurn()。
  */
 export async function claimFreeProfessionalAiTurn(input: {
   userId: string;
@@ -1715,6 +1725,7 @@ export async function claimFreeProfessionalAiTurn(input: {
  * @param input.userId 用户 ID。
  * @param input.usageDate 需要退回的统计日期，必须与占用结果的 usage_date 保持一致。
  * @returns released=false 表示没有可退回的次数，通常说明占用未成功或已被补偿。
+ * @deprecated 仅供旧 Free quota 兼容测试或历史脚本使用，新逻辑使用 releaseProfessionalAiTurn()。
  */
 export async function releaseFreeProfessionalAiTurn(input: {
   userId: string;
@@ -2179,7 +2190,8 @@ export async function redeemGiftCodeForUser(input: {
       ),
       purchased_coins: updatedUser.purchased_coins,
       bonus_coins: updatedUser.bonus_coins,
-      available_coins: updatedUser.purchased_coins + updatedUser.bonus_coins,
+      reserved_coins: updatedUser.reserved_coins,
+      available_coins: calculateAvailableSpendableCoins(updatedUser),
     };
   } catch (err) {
     await client.query('ROLLBACK');

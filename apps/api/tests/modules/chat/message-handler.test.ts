@@ -6,6 +6,7 @@ const {
   mockGetRecentMessages,
   mockGetSoulContent,
   mockGetUserByAccountId,
+  mockGetUserById,
   mockIncrementDailyMessageCount,
   mockParseWeixinMessage,
   mockRunWechatChatSessionTurn,
@@ -17,6 +18,7 @@ const {
   mockGetRecentMessages: vi.fn(),
   mockGetSoulContent: vi.fn(),
   mockGetUserByAccountId: vi.fn(),
+  mockGetUserById: vi.fn(),
   mockIncrementDailyMessageCount: vi.fn(),
   mockParseWeixinMessage: vi.fn(),
   mockRunWechatChatSessionTurn: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getRecentMessages: mockGetRecentMessages,
   getSoulContent: mockGetSoulContent,
   getUserByAccountId: mockGetUserByAccountId,
+  getUserById: mockGetUserById,
   storeMessage: mockStoreMessage,
 }));
 
@@ -107,6 +110,12 @@ describe('processWeixinMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserByAccountId.mockResolvedValue({ id: 'user-1' });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
       membership: { plan_key: 'fateclaw_deep' },

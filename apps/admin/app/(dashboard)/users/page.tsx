@@ -661,7 +661,10 @@ function UserRow({
                       <span>本月 Token {fmt(user.monthly_tokens_used)}</span>
                       <span>
                         官方模型扣费{' '}
-                        {formatCoins(user.estimated_monthly_total_coins)}
+                        {formatCoins(
+                          user.monthly_charged_coins ??
+                            user.estimated_monthly_total_coins,
+                        )}
                       </span>
                     </div>
                   </section>
@@ -1266,7 +1269,8 @@ export default function AdminUsersPage() {
       todayMessages,
       activeMembers: users.filter((u) => u.membership?.active).length,
       chargedCoins: users.reduce(
-        (sum, u) => sum + u.estimated_monthly_total_coins,
+        (sum, u) =>
+          sum + (u.monthly_charged_coins ?? u.estimated_monthly_total_coins),
         0,
       ),
     };

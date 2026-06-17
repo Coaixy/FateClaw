@@ -39,6 +39,9 @@ import {
   getUsageStats,
 } from '../../infrastructure/daily-usage.js';
 import {
+  calculateAvailableSpendableCoins,
+} from '../../shared/balance-coins.js';
+import {
   getMonthlyMeteredBillingSummary,
   getMembershipBillingSummary,
   getMembershipPlanSummaries,
@@ -48,6 +51,7 @@ import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import {
   toBillingStatusDto,
   toDailyUsageRowsDto,
+  toMembershipSubscribeResultDto,
   toWalletTransactionsDto,
   toUsageStatsDto,
 } from '../../contracts-adapter/billing-contract.js';
@@ -82,42 +86,11 @@ export async function getBillingOverview(
 
   return ok(
     toBillingStatusDto({
-      monthly_tokens_used: billing.usedTokens,
-      estimated_monthly_total_coins: billing.chargedCoins,
-      purchased_coins: wallet.purchasedCoins,
-      bonus_coins: wallet.bonusCoins,
-      reserved_coins: wallet.reservedCoins,
-      available_coins: wallet.availableCoins,
-      membership: {
-        enabled: membership.enabled,
-        active: membership.active,
-        plan_key: membership.planKey,
-        monthly_price_coins: membership.monthlyPriceCoins,
-        display_price_coins: membership.displayPriceCoins,
-        current_period_start: membership.currentPeriodStart,
-        current_period_end: membership.currentPeriodEnd,
-        allowance_reset_at: membership.allowanceResetAt,
-        allowance_used_ratio: membership.allowanceUsedRatio,
-        allowance_status: membership.allowanceStatus,
-      },
-      membership_entitlements: membershipEntitlements.map((entitlement) => ({
-        plan_key: entitlement.plan_key,
-        name: entitlement.name,
-        effective_start: entitlement.effective_start,
-        effective_end: entitlement.effective_end,
-        is_current: entitlement.is_current,
-      })),
-      membership_plans: membershipPlans.map((plan) => ({
-        plan_key: plan.planKey,
-        name: plan.name,
-        enabled: plan.enabled,
-        monthly_price_coins: plan.monthlyPriceCoins,
-        display_price_coins: plan.displayPriceCoins,
-        monthly_allowance_units: plan.monthlyAllowanceUnits,
-        standard_price_per_million_units_coins:
-          plan.standardPricePerMillionUnitsCoins,
-        updated_at: plan.updatedAt,
-      })),
+      billing,
+      wallet,
+      membership,
+      membershipEntitlements,
+      membershipPlans,
     }),
   );
 }
@@ -134,23 +107,7 @@ export async function subscribeCurrentUserMembership(
     const result = await subscribeMembershipWithWallet(user.id, planKey);
     const wallet = await getWalletBalanceSummary(result.user.id);
     const membership = await getMembershipBillingSummary(result.user.id);
-    return ok({
-      membership: {
-        enabled: membership.enabled,
-        active: membership.active,
-        plan_key: membership.planKey,
-        monthly_price_coins: membership.monthlyPriceCoins,
-        display_price_coins: membership.displayPriceCoins,
-        current_period_start: membership.currentPeriodStart,
-        current_period_end: membership.currentPeriodEnd,
-        allowance_reset_at: membership.allowanceResetAt,
-        allowance_used_ratio: membership.allowanceUsedRatio,
-        allowance_status: membership.allowanceStatus,
-      },
-      purchased_coins: wallet.purchasedCoins,
-      bonus_coins: wallet.bonusCoins,
-      available_coins: wallet.availableCoins,
-    });
+    return ok(toMembershipSubscribeResultDto({ membership, wallet }));
   } catch (err) {
     return fail(400, err instanceof Error ? err.message : '开通会员失败');
   }
@@ -281,8 +238,10 @@ export async function claimDailySignInReward(
     signed_in_today: true,
     signed_in_at: record.created_at,
     received_coins: record.reward_coins,
+    purchased_coins: updated.purchased_coins,
     bonus_coins: updated.bonus_coins,
-    available_coins: updated.purchased_coins + updated.bonus_coins,
+    reserved_coins: updated.reserved_coins,
+    available_coins: calculateAvailableSpendableCoins(updated),
   });
 }
 

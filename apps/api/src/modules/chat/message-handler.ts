@@ -6,7 +6,6 @@ import crypto from 'crypto';
 
 import {
   getRecentMessages,
-  getMembershipOverview,
   getUserByAccountId,
   storeMessage,
 } from '../../infrastructure/db.js';
@@ -16,13 +15,12 @@ import {
   WeixinMessage,
 } from '../../infrastructure/ilink.js';
 import { logger } from '../../infrastructure/logger.js';
-import { hasWechatClawEntitlement } from '../../shared/membership-plans.js';
 import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
 import { getSoulContent } from '../../infrastructure/db.js';
 import {
   FREE_WECHAT_UNSUPPORTED_MESSAGE,
-  isWechatDeviceBindingDisabled,
 } from '../account/account-service.js';
+import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
 import {
   computeTokenBudget,
   estimateTokens,
@@ -75,8 +73,10 @@ export async function processWeixinMessage(
   const { content, sender } = parsed;
 
   const owner = await getUserByAccountId(account.id);
-  const membership = owner ? await getMembershipOverview(owner.id) : null;
-  if (isWechatDeviceBindingDisabled(hasWechatClawEntitlement(membership))) {
+  const entitlement = owner
+    ? await getRuntimeEntitlementSnapshot(owner.id)
+    : null;
+  if (!entitlement?.canUseWechatClaw) {
     await ilinkSendMessage(
       {
         id: account.id,

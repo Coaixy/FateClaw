@@ -23,7 +23,7 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
-  claimFreeProfessionalAiTurn,
+  claimProfessionalAiTurn,
   createDailySignInReward,
   deductBalanceCoins,
   deductModelChargeCoinsAllowDebt,
@@ -36,7 +36,7 @@ import {
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
   listWalletTransactionsForAdmin,
-  releaseFreeProfessionalAiTurn,
+  releaseProfessionalAiTurn,
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
   setUserMembershipForAdmin,
@@ -440,18 +440,11 @@ describe('billing repository', () => {
     expect(calls[0]?.params).toEqual([4]);
   });
 
-  it('claims a Free professional AI turn when quota remains', async () => {
+  it('claims a professional AI turn when quota remains', async () => {
     const { clientCalls, client } = createMockPool(
       [],
       [
         [],
-        [
-          {
-            id: 'default',
-            daily_professional_turn_limit: '5',
-            updated_at: '2026-05-30T00:00:00.000Z',
-          },
-        ],
         [
           {
             user_id: 'user-1',
@@ -466,8 +459,9 @@ describe('billing repository', () => {
     );
 
     await expect(
-      claimFreeProfessionalAiTurn({
+      claimProfessionalAiTurn({
         userId: 'user-1',
+        dailyTurnLimit: 5,
         usageDate: '2026-05-30',
       }),
     ).resolves.toEqual({
@@ -478,27 +472,20 @@ describe('billing repository', () => {
       remaining: 3,
     });
     expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(clientCalls[2]?.sql).toContain(
+    expect(clientCalls[1]?.sql).toContain(
       'ON CONFLICT (user_id, usage_date) DO UPDATE',
     );
-    expect(clientCalls[2]?.sql).toContain('professional_turn_count < $3');
-    expect(clientCalls[2]?.params).toEqual(['user-1', '2026-05-30', 5]);
-    expect(clientCalls[3]?.sql).toBe('COMMIT');
+    expect(clientCalls[1]?.sql).toContain('professional_turn_count < $3');
+    expect(clientCalls[1]?.params).toEqual(['user-1', '2026-05-30', 5]);
+    expect(clientCalls[2]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('rejects a Free professional AI turn after quota is exhausted', async () => {
+  it('rejects a professional AI turn after quota is exhausted', async () => {
     const { clientCalls, client } = createMockPool(
       [],
       [
         [],
-        [
-          {
-            id: 'default',
-            daily_professional_turn_limit: '5',
-            updated_at: '2026-05-30T00:00:00.000Z',
-          },
-        ],
         [],
         [
           {
@@ -514,8 +501,9 @@ describe('billing repository', () => {
     );
 
     await expect(
-      claimFreeProfessionalAiTurn({
+      claimProfessionalAiTurn({
         userId: 'user-1',
+        dailyTurnLimit: 5,
         usageDate: '2026-05-30',
       }),
     ).resolves.toEqual({
@@ -525,12 +513,14 @@ describe('billing repository', () => {
       used: 5,
       remaining: 0,
     });
-    expect(clientCalls[3]?.sql).toContain('FROM ai_chat_free_daily_usage');
-    expect(clientCalls[4]?.sql).toBe('COMMIT');
+    expect(clientCalls[2]?.sql).toContain(
+      'FROM ai_chat_professional_daily_usage',
+    );
+    expect(clientCalls[3]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('releases a consumed Free professional AI turn', async () => {
+  it('releases a consumed professional AI turn', async () => {
     const { calls } = createMockPool([
       [
         {
@@ -544,7 +534,7 @@ describe('billing repository', () => {
     ]);
 
     await expect(
-      releaseFreeProfessionalAiTurn({
+      releaseProfessionalAiTurn({
         userId: 'user-1',
         usageDate: '2026-05-30',
       }),
@@ -553,7 +543,9 @@ describe('billing repository', () => {
       usage_date: '2026-05-30',
       used: 3,
     });
-    expect(calls[0]?.sql).toContain('UPDATE ai_chat_free_daily_usage');
+    expect(calls[0]?.sql).toContain(
+      'UPDATE ai_chat_professional_daily_usage',
+    );
     expect(calls[0]?.sql).toContain('professional_turn_count > 0');
     expect(calls[0]?.params).toEqual(['user-1', '2026-05-30']);
   });
@@ -807,7 +799,7 @@ describe('billing repository', () => {
     };
     const membership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       status: 'active',
       current_period_start: '2026-05-10T08:00:00.000Z',
       current_period_end: '2026-06-10T08:00:00.000Z',
@@ -815,7 +807,7 @@ describe('billing repository', () => {
     const allowance = {
       id: 'allowance-1',
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       period_start: '2026-05-10T08:00:00.000Z',
       period_end: '2026-06-10T08:00:00.000Z',
       allowance_units: 3000000,
@@ -904,7 +896,7 @@ describe('billing repository', () => {
         [
           {
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             status: 'active',
             current_period_start: '2026-05-31T00:00:00.000Z',
             current_period_end: '2026-06-30T00:00:00.000Z',
@@ -914,7 +906,7 @@ describe('billing repository', () => {
           {
             id: 'allowance-1',
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             period_start: '2026-05-31T00:00:00.000Z',
             period_end: '2026-06-30T00:00:00.000Z',
             allowance_units: 3000000,
@@ -979,7 +971,7 @@ describe('billing repository', () => {
         [
           {
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             status: 'active',
             current_period_start: '2026-07-10T03:00:00.000Z',
             current_period_end: '2026-08-10T03:00:00.000Z',
@@ -990,7 +982,7 @@ describe('billing repository', () => {
           {
             id: 'allowance-1',
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             period_start: '2026-07-10T03:00:00.000Z',
             period_end: '2026-08-10T03:00:00.000Z',
             allowance_units: 3000000,
@@ -1031,7 +1023,7 @@ describe('billing repository', () => {
     };
     const currentMembership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       status: 'active',
       current_period_start: '2026-07-31T08:00:00.000Z',
       current_period_end: '2026-08-31T08:00:00.000Z',
@@ -1066,7 +1058,7 @@ describe('billing repository', () => {
           {
             id: 'allowance-1',
             user_id: 'user-1',
-            plan_key: 'fateclaw_plus',
+            plan_key: 'fateclaw_insight',
             period_start: '2026-07-31T08:00:00.000Z',
             period_end: '2026-08-31T08:00:00.000Z',
             allowance_units: 3000000,
@@ -1088,7 +1080,7 @@ describe('billing repository', () => {
     ]);
   });
 
-  it('inserts a Pro overlay and pauses the existing Plus period', async () => {
+  it('inserts a Deep overlay and pauses the existing Insight period', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-10T00:00:00.000Z'));
 
@@ -1098,9 +1090,9 @@ describe('billing repository', () => {
       bonus_coins: 0,
       reserved_coins: 0,
     };
-    const plusMembership = {
+    const insightMembership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_plus',
+      plan_key: 'fateclaw_insight',
       status: 'active',
       current_period_start: '2026-06-01T00:00:00.000Z',
       current_period_end: '2027-06-01T00:00:00.000Z',
@@ -1115,7 +1107,7 @@ describe('billing repository', () => {
         [],
         [
           {
-            id: 'fateclaw_pro',
+            id: 'fateclaw_deep',
             enabled: true,
             monthly_price_coins: 100,
             monthly_allowance_units: 10000000,
@@ -1124,12 +1116,12 @@ describe('billing repository', () => {
         ],
         [],
         [],
-        [plusMembership],
+        [insightMembership],
         [],
         [
           {
             user_id: 'user-1',
-            plan_key: 'fateclaw_pro',
+            plan_key: 'fateclaw_deep',
             status: 'active',
             current_period_start: '2026-06-10T00:00:00.000Z',
             current_period_end: '2026-07-10T00:00:00.000Z',
@@ -1139,7 +1131,7 @@ describe('billing repository', () => {
           {
             id: 'allowance-pro',
             user_id: 'user-1',
-            plan_key: 'fateclaw_pro',
+            plan_key: 'fateclaw_deep',
             period_start: '2026-06-10T00:00:00.000Z',
             period_end: '2026-07-10T00:00:00.000Z',
             allowance_units: 10000000,
@@ -1150,14 +1142,18 @@ describe('billing repository', () => {
       ],
     );
 
-    await subscribeMembershipWithWallet('user-1', 'fateclaw_pro');
+    await subscribeMembershipWithWallet('user-1', 'fateclaw_deep');
 
-    const plusExtend = clientCalls.find(
+    const insightExtend = clientCalls.find(
       (call) =>
         call.sql.includes('UPDATE user_memberships') &&
         call.sql.includes("INTERVAL '1 millisecond'"),
     );
-    expect(plusExtend?.params).toEqual(['user-1', 'fateclaw_plus', 2592000000]);
+    expect(insightExtend?.params).toEqual([
+      'user-1',
+      'fateclaw_insight',
+      2592000000,
+    ]);
 
     const membershipInsert = clientCalls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
@@ -1221,7 +1217,7 @@ describe('billing repository', () => {
     await expect(
       setUserMembershipForAdmin({
         userId: 'user-1',
-        planKey: 'fateclaw_plus',
+        planKey: 'fateclaw_insight',
         currentPeriodEnd: '2026-07-31T15:59:59.999Z',
       }),
     ).resolves.toEqual(membership);

@@ -92,6 +92,7 @@ import {
   normalizeMembershipPlanKey,
   type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
+import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import {
   getAdminStatusStats,
   getUsageStats,
@@ -118,6 +119,10 @@ import {
   getAdminRechargePaymentConfig,
   updateAdminRechargePaymentConfig,
 } from '../billing/recharge-service.js';
+import {
+  toMembershipPlanDto,
+  toMembershipStatusDto,
+} from '../../contracts-adapter/billing-contract.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
 import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
 import {
@@ -229,6 +234,7 @@ export interface AdminRewardConfigView {
     updated_at: string;
   }>;
   free_professional_ai: {
+    /** 旧 Free 专家次数配置，仅供后台兼容展示，不参与新会员每日次数规则。 */
     daily_turn_limit: number;
     updated_at: string;
   };
@@ -244,6 +250,8 @@ export type AdminUserListItem = Omit<User, 'password_hash'> & {
   account_count: number;
   usage: Awaited<ReturnType<typeof getUsageStats>>;
   monthly_tokens_used: number;
+  monthly_charged_coins: number;
+  /** @deprecated 使用 monthly_charged_coins。 */
   estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
@@ -294,34 +302,13 @@ function membershipConfigToAdminView(
 function membershipStatusToAdminView(
   membership: Awaited<ReturnType<typeof getMembershipBillingSummary>>,
 ): MembershipStatusDto {
-  return {
-    enabled: membership.enabled,
-    active: membership.active,
-    plan_key: membership.planKey,
-    monthly_price_coins: membership.monthlyPriceCoins,
-    display_price_coins: membership.displayPriceCoins,
-    current_period_start: membership.currentPeriodStart,
-    current_period_end: membership.currentPeriodEnd,
-    allowance_reset_at: membership.allowanceResetAt,
-    allowance_used_ratio: membership.allowanceUsedRatio,
-    allowance_status: membership.allowanceStatus,
-  };
+  return toMembershipStatusDto(membership);
 }
 
 function membershipPlanToAdminView(
   plan: Awaited<ReturnType<typeof getMembershipPlanSummaries>>[number],
 ): MembershipPlanDto {
-  return {
-    plan_key: plan.planKey,
-    name: plan.name,
-    enabled: plan.enabled,
-    monthly_price_coins: plan.monthlyPriceCoins,
-    display_price_coins: plan.displayPriceCoins,
-    monthly_allowance_units: plan.monthlyAllowanceUnits,
-    standard_price_per_million_units_coins:
-      plan.standardPricePerMillionUnitsCoins,
-    updated_at: plan.updatedAt,
-  };
+  return toMembershipPlanDto(plan);
 }
 
 async function getAdminUserMembershipState(
@@ -1167,11 +1154,12 @@ export async function listAdminUsersWithStats(
             today_total_tokens: 0,
           } satisfies Awaited<ReturnType<typeof getUsageStats>>),
         monthly_tokens_used: monthlyBilling.usedTokens,
+        monthly_charged_coins: monthlyBilling.chargedCoins,
         estimated_monthly_total_coins: monthlyBilling.chargedCoins,
         purchased_coins: safe.purchased_coins,
         bonus_coins: safe.bonus_coins,
         reserved_coins: safe.reserved_coins,
-        available_coins: safe.purchased_coins + safe.bonus_coins,
+        available_coins: calculateAvailableSpendableCoins(safe),
         membership: membershipStatusToAdminView(
           memberships.get(safe.id) ??
             ({
@@ -1208,6 +1196,8 @@ export async function getAdminUserDetail(userId: string): Promise<{
     account_count: number;
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
+    monthly_charged_coins: number;
+    /** @deprecated 使用 monthly_charged_coins。 */
     estimated_monthly_total_coins: number;
     purchased_coins: number;
     bonus_coins: number;
@@ -1242,6 +1232,7 @@ export async function getAdminUserDetail(userId: string): Promise<{
       account_count: accounts.length,
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
+      monthly_charged_coins: monthlyBilling.chargedCoins,
       estimated_monthly_total_coins: monthlyBilling.chargedCoins,
       purchased_coins: wallet.purchasedCoins,
       bonus_coins: wallet.bonusCoins,

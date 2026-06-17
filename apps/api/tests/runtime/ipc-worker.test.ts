@@ -104,6 +104,7 @@ import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
 import {
   getMembershipOverview,
   getUserByAccountId,
+  getUserById,
 } from '../../src/infrastructure/db.js';
 
 const effectiveRuntime = {
@@ -297,6 +298,12 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     mockEval.mockResolvedValue(1);
     mockLpush.mockResolvedValue(1);
     vi.mocked(getUserByAccountId).mockResolvedValue({ id: 'user-1' } as never);
+    vi.mocked(getUserById).mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    } as never);
     vi.mocked(getMembershipOverview).mockResolvedValue({
       active: true,
       membership: { plan_key: 'fateclaw_insight' },
@@ -338,6 +345,10 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
   });
 
   it('releases normal inbox runtime lease when enqueue fails', async () => {
+    vi.mocked(getMembershipOverview).mockResolvedValueOnce({
+      active: true,
+      membership: { plan_key: 'fateclaw_deep' },
+    } as never);
     mockLpush.mockRejectedValueOnce(new Error('redis down'));
 
     await expect(
@@ -352,5 +363,20 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
 
     expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('account-1');
+  });
+
+  it('does not allow Insight priority queue entitlement to auto-deliver WeChat requests', async () => {
+    await expect(
+      submitInboxRequest({
+        accountId: 'account-1',
+        type: 'chat',
+        userMessage: 'hi',
+        history: [],
+        llmRuntime: effectiveRuntime,
+      }),
+    ).rejects.toThrow('free unsupported');
+
+    expect(mockRetainLocalAgent).not.toHaveBeenCalled();
+    expect(mockLpush).not.toHaveBeenCalled();
   });
 });

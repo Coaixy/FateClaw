@@ -176,7 +176,7 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         authorizedSkillBundleIds: undefined,
         authorizedWorkflowSkillIds: ['snapshot-liuyao'],
         llmRuntimeOverride: { model: 'gpt-test' },
-        plusGateBypass: 'simple_workflow_first_turn',
+        professionalAiQuotaBypass: 'simple_workflow_first_turn',
         runtimeUserMessageOverride: [
           '我该不该换工作？',
           '',

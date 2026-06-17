@@ -6,6 +6,7 @@ const {
   mockGetMembershipOverview,
   mockGetRuntimeConfig,
   mockGetSystemSecret,
+  mockGetUserById,
   mockGetUserModelConfig,
   mockGetUserModelSelection,
   mockListOfficialModelConfigs,
@@ -23,6 +24,7 @@ const {
   mockGetMembershipOverview: vi.fn(),
   mockGetRuntimeConfig: vi.fn(),
   mockGetSystemSecret: vi.fn(),
+  mockGetUserById: vi.fn(),
   mockGetUserModelConfig: vi.fn(),
   mockGetUserModelSelection: vi.fn(),
   mockListOfficialModelConfigs: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getOfficialModelConfig: mockGetOfficialModelConfig,
   getRuntimeConfig: mockGetRuntimeConfig,
   getSystemSecret: mockGetSystemSecret,
+  getUserById: mockGetUserById,
   getUserModelConfig: mockGetUserModelConfig,
   getUserModelSelection: mockGetUserModelSelection,
   listConfigAuditLogs: vi.fn(async () => []),
@@ -127,7 +130,7 @@ function custom(overrides: Partial<UserModelConfig> = {}): UserModelConfig {
 function membership(active = true) {
   return {
     active,
-    membership: active ? { plan_key: 'fateclaw_plus' } : null,
+    membership: active ? { plan_key: 'fateclaw_insight' } : null,
   };
 }
 
@@ -140,6 +143,12 @@ describe('resolveUserLlmRuntime', () => {
       id: 'default',
       custom_model_platform_price_per_million_coins: 2,
       updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
     });
     mockGetMembershipOverview.mockResolvedValue(membership());
     mockGetRuntimeConfig.mockResolvedValue({
@@ -388,7 +397,7 @@ describe('resolveUserLlmRuntime', () => {
     });
   });
 
-  it('resolves selected custom model as a member-only model without platform token billing', async () => {
+  it('resolves selected custom model as a member-only metered model with platform billing', async () => {
     mockGetUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
       source: 'custom',
@@ -407,12 +416,12 @@ describe('resolveUserLlmRuntime', () => {
       contextWindowTokens: 1000000,
       maxOutputTokens: 32768,
       thinkingLevel: 'medium',
-      inputTokenPricePerMillionCoins: 0,
-      outputTokenPricePerMillionCoins: 0,
+      inputTokenPricePerMillionCoins: 2,
+      outputTokenPricePerMillionCoins: 2,
     });
   });
 
-  it('ignores configured platform price for selected custom model billing', async () => {
+  it('uses configured platform price for selected custom model billing', async () => {
     mockGetModelBillingConfig.mockResolvedValue({
       id: 'default',
       custom_model_platform_price_per_million_coins: 9,
@@ -428,8 +437,8 @@ describe('resolveUserLlmRuntime', () => {
     mockGetUserModelConfig.mockResolvedValue(custom());
 
     await expect(resolveUserLlmRuntime('user-1')).resolves.toMatchObject({
-      inputTokenPricePerMillionCoins: 0,
-      outputTokenPricePerMillionCoins: 0,
+      inputTokenPricePerMillionCoins: 9,
+      outputTokenPricePerMillionCoins: 9,
     });
   });
 
@@ -561,6 +570,12 @@ describe('getLocalAgentRuntimePolicy', () => {
       skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
 
     await expect(getLocalAgentRuntimePolicy()).resolves.toEqual({
       maxProcesses: 100,
@@ -590,6 +605,12 @@ describe('getPiSessionHealthPolicy', () => {
       skill_bundle_max_total_chars: 500_000,
       skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
       updated_at: '2026-05-04T00:00:00.000Z',
+    });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
     });
 
     await expect(getPiSessionHealthPolicy()).resolves.toEqual({

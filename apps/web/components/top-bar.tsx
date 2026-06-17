@@ -8,7 +8,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
-import { hasBaseMembershipEntitlement } from '@/features/billing/membership-plans';
+import { hasPaidMembershipEntitlement } from '@/features/billing/membership-plans';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
@@ -148,7 +148,7 @@ export function TopBar({
       : t('topBar.dropdownBalanceAvailable', {
           balance: formatCoins(balanceCoins, locale),
         });
-  const baseMembershipActive = hasBaseMembershipEntitlement(status?.membership);
+  const baseMembershipActive = hasPaidMembershipEntitlement(status?.membership);
 
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">

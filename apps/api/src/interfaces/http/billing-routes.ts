@@ -20,15 +20,10 @@ import {
   listRechargeOrdersForUser,
   syncRechargeOrderForUser,
 } from '../../modules/billing/recharge-service.js';
+import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
-const MembershipPlanKeySchema = z.enum([
-  'fateclaw_clarity',
-  'fateclaw_insight',
-  'fateclaw_deep',
-  'fateclaw_plus',
-  'fateclaw_pro',
-]);
+const MembershipPlanKeySchema = z.enum(MEMBERSHIP_PLAN_KEYS);
 
 const MembershipSubscribeSchema = z
   .object({

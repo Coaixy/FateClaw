@@ -169,6 +169,7 @@ export function membershipOverviewMeetsPlan(
  *
  * @param membership 当前会员概览。
  * @returns Clarity 及以上套餐有效时返回 true。
+ * @deprecated 仅作为旧命名兼容 wrapper，新代码使用 hasPaidMembershipEntitlement()。
  */
 export function hasBaseMembershipEntitlement(
   membership: {

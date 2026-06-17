@@ -15,6 +15,10 @@ import {
 } from '../../infrastructure/daily-usage.js';
 import { logger } from '../../infrastructure/logger.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
+import {
+  calculateAvailableSpendableCoins,
+  isSpendableBalanceInArrears,
+} from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   normalizeMembershipPlanKey,
@@ -34,6 +38,7 @@ export interface WalletBalanceSummary {
   bonusCoins: number;
   reservedCoins: number;
   availableCoins: number;
+  inArrears: boolean;
 }
 
 export interface MonthlyMeteredBillingSummary {
@@ -114,6 +119,11 @@ export async function reserveBillingForRequest(input: {
   userId: string;
   requestId: string;
   runtime: LlmRuntimeSnapshot;
+  entitlementSnapshot?: {
+    planKey: string | null;
+    membershipActive: boolean;
+    availableCoins: number;
+  };
 }): Promise<BillingReservation | null> {
   if (input.runtime.billingMode !== 'metered') {
     return null;
@@ -122,7 +132,7 @@ export async function reserveBillingForRequest(input: {
   if (!user) {
     throw new Error('用户不存在');
   }
-  if (user.purchased_coins + user.bonus_coins < 0) {
+  if (isSpendableBalanceInArrears(user)) {
     throw new Error(BILLING_ARREARS_MESSAGE);
   }
   const yearMonth = currentYearMonth();
@@ -138,6 +148,7 @@ export async function reserveBillingForRequest(input: {
       billingMode: input.runtime.billingMode,
       modelConfigId: input.runtime.modelConfigId,
       model: input.runtime.model,
+      entitlementSnapshot: input.entitlementSnapshot ?? null,
     },
   });
 
@@ -398,12 +409,14 @@ export async function getWalletBalanceSummary(
       bonusCoins: 0,
       reservedCoins: 0,
       availableCoins: 0,
+      inArrears: false,
     };
   }
   return {
     purchasedCoins: user.purchased_coins,
     bonusCoins: user.bonus_coins,
     reservedCoins: user.reserved_coins,
-    availableCoins: user.purchased_coins + user.bonus_coins,
+    availableCoins: calculateAvailableSpendableCoins(user),
+    inArrears: isSpendableBalanceInArrears(user),
   };
 }

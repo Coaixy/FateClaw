@@ -16,7 +16,6 @@ import {
   bindAccountToUser,
   getAccount,
   getAccountsByUserId,
-  getMembershipOverview,
   getSoulContent,
   getUserById,
   getUserSoulEditEnabled,
@@ -32,7 +31,7 @@ import { stopLocalAgent } from '../../runtime/local-runner.js';
 import { stopAccountPolling } from '../../runtime/poller.js';
 import { activateAccount } from '../../app/index.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { hasWechatClawEntitlement } from '../../shared/membership-plans.js';
+import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
 import {
   toAccountDto,
   toAccountSoulDto,
@@ -43,8 +42,8 @@ export async function checkAccountBindingLimit(
 ): Promise<string | null> {
   const user = await getUserById(userId);
   if (!user) return '用户不存在';
-  const membership = await getMembershipOverview(user.id);
-  if (!hasWechatClawEntitlement(membership)) {
+  const entitlement = await getRuntimeEntitlementSnapshot(user.id);
+  if (!entitlement.canUseWechatClaw) {
     return WECHAT_DEVICE_BINDING_DISABLED_MESSAGE;
   }
   const accounts = await getAccountsByUserId(user.id);

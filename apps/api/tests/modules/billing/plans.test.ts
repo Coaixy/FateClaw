@@ -188,7 +188,7 @@ describe('metered billing plans', () => {
         monthly_allowance_units: 3000000,
       },
       membership: {
-        plan_key: 'fateclaw_plus',
+        plan_key: 'fateclaw_insight',
         current_period_start: '2026-06-30T00:00:00.000Z',
         current_period_end: '2026-07-30T00:00:00.000Z',
         created_at: '2026-05-30T00:00:00.000Z',
@@ -219,7 +219,7 @@ describe('metered billing plans', () => {
         monthly_allowance_units: 3000000,
       },
       membership: {
-        plan_key: 'fateclaw_plus',
+        plan_key: 'fateclaw_insight',
         current_period_start: '2026-06-30T00:00:00.000Z',
         current_period_end: '2026-07-30T00:00:00.000Z',
         created_at: '2026-05-30T00:00:00.000Z',

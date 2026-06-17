@@ -5,14 +5,13 @@
 
 import { Redis } from 'ioredis';
 
-import {
-  getMembershipOverview,
-  getUserByAccountId,
-  getUserById,
-} from '../infrastructure/db.js';
-import { hasPriorityQueueEntitlement } from '../shared/membership-plans.js';
+import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
+import {
+  getRuntimeEntitlementSnapshot,
+  type RuntimeEntitlementSnapshot,
+} from '../modules/billing/entitlements.js';
 
 /** Agent 请求超时时间（默认 30 分钟） */
 const AGENT_REQUEST_TIMEOUT = parseInt(
@@ -111,11 +110,18 @@ let cachedGlobalAgentConcurrencyLimit: {
   expiresAtMs: number;
 } | null = null;
 
-async function resolveInboxPriority(
-  userId: string,
-): Promise<'member' | 'normal'> {
-  const membership = await getMembershipOverview(userId);
-  return hasPriorityQueueEntitlement(membership) ? 'member' : 'normal';
+function resolveInboxPriority(
+  entitlement: RuntimeEntitlementSnapshot,
+): 'member' | 'normal' {
+  return entitlement.hasPriorityQueue ? 'member' : 'normal';
+}
+
+function entitlementMetadata(snapshot: RuntimeEntitlementSnapshot) {
+  return {
+    planKey: snapshot.planKey,
+    membershipActive: snapshot.membershipActive,
+    availableCoins: snapshot.wallet.availableCoins,
+  };
 }
 
 async function enqueueInboxPayload(
@@ -623,8 +629,9 @@ export function submitInboxRequest(input: {
           reject(new Error('账号未绑定平台用户，无法处理 AI 请求'));
           return;
         }
-        const priority = await resolveInboxPriority(owner.id);
-        if ((input.autoDeliver ?? true) && priority !== 'member') {
+        const entitlement = await getRuntimeEntitlementSnapshot(owner.id);
+        const priority = resolveInboxPriority(entitlement);
+        if ((input.autoDeliver ?? true) && !entitlement.canUseWechatClaw) {
           reject(new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE));
           return;
         }
@@ -635,6 +642,7 @@ export function submitInboxRequest(input: {
           userId: owner.id,
           requestId,
           runtime: llmRuntime,
+          entitlementSnapshot: entitlementMetadata(entitlement),
         });
 
         timeout = setTimeout(async () => {
@@ -926,12 +934,14 @@ export function submitAiChatInboxRequest(input: {
         const llmRuntime = input.llmRuntime
           ? llmRuntimeToSnapshot(input.llmRuntime)
           : await resolveLlmRuntimeSnapshot(owner.id);
+        const entitlement = await getRuntimeEntitlementSnapshot(owner.id);
         billingReservation = await reserveBillingForRequest({
           userId: owner.id,
           requestId,
           runtime: llmRuntime,
+          entitlementSnapshot: entitlementMetadata(entitlement),
         });
-        const priority = await resolveInboxPriority(owner.id);
+        const priority = resolveInboxPriority(entitlement);
 
         timeout = setTimeout(async () => {
           const pending = pendingAiChatRequests.get(requestId);

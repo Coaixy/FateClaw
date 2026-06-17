@@ -207,7 +207,12 @@ describe('chat-session-service selected board context', () => {
       updated_at: '2026-04-26T09:00:00.000Z',
       deleted_at: null,
     });
-    mockGetUserById.mockResolvedValue({ id: 'user-1' });
+    mockGetUserById.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
       membership: { plan_key: 'fateclaw_deep' },
@@ -591,12 +596,11 @@ describe('chat-session-service selected board context', () => {
         pastedBoard: undefined,
       },
       {
-        plusGateBypass: 'simple_workflow_first_turn',
+        professionalAiQuotaBypass: 'simple_workflow_first_turn',
       },
     );
 
     expect(result.ok).toBe(true);
-    expect(mockGetMembershipOverview).not.toHaveBeenCalled();
     expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
@@ -792,6 +796,7 @@ describe('chat-session-service selected board context', () => {
       id: 'user-1',
       purchased_coins: -1,
       bonus_coins: 0,
+      reserved_coins: 0,
     });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {

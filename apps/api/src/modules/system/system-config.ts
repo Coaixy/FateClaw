@@ -6,7 +6,6 @@ import {
   createOfficialModelConfig,
   deleteOfficialModelConfig,
   deleteUserModelSelectionsByOfficialModelId,
-  getMembershipOverview,
   getOfficialModelConfig,
   getModelBillingConfig,
   getRuntimeConfig,
@@ -43,7 +42,7 @@ import {
   MAX_SKILL_BUNDLE_ZIP_BYTES,
   type SkillBundleLimitsDto,
 } from '@fateclaw/contracts/skills';
-import { hasCustomModelEntitlement } from '../../shared/membership-plans.js';
+import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export type ProviderAuthMode =
@@ -169,8 +168,8 @@ function normalizeThinkingLevel(value: unknown): PiThinkingLevel {
 async function hasCustomModelMembershipEntitlement(
   userId: string,
 ): Promise<boolean> {
-  const membership = await getMembershipOverview(userId);
-  return hasCustomModelEntitlement(membership);
+  const entitlement = await getRuntimeEntitlementSnapshot(userId);
+  return entitlement.canUseCustomModel;
 }
 
 async function assertCustomModelMembershipEntitlement(
@@ -608,6 +607,9 @@ async function resolveCustomRuntime(
       '自配模型',
     ),
   });
+  const modelBilling = await getModelBillingConfig();
+  const platformPriceCoins =
+    modelBilling.custom_model_platform_price_per_million_coins;
   return {
     source: 'custom',
     billingMode: 'metered',
@@ -623,8 +625,8 @@ async function resolveCustomRuntime(
     contextWindowTokens,
     maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
     thinkingLevel,
-    inputTokenPricePerMillionCoins: 0,
-    outputTokenPricePerMillionCoins: 0,
+    inputTokenPricePerMillionCoins: platformPriceCoins,
+    outputTokenPricePerMillionCoins: platformPriceCoins,
   };
 }
 
@@ -1183,14 +1185,14 @@ export async function removeOfficialModel(
 export async function getUserModelSettingsOverview(
   userId: string,
 ): Promise<UserModelSettingsOverview> {
-  const [custom, selection, officialModels, modelBilling, runtime, membership] =
+  const [custom, selection, officialModels, modelBilling, runtime, entitlement] =
     await Promise.all([
       getUserModelConfig(userId),
       getUserModelSelection(userId),
       listOfficialModelViews(),
       getModelBillingConfig(),
       getRuntimeConfig(),
-      getMembershipOverview(userId),
+      getRuntimeEntitlementSnapshot(userId),
     ]);
   const customSecret = custom
     ? await resolveSecret({
@@ -1226,7 +1228,7 @@ export async function getUserModelSettingsOverview(
       runtime.default_thinking_level,
     ),
     custom_model_membership_required: true,
-    custom_model_membership_entitled: hasCustomModelEntitlement(membership),
+    custom_model_membership_entitled: entitlement.canUseCustomModel,
     custom_model_platform_price_per_million_coins:
       modelBilling.custom_model_platform_price_per_million_coins,
   };

@@ -111,6 +111,7 @@ export function membershipStatusMeetsPlan(
  *
  * @param membership 账单接口返回的当前会员状态。
  * @returns Clarity 及以上套餐有效时返回 true。
+ * @deprecated 仅作为旧命名兼容 wrapper，新代码使用 hasPaidMembershipEntitlement()。
  */
 export function hasBaseMembershipEntitlement(
   membership: MembershipStatus | null | undefined,

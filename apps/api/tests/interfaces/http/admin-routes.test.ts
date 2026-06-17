@@ -513,6 +513,23 @@ describe('adminRoutes authentication throttling', () => {
     }
   });
 
+  it('rejects legacy membership plan keys at the admin HTTP boundary', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/membership',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+      payload: {
+        plan_key: 'fateclaw_plus',
+        current_period_end: '2026-07-01T00:00:00.000+08:00',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(setAdminUserMembership).not.toHaveBeenCalled();
+  });
+
   it('blocks the user manager key from high-risk user operations', async () => {
     const grantResponse = await app.inject({
       method: 'POST',
@@ -551,7 +568,7 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
       payload: {
-        plan_key: 'fateclaw_plus',
+        plan_key: 'fateclaw_insight',
         current_period_end: '2026-07-01T00:00:00.000+08:00',
       },
     });

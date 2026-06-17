@@ -4,6 +4,7 @@ import {
   INSUFFICIENT_BALANCE_MESSAGE,
   assertSufficientSpendableCoins,
   calculateAvailableSpendableCoins,
+  isSpendableBalanceInArrears,
 } from '../../src/shared/balance-coins.js';
 
 describe('balance coins guards', () => {
@@ -34,13 +35,20 @@ describe('balance coins guards', () => {
     expect(availableCoins).toBe(100);
   });
 
-  it('returns negative spendable balance for arrears', () => {
+  it('keeps available balance non-negative and reports arrears separately', () => {
     expect(
       calculateAvailableSpendableCoins({
         purchased_coins: -3,
         bonus_coins: 0,
         reserved_coins: 0,
       }),
-    ).toBe(-3);
+    ).toBe(0);
+    expect(
+      isSpendableBalanceInArrears({
+        purchased_coins: -3,
+        bonus_coins: 0,
+        reserved_coins: 0,
+      }),
+    ).toBe(true);
   });
 });

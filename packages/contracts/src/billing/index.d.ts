@@ -78,6 +78,8 @@ export interface WalletTransactionDto {
 
 export interface BillingStatusDto {
   monthly_tokens_used: number;
+  monthly_charged_coins: number;
+  /** @deprecated 使用 monthly_charged_coins。兼容期内两者值保持一致。 */
   estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
@@ -131,6 +133,7 @@ export interface MembershipSubscribeResultDto {
   membership: MembershipStatusDto;
   purchased_coins: number;
   bonus_coins: number;
+  reserved_coins: number;
   available_coins: number;
 }
 
@@ -144,7 +147,9 @@ export interface DailySignInStatusDto {
 
 export interface DailySignInResultDto extends DailySignInStatusDto {
   received_coins: number;
+  purchased_coins: number;
   bonus_coins: number;
+  reserved_coins: number;
   available_coins: number;
 }
 
@@ -186,6 +191,7 @@ export interface GiftCodeRedeemResultDto {
   redemption: GiftCodeRedemptionDto;
   purchased_coins: number;
   bonus_coins: number;
+  reserved_coins: number;
   available_coins: number;
 }
 

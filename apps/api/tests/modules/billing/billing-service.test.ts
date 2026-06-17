@@ -140,7 +140,9 @@ describe('daily sign-in billing service', () => {
         signed_in_today: true,
         signed_in_at: '2026-05-30T00:00:00.000Z',
         received_coins: 20,
+        purchased_coins: 100,
         bonus_coins: 30,
+        reserved_coins: 0,
         available_coins: 130,
       },
     });
