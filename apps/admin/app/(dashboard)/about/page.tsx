@@ -21,6 +21,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { useConfirm } from '@/lib/use-confirm';
 
 interface LedgerFormState {
   entryType: AdminAboutLedgerEntryType;
@@ -126,6 +127,7 @@ function EntryTypeBadge({ type }: { type: AdminAboutLedgerEntryType }) {
  * 管理员可维护公开展示的收入、支出、时间、内容与数额。
  */
 export default function AdminAboutLedgerPage() {
+  const { confirm } = useConfirm();
   const [entries, setEntries] = useState<AdminAboutLedgerEntry[]>([]);
   const [form, setForm] = useState<LedgerFormState>(() => createEmptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -214,7 +216,12 @@ export default function AdminAboutLedgerPage() {
   };
 
   const handleDelete = async (entry: AdminAboutLedgerEntry) => {
-    const confirmed = window.confirm(`确定删除「${entry.content}」吗？`);
+    const confirmed = await confirm({
+      title: '删除收支记录',
+      message: `确定删除「${entry.content}」吗？\n\n该记录会从关于页面公开收支流水中移除，删除后无法恢复。`,
+      confirmLabel: '删除',
+      variant: 'danger',
+    });
     if (!confirmed) return;
 
     setBusyId(entry.id);

@@ -23,6 +23,7 @@ import {
   type AdminAnnouncementDraft,
   type AdminAnnouncementStatus,
 } from '@/lib/admin-api';
+import { useConfirm } from '@/lib/use-confirm';
 
 interface AnnouncementFormState {
   title: string;
@@ -219,6 +220,7 @@ function StatusBadge({ status }: { status: AdminAnnouncementStatus }) {
  * 管理员可创建、编辑、发布、归档公告，并删除尚未发布的草稿。
  */
 export default function AdminAnnouncementsPage() {
+  const { confirm } = useConfirm();
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [form, setForm] = useState<AnnouncementFormState>(() =>
     createEmptyForm(),
@@ -305,7 +307,12 @@ export default function AdminAnnouncementsPage() {
     status: AdminAnnouncementStatus,
   ) => {
     if (status === 'archived') {
-      const confirmed = window.confirm(`确定归档「${announcement.title}」吗？`);
+      const confirmed = await confirm({
+        title: '归档公告',
+        message: `确定归档「${announcement.title}」吗？\n\n归档后该公告会从公开展示中移除，但记录仍会保留在后台。`,
+        confirmLabel: '归档',
+        variant: 'danger',
+      });
       if (!confirmed) return;
     }
 
@@ -327,9 +334,12 @@ export default function AdminAnnouncementsPage() {
   };
 
   const handleDelete = async (announcement: AdminAnnouncement) => {
-    const confirmed = window.confirm(
-      `确定删除草稿「${announcement.title}」吗？`,
-    );
+    const confirmed = await confirm({
+      title: '删除草稿公告',
+      message: `确定删除草稿「${announcement.title}」吗？\n\n只允许删除未发布草稿，删除后无法恢复。`,
+      confirmLabel: '删除',
+      variant: 'danger',
+    });
     if (!confirmed) return;
 
     setBusyId(`delete:${announcement.id}`);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   admin,
+  formatAdminErrorMessage,
   type AdminBillingChargeState,
   type AdminBillingHoldState,
   type AdminBillingRequestReservation,
@@ -13,18 +14,24 @@ import {
   type GlobalStats,
 } from '@/lib/admin-api';
 import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
+import { toAdminDocumentHref } from '@/lib/admin-navigation';
+import { useConfirm } from '@/lib/use-confirm';
+import {
+  AdminAlert,
+  AdminFilterSection,
+  AdminLoadingState,
+  AdminPageHeader,
+  AdminPagination,
+} from '@/components/ui/admin-states';
+import { ReconcileSection } from '@/components/billing/ReconcileSection';
 import {
   Banknote,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Coins,
   CreditCard,
-  Loader2,
   ReceiptText,
   RefreshCw,
   Search,
-  ShieldAlert,
   WalletCards,
 } from 'lucide-react';
 
@@ -88,6 +95,61 @@ function chargeStateLabel(state: AdminBillingChargeState) {
 function walletKindLabel(kind: string) {
   return (
     WALLET_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind
+  );
+}
+
+function readInitialBillingQuery(name: string) {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get(name) || '';
+}
+
+function readInitialBillingPage(name: string) {
+  const value = Number(readInitialBillingQuery(name));
+  return Number.isInteger(value) && value > 0 ? value - 1 : 0;
+}
+
+function readInitialOption<T extends string>(
+  name: string,
+  allowed: readonly T[],
+  fallback: T,
+) {
+  const value = readInitialBillingQuery(name);
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function replaceBillingQuery(input: {
+  userId: string;
+  orderStatus: 'all' | AdminRechargeOrderStatus;
+  payType: 'all' | AdminRechargePayType;
+  walletKind: string;
+  holdState: 'all' | AdminBillingHoldState;
+  chargeState: 'all' | AdminBillingChargeState;
+  orderPage: number;
+  transactionPage: number;
+  reservationPage: number;
+}) {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams();
+  if (input.userId.trim()) params.set('user_id', input.userId.trim());
+  if (input.orderStatus !== 'all') params.set('order_status', input.orderStatus);
+  if (input.payType !== 'all') params.set('pay_type', input.payType);
+  if (input.walletKind !== 'all') params.set('wallet_kind', input.walletKind);
+  if (input.holdState !== 'all') params.set('hold_state', input.holdState);
+  if (input.chargeState !== 'all') {
+    params.set('charge_state', input.chargeState);
+  }
+  if (input.orderPage > 0) params.set('order_page', String(input.orderPage + 1));
+  if (input.transactionPage > 0) {
+    params.set('wallet_page', String(input.transactionPage + 1));
+  }
+  if (input.reservationPage > 0) {
+    params.set('reservation_page', String(input.reservationPage + 1));
+  }
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    toAdminDocumentHref(`/billing${query ? `?${query}` : ''}`),
   );
 }
 
@@ -213,34 +275,15 @@ function PaginationControls({
   const canGoNext = page + 1 < maxPage;
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="min-w-[92px] text-right text-[12px] text-muted tabular-nums">
-        {pageRangeLabel(page, pageSize, total)}
-      </span>
-      <div className="inline-flex overflow-hidden rounded-lg border border-hairline bg-surface-card">
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.max(0, page - 1))}
-          disabled={disabled || !canGoPrev}
-          className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center border-r border-hairline px-2 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-          aria-label="上一页"
-        >
-          <ChevronLeft size={15} />
-        </button>
-        <span className="inline-flex h-10 min-w-14 items-center justify-center px-3 text-[12px] text-muted tabular-nums">
-          {page + 1} / {maxPage}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.min(maxPage - 1, page + 1))}
-          disabled={disabled || !canGoNext}
-          className="inline-flex h-10 min-w-10 cursor-pointer items-center justify-center border-l border-hairline px-2 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-          aria-label="下一页"
-        >
-          <ChevronRight size={15} />
-        </button>
-      </div>
-    </div>
+    <AdminPagination
+      rangeLabel={pageRangeLabel(page, pageSize, total)}
+      pageLabel={`${page + 1} / ${maxPage}`}
+      canPrevious={canGoPrev}
+      canNext={canGoNext}
+      disabled={disabled}
+      onPrevious={() => onPageChange(Math.max(0, page - 1))}
+      onNext={() => onPageChange(Math.min(maxPage - 1, page + 1))}
+    />
   );
 }
 
@@ -469,6 +512,7 @@ function ReservationsTable({
  * 集中展示充值订单、全局余额流水与请求级计费预约，方便运营核对收入与异常状态。
  */
 export default function AdminBillingPage() {
+  const { confirm } = useConfirm();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
   const [orderTotal, setOrderTotal] = useState(0);
@@ -478,24 +522,49 @@ export default function AdminBillingPage() {
     AdminBillingRequestReservation[]
   >([]);
   const [reservationTotal, setReservationTotal] = useState(0);
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(() => readInitialBillingQuery('user_id'));
   const [orderStatus, setOrderStatus] = useState<
     'all' | AdminRechargeOrderStatus
-  >('all');
-  const [payType, setPayType] = useState<'all' | AdminRechargePayType>('all');
-  const [walletKind, setWalletKind] = useState('all');
+  >(() =>
+    readInitialOption('order_status', ['all', 'pending', 'paid', 'failed'], 'all'),
+  );
+  const [payType, setPayType] = useState<'all' | AdminRechargePayType>(() =>
+    readInitialOption('pay_type', ['all', 'alipay', 'wechat'], 'all'),
+  );
+  const [walletKind, setWalletKind] = useState(() => {
+    const value = readInitialBillingQuery('wallet_kind');
+    return WALLET_KIND_OPTIONS.some((option) => option.value === value)
+      ? value
+      : 'all';
+  });
   const [holdState, setHoldState] = useState<'all' | AdminBillingHoldState>(
-    'all',
+    () =>
+      readInitialOption(
+        'hold_state',
+        ['all', 'none', 'held', 'released'],
+        'all',
+      ),
   );
   const [chargeState, setChargeState] = useState<
     'all' | AdminBillingChargeState
-  >('all');
+  >(() => readInitialOption('charge_state', ['all', 'pending', 'charged'], 'all'));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [orderPage, setOrderPage] = useState(0);
-  const [transactionPage, setTransactionPage] = useState(0);
-  const [reservationPage, setReservationPage] = useState(0);
+  const [orderPage, setOrderPage] = useState(() =>
+    readInitialBillingPage('order_page'),
+  );
+  const [transactionPage, setTransactionPage] = useState(() =>
+    readInitialBillingPage('wallet_page'),
+  );
+  const [reservationPage, setReservationPage] = useState(() =>
+    readInitialBillingPage('reservation_page'),
+  );
+  const [reconcileStaleMinutes, setReconcileStaleMinutes] = useState('');
+  const [reconcileLimit, setReconcileLimit] = useState('');
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState('');
+  const [reconcileRequestIds, setReconcileRequestIds] = useState<string[]>([]);
 
   const appliedUserId = userId.trim() || undefined;
 
@@ -546,7 +615,7 @@ export default function AdminBillingPage() {
       setReservations(nextReservations.reservations);
       setReservationTotal(nextReservations.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(formatAdminErrorMessage(err, '加载失败'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -566,6 +635,30 @@ export default function AdminBillingPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    replaceBillingQuery({
+      userId,
+      orderStatus,
+      payType,
+      walletKind,
+      holdState,
+      chargeState,
+      orderPage,
+      transactionPage,
+      reservationPage,
+    });
+  }, [
+    chargeState,
+    holdState,
+    orderPage,
+    orderStatus,
+    payType,
+    reservationPage,
+    transactionPage,
+    userId,
+    walletKind,
+  ]);
 
   const summary = useMemo(() => {
     if (!stats) return null;
@@ -597,44 +690,88 @@ export default function AdminBillingPage() {
     ];
   }, [stats]);
 
+  const handleReconcile = useCallback(async () => {
+    const minutesText = reconcileStaleMinutes.trim();
+    const limitText = reconcileLimit.trim();
+    const minutes = minutesText ? Number(minutesText) : undefined;
+    const limit = limitText ? Number(limitText) : undefined;
+    if (
+      minutes !== undefined &&
+      (!Number.isFinite(minutes) || minutes < 1)
+    ) {
+      setReconcileMessage('陈旧分钟数必须大于等于 1');
+      return;
+    }
+    if (
+      limit !== undefined &&
+      (!Number.isInteger(limit) || limit < 1 || limit > 1000)
+    ) {
+      setReconcileMessage('处理上限必须是 1 到 1000 的整数');
+      return;
+    }
+
+    const ok = await confirm({
+      title: '修复陈旧计费预留',
+      message:
+        '确定要释放陈旧的冻结计费预留吗？此操作只处理超过陈旧阈值且仍冻结中的请求级预留，会影响对应用户的可用余额。',
+      confirmLabel: '开始修复',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    setReconciling(true);
+    setReconcileMessage('');
+    setReconcileRequestIds([]);
+    try {
+      const result = await admin.reconcileBillingReservations({
+        stale_ms: minutes === undefined ? undefined : minutes * 60_000,
+        limit,
+      });
+      setReconcileMessage(
+        result.released > 0
+          ? `已释放 ${result.released.toLocaleString('zh-CN')} 条陈旧预留`
+          : '没有需要修复的陈旧预留',
+      );
+      setReconcileRequestIds(result.requestIds);
+      await load();
+    } catch (err) {
+      setReconcileMessage(formatAdminErrorMessage(err, '修复陈旧预留失败'));
+    } finally {
+      setReconciling(false);
+    }
+  }, [confirm, load, reconcileLimit, reconcileStaleMinutes]);
+
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 size={20} className="animate-spin text-muted" />
-      </div>
-    );
+    return <AdminLoadingState label="加载账单中" />;
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <ReceiptText size={16} className="text-muted" />
-            <h2 className="text-lg font-semibold">账单管理</h2>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
+      <AdminPageHeader
+        icon={ReceiptText}
+        title="账单管理"
+        meta={
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
             <span>订单 {orderTotal.toLocaleString('zh-CN')}</span>
             <span>流水 {transactionTotal.toLocaleString('zh-CN')}</span>
             <span>预约 {reservationTotal.toLocaleString('zh-CN')}</span>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={refreshing}
-          className="inline-flex h-10 cursor-pointer items-center gap-2 self-start rounded-lg border border-hairline px-3 text-[13px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
-          刷新
-        </button>
-      </div>
+        }
+        action={
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={refreshing}
+            className="inline-flex h-10 cursor-pointer items-center gap-2 self-start rounded-lg border border-hairline px-3 text-[13px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            刷新
+          </button>
+        }
+      />
 
       {error ? (
-        <div className="flex items-center gap-2 rounded-xl border border-error/25 bg-error/10 px-4 py-3 text-[13px] text-error">
-          <ShieldAlert size={14} />
-          {error}
-        </div>
+        <AdminAlert tone="error">{error}</AdminAlert>
       ) : null}
 
       {summary ? (
@@ -645,11 +782,7 @@ export default function AdminBillingPage() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-hairline bg-surface-card p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Search size={14} className="text-muted" />
-          <h3 className="text-[14px] font-semibold">筛选</h3>
-        </div>
+      <AdminFilterSection icon={Search} title="筛选">
         <div className="grid gap-3 lg:grid-cols-[minmax(180px,1.2fr)_repeat(5,minmax(130px,1fr))]">
           <label className="min-w-0">
             <span className="mb-1 block text-[12px] text-muted">用户 ID</span>
@@ -749,7 +882,18 @@ export default function AdminBillingPage() {
             </select>
           </label>
         </div>
-      </section>
+      </AdminFilterSection>
+
+      <ReconcileSection
+        staleMinutes={reconcileStaleMinutes}
+        limit={reconcileLimit}
+        busy={reconciling}
+        message={reconcileMessage}
+        requestIds={reconcileRequestIds}
+        onStaleMinutesChange={setReconcileStaleMinutes}
+        onLimitChange={setReconcileLimit}
+        onRun={() => void handleReconcile()}
+      />
 
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

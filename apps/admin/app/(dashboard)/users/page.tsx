@@ -4,20 +4,30 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   admin,
   adminLogs,
+  formatAdminErrorMessage,
+  type AdminBalanceGrant,
   type AdminMembershipState,
   type AdminUser,
   type UserDetail,
   type WalletTransaction,
 } from '@/lib/admin-api';
-import { toAdminDocumentHref } from '@/lib/admin-navigation';
+import { hasAdminScope, toAdminDocumentHref } from '@/lib/admin-navigation';
+import { useAdminSession } from '@/lib/admin-session';
 import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
+import {
+  AdminAlert,
+  AdminEmptyState,
+  AdminLoadingState,
+  AdminPageHeader,
+  AdminPagination,
+} from '@/components/ui/admin-states';
+import { BalanceGrantList } from '@/components/users/BalanceGrantList';
 import {
   Activity,
   AlertTriangle,
   BadgeCheck,
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Coins,
   Eye,
@@ -108,6 +118,34 @@ const USER_ROLE_OPTIONS: Array<{ value: AdminUser['role']; label: string }> = [
   { value: 'admin', label: '管理员' },
 ];
 
+const USER_MANAGER_ROLE_OPTIONS = USER_ROLE_OPTIONS.filter(
+  (option) => option.value === 'consumer',
+);
+
+function readInitialQueryValue(name: string) {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get(name) || '';
+}
+
+function readInitialPageValue() {
+  const value = Number(readInitialQueryValue('page'));
+  return Number.isInteger(value) && value > 0 ? value : 1;
+}
+
+function replaceUsersQuery(search: string, page: number) {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams();
+  const normalizedSearch = search.trim();
+  if (normalizedSearch) params.set('search', normalizedSearch);
+  if (page > 1) params.set('page', String(page));
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    toAdminDocumentHref(`/users${query ? `?${query}` : ''}`),
+  );
+}
+
 const ALLOWANCE_STATUS_LABELS: Record<
   UserDetail['membership']['allowance_status'],
   string
@@ -194,8 +232,10 @@ function UsageMetric({ label, value }: { label: string; value: string }) {
 }
 
 function CreateUserPanel({
+  roleOptions,
   onCreated,
 }: {
+  roleOptions: Array<{ value: AdminUser['role']; label: string }>;
   onCreated: () => void | Promise<void>;
 }) {
   const [phone, setPhone] = useState('');
@@ -204,6 +244,12 @@ function CreateUserPanel({
   const [phoneVerified, setPhoneVerified] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!roleOptions.some((option) => option.value === role)) {
+      setRole(roleOptions[0]?.value ?? 'consumer');
+    }
+  }, [role, roleOptions]);
 
   const handleSubmit = async () => {
     setMessage('');
@@ -277,7 +323,7 @@ function CreateUserPanel({
             }
             className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
           >
-            {USER_ROLE_OPTIONS.map((option) => (
+            {roleOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -323,9 +369,11 @@ function CreateUserPanel({
 
 function UserRow({
   user,
+  canManageUsers,
   onRefresh,
 }: {
   user: AdminUser;
+  canManageUsers: boolean;
   onRefresh: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -353,6 +401,9 @@ function UserRow({
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [balanceGrants, setBalanceGrants] = useState<AdminBalanceGrant[]>([]);
+  const [balanceGrantsLoading, setBalanceGrantsLoading] = useState(false);
+  const [includeExhaustedGrants, setIncludeExhaustedGrants] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -365,11 +416,27 @@ function UserRow({
       setDetail(d);
       setTransactions(tx);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '加载用户详情失败');
+      setMsg(formatAdminErrorMessage(err, '加载用户详情失败'));
     } finally {
       setLoading(false);
     }
   }, [user.id]);
+
+  const loadBalanceGrants = useCallback(async () => {
+    setBalanceGrantsLoading(true);
+    try {
+      const grants = await admin.userBalanceGrants(user.id, {
+        include_exhausted: includeExhaustedGrants,
+        limit: 20,
+      });
+      setBalanceGrants(grants);
+    } catch (err) {
+      setMsg(formatAdminErrorMessage(err, '加载赠送余额批次失败'));
+      setBalanceGrants([]);
+    } finally {
+      setBalanceGrantsLoading(false);
+    }
+  }, [includeExhaustedGrants, user.id]);
 
   const toggle = () => {
     const next = !expanded;
@@ -391,6 +458,11 @@ function UserRow({
     );
     setConfirmCancelMembership(false);
   }, [detail]);
+
+  useEffect(() => {
+    if (!expanded || !detail) return;
+    void loadBalanceGrants();
+  }, [detail, expanded, loadBalanceGrants]);
 
   const applyMembershipState = (state: AdminMembershipState) => {
     setDetail((current) =>
@@ -417,7 +489,7 @@ function UserRow({
       await admin.deleteUser(user.id);
       void onRefresh();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '删除失败');
+      setMsg(formatAdminErrorMessage(err, '删除失败'));
       setDeleting(false);
       setConfirmDelete(false);
     }
@@ -447,7 +519,7 @@ function UserRow({
       void onRefresh();
       void loadDetail();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '余额调整失败');
+      setMsg(formatAdminErrorMessage(err, '余额调整失败'));
     } finally {
       setAdjustingBalance(false);
     }
@@ -481,8 +553,9 @@ function UserRow({
       setMsg('赠送余额已发放');
       void onRefresh();
       void loadDetail();
+      void loadBalanceGrants();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '赠送余额失败');
+      setMsg(formatAdminErrorMessage(err, '赠送余额失败'));
     } finally {
       setGrantingBonus(false);
     }
@@ -520,7 +593,7 @@ function UserRow({
       setMsg('会员状态已更新');
       void onRefresh();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '设置会员失败');
+      setMsg(formatAdminErrorMessage(err, '设置会员失败'));
     } finally {
       setUpdatingMembership(false);
     }
@@ -540,7 +613,7 @@ function UserRow({
       setMsg('会员已停用');
       void onRefresh();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '停用会员失败');
+      setMsg(formatAdminErrorMessage(err, '停用会员失败'));
     } finally {
       setCancellingMembership(false);
     }
@@ -564,7 +637,7 @@ function UserRow({
       setResetPasswordConfirm('');
       setMsg('密码已重置，旧登录态已失效');
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '重置密码失败');
+      setMsg(formatAdminErrorMessage(err, '重置密码失败'));
     } finally {
       setResettingPassword(false);
     }
@@ -582,7 +655,7 @@ function UserRow({
       setMsg(`已清空 ${result.deleted_count} 条对话日志`);
       setConfirmClearLogs(false);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '清空日志失败');
+      setMsg(formatAdminErrorMessage(err, '清空日志失败'));
     } finally {
       setClearingLogs(false);
     }
@@ -689,101 +762,116 @@ function UserRow({
                       />
                     </div>
 
-                    <div className="grid gap-2 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
-                      <label className="min-w-0">
-                        <span className="mb-1 block text-[12px] text-muted">
-                          调整金额（软妹币）
-                        </span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={balanceDelta}
-                          onChange={(e) => setBalanceDelta(e.target.value)}
-                          placeholder="正数增加，负数扣减"
-                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                        />
-                      </label>
-                      <label className="min-w-0">
-                        <span className="mb-1 block text-[12px] text-muted">
-                          备注
-                        </span>
-                        <input
-                          type="text"
-                          value={balanceNote}
-                          onChange={(e) => setBalanceNote(e.target.value)}
-                          placeholder="例如：人工充值 100"
-                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleAdjustBalance}
-                        disabled={adjustingBalance}
-                        className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {adjustingBalance && (
-                          <Loader2 size={12} className="animate-spin" />
-                        )}
-                        调整余额
-                      </button>
-                    </div>
+	                    {canManageUsers && (
+	                      <>
+	                        <div className="grid gap-2 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
+	                          <label className="min-w-0">
+	                            <span className="mb-1 block text-[12px] text-muted">
+	                              调整金额（软妹币）
+	                            </span>
+	                            <input
+	                              type="number"
+	                              step="0.01"
+	                              value={balanceDelta}
+	                              onChange={(e) => setBalanceDelta(e.target.value)}
+	                              placeholder="正数增加，负数扣减"
+	                              className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+	                            />
+	                          </label>
+	                          <label className="min-w-0">
+	                            <span className="mb-1 block text-[12px] text-muted">
+	                              备注
+	                            </span>
+	                            <input
+	                              type="text"
+	                              value={balanceNote}
+	                              onChange={(e) => setBalanceNote(e.target.value)}
+	                              placeholder="例如：人工充值 100"
+	                              className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+	                            />
+	                          </label>
+	                          <button
+	                            type="button"
+	                            onClick={handleAdjustBalance}
+	                            disabled={adjustingBalance}
+	                            className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+	                          >
+	                            {adjustingBalance && (
+	                              <Loader2 size={12} className="animate-spin" />
+	                            )}
+	                            调整余额
+	                          </button>
+	                        </div>
 
-                    <div className="mt-4 border-t border-hairline pt-3">
-                      <div className="mb-2 text-[12px] font-medium text-muted">
-                        赠送余额
-                      </div>
-                      <div className="grid gap-2 lg:grid-cols-[160px_minmax(0,1fr)_150px_auto] lg:items-end">
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-[12px] text-muted">
-                            金额（软妹币）
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={bonusAmount}
-                            onChange={(e) => setBonusAmount(e.target.value)}
-                            placeholder="正数"
-                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                          />
-                        </label>
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-[12px] text-muted">
-                            备注
-                          </span>
-                          <input
-                            type="text"
-                            value={bonusNote}
-                            onChange={(e) => setBonusNote(e.target.value)}
-                            placeholder="例如：活动补偿"
-                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                          />
-                        </label>
-                        <label className="min-w-0">
-                          <span className="mb-1 block text-[12px] text-muted">
-                            过期日
-                          </span>
-                          <input
-                            type="date"
-                            value={bonusExpiresAt}
-                            onChange={(e) => setBonusExpiresAt(e.target.value)}
-                            className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleGrantBonus}
-                          disabled={grantingBonus}
-                          className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline px-4 text-[13px] font-medium text-ink transition-opacity hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {grantingBonus && (
-                            <Loader2 size={12} className="animate-spin" />
-                          )}
-                          发放赠送
-                        </button>
-                      </div>
-                    </div>
-                  </section>
+	                        <div className="mt-4 border-t border-hairline pt-3">
+	                          <div className="mb-2 text-[12px] font-medium text-muted">
+	                            赠送余额
+	                          </div>
+	                          <div className="grid gap-2 lg:grid-cols-[160px_minmax(0,1fr)_150px_auto] lg:items-end">
+	                            <label className="min-w-0">
+	                              <span className="mb-1 block text-[12px] text-muted">
+	                                金额（软妹币）
+	                              </span>
+	                              <input
+	                                type="number"
+	                                min="0"
+	                                step="0.01"
+	                                value={bonusAmount}
+	                                onChange={(e) =>
+	                                  setBonusAmount(e.target.value)
+	                                }
+	                                placeholder="正数"
+	                                className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+	                              />
+	                            </label>
+	                            <label className="min-w-0">
+	                              <span className="mb-1 block text-[12px] text-muted">
+	                                备注
+	                              </span>
+	                              <input
+	                                type="text"
+	                                value={bonusNote}
+	                                onChange={(e) => setBonusNote(e.target.value)}
+	                                placeholder="例如：活动补偿"
+	                                className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+	                              />
+	                            </label>
+	                            <label className="min-w-0">
+	                              <span className="mb-1 block text-[12px] text-muted">
+	                                过期日
+	                              </span>
+	                              <input
+	                                type="date"
+	                                value={bonusExpiresAt}
+	                                onChange={(e) =>
+	                                  setBonusExpiresAt(e.target.value)
+	                                }
+	                                className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+	                              />
+	                            </label>
+	                            <button
+	                              type="button"
+	                              onClick={handleGrantBonus}
+	                              disabled={grantingBonus}
+	                              className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline px-4 text-[13px] font-medium text-ink transition-opacity hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-40"
+	                            >
+	                              {grantingBonus && (
+	                                <Loader2 size={12} className="animate-spin" />
+	                              )}
+	                              发放赠送
+	                            </button>
+	                          </div>
+	                        </div>
+	                      </>
+	                    )}
+
+		                    <BalanceGrantList
+		                      grants={balanceGrants}
+		                      loading={balanceGrantsLoading}
+		                      includeExhausted={includeExhaustedGrants}
+		                      onIncludeExhaustedChange={setIncludeExhaustedGrants}
+		                    />
+	                  </section>
 
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center gap-2">
@@ -856,8 +944,10 @@ function UserRow({
                   </section>
                 </div>
 
-                <aside className="space-y-5 xl:border-l xl:border-hairline xl:pl-5">
-                  <section className="border-b border-hairline pb-4">
+	                <aside className="space-y-5 xl:border-l xl:border-hairline xl:pl-5">
+	                  {canManageUsers && (
+	                    <>
+	                  <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <BadgeCheck size={14} className="text-muted" />
@@ -1013,9 +1103,9 @@ function UserRow({
                         </button>
                       )}
                     </div>
-                  </section>
+	                  </section>
 
-                  <section className="border-b border-hairline pb-4">
+	                  <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center gap-2">
                       <KeyRound size={14} className="text-muted" />
                       <h4 className="text-[13px] font-semibold">密码管理</h4>
@@ -1081,7 +1171,9 @@ function UserRow({
                         重置密码
                       </button>
                     </div>
-                  </section>
+	                  </section>
+	                    </>
+	                  )}
 
                   <section className="border-b border-hairline pb-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -1136,7 +1228,8 @@ function UserRow({
                     </div>
                   </section>
 
-                  <section>
+	                  {canManageUsers && (
+	                  <section>
                     <div className="mb-3 flex items-center gap-2">
                       <AlertTriangle size={14} className="text-error" />
                       <h4 className="text-[13px] font-semibold text-error">
@@ -1202,8 +1295,9 @@ function UserRow({
                         </button>
                       )}
                     </div>
-                  </section>
-                </aside>
+	                  </section>
+	                  )}
+	                </aside>
               </div>
             </div>
           ) : (
@@ -1220,14 +1314,20 @@ function UserRow({
 // ─── 页面 ───
 
 export default function AdminUsersPage() {
+  const session = useAdminSession();
+  const canManageUsers = hasAdminScope(session.scopes, 'admin:*');
+  const canCreateUsers = hasAdminScope(session.scopes, 'users:create');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(() => readInitialQueryValue('search'));
+  const [page, setPage] = useState(readInitialPageValue);
   const [pageSize] = useState(50);
   const [total, setTotal] = useState(0);
+  const roleOptions = canManageUsers
+    ? USER_ROLE_OPTIONS
+    : USER_MANAGER_ROLE_OPTIONS;
 
   const fetchUsers = useCallback(async () => {
     setRefreshing(true);
@@ -1241,12 +1341,16 @@ export default function AdminUsersPage() {
       setUsers(result.items);
       setTotal(result.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(formatAdminErrorMessage(err, '加载失败'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [page, pageSize, search]);
+
+  useEffect(() => {
+    replaceUsersQuery(search, page);
+  }, [page, search]);
 
   useEffect(() => {
     void fetchUsers();
@@ -1278,21 +1382,17 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 size={20} className="animate-spin text-muted" />
-      </div>
-    );
+    return <AdminLoadingState label="加载用户中" />;
   }
 
   if (error) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-[13px] text-error">{error}</p>
+      <div className="space-y-3 py-20">
+        <AdminAlert tone="error">{error}</AdminAlert>
         <button
           type="button"
           onClick={fetchUsers}
-          className="mt-2 cursor-pointer text-[13px] text-muted hover:text-ink"
+          className="mx-auto block cursor-pointer text-[13px] text-muted hover:text-ink"
         >
           重试
         </button>
@@ -1302,33 +1402,38 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Users size={16} className="text-muted" />
-            <h2 className="text-lg font-semibold">用户管理</h2>
+      <div className="mb-4">
+        <AdminPageHeader
+          icon={Users}
+          title="用户管理"
+          description={
+            canManageUsers
+              ? '管理账户余额、会员、密码、绑定账号和用户级操作'
+              : '查看用户资料、余额批次和关联消息'
+          }
+          meta={
             <span className="text-[12px] text-muted">
               {fmt(users.length)} / {fmt(total)}
             </span>
+          }
+          action={
             <button
               type="button"
               onClick={fetchUsers}
               disabled={refreshing}
-              className="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:text-ink disabled:opacity-50"
+              className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline px-3 text-[13px] text-muted transition-colors hover:text-ink disabled:opacity-50"
               title="刷新"
             >
               <RefreshCw
                 size={13}
                 className={refreshing ? 'animate-spin' : ''}
               />
+              刷新
             </button>
-          </div>
-          <p className="mt-1 text-[12px] text-muted">
-            管理账户余额、会员、密码、绑定账号和用户级操作
-          </p>
-        </div>
+          }
+        />
 
-        <div className="relative w-full lg:w-80">
+        <div className="relative mt-3 w-full lg:w-80">
           <Search
             size={13}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
@@ -1346,7 +1451,9 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <CreateUserPanel onCreated={fetchUsers} />
+      {canCreateUsers && (
+        <CreateUserPanel roleOptions={roleOptions} onCreated={fetchUsers} />
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <SummaryCard
@@ -1376,42 +1483,32 @@ export default function AdminUsersPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="rounded-xl border border-hairline bg-surface-card py-12 text-center">
-          <p className="text-[13px] text-muted">
-            {search ? '无匹配用户' : '暂无用户'}
-          </p>
-        </div>
+        <AdminEmptyState
+          icon={Users}
+          title={search ? '无匹配用户' : '暂无用户'}
+        />
       ) : (
         <div className="space-y-2">
           {users.map((user) => (
-            <UserRow key={user.id} user={user} onRefresh={fetchUsers} />
+            <UserRow
+              key={user.id}
+              user={user}
+              canManageUsers={canManageUsers}
+              onRefresh={fetchUsers}
+            />
           ))}
         </div>
       )}
-      <div className="mt-4 flex items-center justify-between text-[12px] text-muted">
-        <span>
-          第 {fmt(page)} / {fmt(totalPages)} 页
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-            disabled={page <= 1 || refreshing}
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-hairline px-2 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ChevronLeft size={13} />
-            上一页
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-            disabled={page >= totalPages || refreshing}
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-hairline px-2 text-[12px] text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            下一页
-            <ChevronRight size={13} />
-          </button>
-        </div>
+      <div className="mt-4 flex justify-end">
+        <AdminPagination
+          rangeLabel={`第 ${fmt(page)} / ${fmt(totalPages)} 页`}
+          pageLabel={`${fmt(page)} / ${fmt(totalPages)}`}
+          canPrevious={page > 1}
+          canNext={page < totalPages}
+          disabled={refreshing}
+          onPrevious={() => setPage((value) => Math.max(1, value - 1))}
+          onNext={() => setPage((value) => Math.min(totalPages, value + 1))}
+        />
       </div>
     </>
   );

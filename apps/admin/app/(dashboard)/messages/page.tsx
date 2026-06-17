@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { toAdminDocumentHref } from '@/lib/admin-navigation';
 import {
   admin,
   AdminChatSession,
@@ -34,6 +35,24 @@ import { useToast } from '@/lib/use-toast';
 
 const SESSION_MESSAGE_PAGE_SIZE = 200;
 const SESSION_FETCH_LIMIT = 200;
+
+function replaceMessagesQuery(input: {
+  userId: string;
+  accountId: string;
+  sessionId: string;
+}) {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams();
+  if (input.userId) params.set('user_id', input.userId);
+  if (input.accountId) params.set('account_id', input.accountId);
+  if (input.sessionId) params.set('session_id', input.sessionId);
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    toAdminDocumentHref(`/messages${query ? `?${query}` : ''}`),
+  );
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('zh-CN', {
@@ -380,6 +399,14 @@ function AdminMessagesContent() {
     }
     void loadMessages(selectedSessionId);
   }, [loadMessages, loading, selectedSessionId]);
+
+  useEffect(() => {
+    replaceMessagesQuery({
+      userId: selectedUserId,
+      accountId: selectedAccountId,
+      sessionId: selectedSessionId,
+    });
+  }, [selectedAccountId, selectedSessionId, selectedUserId]);
 
   const filteredSessions = searchText
     ? sessions.filter(

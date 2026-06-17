@@ -1,7 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { admin, type AdminSystemConfigOverview } from '@/lib/admin-api';
+import {
+  admin,
+  formatAdminErrorMessage,
+  type AdminSystemConfigOverview,
+} from '@/lib/admin-api';
+import { AuditLogViewer } from '@/components/system/AuditLogViewer';
 import { Bot, RefreshCw } from 'lucide-react';
 import {
   ModelBillingPanel,
@@ -37,7 +42,7 @@ export default function AdminModelConfigPage() {
       const data = await admin.systemConfig();
       setOverview(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(formatAdminErrorMessage(err, '加载失败'));
     } finally {
       setLoading(false);
     }
@@ -55,7 +60,7 @@ export default function AdminModelConfigPage() {
         await fn();
         await load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : '操作失败');
+        setError(formatAdminErrorMessage(err, '操作失败'));
       } finally {
         setBusyId('');
       }
@@ -222,6 +227,8 @@ export default function AdminModelConfigPage() {
           </div>
         )}
       </div>
+
+      <AuditLogViewer logs={overview.audit_logs} />
     </div>
   );
 }

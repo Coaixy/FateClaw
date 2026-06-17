@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   admin,
   adminLogs,
@@ -27,6 +27,7 @@ import {
 
 import { useConfirm } from '@/lib/use-confirm';
 import { useToast } from '@/lib/use-toast';
+import { toAdminDocumentHref } from '@/lib/admin-navigation';
 import {
   FinalOutputCard,
   TranscriptEventView,
@@ -51,6 +52,29 @@ const ERROR_TRACE_TYPES = new Set([
   'truncated_tool_calls_fallback',
   'trace_overflow',
 ]);
+
+function readInitialLogsQuery(name: string) {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get(name) || '';
+}
+
+function replaceLogsQuery(input: {
+  userId: string;
+  accountId: string;
+  requestId: string;
+}) {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams();
+  if (input.userId) params.set('user_id', input.userId);
+  if (input.accountId) params.set('account_id', input.accountId);
+  if (input.requestId.trim()) params.set('request_id', input.requestId.trim());
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    toAdminDocumentHref(`/logs${query ? `?${query}` : ''}`),
+  );
+}
 
 function getWebChatRuntimeId(userId: string): string {
   return `${WEB_CHAT_RUNTIME_PREFIX}${userId}`;
@@ -231,8 +255,12 @@ export default function AdminLogsPage() {
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(() =>
+    readInitialLogsQuery('user_id'),
+  );
+  const [selectedAccountId, setSelectedAccountId] = useState(() =>
+    readInitialLogsQuery('account_id'),
+  );
   const [logList, setLogList] = useState<ConversationLogSummary[]>([]);
   const [preloadedFull, setPreloadedFull] = useState<ConversationLog | null>(
     null,
@@ -241,10 +269,14 @@ export default function AdminLogsPage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState('');
-  const [requestIdQuery, setRequestIdQuery] = useState('');
+  const [requestIdQuery, setRequestIdQuery] = useState(() =>
+    readInitialLogsQuery('request_id'),
+  );
   const [searchMode, setSearchMode] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [clearingLogs, setClearingLogs] = useState(false);
+  const initialAccountIdRef = useRef(readInitialLogsQuery('account_id'));
+  const initialRequestIdSearchRef = useRef(Boolean(requestIdQuery.trim()));
 
   useEffect(() => {
     admin
@@ -269,7 +301,14 @@ export default function AdminLogsPage() {
       const detail = await admin.userDetail(userId);
       const accs = buildLogAccountOptions(userId, detail.accounts);
       setAccounts(accs);
-      if (accs.length > 0) {
+      const preferredAccountId = initialAccountIdRef.current;
+      initialAccountIdRef.current = '';
+      if (
+        preferredAccountId &&
+        accs.some((account) => account.id === preferredAccountId)
+      ) {
+        setSelectedAccountId(preferredAccountId);
+      } else if (accs.length > 0) {
         setSelectedAccountId(accs[0].id);
       } else {
         setSelectedAccountId('');
@@ -362,6 +401,22 @@ export default function AdminLogsPage() {
       setLogsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialRequestIdSearchRef.current) return;
+    initialRequestIdSearchRef.current = false;
+    if (requestIdQuery.trim()) {
+      void handleRequestIdSearch();
+    }
+  });
+
+  useEffect(() => {
+    replaceLogsQuery({
+      userId: selectedUserId,
+      accountId: selectedAccountId,
+      requestId: requestIdQuery,
+    });
+  }, [requestIdQuery, selectedAccountId, selectedUserId]);
 
   const handleClearSearch = () => {
     setRequestIdQuery('');
