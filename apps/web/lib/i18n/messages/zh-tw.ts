@@ -59,7 +59,7 @@ export const zhTWMessages = {
     },
     connectWechat: '連接微信',
     skillMarket: '技能市場',
-    studio: '術數開發',
+    studio: '技能開發',
     referrals: '邀請中心',
     wallet: '積分與帳單',
     gifts: '禮品',
