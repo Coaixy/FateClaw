@@ -1,7 +1,7 @@
 import type { DatabaseMigration } from '../types.js';
 
 /**
- * 数据库迁移分段：0045-0046。
+ * 数据库迁移分段：0045-0047。
  */
 export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
   {
@@ -162,6 +162,97 @@ export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_skill_comments_admin_skill
           ON skill_comments(skill_id, created_at DESC)
+      `);
+    },
+  },
+  {
+    id: '0047_membership_default_pricing_snapshot',
+    description: '同步会员套餐默认价格和额度配置',
+    async up(client) {
+      await client.query(`
+        INSERT INTO membership_config (
+          id, enabled, name, monthly_price_coins, display_price_coins,
+          monthly_allowance_units, standard_price_per_million_units_coins,
+          updated_at
+        )
+        VALUES
+          (
+            'fateclaw_clarity',
+            true,
+            'FateClaw Clarity',
+            10,
+            10,
+            1000000,
+            10,
+            NOW()
+          ),
+          (
+            'fateclaw_insight',
+            true,
+            'FateClaw Insight',
+            30,
+            30,
+            3500000,
+            10,
+            NOW()
+          ),
+          (
+            'fateclaw_deep',
+            true,
+            'FateClaw Deep',
+            100,
+            100,
+            13000000,
+            10,
+            NOW()
+          )
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await client.query(`
+        WITH defaults (
+          id,
+          monthly_price_coins,
+          display_price_coins,
+          monthly_allowance_units,
+          standard_price_per_million_units_coins
+        ) AS (
+          VALUES
+            ('fateclaw_clarity', 10::NUMERIC, 10::NUMERIC, 1000000::NUMERIC, 10::NUMERIC),
+            ('fateclaw_insight', 30::NUMERIC, 30::NUMERIC, 3500000::NUMERIC, 10::NUMERIC),
+            ('fateclaw_deep', 100::NUMERIC, 100::NUMERIC, 13000000::NUMERIC, 10::NUMERIC)
+        )
+        UPDATE membership_config config
+        SET monthly_price_coins = defaults.monthly_price_coins,
+            display_price_coins = defaults.display_price_coins,
+            monthly_allowance_units = defaults.monthly_allowance_units,
+            standard_price_per_million_units_coins =
+              defaults.standard_price_per_million_units_coins,
+            updated_at = NOW()
+        FROM defaults
+        WHERE config.id = defaults.id
+          AND (
+            (
+              config.id = 'fateclaw_clarity'
+              AND config.monthly_price_coins = 10
+              AND config.display_price_coins = 10
+              AND config.monthly_allowance_units = 0
+              AND config.standard_price_per_million_units_coins = 10
+            )
+            OR (
+              config.id = 'fateclaw_insight'
+              AND config.monthly_price_coins = 30
+              AND config.display_price_coins = 30
+              AND config.monthly_allowance_units = 3000000
+              AND config.standard_price_per_million_units_coins = 10
+            )
+            OR (
+              config.id = 'fateclaw_deep'
+              AND config.monthly_price_coins = 100
+              AND config.display_price_coins = 120
+              AND config.monthly_allowance_units IN (3000000, 10000000)
+              AND config.standard_price_per_million_units_coins = 10
+            )
+          )
       `);
     },
   },

@@ -60,7 +60,7 @@ function defaultMembershipPlans(): MembershipPlanDraft[] {
       enabled: true,
       monthly_price_coins: '10',
       display_price_coins: '10',
-      monthly_allowance_units: '0',
+      monthly_allowance_units: '1000000',
       standard_price_per_million_units_coins: '10',
     },
     {
@@ -69,7 +69,7 @@ function defaultMembershipPlans(): MembershipPlanDraft[] {
       enabled: true,
       monthly_price_coins: '30',
       display_price_coins: '30',
-      monthly_allowance_units: '3000000',
+      monthly_allowance_units: '3500000',
       standard_price_per_million_units_coins: '10',
     },
     {
@@ -77,8 +77,8 @@ function defaultMembershipPlans(): MembershipPlanDraft[] {
       name: 'FateClaw Deep',
       enabled: true,
       monthly_price_coins: '100',
-      display_price_coins: '120',
-      monthly_allowance_units: '3000000',
+      display_price_coins: '100',
+      monthly_allowance_units: '13000000',
       standard_price_per_million_units_coins: '10',
     },
   ];

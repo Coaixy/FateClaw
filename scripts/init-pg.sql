@@ -554,22 +554,22 @@ CREATE TABLE IF NOT EXISTS membership_config (
   enabled BOOLEAN NOT NULL DEFAULT true,
   name TEXT NOT NULL DEFAULT 'FateClaw Clarity',
   monthly_price_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
-  monthly_allowance_units NUMERIC(18,2) NOT NULL DEFAULT 0,
+  monthly_allowance_units NUMERIC(18,2) NOT NULL DEFAULT 1000000,
   display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
   standard_price_per_million_units_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE membership_config
   ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'FateClaw Clarity',
-  ADD COLUMN IF NOT EXISTS display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 30;
+  ADD COLUMN IF NOT EXISTS display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 10;
 INSERT INTO membership_config (
   id, enabled, name, monthly_price_coins, display_price_coins,
   monthly_allowance_units, standard_price_per_million_units_coins, updated_at
 )
 VALUES
-  ('fateclaw_clarity', true, 'FateClaw Clarity', 10, 10, 0, 10, NOW()),
-  ('fateclaw_insight', true, 'FateClaw Insight', 30, 30, 3000000, 10, NOW()),
-  ('fateclaw_deep', true, 'FateClaw Deep', 100, 120, 3000000, 10, NOW())
+  ('fateclaw_clarity', true, 'FateClaw Clarity', 10, 10, 1000000, 10, NOW()),
+  ('fateclaw_insight', true, 'FateClaw Insight', 30, 30, 3500000, 10, NOW()),
+  ('fateclaw_deep', true, 'FateClaw Deep', 100, 100, 13000000, 10, NOW())
 ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id;
 
 CREATE TABLE IF NOT EXISTS user_memberships (

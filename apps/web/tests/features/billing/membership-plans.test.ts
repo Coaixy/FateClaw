@@ -38,7 +38,7 @@ describe('membership plan helpers', () => {
         ...baseMembership,
         plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
         monthly_price_coins: 100,
-        display_price_coins: 120,
+        display_price_coins: 100,
       }),
     ).toBe(true);
   });
@@ -58,7 +58,7 @@ describe('membership plan helpers', () => {
       ...clarityMembership,
       plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
       monthly_price_coins: 100,
-      display_price_coins: 120,
+      display_price_coins: 100,
     };
 
     expect(
