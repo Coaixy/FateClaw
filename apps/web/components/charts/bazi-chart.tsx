@@ -693,7 +693,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                   大运
                 </span>
               </div>
-              <div className="grid flex-1 grid-cols-[repeat(auto-fit,minmax(clamp(1.95rem,11.5cqw,3rem),1fr))]">
+              <div className="-mb-px -mr-px flex flex-1 flex-wrap overflow-hidden">
                 {decades.map((d, i) => {
                   const stem = d.heavenStem ?? d.sixtyCycle?.[0] ?? '';
                   const branch = d.earthBranch ?? d.sixtyCycle?.[1] ?? '';
@@ -706,7 +706,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleDecadeSelect(i)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'min-w-0 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors last:border-r-0',
+                        'min-w-[clamp(1.95rem,11.5cqw,3rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
@@ -777,7 +777,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                   流年
                 </span>
               </div>
-              <div className="grid flex-1 grid-cols-[repeat(auto-fit,minmax(clamp(2.15rem,13.5cqw,3.55rem),1fr))]">
+              <div className="-mb-px -mr-px flex flex-1 flex-wrap overflow-hidden">
                 {visibleAnnuals.map((a, i) => {
                   const stem = a.heavenStem ?? a.sixtyCycle[0] ?? '';
                   const branch = a.earthBranch ?? a.sixtyCycle[1] ?? '';
@@ -790,7 +790,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleAnnualSelect(a.year)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'min-w-0 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors last:border-r-0',
+                        'min-w-[clamp(2.15rem,13.5cqw,3.55rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
