@@ -5,6 +5,7 @@ import path from 'path';
 
 import { resolveProjectRoot } from '../../infrastructure/project-root.js';
 
+const TEXT_SKILL_MARKER = '/.fateclaw/text-skills/';
 const TEXT_SKILL_ROOT =
   process.env.FATECLAW_TEXT_SKILLS_DIR ||
   path.join(resolveProjectRoot(), '.fateclaw', 'text-skills');
@@ -136,13 +137,47 @@ export function resolveTextSkillBundleDir(args: {
   );
 }
 
-function resolveBundleUri(bundleUri: string | null | undefined): string | null {
+function uniqueResolvedDirs(dirs: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(
+      dirs
+        .map((dir) => dir?.trim())
+        .filter((dir): dir is string => Boolean(dir))
+        .map((dir) => path.resolve(dir)),
+    ),
+  );
+}
+
+function getLocalTextSkillRoots(): string[] {
+  return uniqueResolvedDirs([
+    process.env.FATECLAW_TEXT_SKILLS_DIR,
+    path.join(resolveProjectRoot(), '.fateclaw', 'text-skills'),
+    path.join(process.cwd(), '.fateclaw', 'text-skills'),
+  ]);
+}
+
+function rebaseTextSkillBundleDir(absolute: string): string[] {
+  const normalized = absolute.replace(/\\/g, '/');
+  const markerIndex = normalized.indexOf(TEXT_SKILL_MARKER);
+  if (markerIndex < 0) return [];
+
+  const suffix = normalized
+    .slice(markerIndex + TEXT_SKILL_MARKER.length)
+    .split('/')
+    .filter(Boolean);
+  if (suffix.length === 0) return [];
+
+  // DB 里的 bundle_uri 可能来自容器或旧项目路径，预览读取时按当前进程根目录重映射。
+  return getLocalTextSkillRoots().map((root) => path.join(root, ...suffix));
+}
+
+function resolveBundleUri(bundleUri: string | null | undefined): string[] {
   const raw = bundleUri?.trim();
-  if (!raw) return null;
+  if (!raw) return [];
   const resolved = raw.startsWith('file://') ? fileURLToPath(raw) : raw;
   const absolute = path.resolve(resolved);
   assertNotPiGlobalDir(absolute);
-  return absolute;
+  return uniqueResolvedDirs([absolute, ...rebaseTextSkillBundleDir(absolute)]);
 }
 
 export function normalizeTextSkillBundlePath(rawPath: string): string {
@@ -412,13 +447,15 @@ function readAllowedTextFilesFromDir(bundleDir: string): TextSkillBundleFile[] {
 export function readTextSkillBundleFiles(
   bundleUri: string | null | undefined,
 ): TextSkillBundleFile[] {
-  const bundleDir = resolveBundleUri(bundleUri);
-  if (!bundleDir) return [];
-  try {
-    return readAllowedTextFilesFromDir(bundleDir);
-  } catch {
-    return [];
+  for (const bundleDir of resolveBundleUri(bundleUri)) {
+    try {
+      const files = readAllowedTextFilesFromDir(bundleDir);
+      if (files.some((file) => file.path === 'SKILL.md')) return files;
+    } catch {
+      // 尝试下一个候选目录，兼容迁移后的本地路径。
+    }
   }
+  return [];
 }
 
 export function readTextSkillBundleContent(
@@ -444,7 +481,7 @@ export function appendLegacyTriggerHintToSkillBundle(
 ): string | null {
   const hint = triggerHint?.trim();
   if (!hint) return null;
-  const bundleDir = resolveBundleUri(bundleUri);
+  const [bundleDir] = resolveBundleUri(bundleUri);
   if (!bundleDir) return null;
 
   const files = readTextSkillBundleFiles(bundleDir);

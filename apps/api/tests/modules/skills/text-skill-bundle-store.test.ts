@@ -98,6 +98,34 @@ describe('text skill bundle store', () => {
     ]);
   });
 
+  it('rebases stored text-skill paths to the current project root', async () => {
+    const { readTextSkillBundleFiles } = await import(
+      '../../../src/modules/skills/text-skill-bundle-store.js'
+    );
+    const bundleDir = path.join(
+      rootDir,
+      '.fateclaw',
+      'text-skills',
+      'user-1',
+      'my-skill',
+    );
+    fs.mkdirSync(path.join(bundleDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(bundleDir, 'SKILL.md'), '# My Skill\n');
+    fs.writeFileSync(
+      path.join(bundleDir, 'docs', 'knowledge.md'),
+      'Knowledge',
+    );
+
+    expect(
+      readTextSkillBundleFiles(
+        '/app/.fateclaw/text-skills/user-1/my-skill',
+      ),
+    ).toEqual([
+      { path: 'docs/knowledge.md', content: 'Knowledge' },
+      { path: 'SKILL.md', content: '# My Skill\n' },
+    ]);
+  });
+
   it('rejects unsafe or unsupported bundle paths', async () => {
     const { writeTextSkillBundleFiles } =
       await import('../../../src/modules/skills/text-skill-bundle-store.js');
