@@ -591,9 +591,7 @@ describe('billing repository', () => {
     });
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1', {
-      forUpdate: true,
-    });
+    expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1');
     expect(clientCalls[2]?.sql).toContain(
       'INSERT INTO billing_request_reservations',
     );

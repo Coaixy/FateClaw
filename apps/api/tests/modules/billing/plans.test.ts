@@ -111,6 +111,39 @@ describe('metered billing plans', () => {
     );
   });
 
+  it('uses prepared entitlement wallet without syncing bonus grants again', async () => {
+    await expect(
+      reserveBillingForRequest({
+        userId: 'user-1',
+        requestId: 'request-1',
+        runtime: {
+          billingMode: 'metered',
+          source: 'official',
+          modelConfigId: 'model-1',
+          model: 'gpt-test',
+        } as never,
+        entitlementSnapshot: {
+          planKey: null,
+          membershipActive: false,
+          availableCoins: 10,
+          wallet: {
+            purchased_coins: 10,
+            bonus_coins: 0,
+            reserved_coins: 0,
+            inArrears: false,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      requestId: 'request-1',
+      reservedCoins: 0,
+    });
+
+    expect(mockExpireUserBonusBalanceBefore).not.toHaveBeenCalled();
+    expect(mockGetUserById).not.toHaveBeenCalled();
+    expect(mockReserveUserBalanceCoins).toHaveBeenCalledOnce();
+  });
+
   it('blocks new metered requests when the user is already in arrears', async () => {
     mockGetUserById.mockResolvedValue({
       id: 'user-1',

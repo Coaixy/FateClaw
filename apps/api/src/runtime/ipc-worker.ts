@@ -51,7 +51,11 @@ import {
   resolveUserLlmRuntime,
   type EffectiveLlmRuntimeConfig,
 } from '../modules/system/system-config.js';
-import { releaseLocalAgent, retainLocalAgent } from './local-runner.js';
+import {
+  ensureLocalAgentRunning,
+  releaseLocalAgent,
+  retainLocalAgent,
+} from './local-runner.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import type { User } from '../shared/types.js';
@@ -121,6 +125,12 @@ function entitlementMetadata(snapshot: RuntimeEntitlementSnapshot) {
     planKey: snapshot.planKey,
     membershipActive: snapshot.membershipActive,
     availableCoins: snapshot.wallet.availableCoins,
+    wallet: {
+      purchased_coins: snapshot.wallet.purchasedCoins,
+      bonus_coins: snapshot.wallet.bonusCoins,
+      reserved_coins: snapshot.wallet.reservedCoins,
+      inArrears: snapshot.wallet.inArrears,
+    },
   };
 }
 
@@ -259,6 +269,7 @@ async function acquireGlobalAgentSlot(input: {
   requestId: string;
   priority: 'member' | 'normal';
   shouldContinue?: () => boolean;
+  onQueued?: () => void;
   onAcquired?: (slotId: string) => void;
 }): Promise<string> {
   const queue = waitQueueForPriority(input.priority);
@@ -269,6 +280,7 @@ async function acquireGlobalAgentSlot(input: {
   };
   assertActive();
   await getRedis().lpush(queue, input.requestId);
+  input.onQueued?.();
   try {
     while (true) {
       assertActive();
@@ -905,6 +917,7 @@ export function submitAiChatInboxRequest(input: {
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
+  entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
   const requestId =
@@ -912,6 +925,8 @@ export function submitAiChatInboxRequest(input: {
     `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAtMs = Date.now();
   const aiChatOutboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
+  let acceptedEarly = false;
+  let payloadQueued = false;
 
   return new Promise<InboxRequestResult>((resolve, reject) => {
     void (async () => {
@@ -919,10 +934,13 @@ export function submitAiChatInboxRequest(input: {
       let billingReservation: BillingReservation | null = null;
       let concurrencySlotId: string | undefined;
       let localAgentLeaseAccountId: string | undefined;
+      let runtimeReadyPromise: Promise<void> | undefined;
 
       try {
-        const owner = await getOwnerByRuntimeId(input.accountId);
-        if (!owner?.id) {
+        const ownerUserId =
+          input.entitlementSnapshot?.userId ??
+          (await getOwnerByRuntimeId(input.accountId))?.id;
+        if (!ownerUserId) {
           // 未绑定平台用户的账号不应消费 token：拒绝并明确日志，避免无追踪计费泄漏。
           logger.warn(
             { accountId: input.accountId, kind: 'ai-chat' },
@@ -933,10 +951,12 @@ export function submitAiChatInboxRequest(input: {
         }
         const llmRuntime = input.llmRuntime
           ? llmRuntimeToSnapshot(input.llmRuntime)
-          : await resolveLlmRuntimeSnapshot(owner.id);
-        const entitlement = await getRuntimeEntitlementSnapshot(owner.id);
+          : await resolveLlmRuntimeSnapshot(ownerUserId);
+        const entitlement =
+          input.entitlementSnapshot ??
+          (await getRuntimeEntitlementSnapshot(ownerUserId));
         billingReservation = await reserveBillingForRequest({
-          userId: owner.id,
+          userId: ownerUserId,
           requestId,
           runtime: llmRuntime,
           entitlementSnapshot: entitlementMetadata(entitlement),
@@ -969,13 +989,9 @@ export function submitAiChatInboxRequest(input: {
           reject(new Error(`AI Chat 请求超时: ${requestId}`));
         }, AI_CHAT_REQUEST_TIMEOUT);
 
-        localAgentLeaseAccountId = retainLocalAgent(input.accountId);
-        if (!localAgentLeaseAccountId) {
-          throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
-        }
         pendingAiChatRequests.set(requestId, {
           accountId: input.accountId,
-          ownerUserId: owner.id,
+          ownerUserId,
           toUserId: undefined,
           contextToken: undefined,
           autoDeliver: false, // AI Chat 永远不发微信
@@ -987,16 +1003,43 @@ export function submitAiChatInboxRequest(input: {
           startedAtMs,
           priority,
           concurrencySlotId,
-          localAgentLeaseAccountId,
           resolve,
           reject,
           timeout,
         });
+        runtimeReadyPromise = (async () => {
+          await ensureLocalAgentRunning(input.accountId);
+          addAccountListener(input.accountId);
+          localAgentLeaseAccountId = retainLocalAgent(input.accountId);
+          if (!localAgentLeaseAccountId) {
+            throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
+          }
+          const leasedPending = pendingAiChatRequests.get(requestId);
+          if (!leasedPending) {
+            await releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+              accountId: input.accountId,
+              requestId,
+              reason: 'request_cancelled_after_runtime_start',
+            });
+            throw new Error('请求已取消或超时');
+          }
+          leasedPending.localAgentLeaseAccountId = localAgentLeaseAccountId;
+        })();
+        void runtimeReadyPromise.catch(() => {});
 
         concurrencySlotId = await acquireGlobalAgentSlot({
           requestId,
           priority,
           shouldContinue: () => pendingAiChatRequests.has(requestId),
+          onQueued: () => {
+            if (input.waitForResponse !== false || acceptedEarly) return;
+            acceptedEarly = true;
+            resolve({
+              requestId,
+              status: 'success',
+              text: '',
+            });
+          },
           onAcquired: (slotId) => {
             concurrencySlotId = slotId;
             const pending = pendingAiChatRequests.get(requestId);
@@ -1009,6 +1052,8 @@ export function submitAiChatInboxRequest(input: {
           throw new Error('请求已取消或超时');
         }
 
+        await runtimeReadyPromise;
+
         const payload = JSON.stringify({
           type: 'chat',
           requestId,
@@ -1020,7 +1065,7 @@ export function submitAiChatInboxRequest(input: {
           sessionBoardContexts: input.sessionBoardContexts,
           sessionId: input.sessionId,
           userMessageId: input.userMessageId,
-          ownerUserId: owner.id,
+          ownerUserId,
           userName: input.userName,
           assistantName: input.assistantName,
           personaPrompt: input.personaPrompt,
@@ -1050,6 +1095,7 @@ export function submitAiChatInboxRequest(input: {
           pending.priority ?? 'normal',
           payload,
         );
+        payloadQueued = true;
         logger.info(
           {
             accountId: input.accountId,
@@ -1062,14 +1108,52 @@ export function submitAiChatInboxRequest(input: {
           },
           'AI Chat 请求已提交到 Redis',
         );
-        if (input.waitForResponse === false) {
-          resolve({
-            requestId,
-            status: 'success',
-            text: '',
-          });
-        }
       } catch (err) {
+        if (acceptedEarly && !payloadQueued) {
+          await releaseGlobalAgentSlot(concurrencySlotId);
+          const pending = pendingAiChatRequests.get(requestId);
+          if (pending) {
+            await processAiChatOutboxPayload(
+              {
+                type: 'response',
+                accountId: input.accountId,
+                requestId,
+                sessionId: input.sessionId,
+                userMessageId: input.userMessageId,
+                ownerUserId: pending.ownerUserId,
+                status: 'error',
+                publicErrorText: '抱歉，AI 服务暂时不可用',
+                publicReasonCode: 'submit_error',
+                error: err instanceof Error ? err.message : String(err),
+                timestamp: new Date().toISOString(),
+                usage: {
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  totalTokens: 0,
+                },
+              },
+              input.accountId,
+              pendingAiChatRequests,
+            ).catch((handlerErr) => {
+              clearTimeout(pending.timeout);
+              pendingAiChatRequests.delete(requestId);
+              void releaseSessionProcessingLock(
+                input.sessionId,
+                requestId,
+              ).catch(() => {});
+              void releaseLocalAgentLeaseForPending(pending, {
+                accountId: input.accountId,
+                requestId,
+                reason: 'submit_error_fallback',
+              });
+              logger.error(
+                { accountId: input.accountId, requestId, err: handlerErr },
+                'AI Chat 入队失败后的错误消息落库失败',
+              );
+            });
+          }
+          return;
+        }
         if (timeout) {
           clearTimeout(timeout);
         }

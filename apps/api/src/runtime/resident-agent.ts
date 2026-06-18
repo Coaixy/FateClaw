@@ -10,6 +10,7 @@ import {
   type SessionBoardContext,
 } from '../shared/token-budget.js';
 import type { EffectiveLlmRuntimeConfig } from '../modules/system/system-config.js';
+import type { RuntimeEntitlementSnapshot } from '../modules/billing/entitlements.js';
 
 type ChatInputKind = 'normal' | 'user_pasted_board';
 
@@ -39,10 +40,13 @@ export async function dispatchAiChatPrompt(input: {
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
+  entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
 }): Promise<InboxRequestResult> {
-  await ensureLocalAgentRunning(input.accountId);
-  addAccountListener(input.accountId);
+  if (input.waitForResponse !== false) {
+    await ensureLocalAgentRunning(input.accountId);
+    addAccountListener(input.accountId);
+  }
 
   return submitAiChatInboxRequest({
     accountId: input.accountId,
@@ -60,6 +64,7 @@ export async function dispatchAiChatPrompt(input: {
     authorizedSkillBundleIds: input.authorizedSkillBundleIds,
     authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
     llmRuntime: input.llmRuntime,
+    entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: input.waitForResponse,
   });
 }

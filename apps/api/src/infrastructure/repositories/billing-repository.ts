@@ -3556,9 +3556,7 @@ export async function reserveUserBalanceCoins(input: {
         )
       : undefined;
     if (existing) {
-      const existingUser = await getUserByIdUsing(client, existing.user_id, {
-        forUpdate: true,
-      });
+      const existingUser = await getUserByIdUsing(client, existing.user_id);
       if (!existingUser) {
         throw new Error('用户不存在');
       }
@@ -3569,9 +3567,7 @@ export async function reserveUserBalanceCoins(input: {
       };
     }
 
-    const user = await getUserByIdUsing(client, input.userId, {
-      forUpdate: true,
-    });
+    const user = await getUserByIdUsing(client, input.userId);
     if (!user) {
       throw new Error('用户不存在');
     }

@@ -55,7 +55,10 @@ import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
   normalizeOwnedChatSessionTitle,
 } from '../../shared/chat-session-title-policy.js';
-import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
+import {
+  getRuntimeEntitlementSnapshot,
+  type RuntimeEntitlementSnapshot,
+} from '../billing/entitlements.js';
 import type { ChatSession, NewMessage } from '../../shared/types.js';
 import {
   toChatSessionDto,
@@ -155,6 +158,7 @@ interface PreparedOwnedChatSessionTurn {
   authorizedWorkflowSkillIds?: string[];
   sessionTitle: string;
   professionalAiUsageDate?: string;
+  entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
 
 function isPaymentRequiredError(errorMessage: string): boolean {
@@ -958,6 +962,7 @@ async function prepareOwnedChatSessionTurn(
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
       professionalAiUsageDate,
+      entitlementSnapshot: entitlement,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1000,6 +1005,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
       authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
+      entitlementSnapshot: prepared.entitlementSnapshot,
       waitForResponse: false,
     });
 
@@ -1058,6 +1064,7 @@ async function completeOwnedChatSessionTurn(
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
       authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
+      entitlementSnapshot: prepared.entitlementSnapshot,
     });
 
     if (output.status === 'error') {

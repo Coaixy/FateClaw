@@ -9,6 +9,7 @@ const {
   mockLpush,
   mockLrem,
   mockLoggerInfo,
+  mockEnsureLocalAgentRunning,
   mockReleaseLocalAgent,
   mockRetainLocalAgent,
   mockRpop,
@@ -24,6 +25,7 @@ const {
   mockLpush: vi.fn(async () => 1),
   mockLrem: vi.fn(async () => 1),
   mockLoggerInfo: vi.fn(),
+  mockEnsureLocalAgentRunning: vi.fn(async () => undefined),
   mockReleaseLocalAgent: vi.fn(async () => undefined),
   mockRetainLocalAgent: vi.fn((accountId: string) => accountId),
   mockRpop: vi.fn(),
@@ -75,6 +77,7 @@ vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
 }));
 
 vi.mock('../../src/runtime/local-runner.js', () => ({
+  ensureLocalAgentRunning: mockEnsureLocalAgentRunning,
   releaseLocalAgent: mockReleaseLocalAgent,
   retainLocalAgent: mockRetainLocalAgent,
 }));
@@ -89,7 +92,9 @@ vi.mock('../../src/modules/account/account-service.js', () => ({
 }));
 
 vi.mock('../../src/modules/chat/web-chat-runtime.js', () => ({
-  getUserIdFromWebChatRuntimeId: vi.fn(),
+  getUserIdFromWebChatRuntimeId: vi.fn((value: string) =>
+    value.startsWith('web:') ? value.slice(4) : null,
+  ),
 }));
 
 vi.mock('../../src/modules/system/system-config.js', () => ({
@@ -314,9 +319,22 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     } as never);
   });
 
-  it('retains AI Chat runtime and keeps the lease after waitForResponse=false accepted', async () => {
+  it('accepts AI Chat after wait queue registration and keeps the lease', async () => {
+    let releaseGate: ((value: unknown) => void) | undefined;
+    let releaseRuntime: (() => void) | undefined;
+    mockEval.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        releaseGate = resolve;
+      }),
+    );
+    mockEnsureLocalAgentRunning.mockImplementationOnce(
+      () => new Promise<void>((resolve) => {
+        releaseRuntime = resolve;
+      }),
+    );
+
     const result = await submitAiChatInboxRequest({
-      accountId: 'account-1',
+      accountId: 'web:user-1',
       userMessage: 'hi',
       history: [],
       sessionId: 'session-1',
@@ -331,8 +349,28 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       status: 'success',
       text: '',
     });
-    expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
     expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
+    expect(mockLpush).toHaveBeenCalledWith(
+      'agent:concurrency:wait:member',
+      result.requestId,
+    );
+    expect(getUserByAccountId).not.toHaveBeenCalled();
+    expect(mockEnsureLocalAgentRunning).toHaveBeenCalledWith('web:user-1');
+    expect(mockRetainLocalAgent).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(releaseGate).toBeTypeOf('function');
+    });
+    releaseGate?.([1, 'member']);
+    expect(mockRetainLocalAgent).not.toHaveBeenCalled();
+    releaseRuntime?.();
+    await vi.waitFor(() => {
+      expect(mockRetainLocalAgent).toHaveBeenCalledWith('web:user-1');
+      expect(mockLpush).toHaveBeenCalledWith(
+        expect.stringMatching(/^ipc:web:user-1:inbox:member$/),
+        expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
+      );
+    });
     expect(mockLpush).toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
@@ -343,7 +381,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     );
     expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
       expect.objectContaining({
-        localAgentLeaseAccountId: 'account-1',
+        localAgentLeaseAccountId: 'web:user-1',
       }),
     );
   });

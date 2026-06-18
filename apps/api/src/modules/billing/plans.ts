@@ -19,6 +19,7 @@ import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
+  type SpendableBalanceState,
 } from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
@@ -124,17 +125,24 @@ export async function reserveBillingForRequest(input: {
     planKey: string | null;
     membershipActive: boolean;
     availableCoins: number;
+    wallet?: SpendableBalanceState & { inArrears?: boolean };
   };
 }): Promise<BillingReservation | null> {
   if (input.runtime.billingMode !== 'metered') {
     return null;
   }
-  await expireUserBonusBalanceBefore(input.userId, new Date().toISOString());
-  const user = await getUserById(input.userId);
-  if (!user) {
-    throw new Error('用户不存在');
+  let walletState = input.entitlementSnapshot?.wallet;
+  if (!walletState) {
+    await expireUserBonusBalanceBefore(input.userId, new Date().toISOString());
+    const user = await getUserById(input.userId);
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+    walletState = user;
   }
-  if (isSpendableBalanceInArrears(user)) {
+  const inArrears =
+    walletState.inArrears ?? isSpendableBalanceInArrears(walletState);
+  if (inArrears) {
     throw new Error(BILLING_ARREARS_MESSAGE);
   }
   const yearMonth = currentYearMonth();
