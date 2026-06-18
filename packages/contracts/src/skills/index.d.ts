@@ -110,11 +110,20 @@ export interface PublicSkillCommentDto {
   created_at: string;
 }
 
+/** 当前登录用户可见的本人待审核 Skill 评论。 */
+export interface PendingSkillCommentDto {
+  id: string;
+  body: string;
+  status: 'pending';
+  created_at: string;
+}
+
 /** 单个公开 Skill 详情。 */
 export interface SharedSkillDetailDto extends SharedSkillPreviewDto {
   reaction_summary: SkillReactionSummaryDto;
   my_reaction: SkillReactionKindDto | null;
   comments: PublicSkillCommentDto[];
+  my_pending_comments: PendingSkillCommentDto[];
   comments_enabled: boolean;
   public_interactions_enabled: boolean;
 }
@@ -133,6 +142,8 @@ export interface CreateSkillCommentRequestDto {
 export interface CreateSkillCommentResponseDto {
   id: string;
   status: 'pending';
+  body: string;
+  created_at: string;
 }
 
 /** 管理后台评论审核状态。 */

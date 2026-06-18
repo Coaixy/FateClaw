@@ -36,6 +36,7 @@ import {
   getSkillReactionSummary,
   getUserSkillReaction,
   listPublicSkillComments,
+  listUserPendingSkillComments,
   getSubscribedSkills,
   redeemSkillAccessInvite,
   getResolvedEnabledOfficialSkillNames,
@@ -686,6 +687,42 @@ describe('skills repository official skill settings', () => {
       'ORDER BY pinned DESC, reviewed_at DESC NULLS LAST, created_at DESC',
     );
     expect(calls[0]?.params).toEqual(['skill-1', 100]);
+  });
+
+  it('lists pending comments for the current submitting user only', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'comment-1',
+        body: '待审核评论',
+        status: 'pending',
+        created_at: '2026-06-12T00:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      listUserPendingSkillComments('skill-1', 'user-1', 500),
+    ).resolves.toEqual([
+      {
+        id: 'comment-1',
+        body: '待审核评论',
+        status: 'pending',
+        created_at: '2026-06-12T00:00:00.000Z',
+      },
+    ]);
+
+    expect(calls[0]?.sql).toContain("status = 'pending'");
+    expect(calls[0]?.sql).toContain('user_id = $2');
+    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', 50]);
+  });
+
+  it('does not query pending comments for anonymous users', async () => {
+    const { calls } = createMockPool();
+
+    await expect(
+      listUserPendingSkillComments('skill-1', null),
+    ).resolves.toEqual([]);
+
+    expect(calls).toEqual([]);
   });
 
   it('creates comments as pending rows for later review', async () => {

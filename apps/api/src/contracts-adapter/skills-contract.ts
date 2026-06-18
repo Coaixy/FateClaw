@@ -2,6 +2,7 @@ import type {
   AdminSkillCommentDto,
   BundleSubscriptionSourceDto,
   MarketBundleDto,
+  PendingSkillCommentDto,
   PublicSkillCommentDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
@@ -19,6 +20,7 @@ import type {
 import {
   type AdminSkillCommentRow,
   type PublicSkillComment,
+  type PendingSkillComment,
   resolveSkillAccessInviteStatus,
   type RedeemSkillAccessInviteResult,
   type SkillReactionSummary,
@@ -95,12 +97,25 @@ export function toPublicSkillCommentDto(
   };
 }
 
+/** 转换当前用户本人的待审核评论，不暴露给其他访问者。 */
+export function toPendingSkillCommentDto(
+  comment: PendingSkillComment,
+): PendingSkillCommentDto {
+  return {
+    id: comment.id,
+    body: comment.body,
+    status: 'pending',
+    created_at: comment.created_at,
+  };
+}
+
 /** 转换公开 Skill 详情，并仅为公开上架 Skill 暴露互动数据。 */
 export function toSharedSkillDetailDto(source: {
   skill: UserCustomSkill;
   reactionSummary: SkillReactionSummary;
   myReaction: SkillReactionKindDto | null;
   comments: PublicSkillComment[];
+  myPendingComments: PendingSkillComment[];
 }): SharedSkillDetailDto {
   const interactionsEnabled = source.skill.visibility === 'shared';
   return {
@@ -111,6 +126,9 @@ export function toSharedSkillDetailDto(source: {
     my_reaction: interactionsEnabled ? source.myReaction : null,
     comments: interactionsEnabled
       ? source.comments.map(toPublicSkillCommentDto)
+      : [],
+    my_pending_comments: interactionsEnabled
+      ? source.myPendingComments.map(toPendingSkillCommentDto)
       : [],
     comments_enabled: interactionsEnabled,
     public_interactions_enabled: interactionsEnabled,

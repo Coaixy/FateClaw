@@ -14,6 +14,7 @@ import type {
   CreateSkillAccessInviteRequestDto,
   MarketBundleDto,
   MarketSkillDto,
+  PendingSkillCommentDto,
   SharedBundlePreviewDto,
   SharedSkillDetailDto,
   SharedSkillPreviewDto,
@@ -50,6 +51,7 @@ export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
 export type MarketBundle = MarketBundleDto;
 export type MarketSkill = MarketSkillDto;
 export type SharedSkillDetail = SharedSkillDetailDto;
+export type PendingSkillComment = PendingSkillCommentDto;
 export type SkillReactionKind = SkillReactionKindDto;
 export type SkillReactionSummary = SkillReactionSummaryDto;
 export type SkillAccessInvite = SkillAccessInviteDto;

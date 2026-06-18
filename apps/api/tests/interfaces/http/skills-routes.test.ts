@@ -12,6 +12,7 @@ const {
   mockHasActiveMembership,
   mockListPublicSkillComments,
   mockListSkillAccessInvites,
+  mockListUserPendingSkillComments,
   mockRedeemSkillAccessInvite,
   mockSetUserSkillReaction,
   serviceMocks,
@@ -25,6 +26,7 @@ const {
   const mockHasActiveMembership = vi.fn();
   const mockListPublicSkillComments = vi.fn();
   const mockListSkillAccessInvites = vi.fn();
+  const mockListUserPendingSkillComments = vi.fn();
   const mockRedeemSkillAccessInvite = vi.fn();
   const mockRevokeSkillAccessInvite = vi.fn();
   const mockSetUserSkillReaction = vi.fn();
@@ -39,6 +41,7 @@ const {
     mockHasActiveMembership,
     mockListPublicSkillComments,
     mockListSkillAccessInvites,
+    mockListUserPendingSkillComments,
     mockRedeemSkillAccessInvite,
     mockSetUserSkillReaction,
     serviceMocks: {
@@ -52,6 +55,7 @@ const {
       hasActiveMembership: mockHasActiveMembership,
       listPublicSkillComments: mockListPublicSkillComments,
       listSkillAccessInvites: mockListSkillAccessInvites,
+      listUserPendingSkillComments: mockListUserPendingSkillComments,
       redeemSkillAccessInvite: mockRedeemSkillAccessInvite,
       revokeSkillAccessInvite: mockRevokeSkillAccessInvite,
       setUserSkillReaction: mockSetUserSkillReaction,
@@ -161,6 +165,7 @@ describe('skillsRoutes access invites', () => {
     });
     mockListPublicSkillComments.mockResolvedValue([]);
     mockListSkillAccessInvites.mockResolvedValue([]);
+    mockListUserPendingSkillComments.mockResolvedValue([]);
     app = Fastify({ logger: false });
     await app.register(fastifyJwt, { secret: 'test-secret' });
     app.decorateRequest('requireAuth', async () => {});
@@ -323,7 +328,7 @@ describe('skillsRoutes access invites', () => {
     expect(response.json()).toEqual({ error: '授权链接已撤销' });
   });
 
-  it('returns shared skill details with anonymous approved comments only', async () => {
+  it('returns shared skill details with approved comments and viewer pending comments only', async () => {
     const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
     serviceMocks.getSkillByShareToken.mockResolvedValue({
       ...skillPreview,
@@ -342,6 +347,15 @@ describe('skillsRoutes access invites', () => {
         pinned: true,
         created_at: '2026-01-02T00:00:00.000Z',
         user_id: 'hidden-user',
+      },
+    ]);
+    mockListUserPendingSkillComments.mockResolvedValue([
+      {
+        id: 'comment-2',
+        body: '我的待审核评论',
+        status: 'pending',
+        created_at: '2026-01-03T00:00:00.000Z',
+        user_id: 'viewer-1',
       },
     ]);
 
@@ -367,10 +381,25 @@ describe('skillsRoutes access invites', () => {
             created_at: '2026-01-02T00:00:00.000Z',
           },
         ],
+        my_pending_comments: [
+          {
+            id: 'comment-2',
+            body: '我的待审核评论',
+            status: 'pending',
+            created_at: '2026-01-03T00:00:00.000Z',
+          },
+        ],
       }),
     );
     expect(response.json().comments[0]).not.toHaveProperty('user_id');
+    expect(response.json().my_pending_comments[0]).not.toHaveProperty(
+      'user_id',
+    );
     expect(mockGetUserSkillReaction).toHaveBeenCalledWith(
+      'skill-1',
+      'viewer-1',
+    );
+    expect(mockListUserPendingSkillComments).toHaveBeenCalledWith(
       'skill-1',
       'viewer-1',
     );
@@ -400,9 +429,14 @@ describe('skillsRoutes access invites', () => {
       comments_enabled: true,
       reaction_summary: { like_count: 3, dislike_count: 1 },
       my_reaction: null,
+      my_pending_comments: [],
     });
     // 游客无身份，反应查询应以 null userId 调用
     expect(mockGetUserSkillReaction).toHaveBeenCalledWith('skill-1', null);
+    expect(mockListUserPendingSkillComments).toHaveBeenCalledWith(
+      'skill-1',
+      null,
+    );
   });
 
   it('treats invalid optional auth on shared skill details as anonymous', async () => {
@@ -451,9 +485,11 @@ describe('skillsRoutes access invites', () => {
       reaction_summary: { like_count: 0, dislike_count: 0 },
       my_reaction: null,
       comments: [],
+      my_pending_comments: [],
     });
     expect(mockGetSkillReactionSummary).not.toHaveBeenCalled();
     expect(mockListPublicSkillComments).not.toHaveBeenCalled();
+    expect(mockListUserPendingSkillComments).not.toHaveBeenCalled();
   });
 
   it('requires login before reacting to public shared skills', async () => {
@@ -583,6 +619,8 @@ describe('skillsRoutes access invites', () => {
     mockCreatePendingSkillComment.mockResolvedValue({
       id: 'comment-1',
       status: 'pending',
+      body: '第一行 第二行',
+      created_at: '2026-01-04T00:00:00.000Z',
     });
 
     const response = await app.inject({
@@ -600,7 +638,12 @@ describe('skillsRoutes access invites', () => {
         body: '第一行 第二行',
       }),
     );
-    expect(response.json()).toEqual({ id: 'comment-1', status: 'pending' });
+    expect(response.json()).toEqual({
+      id: 'comment-1',
+      status: 'pending',
+      body: '第一行 第二行',
+      created_at: '2026-01-04T00:00:00.000Z',
+    });
   });
 
   it('blocks duplicate pending comments before creating a row', async () => {

@@ -125,12 +125,31 @@ export function useSkillInstall(
 
   const comment = useCallback(
     async (body: string) => {
-      if (!params.token) return;
+      if (!params.token) return null;
       setCommenting(true);
       // 评论错误与订阅/赞踩解耦：不写全局 error，交由调用方在评论区本地提示，
       // 避免错误同时出现在订阅 sidebar 的告警里造成语义错位。
       try {
-        await skillsApi.createComment(params.token, body);
+        const created = await skillsApi.createComment(params.token, body);
+        setPreview((current) =>
+          current && 'my_pending_comments' in current
+            ? {
+                ...current,
+                my_pending_comments: [
+                  {
+                    id: created.id,
+                    body: created.body,
+                    status: created.status,
+                    created_at: created.created_at,
+                  },
+                  ...current.my_pending_comments.filter(
+                    (comment) => comment.id !== created.id,
+                  ),
+                ],
+              }
+            : current,
+        );
+        return created;
       } finally {
         setCommenting(false);
       }

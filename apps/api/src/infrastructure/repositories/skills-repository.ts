@@ -274,6 +274,14 @@ export type PublicSkillComment = Pick<
   'id' | 'body' | 'pinned' | 'created_at'
 >;
 
+/** 仅当前提交者本人可见的待审核评论字段。 */
+export type PendingSkillComment = Pick<
+  SkillComment,
+  'id' | 'body' | 'status' | 'created_at'
+> & {
+  status: 'pending';
+};
+
 /** 管理端评论审核列表行，包含提交者基础审计信息。 */
 export interface AdminSkillCommentRow extends SkillComment {
   skill_name: string;
@@ -897,6 +905,26 @@ export async function listPublicSkillComments(
     [skillId, Math.min(Math.max(limit, 1), 100)],
   );
   return rows as PublicSkillComment[];
+}
+
+/**
+ * 读取当前用户自己的待审核评论，用于避免用户误判提交失败后重复提交。
+ */
+export async function listUserPendingSkillComments(
+  skillId: string,
+  userId: string | null,
+  limit = 20,
+): Promise<PendingSkillComment[]> {
+  if (!userId) return [];
+  const { rows } = await pool.query(
+    `SELECT id, body, status, created_at
+     FROM skill_comments
+     WHERE skill_id = $1 AND user_id = $2 AND status = 'pending'
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [skillId, userId, Math.min(Math.max(limit, 1), 50)],
+  );
+  return rows as PendingSkillComment[];
 }
 
 /**

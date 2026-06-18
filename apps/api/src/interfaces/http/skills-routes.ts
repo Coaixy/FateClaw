@@ -32,6 +32,7 @@ import {
   listMarketBundles,
   listMarketSkills,
   listSkillAccessInvites,
+  listUserPendingSkillComments,
   listUserBundles,
   publishSkillBundle,
   publishUserCustomSkill,
@@ -484,19 +485,22 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     if (!skill) return reply.code(404).send({ error: '分享链接无效' });
     const userId = await getOptionalUserId(request);
     const interactionsEnabled = skill.visibility === 'shared';
-    const [reactionSummary, myReaction, comments] = interactionsEnabled
-      ? await Promise.all([
-          getSkillReactionSummary(skill.id),
-          getUserSkillReaction(skill.id, userId),
-          listPublicSkillComments(skill.id),
-        ])
-      : [{ like_count: 0, dislike_count: 0 }, null, []];
+    const [reactionSummary, myReaction, comments, myPendingComments] =
+      interactionsEnabled
+        ? await Promise.all([
+            getSkillReactionSummary(skill.id),
+            getUserSkillReaction(skill.id, userId),
+            listPublicSkillComments(skill.id),
+            listUserPendingSkillComments(skill.id, userId),
+          ])
+        : [{ like_count: 0, dislike_count: 0 }, null, [], []];
 
     return toSharedSkillDetailDto({
       skill,
       reactionSummary,
       myReaction,
       comments,
+      myPendingComments,
     });
   });
 
@@ -561,7 +565,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       reply,
     );
     if (!comment) return;
-    return { id: comment.id, status: 'pending' as const };
+    return {
+      id: comment.id,
+      status: 'pending' as const,
+      body: comment.body,
+      created_at: comment.created_at,
+    };
   });
 
   // POST /api/skills/subscribe/:token — 订阅
