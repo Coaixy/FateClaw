@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Activity,
   Archive,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  HeartHandshake,
   Loader2,
   LogIn,
   MessageCircle,
@@ -325,6 +325,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     sessions.length === 0 && (authLoading || sessionsLoading);
   const contactQrOptions: ContactQrType[] =
     locale === 'zh-CN' ? ['wechat', 'qq'] : ['telegram'];
+  const showCharityShortcut = locale !== 'en';
   const activeContactQrType = contactQrOptions.includes(contactQrType)
     ? contactQrType
     : contactQrOptions[0];
@@ -962,30 +963,34 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
 
           <div
-            className="grid grid-cols-3 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+            className={`grid gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1 ${
+              showCharityShortcut ? 'grid-cols-3' : 'grid-cols-2'
+            }`}
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
-            <a
-              href="/status"
-              onClick={closeSidebar}
-              className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
-                pathname === '/status'
-                  ? 'bg-primary/10 text-ink'
-                  : 'text-muted hover:text-ink hover:bg-surface-card'
-              }`}
-              aria-label={t('sidebar.viewStatus')}
-              title={t('sidebar.status')}
-            >
-              <Activity
-                size={14}
-                strokeWidth={1.8}
-                className="group-hover:text-primary"
-              />
-              <span className="max-w-full truncate leading-tight">
-                {t('sidebar.status')}
-              </span>
-            </a>
+            {showCharityShortcut && (
+              <a
+                href="/charity"
+                onClick={closeSidebar}
+                className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
+                  pathname === '/charity'
+                    ? 'bg-primary/10 text-ink'
+                    : 'text-muted hover:text-ink hover:bg-surface-card'
+                }`}
+                aria-label={t('sidebar.viewCharity')}
+                title={t('sidebar.charity')}
+              >
+                <HeartHandshake
+                  size={14}
+                  strokeWidth={1.8}
+                  className="group-hover:text-primary"
+                />
+                <span className="max-w-full truncate leading-tight">
+                  {t('sidebar.charity')}
+                </span>
+              </a>
+            )}
 
             <button
               type="button"

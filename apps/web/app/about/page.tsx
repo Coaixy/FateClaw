@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
-  title: '关于我们',
+  title: '公益',
 };
 
 /**
- * 临时隐藏关于页面。
+ * 将旧关于页入口迁移到公益页。
  *
- * @returns 不渲染页面内容，直接回到主聊天入口。
+ * @returns 不渲染页面内容，直接跳转到公益页。
  */
 export default function AboutPage() {
-  redirect('/ai-chat');
+  redirect('/charity');
 }
