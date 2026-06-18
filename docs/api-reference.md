@@ -657,6 +657,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
     "active": false,
     "plan_key": null,
     "monthly_price_coins": 30,
+    "display_price_coins": 30,
     "current_period_start": null,
     "current_period_end": null,
     "allowance_reset_at": null,
@@ -665,15 +666,15 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
   },
   "membership_entitlements": [
     {
-      "plan_key": "fateclaw_pro",
-      "name": "FateClaw Pro",
+      "plan_key": "fateclaw_deep",
+      "name": "FateClaw Deep",
       "effective_start": "2026-06-10T00:00:00.000Z",
       "effective_end": "2026-07-10T00:00:00.000Z",
       "is_current": true
     },
     {
-      "plan_key": "fateclaw_plus",
-      "name": "FateClaw Plus",
+      "plan_key": "fateclaw_insight",
+      "name": "FateClaw Insight",
       "effective_start": "2026-07-10T00:00:00.000Z",
       "effective_end": "2027-07-01T00:00:00.000Z",
       "is_current": false
@@ -685,7 +686,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 **会员权益时间轴**
 
-`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。Plus 与 Pro 同时存在时，Pro 覆盖期间只返回 Pro 片段，之后再返回回落的 Plus 片段，例如 Plus 延长到 `2027-07-01`。
+`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。Insight 与 Deep 同时存在时，Deep 覆盖期间只返回 Deep 片段，之后再返回回落的 Insight 片段，例如 Insight 延长到 `2027-07-01`。
 
 ---
 
@@ -852,7 +853,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 ### POST /api/billing/membership/subscribe
 
-使用钱包余额开通或续费 FateClaw Plus。需认证。
+使用钱包余额开通或续费 FateClaw 会员套餐。需认证。请求体可传 `plan_key`，当前支持 `fateclaw_clarity`、`fateclaw_insight`、`fateclaw_deep`；省略时默认开通 Clarity。
 
 ---
 

@@ -15,6 +15,7 @@ import { AppShell } from '@/components/app-shell';
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
 import {
+  MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   resolveMembershipPlanDisplayName,
   resolveMembershipPlanRank,
@@ -169,8 +170,14 @@ function resolveEntitlementShortName(
   return resolveMembershipPlanShortName(entitlement);
 }
 
+function hasMembershipAllowance(
+  plan?: Pick<MembershipPlan, 'monthly_allowance_units'> | null,
+) {
+  return (plan?.monthly_allowance_units ?? 0) > 0;
+}
+
 function resolvePlanBenefitLabels(
-  plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
+  plan: Pick<MembershipPlan, 'name' | 'plan_key' | 'monthly_allowance_units'>,
   t: TranslationFn,
 ) {
   const planShortName = resolvePlanShortName(plan);
@@ -191,7 +198,9 @@ function resolvePlanBenefitLabels(
   return [
     t('pages.membership.planBenefitInsightExpert'),
     t('pages.membership.planBenefitInsightTools'),
-    t('pages.membership.planBenefitInsightAllowance'),
+    hasMembershipAllowance(plan)
+      ? t('pages.membership.planBenefitInsightAllowance')
+      : t('pages.membership.planBenefitNoAllowance'),
   ];
 }
 
@@ -844,6 +853,7 @@ function MembershipDetailPanel({
 }) {
   const usedPercent = progressPercent(membership.allowance_used_ratio);
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
+  const allowanceEnabled = hasMembershipAllowance(currentPlan);
   const detailItems = [
     {
       className: 'border-b border-hairline/70 sm:border-b-0 sm:border-r',
@@ -869,12 +879,14 @@ function MembershipDetailPanel({
     },
   ] as const;
   const progressLabel = membership.active
-    ? `${membershipStatusText(membership.allowance_status, t)} · ${t(
-        'pages.membership.usedPercent',
-        { percent: usedPercentText },
-      )}`
+    ? allowanceEnabled
+      ? `${membershipStatusText(membership.allowance_status, t)} · ${t(
+          'pages.membership.usedPercent',
+          { percent: usedPercentText },
+        )}`
+      : t('pages.membership.noAllowanceStatus')
     : t('pages.membership.progressAfterSubscribe');
-  const progressValue = membership.active ? usedPercent : 0;
+  const progressValue = membership.active && allowanceEnabled ? usedPercent : 0;
   const futureEntitlements = entitlements.filter(
     (entitlement) => !entitlement.is_current,
   );
@@ -905,7 +917,9 @@ function MembershipDetailPanel({
           <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
             <div className="mb-2 flex flex-col gap-1 text-[12px] leading-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <span className="font-medium text-muted">
-                {t('pages.membership.allowanceProgress')}
+                {allowanceEnabled
+                  ? t('pages.membership.allowanceProgress')
+                  : t('pages.membership.noAllowanceProgress')}
               </span>
               <span className="min-w-0 text-ink sm:text-right">
                 {progressLabel}
@@ -926,15 +940,19 @@ function MembershipDetailPanel({
             </div>
             <div className="mt-2 text-[11px] leading-5 text-muted">
               {membership.active
-                ? t('pages.membership.activeHint', {
-                    reset: resetText(
-                      membership.allowance_reset_at,
-                      formatDate,
-                      t,
-                    ),
-                  })
+                ? allowanceEnabled
+                  ? t('pages.membership.activeHint', {
+                      reset: resetText(
+                        membership.allowance_reset_at,
+                        formatDate,
+                        t,
+                      ),
+                    })
+                  : t('pages.membership.noAllowanceActiveHint')
                 : membership.enabled
-                  ? t('pages.membership.inactiveHint')
+                  ? currentPlan && !allowanceEnabled
+                    ? t('pages.membership.noAllowanceInactiveHint')
+                    : t('pages.membership.inactiveHint')
                   : t('pages.membership.disabledHint')}
             </div>
           </div>
@@ -1116,6 +1134,15 @@ export function MembershipWorkspace() {
           normalizeMembershipPlanKey(plan.plan_key) === normalizedActivePlanKey,
       ) ?? null)
     : null;
+  const defaultPlan =
+    activePlan ??
+    membershipPlans.find(
+      (plan) =>
+        normalizeMembershipPlanKey(plan.plan_key) ===
+        MEMBERSHIP_CLARITY_PLAN_KEY,
+    ) ??
+    membershipPlans[0] ??
+    null;
   const activePlanShortName = activePlan
     ? resolvePlanShortName(activePlan)
     : 'Clarity';
@@ -1161,7 +1188,7 @@ export function MembershipWorkspace() {
           <MembershipDetailPanel
             membership={membership}
             entitlements={membershipEntitlements}
-            currentPlan={activePlan}
+            currentPlan={defaultPlan}
             busyPlanKey={membershipBusyPlanKey}
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}

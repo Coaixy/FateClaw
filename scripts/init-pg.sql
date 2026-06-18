@@ -550,43 +550,91 @@ CREATE INDEX IF NOT EXISTS idx_point_batches_expiry_scan
   WHERE status = 'active' AND expires_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS membership_config (
-  id TEXT PRIMARY KEY DEFAULT 'default',
+  id TEXT PRIMARY KEY DEFAULT 'fateclaw_clarity',
   enabled BOOLEAN NOT NULL DEFAULT true,
-  monthly_price_coins NUMERIC(14,2) NOT NULL DEFAULT 30,
-  monthly_allowance_units NUMERIC(18,2) NOT NULL DEFAULT 3000000,
+  name TEXT NOT NULL DEFAULT 'FateClaw Clarity',
+  monthly_price_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
+  monthly_allowance_units NUMERIC(18,2) NOT NULL DEFAULT 0,
+  display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
   standard_price_per_million_units_coins NUMERIC(14,2) NOT NULL DEFAULT 10,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-INSERT INTO membership_config (id)
-VALUES ('default')
-ON CONFLICT (id) DO NOTHING;
+ALTER TABLE membership_config
+  ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'FateClaw Clarity',
+  ADD COLUMN IF NOT EXISTS display_price_coins NUMERIC(14,2) NOT NULL DEFAULT 30;
+INSERT INTO membership_config (
+  id, enabled, name, monthly_price_coins, display_price_coins,
+  monthly_allowance_units, standard_price_per_million_units_coins, updated_at
+)
+VALUES
+  ('fateclaw_clarity', true, 'FateClaw Clarity', 10, 10, 0, 10, NOW()),
+  ('fateclaw_insight', true, 'FateClaw Insight', 30, 30, 3000000, 10, NOW()),
+  ('fateclaw_deep', true, 'FateClaw Deep', 100, 120, 3000000, 10, NOW())
+ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id;
 
 CREATE TABLE IF NOT EXISTS user_memberships (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  plan_key TEXT NOT NULL DEFAULT 'fateclaw_plus',
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL DEFAULT 'fateclaw_clarity',
   status TEXT NOT NULL DEFAULT 'active',
   current_period_start TIMESTAMPTZ NOT NULL,
   current_period_end TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, plan_key)
 );
 CREATE INDEX IF NOT EXISTS idx_user_memberships_active_period
   ON user_memberships(status, current_period_end);
+CREATE INDEX IF NOT EXISTS idx_user_memberships_user_effective
+  ON user_memberships(user_id, status, current_period_end DESC);
+UPDATE user_memberships
+SET plan_key = CASE
+  WHEN plan_key = 'fateclaw_plus' THEN 'fateclaw_insight'
+  WHEN plan_key = 'fateclaw_pro' THEN 'fateclaw_deep'
+  ELSE plan_key
+END
+WHERE plan_key IN ('fateclaw_plus', 'fateclaw_pro');
+DELETE FROM user_memberships a
+USING user_memberships b
+WHERE a.ctid < b.ctid
+  AND a.user_id = b.user_id
+  AND a.plan_key = b.plan_key;
+ALTER TABLE user_memberships
+  ALTER COLUMN plan_key SET DEFAULT 'fateclaw_clarity',
+  DROP CONSTRAINT IF EXISTS user_memberships_pkey,
+  ADD CONSTRAINT user_memberships_pkey PRIMARY KEY (user_id, plan_key);
 
 CREATE TABLE IF NOT EXISTS membership_allowances (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  plan_key TEXT NOT NULL DEFAULT 'fateclaw_plus',
+  plan_key TEXT NOT NULL DEFAULT 'fateclaw_clarity',
   period_start TIMESTAMPTZ NOT NULL,
   period_end TIMESTAMPTZ NOT NULL,
   allowance_units NUMERIC(18,2) NOT NULL,
   used_units NUMERIC(18,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, period_start)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_membership_allowances_user_period
   ON membership_allowances(user_id, period_start DESC);
+UPDATE membership_allowances
+SET plan_key = CASE
+  WHEN plan_key = 'fateclaw_plus' THEN 'fateclaw_insight'
+  WHEN plan_key = 'fateclaw_pro' THEN 'fateclaw_deep'
+  ELSE plan_key
+END
+WHERE plan_key IN ('fateclaw_plus', 'fateclaw_pro');
+DELETE FROM membership_allowances a
+USING membership_allowances b
+WHERE a.ctid < b.ctid
+  AND a.user_id = b.user_id
+  AND a.plan_key = b.plan_key
+  AND a.period_start = b.period_start;
+ALTER TABLE membership_allowances
+  ALTER COLUMN plan_key SET DEFAULT 'fateclaw_clarity',
+  DROP CONSTRAINT IF EXISTS membership_allowances_user_id_period_start_key,
+  DROP CONSTRAINT IF EXISTS membership_allowances_user_plan_period_key,
+  ADD CONSTRAINT membership_allowances_user_plan_period_key
+    UNIQUE (user_id, plan_key, period_start);
 
 CREATE TABLE IF NOT EXISTS runtime_config (
   id TEXT PRIMARY KEY DEFAULT 'default',
@@ -873,13 +921,15 @@ END $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_config_allowance_positive') THEN
+  ALTER TABLE membership_config
+    DROP CONSTRAINT IF EXISTS chk_membership_config_allowance_positive;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_config_allowance_nonnegative') THEN
     UPDATE membership_config
-    SET monthly_allowance_units = 3000000
-    WHERE monthly_allowance_units <= 0;
+    SET monthly_allowance_units = 0
+    WHERE monthly_allowance_units < 0;
     ALTER TABLE membership_config
-      ADD CONSTRAINT chk_membership_config_allowance_positive
-      CHECK (monthly_allowance_units > 0);
+      ADD CONSTRAINT chk_membership_config_allowance_nonnegative
+      CHECK (monthly_allowance_units >= 0);
   END IF;
 END $$;
 
@@ -922,14 +972,16 @@ END $$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_allowances_units_valid') THEN
+  ALTER TABLE membership_allowances
+    DROP CONSTRAINT IF EXISTS chk_membership_allowances_units_valid;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_membership_allowances_units_nonnegative') THEN
     UPDATE membership_allowances
-    SET allowance_units = GREATEST(allowance_units, 1),
+    SET allowance_units = GREATEST(allowance_units, 0),
         used_units = GREATEST(used_units, 0)
-    WHERE allowance_units <= 0 OR used_units < 0;
+    WHERE allowance_units < 0 OR used_units < 0;
     ALTER TABLE membership_allowances
-      ADD CONSTRAINT chk_membership_allowances_units_valid
-      CHECK (allowance_units > 0 AND used_units >= 0);
+      ADD CONSTRAINT chk_membership_allowances_units_nonnegative
+      CHECK (allowance_units >= 0 AND used_units >= 0);
   END IF;
 END $$;
 

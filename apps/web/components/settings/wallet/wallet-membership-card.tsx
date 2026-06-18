@@ -56,16 +56,19 @@ function displayPercent(ratio: number) {
  */
 export function WalletMembershipCard({
   membership,
+  monthlyAllowanceUnits = 0,
   busy,
   onSubscribe,
 }: {
   membership: MembershipStatus;
+  monthlyAllowanceUnits?: number;
   busy: boolean;
   onSubscribe: () => void;
 }) {
   const usedPercent = progressPercent(membership.allowance_used_ratio);
   const usedPercentText = displayPercent(membership.allowance_used_ratio);
   const active = membership.active;
+  const hasAllowance = monthlyAllowanceUnits > 0;
   const planDisplayName = resolveMembershipPlanDisplayName({
     plan_key: membership.plan_key ?? 'fateclaw_clarity',
   });
@@ -80,10 +83,16 @@ export function WalletMembershipCard({
           </div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
             {formatCoins(membership.monthly_price_coins)} / 月 ·
-            会员免费额度优先抵扣 AI Chat 消耗
+            {hasAllowance
+              ? '会员免费额度优先抵扣 AI Chat 消耗'
+              : 'AI Chat 继续使用积分余额计费'}
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {['专家模式', '每日专家次数', '会员额度优先抵扣'].map((item) => (
+            {[
+              '专家模式',
+              '每日专家次数',
+              hasAllowance ? '会员额度优先抵扣' : '积分余额计费',
+            ].map((item) => (
               <span
                 key={item}
                 className="rounded-full border border-hairline bg-surface-cream-strong px-2 py-1 text-[10px] font-medium text-muted"
@@ -107,23 +116,33 @@ export function WalletMembershipCard({
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between gap-3 text-[12px]">
           <span className="font-medium">
-            {membershipStatusText(membership.allowance_status)}
+            {hasAllowance
+              ? membershipStatusText(membership.allowance_status)
+              : '当前套餐无会员免费额度'}
           </span>
           <span className="text-muted">
-            {active ? `已使用 ${usedPercentText}` : '会员免费额度进度'}
+            {hasAllowance && active
+              ? `已使用 ${usedPercentText}`
+              : hasAllowance
+                ? '会员免费额度进度'
+                : '积分余额计费'}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-hairline">
           <div
             className="h-full rounded-full bg-primary transition-[width]"
-            style={{ width: `${active ? usedPercent : 0}%` }}
+            style={{ width: `${active && hasAllowance ? usedPercent : 0}%` }}
           />
         </div>
         <div className="mt-2 text-[11px] leading-5 text-muted">
           {active
-            ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
+            ? hasAllowance
+              ? `${resetText(membership.allowance_reset_at)}；额度用完后将继续使用积分余额。`
+              : '当前套餐未配置会员免费额度，AI Chat 会继续使用积分余额计费。'
             : membership.enabled
-              ? '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
+              ? hasAllowance
+                ? '开通后会员免费额度优先抵扣 AI Chat 消耗；额度用完后继续使用积分余额。'
+                : '当前套餐未配置会员免费额度，开通后 AI Chat 仍使用积分余额计费。'
               : '会员暂未开放购买，当前仍按积分余额扣费。'}
         </div>
       </div>

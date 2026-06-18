@@ -492,6 +492,7 @@ export const enMessages = {
       planBenefitDeepAllowance: 'Deep includes more allowance',
       planBenefitDeepSupport: 'Priority support',
       planBenefitDeepExpert: 'Includes Insight expert access',
+      planBenefitNoAllowance: 'AI Chat continues to use credit balance',
       expiresAt: 'Expires at',
       monthlyUsage: 'Monthly usage',
       membershipPrice: 'Membership price',
@@ -501,13 +502,19 @@ export const enMessages = {
       allowanceUsageAria: 'Monthly included member allowance usage',
       usedPercent: '{percent} used',
       progressAfterSubscribe: 'Allowance progress appears after subscribing',
+      noAllowanceProgress: 'No included allowance on this plan',
+      noAllowanceStatus: 'AI Chat uses credit balance',
       entitlementTimeline: 'Entitlement timeline',
       entitlementCurrent: 'Current',
       entitlementUpcoming: 'Upcoming',
       entitlementFallbackHint: 'Then returns to {plan} until {date}',
       activeHint: '{reset}; credit balance is used after allowance is used up.',
+      noAllowanceActiveHint:
+        'This plan has no included member allowance. AI Chat continues to use credit balance.',
       inactiveHint:
         'Included member allowance is used before credit balance after subscribing.',
+      noAllowanceInactiveHint:
+        'This plan has no included member allowance. AI Chat will use credit balance after subscribing.',
       disabledHint:
         'Insight purchase is not open yet. Credit balance billing remains active.',
       confirmRenewTitle: 'Confirm renewal',
