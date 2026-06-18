@@ -40,6 +40,7 @@ import {
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
   MAX_SKILL_BUNDLE_ZIP_BYTES,
+  MAX_USER_SKILLS,
   type SkillBundleLimitsDto,
 } from '@fateclaw/contracts/skills';
 import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
@@ -71,6 +72,7 @@ export const DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS = MAX_SKILL_BUNDLE_FILE_LENGTH;
 export const DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS =
   MAX_SKILL_BUNDLE_TOTAL_LENGTH;
 export const DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES = MAX_SKILL_BUNDLE_ZIP_BYTES;
+export const DEFAULT_USER_SKILL_MAX_COUNT = MAX_USER_SKILLS;
 const CUSTOM_MODEL_MEMBERSHIP_REQUIRED_MESSAGE =
   '自配模型为会员专属，请开通会员后使用';
 
@@ -791,6 +793,7 @@ export async function getSystemConfigOverview(): Promise<{
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
+    user_skill_max_count: number;
     skill_bundle_max_files: number;
     skill_bundle_max_file_chars: number;
     skill_bundle_max_total_chars: number;
@@ -826,6 +829,12 @@ export async function getSystemConfigOverview(): Promise<{
       pi_session_inactive_cleanup_days:
         runtime.pi_session_inactive_cleanup_days,
       pi_session_orphan_grace_days: runtime.pi_session_orphan_grace_days,
+      user_skill_max_count: normalizePolicyInteger(
+        runtime.user_skill_max_count,
+        DEFAULT_USER_SKILL_MAX_COUNT,
+        1,
+        500,
+      ),
       skill_bundle_max_files: skillBundleLimits.max_files,
       skill_bundle_max_file_chars: skillBundleLimits.max_file_chars,
       skill_bundle_max_total_chars: skillBundleLimits.max_total_chars,
@@ -943,6 +952,19 @@ export async function getSkillBundleLimitsPolicy(): Promise<SkillBundleLimitsPol
 }
 
 /**
+ * 读取用户自定义 Skill 数量上限，创建 Skill 时按后台配置动态限制。
+ */
+export async function getUserSkillLimitPolicy(): Promise<number> {
+  const runtime = await getRuntimeConfig();
+  return normalizePolicyInteger(
+    runtime.user_skill_max_count,
+    DEFAULT_USER_SKILL_MAX_COUNT,
+    1,
+    500,
+  );
+}
+
+/**
  * 更新全站 Agent 运行时策略。
  */
 export async function updateRuntimeSettings(args: {
@@ -954,6 +976,7 @@ export async function updateRuntimeSettings(args: {
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
+  userSkillMaxCount?: number;
   skillBundleMaxFiles?: number;
   skillBundleMaxFileChars?: number;
   skillBundleMaxTotalChars?: number;
@@ -968,6 +991,7 @@ export async function updateRuntimeSettings(args: {
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
+  user_skill_max_count: number;
   skill_bundle_max_files: number;
   skill_bundle_max_file_chars: number;
   skill_bundle_max_total_chars: number;
@@ -993,6 +1017,7 @@ export async function updateRuntimeSettings(args: {
     piSessionHealthEnabled: args.piSessionHealthEnabled,
     piSessionInactiveCleanupDays: args.piSessionInactiveCleanupDays,
     piSessionOrphanGraceDays: args.piSessionOrphanGraceDays,
+    userSkillMaxCount: args.userSkillMaxCount,
     skillBundleMaxFiles: args.skillBundleMaxFiles,
     skillBundleMaxFileChars: args.skillBundleMaxFileChars,
     skillBundleMaxTotalChars: args.skillBundleMaxTotalChars,
@@ -1008,6 +1033,12 @@ export async function updateRuntimeSettings(args: {
     after: updated,
   });
   const skillBundleLimits = runtimeToSkillBundleLimits(updated);
+  const userSkillMaxCount = normalizePolicyInteger(
+    updated.user_skill_max_count,
+    DEFAULT_USER_SKILL_MAX_COUNT,
+    1,
+    500,
+  );
   return {
     agent_concurrency_limit: updated.agent_concurrency_limit,
     local_agent_max_processes: updated.local_agent_max_processes,
@@ -1019,6 +1050,7 @@ export async function updateRuntimeSettings(args: {
     pi_session_health_enabled: updated.pi_session_health_enabled,
     pi_session_inactive_cleanup_days: updated.pi_session_inactive_cleanup_days,
     pi_session_orphan_grace_days: updated.pi_session_orphan_grace_days,
+    user_skill_max_count: userSkillMaxCount,
     skill_bundle_max_files: skillBundleLimits.max_files,
     skill_bundle_max_file_chars: skillBundleLimits.max_file_chars,
     skill_bundle_max_total_chars: skillBundleLimits.max_total_chars,
@@ -1185,15 +1217,21 @@ export async function removeOfficialModel(
 export async function getUserModelSettingsOverview(
   userId: string,
 ): Promise<UserModelSettingsOverview> {
-  const [custom, selection, officialModels, modelBilling, runtime, entitlement] =
-    await Promise.all([
-      getUserModelConfig(userId),
-      getUserModelSelection(userId),
-      listOfficialModelViews(),
-      getModelBillingConfig(),
-      getRuntimeConfig(),
-      getRuntimeEntitlementSnapshot(userId),
-    ]);
+  const [
+    custom,
+    selection,
+    officialModels,
+    modelBilling,
+    runtime,
+    entitlement,
+  ] = await Promise.all([
+    getUserModelConfig(userId),
+    getUserModelSelection(userId),
+    listOfficialModelViews(),
+    getModelBillingConfig(),
+    getRuntimeConfig(),
+    getRuntimeEntitlementSnapshot(userId),
+  ]);
   const customSecret = custom
     ? await resolveSecret({
         secretKey: custom.api_key_secret_key,

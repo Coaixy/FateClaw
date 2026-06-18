@@ -30,6 +30,7 @@ const {
   const mockRedeemSkillAccessInvite = vi.fn();
   const mockRevokeSkillAccessInvite = vi.fn();
   const mockSetUserSkillReaction = vi.fn();
+  const mockCreateUserCustomSkill = vi.fn();
   const noop = vi.fn();
   return {
     mockCheckSkillCommentSubmissionGuard,
@@ -60,7 +61,7 @@ const {
       revokeSkillAccessInvite: mockRevokeSkillAccessInvite,
       setUserSkillReaction: mockSetUserSkillReaction,
       createSkillBundle: noop,
-      createUserCustomSkill: noop,
+      createUserCustomSkill: mockCreateUserCustomSkill,
       deleteSkillBundle: noop,
       deleteUserCustomSkill: noop,
       getBundleByToken: noop,
@@ -75,6 +76,7 @@ const {
       getUserCustomSkill: noop,
       getUserCustomSkillCount: noop,
       getUserCustomSkills: noop,
+      getUserSkillLimitPolicy: vi.fn(async () => 30),
       listMarketBundles: noop,
       listMarketSkills: noop,
       listUserBundles: noop,
@@ -243,6 +245,37 @@ describe('skillsRoutes access invites', () => {
         user_id: 'user-1',
         dir_name: 'user-我的 Skill',
       }),
+    );
+  });
+
+  it('uses runtime config when checking user custom skill count limit', async () => {
+    const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
+    const createCallCount =
+      serviceMocks.createUserCustomSkill.mock.calls.length;
+    serviceMocks.getUserSkillLimitPolicy.mockResolvedValueOnce(2);
+    serviceMocks.getUserCustomSkillCount.mockResolvedValueOnce(2);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/user',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        skill_name: '第三个 Skill',
+        files: [
+          {
+            path: 'SKILL.md',
+            content: '---\nname: 第三个 Skill\ndescription: desc\n---\n',
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: '自定义技能数量已达上限（2）',
+    });
+    expect(serviceMocks.createUserCustomSkill).toHaveBeenCalledTimes(
+      createCallCount,
     );
   });
 

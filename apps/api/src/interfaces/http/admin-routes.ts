@@ -532,6 +532,12 @@ const RuntimeConfigSchema = z
       .min(1, 'Pi session 孤儿文件保护天数不能少于 1 天')
       .max(3650, 'Pi session 孤儿文件保护天数不能超过 3650 天')
       .optional(),
+    user_skill_max_count: z
+      .number()
+      .int('用户 Skill 数量上限必须是整数')
+      .min(1, '用户 Skill 数量上限不能少于 1 个')
+      .max(500, '用户 Skill 数量上限不能超过 500 个')
+      .optional(),
     skill_bundle_max_files: z
       .number()
       .int('Skill 文件数上限必须是整数')
@@ -1003,6 +1009,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         piSessionInactiveCleanupDays:
           parsed.data.pi_session_inactive_cleanup_days,
         piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
+        userSkillMaxCount: parsed.data.user_skill_max_count,
         skillBundleMaxFiles: parsed.data.skill_bundle_max_files,
         skillBundleMaxFileChars: parsed.data.skill_bundle_max_file_chars,
         skillBundleMaxTotalChars: parsed.data.skill_bundle_max_total_chars,

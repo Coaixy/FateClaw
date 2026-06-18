@@ -1,7 +1,8 @@
 import type { DatabaseMigration } from '../types.js';
+import { ensureCheckConstraint } from '../helpers.js';
 
 /**
- * 数据库迁移分段：0045-0047。
+ * 数据库迁移分段：0045-0048。
  */
 export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
   {
@@ -254,6 +255,24 @@ export const sqlReviewFixMigrations: readonly DatabaseMigration[] = [
             )
           )
       `);
+    },
+  },
+  {
+    id: '0048_user_skill_runtime_limit',
+    description: '增加用户自定义 Skill 数量上限后台配置',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE runtime_config
+          ADD COLUMN IF NOT EXISTS user_skill_max_count INTEGER NOT NULL DEFAULT 30
+      `);
+      await ensureCheckConstraint(client, {
+        constraintName: 'chk_runtime_config_user_skill_max_count_range',
+        tableName: 'runtime_config',
+        expression: 'user_skill_max_count BETWEEN 1 AND 500',
+        cleanupSql: `UPDATE runtime_config
+                     SET user_skill_max_count = LEAST(GREATEST(user_skill_max_count, 1), 500)
+                     WHERE user_skill_max_count < 1 OR user_skill_max_count > 500`,
+      });
     },
   },
 ];

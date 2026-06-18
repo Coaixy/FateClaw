@@ -356,6 +356,8 @@ export interface RuntimeConfig {
   pi_session_health_enabled: boolean;
   pi_session_inactive_cleanup_days: number;
   pi_session_orphan_grace_days: number;
+  /** 用户可创建的自定义 Skill 数量上限。 */
+  user_skill_max_count: number;
   skill_bundle_max_files: number;
   skill_bundle_max_file_chars: number;
   skill_bundle_max_total_chars: number;

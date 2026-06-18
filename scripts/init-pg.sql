@@ -646,6 +646,7 @@ CREATE TABLE IF NOT EXISTS runtime_config (
   pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
   pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
   pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,
+  user_skill_max_count INTEGER NOT NULL DEFAULT 30,
   skill_bundle_max_files INTEGER NOT NULL DEFAULT 50,
   skill_bundle_max_file_chars INTEGER NOT NULL DEFAULT 100000,
   skill_bundle_max_total_chars INTEGER NOT NULL DEFAULT 500000,
@@ -663,6 +664,7 @@ ALTER TABLE runtime_config
   ADD COLUMN IF NOT EXISTS pi_session_health_enabled BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS pi_session_inactive_cleanup_days INTEGER NOT NULL DEFAULT 30,
   ADD COLUMN IF NOT EXISTS pi_session_orphan_grace_days INTEGER NOT NULL DEFAULT 30,
+  ADD COLUMN IF NOT EXISTS user_skill_max_count INTEGER NOT NULL DEFAULT 30,
   ADD COLUMN IF NOT EXISTS skill_bundle_max_files INTEGER NOT NULL DEFAULT 50,
   ADD COLUMN IF NOT EXISTS skill_bundle_max_file_chars INTEGER NOT NULL DEFAULT 100000,
   ADD COLUMN IF NOT EXISTS skill_bundle_max_total_chars INTEGER NOT NULL DEFAULT 500000,
@@ -994,6 +996,18 @@ BEGIN
     ALTER TABLE runtime_config
       ADD CONSTRAINT chk_runtime_config_agent_concurrency_limit_positive
       CHECK (agent_concurrency_limit > 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_runtime_config_user_skill_max_count_range') THEN
+    UPDATE runtime_config
+    SET user_skill_max_count = LEAST(GREATEST(user_skill_max_count, 1), 500)
+    WHERE user_skill_max_count < 1 OR user_skill_max_count > 500;
+    ALTER TABLE runtime_config
+      ADD CONSTRAINT chk_runtime_config_user_skill_max_count_range
+      CHECK (user_skill_max_count BETWEEN 1 AND 500);
   END IF;
 END $$;
 

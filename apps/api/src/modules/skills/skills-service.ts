@@ -13,7 +13,10 @@ import {
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
   MAX_USER_SKILLS,
 } from '@fateclaw/contracts/skills';
-import { getSkillBundleLimitsPolicy } from '../system/system-config.js';
+import {
+  getSkillBundleLimitsPolicy,
+  getUserSkillLimitPolicy,
+} from '../system/system-config.js';
 
 import {
   checkSkillCommentSubmissionGuard,
@@ -115,6 +118,7 @@ export {
 
 export {
   getSkillBundleLimitsPolicy,
+  getUserSkillLimitPolicy,
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,

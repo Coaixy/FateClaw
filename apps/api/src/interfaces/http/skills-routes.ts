@@ -26,6 +26,7 @@ import {
   getUserCustomSkill,
   getUserCustomSkillCount,
   getUserCustomSkills,
+  getUserSkillLimitPolicy,
   getUserSkillReaction,
   hasActiveMembership,
   listPublicSkillComments,
@@ -39,7 +40,6 @@ import {
   redeemSkillAccessInvite,
   revokeSkillAccessInvite,
   setUserSkillReaction,
-  MAX_USER_SKILLS,
   shareSkillBundle,
   shareUserCustomSkill,
   slugifySkillName,
@@ -327,11 +327,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'files 必须是文本文件数组' });
     }
 
+    const maxUserSkills = await getUserSkillLimitPolicy();
     const count = await getUserCustomSkillCount(userId);
-    if (count >= MAX_USER_SKILLS) {
+    if (count >= maxUserSkills) {
       return reply
         .code(400)
-        .send({ error: `自定义技能数量已达上限（${MAX_USER_SKILLS}）` });
+        .send({ error: `自定义技能数量已达上限（${maxUserSkills}）` });
     }
 
     try {

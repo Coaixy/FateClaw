@@ -71,6 +71,7 @@ import {
   getPiSessionHealthPolicy,
   getSkillBundleLimitsPolicy,
   getSystemConfigOverview,
+  getUserSkillLimitPolicy,
   getUserModelSettingsOverview,
   listOfficialModelViews,
   normalizeCustomModelBaseUrl,
@@ -82,6 +83,7 @@ import {
 } from '../../../src/modules/system/system-config.js';
 import type {
   OfficialModelConfig,
+  RuntimeConfig,
   SystemSecretRow,
   UserModelConfig,
 } from '../../../src/shared/types.js';
@@ -138,6 +140,27 @@ function membership(active = true) {
   };
 }
 
+function runtimeConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
+  return {
+    id: 'default',
+    agent_concurrency_limit: 10,
+    local_agent_max_processes: 4,
+    local_agent_idle_ttl_ms: 600_000,
+    default_official_model_id: null,
+    default_thinking_level: 'medium',
+    pi_session_health_enabled: false,
+    pi_session_inactive_cleanup_days: 30,
+    pi_session_orphan_grace_days: 30,
+    user_skill_max_count: 30,
+    skill_bundle_max_files: 50,
+    skill_bundle_max_file_chars: 100_000,
+    skill_bundle_max_total_chars: 500_000,
+    skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
+    updated_at: '2026-05-04T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('resolveUserLlmRuntime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -155,22 +178,7 @@ describe('resolveUserLlmRuntime', () => {
       reserved_coins: 0,
     });
     mockGetMembershipOverview.mockResolvedValue(membership());
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(runtimeConfig());
   });
 
   it('rejects when the user has no explicit selection', async () => {
@@ -220,22 +228,11 @@ describe('resolveUserLlmRuntime', () => {
 
   it('uses the configured default official model before the lowest priced fallback', async () => {
     mockGetUserModelSelection.mockResolvedValue(undefined);
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: 'configured-default',
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        default_official_model_id: 'configured-default',
+      }),
+    );
     mockGetOfficialModelConfig.mockResolvedValue(
       official({
         id: 'configured-default',
@@ -267,22 +264,11 @@ describe('resolveUserLlmRuntime', () => {
 
   it('uses the configured default thinking level when the user has no selection', async () => {
     mockGetUserModelSelection.mockResolvedValue(undefined);
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'high',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        default_thinking_level: 'high',
+      }),
+    );
     mockListOfficialModelConfigs.mockResolvedValue([
       official({
         id: 'fallback',
@@ -301,22 +287,11 @@ describe('resolveUserLlmRuntime', () => {
 
   it('falls back to the lowest priced model when the configured default is unusable', async () => {
     mockGetUserModelSelection.mockResolvedValue(undefined);
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: 'configured-default',
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        default_official_model_id: 'configured-default',
+      }),
+    );
     mockGetOfficialModelConfig.mockResolvedValue(
       official({
         id: 'configured-default',
@@ -558,22 +533,12 @@ describe('getLocalAgentRuntimePolicy', () => {
   });
 
   it('normalizes local agent process and idle ttl limits', async () => {
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 999,
-      local_agent_idle_ttl_ms: 1,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        local_agent_max_processes: 999,
+        local_agent_idle_ttl_ms: 1,
+      }),
+    );
     mockGetUserById.mockResolvedValue({
       id: 'user-1',
       purchased_coins: 0,
@@ -594,22 +559,13 @@ describe('getPiSessionHealthPolicy', () => {
   });
 
   it('normalizes Pi session health policy days', async () => {
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: true,
-      pi_session_inactive_cleanup_days: 0,
-      pi_session_orphan_grace_days: 5000,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        pi_session_health_enabled: true,
+        pi_session_inactive_cleanup_days: 0,
+        pi_session_orphan_grace_days: 5000,
+      }),
+    );
     mockGetUserById.mockResolvedValue({
       id: 'user-1',
       purchased_coins: 0,
@@ -631,22 +587,14 @@ describe('getSkillBundleLimitsPolicy', () => {
   });
 
   it('normalizes Skill Bundle file limits from runtime config', async () => {
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 999,
-      skill_bundle_max_file_chars: 3_000_000,
-      skill_bundle_max_total_chars: 2,
-      skill_bundle_max_zip_bytes: 1,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        skill_bundle_max_files: 999,
+        skill_bundle_max_file_chars: 3_000_000,
+        skill_bundle_max_total_chars: 2,
+        skill_bundle_max_zip_bytes: 1,
+      }),
+    );
 
     await expect(getSkillBundleLimitsPolicy()).resolves.toEqual({
       max_files: 500,
@@ -654,6 +602,22 @@ describe('getSkillBundleLimitsPolicy', () => {
       max_total_chars: 2_000_000,
       max_zip_bytes: 1024,
     });
+  });
+});
+
+describe('getUserSkillLimitPolicy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('normalizes user custom skill count limit from runtime config', async () => {
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        user_skill_max_count: 999,
+      }),
+    );
+
+    await expect(getUserSkillLimitPolicy()).resolves.toBe(500);
   });
 });
 
@@ -789,22 +753,15 @@ describe('listOfficialModelViews', () => {
       custom_model_platform_price_per_million_coins: 2,
       updated_at: '2026-05-04T00:00:00.000Z',
     });
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 12,
-      skill_bundle_max_file_chars: 20_000,
-      skill_bundle_max_total_chars: 80_000,
-      skill_bundle_max_zip_bytes: 2 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        user_skill_max_count: 42,
+        skill_bundle_max_files: 12,
+        skill_bundle_max_file_chars: 20_000,
+        skill_bundle_max_total_chars: 80_000,
+        skill_bundle_max_zip_bytes: 2 * 1024 * 1024,
+      }),
+    );
   });
 
   it('does not expose official model API keys by default', async () => {
@@ -879,22 +836,11 @@ describe('setUserModelSelection', () => {
     vi.clearAllMocks();
     mockGetUserModelSelection.mockResolvedValue(undefined);
     mockGetMembershipOverview.mockResolvedValue(membership());
-    mockGetRuntimeConfig.mockResolvedValue({
-      id: 'default',
-      agent_concurrency_limit: 10,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'high',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-05-04T00:00:00.000Z',
-    });
+    mockGetRuntimeConfig.mockResolvedValue(
+      runtimeConfig({
+        default_thinking_level: 'high',
+      }),
+    );
     mockUpsertUserModelSelection.mockResolvedValue({
       user_id: 'user-1',
       source: 'custom',

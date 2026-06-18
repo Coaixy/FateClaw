@@ -13,6 +13,7 @@ import {
   MAX_SKILL_BUNDLE_FILES,
   MAX_SKILL_BUNDLE_TOTAL_LENGTH,
   MAX_SKILL_BUNDLE_ZIP_BYTES,
+  MAX_USER_SKILLS,
 } from '@fateclaw/contracts/skills';
 import { getDbPool } from '../db-pool.js';
 
@@ -260,13 +261,15 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
        local_agent_idle_ttl_ms, default_official_model_id, default_thinking_level,
        pi_session_health_enabled,
        pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
+       user_skill_max_count,
        skill_bundle_max_files, skill_bundle_max_file_chars,
        skill_bundle_max_total_chars, skill_bundle_max_zip_bytes
      )
-     VALUES ('default', 10, 4, 600000, NULL, 'medium', false, 30, 30, $1, $2, $3, $4)
+     VALUES ('default', 10, 4, 600000, NULL, 'medium', false, 30, 30, $1, $2, $3, $4, $5)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
     [
+      MAX_USER_SKILLS,
       MAX_SKILL_BUNDLE_FILES,
       MAX_SKILL_BUNDLE_FILE_LENGTH,
       MAX_SKILL_BUNDLE_TOTAL_LENGTH,
@@ -288,6 +291,7 @@ export async function updateRuntimeConfig(input: {
   piSessionHealthEnabled?: boolean;
   piSessionInactiveCleanupDays?: number;
   piSessionOrphanGraceDays?: number;
+  userSkillMaxCount?: number;
   skillBundleMaxFiles?: number;
   skillBundleMaxFileChars?: number;
   skillBundleMaxTotalChars?: number;
@@ -337,10 +341,15 @@ export async function updateRuntimeConfig(input: {
     Math.max(
       1,
       Math.floor(
-        input.piSessionOrphanGraceDays ??
-          current.pi_session_orphan_grace_days,
+        input.piSessionOrphanGraceDays ?? current.pi_session_orphan_grace_days,
       ),
     ),
+  );
+  const userSkillMaxCount = clampInteger(
+    input.userSkillMaxCount ?? current.user_skill_max_count,
+    MAX_USER_SKILLS,
+    1,
+    500,
   );
   const skillBundleMaxFiles = clampInteger(
     input.skillBundleMaxFiles ?? current.skill_bundle_max_files,
@@ -372,11 +381,12 @@ export async function updateRuntimeConfig(input: {
        local_agent_idle_ttl_ms, default_official_model_id, default_thinking_level,
        pi_session_health_enabled,
        pi_session_inactive_cleanup_days, pi_session_orphan_grace_days,
+       user_skill_max_count,
        skill_bundle_max_files, skill_bundle_max_file_chars,
        skill_bundle_max_total_chars, skill_bundle_max_zip_bytes,
        updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
        local_agent_max_processes = EXCLUDED.local_agent_max_processes,
@@ -386,6 +396,7 @@ export async function updateRuntimeConfig(input: {
        pi_session_health_enabled = EXCLUDED.pi_session_health_enabled,
        pi_session_inactive_cleanup_days = EXCLUDED.pi_session_inactive_cleanup_days,
        pi_session_orphan_grace_days = EXCLUDED.pi_session_orphan_grace_days,
+       user_skill_max_count = EXCLUDED.user_skill_max_count,
        skill_bundle_max_files = EXCLUDED.skill_bundle_max_files,
        skill_bundle_max_file_chars = EXCLUDED.skill_bundle_max_file_chars,
        skill_bundle_max_total_chars = EXCLUDED.skill_bundle_max_total_chars,
@@ -401,6 +412,7 @@ export async function updateRuntimeConfig(input: {
       piSessionHealthEnabled,
       piSessionInactiveCleanupDays,
       piSessionOrphanGraceDays,
+      userSkillMaxCount,
       skillBundleMaxFiles,
       skillBundleMaxFileChars,
       skillBundleMaxTotalChars,

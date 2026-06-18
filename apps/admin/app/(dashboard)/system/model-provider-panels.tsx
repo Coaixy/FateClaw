@@ -204,6 +204,7 @@ export function RuntimeConfigPanel({
     pi_session_health_enabled: boolean;
     pi_session_inactive_cleanup_days: number;
     pi_session_orphan_grace_days: number;
+    user_skill_max_count: number;
     skill_bundle_max_files: number;
     skill_bundle_max_file_chars: number;
     skill_bundle_max_total_chars: number;
@@ -232,6 +233,9 @@ export function RuntimeConfigPanel({
   const [piOrphanGraceDays, setPiOrphanGraceDays] = useState(
     runtime.pi_session_orphan_grace_days,
   );
+  const [userSkillMaxCount, setUserSkillMaxCount] = useState(
+    runtime.user_skill_max_count,
+  );
   const [skillMaxFiles, setSkillMaxFiles] = useState(
     runtime.skill_bundle_max_files,
   );
@@ -254,6 +258,7 @@ export function RuntimeConfigPanel({
     setPiHealthEnabled(runtime.pi_session_health_enabled);
     setPiInactiveDays(runtime.pi_session_inactive_cleanup_days);
     setPiOrphanGraceDays(runtime.pi_session_orphan_grace_days);
+    setUserSkillMaxCount(runtime.user_skill_max_count);
     setSkillMaxFiles(runtime.skill_bundle_max_files);
     setSkillMaxFileChars(runtime.skill_bundle_max_file_chars);
     setSkillMaxTotalChars(runtime.skill_bundle_max_total_chars);
@@ -269,6 +274,7 @@ export function RuntimeConfigPanel({
     runtime.pi_session_health_enabled,
     runtime.pi_session_inactive_cleanup_days,
     runtime.pi_session_orphan_grace_days,
+    runtime.user_skill_max_count,
     runtime.skill_bundle_max_file_chars,
     runtime.skill_bundle_max_files,
     runtime.skill_bundle_max_total_chars,
@@ -300,6 +306,10 @@ export function RuntimeConfigPanel({
       3650,
       Math.max(1, Math.floor(piOrphanGraceDays)),
     ),
+    user_skill_max_count: Math.min(
+      500,
+      Math.max(1, Math.floor(userSkillMaxCount)),
+    ),
     skill_bundle_max_files: Math.min(
       500,
       Math.max(1, Math.floor(skillMaxFiles)),
@@ -326,6 +336,7 @@ export function RuntimeConfigPanel({
       runtime.pi_session_inactive_cleanup_days ||
     normalized.pi_session_orphan_grace_days !==
       runtime.pi_session_orphan_grace_days ||
+    normalized.user_skill_max_count !== runtime.user_skill_max_count ||
     normalized.skill_bundle_max_files !== runtime.skill_bundle_max_files ||
     normalized.skill_bundle_max_file_chars !==
       runtime.skill_bundle_max_file_chars ||
@@ -340,7 +351,8 @@ export function RuntimeConfigPanel({
         <div className="min-w-0">
           <div className="text-sm font-semibold">Agent 运行时策略</div>
           <div className="mt-1 text-[12px] leading-5 text-muted">
-            控制请求并发、常驻 agent-runtime、空闲回收和 Pi session 自动健康维护。
+            控制请求并发、常驻 agent-runtime、空闲回收和 Pi session
+            自动健康维护。
           </div>
           <div className="mt-3 grid gap-1 text-[12px] text-muted">
             <div>
@@ -349,12 +361,14 @@ export function RuntimeConfigPanel({
               {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收
             </div>
             <div>
-              当前 Pi：{runtime.pi_session_health_enabled ? '自动维护' : '手动维护'} /{' '}
+              当前 Pi：
+              {runtime.pi_session_health_enabled ? '自动维护' : '手动维护'} /{' '}
               {runtime.pi_session_inactive_cleanup_days} 天未活跃 /{' '}
               {runtime.pi_session_orphan_grace_days} 天孤儿保护
             </div>
             <div>
-              当前 Skill：{runtime.skill_bundle_max_files} 文件 / 单文件{' '}
+              当前 Skill：每人 {runtime.user_skill_max_count} 个 /{' '}
+              {runtime.skill_bundle_max_files} 文件 / 单文件{' '}
               {runtime.skill_bundle_max_file_chars.toLocaleString()} 字 / 总计{' '}
               {runtime.skill_bundle_max_total_chars.toLocaleString()} 字
             </div>
@@ -420,7 +434,8 @@ export function RuntimeConfigPanel({
                 value={defaultThinkingLevel}
                 onChange={(event) =>
                   setDefaultThinkingLevel(
-                    event.target.value as AdminRuntimeConfig['default_thinking_level'],
+                    event.target
+                      .value as AdminRuntimeConfig['default_thinking_level'],
                   )
                 }
                 className={CONTROL}
@@ -443,9 +458,7 @@ export function RuntimeConfigPanel({
                 <input
                   type="checkbox"
                   checked={piHealthEnabled}
-                  onChange={(event) =>
-                    setPiHealthEnabled(event.target.checked)
-                  }
+                  onChange={(event) => setPiHealthEnabled(event.target.checked)}
                   className="h-4 w-4 accent-primary"
                 />
                 自动维护
@@ -471,7 +484,14 @@ export function RuntimeConfigPanel({
             <div className="mb-2 text-[12px] font-medium text-muted">
               Skill Bundle 限制
             </div>
-            <div className="grid gap-2 md:grid-cols-4">
+            <div className="grid gap-2 md:grid-cols-5">
+              <NumberField
+                label="每人 Skill 数"
+                value={userSkillMaxCount}
+                onChange={setUserSkillMaxCount}
+                min={1}
+                max={500}
+              />
               <NumberField
                 label="文本文件数"
                 value={skillMaxFiles}

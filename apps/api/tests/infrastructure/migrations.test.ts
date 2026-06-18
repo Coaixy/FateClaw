@@ -345,6 +345,9 @@ describe('runDatabaseMigrations', () => {
       calls.some((call) => call.sql.includes('skill_bundle_max_files')),
     ).toBe(true);
     expect(
+      calls.some((call) => call.sql.includes('user_skill_max_count')),
+    ).toBe(true);
+    expect(
       calls.some((call) =>
         call.sql.includes('CREATE TABLE IF NOT EXISTS announcements'),
       ),
@@ -359,6 +362,11 @@ describe('runDatabaseMigrations', () => {
         call.sql.includes(
           'chk_runtime_config_skill_bundle_total_chars_at_least_file_chars',
         ),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) =>
+        call.sql.includes('chk_runtime_config_user_skill_max_count_range'),
       ),
     ).toBe(true);
     expect(
@@ -462,6 +470,8 @@ describe('runDatabaseMigrations', () => {
       '0044_referral_reward_membership_plan',
       '0045_sql_review_indexes_and_bundle_stats',
       '0046_skill_reactions_and_comments',
+      '0047_membership_default_pricing_snapshot',
+      '0048_user_skill_runtime_limit',
     ]);
 
     await runDatabaseMigrations(client as never);
