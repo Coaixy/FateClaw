@@ -801,8 +801,6 @@ export const zhCNMessages = {
       high: '高',
       xhigh: '极高',
     },
-    continuationBlockedFallback:
-      '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。',
     loadModelSettingsFailed: '加载模型设置失败',
     loadPaipanFailed: '加载排盘术数失败',
     sendFailed: '发送失败，请稍后重试',

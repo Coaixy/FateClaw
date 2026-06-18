@@ -18,13 +18,13 @@ function formatDebugJson(value: unknown): string {
 }
 
 /**
- * 仅在开发环境展示 artifact 的 formatter 文本和结构化数据，便于核对模型实际可见内容。
+ * 按需展示 artifact 的 formatter 文本和结构化数据，便于核对模型实际可见内容。
  */
 export function ArtifactDebug({ entries }: ArtifactDebugProps) {
   const [expanded, setExpanded] = useState(false);
 
-  // 仅 dev 模式显示
-  if (process.env.NODE_ENV !== 'development') return null;
+  // 调试面板会打断盘面阅读，默认不在本地会话流里展示；需要排查结构化数据时再显式打开。
+  if (process.env.NEXT_PUBLIC_SHOW_ARTIFACT_DEBUG !== '1') return null;
   if (entries.length === 0) return null;
 
   return (

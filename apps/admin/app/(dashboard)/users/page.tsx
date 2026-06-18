@@ -85,18 +85,26 @@ function dateInputValue(iso: string | null) {
   ].join('-');
 }
 
-function defaultMembershipEndDate() {
-  const next = new Date();
-  next.setMonth(next.getMonth() + 1);
-  return [
-    next.getFullYear(),
-    String(next.getMonth() + 1).padStart(2, '0'),
-    String(next.getDate()).padStart(2, '0'),
-  ].join('-');
+function dateTimeInputValue(iso: string | null) {
+  if (!iso) return '';
+  const parsed = new Date(iso);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  const date = dateInputValue(iso);
+  return `${date}T${String(parsed.getHours()).padStart(2, '0')}:${String(
+    parsed.getMinutes(),
+  ).padStart(2, '0')}`;
 }
 
-function endOfChinaDateIso(date: string) {
-  return new Date(`${date}T23:59:59.999+08:00`).toISOString();
+function defaultMembershipEndDateTime() {
+  const next = new Date();
+  next.setMonth(next.getMonth() + 1);
+  return `${dateInputValue(next.toISOString())}T${String(
+    next.getHours(),
+  ).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`;
+}
+
+function chinaDateTimeIso(value: string) {
+  return new Date(`${value}:00+08:00`).toISOString();
 }
 
 function percent(value: number) {
@@ -383,10 +391,17 @@ function UserRow({
   const [grantingBonus, setGrantingBonus] = useState(false);
   const [updatingMembership, setUpdatingMembership] = useState(false);
   const [cancellingMembership, setCancellingMembership] = useState(false);
+  const [cancellingMembershipPlan, setCancellingMembershipPlan] = useState<
+    string | null
+  >(null);
+  const [resettingAllowance, setResettingAllowance] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmCancelMembership, setConfirmCancelMembership] = useState(false);
+  const [confirmCancelMembershipPlan, setConfirmCancelMembershipPlan] =
+    useState<string | null>(null);
+  const [confirmResetAllowance, setConfirmResetAllowance] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [msg, setMsg] = useState('');
@@ -453,10 +468,12 @@ function UserRow({
         'fateclaw_clarity',
     );
     setMembershipEndDate(
-      dateInputValue(detail.membership.current_period_end) ||
-        defaultMembershipEndDate(),
+      dateTimeInputValue(detail.membership.current_period_end) ||
+        defaultMembershipEndDateTime(),
     );
     setConfirmCancelMembership(false);
+    setConfirmCancelMembershipPlan(null);
+    setConfirmResetAllowance(false);
   }, [detail]);
 
   useEffect(() => {
@@ -572,7 +589,7 @@ function UserRow({
     }
     let currentPeriodEnd: string;
     try {
-      currentPeriodEnd = endOfChinaDateIso(membershipEndDate);
+      currentPeriodEnd = chinaDateTimeIso(membershipEndDate);
     } catch {
       setMsg('会员有效期格式不正确');
       return;
@@ -616,6 +633,46 @@ function UserRow({
       setMsg(formatAdminErrorMessage(err, '停用会员失败'));
     } finally {
       setCancellingMembership(false);
+    }
+  };
+
+  const handleCancelMembershipPlan = async (planKey: string) => {
+    if (confirmCancelMembershipPlan !== planKey) {
+      setConfirmCancelMembershipPlan(planKey);
+      return;
+    }
+    setCancellingMembershipPlan(planKey);
+    setMsg('');
+    try {
+      const state = await admin.cancelUserMembershipPlan(user.id, planKey);
+      applyMembershipState(state);
+      setConfirmCancelMembershipPlan(null);
+      setMsg(`${membershipPlanLabel(planKey, detail?.membership_plans ?? [])} 已取消`);
+      void onRefresh();
+    } catch (err) {
+      setMsg(formatAdminErrorMessage(err, '取消会员套餐失败'));
+    } finally {
+      setCancellingMembershipPlan(null);
+    }
+  };
+
+  const handleResetAllowance = async () => {
+    if (!confirmResetAllowance) {
+      setConfirmResetAllowance(true);
+      return;
+    }
+    setResettingAllowance(true);
+    setMsg('');
+    try {
+      const state = await admin.resetUserMembershipAllowance(user.id);
+      applyMembershipState(state);
+      setConfirmResetAllowance(false);
+      setMsg('会员额度已重置');
+      void onRefresh();
+    } catch (err) {
+      setMsg(formatAdminErrorMessage(err, '重置会员额度失败'));
+    } finally {
+      setResettingAllowance(false);
     }
   };
 
@@ -993,23 +1050,68 @@ function UserRow({
                         {detail.membership_entitlements.map((item) => (
                           <div
                             key={`${item.plan_key}:${item.effective_start}`}
-                            className="grid gap-1 px-3 py-2 text-[12px]"
+                            className="grid gap-2 px-3 py-2 text-[12px]"
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium">{item.name}</span>
-                              {item.is_current && (
-                                <span className="text-[11px] text-success">
-                                  当前
-                                </span>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">
+                                    {item.name}
+                                  </span>
+                                  {item.is_current && (
+                                    <span className="text-[11px] text-success">
+                                      当前
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-1 flex items-center gap-1 text-[11px] text-muted">
+                                  <CalendarDays size={11} />
+                                  <span>
+                                    {formatDate(item.effective_start)} -{' '}
+                                    {formatDate(item.effective_end)}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleCancelMembershipPlan(item.plan_key)
+                                }
+                                disabled={
+                                  cancellingMembershipPlan !== null ||
+                                  !detail.membership.active
+                                }
+                                className={`shrink-0 cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                  confirmCancelMembershipPlan === item.plan_key
+                                    ? 'bg-error text-white'
+                                    : 'border border-hairline text-muted hover:text-ink'
+                                }`}
+                              >
+                                {cancellingMembershipPlan === item.plan_key ? (
+                                  <Loader2
+                                    size={11}
+                                    className="inline animate-spin"
+                                  />
+                                ) : confirmCancelMembershipPlan ===
+                                  item.plan_key ? (
+                                  '确认取消此套餐'
+                                ) : (
+                                  '取消此套餐'
+                                )}
+                              </button>
+                            </div>
+                            {confirmCancelMembershipPlan === item.plan_key &&
+                              cancellingMembershipPlan !== item.plan_key && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setConfirmCancelMembershipPlan(null)
+                                  }
+                                  className="w-fit cursor-pointer text-[11px] text-muted hover:text-ink"
+                                >
+                                  保留此套餐
+                                </button>
                               )}
-                            </div>
-                            <div className="flex items-center gap-1 text-[11px] text-muted">
-                              <CalendarDays size={11} />
-                              <span>
-                                {shortDate(item.effective_start)} -{' '}
-                                {shortDate(item.effective_end)}
-                              </span>
-                            </div>
                           </div>
                         ))}
                       </div>
@@ -1048,10 +1150,10 @@ function UserRow({
 
                       <label className="min-w-0">
                         <span className="mb-1 block text-[12px] text-muted">
-                          有效期至
+                          到期时间
                         </span>
                         <input
-                          type="date"
+                          type="datetime-local"
                           value={membershipEndDate}
                           onChange={(event) =>
                             setMembershipEndDate(event.target.value)
@@ -1069,14 +1171,47 @@ function UserRow({
                         {updatingMembership && (
                           <Loader2 size={12} className="animate-spin" />
                         )}
-                        设置 / 续期会员
+                        设置会员与到期时间
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleResetAllowance()}
+                        disabled={
+                          resettingAllowance || !detail.membership.active
+                        }
+                        className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          confirmResetAllowance
+                            ? 'bg-primary text-on-primary'
+                            : 'border border-hairline text-muted hover:text-ink'
+                        }`}
+                      >
+                        {resettingAllowance ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <RefreshCw size={12} />
+                        )}
+                        {confirmResetAllowance
+                          ? '确认重置当前周期额度'
+                          : '重置会员额度'}
+                      </button>
+                      {confirmResetAllowance && !resettingAllowance && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmResetAllowance(false)}
+                          className="cursor-pointer text-[12px] text-muted hover:text-ink"
+                        >
+                          取消重置
+                        </button>
+                      )}
 
                       <button
                         type="button"
                         onClick={() => void handleCancelMembership()}
                         disabled={
-                          cancellingMembership || !detail.membership.active
+                          cancellingMembership ||
+                          cancellingMembershipPlan !== null ||
+                          !detail.membership.active
                         }
                         className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                           confirmCancelMembership
@@ -1090,8 +1225,8 @@ function UserRow({
                           <AlertTriangle size={12} />
                         )}
                         {confirmCancelMembership
-                          ? '确认停用全部会员'
-                          : '停用会员'}
+                          ? '确认取消全部会员套餐'
+                          : '取消全部会员套餐'}
                       </button>
                       {confirmCancelMembership && !cancellingMembership && (
                         <button
@@ -1099,7 +1234,7 @@ function UserRow({
                           onClick={() => setConfirmCancelMembership(false)}
                           className="cursor-pointer text-[12px] text-muted hover:text-ink"
                         >
-                          取消停用
+                          保留会员
                         </button>
                       )}
                     </div>

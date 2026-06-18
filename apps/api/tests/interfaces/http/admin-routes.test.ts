@@ -23,6 +23,7 @@ vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
 vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   adjustUserPurchasedBalance: vi.fn(),
   cancelAdminUserMembership: vi.fn(),
+  cancelAdminUserMembershipPlan: vi.fn(),
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
   createAnnouncement: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
   reviewSkillCommentForAdmin: vi.fn(),
+  resetAdminUserMembershipAllowance: vi.fn(),
   resetAdminUserPassword: vi.fn(),
   setAdminUserMembership: vi.fn(),
   scanPiSessionOrphanFilesForAdmin: vi.fn(),
@@ -93,6 +95,7 @@ import { adminRoutes } from '../../../src/interfaces/http/admin-routes.js';
 import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
+  cancelAdminUserMembershipPlan,
   cleanupPiSessionFilesForAdmin,
   createAdminUser,
   createAnnouncement,
@@ -112,6 +115,7 @@ import {
   listSkillCommentsForAdmin,
   listWalletTransactionsForAdmin,
   reviewSkillCommentForAdmin,
+  resetAdminUserMembershipAllowance,
   resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
   setAdminUserMembership,
@@ -642,6 +646,90 @@ describe('adminRoutes authentication throttling', () => {
     expect(setAdminUserMembership).not.toHaveBeenCalled();
   });
 
+  it('rejects legacy membership plan keys when cancelling one membership plan', async () => {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1/membership/fateclaw_plus',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(cancelAdminUserMembershipPlan).not.toHaveBeenCalled();
+  });
+
+  it('cancels one membership plan through the owner-only admin endpoint', async () => {
+    const membershipState = {
+      membership: {
+        enabled: true,
+        active: true,
+        plan_key: 'fateclaw_insight',
+        monthly_price_coins: 30,
+        display_price_coins: 30,
+        current_period_start: '2026-06-01T00:00:00.000Z',
+        current_period_end: '2026-07-01T00:00:00.000Z',
+        allowance_reset_at: '2026-07-01T00:00:00.000Z',
+        allowance_used_ratio: 0,
+        allowance_status: 'plenty',
+      },
+      membership_entitlements: [],
+      membership_plans: [],
+    };
+    vi.mocked(cancelAdminUserMembershipPlan).mockResolvedValueOnce(
+      membershipState,
+    );
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1/membership/fateclaw_deep',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(membershipState);
+    expect(cancelAdminUserMembershipPlan).toHaveBeenCalledWith(
+      'user-1',
+      'fateclaw_deep',
+    );
+  });
+
+  it('resets membership allowance through the owner-only admin endpoint', async () => {
+    const membershipState = {
+      membership: {
+        enabled: true,
+        active: true,
+        plan_key: 'fateclaw_deep',
+        monthly_price_coins: 100,
+        display_price_coins: 120,
+        current_period_start: '2026-06-01T00:00:00.000Z',
+        current_period_end: '2026-07-01T00:00:00.000Z',
+        allowance_reset_at: '2026-07-01T00:00:00.000Z',
+        allowance_used_ratio: 0,
+        allowance_status: 'plenty',
+      },
+      membership_entitlements: [],
+      membership_plans: [],
+    };
+    vi.mocked(resetAdminUserMembershipAllowance).mockResolvedValueOnce(
+      membershipState,
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/membership/allowance/reset',
+      headers: {
+        'x-admin-key': 'test-manager-key',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(membershipState);
+    expect(resetAdminUserMembershipAllowance).toHaveBeenCalledWith('user-1');
+  });
+
   it('blocks the user manager key from high-risk user operations', async () => {
     const grantResponse = await app.inject({
       method: 'POST',
@@ -691,6 +779,20 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
     });
+    const cancelMembershipPlanResponse = await app.inject({
+      method: 'DELETE',
+      url: '/users/user-1/membership/fateclaw_deep',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
+    const resetAllowanceResponse = await app.inject({
+      method: 'POST',
+      url: '/users/user-1/membership/allowance/reset',
+      headers: {
+        'x-admin-key': 'test-user-manager-key',
+      },
+    });
     const clearLogsResponse = await app.inject({
       method: 'DELETE',
       url: '/users/user-1/logs',
@@ -711,6 +813,8 @@ describe('adminRoutes authentication throttling', () => {
     expect(passwordResponse.statusCode).toBe(403);
     expect(setMembershipResponse.statusCode).toBe(403);
     expect(cancelMembershipResponse.statusCode).toBe(403);
+    expect(cancelMembershipPlanResponse.statusCode).toBe(403);
+    expect(resetAllowanceResponse.statusCode).toBe(403);
     expect(clearLogsResponse.statusCode).toBe(403);
     expect(deleteResponse.statusCode).toBe(403);
     expect(grantBonusBalance).not.toHaveBeenCalled();
@@ -718,6 +822,8 @@ describe('adminRoutes authentication throttling', () => {
     expect(resetAdminUserPassword).not.toHaveBeenCalled();
     expect(setAdminUserMembership).not.toHaveBeenCalled();
     expect(cancelAdminUserMembership).not.toHaveBeenCalled();
+    expect(cancelAdminUserMembershipPlan).not.toHaveBeenCalled();
+    expect(resetAdminUserMembershipAllowance).not.toHaveBeenCalled();
     expect(deleteConversationLogsForAdminUser).not.toHaveBeenCalled();
     expect(deleteUser).not.toHaveBeenCalled();
   });

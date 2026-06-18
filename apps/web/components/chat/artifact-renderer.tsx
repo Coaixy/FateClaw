@@ -64,13 +64,14 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
     'lg:max-w-[min(29rem,calc(100vh-18rem))] xl:max-w-[min(31rem,calc(100vh-19rem))]',
   'meihua-paipan': 'lg:max-w-[900px] xl:max-w-[960px]',
   'liuren-paipan': 'lg:max-w-[960px] xl:max-w-[1020px]',
-  'iching-paipan': 'lg:max-w-[920px] xl:max-w-[980px]',
+  'iching-paipan': 'md:max-w-[960px] lg:max-w-[1040px] xl:max-w-[1120px]',
   'bazi-paipan': 'lg:max-w-[880px] xl:max-w-[940px]',
 };
 
-// 六爻盘信息密度高，移动端聊天流优先占满横向阅读宽度，不再为了“一屏看全”整体缩小。
+// 这些盘面在移动端聊天流里更适合固定高度内完整预览。
 const FIT_MOBILE_CHAT_HEIGHT_SKILLS = new Set<SkillContextEntry['skill']>([
   'bazi-paipan',
+  'iching-paipan',
   'ziwei-paipan',
   'qimen-paipan',
   'liuren-paipan',

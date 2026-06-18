@@ -18,6 +18,7 @@ import type {
 import {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
+  cancelUserMembershipPlanForAdmin,
   createAnnouncement,
   createGiftCodesForAdmin,
   createPublicFinancialLedgerEntry,
@@ -71,6 +72,7 @@ import {
   markChatSessionPiSessionArchived,
   reconcileStaleBillingReservations,
   resetPiSessionCleanupCursor,
+  resetUserMembershipAllowanceForAdmin,
   setSkillGlobalEnabled,
   setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
@@ -151,6 +153,7 @@ const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
 export {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
+  cancelUserMembershipPlanForAdmin,
   createAnnouncement,
   createOfficialModel,
   createPublicFinancialLedgerEntry,
@@ -190,6 +193,7 @@ export {
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
   removeOfficialModel,
+  resetUserMembershipAllowanceForAdmin,
   setSkillGlobalEnabled,
   setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
@@ -1109,6 +1113,34 @@ export async function cancelAdminUserMembership(
   userId: string,
 ): Promise<AdminUserMembershipState> {
   await cancelUserMembershipsForAdmin(userId);
+  return getAdminUserMembershipState(userId);
+}
+
+/**
+ * 管理员停用用户指定套餐。
+ *
+ * @param userId 目标用户 ID。
+ * @param planKey 目标会员套餐 key。
+ * @returns 最新会员状态、权益时间轴和可用套餐。
+ */
+export async function cancelAdminUserMembershipPlan(
+  userId: string,
+  planKey: string,
+): Promise<AdminUserMembershipState> {
+  await cancelUserMembershipPlanForAdmin({ userId, planKey });
+  return getAdminUserMembershipState(userId);
+}
+
+/**
+ * 管理员重置用户当前会员周期额度。
+ *
+ * @param userId 目标用户 ID。
+ * @returns 最新会员状态、权益时间轴和可用套餐。
+ */
+export async function resetAdminUserMembershipAllowance(
+  userId: string,
+): Promise<AdminUserMembershipState> {
+  await resetUserMembershipAllowanceForAdmin(userId);
   return getAdminUserMembershipState(userId);
 }
 

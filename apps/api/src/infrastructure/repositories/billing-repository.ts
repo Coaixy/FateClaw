@@ -1390,7 +1390,10 @@ export async function cancelUserMembershipsForAdmin(
     const result = await client.query(
       `UPDATE user_memberships
        SET status = 'cancelled',
-           current_period_end = LEAST(current_period_end, NOW()),
+           current_period_end = CASE
+             WHEN current_period_start < NOW() THEN LEAST(current_period_end, NOW())
+             ELSE current_period_start + INTERVAL '1 millisecond'
+           END,
            updated_at = NOW()
        WHERE user_id = $1
          AND status = 'active'
@@ -1399,6 +1402,106 @@ export async function cancelUserMembershipsForAdmin(
     );
     await client.query('COMMIT');
     return { cancelledCount: result.rowCount ?? 0 };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 管理员立即停用用户指定套餐的当前和未来会员权益。
+ *
+ * @param input.userId 目标用户 ID。
+ * @param input.planKey 需要停用的会员套餐 key。
+ * @returns 被停用的会员记录数量。
+ * @remarks 只处理指定套餐，不影响同一用户其它有效套餐。
+ */
+export async function cancelUserMembershipPlanForAdmin(input: {
+  userId: string;
+  planKey: string;
+}): Promise<{ cancelledCount: number }> {
+  const normalizedPlanKey = normalizeMembershipPlanKey(input.planKey);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await getUserByIdUsing(client, input.userId, {
+      forUpdate: true,
+    });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+    const result = await client.query(
+      `UPDATE user_memberships
+       SET status = 'cancelled',
+           current_period_end = CASE
+             WHEN current_period_start < NOW() THEN LEAST(current_period_end, NOW())
+             ELSE current_period_start + INTERVAL '1 millisecond'
+           END,
+           updated_at = NOW()
+       WHERE user_id = $1
+         AND plan_key = $2
+         AND status = 'active'
+         AND current_period_end > NOW()`,
+      [input.userId, normalizedPlanKey],
+    );
+    await client.query('COMMIT');
+    return { cancelledCount: result.rowCount ?? 0 };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 管理员重置用户当前有效会员周期的免费额度。
+ *
+ * @param userId 目标用户 ID。
+ * @returns 被重置的当前周期额度记录。
+ * @remarks 只将当前生效套餐、本周期的 used_units 归零；历史会员周期和钱包流水不变。
+ */
+export async function resetUserMembershipAllowanceForAdmin(
+  userId: string,
+): Promise<MembershipAllowanceRow> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await getUserByIdUsing(client, userId, { forUpdate: true });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    const activeMemberships = await getActiveMembershipsForUserUsing(
+      client,
+      userId,
+      { forUpdate: true },
+    );
+    const { membership, config } = await resolveEffectiveMembershipUsing({
+      query: client.query.bind(client),
+      memberships: activeMemberships,
+    });
+    if (!membership) {
+      throw new Error('用户当前没有有效会员');
+    }
+
+    const allowance = await ensureMembershipAllowanceForUserUsing(client, {
+      membership,
+      config,
+    });
+    const { rows } = await client.query(
+      `UPDATE membership_allowances
+       SET used_units = 0,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [allowance.id],
+    );
+
+    await client.query('COMMIT');
+    return normalizeMembershipAllowanceRow(rows[0] as MembershipAllowanceRow);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

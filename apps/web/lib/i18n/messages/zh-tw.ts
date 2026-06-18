@@ -801,8 +801,6 @@ export const zhTWMessages = {
       high: '高',
       xhigh: '極高',
     },
-    continuationBlockedFallback:
-      '此對話長期未活躍，歷史上下文已歸檔，不支援繼續追問。請新建對話。',
     loadModelSettingsFailed: '載入模型設定失敗',
     loadPaipanFailed: '載入排盤術數失敗',
     sendFailed: '發送失敗，請稍後重試',

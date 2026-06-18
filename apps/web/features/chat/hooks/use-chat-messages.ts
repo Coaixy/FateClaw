@@ -107,6 +107,12 @@ export function getAiChatStreamErrorMessage(
  * @returns 适合展示在聊天界面的错误或重连提示。
  */
 export function getAiChatSendErrorMessage(error: unknown): string {
+  const status =
+    error instanceof Error ? (error as { status?: unknown }).status : null;
+  if (status === 410) {
+    return DEFAULT_AI_CHAT_ERROR_MESSAGE;
+  }
+
   const message =
     error instanceof Error
       ? error.message.trim()

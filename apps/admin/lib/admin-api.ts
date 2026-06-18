@@ -1211,6 +1211,18 @@ export const admin = {
       `/api/admin/users/${encodeURIComponent(id)}/membership`,
       { method: 'DELETE' },
     ),
+  cancelUserMembershipPlan: (id: string, planKey: string) =>
+    adminRequest<AdminMembershipState>(
+      `/api/admin/users/${encodeURIComponent(id)}/membership/${encodeURIComponent(
+        planKey,
+      )}`,
+      { method: 'DELETE' },
+    ),
+  resetUserMembershipAllowance: (id: string) =>
+    adminRequest<AdminMembershipState>(
+      `/api/admin/users/${encodeURIComponent(id)}/membership/allowance/reset`,
+      { method: 'POST' },
+    ),
   adjustPurchasedBalance: (
     id: string,
     data: { amount_coins: number; note?: string },

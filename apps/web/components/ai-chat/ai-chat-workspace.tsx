@@ -250,11 +250,6 @@ function AiChatWorkspaceContent() {
     !selectedSession || chatMessages.loadedSessionId === selectedSession;
   const continuationBlocked =
     selectedSessionMessagesLoaded && chatMessages.continuationBlocked;
-  const continuationBlockedMessage =
-    continuationBlocked && selectedSession
-      ? chatMessages.continuationBlockMessage ||
-        t('aiChat.continuationBlockedFallback')
-      : '';
   const onboardingGuide = useOnboardingGuideStatus({
     enabled: chatAvailable && !authLoading,
   });
@@ -491,7 +486,6 @@ function AiChatWorkspaceContent() {
         return;
       }
       if (continuationBlocked) {
-        toast('error', continuationBlockedMessage);
         return;
       }
 
@@ -518,7 +512,6 @@ function AiChatWorkspaceContent() {
       continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
-      continuationBlockedMessage,
       pastedBoardDraftSource,
       requestLogin,
       t,
@@ -761,7 +754,6 @@ function AiChatWorkspaceContent() {
         return;
       }
       if (continuationBlocked) {
-        toast('error', continuationBlockedMessage);
         return;
       }
 
@@ -770,7 +762,7 @@ function AiChatWorkspaceContent() {
       setLockPaipanSkill(Boolean(skill));
       setPaipanSheetMode('current-session');
     },
-    [authLoading, continuationBlocked, continuationBlockedMessage, toast],
+    [authLoading, continuationBlocked],
   );
 
   const handleClosePaipanSheet = useCallback(() => {
@@ -801,7 +793,6 @@ function AiChatWorkspaceContent() {
       return;
     }
     if (continuationBlocked) {
-      toast('error', continuationBlockedMessage);
       return;
     }
 
@@ -810,11 +801,9 @@ function AiChatWorkspaceContent() {
     authLoading,
     chatAvailable,
     continuationBlocked,
-    continuationBlockedMessage,
     input,
     openPastedBoardSheet,
     requestLogin,
-    toast,
   ]);
   const pastedBoardDisabled =
     authLoading || chatMessages.sending || continuationBlocked;
@@ -847,7 +836,7 @@ function AiChatWorkspaceContent() {
       input={input}
       sending={chatMessages.sending}
       disabled={continuationBlocked}
-      disabledMessage={continuationBlockedMessage}
+      disabledMessage=""
       selectedSession={selectedSession}
       paipanAction={
         selectedSession

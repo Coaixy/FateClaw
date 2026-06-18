@@ -45,6 +45,7 @@ import {
   setUserMembershipForAdmin,
   subscribeMembershipWithWallet,
   cancelUserMembershipsForAdmin,
+  cancelUserMembershipPlanForAdmin,
   updateFreeProfessionalAiQuotaConfig,
 } from '../../../src/infrastructure/repositories/billing-repository.js';
 
@@ -1373,6 +1374,28 @@ describe('billing repository', () => {
 
     expect(clientCalls[1]?.sql).toContain("status = 'cancelled'");
     expect(clientCalls[1]?.params).toEqual(['user-1']);
+  });
+
+  it('keeps future membership periods valid when admins cancel one plan', async () => {
+    mockGetUserByIdUsing.mockResolvedValueOnce({
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
+    const { clientCalls } = createMockPool([], [[], { rowCount: 1 }, []]);
+
+    await expect(
+      cancelUserMembershipPlanForAdmin({
+        userId: 'user-1',
+        planKey: 'fateclaw_deep',
+      }),
+    ).resolves.toEqual({ cancelledCount: 1 });
+
+    expect(clientCalls[1]?.sql).toContain(
+      "current_period_start + INTERVAL '1 millisecond'",
+    );
+    expect(clientCalls[1]?.params).toEqual(['user-1', 'fateclaw_deep']);
   });
 
   it('falls back to Plus after the Pro overlay expires', async () => {

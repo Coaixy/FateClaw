@@ -826,8 +826,6 @@ export const enMessages = {
       high: 'High',
       xhigh: 'Very high',
     },
-    continuationBlockedFallback:
-      'This conversation has been inactive for a long time, so its context was archived. Start a new conversation to continue.',
     loadModelSettingsFailed: 'Failed to load model settings',
     loadPaipanFailed: 'Failed to load charting systems',
     sendFailed: 'Failed to send. Please try again later',
