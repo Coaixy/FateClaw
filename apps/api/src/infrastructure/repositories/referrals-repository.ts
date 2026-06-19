@@ -7,13 +7,13 @@ import { queryOne } from '../typed-query.js';
 import type { DbQueryable } from '../db-pool.js';
 import type { UserMembership } from '../../shared/types.js';
 import {
-  MEMBERSHIP_INSIGHT_PLAN_KEY,
+  MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   resolveMembershipPlanRank,
   type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
 
-const DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY = MEMBERSHIP_INSIGHT_PLAN_KEY;
+const DEFAULT_REWARD_MEMBERSHIP_PLAN_KEY = MEMBERSHIP_CLARITY_PLAN_KEY;
 const DEFAULT_MAX_REDEMPTIONS = 1_000_000;
 const PAID_MEMBERSHIP_REWARD_REASON = 'first_paid_membership';
 const INVITE_COUNT_REWARD_REASON = 'invite_count_milestone';

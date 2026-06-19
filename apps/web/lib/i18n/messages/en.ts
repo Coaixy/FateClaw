@@ -489,15 +489,6 @@ export const enMessages = {
       planCardsAria: 'Membership plans',
       previousPlan: 'Previous membership plan',
       nextPlan: 'Next membership plan',
-      planBenefitClarityExpert: 'Unlocks expert mode',
-      planBenefitClarityDaily: '10 expert AI turns per day',
-      planBenefitClarityCharting: 'Simple mode and manual charting included',
-      planBenefitInsightExpert: 'Insight unlocks expert access',
-      planBenefitInsightTools: 'Manual charting and chart tools',
-      planBenefitInsightAllowance: 'Included member allowance used first',
-      planBenefitDeepAllowance: 'Deep includes more allowance',
-      planBenefitDeepSupport: 'Priority support',
-      planBenefitDeepExpert: 'Includes Insight expert access',
       planBenefitNoAllowance: 'AI Chat continues to use credit balance',
       planBenefitGuashiModel: 'Bring your own API key, or use platform credits',
       planBenefitGuashiReading: 'AI charting + ready-to-deliver reading scripts',
@@ -525,7 +516,7 @@ export const enMessages = {
       noAllowanceInactiveHint:
         'This plan has no included member allowance. AI Chat will use credit balance after subscribing.',
       disabledHint:
-        'Insight purchase is not open yet. Credit balance billing remains active.',
+        'Membership purchase is not open yet. Credit balance billing remains active.',
       confirmRenewTitle: 'Confirm renewal',
       confirmSubscribeTitle: 'Confirm subscription',
       confirmRenewMessage:

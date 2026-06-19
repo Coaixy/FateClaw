@@ -53,32 +53,15 @@ type RewardDraft = {
 };
 
 function defaultMembershipPlans(): MembershipPlanDraft[] {
+  // 会员已塌缩为单层「卦师使用权」(fateclaw_clarity);此为后端无配置时的兜底默认,与 migration 0049 对齐。
   return [
     {
       plan_key: 'fateclaw_clarity',
-      name: 'FateClaw Clarity',
+      name: '卦师使用权',
       enabled: true,
-      monthly_price_coins: '10',
-      display_price_coins: '10',
-      monthly_allowance_units: '1000000',
-      standard_price_per_million_units_coins: '10',
-    },
-    {
-      plan_key: 'fateclaw_insight',
-      name: 'FateClaw Insight',
-      enabled: true,
-      monthly_price_coins: '30',
-      display_price_coins: '30',
-      monthly_allowance_units: '3500000',
-      standard_price_per_million_units_coins: '10',
-    },
-    {
-      plan_key: 'fateclaw_deep',
-      name: 'FateClaw Deep',
-      enabled: true,
-      monthly_price_coins: '100',
-      display_price_coins: '100',
-      monthly_allowance_units: '13000000',
+      monthly_price_coins: '66',
+      display_price_coins: '66',
+      monthly_allowance_units: '3000000',
       standard_price_per_million_units_coins: '10',
     },
   ];
