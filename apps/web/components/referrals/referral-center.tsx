@@ -27,13 +27,14 @@ function referralLink(summary: MyReferralSummary): string {
 }
 
 function referralRewardPlanName(summary: MyReferralSummary): string {
+  // 会员已塌缩为单层「卦师使用权」(clarity);存量 deep/insight 保留可读标签以防旧返利配置。
   const planKey = normalizeMembershipPlanKey(
     summary.config.reward_membership_plan_key,
-    'fateclaw_insight',
+    'fateclaw_clarity',
   );
   if (planKey === 'fateclaw_deep') return 'FateClaw Deep';
-  if (planKey === 'fateclaw_clarity') return 'FateClaw Clarity';
-  return 'FateClaw Insight';
+  if (planKey === 'fateclaw_insight') return 'FateClaw Insight';
+  return '卦师使用权';
 }
 
 async function writeClipboardText(value: string): Promise<boolean> {
