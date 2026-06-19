@@ -18,6 +18,11 @@ export interface AccountSoulDto {
   content: string;
 }
 
+/** 用户级话术稿模板;content 为空表示沿用平台默认骨架。 */
+export interface GuashiScriptTemplateDto {
+  content: string;
+}
+
 export interface QrCodeResultDto {
   qrcode: string;
   qrcode_url: string;

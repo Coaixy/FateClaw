@@ -71,6 +71,8 @@ export interface ContainerInput {
   assistantName?: string;
   /** 请求级 Persona 覆盖层；不是 Dashboard 维护的用户 Soul。 */
   personaPrompt?: string;
+  /** 卦师自定义的话术稿分节模板；为空/缺省时回退平台默认骨架。 */
+  guashiScriptTemplate?: string;
   /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
@@ -111,6 +113,7 @@ export interface ChatTaskInboxRequest {
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
+  guashiScriptTemplate?: string;
   /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */

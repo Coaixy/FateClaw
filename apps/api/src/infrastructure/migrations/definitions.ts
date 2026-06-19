@@ -7,6 +7,7 @@ import { runtimeSkillMigrations } from './definitions/0020-0028-runtime-skills.j
 import { sqlReviewFixMigrations } from './definitions/0045-sql-review-fixes.js';
 import { guashiAccessMigrations } from './definitions/0049-guashi-access.js';
 import { clientProfilesMigrations } from './definitions/0050-client-profiles.js';
+import { guashiScriptTemplateMigrations } from './definitions/0051-guashi-script-template.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -22,4 +23,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...sqlReviewFixMigrations,
   ...guashiAccessMigrations,
   ...clientProfilesMigrations,
+  ...guashiScriptTemplateMigrations,
 ];

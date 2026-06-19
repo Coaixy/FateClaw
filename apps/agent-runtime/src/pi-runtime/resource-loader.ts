@@ -227,11 +227,30 @@ function buildAppendSystemPrompt(
   return prompts;
 }
 
+/**
+ * 平台默认话术稿分节骨架。
+ *
+ * 卦师未在「话术稿模板」里自定义时,系统提示回退到这套默认章节。
+ * 注意:这份默认文本与前端编辑器的「填入默认骨架」(guashi-script-template-card.tsx)
+ * 应保持一致;agent-runtime 不引用 @fateclaw/contracts(无 paths 解析),故两侧各自维护一份。
+ */
+const DEFAULT_GUASHI_SCRIPT_SKELETON = [
+  '## 核心论断 —— 先给客户最关心的一句话结论',
+  '## 分项解读 —— 按事业/财运/感情/健康等相关维度逐项展开',
+  '## 时机提示 —— 关键时间点（流年/流月等）',
+  '## 给客户的建议 —— 可落地的行动建议',
+  '## ⚠分寸提示 —— 仅供卦师参考：哪些话不宜对客户说死、客户可能追问什么；此节是给卦师的内部提示，不要写成直接对客户说的话',
+].join('\n');
+
 function buildPiSystemPrompt(
   containerInput: ContainerInput,
   soulEditEnabled: boolean,
 ): string {
   const persona = containerInput.personaPrompt?.trim();
+  // 话术稿分节骨架:卦师自定义模板优先,未自定义时回退平台默认骨架。
+  const guashiScriptSkeleton =
+    containerInput.guashiScriptTemplate?.trim() ||
+    DEFAULT_GUASHI_SCRIPT_SKELETON;
   return [
     '你是 FateClaw 的 Pi-backed Agent Runtime。',
     '你的底层对话人格是 Pi：理性、温和、直接，能够客观讨论大多数话题。',
@@ -275,11 +294,8 @@ function buildPiSystemPrompt(
     ],
     '完成用户请求后，直接用 assistant 回复最终答复。',
     '当本轮是基于盘面（八字/六爻/紫微/奇门等）的玄学解读时，最终答复按以下固定章节、用 Markdown ## 标题组织，便于卦师直接对客户交付：',
-    '## 核心论断 —— 先给客户最关心的一句话结论',
-    '## 分项解读 —— 按事业/财运/感情/健康等相关维度逐项展开',
-    '## 时机提示 —— 关键时间点（流年/流月等）',
-    '## 给客户的建议 —— 可落地的行动建议',
-    '## ⚠分寸提示 —— 仅供卦师参考：哪些话不宜对客户说死、客户可能追问什么；此节是给卦师的内部提示，不要写成直接对客户说的话',
+    guashiScriptSkeleton,
+    '其中标题带「⚠」或「[仅卦师]」标记的章节是给卦师的内部提示，不要写成直接对客户说的话。',
     '若本轮只是追问、澄清或与盘面无关的对话，正常作答即可，不必套用上述章节。',
     '如果缺少关键参数，直接说明需要补充哪些信息。',
   ]

@@ -289,6 +289,13 @@ export const zhCNMessages = {
       description: '维护统一注入站内 AI Chat 和微信对话的 Soul。',
       soulTitle: '自定义人格 Soul',
       soulDescription: '统一注入站内 AI Chat 和微信对话的 Pi Runtime。',
+      scriptTitle: '话术稿模板',
+      scriptDescription:
+        '自定义 AI 解读的分节骨架(Markdown ## 章节);留空则用平台默认骨架。标题带「⚠」或「[仅卦师]」的章节仅卦师可见,导出给客户时自动剔除。',
+      scriptPlaceholder:
+        '每行一个 ## 章节,如「## 核心论断 —— 一句话结论」;留空使用平台默认骨架。',
+      scriptFillDefault: '填入默认骨架',
+      scriptHint: '留空将使用平台默认骨架',
       loadFailed: '加载自定义人格失败',
       saved: '自定义人格已保存并注入运行时',
       saveFailed: '保存自定义人格失败',

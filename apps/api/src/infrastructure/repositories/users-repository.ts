@@ -311,6 +311,37 @@ export async function updateUserSoulEditEnabled(
   );
 }
 
+/**
+ * 读取用户级话术稿模板。
+ *
+ * 为空字符串表示该卦师未自定义,调用方据此回退到平台默认骨架。
+ */
+export async function getUserGuashiScriptTemplate(
+  userId: string,
+): Promise<string> {
+  const row = await queryOne<{ guashi_script_template: string | null }>(
+    getDbPool(),
+    'SELECT guashi_script_template FROM users WHERE id = $1',
+    [userId],
+  );
+  return row?.guashi_script_template ?? '';
+}
+
+/**
+ * 更新用户级话术稿模板。
+ *
+ * 调用方必须已完成用户身份校验;存空字符串等价于恢复使用平台默认骨架。
+ */
+export async function updateUserGuashiScriptTemplate(
+  userId: string,
+  content: string,
+): Promise<void> {
+  await getDbPool().query(
+    'UPDATE users SET guashi_script_template = $1 WHERE id = $2',
+    [content, userId],
+  );
+}
+
 export async function getUserByAccountId(
   accountId: string,
 ): Promise<User | undefined> {

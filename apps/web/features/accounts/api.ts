@@ -65,6 +65,13 @@ export const accountsApi = {
       method: 'PUT',
       body: JSON.stringify({ edit_enabled: editEnabled }),
     }),
+  getUserGuashiScriptTemplate: () =>
+    requestJson<{ content: string }>('/api/account/me/guashi-script-template'),
+  updateUserGuashiScriptTemplate: (content: string) =>
+    requestJson<SuccessResponse>('/api/account/me/guashi-script-template', {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
   getQrCode: () =>
     requestJson<QrCodeResult>('/api/account/qrcode', { method: 'POST' }),
   pollQrStatus: (qrcode: string) =>

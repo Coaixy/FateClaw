@@ -30,15 +30,6 @@ export interface GuashiScript {
   sections: GuashiScriptSection[];
 }
 
-/** 话术稿已知章节的标题关键词(用于命中判定)。 */
-const KNOWN_SECTION_KEYWORDS = [
-  '核心论断',
-  '分项解读',
-  '时机提示',
-  '给客户的建议',
-  '分寸提示',
-];
-
 /** 匹配二级标题行 `## 标题`(用前瞻排除 ### 三级标题)。 */
 const H2_LINE = /^##(?!#)\s+(.+?)\s*$/;
 
@@ -48,9 +39,9 @@ const FENCE_LINE = /^\s*```/;
 /**
  * 判定某章节是否「仅卦师可见」(不可导出给客户)。
  *
- * 话术稿骨架里「## ⚠分寸提示 —— 仅供卦师参考」是给卦师的内部提示;AI 措辞可能
- * 漂移(去掉 emoji、写成「分寸」「仅供卦师」等),故按关键词宽松匹配。此处刻意从宽:
- * 宁可多判为内部、也不要把内部话误导出给客户(导出是面向客户的,误放比误删更严重)。
+ * 话术稿模板现已交给卦师自定义,内部节不再绑定固定章节名,改为识别「约定标记」:
+ * 标题带「⚠」「[仅卦师]」或含「分寸/仅供卦师/内部提示」等词即视为内部提示。
+ * 此处刻意从宽:宁可多判为内部、也不要把内部话误导出给客户(误放比误删更严重)。
  */
 export function isGuashiOnlySection(title: string): boolean {
   return /分寸|仅供卦师|仅卦师|卦师参考|内部提示|⚠/.test(title);
@@ -59,16 +50,12 @@ export function isGuashiOnlySection(title: string): boolean {
 /**
  * 判定解析出的章节标题列表是否构成一份「话术稿」——决定是否启用分节卡片渲染。
  *
- * 这是 P1-C 里真正影响产品手感的判定旋钮:
- *   - 太严(要求 5 节全到、措辞精确)→ AI 输出稍有漂移就退化成普通渲染,卡片形同虚设;
- *   - 太松(只要有 ## 就当话术稿)→ 普通追问里随手写的小标题会被误渲染成话术稿卡片。
- * 当前口径:命中至少 2 个已知话术稿章节关键词即认定为话术稿。可按线上真实 AI 输出微调。
+ * 话术稿模板已交给卦师自定义,章节名不再固定,故不能再按已知关键词命中。
+ * 口径放宽为:最终解读消息里出现 ≥2 个 Markdown ## 章节即认定为话术稿;
+ * 普通追问/澄清类回复一般只有 0~1 个 ## 标题,会自然回退到普通渲染。
  */
 function looksLikeGuashiScript(titles: string[]): boolean {
-  const hits = titles.filter((title) =>
-    KNOWN_SECTION_KEYWORDS.some((keyword) => title.includes(keyword)),
-  ).length;
-  return hits >= 2;
+  return titles.length >= 2;
 }
 
 /** 由扫描中累积的标题与正文行构造一个章节。 */
