@@ -130,10 +130,11 @@ function sectionTitleForClient(title: string): string {
 /**
  * 把 Markdown 文本转成干净的纯文本,供导出给客户。
  *
- * 卦师复制给客户的是聊天纯文本(微信等),不该出现 # * ` > [] 等 Markdown 记号。
- * 按行剥离块级标记(标题/引用/列表/分割线/代码围栏),再行内剥离强调/代码/链接标记。
+ * 卦师复制给客户的是聊天纯文本(微信等),不该出现 # * ` > [] | 等 Markdown 记号。
+ * 按行剥离块级标记(标题/引用/列表/分割线/代码围栏/表格),再行内剥离强调/代码/链接标记。
  * 无序列表项转为「· 」保留分项可读性;有序列表「1. 」是自然表达,保留。
- * 注:话术稿正文以中文段落与简单列表为主,用正则覆盖常见标记即可,不追求完备解析。
+ * 表格转纯文本:两列→「左：右」、多列→顿号连接、删表头下的分隔行(客户端看不懂 | 与 --- 分隔)。
+ * 注:话术稿正文以中文段落、简单列表与小表格为主,用正则覆盖常见标记即可,不追求完备解析。
  */
 function markdownToPlainText(markdown: string): string {
   const lines = markdown.split('\n').map((line) => {
@@ -141,6 +142,22 @@ function markdownToPlainText(markdown: string): string {
     if (/^\s*```/.test(line)) return '';
     // 分割线(--- *** ___)整行丢弃。
     if (/^\s*([-*_])\1{2,}\s*$/.test(line)) return '';
+    // GFM 表格行(以 | 开头):| 与 --- 分隔对客户毫无意义,转成可读纯文本。
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|')) {
+      const cells = trimmed
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map((cell) => cell.trim());
+      // 表头下的分隔行(单元格只含 - : 空白)整行删除。
+      if (cells.every((cell) => cell === '' || /^:?-+:?$/.test(cell))) {
+        return '';
+      }
+      // 两列→「左：右」(最常见的维度→结论);多列→顿号连接成一行。
+      return cells.length === 2
+        ? `${cells[0]}：${cells[1]}`
+        : cells.join('、');
+    }
     return (
       line
         // 行首标题记号 #。
