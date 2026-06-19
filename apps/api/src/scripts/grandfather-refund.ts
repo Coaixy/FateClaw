@@ -2,8 +2,11 @@
  * 一次性运维脚本：存量老用户补偿。
  *
  * 背景：付费体系从三层 C 端会员塌缩为单层"卦师使用权"。存量有效会员已自动承接为卦师版
- * 权益（权益只看 membership.active、不分档）；此脚本额外按"剩余时间比例 × 真实订阅扣费"
- * 把已付会员费折算成站内积分余额退还，作为老用户补贴。
+ * 权益（权益只看 membership.active、不分档）；此脚本额外按"剩余额度比例 × 真实订阅扣费"
+ * 把未消费的会员额度对应的费用折算成站内积分余额退还，作为老用户补贴。
+ *
+ * 口径：会员核心价值是月度 AI 额度，已消费的额度视为已享受、不退；只退当期未用完的额度部分。
+ *   退款 = 真实订阅扣费 × (当期 allowance_units − used_units) / allowance_units。
  *
  * 用法：
  *   tsx apps/api/src/scripts/grandfather-refund.ts --dry-run   仅预览，不写库
@@ -69,21 +72,40 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // 剩余时间比例。
-    const start = new Date(m.current_period_start).getTime();
-    const end = new Date(m.current_period_end).getTime();
-    const now = Date.now();
-    const ratio =
-      end > start ? Math.max(0, Math.min(1, (end - now) / (end - start))) : 0;
+    // 当期月度额度：取 now 落在区间内的 allowance 行。
+    const { rows: allowanceRows } = await pool.query<{
+      allowance_units: string;
+      used_units: string;
+    }>(
+      `SELECT allowance_units, used_units FROM membership_allowances
+        WHERE user_id = $1 AND NOW() >= period_start AND NOW() < period_end
+        ORDER BY period_start DESC LIMIT 1`,
+      [m.user_id],
+    );
+    const allowanceUnits = allowanceRows[0]
+      ? Number(allowanceRows[0].allowance_units)
+      : 0;
+    const usedUnits = allowanceRows[0] ? Number(allowanceRows[0].used_units) : 0;
+    if (!(allowanceUnits > 0)) {
+      // 无月度额度档（理论上不该出现；防御性跳过，避免 0/0）。
+      console.log(`  - 跳过（当期无月度额度，无法按额度折算）: ${m.user_id}`);
+      continue;
+    }
+
+    // 剩余额度比例 = (额度 − 已用) / 额度，夹在 [0,1]。
+    const ratio = Math.max(
+      0,
+      Math.min(1, (allowanceUnits - usedUnits) / allowanceUnits),
+    );
     const refund = Math.round(paidCoins * ratio * 100) / 100;
     if (!(refund > 0)) {
-      console.log(`  - 跳过（折算后为 0）: ${m.user_id}`);
+      console.log(`  - 跳过（额度已用尽，折算为 0）: ${m.user_id}`);
       continue;
     }
 
     console.log(
       `  ${dryRun ? '· 预览' : '✓ 退还'} ${refund} 积分 → ${m.user_id} ` +
-        `(${m.plan_key}, 实付 ${paidCoins}, 剩余 ${(ratio * 100).toFixed(0)}%)`,
+        `(${m.plan_key}, 实付 ${paidCoins}, 剩余额度 ${(ratio * 100).toFixed(0)}%)`,
     );
     refundedCount += 1;
     refundedCoins += refund;
@@ -103,11 +125,13 @@ async function main(): Promise<void> {
         kind: REFUND_KIND,
         amountCoins: refund,
         balanceSource: 'purchased',
-        note: `老用户补偿：${m.plan_key} 剩余 ${(ratio * 100).toFixed(0)}% 会员费折算退还`,
+        note: `老用户补偿：${m.plan_key} 剩余额度 ${(ratio * 100).toFixed(0)}% 会员费折算退还`,
         metadata: {
           plan_key: m.plan_key,
           paid_coins: paidCoins,
-          remaining_ratio: ratio,
+          allowance_units: allowanceUnits,
+          used_units: usedUnits,
+          remaining_allowance_ratio: ratio,
           period_start: m.current_period_start,
           period_end: m.current_period_end,
         },
