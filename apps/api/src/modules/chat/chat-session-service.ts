@@ -21,7 +21,6 @@ import {
   archiveChatSession,
   createChatSession,
   getArchivedChatSessionsByUserId,
-  getAccountsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
   getChatSessionsByUserId,
@@ -96,6 +95,8 @@ import {
 
 const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
+const MEMBERSHIP_REQUIRED_MESSAGE =
+  '需要有效的卦师使用权才能发起解读，请先开通或续费';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
 const PROFESSIONAL_AI_QUOTA_EXHAUSTED_MESSAGE =
@@ -353,13 +354,6 @@ async function getOwnedSession(
   return ok(session);
 }
 
-async function resolveOwnedSoulAccountId(
-  userId: string,
-): Promise<string | undefined> {
-  const accounts = await getAccountsByUserId(userId);
-  return accounts[0]?.id;
-}
-
 function readRequestIdFromMessage(message: NewMessage): string | null {
   const metadata =
     message.metadata &&
@@ -474,8 +468,9 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
 
 export async function listChatSessionsForOwnedUser(
   userId: string,
+  clientId?: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
-  const sessions = await getChatSessionsByUserId(userId);
+  const sessions = await getChatSessionsByUserId(userId, undefined, clientId);
   return ok(sessions.map(toChatSessionDto));
 }
 
@@ -803,6 +798,11 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const entitlement = await getRuntimeEntitlementSnapshot(userId);
+  // 卦师使用权门禁：无有效使用权（membership.active）不得发起解读。
+  // 站内 AI Chat、自贴盘面、简易模式都经此处准备入队，统一在这里硬拦截。
+  if (!entitlement.membershipActive) {
+    return fail(403, MEMBERSHIP_REQUIRED_MESSAGE);
+  }
   if (entitlement.wallet.inArrears) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
@@ -939,7 +939,7 @@ async function prepareOwnedChatSessionTurn(
         runtimeId: session.account_id,
         userName: WEB_CHAT_USER_NAME,
         assistantName: WEB_CHAT_ASSISTANT_NAME,
-        soulAccountId: await resolveOwnedSoulAccountId(userId),
+        soulUserId: userId,
       },
       runtimeUserMessage,
       session.id,
@@ -999,6 +999,8 @@ async function enqueuePreparedOwnedChatSessionTurn(
       sessionBoardContexts: prepared.sessionBoardContexts,
       userName: structured.userName,
       assistantName: structured.assistantName,
+      personaPrompt: structured.personaPrompt,
+      guashiScriptTemplate: structured.guashiScriptTemplate,
       sessionId: session.id,
       userMessageId: msgId,
       requestId,
@@ -1058,6 +1060,8 @@ async function completeOwnedChatSessionTurn(
       sessionBoardContexts: prepared.sessionBoardContexts,
       userName: structured.userName,
       assistantName: structured.assistantName,
+      personaPrompt: structured.personaPrompt,
+      guashiScriptTemplate: structured.guashiScriptTemplate,
       sessionId: session.id,
       userMessageId: msgId,
       requestId,

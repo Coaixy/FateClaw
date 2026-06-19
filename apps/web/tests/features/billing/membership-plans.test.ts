@@ -4,9 +4,7 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   MEMBERSHIP_DEEP_PLAN_KEY,
   MEMBERSHIP_INSIGHT_PLAN_KEY,
-  hasBaseMembershipEntitlement,
-  hasCustomModelEntitlement,
-  hasWechatClawEntitlement,
+  hasPaidMembershipEntitlement,
   membershipStatusMeetsPlan,
   resolveMembershipPlanDisplayName,
   resolveMembershipPlanShortName,
@@ -28,13 +26,13 @@ const baseMembership = {
 describe('membership plan helpers', () => {
   it('keeps base membership available to all paid tiers', () => {
     expect(
-      hasBaseMembershipEntitlement({
+      hasPaidMembershipEntitlement({
         ...baseMembership,
         plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
       }),
     ).toBe(true);
     expect(
-      hasBaseMembershipEntitlement({
+      hasPaidMembershipEntitlement({
         ...baseMembership,
         plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
         monthly_price_coins: 100,
@@ -43,7 +41,7 @@ describe('membership plan helpers', () => {
     ).toBe(true);
   });
 
-  it('can express Insight and Deep requirements', () => {
+  it('can express Insight tier requirements via rank', () => {
     const clarityMembership = {
       ...baseMembership,
       plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
@@ -54,28 +52,12 @@ describe('membership plan helpers', () => {
       monthly_price_coins: 30,
       display_price_coins: 30,
     };
-    const deepMembership = {
-      ...clarityMembership,
-      plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
-      monthly_price_coins: 100,
-      display_price_coins: 100,
-    };
 
     expect(
       membershipStatusMeetsPlan(clarityMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
     ).toBe(false);
     expect(
       membershipStatusMeetsPlan(insightMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
-    ).toBe(true);
-    expect(hasCustomModelEntitlement(clarityMembership)).toBe(false);
-    expect(hasCustomModelEntitlement(insightMembership)).toBe(true);
-    expect(hasWechatClawEntitlement(insightMembership)).toBe(false);
-    expect(hasWechatClawEntitlement(deepMembership)).toBe(true);
-    expect(
-      hasWechatClawEntitlement({
-        ...deepMembership,
-        enabled: false,
-      }),
     ).toBe(true);
   });
 
@@ -85,7 +67,7 @@ describe('membership plan helpers', () => {
       plan_key: 'legacy_plan',
     };
 
-    expect(hasBaseMembershipEntitlement(legacyMembership)).toBe(true);
+    expect(hasPaidMembershipEntitlement(legacyMembership)).toBe(true);
     expect(
       membershipStatusMeetsPlan(legacyMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
     ).toBe(false);

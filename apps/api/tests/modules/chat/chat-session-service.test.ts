@@ -376,6 +376,7 @@ describe('chat-session-service selected board context', () => {
           updated_at: '2026-04-21T09:00:00.000Z',
           share_token: null,
           deleted_at: '2026-04-26T09:00:00.000Z',
+          client_id: null,
         },
       ],
     });
@@ -439,15 +440,8 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('rejects Free professional AI turns because Free has no expert turns', async () => {
+  it('rejects users without an active membership at the access gate', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
-    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
-      allowed: false,
-      usage_date: '2026-04-26',
-      limit: 0,
-      used: 0,
-      remaining: 0,
-    });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
@@ -458,20 +452,11 @@ describe('chat-session-service selected board context', () => {
     expect(result).toEqual({
       ok: false,
       statusCode: 403,
-      error: '今日专家模式 AI 次数已用完，请开通或升级 FateClaw 会员后继续。',
+      error: '需要有效的卦师使用权才能发起解读，请先开通或续费',
     });
-    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
-      userId: 'user-1',
-      dailyTurnLimit: 0,
-    });
+    // 使用权门禁在占用会话处理锁、专家配额之前拦截，后续步骤都不应被触达。
+    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
     expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockRedisEval).toHaveBeenCalledTimes(2);
-    expect(mockRedisEval).toHaveBeenLastCalledWith(
-      expect.stringContaining("redis.call('DEL', KEYS[1])"),
-      1,
-      'session:processing:session-1',
-      expect.stringMatching(/^aichat-/),
-    );
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
@@ -497,7 +482,7 @@ describe('chat-session-service selected board context', () => {
     expect(result.ok).toBe(true);
     expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
-      dailyTurnLimit: 10,
+      dailyTurnLimit: 200,
     });
     expect(mockStoreMessage).toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
@@ -574,7 +559,7 @@ describe('chat-session-service selected board context', () => {
     });
   });
 
-  it('consumes Deep professional AI turns with the Deep daily limit', async () => {
+  it('consumes professional AI turns with the unified 使用权 daily limit', async () => {
     await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
       inputKind: 'normal',
@@ -583,13 +568,16 @@ describe('chat-session-service selected board context', () => {
 
     expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
       userId: 'user-1',
-      dailyTurnLimit: 100,
+      dailyTurnLimit: 200,
     });
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('does not consume professional AI turns for simple workflow first-turn bypass', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
+    mockGetMembershipOverview.mockResolvedValueOnce({
+      active: true,
+      membership: { plan_key: 'fateclaw_clarity' },
+    });
 
     const result = await sendOwnedChatSessionMessage(
       'user-1',
@@ -1123,7 +1111,7 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('uses the owned WeChat account as the Soul source for web AI chat', async () => {
+  it('uses the user id as the Soul source for web AI chat', async () => {
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '继续分析事业',
       selectedBoardMessageId: undefined,
@@ -1135,7 +1123,7 @@ describe('chat-session-service selected board context', () => {
     expect(mockBuildStructuredInputForSession).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeId: 'web:user-1',
-        soulAccountId: 'account-1',
+        soulUserId: 'user-1',
       }),
       '继续分析事业',
       'session-1',

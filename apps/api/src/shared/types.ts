@@ -259,6 +259,29 @@ export interface ChatSession {
   pi_session_archive_payload?: unknown;
   /** 最近一次从数据库归档回写成本地文件的时间。 */
   pi_session_archive_restored_at?: string | null;
+  /** 关联的客户档案 id；未关联或客户被删除时为空。 */
+  client_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/**
+ * 客户（被算者）档案表行。
+ *
+ * @remarks 归属卦师（user_id）；gender 存中文 '男'/'女'；deleted_at 为软删除标记。
+ * solar_date/hour/minute 为可空生辰，关联排盘时用于预填排盘输入。
+ */
+export interface ClientProfile {
+  id: string;
+  user_id: string;
+  name: string;
+  gender: string | null;
+  solar_date: string | null;
+  hour: number | null;
+  minute: number | null;
+  birthplace: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

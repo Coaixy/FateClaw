@@ -27,10 +27,9 @@ const STATUS_OPTIONS = [
   { value: 'ineligible', label: '不符合' },
 ] as const;
 
+// 会员已塌缩为单层「卦师使用权」(fateclaw_clarity);insight/deep 已停用,不再作为返利奖励档。
 const REWARD_MEMBERSHIP_PLAN_OPTIONS = [
-  { value: 'fateclaw_clarity', label: 'FateClaw Clarity' },
-  { value: 'fateclaw_insight', label: 'FateClaw Insight' },
-  { value: 'fateclaw_deep', label: 'FateClaw Deep' },
+  { value: 'fateclaw_clarity', label: '卦师使用权 (Clarity)' },
 ] as const;
 
 function formatDateTime(iso: string | null) {
@@ -156,7 +155,7 @@ function draftFromConfig(
   return {
     enabled: config?.enabled ?? true,
     reward_membership_plan_key:
-      config?.reward_membership_plan_key ?? 'fateclaw_insight',
+      config?.reward_membership_plan_key ?? 'fateclaw_clarity',
     inviter_reward_days: String(config?.inviter_reward_days ?? 7),
     monthly_reward_cap_days: String(config?.monthly_reward_cap_days ?? 30),
     invite_count_reward_threshold: String(

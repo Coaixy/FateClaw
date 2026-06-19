@@ -13,6 +13,7 @@ import {
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
+import { ClientProfileSelector } from '@/components/ai-chat/client-profile-selector';
 import {
   resolvePaipanFlow,
   type PaipanFlowFieldKit,
@@ -21,6 +22,7 @@ import {
   PAIPAN_FLOW_HELPERS,
   PAIPAN_SHEET_HELPERS,
 } from '@/components/ai-chat/paipan-sheet-helpers';
+import type { ClientProfile } from '@/features/chat/client-profiles-api';
 import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
@@ -30,6 +32,14 @@ import {
 } from '@/features/paipan/api';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
+
+/**
+ * 支持按客户档案预填生辰的术数集合。
+ *
+ * 仅八字、紫微以个人出生年月日时 + 性别为输入，关联客户档案预填才有意义；
+ * 其余术数（卦例、奇门等）以事件时间或起卦数为输入，不展示客户选择器。
+ */
+const CLIENT_PREFILL_SKILLS = new Set(['bazi-paipan', 'ziwei-paipan']);
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
 
@@ -941,6 +951,7 @@ export function PaipanSheet({
   const { toast } = useToast();
   const { t } = useI18n();
   const [selectedSkill, setSelectedSkill] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [previewResult, setPreviewResult] = useState<PaipanPreviewResponse | null>(null);
   const [previewSkillName, setPreviewSkillName] = useState('');
@@ -1006,11 +1017,16 @@ export function PaipanSheet({
     setPreviewSkillName('');
     setResultStepActive(false);
     setAdvancedOpen(false);
+    // 切换到不支持客户预填的术数时清除客户关联，避免错把客户绑到无关会话。
+    if (!CLIENT_PREFILL_SKILLS.has(selectedCatalogItem.skill)) {
+      setSelectedClientId(null);
+    }
   }, [selectedCatalogItem]);
 
   useEffect(() => {
     if (!open) {
       setSelectedSkill('');
+      setSelectedClientId(null);
       setPreviewResult(null);
       setPreviewSkillName('');
       setResultStepActive(false);
@@ -1038,6 +1054,32 @@ export function PaipanSheet({
         previous,
       ),
     );
+  };
+
+  // 选中（或清除）客户档案：记录关联 id，并把客户生辰预填到排盘表单的对应字段。
+  const handleSelectClient = (profile: ClientProfile | null) => {
+    setSelectedClientId(profile?.id ?? null);
+    if (!profile) {
+      return;
+    }
+
+    const changes: Array<{ path: string[]; value: unknown }> = [];
+    if (typeof profile.solar_date === 'string' && profile.solar_date) {
+      changes.push({ path: ['solarDate'], value: profile.solar_date });
+    }
+    if (typeof profile.hour === 'number') {
+      changes.push({ path: ['hour'], value: profile.hour });
+      changes.push({
+        path: ['minute'],
+        value: typeof profile.minute === 'number' ? profile.minute : 0,
+      });
+    }
+    if (profile.gender === '男' || profile.gender === '女') {
+      changes.push({ path: ['gender'], value: profile.gender });
+    }
+    if (changes.length > 0) {
+      handleManyChanges(changes);
+    }
   };
 
   const buildCurrentSubmitInput = (): Record<string, unknown> | null => {
@@ -1112,6 +1154,7 @@ export function PaipanSheet({
         sessionId,
         skill: selectedCatalogItem.skill,
         input: submitInput,
+        client_id: selectedClientId,
       });
       await onCommitted(result);
       onClose();
@@ -1142,6 +1185,7 @@ export function PaipanSheet({
       const result = await paipanApi.commit({
         target: 'new_session_from_preview',
         previewId: previewResult.previewId,
+        client_id: selectedClientId,
       });
       await onCommitted(result);
       onClose();
@@ -1284,6 +1328,13 @@ export function PaipanSheet({
 
             {selectedCatalogItem ? (
               <div className="space-y-4">
+                {!resultStepActive &&
+                  CLIENT_PREFILL_SKILLS.has(selectedCatalogItem.skill) && (
+                    <ClientProfileSelector
+                      selectedClientId={selectedClientId}
+                      onSelect={handleSelectClient}
+                    />
+                  )}
                 {SelectedFlow ? (
                   <SelectedFlow
                     draft={draft}

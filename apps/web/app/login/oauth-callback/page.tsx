@@ -32,7 +32,7 @@ function OAuthCallbackContent() {
   useEffect(() => {
     const token = searchParams.get('token');
     const next =
-      normalizeAuthRedirect(searchParams.get('next')) ?? '/dashboard';
+      normalizeAuthRedirect(searchParams.get('next')) ?? '/ai-chat';
     const callbackError = searchParams.get('error');
 
     if (callbackError) {

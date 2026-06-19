@@ -472,6 +472,10 @@ describe('runDatabaseMigrations', () => {
       '0046_skill_reactions_and_comments',
       '0047_membership_default_pricing_snapshot',
       '0048_user_skill_runtime_limit',
+      '0049_collapse_membership_to_guashi_access',
+      '0050_client_profiles',
+      '0051_user_guashi_script_template',
+      '0052_disable_legacy_plus_pro_membership_plans',
     ]);
 
     await runDatabaseMigrations(client as never);

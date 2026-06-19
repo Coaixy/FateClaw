@@ -62,6 +62,44 @@ export interface ChatSessionDto {
   share_token?: string | null;
   /** 会话归档时间；未归档时为空。 */
   deleted_at?: string | null;
+  /** 关联的客户档案 id；未关联时为空。 */
+  client_id?: string | null;
+}
+
+/** 客户（被算者）档案。卦师为客户建档，发起排盘时关联并用生辰预填。 */
+export interface ClientProfileDto {
+  id: string;
+  name: string;
+  gender?: '男' | '女' | null;
+  /** 阳历生日 YYYY-MM-DD。 */
+  solar_date?: string | null;
+  /** 出生小时 0-23。 */
+  hour?: number | null;
+  /** 出生分钟 0-59。 */
+  minute?: number | null;
+  birthplace?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  /** 该客户的解读会话数（列表统计用，可选）。 */
+  session_count?: number;
+  /** 该客户最近一次解读时间（可选）。 */
+  last_session_at?: string | null;
+}
+
+/** 创建/更新客户档案的请求体。 */
+export interface ClientProfileUpsertDto {
+  name: string;
+  gender?: '男' | '女' | null;
+  solar_date?: string | null;
+  hour?: number | null;
+  minute?: number | null;
+  birthplace?: string | null;
+  notes?: string | null;
+}
+
+export interface ClientProfileListResponseDto {
+  clients: ClientProfileDto[];
 }
 
 export interface ChatSessionShareResponseDto {

@@ -93,7 +93,7 @@ import type {
   ReferralRewardStatus,
 } from '../../infrastructure/db.js';
 import {
-  MEMBERSHIP_INSIGHT_PLAN_KEY,
+  MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
@@ -488,7 +488,7 @@ export async function updateAdminReferralConfig(input: {
     ...input,
     rewardMembershipPlanKey: normalizeMembershipPlanKey(
       input.rewardMembershipPlanKey,
-      MEMBERSHIP_INSIGHT_PLAN_KEY,
+      MEMBERSHIP_CLARITY_PLAN_KEY,
     ),
   });
   return {

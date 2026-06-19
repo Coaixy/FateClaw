@@ -173,6 +173,18 @@ import {
 } from './repositories/chat-repository.js';
 import type { ChatSessionPiSessionArchiveRow } from './repositories/chat-repository.js';
 import {
+  createClientProfile,
+  getClientProfile,
+  getClientProfilesByUserId,
+  softDeleteClientProfile,
+  updateClientProfile,
+} from './repositories/client-profiles-repository.js';
+import type {
+  ClientProfileWithStats,
+  CreateClientProfileInput,
+  UpdateClientProfileInput,
+} from './repositories/client-profiles-repository.js';
+import {
   deleteWechatChatSessionLink,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
@@ -234,11 +246,13 @@ import {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
+  getUserGuashiScriptTemplate,
   promoteUserToCreator,
   updateUserSoulEditEnabled,
   updateUserPasswordHash,
   updateUserRole,
   updateUserSoulContent,
+  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
 } from './repositories/users-repository.js';
 import {
@@ -365,6 +379,7 @@ export {
   createUser,
   createUserUsing,
   createUserCustomSkill,
+  createClientProfile,
   deleteAccount,
   deleteDraftAnnouncement,
   deleteChatSession,
@@ -398,6 +413,8 @@ export {
   getChatSessions,
   getChatSessionsByUserId,
   getChatSessionsForAdmin,
+  getClientProfile,
+  getClientProfilesByUserId,
   getConversationLogById,
   getConversationLogByRequestId,
   getConversationLogSummaries,
@@ -455,6 +472,7 @@ export {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
+  getUserGuashiScriptTemplate,
   getUserCustomSkill,
   getUserCustomSkillById,
   getUserCustomSkillCount,
@@ -527,6 +545,7 @@ export {
   settleReferralMembershipRewardUsing,
   settleUserModelChargeCoins,
   setUserMembershipForAdmin,
+  softDeleteClientProfile,
   subscribeMembershipWithWallet,
   subscribeToBundle,
   subscribeToSkill,
@@ -544,6 +563,7 @@ export {
   updateAccount,
   updateAnnouncement,
   updateChatSessionTitle,
+  updateClientProfile,
   updateOfficialModelConfig,
   updatePublicFinancialLedgerEntry,
   updateRuntimeConfig,
@@ -557,6 +577,7 @@ export {
   updateUserRole,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
+  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
   unpublishSkillBundle,
   unpublishUserCustomSkill,
@@ -593,8 +614,10 @@ export type {
   BillingRequestReservationListResult,
   BundleByTokenResult,
   ChatSessionPiSessionArchiveRow,
+  ClientProfileWithStats,
   ConversationLogRow,
   ConversationLogSummaryRow,
+  CreateClientProfileInput,
   DailySignInConfigRow,
   DailySignInRecordRow,
   DeductBalanceResult,
@@ -639,6 +662,7 @@ export type {
   SkillAccessInviteStatus,
   SkillReactionSummary,
   RedeemSkillAccessInviteResult,
+  UpdateClientProfileInput,
   UserMembershipRow,
   WalletTransactionRow,
 };

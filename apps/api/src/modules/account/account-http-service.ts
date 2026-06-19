@@ -8,6 +8,7 @@
 import type {
   AccountDto,
   AccountSoulDto,
+  GuashiScriptTemplateDto,
   QrCodeResultDto,
   QrCodeStatusResultDto,
 } from '@fateclaw/contracts/account';
@@ -20,9 +21,11 @@ import {
   getUserById,
   getUserSoulEditEnabled,
   getUserSoulContent,
+  getUserGuashiScriptTemplate,
   updateSoulContent,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
+  updateUserGuashiScriptTemplate,
 } from '../../infrastructure/db.js';
 import { getLoginQrCode, getQrCodeStatus } from '../../infrastructure/ilink.js';
 import { WECHAT_DEVICE_BINDING_DISABLED_MESSAGE } from './account-service.js';
@@ -129,6 +132,35 @@ export async function updateOwnedUserSoulContent(
   if (editEnabled !== undefined) {
     await updateUserSoulEditEnabled(user.id, editEnabled);
   }
+  return ok({ success: true });
+}
+
+/**
+ * 读取当前用户的话术稿模板;content 为空表示沿用平台默认骨架。
+ */
+export async function getOwnedUserGuashiScriptTemplate(
+  userId: string,
+): Promise<ServiceResult<GuashiScriptTemplateDto>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  const content = await getUserGuashiScriptTemplate(user.id);
+  return ok({ content });
+}
+
+/**
+ * 更新当前用户的话术稿模板;存空字符串等价于恢复使用平台默认骨架。
+ */
+export async function updateOwnedUserGuashiScriptTemplate(
+  userId: string,
+  content: string,
+): Promise<ServiceResult<{ success: true }>> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return fail(404, '用户不存在');
+  }
+  await updateUserGuashiScriptTemplate(user.id, content);
   return ok({ success: true });
 }
 

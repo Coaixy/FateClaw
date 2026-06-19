@@ -71,10 +71,14 @@ describe('simpleWorkflowsRoutes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockStartSimpleWorkflowForOwnedUser).toHaveBeenCalledWith('user-1', {
-      kind: 'divination',
-      question: '看看工作',
-    });
+    expect(mockStartSimpleWorkflowForOwnedUser).toHaveBeenCalledWith(
+      'user-1',
+      {
+        kind: 'divination',
+        question: '看看工作',
+      },
+      undefined,
+    );
     expect(response.json()).toMatchObject({
       session: { id: 'session-1' },
       boardMessageId: 'board-1',

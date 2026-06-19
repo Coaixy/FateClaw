@@ -24,6 +24,7 @@ import { adminRoutes } from './admin-routes.js';
 import { authRoutes } from './auth-routes.js';
 import { billingRoutes } from './billing-routes.js';
 import { chatSessionsRoutes } from './chat-sessions-routes.js';
+import { clientProfilesRoutes } from './client-profiles-routes.js';
 import { messagesRoutes } from './messages-routes.js';
 import { modelSettingsRoutes } from './model-settings-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
@@ -317,6 +318,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(accountRoutes, { prefix: '/api/account' });
   await app.register(chatSessionsRoutes, { prefix: '/api/chat-sessions' });
+  await app.register(clientProfilesRoutes, { prefix: '/api/client-profiles' });
   await app.register(messagesRoutes, { prefix: '/api/messages' });
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });

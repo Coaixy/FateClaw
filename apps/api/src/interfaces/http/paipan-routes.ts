@@ -65,10 +65,12 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
     Body: {
       skill?: string;
       input?: Record<string, unknown>;
+      client_id?: string;
     };
   }>('/preview', async (request, reply) => {
     const skill = request.body?.skill?.trim();
     const input = request.body?.input;
+    const clientId = request.body?.client_id?.trim() || undefined;
 
     if (!skill) {
       return reply.code(400).send({ error: '缺少 skill' });
@@ -82,6 +84,7 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       userId,
       skill,
       input,
+      clientId,
     });
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
@@ -106,6 +109,7 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       sessionId?: string;
       skill?: string;
       input?: Record<string, unknown>;
+      client_id?: string;
     };
   }>('/commit', async (request, reply) => {
     await request.requireAuth();
@@ -115,13 +119,17 @@ export async function paipanRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: '非法 target' });
     }
 
-    const result = await commitDirectPaipanForOwnedUser(request.user.userId, {
-      target,
-      previewId: request.body?.previewId,
-      sessionId: request.body?.sessionId,
-      skill: request.body?.skill,
-      input: request.body?.input,
-    });
+    const result = await commitDirectPaipanForOwnedUser(
+      request.user.userId,
+      {
+        target,
+        previewId: request.body?.previewId,
+        sessionId: request.body?.sessionId,
+        skill: request.body?.skill,
+        input: request.body?.input,
+      },
+      request.body?.client_id?.trim() || undefined,
+    );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

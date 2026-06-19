@@ -88,10 +88,16 @@ function buildUserQueryProcess(traceEvents: unknown): QueryProcessStepDto[] {
 }
 
 export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/chat-sessions — 列出当前用户的站内 AI Chat 会话
-  app.get('/', async (request, reply) => {
+  // GET /api/chat-sessions — 列出当前用户的站内 AI Chat 会话；可选 ?client_id= 只看某客户
+  app.get<{
+    Querystring: { client_id?: string };
+  }>('/', async (request, reply) => {
     await request.requireAuth();
-    const result = await listChatSessionsForOwnedUser(request.user.userId);
+    const clientId = request.query.client_id?.trim() || undefined;
+    const result = await listChatSessionsForOwnedUser(
+      request.user.userId,
+      clientId,
+    );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

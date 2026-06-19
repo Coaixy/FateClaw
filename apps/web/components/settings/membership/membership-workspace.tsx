@@ -18,7 +18,6 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   resolveMembershipPlanDisplayName,
-  resolveMembershipPlanRank,
   resolveMembershipPlanShortName,
 } from '@/features/billing/membership-plans';
 import { useI18n } from '@/lib/i18n';
@@ -161,7 +160,8 @@ function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
 function resolvePlanDisplayName(
   plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
 ) {
-  return resolveMembershipPlanDisplayName(plan);
+  // 优先使用后端配置的套餐名（如"卦师使用权"）；为空时回退到按档位推导的旧展示名。
+  return plan.name?.trim() || resolveMembershipPlanDisplayName(plan);
 }
 
 function resolveEntitlementShortName(
@@ -176,31 +176,12 @@ function hasMembershipAllowance(
   return (plan?.monthly_allowance_units ?? 0) > 0;
 }
 
-function resolvePlanBenefitLabels(
-  plan: Pick<MembershipPlan, 'name' | 'plan_key' | 'monthly_allowance_units'>,
-  t: TranslationFn,
-) {
-  const planShortName = resolvePlanShortName(plan);
-  if (planShortName === 'Clarity') {
-    return [
-      t('pages.membership.planBenefitClarityExpert'),
-      t('pages.membership.planBenefitClarityDaily'),
-      t('pages.membership.planBenefitClarityCharting'),
-    ];
-  }
-  if (planShortName === 'Deep') {
-    return [
-      t('pages.membership.planBenefitDeepAllowance'),
-      t('pages.membership.planBenefitDeepSupport'),
-      t('pages.membership.planBenefitDeepExpert'),
-    ];
-  }
+function resolvePlanBenefitLabels(t: TranslationFn) {
+  // 塌缩为单层"卦师使用权"：统一展示卦师工具的核心卖点，不再按档位区分。
   return [
-    t('pages.membership.planBenefitInsightExpert'),
-    t('pages.membership.planBenefitInsightTools'),
-    hasMembershipAllowance(plan)
-      ? t('pages.membership.planBenefitInsightAllowance')
-      : t('pages.membership.planBenefitNoAllowance'),
+    t('pages.membership.planBenefitGuashiModel'),
+    t('pages.membership.planBenefitGuashiReading'),
+    t('pages.membership.planBenefitGuashiKnowledge'),
   ];
 }
 
@@ -589,11 +570,9 @@ function MembershipPlanCards({
   const normalizedActivePlanKey = activePlanKey
     ? normalizeMembershipPlanKey(activePlanKey)
     : null;
-  const activePlanRank = resolveMembershipPlanRank(normalizedActivePlanKey);
-  const visiblePlans = plans.filter((plan) => {
-    if (activePlanRank <= 0) return true;
-    return resolveMembershipPlanRank(plan.plan_key) > activePlanRank;
-  });
+  // 塌缩为单层"卦师使用权"后不再有多档升级概念：后端已只返回在售套餐（enabled），
+  // 这里直接全部展示，已订阅用户也能看到当前档用于续费。
+  const visiblePlans = plans;
   const visiblePlanSignature = visiblePlans
     .map((plan) => normalizeMembershipPlanKey(plan.plan_key))
     .join('|');
@@ -728,12 +707,11 @@ function MembershipPlanCards({
           const normalizedPlanKey = normalizeMembershipPlanKey(plan.plan_key);
           const isCurrentPlan = normalizedActivePlanKey === normalizedPlanKey;
           const busy = busyPlanKey === plan.plan_key;
-          const planShortName = resolvePlanShortName(plan);
           const planDisplayName = resolvePlanDisplayName(plan);
-          const benefitLabels = resolvePlanBenefitLabels(plan, t);
+          const benefitLabels = resolvePlanBenefitLabels(t);
           const actionLabel = isCurrentPlan
-            ? t('pages.membership.renewPlan', { plan: planShortName })
-            : t('pages.membership.subscribePlan', { plan: planShortName });
+            ? t('pages.membership.renewPlan', { plan: planDisplayName })
+            : t('pages.membership.subscribePlan', { plan: planDisplayName });
           const buttonLabel = !plan.enabled
             ? t('pages.membership.planDisabled')
             : actionLabel;

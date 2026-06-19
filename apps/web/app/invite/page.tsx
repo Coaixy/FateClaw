@@ -88,7 +88,7 @@ function InviteContent() {
     try {
       await referralsApi.redeem(code);
       setDone(true);
-      setTimeout(() => router.push('/dashboard'), 1200);
+      setTimeout(() => router.push('/ai-chat'), 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : '绑定邀请码失败');
     } finally {

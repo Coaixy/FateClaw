@@ -69,7 +69,7 @@ function LoginContent() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(readLoginRedirect('/dashboard'));
+      router.replace(readLoginRedirect('/ai-chat'));
     }
   }, [loading, user, router]);
 
@@ -214,7 +214,7 @@ function LoginContent() {
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
       }
-      router.replace(readLoginRedirect('/dashboard'));
+      router.replace(readLoginRedirect('/ai-chat'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('login.operationFailed'));
       // 登录失败或图形码失败都刷新，避免继续使用已经失效的 nonce。
@@ -231,7 +231,7 @@ function LoginContent() {
     setOAuthStarting(true);
     window.location.assign(
       authApi.googleOAuthStartUrl(
-        readLoginRedirect('/dashboard'),
+        readLoginRedirect('/ai-chat'),
         inviteCode.trim() || null,
       ),
     );
