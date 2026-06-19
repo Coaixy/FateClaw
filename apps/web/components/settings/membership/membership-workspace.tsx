@@ -18,7 +18,6 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   resolveMembershipPlanDisplayName,
-  resolveMembershipPlanShortName,
 } from '@/features/billing/membership-plans';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
@@ -95,10 +94,6 @@ function formatMembershipUsage(
     messages: formatNumber(monthlyMessages),
     tokens: formatCompactNumber(monthlyTokens),
   });
-}
-
-function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
-  return resolveMembershipPlanShortName(plan);
 }
 
 function resolvePlanDisplayName(
@@ -763,7 +758,11 @@ function MembershipDetailPanel({
       className: '',
       label: t('pages.membership.membershipPrice'),
       value: t('pages.membership.pricePerMonth', {
-        price: formatCoins(membership.monthly_price_coins, locale),
+        // 价格以当前在售套餐（卦师使用权）为准；存量会员记录里的旧档价格（如 insight 100）已不适用。
+        price: formatCoins(
+          currentPlan?.monthly_price_coins ?? membership.monthly_price_coins,
+          locale,
+        ),
       }),
     },
   ] as const;
@@ -816,24 +815,25 @@ export function MembershipWorkspace() {
     if (!membership || membershipBusyPlanKey || !plan.enabled) return;
 
     const priceText = formatCoins(plan.monthly_price_coins, locale);
-    const planShortName = resolvePlanShortName(plan);
-    const isCurrentPlan =
-      normalizeMembershipPlanKey(membership.plan_key) ===
-      normalizeMembershipPlanKey(plan.plan_key);
+    // 弹窗里用套餐展示名（卦师使用权），与卡片按钮一致，不再泄漏旧档英文名 Clarity。
+    const planDisplayName = resolvePlanDisplayName(plan);
+    // 单层"卦师使用权"下只有一个在售套餐：存量会员的 plan_key 可能仍是旧档（insight/deep），
+    // 不能按 plan_key 相等判断续费，只要会员仍有效即视为续费。
+    const isRenewal = Boolean(membership.active);
     const ok = await confirm({
-      title: isCurrentPlan
+      title: isRenewal
         ? t('pages.membership.confirmRenewTitle')
         : t('pages.membership.confirmSubscribeTitle'),
-      message: isCurrentPlan
+      message: isRenewal
         ? t('pages.membership.confirmRenewPlanMessage', {
-            plan: planShortName,
+            plan: planDisplayName,
             price: priceText,
           })
         : t('pages.membership.confirmSubscribePlanMessage', {
-            plan: planShortName,
+            plan: planDisplayName,
             price: priceText,
           }),
-      confirmLabel: isCurrentPlan
+      confirmLabel: isRenewal
         ? t('pages.membership.confirmRenew')
         : t('pages.membership.confirmSubscribe'),
       cancelLabel: t('common.cancel'),
@@ -927,7 +927,11 @@ export function MembershipWorkspace() {
         ) : null}
         <MembershipPlanCards
           plans={membershipPlans}
-          activePlanKey={membership?.active ? membership.plan_key : null}
+          activePlanKey={
+            // 续费判定按"生效中的在售套餐"（defaultPlan→clarity）来匹配卡片，
+            // 不用存量会员可能残留的旧档 plan_key，否则唯一卡片会误显示"开通"。
+            membership?.active ? (defaultPlan?.plan_key ?? null) : null
+          }
           busyPlanKey={membershipBusyPlanKey}
           locale={locale}
           onSubscribe={(plan) => void handleSubscribeMembership(plan)}
