@@ -51,9 +51,7 @@ import {
   listWalletTransactionsForAdmin,
   listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
-  cancelAdminUserMembershipPlan,
   removeOfficialModel,
-  resetAdminUserMembershipAllowance,
   resetAdminUserPassword,
   setAdminUserMembership,
   setSkillGlobalEnabled,
@@ -1625,39 +1623,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return await cancelAdminUserMembership(id);
     } catch (err) {
       const message = err instanceof Error ? err.message : '停用会员失败';
-      return reply
-        .code(message === '用户不存在' ? 404 : 400)
-        .send({ error: message });
-    }
-  });
-
-  // DELETE /api/admin/users/:id/membership/:planKey — 管理员停用用户指定会员套餐
-  app.delete('/users/:id/membership/:planKey', async (request, reply) => {
-    const { id, planKey } = request.params as {
-      id: string;
-      planKey: string;
-    };
-    const parsed = MembershipPlanKeySchema.safeParse(planKey);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: '会员套餐无效' });
-    }
-    try {
-      return await cancelAdminUserMembershipPlan(id, parsed.data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '停用会员套餐失败';
-      return reply
-        .code(message === '用户不存在' ? 404 : 400)
-        .send({ error: message });
-    }
-  });
-
-  // POST /api/admin/users/:id/membership/allowance/reset — 管理员重置当前会员周期额度
-  app.post('/users/:id/membership/allowance/reset', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      return await resetAdminUserMembershipAllowance(id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '重置会员额度失败';
       return reply
         .code(message === '用户不存在' ? 404 : 400)
         .send({ error: message });

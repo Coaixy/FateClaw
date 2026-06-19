@@ -26,7 +26,6 @@ import {
   Activity,
   AlertTriangle,
   BadgeCheck,
-  CalendarDays,
   ChevronDown,
   ChevronRight,
   Coins,
@@ -107,10 +106,6 @@ function chinaDateTimeIso(value: string) {
   return new Date(`${value}:00+08:00`).toISOString();
 }
 
-function percent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
 function displayUser(user: AdminUser) {
   return user.phone || user.id;
 }
@@ -153,18 +148,6 @@ function replaceUsersQuery(search: string, page: number) {
     toAdminDocumentHref(`/users${query ? `?${query}` : ''}`),
   );
 }
-
-const ALLOWANCE_STATUS_LABELS: Record<
-  UserDetail['membership']['allowance_status'],
-  string
-> = {
-  inactive: '未生效',
-  plenty: '充足',
-  normal: '正常',
-  tight: '偏紧',
-  almost_used: '将用尽',
-  used_up: '已用尽',
-};
 
 function membershipPlanLabel(
   planKey: string | null,
@@ -391,17 +374,10 @@ function UserRow({
   const [grantingBonus, setGrantingBonus] = useState(false);
   const [updatingMembership, setUpdatingMembership] = useState(false);
   const [cancellingMembership, setCancellingMembership] = useState(false);
-  const [cancellingMembershipPlan, setCancellingMembershipPlan] = useState<
-    string | null
-  >(null);
-  const [resettingAllowance, setResettingAllowance] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmCancelMembership, setConfirmCancelMembership] = useState(false);
-  const [confirmCancelMembershipPlan, setConfirmCancelMembershipPlan] =
-    useState<string | null>(null);
-  const [confirmResetAllowance, setConfirmResetAllowance] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [msg, setMsg] = useState('');
@@ -461,8 +437,15 @@ function UserRow({
 
   useEffect(() => {
     if (!detail) return;
+    // 单层化后旧档（insight/deep）已停用：仅当用户当前档仍是在售档时才默认选中它，
+    // 否则回落到第一个在售档（卦师使用权）。避免给存量旧档会员默认选中停用档，
+    // 导致点"设置会员"提交时被后端以"会员套餐未启用"拒绝。
+    const currentPlanKey = detail.membership.plan_key;
+    const currentPlanEnabled = detail.membership_plans.some(
+      (plan) => plan.plan_key === currentPlanKey && plan.enabled,
+    );
     setMembershipPlan(
-      detail.membership.plan_key ??
+      (currentPlanEnabled ? currentPlanKey : null) ??
         detail.membership_plans.find((plan) => plan.enabled)?.plan_key ??
         detail.membership_plans[0]?.plan_key ??
         'fateclaw_clarity',
@@ -472,8 +455,6 @@ function UserRow({
         defaultMembershipEndDateTime(),
     );
     setConfirmCancelMembership(false);
-    setConfirmCancelMembershipPlan(null);
-    setConfirmResetAllowance(false);
   }, [detail]);
 
   useEffect(() => {
@@ -633,46 +614,6 @@ function UserRow({
       setMsg(formatAdminErrorMessage(err, '停用会员失败'));
     } finally {
       setCancellingMembership(false);
-    }
-  };
-
-  const handleCancelMembershipPlan = async (planKey: string) => {
-    if (confirmCancelMembershipPlan !== planKey) {
-      setConfirmCancelMembershipPlan(planKey);
-      return;
-    }
-    setCancellingMembershipPlan(planKey);
-    setMsg('');
-    try {
-      const state = await admin.cancelUserMembershipPlan(user.id, planKey);
-      applyMembershipState(state);
-      setConfirmCancelMembershipPlan(null);
-      setMsg(`${membershipPlanLabel(planKey, detail?.membership_plans ?? [])} 已取消`);
-      void onRefresh();
-    } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '取消会员套餐失败'));
-    } finally {
-      setCancellingMembershipPlan(null);
-    }
-  };
-
-  const handleResetAllowance = async () => {
-    if (!confirmResetAllowance) {
-      setConfirmResetAllowance(true);
-      return;
-    }
-    setResettingAllowance(true);
-    setMsg('');
-    try {
-      const state = await admin.resetUserMembershipAllowance(user.id);
-      applyMembershipState(state);
-      setConfirmResetAllowance(false);
-      setMsg('会员额度已重置');
-      void onRefresh();
-    } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '重置会员额度失败'));
-    } finally {
-      setResettingAllowance(false);
     }
   };
 
@@ -1033,121 +974,9 @@ function UserRow({
                         label="到期"
                         value={formatDate(detail.membership.current_period_end)}
                       />
-                      <DataCell
-                        label="额度"
-                        value={`${ALLOWANCE_STATUS_LABELS[detail.membership.allowance_status]} · ${percent(
-                          detail.membership.allowance_used_ratio,
-                        )}`}
-                      />
-                      <DataCell
-                        label="重置"
-                        value={formatDate(detail.membership.allowance_reset_at)}
-                      />
                     </div>
 
-                    {detail.membership_entitlements.length > 0 && (
-                      <div className="mb-3 divide-y divide-hairline rounded-lg border border-hairline">
-                        {detail.membership_entitlements.map((item) => (
-                          <div
-                            key={`${item.plan_key}:${item.effective_start}`}
-                            className="grid gap-2 px-3 py-2 text-[12px]"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-medium">
-                                    {item.name}
-                                  </span>
-                                  {item.is_current && (
-                                    <span className="text-[11px] text-success">
-                                      当前
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="mt-1 flex items-center gap-1 text-[11px] text-muted">
-                                  <CalendarDays size={11} />
-                                  <span>
-                                    {formatDate(item.effective_start)} -{' '}
-                                    {formatDate(item.effective_end)}
-                                  </span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleCancelMembershipPlan(item.plan_key)
-                                }
-                                disabled={
-                                  cancellingMembershipPlan !== null ||
-                                  !detail.membership.active
-                                }
-                                className={`shrink-0 cursor-pointer rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                                  confirmCancelMembershipPlan === item.plan_key
-                                    ? 'bg-error text-white'
-                                    : 'border border-hairline text-muted hover:text-ink'
-                                }`}
-                              >
-                                {cancellingMembershipPlan === item.plan_key ? (
-                                  <Loader2
-                                    size={11}
-                                    className="inline animate-spin"
-                                  />
-                                ) : confirmCancelMembershipPlan ===
-                                  item.plan_key ? (
-                                  '确认取消此套餐'
-                                ) : (
-                                  '取消此套餐'
-                                )}
-                              </button>
-                            </div>
-                            {confirmCancelMembershipPlan === item.plan_key &&
-                              cancellingMembershipPlan !== item.plan_key && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setConfirmCancelMembershipPlan(null)
-                                  }
-                                  className="w-fit cursor-pointer text-[11px] text-muted hover:text-ink"
-                                >
-                                  保留此套餐
-                                </button>
-                              )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
                     <div className="grid gap-2">
-                      <label className="min-w-0">
-                        <span className="mb-1 block text-[12px] text-muted">
-                          套餐
-                        </span>
-                        <select
-                          value={membershipPlan}
-                          onChange={(event) =>
-                            setMembershipPlan(event.target.value)
-                          }
-                          className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
-                        >
-                          {detail.membership_plans.length === 0 ? (
-                            <option value="fateclaw_clarity">
-                              FateClaw Clarity
-                            </option>
-                          ) : (
-                            detail.membership_plans.map((plan) => (
-                              <option
-                                key={plan.plan_key}
-                                value={plan.plan_key}
-                                disabled={!plan.enabled}
-                              >
-                                {plan.name}
-                                {plan.enabled ? '' : '（停用）'}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </label>
-
                       <label className="min-w-0">
                         <span className="mb-1 block text-[12px] text-muted">
                           到期时间
@@ -1176,42 +1005,9 @@ function UserRow({
 
                       <button
                         type="button"
-                        onClick={() => void handleResetAllowance()}
-                        disabled={
-                          resettingAllowance || !detail.membership.active
-                        }
-                        className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                          confirmResetAllowance
-                            ? 'bg-primary text-on-primary'
-                            : 'border border-hairline text-muted hover:text-ink'
-                        }`}
-                      >
-                        {resettingAllowance ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <RefreshCw size={12} />
-                        )}
-                        {confirmResetAllowance
-                          ? '确认重置当前周期额度'
-                          : '重置会员额度'}
-                      </button>
-                      {confirmResetAllowance && !resettingAllowance && (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmResetAllowance(false)}
-                          className="cursor-pointer text-[12px] text-muted hover:text-ink"
-                        >
-                          取消重置
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
                         onClick={() => void handleCancelMembership()}
                         disabled={
-                          cancellingMembership ||
-                          cancellingMembershipPlan !== null ||
-                          !detail.membership.active
+                          cancellingMembership || !detail.membership.active
                         }
                         className={`inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                           confirmCancelMembership
@@ -1225,8 +1021,8 @@ function UserRow({
                           <AlertTriangle size={12} />
                         )}
                         {confirmCancelMembership
-                          ? '确认取消全部会员套餐'
-                          : '取消全部会员套餐'}
+                          ? '确认停用会员'
+                          : '停用会员'}
                       </button>
                       {confirmCancelMembership && !cancellingMembership && (
                         <button

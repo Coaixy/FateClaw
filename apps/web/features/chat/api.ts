@@ -156,13 +156,6 @@ export function buildChatSessionStreamUrl(sessionId: string, ticket: string) {
   return url.toString();
 }
 
-export const messagesApi = {
-  list: (accountId: string, limit = 50, before?: string) =>
-    requestJson<Message[]>(
-      `/api/messages/${encodeURIComponent(accountId)}?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
-    ),
-};
-
 const chatSessionListRequestCache =
   createAuthScopedInFlightCache<ChatSession[]>();
 
