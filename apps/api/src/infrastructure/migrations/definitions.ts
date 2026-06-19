@@ -11,6 +11,7 @@ import { guashiScriptTemplateMigrations } from './definitions/0051-guashi-script
 import { disableLegacyPlusProMigrations } from './definitions/0052-disable-legacy-plus-pro.js';
 import { clarityNoAllowanceMigrations } from './definitions/0053-clarity-no-allowance.js';
 import { migrateLegacyMembersToClarityMigrations } from './definitions/0054-migrate-legacy-members-to-clarity.js';
+import { allowanceUnitsNonnegativeMigrations } from './definitions/0055-allowance-units-nonnegative.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -30,4 +31,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...disableLegacyPlusProMigrations,
   ...clarityNoAllowanceMigrations,
   ...migrateLegacyMembersToClarityMigrations,
+  ...allowanceUnitsNonnegativeMigrations,
 ];
