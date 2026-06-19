@@ -12,7 +12,6 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
-  ArrowLeft,
   Bot,
   Brain,
   CalendarCheck,
@@ -20,11 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
   CircleStop,
-  Compass,
   Loader2,
-  LogIn,
   Sparkles,
-  Workflow,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -33,7 +29,6 @@ import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
-import { SimpleModeWorkspace } from '@/components/ai-chat/simple-mode-workspace';
 import { useOnboardingGuideStatus } from '@/components/ai-chat/use-onboarding-guide-status';
 import {
   shouldPromptForPastedBoard,
@@ -49,7 +44,6 @@ import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
-import { hasPaidMembershipEntitlement } from '@/features/billing/membership-plans';
 import {
   paipanApi,
   type PaipanCatalogItem,
@@ -72,7 +66,6 @@ type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
 };
-type HomeMode = 'select' | 'simple' | 'expert';
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
@@ -226,8 +219,6 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceText, setPasteChoiceText] = useState('');
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
-  // B 端卦师默认直接进入专业排盘(expert);快速模式仍可经「返回」进入。
-  const [homeMode, setHomeMode] = useState<HomeMode>('expert');
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
   const [modelOverview, setModelOverview] =
     useState<ModelSettingsOverview | null>(null);
@@ -525,12 +516,6 @@ function AiChatWorkspaceContent() {
     ? getLatestProgressLabel(chatMessages.messages, t)
     : null;
   const billingStatusReady = Boolean(user && !billingLoading && billingStatus);
-  const expertModeLocked = Boolean(
-    user &&
-    !billingLoading &&
-    billingStatus &&
-    !hasPaidMembershipEntitlement(billingStatus.membership),
-  );
   const billingArrears = Boolean(
     billingStatusReady && billingStatus && billingStatus.available_coins < 0,
   );
@@ -593,14 +578,6 @@ function AiChatWorkspaceContent() {
       setSelectedSession(result.session.id);
     },
     [chatMessages, selectedSession, setSelectedSession, touchSession],
-  );
-
-  const handleSimpleWorkflowStarted = useCallback(
-    async (result: { session: PaipanCommitResponse['session'] }) => {
-      touchSession(result.session.id, result.session);
-      setSelectedSession(result.session.id);
-    },
-    [setSelectedSession, touchSession],
   );
 
   const openPreChatPaipan = useCallback(
@@ -920,53 +897,22 @@ function AiChatWorkspaceContent() {
       )}
     </div>
   );
-  const showHomeModeSelector = !selectedSession && homeMode === 'select';
-  const centeredContent = showHomeModeSelector ? (
-    <HomeModeSelector
-      loginRequired={!authLoading && !user}
-      dailySignInEntry={!authLoading && user ? <DailySignInHomeEntry /> : null}
-      onLogin={() => requestLogin()}
-      onOpenSimple={() => setHomeMode('simple')}
-      expertLocked={expertModeLocked}
-      onOpenExpert={() => {
-        if (expertModeLocked) {
-          router.push('/membership');
-          return;
-        }
-        setHomeMode('expert');
-      }}
-    />
-  ) : !selectedSession && homeMode === 'simple' ? (
-    <SimpleModeWorkspace
-      disabled={authLoading || chatMessages.sending}
-      chatAvailable={chatAvailable}
-      onBack={() => setHomeMode('select')}
-      onAuthRequired={(draft) => requestLogin(draft)}
-      onStarted={(result) => void handleSimpleWorkflowStarted(result)}
-    />
-  ) : !selectedSession ? (
-    <ExpertModeFrame onBack={() => setHomeMode('select')}>
+  // 纯专业排盘入口:进入即排盘工作台;未选会话且已登录时,顶部保留每日签到入口。
+  const centeredContent = (
+    <div className="space-y-2.5">
+      {!selectedSession && !authLoading && user ? (
+        <DailySignInHomeEntry />
+      ) : null}
       {expertCenteredComposer}
-    </ExpertModeFrame>
-  ) : (
-    expertCenteredComposer
+    </div>
   );
-  const showSimpleModeWorkspace = !selectedSession && homeMode === 'simple';
   const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
-  const emptyStateTitle =
-    !selectedSession && homeMode !== 'expert'
-      ? ''
-      : t('aiChat.empty.expertTitle');
-  const emptyStateDescription =
-    !selectedSession && homeMode !== 'expert'
-      ? ''
-      : t('aiChat.empty.expertDescription');
-  const emptyStateHint =
-    !selectedSession && homeMode !== 'expert' ? '' : undefined;
-  const emptyStateFrameClassName =
-    !selectedSession && homeMode === 'expert'
-      ? 'justify-start pb-8 pt-8 lg:pt-10'
-      : undefined;
+  const emptyStateTitle = t('aiChat.empty.expertTitle');
+  const emptyStateDescription = t('aiChat.empty.expertDescription');
+  const emptyStateHint = undefined;
+  const emptyStateFrameClassName = !selectedSession
+    ? 'justify-start pb-8 pt-8 lg:pt-10'
+    : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
@@ -989,11 +935,7 @@ function AiChatWorkspaceContent() {
           emptyStateDescription={emptyStateDescription}
           emptyStateHint={emptyStateHint}
           emptyStateFrameClassName={emptyStateFrameClassName}
-          emptyStateMaxWidthClassName={
-            showHomeModeSelector || showSimpleModeWorkspace
-              ? 'max-w-3xl'
-              : 'max-w-xl'
-          }
+          emptyStateMaxWidthClassName="max-w-xl"
         />
         {!showCenteredComposer && replyStatus && (
           <AiChatFloatingStatus status={replyStatus} />
@@ -1101,132 +1043,6 @@ function AiChatWorkspaceContent() {
   );
 }
 
-function HomeModeSelector({
-  loginRequired,
-  dailySignInEntry,
-  onLogin,
-  onOpenSimple,
-  onOpenExpert,
-  expertLocked,
-}: {
-  loginRequired: boolean;
-  dailySignInEntry: ReactNode;
-  onLogin: () => void;
-  onOpenSimple: () => void;
-  onOpenExpert: () => void;
-  expertLocked: boolean;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div className="space-y-2.5">
-      <div className="text-center">
-        <h1 className="font-display text-[28px] font-semibold tracking-tight text-ink sm:text-[34px]">
-          {t('common.productTitle')}
-        </h1>
-        <p className="mt-1 text-[12px] text-muted">
-          {t('aiChat.home.subtitle')}
-        </p>
-      </div>
-
-      {loginRequired && (
-        <div className="rounded-2xl border border-primary/30 bg-[linear-gradient(180deg,rgba(204,120,92,0.14),rgba(204,120,92,0.055))] px-4 py-4 text-left shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex min-w-0 items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
-                <LogIn size={17} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[16px] font-semibold tracking-tight text-ink">
-                  {t('aiChat.home.loginTitle')}
-                </span>
-                <span className="mt-1 block text-[12px] leading-5 text-muted">
-                  {t('aiChat.home.loginDescription')}
-                </span>
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={onLogin}
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-            >
-              <LogIn size={14} />
-              {t('aiChat.home.loginNow')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {dailySignInEntry}
-
-      <div className="grid gap-2.5 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={onOpenSimple}
-          className="group flex min-h-[172px] flex-col justify-between rounded-2xl border border-primary/35 bg-[linear-gradient(135deg,rgba(204,120,92,0.18),rgba(232,165,90,0.12)_48%,rgba(255,255,255,0.22))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/55 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.99]"
-        >
-          <span className="flex items-start justify-between gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm">
-              <Workflow size={18} />
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary px-2 py-1 text-[10px] font-semibold text-on-primary shadow-sm">
-              <Sparkles size={11} strokeWidth={2} />
-              {t('aiChat.home.recommended')}
-            </span>
-          </span>
-
-          <span className="mt-5 block">
-            <span className="block text-[18px] font-semibold leading-7 text-ink">
-              {t('aiChat.home.quickMode')}
-            </span>
-          </span>
-
-          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-on-primary shadow-sm transition-colors duration-200 group-hover:bg-primary-active">
-            {t('aiChat.home.quickAction')}
-            <ChevronRight
-              size={13}
-              className="transition-transform duration-200 group-hover:translate-x-0.5"
-            />
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenExpert}
-          className="group flex min-h-[172px] flex-col justify-between rounded-2xl border border-primary/20 bg-[linear-gradient(180deg,rgba(204,120,92,0.08),rgba(255,255,255,0.04))] p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 active:scale-[0.99]"
-        >
-          <span className="flex items-start justify-between gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/14 text-primary">
-              <Compass size={18} />
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-primary">
-              <CheckCircle2 size={11} strokeWidth={2} />
-              {expertLocked
-                ? t('aiChat.home.expertLockedBadge')
-                : t('aiChat.home.expertBadge')}
-            </span>
-          </span>
-
-          <span className="mt-5 block">
-            <span className="block text-[17px] font-semibold leading-7 text-ink">
-              {t('aiChat.home.expertMode')}
-            </span>
-          </span>
-
-          <span className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-primary">
-            {expertLocked
-              ? t('aiChat.home.expertUpgradeAction')
-              : t('aiChat.home.expertAction')}
-            <ChevronRight
-              size={13}
-              className="transition-transform duration-200 group-hover:translate-x-0.5"
-            />
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function DailySignInHomeEntry() {
   const { locale, t } = useI18n();
@@ -1316,31 +1132,6 @@ function DailySignInHomeEntry() {
   );
 }
 
-function ExpertModeFrame({
-  children,
-  onBack,
-}: {
-  children: ReactNode;
-  onBack: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div className="space-y-2.5">
-      <div className="flex justify-start">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card/60 px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-        >
-          <ArrowLeft size={13} />
-          {t('aiChat.home.backToMode')}
-        </button>
-      </div>
-      {children}
-    </div>
-  );
-}
 
 function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
   const { t } = useI18n();
