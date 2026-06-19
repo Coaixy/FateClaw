@@ -180,7 +180,12 @@ export async function settleBillingReservationDetailed(input: {
   promptTokens: number;
   completionTokens: number;
 }): Promise<BillingSettlementSummary> {
-  if (input.runtime?.billingMode !== 'metered') {
+  // BYOK（自配模型，source==='custom'）用的是卦师自己的 API Key，平台不再按 token 计费，
+  // 实现"使用权 / 余额"解耦：买了使用权即可自带 key 免费跑，余额只用于平台官方模型。
+  if (
+    input.runtime?.billingMode !== 'metered' ||
+    input.runtime?.source === 'custom'
+  ) {
     return {
       actualChargeCoins: 0,
       rawChargeCoins: 0,

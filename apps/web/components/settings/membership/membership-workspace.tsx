@@ -18,7 +18,6 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   normalizeMembershipPlanKey,
   resolveMembershipPlanDisplayName,
-  resolveMembershipPlanRank,
   resolveMembershipPlanShortName,
 } from '@/features/billing/membership-plans';
 import { useI18n } from '@/lib/i18n';
@@ -589,11 +588,9 @@ function MembershipPlanCards({
   const normalizedActivePlanKey = activePlanKey
     ? normalizeMembershipPlanKey(activePlanKey)
     : null;
-  const activePlanRank = resolveMembershipPlanRank(normalizedActivePlanKey);
-  const visiblePlans = plans.filter((plan) => {
-    if (activePlanRank <= 0) return true;
-    return resolveMembershipPlanRank(plan.plan_key) > activePlanRank;
-  });
+  // 塌缩为单层"卦师使用权"后不再有多档升级概念：后端已只返回在售套餐（enabled），
+  // 这里直接全部展示，已订阅用户也能看到当前档用于续费。
+  const visiblePlans = plans;
   const visiblePlanSignature = visiblePlans
     .map((plan) => normalizeMembershipPlanKey(plan.plan_key))
     .join('|');

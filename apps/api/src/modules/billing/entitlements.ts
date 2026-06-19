@@ -8,15 +8,15 @@ import {
   isSpendableBalanceInArrears,
 } from '../../shared/balance-coins.js';
 import {
-  hasCustomModelEntitlement,
   hasPaidMembershipEntitlement,
-  hasPriorityQueueEntitlement,
   hasWechatClawEntitlement,
   normalizeMembershipPlanKey,
   resolveMembershipPlanRank,
-  resolveProfessionalAiDailyTurnLimit,
   type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
+
+/** 单层卦师使用权的每日专家解读轮次上限（防滥用，可调）。 */
+const GUASHI_DAILY_TURN_LIMIT = 200;
 
 /**
  * runtime 和业务服务消费的统一会员权益快照。
@@ -74,11 +74,15 @@ export async function getRuntimeEntitlementSnapshot(
     planKey: activePlanKey,
     planRank: resolveMembershipPlanRank(activePlanKey),
     hasPaidMembership: hasPaidMembershipEntitlement(membership),
-    hasPriorityQueue: hasPriorityQueueEntitlement(membership),
-    canUseCustomModel: hasCustomModelEntitlement(membership),
+    // 塌缩为单层"卦师使用权"：自定义模型（BYOK）与优先队列不再按档位区分，
+    // 有效使用权即开放。微信 Claw 保留原档位判断——新单层用户无 deep 档故默认关闭，
+    // 仅存量 deep 会员仍可用，不在本次付费塌缩里强行下线保留中的微信链路。
+    hasPriorityQueue: membership.active,
+    canUseCustomModel: membership.active,
     canUseWechatClaw: hasWechatClawEntitlement(membership),
-    professionalAiDailyTurnLimit:
-      resolveProfessionalAiDailyTurnLimit(activePlanKey),
+    professionalAiDailyTurnLimit: membership.active
+      ? GUASHI_DAILY_TURN_LIMIT
+      : 0,
     wallet: {
       purchasedCoins: walletState.purchased_coins,
       bonusCoins: walletState.bonus_coins,

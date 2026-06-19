@@ -217,6 +217,31 @@ describe('metered billing plans', () => {
     expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
   });
 
+  it('returns zero charge for BYOK custom-source runtime without settling', async () => {
+    const result = await settleBillingReservationDetailed({
+      requestId: 'request-byok',
+      runtime: {
+        billingMode: 'metered',
+        source: 'custom',
+        modelConfigId: 'custom:user-1',
+        inputTokenPricePerMillionCoins: 3,
+        outputTokenPricePerMillionCoins: 8,
+      } as never,
+      promptTokens: 1000,
+      completionTokens: 500,
+    });
+
+    expect(result).toEqual({
+      actualChargeCoins: 0,
+      rawChargeCoins: 0,
+      membershipCoveredCoins: 0,
+      membershipConsumedUnits: 0,
+    });
+    // BYOK（自带 key）走早返回，既不查待结算记录，也不实际扣费。
+    expect(mockGetBillingRequestReservationByRequestId).not.toHaveBeenCalled();
+    expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
+  });
+
   it('reports personal allowance reset instead of membership expiration', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));

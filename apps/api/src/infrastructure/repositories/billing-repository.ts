@@ -608,12 +608,17 @@ export async function getMembershipPlanConfigs(): Promise<
   const configs = await Promise.all(
     MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
   );
-  return configs.sort((a, b) => {
-    return (
-      MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(a.id)) -
-      MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(b.id))
-    );
-  });
+  // 塌缩为单层"卦师使用权"：只暴露在售（enabled）套餐进入可订阅列表。
+  // 停用的旧档（insight/deep）仍能被 getMembershipConfig 单独读到用于识别存量会员，
+  // 但不再出现在前端套餐选择里。
+  return configs
+    .filter((config) => config.enabled)
+    .sort((a, b) => {
+      return (
+        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(a.id)) -
+        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(b.id))
+      );
+    });
 }
 
 /**
