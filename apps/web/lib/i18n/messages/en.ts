@@ -55,11 +55,9 @@ export const enMessages = {
   userMenu: {
     sections: {
       persona: 'Persona',
-      wechat: 'WeChat',
       market: 'Market',
       account: 'Account',
     },
-    connectWechat: 'Connect WeChat',
     skillMarket: 'Skill Market',
     studio: 'Skill Studio',
     referrals: 'Referrals',

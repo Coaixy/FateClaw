@@ -226,7 +226,8 @@ function AiChatWorkspaceContent() {
   const [pasteChoiceText, setPasteChoiceText] = useState('');
   const [pasteChoiceSelection, setPasteChoiceSelection] =
     useState<PasteChoiceSelection | null>(null);
-  const [homeMode, setHomeMode] = useState<HomeMode>('select');
+  // B 端卦师默认直接进入专业排盘(expert);快速模式仍可经「返回」进入。
+  const [homeMode, setHomeMode] = useState<HomeMode>('expert');
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
   const [modelOverview, setModelOverview] =
     useState<ModelSettingsOverview | null>(null);

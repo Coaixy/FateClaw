@@ -54,11 +54,9 @@ export const zhCNMessages = {
   userMenu: {
     sections: {
       persona: '断卦人设',
-      wechat: '微信对话',
       market: '市场',
       account: '账户',
     },
-    connectWechat: '连接微信',
     skillMarket: '技能市场',
     studio: '技能开发',
     referrals: '邀请中心',

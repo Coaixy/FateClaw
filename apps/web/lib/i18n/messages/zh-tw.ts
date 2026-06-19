@@ -54,11 +54,9 @@ export const zhTWMessages = {
   userMenu: {
     sections: {
       persona: '斷卦人設',
-      wechat: '微信對話',
       market: '市場',
       account: '帳戶',
     },
-    connectWechat: '連接微信',
     skillMarket: '技能市場',
     studio: '技能開發',
     referrals: '邀請中心',
