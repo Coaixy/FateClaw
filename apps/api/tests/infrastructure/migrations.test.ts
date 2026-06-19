@@ -477,6 +477,8 @@ describe('runDatabaseMigrations', () => {
       '0051_user_guashi_script_template',
       '0052_disable_legacy_plus_pro_membership_plans',
       '0053_clarity_no_free_allowance',
+      '0054_migrate_legacy_active_members_to_clarity',
+      '0055_allowance_units_nonnegative',
     ]);
 
     await runDatabaseMigrations(client as never);
