@@ -33,7 +33,7 @@ export const enMessages = {
   metadata: {
     title: 'FateClaw | Shouyi AI',
     description:
-      'An AI assistant platform for metaphysics creators, running in chat and preserving your methods over time.',
+      'An AI divination copilot for diviners — auto charting, reading assistance, and client-ready scripts.',
   },
   shell: {
     redirectingLogin: 'No active session detected. Redirecting to login...',
@@ -789,9 +789,9 @@ export const enMessages = {
     createPhoneAccount: 'Create a phone account',
     phoneLogin: 'Phone login',
     googleLogin: 'Google sign-in',
-    googleSubtitle: 'Manage your metaphysics AI assistant with Google',
-    registerSubtitle: 'Start using your metaphysics AI assistant right away',
-    loginSubtitle: 'Manage your metaphysics AI assistant',
+    googleSubtitle: 'Sign in with Google to enter your divination workspace',
+    registerSubtitle: 'Sign up to activate your AI divination copilot',
+    loginSubtitle: 'Sign in to your divination workspace',
     phone: 'Mainland China phone',
     password: 'Password',
     passwordPlaceholder: 'At least 8 characters',
@@ -870,7 +870,7 @@ export const enMessages = {
       aiDisclaimer: 'AI-generated content, for reference only',
     },
     home: {
-      subtitle: 'AI Divination · Fate Reading · Life Questions',
+      subtitle: 'Charting · Reading · Client Scripts',
       loginTitle: 'Log in to start',
       loginDescription:
         'Log in to use expert mode, save conversations, and view your credit balance and usage.',

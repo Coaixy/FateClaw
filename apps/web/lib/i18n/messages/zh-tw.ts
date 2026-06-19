@@ -33,7 +33,7 @@ export const zhTWMessages = {
   metadata: {
     title: '小奕想要三合木｜守義AI',
     description:
-      '面向命理創作者的 AI 分身平台，在微信對話中運行，沉澱方法，持續服務。',
+      '面向卦師的 AI 斷卦副駕 — 自動排盤、輔助解讀、生成話術，助你服務客戶。',
   },
   shell: {
     redirectingLogin: '未偵測到登入狀態，正在跳轉到登入頁...',
@@ -768,9 +768,9 @@ export const zhTWMessages = {
     createPhoneAccount: '建立手機號帳戶',
     phoneLogin: '手機號登入',
     googleLogin: 'Google 登入',
-    googleSubtitle: '使用 Google 管理你的玄學 AI 助手',
-    registerSubtitle: '註冊後即刻擁有玄學 AI 助手',
-    loginSubtitle: '管理你的玄學 AI 助手',
+    googleSubtitle: '使用 Google 登入，進入你的斷卦工作台',
+    registerSubtitle: '註冊即開通你的 AI 斷卦副駕',
+    loginSubtitle: '登入你的斷卦工作台',
     phone: '中國大陸手機號',
     password: '密碼',
     passwordPlaceholder: '至少 8 位',
@@ -845,7 +845,7 @@ export const zhTWMessages = {
       aiDisclaimer: 'AI 生成內容，僅供參考',
     },
     home: {
-      subtitle: 'AI 算卦 · 算命 · 問事',
+      subtitle: '排盤 · 斷卦 · 出話術',
       loginTitle: '登入後開始體驗',
       loginDescription:
         '登入後可進入專業模式、保存對話記錄，並查看積分餘額和用量。',
