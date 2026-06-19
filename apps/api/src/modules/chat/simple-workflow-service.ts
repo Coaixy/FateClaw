@@ -26,6 +26,7 @@ import type {
 import { normalizeOwnedChatSessionTitle } from '../../shared/chat-session-title-policy.js';
 import { resolveSimpleWorkflowLlmRuntime } from '../system/system-config.js';
 import { sendOwnedChatSessionMessage } from './chat-session-service.js';
+import { applyClientProfilePrefill } from './client-profile-service.js';
 import { DirectPaipanError, executeDirectPaipan } from './paipan-runtime.js';
 import {
   getWebChatRuntimeId,
@@ -217,6 +218,7 @@ async function createSimpleWorkflowSession(args: {
   preset: SimpleWorkflowPreset;
   prepared: SimpleWorkflowPreparedInput;
   skillContextEntry: SkillContextEntryDto;
+  clientId?: string;
 }): Promise<{
   session: ChatSession;
   boardMessages: SimpleWorkflowBoardMessages;
@@ -227,6 +229,7 @@ async function createSimpleWorkflowSession(args: {
     accountId: runtimeId,
     userId: args.userId,
     title: args.prepared.sessionTitle,
+    clientId: args.clientId,
   });
   const messages = buildSimpleWorkflowBoardMessages({
     userId: args.userId,
@@ -364,11 +367,13 @@ async function enqueueSimpleWorkflowFirstTurn(args: {
  *
  * @param userId 当前登录用户 ID。
  * @param input 用户在简易模式表单提交的数据。
+ * @param clientId 关联的客户档案 id；命理排盘会用其生辰预填（本轮表单输入优先），并绑定到新会话。
  * @returns 新建会话和盘面消息；首轮 AI 请求会在后台继续入队。
  */
 export async function startSimpleWorkflowForOwnedUser(
   userId: string,
   input: SimpleWorkflowStartRequestDto,
+  clientId?: string,
 ): Promise<ServiceResult<SimpleWorkflowStartResponseDto>> {
   const preset = await getDefaultSimpleWorkflowPreset(input.kind);
   if (!preset) {
@@ -379,13 +384,22 @@ export async function startSimpleWorkflowForOwnedUser(
     return prepared;
   }
 
+  // 关联客户时用其生辰预填排盘输入；prepared.paipanInput 已含本轮表单值，本轮输入优先。
+  const paipanInput = clientId
+    ? await applyClientProfilePrefill(
+        userId,
+        clientId,
+        prepared.data.paipanInput,
+      )
+    : prepared.data.paipanInput;
+
   let skillContextEntry: SkillContextEntryDto;
   try {
     const execution = await executeDirectPaipan({
       accountId: getWebChatRuntimeId(userId),
       userId,
       skillDir: preset.paipan_skill,
-      input: prepared.data.paipanInput,
+      input: paipanInput,
     });
     skillContextEntry = execution.skillContextEntry;
   } catch (error) {
@@ -397,6 +411,7 @@ export async function startSimpleWorkflowForOwnedUser(
     preset,
     prepared: prepared.data,
     skillContextEntry,
+    clientId,
   });
 
   const userMessageId = createMessageId('simple-workflow-user');

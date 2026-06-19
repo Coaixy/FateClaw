@@ -14,7 +14,7 @@ export async function simpleWorkflowsRoutes(
 ): Promise<void> {
   // POST /api/simple-workflows/start — 按占卜/命理入口启动简易模式会话
   app.post<{
-    Body: SimpleWorkflowStartRequestDto;
+    Body: SimpleWorkflowStartRequestDto & { client_id?: string };
   }>('/start', async (request, reply) => {
     await request.requireAuth();
 
@@ -23,9 +23,14 @@ export async function simpleWorkflowsRoutes(
       return reply.code(400).send({ error: '请选择占卜问事或命理分析' });
     }
 
+    const clientId =
+      typeof body.client_id === 'string' && body.client_id.trim()
+        ? body.client_id.trim()
+        : undefined;
     const result = await startSimpleWorkflowForOwnedUser(
       request.user.userId,
       body,
+      clientId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

@@ -468,8 +468,9 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
 
 export async function listChatSessionsForOwnedUser(
   userId: string,
+  clientId?: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
-  const sessions = await getChatSessionsByUserId(userId);
+  const sessions = await getChatSessionsByUserId(userId, undefined, clientId);
   return ok(sessions.map(toChatSessionDto));
 }
 

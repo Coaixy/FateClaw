@@ -189,11 +189,19 @@ export async function createChatSession(session: {
   accountId: string;
   userId: string;
   title: string;
+  /** 关联的客户档案 id；不传则会话不绑定客户。 */
+  clientId?: string;
 }): Promise<ChatSession> {
   const { rows } = await getDbPool().query(
-    `INSERT INTO chat_sessions (id, account_id, user_id, title)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [session.id, session.accountId, session.userId, session.title],
+    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [
+      session.id,
+      session.accountId,
+      session.userId,
+      session.title,
+      session.clientId ?? null,
+    ],
   );
   return rows[0] as ChatSession;
 }
@@ -215,13 +223,23 @@ export async function getChatSessions(
 export async function getChatSessionsByUserId(
   userId: string,
   limit = 100,
+  clientId?: string,
 ): Promise<ChatSession[]> {
+  const conditions = ['user_id = $1', 'deleted_at IS NULL'];
+  const params: unknown[] = [userId, Math.min(Math.max(limit, 1), 500)];
+
+  // 传入 clientId 时只返回该客户名下的会话（客户档案详情页用）。
+  if (clientId) {
+    params.push(clientId);
+    conditions.push(`client_id = $${params.length}`);
+  }
+
   const { rows } = await getDbPool().query(
     `SELECT * FROM chat_sessions
-     WHERE user_id = $1 AND deleted_at IS NULL
+     WHERE ${conditions.join(' AND ')}
      ORDER BY updated_at DESC
      LIMIT $2`,
-    [userId, Math.min(Math.max(limit, 1), 500)],
+    params,
   );
   return rows as ChatSession[];
 }

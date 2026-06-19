@@ -376,6 +376,7 @@ describe('chat-session-service selected board context', () => {
           updated_at: '2026-04-21T09:00:00.000Z',
           share_token: null,
           deleted_at: '2026-04-26T09:00:00.000Z',
+          client_id: null,
         },
       ],
     });

@@ -10,12 +10,14 @@ import {
   MessageCircle,
   RotateCcw,
   Search,
+  Users,
   X,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useToast } from '@/lib/use-toast';
 
 function formatArchivedTime(value?: string | null) {
@@ -34,10 +36,13 @@ function formatArchivedTime(value?: string | null) {
 function ArchivedSessionsContent() {
   const { restoreSession } = useChatSessions();
   const { toast } = useToast();
+  const { profiles: clientProfiles, loadProfiles: loadClientProfiles } =
+    useClientProfiles(() => {});
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('all');
   const [restoringSessionId, setRestoringSessionId] = useState('');
 
   const loadArchivedSessions = useCallback(async () => {
@@ -56,13 +61,46 @@ function ArchivedSessionsContent() {
     void loadArchivedSessions();
   }, [loadArchivedSessions]);
 
+  useEffect(() => {
+    void loadClientProfiles().catch(() => {});
+  }, [loadClientProfiles]);
+
+  // 客户名 join 表，用于卡片展示与过滤下拉。
+  const clientNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const profile of clientProfiles) {
+      map.set(profile.id, profile.name);
+    }
+    return map;
+  }, [clientProfiles]);
+
+  // 过滤下拉只列出在归档会话里真正出现过的客户，避免列出无关客户。
+  const clientFilterOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const session of sessions) {
+      if (session.client_id) ids.add(session.client_id);
+    }
+    return Array.from(ids).map((id) => ({
+      id,
+      name: clientNameById.get(id) ?? '未知客户',
+    }));
+  }, [clientNameById, sessions]);
+
   const normalizedSearch = search.trim().toLowerCase();
   const filteredSessions = useMemo(() => {
-    if (!normalizedSearch) return sessions;
-    return sessions.filter((session) =>
-      session.title.toLowerCase().includes(normalizedSearch),
-    );
-  }, [normalizedSearch, sessions]);
+    return sessions.filter((session) => {
+      if (clientFilter !== 'all' && session.client_id !== clientFilter) {
+        return false;
+      }
+      if (
+        normalizedSearch &&
+        !session.title.toLowerCase().includes(normalizedSearch)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [clientFilter, normalizedSearch, sessions]);
 
   const restoreArchivedSession = async (sessionId: string) => {
     if (restoringSessionId) return;
@@ -109,28 +147,52 @@ function ArchivedSessionsContent() {
           </div>
         </div>
 
-        <div className="relative w-full sm:w-[280px]">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/70"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索归档标题..."
-            className="h-10 w-full rounded-xl border border-hairline bg-canvas pl-9 pr-9 text-[13px] text-ink placeholder:text-muted/70 transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted/70 transition-colors hover:bg-surface-card hover:text-ink"
-              aria-label="清空搜索"
-            >
-              <X size={13} />
-            </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          {clientFilterOptions.length > 0 && (
+            <div className="relative w-full sm:w-[180px]">
+              <Users
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted/70"
+              />
+              <select
+                value={clientFilter}
+                onChange={(event) => setClientFilter(event.target.value)}
+                aria-label="按客户过滤"
+                className="h-10 w-full appearance-none rounded-xl border border-hairline bg-canvas pl-9 pr-8 text-[13px] text-ink transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+              >
+                <option value="all">全部客户</option>
+                {clientFilterOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
+
+          <div className="relative w-full sm:w-[280px]">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/70"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="搜索归档标题..."
+              className="h-10 w-full rounded-xl border border-hairline bg-canvas pl-9 pr-9 text-[13px] text-ink placeholder:text-muted/70 transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted/70 transition-colors hover:bg-surface-card hover:text-ink"
+                aria-label="清空搜索"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -160,7 +222,9 @@ function ArchivedSessionsContent() {
         <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-hairline bg-surface-card/60 px-6 text-center">
           <Search size={20} className="text-muted/55" strokeWidth={1.8} />
           <p className="mt-3 text-[13px] text-muted">
-            没有匹配“{search.trim()}”的归档对话
+            {search.trim()
+              ? `没有匹配“${search.trim()}”的归档对话`
+              : '该客户暂无匹配的归档对话'}
           </p>
         </div>
       ) : (
@@ -186,6 +250,13 @@ function ArchivedSessionsContent() {
                         归档于{' '}
                         {formatArchivedTime(session.deleted_at ?? null)}
                       </span>
+                      {session.client_id &&
+                        clientNameById.get(session.client_id) && (
+                          <span className="inline-flex items-center gap-1">
+                            <Users size={12} strokeWidth={1.8} />
+                            {clientNameById.get(session.client_id)}
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>

@@ -6,6 +6,7 @@ import { financeArchiveMigrations } from './definitions/0012-0019-finance-archiv
 import { runtimeSkillMigrations } from './definitions/0020-0028-runtime-skills.js';
 import { sqlReviewFixMigrations } from './definitions/0045-sql-review-fixes.js';
 import { guashiAccessMigrations } from './definitions/0049-guashi-access.js';
+import { clientProfilesMigrations } from './definitions/0050-client-profiles.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -20,4 +21,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...runtimeSkillMigrations,
   ...sqlReviewFixMigrations,
   ...guashiAccessMigrations,
+  ...clientProfilesMigrations,
 ];

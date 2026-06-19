@@ -173,6 +173,18 @@ import {
 } from './repositories/chat-repository.js';
 import type { ChatSessionPiSessionArchiveRow } from './repositories/chat-repository.js';
 import {
+  createClientProfile,
+  getClientProfile,
+  getClientProfilesByUserId,
+  softDeleteClientProfile,
+  updateClientProfile,
+} from './repositories/client-profiles-repository.js';
+import type {
+  ClientProfileWithStats,
+  CreateClientProfileInput,
+  UpdateClientProfileInput,
+} from './repositories/client-profiles-repository.js';
+import {
   deleteWechatChatSessionLink,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
@@ -365,6 +377,7 @@ export {
   createUser,
   createUserUsing,
   createUserCustomSkill,
+  createClientProfile,
   deleteAccount,
   deleteDraftAnnouncement,
   deleteChatSession,
@@ -398,6 +411,8 @@ export {
   getChatSessions,
   getChatSessionsByUserId,
   getChatSessionsForAdmin,
+  getClientProfile,
+  getClientProfilesByUserId,
   getConversationLogById,
   getConversationLogByRequestId,
   getConversationLogSummaries,
@@ -527,6 +542,7 @@ export {
   settleReferralMembershipRewardUsing,
   settleUserModelChargeCoins,
   setUserMembershipForAdmin,
+  softDeleteClientProfile,
   subscribeMembershipWithWallet,
   subscribeToBundle,
   subscribeToSkill,
@@ -544,6 +560,7 @@ export {
   updateAccount,
   updateAnnouncement,
   updateChatSessionTitle,
+  updateClientProfile,
   updateOfficialModelConfig,
   updatePublicFinancialLedgerEntry,
   updateRuntimeConfig,
@@ -593,8 +610,10 @@ export type {
   BillingRequestReservationListResult,
   BundleByTokenResult,
   ChatSessionPiSessionArchiveRow,
+  ClientProfileWithStats,
   ConversationLogRow,
   ConversationLogSummaryRow,
+  CreateClientProfileInput,
   DailySignInConfigRow,
   DailySignInRecordRow,
   DeductBalanceResult,
@@ -639,6 +658,7 @@ export type {
   SkillAccessInviteStatus,
   SkillReactionSummary,
   RedeemSkillAccessInviteResult,
+  UpdateClientProfileInput,
   UserMembershipRow,
   WalletTransactionRow,
 };

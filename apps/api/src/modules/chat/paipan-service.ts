@@ -23,6 +23,7 @@ import {
 } from '../../contracts-adapter/chat-contract.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import type { ChatSession, NewMessage } from '../../shared/types.js';
+import { applyClientProfilePrefill } from './client-profile-service.js';
 import {
   DirectPaipanError,
   executeDirectPaipan,
@@ -44,6 +45,8 @@ interface DirectPaipanPreviewRecord {
   requestSummary: string;
   sessionTitle: string;
   skillContextEntry: SkillContextEntryDto;
+  /** 预览时关联的客户档案 id；提交为新会话时回填到会话。 */
+  clientId: string | null;
   createdAt: string;
   expiresAt: string;
 }
@@ -165,7 +168,8 @@ async function loadDirectPaipanPreviewRecord(
     ) {
       return null;
     }
-    return parsed;
+    // 兼容历史缓存记录：旧记录没有 clientId 字段，按未关联客户处理。
+    return { ...parsed, clientId: parsed.clientId ?? null };
   } catch {
     return null;
   }
@@ -183,6 +187,7 @@ async function createSessionWithBoardMessages(args: {
   sessionTitle: string;
   requestSummary: string;
   skillContextEntry: SkillContextEntryDto;
+  clientId?: string | null;
 }): Promise<{
   session: ChatSession;
   requestMessage: MessageDto;
@@ -193,6 +198,7 @@ async function createSessionWithBoardMessages(args: {
     accountId: args.runtimeId,
     userId: args.userId,
     title: args.sessionTitle,
+    clientId: args.clientId ?? undefined,
   });
   const { requestMessage, resultMessage } = buildDirectPaipanMessages({
     userId: args.userId,
@@ -254,22 +260,36 @@ export async function listDirectPaipanCatalogForOwnedUser(
 /**
  * 执行直接排盘预览，并把预览结果写入短期缓存。
  * userId 为空时按游客预览保存，后续提交会凭不可猜测的 previewId 绑定到登录用户。
+ *
+ * @remarks 传入 clientId 时（需登录）用客户档案生辰预填排盘输入，本轮输入优先；
+ *          clientId 会随预览记录保存，提交为新会话时回填到会话。
  */
 export async function previewDirectPaipanForOwnedUser(args: {
   userId?: string;
   skill: string;
   input: Record<string, unknown>;
+  clientId?: string;
 }): Promise<ServiceResult<PaipanPreviewResponseDto>> {
   const runtimeId = args.userId
     ? getWebChatRuntimeId(args.userId)
     : getWebChatRuntimeId('public-preview');
+
+  // 客户档案预填仅在登录用户携带 clientId 时生效；游客预览忽略 clientId。
+  const effectiveClientId = args.userId ? args.clientId : undefined;
+  const effectiveInput = effectiveClientId
+    ? await applyClientProfilePrefill(
+        args.userId as string,
+        effectiveClientId,
+        args.input,
+      )
+    : args.input;
 
   try {
     const execution = await executeDirectPaipan({
       accountId: runtimeId,
       userId: args.userId,
       skillDir: args.skill,
-      input: args.input,
+      input: effectiveInput,
     });
     const previewId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -285,6 +305,7 @@ export async function previewDirectPaipanForOwnedUser(args: {
       requestSummary: execution.requestSummary,
       sessionTitle: execution.sessionTitle,
       skillContextEntry: execution.skillContextEntry,
+      clientId: effectiveClientId ?? null,
       createdAt,
       expiresAt,
     });
@@ -312,10 +333,15 @@ export async function previewDirectPaipanForOwnedUser(args: {
 /**
  * 将直接排盘结果写入用户会话。
  * 从预览提交时会校验已绑定预览的归属；游客预览则在提交时归属到当前登录用户。
+ *
+ * @param userId 当前登录用户 ID。
+ * @param request 提交请求体。
+ * @param clientId 关联的客户档案 id；新会话时绑定到会话，当前会话提交时用于生辰预填。
  */
 export async function commitDirectPaipanForOwnedUser(
   userId: string,
   request: PaipanCommitRequestDto,
+  clientId?: string,
 ): Promise<ServiceResult<PaipanCommitResponseDto>> {
   if (request.target === 'new_session_from_preview') {
     if (!request.previewId) {
@@ -333,12 +359,14 @@ export async function commitDirectPaipanForOwnedUser(
       ? preview.runtimeId
       : getWebChatRuntimeId(userId);
 
+    // 优先使用预览时已关联的客户；预览未关联时回落到本次提交携带的 clientId。
     const created = await createSessionWithBoardMessages({
       userId,
       runtimeId,
       sessionTitle: preview.sessionTitle,
       requestSummary: preview.requestSummary,
       skillContextEntry: preview.skillContextEntry,
+      clientId: preview.clientId ?? clientId ?? null,
     });
     await deleteDirectPaipanPreviewRecord(request.previewId);
 
@@ -384,11 +412,16 @@ export async function commitDirectPaipanForOwnedUser(
   }
 
   try {
+    // 当前会话提交：优先用本次携带的 clientId，否则沿用会话已绑定的客户做生辰预填。
+    const prefillClientId = clientId ?? sessionResult.data.client_id ?? undefined;
+    const effectiveInput = prefillClientId
+      ? await applyClientProfilePrefill(userId, prefillClientId, request.input)
+      : request.input;
     const execution = await executeDirectPaipan({
       accountId: sessionResult.data.account_id,
       userId,
       skillDir: request.skill,
-      input: request.input,
+      input: effectiveInput,
     });
 
     const appended = await appendBoardMessagesToExistingSession({

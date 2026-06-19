@@ -23,9 +23,11 @@ import {
   Sun,
   ExternalLink,
   Send,
+  Users,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
@@ -220,6 +222,30 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     chatAvailable,
     loading: sessionsLoading,
   } = useChatSessions();
+
+  // 侧栏内静默加载客户档案，仅用于把会话上的 client_id 在内存里 join 成客户名展示。
+  // 失败时不打扰用户（不弹 toast），缺失客户名时会话标题照常显示。
+  const { profiles: clientProfiles, loadProfiles: loadClientProfiles } =
+    useClientProfiles(() => {});
+  const hasSessionWithClient = useMemo(
+    () => sessions.some((session) => Boolean(session.client_id)),
+    [sessions],
+  );
+  const clientNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const profile of clientProfiles) {
+      map.set(profile.id, profile.name);
+    }
+    return map;
+  }, [clientProfiles]);
+
+  useEffect(() => {
+    // 只有存在关联客户的会话时才拉取客户档案，避免无谓请求。
+    if (!chatAvailable || !hasSessionWithClient) {
+      return;
+    }
+    void loadClientProfiles().catch(() => {});
+  }, [chatAvailable, hasSessionWithClient, loadClientProfiles]);
 
   useEffect(() => {
     setOpen(false);
@@ -678,6 +704,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                             <p className="truncate text-[12px] font-medium leading-tight">
                               {session.title}
                             </p>
+                            {session.client_id &&
+                              clientNameById.get(session.client_id) && (
+                                <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] leading-tight text-muted/60">
+                                  <Users size={9} className="shrink-0" />
+                                  {clientNameById.get(session.client_id)}
+                                </p>
+                              )}
                             <p className="mt-0.5 text-[10px] leading-tight text-muted/50">
                               {formatSessionTime(
                                 session.updated_at,
@@ -731,6 +764,31 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
           )}
+        </div>
+
+        {/* 客户档案入口：B 端卦师的"给谁算"工作台 */}
+        <div className="relative px-3 mt-2 shrink-0">
+          <Link
+            href="/clients"
+            onClick={closeSidebar}
+            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
+              pathname === '/clients'
+                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
+                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
+            }`}
+            aria-label={t('clients.nav')}
+          >
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                pathname === '/clients'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-primary/10 text-primary'
+              }`}
+            >
+              <Users size={14} strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{t('clients.nav')}</span>
+          </Link>
         </div>
 
         {/* 对话历史列表 */}
@@ -889,6 +947,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                         <p className="truncate text-[12px] font-medium leading-tight">
                           {session.title}
                         </p>
+                        {session.client_id &&
+                          clientNameById.get(session.client_id) && (
+                            <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] leading-tight text-muted/60">
+                              <Users size={9} className="shrink-0" />
+                              {clientNameById.get(session.client_id)}
+                            </p>
+                          )}
                         <p className="text-[10px] text-muted/50 leading-tight mt-0.5">
                           {formatSessionTime(
                             session.updated_at,
