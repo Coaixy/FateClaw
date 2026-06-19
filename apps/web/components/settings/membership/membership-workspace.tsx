@@ -97,62 +97,6 @@ function formatMembershipUsage(
   });
 }
 
-function membershipStatusText(
-  status: MembershipStatus['allowance_status'],
-  t: TranslationFn,
-) {
-  switch (status) {
-    case 'plenty':
-      return t('pages.membership.statusPlenty');
-    case 'normal':
-      return t('pages.membership.statusNormal');
-    case 'tight':
-      return t('pages.membership.statusTight');
-    case 'almost_used':
-      return t('pages.membership.statusAlmostUsed');
-    case 'used_up':
-      return t('pages.membership.statusUsedUp');
-    case 'inactive':
-    default:
-      return t('pages.membership.statusInactive');
-  }
-}
-
-function resetText(
-  value: string | null,
-  formatDate: (
-    value: string | number | Date,
-    options?: Intl.DateTimeFormatOptions,
-  ) => string,
-  t: TranslationFn,
-) {
-  if (!value) return t('pages.membership.resetPending');
-  return t('pages.membership.resetAt', {
-    date: formatDate(value, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }),
-  });
-}
-
-function progressPercent(ratio: number) {
-  const percent = Math.min(100, Math.max(0, ratio * 100));
-  if (percent > 0 && percent < 0.1) {
-    return 0.1;
-  }
-  return Math.round(percent * 10) / 10;
-}
-
-function displayPercent(ratio: number) {
-  const percent = Math.min(100, Math.max(0, ratio * 100));
-  if (percent === 0) return '0%';
-  if (percent < 0.01) return '< 0.01%';
-  if (percent < 0.1) return `${percent.toFixed(2)}%`;
-  if (percent < 10) return `${percent.toFixed(1)}%`;
-  return `${Math.round(percent)}%`;
-}
-
 function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
   return resolveMembershipPlanShortName(plan);
 }
@@ -164,18 +108,6 @@ function resolvePlanDisplayName(
   return plan.name?.trim() || resolveMembershipPlanDisplayName(plan);
 }
 
-function resolveEntitlementShortName(
-  entitlement: Pick<MembershipEntitlement, 'name' | 'plan_key'>,
-) {
-  return resolveMembershipPlanShortName(entitlement);
-}
-
-function hasMembershipAllowance(
-  plan?: Pick<MembershipPlan, 'monthly_allowance_units'> | null,
-) {
-  return (plan?.monthly_allowance_units ?? 0) > 0;
-}
-
 function resolvePlanBenefitLabels(t: TranslationFn) {
   // 塌缩为单层"卦师使用权"：统一展示卦师工具的核心卖点，不再按档位区分。
   return [
@@ -183,24 +115,6 @@ function resolvePlanBenefitLabels(t: TranslationFn) {
     t('pages.membership.planBenefitGuashiReading'),
     t('pages.membership.planBenefitGuashiKnowledge'),
   ];
-}
-
-function formatEntitlementRange(
-  entitlement: MembershipEntitlement,
-  formatDate: (
-    value: string | number | Date,
-    options?: Intl.DateTimeFormatOptions,
-  ) => string,
-) {
-  const options = {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  } as const;
-  return `${formatDate(entitlement.effective_start, options)} - ${formatDate(
-    entitlement.effective_end,
-    options,
-  )}`;
 }
 
 function TaijiIcon({
@@ -401,7 +315,7 @@ function AmpMembershipCard({
           <div className="flex h-20 w-20 items-center justify-center rounded-full border border-hairline bg-[conic-gradient(from_160deg,color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-primary)_55%,var(--color-canvas)),color-mix(in_srgb,var(--color-warning)_45%,var(--color-canvas)),color-mix(in_srgb,var(--color-accent-teal)_55%,var(--color-canvas)))] shadow-[0_10px_30px_color-mix(in_srgb,var(--color-primary)_18%,transparent)] transition-transform duration-300 group-hover:scale-[1.04] sm:h-24 sm:w-24">
             <TaijiIcon size={1.25} className="text-on-primary drop-shadow-sm" />
           </div>
-          <div className="mt-4 text-[52px] font-extrabold leading-none text-ink sm:mt-5 sm:text-[64px]">
+          <div className="mt-4 break-words text-[24px] font-extrabold leading-tight text-ink sm:mt-5 sm:text-[30px]">
             {planShortName}
           </div>
         </div>
@@ -829,9 +743,6 @@ function MembershipDetailPanel({
   onRenew: (plan: MembershipPlan) => void;
   t: TranslationFn;
 }) {
-  const usedPercent = progressPercent(membership.allowance_used_ratio);
-  const usedPercentText = displayPercent(membership.allowance_used_ratio);
-  const allowanceEnabled = hasMembershipAllowance(currentPlan);
   const detailItems = [
     {
       className: 'border-b border-hairline/70 sm:border-b-0 sm:border-r',
@@ -856,19 +767,6 @@ function MembershipDetailPanel({
       }),
     },
   ] as const;
-  const progressLabel = membership.active
-    ? allowanceEnabled
-      ? `${membershipStatusText(membership.allowance_status, t)} · ${t(
-          'pages.membership.usedPercent',
-          { percent: usedPercentText },
-        )}`
-      : t('pages.membership.noAllowanceStatus')
-    : t('pages.membership.progressAfterSubscribe');
-  const progressValue = membership.active && allowanceEnabled ? usedPercent : 0;
-  const futureEntitlements = entitlements.filter(
-    (entitlement) => !entitlement.is_current,
-  );
-  const nextEntitlement = futureEntitlements[0] ?? null;
 
   return (
     <section
@@ -892,133 +790,6 @@ function MembershipDetailPanel({
               </div>
             ))}
           </div>
-          <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
-            <div className="mb-2 flex flex-col gap-1 text-[12px] leading-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <span className="font-medium text-muted">
-                {allowanceEnabled
-                  ? t('pages.membership.allowanceProgress')
-                  : t('pages.membership.noAllowanceProgress')}
-              </span>
-              <span className="min-w-0 text-ink sm:text-right">
-                {progressLabel}
-              </span>
-            </div>
-            <div
-              role="meter"
-              aria-label={t('pages.membership.allowanceUsageAria')}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progressValue}
-              className="h-2.5 overflow-hidden rounded-full border border-hairline/70 bg-canvas/55"
-            >
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,var(--color-accent-teal),var(--color-primary))] transition-[width]"
-                style={{ width: `${progressValue}%` }}
-              />
-            </div>
-            <div className="mt-2 text-[11px] leading-5 text-muted">
-              {membership.active
-                ? allowanceEnabled
-                  ? t('pages.membership.activeHint', {
-                      reset: resetText(
-                        membership.allowance_reset_at,
-                        formatDate,
-                        t,
-                      ),
-                    })
-                  : t('pages.membership.noAllowanceActiveHint')
-                : membership.enabled
-                  ? currentPlan && !allowanceEnabled
-                    ? t('pages.membership.noAllowanceInactiveHint')
-                    : t('pages.membership.inactiveHint')
-                  : t('pages.membership.disabledHint')}
-            </div>
-          </div>
-          {entitlements.length > 0 && (
-            <div className="border-t border-hairline/70 px-3 py-3 sm:px-4">
-              <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                <div className="text-[11px] font-medium text-muted">
-                  {t('pages.membership.entitlementTimeline')}
-                </div>
-                {nextEntitlement && (
-                  <div className="text-[11px] leading-5 text-muted sm:text-right">
-                    {t('pages.membership.entitlementFallbackHint', {
-                      plan: resolveEntitlementShortName(nextEntitlement),
-                      date: formatMembershipDate(
-                        nextEntitlement.effective_end,
-                        formatDate,
-                        t,
-                      ),
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {entitlements.map((entitlement) => {
-                  const planShortName =
-                    resolveEntitlementShortName(entitlement);
-                  const canRenewCurrentEntitlement = Boolean(
-                    entitlement.is_current && currentPlan?.enabled,
-                  );
-                  const renewingCurrentPlan =
-                    currentPlan?.plan_key === busyPlanKey;
-                  return (
-                    <div
-                      key={`${entitlement.plan_key}-${entitlement.effective_start}-${entitlement.effective_end}`}
-                      className={`rounded-md border px-3 py-2 ${
-                        entitlement.is_current
-                          ? 'border-primary/35 bg-primary/8'
-                          : 'border-hairline bg-canvas/45'
-                      }`}
-                    >
-                      <div className="flex min-h-5 items-center justify-between gap-2">
-                        <span className="text-[12px] font-semibold text-ink">
-                          {planShortName}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            entitlement.is_current
-                              ? 'bg-primary/12 text-primary'
-                              : 'bg-surface-card text-muted'
-                          }`}
-                        >
-                          {entitlement.is_current
-                            ? t('pages.membership.entitlementCurrent')
-                            : t('pages.membership.entitlementUpcoming')}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-[11px] leading-5 text-muted">
-                        {formatEntitlementRange(entitlement, formatDate)}
-                      </div>
-                      {canRenewCurrentEntitlement && currentPlan && (
-                        <button
-                          type="button"
-                          onClick={() => onRenew(currentPlan)}
-                          disabled={renewingCurrentPlan}
-                          aria-label={t('pages.membership.renewPlan', {
-                            plan: resolvePlanShortName(currentPlan),
-                          })}
-                          className="mt-2 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md border border-primary/25 bg-primary/10 px-3 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
-                        >
-                          {renewingCurrentPlan ? (
-                            <Loader2
-                              size={13}
-                              className="shrink-0 animate-spin"
-                            />
-                          ) : (
-                            <Sparkles size={13} className="shrink-0" />
-                          )}
-                          {t('pages.membership.renewPlan', {
-                            plan: resolvePlanShortName(currentPlan),
-                          })}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </section>
@@ -1121,9 +892,9 @@ export function MembershipWorkspace() {
     ) ??
     membershipPlans[0] ??
     null;
-  const activePlanShortName = activePlan
-    ? resolvePlanShortName(activePlan)
-    : 'Clarity';
+  const activePlanShortName = defaultPlan
+    ? resolvePlanDisplayName(defaultPlan)
+    : '卦师使用权';
 
   return (
     <AppShell>
