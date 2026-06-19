@@ -8,6 +8,7 @@ import { sqlReviewFixMigrations } from './definitions/0045-sql-review-fixes.js';
 import { guashiAccessMigrations } from './definitions/0049-guashi-access.js';
 import { clientProfilesMigrations } from './definitions/0050-client-profiles.js';
 import { guashiScriptTemplateMigrations } from './definitions/0051-guashi-script-template.js';
+import { disableLegacyPlusProMigrations } from './definitions/0052-disable-legacy-plus-pro.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -24,4 +25,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...guashiAccessMigrations,
   ...clientProfilesMigrations,
   ...guashiScriptTemplateMigrations,
+  ...disableLegacyPlusProMigrations,
 ];
