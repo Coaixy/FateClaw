@@ -160,7 +160,8 @@ function resolvePlanShortName(plan: Pick<MembershipPlan, 'name' | 'plan_key'>) {
 function resolvePlanDisplayName(
   plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
 ) {
-  return resolveMembershipPlanDisplayName(plan);
+  // 优先使用后端配置的套餐名（如"卦师使用权"）；为空时回退到按档位推导的旧展示名。
+  return plan.name?.trim() || resolveMembershipPlanDisplayName(plan);
 }
 
 function resolveEntitlementShortName(
@@ -175,31 +176,12 @@ function hasMembershipAllowance(
   return (plan?.monthly_allowance_units ?? 0) > 0;
 }
 
-function resolvePlanBenefitLabels(
-  plan: Pick<MembershipPlan, 'name' | 'plan_key' | 'monthly_allowance_units'>,
-  t: TranslationFn,
-) {
-  const planShortName = resolvePlanShortName(plan);
-  if (planShortName === 'Clarity') {
-    return [
-      t('pages.membership.planBenefitClarityExpert'),
-      t('pages.membership.planBenefitClarityDaily'),
-      t('pages.membership.planBenefitClarityCharting'),
-    ];
-  }
-  if (planShortName === 'Deep') {
-    return [
-      t('pages.membership.planBenefitDeepAllowance'),
-      t('pages.membership.planBenefitDeepSupport'),
-      t('pages.membership.planBenefitDeepExpert'),
-    ];
-  }
+function resolvePlanBenefitLabels(t: TranslationFn) {
+  // 塌缩为单层"卦师使用权"：统一展示卦师工具的核心卖点，不再按档位区分。
   return [
-    t('pages.membership.planBenefitInsightExpert'),
-    t('pages.membership.planBenefitInsightTools'),
-    hasMembershipAllowance(plan)
-      ? t('pages.membership.planBenefitInsightAllowance')
-      : t('pages.membership.planBenefitNoAllowance'),
+    t('pages.membership.planBenefitGuashiModel'),
+    t('pages.membership.planBenefitGuashiReading'),
+    t('pages.membership.planBenefitGuashiKnowledge'),
   ];
 }
 
@@ -725,12 +707,11 @@ function MembershipPlanCards({
           const normalizedPlanKey = normalizeMembershipPlanKey(plan.plan_key);
           const isCurrentPlan = normalizedActivePlanKey === normalizedPlanKey;
           const busy = busyPlanKey === plan.plan_key;
-          const planShortName = resolvePlanShortName(plan);
           const planDisplayName = resolvePlanDisplayName(plan);
-          const benefitLabels = resolvePlanBenefitLabels(plan, t);
+          const benefitLabels = resolvePlanBenefitLabels(t);
           const actionLabel = isCurrentPlan
-            ? t('pages.membership.renewPlan', { plan: planShortName })
-            : t('pages.membership.subscribePlan', { plan: planShortName });
+            ? t('pages.membership.renewPlan', { plan: planDisplayName })
+            : t('pages.membership.subscribePlan', { plan: planDisplayName });
           const buttonLabel = !plan.enabled
             ? t('pages.membership.planDisabled')
             : actionLabel;
