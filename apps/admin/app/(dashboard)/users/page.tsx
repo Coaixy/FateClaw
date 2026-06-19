@@ -461,8 +461,15 @@ function UserRow({
 
   useEffect(() => {
     if (!detail) return;
+    // 单层化后旧档（insight/deep）已停用：仅当用户当前档仍是在售档时才默认选中它，
+    // 否则回落到第一个在售档（卦师使用权）。避免给存量旧档会员默认选中停用档，
+    // 导致点"设置会员"提交时被后端以"会员套餐未启用"拒绝。
+    const currentPlanKey = detail.membership.plan_key;
+    const currentPlanEnabled = detail.membership_plans.some(
+      (plan) => plan.plan_key === currentPlanKey && plan.enabled,
+    );
     setMembershipPlan(
-      detail.membership.plan_key ??
+      (currentPlanEnabled ? currentPlanKey : null) ??
         detail.membership_plans.find((plan) => plan.enabled)?.plan_key ??
         detail.membership_plans[0]?.plan_key ??
         'fateclaw_clarity',
