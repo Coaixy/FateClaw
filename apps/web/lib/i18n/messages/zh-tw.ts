@@ -53,6 +53,7 @@ export const zhTWMessages = {
   },
   userMenu: {
     sections: {
+      persona: '斷卦人設',
       wechat: '微信對話',
       market: '市場',
       account: '帳戶',

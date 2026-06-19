@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
-  Bot,
   ChevronRight,
   Compass,
   Crown,
@@ -64,11 +63,11 @@ export function UserMenuDropdown({
         </div>
       </div>
       <div className="p-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
-        <MenuSection label={t('userMenu.sections.wechat')}>
+        <MenuSection label={t('userMenu.sections.persona')}>
           <MenuItem
-            href="/dashboard"
-            icon={Bot}
-            label={t('userMenu.connectWechat')}
+            href="/persona"
+            icon={Sparkles}
+            label={t('userMenu.persona')}
             onNavigate={onNavigate}
           />
         </MenuSection>
@@ -109,12 +108,6 @@ export function UserMenuDropdown({
             href="/gifts"
             icon={TicketPercent}
             label={t('userMenu.gifts')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/persona"
-            icon={Sparkles}
-            label={t('userMenu.persona')}
             onNavigate={onNavigate}
           />
           <MenuItem

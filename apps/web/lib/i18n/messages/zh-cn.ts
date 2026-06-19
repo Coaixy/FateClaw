@@ -53,6 +53,7 @@ export const zhCNMessages = {
   },
   userMenu: {
     sections: {
+      persona: '断卦人设',
       wechat: '微信对话',
       market: '市场',
       account: '账户',
