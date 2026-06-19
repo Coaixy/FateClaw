@@ -169,22 +169,6 @@ export function membershipOverviewMeetsPlan(
  *
  * @param membership 当前会员概览。
  * @returns Clarity 及以上套餐有效时返回 true。
- * @deprecated 仅作为旧命名兼容 wrapper，新代码使用 hasPaidMembershipEntitlement()。
- */
-export function hasBaseMembershipEntitlement(
-  membership: {
-    active: boolean;
-    membership: { plan_key: string | null } | null;
-  } | null,
-): boolean {
-  return hasPaidMembershipEntitlement(membership);
-}
-
-/**
- * 判断当前会员是否拥有付费会员基础身份。
- *
- * @param membership 当前会员概览。
- * @returns Clarity 及以上套餐有效时返回 true。
  */
 export function hasPaidMembershipEntitlement(
   membership: {
@@ -193,51 +177,6 @@ export function hasPaidMembershipEntitlement(
   } | null,
 ): boolean {
   return membershipOverviewMeetsPlan(membership, MEMBERSHIP_CLARITY_PLAN_KEY);
-}
-
-/**
- * 判断当前会员是否可使用专家模式。
- *
- * @param membership 当前会员概览。
- * @returns Clarity 及以上套餐有效时返回 true。
- */
-export function hasExpertModeEntitlement(
-  membership: {
-    active: boolean;
-    membership: { plan_key: string | null } | null;
-  } | null,
-): boolean {
-  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_CLARITY_PLAN_KEY);
-}
-
-/**
- * 判断当前会员是否进入 runtime 会员优先队列。
- *
- * @param membership 当前会员概览。
- * @returns Insight 及以上套餐有效时返回 true。
- */
-export function hasPriorityQueueEntitlement(
-  membership: {
-    active: boolean;
-    membership: { plan_key: string | null } | null;
-  } | null,
-): boolean {
-  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_INSIGHT_PLAN_KEY);
-}
-
-/**
- * 判断当前会员是否可使用自定义模型。
- *
- * @param membership 当前会员概览。
- * @returns Insight 及以上套餐有效时返回 true。
- */
-export function hasCustomModelEntitlement(
-  membership: {
-    active: boolean;
-    membership: { plan_key: string | null } | null;
-  } | null,
-): boolean {
-  return membershipOverviewMeetsPlan(membership, MEMBERSHIP_INSIGHT_PLAN_KEY);
 }
 
 /**
@@ -253,20 +192,4 @@ export function hasWechatClawEntitlement(
   } | null,
 ): boolean {
   return membershipOverviewMeetsPlan(membership, MEMBERSHIP_DEEP_PLAN_KEY);
-}
-
-/**
- * 解析套餐对应的专家 AI 每日可用次数。
- *
- * @param planKey 当前套餐 key；为空或未知时按 Free 处理。
- * @returns Free 为 0，Clarity 为 10，Insight 为 30，Deep 为 100。
- */
-export function resolveProfessionalAiDailyTurnLimit(
-  planKey?: string | null,
-): number {
-  const rank = resolveMembershipPlanRank(planKey);
-  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_DEEP_PLAN_KEY]) return 100;
-  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_INSIGHT_PLAN_KEY]) return 30;
-  if (rank >= MEMBERSHIP_PLAN_RANKS[MEMBERSHIP_CLARITY_PLAN_KEY]) return 10;
-  return 0;
 }

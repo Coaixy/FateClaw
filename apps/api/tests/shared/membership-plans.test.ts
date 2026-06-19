@@ -6,9 +6,7 @@ import {
   MEMBERSHIP_INSIGHT_PLAN_KEY,
   MEMBERSHIP_PLUS_PLAN_KEY,
   MEMBERSHIP_PRO_PLAN_KEY,
-  hasBaseMembershipEntitlement,
-  hasCustomModelEntitlement,
-  hasPriorityQueueEntitlement,
+  hasPaidMembershipEntitlement,
   hasWechatClawEntitlement,
   membershipOverviewMeetsPlan,
   membershipPlanMeets,
@@ -16,7 +14,6 @@ import {
   resolveMembershipConfigId,
   resolveMembershipPlanKey,
   resolveMembershipPlanRank,
-  resolveProfessionalAiDailyTurnLimit,
 } from '../../src/shared/membership-plans.js';
 
 describe('membership plan helpers', () => {
@@ -73,19 +70,19 @@ describe('membership plan helpers', () => {
 
   it('keeps paid membership entitlement available to all paid tiers', () => {
     expect(
-      hasBaseMembershipEntitlement({
+      hasPaidMembershipEntitlement({
         active: true,
         membership: { plan_key: MEMBERSHIP_CLARITY_PLAN_KEY },
       }),
     ).toBe(true);
     expect(
-      hasBaseMembershipEntitlement({
+      hasPaidMembershipEntitlement({
         active: true,
         membership: { plan_key: MEMBERSHIP_DEEP_PLAN_KEY },
       }),
     ).toBe(true);
     expect(
-      hasBaseMembershipEntitlement({ active: false, membership: null }),
+      hasPaidMembershipEntitlement({ active: false, membership: null }),
     ).toBe(false);
   });
 
@@ -101,25 +98,7 @@ describe('membership plan helpers', () => {
     ).toBe(false);
   });
 
-  it('expresses split entitlements explicitly', () => {
-    expect(
-      hasCustomModelEntitlement({
-        active: true,
-        membership: { plan_key: MEMBERSHIP_CLARITY_PLAN_KEY },
-      }),
-    ).toBe(false);
-    expect(
-      hasCustomModelEntitlement({
-        active: true,
-        membership: { plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY },
-      }),
-    ).toBe(true);
-    expect(
-      hasPriorityQueueEntitlement({
-        active: true,
-        membership: { plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY },
-      }),
-    ).toBe(true);
+  it('requires Deep tier for the wechat claw entitlement', () => {
     expect(
       hasWechatClawEntitlement({
         active: true,
@@ -134,16 +113,4 @@ describe('membership plan helpers', () => {
     ).toBe(true);
   });
 
-  it('resolves professional AI daily limits by tier', () => {
-    expect(resolveProfessionalAiDailyTurnLimit(null)).toBe(0);
-    expect(
-      resolveProfessionalAiDailyTurnLimit(MEMBERSHIP_CLARITY_PLAN_KEY),
-    ).toBe(10);
-    expect(
-      resolveProfessionalAiDailyTurnLimit(MEMBERSHIP_INSIGHT_PLAN_KEY),
-    ).toBe(30);
-    expect(resolveProfessionalAiDailyTurnLimit(MEMBERSHIP_DEEP_PLAN_KEY)).toBe(
-      100,
-    );
-  });
 });
