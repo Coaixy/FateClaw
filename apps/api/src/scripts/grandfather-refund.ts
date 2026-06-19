@@ -25,16 +25,20 @@ async function main(): Promise<void> {
   await initDatabase();
   const pool = getDbPool();
 
-  // 当前仍有效的存量会员（无论旧档位）。
+  // 当前仍有效的存量会员（无论旧档位）。一个用户可能有多条 active 会员行（升级后旧行未失效），
+  // 而补贴按用户唯一发放、退款又全按 user_id 聚合计算（实付/额度均按 user_id 查），故用 DISTINCT ON
+  // 去重到每人一行（取 period_end 最新者），避免 dry-run 把同一人重复计数，并保证口径确定可复现。
   const { rows: memberships } = await pool.query<{
     user_id: string;
     plan_key: string;
     current_period_start: string;
     current_period_end: string;
   }>(
-    `SELECT user_id, plan_key, current_period_start, current_period_end
+    `SELECT DISTINCT ON (user_id)
+            user_id, plan_key, current_period_start, current_period_end
        FROM user_memberships
-      WHERE status = 'active' AND current_period_end > NOW()`,
+      WHERE status = 'active' AND current_period_end > NOW()
+      ORDER BY user_id, current_period_end DESC`,
   );
 
   console.log(
