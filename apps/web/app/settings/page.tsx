@@ -7,7 +7,7 @@ const LEGACY_TAB_REDIRECT: Record<string, string> = {
   personal: '/profile',
   account: '/profile',
   appearance: '/profile',
-  wallet: '/wallet',
+  wallet: '/membership',
 };
 
 function SettingsRedirectInner() {

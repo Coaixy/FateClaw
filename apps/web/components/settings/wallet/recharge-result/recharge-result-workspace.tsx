@@ -339,11 +339,11 @@ export function RechargeResultWorkspace() {
             <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
               {status === 'paid' ? (
                 <Link
-                  href="/wallet"
+                  href="/membership"
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
                 >
                   <Wallet size={15} />
-                  查看积分与账单
+                  查看订阅与计费
                 </Link>
               ) : (
                 <button
@@ -361,11 +361,11 @@ export function RechargeResultWorkspace() {
               )}
 
               <Link
-                href="/wallet"
+                href="/membership"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-hairline bg-canvas/60 px-4 text-[13px] font-medium text-muted transition-colors hover:text-ink"
               >
                 <ArrowLeft size={15} />
-                返回积分与账单
+                返回订阅与计费
               </Link>
             </div>
 
