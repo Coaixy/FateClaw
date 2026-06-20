@@ -27,7 +27,7 @@ const WECHAT_CLAW_FEATURE_ENABLED = false;
 /**
  * runtime 和业务服务消费的统一会员权益快照。
  *
- * 字段按“可消费能力”组织，调用方应直接读取布尔能力与每日次数上限，
+ * 字段按“可消费能力”组织，调用方应直接读取布尔能力，
  * 不要在各模块内重新根据 planKey 推导微信 Claw、优先队列或自配模型权限。
  */
 export interface RuntimeEntitlementSnapshot {
@@ -39,8 +39,6 @@ export interface RuntimeEntitlementSnapshot {
   hasPriorityQueue: boolean;
   canUseCustomModel: boolean;
   canUseWechatClaw: boolean;
-  /** 每日专家解读次数上限；null 表示不限次数（当前 B 端卦师不设上限）。 */
-  professionalAiDailyTurnLimit: number | null;
   wallet: {
     purchasedCoins: number;
     bonusCoins: number;
@@ -54,7 +52,7 @@ export interface RuntimeEntitlementSnapshot {
  * 读取用户在当前请求中的统一权益快照。
  *
  * @param userId 平台用户 ID。
- * @returns 会员状态、套餐能力、专家次数上限和钱包余额的同一时点快照。
+ * @returns 会员状态、套餐能力和钱包余额的同一时点快照。
  * @remarks 调用方只能消费布尔能力，不应重新解释 planKey。
  */
 export async function getRuntimeEntitlementSnapshot(
@@ -88,10 +86,6 @@ export async function getRuntimeEntitlementSnapshot(
     // 功能已在迁移 0057 数据层可逆停用（accounts.enabled=false → 启动不拉起 iLink 轮询、
     // 前端无绑定入口、状态页不展示微信卡）。恢复时把常量改回 true 即对所有有效卦师开放。
     canUseWechatClaw: WECHAT_CLAW_FEATURE_ENABLED && membership.active,
-    // B 端卦师按 token 计费，取消每日专家次数上限：有效卦师返回 null，
-    // prepareOwnedChatSessionTurn 会据此跳过 claimProfessionalAiTurn（机制保留休眠，
-    // 未来如需恢复上限，把 null 改回具体数值即可）。
-    professionalAiDailyTurnLimit: membership.active ? null : 0,
     wallet: {
       purchasedCoins: walletState.purchased_coins,
       bonusCoins: walletState.bonus_coins,

@@ -23,7 +23,6 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
-  claimProfessionalAiTurn,
   createDailySignInReward,
   deductBalanceCoins,
   deductModelChargeCoinsAllowDebt,
@@ -38,7 +37,6 @@ import {
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
   listWalletTransactionsForAdmin,
-  releaseProfessionalAiTurn,
   reserveUserBalanceCoins,
   settleRechargeOrderPaid,
   setUserMembershipForAdmin,
@@ -413,116 +411,6 @@ describe('billing repository', () => {
     ).toBe(false);
     expect(clientCalls[3]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
-  });
-
-  it('claims a professional AI turn when quota remains', async () => {
-    const { clientCalls, client } = createMockPool(
-      [],
-      [
-        [],
-        [
-          {
-            user_id: 'user-1',
-            usage_date: '2026-05-30',
-            professional_turn_count: '2',
-            created_at: '2026-05-30T00:00:00.000Z',
-            updated_at: '2026-05-30T00:01:00.000Z',
-          },
-        ],
-        [],
-      ],
-    );
-
-    await expect(
-      claimProfessionalAiTurn({
-        userId: 'user-1',
-        dailyTurnLimit: 5,
-        usageDate: '2026-05-30',
-      }),
-    ).resolves.toEqual({
-      allowed: true,
-      usage_date: '2026-05-30',
-      limit: 5,
-      used: 2,
-      remaining: 3,
-    });
-    expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(clientCalls[1]?.sql).toContain(
-      'ON CONFLICT (user_id, usage_date) DO UPDATE',
-    );
-    expect(clientCalls[1]?.sql).toContain('professional_turn_count < $3');
-    expect(clientCalls[1]?.params).toEqual(['user-1', '2026-05-30', 5]);
-    expect(clientCalls[2]?.sql).toBe('COMMIT');
-    expect(client.release).toHaveBeenCalledOnce();
-  });
-
-  it('rejects a professional AI turn after quota is exhausted', async () => {
-    const { clientCalls, client } = createMockPool(
-      [],
-      [
-        [],
-        [],
-        [
-          {
-            user_id: 'user-1',
-            usage_date: '2026-05-30',
-            professional_turn_count: '5',
-            created_at: '2026-05-30T00:00:00.000Z',
-            updated_at: '2026-05-30T00:01:00.000Z',
-          },
-        ],
-        [],
-      ],
-    );
-
-    await expect(
-      claimProfessionalAiTurn({
-        userId: 'user-1',
-        dailyTurnLimit: 5,
-        usageDate: '2026-05-30',
-      }),
-    ).resolves.toEqual({
-      allowed: false,
-      usage_date: '2026-05-30',
-      limit: 5,
-      used: 5,
-      remaining: 0,
-    });
-    expect(clientCalls[2]?.sql).toContain(
-      'FROM ai_chat_professional_daily_usage',
-    );
-    expect(clientCalls[3]?.sql).toBe('COMMIT');
-    expect(client.release).toHaveBeenCalledOnce();
-  });
-
-  it('releases a consumed professional AI turn', async () => {
-    const { calls } = createMockPool([
-      [
-        {
-          user_id: 'user-1',
-          usage_date: '2026-05-30',
-          professional_turn_count: '3',
-          created_at: '2026-05-30T00:00:00.000Z',
-          updated_at: '2026-05-30T00:01:00.000Z',
-        },
-      ],
-    ]);
-
-    await expect(
-      releaseProfessionalAiTurn({
-        userId: 'user-1',
-        usageDate: '2026-05-30',
-      }),
-    ).resolves.toEqual({
-      released: true,
-      usage_date: '2026-05-30',
-      used: 3,
-    });
-    expect(calls[0]?.sql).toContain(
-      'UPDATE ai_chat_professional_daily_usage',
-    );
-    expect(calls[0]?.sql).toContain('professional_turn_count > 0');
-    expect(calls[0]?.params).toEqual(['user-1', '2026-05-30']);
   });
 
   it('records metered requests without reserving balance', async () => {

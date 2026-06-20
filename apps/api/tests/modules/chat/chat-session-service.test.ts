@@ -12,8 +12,6 @@ const {
   mockGetSessionMessagesWithToolContext,
   mockGetSharedChatSessionByToken,
   mockGetMembershipOverview,
-  mockClaimProfessionalAiTurn,
-  mockReleaseProfessionalAiTurn,
   mockGetUserById,
   mockGetAccountsByUserId,
   mockHasFinalAiChatSessionReply,
@@ -49,8 +47,6 @@ const {
   mockGetSessionMessagesWithToolContext: vi.fn(),
   mockGetSharedChatSessionByToken: vi.fn(),
   mockGetMembershipOverview: vi.fn(),
-  mockClaimProfessionalAiTurn: vi.fn(),
-  mockReleaseProfessionalAiTurn: vi.fn(),
   mockGetUserById: vi.fn(),
   mockGetAccountsByUserId: vi.fn(),
   mockHasFinalAiChatSessionReply: vi.fn(),
@@ -91,8 +87,6 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getSessionMessagesWithToolContext: mockGetSessionMessagesWithToolContext,
   getSharedChatSessionByToken: mockGetSharedChatSessionByToken,
   getMembershipOverview: mockGetMembershipOverview,
-  claimProfessionalAiTurn: mockClaimProfessionalAiTurn,
-  releaseProfessionalAiTurn: mockReleaseProfessionalAiTurn,
   getUserById: mockGetUserById,
   getAccountsByUserId: mockGetAccountsByUserId,
   hasFinalAiChatSessionReply: mockHasFinalAiChatSessionReply,
@@ -220,18 +214,6 @@ describe('chat-session-service selected board context', () => {
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
       membership: { plan_key: 'fateclaw_deep' },
-    });
-    mockClaimProfessionalAiTurn.mockResolvedValue({
-      allowed: true,
-      usage_date: '2026-04-26',
-      limit: 100,
-      used: 1,
-      remaining: 99,
-    });
-    mockReleaseProfessionalAiTurn.mockResolvedValue({
-      released: true,
-      usage_date: '2026-04-26',
-      used: 0,
     });
     mockGetAccountsByUserId.mockResolvedValue([
       {
@@ -454,54 +436,9 @@ describe('chat-session-service selected board context', () => {
       statusCode: 403,
       error: '需要有效的卦师使用权才能发起解读，请先开通或续费',
     });
-    // 使用权门禁在占用会话处理锁、专家配额之前拦截，后续步骤都不应被触达。
-    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
+    // 使用权门禁在占用会话处理锁之前拦截，后续步骤都不应被触达。
     expect(mockStoreMessage).not.toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
-  });
-
-  it('每日专家次数上限已软取消，有效卦师不再消耗次数', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({
-      active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
-    });
-
-    await sendOwnedChatSessionMessage('user-1', 'session-1', {
-      content: '请解读这张盘',
-      inputKind: 'normal',
-      pastedBoard: undefined,
-    });
-
-    // entitlement.professionalAiDailyTurnLimit 返回 null（不限次数），
-    // prepareOwnedChatSessionTurn 据此跳过 claim/release（机制保留休眠）。
-    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
-    expect(mockReleaseProfessionalAiTurn).not.toHaveBeenCalled();
-    expect(mockStoreMessage).toHaveBeenCalled();
-    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not consume professional AI turns for simple workflow first-turn bypass', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({
-      active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
-    });
-
-    const result = await sendOwnedChatSessionMessage(
-      'user-1',
-      'session-1',
-      {
-        content: '简易模式首轮',
-        inputKind: 'normal',
-        pastedBoard: undefined,
-      },
-      {
-        professionalAiQuotaBypass: 'simple_workflow_first_turn',
-      },
-    );
-
-    expect(result.ok).toBe(true);
-    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
-    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {
