@@ -558,6 +558,8 @@ async function getMembershipConfigUsing(input: {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
+  // 旧档（deep/insight）定价仅用于按需补齐存量会员的 config 行以识别其历史档位，
+  // 不再进入在售列表（getMembershipPlanConfigs 只 ensure clarity）。在售档 clarity = 10。
   const monthlyPriceCoins =
     planKey === MEMBERSHIP_DEEP_PLAN_KEY
       ? 100
@@ -826,6 +828,14 @@ async function resolveEffectiveMembershipUsing(input: {
   };
 }
 
+/**
+ * 高档权益插队时，把被覆盖的低档会员时长顺延到末尾。
+ *
+ * @deprecated 单层化后只有 clarity 一档在售（rank=1），targetRank 恒为 1，
+ *   循环内 `rank >= targetRank` 恒成立 → 直接 continue，UPDATE 永不执行（死分支）。
+ *   保留以兼容存量未迁移的多档行（理论上 0054 已归一），并保持订阅路径调用点不变。
+ *   若未来确认无存量多档需求，可连同调用点一并物理删除。
+ */
 async function extendLowerTierMembershipsForOverlayUsing(
   client: pg.PoolClient,
   input: {

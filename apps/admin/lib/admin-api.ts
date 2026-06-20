@@ -199,8 +199,6 @@ export interface AdminUser {
   membership: MembershipStatusDto;
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;
@@ -301,8 +299,6 @@ export interface GlobalStats {
   total_users: number;
   model_selection_distribution: { source: string; count: number }[];
   active_memberships: number;
-  /** @deprecated 使用 active_memberships。 */
-  active_subscriptions: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;

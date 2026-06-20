@@ -79,8 +79,6 @@ export interface WalletTransactionDto {
 export interface BillingStatusDto {
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。兼容期内两者值保持一致。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;

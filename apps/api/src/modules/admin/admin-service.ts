@@ -257,8 +257,6 @@ export type AdminUserListItem = Omit<User, 'password_hash'> & {
   usage: Awaited<ReturnType<typeof getUsageStats>>;
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;
@@ -1161,7 +1159,6 @@ export async function listAdminUsersWithStats(
           } satisfies Awaited<ReturnType<typeof getUsageStats>>),
         monthly_tokens_used: monthlyBilling.usedTokens,
         monthly_charged_coins: monthlyBilling.chargedCoins,
-        estimated_monthly_total_coins: monthlyBilling.chargedCoins,
         purchased_coins: safe.purchased_coins,
         bonus_coins: safe.bonus_coins,
         reserved_coins: safe.reserved_coins,
@@ -1203,8 +1200,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
     monthly_charged_coins: number;
-    /** @deprecated 使用 monthly_charged_coins。 */
-    estimated_monthly_total_coins: number;
     purchased_coins: number;
     bonus_coins: number;
     reserved_coins: number;
@@ -1239,7 +1234,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
       monthly_charged_coins: monthlyBilling.chargedCoins,
-      estimated_monthly_total_coins: monthlyBilling.chargedCoins,
       purchased_coins: wallet.purchasedCoins,
       bonus_coins: wallet.bonusCoins,
       reserved_coins: wallet.reservedCoins,

@@ -117,6 +117,9 @@ export function hasPaidMembershipEntitlement(
  *
  * @param membership 当前会员概览。
  * @returns Deep 套餐有效时返回 true。
+ * @deprecated 微信 Claw 功能已在迁移 0057 数据层可逆停用（accounts.enabled=false，
+ *   启动不再拉起 iLink 轮询、前端无绑定入口、状态页不展示）。单层化后不再新增 deep 会员，
+ *   故此判断对新用户恒为 false；保留供识别存量 deep 会员、未来恢复微信时复用（无需改此逻辑）。
  */
 export function hasWechatClawEntitlement(
   membership: {

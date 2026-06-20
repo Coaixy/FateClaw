@@ -22,8 +22,6 @@ export interface AdminGlobalStats {
   plan_distribution: { plan: string; count: number }[];
   model_selection_distribution: { source: string; count: number }[];
   active_memberships: number;
-  /** @deprecated 使用 active_memberships。 */
-  active_subscriptions: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
@@ -765,7 +763,6 @@ export async function getAdminGlobalStats(
       count: r.count,
     })),
     active_memberships: Number(ms.active),
-    active_subscriptions: Number(ms.active),
     total_recharge_orders: Number(rs.total_orders),
     paid_recharge_orders: Number(rs.paid_orders),
     pending_recharge_orders: Number(rs.pending_orders),

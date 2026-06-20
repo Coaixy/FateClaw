@@ -129,7 +129,6 @@ export function toBillingStatusDto(data: {
   return {
     monthly_tokens_used: data.billing.usedTokens,
     monthly_charged_coins: monthlyChargedCoins,
-    estimated_monthly_total_coins: monthlyChargedCoins,
     ...toWalletBalanceDto(data.wallet),
     membership: toMembershipStatusDto(data.membership),
     membership_entitlements: data.membershipEntitlements.map(
