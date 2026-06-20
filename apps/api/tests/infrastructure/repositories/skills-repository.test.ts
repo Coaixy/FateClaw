@@ -26,17 +26,11 @@ vi.mock('../../../src/modules/skills/text-skill-bundle-store.js', () => ({
 }));
 
 import {
-  checkSkillCommentSubmissionGuard,
-  createPendingSkillComment,
   createSkillAccessInvite,
   createUserCustomSkill,
   getBundleByToken,
   getEffectiveUserSkills,
   getSkillAccessInvitePreviewByToken,
-  getSkillReactionSummary,
-  getUserSkillReaction,
-  listPublicSkillComments,
-  listUserPendingSkillComments,
   getSubscribedSkills,
   redeemSkillAccessInvite,
   getResolvedEnabledOfficialSkillNames,
@@ -46,9 +40,7 @@ import {
   reviewSkillCommentForAdmin,
   seedOfficialSkills,
   setSkillCommentPinnedForAdmin,
-  setUserSkillReaction,
   subscribeToBundle,
-  toggleUserSkillReaction,
   unsubscribeFromSkill,
 } from '../../../src/infrastructure/repositories/skills-repository.js';
 
@@ -600,208 +592,6 @@ describe('skills repository official skill settings', () => {
         call.sql.includes('DELETE FROM user_skill_subscriptions'),
       ),
     ).toBe(false);
-  });
-
-  it('aggregates public Skill reaction counts', async () => {
-    const { calls } = createMockPool([{ like_count: '3', dislike_count: '1' }]);
-
-    await expect(getSkillReactionSummary('skill-1')).resolves.toEqual({
-      like_count: 3,
-      dislike_count: 1,
-    });
-    expect(calls[0]?.sql).toContain(
-      "COUNT(*) FILTER (WHERE kind = 'like')::int",
-    );
-    expect(calls[0]?.sql).toContain('FROM skill_reactions');
-    expect(calls[0]?.params).toEqual(['skill-1']);
-  });
-
-  it('upserts and clears one reaction per user and Skill', async () => {
-    const { calls } = createSequencedMockPool([[{ kind: 'like' }], []]);
-
-    await expect(
-      setUserSkillReaction('skill-1', 'user-1', 'like'),
-    ).resolves.toBe('like');
-    await expect(
-      setUserSkillReaction('skill-1', 'user-1', null),
-    ).resolves.toBeNull();
-
-    expect(calls[0]?.sql).toContain('ON CONFLICT (skill_id, user_id)');
-    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', 'like']);
-    expect(calls[1]?.sql).toContain('DELETE FROM skill_reactions');
-    expect(calls[1]?.params).toEqual(['skill-1', 'user-1']);
-  });
-
-  it('toggles repeated reactions off before switching reactions', async () => {
-    const repeated = createSequencedMockPool([[{ kind: 'like' }], []]);
-
-    await expect(
-      toggleUserSkillReaction('skill-1', 'user-1', 'like'),
-    ).resolves.toBeNull();
-
-    expect(repeated.calls[0]?.sql).toContain('SELECT kind');
-    expect(repeated.calls[1]?.sql).toContain('DELETE FROM skill_reactions');
-
-    const switched = createSequencedMockPool([
-      [{ kind: 'like' }],
-      [{ kind: 'dislike' }],
-    ]);
-
-    await expect(
-      toggleUserSkillReaction('skill-1', 'user-1', 'dislike'),
-    ).resolves.toBe('dislike');
-
-    expect(switched.calls[1]?.sql).toContain('ON CONFLICT (skill_id, user_id)');
-    expect(switched.calls[1]?.params).toEqual(['skill-1', 'user-1', 'dislike']);
-  });
-
-  it('returns null user reaction without querying when anonymous', async () => {
-    const { calls } = createMockPool();
-
-    await expect(getUserSkillReaction('skill-1', null)).resolves.toBeNull();
-
-    expect(calls).toEqual([]);
-  });
-
-  it('lists only approved public comments with pinned-first ordering', async () => {
-    const { calls } = createMockPool([
-      {
-        id: 'comment-1',
-        body: '公开评论',
-        pinned: true,
-        created_at: '2026-06-12T00:00:00.000Z',
-      },
-    ]);
-
-    await expect(listPublicSkillComments('skill-1', 500)).resolves.toEqual([
-      {
-        id: 'comment-1',
-        body: '公开评论',
-        pinned: true,
-        created_at: '2026-06-12T00:00:00.000Z',
-      },
-    ]);
-
-    expect(calls[0]?.sql).toContain("status = 'approved'");
-    expect(calls[0]?.sql).toContain(
-      'ORDER BY pinned DESC, reviewed_at DESC NULLS LAST, created_at DESC',
-    );
-    expect(calls[0]?.params).toEqual(['skill-1', 100]);
-  });
-
-  it('lists pending comments for the current submitting user only', async () => {
-    const { calls } = createMockPool([
-      {
-        id: 'comment-1',
-        body: '待审核评论',
-        status: 'pending',
-        created_at: '2026-06-12T00:00:00.000Z',
-      },
-    ]);
-
-    await expect(
-      listUserPendingSkillComments('skill-1', 'user-1', 500),
-    ).resolves.toEqual([
-      {
-        id: 'comment-1',
-        body: '待审核评论',
-        status: 'pending',
-        created_at: '2026-06-12T00:00:00.000Z',
-      },
-    ]);
-
-    expect(calls[0]?.sql).toContain("status = 'pending'");
-    expect(calls[0]?.sql).toContain('user_id = $2');
-    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', 50]);
-  });
-
-  it('does not query pending comments for anonymous users', async () => {
-    const { calls } = createMockPool();
-
-    await expect(
-      listUserPendingSkillComments('skill-1', null),
-    ).resolves.toEqual([]);
-
-    expect(calls).toEqual([]);
-  });
-
-  it('creates comments as pending rows for later review', async () => {
-    const { calls } = createMockPool([
-      {
-        id: 'comment-1',
-        skill_id: 'skill-1',
-        user_id: 'user-1',
-        body: '评论内容',
-        status: 'pending',
-        pinned: false,
-      },
-    ]);
-
-    await expect(
-      createPendingSkillComment({
-        id: 'comment-1',
-        skillId: 'skill-1',
-        userId: 'user-1',
-        body: '评论内容',
-      }),
-    ).resolves.toMatchObject({
-      id: 'comment-1',
-      status: 'pending',
-    });
-
-    expect(calls[0]?.sql).toContain('INSERT INTO skill_comments');
-    expect(calls[0]?.params).toEqual([
-      'comment-1',
-      'skill-1',
-      'user-1',
-      '评论内容',
-    ]);
-  });
-
-  it('blocks duplicate pending comments in the submission guard', async () => {
-    const { calls } = createMockPool([
-      {
-        duplicate_pending: true,
-        skill_pending_count: '1',
-        user_recent_pending_count: '1',
-      },
-    ]);
-
-    await expect(
-      checkSkillCommentSubmissionGuard({
-        skillId: 'skill-1',
-        userId: 'user-1',
-        body: '重复评论',
-      }),
-    ).resolves.toEqual({
-      allowed: false,
-      reason: 'duplicate_pending',
-    });
-
-    expect(calls[0]?.sql).toContain('duplicate_pending');
-    expect(calls[0]?.sql).toContain("created_at >= NOW() - INTERVAL '1 hour'");
-    expect(calls[0]?.params).toEqual(['skill-1', 'user-1', '重复评论']);
-  });
-
-  it('allows comments when submission guard thresholds are clear', async () => {
-    createMockPool([
-      {
-        duplicate_pending: false,
-        skill_pending_count: '0',
-        user_recent_pending_count: '0',
-      },
-    ]);
-
-    await expect(
-      checkSkillCommentSubmissionGuard({
-        skillId: 'skill-1',
-        userId: 'user-1',
-        body: '新的评论',
-      }),
-    ).resolves.toEqual({
-      allowed: true,
-      reason: null,
-    });
   });
 
   it('builds admin comment review filters and returns submitter audit data', async () => {

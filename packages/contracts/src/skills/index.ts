@@ -93,58 +93,12 @@ export interface SharedSkillPreviewDto {
   author_label: string;
 }
 
-/** Skill 公开赞踩类型。 */
-export type SkillReactionKindDto = 'like' | 'dislike';
-
-/** Skill 公开赞踩汇总。 */
-export interface SkillReactionSummaryDto {
-  like_count: number;
-  dislike_count: number;
-}
-
-/** 公开展示的匿名 Skill 评论。 */
-export interface PublicSkillCommentDto {
-  id: string;
-  body: string;
-  pinned: boolean;
-  created_at: string;
-}
-
-/** 当前登录用户可见的本人待审核 Skill 评论。 */
-export interface PendingSkillCommentDto {
-  id: string;
-  body: string;
-  status: 'pending';
-  created_at: string;
-}
-
-/** 单个公开 Skill 详情。 */
-export interface SharedSkillDetailDto extends SharedSkillPreviewDto {
-  reaction_summary: SkillReactionSummaryDto;
-  my_reaction: SkillReactionKindDto | null;
-  comments: PublicSkillCommentDto[];
-  my_pending_comments: PendingSkillCommentDto[];
-  comments_enabled: boolean;
-  public_interactions_enabled: boolean;
-}
-
-/** 设置当前用户对 Skill 的赞踩。kind 传 null 表示清除当前反应。 */
-export interface SetSkillReactionRequestDto {
-  kind: SkillReactionKindDto | null;
-}
-
-/** 提交 Skill 评论。评论仅支持纯文本。 */
-export interface CreateSkillCommentRequestDto {
-  body: string;
-}
-
-/** 提交 Skill 评论后的状态。 */
-export interface CreateSkillCommentResponseDto {
-  id: string;
-  status: 'pending';
-  body: string;
-  created_at: string;
-}
+/**
+ * 单个公开 Skill 详情。
+ *
+ * @remarks 公开 toC 互动(赞踩/评论)已下线,详情现等价于安装预览。
+ */
+export interface SharedSkillDetailDto extends SharedSkillPreviewDto {}
 
 /** 管理后台评论审核状态。 */
 export type AdminSkillCommentStatusDto = 'pending' | 'approved' | 'rejected';

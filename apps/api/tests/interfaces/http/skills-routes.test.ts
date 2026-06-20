@@ -3,63 +3,31 @@ import fastifyJwt from '@fastify/jwt';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  mockCheckSkillCommentSubmissionGuard,
-  mockCreatePendingSkillComment,
   mockCreateSkillAccessInvite,
   mockGetSkillAccessInvitePreviewByToken,
-  mockGetSkillReactionSummary,
-  mockGetUserSkillReaction,
-  mockHasActiveMembership,
-  mockListPublicSkillComments,
   mockListSkillAccessInvites,
-  mockListUserPendingSkillComments,
   mockRedeemSkillAccessInvite,
-  mockSetUserSkillReaction,
   serviceMocks,
 } = vi.hoisted(() => {
-  const mockCheckSkillCommentSubmissionGuard = vi.fn();
-  const mockCreatePendingSkillComment = vi.fn();
   const mockCreateSkillAccessInvite = vi.fn();
   const mockGetSkillAccessInvitePreviewByToken = vi.fn();
-  const mockGetSkillReactionSummary = vi.fn();
-  const mockGetUserSkillReaction = vi.fn();
-  const mockHasActiveMembership = vi.fn();
-  const mockListPublicSkillComments = vi.fn();
   const mockListSkillAccessInvites = vi.fn();
-  const mockListUserPendingSkillComments = vi.fn();
   const mockRedeemSkillAccessInvite = vi.fn();
   const mockRevokeSkillAccessInvite = vi.fn();
-  const mockSetUserSkillReaction = vi.fn();
   const mockCreateUserCustomSkill = vi.fn();
   const noop = vi.fn();
   return {
-    mockCheckSkillCommentSubmissionGuard,
-    mockCreatePendingSkillComment,
     mockCreateSkillAccessInvite,
     mockGetSkillAccessInvitePreviewByToken,
-    mockGetSkillReactionSummary,
-    mockGetUserSkillReaction,
-    mockHasActiveMembership,
-    mockListPublicSkillComments,
     mockListSkillAccessInvites,
-    mockListUserPendingSkillComments,
     mockRedeemSkillAccessInvite,
-    mockSetUserSkillReaction,
     serviceMocks: {
-      checkSkillCommentSubmissionGuard: mockCheckSkillCommentSubmissionGuard,
-      createPendingSkillComment: mockCreatePendingSkillComment,
       createSkillAccessInvite: mockCreateSkillAccessInvite,
       getSkillAccessInvitePreviewByToken:
         mockGetSkillAccessInvitePreviewByToken,
-      getSkillReactionSummary: mockGetSkillReactionSummary,
-      getUserSkillReaction: mockGetUserSkillReaction,
-      hasActiveMembership: mockHasActiveMembership,
-      listPublicSkillComments: mockListPublicSkillComments,
       listSkillAccessInvites: mockListSkillAccessInvites,
-      listUserPendingSkillComments: mockListUserPendingSkillComments,
       redeemSkillAccessInvite: mockRedeemSkillAccessInvite,
       revokeSkillAccessInvite: mockRevokeSkillAccessInvite,
-      setUserSkillReaction: mockSetUserSkillReaction,
       createSkillBundle: noop,
       createUserCustomSkill: mockCreateUserCustomSkill,
       deleteSkillBundle: noop,
@@ -155,19 +123,7 @@ describe('skillsRoutes access invites', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 0,
-      dislike_count: 0,
-    });
-    mockGetUserSkillReaction.mockResolvedValue(null);
-    mockHasActiveMembership.mockResolvedValue(false);
-    mockCheckSkillCommentSubmissionGuard.mockResolvedValue({
-      allowed: true,
-      reason: null,
-    });
-    mockListPublicSkillComments.mockResolvedValue([]);
     mockListSkillAccessInvites.mockResolvedValue([]);
-    mockListUserPendingSkillComments.mockResolvedValue([]);
     app = Fastify({ logger: false });
     await app.register(fastifyJwt, { secret: 'test-secret' });
     app.decorateRequest('requireAuth', async () => {});
@@ -361,437 +317,41 @@ describe('skillsRoutes access invites', () => {
     expect(response.json()).toEqual({ error: '授权链接已撤销' });
   });
 
-  it('returns shared skill details with approved comments and viewer pending comments only', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
+  it('returns shared skill install preview without public interaction fields', async () => {
+    // 公开 toC 互动已下线：/shared/:token 现仅返回安装预览级字段。
     serviceMocks.getSkillByShareToken.mockResolvedValue({
       ...skillPreview,
       visibility: 'shared',
       share_token: 'share-token',
     });
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 3,
-      dislike_count: 1,
-    });
-    mockGetUserSkillReaction.mockResolvedValue('like');
-    mockListPublicSkillComments.mockResolvedValue([
-      {
-        id: 'comment-1',
-        body: '已审核评论',
-        pinned: true,
-        created_at: '2026-01-02T00:00:00.000Z',
-        user_id: 'hidden-user',
-      },
-    ]);
-    mockListUserPendingSkillComments.mockResolvedValue([
-      {
-        id: 'comment-2',
-        body: '我的待审核评论',
-        status: 'pending',
-        created_at: '2026-01-03T00:00:00.000Z',
-        user_id: 'viewer-1',
-      },
-    ]);
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/shared/share-token',
-      headers: { authorization: `Bearer ${token}` },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(
-      expect.objectContaining({
-        id: 'skill-1',
-        public_interactions_enabled: true,
-        comments_enabled: true,
-        reaction_summary: { like_count: 3, dislike_count: 1 },
-        my_reaction: 'like',
-        comments: [
-          {
-            id: 'comment-1',
-            body: '已审核评论',
-            pinned: true,
-            created_at: '2026-01-02T00:00:00.000Z',
-          },
-        ],
-        my_pending_comments: [
-          {
-            id: 'comment-2',
-            body: '我的待审核评论',
-            status: 'pending',
-            created_at: '2026-01-03T00:00:00.000Z',
-          },
-        ],
-      }),
-    );
-    expect(response.json().comments[0]).not.toHaveProperty('user_id');
-    expect(response.json().my_pending_comments[0]).not.toHaveProperty(
-      'user_id',
-    );
-    expect(mockGetUserSkillReaction).toHaveBeenCalledWith(
-      'skill-1',
-      'viewer-1',
-    );
-    expect(mockListUserPendingSkillComments).toHaveBeenCalledWith(
-      'skill-1',
-      'viewer-1',
-    );
-  });
-
-  it('returns public shared skill details for anonymous visitors with null reaction', async () => {
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 3,
-      dislike_count: 1,
-    });
-    mockListPublicSkillComments.mockResolvedValue([]);
-
-    // 不带 authorization 头：getOptionalUserId 应安全降级为游客而非报错
     const response = await app.inject({
       method: 'GET',
       url: '/shared/share-token',
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      public_interactions_enabled: true,
-      comments_enabled: true,
-      reaction_summary: { like_count: 3, dislike_count: 1 },
-      my_reaction: null,
-      my_pending_comments: [],
-    });
-    // 游客无身份，反应查询应以 null userId 调用
-    expect(mockGetUserSkillReaction).toHaveBeenCalledWith('skill-1', null);
-    expect(mockListUserPendingSkillComments).toHaveBeenCalledWith(
-      'skill-1',
-      null,
-    );
-  });
-
-  it('treats invalid optional auth on shared skill details as anonymous', async () => {
-    const staleToken = app.jwt.sign({ userId: 'viewer-1' });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 3,
-      dislike_count: 1,
-    });
-    mockListPublicSkillComments.mockResolvedValue([]);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/shared/share-token',
-      headers: { authorization: `Bearer ${staleToken}` },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      public_interactions_enabled: true,
-      my_reaction: null,
-    });
-    expect(mockGetUserSkillReaction).toHaveBeenCalledWith('skill-1', null);
-  });
-
-  it('hides interactions for private share skill details', async () => {
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'link_shared',
-      share_token: 'private-token',
-    });
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/shared/private-token',
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      public_interactions_enabled: false,
-      comments_enabled: false,
-      reaction_summary: { like_count: 0, dislike_count: 0 },
-      my_reaction: null,
-      comments: [],
-      my_pending_comments: [],
-    });
-    expect(mockGetSkillReactionSummary).not.toHaveBeenCalled();
-    expect(mockListPublicSkillComments).not.toHaveBeenCalled();
-    expect(mockListUserPendingSkillComments).not.toHaveBeenCalled();
-  });
-
-  it('requires login before reacting to public shared skills', async () => {
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/shared/share-token/reaction',
-      payload: { kind: 'like' },
-    });
-
-    expect(response.statusCode).toBe(401);
-    expect(mockSetUserSkillReaction).not.toHaveBeenCalled();
-  });
-
-  it('sets public shared skill reactions for authenticated users', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockSetUserSkillReaction.mockResolvedValue('dislike');
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 2,
-      dislike_count: 4,
-    });
-
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/shared/share-token/reaction',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { kind: 'dislike' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(mockSetUserSkillReaction).toHaveBeenCalledWith(
-      'skill-1',
-      'viewer-1',
-      'dislike',
-    );
     expect(response.json()).toEqual({
-      reaction_summary: { like_count: 2, dislike_count: 4 },
-      my_reaction: 'dislike',
+      id: 'skill-1',
+      skill_name: 'Invite Skill',
+      description: 'desc',
+      content_length: 12,
+      author_label: '匿名作者',
     });
+    expect(response.json()).not.toHaveProperty('reaction_summary');
+    expect(response.json()).not.toHaveProperty('comments');
   });
 
-  it('clears public shared skill reactions when kind is null', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockSetUserSkillReaction.mockResolvedValue(null);
-    mockGetSkillReactionSummary.mockResolvedValue({
-      like_count: 5,
-      dislike_count: 2,
-    });
+  it('returns 404 for unknown shared skill tokens', async () => {
+    serviceMocks.getSkillByShareToken.mockResolvedValue(undefined);
 
     const response = await app.inject({
-      method: 'PUT',
-      url: '/shared/share-token/reaction',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { kind: null },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(mockSetUserSkillReaction).toHaveBeenCalledWith(
-      'skill-1',
-      'viewer-1',
-      null,
-    );
-    // 清除后应回传最新计数与空反应，供前端同步按钮状态
-    expect(response.json()).toEqual({
-      reaction_summary: { like_count: 5, dislike_count: 2 },
-      my_reaction: null,
-    });
-  });
-
-  it('does not allow reactions on private share links', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'link_shared',
-      share_token: 'private-token',
-    });
-
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/shared/private-token/reaction',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { kind: 'like' },
+      method: 'GET',
+      url: '/shared/missing-token',
     });
 
     expect(response.statusCode).toBe(404);
-    expect(mockSetUserSkillReaction).not.toHaveBeenCalled();
-  });
-
-  it('rejects comments from non-members', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(false);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '评论内容' },
-    });
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ error: '仅会员可发表评论' });
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
-  });
-
-  it('creates pending comments for active members', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(true);
-    mockCreatePendingSkillComment.mockResolvedValue({
-      id: 'comment-1',
-      status: 'pending',
-      body: '第一行 第二行',
-      created_at: '2026-01-04T00:00:00.000Z',
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '  第一行\n第二行  ' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(mockCreatePendingSkillComment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skillId: 'skill-1',
-        userId: 'viewer-1',
-        body: '第一行 第二行',
-      }),
-    );
-    expect(response.json()).toEqual({
-      id: 'comment-1',
-      status: 'pending',
-      body: '第一行 第二行',
-      created_at: '2026-01-04T00:00:00.000Z',
-    });
-  });
-
-  it('blocks duplicate pending comments before creating a row', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(true);
-    mockCheckSkillCommentSubmissionGuard.mockResolvedValue({
-      allowed: false,
-      reason: 'duplicate_pending',
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '重复评论' },
-    });
-
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      error: '相同评论正在审核中，请勿重复提交',
-    });
-    expect(mockCheckSkillCommentSubmissionGuard).toHaveBeenCalledWith({
-      skillId: 'skill-1',
-      userId: 'viewer-1',
-      body: '重复评论',
-    });
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
-  });
-
-  it('rejects empty comment body from members', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(true);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '' },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: '评论内容不能为空' });
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
-  });
-
-  it('rejects whitespace-only comment body after collapsing', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(true);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '   \n\t  ' },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: '评论内容不能为空' });
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
-  });
-
-  it('rejects comment body longer than 500 chars', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'shared',
-      share_token: 'share-token',
-    });
-    mockHasActiveMembership.mockResolvedValue(true);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/share-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      // 折叠空白后仍为 501 个连续字符，触发长度上限
-      payload: { body: 'a'.repeat(501) },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: '评论内容不超过 500 字' });
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
-  });
-
-  it('does not allow comments on private share links', async () => {
-    const token = app.jwt.sign({ userId: 'viewer-1', authTokenVersion: 1 });
-    serviceMocks.getSkillByShareToken.mockResolvedValue({
-      ...skillPreview,
-      visibility: 'link_shared',
-      share_token: 'private-token',
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/shared/private-token/comments',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { body: '评论内容' },
-    });
-
-    expect(response.statusCode).toBe(404);
-    expect(mockCreatePendingSkillComment).not.toHaveBeenCalled();
+    expect(response.json()).toEqual({ error: '分享链接无效' });
   });
 
   it('creates owner access invites without payment fields', async () => {
