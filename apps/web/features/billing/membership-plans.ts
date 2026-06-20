@@ -1,92 +1,22 @@
 import type { BillingStatus } from './api';
-
-export const MEMBERSHIP_CLARITY_PLAN_KEY = 'fateclaw_clarity';
-export const MEMBERSHIP_INSIGHT_PLAN_KEY = 'fateclaw_insight';
-export const MEMBERSHIP_DEEP_PLAN_KEY = 'fateclaw_deep';
-
-/** @deprecated 仅用于识别迁移前的 Insight 旧 key。 */
-export const MEMBERSHIP_PLUS_PLAN_KEY = 'fateclaw_plus';
-/** @deprecated 仅用于识别迁移前的 Deep 旧 key。 */
-export const MEMBERSHIP_PRO_PLAN_KEY = 'fateclaw_pro';
-
-export const MEMBERSHIP_PLAN_KEYS = [
+import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
-  MEMBERSHIP_INSIGHT_PLAN_KEY,
   MEMBERSHIP_DEEP_PLAN_KEY,
-] as const;
+  normalizeMembershipPlanKey,
+  membershipPlanMeets,
+} from '@fateclaw/contracts/membership';
+import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
 
-export type MembershipPlanKey = (typeof MEMBERSHIP_PLAN_KEYS)[number];
+/**
+ * 会员（卦师使用权）套餐 key 常量、归一与档位逻辑（apps/web 侧）。
+ *
+ * 跨端共享的核心常量与基础纯函数统一来自 @fateclaw/contracts/membership 并经本文件
+ * re-export；此处只补充前端展示特化（短名 / 完整展示名 / 基于账单状态的权益判断），
+ * 避免前后端定义漂移（后端 apps/api/src/shared/membership-plans.ts 同样 re-export contracts）。
+ */
+export * from '@fateclaw/contracts/membership';
 
 type MembershipStatus = BillingStatus['membership'];
-
-const MEMBERSHIP_PLAN_RANKS: Record<MembershipPlanKey, number> = {
-  [MEMBERSHIP_CLARITY_PLAN_KEY]: 1,
-  [MEMBERSHIP_INSIGHT_PLAN_KEY]: 2,
-  [MEMBERSHIP_DEEP_PLAN_KEY]: 3,
-};
-
-const LEGACY_MEMBERSHIP_PLAN_KEY_MAP: Record<string, MembershipPlanKey> = {
-  [MEMBERSHIP_PLUS_PLAN_KEY]: MEMBERSHIP_INSIGHT_PLAN_KEY,
-  [MEMBERSHIP_PRO_PLAN_KEY]: MEMBERSHIP_DEEP_PLAN_KEY,
-};
-
-/**
- * 判断传入值是否是前端已知的会员套餐 key。
- *
- * @param value 待检查字符串。
- * @returns 如果值是 Clarity、Insight 或 Deep 套餐 key，则返回 true。
- */
-export function isMembershipPlanKey(value: string): value is MembershipPlanKey {
-  return (MEMBERSHIP_PLAN_KEYS as readonly string[]).includes(value);
-}
-
-/**
- * 返回套餐档位等级。
- *
- * @param planKey 套餐 key。
- * @returns Clarity 为 1，Insight 为 2，Deep 为 3，未知套餐为 0。
- */
-export function resolveMembershipPlanRank(planKey?: string | null): number {
-  if (!planKey) return 0;
-  const normalizedPlanKey = isMembershipPlanKey(planKey)
-    ? planKey
-    : LEGACY_MEMBERSHIP_PLAN_KEY_MAP[planKey];
-  return normalizedPlanKey ? MEMBERSHIP_PLAN_RANKS[normalizedPlanKey] : 0;
-}
-
-/**
- * 将接口返回的套餐 key 规范化为已知套餐。
- *
- * @param planKey 接口返回或组件传入的套餐 key。
- * @param fallback 未知或空值时使用的回退套餐，默认回落到最低付费档 Clarity。
- * @returns 已知套餐 key；旧 Plus/Pro 会映射到 Insight/Deep。
- */
-export function normalizeMembershipPlanKey(
-  planKey?: string | null,
-  fallback: MembershipPlanKey = MEMBERSHIP_CLARITY_PLAN_KEY,
-): MembershipPlanKey {
-  if (isMembershipPlanKey(planKey ?? '')) {
-    return planKey as MembershipPlanKey;
-  }
-  return LEGACY_MEMBERSHIP_PLAN_KEY_MAP[planKey ?? ''] ?? fallback;
-}
-
-/**
- * 判断当前套餐是否达到指定最低档位。
- *
- * @param currentPlanKey 当前生效套餐 key。
- * @param requiredPlanKey 目标最低套餐档位。
- * @returns 当前档位大于等于目标档位时返回 true。
- */
-export function membershipPlanMeets(
-  currentPlanKey: string | null | undefined,
-  requiredPlanKey: MembershipPlanKey,
-): boolean {
-  return (
-    resolveMembershipPlanRank(currentPlanKey) >=
-    resolveMembershipPlanRank(requiredPlanKey)
-  );
-}
 
 /**
  * 判断会员状态是否拥有指定最低档位。

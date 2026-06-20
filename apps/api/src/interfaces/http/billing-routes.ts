@@ -20,10 +20,10 @@ import {
   listRechargeOrdersForUser,
   syncRechargeOrderForUser,
 } from '../../modules/billing/recharge-service.js';
-import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
-const MembershipPlanKeySchema = z.enum(MEMBERSHIP_PLAN_KEYS);
+const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
 
 const MembershipSubscribeSchema = z
   .object({

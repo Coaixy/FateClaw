@@ -22,7 +22,7 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   MEMBERSHIP_DEEP_PLAN_KEY,
   MEMBERSHIP_INSIGHT_PLAN_KEY,
-  MEMBERSHIP_PLAN_KEYS,
+  ACTIVE_MEMBERSHIP_PLAN_KEYS,
   type MembershipPlanKey,
   hasPaidMembershipEntitlement,
   normalizeMembershipPlanKey,
@@ -605,20 +605,14 @@ export async function getMembershipConfig(
 export async function getMembershipPlanConfigs(): Promise<
   MembershipConfigRow[]
 > {
+  // 单层"卦师使用权"：只 ensure / 暴露在售档（clarity）。停用的旧档（insight/deep）
+  // 仍能被 getMembershipConfig 单独读到用于识别存量会员，但不再进入可订阅列表，
+  // 也不再被这里 ensure 重建（ACTIVE_MEMBERSHIP_PLAN_KEYS 仅含 clarity）。
   const configs = await Promise.all(
-    MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
+    ACTIVE_MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
   );
-  // 塌缩为单层"卦师使用权"：只暴露在售（enabled）套餐进入可订阅列表。
-  // 停用的旧档（insight/deep）仍能被 getMembershipConfig 单独读到用于识别存量会员，
-  // 但不再出现在前端套餐选择里。
-  return configs
-    .filter((config) => config.enabled)
-    .sort((a, b) => {
-      return (
-        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(a.id)) -
-        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(b.id))
-      );
-    });
+  // 在售档只有 clarity，无需再按档位排序。
+  return configs.filter((config) => config.enabled);
 }
 
 /**
@@ -741,7 +735,7 @@ async function getEffectiveMembershipEntitlementsUsing(input: {
   const configs = new Map(
     (
       await Promise.all(
-        MEMBERSHIP_PLAN_KEYS.map((planKey) =>
+        ACTIVE_MEMBERSHIP_PLAN_KEYS.map((planKey) =>
           getMembershipConfigUsing({ query: input.query, planKey }),
         ),
       )

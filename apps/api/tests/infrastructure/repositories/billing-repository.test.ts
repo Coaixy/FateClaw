@@ -1639,9 +1639,9 @@ describe('billing repository', () => {
       monthly_allowance_units: 3000000,
       standard_price_per_million_units_coins: 10,
     };
+    // 单层化后 getMembershipPlanConfigs 只 ensure 在售档（clarity）一次，
+    // 故批量概览的 config query 由旧的三档三次收敛为一次。
     const { calls } = createMockPool([
-      [config],
-      [config],
       [config],
       [membership],
       [allowance],
@@ -1654,8 +1654,8 @@ describe('billing repository', () => {
       allowance,
     });
 
-    expect(calls[4]?.sql).toContain('period_start = ANY($2::timestamptz[])');
-    expect(calls[4]?.params).toEqual([
+    expect(calls[2]?.sql).toContain('period_start = ANY($2::timestamptz[])');
+    expect(calls[2]?.params).toEqual([
       ['user-1'],
       ['2026-05-30T00:00:00.000Z'],
     ]);

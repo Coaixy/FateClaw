@@ -88,7 +88,7 @@ import {
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
-import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
@@ -224,7 +224,7 @@ const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
 
-const MembershipPlanKeySchema = z.enum(MEMBERSHIP_PLAN_KEYS);
+const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
 
 const AdminSetUserMembershipSchema = z
   .object({
@@ -697,7 +697,7 @@ const RewardConfigSchema = z.object({
 
 const ReferralConfigSchema = z.object({
   enabled: z.boolean(),
-  reward_membership_plan_key: z.enum(MEMBERSHIP_PLAN_KEYS).optional(),
+  reward_membership_plan_key: z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS).optional(),
   inviter_reward_days: z
     .number()
     .int('奖励天数必须是整数')
