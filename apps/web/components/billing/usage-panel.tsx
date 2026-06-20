@@ -58,7 +58,7 @@ export function UsagePanel({
             <div className="mt-1 max-w-[250px] text-[10px] leading-4 text-muted">
               {hasAllowance
                 ? '会员免费额度优先抵扣，超出后继续使用积分余额'
-                : 'AI Chat 使用积分余额计费，有免费额度的套餐会优先抵扣'}
+                : 'AI Chat 使用积分余额计费，自带 API Key 不计费'}
             </div>
           </div>
           <button

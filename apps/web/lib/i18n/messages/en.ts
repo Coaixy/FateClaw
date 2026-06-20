@@ -463,7 +463,7 @@ export const enMessages = {
       monthlyToken: 'Monthly tokens',
       freeAccount: 'Free account',
       freeDescription:
-        'Simple mode and manual charting remain available. Expert mode and follow-up questions require Clarity or higher.',
+        'Simple mode and manual charting remain available. Expert mode and follow-up questions require Clarity.',
       freeBadgeWallet: 'Credit balance billing',
       freeBadgeUpgrade: 'Upgrade anytime',
       freeBadgeInactive: 'Included allowance inactive',
@@ -493,14 +493,10 @@ export const enMessages = {
       noAllowanceStatus: 'AI Chat uses credit balance',
       confirmRenewTitle: 'Confirm renewal',
       confirmSubscribeTitle: 'Confirm subscription',
-      confirmRenewMessage:
-        '{price} will be deducted from credit balance. Membership validity will extend by 1 month after the current period.',
-      confirmSubscribeMessage:
-        '{price} will be deducted from credit balance for 1 month of FateClaw Insight.',
       confirmRenewPlanMessage:
         '{price} will be deducted from credit balance. {plan} validity will extend by 1 month after the current period.',
       confirmSubscribePlanMessage:
-        '{price} will be deducted from credit balance for 1 month of FateClaw {plan}.',
+        '{price} will be deducted from credit balance for 1 month of {plan}.',
       confirmRenew: 'Confirm renewal',
       confirmSubscribe: 'Confirm subscription',
       subscribeFailed: 'Failed to subscribe',
