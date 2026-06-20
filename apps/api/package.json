@@ -20,8 +20,7 @@
     "test:watch": "pnpm --dir ../.. exec vitest --passWithNoTests apps/api/tests",
     "login": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts login",
     "accounts": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts list",
-    "account:remove": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts remove",
-    "grandfather:refund": "pnpm --dir ../.. exec tsx apps/api/src/scripts/grandfather-refund.ts"
+    "account:remove": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts remove"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.4",

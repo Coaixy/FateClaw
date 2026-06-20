@@ -12,14 +12,9 @@ import { logger } from '../../infrastructure/logger.js';
 import { Account } from '../../shared/types.js';
 
 export const WECHAT_DEVICE_BINDING_DISABLED_MESSAGE =
-  '微信 Claw 仅支持 FateClaw Deep 会员使用。';
+  '微信 Claw 功能当前未开放。';
 
-export const FREE_WECHAT_UNSUPPORTED_MESSAGE =
-  '微信 Claw 仅支持 FateClaw Deep 会员使用，请升级后继续。';
-
-export function isWechatDeviceBindingDisabled(isMember = false): boolean {
-  return !isMember;
-}
+export const FREE_WECHAT_UNSUPPORTED_MESSAGE = '微信 Claw 功能当前未开放。';
 
 export async function addAccount(
   name: string,
@@ -38,7 +33,9 @@ export async function addAccount(
     bot_token: botToken,
     base_url: baseUrl,
     get_updates_buf: '',
-    enabled: true,
+    // 微信 Claw 已可逆停用（WECHAT_CLAW_FEATURE_ENABLED=false / 迁移 0057 把存量账号置 false）。
+    // CLI 新建账号默认 enabled=false，堵住绕过停用拉起 iLink 轮询的活口；恢复功能时再统一启用。
+    enabled: false,
     created_at: new Date().toISOString(),
     owner_id: null,
   };

@@ -63,19 +63,17 @@ export interface MembershipPlanSummary {
   enabled: boolean;
   monthlyPriceCoins: number;
   displayPriceCoins: number;
-  monthlyAllowanceUnits: number;
-  standardPricePerMillionUnitsCoins: number;
   updatedAt: string;
 }
 
 /**
- * 单次计费结算摘要，用于前端展示积分实扣和会员免费额度抵扣。
+ * 单次计费结算摘要，用于前端展示积分实扣。
+ *
+ * @remarks 单层化后会员不含 AI 免费额度，故无会员抵扣字段。
  */
 export interface BillingSettlementSummary {
   actualChargeCoins: number;
   rawChargeCoins: number;
-  membershipCoveredCoins: number;
-  membershipConsumedUnits: number;
   missingReservation?: boolean;
 }
 
@@ -179,8 +177,6 @@ export async function settleBillingReservationDetailed(input: {
     return {
       actualChargeCoins: 0,
       rawChargeCoins: 0,
-      membershipCoveredCoins: 0,
-      membershipConsumedUnits: 0,
     };
   }
   const reservation = await getBillingRequestReservationByRequestId(
@@ -198,8 +194,6 @@ export async function settleBillingReservationDetailed(input: {
     return {
       actualChargeCoins: 0,
       rawChargeCoins: 0,
-      membershipCoveredCoins: 0,
-      membershipConsumedUnits: 0,
       missingReservation: true,
     };
   }
@@ -220,8 +214,6 @@ export async function settleBillingReservationDetailed(input: {
   return {
     actualChargeCoins: result.actualChargeCoins,
     rawChargeCoins: result.rawChargeCoins,
-    membershipCoveredCoins: result.membershipCoveredCoins,
-    membershipConsumedUnits: result.membershipConsumedUnits,
   };
 }
 
@@ -353,9 +345,6 @@ export async function getMembershipPlanSummaries(): Promise<
     enabled: config.enabled,
     monthlyPriceCoins: config.monthly_price_coins,
     displayPriceCoins: config.display_price_coins,
-    monthlyAllowanceUnits: config.monthly_allowance_units,
-    standardPricePerMillionUnitsCoins:
-      config.standard_price_per_million_units_coins,
     updatedAt: config.updated_at,
   }));
 }

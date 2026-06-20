@@ -8,7 +8,6 @@ import { settleReferralMembershipRewardUsing } from './referrals-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type {
   BalanceGrantSource,
-  MembershipAllowance,
   MembershipConfig,
   User,
   UserMembership,
@@ -20,8 +19,6 @@ import {
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
-  MEMBERSHIP_DEEP_PLAN_KEY,
-  MEMBERSHIP_INSIGHT_PLAN_KEY,
   ACTIVE_MEMBERSHIP_PLAN_KEYS,
   type MembershipPlanKey,
   hasPaidMembershipEntitlement,
@@ -42,7 +39,6 @@ const pool = {
 };
 
 const COIN_CENTS = 100;
-const MEMBERSHIP_UNIT_DENOMINATOR = 1_000_000;
 
 function toCoins(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -50,11 +46,6 @@ function toCoins(value: unknown): number {
 }
 
 function roundCoinsToCents(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * COIN_CENTS) / COIN_CENTS;
-}
-
-function roundAllowanceUnits(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * COIN_CENTS) / COIN_CENTS;
 }
@@ -260,22 +251,6 @@ function normalizeMembershipConfigRow(row: MembershipConfig): MembershipConfig {
       monthlyPriceCoins,
       toCoins(row.display_price_coins),
     ),
-    monthly_allowance_units: roundAllowanceUnits(
-      Number(row.monthly_allowance_units ?? 0),
-    ),
-    standard_price_per_million_units_coins: toCoins(
-      row.standard_price_per_million_units_coins,
-    ),
-  };
-}
-
-function normalizeMembershipAllowanceRow(
-  row: MembershipAllowance,
-): MembershipAllowance {
-  return {
-    ...row,
-    allowance_units: roundAllowanceUnits(Number(row.allowance_units ?? 0)),
-    used_units: roundAllowanceUnits(Number(row.used_units ?? 0)),
   };
 }
 
@@ -360,13 +335,14 @@ export interface BillingRequestReservationListResult {
 }
 
 /**
- * 单次模型请求结算结果，包含积分实扣和会员免费额度抵扣明细。
+ * 单次模型请求结算结果。
+ *
+ * @remarks 单层化后会员不含 AI 免费额度（clarity allowance 恒 0），故无会员抵扣字段；
+ *   actualChargeCoins 即按真实 Token 费用实扣（BYOK 在 plans 层提前短路为 0）。
  */
 export interface ModelChargeSettlementResult {
   actualChargeCoins: number;
   rawChargeCoins: number;
-  membershipCoveredCoins: number;
-  membershipConsumedUnits: number;
   user: User;
 }
 
@@ -533,12 +509,10 @@ export type FreeProfessionalAiTurnReleaseResult =
 
 export type MembershipConfigRow = MembershipConfig;
 export type UserMembershipRow = UserMembership;
-export type MembershipAllowanceRow = MembershipAllowance;
 
 export interface MembershipOverviewRow {
   config: MembershipConfigRow;
   membership: UserMembershipRow | null;
-  allowance: MembershipAllowanceRow | null;
   active: boolean;
 }
 
@@ -558,33 +532,18 @@ async function getMembershipConfigUsing(input: {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
-  // 旧档（deep/insight）定价仅用于按需补齐存量会员的 config 行以识别其历史档位，
-  // 不再进入在售列表（getMembershipPlanConfigs 只 ensure clarity）。在售档 clarity = 10。
-  const monthlyPriceCoins =
-    planKey === MEMBERSHIP_DEEP_PLAN_KEY
-      ? 100
-      : planKey === MEMBERSHIP_INSIGHT_PLAN_KEY
-        ? 30
-        : 10;
-  const displayPriceCoins =
-    planKey === MEMBERSHIP_DEEP_PLAN_KEY ? 120 : monthlyPriceCoins;
-  const monthlyAllowanceUnits =
-    planKey === MEMBERSHIP_CLARITY_PLAN_KEY ? 0 : 3_000_000;
+  // 单层「卦师使用权」：首次访问补齐默认价（10），存量行走 ON CONFLICT 保留 DB 实际价。
+  // allowance 列已随单层化移除（迁移 0059 DROP membership_config 两列），不再写入。
+  const monthlyPriceCoins = 10;
+  const displayPriceCoins = monthlyPriceCoins;
   const { rows } = await input.query(
     `INSERT INTO membership_config (
-       id, name, monthly_price_coins, display_price_coins,
-       monthly_allowance_units
+       id, name, monthly_price_coins, display_price_coins
      )
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
      RETURNING *`,
-    [
-      configId,
-      name,
-      monthlyPriceCoins,
-      displayPriceCoins,
-      monthlyAllowanceUnits,
-    ],
+    [configId, name, monthlyPriceCoins, displayPriceCoins],
   );
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
 }
@@ -602,14 +561,13 @@ export async function getMembershipConfig(
 }
 
 /**
- * 读取所有会员套餐配置；首次访问时补齐 Clarity、Insight 和 Deep 默认配置。
+ * 读取所有在售会员套餐配置；首次访问时补齐 Clarity（卦师使用权）默认配置。
  */
 export async function getMembershipPlanConfigs(): Promise<
   MembershipConfigRow[]
 > {
-  // 单层"卦师使用权"：只 ensure / 暴露在售档（clarity）。停用的旧档（insight/deep）
-  // 仍能被 getMembershipConfig 单独读到用于识别存量会员，但不再进入可订阅列表，
-  // 也不再被这里 ensure 重建（ACTIVE_MEMBERSHIP_PLAN_KEYS 仅含 clarity）。
+  // 单层「卦师使用权」：只 ensure / 暴露在售档（clarity）。
+  // 旧档已由迁移 0058 全量归一删除，ACTIVE_MEMBERSHIP_PLAN_KEYS 仅含 clarity。
   const configs = await Promise.all(
     ACTIVE_MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
   );
@@ -633,9 +591,8 @@ export async function updateMembershipConfig(input: {
   const displayPriceCoins = roundCoinsToCents(
     input.displayPriceCoins ?? input.monthlyPriceCoins,
   );
-  // 单层「卦师使用权」不再由 admin 配置免费额度：仅更新价格与名称。
-  // allowance/standard 列不在写入集——INSERT 时用 DB 默认值；clarity 行已存在故走
-  // ON CONFLICT UPDATE，不更新这两列即保留存量值（clarity 恒为 0），与温和档一致。
+  // 单层「卦师使用权」仅更新价格与名称。
+  // allowance/standard 两列已被迁移 0059 DROP、不复存在，故不在写入集。
   const { rows } = await pool.query(
     `INSERT INTO membership_config (
        id, enabled, name, monthly_price_coins, display_price_coins,
@@ -660,34 +617,6 @@ export async function updateMembershipConfig(input: {
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
 }
 
-function calculateMembershipCostUnits(
-  costCoins: number,
-  config: MembershipConfigRow,
-): number {
-  if (costCoins <= 0) return 0;
-  const units =
-    (costCoins * MEMBERSHIP_UNIT_DENOMINATOR) /
-    config.standard_price_per_million_units_coins;
-  return roundAllowanceUnits(units);
-}
-
-async function getActiveMembershipForUserUsing(
-  client: pg.PoolClient,
-  userId: string,
-  opts?: { forUpdate?: boolean },
-): Promise<UserMembershipRow | null> {
-  const memberships = await getActiveMembershipsForUserUsing(
-    client,
-    userId,
-    opts,
-  );
-  const { membership } = await resolveEffectiveMembershipUsing({
-    query: client.query.bind(client),
-    memberships,
-  });
-  return membership;
-}
-
 async function getActiveMembershipsForUserUsing(
   client: pg.PoolClient,
   userId: string,
@@ -699,16 +628,7 @@ async function getActiveMembershipsForUserUsing(
      WHERE user_id = $1
        AND status = 'active'
        AND current_period_end > NOW()
-     ORDER BY CASE plan_key
-       -- 旧 Plus/Pro 只用于历史会员行排序兜底，新的写入路径必须使用三档新 key。
-       WHEN 'fateclaw_deep' THEN 3
-       WHEN 'fateclaw_pro' THEN 3
-       WHEN 'fateclaw_insight' THEN 2
-       WHEN 'fateclaw_plus' THEN 2
-       WHEN 'fateclaw_clarity' THEN 1
-       ELSE 0
-     END DESC,
-     current_period_end DESC
+     ORDER BY current_period_end DESC
      ${opts?.forUpdate ? 'FOR UPDATE' : ''}`,
     [userId],
   );
@@ -824,187 +744,18 @@ async function resolveEffectiveMembershipUsing(input: {
 }
 
 /**
- * 高档权益插队时，把被覆盖的低档会员时长顺延到末尾。
- *
- * @deprecated 单层化后只有 clarity 一档在售（rank=1），targetRank 恒为 1，
- *   循环内 `rank >= targetRank` 恒成立 → 直接 continue，UPDATE 永不执行（死分支）。
- *   保留以兼容存量未迁移的多档行（理论上 0054 已归一），并保持订阅路径调用点不变。
- *   若未来确认无存量多档需求，可连同调用点一并物理删除。
- */
-async function extendLowerTierMembershipsForOverlayUsing(
-  client: pg.PoolClient,
-  input: {
-    userId: string;
-    planKey: MembershipPlanKey;
-    overlayStart: Date;
-    overlayEnd: Date;
-    memberships: UserMembershipRow[];
-  },
-): Promise<void> {
-  const targetRank = resolveMembershipPlanRank(input.planKey);
-  for (const membership of input.memberships) {
-    if (resolveMembershipPlanRank(membership.plan_key) >= targetRank) {
-      continue;
-    }
-    const lowerStart = new Date(membership.current_period_start);
-    const lowerEnd = new Date(membership.current_period_end);
-    const overlapStart = Math.max(
-      lowerStart.getTime(),
-      input.overlayStart.getTime(),
-    );
-    const overlapEnd = Math.min(lowerEnd.getTime(), input.overlayEnd.getTime());
-    const coveredMilliseconds = overlapEnd - overlapStart;
-    if (coveredMilliseconds <= 0) {
-      continue;
-    }
-
-    // 高档权益插队期间低档权益暂停消耗，因此把被覆盖的低档时长顺延到末尾。
-    await client.query(
-      `UPDATE user_memberships
-       SET current_period_end =
-             current_period_end + ($3::double precision * INTERVAL '1 millisecond'),
-           updated_at = NOW()
-       WHERE user_id = $1 AND plan_key = $2`,
-      [input.userId, membership.plan_key, coveredMilliseconds],
-    );
-  }
-}
-
-async function ensureMembershipAllowanceForUserUsing(
-  client: pg.PoolClient,
-  input: {
-    membership: UserMembershipRow;
-    config: MembershipConfigRow;
-  },
-): Promise<MembershipAllowanceRow> {
-  const period = resolveMembershipAllowancePeriod(input.membership);
-  // 单层"卦师使用权"额度恒为 0：跳过 INSERT，返回内存零额度行，
-  // 停掉每次结算写一行 allowance_units=0 的空转记录。consume 拿到后
-  // remainingUnits=0 → consumedUnits=0（提前返回），与写库行为等价。
-  if (input.config.monthly_allowance_units <= 0) {
-    const nowIso = new Date().toISOString();
-    return {
-      id: '',
-      user_id: input.membership.user_id,
-      plan_key: input.membership.plan_key,
-      period_start: period.start,
-      period_end: period.end,
-      allowance_units: 0,
-      used_units: 0,
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-  }
-  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const { rows } = await client.query(
-    `INSERT INTO membership_allowances (
-       id, user_id, plan_key, period_start, period_end,
-       allowance_units, used_units, created_at, updated_at
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, 0, NOW(), NOW())
-     ON CONFLICT (user_id, plan_key, period_start) DO UPDATE
-       SET period_end = EXCLUDED.period_end,
-           allowance_units = GREATEST(
-             membership_allowances.allowance_units,
-             EXCLUDED.allowance_units
-           ),
-           updated_at = NOW()
-     RETURNING *`,
-    [
-      allowanceId,
-      input.membership.user_id,
-      input.membership.plan_key,
-      period.start,
-      period.end,
-      input.config.monthly_allowance_units,
-    ],
-  );
-  return normalizeMembershipAllowanceRow(rows[0] as MembershipAllowanceRow);
-}
-
-async function consumeMembershipAllowanceUsing(
-  client: pg.PoolClient,
-  input: {
-    userId: string;
-    chargeCoins: number;
-    config: MembershipConfigRow;
-    membership?: UserMembershipRow;
-  },
-): Promise<{
-  consumedUnits: number;
-  coveredCoins: number;
-  allowance: MembershipAllowanceRow | null;
-}> {
-  const membership =
-    input.membership ??
-    (await getActiveMembershipForUserUsing(client, input.userId, {
-      forUpdate: true,
-    }));
-  if (!membership) {
-    return { consumedUnits: 0, coveredCoins: 0, allowance: null };
-  }
-
-  const allowance = await ensureMembershipAllowanceForUserUsing(client, {
-    membership,
-    config: input.config,
-  });
-  const requestedUnits = calculateMembershipCostUnits(
-    input.chargeCoins,
-    input.config,
-  );
-  const remainingUnits = Math.max(
-    0,
-    allowance.allowance_units - allowance.used_units,
-  );
-  const consumedUnits = roundAllowanceUnits(
-    Math.min(requestedUnits, remainingUnits),
-  );
-  if (consumedUnits <= 0) {
-    return { consumedUnits: 0, coveredCoins: 0, allowance };
-  }
-
-  const { rows } = await client.query(
-    `UPDATE membership_allowances
-     SET used_units = LEAST(allowance_units, used_units + $1),
-         updated_at = NOW()
-     WHERE id = $2
-     RETURNING *`,
-    [consumedUnits, allowance.id],
-  );
-  const coveredCoins = roundCoinsToCents(
-    (consumedUnits * input.config.standard_price_per_million_units_coins) /
-      MEMBERSHIP_UNIT_DENOMINATOR,
-  );
-  return {
-    consumedUnits,
-    coveredCoins: Math.min(input.chargeCoins, coveredCoins),
-    allowance: normalizeMembershipAllowanceRow(
-      rows[0] as MembershipAllowanceRow,
-    ),
-  };
-}
-
-/**
  * 读取用户会员状态和当前周期额度。
  */
 export async function getMembershipOverview(
   userId: string,
 ): Promise<MembershipOverviewRow> {
+  // 单层化后每用户至多一条 clarity 会员行（迁移 0058 已归一），按"有效优先 + 到期最新"取行即可。
   const { rows: membershipRows } = await pool.query(
     `SELECT *
      FROM user_memberships
      WHERE user_id = $1
      ORDER BY CASE
        WHEN status = 'active' AND current_period_end > NOW() THEN 1
-       ELSE 0
-     END DESC,
-     CASE plan_key
-       -- 旧 Plus/Pro 只用于历史会员行排序兜底，新的写入路径必须使用三档新 key。
-       WHEN 'fateclaw_deep' THEN 3
-       WHEN 'fateclaw_pro' THEN 3
-       WHEN 'fateclaw_insight' THEN 2
-       WHEN 'fateclaw_plus' THEN 2
-       WHEN 'fateclaw_clarity' THEN 1
        ELSE 0
      END DESC,
      current_period_end DESC,
@@ -1016,30 +767,13 @@ export async function getMembershipOverview(
     query: pool.query,
     memberships,
   });
-  const period = membership
-    ? resolveMembershipAllowancePeriod(membership)
-    : null;
   const active = Boolean(
     membership &&
     membership.status === 'active' &&
     new Date(membership.current_period_end).getTime() > Date.now(),
   );
-  const allowance =
-    active && membership && period
-      ? await (async () => {
-          const { rows } = await pool.query(
-            `SELECT *
-           FROM membership_allowances
-           WHERE user_id = $1 AND plan_key = $2 AND period_start = $3
-           LIMIT 1`,
-            [userId, membership.plan_key, period.start],
-          );
-          const row = rows[0] as MembershipAllowanceRow | undefined;
-          return row ? normalizeMembershipAllowanceRow(row) : null;
-        })()
-      : null;
 
-  return { config, membership, allowance, active };
+  return { config, membership, active };
 }
 
 /**
@@ -1066,7 +800,6 @@ export async function getMembershipOverviewsByUserIds(
       {
         config: defaultConfig,
         membership: null,
-        allowance: null,
         active: false,
       },
     ]),
@@ -1088,51 +821,23 @@ export async function getMembershipOverviewsByUserIds(
     membershipsByUser.set(membership.user_id, items);
   }
 
+  // 单层化后每用户至多一条 clarity 行，按到期最新取行即可（无需按档位排序）。
   const selectedMemberships = new Map<string, UserMembershipRow>();
-  const periodStarts = new Set<string>();
   for (const userId of userIds) {
-    const membership = (membershipsByUser.get(userId) ?? []).sort((a, b) => {
-      const rankDelta =
-        resolveMembershipPlanRank(b.plan_key) -
-        resolveMembershipPlanRank(a.plan_key);
-      if (rankDelta !== 0) return rankDelta;
-      return (
+    const membership = (membershipsByUser.get(userId) ?? []).sort(
+      (a, b) =>
         new Date(b.current_period_end).getTime() -
-        new Date(a.current_period_end).getTime()
-      );
-    })[0];
+        new Date(a.current_period_end).getTime(),
+    )[0];
     if (!membership) continue;
     selectedMemberships.set(userId, membership);
-    periodStarts.add(resolveMembershipAllowancePeriod(membership).start);
-  }
-
-  const allowanceByKey = new Map<string, MembershipAllowanceRow>();
-  if (periodStarts.size > 0) {
-    const { rows: allowanceRows } = await pool.query(
-      `SELECT *
-       FROM membership_allowances
-       WHERE user_id = ANY($1::text[])
-         AND period_start = ANY($2::timestamptz[])`,
-      [userIds, [...periodStarts]],
-    );
-    for (const allowance of allowanceRows as MembershipAllowanceRow[]) {
-      allowanceByKey.set(
-        `${allowance.user_id}:${allowance.plan_key}:${allowance.period_start}`,
-        normalizeMembershipAllowanceRow(allowance),
-      );
-    }
   }
 
   for (const [userId, membership] of selectedMemberships) {
     const planKey = normalizeMembershipPlanKey(membership.plan_key);
-    const period = resolveMembershipAllowancePeriod(membership);
     result.set(userId, {
       config: configsByPlan.get(planKey) ?? defaultConfig,
       membership,
-      allowance:
-        allowanceByKey.get(
-          `${userId}:${membership.plan_key}:${period.start}`,
-        ) ?? null,
       active: true,
     });
   }
@@ -1199,43 +904,25 @@ export async function subscribeMembershipWithWallet(
         (membership) =>
           normalizeMembershipPlanKey(membership.plan_key) === normalizedPlanKey,
       ) ?? null;
-    const currentHigherTier = activeMemberships.find(
-      (membership) =>
-        resolveMembershipPlanRank(membership.plan_key) >
-        resolveMembershipPlanRank(normalizedPlanKey),
-    );
     const now = new Date();
     const currentSamePlanActive = Boolean(
       currentSamePlan &&
       new Date(currentSamePlan.current_period_end).getTime() > now.getTime(),
     );
-    const baseStart =
-      !currentSamePlanActive && currentHigherTier
-        ? new Date(currentHigherTier.current_period_end)
-        : now;
+    // 续费保留原周期锚点（避免重置当前周期）；新开通从当前时刻起算。
+    // 单层化后无更高档插队，故不再有低档覆盖顺延逻辑。
     const periodStart =
       currentSamePlanActive && currentSamePlan
         ? new Date(
             resolveMembershipAllowancePeriod(currentSamePlan, now).anchor,
           )
-        : baseStart;
-    const overlayStart =
-      currentSamePlanActive && currentSamePlan
-        ? new Date(currentSamePlan.current_period_end)
-        : baseStart;
+        : now;
     const periodEnd = addMonths(
       currentSamePlanActive && currentSamePlan
         ? new Date(currentSamePlan.current_period_end)
-        : baseStart,
+        : now,
       1,
     );
-    await extendLowerTierMembershipsForOverlayUsing(client, {
-      userId,
-      planKey: normalizedPlanKey,
-      overlayStart,
-      overlayEnd: periodEnd,
-      memberships: activeMemberships,
-    });
     const { rows: membershipRows } = await client.query(
       `INSERT INTO user_memberships (
          user_id, plan_key, status, current_period_start,
@@ -1256,10 +943,6 @@ export async function subscribeMembershipWithWallet(
       ],
     );
     const membership = membershipRows[0] as UserMembershipRow;
-    const allowance = await ensureMembershipAllowanceForUserUsing(client, {
-      membership,
-      config,
-    });
 
     // membership_subscription 是历史钱包流水 kind，代表会员购买/续费流水，不是 Skill subscription。
     const membershipTransactionId = await insertWalletTransaction(client, {
@@ -1272,7 +955,6 @@ export async function subscribeMembershipWithWallet(
         planKey: normalizedPlanKey,
         periodStart: membership.current_period_start,
         periodEnd: membership.current_period_end,
-        allowanceUnits: allowance.allowance_units,
         bonusDeducted: deduction.bonusDeducted,
         purchasedDeducted: deduction.purchasedDeducted,
       },
@@ -1291,7 +973,6 @@ export async function subscribeMembershipWithWallet(
       overview: {
         config,
         membership,
-        allowance,
         active: true,
       },
     };
@@ -1356,7 +1037,7 @@ export async function setUserMembershipForAdmin(input: {
     const existingEnd = existing
       ? new Date(existing.current_period_end).getTime()
       : 0;
-    // 同套餐续期保留原周期锚点，避免重置当前周期已使用的会员免费额度。
+    // 同套餐续期保留原周期锚点，避免重置当前会员周期。
     const periodStart =
       existing?.status === 'active' && existingEnd > now.getTime()
         ? existing.current_period_start
@@ -1377,10 +1058,6 @@ export async function setUserMembershipForAdmin(input: {
       [input.userId, normalizedPlanKey, periodStart, periodEnd.toISOString()],
     );
     const membership = membershipRows[0] as UserMembershipRow;
-    await ensureMembershipAllowanceForUserUsing(client, {
-      membership,
-      config,
-    });
     await client.query('COMMIT');
     return membership;
   } catch (err) {
@@ -2776,33 +2453,21 @@ async function getModelChargeSettlementMetadataUsing(
   requestId: string,
 ): Promise<{
   rawChargeCoins?: number;
-  membershipCoveredCoins?: number;
-  membershipConsumedUnits?: number;
 }> {
+  // 单层化后不再有会员额度抵扣流水（membership_allowance_use 已停写），
+  // 幂等重结算只需从 overage_charge 流水回看原始 Token 费用。
   const { rows } = await client.query(
     `SELECT metadata
      FROM wallet_transactions
      WHERE request_id = $1
-       AND kind IN ('membership_allowance_use', 'overage_charge')
-     ORDER BY CASE kind
-       WHEN 'membership_allowance_use' THEN 0
-       ELSE 1
-     END,
-     created_at ASC
+       AND kind = 'overage_charge'
+     ORDER BY created_at ASC
      LIMIT 1`,
     [requestId],
   );
   const metadata = (rows[0] as { metadata?: unknown } | undefined)?.metadata;
   return {
     rawChargeCoins: numberFromMetadata(metadata, 'rawRequestCostCoins'),
-    membershipCoveredCoins: numberFromMetadata(
-      metadata,
-      'membershipCoveredCoins',
-    ),
-    membershipConsumedUnits: numberFromMetadata(
-      metadata,
-      'membershipConsumedUnits',
-    ),
   };
 }
 
@@ -3619,10 +3284,6 @@ export async function settleUserModelChargeCoins(
         rawChargeCoins:
           settlementMetadata.rawChargeCoins ??
           reservation.total_overage_cost_coins,
-        membershipCoveredCoins:
-          settlementMetadata.membershipCoveredCoins ?? 0,
-        membershipConsumedUnits:
-          settlementMetadata.membershipConsumedUnits ?? 0,
         user: normalizeUserCoins(existingUser),
       };
     }
@@ -3657,30 +3318,9 @@ export async function settleUserModelChargeCoins(
     );
     const previousChargeCoins = toCoins(monthlyState.billed_overage_cost_coins);
     const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
-    const activeMemberships = await getActiveMembershipsForUserUsing(
-      client,
-      reservation.user_id,
-      {
-        forUpdate: true,
-      },
-    );
-    const { membership: activeMembership, config: membershipConfig } =
-      await resolveEffectiveMembershipUsing({
-        query: client.query.bind(client),
-        memberships: activeMemberships,
-      });
-    const membershipDeduction =
-      activeMembership && membershipConfig.enabled
-        ? await consumeMembershipAllowanceUsing(client, {
-            userId: reservation.user_id,
-            chargeCoins: rawChargeCoins,
-            config: membershipConfig,
-            membership: activeMembership,
-          })
-        : { consumedUnits: 0, coveredCoins: 0, allowance: null };
-    const actualChargeCoins = roundCoinsToCents(
-      Math.max(0, rawChargeCoins - membershipDeduction.coveredCoins),
-    );
+    // 单层化后会员不含 AI 免费额度（clarity allowance 已移除），模型费用按真实 Token 全额实扣；
+    // BYOK（自配模型）已在 plans 层结算时短路为 0，不会走到这里。
+    const actualChargeCoins = rawChargeCoins;
     const nextChargeCoins = roundCoinsToCents(
       previousChargeCoins + actualChargeCoins,
     );
@@ -3733,8 +3373,6 @@ export async function settleUserModelChargeCoins(
           requestTokens,
           requestCostCoins: actualChargeCoins,
           rawRequestCostCoins: rawChargeCoins,
-          membershipCoveredCoins: membershipDeduction.coveredCoins,
-          membershipConsumedUnits: membershipDeduction.consumedUnits,
           previousChargeCoins,
           nextChargeCoins,
           bonusDeducted: deduction.bonusDeducted,
@@ -3743,31 +3381,11 @@ export async function settleUserModelChargeCoins(
         },
       });
     }
-    if (membershipDeduction.consumedUnits > 0) {
-      await insertWalletTransaction(client, {
-        userId: reservation.user_id,
-        kind: 'membership_allowance_use',
-        amountCoins: 0,
-        balanceSource: null,
-        requestId,
-        note: '会员 AI 对话额度抵扣',
-        metadata: {
-          yearMonth: reservation.year_month,
-          requestTokens,
-          rawRequestCostCoins: rawChargeCoins,
-          membershipCoveredCoins: membershipDeduction.coveredCoins,
-          membershipConsumedUnits: membershipDeduction.consumedUnits,
-          allowanceId: membershipDeduction.allowance?.id ?? null,
-        },
-      });
-    }
 
     await client.query('COMMIT');
     return {
       actualChargeCoins,
       rawChargeCoins,
-      membershipCoveredCoins: membershipDeduction.coveredCoins,
-      membershipConsumedUnits: membershipDeduction.consumedUnits,
       user: deduction.user,
     };
   } catch (err) {

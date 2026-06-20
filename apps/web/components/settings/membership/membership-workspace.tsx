@@ -1,10 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Crown,
   Loader2,
   MessageSquare,
@@ -26,7 +24,6 @@ import { useToast } from '@/lib/use-toast';
 import type { BillingStatus } from '@/features/billing/api';
 
 type MembershipStatus = BillingStatus['membership'];
-type MembershipEntitlement = BillingStatus['membership_entitlements'][number];
 type MembershipPlan = BillingStatus['membership_plans'][number];
 type TranslationFn = (
   key: string,
@@ -470,263 +467,118 @@ function MembershipPlanCards({
   onSubscribe: (plan: MembershipPlan) => void;
   t: TranslationFn;
 }) {
-  const scrollRef = useRef<HTMLElement | null>(null);
-  const [planNavState, setPlanNavState] = useState({
-    activeIndex: 0,
-    canScrollNext: false,
-    canScrollPrevious: false,
-  });
   const normalizedActivePlanKey = activePlanKey
     ? normalizeMembershipPlanKey(activePlanKey)
     : null;
-  // 塌缩为单层"卦师使用权"后不再有多档升级概念：后端已只返回在售套餐（enabled），
-  // 这里直接全部展示，已订阅用户也能看到当前档用于续费。
-  const visiblePlans = plans;
-  const visiblePlanSignature = visiblePlans
-    .map((plan) => normalizeMembershipPlanKey(plan.plan_key))
-    .join('|');
+  // 单层化后只有一个在售套餐（卦师使用权）：直接取第一个套餐渲染单卡，
+  // 不再需要多卡轮播的滚动检测、导航箭头和分页圆点等脚手架。
+  const plan = plans[0];
+  if (!plan) return null;
 
-  const updatePlanNavState = useCallback(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    const cards = Array.from(
-      scroller.querySelectorAll<HTMLElement>('[data-plan-key]'),
-    );
-    const maxScrollLeft = Math.max(
-      0,
-      scroller.scrollWidth - scroller.clientWidth,
-    );
-    const scrollerRect = scroller.getBoundingClientRect();
-    const viewportCenter = scrollerRect.left + scrollerRect.width / 2;
-    const activeIndex =
-      cards.length === 0
-        ? 0
-        : cards.reduce((closestIndex, card, index) => {
-            const closestCard = cards[closestIndex];
-            const closestCenter =
-              closestCard.getBoundingClientRect().left +
-              closestCard.offsetWidth / 2;
-            const cardCenter =
-              card.getBoundingClientRect().left + card.offsetWidth / 2;
-            return Math.abs(cardCenter - viewportCenter) <
-              Math.abs(closestCenter - viewportCenter)
-              ? index
-              : closestIndex;
-          }, 0);
-    const nextState = {
-      activeIndex,
-      canScrollNext: scroller.scrollLeft < maxScrollLeft - 2,
-      canScrollPrevious: scroller.scrollLeft > 2,
-    };
-
-    setPlanNavState((currentState) =>
-      currentState.activeIndex === nextState.activeIndex &&
-      currentState.canScrollNext === nextState.canScrollNext &&
-      currentState.canScrollPrevious === nextState.canScrollPrevious
-        ? currentState
-        : nextState,
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!normalizedActivePlanKey || !scrollRef.current) return;
-    const activeCard = Array.from(
-      scrollRef.current.querySelectorAll<HTMLElement>('[data-plan-key]'),
-    ).find((card) => card.dataset.planKey === normalizedActivePlanKey);
-    if (!activeCard) return;
-    scrollRef.current.scrollTo({
-      left: activeCard.offsetLeft - scrollRef.current.offsetLeft,
-      behavior: 'auto',
-    });
-    window.requestAnimationFrame(updatePlanNavState);
-  }, [normalizedActivePlanKey, updatePlanNavState, visiblePlanSignature]);
-
-  useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    updatePlanNavState();
-    const handleScroll = () => updatePlanNavState();
-    const handleResize = () => updatePlanNavState();
-    scroller.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize);
-    return () => {
-      scroller.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [updatePlanNavState, visiblePlanSignature]);
-
-  const scrollPlanCards = (direction: 'previous' | 'next') => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    const delta = Math.max(280, scroller.clientWidth * 0.86);
-    scroller.scrollBy({
-      left: direction === 'previous' ? -delta : delta,
-      behavior: 'smooth',
-    });
-    window.setTimeout(updatePlanNavState, 360);
-  };
-
-  if (visiblePlans.length === 0) return null;
+  const normalizedPlanKey = normalizeMembershipPlanKey(plan.plan_key);
+  const isCurrentPlan = normalizedActivePlanKey === normalizedPlanKey;
+  const busy = busyPlanKey === plan.plan_key;
+  const planDisplayName = resolvePlanDisplayName(plan);
+  const benefitLabels = resolvePlanBenefitLabels(t);
+  const actionLabel = isCurrentPlan
+    ? t('pages.membership.renewPlan', { plan: planDisplayName })
+    : t('pages.membership.subscribePlan', { plan: planDisplayName });
+  const buttonLabel = !plan.enabled
+    ? t('pages.membership.planDisabled')
+    : actionLabel;
+  const buttonDisabled = busy || !plan.enabled;
 
   return (
-    <div className="space-y-2">
-      {visiblePlans.length > 1 && (
-        <div className="flex items-center justify-end gap-2 px-1">
-          <div className="flex items-center gap-1" aria-hidden="true">
-            {visiblePlans.map((plan, index) => (
-              <span
-                key={plan.plan_key}
-                className={`h-1.5 rounded-full transition-all ${
-                  planNavState.activeIndex === index
-                    ? 'w-5 bg-primary'
-                    : 'w-1.5 bg-hairline'
-                }`}
-              />
-            ))}
+    <article
+      data-plan-key={normalizedPlanKey}
+      className={`flex w-[min(82vw,360px)] flex-col overflow-hidden rounded-lg border bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] sm:w-[360px] lg:w-[340px] ${
+        isCurrentPlan ? 'border-primary/45' : 'border-hairline'
+      }`}
+    >
+      <div className="flex min-h-[146px] flex-1 flex-col justify-between gap-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Crown size={16} className="shrink-0 text-primary" />
+              <h3 className="text-[18px] font-extrabold leading-tight text-ink">
+                {planDisplayName}
+              </h3>
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-2">
+              <span className="text-[30px] font-extrabold leading-none text-ink tabular-nums">
+                {formatCoins(plan.monthly_price_coins, locale)}
+              </span>
+              <span className="text-[12px] font-medium text-muted">
+                {t('pages.membership.perMonth')}
+              </span>
+              {plan.display_price_coins > plan.monthly_price_coins && (
+                <span className="text-[12px] text-muted-soft line-through">
+                  {formatCoins(plan.display_price_coins, locale)}
+                </span>
+              )}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => scrollPlanCards('previous')}
-            disabled={!planNavState.canScrollPrevious}
-            aria-label={t('pages.membership.previousPlan')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-muted shadow-sm transition-colors hover:bg-surface-cream-strong hover:text-ink disabled:cursor-default disabled:opacity-35"
-          >
-            <ChevronLeft size={15} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollPlanCards('next')}
-            disabled={!planNavState.canScrollNext}
-            aria-label={t('pages.membership.nextPlan')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-muted shadow-sm transition-colors hover:bg-surface-cream-strong hover:text-ink disabled:cursor-default disabled:opacity-35"
-          >
-            <ChevronRight size={15} aria-hidden="true" />
-          </button>
+          {isCurrentPlan && (
+            <span className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
+              <CheckCircle2 size={12} aria-hidden="true" />
+              {t('pages.membership.currentPlan')}
+            </span>
+          )}
         </div>
-      )}
-      <section
-        ref={scrollRef}
-        aria-label={t('pages.membership.planCardsAria')}
-        className="scrollbar-hide -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-1 pb-1"
-      >
-        {visiblePlans.map((plan) => {
-          const normalizedPlanKey = normalizeMembershipPlanKey(plan.plan_key);
-          const isCurrentPlan = normalizedActivePlanKey === normalizedPlanKey;
-          const busy = busyPlanKey === plan.plan_key;
-          const planDisplayName = resolvePlanDisplayName(plan);
-          const benefitLabels = resolvePlanBenefitLabels(t);
-          const actionLabel = isCurrentPlan
-            ? t('pages.membership.renewPlan', { plan: planDisplayName })
-            : t('pages.membership.subscribePlan', { plan: planDisplayName });
-          const buttonLabel = !plan.enabled
-            ? t('pages.membership.planDisabled')
-            : actionLabel;
-          const buttonDisabled = busy || !plan.enabled;
 
-          return (
-            <article
-              key={plan.plan_key}
-              data-plan-key={normalizedPlanKey}
-              className={`flex w-[min(82vw,360px)] shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-surface-card shadow-[0_10px_24px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] sm:w-[360px] lg:w-[340px] ${
-                isCurrentPlan ? 'border-primary/45' : 'border-hairline'
-              }`}
+        <div className="grid gap-2">
+          {benefitLabels.map((benefit) => (
+            <div
+              key={benefit}
+              className="flex min-h-6 items-center gap-2 text-[12px] leading-5 text-muted"
             >
-              <div className="flex min-h-[146px] flex-1 flex-col justify-between gap-4 p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Crown size={16} className="shrink-0 text-primary" />
-                      <h3 className="text-[18px] font-extrabold leading-tight text-ink">
-                        {planDisplayName}
-                      </h3>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                      <span className="text-[30px] font-extrabold leading-none text-ink tabular-nums">
-                        {formatCoins(plan.monthly_price_coins, locale)}
-                      </span>
-                      <span className="text-[12px] font-medium text-muted">
-                        {t('pages.membership.perMonth')}
-                      </span>
-                      {plan.display_price_coins > plan.monthly_price_coins && (
-                        <span className="text-[12px] text-muted-soft line-through">
-                          {formatCoins(plan.display_price_coins, locale)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {isCurrentPlan && (
-                    <span className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
-                      <CheckCircle2 size={12} aria-hidden="true" />
-                      {t('pages.membership.currentPlan')}
-                    </span>
-                  )}
-                </div>
+              <CheckCircle2
+                size={13}
+                aria-hidden="true"
+                className="shrink-0 text-accent-teal"
+              />
+              <span>{benefit}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
-                <div className="grid gap-2">
-                  {benefitLabels.map((benefit) => (
-                    <div
-                      key={benefit}
-                      className="flex min-h-6 items-center gap-2 text-[12px] leading-5 text-muted"
-                    >
-                      <CheckCircle2
-                        size={13}
-                        aria-hidden="true"
-                        className="shrink-0 text-accent-teal"
-                      />
-                      <span>{benefit}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="shrink-0 border-t border-hairline/70 p-3">
-                <button
-                  type="button"
-                  onClick={() => onSubscribe(plan)}
-                  disabled={buttonDisabled}
-                  aria-label={buttonLabel}
-                  className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-[14px] font-semibold transition-colors ${
-                    isCurrentPlan
-                      ? 'border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15'
-                      : 'bg-primary text-on-primary hover:bg-primary-active disabled:opacity-40'
-                  }`}
-                >
-                  {busy ? (
-                    <Loader2 size={15} className="shrink-0 animate-spin" />
-                  ) : (
-                    <Sparkles size={15} className="shrink-0" />
-                  )}
-                  {buttonLabel}
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </section>
-    </div>
+      <div className="shrink-0 border-t border-hairline/70 p-3">
+        <button
+          type="button"
+          onClick={() => onSubscribe(plan)}
+          disabled={buttonDisabled}
+          aria-label={buttonLabel}
+          className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-[14px] font-semibold transition-colors ${
+            isCurrentPlan
+              ? 'border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15'
+              : 'bg-primary text-on-primary hover:bg-primary-active disabled:opacity-40'
+          }`}
+        >
+          {busy ? (
+            <Loader2 size={15} className="shrink-0 animate-spin" />
+          ) : (
+            <Sparkles size={15} className="shrink-0" />
+          )}
+          {buttonLabel}
+        </button>
+      </div>
+    </article>
   );
 }
 
 function MembershipDetailPanel({
   membership,
-  entitlements,
   currentPlan,
-  busyPlanKey,
   monthlyMessages,
   monthlyTokens,
   formatDate,
   formatNumber,
   locale,
-  onRenew,
   t,
 }: {
   membership: MembershipStatus;
-  entitlements: MembershipEntitlement[];
   currentPlan: MembershipPlan | null;
-  busyPlanKey: string | null;
   monthlyMessages: number;
   monthlyTokens: number;
   formatDate: (
@@ -735,7 +587,6 @@ function MembershipDetailPanel({
   ) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   locale: Parameters<typeof formatCoins>[1];
-  onRenew: (plan: MembershipPlan) => void;
   t: TranslationFn;
 }) {
   const detailItems = [
@@ -871,7 +722,6 @@ export function MembershipWorkspace() {
   const monthlyMessages = usage?.monthly_messages ?? 0;
   const availableCoins = billingInfo?.available_coins ?? 0;
   const membership = billingInfo?.membership;
-  const membershipEntitlements = billingInfo?.membership_entitlements ?? [];
   const membershipPlans = billingInfo?.membership_plans ?? [];
   const normalizedActivePlanKey =
     membership?.active && membership.plan_key
@@ -940,15 +790,12 @@ export function MembershipWorkspace() {
         {membership ? (
           <MembershipDetailPanel
             membership={membership}
-            entitlements={membershipEntitlements}
             currentPlan={defaultPlan}
-            busyPlanKey={membershipBusyPlanKey}
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
             formatDate={formatDate}
             formatNumber={formatNumber}
             locale={locale}
-            onRenew={(plan) => void handleSubscribeMembership(plan)}
             t={t}
           />
         ) : null}

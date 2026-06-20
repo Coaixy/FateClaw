@@ -31,7 +31,7 @@ async function cmdLogin(): Promise<void> {
   console.log(`\n✅ 账号绑定成功！`);
   console.log(`   账号名：${account.name}`);
   console.log(`   账号ID：${account.id}`);
-  console.log(`\n运行 npm start 启动 FateClaw AI 伴侣`);
+  console.log(`\n运行 npm start 启动卦师副驾服务`);
 }
 
 async function cmdList(): Promise<void> {

@@ -9,7 +9,6 @@ import {
 } from '../../shared/balance-coins.js';
 import {
   hasPaidMembershipEntitlement,
-  hasWechatClawEntitlement,
   normalizeMembershipPlanKey,
   resolveMembershipPlanRank,
   type MembershipPlanKey,
@@ -17,6 +16,16 @@ import {
 
 /** 单层卦师使用权的每日专家解读轮次上限（防滥用，可调）。 */
 const GUASHI_DAILY_TURN_LIMIT = 200;
+
+/**
+ * 微信 Claw 功能总开关（可逆停用的集中控制点）。
+ *
+ * 产品决策：微信 Claw 暂不对外提供（迁移 0057 已把 accounts.enabled=false 作数据层双保险）。
+ * 单层化后不再有 Deep 档位，故此处用一个集中常量替代原"按 Deep 档推导"的耦合逻辑：
+ * 未来恢复微信功能时，只需把此常量改回 true（届时按 membership.active 对所有有效卦师开放），
+ * 无需改动任何档位/权益判断。代码侧微信链路（ilink/poller/QR 路由）全部保留待恢复。
+ */
+const WECHAT_CLAW_FEATURE_ENABLED = false;
 
 /**
  * runtime 和业务服务消费的统一会员权益快照。
@@ -77,11 +86,10 @@ export async function getRuntimeEntitlementSnapshot(
     // 塌缩为单层"卦师使用权"：自定义模型（BYOK）与优先队列不再按档位区分，有效使用权即开放。
     hasPriorityQueue: membership.active,
     canUseCustomModel: membership.active,
-    // 微信 Claw 权益判断保留原档位逻辑（仅存量 deep 会员），不在 entitlements 层硬关——
-    // 因为该字段被单元测试当作"按档位推导"的纯逻辑。微信【功能】已在数据层可逆停用：
-    // 迁移 0057 将所有 accounts.enabled 置 false → 启动不再拉起 iLink 轮询，前端亦无绑定入口，
-    // 状态页不再展示微信卡。未来恢复只需重新启用账号（无 enabled 账号即无微信链路）。
-    canUseWechatClaw: hasWechatClawEntitlement(membership),
+    // 微信 Claw 由集中总开关 WECHAT_CLAW_FEATURE_ENABLED 控制（当前 false → 恒不可用）。
+    // 功能已在迁移 0057 数据层可逆停用（accounts.enabled=false → 启动不拉起 iLink 轮询、
+    // 前端无绑定入口、状态页不展示微信卡）。恢复时把常量改回 true 即对所有有效卦师开放。
+    canUseWechatClaw: WECHAT_CLAW_FEATURE_ENABLED && membership.active,
     professionalAiDailyTurnLimit: membership.active
       ? GUASHI_DAILY_TURN_LIMIT
       : 0,

@@ -311,7 +311,8 @@ describe('referrals repository', () => {
       calls.some(
         (call) =>
           call.sql.includes('INSERT INTO user_memberships') &&
-          call.params?.[1] === 'fateclaw_deep',
+          // 单层化后任何配置档位都归一为 clarity（reward_membership_plan_key 经 normalize）。
+          call.params?.[1] === 'fateclaw_clarity',
       ),
     ).toBe(true);
     expect(
@@ -319,7 +320,7 @@ describe('referrals repository', () => {
     ).toBe(true);
   });
 
-  it('starts Insight referral rewards after an active Deep overlay', async () => {
+  it('starts clarity referral rewards after an active higher-tier overlay', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 
@@ -397,9 +398,10 @@ describe('referrals repository', () => {
     const membershipInsert = calls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
     );
+    // 单层化后奖励档位恒为 clarity；低档天数仍排到现存高档覆盖期（mock 的 deep 行）之后。
     expect(membershipInsert?.params).toEqual([
       'inviter-1',
-      'fateclaw_insight',
+      'fateclaw_clarity',
       '2026-07-10T00:00:00.000Z',
       '2026-07-17T00:00:00.000Z',
     ]);
@@ -408,8 +410,9 @@ describe('referrals repository', () => {
         .filter((call) => call.sql.includes('FROM user_memberships'))
         .map((call) => call.params),
     ).toEqual([
-      ['inviter-1', 'fateclaw_insight'],
-      ['inviter-1', 'fateclaw_insight', 2],
+      ['inviter-1', 'fateclaw_clarity'],
+      // getCurrentHigher 第三参为 clarity 的 rank（=1）。
+      ['inviter-1', 'fateclaw_clarity', 1],
     ]);
 
     vi.useRealTimers();

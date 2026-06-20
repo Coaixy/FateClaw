@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockHandleWechatChatCommand,
-  mockGetMembershipOverview,
+  mockGetRuntimeEntitlementSnapshot,
   mockGetRecentMessages,
   mockGetSoulContent,
   mockGetUserByAccountId,
@@ -14,7 +14,7 @@ const {
   mockStoreMessage,
 } = vi.hoisted(() => ({
   mockHandleWechatChatCommand: vi.fn(),
-  mockGetMembershipOverview: vi.fn(),
+  mockGetRuntimeEntitlementSnapshot: vi.fn(),
   mockGetRecentMessages: vi.fn(),
   mockGetSoulContent: vi.fn(),
   mockGetUserByAccountId: vi.fn(),
@@ -31,12 +31,15 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
     expired: 0,
     totalCoinsExpired: 0,
   })),
-  getMembershipOverview: mockGetMembershipOverview,
   getRecentMessages: mockGetRecentMessages,
   getSoulContent: mockGetSoulContent,
   getUserByAccountId: mockGetUserByAccountId,
   getUserById: mockGetUserById,
   storeMessage: mockStoreMessage,
+}));
+
+vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+  getRuntimeEntitlementSnapshot: mockGetRuntimeEntitlementSnapshot,
 }));
 
 vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
@@ -78,6 +81,7 @@ import {
   buildWeixinRuntimeSessionId,
   processWeixinMessage,
 } from '../../../src/modules/chat/message-handler.js';
+import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../../../src/modules/account/account-service.js';
 import type { Account } from '../../../src/shared/types.js';
 import type { WeixinMessage } from '../../../src/infrastructure/ilink.js';
 
@@ -120,31 +124,15 @@ describe('processWeixinMessage', () => {
       bonus_coins: 0,
       reserved_coins: 0,
     });
-    mockGetMembershipOverview.mockResolvedValue({
-      active: true,
-      membership: { plan_key: 'fateclaw_deep' },
+    // 微信 Claw 已可逆停用：canUseWechatClaw 恒为 false（WECHAT_CLAW_FEATURE_ENABLED=false）。
+    mockGetRuntimeEntitlementSnapshot.mockResolvedValue({
+      canUseWechatClaw: false,
     });
     mockHandleWechatChatCommand.mockResolvedValue({ handled: false });
-    mockRunWechatChatSessionTurn.mockImplementation(async (input) => {
-      await input.onAccepted?.();
-      return {
-        status: 'completed',
-        sessionId: 'session-1',
-        finalAssistantMessages: [
-          {
-            id: 'assistant-1',
-            account_id: 'web:user-1',
-            sender: 'web:user-1',
-            sender_name: '命枢',
-            content: '最终回复',
-            timestamp: '2026-06-03T08:00:01.000Z',
-            is_from_me: true,
-            is_bot_message: true,
-            metadata: { kind: 'final' },
-            tool_context: null,
-          },
-        ],
-      };
+    mockRunWechatChatSessionTurn.mockResolvedValue({
+      status: 'completed',
+      sessionId: 'session-1',
+      finalAssistantMessages: [],
     });
     mockStoreMessage.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('client-1');
@@ -153,7 +141,7 @@ describe('processWeixinMessage', () => {
     mockGetSoulContent.mockResolvedValue('');
   });
 
-  it('routes text chat into a web chat session and delivers only ack plus final messages', async () => {
+  it('blocks active members with the disabled-feature reply before any routing', async () => {
     const account = createAccount();
     const sender = 'sender-1@im.weixin';
     const msg: WeixinMessage = {
@@ -170,52 +158,26 @@ describe('processWeixinMessage', () => {
 
     await processWeixinMessage(account, msg);
 
+    // 微信功能停用后：无论是否会员，命令路由与会话轮次都不再触发。
+    expect(mockHandleWechatChatCommand).not.toHaveBeenCalled();
+    expect(mockRunWechatChatSessionTurn).not.toHaveBeenCalled();
     expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockGetRecentMessages).not.toHaveBeenCalled();
-    expect(mockHandleWechatChatCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        account,
-        owner: { id: 'user-1' },
-        sender,
-        content: '你好',
-      }),
-    );
-    expect(mockRunWechatChatSessionTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        account,
-        owner: { id: 'user-1' },
-        sender,
-        messageId: '123',
-        content: '你好',
-      }),
-    );
-    expect(mockSendMessage).toHaveBeenNthCalledWith(
-      1,
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: account.id }),
       sender,
-      '收到，正在思考。完成后会直接回复；期间新消息不会进入本轮。',
-      'ctx-1',
-    );
-    expect(mockSendMessage).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ id: account.id }),
-      sender,
-      '最终回复',
+      FREE_WECHAT_UNSUPPORTED_MESSAGE,
       'ctx-1',
     );
   });
 
-  it('handles slash commands without entering the chat session turn', async () => {
+  it('blocks slash commands with the disabled-feature reply', async () => {
     const account = createAccount();
     const sender = 'sender-1@im.weixin';
     mockParseWeixinMessage.mockReturnValue({
       content: '/sessions',
       sender,
       sender_name: '用户甲',
-    });
-    mockHandleWechatChatCommand.mockResolvedValue({
-      handled: true,
-      replyText: '选择要接续的网页会话',
     });
 
     await processWeixinMessage(account, {
@@ -224,44 +186,20 @@ describe('processWeixinMessage', () => {
       context_token: 'ctx-2',
     });
 
+    expect(mockHandleWechatChatCommand).not.toHaveBeenCalled();
     expect(mockRunWechatChatSessionTurn).not.toHaveBeenCalled();
     expect(mockStoreMessage).not.toHaveBeenCalled();
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: account.id }),
       sender,
-      '选择要接续的网页会话',
+      FREE_WECHAT_UNSUPPORTED_MESSAGE,
       'ctx-2',
     );
   });
 
-  it('drops busy wechat messages without ack or final delivery', async () => {
+  it('blocks inactive members with the same disabled-feature reply', async () => {
     const account = createAccount();
     const sender = 'sender-1@im.weixin';
-    mockParseWeixinMessage.mockReturnValue({
-      content: '第二条',
-      sender,
-      sender_name: '用户甲',
-    });
-    mockRunWechatChatSessionTurn.mockResolvedValue({
-      status: 'discarded',
-      sessionId: 'session-1',
-    });
-
-    await processWeixinMessage(account, {
-      message_id: 125,
-      from_user_id: sender,
-      context_token: 'ctx-3',
-    });
-
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockIncrementDailyMessageCount).not.toHaveBeenCalled();
-  });
-
-  it('keeps non-member wechat gate before commands and session routing', async () => {
-    const account = createAccount();
-    const sender = 'sender-1@im.weixin';
-    mockGetMembershipOverview.mockResolvedValue({ active: false });
     mockParseWeixinMessage.mockReturnValue({
       content: '/sessions',
       sender,
@@ -279,7 +217,7 @@ describe('processWeixinMessage', () => {
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ id: account.id }),
       sender,
-      expect.stringContaining('Deep'),
+      FREE_WECHAT_UNSUPPORTED_MESSAGE,
       'ctx-4',
     );
   });

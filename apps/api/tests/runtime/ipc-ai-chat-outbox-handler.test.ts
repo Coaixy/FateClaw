@@ -25,8 +25,6 @@ const {
   mockSettleBillingReservationDetailed: vi.fn(async () => ({
     actualChargeCoins: 1.23,
     rawChargeCoins: 1.23,
-    membershipCoveredCoins: 0,
-    membershipConsumedUnits: 0,
   })),
   mockSettleBillingReservation: vi.fn(async () => 1.23),
   mockStoreConversationLog: vi.fn(async () => undefined),
@@ -232,8 +230,6 @@ describe('processAiChatOutboxPayload', () => {
         metadata: expect.objectContaining({
           actual_charge_coins: 1.23,
           raw_charge_coins: 1.23,
-          membership_covered_coins: 0,
-          membership_consumed_units: 0,
         }),
       }),
     );
@@ -263,70 +259,6 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockPublish).toHaveBeenCalledWith(
       'ipc:ai-chat:stream:session-2',
       expect.stringContaining('"actual_charge_coins":1.23'),
-    );
-  });
-
-  it('adds membership coverage details to AI Chat final metadata', async () => {
-    mockSettleBillingReservationDetailed.mockResolvedValueOnce({
-      actualChargeCoins: 0,
-      rawChargeCoins: 0.63,
-      membershipCoveredCoins: 0.63,
-      membershipConsumedUnits: 63000,
-    });
-    const timeout = setTimeout(() => undefined, 10_000);
-    const pendingRequests = new Map<string, PendingInboxRequest>([
-      [
-        'req-member',
-        {
-          accountId: 'web:user-1',
-          ownerUserId: 'user-1',
-          autoDeliver: false,
-          sessionId: 'session-member',
-          llmRuntime: {
-            source: 'official',
-            billingMode: 'metered',
-            modelConfigId: 'official-1',
-            piApi: 'openai-completions',
-            model: 'gpt-4.1',
-            apiKey: 'secret',
-            authMode: 'openai_api_key',
-            providerKey: 'openai-main',
-            inputTokenPricePerMillionCoins: 1000,
-            outputTokenPricePerMillionCoins: 5000,
-          },
-          resolve: mockResolve,
-          reject: mockReject,
-          timeout,
-        },
-      ],
-    ]);
-
-    await processAiChatOutboxPayload(
-      {
-        type: 'response',
-        accountId: 'web:user-1',
-        requestId: 'req-member',
-        text: 'member reply',
-        status: 'success',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      },
-      'web:user-1',
-      pendingRequests,
-    );
-
-    expect(mockResolve).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          actual_charge_coins: 0,
-          raw_charge_coins: 0.63,
-          membership_covered_coins: 0.63,
-          membership_consumed_units: 63000,
-        }),
-      }),
-    );
-    expect(mockPublish).toHaveBeenCalledWith(
-      'ipc:ai-chat:stream:session-member',
-      expect.stringContaining('"membership_covered_coins":0.63'),
     );
   });
 

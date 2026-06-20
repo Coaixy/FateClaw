@@ -102,9 +102,6 @@ export function toMembershipPlanDto(
     enabled: plan.enabled,
     monthly_price_coins: plan.monthlyPriceCoins,
     display_price_coins: plan.displayPriceCoins,
-    monthly_allowance_units: plan.monthlyAllowanceUnits,
-    standard_price_per_million_units_coins:
-      plan.standardPricePerMillionUnitsCoins,
     updated_at: plan.updatedAt,
   };
 }

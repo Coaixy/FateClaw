@@ -113,8 +113,6 @@ export interface MembershipPlanDto {
   enabled: boolean;
   monthly_price_coins: number;
   display_price_coins: number;
-  monthly_allowance_units: number;
-  standard_price_per_million_units_coins: number;
   updated_at: string;
 }
 

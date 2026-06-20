@@ -4,19 +4,17 @@ import type { ReactNode } from 'react';
 
 const LEGACY_COMPACT_COST_RE =
   /^(会员抵扣|會員抵扣|Membership covered|钱包实扣|錢包實扣|Wallet charged)\s+(软妹币|軟妹幣|CNY)\s+(.+)$/;
+// 单层化拆除会员免费额度后,cost label 不再产出"会员免费额度抵扣",只剩积分实扣。
 const CURRENT_COMPACT_COST_RE =
-  /^(会员免费额度抵扣|會員免費額度抵扣|Included allowance covered|积分实扣|積分實扣|Credits charged)\s+(.+)$/;
+  /^(积分实扣|積分實扣|Credits charged)\s+(.+)$/;
 
 function compactCostLabel(label: string): string {
   const currentMatch = label.match(CURRENT_COMPACT_COST_RE);
   if (currentMatch) {
     const action = currentMatch[1];
     const amount = currentMatch[2];
-    if (action === 'Included allowance covered') return `Covered ${amount}`;
     if (action === 'Credits charged') return `Charged ${amount}`;
-    if (action === '會員免費額度抵扣') return `抵扣 ${amount}`;
     if (action === '積分實扣') return `實扣 ${amount}`;
-    if (action === '会员免费额度抵扣') return `抵扣 ${amount}`;
     return `实扣 ${amount}`;
   }
 

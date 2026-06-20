@@ -225,12 +225,12 @@ describe('chat display message state helpers', () => {
   });
 
   it('formats assistant response billing breakdown labels', () => {
+    // 单层化后会员不再抵扣 AI 费用，breakdown 只剩"积分实扣"一条。
     expect(
       formatChatCostLabels({
         actual_charge_coins: 0,
-        membership_covered_coins: 0.63,
       }),
-    ).toEqual(['会员免费额度抵扣 0.63 积分', '积分实扣 0.00 积分']);
+    ).toEqual(['积分实扣 0.00 积分']);
     expect(formatChatCostLabels({ actual_charge_coins: 1.236 })).toEqual([
       '积分实扣 1.24 积分',
     ]);
