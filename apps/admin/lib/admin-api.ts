@@ -8,13 +8,7 @@ import type {
   AdminSkillCommentStatusDto,
 } from '@fateclaw/contracts/skills';
 import type {
-  AdminCreateGiftCodesResponseDto,
-  AdminGiftCodesResponseDto,
   AdminStatusStatsDto,
-  GiftCodeBalanceTypeDto,
-  GiftCodeDto,
-  GiftCodeStatusDto,
-  GiftCodeUsageTypeDto,
   MembershipEntitlementDto,
   MembershipPlanDto,
   MembershipStatusDto,
@@ -401,26 +395,6 @@ export interface AdminWalletTransactionsResponse {
   total: number;
 }
 
-export type AdminGiftCodeBalanceType = GiftCodeBalanceTypeDto;
-export type AdminGiftCodeUsageType = GiftCodeUsageTypeDto;
-export type AdminGiftCodeStatus = GiftCodeStatusDto;
-export type AdminGiftCode = GiftCodeDto;
-export type AdminGiftCodesResponse = AdminGiftCodesResponseDto;
-export type AdminCreateGiftCodesResponse = AdminCreateGiftCodesResponseDto;
-
-export interface AdminCreateGiftCodesPayload {
-  name?: string;
-  balance_type: AdminGiftCodeBalanceType;
-  usage_type: AdminGiftCodeUsageType;
-  amount_coins: number;
-  max_redemptions?: number;
-  quantity: number;
-  expires_at?: string | null;
-  note?: string;
-  code_prefix?: string;
-  code?: string;
-}
-
 export interface AdminMessage {
   id: string;
   account_id: string;
@@ -615,77 +589,6 @@ export interface AdminRechargePaymentConfig {
   notify_url: string;
   return_url: string;
   updated_at: string;
-}
-
-export interface AdminRewardConfig {
-  daily_sign_in: {
-    enabled: boolean;
-    reward_coins: number;
-    updated_at: string;
-  };
-  membership: {
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  };
-  membership_plans: Array<{
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  }>;
-  free_professional_ai: {
-    daily_turn_limit: number;
-    updated_at: string;
-  };
-}
-
-/** 管理后台邀请奖励状态。 */
-export type AdminReferralRewardStatus =
-  | 'pending'
-  | 'granted'
-  | 'skipped'
-  | 'ineligible';
-
-/** 管理后台邀请返会员配置。 */
-export interface AdminReferralConfig {
-  enabled: boolean;
-  reward_membership_plan_key: string;
-  inviter_reward_days: number;
-  monthly_reward_cap_days: number;
-  reward_first_membership_only: boolean;
-  invite_count_reward_threshold: number;
-  invite_count_reward_days: number;
-  invite_count_reward_max_invites: number;
-  updated_at: string;
-}
-
-/** 管理后台邀请关系列表行。 */
-export interface AdminReferralRow {
-  id: string;
-  invite_code: string;
-  inviter_id: string;
-  inviter_phone: string | null;
-  invitee_id: string;
-  invitee_phone: string | null;
-  bind_source: 'register' | 'redeem';
-  reward_status: AdminReferralRewardStatus;
-  reward_days: number;
-  reward_event_id: string | null;
-  rewarded_at: string | null;
-  skip_reason: string | null;
-  created_at: string;
-}
-
-/** 管理后台邀请关系列表响应。 */
-export interface AdminReferralListResponse {
-  referrals: AdminReferralRow[];
-  total: number;
 }
 
 /** 关于页面公开收支流水类型。 */
@@ -896,30 +799,6 @@ export const admin = {
       `/api/admin/billing/wallet-transactions${query ? `?${query}` : ''}`,
     );
   },
-  giftCodes: (opts?: {
-    status?: AdminGiftCodeStatus;
-    balance_type?: AdminGiftCodeBalanceType;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.status) params.set('status', opts.status);
-    if (opts?.balance_type) params.set('balance_type', opts.balance_type);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const query = params.toString();
-    return adminRequest<AdminGiftCodesResponse>(
-      `/api/admin/billing/gift-codes${query ? `?${query}` : ''}`,
-    );
-  },
-  createGiftCodes: (data: AdminCreateGiftCodesPayload) =>
-    adminRequest<AdminCreateGiftCodesResponse>(
-      '/api/admin/billing/gift-codes',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ),
   billingReservations: (opts?: {
     user_id?: string;
     hold_state?: AdminBillingHoldState;
@@ -953,66 +832,6 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  rewardConfig: () =>
-    adminRequest<AdminRewardConfig>('/api/admin/reward-config'),
-  updateRewardConfig: (data: {
-    daily_sign_in: {
-      enabled: boolean;
-      reward_coins: number;
-    };
-    membership: {
-      enabled: boolean;
-      monthly_price_coins: number;
-    };
-    membership_plans?: Array<{
-      plan_key: string;
-      name: string;
-      enabled: boolean;
-      monthly_price_coins: number;
-      display_price_coins: number;
-    }>;
-    free_professional_ai?: {
-      daily_turn_limit: number;
-    };
-  }) =>
-    adminRequest<AdminRewardConfig>('/api/admin/reward-config', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  referralConfig: () =>
-    adminRequest<AdminReferralConfig>('/api/admin/referrals/config'),
-  updateReferralConfig: (data: {
-    enabled: boolean;
-    reward_membership_plan_key: string;
-    inviter_reward_days: number;
-    monthly_reward_cap_days: number;
-    reward_first_membership_only?: boolean;
-    invite_count_reward_threshold?: number;
-    invite_count_reward_days?: number;
-    invite_count_reward_max_invites?: number;
-  }) =>
-    adminRequest<AdminReferralConfig>('/api/admin/referrals/config', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  referrals: (opts?: {
-    inviter_id?: string;
-    invitee_id?: string;
-    reward_status?: AdminReferralRewardStatus;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.inviter_id) params.set('inviter_id', opts.inviter_id);
-    if (opts?.invitee_id) params.set('invitee_id', opts.invitee_id);
-    if (opts?.reward_status) params.set('reward_status', opts.reward_status);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const query = params.toString();
-    return adminRequest<AdminReferralListResponse>(
-      `/api/admin/referrals${query ? `?${query}` : ''}`,
-    );
-  },
   aboutLedger: () =>
     adminRequest<AdminAboutLedgerResponse>('/api/admin/about-ledger'),
   createAboutLedgerEntry: (data: AdminAboutLedgerEntryDraft) =>

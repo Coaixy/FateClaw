@@ -17,12 +17,10 @@ import {
   Puzzle,
   ScrollText,
   Bot,
-  Gift,
   Landmark,
   ReceiptText,
   WalletCards,
   Workflow,
-  UserPlus,
   Megaphone,
   LogOut,
   Menu,
@@ -50,12 +48,6 @@ const navItems = [
     requiredScopes: ['admin:*'],
   },
   {
-    href: '/gifts',
-    label: '礼品码',
-    icon: Gift,
-    requiredScopes: ['admin:*'],
-  },
-  {
     href: '/announcements',
     label: '公告',
     icon: Megaphone,
@@ -66,12 +58,6 @@ const navItems = [
     label: '用户',
     icon: Users,
     requiredScopes: ['users:read'],
-  },
-  {
-    href: '/referrals',
-    label: '邀请管理',
-    icon: UserPlus,
-    requiredScopes: ['admin:*'],
   },
   {
     href: '/messages',
@@ -101,7 +87,7 @@ const navItems = [
   },
   {
     href: '/system/rewards',
-    label: '软妹币配置',
+    label: '充值配置',
     icon: WalletCards,
     requiredScopes: ['admin:*'],
   },
