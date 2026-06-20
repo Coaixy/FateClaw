@@ -10,11 +10,9 @@ import type {
   BundleSkillPreviewDto,
   BundleSubscribeResultDto,
   BundleUnsubscribeResultDto,
-  CreateSkillCommentResponseDto,
   CreateSkillAccessInviteRequestDto,
   MarketBundleDto,
   MarketSkillDto,
-  PendingSkillCommentDto,
   SharedBundlePreviewDto,
   SharedSkillDetailDto,
   SharedSkillPreviewDto,
@@ -24,8 +22,6 @@ import type {
   SkillBundleLimitsDto,
   SkillBundleDto,
   SkillDeleteResponseDto,
-  SkillReactionKindDto,
-  SkillReactionSummaryDto,
   SkillShareResponseDto,
   SkillSubscriptionCreateResponseDto,
   SkillSubscriptionToggleResponseDto,
@@ -51,9 +47,6 @@ export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
 export type MarketBundle = MarketBundleDto;
 export type MarketSkill = MarketSkillDto;
 export type SharedSkillDetail = SharedSkillDetailDto;
-export type PendingSkillComment = PendingSkillCommentDto;
-export type SkillReactionKind = SkillReactionKindDto;
-export type SkillReactionSummary = SkillReactionSummaryDto;
 export type SkillAccessInvite = SkillAccessInviteDto;
 export type SkillAccessInvitePreview = SkillAccessInvitePreviewDto;
 export type SkillAccessInviteRedeemResult = SkillAccessInviteRedeemResultDto;
@@ -132,22 +125,6 @@ export const skillsApi = {
   sharedPreview: (token: string) =>
     requestJson<SharedSkillDetail>(
       `/api/skills/shared/${pathSegment(token)}`,
-    ),
-  setReaction: (token: string, kind: SkillReactionKind | null) =>
-    requestJson<{
-      reaction_summary: SkillReactionSummary;
-      my_reaction: SkillReactionKind | null;
-    }>(`/api/skills/shared/${pathSegment(token)}/reaction`, {
-      method: 'PUT',
-      body: JSON.stringify({ kind }),
-    }),
-  createComment: (token: string, body: string) =>
-    requestJson<CreateSkillCommentResponseDto>(
-      `/api/skills/shared/${pathSegment(token)}/comments`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ body }),
-      },
     ),
   subscribe: (token: string) =>
     requestJson<SkillSubscriptionCreateResponseDto>(

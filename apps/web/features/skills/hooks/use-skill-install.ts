@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   skillsApi,
-  type SkillReactionKind,
   type SharedSkillDetail,
   type SharedSkillPreview,
   type SkillAccessInvitePreview,
@@ -17,7 +16,7 @@ export type SkillInstallPreview = (SharedSkillPreview | SharedSkillDetail) & {
   access_status?: SkillAccessInvitePreview['status'];
 };
 
-/** 加载 Skill 详情/授权预览，并封装订阅、赞踩和评论提交状态。 */
+/** 加载 Skill 详情/授权预览，并封装订阅状态。 */
 export function useSkillInstall(
   params: { token: string | null; invite: string | null },
   onDone: () => void,
@@ -26,8 +25,6 @@ export function useSkillInstall(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [subscribing, setSubscribing] = useState(false);
-  const [reacting, setReacting] = useState(false);
-  const [commenting, setCommenting] = useState(false);
   const [done, setDone] = useState(false);
   const activeToken = params.invite || params.token;
   const mode: SkillInstallMode = params.invite ? 'invite' : 'share';
@@ -98,77 +95,14 @@ export function useSkillInstall(
     }
   }, [activeToken, mode, onDone]);
 
-  const react = useCallback(
-    async (kind: SkillReactionKind | null) => {
-      if (!params.token) return;
-      setReacting(true);
-      setError('');
-      try {
-        const result = await skillsApi.setReaction(params.token, kind);
-        setPreview((current) =>
-          current && 'reaction_summary' in current
-            ? {
-                ...current,
-                reaction_summary: result.reaction_summary,
-                my_reaction: result.my_reaction,
-              }
-            : current,
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '操作失败');
-      } finally {
-        setReacting(false);
-      }
-    },
-    [params.token],
-  );
-
-  const comment = useCallback(
-    async (body: string) => {
-      if (!params.token) return null;
-      setCommenting(true);
-      // 评论错误与订阅/赞踩解耦：不写全局 error，交由调用方在评论区本地提示，
-      // 避免错误同时出现在订阅 sidebar 的告警里造成语义错位。
-      try {
-        const created = await skillsApi.createComment(params.token, body);
-        setPreview((current) =>
-          current && 'my_pending_comments' in current
-            ? {
-                ...current,
-                my_pending_comments: [
-                  {
-                    id: created.id,
-                    body: created.body,
-                    status: created.status,
-                    created_at: created.created_at,
-                  },
-                  ...current.my_pending_comments.filter(
-                    (comment) => comment.id !== created.id,
-                  ),
-                ],
-              }
-            : current,
-        );
-        return created;
-      } finally {
-        setCommenting(false);
-      }
-    },
-    [params.token],
-  );
-
   return {
     preview,
     loading,
     error,
     subscribing,
-    reacting,
-    commenting,
     done,
     mode,
     subscribe,
-    react,
-    comment,
     reload: loadPreview,
   };
 }
