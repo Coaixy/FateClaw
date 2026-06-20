@@ -1,6 +1,6 @@
 'use client';
 
-import { Share2, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { Check, Share2, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 
 import { SubscribedSkill } from '@/features/skills/api';
 
@@ -8,17 +8,49 @@ export function SubscribedSkillCard({
   sk,
   onToggle,
   onUnsubscribe,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   sk: SubscribedSkill;
   onToggle: (id: string) => void;
   onUnsubscribe: (id: string) => void;
+  /** 是否处于批量选择模式;为真时整卡可点选中、内部操作禁用 */
+  selectionMode?: boolean;
+  /** 当前卡片是否被选中 */
+  selected?: boolean;
+  /** 切换选中状态,入参为订阅 id(subscription_id) */
+  onToggleSelect?: (id: string) => void;
 }) {
   return (
-    <div className="group relative rounded-2xl border border-hairline bg-surface-card hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))] transition-all duration-300">
+    <div
+      className={`group relative rounded-2xl border bg-surface-card transition-all duration-300 ${
+        selectionMode
+          ? selected
+            ? 'cursor-pointer border-primary ring-1 ring-primary/40'
+            : 'cursor-pointer border-hairline hover:border-primary/40'
+          : 'border-hairline hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))]'
+      }`}
+      onClick={
+        selectionMode ? () => onToggleSelect?.(sk.subscription_id) : undefined
+      }
+    >
       <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.04),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-      <div className="relative p-3.5 sm:p-4">
+      {/* 选择模式下内容区禁用指针事件,避免点到内部操作按钮;选中态由外层整卡点击处理 */}
+      <div className={`relative p-3.5 sm:p-4 ${selectionMode ? 'pointer-events-none' : ''}`}>
         <div className="flex items-start gap-3">
+          {selectionMode && (
+            <div
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                selected
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-hairline bg-surface-card'
+              }`}
+            >
+              {selected && <Check size={13} />}
+            </div>
+          )}
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
               sk.subscription_enabled

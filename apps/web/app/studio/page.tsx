@@ -8,13 +8,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  ListChecks,
   Loader2,
   Plus,
   Puzzle,
   Search,
   Share2,
+  ToggleLeft,
+  ToggleRight,
   Upload,
   Users,
+  X,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -47,6 +51,26 @@ import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 const STUDIO_LIST_PAGE_SIZE = 4;
+
+// 三个列表区改为标签页展示;顺序与产品约定一致:订阅 → 捆绑包 → 我的技能
+const STUDIO_TABS = [
+  {
+    key: 'subscribed' as const,
+    labelKey: 'pages.studio.subscribedTitle',
+    Icon: Share2,
+  },
+  {
+    key: 'bundles' as const,
+    labelKey: 'pages.studio.bundlesTitle',
+    Icon: Layers,
+  },
+  {
+    key: 'own' as const,
+    labelKey: 'pages.studio.ownSkillsTitle',
+    Icon: Puzzle,
+  },
+];
+type StudioTabKey = (typeof STUDIO_TABS)[number]['key'];
 
 type SubscribedListItem =
   | {
@@ -104,6 +128,13 @@ export default function StudioPage() {
   const [subscriptionPage, setSubscriptionPage] = useState(1);
   const [bundlePage, setBundlePage] = useState(1);
   const [skillPage, setSkillPage] = useState(1);
+  // 批量选择:我的知识技能 / 订阅技能 各一套独立状态(跨页按 id 记录选中)
+  const [ownSelectionMode, setOwnSelectionMode] = useState(false);
+  const [ownSelectedIds, setOwnSelectedIds] = useState<Set<string>>(new Set());
+  const [subSelectionMode, setSubSelectionMode] = useState(false);
+  const [subSelectedIds, setSubSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<StudioTabKey>('subscribed');
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
@@ -243,6 +274,37 @@ export default function StudioPage() {
     [filteredOwnSkills, skillPage],
   );
 
+  // 批量选择作用于「当前过滤结果全集」而非当前页,否则每页仅 4 项批量无意义
+  const ownSelectableIds = useMemo(
+    () => filteredOwnSkills.map((skill) => skill.id),
+    [filteredOwnSkills],
+  );
+  // 订阅区混有 bundle 组与单技能,批量仅针对单技能(subscription_id)
+  const subSelectableIds = useMemo(
+    () =>
+      filteredSubscribedItems.flatMap((item) =>
+        item.type === 'skill' ? [item.skill.subscription_id] : [],
+      ),
+    [filteredSubscribedItems],
+  );
+  const hasSubscribedSkills = useMemo(
+    () => subscribedItems.some((item) => item.type === 'skill'),
+    [subscribedItems],
+  );
+  const allOwnSelected =
+    ownSelectableIds.length > 0 &&
+    ownSelectableIds.every((id) => ownSelectedIds.has(id));
+  const allSubSelected =
+    subSelectableIds.length > 0 &&
+    subSelectableIds.every((id) => subSelectedIds.has(id));
+
+  // 各标签页的计数徽标
+  const tabCounts: Record<StudioTabKey, number> = {
+    subscribed: subscribedSkills.length,
+    bundles: bundles.length,
+    own: ownSkills.length,
+  };
+
   useEffect(() => {
     setSubscriptionPage(1);
   }, [subscriptionSearch]);
@@ -375,6 +437,114 @@ export default function StudioPage() {
       await skillsApi.subscriptionToggle(subId);
       await loadUserSkills();
     }, t('pages.studio.toggleFailed'));
+  };
+
+  // —— 批量选择与批量启停 ——
+  const toggleOwnSelect = (id: string) => {
+    setOwnSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSubSelect = (id: string) => {
+    setSubSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const exitOwnSelection = () => {
+    setOwnSelectionMode(false);
+    setOwnSelectedIds(new Set());
+  };
+  const exitSubSelection = () => {
+    setSubSelectionMode(false);
+    setSubSelectedIds(new Set());
+  };
+  // 全选/取消:全选作用于当前过滤结果全集,取消则清空整个选择集
+  const selectAllOwn = () => {
+    setOwnSelectedIds(allOwnSelected ? new Set() : new Set(ownSelectableIds));
+  };
+  const selectAllSub = () => {
+    setSubSelectedIds(allSubSelected ? new Set() : new Set(subSelectableIds));
+  };
+
+  // 批量启停:后端 /toggle 只能翻转,故前端只对「选中且当前状态 != 目标」的项调用,
+  // 保证「批量启用/关闭」是幂等的目标态语义而非盲翻转。
+  const batchToggleOwn = async (target: boolean) => {
+    const targets = ownSkills.filter(
+      (skill) => ownSelectedIds.has(skill.id) && skill.enabled !== target,
+    );
+    if (targets.length === 0) {
+      toast('error', t('pages.studio.batchNoChange'));
+      return;
+    }
+    setBatchBusy(true);
+    const results = await Promise.allSettled(
+      targets.map((skill) => skillsApi.userToggle(skill.id)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    await loadUserSkills();
+    setBatchBusy(false);
+    exitOwnSelection();
+    const done = targets.length - failed;
+    if (failed === 0) {
+      toast(
+        'success',
+        t(target ? 'pages.studio.batchEnabled' : 'pages.studio.batchDisabled', {
+          count: formatNumber(done),
+        }),
+      );
+    } else {
+      toast(
+        'error',
+        t('pages.studio.batchPartial', {
+          success: formatNumber(done),
+          failed: formatNumber(failed),
+        }),
+      );
+    }
+  };
+  const batchToggleSub = async (target: boolean) => {
+    const targets = subscribedSkills.filter(
+      (skill) =>
+        subSelectedIds.has(skill.subscription_id) &&
+        skill.subscription_enabled !== target,
+    );
+    if (targets.length === 0) {
+      toast('error', t('pages.studio.batchNoChange'));
+      return;
+    }
+    setBatchBusy(true);
+    const results = await Promise.allSettled(
+      targets.map((skill) =>
+        skillsApi.subscriptionToggle(skill.subscription_id),
+      ),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    await loadUserSkills();
+    setBatchBusy(false);
+    exitSubSelection();
+    const done = targets.length - failed;
+    if (failed === 0) {
+      toast(
+        'success',
+        t(target ? 'pages.studio.batchEnabled' : 'pages.studio.batchDisabled', {
+          count: formatNumber(done),
+        }),
+      );
+    } else {
+      toast(
+        'error',
+        t('pages.studio.batchPartial', {
+          success: formatNumber(done),
+          failed: formatNumber(failed),
+        }),
+      );
+    }
   };
 
   const handleUnsubscribe = async (subId: string) => {
@@ -567,14 +737,58 @@ export default function StudioPage() {
           />
         </section>
 
+        {/* Tab 切换:三个列表区改为标签页,避免垂直堆叠过长 */}
+        <div className="flex items-center gap-1 rounded-2xl border border-hairline bg-surface-card p-1">
+          {STUDIO_TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex flex-1 items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-medium transition-colors sm:text-[13px] ${
+                  active
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-muted hover:bg-surface-cream-strong hover:text-ink'
+                }`}
+              >
+                <tab.Icon size={14} className="shrink-0" />
+                <span className="truncate">{t(tab.labelKey)}</span>
+                {!loading && (
+                  <span
+                    className={`shrink-0 rounded-md px-1.5 text-[10px] tabular-nums ${
+                      active ? 'bg-white/20' : 'bg-surface-cream-strong'
+                    }`}
+                  >
+                    {formatNumber(tabCounts[tab.key])}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* 别人的订阅 */}
+        {activeTab === 'subscribed' && (
         <section>
-          <SectionTitle
-            icon={Share2}
-            title={t('pages.studio.subscribedTitle')}
-            count={loading ? undefined : subscribedSkills.length}
-            subtitle={t('pages.studio.subscribedSubtitle')}
-          />
+          <div className="flex items-start justify-between gap-3">
+            <SectionTitle
+              icon={Share2}
+              title={t('pages.studio.subscribedTitle')}
+              count={loading ? undefined : subscribedSkills.length}
+              subtitle={t('pages.studio.subscribedSubtitle')}
+            />
+            {!loading && hasSubscribedSkills && !subSelectionMode && (
+              <button
+                type="button"
+                onClick={() => setSubSelectionMode(true)}
+                className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
+              >
+                <ListChecks size={12} />
+                {t('pages.studio.batchManage')}
+              </button>
+            )}
+          </div>
 
           <div className="mt-5 space-y-3">
             {loading ? (
@@ -593,6 +807,19 @@ export default function StudioPage() {
                   onChange={setSubscriptionSearch}
                   placeholder={t('pages.studio.subscribedSearchPlaceholder')}
                 />
+                {subSelectionMode && (
+                  <BatchActionBar
+                    selectedCount={subSelectedIds.size}
+                    totalCount={subSelectableIds.length}
+                    allSelected={allSubSelected}
+                    busy={batchBusy}
+                    onSelectAll={selectAllSub}
+                    onEnable={() => batchToggleSub(true)}
+                    onDisable={() => batchToggleSub(false)}
+                    onExit={exitSubSelection}
+                    t={t}
+                  />
+                )}
                 {filteredSubscribedItems.length === 0 ? (
                   <ListEmptyMessage
                     message={t('pages.studio.noSearchResults', {
@@ -615,6 +842,11 @@ export default function StudioPage() {
                             sk={item.skill}
                             onToggle={handleSubscriptionToggle}
                             onUnsubscribe={handleUnsubscribe}
+                            selectionMode={subSelectionMode}
+                            selected={subSelectedIds.has(
+                              item.skill.subscription_id,
+                            )}
+                            onToggleSelect={toggleSubSelect}
                           />
                         ),
                       )}
@@ -634,8 +866,10 @@ export default function StudioPage() {
             )}
           </div>
         </section>
+        )}
 
         {/* 我的捆绑包 */}
+        {activeTab === 'bundles' && (
         <section>
           <div className="flex items-start justify-between gap-3">
             <SectionTitle
@@ -708,15 +942,29 @@ export default function StudioPage() {
             )}
           </div>
         </section>
+        )}
 
         {/* 我的知识技能 */}
+        {activeTab === 'own' && (
         <section>
-          <SectionTitle
-            icon={Puzzle}
-            title={t('pages.studio.ownSkillsTitle')}
-            count={loading ? undefined : ownSkills.length}
-            subtitle={t('pages.studio.ownSkillsSubtitle')}
-          />
+          <div className="flex items-start justify-between gap-3">
+            <SectionTitle
+              icon={Puzzle}
+              title={t('pages.studio.ownSkillsTitle')}
+              count={loading ? undefined : ownSkills.length}
+              subtitle={t('pages.studio.ownSkillsSubtitle')}
+            />
+            {!loading && ownSkills.length > 0 && !ownSelectionMode && (
+              <button
+                type="button"
+                onClick={() => setOwnSelectionMode(true)}
+                className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
+              >
+                <ListChecks size={12} />
+                {t('pages.studio.batchManage')}
+              </button>
+            )}
+          </div>
 
           <div className="mt-5 space-y-3">
             {loading ? (
@@ -783,6 +1031,19 @@ export default function StudioPage() {
                   onChange={setSkillSearch}
                   placeholder={t('pages.studio.ownSkillsSearchPlaceholder')}
                 />
+                {ownSelectionMode && (
+                  <BatchActionBar
+                    selectedCount={ownSelectedIds.size}
+                    totalCount={ownSelectableIds.length}
+                    allSelected={allOwnSelected}
+                    busy={batchBusy}
+                    onSelectAll={selectAllOwn}
+                    onEnable={() => batchToggleOwn(true)}
+                    onDisable={() => batchToggleOwn(false)}
+                    onExit={exitOwnSelection}
+                    t={t}
+                  />
+                )}
                 {filteredOwnSkills.length === 0 ? (
                   <ListEmptyMessage
                     message={t('pages.studio.noSearchResults', {
@@ -810,6 +1071,9 @@ export default function StudioPage() {
                           }
                           onExport={handleExportSkillZip}
                           onDelete={handleDelete}
+                          selectionMode={ownSelectionMode}
+                          selected={ownSelectedIds.has(sk.id)}
+                          onToggleSelect={toggleOwnSelect}
                         />
                       ))}
                     </div>
@@ -828,6 +1092,7 @@ export default function StudioPage() {
             )}
           </div>
         </section>
+        )}
       </div>
 
       {/* Modals */}
@@ -1000,6 +1265,90 @@ function SectionTitle({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 批量操作栏:进入选择模式后显示在搜索框下方。
+ *
+ * 提供全选/取消、批量启用、批量关闭、退出选择;启用/关闭按钮在执行中或
+ * 未选中任何项时禁用。具体的「只对状态不符项 toggle」幂等逻辑在页面层处理。
+ */
+function BatchActionBar({
+  selectedCount,
+  totalCount,
+  allSelected,
+  busy,
+  onSelectAll,
+  onEnable,
+  onDisable,
+  onExit,
+  t,
+}: {
+  selectedCount: number;
+  totalCount: number;
+  allSelected: boolean;
+  busy: boolean;
+  onSelectAll: () => void;
+  onEnable: () => void;
+  onDisable: () => void;
+  onExit: () => void;
+  t: (
+    key: string,
+    params?: Record<string, string | number | boolean | null | undefined>,
+  ) => string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--color-surface-card))] px-3 py-2">
+      <button
+        type="button"
+        onClick={onSelectAll}
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-surface-cream-strong"
+      >
+        {allSelected
+          ? t('pages.studio.batchClearAll')
+          : t('pages.studio.batchSelectAll')}
+      </button>
+      <span className="text-[12px] text-muted tabular-nums">
+        {t('pages.studio.batchSelected', {
+          count: selectedCount,
+          total: totalCount,
+        })}
+      </span>
+      <div className="flex-1" />
+      <button
+        type="button"
+        onClick={onEnable}
+        disabled={busy || selectedCount === 0}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {busy ? (
+          <Loader2 size={13} className="animate-spin" />
+        ) : (
+          <ToggleRight size={14} />
+        )}
+        {t('pages.studio.batchEnable')}
+      </button>
+      <button
+        type="button"
+        onClick={onDisable}
+        disabled={busy || selectedCount === 0}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-surface-cream-strong disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ToggleLeft size={14} />
+        {t('pages.studio.batchDisable')}
+      </button>
+      <button
+        type="button"
+        onClick={onExit}
+        disabled={busy}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink disabled:opacity-40"
+        title={t('pages.studio.batchExit')}
+        aria-label={t('pages.studio.batchExit')}
+      >
+        <X size={15} />
+      </button>
     </div>
   );
 }
