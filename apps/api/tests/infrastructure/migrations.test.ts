@@ -483,6 +483,7 @@ describe('runDatabaseMigrations', () => {
       '0057_disable_wechat_claw_accounts',
       '0058_normalize_all_plan_keys_to_clarity',
       '0059_drop_allowance_columns_and_table',
+      '0060_client_crm_fields',
     ]);
 
     await runDatabaseMigrations(client as never);

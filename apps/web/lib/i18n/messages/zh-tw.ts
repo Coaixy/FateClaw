@@ -508,6 +508,15 @@ export const zhTWMessages = {
       female: '女',
       unset: '未填',
     },
+    status: {
+      vip: 'VIP',
+      followUp: '待跟進',
+      done: '已完成',
+      unset: '不標記',
+    },
+    filter: {
+      allStatus: '全部狀態',
+    },
     card: {
       birthWithTime: '{date} {hour}:{minute}',
       birthUnknown: '生辰未填',
@@ -551,6 +560,11 @@ export const zhTWMessages = {
       birthplacePlaceholder: '例如：浙江杭州',
       notesSection: '備註',
       notesPlaceholder: '記錄與該客戶相關的情況、訴求或歷史結論...',
+      crmSection: '客戶管理',
+      statusLabel: '客戶狀態',
+      tagsLabel: '標籤',
+      tagsPlaceholder: '輸入標籤後按 Enter 新增',
+      tagRemove: '移除標籤 {tag}',
       discardTitle: '放棄未儲存的修改？',
       discardMessage: '你改過的內容將會遺失。',
       discardConfirm: '放棄',

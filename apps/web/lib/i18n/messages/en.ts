@@ -528,6 +528,15 @@ export const enMessages = {
       female: 'Female',
       unset: 'Unset',
     },
+    status: {
+      vip: 'VIP',
+      followUp: 'Follow up',
+      done: 'Done',
+      unset: 'None',
+    },
+    filter: {
+      allStatus: 'All statuses',
+    },
     card: {
       birthWithTime: '{date} {hour}:{minute}',
       birthUnknown: 'Birth info not set',
@@ -571,6 +580,11 @@ export const enMessages = {
       birthplacePlaceholder: 'e.g. Hangzhou, Zhejiang',
       notesSection: 'Notes',
       notesPlaceholder: 'Record context, requests, or past conclusions...',
+      crmSection: 'Client management',
+      statusLabel: 'Client status',
+      tagsLabel: 'Tags',
+      tagsPlaceholder: 'Type a tag and press Enter',
+      tagRemove: 'Remove tag {tag}',
       discardTitle: 'Discard unsaved changes?',
       discardMessage: 'Your edits will be lost.',
       discardConfirm: 'Discard',

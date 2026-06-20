@@ -8,6 +8,7 @@
 import type {
   ClientProfileDto,
   ClientProfileUpsertDto,
+  ClientStatusDto,
 } from '@fateclaw/contracts/chat';
 
 import {
@@ -47,6 +48,46 @@ function normalizeText(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** 合法客户状态集合。 */
+const VALID_CLIENT_STATUSES: ReadonlySet<string> = new Set([
+  'vip',
+  'follow_up',
+  'done',
+]);
+
+/**
+ * 归一化客户状态：仅接受 vip/follow_up/done，其余（含空/脏值）落为 null。
+ *
+ * @remarks 同时用于入参兜底和行→DTO 映射，故接受宽松的 string 输入。
+ */
+function normalizeStatus(
+  status: string | null | undefined,
+): ClientStatusDto | null {
+  return status && VALID_CLIENT_STATUSES.has(status)
+    ? (status as ClientStatusDto)
+    : null;
+}
+
+/**
+ * 归一化标签数组：去首尾空白、丢空串、去重，单标签截断 20 字，最多 12 个。
+ *
+ * @remarks 入库与出参均兜底，避免脏标签；非数组输入按空数组处理。
+ */
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of tags) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim().slice(0, 20);
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+    if (result.length >= 12) break;
+  }
+  return result;
+}
+
 /** 判断是否为 Postgres 唯一约束冲突。 */
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -75,6 +116,8 @@ function toClientProfileDto(
     minute: profile.minute ?? null,
     birthplace: profile.birthplace ?? null,
     notes: profile.notes ?? null,
+    tags: normalizeTags(profile.tags),
+    status: normalizeStatus(profile.status),
     created_at: profile.created_at,
     updated_at: profile.updated_at,
     session_count: stats?.session_count,
@@ -149,6 +192,8 @@ export async function createClientProfileForOwnedUser(
       minute: input.minute ?? null,
       birthplace: normalizeText(input.birthplace),
       notes: normalizeText(input.notes),
+      tags: normalizeTags(input.tags),
+      status: normalizeStatus(input.status),
     });
     return ok(toClientProfileDto(profile));
   } catch (error) {
@@ -193,6 +238,8 @@ export async function updateClientProfileForOwnedUser(
       minute: input.minute ?? null,
       birthplace: normalizeText(input.birthplace),
       notes: normalizeText(input.notes),
+      tags: normalizeTags(input.tags),
+      status: normalizeStatus(input.status),
     });
     if (!profile) {
       return fail(404, '客户档案不存在');

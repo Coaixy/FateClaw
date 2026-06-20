@@ -268,6 +268,9 @@ export interface ClientProfile {
   minute: number | null;
   birthplace: string | null;
   notes: string | null;
+  // 轻量 CRM：自由标签数组（默认空）与客户状态（vip/follow_up/done，可空）。
+  tags: string[];
+  status: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

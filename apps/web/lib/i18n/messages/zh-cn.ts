@@ -508,6 +508,15 @@ export const zhCNMessages = {
       female: '女',
       unset: '未填',
     },
+    status: {
+      vip: 'VIP',
+      followUp: '待跟进',
+      done: '已完成',
+      unset: '不标记',
+    },
+    filter: {
+      allStatus: '全部状态',
+    },
     card: {
       birthWithTime: '{date} {hour}:{minute}',
       birthUnknown: '生辰未填',
@@ -551,6 +560,11 @@ export const zhCNMessages = {
       birthplacePlaceholder: '例如：浙江杭州',
       notesSection: '备注',
       notesPlaceholder: '记录与该客户相关的情况、诉求或历史结论...',
+      crmSection: '客户管理',
+      statusLabel: '客户状态',
+      tagsLabel: '标签',
+      tagsPlaceholder: '输入标签后回车添加',
+      tagRemove: '移除标签 {tag}',
       discardTitle: '放弃未保存的修改？',
       discardMessage: '你改过的内容将会丢失。',
       discardConfirm: '放弃',

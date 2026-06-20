@@ -62,6 +62,9 @@ export interface ChatSessionDto {
   client_id?: string | null;
 }
 
+/** 客户状态标记：vip 重点客户、follow_up 待跟进、done 已完成。 */
+export type ClientStatusDto = 'vip' | 'follow_up' | 'done';
+
 /** 客户（被算者）档案。卦师为客户建档，发起排盘时关联并用生辰预填。 */
 export interface ClientProfileDto {
   id: string;
@@ -75,6 +78,10 @@ export interface ClientProfileDto {
   minute?: number | null;
   birthplace?: string | null;
   notes?: string | null;
+  /** 自由标签（卦师自定义，可多个）。 */
+  tags: string[];
+  /** 客户状态；未标记时为 null。 */
+  status: ClientStatusDto | null;
   created_at: string;
   updated_at: string;
   /** 该客户的解读会话数（列表统计用，可选）。 */
@@ -92,6 +99,10 @@ export interface ClientProfileUpsertDto {
   minute?: number | null;
   birthplace?: string | null;
   notes?: string | null;
+  /** 自由标签；不传表示不修改/置空由上层决定。 */
+  tags?: string[];
+  /** 客户状态；null 表示清除标记。 */
+  status?: ClientStatusDto | null;
 }
 
 export interface ClientProfileListResponseDto {

@@ -20,6 +20,7 @@ import { ClientProfileForm } from '@/components/clients/client-profile-form';
 import type {
   ClientProfile,
   ClientProfileUpsert,
+  ClientStatus,
 } from '@/features/chat/client-profiles-api';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -28,6 +29,28 @@ import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 const CLIENTS_PAGE_SIZE = 6;
+
+/** 客户状态筛选项（含"全部"）。 */
+const STATUS_FILTERS: readonly { value: ClientStatus | 'all'; labelKey: string }[] = [
+  { value: 'all', labelKey: 'clients.filter.allStatus' },
+  { value: 'vip', labelKey: 'clients.status.vip' },
+  { value: 'follow_up', labelKey: 'clients.status.followUp' },
+  { value: 'done', labelKey: 'clients.status.done' },
+];
+
+/** 客户状态徽章样式（边框/底色/文字）。 */
+const STATUS_BADGE_CLASS: Record<ClientStatus, string> = {
+  vip: 'border-amber-400/40 bg-amber-400/10 text-amber-500',
+  follow_up: 'border-primary/35 bg-primary/10 text-primary',
+  done: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
+};
+
+/** 客户状态对应的 i18n 文案键。 */
+const STATUS_LABEL_KEY: Record<ClientStatus, string> = {
+  vip: 'clients.status.vip',
+  follow_up: 'clients.status.followUp',
+  done: 'clients.status.done',
+};
 
 type FormState =
   | { mode: 'create' }
@@ -61,6 +84,7 @@ export default function ClientsPage() {
 
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ClientStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const [formState, setFormState] = useState<FormState>(null);
   const [deletingId, setDeletingId] = useState('');
@@ -80,8 +104,12 @@ export default function ClientsPage() {
 
   const filteredProfiles = useMemo(() => {
     const query = normalizeSearch(search);
-    return profiles.filter((profile) => matchesSearch(profile, query));
-  }, [profiles, search]);
+    return profiles.filter(
+      (profile) =>
+        matchesSearch(profile, query) &&
+        (statusFilter === 'all' || profile.status === statusFilter),
+    );
+  }, [profiles, search, statusFilter]);
 
   const totalPages = Math.max(
     1,
@@ -95,7 +123,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, statusFilter]);
 
   const showSkeleton = loading && !initialLoaded;
 
@@ -183,6 +211,25 @@ export default function ClientsPage() {
                   aria-label={t('clients.searchPlaceholder')}
                   className="w-full h-10 pl-9 pr-3 rounded-xl border border-hairline bg-surface-card text-[13px] placeholder:text-muted focus:border-primary focus:outline-none transition-all"
                 />
+              </div>
+
+              {/* 状态筛选:卦师按 VIP/待跟进/已完成 快速过滤客户 */}
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_FILTERS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setStatusFilter(item.value)}
+                    className={`h-8 rounded-lg border px-3 text-[12px] font-medium transition-all ${
+                      statusFilter === item.value
+                        ? 'border-primary/30 bg-primary/12 text-primary'
+                        : 'border-hairline bg-surface-card text-muted hover:border-primary/25 hover:text-ink'
+                    }`}
+                    aria-pressed={statusFilter === item.value}
+                  >
+                    {t(item.labelKey)}
+                  </button>
+                ))}
               </div>
 
               {filteredProfiles.length === 0 ? (
@@ -329,6 +376,13 @@ function ClientCard({
                   {genderLabel}
                 </span>
               )}
+              {profile.status && (
+                <span
+                  className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE_CLASS[profile.status]}`}
+                >
+                  {t(STATUS_LABEL_KEY[profile.status])}
+                </span>
+              )}
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
               <span className="inline-flex items-center gap-1">
@@ -364,6 +418,18 @@ function ClientCard({
               <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-muted">
                 {profile.notes}
               </p>
+            )}
+            {profile.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {profile.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-md bg-primary/8 px-1.5 py-0.5 text-[10px] text-primary/90"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>

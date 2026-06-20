@@ -2,6 +2,7 @@ import type {
   ClientProfileDto,
   ClientProfileListResponseDto,
   ClientProfileUpsertDto,
+  ClientStatusDto,
 } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
@@ -10,6 +11,7 @@ import { requestJson } from '@/lib/http/client';
 export type ClientProfile = ClientProfileDto;
 export type ClientProfileUpsert = ClientProfileUpsertDto;
 export type ClientProfileListResponse = ClientProfileListResponseDto;
+export type ClientStatus = ClientStatusDto;
 
 const pathSegment = (value: string) => encodeURIComponent(value);
 

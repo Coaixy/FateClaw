@@ -20,6 +20,8 @@ const CLIENT_PROFILE_SELECT_COLUMNS = `
   c.minute,
   c.birthplace,
   c.notes,
+  c.tags,
+  c.status,
   c.created_at,
   c.updated_at,
   c.deleted_at
@@ -36,6 +38,8 @@ const CLIENT_PROFILE_RETURNING_COLUMNS = `
   minute,
   birthplace,
   notes,
+  tags,
+  status,
   created_at,
   updated_at,
   deleted_at
@@ -55,6 +59,8 @@ export interface CreateClientProfileInput {
   minute?: number | null;
   birthplace?: string | null;
   notes?: string | null;
+  tags?: string[];
+  status?: string | null;
 }
 
 /** 更新客户档案行时可覆盖的字段；未提供（undefined）的字段保持原值。 */
@@ -66,6 +72,8 @@ export interface UpdateClientProfileInput {
   minute?: number | null;
   birthplace?: string | null;
   notes?: string | null;
+  tags?: string[];
+  status?: string | null;
 }
 
 /**
@@ -92,8 +100,8 @@ export async function createClientProfile(
   const id = `cp-${crypto.randomUUID()}`;
   const { rows } = await pool.query(
     `INSERT INTO client_profiles
-       (id, user_id, name, gender, solar_date, hour, minute, birthplace, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (id, user_id, name, gender, solar_date, hour, minute, birthplace, notes, tags, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING ${CLIENT_PROFILE_RETURNING_COLUMNS}`,
     [
       id,
@@ -105,6 +113,8 @@ export async function createClientProfile(
       input.minute ?? null,
       input.birthplace ?? null,
       input.notes ?? null,
+      input.tags ?? [],
+      input.status ?? null,
     ],
   );
   return rows[0] as ClientProfile;
@@ -188,6 +198,8 @@ export async function updateClientProfile(
   if (updates.birthplace !== undefined)
     assign('birthplace', updates.birthplace);
   if (updates.notes !== undefined) assign('notes', updates.notes);
+  if (updates.tags !== undefined) assign('tags', updates.tags);
+  if (updates.status !== undefined) assign('status', updates.status);
 
   // 没有任何字段变更时直接回读当前行，保持幂等。
   if (fields.length === 0) {
