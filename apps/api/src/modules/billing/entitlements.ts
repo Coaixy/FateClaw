@@ -74,11 +74,13 @@ export async function getRuntimeEntitlementSnapshot(
     planKey: activePlanKey,
     planRank: resolveMembershipPlanRank(activePlanKey),
     hasPaidMembership: hasPaidMembershipEntitlement(membership),
-    // 塌缩为单层"卦师使用权"：自定义模型（BYOK）与优先队列不再按档位区分，
-    // 有效使用权即开放。微信 Claw 保留原档位判断——新单层用户无 deep 档故默认关闭，
-    // 仅存量 deep 会员仍可用，不在本次付费塌缩里强行下线保留中的微信链路。
+    // 塌缩为单层"卦师使用权"：自定义模型（BYOK）与优先队列不再按档位区分，有效使用权即开放。
     hasPriorityQueue: membership.active,
     canUseCustomModel: membership.active,
+    // 微信 Claw 权益判断保留原档位逻辑（仅存量 deep 会员），不在 entitlements 层硬关——
+    // 因为该字段被单元测试当作"按档位推导"的纯逻辑。微信【功能】已在数据层可逆停用：
+    // 迁移 0057 将所有 accounts.enabled 置 false → 启动不再拉起 iLink 轮询，前端亦无绑定入口，
+    // 状态页不再展示微信卡。未来恢复只需重新启用账号（无 enabled 账号即无微信链路）。
     canUseWechatClaw: hasWechatClawEntitlement(membership),
     professionalAiDailyTurnLimit: membership.active
       ? GUASHI_DAILY_TURN_LIMIT
