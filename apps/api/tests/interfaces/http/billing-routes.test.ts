@@ -76,14 +76,14 @@ describe('billingRoutes membership plan boundary', () => {
       method: 'POST',
       url: '/membership/subscribe',
       payload: {
-        plan_key: 'fateclaw_deep',
+        plan_key: 'fateclaw_clarity',
       },
     });
 
     expect(response.statusCode).toBe(200);
     expect(subscribeCurrentUserMembership).toHaveBeenCalledWith(
       'user-1',
-      'fateclaw_deep',
+      'fateclaw_clarity',
     );
   });
 });

@@ -66,9 +66,6 @@ export function toMembershipStatusDto(
     display_price_coins: membership.displayPriceCoins,
     current_period_start: membership.currentPeriodStart,
     current_period_end: membership.currentPeriodEnd,
-    allowance_reset_at: membership.allowanceResetAt,
-    allowance_used_ratio: membership.allowanceUsedRatio,
-    allowance_status: membership.allowanceStatus,
   };
 }
 
@@ -129,7 +126,6 @@ export function toBillingStatusDto(data: {
   return {
     monthly_tokens_used: data.billing.usedTokens,
     monthly_charged_coins: monthlyChargedCoins,
-    estimated_monthly_total_coins: monthlyChargedCoins,
     ...toWalletBalanceDto(data.wallet),
     membership: toMembershipStatusDto(data.membership),
     membership_entitlements: data.membershipEntitlements.map(

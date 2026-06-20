@@ -88,7 +88,7 @@ import {
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
-import { MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
@@ -224,7 +224,7 @@ const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
 
-const MembershipPlanKeySchema = z.enum(MEMBERSHIP_PLAN_KEYS);
+const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
 
 const AdminSetUserMembershipSchema = z
   .object({
@@ -650,14 +650,6 @@ const RewardMembershipPlanSchema = z.object({
     (value) => value >= 0 && value <= 1_000_000,
     '会员展示原价必须在 0 到 1000000 之间',
   ),
-  monthly_allowance_units: z
-    .number()
-    .min(0, '会员免费额度不能小于 0')
-    .max(1_000_000_000_000, '会员免费额度过大'),
-  standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
-    (value) => value > 0 && value <= 1_000_000,
-    '标准额度折算价格必须在 0 到 1000000 之间',
-  ),
 });
 
 const RewardConfigSchema = z.object({
@@ -683,21 +675,13 @@ const RewardConfigSchema = z.object({
       (value) => value >= 0 && value <= 1_000_000,
       '会员月费必须在 0 到 1000000 之间',
     ),
-    monthly_allowance_units: z
-      .number()
-      .min(0, '会员免费额度不能小于 0')
-      .max(1_000_000_000_000, '会员免费额度过大'),
-    standard_price_per_million_units_coins: SoftCurrencyNumberSchema.refine(
-      (value) => value > 0 && value <= 1_000_000,
-      '标准额度折算价格必须在 0 到 1000000 之间',
-    ),
   }),
   membership_plans: z.array(RewardMembershipPlanSchema).optional(),
 });
 
 const ReferralConfigSchema = z.object({
   enabled: z.boolean(),
-  reward_membership_plan_key: z.enum(MEMBERSHIP_PLAN_KEYS).optional(),
+  reward_membership_plan_key: z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS).optional(),
   inviter_reward_days: z
     .number()
     .int('奖励天数必须是整数')
@@ -1146,9 +1130,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       membership: {
         enabled: parsed.data.membership.enabled,
         monthlyPriceCoins: parsed.data.membership.monthly_price_coins,
-        monthlyAllowanceUnits: parsed.data.membership.monthly_allowance_units,
-        standardPricePerMillionUnitsCoins:
-          parsed.data.membership.standard_price_per_million_units_coins,
       },
       membershipPlans: parsed.data.membership_plans?.map((plan) => ({
         planKey: plan.plan_key,
@@ -1156,9 +1137,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         enabled: plan.enabled,
         monthlyPriceCoins: plan.monthly_price_coins,
         displayPriceCoins: plan.display_price_coins,
-        monthlyAllowanceUnits: plan.monthly_allowance_units,
-        standardPricePerMillionUnitsCoins:
-          plan.standard_price_per_million_units_coins,
       })),
       freeProfessionalAi: parsed.data.free_professional_ai
         ? {

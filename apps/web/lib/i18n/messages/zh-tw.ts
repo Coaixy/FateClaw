@@ -313,7 +313,7 @@ export const zhTWMessages = {
       badge: '邀請中心',
       title: '邀請中心',
       description:
-        '分享邀請碼給好友。好友首次使用充值積分開通會員，或累計邀請人數達標後，你會獲得會員天數獎勵。',
+        '分享邀請碼給好友。好友首次使用充值積分開通卦師使用權，或累計邀請人數達標後，你會獲得使用權天數獎勵。',
       loadFailed: '邀請資訊載入失敗',
       copyFailed: '複製失敗',
       inviteCodeBound: '邀請碼已綁定',
@@ -446,7 +446,7 @@ export const zhTWMessages = {
       monthlyToken: '本月 Token',
       freeAccount: '目前為免費帳戶',
       freeDescription:
-        '可使用簡易模式與手動排盤；專家模式和追問需開通 Clarity 或更高等級。',
+        '可使用簡易模式與手動排盤；專家模式和追問需開通卦師使用權。',
       freeBadgeWallet: '積分餘額計費',
       freeBadgeUpgrade: '可隨時升級',
       freeBadgeInactive: '會員免費額度未啟用',
@@ -476,14 +476,10 @@ export const zhTWMessages = {
       noAllowanceStatus: 'AI Chat 使用積分餘額計費',
       confirmRenewTitle: '確認續費會員',
       confirmSubscribeTitle: '確認開通會員',
-      confirmRenewMessage:
-        '將從積分餘額扣除 {price}，會員有效期將在目前週期結束後順延 1 個月。',
-      confirmSubscribeMessage:
-        '將從積分餘額扣除 {price}，開通 FateClaw Insight 會員 1 個月。',
       confirmRenewPlanMessage:
         '將從積分餘額扣除 {price}，{plan} 有效期將在目前週期結束後順延 1 個月。',
       confirmSubscribePlanMessage:
-        '將從積分餘額扣除 {price}，開通 FateClaw {plan} 會員 1 個月。',
+        '將從積分餘額扣除 {price}，開通 {plan} 1 個月。',
       confirmRenew: '確認續費',
       confirmSubscribe: '確認開通',
       subscribeFailed: '開通會員失敗',

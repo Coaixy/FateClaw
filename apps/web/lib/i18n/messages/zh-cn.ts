@@ -313,7 +313,7 @@ export const zhCNMessages = {
       badge: '邀请中心',
       title: '邀请中心',
       description:
-        '分享邀请码给好友。好友首次使用充值积分开通会员，或累计邀请人数达标后，你会获得会员天数奖励。',
+        '分享邀请码给好友。好友首次使用充值积分开通卦师使用权，或累计邀请人数达标后，你会获得使用权天数奖励。',
       loadFailed: '邀请信息加载失败',
       copyFailed: '复制失败',
       inviteCodeBound: '邀请码已绑定',
@@ -446,7 +446,7 @@ export const zhCNMessages = {
       monthlyToken: '本月 Token',
       freeAccount: '当前为免费账户',
       freeDescription:
-        '可使用简易模式与手动排盘；专家模式和追问需开通 Clarity 或更高等级。',
+        '可使用简易模式与手动排盘；专家模式和追问需开通卦师使用权。',
       freeBadgeWallet: '积分余额计费',
       freeBadgeUpgrade: '可随时升级',
       freeBadgeInactive: '会员免费额度未启用',
@@ -476,14 +476,10 @@ export const zhCNMessages = {
       noAllowanceStatus: 'AI Chat 使用积分余额计费',
       confirmRenewTitle: '确认续费会员',
       confirmSubscribeTitle: '确认开通会员',
-      confirmRenewMessage:
-        '将从积分余额扣除 {price}，会员有效期将在当前周期结束后顺延 1 个月。',
-      confirmSubscribeMessage:
-        '将从积分余额扣除 {price}，开通 FateClaw Insight 会员 1 个月。',
       confirmRenewPlanMessage:
         '将从积分余额扣除 {price}，{plan} 有效期将在当前周期结束后顺延 1 个月。',
       confirmSubscribePlanMessage:
-        '将从积分余额扣除 {price}，开通 FateClaw {plan} 会员 1 个月。',
+        '将从积分余额扣除 {price}，开通 {plan} 1 个月。',
       confirmRenew: '确认续费',
       confirmSubscribe: '确认开通',
       subscribeFailed: '开通会员失败',

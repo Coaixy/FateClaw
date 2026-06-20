@@ -225,8 +225,6 @@ export interface AdminRewardConfigView {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   };
   membership_plans: Array<{
@@ -235,8 +233,6 @@ export interface AdminRewardConfigView {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   }>;
   free_professional_ai: {
@@ -257,8 +253,6 @@ export type AdminUserListItem = Omit<User, 'password_hash'> & {
   usage: Awaited<ReturnType<typeof getUsageStats>>;
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;
@@ -298,9 +292,6 @@ function membershipConfigToAdminView(
     enabled: config.enabled,
     monthly_price_coins: config.monthly_price_coins,
     display_price_coins: config.display_price_coins,
-    monthly_allowance_units: config.monthly_allowance_units,
-    standard_price_per_million_units_coins:
-      config.standard_price_per_million_units_coins,
     updated_at: config.updated_at,
   };
 }
@@ -373,8 +364,6 @@ export async function updateAdminRewardConfig(input: {
     enabled: boolean;
     monthlyPriceCoins: number;
     displayPriceCoins?: number;
-    monthlyAllowanceUnits: number;
-    standardPricePerMillionUnitsCoins: number;
   };
   membershipPlans?: Array<{
     planKey: string;
@@ -382,8 +371,6 @@ export async function updateAdminRewardConfig(input: {
     enabled: boolean;
     monthlyPriceCoins: number;
     displayPriceCoins: number;
-    monthlyAllowanceUnits: number;
-    standardPricePerMillionUnitsCoins: number;
   }>;
   freeProfessionalAi?: {
     dailyTurnLimit: number;
@@ -412,9 +399,6 @@ export async function updateAdminRewardConfig(input: {
         enabled: membershipInput.enabled,
         monthlyPriceCoins: membershipInput.monthlyPriceCoins,
         displayPriceCoins: membershipInput.displayPriceCoins,
-        monthlyAllowanceUnits: membershipInput.monthlyAllowanceUnits,
-        standardPricePerMillionUnitsCoins:
-          membershipInput.standardPricePerMillionUnitsCoins,
       }),
     ),
   );
@@ -1161,7 +1145,6 @@ export async function listAdminUsersWithStats(
           } satisfies Awaited<ReturnType<typeof getUsageStats>>),
         monthly_tokens_used: monthlyBilling.usedTokens,
         monthly_charged_coins: monthlyBilling.chargedCoins,
-        estimated_monthly_total_coins: monthlyBilling.chargedCoins,
         purchased_coins: safe.purchased_coins,
         bonus_coins: safe.bonus_coins,
         reserved_coins: safe.reserved_coins,
@@ -1176,9 +1159,6 @@ export async function listAdminUsersWithStats(
               displayPriceCoins: 0,
               currentPeriodStart: null,
               currentPeriodEnd: null,
-              allowanceResetAt: null,
-              allowanceUsedRatio: 0,
-              allowanceStatus: 'inactive',
             } satisfies Awaited<
               ReturnType<typeof getMembershipBillingSummary>
             >),
@@ -1203,8 +1183,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
     usage: Awaited<ReturnType<typeof getUsageStats>>;
     monthly_tokens_used: number;
     monthly_charged_coins: number;
-    /** @deprecated 使用 monthly_charged_coins。 */
-    estimated_monthly_total_coins: number;
     purchased_coins: number;
     bonus_coins: number;
     reserved_coins: number;
@@ -1239,7 +1217,6 @@ export async function getAdminUserDetail(userId: string): Promise<{
       usage,
       monthly_tokens_used: monthlyBilling.usedTokens,
       monthly_charged_coins: monthlyBilling.chargedCoins,
-      estimated_monthly_total_coins: monthlyBilling.chargedCoins,
       purchased_coins: wallet.purchasedCoins,
       bonus_coins: wallet.bonusCoins,
       reserved_coins: wallet.reservedCoins,

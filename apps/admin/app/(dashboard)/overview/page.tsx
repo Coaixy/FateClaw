@@ -257,7 +257,7 @@ export default function AdminOverviewPage() {
           <StatCard
             icon={WalletCards}
             label="活跃会员"
-            value={fmt(stats.active_memberships ?? stats.active_subscriptions)}
+            value={fmt(stats.active_memberships)}
             sub="FateClaw 会员有效周期"
           />
           <StatCard

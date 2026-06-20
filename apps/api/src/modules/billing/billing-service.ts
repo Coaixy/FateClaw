@@ -60,11 +60,12 @@ function todaySignInDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// 微信 Claw 已可逆停用：状态页不再展示"微信绑定"服务卡。
+// PublicStatusServiceKeyDto 联合仍保留 'wechat_binding'（待恢复），此处仅运行时不输出。
 const PUBLIC_STATUS_SERVICE_KEYS: PublicStatusServiceKeyDto[] = [
   'ai_chat',
   'wallet',
   'membership',
-  'wechat_binding',
 ];
 
 export async function getBillingOverview(

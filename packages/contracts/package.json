@@ -18,6 +18,11 @@
       "types": "./src/skills/index.d.ts",
       "import": "./src/skills/index.js",
       "default": "./src/skills/index.js"
+    },
+    "./membership": {
+      "types": "./src/membership/index.d.ts",
+      "import": "./src/membership/index.js",
+      "default": "./src/membership/index.js"
     }
   }
 }

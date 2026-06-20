@@ -21,7 +21,6 @@ import {
   isSpendableBalanceInArrears,
   type SpendableBalanceState,
 } from '../../shared/balance-coins.js';
-import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   normalizeMembershipPlanKey,
   resolveMembershipPlanKey,
@@ -56,15 +55,6 @@ export interface MembershipBillingSummary {
   displayPriceCoins: number;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
-  allowanceResetAt: string | null;
-  allowanceUsedRatio: number;
-  allowanceStatus:
-    | 'inactive'
-    | 'plenty'
-    | 'normal'
-    | 'tight'
-    | 'almost_used'
-    | 'used_up';
 }
 
 export interface MembershipPlanSummary {
@@ -279,31 +269,10 @@ export async function getMonthlyMeteredBillingSummariesByUserIds(
   );
 }
 
-function resolveAllowanceStatus(
-  active: boolean,
-  usedRatio: number,
-): MembershipBillingSummary['allowanceStatus'] {
-  if (!active) return 'inactive';
-  if (usedRatio >= 1) return 'used_up';
-  if (usedRatio >= 0.95) return 'almost_used';
-  if (usedRatio >= 0.8) return 'tight';
-  if (usedRatio >= 0.5) return 'normal';
-  return 'plenty';
-}
-
 export async function getMembershipBillingSummary(
   userId: string,
 ): Promise<MembershipBillingSummary> {
   const overview = await getMembershipOverview(userId);
-  const allowancePeriod = overview.membership
-    ? resolveMembershipAllowancePeriod(overview.membership)
-    : null;
-  const allowanceUnits =
-    overview.allowance?.allowance_units ??
-    (overview.active ? overview.config.monthly_allowance_units : 0);
-  const usedUnits = overview.allowance?.used_units ?? 0;
-  const usedRatio =
-    allowanceUnits > 0 ? Math.min(1, usedUnits / allowanceUnits) : 0;
 
   return {
     enabled: overview.config.enabled,
@@ -319,27 +288,12 @@ export async function getMembershipBillingSummary(
     currentPeriodEnd: overview.active
       ? (overview.membership?.current_period_end ?? null)
       : null,
-    allowanceResetAt: overview.active
-      ? (overview.allowance?.period_end ?? allowancePeriod?.end ?? null)
-      : null,
-    allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
-    allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
   };
 }
 
 function membershipOverviewToBillingSummary(
   overview: Awaited<ReturnType<typeof getMembershipOverview>>,
 ): MembershipBillingSummary {
-  const allowancePeriod = overview.membership
-    ? resolveMembershipAllowancePeriod(overview.membership)
-    : null;
-  const allowanceUnits =
-    overview.allowance?.allowance_units ??
-    (overview.active ? overview.config.monthly_allowance_units : 0);
-  const usedUnits = overview.allowance?.used_units ?? 0;
-  const usedRatio =
-    allowanceUnits > 0 ? Math.min(1, usedUnits / allowanceUnits) : 0;
-
   return {
     enabled: overview.config.enabled,
     active: overview.active,
@@ -354,11 +308,6 @@ function membershipOverviewToBillingSummary(
     currentPeriodEnd: overview.active
       ? (overview.membership?.current_period_end ?? null)
       : null,
-    allowanceResetAt: overview.active
-      ? (overview.allowance?.period_end ?? allowancePeriod?.end ?? null)
-      : null,
-    allowanceUsedRatio: Math.round(usedRatio * 10000) / 10000,
-    allowanceStatus: resolveAllowanceStatus(overview.active, usedRatio),
   };
 }
 
@@ -386,9 +335,6 @@ export async function getMembershipBillingSummariesByUserIds(
             displayPriceCoins: 0,
             currentPeriodStart: null,
             currentPeriodEnd: null,
-            allowanceResetAt: null,
-            allowanceUsedRatio: 0,
-            allowanceStatus: 'inactive',
           } satisfies MembershipBillingSummary,
         ] as const;
       }

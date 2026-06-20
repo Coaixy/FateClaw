@@ -22,7 +22,7 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   MEMBERSHIP_DEEP_PLAN_KEY,
   MEMBERSHIP_INSIGHT_PLAN_KEY,
-  MEMBERSHIP_PLAN_KEYS,
+  ACTIVE_MEMBERSHIP_PLAN_KEYS,
   type MembershipPlanKey,
   hasPaidMembershipEntitlement,
   normalizeMembershipPlanKey,
@@ -558,6 +558,8 @@ async function getMembershipConfigUsing(input: {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
+  // 旧档（deep/insight）定价仅用于按需补齐存量会员的 config 行以识别其历史档位，
+  // 不再进入在售列表（getMembershipPlanConfigs 只 ensure clarity）。在售档 clarity = 10。
   const monthlyPriceCoins =
     planKey === MEMBERSHIP_DEEP_PLAN_KEY
       ? 100
@@ -605,20 +607,14 @@ export async function getMembershipConfig(
 export async function getMembershipPlanConfigs(): Promise<
   MembershipConfigRow[]
 > {
+  // 单层"卦师使用权"：只 ensure / 暴露在售档（clarity）。停用的旧档（insight/deep）
+  // 仍能被 getMembershipConfig 单独读到用于识别存量会员，但不再进入可订阅列表，
+  // 也不再被这里 ensure 重建（ACTIVE_MEMBERSHIP_PLAN_KEYS 仅含 clarity）。
   const configs = await Promise.all(
-    MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
+    ACTIVE_MEMBERSHIP_PLAN_KEYS.map((planKey) => getMembershipConfig(planKey)),
   );
-  // 塌缩为单层"卦师使用权"：只暴露在售（enabled）套餐进入可订阅列表。
-  // 停用的旧档（insight/deep）仍能被 getMembershipConfig 单独读到用于识别存量会员，
-  // 但不再出现在前端套餐选择里。
-  return configs
-    .filter((config) => config.enabled)
-    .sort((a, b) => {
-      return (
-        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(a.id)) -
-        MEMBERSHIP_PLAN_KEYS.indexOf(resolveMembershipPlanKey(b.id))
-      );
-    });
+  // 在售档只有 clarity，无需再按档位排序。
+  return configs.filter((config) => config.enabled);
 }
 
 /**
@@ -630,8 +626,6 @@ export async function updateMembershipConfig(input: {
   name?: string;
   monthlyPriceCoins: number;
   displayPriceCoins?: number;
-  monthlyAllowanceUnits: number;
-  standardPricePerMillionUnitsCoins: number;
 }): Promise<MembershipConfigRow> {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
@@ -639,21 +633,20 @@ export async function updateMembershipConfig(input: {
   const displayPriceCoins = roundCoinsToCents(
     input.displayPriceCoins ?? input.monthlyPriceCoins,
   );
+  // 单层「卦师使用权」不再由 admin 配置免费额度：仅更新价格与名称。
+  // allowance/standard 列不在写入集——INSERT 时用 DB 默认值；clarity 行已存在故走
+  // ON CONFLICT UPDATE，不更新这两列即保留存量值（clarity 恒为 0），与温和档一致。
   const { rows } = await pool.query(
     `INSERT INTO membership_config (
        id, enabled, name, monthly_price_coins, display_price_coins,
-       monthly_allowance_units, standard_price_per_million_units_coins,
        updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
        name = EXCLUDED.name,
        monthly_price_coins = EXCLUDED.monthly_price_coins,
        display_price_coins = EXCLUDED.display_price_coins,
-       monthly_allowance_units = EXCLUDED.monthly_allowance_units,
-       standard_price_per_million_units_coins =
-         EXCLUDED.standard_price_per_million_units_coins,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -662,8 +655,6 @@ export async function updateMembershipConfig(input: {
       input.name?.trim() || resolveMembershipPlanName(planKey),
       monthlyPriceCoins,
       Math.max(monthlyPriceCoins, displayPriceCoins),
-      Math.max(0, roundAllowanceUnits(input.monthlyAllowanceUnits)),
-      roundCoinsToCents(input.standardPricePerMillionUnitsCoins),
     ],
   );
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
@@ -741,7 +732,7 @@ async function getEffectiveMembershipEntitlementsUsing(input: {
   const configs = new Map(
     (
       await Promise.all(
-        MEMBERSHIP_PLAN_KEYS.map((planKey) =>
+        ACTIVE_MEMBERSHIP_PLAN_KEYS.map((planKey) =>
           getMembershipConfigUsing({ query: input.query, planKey }),
         ),
       )
@@ -832,6 +823,14 @@ async function resolveEffectiveMembershipUsing(input: {
   };
 }
 
+/**
+ * 高档权益插队时，把被覆盖的低档会员时长顺延到末尾。
+ *
+ * @deprecated 单层化后只有 clarity 一档在售（rank=1），targetRank 恒为 1，
+ *   循环内 `rank >= targetRank` 恒成立 → 直接 continue，UPDATE 永不执行（死分支）。
+ *   保留以兼容存量未迁移的多档行（理论上 0054 已归一），并保持订阅路径调用点不变。
+ *   若未来确认无存量多档需求，可连同调用点一并物理删除。
+ */
 async function extendLowerTierMembershipsForOverlayUsing(
   client: pg.PoolClient,
   input: {
@@ -878,8 +877,25 @@ async function ensureMembershipAllowanceForUserUsing(
     config: MembershipConfigRow;
   },
 ): Promise<MembershipAllowanceRow> {
-  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const period = resolveMembershipAllowancePeriod(input.membership);
+  // 单层"卦师使用权"额度恒为 0：跳过 INSERT，返回内存零额度行，
+  // 停掉每次结算写一行 allowance_units=0 的空转记录。consume 拿到后
+  // remainingUnits=0 → consumedUnits=0（提前返回），与写库行为等价。
+  if (input.config.monthly_allowance_units <= 0) {
+    const nowIso = new Date().toISOString();
+    return {
+      id: '',
+      user_id: input.membership.user_id,
+      plan_key: input.membership.plan_key,
+      period_start: period.start,
+      period_end: period.end,
+      allowance_units: 0,
+      used_units: 0,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+  }
+  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { rows } = await client.query(
     `INSERT INTO membership_allowances (
        id, user_id, plan_key, period_start, period_end,

@@ -199,8 +199,6 @@ export interface AdminUser {
   membership: MembershipStatusDto;
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;
@@ -301,8 +299,6 @@ export interface GlobalStats {
   total_users: number;
   model_selection_distribution: { source: string; count: number }[];
   active_memberships: number;
-  /** @deprecated 使用 active_memberships。 */
-  active_subscriptions: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
   pending_recharge_orders: number;
@@ -633,8 +629,6 @@ export interface AdminRewardConfig {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   };
   membership_plans: Array<{
@@ -643,8 +637,6 @@ export interface AdminRewardConfig {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   }>;
   free_professional_ai: {
@@ -971,8 +963,6 @@ export const admin = {
     membership: {
       enabled: boolean;
       monthly_price_coins: number;
-      monthly_allowance_units: number;
-      standard_price_per_million_units_coins: number;
     };
     membership_plans?: Array<{
       plan_key: string;
@@ -980,8 +970,6 @@ export const admin = {
       enabled: boolean;
       monthly_price_coins: number;
       display_price_coins: number;
-      monthly_allowance_units: number;
-      standard_price_per_million_units_coins: number;
     }>;
     free_professional_ai?: {
       daily_turn_limit: number;

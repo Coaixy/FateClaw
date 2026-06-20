@@ -79,8 +79,6 @@ export interface WalletTransactionDto {
 export interface BillingStatusDto {
   monthly_tokens_used: number;
   monthly_charged_coins: number;
-  /** @deprecated 使用 monthly_charged_coins。兼容期内两者值保持一致。 */
-  estimated_monthly_total_coins: number;
   purchased_coins: number;
   bonus_coins: number;
   reserved_coins: number;
@@ -107,15 +105,6 @@ export interface MembershipStatusDto {
   display_price_coins: number;
   current_period_start: string | null;
   current_period_end: string | null;
-  allowance_reset_at: string | null;
-  allowance_used_ratio: number;
-  allowance_status:
-    | 'inactive'
-    | 'plenty'
-    | 'normal'
-    | 'tight'
-    | 'almost_used'
-    | 'used_up';
 }
 
 export interface MembershipPlanDto {

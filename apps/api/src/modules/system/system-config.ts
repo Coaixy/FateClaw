@@ -610,6 +610,9 @@ async function resolveCustomRuntime(
     ),
   });
   const modelBilling = await getModelBillingConfig();
+  // 注意：BYOK（source==='custom'）在 plans.ts 结算时被短路、直接返回 0 费用，
+  // 故此平台单价虽写入 runtime 快照却永不参与扣费（配置存在但不生效）。
+  // 保留字段仅为未来对 BYOK 抽取平台手续费的预留，admin 仍可配置但当前无实际效果。
   const platformPriceCoins =
     modelBilling.custom_model_platform_price_per_million_coins;
   return {

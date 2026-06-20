@@ -374,8 +374,6 @@ describe('admin reward config', () => {
         enabled: true,
         monthly_price_coins: 30,
         display_price_coins: 30,
-        monthly_allowance_units: 3500000,
-        standard_price_per_million_units_coins: 10,
         updated_at: '2026-05-30T00:00:00.000Z',
       },
       membership_plans: [
@@ -385,8 +383,6 @@ describe('admin reward config', () => {
           enabled: true,
           monthly_price_coins: 30,
           display_price_coins: 30,
-          monthly_allowance_units: 3500000,
-          standard_price_per_million_units_coins: 10,
           updated_at: '2026-05-30T00:00:00.000Z',
         },
         {
@@ -395,8 +391,6 @@ describe('admin reward config', () => {
           enabled: true,
           monthly_price_coins: 100,
           display_price_coins: 100,
-          monthly_allowance_units: 13000000,
-          standard_price_per_million_units_coins: 10,
           updated_at: '2026-05-30T00:00:00.000Z',
         },
       ],
@@ -432,8 +426,6 @@ describe('admin reward config', () => {
         membership: {
           enabled: true,
           monthlyPriceCoins: 30,
-          monthlyAllowanceUnits: 5000000,
-          standardPricePerMillionUnitsCoins: 12,
         },
         freeProfessionalAi: {
           dailyTurnLimit: 5,
@@ -451,8 +443,6 @@ describe('admin reward config', () => {
         enabled: true,
         monthly_price_coins: 30,
         display_price_coins: 30,
-        monthly_allowance_units: 5000000,
-        standard_price_per_million_units_coins: 12,
         updated_at: '2026-05-30T01:00:00.000Z',
       },
       membership_plans: [
@@ -462,8 +452,6 @@ describe('admin reward config', () => {
           enabled: true,
           monthly_price_coins: 30,
           display_price_coins: 30,
-          monthly_allowance_units: 5000000,
-          standard_price_per_million_units_coins: 12,
           updated_at: '2026-05-30T01:00:00.000Z',
         },
         {
@@ -472,8 +460,6 @@ describe('admin reward config', () => {
           enabled: true,
           monthly_price_coins: 100,
           display_price_coins: 100,
-          monthly_allowance_units: 13000000,
-          standard_price_per_million_units_coins: 10,
           updated_at: '2026-05-30T00:00:00.000Z',
         },
       ],
@@ -493,8 +479,6 @@ describe('admin reward config', () => {
       enabled: true,
       monthlyPriceCoins: 30,
       displayPriceCoins: undefined,
-      monthlyAllowanceUnits: 5000000,
-      standardPricePerMillionUnitsCoins: 12,
     });
     expect(mockUpdateFreeProfessionalAiQuotaConfig).toHaveBeenCalledWith({
       dailyProfessionalTurnLimit: 5,
