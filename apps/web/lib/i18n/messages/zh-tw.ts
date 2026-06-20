@@ -523,6 +523,16 @@ export const zhTWMessages = {
       sessionCount: '{count} 次解讀',
       lastSession: '最近 {time}',
       neverConsulted: '尚未解讀',
+      startReading: '發起排盤',
+      viewHistory: '查看歷史',
+    },
+    detail: {
+      back: '返回客戶列表',
+      loadFailed: '載入失敗',
+      notFound: '客戶不存在',
+      sessionsTitle: '斷卦歷史',
+      empty: '該客戶還沒有斷卦記錄',
+      archivedBadge: '已歸檔',
     },
     toast: {
       created: '客戶檔案已建立',

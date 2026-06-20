@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Loader2, Plus, UserCheck, Users, X } from 'lucide-react';
 
 import { ClientProfileForm } from '@/components/clients/client-profile-form';
@@ -34,14 +34,17 @@ function buildBirthSummary(profile: ClientProfile): string {
  *
  * @param props.selectedClientId 当前选中的客户 id；为空表示未关联客户。
  * @param props.onSelect 选中（或清除）客户时的回调，传 null 表示取消关联。
+ * @param props.autoSelectClientId 外部带入需自动选中的客户 id；列表加载到匹配档案后自动选中一次。
  * @returns 客户选择器与可选的建档抽屉。
  */
 export function ClientProfileSelector({
   selectedClientId,
   onSelect,
+  autoSelectClientId,
 }: {
   selectedClientId: string | null;
   onSelect: (profile: ClientProfile | null) => void;
+  autoSelectClientId?: string | null;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -57,6 +60,23 @@ export function ClientProfileSelector({
   useEffect(() => {
     void loadProfiles().catch(() => {});
   }, [loadProfiles]);
+
+  // 从外部（如客户卡片"发起排盘"）带入的客户：列表加载到匹配档案后自动选中一次，触发生辰预填。
+  const autoSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoSelectClientId || autoSelectedRef.current === autoSelectClientId) {
+      return;
+    }
+    if (selectedClientId === autoSelectClientId) {
+      autoSelectedRef.current = autoSelectClientId;
+      return;
+    }
+    const match = profiles.find((profile) => profile.id === autoSelectClientId);
+    if (match) {
+      autoSelectedRef.current = autoSelectClientId;
+      onSelect(match);
+    }
+  }, [autoSelectClientId, profiles, selectedClientId, onSelect]);
 
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedClientId) ?? null;

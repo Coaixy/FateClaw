@@ -201,6 +201,10 @@ function AiChatWorkspaceContent() {
     string | null
   >(null);
   const [lockPaipanSkill, setLockPaipanSkill] = useState(false);
+  // 从客户卡片"发起排盘"带入的客户 id，开排盘时自动预选并预填生辰。
+  const [preselectedClientId, setPreselectedClientId] = useState<string | null>(
+    null,
+  );
   const [pastedBoardDraft, setPastedBoardDraft] = useState('');
   const [pastedBoardSheetOpen, setPastedBoardSheetOpen] = useState(false);
   const [pastedBoardDraftSource, setPastedBoardDraftSource] =
@@ -722,7 +726,31 @@ function AiChatWorkspaceContent() {
     setPaipanSheetMode(null);
     setPreselectedPaipanSkill(null);
     setLockPaipanSkill(false);
+    setPreselectedClientId(null);
   }, []);
+
+  // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
+  const clientParamHandledRef = useRef(false);
+  useEffect(() => {
+    if (clientParamHandledRef.current || authLoading) {
+      return;
+    }
+    const clientId = searchParams.get('client');
+    if (!clientId) {
+      return;
+    }
+    clientParamHandledRef.current = true;
+    setPreselectedClientId(clientId);
+    setPreselectedPaipanSkill('bazi-paipan');
+    setLockPaipanSkill(false);
+    setPaipanSheetMode('pre-chat');
+    // 清掉 URL 上的 client 参数，避免刷新或重渲染重复触发。
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('client');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    }
+  }, [authLoading, searchParams]);
 
   const handleOpenComposerPastedBoard = useCallback(() => {
     if (authLoading) {
@@ -947,6 +975,7 @@ function AiChatWorkspaceContent() {
         catalogLoading={paipanCatalogLoading}
         sessionId={selectedSession || undefined}
         initialSkill={preselectedPaipanSkill}
+        initialClientId={preselectedClientId}
         lockSkill={lockPaipanSkill}
         canCommit={
           chatAvailable &&

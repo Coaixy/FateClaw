@@ -523,6 +523,16 @@ export const zhCNMessages = {
       sessionCount: '{count} 次解读',
       lastSession: '最近 {time}',
       neverConsulted: '尚未解读',
+      startReading: '发起排盘',
+      viewHistory: '查看历史',
+    },
+    detail: {
+      back: '返回客户列表',
+      loadFailed: '加载失败',
+      notFound: '客户不存在',
+      sessionsTitle: '断卦历史',
+      empty: '该客户还没有断卦记录',
+      archivedBadge: '已归档',
     },
     toast: {
       created: '客户档案已创建',

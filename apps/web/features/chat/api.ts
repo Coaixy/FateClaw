@@ -181,6 +181,11 @@ export const chatSessionsApi = {
       requestJson<ChatSession[]>('/api/chat-sessions'),
     ),
   archived: () => requestJson<ChatSession[]>('/api/chat-sessions/archived'),
+  /** 某客户名下的全部会话（活跃 + 已归档），客户档案历史视图用。 */
+  byClient: (clientId: string) =>
+    requestJson<ChatSession[]>(
+      `/api/chat-sessions/by-client/${encodeURIComponent(clientId)}`,
+    ),
   create: (title?: string) =>
     requestJson<ChatSession>('/api/chat-sessions', {
       method: 'POST',

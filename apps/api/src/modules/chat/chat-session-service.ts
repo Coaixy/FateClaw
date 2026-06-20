@@ -23,6 +23,7 @@ import {
   getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
+  getChatSessionsByClientId,
   getChatSessionsByUserId,
   getConversationLogByRequestId,
   claimProfessionalAiTurn,
@@ -484,6 +485,21 @@ export async function listArchivedChatSessionsForOwnedUser(
   userId: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
   const sessions = await getArchivedChatSessionsByUserId(userId);
+  return ok(sessions.map(toChatSessionDto));
+}
+
+/**
+ * 列出某客户名下的全部会话（活跃 + 已归档），用于客户档案历史视图。
+ *
+ * @param userId 会话归属用户 ID（owner 隔离）。
+ * @param clientId 客户档案 ID。
+ * @returns 按更新时间倒序的会话 DTO 列表；归档会话 deleted_at 非空。
+ */
+export async function listChatSessionsByClientForOwnedUser(
+  userId: string,
+  clientId: string,
+): Promise<ServiceResult<ChatSessionDto[]>> {
+  const sessions = await getChatSessionsByClientId(userId, clientId);
   return ok(sessions.map(toChatSessionDto));
 }
 

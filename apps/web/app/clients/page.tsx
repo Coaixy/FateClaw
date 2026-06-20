@@ -1,16 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  History,
   Loader2,
   MapPin,
   MessageSquare,
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -70,6 +73,7 @@ function matchesSearch(profile: ClientProfile, query: string): boolean {
 }
 
 export default function ClientsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
   const { confirm: confirmDialog } = useConfirm();
@@ -256,6 +260,16 @@ export default function ClientsPage() {
                           setFormState({ mode: 'edit', profile })
                         }
                         onDelete={() => void handleDelete(profile)}
+                        onStartReading={() =>
+                          router.push(
+                            `/ai-chat?client=${encodeURIComponent(profile.id)}`,
+                          )
+                        }
+                        onViewHistory={() =>
+                          router.push(
+                            `/clients/detail?id=${encodeURIComponent(profile.id)}`,
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -330,6 +344,8 @@ function ClientCard({
   t,
   onEdit,
   onDelete,
+  onStartReading,
+  onViewHistory,
 }: {
   profile: ClientProfile;
   deleting: boolean;
@@ -341,6 +357,8 @@ function ClientCard({
   t: (key: string, params?: Record<string, string | number>) => string;
   onEdit: () => void;
   onDelete: () => void;
+  onStartReading: () => void;
+  onViewHistory: () => void;
 }) {
   const genderLabel =
     profile.gender === '男'
@@ -459,6 +477,26 @@ function ClientCard({
             )}
           </button>
         </div>
+      </div>
+
+      {/* 操作:发起排盘(带客户进排盘) / 查看历史(该客户全部会话) */}
+      <div className="mt-3 flex items-center gap-2 border-t border-hairline/50 pt-3">
+        <button
+          type="button"
+          onClick={onStartReading}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/8 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/45 hover:bg-primary/12"
+        >
+          <Sparkles size={13} strokeWidth={1.8} />
+          {t('clients.card.startReading')}
+        </button>
+        <button
+          type="button"
+          onClick={onViewHistory}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink"
+        >
+          <History size={13} strokeWidth={1.8} />
+          {t('clients.card.viewHistory')}
+        </button>
       </div>
     </div>
   );

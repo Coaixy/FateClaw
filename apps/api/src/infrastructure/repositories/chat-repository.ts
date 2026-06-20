@@ -265,6 +265,29 @@ export async function getArchivedChatSessionsByUserId(
   return rows as ChatSession[];
 }
 
+/**
+ * 读取某客户名下的全部会话（含活跃与已归档），用于客户档案历史视图。
+ *
+ * @param userId 会话归属用户 ID（owner 隔离）。
+ * @param clientId 客户档案 ID。
+ * @param limit 返回数量上限。
+ * @returns 按更新时间倒序的会话列表；已归档会话的 deleted_at 非空。
+ */
+export async function getChatSessionsByClientId(
+  userId: string,
+  clientId: string,
+  limit = 200,
+): Promise<ChatSession[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM chat_sessions
+     WHERE user_id = $1 AND client_id = $2
+     ORDER BY updated_at DESC
+     LIMIT $3`,
+    [userId, clientId, Math.min(Math.max(limit, 1), 500)],
+  );
+  return rows as ChatSession[];
+}
+
 export async function getChatSession(
   id: string,
 ): Promise<ChatSession | undefined> {

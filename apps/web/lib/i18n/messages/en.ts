@@ -543,6 +543,16 @@ export const enMessages = {
       sessionCount: '{count} readings',
       lastSession: 'Last {time}',
       neverConsulted: 'No readings yet',
+      startReading: 'Start reading',
+      viewHistory: 'View history',
+    },
+    detail: {
+      back: 'Back to clients',
+      loadFailed: 'Failed to load',
+      notFound: 'Client not found',
+      sessionsTitle: 'Reading history',
+      empty: 'No readings for this client yet',
+      archivedBadge: 'Archived',
     },
     toast: {
       created: 'Client profile created',
