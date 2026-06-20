@@ -882,8 +882,25 @@ async function ensureMembershipAllowanceForUserUsing(
     config: MembershipConfigRow;
   },
 ): Promise<MembershipAllowanceRow> {
-  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const period = resolveMembershipAllowancePeriod(input.membership);
+  // 单层"卦师使用权"额度恒为 0：跳过 INSERT，返回内存零额度行，
+  // 停掉每次结算写一行 allowance_units=0 的空转记录。consume 拿到后
+  // remainingUnits=0 → consumedUnits=0（提前返回），与写库行为等价。
+  if (input.config.monthly_allowance_units <= 0) {
+    const nowIso = new Date().toISOString();
+    return {
+      id: '',
+      user_id: input.membership.user_id,
+      plan_key: input.membership.plan_key,
+      period_start: period.start,
+      period_end: period.end,
+      allowance_units: 0,
+      used_units: 0,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+  }
+  const allowanceId = `mta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { rows } = await client.query(
     `INSERT INTO membership_allowances (
        id, user_id, plan_key, period_start, period_end,

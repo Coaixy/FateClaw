@@ -66,9 +66,6 @@ export function toMembershipStatusDto(
     display_price_coins: membership.displayPriceCoins,
     current_period_start: membership.currentPeriodStart,
     current_period_end: membership.currentPeriodEnd,
-    allowance_reset_at: membership.allowanceResetAt,
-    allowance_used_ratio: membership.allowanceUsedRatio,
-    allowance_status: membership.allowanceStatus,
   };
 }
 

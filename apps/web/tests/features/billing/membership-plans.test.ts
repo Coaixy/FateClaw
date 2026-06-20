@@ -18,9 +18,6 @@ const baseMembership = {
   display_price_coins: 30,
   current_period_start: '2026-06-01T00:00:00.000Z',
   current_period_end: '2026-07-01T00:00:00.000Z',
-  allowance_reset_at: '2026-07-01T00:00:00.000Z',
-  allowance_used_ratio: 0,
-  allowance_status: 'plenty' as const,
 };
 
 describe('membership plan helpers', () => {

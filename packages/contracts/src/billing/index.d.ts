@@ -105,15 +105,6 @@ export interface MembershipStatusDto {
   display_price_coins: number;
   current_period_start: string | null;
   current_period_end: string | null;
-  allowance_reset_at: string | null;
-  allowance_used_ratio: number;
-  allowance_status:
-    | 'inactive'
-    | 'plenty'
-    | 'normal'
-    | 'tight'
-    | 'almost_used'
-    | 'used_up';
 }
 
 export interface MembershipPlanDto {

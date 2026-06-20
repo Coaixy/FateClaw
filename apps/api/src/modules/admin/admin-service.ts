@@ -1173,9 +1173,6 @@ export async function listAdminUsersWithStats(
               displayPriceCoins: 0,
               currentPeriodStart: null,
               currentPeriodEnd: null,
-              allowanceResetAt: null,
-              allowanceUsedRatio: 0,
-              allowanceStatus: 'inactive',
             } satisfies Awaited<
               ReturnType<typeof getMembershipBillingSummary>
             >),

@@ -40,7 +40,6 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
-  getMembershipBillingSummary,
   reserveBillingForRequest,
   settleBillingReservation,
   settleBillingReservationDetailed,
@@ -240,63 +239,5 @@ describe('metered billing plans', () => {
     // BYOK（自带 key）走早返回，既不查待结算记录，也不实际扣费。
     expect(mockGetBillingRequestReservationByRequestId).not.toHaveBeenCalled();
     expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
-  });
-
-  it('reports personal allowance reset instead of membership expiration', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
-
-    mockGetMembershipOverview.mockResolvedValue({
-      config: {
-        enabled: true,
-        monthly_price_coins: 30,
-        monthly_allowance_units: 3000000,
-      },
-      membership: {
-        plan_key: 'fateclaw_insight',
-        current_period_start: '2026-06-30T00:00:00.000Z',
-        current_period_end: '2026-07-30T00:00:00.000Z',
-        created_at: '2026-05-30T00:00:00.000Z',
-      },
-      allowance: {
-        period_end: '2026-06-30T00:00:00.000Z',
-        allowance_units: 3000000,
-        used_units: 1500000,
-      },
-      active: true,
-    });
-
-    await expect(getMembershipBillingSummary('user-1')).resolves.toMatchObject({
-      currentPeriodEnd: '2026-07-30T00:00:00.000Z',
-      allowanceResetAt: '2026-06-30T00:00:00.000Z',
-      allowanceUsedRatio: 0.5,
-    });
-  });
-
-  it('falls back to next personal reset when current allowance row has not been created yet', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
-
-    mockGetMembershipOverview.mockResolvedValue({
-      config: {
-        enabled: true,
-        monthly_price_coins: 30,
-        monthly_allowance_units: 3000000,
-      },
-      membership: {
-        plan_key: 'fateclaw_insight',
-        current_period_start: '2026-06-30T00:00:00.000Z',
-        current_period_end: '2026-07-30T00:00:00.000Z',
-        created_at: '2026-05-30T00:00:00.000Z',
-      },
-      allowance: null,
-      active: true,
-    });
-
-    await expect(getMembershipBillingSummary('user-1')).resolves.toMatchObject({
-      currentPeriodEnd: '2026-07-30T00:00:00.000Z',
-      allowanceResetAt: '2026-06-30T00:00:00.000Z',
-      allowanceUsedRatio: 0,
-    });
   });
 });
