@@ -32,17 +32,6 @@ export interface TextSkillBundleFileDto {
   content: string;
 }
 
-export interface CreateUserSkillRequestDto {
-  skill_name: string;
-  dir_name?: string;
-  files: TextSkillBundleFileDto[];
-}
-
-export interface UpdateUserSkillRequestDto {
-  skill_name?: string;
-  files?: TextSkillBundleFileDto[];
-}
-
 export interface UserCustomSkillDto {
   id: string;
   user_id: string;
@@ -122,16 +111,6 @@ export interface AdminSkillCommentDto {
 /** 管理后台 Skill 评论列表。 */
 export interface AdminSkillCommentsResponseDto {
   items: AdminSkillCommentDto[];
-}
-
-/** 管理后台更新 Skill 评论审核状态。 */
-export interface AdminSkillCommentReviewRequestDto {
-  status: Exclude<AdminSkillCommentStatusDto, 'pending'>;
-}
-
-/** 管理后台更新 Skill 评论置顶状态。 */
-export interface AdminSkillCommentPinRequestDto {
-  pinned: boolean;
 }
 
 export interface SkillShareResponseDto {

@@ -9,7 +9,6 @@ import {
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
 import type {
-  EffectiveUserSkill,
   SkillAccessInvite,
   SkillAccessInviteTargetType,
   SkillBundle,
@@ -88,14 +87,6 @@ export interface RedeemSkillAccessInviteResult {
   subscriptionIds: string[];
 }
 
-/** 返回所有后台全局开启的系统排盘名称列表 */
-export async function getGloballyEnabledSkillNames(): Promise<string[]> {
-  const { rows } = await getDbPool().query(
-    'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true ORDER BY skill_name',
-  );
-  return (rows as { skill_name: string }[]).map((r) => r.skill_name);
-}
-
 /** 获取所有系统排盘的全局配置。 */
 export async function getAllSkillGlobalConfigs(): Promise<SkillGlobalConfig[]> {
   const { rows } = await getDbPool().query(
@@ -160,39 +151,6 @@ export async function getResolvedEnabledOfficialSkillNames(
      ORDER BY skill_name`,
   );
   return (rows as { skill_name: string }[]).map((row) => row.skill_name);
-}
-
-/**
- * 获取用户的有效 skill 列表（自有 + 订阅），用于 IPC 同步。
- */
-export async function getEffectiveUserSkills(
-  userId: string,
-): Promise<EffectiveUserSkill[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'self' as source
-     FROM user_custom_skills s
-     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
-     UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'subscribed' as source
-     FROM user_skill_subscriptions sub
-     JOIN user_custom_skills s ON s.id = sub.skill_id
-     WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
-       AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL
-       AND (
-         s.visibility IN ('link_shared', 'shared')
-         OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
-       )
-       AND s.install_status = 'installed'
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
-    [userId],
-  );
-  return rows as EffectiveUserSkill[];
 }
 
 export interface MarketSkillListRow {
@@ -1485,19 +1443,6 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
   );
 }
 
-/** 获取订阅某个 skill 的所有用户 ID */
-export async function getSubscriberIds(skillId: string): Promise<string[]> {
-  const { rows } = await pool.query(
-    `SELECT subscriber_id
-     FROM user_skill_subscriptions
-     WHERE skill_id = $1
-       AND enabled = true
-       AND status = 'active'
-       AND (expires_at IS NULL OR expires_at > NOW())`,
-    [skillId],
-  );
-  return (rows as { subscriber_id: string }[]).map((r) => r.subscriber_id);
-}
 
 // =====================
 // --- Skill Bundles ---

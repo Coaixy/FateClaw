@@ -14,7 +14,6 @@ import {
   getUserByIdUsing,
   getUserByOAuthIdentityUsing,
   listUsersPageForAdmin,
-  promoteUserToCreator,
   updateUserPasswordHash,
   upsertOAuthIdentityUsing,
 } from '../../../src/infrastructure/repositories/users-repository.js';
@@ -167,18 +166,6 @@ describe('users repository', () => {
       'https://example.com/avatar.png',
       JSON.stringify({ sub: 'google-sub-1' }),
     ]);
-  });
-
-  it('promotes consumers to both role while preserving admin role', async () => {
-    const { calls } = createMockPool([
-      { match: 'RETURNING role', rows: [{ role: 'both' }] },
-    ]);
-
-    await expect(promoteUserToCreator('user-1')).resolves.toBe('both');
-
-    expect(calls[0]?.sql).toContain("WHEN 'consumer' THEN 'both'");
-    expect(calls[0]?.sql).toContain("WHEN 'admin' THEN 'admin'");
-    expect(calls[0]?.params).toEqual(['user-1']);
   });
 
   it('uses index-friendly prefix search for admin ASCII user queries', async () => {

@@ -99,7 +99,6 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   touchChatSession: mockTouchChatSession,
   getChatSessionsByUserId: vi.fn(),
   createChatSession: vi.fn(),
-  deleteChatSession: vi.fn(),
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
   updateChatSessionTitle: mockUpdateChatSessionTitle,
 }));

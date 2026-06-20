@@ -21,7 +21,6 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
-  deleteChatSession,
   getArchivedChatSessionsByUserId,
   getChatSessionPiSessionArchive,
   getRecentMessages,
@@ -158,21 +157,6 @@ describe('chat repository', () => {
       'session-1',
       '2026-05-27T01:00:00.000Z',
       '2026-05-27T00:00:00.000Z',
-    ]);
-  });
-
-  it('soft deletes a chat session without scanning all messages', async () => {
-    const { calls } = createMockPool();
-
-    await deleteChatSession('session-1');
-
-    expect(calls).toEqual([
-      {
-        sql: `UPDATE chat_sessions
-     SET deleted_at = NOW(), share_token = NULL
-     WHERE id = $1`,
-        params: ['session-1'],
-      },
     ]);
   });
 

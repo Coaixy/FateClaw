@@ -29,7 +29,6 @@ import {
   createSkillAccessInvite,
   createUserCustomSkill,
   getBundleByToken,
-  getEffectiveUserSkills,
   getSkillAccessInvitePreviewByToken,
   getSubscribedSkills,
   redeemSkillAccessInvite,
@@ -251,21 +250,6 @@ describe('skills repository official skill settings', () => {
     expect(calls[0]?.sql).toContain('globally_enabled = true');
     expect(calls[0]?.sql).not.toContain('default_enabled');
     expect(calls[0]?.params).toBeUndefined();
-  });
-
-  it('reads effective custom skills from self and subscription sources', async () => {
-    const { calls } = createMockPool([{ id: 'skill-1' }]);
-
-    await expect(getEffectiveUserSkills('user-1')).resolves.toEqual([
-      { id: 'skill-1' },
-    ]);
-
-    expect(calls[0]?.sql).toContain("'self' as source");
-    expect(calls[0]?.sql).toContain("'subscribed' as source");
-    expect(calls[0]?.sql).toContain(
-      "sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')",
-    );
-    expect(calls[0]?.params).toEqual(['user-1']);
   });
 
   it('includes private invite subscriptions in subscribed skill reads', async () => {

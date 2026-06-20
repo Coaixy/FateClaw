@@ -15,7 +15,6 @@ import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
   ACTIVE_MEMBERSHIP_PLAN_KEYS,
   type MembershipPlanKey,
-  hasPaidMembershipEntitlement,
   normalizeMembershipPlanKey,
   resolveMembershipConfigId,
   resolveMembershipPlanKey,
@@ -372,48 +371,6 @@ export async function getMembershipPlanConfigs(): Promise<
   );
   // 在售档只有 clarity，无需再按档位排序。
   return configs.filter((config) => config.enabled);
-}
-
-/**
- * 更新会员价格和每周期标准额度。
- */
-export async function updateMembershipConfig(input: {
-  planKey?: string;
-  enabled: boolean;
-  name?: string;
-  monthlyPriceCoins: number;
-  displayPriceCoins?: number;
-}): Promise<MembershipConfigRow> {
-  const planKey = normalizeMembershipPlanKey(input.planKey);
-  const configId = resolveMembershipConfigId(planKey);
-  const monthlyPriceCoins = roundCoinsToCents(input.monthlyPriceCoins);
-  const displayPriceCoins = roundCoinsToCents(
-    input.displayPriceCoins ?? input.monthlyPriceCoins,
-  );
-  // 单层「卦师使用权」仅更新价格与名称。
-  // allowance/standard 两列已被迁移 0059 DROP、不复存在，故不在写入集。
-  const { rows } = await pool.query(
-    `INSERT INTO membership_config (
-       id, enabled, name, monthly_price_coins, display_price_coins,
-       updated_at
-     )
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     ON CONFLICT (id) DO UPDATE SET
-       enabled = EXCLUDED.enabled,
-       name = EXCLUDED.name,
-       monthly_price_coins = EXCLUDED.monthly_price_coins,
-       display_price_coins = EXCLUDED.display_price_coins,
-       updated_at = NOW()
-     RETURNING *`,
-    [
-      configId,
-      input.enabled,
-      input.name?.trim() || resolveMembershipPlanName(planKey),
-      monthlyPriceCoins,
-      Math.max(monthlyPriceCoins, displayPriceCoins),
-    ],
-  );
-  return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
 }
 
 async function getActiveMembershipsForUserUsing(
@@ -898,14 +855,6 @@ export async function cancelUserMembershipsForAdmin(
   } finally {
     client.release();
   }
-}
-
-/**
- * 判断用户是否处于有效会员周期。
- */
-export async function hasActiveMembership(userId: string): Promise<boolean> {
-  const overview = await getMembershipOverview(userId);
-  return hasPaidMembershipEntitlement(overview);
 }
 
 export async function insertWalletTransaction(
@@ -1878,98 +1827,6 @@ export async function grantBonusBalance(input: {
   } finally {
     client.release();
   }
-}
-
-/**
- * 后台过期扫描入口：扫描已过期的活跃批次，批次级过期处理。
- * 每个批次在独立事务内完成：标记 expired → 扣 users.bonus_coins → 写流水。
- * FOR UPDATE SKIP LOCKED 保证多实例并发运行时不会重复处理同一批次。
- */
-export async function expireBonusBalance(
-  beforeIso: string,
-  limit = 200,
-): Promise<{ expired: number; totalCoinsExpired: number }> {
-  // 阶段 1：无锁快扫出候选批次（避免长事务）
-  const { rows: candidates } = await pool.query(
-    `SELECT id FROM balance_grants
-     WHERE status = 'active'
-       AND expires_at IS NOT NULL
-       AND expires_at < $1
-     ORDER BY expires_at ASC
-     LIMIT $2`,
-    [beforeIso, limit],
-  );
-
-  let expired = 0;
-  let totalCoinsExpired = 0;
-
-  for (const { id: grantId } of candidates as { id: string }[]) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      // SKIP LOCKED：并发实例遇到同一批次会直接跳过
-      const { rows } = await client.query(
-        `SELECT * FROM balance_grants
-         WHERE id = $1
-           AND status = 'active'
-           AND expires_at IS NOT NULL
-           AND expires_at < $2
-         FOR UPDATE SKIP LOCKED`,
-        [grantId, beforeIso],
-      );
-      const batch = rows[0]
-        ? normalizeBalanceGrantRow(rows[0] as BalanceGrantRow)
-        : undefined;
-      if (!batch) {
-        await client.query('COMMIT');
-        continue;
-      }
-
-      const remaining = batch.remaining_coins;
-      await client.query(
-        `UPDATE balance_grants
-         SET status = 'expired',
-             remaining_coins = 0,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [batch.id],
-      );
-
-      if (remaining > 0) {
-        await client.query(
-          `UPDATE users
-           SET bonus_coins = GREATEST(0, bonus_coins - $1)
-           WHERE id = $2`,
-          [remaining, batch.user_id],
-        );
-
-        await insertWalletTransaction(client, {
-          userId: batch.user_id,
-          kind: 'bonus_expire',
-          amountCoins: -remaining,
-          balanceSource: 'bonus',
-          balanceGrantId: batch.id,
-          note: `赠送积分过期（批次 ${batch.id}）`,
-          metadata: {
-            batch_source: batch.source,
-            expires_at: batch.expires_at,
-            original_amount: batch.amount_coins,
-          },
-        });
-      }
-
-      await client.query('COMMIT');
-      expired += 1;
-      totalCoinsExpired += remaining;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.warn({ grantId, err }, '赠送积分过期处理失败');
-    } finally {
-      client.release();
-    }
-  }
-
-  return { expired, totalCoinsExpired };
 }
 
 /**
