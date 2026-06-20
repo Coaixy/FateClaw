@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
-  MEMBERSHIP_DEEP_PLAN_KEY,
-  MEMBERSHIP_INSIGHT_PLAN_KEY,
   hasPaidMembershipEntitlement,
   membershipStatusMeetsPlan,
   resolveMembershipPlanDisplayName,
-  resolveMembershipPlanShortName,
 } from '../../../features/billing/membership-plans';
 
 const baseMembership = {
@@ -21,44 +18,37 @@ const baseMembership = {
 };
 
 describe('membership plan helpers', () => {
-  it('keeps base membership available to all paid tiers', () => {
+  it('keeps base membership available to active clarity members', () => {
     expect(
       hasPaidMembershipEntitlement({
         ...baseMembership,
         plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
       }),
     ).toBe(true);
-    expect(
-      hasPaidMembershipEntitlement({
-        ...baseMembership,
-        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
-        monthly_price_coins: 100,
-        display_price_coins: 100,
-      }),
-    ).toBe(true);
+    expect(hasPaidMembershipEntitlement({ ...baseMembership, active: false })).toBe(
+      false,
+    );
   });
 
-  it('can express Insight tier requirements via rank', () => {
+  it('meets the clarity requirement when active', () => {
     const clarityMembership = {
       ...baseMembership,
       plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
     };
-    const insightMembership = {
-      ...clarityMembership,
-      plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
-      monthly_price_coins: 30,
-      display_price_coins: 30,
-    };
 
     expect(
-      membershipStatusMeetsPlan(clarityMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
-    ).toBe(false);
-    expect(
-      membershipStatusMeetsPlan(insightMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
+      membershipStatusMeetsPlan(clarityMembership, MEMBERSHIP_CLARITY_PLAN_KEY),
     ).toBe(true);
+    expect(
+      membershipStatusMeetsPlan(
+        { ...clarityMembership, active: false },
+        MEMBERSHIP_CLARITY_PLAN_KEY,
+      ),
+    ).toBe(false);
   });
 
-  it('keeps unknown active plan rows at the Clarity baseline', () => {
+  it('normalizes unknown active plan rows to the Clarity baseline', () => {
+    // 旧档历史 plan_key 归一为 clarity，仍满足 clarity 基线。
     const legacyMembership = {
       ...baseMembership,
       plan_key: 'legacy_plan',
@@ -66,32 +56,12 @@ describe('membership plan helpers', () => {
 
     expect(hasPaidMembershipEntitlement(legacyMembership)).toBe(true);
     expect(
-      membershipStatusMeetsPlan(legacyMembership, MEMBERSHIP_INSIGHT_PLAN_KEY),
-    ).toBe(false);
+      membershipStatusMeetsPlan(legacyMembership, MEMBERSHIP_CLARITY_PLAN_KEY),
+    ).toBe(true);
   });
 
-  it('formats known short names by plan key first', () => {
-    expect(
-      resolveMembershipPlanShortName({
-        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
-        name: 'Custom Name',
-      }),
-    ).toBe('Deep');
-    expect(
-      resolveMembershipPlanShortName({
-        plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
-        name: 'FateClaw Insight',
-      }),
-    ).toBe('Insight');
-    expect(
-      resolveMembershipPlanShortName({
-        plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
-        name: 'FateClaw Clarity',
-      }),
-    ).toBe('Clarity');
-  });
-
-  it('formats known display names for the current membership branding', () => {
+  it('formats display names for the current membership branding', () => {
+    // 单层化后展示名恒为 FateClaw Clarity（不再有 insight/deep 分支）。
     expect(
       resolveMembershipPlanDisplayName({
         plan_key: MEMBERSHIP_CLARITY_PLAN_KEY,
@@ -100,15 +70,9 @@ describe('membership plan helpers', () => {
     ).toBe('FateClaw Clarity');
     expect(
       resolveMembershipPlanDisplayName({
-        plan_key: MEMBERSHIP_INSIGHT_PLAN_KEY,
-        name: 'FateClaw Insight',
+        plan_key: 'legacy_plan',
+        name: 'Custom Name',
       }),
-    ).toBe('FateClaw Insight');
-    expect(
-      resolveMembershipPlanDisplayName({
-        plan_key: MEMBERSHIP_DEEP_PLAN_KEY,
-        name: 'FateClaw Deep',
-      }),
-    ).toBe('FateClaw Deep');
+    ).toBe('FateClaw Clarity');
   });
 });

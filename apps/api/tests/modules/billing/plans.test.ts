@@ -233,8 +233,6 @@ describe('metered billing plans', () => {
     expect(result).toEqual({
       actualChargeCoins: 0,
       rawChargeCoins: 0,
-      membershipCoveredCoins: 0,
-      membershipConsumedUnits: 0,
     });
     // BYOK（自带 key）走早返回，既不查待结算记录，也不实际扣费。
     expect(mockGetBillingRequestReservationByRequestId).not.toHaveBeenCalled();

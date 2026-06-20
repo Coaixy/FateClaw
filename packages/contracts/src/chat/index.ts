@@ -23,10 +23,6 @@ export interface MessageMetadataDto {
   actual_charge_coins?: number;
   /** 本轮 AI 回复按模型价格计算的原始积分金额。 */
   raw_charge_coins?: number;
-  /** 本轮 AI 回复被会员免费额度抵扣的积分金额。 */
-  membership_covered_coins?: number;
-  /** 本轮 AI 回复消耗的会员免费额度单位。 */
-  membership_consumed_units?: number;
 }
 
 export interface MessageDto {

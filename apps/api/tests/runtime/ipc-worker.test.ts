@@ -389,10 +389,13 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
   it('releases normal inbox runtime lease when enqueue fails', async () => {
     vi.mocked(getMembershipOverview).mockResolvedValueOnce({
       active: true,
-      membership: { plan_key: 'fateclaw_deep' },
+      membership: { plan_key: 'fateclaw_clarity' },
     } as never);
     mockLpush.mockRejectedValueOnce(new Error('redis down'));
 
+    // 微信 Claw 停用后，autoDeliver 默认 true 的请求会在门禁处被拒；
+    // 只有 autoDeliver:false（不投递微信，如取消/AI Chat 旁路）才会真正走到入队，
+    // 这条用例验证入队失败时本地 agent 租约被释放。
     await expect(
       submitInboxRequest({
         accountId: 'account-1',
@@ -400,6 +403,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
         userMessage: 'hi',
         history: [],
         llmRuntime: effectiveRuntime,
+        autoDeliver: false,
       }),
     ).rejects.toThrow('redis down');
 

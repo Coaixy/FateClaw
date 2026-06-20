@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 
 import type { BillingStatus } from '@/features/billing/api';
-import { normalizeMembershipPlanKey } from '@/features/billing/membership-plans';
 import { formatCoins } from '@/lib/soft-currency';
 
 /**
@@ -38,15 +37,6 @@ export function UsagePanel({
       </div>
     );
   }
-  const activePlan = status.membership.active
-    ? status.membership_plans.find(
-        (plan) =>
-          normalizeMembershipPlanKey(plan.plan_key) ===
-          normalizeMembershipPlanKey(status.membership.plan_key),
-      )
-    : null;
-  const hasAllowance = (activePlan?.monthly_allowance_units ?? 0) > 0;
-
   return (
     <div className="mx-auto w-[min(340px,calc(100vw-1.5rem))]">
       <div className="border-b border-hairline/40 px-4 pb-3 pt-3.5">
@@ -56,9 +46,7 @@ export function UsagePanel({
               积分概览
             </div>
             <div className="mt-1 max-w-[250px] text-[10px] leading-4 text-muted">
-              {hasAllowance
-                ? '会员免费额度优先抵扣，超出后继续使用积分余额'
-                : 'AI Chat 使用积分余额计费，自带 API Key 不计费'}
+              AI Chat 使用积分余额计费，自带 API Key 不计费
             </div>
           </div>
           <button

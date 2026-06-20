@@ -481,6 +481,8 @@ describe('runDatabaseMigrations', () => {
       '0055_allowance_units_nonnegative',
       '0056_referral_reward_clarity_only',
       '0057_disable_wechat_claw_accounts',
+      '0058_normalize_all_plan_keys_to_clarity',
+      '0059_drop_allowance_columns_and_table',
     ]);
 
     await runDatabaseMigrations(client as never);

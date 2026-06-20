@@ -26,6 +26,11 @@ jobs:
         continue-on-error: true
         run: pnpm run format:check
 
+      # @fateclaw/contracts 现为标准 tsc 构建包(产物不进仓),
+      # 下游 typecheck/test 经 package.json exports 解析到 dist,故需先构建。
+      - name: Build contracts
+        run: pnpm run build:contracts
+
       - name: Typecheck
         run: pnpm run typecheck
 

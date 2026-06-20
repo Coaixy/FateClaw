@@ -13,12 +13,7 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "paths": {
-      "@fateclaw/contracts": ["../../packages/contracts/src/index.d.ts"],
-      "@fateclaw/contracts/skills": ["../../packages/contracts/src/skills"],
-      "@fateclaw/contracts/*": ["../../packages/contracts/src/*/index.d.ts"]
-    }
+    "sourceMap": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -209,7 +209,10 @@ pack_backend_runtime() {
   cp apps/agent-runtime/package.json "$app_dir/apps/agent-runtime/package.json"
   cp -R apps/agent-runtime/dist "$app_dir/apps/agent-runtime/dist"
   cp packages/contracts/package.json "$app_dir/packages/contracts/package.json"
-  cp -R packages/contracts/src "$app_dir/packages/contracts/src"
+  # contracts 已改标准 tsc 构建包(P6):exports 指向 dist,运行时(apps/api/dist 编译产物)
+  # 经 import '@fateclaw/contracts/<域>' 解析到 dist/<域>/index.js。故运行包必须携带【dist】
+  # (build:backend 已含 build:contracts、此刻 dist 已生成),不再是 src(TS 源运行时用不到)。
+  cp -R packages/contracts/dist "$app_dir/packages/contracts/dist"
   find "$app_dir/apps/api/dist" "$app_dir/apps/agent-runtime/dist" \
     \( -name '*.test.js' -o -name '*.test.js.map' -o -name '*.test.d.ts' -o -name '*.test.d.ts.map' \) \
     -delete

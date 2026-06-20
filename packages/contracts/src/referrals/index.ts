@@ -12,11 +12,8 @@ export type ReferralRewardStatusDto =
 /** 邀请关系绑定来源。 */
 export type ReferralBindSourceDto = 'register' | 'redeem';
 
-/** 邀请奖励可发放的会员档位。 */
-export type ReferralRewardMembershipPlanKeyDto =
-  | 'fateclaw_clarity'
-  | 'fateclaw_insight'
-  | 'fateclaw_deep';
+/** 邀请奖励可发放的会员档位：单层化后仅卦师使用权(clarity)，与迁移 0056 的 CHECK 对齐。 */
+export type ReferralRewardMembershipPlanKeyDto = 'fateclaw_clarity';
 
 /** 后台可配置的邀请返会员规则。 */
 export interface ReferralConfigDto {

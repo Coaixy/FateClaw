@@ -29,13 +29,11 @@ export type BalanceGrantSource =
 export type BalanceGrantStatus = 'active' | 'exhausted' | 'expired' | 'revoked';
 
 export interface MembershipConfig {
-  id: 'default' | string;
+  id: string;
   enabled: boolean;
   name: string;
   monthly_price_coins: number;
   display_price_coins: number;
-  monthly_allowance_units: number;
-  standard_price_per_million_units_coins: number;
   updated_at: string;
 }
 
@@ -47,18 +45,6 @@ export interface UserMembership {
   status: UserMembershipStatus;
   current_period_start: string;
   current_period_end: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MembershipAllowance {
-  id: string;
-  user_id: string;
-  plan_key: string;
-  period_start: string;
-  period_end: string;
-  allowance_units: number;
-  used_units: number;
   created_at: string;
   updated_at: string;
 }

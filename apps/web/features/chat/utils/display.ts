@@ -114,21 +114,8 @@ export function formatChatCostLabels(
 
   const data = metadata as {
     actual_charge_coins?: unknown;
-    membership_covered_coins?: unknown;
   };
   const labels: string[] = [];
-
-  if (
-    typeof data.membership_covered_coins === 'number' &&
-    Number.isFinite(data.membership_covered_coins) &&
-    data.membership_covered_coins > 0
-  ) {
-    const coins = formatCoins(data.membership_covered_coins, locale);
-    labels.push(
-      t?.('format.membershipCovered', { coins }) ??
-        `会员免费额度抵扣 ${coins}`,
-    );
-  }
 
   if (
     typeof data.actual_charge_coins === 'number' &&

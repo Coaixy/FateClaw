@@ -14,6 +14,8 @@ import { migrateLegacyMembersToClarityMigrations } from './definitions/0054-migr
 import { allowanceUnitsNonnegativeMigrations } from './definitions/0055-allowance-units-nonnegative.js';
 import { referralRewardClarityMigrations } from './definitions/0056-referral-reward-clarity.js';
 import { disableWechatAccountsMigrations } from './definitions/0057-disable-wechat-claw-accounts.js';
+import { normalizeAllPlanKeysToClarityMigrations } from './definitions/0058-normalize-all-plan-keys-to-clarity.js';
+import { dropAllowanceColumnsAndTableMigrations } from './definitions/0059-drop-allowance-columns-and-table.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -36,4 +38,6 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...allowanceUnitsNonnegativeMigrations,
   ...referralRewardClarityMigrations,
   ...disableWechatAccountsMigrations,
+  ...normalizeAllPlanKeysToClarityMigrations,
+  ...dropAllowanceColumnsAndTableMigrations,
 ];

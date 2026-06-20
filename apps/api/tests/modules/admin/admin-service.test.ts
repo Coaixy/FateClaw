@@ -362,6 +362,8 @@ describe('admin reward config', () => {
       updated_at: '2026-05-30T00:00:00.000Z',
     });
 
+    // 单层化后任何历史 config id（insight/deep）都经 resolveMembershipPlanKey 归一为 clarity；
+    // name 仍取 config.name 原值。
     await expect(getAdminRewardConfig()).resolves.toEqual({
       daily_sign_in: {
         enabled: true,
@@ -369,7 +371,7 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T00:00:00.000Z',
       },
       membership: {
-        plan_key: 'fateclaw_insight',
+        plan_key: 'fateclaw_clarity',
         name: 'FateClaw Insight',
         enabled: true,
         monthly_price_coins: 30,
@@ -378,7 +380,7 @@ describe('admin reward config', () => {
       },
       membership_plans: [
         {
-          plan_key: 'fateclaw_insight',
+          plan_key: 'fateclaw_clarity',
           name: 'FateClaw Insight',
           enabled: true,
           monthly_price_coins: 30,
@@ -386,7 +388,7 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T00:00:00.000Z',
         },
         {
-          plan_key: 'fateclaw_deep',
+          plan_key: 'fateclaw_clarity',
           name: 'FateClaw Deep',
           enabled: true,
           monthly_price_coins: 100,
@@ -438,7 +440,7 @@ describe('admin reward config', () => {
         updated_at: '2026-05-30T01:00:00.000Z',
       },
       membership: {
-        plan_key: 'fateclaw_insight',
+        plan_key: 'fateclaw_clarity',
         name: 'FateClaw Insight',
         enabled: true,
         monthly_price_coins: 30,
@@ -447,7 +449,7 @@ describe('admin reward config', () => {
       },
       membership_plans: [
         {
-          plan_key: 'fateclaw_insight',
+          plan_key: 'fateclaw_clarity',
           name: 'FateClaw Insight',
           enabled: true,
           monthly_price_coins: 30,
@@ -455,7 +457,7 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T01:00:00.000Z',
         },
         {
-          plan_key: 'fateclaw_deep',
+          plan_key: 'fateclaw_clarity',
           name: 'FateClaw Deep',
           enabled: true,
           monthly_price_coins: 100,

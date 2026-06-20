@@ -5,8 +5,10 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "declaration": true,
-    "emitDeclarationOnly": true,
-    "outDir": "./dist"
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules"]

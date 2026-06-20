@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { normalizeMembershipPlanKey } from '@/features/billing/membership-plans';
 import { referralsApi, type MyReferralSummary } from '@/features/referrals/api';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -26,14 +25,8 @@ function referralLink(summary: MyReferralSummary): string {
   return new URL(summary.invite_url, window.location.origin).toString();
 }
 
-function referralRewardPlanName(summary: MyReferralSummary): string {
-  // 会员已塌缩为单层「卦师使用权」(clarity);存量 deep/insight 保留可读标签以防旧返利配置。
-  const planKey = normalizeMembershipPlanKey(
-    summary.config.reward_membership_plan_key,
-    'fateclaw_clarity',
-  );
-  if (planKey === 'fateclaw_deep') return 'FateClaw Deep';
-  if (planKey === 'fateclaw_insight') return 'FateClaw Insight';
+function referralRewardPlanName(): string {
+  // 引荐奖励已收敛为单层「卦师使用权」(迁移 0056 把 referral_config CHECK 收窄为仅 clarity)。
   return '卦师使用权';
 }
 
@@ -165,7 +158,7 @@ export function ReferralCenter() {
   };
 
   const link = summary ? referralLink(summary) : '';
-  const rewardPlanName = summary ? referralRewardPlanName(summary) : '';
+  const rewardPlanName = summary ? referralRewardPlanName() : '';
   const countRewardEnabled = summary
     ? summary.config.invite_count_reward_threshold > 0 &&
       summary.config.invite_count_reward_days > 0 &&

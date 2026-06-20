@@ -127,7 +127,6 @@ import type {
   ProfessionalAiDailyUsageRow,
   ProfessionalAiTurnClaimResult,
   ProfessionalAiTurnReleaseResult,
-  MembershipAllowanceRow,
   AdminRechargeOrderListResult,
   AdminRechargeOrderRow,
   AdminWalletTransactionListResult,
@@ -627,7 +626,6 @@ export type {
   GiftCodeRow,
   GiftCodeStatus,
   GiftCodeUsageType,
-  MembershipAllowanceRow,
   MembershipConfigRow,
   MembershipEntitlementRow,
   MembershipOverviewRow,
@@ -724,9 +722,6 @@ export async function deleteUser(userId: string): Promise<void> {
       [userId],
     );
     await client.query('DELETE FROM monthly_billing_state WHERE user_id = $1', [
-      userId,
-    ]);
-    await client.query('DELETE FROM membership_allowances WHERE user_id = $1', [
       userId,
     ]);
     await client.query('DELETE FROM user_memberships WHERE user_id = $1', [

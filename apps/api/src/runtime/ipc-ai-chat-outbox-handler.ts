@@ -182,8 +182,6 @@ function buildFinalMetadata(args: {
       ? {
           actual_charge_coins: billing.actualChargeCoins,
           raw_charge_coins: billing.rawChargeCoins,
-          membership_covered_coins: billing.membershipCoveredCoins,
-          membership_consumed_units: billing.membershipConsumedUnits,
         }
       : {}),
   };
@@ -274,7 +272,6 @@ async function settleAiChatBilling(args: {
       accountId: args.accountId,
       requestId: args.payload.requestId,
       actualChargeCoins: billing.actualChargeCoins,
-      membershipCoveredCoins: billing.membershipCoveredCoins,
     },
     'AI Chat: 已完成模型 Token 扣费结算',
   );
