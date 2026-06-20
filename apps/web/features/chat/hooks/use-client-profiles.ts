@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import {
   clientProfilesApi,
@@ -23,6 +23,13 @@ export function useClientProfiles(
   const [profiles, setProfiles] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // 用 ref 持有最新的 notify，使 loadProfiles 无需把 notify 列入依赖。
+  // 否则调用方若传入内联函数（如 sidebar/归档面板的 `() => {}`），notify 每次渲染都是
+  // 新引用，会让 loadProfiles 引用不稳定；而依赖 loadProfiles 的 useEffect 便会反复执行，
+  // 无限重复请求 /api/client-profiles（曾导致前端被防火墙限流屏蔽）。
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
+
   const loadProfiles = useCallback(async () => {
     setLoading(true);
     try {
@@ -31,12 +38,15 @@ export function useClientProfiles(
       setProfiles(list);
       return list;
     } catch (err) {
-      notify('error', err instanceof Error ? err.message : '加载客户档案失败');
+      notifyRef.current(
+        'error',
+        err instanceof Error ? err.message : '加载客户档案失败',
+      );
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, []);
 
   const create = useCallback(
     async (data: ClientProfileUpsert) => {
