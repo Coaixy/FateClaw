@@ -2,7 +2,6 @@ import pg from 'pg';
 
 import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
-import { settleReferralMembershipRewardUsing } from './referrals-repository.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type {
   BalanceGrantSource,
@@ -745,7 +744,7 @@ export async function subscribeMembershipWithWallet(
     const membership = membershipRows[0] as UserMembershipRow;
 
     // membership_subscription 是历史钱包流水 kind，代表会员购买/续费流水，不是 Skill subscription。
-    const membershipTransactionId = await insertWalletTransaction(client, {
+    await insertWalletTransaction(client, {
       userId,
       kind: 'membership_subscription',
       amountCoins: -priceCoins,
@@ -758,13 +757,6 @@ export async function subscribeMembershipWithWallet(
         bonusDeducted: deduction.bonusDeducted,
         purchasedDeducted: deduction.purchasedDeducted,
       },
-    });
-    await settleReferralMembershipRewardUsing(client, {
-      inviteeId: userId,
-      bonusDeducted: deduction.bonusDeducted,
-      purchasedDeducted: deduction.purchasedDeducted,
-      priceCoins,
-      triggerWalletTransactionId: membershipTransactionId,
     });
 
     await client.query('COMMIT');

@@ -27,7 +27,6 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
-  getAdminReferralConfig,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -44,7 +43,6 @@ import {
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
-  listAdminReferrals,
   listWalletTransactionsForAdmin,
   listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
@@ -59,7 +57,6 @@ import {
   updateOfficialModel,
   updateRuntimeSettings,
   updateAdminRechargePaymentConfig,
-  updateAdminReferralConfig,
   getAdminUserDetail,
   createPublicFinancialLedgerEntry,
   deletePublicFinancialLedgerEntry,
@@ -562,50 +559,6 @@ const RechargePaymentConfigSchema = z
     }
   });
 
-const ReferralConfigSchema = z.object({
-  enabled: z.boolean(),
-  reward_membership_plan_key: z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS).optional(),
-  inviter_reward_days: z
-    .number()
-    .int('奖励天数必须是整数')
-    .min(0, '奖励天数不能小于 0')
-    .max(366, '奖励天数不能超过 366'),
-  monthly_reward_cap_days: z
-    .number()
-    .int('月度封顶天数必须是整数')
-    .min(0, '月度封顶天数不能小于 0')
-    .max(3660, '月度封顶天数不能超过 3660'),
-  reward_first_membership_only: z.boolean().optional(),
-  invite_count_reward_threshold: z
-    .number()
-    .int('累计邀请门槛必须是整数')
-    .min(0, '累计邀请门槛不能小于 0')
-    .max(1_000_000, '累计邀请门槛过大')
-    .optional(),
-  invite_count_reward_days: z
-    .number()
-    .int('累计邀请奖励天数必须是整数')
-    .min(0, '累计邀请奖励天数不能小于 0')
-    .max(366, '累计邀请奖励天数不能超过 366')
-    .optional(),
-  invite_count_reward_max_invites: z
-    .number()
-    .int('累计邀请人数上限必须是整数')
-    .min(0, '累计邀请人数上限不能小于 0')
-    .max(1_000_000, '累计邀请人数上限过大')
-    .optional(),
-});
-
-const AdminReferralsQuerySchema = z.object({
-  inviter_id: z.string().trim().optional(),
-  invitee_id: z.string().trim().optional(),
-  reward_status: z
-    .enum(['pending', 'granted', 'skipped', 'ineligible'])
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
-
 const PublicFinancialLedgerEntrySchema = z.object({
   entry_type: z.enum(['income', 'expense']),
   occurred_at: DateOnlySchema,
@@ -937,51 +890,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return listWalletTransactionsForAdmin({
       userId: parsed.data.user_id,
       kind: parsed.data.kind,
-      limit: parsed.data.limit,
-      offset: parsed.data.offset,
-    });
-  });
-
-  // GET /api/admin/referrals/config — 读取邀请返利配置
-  app.get('/referrals/config', async () => {
-    return getAdminReferralConfig();
-  });
-
-  // PUT /api/admin/referrals/config — 更新邀请返利配置
-  app.put('/referrals/config', async (request, reply) => {
-    const parsed = ReferralConfigSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return updateAdminReferralConfig({
-      enabled: parsed.data.enabled,
-      rewardMembershipPlanKey: parsed.data.reward_membership_plan_key,
-      inviterRewardDays: parsed.data.inviter_reward_days,
-      monthlyRewardCapDays: parsed.data.monthly_reward_cap_days,
-      rewardFirstMembershipOnly:
-        parsed.data.reward_first_membership_only ?? true,
-      inviteCountRewardThreshold:
-        parsed.data.invite_count_reward_threshold ?? 10,
-      inviteCountRewardDays: parsed.data.invite_count_reward_days ?? 7,
-      inviteCountRewardMaxInvites:
-        parsed.data.invite_count_reward_max_invites ?? 50,
-    });
-  });
-
-  // GET /api/admin/referrals — 查询邀请关系
-  app.get('/referrals', async (request, reply) => {
-    const parsed = AdminReferralsQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return listAdminReferrals({
-      inviterId: parsed.data.inviter_id || undefined,
-      inviteeId: parsed.data.invitee_id || undefined,
-      rewardStatus: parsed.data.reward_status,
       limit: parsed.data.limit,
       offset: parsed.data.offset,
     });

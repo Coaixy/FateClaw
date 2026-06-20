@@ -43,7 +43,6 @@ import {
   getMessagesForAdmin,
   getMembershipEntitlements,
   getBalanceGrantsByUserId,
-  getReferralConfig,
   getPiSessionCleanupCursor,
   getUserById,
   getUserByPhone,
@@ -59,7 +58,6 @@ import {
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
-  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   markChatSessionPiSessionArchived,
@@ -74,18 +72,8 @@ import {
   updateUserPasswordHash,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
-  updateReferralConfig,
   updateSimpleWorkflowPreset,
 } from '../../infrastructure/db.js';
-import type {
-  AdminReferralListResult,
-  ReferralRewardStatus,
-} from '../../infrastructure/db.js';
-import {
-  MEMBERSHIP_CLARITY_PLAN_KEY,
-  normalizeMembershipPlanKey,
-  type MembershipPlanKey,
-} from '../../shared/membership-plans.js';
 import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import {
   getAdminStatusStats,
@@ -159,7 +147,6 @@ export {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
-  getReferralConfig,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -173,7 +160,6 @@ export {
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
-  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
@@ -188,7 +174,6 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updatePublicFinancialLedgerEntry,
-  updateReferralConfig,
   updateSimpleWorkflowPreset,
   reviewSkillCommentForAdmin,
 };
@@ -261,96 +246,6 @@ async function getAdminUserMembershipState(
     membership: membershipStatusToAdminView(membership),
     membership_entitlements: entitlements,
     membership_plans: plans.map(membershipPlanToAdminView),
-  };
-}
-
-/** 管理后台邀请配置视图。 */
-export interface AdminReferralConfigView {
-  enabled: boolean;
-  reward_membership_plan_key: MembershipPlanKey;
-  inviter_reward_days: number;
-  monthly_reward_cap_days: number;
-  reward_first_membership_only: boolean;
-  invite_count_reward_threshold: number;
-  invite_count_reward_days: number;
-  invite_count_reward_max_invites: number;
-  updated_at: string;
-}
-
-/**
- * 读取后台邀请配置。
- */
-export async function getAdminReferralConfig(): Promise<AdminReferralConfigView> {
-  const config = await getReferralConfig();
-  return {
-    enabled: config.enabled,
-    reward_membership_plan_key: config.reward_membership_plan_key,
-    inviter_reward_days: config.inviter_reward_days,
-    monthly_reward_cap_days: config.monthly_reward_cap_days,
-    reward_first_membership_only: config.reward_first_membership_only,
-    invite_count_reward_threshold: config.invite_count_reward_threshold,
-    invite_count_reward_days: config.invite_count_reward_days,
-    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
-    updated_at: config.updated_at,
-  };
-}
-
-/**
- * 更新后台邀请配置。
- */
-export async function updateAdminReferralConfig(input: {
-  enabled: boolean;
-  rewardMembershipPlanKey?: MembershipPlanKey;
-  inviterRewardDays: number;
-  monthlyRewardCapDays: number;
-  rewardFirstMembershipOnly: boolean;
-  inviteCountRewardThreshold: number;
-  inviteCountRewardDays: number;
-  inviteCountRewardMaxInvites: number;
-}): Promise<AdminReferralConfigView> {
-  const config = await updateReferralConfig({
-    ...input,
-    rewardMembershipPlanKey: normalizeMembershipPlanKey(
-      input.rewardMembershipPlanKey,
-      MEMBERSHIP_CLARITY_PLAN_KEY,
-    ),
-  });
-  return {
-    enabled: config.enabled,
-    reward_membership_plan_key: config.reward_membership_plan_key,
-    inviter_reward_days: config.inviter_reward_days,
-    monthly_reward_cap_days: config.monthly_reward_cap_days,
-    reward_first_membership_only: config.reward_first_membership_only,
-    invite_count_reward_threshold: config.invite_count_reward_threshold,
-    invite_count_reward_days: config.invite_count_reward_days,
-    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
-    updated_at: config.updated_at,
-  };
-}
-
-function maskAdminPhone(phone: string | null): string | null {
-  if (!phone || phone.length < 7) return phone;
-  return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
-}
-
-/**
- * 查询后台邀请关系列表。
- */
-export async function listAdminReferrals(input: {
-  inviterId?: string;
-  inviteeId?: string;
-  rewardStatus?: ReferralRewardStatus;
-  limit?: number;
-  offset?: number;
-}): Promise<AdminReferralListResult> {
-  const result = await listReferralsForAdmin(input);
-  return {
-    total: result.total,
-    referrals: result.referrals.map((row) => ({
-      ...row,
-      inviter_phone: maskAdminPhone(row.inviter_phone),
-      invitee_phone: maskAdminPhone(row.invitee_phone),
-    })),
   };
 }
 

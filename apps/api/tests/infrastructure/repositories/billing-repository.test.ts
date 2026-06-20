@@ -648,10 +648,9 @@ describe('billing repository', () => {
     mockGetUserByIdUsing
       .mockResolvedValueOnce(user)
       .mockResolvedValueOnce({ ...user, purchased_coins: 20 });
-    // 单层化后开通流程不再创建 membership_allowance；client 序列为：
+    // 单层化后开通流程不再创建 membership_allowance；推荐返利钩子已摘除；client 序列为：
     // BEGIN, INSERT config, SELECT balance_grants, UPDATE users, SELECT active memberships,
-    // INSERT user_memberships, INSERT wallet_transactions(membership_subscription),
-    // SELECT user_referrals(无邀请→提前返回), COMMIT。
+    // INSERT user_memberships, INSERT wallet_transactions(membership_subscription), COMMIT。
     const { clientCalls } = createMockPool(
       [],
       [

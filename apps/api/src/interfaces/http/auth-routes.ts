@@ -50,12 +50,6 @@ const RegisterSchema = z.object({
   phoneNumber: PhoneSchema,
   password: z.string().min(8, '密码至少 8 位'),
   smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
-  invite_code: z
-    .string()
-    .trim()
-    .max(64, '邀请码不超过 64 位')
-    .nullable()
-    .optional(),
 });
 
 const LoginSchema = z.object({
@@ -95,7 +89,6 @@ const ResetCurrentUserPasswordSchema = z.object({
 
 const GoogleOAuthStartSchema = z.object({
   next: z.string().max(2048).optional(),
-  invite_code: z.string().max(64).optional(),
 });
 
 const GoogleOAuthCallbackSchema = z.object({
@@ -179,7 +172,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const query = GoogleOAuthStartSchema.parse(request.query);
     const oauthState = createGoogleOAuthState({
       next: query.next,
-      inviteCode: query.invite_code,
     });
     const authorizationUrl = buildGoogleAuthorizationUrl(oauthState.state);
 
@@ -212,7 +204,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
       next = state.next;
       const profile = await exchangeGoogleCodeForProfile(query.code);
-      const user = await findOrCreateGoogleOAuthUser(profile, state.inviteCode);
+      const user = await findOrCreateGoogleOAuthUser(profile);
       const token = signAuthToken(app, user);
       return reply
         .code(302)
@@ -312,7 +304,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         body.password,
         body.smsCaptchaCode,
         request.ip,
-        body.invite_code,
       );
       const token = signAuthToken(app, user);
       const safe: UserDto = toUserDto(user);

@@ -10,7 +10,6 @@ import {
   createUserUsing,
   getDbPool,
   getUserByOAuthIdentityUsing,
-  redeemReferralInviteCodeUsing,
   upsertOAuthIdentityUsing,
 } from '../../infrastructure/db.js';
 import type { User } from '../../shared/types.js';
@@ -27,7 +26,6 @@ interface GoogleOAuthStatePayload {
   provider: typeof GOOGLE_OAUTH_PROVIDER;
   nonce: string;
   next: string;
-  inviteCode: string | null;
   exp: number;
 }
 
@@ -89,11 +87,6 @@ function timingSafeEqualString(left: string, right: string): boolean {
   );
 }
 
-function normalizeInviteCode(raw: string | null | undefined): string | null {
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed.toUpperCase() : null;
-}
-
 function normalizeNextPath(raw: string | null | undefined): string {
   const trimmed = raw?.trim();
   if (!trimmed || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
@@ -139,19 +132,16 @@ function asRecord(value: unknown): Record<string, unknown> {
  * 创建 Google OAuth state。
  *
  * @param input.next 登录完成后的站内回跳路径。
- * @param input.inviteCode 可选邀请码，新 OAuth 用户创建时会沿用。
  * @returns 签名 state、同源校验 nonce 和 cookie 有效期。
  */
 export function createGoogleOAuthState(input: {
   next?: string | null;
-  inviteCode?: string | null;
 }): GoogleOAuthState {
   const nonce = crypto.randomBytes(24).toString('base64url');
   const payload: GoogleOAuthStatePayload = {
     provider: GOOGLE_OAUTH_PROVIDER,
     nonce,
     next: normalizeNextPath(input.next),
-    inviteCode: normalizeInviteCode(input.inviteCode),
     exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_TTL_SECONDS,
   };
   const encodedPayload = base64UrlEncodeJson(payload);
@@ -200,7 +190,6 @@ export function verifyGoogleOAuthState(
   return {
     ...payload,
     next: normalizeNextPath(payload.next),
-    inviteCode: normalizeInviteCode(payload.inviteCode),
   };
 }
 
@@ -307,13 +296,11 @@ export async function exchangeGoogleCodeForProfile(
  * 查找或创建 Google OAuth 用户。
  *
  * @param profile 已验证的 Google 用户资料。
- * @param inviteCode 可选邀请码，仅在新建用户时兑换。
  * @returns 本地用户模型。
  * @remarks 使用事务级 advisory lock 保证同一个 Google sub 的并发 callback 不会重复建号。
  */
 export async function findOrCreateGoogleOAuthUser(
   profile: GoogleOAuthProfile,
-  inviteCode?: string | null,
 ): Promise<User> {
   const client = await getDbPool().connect();
   try {
@@ -365,15 +352,6 @@ export async function findOrCreateGoogleOAuthUser(
       avatarUrl: profile.avatarUrl,
       profileJson: profile.raw,
     });
-
-    const normalizedInviteCode = normalizeInviteCode(inviteCode);
-    if (normalizedInviteCode) {
-      await redeemReferralInviteCodeUsing(client, {
-        inviteeId: user.id,
-        code: normalizedInviteCode,
-        source: 'register',
-      });
-    }
 
     await client.query('COMMIT');
     return user;
