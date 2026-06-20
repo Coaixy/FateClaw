@@ -9,13 +9,11 @@ import {
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
 import type {
-  EffectiveUserSkill,
   SkillAccessInvite,
   SkillAccessInviteTargetType,
   SkillBundle,
   SkillComment,
   SkillCommentStatus,
-  SkillReactionKind,
   TextSkillBundleFile,
   UserCustomSkill,
   UserSkillSubscription,
@@ -89,14 +87,6 @@ export interface RedeemSkillAccessInviteResult {
   subscriptionIds: string[];
 }
 
-/** 返回所有后台全局开启的系统排盘名称列表 */
-export async function getGloballyEnabledSkillNames(): Promise<string[]> {
-  const { rows } = await getDbPool().query(
-    'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true ORDER BY skill_name',
-  );
-  return (rows as { skill_name: string }[]).map((r) => r.skill_name);
-}
-
 /** 获取所有系统排盘的全局配置。 */
 export async function getAllSkillGlobalConfigs(): Promise<SkillGlobalConfig[]> {
   const { rows } = await getDbPool().query(
@@ -161,39 +151,6 @@ export async function getResolvedEnabledOfficialSkillNames(
      ORDER BY skill_name`,
   );
   return (rows as { skill_name: string }[]).map((row) => row.skill_name);
-}
-
-/**
- * 获取用户的有效 skill 列表（自有 + 订阅），用于 IPC 同步。
- */
-export async function getEffectiveUserSkills(
-  userId: string,
-): Promise<EffectiveUserSkill[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'self' as source
-     FROM user_custom_skills s
-     WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
-     UNION ALL
-    SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
-            'subscribed' as source
-     FROM user_skill_subscriptions sub
-     JOIN user_custom_skills s ON s.id = sub.skill_id
-     WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
-       AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
-       AND s.deleted_at IS NULL
-       AND (
-         s.visibility IN ('link_shared', 'shared')
-         OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
-       )
-       AND s.install_status = 'installed'
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
-    [userId],
-  );
-  return rows as EffectiveUserSkill[];
 }
 
 export interface MarketSkillListRow {
@@ -262,36 +219,10 @@ export interface MarketBundleListRow {
   bundle_token: string;
 }
 
-/** 公开 Skill 的赞踩聚合计数。 */
-export interface SkillReactionSummary {
-  like_count: number;
-  dislike_count: number;
-}
-
-/** 公开端允许匿名展示的评论字段。 */
-export type PublicSkillComment = Pick<
-  SkillComment,
-  'id' | 'body' | 'pinned' | 'created_at'
->;
-
-/** 仅当前提交者本人可见的待审核评论字段。 */
-export type PendingSkillComment = Pick<
-  SkillComment,
-  'id' | 'body' | 'status' | 'created_at'
-> & {
-  status: 'pending';
-};
-
 /** 管理端评论审核列表行，包含提交者基础审计信息。 */
 export interface AdminSkillCommentRow extends SkillComment {
   skill_name: string;
   user_phone: string | null;
-}
-
-/** 当前用户提交公开评论前的防刷检查结果。 */
-export interface SkillCommentSubmissionGuard {
-  allowed: boolean;
-  reason: 'duplicate_pending' | 'too_many_pending' | 'too_many_recent' | null;
 }
 
 export async function listMarketBundles(opts: {
@@ -799,206 +730,6 @@ export async function getSkillByShareToken(
   return rows[0]
     ? hydrateUserCustomSkillContent(rows[0] as UserCustomSkill)
     : undefined;
-}
-
-/**
- * 统计公开 Skill 的赞踩数量。
- */
-export async function getSkillReactionSummary(
-  skillId: string,
-): Promise<SkillReactionSummary> {
-  const { rows } = await pool.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE kind = 'like')::int AS like_count,
-       COUNT(*) FILTER (WHERE kind = 'dislike')::int AS dislike_count
-     FROM skill_reactions
-     WHERE skill_id = $1`,
-    [skillId],
-  );
-  const row = rows[0] as
-    | { like_count: number | string; dislike_count: number | string }
-    | undefined;
-  return {
-    like_count: Number(row?.like_count ?? 0),
-    dislike_count: Number(row?.dislike_count ?? 0),
-  };
-}
-
-/**
- * 读取当前用户对某个 Skill 的赞踩。
- */
-export async function getUserSkillReaction(
-  skillId: string,
-  userId: string | null,
-): Promise<SkillReactionKind | null> {
-  if (!userId) return null;
-  const { rows } = await pool.query(
-    `SELECT kind
-     FROM skill_reactions
-     WHERE skill_id = $1 AND user_id = $2
-     LIMIT 1`,
-    [skillId, userId],
-  );
-  return ((rows[0] as { kind?: SkillReactionKind } | undefined)?.kind ??
-    null) as SkillReactionKind | null;
-}
-
-/**
- * 设置或清除当前用户对公开 Skill 的赞踩。
- *
- * @remarks kind 为 null 时删除当前反应；否则使用唯一键完成切换。
- */
-export async function setUserSkillReaction(
-  skillId: string,
-  userId: string,
-  kind: SkillReactionKind | null,
-): Promise<SkillReactionKind | null> {
-  if (kind === null) {
-    await pool.query(
-      `DELETE FROM skill_reactions
-       WHERE skill_id = $1 AND user_id = $2`,
-      [skillId, userId],
-    );
-    return null;
-  }
-
-  const { rows } = await pool.query(
-    `INSERT INTO skill_reactions (skill_id, user_id, kind)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (skill_id, user_id) DO UPDATE SET
-       kind = EXCLUDED.kind,
-       updated_at = NOW()
-     RETURNING kind`,
-    [skillId, userId, kind],
-  );
-  return (rows[0] as { kind: SkillReactionKind }).kind;
-}
-
-/**
- * 当前用户重复点击相同赞踩时取消，否则切换到目标赞踩。
- */
-export async function toggleUserSkillReaction(
-  skillId: string,
-  userId: string,
-  kind: SkillReactionKind,
-): Promise<SkillReactionKind | null> {
-  const current = await getUserSkillReaction(skillId, userId);
-  if (current === kind) {
-    return setUserSkillReaction(skillId, userId, null);
-  }
-  return setUserSkillReaction(skillId, userId, kind);
-}
-
-/**
- * 读取公开展示的已审核匿名评论。
- */
-export async function listPublicSkillComments(
-  skillId: string,
-  limit = 50,
-): Promise<PublicSkillComment[]> {
-  const { rows } = await pool.query(
-    `SELECT id, body, pinned, created_at
-     FROM skill_comments
-     WHERE skill_id = $1 AND status = 'approved'
-     ORDER BY pinned DESC, reviewed_at DESC NULLS LAST, created_at DESC
-     LIMIT $2`,
-    [skillId, Math.min(Math.max(limit, 1), 100)],
-  );
-  return rows as PublicSkillComment[];
-}
-
-/**
- * 读取当前用户自己的待审核评论，用于避免用户误判提交失败后重复提交。
- */
-export async function listUserPendingSkillComments(
-  skillId: string,
-  userId: string | null,
-  limit = 20,
-): Promise<PendingSkillComment[]> {
-  if (!userId) return [];
-  const { rows } = await pool.query(
-    `SELECT id, body, status, created_at
-     FROM skill_comments
-     WHERE skill_id = $1 AND user_id = $2 AND status = 'pending'
-     ORDER BY created_at DESC
-     LIMIT $3`,
-    [skillId, userId, Math.min(Math.max(limit, 1), 50)],
-  );
-  return rows as PendingSkillComment[];
-}
-
-/**
- * 创建待审核 Skill 评论。
- */
-export async function createPendingSkillComment(input: {
-  id: string;
-  skillId: string;
-  userId: string;
-  body: string;
-}): Promise<SkillComment> {
-  const { rows } = await pool.query(
-    `INSERT INTO skill_comments (id, skill_id, user_id, body)
-     VALUES ($1, $2, $3, $4)
-     RETURNING *`,
-    [input.id, input.skillId, input.userId, input.body],
-  );
-  return rows[0] as SkillComment;
-}
-
-/**
- * 检查用户是否还能提交新的待审核评论。
- *
- * @remarks 避免单个用户或单个 Skill 的审核队列被重复内容和短时间提交刷满。
- */
-export async function checkSkillCommentSubmissionGuard(input: {
-  skillId: string;
-  userId: string;
-  body: string;
-}): Promise<SkillCommentSubmissionGuard> {
-  const { rows } = await pool.query(
-    `SELECT
-       EXISTS (
-         SELECT 1
-         FROM skill_comments
-         WHERE skill_id = $1
-           AND user_id = $2
-           AND status = 'pending'
-           AND body = $3
-       ) AS duplicate_pending,
-       COUNT(*) FILTER (
-         WHERE skill_id = $1 AND status = 'pending'
-       )::int AS skill_pending_count,
-       COUNT(*) FILTER (
-         WHERE user_id = $2
-           AND status = 'pending'
-           AND created_at >= NOW() - INTERVAL '1 hour'
-       )::int AS user_recent_pending_count
-     FROM skill_comments
-     WHERE (skill_id = $1 AND status = 'pending')
-        OR (
-          user_id = $2
-          AND status = 'pending'
-          AND created_at >= NOW() - INTERVAL '1 hour'
-        )`,
-    [input.skillId, input.userId, input.body],
-  );
-  const row = rows[0] as
-    | {
-        duplicate_pending?: boolean;
-        skill_pending_count?: number | string;
-        user_recent_pending_count?: number | string;
-      }
-    | undefined;
-  if (row?.duplicate_pending) {
-    return { allowed: false, reason: 'duplicate_pending' };
-  }
-  if (Number(row?.skill_pending_count ?? 0) >= 200) {
-    return { allowed: false, reason: 'too_many_pending' };
-  }
-  if (Number(row?.user_recent_pending_count ?? 0) >= 5) {
-    return { allowed: false, reason: 'too_many_recent' };
-  }
-  return { allowed: true, reason: null };
 }
 
 /**
@@ -1712,19 +1443,6 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
   );
 }
 
-/** 获取订阅某个 skill 的所有用户 ID */
-export async function getSubscriberIds(skillId: string): Promise<string[]> {
-  const { rows } = await pool.query(
-    `SELECT subscriber_id
-     FROM user_skill_subscriptions
-     WHERE skill_id = $1
-       AND enabled = true
-       AND status = 'active'
-       AND (expires_at IS NULL OR expires_at > NOW())`,
-    [skillId],
-  );
-  return (rows as { subscriber_id: string }[]).map((r) => r.subscriber_id);
-}
 
 // =====================
 // --- Skill Bundles ---

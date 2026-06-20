@@ -170,20 +170,6 @@ export async function hasFinalAiChatSessionReply(
   return rows.length > 0;
 }
 
-export async function getMessagesSince(
-  accountId: string,
-  sinceTimestamp: string,
-  limit: number = 200,
-): Promise<NewMessage[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT * FROM messages
-     WHERE account_id = $1 AND timestamp > $2 AND is_bot_message = false AND deleted_at IS NULL
-     ORDER BY timestamp DESC LIMIT $3`,
-    [accountId, sinceTimestamp, limit],
-  );
-  return rows as NewMessage[];
-}
-
 export async function createChatSession(session: {
   id: string;
   accountId: string;
@@ -204,20 +190,6 @@ export async function createChatSession(session: {
     ],
   );
   return rows[0] as ChatSession;
-}
-
-export async function getChatSessions(
-  accountId: string,
-  limit = 100,
-): Promise<ChatSession[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT * FROM chat_sessions
-     WHERE account_id = $1 AND deleted_at IS NULL
-     ORDER BY updated_at DESC
-     LIMIT $2`,
-    [accountId, Math.min(Math.max(limit, 1), 500)],
-  );
-  return rows as ChatSession[];
 }
 
 export async function getChatSessionsByUserId(
@@ -331,16 +303,6 @@ export async function archiveChatSession(id: string): Promise<void> {
      WHERE id = $1`,
     [id],
   );
-}
-
-/**
- * 兼容旧调用方的软删除入口。
- *
- * @param id chat_sessions.id。
- * @returns 无返回值。
- */
-export async function deleteChatSession(id: string): Promise<void> {
-  await archiveChatSession(id);
 }
 
 /**

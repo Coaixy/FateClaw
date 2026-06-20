@@ -1,7 +1,7 @@
-import { User, UserRole } from '../../shared/types.js';
+import { User } from '../../shared/types.js';
 import type { DbQueryable } from '../db-pool.js';
 import { getDbPool } from '../db-pool.js';
-import { queryOne, queryRows } from '../typed-query.js';
+import { queryOne } from '../typed-query.js';
 
 const USER_SELECT_COLUMNS = `
   u.id,
@@ -151,15 +151,6 @@ export async function upsertOAuthIdentityUsing(
       input.avatarUrl,
       JSON.stringify(input.profileJson),
     ],
-  );
-}
-
-export async function getAllUsers(): Promise<User[]> {
-  return queryRows<User>(
-    getDbPool(),
-    `SELECT ${USER_SELECT_COLUMNS}
-     FROM users u
-     ORDER BY u.created_at DESC`,
   );
 }
 
@@ -355,29 +346,3 @@ export async function getUserByAccountId(
   );
 }
 
-export async function updateUserRole(
-  userId: string,
-  role: UserRole,
-): Promise<void> {
-  await getDbPool().query('UPDATE users SET role = $1 WHERE id = $2', [
-    role,
-    userId,
-  ]);
-}
-
-/** 消费者申请成为创作者：consumer → both（保留消费者能力），creator → creator（幂等） */
-export async function promoteUserToCreator(userId: string): Promise<UserRole> {
-  const row = await queryOne<{ role: UserRole }>(
-    getDbPool(),
-    `UPDATE users
-       SET role = CASE role
-         WHEN 'consumer' THEN 'both'
-         WHEN 'admin' THEN 'admin'
-         ELSE role
-       END
-     WHERE id = $1
-     RETURNING role`,
-    [userId],
-  );
-  return row?.role ?? 'consumer';
-}

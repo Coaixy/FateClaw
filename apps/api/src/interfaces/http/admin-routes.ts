@@ -12,7 +12,6 @@ import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
   createAnnouncement,
-  createGiftCodesForAdmin,
   createOfficialModel,
   deleteConversationLogsForAdminUser,
   deleteDraftAnnouncement,
@@ -28,8 +27,6 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
-  getAdminRewardConfig,
-  getAdminReferralConfig,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -45,9 +42,7 @@ import {
   listAdminUsersWithStats,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
-  listGiftCodesForAdmin,
   listRechargeOrdersForAdmin,
-  listAdminReferrals,
   listWalletTransactionsForAdmin,
   listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
@@ -62,8 +57,6 @@ import {
   updateOfficialModel,
   updateRuntimeSettings,
   updateAdminRechargePaymentConfig,
-  updateAdminRewardConfig,
-  updateAdminReferralConfig,
   getAdminUserDetail,
   createPublicFinancialLedgerEntry,
   deletePublicFinancialLedgerEntry,
@@ -354,78 +347,6 @@ const AdminWalletTransactionsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 
-const AdminGiftCodesQuerySchema = z.object({
-  status: z.enum(['active', 'disabled', 'expired', 'exhausted']).optional(),
-  balance_type: z.enum(['purchased', 'bonus']).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
-
-const AdminCreateGiftCodesSchema = z
-  .object({
-    name: z.string().trim().max(80).optional(),
-    balance_type: z.enum(['purchased', 'bonus']),
-    usage_type: z.enum(['single', 'multi']),
-    amount_coins: SoftCurrencyNumberSchema.refine(
-      (value) => value > 0 && value <= 1_000_000,
-      '礼品金额必须在 0 到 1000000 之间',
-    ),
-    max_redemptions: z.number().int().min(1).max(100000).optional(),
-    quantity: z.number().int().min(1).max(100).default(1),
-    expires_at: z.string().datetime({ offset: true }).nullable().optional(),
-    note: z.string().trim().max(200).optional(),
-    code_prefix: z
-      .string()
-      .trim()
-      .max(12)
-      .regex(/^[a-z0-9]*$/i, '礼品码前缀只能包含英文和数字')
-      .optional(),
-    code: z
-      .string()
-      .trim()
-      .min(4, '自定义礼品码至少 4 位')
-      .max(80, '自定义礼品码过长')
-      .regex(/^[a-z0-9-]+$/i, '自定义礼品码只能包含英文、数字和横线')
-      .optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (
-      value.usage_type === 'single' &&
-      value.max_redemptions &&
-      value.max_redemptions !== 1
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['max_redemptions'],
-        message: '单次使用礼品码最大兑换次数必须为 1',
-      });
-    }
-    if (value.usage_type === 'multi' && !value.max_redemptions) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['max_redemptions'],
-        message: '多次使用礼品码需要设置最大兑换次数',
-      });
-    }
-    if (value.code && value.quantity !== 1) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['code'],
-        message: '自定义礼品码只能在生成数量为 1 时使用',
-      });
-    }
-    if (
-      value.expires_at &&
-      new Date(value.expires_at).getTime() <= Date.now()
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['expires_at'],
-        message: '过期时间必须晚于当前时间',
-      });
-    }
-  });
-
 const AdminBillingReservationsQuerySchema = z.object({
   user_id: z.string().trim().min(1).max(120).optional(),
   hold_state: z.enum(['none', 'held', 'released']).optional(),
@@ -637,82 +558,6 @@ const RechargePaymentConfigSchema = z
       }
     }
   });
-
-const RewardMembershipPlanSchema = z.object({
-  plan_key: MembershipPlanKeySchema,
-  name: z.string().trim().min(1, '套餐名称不能为空').max(80),
-  enabled: z.boolean(),
-  monthly_price_coins: SoftCurrencyNumberSchema.refine(
-    (value) => value >= 0 && value <= 1_000_000,
-    '会员月费必须在 0 到 1000000 之间',
-  ),
-  display_price_coins: SoftCurrencyNumberSchema.refine(
-    (value) => value >= 0 && value <= 1_000_000,
-    '会员展示原价必须在 0 到 1000000 之间',
-  ),
-});
-
-const RewardConfigSchema = z.object({
-  daily_sign_in: z.object({
-    enabled: z.boolean(),
-    reward_coins: SoftCurrencyNumberSchema.refine(
-      (value) => value >= 0 && value <= 1_000_000,
-      '签到奖励必须在 0 到 1000000 之间',
-    ),
-  }),
-  membership: z.object({
-    enabled: z.boolean(),
-    monthly_price_coins: SoftCurrencyNumberSchema.refine(
-      (value) => value >= 0 && value <= 1_000_000,
-      '会员月费必须在 0 到 1000000 之间',
-    ),
-  }),
-  membership_plans: z.array(RewardMembershipPlanSchema).optional(),
-});
-
-const ReferralConfigSchema = z.object({
-  enabled: z.boolean(),
-  reward_membership_plan_key: z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS).optional(),
-  inviter_reward_days: z
-    .number()
-    .int('奖励天数必须是整数')
-    .min(0, '奖励天数不能小于 0')
-    .max(366, '奖励天数不能超过 366'),
-  monthly_reward_cap_days: z
-    .number()
-    .int('月度封顶天数必须是整数')
-    .min(0, '月度封顶天数不能小于 0')
-    .max(3660, '月度封顶天数不能超过 3660'),
-  reward_first_membership_only: z.boolean().optional(),
-  invite_count_reward_threshold: z
-    .number()
-    .int('累计邀请门槛必须是整数')
-    .min(0, '累计邀请门槛不能小于 0')
-    .max(1_000_000, '累计邀请门槛过大')
-    .optional(),
-  invite_count_reward_days: z
-    .number()
-    .int('累计邀请奖励天数必须是整数')
-    .min(0, '累计邀请奖励天数不能小于 0')
-    .max(366, '累计邀请奖励天数不能超过 366')
-    .optional(),
-  invite_count_reward_max_invites: z
-    .number()
-    .int('累计邀请人数上限必须是整数')
-    .min(0, '累计邀请人数上限不能小于 0')
-    .max(1_000_000, '累计邀请人数上限过大')
-    .optional(),
-});
-
-const AdminReferralsQuerySchema = z.object({
-  inviter_id: z.string().trim().optional(),
-  invitee_id: z.string().trim().optional(),
-  reward_status: z
-    .enum(['pending', 'granted', 'skipped', 'ineligible'])
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
 
 const PublicFinancialLedgerEntrySchema = z.object({
   entry_type: z.enum(['income', 'expense']),
@@ -1045,133 +890,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return listWalletTransactionsForAdmin({
       userId: parsed.data.user_id,
       kind: parsed.data.kind,
-      limit: parsed.data.limit,
-      offset: parsed.data.offset,
-    });
-  });
-
-  // GET /api/admin/billing/gift-codes — 查询积分礼品码
-  app.get('/billing/gift-codes', async (request, reply) => {
-    const parsed = AdminGiftCodesQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return listGiftCodesForAdmin({
-      status: parsed.data.status,
-      balanceType: parsed.data.balance_type,
-      limit: parsed.data.limit,
-      offset: parsed.data.offset,
-    });
-  });
-
-  // POST /api/admin/billing/gift-codes — 生成积分礼品码
-  app.post('/billing/gift-codes', async (request, reply) => {
-    const parsed = AdminCreateGiftCodesSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      const giftCodes = await createGiftCodesForAdmin({
-        name: parsed.data.name,
-        balanceType: parsed.data.balance_type,
-        usageType: parsed.data.usage_type,
-        amountCoins: parsed.data.amount_coins,
-        maxRedemptions:
-          parsed.data.usage_type === 'single'
-            ? 1
-            : (parsed.data.max_redemptions ?? 1),
-        quantity: parsed.data.quantity,
-        expiresAt: parsed.data.expires_at ?? null,
-        note: parsed.data.note,
-        createdBy: 'admin',
-        codePrefix: parsed.data.code_prefix,
-        code: parsed.data.code,
-      });
-      return reply.code(201).send({ gift_codes: giftCodes });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '生成礼品码失败';
-      return reply
-        .code(message.includes('duplicate') ? 409 : 400)
-        .send({ error: message });
-    }
-  });
-
-  // GET /api/admin/reward-config — 读取积分奖励配置
-  app.get('/reward-config', async () => {
-    return getAdminRewardConfig();
-  });
-
-  // PUT /api/admin/reward-config — 更新积分奖励配置
-  app.put('/reward-config', async (request, reply) => {
-    const parsed = RewardConfigSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return updateAdminRewardConfig({
-      dailySignIn: {
-        enabled: parsed.data.daily_sign_in.enabled,
-        rewardCoins: parsed.data.daily_sign_in.reward_coins,
-      },
-      membership: {
-        enabled: parsed.data.membership.enabled,
-        monthlyPriceCoins: parsed.data.membership.monthly_price_coins,
-      },
-      membershipPlans: parsed.data.membership_plans?.map((plan) => ({
-        planKey: plan.plan_key,
-        name: plan.name,
-        enabled: plan.enabled,
-        monthlyPriceCoins: plan.monthly_price_coins,
-        displayPriceCoins: plan.display_price_coins,
-      })),
-    });
-  });
-
-  // GET /api/admin/referrals/config — 读取邀请返利配置
-  app.get('/referrals/config', async () => {
-    return getAdminReferralConfig();
-  });
-
-  // PUT /api/admin/referrals/config — 更新邀请返利配置
-  app.put('/referrals/config', async (request, reply) => {
-    const parsed = ReferralConfigSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return updateAdminReferralConfig({
-      enabled: parsed.data.enabled,
-      rewardMembershipPlanKey: parsed.data.reward_membership_plan_key,
-      inviterRewardDays: parsed.data.inviter_reward_days,
-      monthlyRewardCapDays: parsed.data.monthly_reward_cap_days,
-      rewardFirstMembershipOnly:
-        parsed.data.reward_first_membership_only ?? true,
-      inviteCountRewardThreshold:
-        parsed.data.invite_count_reward_threshold ?? 10,
-      inviteCountRewardDays: parsed.data.invite_count_reward_days ?? 7,
-      inviteCountRewardMaxInvites:
-        parsed.data.invite_count_reward_max_invites ?? 50,
-    });
-  });
-
-  // GET /api/admin/referrals — 查询邀请关系
-  app.get('/referrals', async (request, reply) => {
-    const parsed = AdminReferralsQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return listAdminReferrals({
-      inviterId: parsed.data.inviter_id || undefined,
-      inviteeId: parsed.data.invitee_id || undefined,
-      rewardStatus: parsed.data.reward_status,
       limit: parsed.data.limit,
       offset: parsed.data.offset,
     });

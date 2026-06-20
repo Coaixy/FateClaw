@@ -318,7 +318,6 @@ async function enqueueSimpleWorkflowFirstTurn(args: {
             ? undefined
             : args.preset.skill_bundle_ids,
         authorizedWorkflowSkillIds: args.preset.skill_snapshot_ids,
-        professionalAiQuotaBypass: 'simple_workflow_first_turn',
       },
     );
 

@@ -26,7 +26,6 @@ import {
   getChatSessionsByClientId,
   getChatSessionsByUserId,
   getConversationLogByRequestId,
-  claimProfessionalAiTurn,
   getRecentMessages,
   getSessionMessageById,
   getSessionMessages,
@@ -35,7 +34,6 @@ import {
   hasFinalAiChatSessionReply,
   markChatSessionPiSessionArchived,
   markChatSessionPiSessionArchiveRestored,
-  releaseProfessionalAiTurn,
   restoreArchivedChatSession,
   shareOwnedChatSession,
   storeMessage,
@@ -100,8 +98,6 @@ const MEMBERSHIP_REQUIRED_MESSAGE =
   '需要有效的卦师使用权才能发起解读，请先开通或续费';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
-const PROFESSIONAL_AI_QUOTA_EXHAUSTED_MESSAGE =
-  '今日专家模式 AI 次数已用完，请开通或升级 FateClaw 会员后继续。';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
 
 /** 「整理为解读稿」给用户端展示的轮次内容（会落为一条会话消息）。 */
@@ -145,14 +141,6 @@ export interface OwnedChatSessionTurnOptions {
   authorizedSkillBundleIds?: string[];
   /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
   authorizedWorkflowSkillIds?: string[];
-  /**
-   * 服务端内部豁免专家每日次数占用；不要暴露到 HTTP 请求体。
-   * - simple_workflow_first_turn：简易模式首轮
-   * - interpretation_export：整理为解读稿（衍生动作，不再占用每日次数，仍按 token 计费）
-   */
-  professionalAiQuotaBypass?:
-    | 'simple_workflow_first_turn'
-    | 'interpretation_export';
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -179,7 +167,6 @@ interface PreparedOwnedChatSessionTurn {
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   sessionTitle: string;
-  professionalAiUsageDate?: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
 
@@ -224,30 +211,6 @@ async function releaseChatSessionProcessing(
   requestId: string,
 ): Promise<void> {
   await releaseSessionProcessingLock(sessionId, requestId);
-}
-
-async function compensateProfessionalAiTurn(
-  prepared: Pick<
-    PreparedOwnedChatSessionTurn,
-    'userId' | 'professionalAiUsageDate'
-  >,
-): Promise<void> {
-  if (!prepared.professionalAiUsageDate) return;
-  try {
-    await releaseProfessionalAiTurn({
-      userId: prepared.userId,
-      usageDate: prepared.professionalAiUsageDate,
-    });
-  } catch (err) {
-    logger.warn(
-      {
-        userId: prepared.userId,
-        usageDate: prepared.professionalAiUsageDate,
-        err,
-      },
-      'AI 对话: 专家模式次数退回失败',
-    );
-  }
 }
 
 function buildSelectedBoardContext(message: NewMessage): boolean {
@@ -818,7 +781,7 @@ export async function runOwnedChatSessionTurn(
  *
  * 复用 runOwnedChatSessionTurn 在同一 Pi session 内追加一轮「汇总」请求，
  * agent 自带本次会话的全部上下文，产出结构化解读稿文本返回前端。
- * 该轮豁免专家每日次数占用（仍按 token 正常计费）；会员门禁/欠费仍照常拦截。
+ * 该轮仍按 token 正常计费；会员门禁/欠费仍照常拦截。
  *
  * @param userId 会话归属用户。
  * @param sessionId chat_sessions.id。
@@ -833,7 +796,6 @@ export async function compileSessionScriptForOwnedUser(
     sessionId,
     { content: COMPILE_SCRIPT_USER_LABEL, inputKind: 'normal' },
     {
-      professionalAiQuotaBypass: 'interpretation_export',
       runtimeUserMessageOverride: COMPILE_SCRIPT_PROMPT,
     },
   );
@@ -874,10 +836,6 @@ async function prepareOwnedChatSessionTurn(
   }
   if (entitlement.wallet.inArrears) {
     return fail(402, BILLING_ARREARS_MESSAGE);
-  }
-  let professionalAiDailyTurnLimit: number | null = null;
-  if (!options.professionalAiQuotaBypass) {
-    professionalAiDailyTurnLimit = entitlement.professionalAiDailyTurnLimit;
   }
   const msgId =
     options.userMessageId ??
@@ -920,18 +878,6 @@ async function prepareOwnedChatSessionTurn(
   );
   if (!processingClaimed) {
     return fail(409, SESSION_PROCESSING_BUSY_ERROR);
-  }
-  let professionalAiUsageDate: string | undefined;
-  if (professionalAiDailyTurnLimit !== null) {
-    const quota = await claimProfessionalAiTurn({
-      userId,
-      dailyTurnLimit: professionalAiDailyTurnLimit,
-    });
-    if (!quota.allowed) {
-      await releaseChatSessionProcessing(session.id, requestId);
-      return fail(403, PROFESSIONAL_AI_QUOTA_EXHAUSTED_MESSAGE);
-    }
-    professionalAiUsageDate = quota.usage_date;
   }
   try {
     await options.onProcessingClaimed?.();
@@ -1030,16 +976,11 @@ async function prepareOwnedChatSessionTurn(
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
-      professionalAiUsageDate,
       entitlementSnapshot: entitlement,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
-    await compensateProfessionalAiTurn({
-      userId,
-      professionalAiUsageDate,
-    });
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: 请求准备失败',
@@ -1084,7 +1025,6 @@ async function enqueuePreparedOwnedChatSessionTurn(
       const errorMessage =
         output.publicErrorText || output.text || output.error || 'AI 处理失败';
       await releaseChatSessionProcessing(session.id, requestId);
-      await compensateProfessionalAiTurn(prepared);
       return fail(
         isPaymentRequiredError(errorMessage) ? 402 : 502,
         errorMessage,
@@ -1100,7 +1040,6 @@ async function enqueuePreparedOwnedChatSessionTurn(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
-    await compensateProfessionalAiTurn(prepared);
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: 请求入队失败',
@@ -1151,7 +1090,6 @@ async function completeOwnedChatSessionTurn(
         },
         'AI 对话: agent 返回错误',
       );
-      await compensateProfessionalAiTurn(prepared);
       return fail(
         isPaymentRequiredError(errorMessage) ? 402 : 502,
         errorMessage,
@@ -1206,7 +1144,6 @@ async function completeOwnedChatSessionTurn(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await releaseChatSessionProcessing(session.id, requestId);
-    await compensateProfessionalAiTurn(prepared);
     logger.error(
       { accountId: session.account_id, sessionId: session.id, err },
       'AI 对话: agent 调用失败',

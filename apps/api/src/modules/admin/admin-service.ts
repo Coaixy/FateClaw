@@ -19,7 +19,6 @@ import {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
   createAnnouncement,
-  createGiftCodesForAdmin,
   createPublicFinancialLedgerEntry,
   createUser,
   deleteDraftAnnouncement,
@@ -42,13 +41,8 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  listGiftCodesForAdmin,
-  getMembershipConfig,
   getMembershipEntitlements,
-  getMembershipPlanConfigs,
   getBalanceGrantsByUserId,
-  getDailySignInConfig,
-  getReferralConfig,
   getPiSessionCleanupCursor,
   getUserById,
   getUserByPhone,
@@ -64,7 +58,6 @@ import {
   listBillingRequestReservationsPageForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
-  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   markChatSessionPiSessionArchived,
@@ -76,23 +69,11 @@ import {
   reviewSkillCommentForAdmin,
   setUserMembershipForAdmin,
   upsertPiSessionCleanupCursor,
-  updateDailySignInConfig,
-  updateMembershipConfig,
   updateUserPasswordHash,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
-  updateReferralConfig,
   updateSimpleWorkflowPreset,
 } from '../../infrastructure/db.js';
-import type {
-  AdminReferralListResult,
-  ReferralRewardStatus,
-} from '../../infrastructure/db.js';
-import {
-  MEMBERSHIP_CLARITY_PLAN_KEY,
-  normalizeMembershipPlanKey,
-  type MembershipPlanKey,
-} from '../../shared/membership-plans.js';
 import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import {
   getAdminStatusStats,
@@ -140,7 +121,6 @@ import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
 } from '../user/phone.js';
-import { resolveMembershipPlanKey } from '../../shared/membership-plans.js';
 import type { User, UserRole } from '../../shared/types.js';
 
 const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
@@ -152,7 +132,6 @@ export {
   createAnnouncement,
   createOfficialModel,
   createPublicFinancialLedgerEntry,
-  createGiftCodesForAdmin,
   deleteConversationLogsByAccountIds,
   deleteDraftAnnouncement,
   deletePublicFinancialLedgerEntry,
@@ -168,7 +147,6 @@ export {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
-  getReferralConfig,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -180,10 +158,8 @@ export {
   listSkillCommentsForAdmin,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
-  listGiftCodesForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
-  listReferralsForAdmin,
   listSimpleWorkflowPresets,
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
@@ -198,7 +174,6 @@ export {
   updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updatePublicFinancialLedgerEntry,
-  updateReferralConfig,
   updateSimpleWorkflowPreset,
   reviewSkillCommentForAdmin,
 };
@@ -208,31 +183,6 @@ export interface AdminUserMembershipState {
   membership: MembershipStatusDto;
   membership_entitlements: MembershipEntitlementDto[];
   membership_plans: MembershipPlanDto[];
-}
-
-/** 管理后台积分奖励配置视图。 */
-export interface AdminRewardConfigView {
-  daily_sign_in: {
-    enabled: boolean;
-    reward_coins: number;
-    updated_at: string;
-  };
-  membership: {
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  };
-  membership_plans: Array<{
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  }>;
 }
 
 export interface AdminUserListOptions {
@@ -272,23 +222,6 @@ export async function getAdminStatusOverview(): Promise<AdminStatusStatsDto> {
   return getAdminStatusStats();
 }
 
-function membershipPlanKeyFromConfigId(configId: string) {
-  return resolveMembershipPlanKey(configId);
-}
-
-function membershipConfigToAdminView(
-  config: Awaited<ReturnType<typeof getMembershipConfig>>,
-) {
-  return {
-    plan_key: membershipPlanKeyFromConfigId(config.id),
-    name: config.name,
-    enabled: config.enabled,
-    monthly_price_coins: config.monthly_price_coins,
-    display_price_coins: config.display_price_coins,
-    updated_at: config.updated_at,
-  };
-}
-
 function membershipStatusToAdminView(
   membership: Awaited<ReturnType<typeof getMembershipBillingSummary>>,
 ): MembershipStatusDto {
@@ -313,173 +246,6 @@ async function getAdminUserMembershipState(
     membership: membershipStatusToAdminView(membership),
     membership_entitlements: entitlements,
     membership_plans: plans.map(membershipPlanToAdminView),
-  };
-}
-
-/**
- * 读取后台积分奖励配置。
- */
-export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
-  const [dailySignIn, membership, membershipPlans] = await Promise.all([
-    getDailySignInConfig(),
-    getMembershipConfig(),
-    getMembershipPlanConfigs(),
-  ]);
-  const membershipView = membershipConfigToAdminView(membership);
-  return {
-    daily_sign_in: {
-      enabled: dailySignIn.enabled,
-      reward_coins: dailySignIn.reward_coins,
-      updated_at: dailySignIn.updated_at,
-    },
-    membership: membershipView,
-    membership_plans: membershipPlans.map(membershipConfigToAdminView),
-  };
-}
-
-/**
- * 更新后台积分奖励配置。
- */
-export async function updateAdminRewardConfig(input: {
-  dailySignIn: {
-    enabled: boolean;
-    rewardCoins: number;
-  };
-  membership: {
-    planKey?: string;
-    name?: string;
-    enabled: boolean;
-    monthlyPriceCoins: number;
-    displayPriceCoins?: number;
-  };
-  membershipPlans?: Array<{
-    planKey: string;
-    name: string;
-    enabled: boolean;
-    monthlyPriceCoins: number;
-    displayPriceCoins: number;
-  }>;
-}): Promise<AdminRewardConfigView> {
-  const membershipInputs =
-    input.membershipPlans && input.membershipPlans.length > 0
-      ? input.membershipPlans
-      : [input.membership];
-  const dailySignIn = await updateDailySignInConfig({
-    enabled: input.dailySignIn.enabled,
-    rewardCoins: input.dailySignIn.rewardCoins,
-  });
-  await Promise.all(
-    membershipInputs.map((membershipInput) =>
-      updateMembershipConfig({
-        planKey: membershipInput.planKey,
-        name: membershipInput.name,
-        enabled: membershipInput.enabled,
-        monthlyPriceCoins: membershipInput.monthlyPriceCoins,
-        displayPriceCoins: membershipInput.displayPriceCoins,
-      }),
-    ),
-  );
-  const membershipPlans = await getMembershipPlanConfigs();
-  const membership = membershipPlans[0];
-  const membershipView = membershipConfigToAdminView(membership);
-  return {
-    daily_sign_in: {
-      enabled: dailySignIn.enabled,
-      reward_coins: dailySignIn.reward_coins,
-      updated_at: dailySignIn.updated_at,
-    },
-    membership: membershipView,
-    membership_plans: membershipPlans.map(membershipConfigToAdminView),
-  };
-}
-
-/** 管理后台邀请配置视图。 */
-export interface AdminReferralConfigView {
-  enabled: boolean;
-  reward_membership_plan_key: MembershipPlanKey;
-  inviter_reward_days: number;
-  monthly_reward_cap_days: number;
-  reward_first_membership_only: boolean;
-  invite_count_reward_threshold: number;
-  invite_count_reward_days: number;
-  invite_count_reward_max_invites: number;
-  updated_at: string;
-}
-
-/**
- * 读取后台邀请配置。
- */
-export async function getAdminReferralConfig(): Promise<AdminReferralConfigView> {
-  const config = await getReferralConfig();
-  return {
-    enabled: config.enabled,
-    reward_membership_plan_key: config.reward_membership_plan_key,
-    inviter_reward_days: config.inviter_reward_days,
-    monthly_reward_cap_days: config.monthly_reward_cap_days,
-    reward_first_membership_only: config.reward_first_membership_only,
-    invite_count_reward_threshold: config.invite_count_reward_threshold,
-    invite_count_reward_days: config.invite_count_reward_days,
-    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
-    updated_at: config.updated_at,
-  };
-}
-
-/**
- * 更新后台邀请配置。
- */
-export async function updateAdminReferralConfig(input: {
-  enabled: boolean;
-  rewardMembershipPlanKey?: MembershipPlanKey;
-  inviterRewardDays: number;
-  monthlyRewardCapDays: number;
-  rewardFirstMembershipOnly: boolean;
-  inviteCountRewardThreshold: number;
-  inviteCountRewardDays: number;
-  inviteCountRewardMaxInvites: number;
-}): Promise<AdminReferralConfigView> {
-  const config = await updateReferralConfig({
-    ...input,
-    rewardMembershipPlanKey: normalizeMembershipPlanKey(
-      input.rewardMembershipPlanKey,
-      MEMBERSHIP_CLARITY_PLAN_KEY,
-    ),
-  });
-  return {
-    enabled: config.enabled,
-    reward_membership_plan_key: config.reward_membership_plan_key,
-    inviter_reward_days: config.inviter_reward_days,
-    monthly_reward_cap_days: config.monthly_reward_cap_days,
-    reward_first_membership_only: config.reward_first_membership_only,
-    invite_count_reward_threshold: config.invite_count_reward_threshold,
-    invite_count_reward_days: config.invite_count_reward_days,
-    invite_count_reward_max_invites: config.invite_count_reward_max_invites,
-    updated_at: config.updated_at,
-  };
-}
-
-function maskAdminPhone(phone: string | null): string | null {
-  if (!phone || phone.length < 7) return phone;
-  return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
-}
-
-/**
- * 查询后台邀请关系列表。
- */
-export async function listAdminReferrals(input: {
-  inviterId?: string;
-  inviteeId?: string;
-  rewardStatus?: ReferralRewardStatus;
-  limit?: number;
-  offset?: number;
-}): Promise<AdminReferralListResult> {
-  const result = await listReferralsForAdmin(input);
-  return {
-    total: result.total,
-    referrals: result.referrals.map((row) => ({
-      ...row,
-      inviter_phone: maskAdminPhone(row.inviter_phone),
-      invitee_phone: maskAdminPhone(row.invitee_phone),
-    })),
   };
 }
 

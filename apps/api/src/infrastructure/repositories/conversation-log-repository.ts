@@ -135,42 +135,6 @@ export async function storeConversationLog(log: {
   }
 }
 
-export async function getConversationLogs(
-  accountId: string,
-  limit: number = 20,
-  before?: string,
-): Promise<ConversationLogRow[]> {
-  const conditions = ['l.account_id = $1'];
-  const params: unknown[] = [accountId, limit];
-
-  if (before) {
-    params.push(before);
-    conditions.push(`l.created_at < $${params.length}`);
-  }
-
-  const { rows } = await getDbPool().query(
-    `SELECT
-       l.id,
-       l.account_id,
-       l.request_id,
-       COALESCE(p.transcript, '[]'::jsonb) AS transcript,
-       l.usage,
-       l.model,
-       l.provider,
-       p.trace_events,
-       p.agent_graph,
-       l.agent_graph_summary,
-       l.capability_ledger,
-       l.created_at
-     FROM conversation_logs l
-     LEFT JOIN conversation_log_payloads p ON p.log_id = l.id
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY l.created_at DESC LIMIT $2`,
-    params,
-  );
-  return rows as ConversationLogRow[];
-}
-
 /**
  * 列表场景下的轻量查询。仅用于 admin 面板 /api/admin/logs。
  */
@@ -267,37 +231,6 @@ export async function getConversationLogByRequestId(
     [requestId],
   );
   return rows[0] as ConversationLogRow | undefined;
-}
-
-export async function getConversationLogsByTimeWindow(
-  accountId: string,
-  around: string,
-  windowSeconds: number = 60,
-): Promise<ConversationLogRow[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT
-       l.id,
-       l.account_id,
-       l.request_id,
-       COALESCE(p.transcript, '[]'::jsonb) AS transcript,
-       l.usage,
-       l.model,
-       l.provider,
-       p.trace_events,
-       p.agent_graph,
-       l.agent_graph_summary,
-       l.capability_ledger,
-       l.created_at
-     FROM conversation_logs l
-     LEFT JOIN conversation_log_payloads p ON p.log_id = l.id
-     WHERE l.account_id = $1
-       AND l.created_at BETWEEN ($2::timestamptz - interval '1 second' * $3)
-                         AND ($2::timestamptz + interval '10 seconds')
-     ORDER BY l.created_at DESC
-     LIMIT 5`,
-    [accountId, around, windowSeconds],
-  );
-  return rows as ConversationLogRow[];
 }
 
 /**

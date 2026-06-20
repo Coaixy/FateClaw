@@ -29,7 +29,6 @@ export interface RegisterRequestDto {
   phoneNumber: string;
   password: string;
   smsCaptchaCode: string;
-  invite_code?: string | null;
 }
 
 export interface CaptchaChallengeDto {

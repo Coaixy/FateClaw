@@ -9,15 +9,12 @@ const {
   mockDeletePublicFinancialLedgerEntry,
   mockDeletePiSessionFilesForSession,
   mockDeletePiSessionOrphanFiles,
-  mockGetDailySignInConfig,
   mockGetChatSessionPiArchiveStates,
   mockGetChatSessionPiCleanupCandidates,
   mockGetChatSessionPiSessionArchive,
   mockGetConversationLogByRequestId,
   mockGetPiSessionHealthPolicy,
-  mockGetMembershipConfig,
   mockGetMembershipEntitlements,
-  mockGetMembershipPlanConfigs,
   mockGetPiSessionCleanupCursor,
   mockGetAdminAnnouncementById,
   mockGetRecentMessages,
@@ -36,7 +33,6 @@ const {
   mockWritePiSessionSnapshotArchiveToFiles,
   mockUpdateDailySignInConfig,
   mockUpdateAnnouncement,
-  mockUpdateMembershipConfig,
   mockUpdatePublicFinancialLedgerEntry,
   mockUpdateUserPasswordHash,
   mockUpsertPiSessionCleanupCursor,
@@ -49,15 +45,12 @@ const {
   mockDeletePublicFinancialLedgerEntry: vi.fn(),
   mockDeletePiSessionFilesForSession: vi.fn(),
   mockDeletePiSessionOrphanFiles: vi.fn(),
-  mockGetDailySignInConfig: vi.fn(),
   mockGetChatSessionPiArchiveStates: vi.fn(),
   mockGetChatSessionPiCleanupCandidates: vi.fn(),
   mockGetChatSessionPiSessionArchive: vi.fn(),
   mockGetConversationLogByRequestId: vi.fn(),
   mockGetPiSessionHealthPolicy: vi.fn(),
-  mockGetMembershipConfig: vi.fn(),
   mockGetMembershipEntitlements: vi.fn(),
-  mockGetMembershipPlanConfigs: vi.fn(),
   mockGetPiSessionCleanupCursor: vi.fn(),
   mockGetAdminAnnouncementById: vi.fn(),
   mockGetRecentMessages: vi.fn(),
@@ -76,7 +69,6 @@ const {
   mockWritePiSessionSnapshotArchiveToFiles: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
   mockUpdateAnnouncement: vi.fn(),
-  mockUpdateMembershipConfig: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
   mockUpdateUserPasswordHash: vi.fn(),
   mockUpsertPiSessionCleanupCursor: vi.fn(),
@@ -89,15 +81,12 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   createUser: mockCreateUser,
   deleteDraftAnnouncement: mockDeleteDraftAnnouncement,
   deletePublicFinancialLedgerEntry: mockDeletePublicFinancialLedgerEntry,
-  getDailySignInConfig: mockGetDailySignInConfig,
   getChatSessionPiArchiveStates: mockGetChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates: mockGetChatSessionPiCleanupCandidates,
   getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
   getAdminAnnouncementById: mockGetAdminAnnouncementById,
-  getMembershipConfig: mockGetMembershipConfig,
   getMembershipEntitlements: mockGetMembershipEntitlements,
-  getMembershipPlanConfigs: mockGetMembershipPlanConfigs,
   getPiSessionCleanupCursor: mockGetPiSessionCleanupCursor,
   getRecentMessages: mockGetRecentMessages,
   getUserById: mockGetUserById,
@@ -111,9 +100,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   markChatSessionPiSessionArchived: mockMarkChatSessionPiSessionArchived,
   resetPiSessionCleanupCursor: mockResetPiSessionCleanupCursor,
   setUserMembershipForAdmin: mockSetUserMembershipForAdmin,
-  updateDailySignInConfig: mockUpdateDailySignInConfig,
   updateAnnouncement: mockUpdateAnnouncement,
-  updateMembershipConfig: mockUpdateMembershipConfig,
   updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
   updateUserPasswordHash: mockUpdateUserPasswordHash,
   upsertPiSessionCleanupCursor: mockUpsertPiSessionCleanupCursor,
@@ -154,69 +141,15 @@ vi.mock('../../../src/modules/system/system-config.js', () => ({
 import {
   cleanupPiSessionFilesForAdmin,
   createAdminUser,
-  getAdminRewardConfig,
   resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
-  updateAdminRewardConfig,
 } from '../../../src/modules/admin/admin-service.js';
-
-function plusMembershipConfig(overrides = {}) {
-  return {
-    id: 'fateclaw_insight',
-    name: 'FateClaw Insight',
-    enabled: true,
-    monthly_price_coins: 30,
-    display_price_coins: 30,
-    monthly_allowance_units: 3500000,
-    standard_price_per_million_units_coins: 10,
-    updated_at: '2026-05-30T00:00:00.000Z',
-    ...overrides,
-  };
-}
-
-function proMembershipConfig(overrides = {}) {
-  return {
-    id: 'fateclaw_deep',
-    name: 'FateClaw Deep',
-    enabled: true,
-    monthly_price_coins: 100,
-    display_price_coins: 100,
-    monthly_allowance_units: 13000000,
-    standard_price_per_million_units_coins: 10,
-    updated_at: '2026-05-30T00:00:00.000Z',
-    ...overrides,
-  };
-}
 
 describe('createAdminUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserByPhone.mockResolvedValue(undefined);
     mockCreateUser.mockResolvedValue(undefined);
-    mockGetDailySignInConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      reward_coins: 20,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
-    mockUpdateDailySignInConfig.mockResolvedValue({
-      id: 'default',
-      enabled: false,
-      reward_coins: 10,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
-    mockGetMembershipConfig.mockResolvedValue(plusMembershipConfig());
-    mockGetMembershipPlanConfigs.mockResolvedValue([
-      plusMembershipConfig(),
-      proMembershipConfig(),
-    ]);
-    mockUpdateMembershipConfig.mockResolvedValue(
-      plusMembershipConfig({
-        monthly_allowance_units: 5000000,
-        standard_price_per_million_units_coins: 12,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      }),
-    );
   });
 
   it('normalizes phone and persists a hashed admin-created user', async () => {
@@ -308,143 +241,6 @@ describe('resetAdminUserPassword', () => {
     ).rejects.toThrow('用户不存在');
 
     expect(mockUpdateUserPasswordHash).not.toHaveBeenCalled();
-  });
-});
-
-describe('admin reward config', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetMembershipConfig.mockResolvedValue(plusMembershipConfig());
-    mockGetMembershipPlanConfigs.mockResolvedValue([
-      plusMembershipConfig(),
-      proMembershipConfig(),
-    ]);
-    mockUpdateMembershipConfig.mockResolvedValue(
-      plusMembershipConfig({
-        monthly_allowance_units: 5000000,
-        standard_price_per_million_units_coins: 12,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      }),
-    );
-  });
-
-  it('reads daily sign-in reward config', async () => {
-    mockGetDailySignInConfig.mockResolvedValue({
-      id: 'default',
-      enabled: true,
-      reward_coins: 20,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
-
-    // 单层化后任何历史 config id（insight/deep）都经 resolveMembershipPlanKey 归一为 clarity；
-    // name 仍取 config.name 原值。
-    await expect(getAdminRewardConfig()).resolves.toEqual({
-      daily_sign_in: {
-        enabled: true,
-        reward_coins: 20,
-        updated_at: '2026-05-30T00:00:00.000Z',
-      },
-      membership: {
-        plan_key: 'fateclaw_clarity',
-        name: 'FateClaw Insight',
-        enabled: true,
-        monthly_price_coins: 30,
-        display_price_coins: 30,
-        updated_at: '2026-05-30T00:00:00.000Z',
-      },
-      membership_plans: [
-        {
-          plan_key: 'fateclaw_clarity',
-          name: 'FateClaw Insight',
-          enabled: true,
-          monthly_price_coins: 30,
-          display_price_coins: 30,
-          updated_at: '2026-05-30T00:00:00.000Z',
-        },
-        {
-          plan_key: 'fateclaw_clarity',
-          name: 'FateClaw Deep',
-          enabled: true,
-          monthly_price_coins: 100,
-          display_price_coins: 100,
-          updated_at: '2026-05-30T00:00:00.000Z',
-        },
-      ],
-    });
-  });
-
-  it('updates daily sign-in reward config', async () => {
-    mockUpdateDailySignInConfig.mockResolvedValue({
-      id: 'default',
-      enabled: false,
-      reward_coins: 10,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
-    mockGetMembershipPlanConfigs.mockResolvedValue([
-      plusMembershipConfig({
-        monthly_allowance_units: 5000000,
-        standard_price_per_million_units_coins: 12,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      }),
-      proMembershipConfig(),
-    ]);
-
-    await expect(
-      updateAdminRewardConfig({
-        dailySignIn: {
-          enabled: false,
-          rewardCoins: 10,
-        },
-        membership: {
-          enabled: true,
-          monthlyPriceCoins: 30,
-        },
-      }),
-    ).resolves.toEqual({
-      daily_sign_in: {
-        enabled: false,
-        reward_coins: 10,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      },
-      membership: {
-        plan_key: 'fateclaw_clarity',
-        name: 'FateClaw Insight',
-        enabled: true,
-        monthly_price_coins: 30,
-        display_price_coins: 30,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      },
-      membership_plans: [
-        {
-          plan_key: 'fateclaw_clarity',
-          name: 'FateClaw Insight',
-          enabled: true,
-          monthly_price_coins: 30,
-          display_price_coins: 30,
-          updated_at: '2026-05-30T01:00:00.000Z',
-        },
-        {
-          plan_key: 'fateclaw_clarity',
-          name: 'FateClaw Deep',
-          enabled: true,
-          monthly_price_coins: 100,
-          display_price_coins: 100,
-          updated_at: '2026-05-30T00:00:00.000Z',
-        },
-      ],
-    });
-
-    expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
-      enabled: false,
-      rewardCoins: 10,
-    });
-    expect(mockUpdateMembershipConfig).toHaveBeenCalledWith({
-      planKey: undefined,
-      name: undefined,
-      enabled: true,
-      monthlyPriceCoins: 30,
-      displayPriceCoins: undefined,
-    });
   });
 });
 

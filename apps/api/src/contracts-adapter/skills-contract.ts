@@ -2,8 +2,6 @@ import type {
   AdminSkillCommentDto,
   BundleSubscriptionSourceDto,
   MarketBundleDto,
-  PendingSkillCommentDto,
-  PublicSkillCommentDto,
   MarketSkillDto,
   SharedBundlePreviewDto,
   SharedSkillDetailDto,
@@ -11,19 +9,14 @@ import type {
   SkillAccessInviteDto,
   SkillAccessInvitePreviewDto,
   SkillAccessInviteRedeemResultDto,
-  SkillReactionKindDto,
-  SkillReactionSummaryDto,
   SubscribedSkillDto,
   UserCustomSkillDto,
 } from '@fateclaw/contracts/skills';
 
 import {
   type AdminSkillCommentRow,
-  type PublicSkillComment,
-  type PendingSkillComment,
   resolveSkillAccessInviteStatus,
   type RedeemSkillAccessInviteResult,
-  type SkillReactionSummary,
   type SkillAccessInvitePreviewResult,
 } from '../infrastructure/db.js';
 import type {
@@ -75,64 +68,15 @@ export function toSharedSkillPreviewDto(
   };
 }
 
-/** 转换 Skill 赞踩聚合计数。 */
-export function toSkillReactionSummaryDto(
-  summary: SkillReactionSummary,
-): SkillReactionSummaryDto {
-  return {
-    like_count: summary.like_count,
-    dislike_count: summary.dislike_count,
-  };
-}
-
-/** 转换公开匿名评论，确保不暴露提交者身份字段。 */
-export function toPublicSkillCommentDto(
-  comment: PublicSkillComment,
-): PublicSkillCommentDto {
-  return {
-    id: comment.id,
-    body: comment.body,
-    pinned: comment.pinned,
-    created_at: comment.created_at,
-  };
-}
-
-/** 转换当前用户本人的待审核评论，不暴露给其他访问者。 */
-export function toPendingSkillCommentDto(
-  comment: PendingSkillComment,
-): PendingSkillCommentDto {
-  return {
-    id: comment.id,
-    body: comment.body,
-    status: 'pending',
-    created_at: comment.created_at,
-  };
-}
-
-/** 转换公开 Skill 详情，并仅为公开上架 Skill 暴露互动数据。 */
-export function toSharedSkillDetailDto(source: {
-  skill: UserCustomSkill;
-  reactionSummary: SkillReactionSummary;
-  myReaction: SkillReactionKindDto | null;
-  comments: PublicSkillComment[];
-  myPendingComments: PendingSkillComment[];
-}): SharedSkillDetailDto {
-  const interactionsEnabled = source.skill.visibility === 'shared';
-  return {
-    ...toSharedSkillPreviewDto(source.skill),
-    reaction_summary: interactionsEnabled
-      ? toSkillReactionSummaryDto(source.reactionSummary)
-      : { like_count: 0, dislike_count: 0 },
-    my_reaction: interactionsEnabled ? source.myReaction : null,
-    comments: interactionsEnabled
-      ? source.comments.map(toPublicSkillCommentDto)
-      : [],
-    my_pending_comments: interactionsEnabled
-      ? source.myPendingComments.map(toPendingSkillCommentDto)
-      : [],
-    comments_enabled: interactionsEnabled,
-    public_interactions_enabled: interactionsEnabled,
-  };
+/**
+ * 转换公开 Skill 详情。
+ *
+ * @remarks 公开 toC 互动(赞踩/评论)已下线，详情现仅返回安装预览级字段。
+ */
+export function toSharedSkillDetailDto(
+  skill: UserCustomSkill,
+): SharedSkillDetailDto {
+  return toSharedSkillPreviewDto(skill);
 }
 
 type SubscribedSkillSource = UserCustomSkill & {
