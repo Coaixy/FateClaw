@@ -1,23 +1,23 @@
 /**
- * 技能与创作者域跨端契约。
+ * 技能与创作者域跨端契约(运行时常量 + 类型)。
  */
 
 import type { OkResponse } from '../common/api.js';
 
 /** 用户可创建的自定义 Skill 数量上限。 */
-export declare const MAX_USER_SKILLS: 30;
+export const MAX_USER_SKILLS = 30;
 
 /** 单个 Skill Bundle 允许包含的最大文本文件数。 */
-export declare const MAX_SKILL_BUNDLE_FILES: 50;
+export const MAX_SKILL_BUNDLE_FILES = 50;
 
 /** 单个 Skill Bundle 文件允许包含的最大字符数。 */
-export declare const MAX_SKILL_BUNDLE_FILE_LENGTH: 100000;
+export const MAX_SKILL_BUNDLE_FILE_LENGTH = 100_000;
 
 /** 单个 Skill Bundle 所有文件合计允许包含的最大字符数。 */
-export declare const MAX_SKILL_BUNDLE_TOTAL_LENGTH: 500000;
+export const MAX_SKILL_BUNDLE_TOTAL_LENGTH = 500_000;
 
 /** ZIP 导入文件允许的最大字节数。 */
-export declare const MAX_SKILL_BUNDLE_ZIP_BYTES: 8388608;
+export const MAX_SKILL_BUNDLE_ZIP_BYTES = 8 * 1024 * 1024;
 
 /** 当前生效的 Skill Bundle 文件限制。 */
 export interface SkillBundleLimitsDto {
