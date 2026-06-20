@@ -19,7 +19,6 @@ import {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
   createAnnouncement,
-  createGiftCodesForAdmin,
   createPublicFinancialLedgerEntry,
   createUser,
   deleteDraftAnnouncement,
@@ -42,12 +41,8 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  listGiftCodesForAdmin,
-  getMembershipConfig,
   getMembershipEntitlements,
-  getMembershipPlanConfigs,
   getBalanceGrantsByUserId,
-  getDailySignInConfig,
   getReferralConfig,
   getPiSessionCleanupCursor,
   getUserById,
@@ -76,8 +71,6 @@ import {
   reviewSkillCommentForAdmin,
   setUserMembershipForAdmin,
   upsertPiSessionCleanupCursor,
-  updateDailySignInConfig,
-  updateMembershipConfig,
   updateUserPasswordHash,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
@@ -140,7 +133,6 @@ import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
 } from '../user/phone.js';
-import { resolveMembershipPlanKey } from '../../shared/membership-plans.js';
 import type { User, UserRole } from '../../shared/types.js';
 
 const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
@@ -152,7 +144,6 @@ export {
   createAnnouncement,
   createOfficialModel,
   createPublicFinancialLedgerEntry,
-  createGiftCodesForAdmin,
   deleteConversationLogsByAccountIds,
   deleteDraftAnnouncement,
   deletePublicFinancialLedgerEntry,
@@ -180,7 +171,6 @@ export {
   listSkillCommentsForAdmin,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
-  listGiftCodesForAdmin,
   listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
   listReferralsForAdmin,
@@ -208,31 +198,6 @@ export interface AdminUserMembershipState {
   membership: MembershipStatusDto;
   membership_entitlements: MembershipEntitlementDto[];
   membership_plans: MembershipPlanDto[];
-}
-
-/** 管理后台积分奖励配置视图。 */
-export interface AdminRewardConfigView {
-  daily_sign_in: {
-    enabled: boolean;
-    reward_coins: number;
-    updated_at: string;
-  };
-  membership: {
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  };
-  membership_plans: Array<{
-    plan_key: string;
-    name: string;
-    enabled: boolean;
-    monthly_price_coins: number;
-    display_price_coins: number;
-    updated_at: string;
-  }>;
 }
 
 export interface AdminUserListOptions {
@@ -272,23 +237,6 @@ export async function getAdminStatusOverview(): Promise<AdminStatusStatsDto> {
   return getAdminStatusStats();
 }
 
-function membershipPlanKeyFromConfigId(configId: string) {
-  return resolveMembershipPlanKey(configId);
-}
-
-function membershipConfigToAdminView(
-  config: Awaited<ReturnType<typeof getMembershipConfig>>,
-) {
-  return {
-    plan_key: membershipPlanKeyFromConfigId(config.id),
-    name: config.name,
-    enabled: config.enabled,
-    monthly_price_coins: config.monthly_price_coins,
-    display_price_coins: config.display_price_coins,
-    updated_at: config.updated_at,
-  };
-}
-
 function membershipStatusToAdminView(
   membership: Awaited<ReturnType<typeof getMembershipBillingSummary>>,
 ): MembershipStatusDto {
@@ -313,83 +261,6 @@ async function getAdminUserMembershipState(
     membership: membershipStatusToAdminView(membership),
     membership_entitlements: entitlements,
     membership_plans: plans.map(membershipPlanToAdminView),
-  };
-}
-
-/**
- * 读取后台积分奖励配置。
- */
-export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
-  const [dailySignIn, membership, membershipPlans] = await Promise.all([
-    getDailySignInConfig(),
-    getMembershipConfig(),
-    getMembershipPlanConfigs(),
-  ]);
-  const membershipView = membershipConfigToAdminView(membership);
-  return {
-    daily_sign_in: {
-      enabled: dailySignIn.enabled,
-      reward_coins: dailySignIn.reward_coins,
-      updated_at: dailySignIn.updated_at,
-    },
-    membership: membershipView,
-    membership_plans: membershipPlans.map(membershipConfigToAdminView),
-  };
-}
-
-/**
- * 更新后台积分奖励配置。
- */
-export async function updateAdminRewardConfig(input: {
-  dailySignIn: {
-    enabled: boolean;
-    rewardCoins: number;
-  };
-  membership: {
-    planKey?: string;
-    name?: string;
-    enabled: boolean;
-    monthlyPriceCoins: number;
-    displayPriceCoins?: number;
-  };
-  membershipPlans?: Array<{
-    planKey: string;
-    name: string;
-    enabled: boolean;
-    monthlyPriceCoins: number;
-    displayPriceCoins: number;
-  }>;
-}): Promise<AdminRewardConfigView> {
-  const membershipInputs =
-    input.membershipPlans && input.membershipPlans.length > 0
-      ? input.membershipPlans
-      : [input.membership];
-  const dailySignIn = await updateDailySignInConfig({
-    enabled: input.dailySignIn.enabled,
-    rewardCoins: input.dailySignIn.rewardCoins,
-  });
-  await Promise.all(
-    membershipInputs.map((membershipInput) =>
-      updateMembershipConfig({
-        planKey: membershipInput.planKey,
-        name: membershipInput.name,
-        enabled: membershipInput.enabled,
-        monthlyPriceCoins: membershipInput.monthlyPriceCoins,
-        displayPriceCoins: membershipInput.displayPriceCoins,
-      }),
-    ),
-  );
-  const membershipPlans = await getMembershipPlanConfigs();
-  const membership = membershipPlans[0];
-  const membershipView = membershipConfigToAdminView(membership);
-  return {
-    daily_sign_in: {
-      enabled: dailySignIn.enabled,
-      reward_coins: dailySignIn.reward_coins,
-      updated_at: dailySignIn.updated_at,
-    },
-    membership: membershipView,
-    membership_plans: membershipPlans.map(membershipConfigToAdminView),
   };
 }
 

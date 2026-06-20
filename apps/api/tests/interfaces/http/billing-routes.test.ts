@@ -6,14 +6,11 @@ const { mockSubscribeCurrentUserMembership } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../src/modules/billing/billing-service.js', () => ({
-  claimDailySignInReward: vi.fn(),
   getBillingDailyUsage: vi.fn(),
   getBillingOverview: vi.fn(),
   getBillingTransactions: vi.fn(),
   getBillingUsage: vi.fn(),
-  getDailySignInStatus: vi.fn(),
   getPublicStatusOverview: vi.fn(),
-  redeemCurrentUserGiftCode: vi.fn(),
   resetBillingScope: vi.fn(),
   subscribeCurrentUserMembership: mockSubscribeCurrentUserMembership,
 }));

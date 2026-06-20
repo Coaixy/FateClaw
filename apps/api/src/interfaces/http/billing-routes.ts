@@ -2,14 +2,11 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import {
-  claimDailySignInReward,
   getBillingDailyUsage,
   getBillingOverview,
   getBillingTransactions,
   getBillingUsage,
-  getDailySignInStatus,
   getPublicStatusOverview,
-  redeemCurrentUserGiftCode,
   resetBillingScope,
   subscribeCurrentUserMembership,
 } from '../../modules/billing/billing-service.js';
@@ -30,10 +27,6 @@ const MembershipSubscribeSchema = z
     plan_key: MembershipPlanKeySchema.optional(),
   })
   .optional();
-
-const GiftCodeRedeemSchema = z.object({
-  code: z.string().trim().min(1, '礼品码不能为空').max(80, '礼品码过长'),
-});
 
 export async function billingRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/billing — 积分余额与 Token 计费概览
@@ -79,45 +72,6 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/transactions', async (request, reply) => {
     await request.requireAuth();
     const result = await getBillingTransactions(request.user.userId, 20);
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // GET /api/billing/daily-sign-in — 当前用户每日签到状态
-  app.get('/daily-sign-in', async (request, reply) => {
-    await request.requireAuth();
-    const result = await getDailySignInStatus(request.user.userId);
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // POST /api/billing/daily-sign-in — 领取每日签到积分奖励
-  app.post('/daily-sign-in', async (request, reply) => {
-    await request.requireAuth();
-    const result = await claimDailySignInReward(request.user.userId);
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // POST /api/billing/gifts/redeem — 兑换积分礼品码
-  app.post('/gifts/redeem', async (request, reply) => {
-    await request.requireAuth();
-    const parsed = GiftCodeRedeemSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '礼品码参数无效' });
-    }
-    const result = await redeemCurrentUserGiftCode(
-      request.user.userId,
-      parsed.data.code,
-    );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

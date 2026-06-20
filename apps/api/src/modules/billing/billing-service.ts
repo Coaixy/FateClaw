@@ -8,9 +8,6 @@
 import type {
   BillingStatusDto,
   DailyUsageRowDto,
-  DailySignInResultDto,
-  DailySignInStatusDto,
-  GiftCodeRedeemResultDto,
   MembershipSubscribeResultDto,
   PublicStatusOverviewDto,
   PublicStatusServiceKeyDto,
@@ -20,15 +17,11 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
-  createDailySignInReward,
   subscribeMembershipWithWallet,
   getAccountsByUserId,
-  getDailySignInConfig,
-  getDailySignInRecordByDate,
   getMembershipEntitlements,
   getUserById,
   getVisibleWalletTransactionsByUserId,
-  redeemGiftCodeForUser,
   resetUserData,
   resetUserMessages,
   updateSoulContent,
@@ -38,9 +31,6 @@ import {
   getDailyUsageRows,
   getUsageStats,
 } from '../../infrastructure/daily-usage.js';
-import {
-  calculateAvailableSpendableCoins,
-} from '../../shared/balance-coins.js';
 import {
   getMonthlyMeteredBillingSummary,
   getMembershipBillingSummary,
@@ -55,10 +45,6 @@ import {
   toWalletTransactionsDto,
   toUsageStatsDto,
 } from '../../contracts-adapter/billing-contract.js';
-
-function todaySignInDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // 微信 Claw 已可逆停用：状态页不再展示"微信绑定"服务卡。
 // PublicStatusServiceKeyDto 联合仍保留 'wechat_binding'（待恢复），此处仅运行时不输出。
@@ -165,106 +151,6 @@ export async function getBillingTransactions(
       await getVisibleWalletTransactionsByUserId(user.id, limit),
     ),
   );
-}
-
-/**
- * 获取当前用户每日签到状态。
- *
- * 返回后台开关、奖励金额、当天日期和用户是否已签到；日期按现有用量统计的 UTC 日期口径计算。
- */
-export async function getDailySignInStatus(
-  userId: string,
-): Promise<ServiceResult<DailySignInStatusDto>> {
-  const user = await getUserById(userId);
-  if (!user) {
-    return fail(404, '用户不存在');
-  }
-
-  const signInDate = todaySignInDate();
-  const [config, record] = await Promise.all([
-    getDailySignInConfig(),
-    getDailySignInRecordByDate(user.id, signInDate),
-  ]);
-
-  return ok({
-    enabled: config.enabled,
-    reward_coins: config.reward_coins,
-    sign_in_date: signInDate,
-    signed_in_today: Boolean(record),
-    signed_in_at: record?.created_at ?? null,
-  });
-}
-
-/**
- * 领取每日签到积分奖励。
- *
- * 奖励以赠送积分入账；同一用户同一日期只允许成功领取一次。
- */
-export async function claimDailySignInReward(
-  userId: string,
-): Promise<ServiceResult<DailySignInResultDto>> {
-  const user = await getUserById(userId);
-  if (!user) {
-    return fail(404, '用户不存在');
-  }
-
-  const config = await getDailySignInConfig();
-  if (!config.enabled) {
-    return fail(403, '每日签到暂未开启');
-  }
-  if (config.reward_coins <= 0) {
-    return fail(400, '每日签到奖励未配置');
-  }
-
-  const signInDate = todaySignInDate();
-  const existing = await getDailySignInRecordByDate(user.id, signInDate);
-  if (existing) {
-    return fail(409, '今日已签到');
-  }
-
-  const { user: updated, record, created } = await createDailySignInReward({
-    userId: user.id,
-    signInDate,
-    rewardCoins: config.reward_coins,
-    note: `每日签到奖励（${signInDate}）`,
-  });
-  if (!created) {
-    return fail(409, '今日已签到');
-  }
-
-  return ok({
-    enabled: config.enabled,
-    reward_coins: config.reward_coins,
-    sign_in_date: signInDate,
-    signed_in_today: true,
-    signed_in_at: record.created_at,
-    received_coins: record.reward_coins,
-    purchased_coins: updated.purchased_coins,
-    bonus_coins: updated.bonus_coins,
-    reserved_coins: updated.reserved_coins,
-    available_coins: calculateAvailableSpendableCoins(updated),
-  });
-}
-
-/**
- * 兑换当前用户输入的积分礼品码。
- *
- * 充值积分礼品会进入 purchased_coins；奖励积分礼品会进入 bonus_coins 并创建可追溯批次。
- */
-export async function redeemCurrentUserGiftCode(
-  userId: string,
-  code: string,
-): Promise<ServiceResult<GiftCodeRedeemResultDto>> {
-  const user = await getUserById(userId);
-  if (!user) {
-    return fail(404, '用户不存在');
-  }
-
-  try {
-    return ok(await redeemGiftCodeForUser({ userId: user.id, code }));
-  } catch (err) {
-    return fail(400, err instanceof Error ? err.message : '礼品码兑换失败');
-  }
 }
 
 export async function resetBillingScope(
