@@ -113,20 +113,8 @@ export interface UserSkillSubscription {
   subscribed_at: string;
 }
 
-/** Skill 公开赞踩类型。 */
-export type SkillReactionKind = 'like' | 'dislike';
-
 /** Skill 评论审核状态。 */
 export type SkillCommentStatus = 'pending' | 'approved' | 'rejected';
-
-/** 用户对公开 Skill 的赞踩记录。 */
-export interface SkillReaction {
-  skill_id: string;
-  user_id: string;
-  kind: SkillReactionKind;
-  created_at: string;
-  updated_at: string;
-}
 
 /**
  * Skill 评论原始行。
@@ -179,19 +167,6 @@ export interface SkillBundle {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-}
-
-/** IPC 同步到容器的用户 skill 条目（合并自有 + 订阅） */
-export interface EffectiveUserSkill {
-  id: string;
-  dir: string;
-  name: string;
-  description: string;
-  bundle_uri: string;
-  checksum: string | null;
-  install_status: 'installed' | 'missing' | 'error';
-  visibility: 'private' | 'link_shared' | 'shared';
-  source: 'self' | 'subscribed';
 }
 
 export interface Account {
