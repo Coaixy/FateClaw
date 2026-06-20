@@ -460,116 +460,23 @@ describe('chat-session-service selected board context', () => {
     expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
-  it('allows Clarity professional AI turns while daily turns remain and consumes one turn', async () => {
+  it('每日专家次数上限已软取消，有效卦师不再消耗次数', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({
       active: true,
       membership: { plan_key: 'fateclaw_clarity' },
     });
-    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
-      allowed: true,
-      usage_date: '2026-04-26',
-      limit: 10,
-      used: 4,
-      remaining: 6,
-    });
 
-    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
-      content: '请解读这张盘',
-      inputKind: 'normal',
-      pastedBoard: undefined,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
-      userId: 'user-1',
-      dailyTurnLimit: 200,
-    });
-    expect(mockStoreMessage).toHaveBeenCalled();
-    expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
-  });
-
-  it('refunds a consumed Clarity professional AI turn when request preparation fails', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({
-      active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
-    });
-    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
-      allowed: true,
-      usage_date: '2026-04-26',
-      limit: 10,
-      used: 4,
-      remaining: 6,
-    });
-    mockBuildStructuredInputForSession.mockRejectedValueOnce(
-      new Error('structured input unavailable'),
-    );
-
-    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
-      content: '请解读这张盘',
-      inputKind: 'normal',
-      pastedBoard: undefined,
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      statusCode: 502,
-      error: 'structured input unavailable',
-    });
-    expect(mockReleaseProfessionalAiTurn).toHaveBeenCalledWith({
-      userId: 'user-1',
-      usageDate: '2026-04-26',
-    });
-    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
-  });
-
-  it('refunds a consumed Clarity professional AI turn when enqueueing fails', async () => {
-    mockGetMembershipOverview.mockResolvedValueOnce({
-      active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
-    });
-    mockClaimProfessionalAiTurn.mockResolvedValueOnce({
-      allowed: true,
-      usage_date: '2026-04-26',
-      limit: 10,
-      used: 4,
-      remaining: 6,
-    });
-    mockDispatchAiChatPrompt.mockResolvedValueOnce({
-      status: 'error',
-      publicErrorText: 'AI 处理失败',
-      text: '',
-      error: 'runtime unavailable',
-    });
-
-    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
-      content: '请解读这张盘',
-      inputKind: 'normal',
-      pastedBoard: undefined,
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      statusCode: 502,
-      error: 'AI 处理失败',
-    });
-    expect(mockStoreMessage).toHaveBeenCalled();
-    expect(mockReleaseProfessionalAiTurn).toHaveBeenCalledWith({
-      userId: 'user-1',
-      usageDate: '2026-04-26',
-    });
-  });
-
-  it('consumes professional AI turns with the unified 使用权 daily limit', async () => {
     await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '请解读这张盘',
       inputKind: 'normal',
       pastedBoard: undefined,
     });
 
-    expect(mockClaimProfessionalAiTurn).toHaveBeenCalledWith({
-      userId: 'user-1',
-      dailyTurnLimit: 200,
-    });
+    // entitlement.professionalAiDailyTurnLimit 返回 null（不限次数），
+    // prepareOwnedChatSessionTurn 据此跳过 claim/release（机制保留休眠）。
+    expect(mockClaimProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockReleaseProfessionalAiTurn).not.toHaveBeenCalled();
+    expect(mockStoreMessage).toHaveBeenCalled();
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledTimes(1);
   });
 

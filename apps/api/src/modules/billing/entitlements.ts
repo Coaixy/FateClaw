@@ -14,9 +14,6 @@ import {
   type MembershipPlanKey,
 } from '../../shared/membership-plans.js';
 
-/** 单层卦师使用权的每日专家解读轮次上限（防滥用，可调）。 */
-const GUASHI_DAILY_TURN_LIMIT = 200;
-
 /**
  * 微信 Claw 功能总开关（可逆停用的集中控制点）。
  *
@@ -42,7 +39,8 @@ export interface RuntimeEntitlementSnapshot {
   hasPriorityQueue: boolean;
   canUseCustomModel: boolean;
   canUseWechatClaw: boolean;
-  professionalAiDailyTurnLimit: number;
+  /** 每日专家解读次数上限；null 表示不限次数（当前 B 端卦师不设上限）。 */
+  professionalAiDailyTurnLimit: number | null;
   wallet: {
     purchasedCoins: number;
     bonusCoins: number;
@@ -90,9 +88,10 @@ export async function getRuntimeEntitlementSnapshot(
     // 功能已在迁移 0057 数据层可逆停用（accounts.enabled=false → 启动不拉起 iLink 轮询、
     // 前端无绑定入口、状态页不展示微信卡）。恢复时把常量改回 true 即对所有有效卦师开放。
     canUseWechatClaw: WECHAT_CLAW_FEATURE_ENABLED && membership.active,
-    professionalAiDailyTurnLimit: membership.active
-      ? GUASHI_DAILY_TURN_LIMIT
-      : 0,
+    // B 端卦师按 token 计费，取消每日专家次数上限：有效卦师返回 null，
+    // prepareOwnedChatSessionTurn 会据此跳过 claimProfessionalAiTurn（机制保留休眠，
+    // 未来如需恢复上限，把 null 改回具体数值即可）。
+    professionalAiDailyTurnLimit: membership.active ? null : 0,
     wallet: {
       purchasedCoins: walletState.purchased_coins,
       bonusCoins: walletState.bonus_coins,
