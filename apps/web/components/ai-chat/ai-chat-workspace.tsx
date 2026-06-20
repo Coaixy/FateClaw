@@ -89,13 +89,6 @@ const PaipanSheet = dynamic(
     ),
   { ssr: false, loading: () => null },
 );
-const PaipanSkillPickerSheet = dynamic(
-  () =>
-    import('@/components/ai-chat/paipan-skill-picker-sheet').then(
-      (module) => module.PaipanSkillPickerSheet,
-    ),
-  { ssr: false, loading: () => null },
-);
 const PastedBoardSheet = dynamic(
   () =>
     import('@/components/ai-chat/pasted-board-sheet').then(
@@ -205,7 +198,6 @@ function AiChatWorkspaceContent() {
   const [input, setInput] = useState('');
   const [paipanSheetMode, setPaipanSheetMode] =
     useState<PaipanSheetMode | null>(null);
-  const [paipanSkillPickerOpen, setPaipanSkillPickerOpen] = useState(false);
   const [paipanCatalog, setPaipanCatalog] = useState<PaipanCatalogItem[]>([]);
   const [paipanCatalogLoading, setPaipanCatalogLoading] = useState(false);
   const [preselectedPaipanSkill, setPreselectedPaipanSkill] = useState<
@@ -269,10 +261,6 @@ function AiChatWorkspaceContent() {
 
     window.sessionStorage.removeItem(PENDING_CHAT_INPUT_KEY);
     setInput((current) => current || pendingText);
-  }, [chatAvailable]);
-
-  useEffect(() => {
-    setPaipanSkillPickerOpen(false);
   }, [chatAvailable]);
 
   const loadModelSettings = useCallback(async () => {
@@ -586,21 +574,12 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      setPaipanSkillPickerOpen(false);
       setPreselectedPaipanSkill(skill ?? null);
       setLockPaipanSkill(Boolean(skill));
       setPaipanSheetMode('pre-chat');
     },
     [authLoading],
   );
-
-  const openPaipanSkillPicker = useCallback(() => {
-    if (authLoading) {
-      return;
-    }
-
-    setPaipanSkillPickerOpen(true);
-  }, [authLoading]);
 
   const openSkillMarket = useCallback(() => {
     router.push('/discover');
@@ -735,7 +714,6 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      setPaipanSkillPickerOpen(false);
       setPreselectedPaipanSkill(skill ?? null);
       setLockPaipanSkill(Boolean(skill));
       setPaipanSheetMode('current-session');
@@ -748,18 +726,6 @@ function AiChatWorkspaceContent() {
     setPreselectedPaipanSkill(null);
     setLockPaipanSkill(false);
   }, []);
-
-  const handleClosePaipanSkillPicker = useCallback(() => {
-    setPaipanSkillPickerOpen(false);
-  }, []);
-
-  const handleSelectSkillFromPicker = useCallback(
-    (skill: string) => {
-      setPaipanSkillPickerOpen(false);
-      openPreChatPaipan(skill);
-    },
-    [openPreChatPaipan],
-  );
 
   const handleOpenComposerPastedBoard = useCallback(() => {
     if (authLoading) {
@@ -884,13 +850,9 @@ function AiChatWorkspaceContent() {
         <PaipanSkillRail
           catalog={paipanCatalog}
           loading={paipanCatalogLoading}
-          enabledSkills={onboardingGuide.enabledSkills}
-          enabledSkillsLoading={onboardingGuide.enabledSkillsLoading}
-          showEnabledSkillsEmptyState={chatAvailable}
           disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
-          onOpenAll={openPaipanSkillPicker}
           onOpenSkillMarket={openSkillMarket}
           onOpenPastedBoard={handleOpenComposerPastedBoard}
         />
@@ -985,14 +947,6 @@ function AiChatWorkspaceContent() {
           </div>
         </div>
       )}
-
-      <PaipanSkillPickerSheet
-        open={paipanSkillPickerOpen}
-        catalog={paipanCatalog}
-        loading={paipanCatalogLoading}
-        onClose={handleClosePaipanSkillPicker}
-        onSelectSkill={handleSelectSkillFromPicker}
-      />
 
       <PaipanSheet
         open={paipanSheetMode !== null}
