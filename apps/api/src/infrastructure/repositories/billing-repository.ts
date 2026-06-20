@@ -1152,54 +1152,6 @@ export async function updateDailySignInConfig(input: {
 }
 
 /**
- * 读取旧 Free 用户专业模式 AI 每日次数配置；首次访问时补齐默认 5 次。
- *
- * @returns 当前全局配置行。
- * @deprecated 仅供后台兼容展示旧配置，新会员体系的每日次数来自套餐能力矩阵。
- */
-export async function getFreeProfessionalAiQuotaConfig(): Promise<FreeProfessionalAiQuotaConfigRow> {
-  const { rows } = await pool.query(
-    `INSERT INTO ai_chat_free_quota_config (id)
-     VALUES ('default')
-     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
-     RETURNING *`,
-  );
-  return normalizeFreeProfessionalAiQuotaConfigRow(
-    rows[0] as FreeProfessionalAiQuotaConfigRow,
-  );
-}
-
-/**
- * 更新旧 Free 用户专业模式 AI 每日可用次数。
- *
- * @param input.dailyProfessionalTurnLimit 旧配置里的每日专业模式 AI 轮数；0 表示关闭旧免费额度。
- * @returns 更新后的配置行。
- * @deprecated 仅供后台兼容写入旧配置，新会员体系的每日次数来自套餐能力矩阵。
- */
-export async function updateFreeProfessionalAiQuotaConfig(input: {
-  dailyProfessionalTurnLimit: number;
-}): Promise<FreeProfessionalAiQuotaConfigRow> {
-  const dailyProfessionalTurnLimit = Math.max(
-    0,
-    Math.trunc(input.dailyProfessionalTurnLimit),
-  );
-  const { rows } = await pool.query(
-    `INSERT INTO ai_chat_free_quota_config (
-       id, daily_professional_turn_limit, updated_at
-     )
-     VALUES ('default', $1, NOW())
-     ON CONFLICT (id) DO UPDATE SET
-       daily_professional_turn_limit = EXCLUDED.daily_professional_turn_limit,
-       updated_at = NOW()
-     RETURNING *`,
-    [dailyProfessionalTurnLimit],
-  );
-  return normalizeFreeProfessionalAiQuotaConfigRow(
-    rows[0] as FreeProfessionalAiQuotaConfigRow,
-  );
-}
-
-/**
  * 原子占用用户一次专家模式 AI 使用次数。
  *
  * @param input.userId 用户 ID。

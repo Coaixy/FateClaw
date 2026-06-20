@@ -42,7 +42,6 @@ import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-  getFreeProfessionalAiQuotaConfig,
   listGiftCodesForAdmin,
   getMembershipConfig,
   getMembershipEntitlements,
@@ -78,7 +77,6 @@ import {
   setUserMembershipForAdmin,
   upsertPiSessionCleanupCursor,
   updateDailySignInConfig,
-  updateFreeProfessionalAiQuotaConfig,
   updateMembershipConfig,
   updateUserPasswordHash,
   updateAnnouncement,
@@ -235,11 +233,6 @@ export interface AdminRewardConfigView {
     display_price_coins: number;
     updated_at: string;
   }>;
-  free_professional_ai: {
-    /** 旧 Free 专家次数配置，仅供后台兼容展示，不参与新会员每日次数规则。 */
-    daily_turn_limit: number;
-    updated_at: string;
-  };
 }
 
 export interface AdminUserListOptions {
@@ -327,13 +320,11 @@ async function getAdminUserMembershipState(
  * 读取后台积分奖励配置。
  */
 export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
-  const [dailySignIn, membership, membershipPlans, freeProfessionalAi] =
-    await Promise.all([
-      getDailySignInConfig(),
-      getMembershipConfig(),
-      getMembershipPlanConfigs(),
-      getFreeProfessionalAiQuotaConfig(),
-    ]);
+  const [dailySignIn, membership, membershipPlans] = await Promise.all([
+    getDailySignInConfig(),
+    getMembershipConfig(),
+    getMembershipPlanConfigs(),
+  ]);
   const membershipView = membershipConfigToAdminView(membership);
   return {
     daily_sign_in: {
@@ -343,10 +334,6 @@ export async function getAdminRewardConfig(): Promise<AdminRewardConfigView> {
     },
     membership: membershipView,
     membership_plans: membershipPlans.map(membershipConfigToAdminView),
-    free_professional_ai: {
-      daily_turn_limit: freeProfessionalAi.daily_professional_turn_limit,
-      updated_at: freeProfessionalAi.updated_at,
-    },
   };
 }
 
@@ -372,25 +359,15 @@ export async function updateAdminRewardConfig(input: {
     monthlyPriceCoins: number;
     displayPriceCoins: number;
   }>;
-  freeProfessionalAi?: {
-    dailyTurnLimit: number;
-  };
 }): Promise<AdminRewardConfigView> {
   const membershipInputs =
     input.membershipPlans && input.membershipPlans.length > 0
       ? input.membershipPlans
       : [input.membership];
-  const [dailySignIn, freeProfessionalAi] = await Promise.all([
-    updateDailySignInConfig({
-      enabled: input.dailySignIn.enabled,
-      rewardCoins: input.dailySignIn.rewardCoins,
-    }),
-    input.freeProfessionalAi
-      ? updateFreeProfessionalAiQuotaConfig({
-          dailyProfessionalTurnLimit: input.freeProfessionalAi.dailyTurnLimit,
-        })
-      : getFreeProfessionalAiQuotaConfig(),
-  ]);
+  const dailySignIn = await updateDailySignInConfig({
+    enabled: input.dailySignIn.enabled,
+    rewardCoins: input.dailySignIn.rewardCoins,
+  });
   await Promise.all(
     membershipInputs.map((membershipInput) =>
       updateMembershipConfig({
@@ -413,10 +390,6 @@ export async function updateAdminRewardConfig(input: {
     },
     membership: membershipView,
     membership_plans: membershipPlans.map(membershipConfigToAdminView),
-    free_professional_ai: {
-      daily_turn_limit: freeProfessionalAi.daily_professional_turn_limit,
-      updated_at: freeProfessionalAi.updated_at,
-    },
   };
 }
 

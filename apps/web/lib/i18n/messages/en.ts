@@ -553,6 +553,17 @@ export const enMessages = {
       sessionsTitle: 'Reading history',
       empty: 'No readings for this client yet',
       archivedBadge: 'Archived',
+      followUps: {
+        title: 'Follow-ups',
+        placeholder: 'Note this conversation, client feedback, or next steps…',
+        add: 'Add',
+        adding: 'Adding…',
+        empty: 'No follow-ups yet',
+        delete: 'Delete',
+        deleteConfirm: 'Delete this follow-up?',
+        addFailed: 'Failed to add follow-up',
+        deleteFailed: 'Failed to delete follow-up',
+      },
     },
     toast: {
       created: 'Client profile created',
@@ -783,6 +794,15 @@ export const enMessages = {
       useAsBoard: 'Use as chart',
       shortcutHint: 'Enter to send · Shift+Enter for new line',
       aiDisclaimer: 'AI-generated content, for reference only',
+    },
+    compileScript: {
+      button: 'Compile script',
+      compiling: 'Compiling…',
+      title: 'Reading script',
+      hint: 'AI-compiled draft for review only — polish and verify before sending to your client.',
+      copy: 'Copy all',
+      copied: 'Copied',
+      failed: 'Failed to compile script',
     },
     home: {
       subtitle: 'Charting · Reading · Client Scripts',

@@ -4,6 +4,7 @@ import type {
   ChatSessionShareResponseDto,
   ChatSessionSendRequestDto,
   ChatSessionSendResponseDto,
+  CompileScriptResponseDto,
   MessageDto,
   SessionMessageListResponseDto,
   SharedChatSessionDto,
@@ -271,4 +272,14 @@ export const chatSessionsApi = {
       fetchOptions,
     );
   },
+  /** 把一次断卦会话整理成可编辑解读稿（等待 AI 完整生成；会扣积分但不占每日次数）。 */
+  compileScript: (sessionId: string) =>
+    requestJson<CompileScriptResponseDto>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/compile-script`,
+      {
+        method: 'POST',
+        exposeServerErrorMessage: true,
+        headers: { 'x-no-compression': '1' },
+      },
+    ),
 };

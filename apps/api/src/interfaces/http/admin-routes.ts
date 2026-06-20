@@ -660,15 +660,6 @@ const RewardConfigSchema = z.object({
       '签到奖励必须在 0 到 1000000 之间',
     ),
   }),
-  free_professional_ai: z
-    .object({
-      daily_turn_limit: z
-        .number()
-        .int('专家模式每日次数必须是整数')
-        .min(0, '专家模式每日次数不能小于 0')
-        .max(1_000_000, '专家模式每日次数过大'),
-    })
-    .optional(),
   membership: z.object({
     enabled: z.boolean(),
     monthly_price_coins: SoftCurrencyNumberSchema.refine(
@@ -1138,11 +1129,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         monthlyPriceCoins: plan.monthly_price_coins,
         displayPriceCoins: plan.display_price_coins,
       })),
-      freeProfessionalAi: parsed.data.free_professional_ai
-        ? {
-            dailyTurnLimit: parsed.data.free_professional_ai.daily_turn_limit,
-          }
-        : undefined,
     });
   });
 

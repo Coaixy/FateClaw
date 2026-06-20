@@ -15,7 +15,6 @@ const {
   mockGetChatSessionPiSessionArchive,
   mockGetConversationLogByRequestId,
   mockGetPiSessionHealthPolicy,
-  mockGetFreeProfessionalAiQuotaConfig,
   mockGetMembershipConfig,
   mockGetMembershipEntitlements,
   mockGetMembershipPlanConfigs,
@@ -36,7 +35,6 @@ const {
   mockSetUserMembershipForAdmin,
   mockWritePiSessionSnapshotArchiveToFiles,
   mockUpdateDailySignInConfig,
-  mockUpdateFreeProfessionalAiQuotaConfig,
   mockUpdateAnnouncement,
   mockUpdateMembershipConfig,
   mockUpdatePublicFinancialLedgerEntry,
@@ -57,7 +55,6 @@ const {
   mockGetChatSessionPiSessionArchive: vi.fn(),
   mockGetConversationLogByRequestId: vi.fn(),
   mockGetPiSessionHealthPolicy: vi.fn(),
-  mockGetFreeProfessionalAiQuotaConfig: vi.fn(),
   mockGetMembershipConfig: vi.fn(),
   mockGetMembershipEntitlements: vi.fn(),
   mockGetMembershipPlanConfigs: vi.fn(),
@@ -78,7 +75,6 @@ const {
   mockSetUserMembershipForAdmin: vi.fn(),
   mockWritePiSessionSnapshotArchiveToFiles: vi.fn(),
   mockUpdateDailySignInConfig: vi.fn(),
-  mockUpdateFreeProfessionalAiQuotaConfig: vi.fn(),
   mockUpdateAnnouncement: vi.fn(),
   mockUpdateMembershipConfig: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
@@ -99,7 +95,6 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
   getAdminAnnouncementById: mockGetAdminAnnouncementById,
-  getFreeProfessionalAiQuotaConfig: mockGetFreeProfessionalAiQuotaConfig,
   getMembershipConfig: mockGetMembershipConfig,
   getMembershipEntitlements: mockGetMembershipEntitlements,
   getMembershipPlanConfigs: mockGetMembershipPlanConfigs,
@@ -117,7 +112,6 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   resetPiSessionCleanupCursor: mockResetPiSessionCleanupCursor,
   setUserMembershipForAdmin: mockSetUserMembershipForAdmin,
   updateDailySignInConfig: mockUpdateDailySignInConfig,
-  updateFreeProfessionalAiQuotaConfig: mockUpdateFreeProfessionalAiQuotaConfig,
   updateAnnouncement: mockUpdateAnnouncement,
   updateMembershipConfig: mockUpdateMembershipConfig,
   updatePublicFinancialLedgerEntry: mockUpdatePublicFinancialLedgerEntry,
@@ -205,20 +199,10 @@ describe('createAdminUser', () => {
       reward_coins: 20,
       updated_at: '2026-05-30T00:00:00.000Z',
     });
-    mockGetFreeProfessionalAiQuotaConfig.mockResolvedValue({
-      id: 'default',
-      daily_professional_turn_limit: 5,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
     mockUpdateDailySignInConfig.mockResolvedValue({
       id: 'default',
       enabled: false,
       reward_coins: 10,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
-    mockUpdateFreeProfessionalAiQuotaConfig.mockResolvedValue({
-      id: 'default',
-      daily_professional_turn_limit: 5,
       updated_at: '2026-05-30T01:00:00.000Z',
     });
     mockGetMembershipConfig.mockResolvedValue(plusMembershipConfig());
@@ -226,11 +210,6 @@ describe('createAdminUser', () => {
       plusMembershipConfig(),
       proMembershipConfig(),
     ]);
-    mockGetFreeProfessionalAiQuotaConfig.mockResolvedValue({
-      id: 'default',
-      daily_professional_turn_limit: 5,
-      updated_at: '2026-05-30T00:00:00.000Z',
-    });
     mockUpdateMembershipConfig.mockResolvedValue(
       plusMembershipConfig({
         monthly_allowance_units: 5000000,
@@ -238,11 +217,6 @@ describe('createAdminUser', () => {
         updated_at: '2026-05-30T01:00:00.000Z',
       }),
     );
-    mockUpdateFreeProfessionalAiQuotaConfig.mockResolvedValue({
-      id: 'default',
-      daily_professional_turn_limit: 5,
-      updated_at: '2026-05-30T01:00:00.000Z',
-    });
   });
 
   it('normalizes phone and persists a hashed admin-created user', async () => {
@@ -396,10 +370,6 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T00:00:00.000Z',
         },
       ],
-      free_professional_ai: {
-        daily_turn_limit: 5,
-        updated_at: '2026-05-30T00:00:00.000Z',
-      },
     });
   });
 
@@ -428,9 +398,6 @@ describe('admin reward config', () => {
         membership: {
           enabled: true,
           monthlyPriceCoins: 30,
-        },
-        freeProfessionalAi: {
-          dailyTurnLimit: 5,
         },
       }),
     ).resolves.toEqual({
@@ -465,10 +432,6 @@ describe('admin reward config', () => {
           updated_at: '2026-05-30T00:00:00.000Z',
         },
       ],
-      free_professional_ai: {
-        daily_turn_limit: 5,
-        updated_at: '2026-05-30T01:00:00.000Z',
-      },
     });
 
     expect(mockUpdateDailySignInConfig).toHaveBeenCalledWith({
@@ -481,9 +444,6 @@ describe('admin reward config', () => {
       enabled: true,
       monthlyPriceCoins: 30,
       displayPriceCoins: undefined,
-    });
-    expect(mockUpdateFreeProfessionalAiQuotaConfig).toHaveBeenCalledWith({
-      dailyProfessionalTurnLimit: 5,
     });
   });
 });

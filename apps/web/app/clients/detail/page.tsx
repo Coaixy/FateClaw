@@ -7,17 +7,22 @@ import {
   Archive,
   ArrowLeft,
   CalendarDays,
+  ClipboardList,
   Loader2,
   MapPin,
   MessageCircle,
+  Plus,
   Sparkles,
+  Trash2,
   Users,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
 import {
+  clientFollowUpsApi,
   clientProfilesApi,
+  type ClientFollowUp,
   type ClientProfile,
   type ClientStatus,
 } from '@/features/chat/client-profiles-api';
@@ -72,6 +77,10 @@ function ClientDetailContent() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [followUps, setFollowUps] = useState<ClientFollowUp[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [followUpError, setFollowUpError] = useState('');
 
   useEffect(() => {
     if (!user || !clientId) {
@@ -83,11 +92,13 @@ function ClientDetailContent() {
     Promise.all([
       clientProfilesApi.get(clientId),
       chatSessionsApi.byClient(clientId),
+      clientFollowUpsApi.list(clientId),
     ])
-      .then(([loadedProfile, loadedSessions]) => {
+      .then(([loadedProfile, loadedSessions, loadedFollowUps]) => {
         if (cancelled) return;
         setProfile(loadedProfile);
         setSessions(loadedSessions);
+        setFollowUps(loadedFollowUps.follow_ups);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -102,6 +113,43 @@ function ClientDetailContent() {
       cancelled = true;
     };
   }, [user, clientId, t]);
+
+  // 提交一条跟进记录：成功后清空输入并把新记录插到时间线顶部。
+  const handleAddFollowUp = async () => {
+    const content = newNote.trim();
+    if (!content || submitting) return;
+    setSubmitting(true);
+    setFollowUpError('');
+    try {
+      const created = await clientFollowUpsApi.create(clientId, { content });
+      setFollowUps((prev) => [created, ...prev]);
+      setNewNote('');
+    } catch (err) {
+      setFollowUpError(
+        err instanceof Error
+          ? err.message
+          : t('clients.detail.followUps.addFailed'),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 软删除一条跟进记录，先确认再删。
+  const handleDeleteFollowUp = async (id: string) => {
+    if (!window.confirm(t('clients.detail.followUps.deleteConfirm'))) return;
+    setFollowUpError('');
+    try {
+      await clientFollowUpsApi.delete(clientId, id);
+      setFollowUps((prev) => prev.filter((item) => item.id !== id));
+    } catch (err) {
+      setFollowUpError(
+        err instanceof Error
+          ? err.message
+          : t('clients.detail.followUps.deleteFailed'),
+      );
+    }
+  };
 
   const birthLabel = profile?.solar_date
     ? typeof profile.hour === 'number'
@@ -206,6 +254,94 @@ function ClientDetailContent() {
                 </button>
               </div>
             </header>
+
+            {/* 跟进记录:可追加的客户服务时间线 */}
+            <section className="space-y-3">
+              <h2 className="px-0.5 text-[13px] font-semibold text-ink">
+                {t('clients.detail.followUps.title')}
+                {followUps.length > 0 && (
+                  <span className="ml-1.5 text-[12px] font-normal text-muted">
+                    {followUps.length}
+                  </span>
+                )}
+              </h2>
+
+              {/* 追加输入框 */}
+              <div className="rounded-2xl border border-hairline bg-surface-card p-3">
+                <textarea
+                  value={newNote}
+                  onChange={(event) => setNewNote(event.target.value)}
+                  placeholder={t('clients.detail.followUps.placeholder')}
+                  rows={2}
+                  className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-ink placeholder:text-muted/60 focus:outline-none"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAddFollowUp}
+                    disabled={!newNote.trim() || submitting}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {submitting ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Plus size={13} />
+                    )}
+                    {submitting
+                      ? t('clients.detail.followUps.adding')
+                      : t('clients.detail.followUps.add')}
+                  </button>
+                </div>
+              </div>
+
+              {followUpError && (
+                <p className="px-0.5 text-[12px] text-rose-500">
+                  {followUpError}
+                </p>
+              )}
+
+              {/* 时间线列表（倒序,最新在前） */}
+              {followUps.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-hairline py-10 text-center text-[12px] text-muted">
+                  {t('clients.detail.followUps.empty')}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {followUps.map((item) => (
+                    <div
+                      key={item.id}
+                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3"
+                    >
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <ClipboardList size={13} strokeWidth={1.8} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">
+                          {item.content}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted">
+                          {formatDate(item.created_at, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFollowUp(item.id)}
+                        aria-label={t('clients.detail.followUps.delete')}
+                        className="shrink-0 rounded-md p-1 text-muted/50 opacity-0 transition-all hover:text-rose-500 group-hover:opacity-100"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {/* 断卦历史:活跃 + 已归档统一列出 */}
             <section className="space-y-3">
