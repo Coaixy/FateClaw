@@ -8,6 +8,11 @@ import {
   listClientProfilesForOwnedUser,
   updateClientProfileForOwnedUser,
 } from '../../modules/chat/client-profile-service.js';
+import {
+  createClientFollowUpForOwnedUser,
+  deleteClientFollowUpForOwnedUser,
+  listClientFollowUpsForOwnedUser,
+} from '../../modules/chat/client-follow-up-service.js';
 
 /** 阳历生日 YYYY-MM-DD 格式校验。 */
 const SOLAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,6 +39,11 @@ const ClientProfileUpsertSchema = z.object({
   // 轻量 CRM：自由标签(最多12个,单个≤20字)与状态(vip/待跟进/已完成)。
   tags: z.array(z.string().trim().min(1).max(20)).max(12).optional(),
   status: z.enum(['vip', 'follow_up', 'done']).nullable().optional(),
+});
+
+/** 客户跟进记录创建请求体校验。 */
+const ClientFollowUpCreateSchema = z.object({
+  content: z.string().trim().min(1, '请填写跟进内容').max(1000),
 });
 
 /**
@@ -118,6 +128,56 @@ export async function clientProfilesRoutes(app: FastifyInstance): Promise<void> 
     Params: { id: string };
   }>('/:id', async (request, reply) => {
     const result = await deleteClientProfileForOwnedUser(
+      request.user.userId,
+      request.params.id,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // GET /api/client-profiles/:clientId/follow-ups — 列出某客户的跟进记录（时间线倒序）
+  app.get<{
+    Params: { clientId: string };
+  }>('/:clientId/follow-ups', async (request, reply) => {
+    const result = await listClientFollowUpsForOwnedUser(
+      request.user.userId,
+      request.params.clientId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return { follow_ups: result.data };
+  });
+
+  // POST /api/client-profiles/:clientId/follow-ups — 新增一条跟进记录
+  app.post<{
+    Params: { clientId: string };
+    Body: unknown;
+  }>('/:clientId/follow-ups', async (request, reply) => {
+    const parsed = ClientFollowUpCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    const result = await createClientFollowUpForOwnedUser(
+      request.user.userId,
+      request.params.clientId,
+      parsed.data,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // DELETE /api/client-profiles/:clientId/follow-ups/:id — 软删除跟进记录
+  app.delete<{
+    Params: { clientId: string; id: string };
+  }>('/:clientId/follow-ups/:id', async (request, reply) => {
+    const result = await deleteClientFollowUpForOwnedUser(
       request.user.userId,
       request.params.id,
     );

@@ -1,4 +1,7 @@
 import type {
+  ClientFollowUpCreateDto,
+  ClientFollowUpDto,
+  ClientFollowUpListResponseDto,
   ClientProfileDto,
   ClientProfileListResponseDto,
   ClientProfileUpsertDto,
@@ -12,6 +15,7 @@ export type ClientProfile = ClientProfileDto;
 export type ClientProfileUpsert = ClientProfileUpsertDto;
 export type ClientProfileListResponse = ClientProfileListResponseDto;
 export type ClientStatus = ClientStatusDto;
+export type ClientFollowUp = ClientFollowUpDto;
 
 const pathSegment = (value: string) => encodeURIComponent(value);
 
@@ -44,4 +48,34 @@ export const clientProfilesApi = {
     requestJson<SuccessResponse>(`/api/client-profiles/${pathSegment(id)}`, {
       method: 'DELETE',
     }),
+};
+
+/**
+ * 客户跟进记录的浏览器侧 REST 封装。
+ *
+ * 与后端 `/api/client-profiles/:clientId/follow-ups` 约定对接，统一走 `requestJson`。
+ */
+export const clientFollowUpsApi = {
+  /** 拉取某客户的全部跟进记录（时间线倒序）。 */
+  list: (clientId: string) =>
+    requestJson<ClientFollowUpListResponseDto>(
+      `/api/client-profiles/${pathSegment(clientId)}/follow-ups`,
+    ),
+  /** 为某客户新增一条跟进记录，返回创建后的记录。 */
+  create: (clientId: string, data: ClientFollowUpCreateDto) =>
+    requestJson<ClientFollowUp>(
+      `/api/client-profiles/${pathSegment(clientId)}/follow-ups`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+  /** 删除某条跟进记录。 */
+  delete: (clientId: string, id: string) =>
+    requestJson<SuccessResponse>(
+      `/api/client-profiles/${pathSegment(clientId)}/follow-ups/${pathSegment(id)}`,
+      {
+        method: 'DELETE',
+      },
+    ),
 };

@@ -277,6 +277,20 @@ export interface ClientProfile {
 }
 
 /**
+ * 客户跟进记录表行。
+ *
+ * @remarks 归属卦师（user_id）+ 关联客户（client_id）；只追加 + 软删（deleted_at），不编辑。
+ */
+export interface ClientFollowUp {
+  id: string;
+  user_id: string;
+  client_id: string;
+  content: string;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+/**
  * 微信 sender 与网页 AI Chat 会话的接续映射。
  *
  * @remarks sender_hash 必须是去标识化值，避免持久化外部微信 ID。

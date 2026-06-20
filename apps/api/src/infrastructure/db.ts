@@ -183,6 +183,12 @@ import type {
   UpdateClientProfileInput,
 } from './repositories/client-profiles-repository.js';
 import {
+  createClientFollowUp,
+  getClientFollowUpsByClientId,
+  softDeleteClientFollowUp,
+} from './repositories/client-follow-ups-repository.js';
+import type { CreateClientFollowUpInput } from './repositories/client-follow-ups-repository.js';
+import {
   deleteWechatChatSessionLink,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
@@ -377,6 +383,9 @@ export {
   createUserUsing,
   createUserCustomSkill,
   createClientProfile,
+  createClientFollowUp,
+  getClientFollowUpsByClientId,
+  softDeleteClientFollowUp,
   deleteAccount,
   deleteDraftAnnouncement,
   deleteChatSession,
@@ -615,6 +624,7 @@ export type {
   ConversationLogRow,
   ConversationLogSummaryRow,
   CreateClientProfileInput,
+  CreateClientFollowUpInput,
   DailySignInConfigRow,
   DailySignInRecordRow,
   DeductBalanceResult,

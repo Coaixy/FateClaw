@@ -8,6 +8,7 @@ import {
   archiveOwnedChatSession,
   createChatSessionForOwnedUser,
   cancelOwnedChatSessionMessage,
+  compileSessionScriptForOwnedUser,
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
   getSharedChatSessionByShareToken,
@@ -326,4 +327,28 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     }
     return result.data;
   });
+
+  // POST /api/chat-sessions/s/:sessionId/compile-script — 把整段断卦汇总成可编辑解读稿
+  app.post<{
+    Params: { sessionId: string };
+  }>(
+    '/s/:sessionId/compile-script',
+    {
+      config: {
+        // 与发送消息一致：汇总需等 AI 完整生成，断连时压缩流易产生噪声。
+        compress: false,
+      },
+    },
+    async (request, reply) => {
+      await request.requireAuth();
+      const result = await compileSessionScriptForOwnedUser(
+        request.user.userId,
+        request.params.sessionId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return { script: result.data.script, request_id: result.data.requestId };
+    },
+  );
 }

@@ -484,6 +484,7 @@ describe('runDatabaseMigrations', () => {
       '0058_normalize_all_plan_keys_to_clarity',
       '0059_drop_allowance_columns_and_table',
       '0060_client_crm_fields',
+      '0061_client_follow_ups',
     ]);
 
     await runDatabaseMigrations(client as never);

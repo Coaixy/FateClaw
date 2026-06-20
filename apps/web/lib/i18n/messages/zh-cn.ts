@@ -533,6 +533,17 @@ export const zhCNMessages = {
       sessionsTitle: '断卦历史',
       empty: '该客户还没有断卦记录',
       archivedBadge: '已归档',
+      followUps: {
+        title: '跟进记录',
+        placeholder: '记录这次沟通、客户反馈或下一步安排…',
+        add: '添加',
+        adding: '添加中…',
+        empty: '还没有跟进记录',
+        delete: '删除',
+        deleteConfirm: '删除这条跟进记录？',
+        addFailed: '添加跟进失败',
+        deleteFailed: '删除跟进失败',
+      },
     },
     toast: {
       created: '客户档案已创建',
@@ -759,6 +770,15 @@ export const zhCNMessages = {
       useAsBoard: '作为盘面',
       shortcutHint: 'Enter 发送 · Shift+Enter 换行',
       aiDisclaimer: 'AI 生成内容，仅供参考',
+    },
+    compileScript: {
+      button: '整理为解读稿',
+      compiling: '整理中…',
+      title: '解读稿',
+      hint: '此稿由 AI 汇总，仅作复盘素材，请润色核对后再交付客户。',
+      copy: '复制全文',
+      copied: '已复制',
+      failed: '整理解读稿失败',
     },
     home: {
       subtitle: '排盘 · 断卦 · 出话术',

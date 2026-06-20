@@ -533,6 +533,17 @@ export const zhTWMessages = {
       sessionsTitle: '斷卦歷史',
       empty: '該客戶還沒有斷卦記錄',
       archivedBadge: '已歸檔',
+      followUps: {
+        title: '跟進記錄',
+        placeholder: '記錄這次溝通、客戶回饋或下一步安排…',
+        add: '新增',
+        adding: '新增中…',
+        empty: '還沒有跟進記錄',
+        delete: '刪除',
+        deleteConfirm: '刪除這條跟進記錄？',
+        addFailed: '新增跟進失敗',
+        deleteFailed: '刪除跟進失敗',
+      },
     },
     toast: {
       created: '客戶檔案已建立',
@@ -759,6 +770,15 @@ export const zhTWMessages = {
       useAsBoard: '作為盤面',
       shortcutHint: 'Enter 發送 · Shift+Enter 換行',
       aiDisclaimer: 'AI 生成內容，僅供參考',
+    },
+    compileScript: {
+      button: '整理為解讀稿',
+      compiling: '整理中…',
+      title: '解讀稿',
+      hint: '此稿由 AI 彙總，僅作複盤素材，請潤色核對後再交付客戶。',
+      copy: '複製全文',
+      copied: '已複製',
+      failed: '整理解讀稿失敗',
     },
     home: {
       subtitle: '排盤 · 斷卦 · 出話術',
