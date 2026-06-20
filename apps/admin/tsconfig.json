@@ -19,8 +19,6 @@
       }
     ],
     "paths": {
-      "@fateclaw/contracts": ["../../packages/contracts/dist/index.d.ts"],
-      "@fateclaw/contracts/*": ["../../packages/contracts/dist/*/index.d.ts"],
       "@/*": ["./*"]
     }
   },
