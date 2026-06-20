@@ -23,7 +23,8 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 版本统一读取 .nvmrc(当前 22),需 ≥22.13 以满足 pnpm@11.5.0 的 engines 要求
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Configure git
