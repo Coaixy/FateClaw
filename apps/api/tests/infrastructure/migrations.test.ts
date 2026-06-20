@@ -479,6 +479,8 @@ describe('runDatabaseMigrations', () => {
       '0053_clarity_no_free_allowance',
       '0054_migrate_legacy_active_members_to_clarity',
       '0055_allowance_units_nonnegative',
+      '0056_referral_reward_clarity_only',
+      '0057_disable_wechat_claw_accounts',
     ]);
 
     await runDatabaseMigrations(client as never);
