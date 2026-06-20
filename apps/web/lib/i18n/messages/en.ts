@@ -79,7 +79,6 @@ export const enMessages = {
       countRecords: '{count} days',
       countOrders: '{count} orders',
       countOrderItems: '{count} orders',
-      heat: 'Popularity {count}',
     },
     status: {
       title: 'FateClaw System Status',
@@ -120,9 +119,9 @@ export const enMessages = {
       },
     },
     discover: {
-      title: 'Skill Market',
+      title: 'Skill library',
       description:
-        'Discover and subscribe to metaphysics skills published by creators',
+        'Browse and subscribe to reusable divination skills for your workspace',
       searchPlaceholder: 'Search skills...',
       empty: 'No public content yet',
       bundlesTitle: 'Featured · Public bundles',
@@ -130,11 +129,12 @@ export const enMessages = {
       bundleBadge: 'Bundle',
       bundleFallbackDescription: 'A bundled set of skills',
       subscribeAll: 'Subscribe all',
-      skillsTitle: 'Skill popularity chart',
-      skillsDescription: 'Sorted by subscription popularity by default',
+      skillsTitle: 'All skills',
+      skillsDescription: 'Search and subscribe skills into your workspace',
       skillBadge: 'Skill',
       noDescription: 'No description',
       subscribe: 'Subscribe',
+      subscriberCount: '{count} subscribers',
     },
     studio: {
       title: 'Studio',

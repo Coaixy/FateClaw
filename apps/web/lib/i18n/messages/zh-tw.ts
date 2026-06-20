@@ -78,7 +78,6 @@ export const zhTWMessages = {
       countRecords: '{count} 天記錄',
       countOrders: '{count} 筆',
       countOrderItems: '{count} 筆訂單',
-      heat: '熱度 {count}',
     },
     status: {
       title: 'FateClaw 系統狀態',
@@ -117,8 +116,8 @@ export const zhTWMessages = {
       },
     },
     discover: {
-      title: '技能市場',
-      description: '發現並訂閱命理師發布的術數技能',
+      title: '技能庫',
+      description: '瀏覽並訂閱可複用的斷卦技能,裝進你的工作台',
       searchPlaceholder: '搜尋技能...',
       empty: '暫無公開內容',
       bundlesTitle: '優先推薦 · 公開捆綁包',
@@ -126,11 +125,12 @@ export const zhTWMessages = {
       bundleBadge: '捆綁包',
       bundleFallbackDescription: '整組技能打包訂閱',
       subscribeAll: '一鍵訂閱',
-      skillsTitle: '技能熱度榜',
-      skillsDescription: '預設按訂閱熱度排行，越靠前代表越受歡迎',
+      skillsTitle: '全部技能',
+      skillsDescription: '搜尋並訂閱技能,裝進工作台隨時調用',
       skillBadge: 'Skill',
       noDescription: '暫無描述',
       subscribe: '訂閱',
+      subscriberCount: '{count} 人訂閱',
     },
     studio: {
       title: '術數開發',

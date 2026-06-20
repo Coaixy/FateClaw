@@ -78,7 +78,6 @@ export const zhCNMessages = {
       countRecords: '{count} 天记录',
       countOrders: '{count} 笔',
       countOrderItems: '{count} 笔订单',
-      heat: '热度 {count}',
     },
     status: {
       title: 'FateClaw 系统状态',
@@ -117,8 +116,8 @@ export const zhCNMessages = {
       },
     },
     discover: {
-      title: '技能市场',
-      description: '发现并订阅命理师发布的术数技能',
+      title: '技能库',
+      description: '浏览并订阅可复用的断卦技能,装进你的工作台',
       searchPlaceholder: '搜索技能...',
       empty: '暂无公开内容',
       bundlesTitle: '优先推荐 · 公开捆绑包',
@@ -126,11 +125,12 @@ export const zhCNMessages = {
       bundleBadge: '捆绑包',
       bundleFallbackDescription: '整组技能打包订阅',
       subscribeAll: '一键订阅',
-      skillsTitle: '技能热度榜',
-      skillsDescription: '默认按订阅热度排行，越靠前说明越受欢迎',
+      skillsTitle: '全部技能',
+      skillsDescription: '搜索并订阅技能,装进工作台随时调用',
       skillBadge: 'Skill',
       noDescription: '暂无描述',
       subscribe: '订阅',
+      subscriberCount: '{count} 人订阅',
     },
     studio: {
       title: '术数开发',
