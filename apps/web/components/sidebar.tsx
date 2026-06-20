@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  HeartHandshake,
   Loader2,
   LogIn,
   MessageCircle,
@@ -23,6 +22,7 @@ import {
   Sun,
   ExternalLink,
   Send,
+  Sparkle,
   Users,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -351,7 +351,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     sessions.length === 0 && (authLoading || sessionsLoading);
   const contactQrOptions: ContactQrType[] =
     locale === 'zh-CN' ? ['wechat', 'qq'] : ['telegram'];
-  const showCharityShortcut = locale !== 'en';
   const activeContactQrType = contactQrOptions.includes(contactQrType)
     ? contactQrType
     : contactQrOptions[0];
@@ -791,6 +790,31 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </Link>
         </div>
 
+        {/* 技能工作室入口:卦师沉淀/复用断卦技能的资产区 */}
+        <div className="relative px-3 mt-2 shrink-0">
+          <Link
+            href="/studio"
+            onClick={closeSidebar}
+            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
+              pathname.startsWith('/studio')
+                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
+                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
+            }`}
+            aria-label={t('userMenu.studio')}
+          >
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                pathname.startsWith('/studio')
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-primary/10 text-primary'
+              }`}
+            >
+              <Sparkle size={14} strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{t('userMenu.studio')}</span>
+          </Link>
+        </div>
+
         {/* 对话历史列表 */}
         <div className="relative flex-1 min-h-0 flex flex-col mt-3">
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 scrollbar-hide">
@@ -1028,35 +1052,10 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
 
           <div
-            className={`grid gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1 ${
-              showCharityShortcut ? 'grid-cols-3' : 'grid-cols-2'
-            }`}
+            className="grid grid-cols-2 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
-            {showCharityShortcut && (
-              <a
-                href="/charity"
-                onClick={closeSidebar}
-                className={`group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium transition-all duration-200 ${
-                  pathname === '/charity'
-                    ? 'bg-primary/10 text-ink'
-                    : 'text-muted hover:text-ink hover:bg-surface-card'
-                }`}
-                aria-label={t('sidebar.viewCharity')}
-                title={t('sidebar.charity')}
-              >
-                <HeartHandshake
-                  size={14}
-                  strokeWidth={1.8}
-                  className="group-hover:text-primary"
-                />
-                <span className="max-w-full truncate leading-tight">
-                  {t('sidebar.charity')}
-                </span>
-              </a>
-            )}
-
             <button
               type="button"
               onClick={() => {

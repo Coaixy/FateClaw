@@ -50,6 +50,8 @@ interface PaipanSheetProps {
   catalogLoading: boolean;
   sessionId?: string;
   initialSkill?: string | null;
+  /** 外部带入需自动预选并预填的客户 id（如客户卡片"发起排盘"）。 */
+  initialClientId?: string | null;
   lockSkill?: boolean;
   canCommit?: boolean;
   onClose: () => void;
@@ -942,6 +944,7 @@ export function PaipanSheet({
   catalogLoading,
   sessionId,
   initialSkill,
+  initialClientId,
   lockSkill = false,
   canCommit = true,
   onClose,
@@ -1333,6 +1336,7 @@ export function PaipanSheet({
                     <ClientProfileSelector
                       selectedClientId={selectedClientId}
                       onSelect={handleSelectClient}
+                      autoSelectClientId={initialClientId}
                     />
                   )}
                 {SelectedFlow ? (

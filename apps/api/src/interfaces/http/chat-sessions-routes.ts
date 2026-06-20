@@ -12,6 +12,7 @@ import {
   getOwnedChatSessionQueryProcessSource,
   getSharedChatSessionByShareToken,
   listArchivedChatSessionsForOwnedUser,
+  listChatSessionsByClientForOwnedUser,
   listChatSessionsForOwnedUser,
   renameOwnedChatSession,
   restoreOwnedArchivedChatSession,
@@ -109,6 +110,21 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     await request.requireAuth();
     const result = await listArchivedChatSessionsForOwnedUser(
       request.user.userId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // GET /api/chat-sessions/by-client/:clientId — 某客户名下全部会话（活跃 + 已归档）
+  app.get<{
+    Params: { clientId: string };
+  }>('/by-client/:clientId', async (request, reply) => {
+    await request.requireAuth();
+    const result = await listChatSessionsByClientForOwnedUser(
+      request.user.userId,
+      request.params.clientId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

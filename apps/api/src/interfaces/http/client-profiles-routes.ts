@@ -31,6 +31,9 @@ const ClientProfileUpsertSchema = z.object({
   minute: z.number().int().min(0).max(59).nullable().optional(),
   birthplace: z.string().trim().max(120).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
+  // 轻量 CRM：自由标签(最多12个,单个≤20字)与状态(vip/待跟进/已完成)。
+  tags: z.array(z.string().trim().min(1).max(20)).max(12).optional(),
+  status: z.enum(['vip', 'follow_up', 'done']).nullable().optional(),
 });
 
 /**

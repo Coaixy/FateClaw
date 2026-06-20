@@ -1,16 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  History,
   Loader2,
   MapPin,
   MessageSquare,
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -20,6 +23,7 @@ import { ClientProfileForm } from '@/components/clients/client-profile-form';
 import type {
   ClientProfile,
   ClientProfileUpsert,
+  ClientStatus,
 } from '@/features/chat/client-profiles-api';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -28,6 +32,28 @@ import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 const CLIENTS_PAGE_SIZE = 6;
+
+/** 客户状态筛选项（含"全部"）。 */
+const STATUS_FILTERS: readonly { value: ClientStatus | 'all'; labelKey: string }[] = [
+  { value: 'all', labelKey: 'clients.filter.allStatus' },
+  { value: 'vip', labelKey: 'clients.status.vip' },
+  { value: 'follow_up', labelKey: 'clients.status.followUp' },
+  { value: 'done', labelKey: 'clients.status.done' },
+];
+
+/** 客户状态徽章样式（边框/底色/文字）。 */
+const STATUS_BADGE_CLASS: Record<ClientStatus, string> = {
+  vip: 'border-amber-400/40 bg-amber-400/10 text-amber-500',
+  follow_up: 'border-primary/35 bg-primary/10 text-primary',
+  done: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
+};
+
+/** 客户状态对应的 i18n 文案键。 */
+const STATUS_LABEL_KEY: Record<ClientStatus, string> = {
+  vip: 'clients.status.vip',
+  follow_up: 'clients.status.followUp',
+  done: 'clients.status.done',
+};
 
 type FormState =
   | { mode: 'create' }
@@ -47,6 +73,7 @@ function matchesSearch(profile: ClientProfile, query: string): boolean {
 }
 
 export default function ClientsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
   const { confirm: confirmDialog } = useConfirm();
@@ -61,6 +88,7 @@ export default function ClientsPage() {
 
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ClientStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const [formState, setFormState] = useState<FormState>(null);
   const [deletingId, setDeletingId] = useState('');
@@ -80,8 +108,12 @@ export default function ClientsPage() {
 
   const filteredProfiles = useMemo(() => {
     const query = normalizeSearch(search);
-    return profiles.filter((profile) => matchesSearch(profile, query));
-  }, [profiles, search]);
+    return profiles.filter(
+      (profile) =>
+        matchesSearch(profile, query) &&
+        (statusFilter === 'all' || profile.status === statusFilter),
+    );
+  }, [profiles, search, statusFilter]);
 
   const totalPages = Math.max(
     1,
@@ -95,7 +127,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, statusFilter]);
 
   const showSkeleton = loading && !initialLoaded;
 
@@ -185,6 +217,25 @@ export default function ClientsPage() {
                 />
               </div>
 
+              {/* 状态筛选:卦师按 VIP/待跟进/已完成 快速过滤客户 */}
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_FILTERS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setStatusFilter(item.value)}
+                    className={`h-8 rounded-lg border px-3 text-[12px] font-medium transition-all ${
+                      statusFilter === item.value
+                        ? 'border-primary/30 bg-primary/12 text-primary'
+                        : 'border-hairline bg-surface-card text-muted hover:border-primary/25 hover:text-ink'
+                    }`}
+                    aria-pressed={statusFilter === item.value}
+                  >
+                    {t(item.labelKey)}
+                  </button>
+                ))}
+              </div>
+
               {filteredProfiles.length === 0 ? (
                 <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
                   <div className="relative flex flex-col items-center gap-2">
@@ -209,6 +260,16 @@ export default function ClientsPage() {
                           setFormState({ mode: 'edit', profile })
                         }
                         onDelete={() => void handleDelete(profile)}
+                        onStartReading={() =>
+                          router.push(
+                            `/ai-chat?client=${encodeURIComponent(profile.id)}`,
+                          )
+                        }
+                        onViewHistory={() =>
+                          router.push(
+                            `/clients/detail?id=${encodeURIComponent(profile.id)}`,
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -283,6 +344,8 @@ function ClientCard({
   t,
   onEdit,
   onDelete,
+  onStartReading,
+  onViewHistory,
 }: {
   profile: ClientProfile;
   deleting: boolean;
@@ -294,6 +357,8 @@ function ClientCard({
   t: (key: string, params?: Record<string, string | number>) => string;
   onEdit: () => void;
   onDelete: () => void;
+  onStartReading: () => void;
+  onViewHistory: () => void;
 }) {
   const genderLabel =
     profile.gender === '男'
@@ -327,6 +392,13 @@ function ClientCard({
               {genderLabel && (
                 <span className="shrink-0 rounded-md bg-surface-cream-strong px-1.5 py-0.5 text-[10px] text-muted">
                   {genderLabel}
+                </span>
+              )}
+              {profile.status && (
+                <span
+                  className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE_CLASS[profile.status]}`}
+                >
+                  {t(STATUS_LABEL_KEY[profile.status])}
                 </span>
               )}
             </div>
@@ -365,6 +437,18 @@ function ClientCard({
                 {profile.notes}
               </p>
             )}
+            {profile.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {profile.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-md bg-primary/8 px-1.5 py-0.5 text-[10px] text-primary/90"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -393,6 +477,26 @@ function ClientCard({
             )}
           </button>
         </div>
+      </div>
+
+      {/* 操作:发起排盘(带客户进排盘) / 查看历史(该客户全部会话) */}
+      <div className="mt-3 flex items-center gap-2 border-t border-hairline/50 pt-3">
+        <button
+          type="button"
+          onClick={onStartReading}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/8 px-3 text-[12px] font-medium text-primary transition-colors hover:border-primary/45 hover:bg-primary/12"
+        >
+          <Sparkles size={13} strokeWidth={1.8} />
+          {t('clients.card.startReading')}
+        </button>
+        <button
+          type="button"
+          onClick={onViewHistory}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-muted transition-colors hover:border-primary/30 hover:text-ink"
+        >
+          <History size={13} strokeWidth={1.8} />
+          {t('clients.card.viewHistory')}
+        </button>
       </div>
     </div>
   );

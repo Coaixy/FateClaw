@@ -10,19 +10,6 @@ import { useI18n } from '@/lib/i18n';
 import { appendGuideResume, buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
-function getRankBadgeClass(rank: number): string {
-  if (rank === 1) {
-    return 'border-[color-mix(in_srgb,var(--color-accent-amber)_55%,var(--color-hairline))] bg-[color-mix(in_srgb,var(--color-accent-amber)_22%,var(--color-canvas))] text-[color-mix(in_srgb,var(--color-accent-amber)_52%,var(--color-ink))]';
-  }
-  if (rank === 2) {
-    return 'border-[color-mix(in_srgb,var(--color-muted)_46%,var(--color-hairline))] bg-[color-mix(in_srgb,var(--color-muted)_15%,var(--color-canvas))] text-body-strong';
-  }
-  if (rank === 3) {
-    return 'border-[color-mix(in_srgb,var(--color-primary)_48%,var(--color-hairline))] bg-[color-mix(in_srgb,var(--color-primary)_18%,var(--color-canvas))] text-[color-mix(in_srgb,var(--color-primary)_48%,var(--color-ink))]';
-  }
-  return 'border-hairline bg-canvas text-body-strong';
-}
-
 function appendQueryString(href: string, query: string) {
   if (!query) return href;
   return `${href}${href.includes('?') ? '&' : '?'}${query}`;
@@ -122,9 +109,7 @@ export default function DiscoverPage() {
                   </span>
                 </div>
 
-                {market.filteredBundles.map((bundle, index) => {
-                  const rank = index + 1;
-
+                {market.filteredBundles.map((bundle) => {
                   return (
                     <Link
                       key={bundle.id}
@@ -135,11 +120,6 @@ export default function DiscoverPage() {
                       className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
-                        <div
-                          className={`flex h-10 w-10 items-center justify-center rounded-xl border text-[13px] font-bold tracking-tight ${getRankBadgeClass(rank)}`}
-                        >
-                          {rank}
-                        </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)]">
                           <Layers className="h-4 w-4 text-primary" />
                         </div>
@@ -204,9 +184,7 @@ export default function DiscoverPage() {
                   </span>
                 </div>
 
-                {market.filteredSkills.map((s, index) => {
-                  const rank = index + 1;
-
+                {market.filteredSkills.map((s) => {
                   return (
                     <Link
                       key={s.id}
@@ -221,11 +199,6 @@ export default function DiscoverPage() {
                       className="group flex min-h-[76px] items-start gap-3 rounded-2xl border border-hairline/80 bg-[color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas))] px-3.5 py-3 shadow-sm hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] hover:bg-surface-card transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
-                        <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-[14px] font-bold tracking-tight shadow-sm ${getRankBadgeClass(rank)}`}
-                        >
-                          {rank}
-                        </div>
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)]">
                           <Puzzle className="h-4 w-4 text-primary" />
                         </div>
@@ -238,9 +211,6 @@ export default function DiscoverPage() {
                           <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-primary">
                             {t('pages.discover.skillBadge')}
                           </span>
-                          <span className="shrink-0 rounded-md border border-hairline/70 bg-canvas px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-body-strong tabular-nums">
-                            TOP {rank}
-                          </span>
                         </div>
                         <p className="mt-1 truncate text-[12px] leading-5 text-body">
                           {s.description || t('pages.discover.noDescription')}
@@ -248,7 +218,7 @@ export default function DiscoverPage() {
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] sm:hidden">
                           <span className="inline-flex items-center gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 font-medium text-body-strong">
                             <Users size={11} className="text-muted" />
-                            {t('pages.common.heat', {
+                            {t('pages.discover.subscriberCount', {
                               count: formatNumber(s.stat_subscriber_count),
                             })}
                           </span>
@@ -260,7 +230,7 @@ export default function DiscoverPage() {
                         </span>
                         <span className="mt-1 inline-flex items-center justify-end gap-1 rounded-md border border-hairline/60 bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-body-strong whitespace-nowrap">
                           <Users size={11} className="text-muted" />
-                          {t('pages.common.heat', {
+                          {t('pages.discover.subscriberCount', {
                             count: formatNumber(s.stat_subscriber_count),
                           })}
                         </span>

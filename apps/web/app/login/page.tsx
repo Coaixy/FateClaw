@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -16,33 +16,6 @@ const AUTH_MODES: ReadonlyArray<readonly [AuthMode, string]> = [
   ['login', 'login.authModes.login'],
   ['register', 'login.authModes.register'],
 ];
-
-function inviteCodeFromSearchParams(searchParams: {
-  get(name: string): string | null;
-}): string {
-  // 邀请链接会先写入 next 回跳参数，注册页需要从两种位置继承邀请码。
-  const directCode =
-    searchParams.get('invite_code') ??
-    searchParams.get('invite') ??
-    searchParams.get('code') ??
-    '';
-  if (directCode.trim()) return directCode.trim();
-
-  const next = searchParams.get('next');
-  if (!next?.startsWith('/invite')) return '';
-
-  try {
-    const nextUrl = new URL(next, 'http://local');
-    return (
-      nextUrl.searchParams.get('code') ??
-      nextUrl.searchParams.get('invite') ??
-      nextUrl.searchParams.get('invite_code') ??
-      ''
-    ).trim();
-  } catch {
-    return '';
-  }
-}
 
 export default function LoginPage() {
   return (
@@ -61,7 +34,6 @@ export default function LoginPage() {
 function LoginContent() {
   const { locale, t } = useI18n();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, loading, login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const phoneAuthEnabled = locale === 'zh-CN';
@@ -69,7 +41,7 @@ function LoginContent() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace(readLoginRedirect('/ai-chat'));
+      router.replace(readLoginRedirect('/clients'));
     }
   }, [loading, user, router]);
 
@@ -83,7 +55,6 @@ function LoginContent() {
   const [smsSending, setSMSSending] = useState(false);
   const [smsCaptchaCode, setSMSCaptchaCode] = useState('');
   const [smsCooldown, setSMSCooldown] = useState(0);
-  const [inviteCode, setInviteCode] = useState('');
 
   const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
   const [captchaLoading, setCaptchaLoading] = useState(false);
@@ -110,14 +81,6 @@ function LoginContent() {
     }
     void refreshCaptcha();
   }, [phoneAuthEnabled, refreshCaptcha]);
-
-  useEffect(() => {
-    const fromQuery = inviteCodeFromSearchParams(searchParams);
-    if (fromQuery.trim()) {
-      setInviteCode(fromQuery.trim().toUpperCase());
-      setMode('register');
-    }
-  }, [searchParams]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
@@ -205,16 +168,11 @@ function LoginContent() {
     setSubmitting(true);
     try {
       if (mode === 'register') {
-        await register(
-          normalizedPhone,
-          password,
-          smsCaptchaCode.trim(),
-          inviteCode.trim() || null,
-        );
+        await register(normalizedPhone, password, smsCaptchaCode.trim());
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
       }
-      router.replace(readLoginRedirect('/ai-chat'));
+      router.replace(readLoginRedirect('/clients'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('login.operationFailed'));
       // 登录失败或图形码失败都刷新，避免继续使用已经失效的 nonce。
@@ -230,10 +188,7 @@ function LoginContent() {
     setError('');
     setOAuthStarting(true);
     window.location.assign(
-      authApi.googleOAuthStartUrl(
-        readLoginRedirect('/ai-chat'),
-        inviteCode.trim() || null,
-      ),
+      authApi.googleOAuthStartUrl(readLoginRedirect('/clients')),
     );
   };
 
@@ -282,14 +237,6 @@ function LoginContent() {
                 onChange={setCaptchaInput}
                 onRefresh={refreshCaptcha}
               />
-              {requiresSMSCaptcha ? (
-                <>
-                  <InviteCodeField
-                    value={inviteCode}
-                    onChange={setInviteCode}
-                  />
-                </>
-              ) : null}
               {requiresSMSCaptcha ? (
                 <SMSCaptchaField
                   value={smsCaptchaCode}
@@ -358,35 +305,6 @@ function GoogleOAuthButton({
       )}
       {starting ? t('login.googleStarting') : t('login.googleContinue')}
     </button>
-  );
-}
-
-function InviteCodeField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div>
-      <label className="block text-[13px] text-muted mb-1.5">
-        {t('login.inviteCode')}
-      </label>
-      <input
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value.toUpperCase())}
-        maxLength={64}
-        autoCapitalize="characters"
-        autoCorrect="off"
-        spellCheck={false}
-        className="w-full h-10 px-3 rounded-lg border border-hairline bg-canvas text-sm placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-150"
-        placeholder={t('login.invitePlaceholder')}
-      />
-    </div>
   );
 }
 

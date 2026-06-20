@@ -26,18 +26,8 @@ export function useAuthActions(setUser: (user: User | null) => void) {
   );
 
   const register = useCallback(
-    async (
-      phone: string,
-      password: string,
-      smsCaptchaCode: string,
-      inviteCode?: string | null,
-    ) => {
-      const res = await authApi.register(
-        phone,
-        password,
-        smsCaptchaCode,
-        inviteCode,
-      );
+    async (phone: string, password: string, smsCaptchaCode: string) => {
+      const res = await authApi.register(phone, password, smsCaptchaCode);
       setAuthToken(res.token);
       setUser(res.user);
     },

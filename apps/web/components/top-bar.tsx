@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Crown, User as UserIcon, LogIn } from 'lucide-react';
+import { User as UserIcon, LogIn } from 'lucide-react';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { UsagePanel } from '@/components/billing/usage-panel';
 import { UserMenuDropdown } from '@/components/user-menu-dropdown';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
-import { hasPaidMembershipEntitlement } from '@/features/billing/membership-plans';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
@@ -139,20 +138,15 @@ export function TopBar({
   const pillPad = compact
     ? 'h-7 px-2 gap-1 text-[10px]'
     : 'h-9 px-3.5 gap-2 text-[12px]';
-  const membershipPillClass = compact
-    ? 'h-7 px-2 gap-1 text-[10px]'
-    : 'h-9 px-3 gap-1.5 text-[12px]';
   const dropdownBalanceLabel =
     billingLoading || balanceCoins === null
       ? `${t('common.loading')}…`
       : t('topBar.dropdownBalanceAvailable', {
           balance: formatCoins(balanceCoins, locale),
         });
-  const baseMembershipActive = hasPaidMembershipEntitlement(status?.membership);
-
   return (
     <div ref={containerRef} className="flex min-w-0 items-center gap-2">
-      {/* 余额胶囊只承载钱包信息，会员入口保持独立。 */}
+      {/* 用量/余额胶囊;会员入口已下沉到用户菜单。 */}
       <div className="relative min-w-0">
         {billingLoading ? (
           <div role="status" aria-label={t('topBar.loadingBalance')}>
@@ -200,25 +194,6 @@ export function TopBar({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          setUsageOpen(false);
-          setMenuOpen(false);
-          router.push('/membership');
-        }}
-        className={`inline-flex shrink-0 items-center justify-center rounded-full border text-primary shadow-sm transition-all hover:border-primary/40 hover:bg-primary/12 active:scale-95 ${
-          baseMembershipActive
-            ? 'border-primary/25 bg-primary/12'
-            : 'border-hairline/60 bg-surface-card/80'
-        } ${membershipPillClass}`}
-        aria-label={t('topBar.membershipCenter')}
-      >
-        <Crown size={compact ? 12 : 14} />
-        <span className="whitespace-nowrap font-medium">
-          {t('topBar.membershipCenter')}
-        </span>
-      </button>
       {/* 头像 + 菜单 */}
       <div className="relative">
         <button

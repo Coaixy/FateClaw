@@ -2,9 +2,6 @@ import type {
   BillingStatusDto,
   CreateRechargeOrderResponseDto,
   DailyUsageRowDto,
-  DailySignInResultDto,
-  DailySignInStatusDto,
-  GiftCodeRedeemResultDto,
   MembershipSubscribeResultDto,
   PublicStatusOverviewDto,
   RechargeOrderDto,
@@ -23,9 +20,6 @@ export type MembershipSubscribeResult = MembershipSubscribeResultDto;
 export type WalletTransaction = WalletTransactionDto;
 export type UsageStats = UsageStatsDto;
 export type DailyUsageRow = DailyUsageRowDto;
-export type DailySignInStatus = DailySignInStatusDto;
-export type DailySignInResult = DailySignInResultDto;
-export type GiftCodeRedeemResult = GiftCodeRedeemResultDto;
 export type PublicStatusOverview = PublicStatusOverviewDto;
 export type RechargePayType = RechargePayTypeDto;
 export type RechargeOrder = RechargeOrderDto;
@@ -77,17 +71,6 @@ export const billingApi = {
     requestJson<PublicStatusOverview>('/api/billing/status'),
   transactions: () =>
     requestJson<WalletTransaction[]>('/api/billing/transactions'),
-  dailySignInStatus: () =>
-    requestJson<DailySignInStatus>('/api/billing/daily-sign-in'),
-  claimDailySignIn: () =>
-    requestJson<DailySignInResult>('/api/billing/daily-sign-in', {
-      method: 'POST',
-    }).finally(clearBillingCache),
-  redeemGiftCode: (code: string) =>
-    requestJson<GiftCodeRedeemResult>('/api/billing/gifts/redeem', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    }).finally(clearBillingCache),
   subscribeMembership: (data?: { plan_key?: string }) =>
     requestJson<MembershipSubscribeResult>('/api/billing/membership/subscribe', {
       method: 'POST',

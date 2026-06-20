@@ -6,14 +6,11 @@ import {
   ChevronRight,
   Compass,
   Crown,
-  Gift,
   LogOut,
   ServerCog,
   Sparkle,
   Sparkles,
-  TicketPercent,
   User as UserIcon,
-  Wallet,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { getUserIdentityLabel } from '@/lib/user-identity';
@@ -63,19 +60,18 @@ export function UserMenuDropdown({
         </div>
       </div>
       <div className="p-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
-        <MenuSection label={t('userMenu.sections.persona')}>
+        {/* 工作配置:卦师日常会调的断卦工具(人格话术/模型/技能)集中在一起 */}
+        <MenuSection label={t('userMenu.sections.workspace')}>
           <MenuItem
             href="/persona"
             icon={Sparkles}
             label={t('userMenu.persona')}
             onNavigate={onNavigate}
           />
-        </MenuSection>
-        <MenuSection label={t('userMenu.sections.market')}>
           <MenuItem
-            href="/discover"
-            icon={Compass}
-            label={t('userMenu.skillMarket')}
+            href="/settings/advanced"
+            icon={ServerCog}
+            label={t('userMenu.modelSettings')}
             onNavigate={onNavigate}
           />
           <MenuItem
@@ -84,36 +80,19 @@ export function UserMenuDropdown({
             label={t('userMenu.studio')}
             onNavigate={onNavigate}
           />
+          <MenuItem
+            href="/discover"
+            icon={Compass}
+            label={t('userMenu.skillMarket')}
+            onNavigate={onNavigate}
+          />
         </MenuSection>
+        {/* 账户:低频的计费与个人资料 */}
         <MenuSection label={t('userMenu.sections.account')}>
           <MenuItem
             href="/membership"
             icon={Crown}
-            label={t('topBar.membershipCenter')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/referrals"
-            icon={Gift}
-            label={t('userMenu.referrals')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/wallet"
-            icon={Wallet}
             label={t('userMenu.wallet')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/gifts"
-            icon={TicketPercent}
-            label={t('userMenu.gifts')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/settings/advanced"
-            icon={ServerCog}
-            label={t('userMenu.modelSettings')}
             onNavigate={onNavigate}
           />
           <MenuItem

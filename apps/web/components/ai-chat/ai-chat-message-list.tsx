@@ -7,7 +7,6 @@ import {
   Brain,
   ChevronDown,
   Crown,
-  Wallet,
   Wrench,
 } from 'lucide-react';
 
@@ -271,22 +270,9 @@ function LatestMessageBillingNotice({
                 {t(descriptionKey)}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {isArrears && (
-                  <Link
-                    href="/wallet"
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
-                  >
-                    <Wallet size={12} aria-hidden="true" />
-                    {t('aiChat.messageList.recharge')}
-                  </Link>
-                )}
                 <Link
                   href="/membership"
-                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-medium shadow-sm transition-colors ${
-                    isArrears
-                      ? 'border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15'
-                      : 'bg-primary text-on-primary hover:bg-primary-active'
-                  }`}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
                 >
                   <Crown size={12} aria-hidden="true" />
                   {t(
@@ -439,15 +425,8 @@ function AiChatMessageRow({
           {showWalletRecovery ? (
             <div className="mt-2 flex flex-wrap gap-2">
               <Link
-                href="/wallet"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
-              >
-                <Wallet size={12} />
-                {t('aiChat.messageList.recharge')}
-              </Link>
-              <Link
                 href="/membership"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/15"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
               >
                 <Crown size={12} />
                 {t('aiChat.messageList.membershipCenter')}

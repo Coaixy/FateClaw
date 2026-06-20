@@ -78,22 +78,14 @@ export function UsagePanel({
         </section>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 border-t border-hairline/40 p-2">
-        <Link
-          href="/wallet"
-          onClick={onNavigate}
-          className="flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-medium text-muted transition-colors hover:bg-surface-cream-strong hover:text-ink"
-        >
-          <Wallet size={12} />
-          补充积分
-        </Link>
+      <div className="border-t border-hairline/40 p-2">
         <Link
           href="/membership"
           onClick={onNavigate}
           className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary/15 px-3 text-[11px] font-medium text-primary transition-colors hover:bg-primary/25"
         >
           <Crown size={12} />
-          会员中心
+          订阅与计费
         </Link>
       </div>
     </div>

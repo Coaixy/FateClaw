@@ -16,6 +16,7 @@ import { referralRewardClarityMigrations } from './definitions/0056-referral-rew
 import { disableWechatAccountsMigrations } from './definitions/0057-disable-wechat-claw-accounts.js';
 import { normalizeAllPlanKeysToClarityMigrations } from './definitions/0058-normalize-all-plan-keys-to-clarity.js';
 import { dropAllowanceColumnsAndTableMigrations } from './definitions/0059-drop-allowance-columns-and-table.js';
+import { clientCrmFieldsMigrations } from './definitions/0060-client-crm-fields.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -40,4 +41,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...disableWechatAccountsMigrations,
   ...normalizeAllPlanKeysToClarityMigrations,
   ...dropAllowanceColumnsAndTableMigrations,
+  ...clientCrmFieldsMigrations,
 ];

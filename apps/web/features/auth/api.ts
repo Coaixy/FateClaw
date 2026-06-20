@@ -23,18 +23,10 @@ const meRequestCache = createAuthScopedInFlightCache<User>();
  * 构造 Google OAuth 发起地址。
  *
  * @param next 登录完成后的站内回跳路径。
- * @param inviteCode 可选邀请码；仅新建 OAuth 用户时使用。
  * @returns 可用于浏览器整页跳转的 API 地址。
  */
-export function buildGoogleOAuthStartUrl(
-  next: string,
-  inviteCode?: string | null,
-): string {
+export function buildGoogleOAuthStartUrl(next: string): string {
   const params = new URLSearchParams({ next });
-  const normalizedInviteCode = inviteCode?.trim();
-  if (normalizedInviteCode) {
-    params.set('invite_code', normalizedInviteCode);
-  }
   return `${getApiBase()}/api/auth/google/start?${params.toString()}`;
 }
 
@@ -65,19 +57,13 @@ export const authApi = {
         captcha_answer: captchaAnswer,
       }),
     }),
-  register: (
-    phone: string,
-    password: string,
-    smsCaptchaCode: string,
-    inviteCode?: string | null,
-  ) =>
+  register: (phone: string, password: string, smsCaptchaCode: string) =>
     requestJson<AuthResponse>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         phoneNumber: phone,
         password,
         smsCaptchaCode,
-        invite_code: inviteCode?.trim() || undefined,
       } satisfies RegisterRequestDto),
     }),
   login: (

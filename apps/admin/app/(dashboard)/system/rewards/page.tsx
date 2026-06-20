@@ -1,24 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  admin,
-  type AdminRechargePaymentConfig,
-  type AdminRewardConfig,
-} from '@/lib/admin-api';
+import { admin, type AdminRechargePaymentConfig } from '@/lib/admin-api';
 import { RefreshCw, WalletCards } from 'lucide-react';
 import { RechargeConfigPanel } from '../recharge-config-panel';
-import { RewardConfigPanel } from '../reward-config-panel';
 
 /**
- * 后台软妹币配置页面，负责充值和每日签到奖励维护。
+ * 后台充值配置页面，负责充值档位与支付方式维护。
  */
 export default function AdminRewardConfigPage() {
   const [rechargeConfig, setRechargeConfig] =
     useState<AdminRechargePaymentConfig | null>(null);
-  const [rewardConfig, setRewardConfig] = useState<AdminRewardConfig | null>(
-    null,
-  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
@@ -27,12 +19,8 @@ export default function AdminRewardConfigPage() {
     setLoading(true);
     setError('');
     try {
-      const [nextRechargeConfig, nextRewardConfig] = await Promise.all([
-        admin.rechargeConfig(),
-        admin.rewardConfig(),
-      ]);
+      const [nextRechargeConfig] = await Promise.all([admin.rechargeConfig()]);
       setRechargeConfig(nextRechargeConfig);
-      setRewardConfig(nextRewardConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -68,7 +56,7 @@ export default function AdminRewardConfigPage() {
     );
   }
 
-  if (!rechargeConfig || !rewardConfig) {
+  if (!rechargeConfig) {
     return (
       <div className="py-20 text-center text-[13px] text-error">
         {error || '加载失败'}
@@ -82,10 +70,10 @@ export default function AdminRewardConfigPage() {
         <div>
           <div className="flex items-center gap-2">
             <WalletCards size={16} className="text-muted" />
-            <h2 className="text-lg font-semibold">软妹币配置</h2>
+            <h2 className="text-lg font-semibold">充值配置</h2>
           </div>
           <p className="mt-1 text-[13px] leading-6 text-muted">
-            管理充值能力和每日签到软妹币奖励。
+            管理充值档位与支付方式。
           </p>
         </div>
         <button
@@ -103,17 +91,6 @@ export default function AdminRewardConfigPage() {
           {error}
         </div>
       )}
-
-      <RewardConfigPanel
-        config={rewardConfig}
-        busy={busyId === 'reward-config'}
-        onSave={async (draft) =>
-          withBusy('reward-config', async () => {
-            const saved = await admin.updateRewardConfig(draft);
-            setRewardConfig(saved);
-          })
-        }
-      />
 
       <RechargeConfigPanel
         config={rechargeConfig}

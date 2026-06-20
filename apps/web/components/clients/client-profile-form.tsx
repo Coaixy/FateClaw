@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Loader2, XCircle } from 'lucide-react';
+import { Loader2, X, XCircle } from 'lucide-react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import type {
   ClientProfile,
   ClientProfileUpsert,
+  ClientStatus,
 } from '@/features/chat/client-profiles-api';
 import { useConfirm } from '@/lib/use-confirm';
 import { useI18n } from '@/lib/i18n';
@@ -30,6 +31,18 @@ const SHICHEN_LABELS = [
 ];
 
 type GenderValue = '男' | '女' | '';
+type StatusValue = ClientStatus | '';
+
+/** 客户状态可选项，空值表示不标记。 */
+const STATUS_OPTIONS: readonly { value: StatusValue; labelKey: string }[] = [
+  { value: 'vip', labelKey: 'clients.status.vip' },
+  { value: 'follow_up', labelKey: 'clients.status.followUp' },
+  { value: 'done', labelKey: 'clients.status.done' },
+  { value: '', labelKey: 'clients.status.unset' },
+];
+
+const TAG_MAX_LENGTH = 20;
+const TAG_MAX_COUNT = 12;
 
 /** 给定阳历年月计算当月天数，闰年自动处理。 */
 function getDaysInMonth(year: number, month: number): number {
@@ -150,6 +163,9 @@ export function ClientProfileForm({
   );
   const [birthplace, setBirthplace] = useState(initial?.birthplace ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [status, setStatus] = useState<StatusValue>(initial?.status ?? '');
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -184,11 +200,15 @@ export function ClientProfileForm({
       initial?.gender === '男' || initial?.gender === '女'
         ? initial.gender
         : '';
+    const initialTags = initial?.tags ?? [];
     return (
       name !== (initial?.name ?? '') ||
       gender !== initialGender ||
       birthplace !== (initial?.birthplace ?? '') ||
       notes !== (initial?.notes ?? '') ||
+      status !== (initial?.status ?? '') ||
+      tags.length !== initialTags.length ||
+      tags.some((tag, index) => tag !== initialTags[index]) ||
       birth.hasDate !== initialBirth.hasDate ||
       birth.hasTime !== initialBirth.hasTime ||
       (birth.hasDate &&
@@ -199,7 +219,7 @@ export function ClientProfileForm({
         (birth.hour !== initialBirth.hour ||
           birth.minute !== initialBirth.minute))
     );
-  }, [birth, birthplace, gender, initial, name, notes]);
+  }, [birth, birthplace, gender, initial, name, notes, status, tags]);
 
   const updateBirth = (patch: Partial<BirthState>) => {
     setBirth((previous) => {
@@ -211,6 +231,20 @@ export function ClientProfileForm({
       }
       return next;
     });
+  };
+
+  const addTag = () => {
+    const value = tagInput.trim().slice(0, TAG_MAX_LENGTH);
+    if (!value || tags.includes(value) || tags.length >= TAG_MAX_COUNT) {
+      setTagInput('');
+      return;
+    }
+    setTags((previous) => [...previous, value]);
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => {
+    setTags((previous) => previous.filter((item) => item !== tag));
   };
 
   const handleCloseAttempt = async () => {
@@ -245,6 +279,8 @@ export function ClientProfileForm({
       minute: birth.hasDate && birth.hasTime ? birth.minute : null,
       birthplace: birthplace.trim() || null,
       notes: notes.trim() || null,
+      tags,
+      status: status || null,
     };
 
     setSaving(true);
@@ -476,6 +512,81 @@ export function ClientProfileForm({
             <span className="text-[10px] text-muted tabular-nums">
               {notes.length}/{NOTES_MAX_LENGTH}
             </span>
+          </div>
+        </div>
+
+        {/* 客户管理：状态 + 标签 */}
+        <div>
+          <div className="flex items-center gap-2 mb-3 sm:mb-4">
+            <div className="w-1 h-4 rounded-full bg-emerald-400" />
+            <span className="text-[11px] sm:text-[12px] font-semibold text-ink uppercase tracking-wider">
+              {t('clients.form.crmSection')}
+            </span>
+          </div>
+          <div className="space-y-3 sm:space-y-4">
+            <div>
+              <label className="text-[11px] sm:text-[12px] font-medium text-muted mb-1.5 sm:mb-2 block">
+                {t('clients.form.statusLabel')}
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {STATUS_OPTIONS.map((option) => {
+                  const active = status === option.value;
+                  return (
+                    <button
+                      key={option.labelKey}
+                      type="button"
+                      onClick={() => setStatus(option.value)}
+                      className={`h-10 rounded-xl border text-[12px] font-medium transition-all duration-150 ${
+                        active
+                          ? 'border-primary bg-primary/12 text-ink'
+                          : 'border-hairline bg-canvas text-muted hover:border-primary/35 hover:text-ink'
+                      }`}
+                    >
+                      {t(option.labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] sm:text-[12px] font-medium text-muted mb-1.5 sm:mb-2 block">
+                {t('clients.form.tagsLabel')}
+              </label>
+              {tags.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[12px] text-primary"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="text-primary/60 transition-colors hover:text-primary"
+                        aria-label={t('clients.form.tagRemove', { tag })}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addTag();
+                  }
+                }}
+                maxLength={TAG_MAX_LENGTH}
+                placeholder={t('clients.form.tagsPlaceholder')}
+                disabled={tags.length >= TAG_MAX_COUNT}
+                className={inputClass}
+              />
+            </div>
           </div>
         </div>
       </div>

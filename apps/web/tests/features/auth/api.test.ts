@@ -16,8 +16,9 @@ describe('authApi', () => {
     requestJsonMock.mockResolvedValue({});
   });
 
-  it('passes optional invite code during registration', async () => {
-    await authApi.register('13800138000', 'password123', '123456', 'ABC123');
+  it('registers without invite code in payload', async () => {
+    // 邀请体系已从前端下线,注册请求不再携带 invite_code 字段。
+    await authApi.register('13800138000', 'password123', '123456');
 
     expect(requestJsonMock).toHaveBeenCalledWith('/api/auth/register', {
       method: 'POST',
@@ -25,7 +26,6 @@ describe('authApi', () => {
         phoneNumber: '13800138000',
         password: 'password123',
         smsCaptchaCode: '123456',
-        invite_code: 'ABC123',
       }),
     });
   });

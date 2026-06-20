@@ -14,7 +14,6 @@ import dynamic from 'next/dynamic';
 import {
   Bot,
   Brain,
-  CalendarCheck,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -42,7 +41,6 @@ import {
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
-import { billingApi, type DailySignInStatus } from '@/features/billing/api';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import {
   paipanApi,
@@ -58,7 +56,6 @@ import {
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { buildGuideReturnQuery } from '@/lib/return-to';
-import { formatCoins } from '@/lib/soft-currency';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
@@ -204,6 +201,10 @@ function AiChatWorkspaceContent() {
     string | null
   >(null);
   const [lockPaipanSkill, setLockPaipanSkill] = useState(false);
+  // 从客户卡片"发起排盘"带入的客户 id，开排盘时自动预选并预填生辰。
+  const [preselectedClientId, setPreselectedClientId] = useState<string | null>(
+    null,
+  );
   const [pastedBoardDraft, setPastedBoardDraft] = useState('');
   const [pastedBoardSheetOpen, setPastedBoardSheetOpen] = useState(false);
   const [pastedBoardDraftSource, setPastedBoardDraftSource] =
@@ -725,7 +726,31 @@ function AiChatWorkspaceContent() {
     setPaipanSheetMode(null);
     setPreselectedPaipanSkill(null);
     setLockPaipanSkill(false);
+    setPreselectedClientId(null);
   }, []);
+
+  // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
+  const clientParamHandledRef = useRef(false);
+  useEffect(() => {
+    if (clientParamHandledRef.current || authLoading) {
+      return;
+    }
+    const clientId = searchParams.get('client');
+    if (!clientId) {
+      return;
+    }
+    clientParamHandledRef.current = true;
+    setPreselectedClientId(clientId);
+    setPreselectedPaipanSkill('bazi-paipan');
+    setLockPaipanSkill(false);
+    setPaipanSheetMode('pre-chat');
+    // 清掉 URL 上的 client 参数，避免刷新或重渲染重复触发。
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('client');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    }
+  }, [authLoading, searchParams]);
 
   const handleOpenComposerPastedBoard = useCallback(() => {
     if (authLoading) {
@@ -859,14 +884,9 @@ function AiChatWorkspaceContent() {
       )}
     </div>
   );
-  // 纯专业排盘入口:进入即排盘工作台;未选会话且已登录时,顶部保留每日签到入口。
+  // 纯专业排盘入口:进入即排盘工作台。
   const centeredContent = (
-    <div className="space-y-2.5">
-      {!selectedSession && !authLoading && user ? (
-        <DailySignInHomeEntry />
-      ) : null}
-      {expertCenteredComposer}
-    </div>
+    <div className="space-y-2.5">{expertCenteredComposer}</div>
   );
   const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
   const emptyStateTitle = t('aiChat.empty.expertTitle');
@@ -955,6 +975,7 @@ function AiChatWorkspaceContent() {
         catalogLoading={paipanCatalogLoading}
         sessionId={selectedSession || undefined}
         initialSkill={preselectedPaipanSkill}
+        initialClientId={preselectedClientId}
         lockSkill={lockPaipanSkill}
         canCommit={
           chatAvailable &&
@@ -994,95 +1015,6 @@ function AiChatWorkspaceContent() {
         onComplete={onboardingGuide.completeGuide}
       />
     </div>
-  );
-}
-
-
-function DailySignInHomeEntry() {
-  const { locale, t } = useI18n();
-  const { toast } = useToast();
-  const [status, setStatus] = useState<DailySignInStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
-    try {
-      setStatus(await billingApi.dailySignInStatus());
-    } catch {
-      setStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadStatus();
-  }, [loadStatus]);
-
-  const enabled = Boolean(status?.enabled);
-  const signedIn = Boolean(status?.signed_in_today);
-  const rewardCoins = status?.reward_coins ?? 0;
-  const canClaim = enabled && !signedIn && rewardCoins > 0;
-
-  const claim = async () => {
-    if (!canClaim || busy) return;
-
-    setBusy(true);
-    try {
-      const result = await billingApi.claimDailySignIn();
-      setStatus(result);
-      toast(
-        'success',
-        t('pages.dailySignIn.claimed', {
-          coins: formatCoins(result.received_coins, locale),
-        }),
-      );
-    } catch (err) {
-      toast(
-        'error',
-        err instanceof Error ? err.message : t('pages.dailySignIn.claimFailed'),
-      );
-      await loadStatus();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loading || !canClaim) {
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void claim()}
-      disabled={busy}
-      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/12 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 active:translate-y-0 disabled:cursor-wait disabled:opacity-70"
-    >
-      <span className="flex min-w-0 items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/14 text-primary">
-          {busy ? (
-            <Loader2 size={17} className="animate-spin" />
-          ) : (
-            <CalendarCheck size={17} />
-          )}
-        </span>
-        <span className="min-w-0">
-          <span className="block text-[13px] font-semibold text-ink">
-            {t('pages.dailySignIn.title')}
-          </span>
-          <span className="mt-0.5 block truncate text-[11px] text-muted">
-            {t('pages.dailySignIn.claimable', {
-              coins: formatCoins(rewardCoins, locale),
-            })}
-          </span>
-        </span>
-      </span>
-      <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-primary px-3 text-[12px] font-semibold text-on-primary transition-colors group-hover:bg-primary-active">
-        {t('pages.dailySignIn.signButton')}
-      </span>
-    </button>
   );
 }
 
