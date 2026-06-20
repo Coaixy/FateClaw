@@ -629,8 +629,6 @@ export interface AdminRewardConfig {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   };
   membership_plans: Array<{
@@ -639,8 +637,6 @@ export interface AdminRewardConfig {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   }>;
   free_professional_ai: {
@@ -967,8 +963,6 @@ export const admin = {
     membership: {
       enabled: boolean;
       monthly_price_coins: number;
-      monthly_allowance_units: number;
-      standard_price_per_million_units_coins: number;
     };
     membership_plans?: Array<{
       plan_key: string;
@@ -976,8 +970,6 @@ export const admin = {
       enabled: boolean;
       monthly_price_coins: number;
       display_price_coins: number;
-      monthly_allowance_units: number;
-      standard_price_per_million_units_coins: number;
     }>;
     free_professional_ai?: {
       daily_turn_limit: number;

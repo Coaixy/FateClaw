@@ -225,8 +225,6 @@ export interface AdminRewardConfigView {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   };
   membership_plans: Array<{
@@ -235,8 +233,6 @@ export interface AdminRewardConfigView {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
     updated_at: string;
   }>;
   free_professional_ai: {
@@ -296,9 +292,6 @@ function membershipConfigToAdminView(
     enabled: config.enabled,
     monthly_price_coins: config.monthly_price_coins,
     display_price_coins: config.display_price_coins,
-    monthly_allowance_units: config.monthly_allowance_units,
-    standard_price_per_million_units_coins:
-      config.standard_price_per_million_units_coins,
     updated_at: config.updated_at,
   };
 }
@@ -371,8 +364,6 @@ export async function updateAdminRewardConfig(input: {
     enabled: boolean;
     monthlyPriceCoins: number;
     displayPriceCoins?: number;
-    monthlyAllowanceUnits: number;
-    standardPricePerMillionUnitsCoins: number;
   };
   membershipPlans?: Array<{
     planKey: string;
@@ -380,8 +371,6 @@ export async function updateAdminRewardConfig(input: {
     enabled: boolean;
     monthlyPriceCoins: number;
     displayPriceCoins: number;
-    monthlyAllowanceUnits: number;
-    standardPricePerMillionUnitsCoins: number;
   }>;
   freeProfessionalAi?: {
     dailyTurnLimit: number;
@@ -410,9 +399,6 @@ export async function updateAdminRewardConfig(input: {
         enabled: membershipInput.enabled,
         monthlyPriceCoins: membershipInput.monthlyPriceCoins,
         displayPriceCoins: membershipInput.displayPriceCoins,
-        monthlyAllowanceUnits: membershipInput.monthlyAllowanceUnits,
-        standardPricePerMillionUnitsCoins:
-          membershipInput.standardPricePerMillionUnitsCoins,
       }),
     ),
   );

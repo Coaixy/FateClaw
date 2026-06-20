@@ -626,8 +626,6 @@ export async function updateMembershipConfig(input: {
   name?: string;
   monthlyPriceCoins: number;
   displayPriceCoins?: number;
-  monthlyAllowanceUnits: number;
-  standardPricePerMillionUnitsCoins: number;
 }): Promise<MembershipConfigRow> {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
@@ -635,21 +633,20 @@ export async function updateMembershipConfig(input: {
   const displayPriceCoins = roundCoinsToCents(
     input.displayPriceCoins ?? input.monthlyPriceCoins,
   );
+  // 单层「卦师使用权」不再由 admin 配置免费额度：仅更新价格与名称。
+  // allowance/standard 列不在写入集——INSERT 时用 DB 默认值；clarity 行已存在故走
+  // ON CONFLICT UPDATE，不更新这两列即保留存量值（clarity 恒为 0），与温和档一致。
   const { rows } = await pool.query(
     `INSERT INTO membership_config (
        id, enabled, name, monthly_price_coins, display_price_coins,
-       monthly_allowance_units, standard_price_per_million_units_coins,
        updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
        name = EXCLUDED.name,
        monthly_price_coins = EXCLUDED.monthly_price_coins,
        display_price_coins = EXCLUDED.display_price_coins,
-       monthly_allowance_units = EXCLUDED.monthly_allowance_units,
-       standard_price_per_million_units_coins =
-         EXCLUDED.standard_price_per_million_units_coins,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -658,8 +655,6 @@ export async function updateMembershipConfig(input: {
       input.name?.trim() || resolveMembershipPlanName(planKey),
       monthlyPriceCoins,
       Math.max(monthlyPriceCoins, displayPriceCoins),
-      Math.max(0, roundAllowanceUnits(input.monthlyAllowanceUnits)),
-      roundCoinsToCents(input.standardPricePerMillionUnitsCoins),
     ],
   );
   return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);

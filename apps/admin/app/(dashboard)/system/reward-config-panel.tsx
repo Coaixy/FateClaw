@@ -14,8 +14,6 @@ type RewardConfigPayload = {
   membership: {
     enabled: boolean;
     monthly_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
   };
   membership_plans?: Array<{
     plan_key: string;
@@ -23,8 +21,6 @@ type RewardConfigPayload = {
     enabled: boolean;
     monthly_price_coins: number;
     display_price_coins: number;
-    monthly_allowance_units: number;
-    standard_price_per_million_units_coins: number;
   }>;
   free_professional_ai?: {
     daily_turn_limit: number;
@@ -37,8 +33,6 @@ type MembershipPlanDraft = {
   enabled: boolean;
   monthly_price_coins: string;
   display_price_coins: string;
-  monthly_allowance_units: string;
-  standard_price_per_million_units_coins: string;
 };
 
 type RewardDraft = {
@@ -61,8 +55,6 @@ function defaultMembershipPlans(): MembershipPlanDraft[] {
       enabled: true,
       monthly_price_coins: '66',
       display_price_coins: '66',
-      monthly_allowance_units: '3000000',
-      standard_price_per_million_units_coins: '10',
     },
   ];
 }
@@ -76,10 +68,6 @@ function planDraftFromConfig(
     enabled: plan.enabled,
     monthly_price_coins: String(plan.monthly_price_coins),
     display_price_coins: String(plan.display_price_coins),
-    monthly_allowance_units: String(plan.monthly_allowance_units),
-    standard_price_per_million_units_coins: String(
-      plan.standard_price_per_million_units_coins,
-    ),
   };
 }
 
@@ -111,10 +99,6 @@ function payloadPlanFromDraft(plan: MembershipPlanDraft) {
     enabled: plan.enabled,
     monthly_price_coins: roundCurrency(plan.monthly_price_coins),
     display_price_coins: roundCurrency(plan.display_price_coins),
-    monthly_allowance_units: Number(plan.monthly_allowance_units || 0),
-    standard_price_per_million_units_coins: roundCurrency(
-      plan.standard_price_per_million_units_coins,
-    ),
   };
 }
 
@@ -166,7 +150,7 @@ export function RewardConfigPanel({
       ),
     }));
   };
-  const plusPlan =
+  const clarityPlan =
     draft.membership_plans.find(
       (plan) => plan.plan_key === 'fateclaw_clarity',
     ) ??
@@ -244,7 +228,7 @@ export function RewardConfigPanel({
                   className="h-8 w-full rounded-md border border-transparent bg-transparent px-0 text-sm font-semibold text-ink focus:border-hairline focus:bg-canvas focus:px-2 focus:outline-none sm:w-[220px]"
                 />
                 <div className="mt-1 text-[12px] leading-5 text-muted">
-                  管理会员月费、展示原价、后台额度池和额度进度条的成本折算口径。
+                  管理会员月费与展示原价。
                 </div>
               </div>
               <label className="inline-flex items-center gap-2 text-[13px] text-muted">
@@ -262,7 +246,7 @@ export function RewardConfigPanel({
               </label>
             </div>
 
-            <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <label className="space-y-1.5">
                 <div className="text-[12px] font-medium text-muted">
                   实收月费（软妹币）
@@ -287,37 +271,6 @@ export function RewardConfigPanel({
                   onChange={(event) =>
                     updateMembershipPlan(plan.plan_key, {
                       display_price_coins: event.target.value,
-                    })
-                  }
-                  inputMode="decimal"
-                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1.5">
-                <div className="text-[12px] font-medium text-muted">
-                  月度标准额度
-                </div>
-                <input
-                  value={plan.monthly_allowance_units}
-                  onChange={(event) =>
-                    updateMembershipPlan(plan.plan_key, {
-                      monthly_allowance_units: event.target.value,
-                    })
-                  }
-                  inputMode="numeric"
-                  className="h-11 w-full rounded-lg border border-hairline bg-canvas px-3 text-sm focus:border-hairline focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1.5">
-                <div className="text-[12px] font-medium text-muted">
-                  百万标准额度成本
-                </div>
-                <input
-                  value={plan.standard_price_per_million_units_coins}
-                  onChange={(event) =>
-                    updateMembershipPlan(plan.plan_key, {
-                      standard_price_per_million_units_coins:
-                        event.target.value,
                     })
                   }
                   inputMode="decimal"
@@ -361,15 +314,9 @@ export function RewardConfigPanel({
                   ) / 100,
               },
               membership: {
-                enabled: plusPlan.enabled,
+                enabled: clarityPlan.enabled,
                 monthly_price_coins: roundCurrency(
-                  plusPlan.monthly_price_coins,
-                ),
-                monthly_allowance_units: Number(
-                  plusPlan.monthly_allowance_units || 0,
-                ),
-                standard_price_per_million_units_coins: roundCurrency(
-                  plusPlan.standard_price_per_million_units_coins,
+                  clarityPlan.monthly_price_coins,
                 ),
               },
               membership_plans:
