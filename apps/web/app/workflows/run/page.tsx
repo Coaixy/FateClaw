@@ -246,17 +246,21 @@ function RunWorkflowInner() {
   }, [nodeStates]);
 
   // 把运行状态 + 选中态同步进画布节点 data,触发节点重绘变色。
+  // 无变化的节点返回原引用、整体无变化时返回原数组,避免无谓重渲染/节点闪烁。
   useEffect(() => {
-    setRfNodes((nds) =>
-      nds.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          status: statusById[n.id] ?? 'pending',
-          selected: n.id === selectedNodeId,
-        },
-      })),
-    );
+    setRfNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
+        const status = statusById[n.id] ?? 'pending';
+        const selected = n.id === selectedNodeId;
+        if (n.data.status === status && n.data.selected === selected) {
+          return n;
+        }
+        changed = true;
+        return { ...n, data: { ...n.data, status, selected } };
+      });
+      return changed ? next : nds;
+    });
   }, [statusById, selectedNodeId, setRfNodes]);
 
   const patchNode = useCallback((index: number, patch: Partial<RunNodeState>) => {
