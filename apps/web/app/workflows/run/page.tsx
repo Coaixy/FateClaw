@@ -4,11 +4,25 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  Background,
+  Controls,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  useEdgesState,
+  useNodesState,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react';
 import {
   AlertCircle,
   ArrowRight,
@@ -19,6 +33,7 @@ import {
   Play,
   RefreshCw,
   Save,
+  Sparkles,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -36,7 +51,6 @@ import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
 // 复用"直接对话"的排盘表单:运行到排盘节点时弹出,卦师当场引导填参+提交出盘到本次会话。
-// 依赖浏览器 API,仅客户端渲染。
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
@@ -59,9 +73,17 @@ interface RunNodeState {
   error?: string;
 }
 
+// 画布上运行态节点的数据(用 type 别名以满足 React Flow v12 的 Node data 约束)。
+type RunNodeData = {
+  title: string;
+  kind: 'paipan' | 'ai';
+  status: NodeStatus;
+  selected: boolean;
+};
+type RunFlowNode = Node<RunNodeData>;
+
 /**
  * 拓扑排序(Kahn);并行分支按此顺序逐个串行执行(同会话有处理锁)。
- * 入度为 0 的节点按原始顺序入队,保证确定性;有环/缺失时把剩余按原序补在末尾兜底。
  */
 function topoOrder(
   nodes: WorkflowRunNode[],
@@ -98,9 +120,6 @@ function topoOrder(
 
 /**
  * 轮询会话消息,等某条 AI 回复落库完成。
- *
- * @remarks 主路径按 execute 返回的 assistantMessageId 命中并看 metadata.kind;
- *          兜底:processing 转 false 后取最新的 final/error 机器人消息。
  */
 async function waitForReply(
   sessionId: string,
@@ -163,24 +182,22 @@ function RunWorkflowInner() {
   const [busy, setBusy] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [savingRefine, setSavingRefine] = useState(false);
-  // 排盘节点用:当前要弹出的排盘表单(节点序号 + 锁定术数);null = 不弹。
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [paipanSheet, setPaipanSheet] = useState<{
     index: number;
     skill: string;
   } | null>(null);
   const [catalog, setCatalog] = useState<PaipanCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [rfNodes, setRfNodes, onRfNodesChange] = useNodesState<RunFlowNode>([]);
+  const [rfEdges, setRfEdges, onRfEdgesChange] = useEdgesState<Edge>([]);
 
   const sessionIdRef = useRef<string>('');
   const orderRef = useRef<WorkflowRunNode[]>([]);
-  // 末端(叶)节点 id:无出边者,各自是一份成品输出。
   const leafIdsRef = useRef<Set<string>>(new Set());
-  // 串行闸:一条执行链在跑时,外部触发(下一步/重跑/启动)直接忽略,避免快速双击
-  // 并发自触发——排盘节点无后端处理锁,并发会落重复盘面 + 双重续跑链。
+  // 串行闸:跑链期间外部触发(开始/下一步/重跑)直接忽略,避免快速双击并发自触发。
   const runningRef = useRef(false);
-  // 排盘节点 id → 术数(运行节点视图不带 skill,从已加载的完整定义取)。
   const skillByNodeIdRef = useRef<Record<string, string>>({});
-  // 区分排盘表单"提交出盘"与"取消":提交后 onClose 不应把节点回退为待执行。
   const paipanCommittedRef = useRef(false);
 
   useEffect(() => {
@@ -204,7 +221,7 @@ function RunWorkflowInner() {
     };
   }, [workflowId]);
 
-  // 排盘表单需要术数目录;运行前预拉,避免开表单时再等。
+  // 排盘表单需要术数目录,运行前预拉。
   useEffect(() => {
     let cancelled = false;
     setCatalogLoading(true);
@@ -213,9 +230,7 @@ function RunWorkflowInner() {
       .then((items) => {
         if (!cancelled) setCatalog(items);
       })
-      .catch(() => {
-        /* 目录拉取失败不阻断,开表单时表单内自行兜底 */
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setCatalogLoading(false);
       });
@@ -224,15 +239,33 @@ function RunWorkflowInner() {
     };
   }, []);
 
+  const statusById = useMemo(() => {
+    const map: Record<string, NodeStatus> = {};
+    for (const state of nodeStates) map[state.node.id] = state.status;
+    return map;
+  }, [nodeStates]);
+
+  // 把运行状态 + 选中态同步进画布节点 data,触发节点重绘变色。
+  useEffect(() => {
+    setRfNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          status: statusById[n.id] ?? 'pending',
+          selected: n.id === selectedNodeId,
+        },
+      })),
+    );
+  }, [statusById, selectedNodeId, setRfNodes]);
+
   const patchNode = useCallback((index: number, patch: Partial<RunNodeState>) => {
     setNodeStates((prev) =>
       prev.map((state, i) => (i === index ? { ...state, ...patch } : state)),
     );
   }, []);
 
-  // 递归执行 worker(拓扑序):排盘节点弹"直接对话"排盘表单(在此暂停,提交回调里恢复);
-  // AI 节点发起后轮询等回复;自动节点连跑、暂停节点停下。
-  // 假定调用方已持有 runningRef 闸;自动续跑在链内部递归调用自身,不重新抢闸。
+  // 递归执行 worker:排盘节点弹表单(暂停,提交回调里续跑);AI 节点轮询;自动节点连跑、暂停节点停。
   const executeFrom = useCallback(
     async (index: number) => {
       const sessionId = sessionIdRef.current;
@@ -244,8 +277,8 @@ function RunWorkflowInner() {
       }
       const node = order[index];
       setCurrentIndex(index);
+      setSelectedNodeId(node.id);
 
-      // 排盘节点:打开排盘表单交给卦师当场填参+提交出盘,执行链在此停下,handlePaipanCommitted 里续跑。
       if (node.type === 'paipan') {
         setBusy(false);
         patchNode(index, { status: 'running', error: undefined });
@@ -299,7 +332,6 @@ function RunWorkflowInner() {
     [workflowId, patchNode, t],
   );
 
-  // 外部入口(启动/下一步/重跑):抢同步闸串行化,跑链期间的重复点击直接忽略。
   const runNode = useCallback(
     async (index: number) => {
       if (runningRef.current) return;
@@ -313,8 +345,6 @@ function RunWorkflowInner() {
     [executeFrom],
   );
 
-  // 排盘表单提交出盘:标记该节点完成,按 pauseAfter 决定续跑还是停下让卦师看盘。
-  // 注:表单提交后会先调 onCommitted 再调 onClose,故这里置 committed 标记,避免 onClose 把节点回退。
   const handlePaipanCommitted = useCallback(async () => {
     if (!paipanSheet) return;
     const index = paipanSheet.index;
@@ -328,7 +358,6 @@ function RunWorkflowInner() {
     }
   }, [paipanSheet, patchNode, runNode, t]);
 
-  // 关闭排盘表单:若是"取消"(未出盘),把节点退回待执行,卡片给"排盘"按钮重开。
   const handlePaipanClose = useCallback(() => {
     const current = paipanSheet;
     setPaipanSheet(null);
@@ -338,12 +367,12 @@ function RunWorkflowInner() {
     paipanCommittedRef.current = false;
   }, [paipanSheet, patchNode]);
 
-  // 卡片上的"排盘"按钮:重开某排盘节点的表单(取消后重试)。
   const openPaipanFor = useCallback(
     (index: number) => {
       const node = orderRef.current[index];
       if (!node) return;
       setCurrentIndex(index);
+      setSelectedNodeId(node.id);
       patchNode(index, { status: 'running', error: undefined });
       paipanCommittedRef.current = false;
       setPaipanSheet({ index, skill: skillByNodeIdRef.current[node.id] ?? '' });
@@ -361,7 +390,6 @@ function RunWorkflowInner() {
       sessionIdRef.current = res.session.id;
       const order = topoOrder(res.nodes, res.edges);
       orderRef.current = order;
-      // 运行节点视图不带 skill,从已加载的完整定义建 nodeId→术数 映射,供排盘表单锁定术数。
       const skillMap: Record<string, string> = {};
       for (const graphNode of workflow?.graph.nodes ?? []) {
         if (graphNode.type === 'paipan') skillMap[graphNode.id] = graphNode.skill;
@@ -375,6 +403,28 @@ function RunWorkflowInner() {
       setNodeStates(
         order.map((node) => ({ node, status: 'pending', output: '' })),
       );
+      // 画布按定义里的坐标布局渲染(只读),运行时节点变色。
+      setRfNodes(
+        (workflow?.graph.nodes ?? []).map((graphNode) => ({
+          id: graphNode.id,
+          type: 'run',
+          position: graphNode.position ?? { x: 0, y: 0 },
+          data: {
+            title: graphNode.title,
+            kind: graphNode.type,
+            status: 'pending' as NodeStatus,
+            selected: false,
+          },
+        })),
+      );
+      setRfEdges(
+        (workflow?.graph.edges ?? []).map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          markerEnd: { type: MarkerType.ArrowClosed },
+        })),
+      );
       setPhase('running');
       void runNode(0);
     } catch (error) {
@@ -387,7 +437,17 @@ function RunWorkflowInner() {
     } finally {
       setStarting(false);
     }
-  }, [workflowId, clientId, question, runNode, t, toast, workflow]);
+  }, [
+    workflowId,
+    clientId,
+    question,
+    runNode,
+    t,
+    toast,
+    workflow,
+    setRfNodes,
+    setRfEdges,
+  ]);
 
   const handleRefine = useCallback(
     async (index: number) => {
@@ -413,6 +473,8 @@ function RunWorkflowInner() {
     [workflowId, nodeStates, t, toast],
   );
 
+  const nodeTypes = useMemo(() => ({ run: RunFlowNodeView }), []);
+
   if (phase === 'loading') {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -429,27 +491,17 @@ function RunWorkflowInner() {
     );
   }
 
-  // 跑完后的多输出:叶节点里有 AI 产出的,各自展示为一份成品。
-  const leafOutputs = allDone
-    ? nodeStates.filter(
-        (state) =>
-          leafIdsRef.current.has(state.node.id) &&
-          state.node.type === 'ai' &&
-          state.status === 'done' &&
-          state.output.trim().length > 0,
-      )
-    : [];
-
-  return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
-          {workflow.name}
-        </h1>
-        <p className="mt-1 text-sm text-muted">{t('workflows.runner.title')}</p>
-      </header>
-
-      {phase === 'start' ? (
+  if (phase === 'start') {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            {workflow.name}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {t('workflows.runner.title')}
+          </p>
+        </header>
         <section className="space-y-4 rounded-2xl border border-hairline bg-surface-card p-5">
           <label className="block space-y-1.5">
             <span className="text-[12px] font-medium text-muted">
@@ -463,89 +515,138 @@ function RunWorkflowInner() {
               className="w-full resize-none rounded-lg border border-hairline bg-canvas px-3 py-2 text-[13px] text-ink placeholder:text-muted focus:border-primary focus:outline-none"
             />
           </label>
-          <Button
-            onClick={handleStart}
-            loading={starting}
-            icon={<Play size={15} />}
-          >
+          <Button onClick={handleStart} loading={starting} icon={<Play size={15} />}>
             {t('workflows.runner.start')}
           </Button>
         </section>
-      ) : (
-        <section className="space-y-3">
-          {nodeStates.map((state, index) => (
-            <NodeRunCard
-              key={state.node.id}
-              state={state}
-              index={index}
-              isLeaf={leafIdsRef.current.has(state.node.id)}
+      </div>
+    );
+  }
+
+  // running 阶段:画布(节点实时变色)+ 右侧选中节点详情面板
+  const doneCount = nodeStates.filter((s) => s.status === 'done').length;
+  const selectedIndex = selectedNodeId
+    ? nodeStates.findIndex((s) => s.node.id === selectedNodeId)
+    : -1;
+  const selectedState = selectedIndex >= 0 ? nodeStates[selectedIndex] : null;
+  const leafOutputs = nodeStates.filter(
+    (s) =>
+      leafIdsRef.current.has(s.node.id) &&
+      s.node.type === 'ai' &&
+      s.status === 'done' &&
+      s.output.trim().length > 0,
+  );
+
+  return (
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-ink">
+            {workflow.name}
+          </h1>
+          <p className="mt-0.5 text-[12px] text-muted">
+            {t('workflows.runner.progress', {
+              done: doneCount,
+              total: nodeStates.length,
+            })}
+            {busy ? ` · ${t('workflows.runner.nodeRunning')}` : ''}
+          </p>
+        </div>
+        {allDone && (
+          <Button
+            variant="secondary"
+            icon={<MessageSquare size={14} />}
+            onClick={() =>
+              router.push(
+                `/ai-chat?sid=${encodeURIComponent(sessionIdRef.current)}`,
+              )
+            }
+          >
+            {t('workflows.runner.goToSession')}
+          </Button>
+        )}
+      </header>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="h-[calc(100vh-15rem)] min-h-[480px] flex-1 overflow-hidden rounded-2xl border border-hairline bg-canvas">
+          <ReactFlow
+            nodes={rfNodes}
+            edges={rfEdges}
+            onNodesChange={onRfNodesChange}
+            onEdgesChange={onRfEdgesChange}
+            nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            edgesFocusable={false}
+            onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+            fitView
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={16} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
+
+        <aside className="w-full shrink-0 space-y-4 lg:w-[360px] lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto">
+          {selectedState ? (
+            <NodeDetailPanel
+              state={selectedState}
               isPaused={
-                index === currentIndex &&
-                state.status === 'done' &&
-                state.node.pauseAfter &&
+                selectedIndex === currentIndex &&
+                selectedState.status === 'done' &&
+                selectedState.node.pauseAfter &&
                 !busy &&
                 !allDone
               }
-              // 排盘节点被取消(退回待执行)时,给"排盘"按钮重开表单。
               canCast={
-                state.node.type === 'paipan' &&
-                index === currentIndex &&
-                state.status === 'pending' &&
+                selectedState.node.type === 'paipan' &&
+                selectedIndex === currentIndex &&
+                selectedState.status === 'pending' &&
                 paipanSheet === null &&
                 !busy &&
                 !allDone
               }
               savingRefine={savingRefine}
-              onEditOutput={(value) => patchNode(index, { output: value })}
-              onRefine={() => handleRefine(index)}
-              onRerun={() => runNode(index)}
-              onNext={() => runNode(index + 1)}
-              onCast={() => openPaipanFor(index)}
+              onEditOutput={(value) =>
+                patchNode(selectedIndex, { output: value })
+              }
+              onRefine={() => handleRefine(selectedIndex)}
+              onRerun={() => runNode(selectedIndex)}
+              onNext={() => runNode(selectedIndex + 1)}
+              onCast={() => openPaipanFor(selectedIndex)}
             />
-          ))}
-
-          {allDone && (
-            <>
-              {leafOutputs.length > 0 && (
-                <div className="space-y-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
-                  <p className="text-[12px] font-semibold text-primary">
-                    {t('workflows.runner.outputsTitle')}
-                  </p>
-                  {leafOutputs.map((state) => (
-                    <div key={state.node.id} className="space-y-1">
-                      <p className="text-[12px] font-medium text-ink">
-                        {state.node.title}
-                      </p>
-                      <div className="whitespace-pre-wrap rounded-lg bg-surface-card px-3 py-2 text-[12px] leading-relaxed text-muted">
-                        {state.output}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-hairline bg-surface-card py-8 text-center">
-                <Check className="h-6 w-6 text-primary" />
-                <p className="text-sm font-medium text-ink">
-                  {t('workflows.runner.allDone')}
-                </p>
-                <Button
-                  variant="secondary"
-                  icon={<MessageSquare size={14} />}
-                  onClick={() =>
-                    router.push(
-                      `/ai-chat?sid=${encodeURIComponent(sessionIdRef.current)}`,
-                    )
-                  }
-                >
-                  {t('workflows.runner.goToSession')}
-                </Button>
-              </div>
-            </>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-hairline bg-surface-card p-6 text-center text-[12px] text-muted">
+              {t('workflows.runner.pickNode')}
+            </div>
           )}
-        </section>
-      )}
 
-      {/* 排盘节点的"直接对话"式排盘表单:运行到排盘节点时弹出,提交出盘到本次会话 */}
+          {allDone && leafOutputs.length > 0 && (
+            <div className="space-y-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+              <p className="text-[12px] font-semibold text-primary">
+                {t('workflows.runner.outputsTitle')}
+              </p>
+              {leafOutputs.map((state) => (
+                <button
+                  key={state.node.id}
+                  type="button"
+                  onClick={() => setSelectedNodeId(state.node.id)}
+                  className="block w-full rounded-lg bg-surface-card px-3 py-2 text-left transition-colors hover:bg-surface-cream-strong"
+                >
+                  <p className="text-[12px] font-medium text-ink">
+                    {state.node.title}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted">
+                    {state.output}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* 排盘节点的"直接对话"式排盘表单 */}
       <PaipanSheet
         open={paipanSheet !== null}
         mode="current-session"
@@ -563,10 +664,70 @@ function RunWorkflowInner() {
   );
 }
 
-function NodeRunCard({
+/** 画布上运行态节点:按 status 变色,显示类型/标题/状态。 */
+function RunFlowNodeView({ data }: NodeProps) {
+  const d = data as RunNodeData;
+  const { t } = useI18n();
+
+  const ring =
+    d.status === 'error'
+      ? 'border-error/50'
+      : d.status === 'running'
+        ? 'border-primary ring-2 ring-primary/30'
+        : d.status === 'done'
+          ? 'border-emerald-500/50'
+          : 'border-hairline';
+  const selectedRing = d.selected ? ' ring-2 ring-primary/40' : '';
+
+  return (
+    <div
+      className={`min-w-[160px] rounded-xl border bg-surface-card px-3 py-2 shadow-sm transition-colors ${ring}${selectedRing}`}
+    >
+      <Handle type="target" position={Position.Left} className="!opacity-0" />
+      <div className="flex items-center gap-1.5">
+        {d.kind === 'paipan' ? (
+          <Compass size={13} className="text-primary" />
+        ) : (
+          <Sparkles size={13} className="text-success" />
+        )}
+        <span
+          className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+            d.kind === 'paipan'
+              ? 'bg-primary/10 text-primary'
+              : 'bg-success/10 text-success'
+          }`}
+        >
+          {d.kind === 'paipan'
+            ? t('workflows.builder.paipanBadge')
+            : t('workflows.builder.aiBadge')}
+        </span>
+        <span className="ml-auto">
+          <RunStatusDot status={d.status} />
+        </span>
+      </div>
+      <p className="mt-1 truncate text-[12px] font-medium text-ink">
+        {d.title}
+      </p>
+      <Handle type="source" position={Position.Right} className="!opacity-0" />
+    </div>
+  );
+}
+
+function RunStatusDot({ status }: { status: NodeStatus }) {
+  if (status === 'running') {
+    return <Loader2 size={13} className="animate-spin text-primary" />;
+  }
+  if (status === 'done') {
+    return <Check size={13} className="text-emerald-600" />;
+  }
+  if (status === 'error') {
+    return <AlertCircle size={13} className="text-error" />;
+  }
+  return <span className="block h-2 w-2 rounded-full bg-muted/40" />;
+}
+
+function NodeDetailPanel({
   state,
-  index,
-  isLeaf,
   isPaused,
   canCast,
   savingRefine,
@@ -577,8 +738,6 @@ function NodeRunCard({
   onCast,
 }: {
   state: RunNodeState;
-  index: number;
-  isLeaf: boolean;
   isPaused: boolean;
   canCast: boolean;
   savingRefine: boolean;
@@ -592,15 +751,8 @@ function NodeRunCard({
   const { node, status, output, error } = state;
 
   return (
-    <div
-      className={`rounded-2xl border bg-surface-card p-4 ${
-        status === 'error' ? 'border-error/30' : 'border-hairline'
-      }`}
-    >
+    <div className="space-y-3 rounded-2xl border border-hairline bg-surface-card p-4">
       <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-          {index + 1}
-        </span>
         <span
           className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
             node.type === 'paipan'
@@ -612,27 +764,28 @@ function NodeRunCard({
             ? t('workflows.builder.paipanBadge')
             : t('workflows.builder.aiBadge')}
         </span>
-        {isLeaf && (
-          <span className="rounded-md border border-hairline px-1.5 py-0.5 text-[10px] text-muted">
-            {t('workflows.runner.outputBadge')}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
           {node.title}
         </span>
         <StatusIndicator status={status} />
       </div>
 
-      {error && <p className="mt-2 text-[12px] text-error">{error}</p>}
+      {error && <p className="text-[12px] text-error">{error}</p>}
+
+      {canCast && (
+        <Button size="sm" icon={<Compass size={13} />} onClick={onCast}>
+          {t('workflows.runner.castBoard')}
+        </Button>
+      )}
 
       {node.type === 'ai' && output && status !== 'error' && (
-        <div className="mt-3">
+        <div>
           {isPaused ? (
             <>
               <textarea
                 value={output}
                 onChange={(event) => onEditOutput(event.target.value)}
-                rows={6}
+                rows={8}
                 className="w-full resize-y rounded-lg border border-hairline bg-canvas px-3 py-2 text-[13px] leading-relaxed text-ink focus:border-primary focus:outline-none"
               />
               <p className="mt-1 text-[11px] text-muted/80">
@@ -669,18 +822,8 @@ function NodeRunCard({
         </div>
       )}
 
-      {/* 排盘节点被取消后:给"排盘"按钮重开填参表单 */}
-      {canCast && (
-        <div className="mt-3">
-          <Button size="sm" icon={<Compass size={13} />} onClick={onCast}>
-            {t('workflows.runner.castBoard')}
-          </Button>
-        </div>
-      )}
-
-      {/* 排盘节点暂停时也给"下一步" */}
       {node.type === 'paipan' && isPaused && (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="text-[12px] text-muted">
             {t('workflows.runner.boardGenerated')}
           </span>
@@ -688,6 +831,17 @@ function NodeRunCard({
             {t('workflows.runner.next')}
           </Button>
         </div>
+      )}
+
+      {status === 'error' && (
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<RefreshCw size={13} />}
+          onClick={onRerun}
+        >
+          {t('workflows.runner.rerun')}
+        </Button>
       )}
     </div>
   );
@@ -728,7 +882,7 @@ function StatusIndicator({ status }: { status: NodeStatus }) {
 
 export default function RunWorkflowPage() {
   return (
-    <AppShell>
+    <AppShell wide>
       <Suspense
         fallback={
           <div className="flex min-h-[40vh] items-center justify-center">

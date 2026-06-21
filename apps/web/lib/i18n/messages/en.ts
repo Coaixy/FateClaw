@@ -57,6 +57,8 @@ export const enMessages = {
       outputsTitle: 'Outputs from this run (terminal nodes)',
       outputBadge: 'Output',
       castBoard: 'Cast chart',
+      progress: 'Done {done}/{total}',
+      pickNode: 'Click a node on the canvas to see its output',
     },
     builder: {
       newTitle: 'New workflow',

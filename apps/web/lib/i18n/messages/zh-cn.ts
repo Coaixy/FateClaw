@@ -57,6 +57,8 @@ export const zhCNMessages = {
       outputsTitle: '本次产出(各末端节点)',
       outputBadge: '输出',
       castBoard: '排盘',
+      progress: '已完成 {done}/{total}',
+      pickNode: '点选画布上的节点查看产出',
     },
     builder: {
       newTitle: '新建工作流',

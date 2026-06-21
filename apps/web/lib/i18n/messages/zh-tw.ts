@@ -57,6 +57,8 @@ export const zhTWMessages = {
       outputsTitle: '本次產出(各末端節點)',
       outputBadge: '輸出',
       castBoard: '排盤',
+      progress: '已完成 {done}/{total}',
+      pickNode: '點選畫布上的節點查看產出',
     },
     builder: {
       newTitle: '新建工作流程',
