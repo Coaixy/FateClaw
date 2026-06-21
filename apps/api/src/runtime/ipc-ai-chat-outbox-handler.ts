@@ -483,6 +483,13 @@ async function storeAiChatFinalResponseMessages(args: {
             kind: 'assistant',
             request_id: args.payload.requestId,
           },
+      // workflow AI 节点产出:把节点 id 落入 workflow_node_id 列,实现"节点↔产出"结构化关联
+      // (替代靠回复 id `wf-<nodeId>-…_reply` 反解)。仅单段 `_reply` 落列,与 collectNodeOutputs
+      // 读口径一致(多段 `_reply_N` 维持既有"不收集"行为);非 workflow 请求 pending 无该字段 → 列为空。
+      workflow_node_id:
+        args.assistantMessages.length === 1
+          ? (args.pending?.workflowNodeId ?? null)
+          : null,
     });
   }
 

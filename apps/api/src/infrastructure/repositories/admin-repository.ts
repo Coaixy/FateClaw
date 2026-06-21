@@ -93,7 +93,9 @@ export async function getMessagesForAdmin(opts: {
   const limit = Math.min(opts.limit ?? 50, 200);
   const offset = opts.offset ?? 0;
 
-  let whereClause = 'WHERE 1=1';
+  // 隐藏 workflow 运行会话的消息:后台对话视图回归纯真人对话(workflow 运行另有运行历史入口)。
+  // session_id 为空的微信消息 s.origin 为 NULL,IS DISTINCT FROM 保证其不被误排除。
+  let whereClause = "WHERE 1=1 AND (s.origin IS DISTINCT FROM 'workflow_run')";
   const params: unknown[] = [];
   let paramIdx = 1;
 
@@ -114,7 +116,7 @@ export async function getMessagesForAdmin(opts: {
     params.push(opts.sessionId);
   }
 
-  const countQuery = `SELECT COUNT(*) as cnt FROM messages m ${whereClause}`;
+  const countQuery = `SELECT COUNT(*) as cnt FROM messages m LEFT JOIN chat_sessions s ON s.id = m.session_id ${whereClause}`;
   const { rows: countRows } = await pool.query(countQuery, params);
   const total = Number((countRows[0] as { cnt: string }).cnt);
 
@@ -155,7 +157,8 @@ export async function getChatSessionsForAdmin(opts: {
   const limit = Math.min(opts.limit ?? 100, 200);
   const offset = opts.offset ?? 0;
 
-  let whereClause = 'WHERE 1=1';
+  // 隐藏 workflow 运行会话:后台会话列表回归纯真人对话。
+  let whereClause = "WHERE 1=1 AND (s.origin IS DISTINCT FROM 'workflow_run')";
   const params: unknown[] = [];
   let paramIdx = 1;
 
@@ -258,6 +261,9 @@ export async function getChatSessionPiCleanupCandidates(opts: {
       `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
        FROM chat_sessions s
        WHERE deleted_at IS NOT NULL
+         -- 排除 workflow 运行会话:其 Pi 文件在 <userMessageId>__pi 名下、不在 session.id 名下,
+         -- 按 session.id 清理/归档对它无效(纯浪费),且会错误归档其本不存在的 session 名 Pi。
+         AND s.origin <> 'workflow_run'
          ${opts.cursor ? `AND id > $${paramIdx++}` : ''}
          AND (
            pi_session_archived_at IS NULL
@@ -294,6 +300,8 @@ export async function getChatSessionPiCleanupCandidates(opts: {
      FROM chat_sessions s
      WHERE deleted_at IS NULL
        AND updated_at < $1
+       -- 排除 workflow 运行会话(同上:其 Pi 文件不在 session.id 名下)。
+       AND s.origin <> 'workflow_run'
        ${opts.cursor ? `AND id > $${paramIdx - 1}` : ''}
        AND (
          pi_session_archived_at IS NULL

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectNodeOutputs,
   renderWorkflowPrompt,
+  resolveNodeOutputId,
 } from '../../../src/modules/chat/workflow-run-render.js';
 
 describe('renderWorkflowPrompt', () => {
@@ -73,5 +74,72 @@ describe('collectNodeOutputs', () => {
       { id: 'wf-node_2-100-aaa_reply', content: 'x', timestamp: '2026-06-21T00:00:01Z' },
     ]);
     expect(outputs).toEqual({ node_2: 'x' });
+  });
+
+  it('列优先:有 workflow_node_id 列时按列关联(不依赖 id 字符串)', () => {
+    const outputs = collectNodeOutputs([
+      {
+        id: 'whatever-id-不符合-wf-约定',
+        content: '按列读到',
+        timestamp: '2026-06-21T00:00:01Z',
+        workflow_node_id: 'n1',
+      },
+    ]);
+    expect(outputs).toEqual({ n1: '按列读到' });
+  });
+
+  it('列优先:nodeId 含连字符(未来放开字符集)也能正确关联', () => {
+    const outputs = collectNodeOutputs([
+      {
+        id: 'wf-cai-yun-a-100-aaa_reply',
+        content: '财运A产出',
+        timestamp: '2026-06-21T00:00:01Z',
+        workflow_node_id: 'cai-yun-a',
+      },
+    ]);
+    expect(outputs).toEqual({ 'cai-yun-a': '财运A产出' });
+  });
+
+  it('排除盘面:盘面带 workflow_node_id 列但 kind=board_result,不作为文本产出', () => {
+    const outputs = collectNodeOutputs([
+      {
+        id: 'wf-board-p1-100-zzz',
+        content: '已生成盘面。',
+        timestamp: '2026-06-21T00:00:01Z',
+        workflow_node_id: 'p1',
+        metadata: { kind: 'board_result' },
+      },
+      {
+        id: 'wf-a1-100-aaa_reply',
+        content: 'AI 解读',
+        timestamp: '2026-06-21T00:00:02Z',
+        workflow_node_id: 'a1',
+      },
+    ]);
+    expect(outputs).toEqual({ a1: 'AI 解读' });
+  });
+});
+
+describe('resolveNodeOutputId', () => {
+  it('列优先 → 返回 workflow_node_id 列', () => {
+    expect(
+      resolveNodeOutputId({ id: 'x', workflow_node_id: 'n1' }),
+    ).toBe('n1');
+  });
+
+  it('盘面(board_result)即便有列也返回 undefined', () => {
+    expect(
+      resolveNodeOutputId({
+        id: 'wf-board-p1-1-z',
+        workflow_node_id: 'p1',
+        metadata: { kind: 'board_result' },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('无列时回退 id 约定;非 _reply / 非 wf- 返回 undefined', () => {
+    expect(resolveNodeOutputId({ id: 'wf-n1-100-aaa_reply' })).toBe('n1');
+    expect(resolveNodeOutputId({ id: 'wf-n1-100-aaa' })).toBeUndefined();
+    expect(resolveNodeOutputId({ id: 'session-x-1' })).toBeUndefined();
   });
 });

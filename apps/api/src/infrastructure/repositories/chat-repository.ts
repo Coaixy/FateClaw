@@ -9,8 +9,8 @@ const HISTORY_REDIS_MAX = 500;
 
 export async function storeMessage(msg: NewMessage): Promise<void> {
   await getDbPool().query(
-    `INSERT INTO messages (id, account_id, user_id, sender, sender_name, content, timestamp, is_from_me, is_bot_message, tool_context, session_id, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO messages (id, account_id, user_id, sender, sender_name, content, timestamp, is_from_me, is_bot_message, tool_context, session_id, metadata, workflow_node_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (id, account_id) DO UPDATE SET
        user_id = EXCLUDED.user_id,
        sender = EXCLUDED.sender,
@@ -21,7 +21,8 @@ export async function storeMessage(msg: NewMessage): Promise<void> {
        is_bot_message = EXCLUDED.is_bot_message,
        tool_context = EXCLUDED.tool_context,
        session_id = EXCLUDED.session_id,
-       metadata = EXCLUDED.metadata`,
+       metadata = EXCLUDED.metadata,
+       workflow_node_id = EXCLUDED.workflow_node_id`,
     [
       msg.id,
       msg.account_id,
@@ -35,6 +36,7 @@ export async function storeMessage(msg: NewMessage): Promise<void> {
       msg.tool_context ?? null,
       msg.session_id ?? null,
       msg.metadata ? JSON.stringify(msg.metadata) : null,
+      msg.workflow_node_id ?? null,
     ],
   );
 

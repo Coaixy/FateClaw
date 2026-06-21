@@ -137,6 +137,11 @@ export interface OwnedChatSessionTurnOptions {
    * (不 reload 兄弟节点的轮次),而产出仍按会话 id 落库。不传则回退会话 id(直接对话即同一个)。
    */
   piSessionId?: string;
+  /**
+   * workflow 节点 id:本轮是某 workflow AI 节点的执行时透传,最终 assistant 回复落库时写入
+   * messages.workflow_node_id 列(结构化关联,替代靠回复 id 字符串反解);直接对话不传。
+   */
+  workflowNodeId?: string;
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -163,6 +168,7 @@ interface PreparedOwnedChatSessionTurn {
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   piSessionId?: string;
+  workflowNodeId?: string;
   sessionTitle: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
@@ -949,6 +955,7 @@ async function prepareOwnedChatSessionTurn(
       authorizedSkillBundleIds,
       authorizedWorkflowSkillIds,
       piSessionId: options.piSessionId,
+      workflowNodeId: options.workflowNodeId,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -989,6 +996,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       sessionId: session.id,
       piSessionId: prepared.piSessionId,
       userMessageId: msgId,
+      workflowNodeId: prepared.workflowNodeId,
       requestId,
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
@@ -1048,6 +1056,7 @@ async function completeOwnedChatSessionTurn(
       sessionId: session.id,
       piSessionId: prepared.piSessionId,
       userMessageId: msgId,
+      workflowNodeId: prepared.workflowNodeId,
       requestId,
       llmRuntime,
       authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,

@@ -48,6 +48,7 @@ import {
 import {
   collectNodeOutputs,
   renderWorkflowPrompt,
+  resolveNodeOutputId,
 } from './workflow-run-render.js';
 
 function randomSuffix(): string {
@@ -212,6 +213,8 @@ async function executePaipanNode(args: {
     is_bot_message: true,
     session_id: args.sessionId,
     tool_context: JSON.stringify([skillContextEntry]),
+    // 结构化关联列:标记本盘面属于哪个排盘节点(P1 的 run_node 据此做外键)。
+    workflow_node_id: args.node.id,
     metadata: {
       kind: 'board_result',
       workflow: 'workflow',
@@ -274,6 +277,9 @@ async function executeAiNode(args: {
     },
     {
       userMessageId,
+      // 结构化节点关联:透传到 in-process pending,outbox 落 AI 回复时写 workflow_node_id 列
+      // (替代靠回复 id `wf-<nodeId>-…_reply` 反解;见 ipc-ai-chat-outbox-handler)。
+      workflowNodeId: args.node.id,
       llmRuntimeOverride: llmRuntime,
       runtimeUserMessageOverride: rendered,
       // 有快照用快照(workflow 授权优先);没绑 skill 则不加载任何用户级 skill,保证工作流确定性。
@@ -365,17 +371,14 @@ export async function executeWorkflowRunNode(
   });
 }
 
-/** 找到某节点最新的 AI 回复消息(id 约定 `wf-<nodeId>-…_reply`)。 */
+/** 找到某节点最新的 AI 文本产出消息(列优先 + id 约定回退,排除盘面)。 */
 function findLatestNodeReply(
   messages: NewMessage[],
   nodeId: string,
 ): NewMessage | undefined {
   let latest: NewMessage | undefined;
   for (const message of messages) {
-    if (
-      !message.id.startsWith(`wf-${nodeId}-`) ||
-      !message.id.endsWith('_reply')
-    ) {
+    if (resolveNodeOutputId(message) !== nodeId) {
       continue;
     }
     if (!latest || message.timestamp >= latest.timestamp) {
@@ -449,6 +452,8 @@ export async function saveWorkflowNodeOutput(
     is_from_me: true,
     is_bot_message: true,
     session_id: sessionId,
+    // 结构化关联列:手填产出归属该节点,下游 collectNodeOutputs 据列读到。
+    workflow_node_id: nodeId,
     metadata: {
       kind: 'final',
       workflow: 'workflow',
