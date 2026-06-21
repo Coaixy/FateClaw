@@ -490,6 +490,7 @@ describe('runDatabaseMigrations', () => {
       '0064_workflow_definition_inputs',
       '0065_chat_session_workflow_origin',
       '0066_messages_workflow_node_id',
+      '0067_workflow_runs',
     ]);
 
     await runDatabaseMigrations(client as never);

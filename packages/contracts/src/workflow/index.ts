@@ -212,3 +212,59 @@ export interface WorkflowRunNodeExecuteResponseDto {
   /** 排盘节点:生成的盘面消息 id;AI 节点为空。 */
   boardMessageId?: string;
 }
+
+// ───────────────────── 后端编排运行状态(架构升级 B 方案 P1 起)─────────────────────
+// 运行态升级为独立领域实体:workflow_runs(运行)+ workflow_run_nodes(节点状态)。
+// 后端拓扑编排状态机驱动推进,前端退化为"提交输入 + 订阅 run 状态快照"。
+// 产出正文仍落 messages(卦师照常润色),run_node 只持节点编排状态 + 复合外键指针。
+
+/** 运行整体状态。 */
+export type WorkflowRunStatus =
+  | 'running' // 推进中
+  | 'paused' // 命中某 pauseAfter 节点,等卦师接管
+  | 'done' // 全部叶子节点完成
+  | 'error' // 某节点失败且未恢复
+  | 'canceled'; // 卦师取消
+
+/** 单节点运行状态。 */
+export type WorkflowRunNodeStatus =
+  | 'pending' // 未就绪 / 等待上游
+  | 'running' // AI 节点已发起,等回复落库
+  | 'awaiting_paipan' // 排盘节点等卦师在前端提交起盘
+  | 'done' // 已产出
+  | 'error' // 执行失败
+  | 'skipped' // 卦师跳过
+  | 'manual'; // 卦师手填产出
+
+/** 运行中某节点的状态快照(前端渲染 + 下游引用)。 */
+export interface WorkflowRunNodeStateDto {
+  nodeId: string;
+  type: WorkflowNodeDto['type'];
+  title: string;
+  pauseAfter: boolean;
+  status: WorkflowRunNodeStatus;
+  /** 文本产出(AI / 手填);排盘节点为空,盘面经 outputMessageId 关联消息 tool_context。 */
+  output: string;
+  /** 关联产出消息 id(AI 回复 / 盘面 / 手填);未产出为空。 */
+  outputMessageId?: string;
+  /** 失败时的错误信息。 */
+  error?: string;
+}
+
+/** 一次运行的完整状态快照(GET /runs/:id 返回;前端据此渲染画布与产出)。 */
+export interface WorkflowRunStateDto {
+  runId: string;
+  /** 产出落库的 chat 会话 id(消息仍存这里供润色/渲染)。 */
+  sessionId: string;
+  definitionId: string;
+  title: string;
+  status: WorkflowRunStatus;
+  /** 关联客户 id;未关联为空。 */
+  clientId?: string;
+  /** 本次运行输入(键为定义 inputs 的 key)。 */
+  input: Record<string, string>;
+  /** 运行开始时间(ISO)。 */
+  startedAt: string;
+  nodes: WorkflowRunNodeStateDto[];
+  edges: WorkflowEdgeDto[];
+}
