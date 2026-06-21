@@ -208,6 +208,9 @@ function toRunStateDto(
   messages: NewMessage[],
 ): WorkflowRunStateDto {
   const contentById = new Map(messages.map((m) => [m.id, m.content]));
+  const toolContextById = new Map(
+    messages.map((m) => [m.id, m.tool_context ?? null]),
+  );
   return {
     runId: snapshot.runId,
     sessionId: snapshot.sessionId,
@@ -232,6 +235,10 @@ function toRunStateDto(
             ? (contentById.get(node.outputMessageId) ?? '')
             : '',
       outputMessageId: node.outputMessageId ?? undefined,
+      // 盘面/artifact 的 tool_context,供前端 ArtifactRenderer 渲染(排盘节点正文为空但有盘面)。
+      toolContext: node.outputMessageId
+        ? (toolContextById.get(node.outputMessageId) ?? undefined)
+        : undefined,
       error: node.error ?? undefined,
     })),
   };

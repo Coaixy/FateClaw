@@ -14,8 +14,12 @@ import type {
   WorkflowRunNodeDto,
   WorkflowRunNodeExecuteRequestDto,
   WorkflowRunNodeExecuteResponseDto,
+  WorkflowRunNodeStateDto,
+  WorkflowRunNodeStatus as WorkflowRunNodeStatusDto,
   WorkflowRunStartRequestDto,
   WorkflowRunStartResponseDto,
+  WorkflowRunStateDto,
+  WorkflowRunStatus as WorkflowRunStatusDto,
   WorkflowRunSummaryDto,
 } from '@fateclaw/contracts/workflow';
 import type { SimpleModelPolicyDto } from '@fateclaw/contracts/chat';
@@ -43,6 +47,11 @@ export type WorkflowRunNodeExecuteRequest = WorkflowRunNodeExecuteRequestDto;
 export type WorkflowRunNodeExecuteResponse = WorkflowRunNodeExecuteResponseDto;
 export type WorkflowRunSummary = WorkflowRunSummaryDto;
 export type WorkflowRunListResponse = WorkflowRunListResponseDto;
+// 后端编排运行状态(架构升级 B 方案 P3 起前端用)。
+export type WorkflowRunState = WorkflowRunStateDto;
+export type WorkflowRunNodeState = WorkflowRunNodeStateDto;
+export type WorkflowRunStatus = WorkflowRunStatusDto;
+export type WorkflowRunNodeStatus = WorkflowRunNodeStatusDto;
 
 const seg = (value: string) => encodeURIComponent(value);
 
@@ -125,4 +134,69 @@ export const workflowsApi = {
         exposeServerErrorMessage: true,
       },
     ),
+
+  /**
+   * 后端编排运行 API(架构升级 B 方案):前端只"提交输入 + 订阅 run 快照",拓扑推进在后端。
+   * 所有方法返回完整运行状态快照 WorkflowRunState。
+   */
+  run: {
+    /** 启动一次后端编排运行。 */
+    start: (workflowId: string, data: WorkflowRunStartRequest) =>
+      requestJson<WorkflowRunState>(`/api/workflows/${seg(workflowId)}/run`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+        exposeServerErrorMessage: true,
+      }),
+
+    /** 读取运行状态快照(后端会先回灌已落库产出再返回)。 */
+    get: (runId: string) =>
+      requestJson<WorkflowRunState>(`/api/workflows/run/${seg(runId)}`),
+
+    /** 从暂停续跑。 */
+    resume: (runId: string) =>
+      requestJson<WorkflowRunState>(
+        `/api/workflows/run/${seg(runId)}/resume`,
+        { method: 'POST', exposeServerErrorMessage: true },
+      ),
+
+    /** 卦师起盘提交(input 为 PaipanSheet 填写的排盘参数)。 */
+    commitPaipan: (
+      runId: string,
+      nodeId: string,
+      input: Record<string, unknown>,
+    ) =>
+      requestJson<WorkflowRunState>(
+        `/api/workflows/run/${seg(runId)}/nodes/${seg(nodeId)}/paipan`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ input }),
+          exposeServerErrorMessage: true,
+        },
+      ),
+
+    /** 从该节点级联重跑下游。 */
+    rerun: (runId: string, nodeId: string) =>
+      requestJson<WorkflowRunState>(
+        `/api/workflows/run/${seg(runId)}/nodes/${seg(nodeId)}/rerun`,
+        { method: 'POST', exposeServerErrorMessage: true },
+      ),
+
+    /** 跳过该节点。 */
+    skip: (runId: string, nodeId: string) =>
+      requestJson<WorkflowRunState>(
+        `/api/workflows/run/${seg(runId)}/nodes/${seg(nodeId)}/skip`,
+        { method: 'POST', exposeServerErrorMessage: true },
+      ),
+
+    /** 润色 / 手填某节点产出。 */
+    saveOutput: (runId: string, nodeId: string, content: string) =>
+      requestJson<WorkflowRunState>(
+        `/api/workflows/run/${seg(runId)}/nodes/${seg(nodeId)}/output`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ content }),
+          exposeServerErrorMessage: true,
+        },
+      ),
+  },
 };

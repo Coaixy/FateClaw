@@ -243,10 +243,15 @@ export interface WorkflowRunNodeStateDto {
   title: string;
   pauseAfter: boolean;
   status: WorkflowRunNodeStatus;
-  /** 文本产出(AI / 手填);排盘节点为空,盘面经 outputMessageId 关联消息 tool_context。 */
+  /** 文本产出(AI / 手填);排盘节点为空,盘面经 toolContext 渲染。 */
   output: string;
   /** 关联产出消息 id(AI 回复 / 盘面 / 手填);未产出为空。 */
   outputMessageId?: string;
+  /**
+   * 产出消息的 tool_context 原始 JSON(SkillContextEntry[] 序列化):排盘盘面、或 AI 调用 skill 的
+   * artifact。前端 parseToolContext 后用 ArtifactRenderer 渲染。无 artifact 为空。
+   */
+  toolContext?: string | null;
   /** 失败时的错误信息。 */
   error?: string;
 }
