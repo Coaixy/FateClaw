@@ -390,9 +390,10 @@ function RunWorkflowInner() {
     };
   }, [workflowId, runIdParam]);
 
-  // 排盘目录(PaipanSheet 用),首次进入运行态时加载一次。
+  // 排盘目录(PaipanSheet 用)挂载时加载一次。注意:不能把 catalogLoading 放进依赖 —— effect 内
+  // setCatalogLoading(true) 会触发 effect 重跑,其 cleanup 把进行中的请求 cancel 掉,导致 .then/.finally
+  // 被 if(!cancelled) 挡掉 → catalog 永远没设、loading 永远卡住。用 [] 依赖挂载一次即可。
   useEffect(() => {
-    if (phase !== 'running' || catalog.length > 0 || catalogLoading) return;
     let cancelled = false;
     setCatalogLoading(true);
     void paipanApi
@@ -407,7 +408,7 @@ function RunWorkflowInner() {
     return () => {
       cancelled = true;
     };
-  }, [phase, catalog.length, catalogLoading]);
+  }, []);
 
   // 运行中轮询后端快照:仅 status='running' 时拉,转入 paused/done/error 即停。
   useEffect(() => {
