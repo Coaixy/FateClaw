@@ -27,7 +27,8 @@ export function renderWorkflowPrompt(
     if (ref.startsWith('input.')) {
       return context.input[ref.slice('input.'.length)] ?? '';
     }
-    const nodeMatch = /^node\.([A-Za-z0-9_]+)\.output$/.exec(ref);
+    // nodeId 字符集已放开(可含 '-',如 nanoid),引用正则同步允许 '-',否则 {{node.my-node.output}} 静默失效。
+    const nodeMatch = /^node\.([A-Za-z0-9_-]+)\.output$/.exec(ref);
     if (nodeMatch) {
       return context.nodeOutputs[nodeMatch[1]] ?? '';
     }
@@ -35,27 +36,59 @@ export function renderWorkflowPrompt(
   });
 }
 
+/** collectNodeOutputs / findLatestNodeReply 读取所需的最小消息形状。 */
+export interface WorkflowOutputMessage {
+  id: string;
+  content: string;
+  timestamp: string;
+  /** 结构化节点关联列(P0 起);旧消息为空时回退 id 约定解析。 */
+  workflow_node_id?: string | null;
+  /** 用于排除盘面(metadata.kind='board_result')—— 盘面带 node 列但不是文本产出。 */
+  metadata?: unknown;
+}
+
 /**
- * 从会话消息里收集各 AI 节点的最新产出(nodeId → 回复文本)。
+ * 解出"该消息作为 AI 文本产出所归属的节点 id";非节点文本产出返回 undefined。
  *
- * @remarks 回复消息 id 形如 `wf-<nodeId>-<ts>-<rand>_reply`;nodeId 不含 '-'(路由已限定),
- *          故按首个 '-' 切出。同一节点多次运行/重跑时按时间戳取最新,从而拿到卦师润色后的版本。
+ * @remarks
+ * - 列优先:workflow_node_id 列(P0 起的结构化关联);列为空时回退旧 id 约定 `wf-<nodeId>-…_reply`
+ *   解析(历史消息 / 进程重启等边角数据)。
+ * - 排盘盘面(metadata.kind='board_result')虽带 workflow_node_id 列,但它是盘面、不是 {{node.output}}
+ *   引用的文本产出,按 kind 排除;运行起始消息(wf-run-…)无该列、id 也不以 _reply 结尾,天然排除。
+ */
+export function resolveNodeOutputId(
+  message: Pick<WorkflowOutputMessage, 'id' | 'workflow_node_id' | 'metadata'>,
+): string | undefined {
+  const kind = (message.metadata as { kind?: unknown } | null | undefined)?.kind;
+  // 盘面(board_result)与失败消息(error)虽可能带 node 列,但都不是 {{node.output}} 的文本产出。
+  if (kind === 'board_result' || kind === 'error') return undefined;
+  if (message.workflow_node_id) return message.workflow_node_id;
+  // 回退:旧消息无列,按 id 约定 `wf-<nodeId>-…_reply`(nodeId 不含 '-',按首个 '-' 切出)。
+  if (!message.id.startsWith('wf-') || !message.id.endsWith('_reply')) {
+    return undefined;
+  }
+  const rest = message.id.slice('wf-'.length);
+  const dashIndex = rest.indexOf('-');
+  if (dashIndex <= 0) return undefined;
+  return rest.slice(0, dashIndex);
+}
+
+/**
+ * 从会话消息里收集各 AI 节点的最新文本产出(nodeId → 回复文本)。
+ *
+ * @remarks 关联走 resolveNodeOutputId(列优先 + id 回退);同一节点多次运行/重跑时按时间戳取最新,
+ *          从而拿到卦师润色后的版本。盘面消息被排除。
  */
 export function collectNodeOutputs(
-  messages: { id: string; content: string; timestamp: string }[],
+  messages: WorkflowOutputMessage[],
 ): Record<string, string> {
   const latestByNode = new Map<
     string,
     { content: string; timestamp: string }
   >();
   for (const message of messages) {
-    if (!message.id.startsWith('wf-') || !message.id.endsWith('_reply')) {
-      continue;
-    }
-    const rest = message.id.slice('wf-'.length);
-    const dashIndex = rest.indexOf('-');
-    if (dashIndex <= 0) continue;
-    const nodeId = rest.slice(0, dashIndex);
+    const nodeId = resolveNodeOutputId(message);
+    if (!nodeId) continue;
     const prev = latestByNode.get(nodeId);
     if (!prev || message.timestamp >= prev.timestamp) {
       latestByNode.set(nodeId, {

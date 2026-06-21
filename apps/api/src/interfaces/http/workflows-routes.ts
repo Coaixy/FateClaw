@@ -11,11 +11,15 @@ import {
   updateWorkflowDefinitionForOwnedUser,
 } from '../../modules/chat/workflow-definition-service.js';
 import {
-  executeWorkflowRunNode,
-  listWorkflowRuns,
-  saveWorkflowNodeOutput,
-  startWorkflowRun,
-} from '../../modules/chat/workflow-run-service.js';
+  commitWorkflowPaipanNodeV2,
+  getWorkflowRunStateV2,
+  listWorkflowRunHistoryV2,
+  rerunWorkflowNodeV2,
+  resumeWorkflowRunV2,
+  saveWorkflowNodeOutputV2,
+  skipWorkflowNodeV2,
+  startWorkflowRunV2,
+} from '../../modules/workflow/workflow-run-engine.js';
 
 /** 模型策略校验(对齐契约 SimpleModelPolicyDto)。 */
 const ModelPolicySchema = z.object({
@@ -30,13 +34,10 @@ const PositionSchema = z.object({
   y: z.number(),
 });
 
-/** 节点公共字段;id 必填、需稳定(前端新增节点时生成、之后不变),且仅含字母数字下划线
- *  (运行侧用 `wf-<nodeId>-…` 的消息 id 约定关联节点产出,故 nodeId 不能含 '-')。 */
+/** 节点公共字段;id 必填、需稳定(前端新增节点时生成、之后不变)。
+ *  节点↔产出已走 messages.workflow_node_id 列结构化关联(不再靠 id 字符串约定),故 id 不再限字符集。 */
 const nodeBase = {
-  id: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9_]+$/, '节点 id 仅可含字母、数字、下划线'),
+  id: z.string().trim().min(1, '请填写节点 id').max(64),
   title: z.string().trim().min(1, '请填写节点名称').max(60),
   pauseAfter: z.boolean(),
   position: PositionSchema,
@@ -161,18 +162,14 @@ const RunStartSchema = z.object({
   input: z.record(z.string(), z.string()).optional().default({}),
 });
 
-/** 执行单个节点请求体校验。 */
-const NodeExecuteSchema = z.object({
-  boardMessageIds: z
-    .array(z.string().trim().min(1))
-    .max(20)
-    .optional()
-    .default([]),
-});
-
 /** 保存某节点润色结果请求体校验。 */
 const NodeOutputSchema = z.object({
   content: z.string().max(20000),
+});
+
+/** 起盘提交请求体校验(后端编排版:PaipanSheet 自落盘面后返回的盘面消息 id,后端认领之)。 */
+const PaipanCommitSchema = z.object({
+  boardMessageId: z.string().trim().min(1, '缺少盘面消息 id'),
 });
 
 /**
@@ -291,21 +288,11 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // GET /api/workflows/:id/runs — 列出该工作流的运行历史
-  app.get<{ Params: { id: string } }>('/:id/runs', async (request, reply) => {
-    const result = await listWorkflowRuns(
-      request.user.userId,
-      request.params.id,
-    );
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
+  // ───────────── 后端编排运行(架构升级 B 方案;按 runId 寻址)─────────────
 
-  // POST /api/workflows/:id/runs — 启动一次运行(建会话,可关联客户)
+  // POST /api/workflows/:id/run — 启动一次后端编排运行,返回运行状态快照
   app.post<{ Params: { id: string }; Body: unknown }>(
-    '/:id/runs',
+    '/:id/run',
     async (request, reply) => {
       const parsed = RunStartSchema.safeParse(request.body ?? {});
       if (!parsed.success) {
@@ -313,7 +300,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
           .code(400)
           .send({ error: parsed.error.issues[0]?.message || '参数错误' });
       }
-      const result = await startWorkflowRun(
+      const result = await startWorkflowRunV2(
         request.user.userId,
         request.params.id,
         { clientId: parsed.data.clientId, input: parsed.data.input },
@@ -325,25 +312,13 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/workflows/:id/runs/:sessionId/nodes/:nodeId/execute — 执行单个节点
-  app.post<{
-    Params: { id: string; sessionId: string; nodeId: string };
-    Body: unknown;
-  }>(
-    '/:id/runs/:sessionId/nodes/:nodeId/execute',
+  // GET /api/workflows/:id/run-history — 后端编排运行历史(按 runId)
+  app.get<{ Params: { id: string } }>(
+    '/:id/run-history',
     async (request, reply) => {
-      const parsed = NodeExecuteSchema.safeParse(request.body ?? {});
-      if (!parsed.success) {
-        return reply
-          .code(400)
-          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-      }
-      const result = await executeWorkflowRunNode(
+      const result = await listWorkflowRunHistoryV2(
         request.user.userId,
         request.params.id,
-        request.params.sessionId,
-        request.params.nodeId,
-        parsed.data.boardMessageIds,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });
@@ -352,12 +327,94 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /api/workflows/:id/runs/:sessionId/nodes/:nodeId/output — 保存某节点润色结果
-  app.patch<{
-    Params: { id: string; sessionId: string; nodeId: string };
-    Body: unknown;
-  }>(
-    '/:id/runs/:sessionId/nodes/:nodeId/output',
+  // GET /api/workflows/run/:runId — 读取运行状态(自动 reconcile 已落库产出)
+  app.get<{ Params: { runId: string } }>(
+    '/run/:runId',
+    async (request, reply) => {
+      const result = await getWorkflowRunStateV2(
+        request.user.userId,
+        request.params.runId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/resume — 从暂停续跑
+  app.post<{ Params: { runId: string } }>(
+    '/run/:runId/resume',
+    async (request, reply) => {
+      const result = await resumeWorkflowRunV2(
+        request.user.userId,
+        request.params.runId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/paipan — 卦师起盘提交
+  app.post<{ Params: { runId: string; nodeId: string }; Body: unknown }>(
+    '/run/:runId/nodes/:nodeId/paipan',
+    async (request, reply) => {
+      const parsed = PaipanCommitSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      const result = await commitWorkflowPaipanNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+        parsed.data.boardMessageId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/rerun — 从该节点级联重跑
+  app.post<{ Params: { runId: string; nodeId: string } }>(
+    '/run/:runId/nodes/:nodeId/rerun',
+    async (request, reply) => {
+      const result = await rerunWorkflowNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/skip — 跳过该节点
+  app.post<{ Params: { runId: string; nodeId: string } }>(
+    '/run/:runId/nodes/:nodeId/skip',
+    async (request, reply) => {
+      const result = await skipWorkflowNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // PATCH /api/workflows/run/:runId/nodes/:nodeId/output — 润色 / 手填节点产出
+  app.patch<{ Params: { runId: string; nodeId: string }; Body: unknown }>(
+    '/run/:runId/nodes/:nodeId/output',
     async (request, reply) => {
       const parsed = NodeOutputSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -365,10 +422,9 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
           .code(400)
           .send({ error: parsed.error.issues[0]?.message || '参数错误' });
       }
-      const result = await saveWorkflowNodeOutput(
+      const result = await saveWorkflowNodeOutputV2(
         request.user.userId,
-        request.params.id,
-        request.params.sessionId,
+        request.params.runId,
         request.params.nodeId,
         parsed.data.content,
       );

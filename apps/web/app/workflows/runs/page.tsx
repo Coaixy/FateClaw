@@ -8,7 +8,7 @@ import { AppShell } from '@/components/app-shell';
 import {
   workflowsApi,
   type WorkflowDefinition,
-  type WorkflowRunSummary,
+  type WorkflowRunHistoryItem,
 } from '@/features/workflows/api';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -30,7 +30,7 @@ function WorkflowRunsInner() {
 
   const workflowId = params.get('id') ?? '';
   const [workflow, setWorkflow] = useState<WorkflowDefinition | null>(null);
-  const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
+  const [runs, setRuns] = useState<WorkflowRunHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,7 +43,7 @@ function WorkflowRunsInner() {
       try {
         const [def, runList] = await Promise.all([
           workflowsApi.get(workflowId),
-          workflowsApi.listRuns(workflowId),
+          workflowsApi.run.history(workflowId),
         ]);
         if (cancelled) return;
         setWorkflow(def);
@@ -91,13 +91,13 @@ function WorkflowRunsInner() {
         <div className="space-y-2">
           {runs.map((run) => (
             <button
-              key={run.sessionId}
+              key={run.runId}
               type="button"
               onClick={() =>
                 router.push(
                   `/workflows/run?id=${encodeURIComponent(
                     workflowId,
-                  )}&view=${encodeURIComponent(run.sessionId)}`,
+                  )}&run=${encodeURIComponent(run.runId)}`,
                 )
               }
               className="flex w-full items-center gap-3 rounded-xl border border-hairline bg-surface-card px-4 py-3 text-left transition-colors hover:border-primary/25"

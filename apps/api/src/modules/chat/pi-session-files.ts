@@ -499,12 +499,30 @@ export interface PiSessionOrphanFileDeleteResult {
   skipped_unsafe_files: string[];
 }
 
+/**
+ * 是否为 workflow AI 节点的一次性隔离 Pi 文件基名(`<userMessageId>__pi`)。
+ *
+ * @remarks 这类 Pi 会话与 chat_sessions 解耦、设计上节点跑完即由 session 内 finally 删除;持久化
+ *          下来的一定是进程被杀(OOM/SIGKILL/容器重启)泄漏的孤儿。孤儿扫描据此兜底回收——给它一个
+ *          非空 session_id(= base 名,无对应 chat_sessions 行),从而通过消费端"session_id 非空"门、
+ *          且不被"未归档"门拦;正在执行的节点其 __pi 文件 mtime 很新,被 grace 天数门保护不会误删。
+ */
+function isEphemeralWorkflowPiBaseName(baseName: string): boolean {
+  return baseName.endsWith('__pi');
+}
+
 function extractSessionIdFromPathFileName(name: string): string | null {
   if (!name.endsWith('.path')) {
     return null;
   }
-  const sessionId = name.slice(0, -'.path'.length);
-  return sessionId.startsWith('session-') ? sessionId : null;
+  const baseName = name.slice(0, -'.path'.length);
+  if (baseName.startsWith('session-')) {
+    return baseName;
+  }
+  if (isEphemeralWorkflowPiBaseName(baseName)) {
+    return baseName;
+  }
+  return null;
 }
 
 function extractSessionIdFromJsonlFileName(name: string): string | null {
@@ -513,6 +531,9 @@ function extractSessionIdFromJsonlFileName(name: string): string | null {
   }
   const baseName = name.slice(0, -'.jsonl'.length);
   if (baseName.startsWith('session-')) {
+    return baseName;
+  }
+  if (isEphemeralWorkflowPiBaseName(baseName)) {
     return baseName;
   }
   const marker = '_session-';
@@ -635,6 +656,21 @@ export async function scanPiSessionOrphanFiles(input?: {
     scannedPathFiles += 1;
     const mappingPath = path.join(sessionDir, name);
     const mappingStat = await statFile(mappingPath);
+
+    // workflow 一次性 __pi.path:无论映射是否健康一律视为孤儿(设计上跑完即删,持久化=进程被杀泄漏)。
+    // 不把其映射的 .jsonl 计入 referenced,从而对应 .jsonl 也会在下方被判为 unmapped 孤儿一并回收。
+    if (isEphemeralWorkflowPiBaseName(name.slice(0, -'.path'.length))) {
+      danglingPathFiles.push({
+        kind: 'dangling_path',
+        name,
+        path: mappingPath,
+        session_id: extractSessionIdFromPathFileName(name),
+        size_bytes: mappingStat?.size_bytes ?? null,
+        modified_at: mappingStat?.modified_at ?? null,
+      });
+      continue;
+    }
+
     let mapped = '';
     try {
       mapped = (await fs.readFile(mappingPath, 'utf-8')).trim();

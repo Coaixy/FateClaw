@@ -140,6 +140,12 @@ export interface PendingInboxRequest {
   sessionId?: string;
   /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID，避免重复落库。 */
   userMessageId?: string;
+  /**
+   * workflow 节点 id(仅 workflow AI 节点请求带):outbox handler 落最终 assistant 回复时写入
+   * messages.workflow_node_id 列,实现"节点↔产出"结构化关联(替代靠回复 id 字符串反解)。
+   * 仅进程内透传,不离开 API 进程。
+   */
+  workflowNodeId?: string;
   /** session:processing 锁内保存的 owner 值，必须与当前请求 ID 一致后才可释放。 */
   sessionProcessingRequestId?: string;
   llmRuntime?: LlmRuntimeSnapshot;

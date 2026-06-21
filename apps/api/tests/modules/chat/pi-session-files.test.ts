@@ -96,4 +96,37 @@ describe('Pi session orphan files', () => {
       fs.access(path.join(tempDir!, '2000_session-archived.jsonl')),
     ).rejects.toThrow();
   });
+
+  it('把泄漏的 workflow __pi 文件对判为可回收孤儿(即便映射健康),且 session_id 非空', async () => {
+    // 健康真实会话:不应被判孤儿。
+    await writeFile('session-active.path', 'active.jsonl');
+    await writeFile('active.jsonl', '{"type":"session"}\n');
+    // 泄漏的一次性 __pi:.path 与 .jsonl 都在、映射健康,但设计上节点跑完即删 → 进程被杀残留 = 孤儿。
+    await writeFile('wf-a1-100-aaa__pi.path', 'wf-a1-100-aaa__pi.jsonl');
+    await writeFile('wf-a1-100-aaa__pi.jsonl', '{"type":"session"}\n');
+
+    const scan = await scanPiSessionOrphanFiles();
+
+    // __pi.path 即便映射健康也判 dangling 孤儿;session_id = base 名(非空,才能过消费端"session_id 非空"门)。
+    expect(scan.dangling_path_files).toContainEqual(
+      expect.objectContaining({
+        name: 'wf-a1-100-aaa__pi.path',
+        session_id: 'wf-a1-100-aaa__pi',
+      }),
+    );
+    // 其 .jsonl 不被计入 referenced → 也判 unmapped 孤儿,一并回收。
+    expect(scan.unmapped_jsonl_files).toContainEqual(
+      expect.objectContaining({
+        name: 'wf-a1-100-aaa__pi.jsonl',
+        session_id: 'wf-a1-100-aaa__pi',
+      }),
+    );
+    // 真实健康会话(session-active)不被误判为孤儿。
+    expect(scan.dangling_path_files.map((entry) => entry.name)).not.toContain(
+      'session-active.path',
+    );
+    expect(scan.unmapped_jsonl_files.map((entry) => entry.name)).not.toContain(
+      'active.jsonl',
+    );
+  });
 });

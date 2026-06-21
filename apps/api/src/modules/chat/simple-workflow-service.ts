@@ -311,13 +311,20 @@ async function enqueueSimpleWorkflowFirstTurn(args: {
       },
       {
         userMessageId: args.userMessageId,
-        llmRuntimeOverride: llmRuntime,
-        runtimeUserMessageOverride: args.prepared.runtimePrompt,
-        authorizedSkillBundleIds:
-          args.preset.skill_snapshot_ids.length > 0
-            ? undefined
-            : args.preset.skill_bundle_ids,
-        authorizedWorkflowSkillIds: args.preset.skill_snapshot_ids,
+        // 简易线性工作流首轮:在 run 会话上连续执行(不做 Pi 隔离、遵守续聊门禁);
+        // 绑了快照用快照,否则用 preset 的 Skill Bundle 白名单。
+        workflow: {
+          llmRuntime,
+          runtimeUserMessage: args.prepared.runtimePrompt,
+          skill:
+            args.preset.skill_snapshot_ids.length > 0
+              ? {
+                  kind: 'snapshot',
+                  snapshotIds: args.preset.skill_snapshot_ids,
+                }
+              : { kind: 'bundles', bundleIds: args.preset.skill_bundle_ids },
+          skipContinuationGate: false,
+        },
       },
     );
 

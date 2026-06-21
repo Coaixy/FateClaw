@@ -199,6 +199,11 @@ export interface NewMessage {
   session_id?: string | null;
   /** 结构化元信息，供 AI chat 存储 progress 等非正文事件。 */
   metadata?: unknown;
+  /**
+   * 工作流节点 id —— 标记本条消息是哪个 workflow 节点的产出(排盘盘面 / AI 回复 / 手填)。
+   * 替代旧的"靠消息 id 字符串 wf-<nodeId>-…_reply 约定解析"的结构化关联列;非 workflow 消息为空。
+   */
+  workflow_node_id?: string | null;
 }
 
 export interface ChatSession {

@@ -15,7 +15,7 @@
  *     盘面不进引用语法,靠会话 selectedBoardMessageId 自动透传给 AI 节点。
  */
 
-import type { ChatSessionDto, SimpleModelPolicyDto } from '../chat/index.js';
+import type { SimpleModelPolicyDto } from '../chat/index.js';
 
 /** 画布坐标(React Flow 节点位置,仅用于编辑器渲染,不参与执行)。 */
 export interface WorkflowNodePositionDto {
@@ -26,8 +26,8 @@ export interface WorkflowNodePositionDto {
 /** 节点公共字段(两种节点都有)。 */
 export interface WorkflowNodeBaseDto {
   /**
-   * 节点稳定 id —— 被引用语法 {{node.<id>.output}} 与运行消息 id 约定
-   * (wf-<id>-<ts>-<rand>_reply)使用。因 '-' 是消息 id 的分隔符,id 仅允许 [A-Za-z0-9_]。
+   * 节点稳定 id —— 被引用语法 {{node.<id>.output}} 使用。节点↔产出走 messages.workflow_node_id 列
+   * 结构化关联(不再靠消息 id 字符串约定),故 id 不限字符集(仅非空、限长);可含 '-'(如 nanoid)。
    */
   id: string;
   /** 卦师可读的节点名称。 */
@@ -157,58 +157,84 @@ export interface WorkflowRunStartRequestDto {
   input?: Record<string, string>;
 }
 
-/** 运行时节点的精简视图(前端拓扑执行只需这些)。 */
-export interface WorkflowRunNodeDto {
-  id: string;
-  type: WorkflowNodeDto['type'];
-  title: string;
-  pauseAfter: boolean;
-}
+// ───────────────────── 后端编排运行状态(架构升级 B 方案 P1 起)─────────────────────
+// 运行态升级为独立领域实体:workflow_runs(运行)+ workflow_run_nodes(节点状态)。
+// 后端拓扑编排状态机驱动推进,前端退化为"提交输入 + 订阅 run 状态快照"。
+// 产出正文仍落 messages(卦师照常润色),run_node 只持节点编排状态 + 复合外键指针。
 
-/** 启动运行的响应:新会话 + 图(节点清单 + 边,供前端算拓扑序)+ 本次运行的输入项定义。 */
-export interface WorkflowRunStartResponseDto {
-  session: ChatSessionDto;
-  nodes: WorkflowRunNodeDto[];
-  edges: WorkflowEdgeDto[];
-  /** 运行前要填的输入项(供运行页渲染表单);空数组时前端回退默认 question 框。 */
-  inputs: WorkflowRunInputDto[];
-}
+/** 运行整体状态。 */
+export type WorkflowRunStatus =
+  | 'running' // 推进中
+  | 'paused' // 命中某 pauseAfter 节点,等卦师接管
+  | 'done' // 全部叶子节点完成
+  | 'error' // 某节点失败且未恢复
+  | 'canceled'; // 卦师取消
 
-/** 一次工作流运行的摘要(运行历史列表用)。 */
-export interface WorkflowRunSummaryDto {
-  /** 运行会话 id(= 查看该次运行的入口)。 */
-  sessionId: string;
-  /** 运行开始时间(会话创建时间,ISO)。 */
-  startedAt: string;
-  /** 关联客户 id;未关联为空。 */
-  clientId?: string;
-  /** 运行标题(保存运行时的工作流名快照)。 */
-  title: string;
-}
+/** 单节点运行状态。 */
+export type WorkflowRunNodeStatus =
+  | 'pending' // 未就绪 / 等待上游
+  | 'running' // AI 节点已发起,等回复落库
+  | 'awaiting_paipan' // 排盘节点等卦师在前端提交起盘
+  | 'done' // 已产出
+  | 'error' // 执行失败
+  | 'skipped' // 卦师跳过
+  | 'manual'; // 卦师手填产出
 
-/** 工作流运行历史响应(按工作流聚合,创建时间倒序)。 */
-export interface WorkflowRunListResponseDto {
-  runs: WorkflowRunSummaryDto[];
-}
-
-/** 单节点执行的请求体。 */
-export interface WorkflowRunNodeExecuteRequestDto {
-  /**
-   * AI 节点**直接入边**排盘节点产出的盘面消息 id 列表 —— 前端按 graph 算出。
-   * 后端只把这些盘注入该 AI(实现分支上下文隔离),首个作主盘面;空数组 = 不带任何盘
-   * (如纯汇总节点,只吃上游 AI 的 output 文本)。
-   */
-  boardMessageIds?: string[];
-}
-
-/** 单节点执行的响应。 */
-export interface WorkflowRunNodeExecuteResponseDto {
+/** 运行中某节点的状态快照(前端渲染 + 下游引用)。 */
+export interface WorkflowRunNodeStateDto {
   nodeId: string;
   type: WorkflowNodeDto['type'];
-  /** 此节点产出后前端是否应暂停等卦师接管。 */
+  title: string;
   pauseAfter: boolean;
-  /** AI 节点:预测的 assistant 回复消息 id(前端据此等待回复完成);排盘节点为空。 */
-  assistantMessageId?: string;
-  /** 排盘节点:生成的盘面消息 id;AI 节点为空。 */
-  boardMessageId?: string;
+  status: WorkflowRunNodeStatus;
+  /** 文本产出(AI / 手填);排盘节点为空,盘面经 toolContext 渲染。 */
+  output: string;
+  /** 关联产出消息 id(AI 回复 / 盘面 / 手填);未产出为空。 */
+  outputMessageId?: string;
+  /**
+   * 产出消息的 tool_context 原始 JSON(SkillContextEntry[] 序列化):排盘盘面、或 AI 调用 skill 的
+   * artifact。前端 parseToolContext 后用 ArtifactRenderer 渲染。无 artifact 为空。
+   */
+  toolContext?: string | null;
+  /**
+   * 运行中(status='running')AI 节点的最新工具进度(tool_trace,如「排盘: bazi 中」),
+   * 让卦师看到 AI 在干什么、是否还在动而非黑盒转圈。非运行中为空。
+   */
+  progressText?: string;
+  /** 失败时的错误信息。 */
+  error?: string;
+}
+
+/** 后端编排运行历史的单条摘要(按 runId 寻址)。 */
+export interface WorkflowRunHistoryItemDto {
+  runId: string;
+  /** 运行开始时间(ISO)。 */
+  startedAt: string;
+  status: WorkflowRunStatus;
+  /** 关联客户 id;未关联为空。 */
+  clientId?: string;
+  title: string;
+}
+
+/** 后端编排运行历史响应(某工作流,创建时间倒序)。 */
+export interface WorkflowRunHistoryResponseDto {
+  runs: WorkflowRunHistoryItemDto[];
+}
+
+/** 一次运行的完整状态快照(GET /runs/:id 返回;前端据此渲染画布与产出)。 */
+export interface WorkflowRunStateDto {
+  runId: string;
+  /** 产出落库的 chat 会话 id(消息仍存这里供润色/渲染)。 */
+  sessionId: string;
+  definitionId: string;
+  title: string;
+  status: WorkflowRunStatus;
+  /** 关联客户 id;未关联为空。 */
+  clientId?: string;
+  /** 本次运行输入(键为定义 inputs 的 key)。 */
+  input: Record<string, string>;
+  /** 运行开始时间(ISO)。 */
+  startedAt: string;
+  nodes: WorkflowRunNodeStateDto[];
+  edges: WorkflowEdgeDto[];
 }

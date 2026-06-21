@@ -29,6 +29,7 @@ import {
   type WorkflowNodeInput,
   type WorkflowRunInput,
 } from '@/features/workflows/api';
+import { resolveNodePositions } from '@/features/workflows/layout';
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -97,12 +98,14 @@ function toFlow(workflow: WorkflowDefinition): {
   nodes: FlowNode[];
   edges: Edge[];
 } {
+  // 坐标兜底:无坐标 / 全同坐标(早期或线性迁移工作流)时按拓扑分层自动布局,避免节点堆在原点重叠。
+  const positions = resolveNodePositions(workflow.graph);
   const nodes: FlowNode[] = workflow.graph.nodes.map((node) => {
     if (node.type === 'paipan') {
       return {
         id: node.id,
         type: 'paipan',
-        position: node.position ?? { x: 0, y: 0 },
+        position: positions[node.id],
         data: {
           kind: 'paipan',
           title: node.title,
@@ -121,7 +124,7 @@ function toFlow(workflow: WorkflowDefinition): {
     return {
       id: node.id,
       type: 'ai',
-      position: node.position ?? { x: 0, y: 0 },
+      position: positions[node.id],
       data: {
         kind: 'ai',
         title: node.title,

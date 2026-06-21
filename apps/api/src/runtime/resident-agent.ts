@@ -34,6 +34,7 @@ export async function dispatchAiChatPrompt(input: {
   sessionId: string;
   piSessionId?: string;
   userMessageId?: string;
+  workflowNodeId?: string;
   requestId?: string;
   userName?: string;
   assistantName?: string;
@@ -59,6 +60,7 @@ export async function dispatchAiChatPrompt(input: {
     sessionId: input.sessionId,
     piSessionId: input.piSessionId,
     userMessageId: input.userMessageId,
+    workflowNodeId: input.workflowNodeId,
     requestId: input.requestId,
     userName: input.userName,
     assistantName: input.assistantName,

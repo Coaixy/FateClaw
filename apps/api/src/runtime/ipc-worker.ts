@@ -911,6 +911,8 @@ export function submitAiChatInboxRequest(input: {
   sessionId: string;
   piSessionId?: string;
   userMessageId?: string;
+  /** workflow 节点 id:仅进程内透传给 pending,供 outbox 落 AI 回复时写 workflow_node_id 列。 */
+  workflowNodeId?: string;
   requestId?: string;
   userName?: string;
   assistantName?: string;
@@ -998,6 +1000,7 @@ export function submitAiChatInboxRequest(input: {
           autoDeliver: false, // AI Chat 永远不发微信
           sessionId: input.sessionId,
           userMessageId: input.userMessageId,
+          workflowNodeId: input.workflowNodeId,
           sessionProcessingRequestId: requestId,
           llmRuntime,
           billingReservation,
