@@ -155,6 +155,9 @@ function RunWorkflowInner() {
   const orderRef = useRef<WorkflowRunNode[]>([]);
   // 末端(叶)节点 id:无出边者,各自是一份成品输出。
   const leafIdsRef = useRef<Set<string>>(new Set());
+  // 串行闸:一条执行链在跑时,外部触发(下一步/重跑/启动)直接忽略,避免快速双击
+  // 并发自触发——排盘节点无后端处理锁,并发会落重复盘面 + 双重续跑链。
+  const runningRef = useRef(false);
 
   useEffect(() => {
     if (!workflowId) {
@@ -183,8 +186,9 @@ function RunWorkflowInner() {
     );
   }, []);
 
-  // 执行第 index 个节点(拓扑序):排盘同步、AI 发起后轮询等回复;自动节点连跑、暂停节点停下。
-  const runNode = useCallback(
+  // 递归执行 worker(拓扑序):排盘同步、AI 发起后轮询等回复;自动节点连跑、暂停节点停下。
+  // 假定调用方已持有 runningRef 闸;自动续跑在链内部递归调用自身,不重新抢闸。
+  const executeFrom = useCallback(
     async (index: number) => {
       const sessionId = sessionIdRef.current;
       const order = orderRef.current;
@@ -233,10 +237,24 @@ function RunWorkflowInner() {
 
       setBusy(false);
       if (!order[index].pauseAfter) {
-        await runNode(index + 1);
+        await executeFrom(index + 1);
       }
     },
     [workflowId, patchNode, t],
+  );
+
+  // 外部入口(启动/下一步/重跑):抢同步闸串行化,跑链期间的重复点击直接忽略。
+  const runNode = useCallback(
+    async (index: number) => {
+      if (runningRef.current) return;
+      runningRef.current = true;
+      try {
+        await executeFrom(index);
+      } finally {
+        runningRef.current = false;
+      }
+    },
+    [executeFrom],
   );
 
   const handleStart = useCallback(async () => {
