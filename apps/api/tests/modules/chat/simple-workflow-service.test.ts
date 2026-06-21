@@ -173,23 +173,21 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         ),
       }),
       expect.objectContaining({
-        authorizedSkillBundleIds: undefined,
-        authorizedWorkflowSkillIds: ['snapshot-liuyao'],
-        llmRuntimeOverride: { model: 'gpt-test' },
-        runtimeUserMessageOverride: [
-          '我该不该换工作？',
-          '',
-          '最近有新机会',
-        ].join('\n'),
+        workflow: expect.objectContaining({
+          skill: { kind: 'snapshot', snapshotIds: ['snapshot-liuyao'] },
+          llmRuntime: { model: 'gpt-test' },
+          runtimeUserMessage: ['我该不该换工作？', '', '最近有新机会'].join('\n'),
+          skipContinuationGate: false,
+        }),
       }),
     );
     expect(
-      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
-        ?.runtimeUserMessageOverride,
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]?.workflow
+        ?.runtimeUserMessage,
     ).not.toContain('占卜模板');
     expect(
-      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
-        ?.runtimeUserMessageOverride,
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]?.workflow
+        ?.runtimeUserMessage,
     ).not.toContain('六爻盘面作答');
   });
 
@@ -219,7 +217,9 @@ describe('startSimpleWorkflowForOwnedUser', () => {
           content: '我该不该换工作？',
         }),
         expect.objectContaining({
-          llmRuntimeOverride: { model: 'gpt-test' },
+          workflow: expect.objectContaining({
+            llmRuntime: { model: 'gpt-test' },
+          }),
         }),
       );
     });
@@ -269,18 +269,19 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         content: '命理分析：事业方向',
       }),
       expect.objectContaining({
-        authorizedSkillBundleIds: undefined,
-        authorizedWorkflowSkillIds: ['snapshot-bazi'],
-        runtimeUserMessageOverride: '事业方向',
+        workflow: expect.objectContaining({
+          skill: { kind: 'snapshot', snapshotIds: ['snapshot-bazi'] },
+          runtimeUserMessage: '事业方向',
+        }),
       }),
     );
     expect(
-      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
-        ?.runtimeUserMessageOverride,
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]?.workflow
+        ?.runtimeUserMessage,
     ).not.toContain('命理模板');
     expect(
-      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]
-        ?.runtimeUserMessageOverride,
+      mockSendOwnedChatSessionMessage.mock.calls[0]?.[3]?.workflow
+        ?.runtimeUserMessage,
     ).not.toContain('八字盘面作答');
   });
 
@@ -314,8 +315,9 @@ describe('startSimpleWorkflowForOwnedUser', () => {
         expect.any(String),
         expect.any(Object),
         expect.objectContaining({
-          authorizedSkillBundleIds: ['bundle-liuyao'],
-          authorizedWorkflowSkillIds: [],
+          workflow: expect.objectContaining({
+            skill: { kind: 'bundles', bundleIds: ['bundle-liuyao'] },
+          }),
         }),
       );
     });

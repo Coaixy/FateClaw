@@ -112,36 +112,62 @@ export interface ChatSessionTurnSourceMetadata {
 }
 
 /**
+ * workflow turn 的 skill 可见性(显式联合,替代旧 authorizedSkillBundleIds 的 undefined/[]/列表 三态)。
+ * - snapshot:绑了 skill 快照,用这些快照(workflow 授权优先)。
+ * - bundles:用指定的 Skill Bundle 白名单(简易模式未绑快照时用 preset 的 bundle 列表;空列表=不加载)。
+ * - none:不加载任何用户级 skill(DAG 节点未绑 skill 时,保证确定性)。
+ */
+export type WorkflowTurnSkillPolicy =
+  | { kind: 'snapshot'; snapshotIds: string[] }
+  | { kind: 'bundles'; bundleIds: string[] }
+  | { kind: 'none' };
+
+/**
+ * workflow turn 的本轮上下文(DAG 运行节点 / 简易线性工作流首轮)。
+ *
+ * @remarks 只有 workflow 执行(workflow-run-engine / simple-workflow-service)传入;真人对话 / 微信入口
+ *          不传 —— 故"是不是 workflow 执行"由 `options.workflow` 是否存在显式判定,不再靠 piSessionId 当探针。
+ *          把过去散落在 OwnedChatSessionTurnOptions 上的一组 workflow 旁路字段收敛于此,纠正依赖方向:
+ *          chat turn 暴露一个"带 workflow 上下文的确定性单轮执行",workflow 提供上下文,而非反向改造 chat。
+ *          DAG 与简易语义不同已显式建模(nodeId/piSessionId/boardMessageIds 可选、skipContinuationGate 显式)。
+ */
+export interface WorkflowTurnContext {
+  /** 节点 id:DAG 节点设(最终回复落库写 messages.workflow_node_id 列);简易工作流不设。 */
+  nodeId?: string;
+  /**
+   * Pi 运行时会话标识(与会话 id 解耦):DAG 每节点设独立值以隔离 Pi 对话历史;简易工作流不设
+   * (回退会话 id,沿用会话连续性)。产出始终按会话 id 落库。
+   */
+  piSessionId?: string;
+  /** 本轮指定模型运行时(workflow 各自的模型策略)。 */
+  llmRuntime: EffectiveLlmRuntimeConfig;
+  /** 覆盖送入 runtime 的提示词(渲染后的);用户端展示仍为原 content。 */
+  runtimeUserMessage: string;
+  /**
+   * 只注入这些 id 的盘面(DAG 分支隔离:只看直接入边排盘的盘);空数组=不注入任何盘面;
+   * 不设(undefined)=注入全会话盘面(简易工作流语义)。
+   */
+  boardMessageIds?: string[];
+  /** 该轮的 skill 可见性。 */
+  skill: WorkflowTurnSkillPolicy;
+  /**
+   * 是否跳过续聊门禁:DAG 节点用独立隔离 Pi 会话(其 Pi 文件不在 run session.id 下,门禁语义不适用)→ true;
+   * 简易工作流在 run 会话上连续执行,遵守门禁 → false。显式标记,替代旧"靠 piSessionId 是否存在"判定。
+   */
+  skipContinuationGate: boolean;
+}
+
+/**
  * 发送 AI Chat turn 时可覆盖的内部选项。
  *
- * @remarks 微信入口会传入确定性消息 ID，避免 iLink 重试导致重复触发模型。
+ * @remarks 微信入口会传入确定性消息 ID(userMessageId),避免 iLink 重试导致重复触发模型;
+ *          workflow 运行节点传入 workflow 上下文。两者都不传时即普通真人对话。
  */
 export interface OwnedChatSessionTurnOptions {
   userMessageId?: string;
   sourceMetadata?: ChatSessionTurnSourceMetadata;
-  /** 简易模式等内部 workflow 可传入本轮指定模型运行时。 */
-  llmRuntimeOverride?: EffectiveLlmRuntimeConfig;
-  /** 内部 workflow 可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
-  runtimeUserMessageOverride?: string;
-  /** 本轮 AI 请求明确授权可读取的 Skill Bundle；不传时保持用户全部有效 Skill 可见，传空数组时不加载用户级 Skill。 */
-  authorizedSkillBundleIds?: string[];
-  /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
-  authorizedWorkflowSkillIds?: string[];
-  /**
-   * 本轮只注入这些 id 的盘面(workflow 节点隔离用：AI 节点只看它直接入边排盘的盘)。
-   * 不传 = 注入全会话盘面(直接对话语义);传空数组 = 不注入任何盘面。
-   */
-  restrictBoardMessageIds?: string[];
-  /**
-   * Pi 运行时会话标识(与会话 id 解耦):workflow 每个 AI 节点传独立值,从而隔离 Pi 对话历史
-   * (不 reload 兄弟节点的轮次),而产出仍按会话 id 落库。不传则回退会话 id(直接对话即同一个)。
-   */
-  piSessionId?: string;
-  /**
-   * workflow 节点 id:本轮是某 workflow AI 节点的执行时透传,最终 assistant 回复落库时写入
-   * messages.workflow_node_id 列(结构化关联,替代靠回复 id 字符串反解);直接对话不传。
-   */
-  workflowNodeId?: string;
+  /** workflow AI 节点执行上下文;真人对话 / 微信入口不传(走默认模型 / 全 skill / 全盘面 / 续聊门禁)。 */
+  workflow?: WorkflowTurnContext;
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -791,9 +817,9 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const session = sessionResult.data;
-  // workflow 节点用独立隔离的 Pi 会话(piSessionId 每次唯一、必新建),其 Pi 文件不在 run session.id 下;
-  // "续聊需 run 会话 Pi 文件存在"的门禁语义对它不适用,跳过以免第 2+ 个 AI 节点被 410 拦死。
-  if (!options.piSessionId) {
+  // 续聊门禁:真人对话与简易工作流遵守;DAG 节点用独立隔离 Pi 会话(其 Pi 文件不在 run session.id 下,
+  // 门禁语义不适用)→ 显式 skipContinuationGate 跳过(替代旧"靠 piSessionId 是否存在"的隐式探针)。
+  if (!options.workflow?.skipContinuationGate) {
     const continuation = await resolveSessionContinuationState(session);
     if (continuation.blocked) {
       return fail(
@@ -865,15 +891,28 @@ async function prepareOwnedChatSessionTurn(
 
   try {
     const llmRuntime =
-      options.llmRuntimeOverride ?? (await resolveUserLlmRuntime(userId));
-    const authorizedSkillBundleIds =
-      options.authorizedSkillBundleIds === undefined
-        ? undefined
-        : normalizeAuthorizedIds(options.authorizedSkillBundleIds);
-    const authorizedWorkflowSkillIds =
-      options.authorizedWorkflowSkillIds === undefined
-        ? undefined
-        : normalizeAuthorizedIds(options.authorizedWorkflowSkillIds);
+      options.workflow?.llmRuntime ?? (await resolveUserLlmRuntime(userId));
+    // skill 可见性:真人对话(无 workflow)→ 两者 undefined,保持用户全部有效 skill 可见;
+    // workflow 按显式 skill policy 映射(workflow 快照优先于 bundle 白名单)。
+    const workflowSkill = options.workflow?.skill;
+    let authorizedSkillBundleIds: string[] | undefined;
+    let authorizedWorkflowSkillIds: string[] | undefined;
+    if (workflowSkill === undefined) {
+      authorizedSkillBundleIds = undefined;
+      authorizedWorkflowSkillIds = undefined;
+    } else if (workflowSkill.kind === 'snapshot') {
+      authorizedSkillBundleIds = undefined;
+      authorizedWorkflowSkillIds = normalizeAuthorizedIds(
+        workflowSkill.snapshotIds,
+      );
+    } else if (workflowSkill.kind === 'bundles') {
+      authorizedSkillBundleIds = normalizeAuthorizedIds(workflowSkill.bundleIds);
+      authorizedWorkflowSkillIds = [];
+    } else {
+      // none:不加载任何用户级 skill。
+      authorizedSkillBundleIds = [];
+      authorizedWorkflowSkillIds = [];
+    }
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -904,11 +943,10 @@ async function prepareOwnedChatSessionTurn(
       session.account_id,
       session.id,
     );
-    // workflow 节点隔离:只注入指定(入边)盘面;不传则注入全会话盘面(直接对话语义)。
-    const boardMessages = options.restrictBoardMessageIds
-      ? allBoardMessages.filter((message) =>
-          options.restrictBoardMessageIds!.includes(message.id),
-        )
+    // workflow 节点隔离:只注入指定(入边)盘面;真人对话(无 workflow)注入全会话盘面。
+    const restrictBoardIds = options.workflow?.boardMessageIds;
+    const boardMessages = restrictBoardIds
+      ? allBoardMessages.filter((message) => restrictBoardIds.includes(message.id))
       : allBoardMessages;
     const sessionBoardContexts = buildSessionBoardContexts(boardMessages, {
       selectedBoardMessageId,
@@ -928,7 +966,7 @@ async function prepareOwnedChatSessionTurn(
         sessionBoardContexts,
       });
     const runtimeUserMessage =
-      options.runtimeUserMessageOverride?.trim() || defaultRuntimeUserMessage;
+      options.workflow?.runtimeUserMessage?.trim() || defaultRuntimeUserMessage;
 
     const structured = await buildStructuredInputForSession(
       {
@@ -954,8 +992,8 @@ async function prepareOwnedChatSessionTurn(
       sessionBoardContexts,
       authorizedSkillBundleIds,
       authorizedWorkflowSkillIds,
-      piSessionId: options.piSessionId,
-      workflowNodeId: options.workflowNodeId,
+      piSessionId: options.workflow?.piSessionId,
+      workflowNodeId: options.workflow?.nodeId,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,

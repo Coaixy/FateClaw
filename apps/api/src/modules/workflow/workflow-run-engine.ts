@@ -115,14 +115,21 @@ const executor: WorkflowRunExecutor = {
       },
       {
         userMessageId,
-        workflowNodeId: node.id,
-        llmRuntimeOverride: llmRuntime,
-        runtimeUserMessageOverride: rendered,
-        authorizedWorkflowSkillIds: node.skillSnapshotIds,
-        authorizedSkillBundleIds:
-          node.skillSnapshotIds.length > 0 ? undefined : [],
-        restrictBoardMessageIds: boards,
-        piSessionId: `${userMessageId}__pi`,
+        // workflow 节点执行上下文(收敛后的单一字段;chat turn 据此走确定性单轮执行)。
+        workflow: {
+          nodeId: node.id,
+          piSessionId: `${userMessageId}__pi`,
+          llmRuntime,
+          runtimeUserMessage: rendered,
+          boardMessageIds: boards,
+          // 绑了 skill 快照→只用快照;没绑→不加载任何用户级 skill(工作流确定性)。
+          skill:
+            node.skillSnapshotIds.length > 0
+              ? { kind: 'snapshot', snapshotIds: node.skillSnapshotIds }
+              : { kind: 'none' },
+          // DAG 节点用独立隔离 Pi 会话,跳过续聊门禁。
+          skipContinuationGate: true,
+        },
       },
     );
     if (!sendResult.ok) {
