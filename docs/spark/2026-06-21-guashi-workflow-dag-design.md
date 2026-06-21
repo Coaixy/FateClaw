@@ -1,7 +1,9 @@
 # FateClaw 卦师工作流 DAG 版设计(取代线性版)
 
 日期:2026-06-21
-状态:设计稿(待实现)。**取代** `2026-06-21-guashi-custom-workflow-design.md`(线性版)。
+状态:**已实现**(分支 feat/guashi-custom-workflow)。**取代** `2026-06-21-guashi-custom-workflow-design.md`(线性版)。
+
+> 实现进度(2026-06-21):契约(graph nodes/edges)→ 迁移 0063(steps→graph)→ 后端仓储/路由/服务/运行服务(拓扑节点执行)→ 前端 @xyflow/react 画布搭建器 + schema 驱动排盘参数表单 + 拓扑运行器(多输出)+ 三语 i18n,均已提交。api typecheck=0 / 工作流单测 19 绿;web tsc=0。对抗式 review(5 维 25 agent)仅确认 1 个真 bug(运行器双击并发自触发,排盘节点无锁会落重复盘面)已修。**待真机冒烟**(轮询/润色/分叉汇总闭环未真跑)。
 
 ## 0. 背景与方向修正
 
