@@ -288,6 +288,50 @@ describe('run-orchestrator 拓扑推进', () => {
     expect(skipped.status).toBe('done');
   });
 
+  it('串行发起:就绪的并行 AI 节点一次只发起一个(防会话锁 409 误判失败)', async () => {
+    const graph: WorkflowGraphDto = {
+      nodes: [aiNode('A'), aiNode('B'), aiNode('C')],
+      edges: [edge('A', 'B'), edge('A', 'C')],
+    };
+    const store = makeMemStore(graph);
+    const started: string[] = [];
+    // 只记录发起、不自动完成,以观察"同时发起几个"。
+    const executor: WorkflowRunExecutor = {
+      async startAiNode(node) {
+        started.push(node.id);
+      },
+    };
+    const orch = createWorkflowRunOrchestrator({ store, executor });
+
+    await orch.startRun({
+      runId: 'run-1',
+      userId: USER,
+      definitionId: 'def-1',
+      graph,
+      chatSessionId: 'session-1',
+      title: 't',
+      input: {},
+    });
+    // 起点只发起 A。
+    expect(started).toEqual(['A']);
+
+    // A 完成 → B、C 都就绪,但只发起其中一个(不并发,避免会话锁 409)。
+    await orch.markNodeCompleted('run-1', USER, 'A', {
+      messageId: 'm-A',
+      accountId: 'web:u1',
+    });
+    expect(started.length).toBe(2);
+    const second = started[1];
+    expect(['B', 'C']).toContain(second);
+
+    // 第二个完成 → 才发起最后一个。
+    await orch.markNodeCompleted('run-1', USER, second, {
+      messageId: `m-${second}`,
+      accountId: 'web:u1',
+    });
+    expect(started.length).toBe(3);
+  });
+
   it('一个失败不连坐:B 失败,兄弟 C 仍跑完;D 因 B 卡住,整体 error', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B'), aiNode('C'), aiNode('D')],

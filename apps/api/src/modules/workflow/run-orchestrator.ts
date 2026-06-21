@@ -204,38 +204,46 @@ export function createWorkflowRunOrchestrator(deps: {
     const ready = computeReadyNodes(loaded.graph, statusByNode);
     const nodeById = new Map(loaded.graph.nodes.map((node) => [node.id, node]));
 
-    // 先把就绪节点一次性持久化为在途(AI→running、排盘→awaiting_paipan),再发起 AI ——
-    // 完成事件重入 advance 时,这些节点已非 pending,不会被重复发起。
-    const aiToStart: WorkflowAiNodeDto[] = [];
+    // 排盘节点:就绪即置 awaiting_paipan(不占会话锁,可并存等卦师逐个起盘)。
     for (const nodeId of ready) {
       const node = nodeById.get(nodeId);
-      if (!node) continue;
-      if (node.type === 'paipan') {
+      if (node?.type === 'paipan') {
         await store.updateNode(runId, nodeId, { status: 'awaiting_paipan' });
-      } else {
-        await store.updateNode(runId, nodeId, {
+      }
+    }
+
+    // AI 节点:同一运行会话有处理锁,P2.5 拆锁前必须串行 —— 已有 AI 在跑则本轮不再发起
+    // (等其完成回灌后下次 advance 再推进);否则只发起一个就绪 AI,其余就绪 AI 留 pending。
+    // 并发发起会撞「上一条仍在处理」409 把兄弟节点误判为失败,故这里一次只发一个。
+    const aiAlreadyRunning = loaded.nodes.some(
+      (node) => node.status === 'running',
+    );
+    if (!aiAlreadyRunning) {
+      const nextAi = ready
+        .map((nodeId) => nodeById.get(nodeId))
+        .find((node): node is WorkflowAiNodeDto => node?.type === 'ai');
+      if (nextAi) {
+        // 先持久化为 running 再发起:完成事件重入 advance 时它已非 pending,不会被重复发起。
+        await store.updateNode(runId, nextAi.id, {
           status: 'running',
           bumpAttempt: true,
           error: null,
         });
-        aiToStart.push(node);
-      }
-    }
-
-    const ctx: Omit<NodeExecContext, never> = {
-      runId,
-      userId,
-      sessionId: loaded.run.chat_session_id,
-      clientId: loaded.run.client_id ?? undefined,
-      input: loaded.run.input ?? {},
-      graph: loaded.graph,
-    };
-    for (const node of aiToStart) {
-      try {
-        await executor.startAiNode(node, ctx);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        await markNodeFailed(runId, userId, node.id, message);
+        const ctx: NodeExecContext = {
+          runId,
+          userId,
+          sessionId: loaded.run.chat_session_id,
+          clientId: loaded.run.client_id ?? undefined,
+          input: loaded.run.input ?? {},
+          graph: loaded.graph,
+        };
+        try {
+          await executor.startAiNode(nextAi, ctx);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          await markNodeFailed(runId, userId, nextAi.id, message);
+        }
       }
     }
 
