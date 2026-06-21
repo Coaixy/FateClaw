@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  History,
   Loader2,
   Pencil,
   Play,
@@ -196,6 +197,11 @@ export default function WorkflowsPage() {
                           }`,
                         )
                       }
+                      onRuns={() =>
+                        router.push(
+                          `/workflows/runs?id=${encodeURIComponent(workflow.id)}`,
+                        )
+                      }
                       onEdit={() =>
                         router.push(
                           `/workflows/edit?id=${encodeURIComponent(workflow.id)}`,
@@ -218,12 +224,14 @@ function WorkflowCard({
   workflow,
   deleting,
   onRun,
+  onRuns,
   onEdit,
   onDelete,
 }: {
   workflow: WorkflowDefinition;
   deleting: boolean;
   onRun: () => void;
+  onRuns: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -276,6 +284,14 @@ function WorkflowCard({
           >
             <Play size={13} />
             {t('workflows.runAction')}
+          </button>
+          <button
+            type="button"
+            onClick={onRuns}
+            aria-label={t('workflows.runs.title')}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-cream-strong hover:text-ink"
+          >
+            <History size={14} />
           </button>
           <button
             type="button"

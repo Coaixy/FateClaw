@@ -6,6 +6,7 @@ import type {
   WorkflowEdgeDto,
   WorkflowGraphDto,
   WorkflowNodeDto,
+  WorkflowRunInputDto,
 } from '@fateclaw/contracts/workflow';
 
 import {
@@ -15,28 +16,30 @@ import {
 } from '../../modules/skills/text-skill-bundle-store.js';
 import { getDbPool } from '../db-pool.js';
 
-/** 工作流定义表行;graph 为 JSONB,读出为 unknown 待归一。 */
+/** 工作流定义表行;graph / inputs 为 JSONB,读出为 unknown 待归一。 */
 interface WorkflowDefinitionRow {
   id: string;
   user_id: string;
   name: string;
   description: string;
   graph: unknown;
+  inputs: unknown;
   enabled: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
 }
 
-/** 归一后的工作流定义记录(graph 已归一为 { nodes, edges })。 */
+/** 归一后的工作流定义记录(graph 已归一为 { nodes, edges },inputs 为输入项数组)。 */
 export interface WorkflowDefinitionRecord
-  extends Omit<WorkflowDefinitionRow, 'graph'> {
+  extends Omit<WorkflowDefinitionRow, 'graph' | 'inputs'> {
   graph: WorkflowGraphDto;
+  inputs: WorkflowRunInputDto[];
 }
 
 /** SELECT 公共列(避免把 deleted_at 等内部列带出)。 */
 const SELECT_COLUMNS =
-  'id, user_id, name, description, graph, enabled, sort_order, created_at, updated_at';
+  'id, user_id, name, description, graph, inputs, enabled, sort_order, created_at, updated_at';
 
 /** 绑定 skill 不存在/不可用时抛出的错误,供服务层映射为 400。 */
 export class WorkflowSkillUnavailableError extends Error {
@@ -75,8 +78,35 @@ function normalizeGraph(value: unknown): WorkflowGraphDto {
   return { nodes, edges };
 }
 
+/**
+ * 归一 inputs:接受输入项数组,每项须有字符串 key/label;type 非 'text'/'textarea' 兜底为 'text'。
+ *
+ * @remarks 入库时由路由 zod 校验过结构,这里是读出兜底,避免脏 JSONB 影响下游。
+ */
+function normalizeInputs(value: unknown): WorkflowRunInputDto[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (item): item is Record<string, unknown> =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as { key?: unknown }).key === 'string' &&
+        typeof (item as { label?: unknown }).label === 'string',
+    )
+    .map((item) => ({
+      key: item.key as string,
+      label: item.label as string,
+      type: item.type === 'textarea' ? 'textarea' : 'text',
+      required: item.required === true,
+    }));
+}
+
 function mapRow(row: WorkflowDefinitionRow): WorkflowDefinitionRecord {
-  return { ...row, graph: normalizeGraph(row.graph) };
+  return {
+    ...row,
+    graph: normalizeGraph(row.graph),
+    inputs: normalizeInputs(row.inputs),
+  };
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -308,6 +338,7 @@ export interface CreateWorkflowDefinitionInput {
   name: string;
   description: string;
   graph: WorkflowGraphDto;
+  inputs: WorkflowRunInputDto[];
   enabled: boolean;
   sortOrder: number;
 }
@@ -317,6 +348,7 @@ export interface UpdateWorkflowDefinitionInput {
   name?: string;
   description?: string;
   graph?: WorkflowGraphDto;
+  inputs?: WorkflowRunInputDto[];
   enabled?: boolean;
   sortOrder?: number;
 }
@@ -376,8 +408,8 @@ export async function createWorkflowDefinition(
     const graph = await applyDefinitionSkillSnapshots(client, id, input.graph);
     const { rows } = await client.query(
       `INSERT INTO workflow_definitions
-         (id, user_id, name, description, graph, enabled, sort_order)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+         (id, user_id, name, description, graph, inputs, enabled, sort_order)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8)
        RETURNING ${SELECT_COLUMNS}`,
       [
         id,
@@ -385,6 +417,7 @@ export async function createWorkflowDefinition(
         input.name,
         input.description,
         JSON.stringify(graph),
+        JSON.stringify(input.inputs),
         input.enabled,
         input.sortOrder,
       ],
@@ -418,6 +451,7 @@ export async function updateWorkflowDefinition(
   const nextName = input.name ?? current.name;
   const nextDescription = input.description ?? current.description;
   const nextGraphInput = input.graph ?? current.graph;
+  const nextInputs = input.inputs ?? current.inputs;
   const nextEnabled = input.enabled ?? current.enabled;
   const nextSortOrder = input.sortOrder ?? current.sort_order;
 
@@ -430,8 +464,9 @@ export async function updateWorkflowDefinition(
        SET name = $3,
            description = $4,
            graph = $5::jsonb,
-           enabled = $6,
-           sort_order = $7,
+           inputs = $6::jsonb,
+           enabled = $7,
+           sort_order = $8,
            updated_at = NOW()
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
        RETURNING ${SELECT_COLUMNS}`,
@@ -441,6 +476,7 @@ export async function updateWorkflowDefinition(
         nextName,
         nextDescription,
         JSON.stringify(graph),
+        JSON.stringify(nextInputs),
         nextEnabled,
         nextSortOrder,
       ],

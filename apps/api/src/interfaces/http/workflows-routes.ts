@@ -12,6 +12,7 @@ import {
 } from '../../modules/chat/workflow-definition-service.js';
 import {
   executeWorkflowRunNode,
+  listWorkflowRuns,
   saveWorkflowNodeOutput,
   startWorkflowRun,
 } from '../../modules/chat/workflow-run-service.js';
@@ -123,11 +124,33 @@ const GraphSchema = z
   })
   .superRefine(validateGraphShape);
 
+/** 运行前输入项校验(对齐契约 WorkflowRunInputDto);key 用于 {{input.<key>}} 引用,限 [A-Za-z0-9_]。 */
+const RunInputSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_]+$/, '输入键仅可含字母、数字、下划线')
+    .max(40),
+  label: z.string().trim().min(1, '请填写输入项标签').max(60),
+  type: z.enum(['text', 'textarea']),
+  required: z.boolean(),
+});
+
 /** 工作流创建/更新请求体校验(对齐契约 WorkflowDefinitionUpsertDto)。 */
 const WorkflowUpsertSchema = z.object({
   name: z.string().trim().min(1, '请填写工作流名称').max(60),
   description: z.string().trim().max(500).optional().default(''),
   graph: GraphSchema,
+  inputs: z
+    .array(RunInputSchema)
+    .max(10)
+    .default([])
+    .superRefine((inputs, ctx) => {
+      const keys = inputs.map((item) => item.key);
+      if (new Set(keys).size !== keys.length) {
+        ctx.addIssue({ code: 'custom', message: '输入项的键不能重复' });
+      }
+    }),
   enabled: z.boolean().optional().default(true),
   sort_order: z.number().int().optional().default(0),
 });
@@ -136,6 +159,15 @@ const WorkflowUpsertSchema = z.object({
 const RunStartSchema = z.object({
   clientId: z.string().trim().min(1).optional(),
   input: z.record(z.string(), z.string()).optional().default({}),
+});
+
+/** 执行单个节点请求体校验。 */
+const NodeExecuteSchema = z.object({
+  boardMessageIds: z
+    .array(z.string().trim().min(1))
+    .max(20)
+    .optional()
+    .default([]),
 });
 
 /** 保存某节点润色结果请求体校验。 */
@@ -195,6 +227,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
         name: parsed.data.name,
         description: parsed.data.description,
         graph: toFullGraph(parsed.data.graph),
+        inputs: parsed.data.inputs,
         enabled: parsed.data.enabled,
         sortOrder: parsed.data.sort_order,
       },
@@ -234,6 +267,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
           name: parsed.data.name,
           description: parsed.data.description,
           graph: toFullGraph(parsed.data.graph),
+          inputs: parsed.data.inputs,
           enabled: parsed.data.enabled,
           sortOrder: parsed.data.sort_order,
         },
@@ -248,6 +282,18 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/workflows/:id — 软删除工作流
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const result = await deleteWorkflowDefinitionForOwnedUser(
+      request.user.userId,
+      request.params.id,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // GET /api/workflows/:id/runs — 列出该工作流的运行历史
+  app.get<{ Params: { id: string } }>('/:id/runs', async (request, reply) => {
+    const result = await listWorkflowRuns(
       request.user.userId,
       request.params.id,
     );
@@ -282,14 +328,22 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/workflows/:id/runs/:sessionId/nodes/:nodeId/execute — 执行单个节点
   app.post<{
     Params: { id: string; sessionId: string; nodeId: string };
+    Body: unknown;
   }>(
     '/:id/runs/:sessionId/nodes/:nodeId/execute',
     async (request, reply) => {
+      const parsed = NodeExecuteSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
       const result = await executeWorkflowRunNode(
         request.user.userId,
         request.params.id,
         request.params.sessionId,
         request.params.nodeId,
+        parsed.data.boardMessageIds,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });

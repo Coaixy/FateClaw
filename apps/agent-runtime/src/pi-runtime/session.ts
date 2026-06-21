@@ -30,7 +30,10 @@ import {
   pushAiChatOutboxMessage,
 } from '../ai-chat-stream.js';
 import { log } from '../io.js';
-import { createFateClawPiSessionManager } from './session-manager.js';
+import {
+  createFateClawPiSessionManager,
+  deletePiSessionFiles,
+} from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
 import { getRequestId } from '../request-scope.js';
@@ -159,7 +162,9 @@ export async function runPiSession(args: {
   const cwd = process.cwd();
   const piSession = createFateClawPiSessionManager({
     cwd,
-    sessionId: args.containerInput.sessionId,
+    // 优先用 piSessionId(workflow 每个 AI 节点独立隔离的 Pi 会话,不 reload 兄弟节点历史);
+    // 缺省回退会话 id(直接对话两者相同)。
+    sessionId: args.containerInput.piSessionId ?? args.containerInput.sessionId,
   });
   const { session } = await createAgentSession({
     cwd,
@@ -263,5 +268,12 @@ export async function runPiSession(args: {
   } finally {
     unsubscribe();
     session.dispose();
+    // workflow 隔离节点的 Pi 会话一次性、永不 reload,产出已落运行会话;跑完即删避免文件无限堆积。
+    if (args.containerInput.piSessionId) {
+      deletePiSessionFiles({
+        cwd,
+        sessionId: args.containerInput.piSessionId,
+      });
+    }
   }
 }

@@ -18,7 +18,7 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import { Compass, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Compass, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { skillsApi } from '@/features/skills/api';
@@ -27,6 +27,7 @@ import {
   type WorkflowDefinition,
   type WorkflowGraphInput,
   type WorkflowNodeInput,
+  type WorkflowRunInput,
 } from '@/features/workflows/api';
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
@@ -53,6 +54,8 @@ type PaipanNodeData = {
   pauseAfter: boolean;
   skill: string;
   inputDefaults: Record<string, unknown>;
+  // 搭建期校验:该节点是否有告警(孤立未连线等),仅用于画布徽标,不上行保存。
+  hasWarning?: boolean;
 };
 
 type AiNodeData = {
@@ -65,6 +68,8 @@ type AiNodeData = {
     mode: 'system-default' | 'user-current';
     thinkingLevel: ThinkingLevel;
   };
+  // 搭建期校验告警标记,仅用于画布徽标,不上行保存。
+  hasWarning?: boolean;
 };
 
 type NodeData = PaipanNodeData | AiNodeData;
@@ -185,6 +190,28 @@ function upstreamAiNodeIds(
     .map((n) => n.id);
 }
 
+/** 提取 prompt 模板里引用的上游节点 id({{node.<id>.output}}),供校验悬空引用。 */
+function extractNodeRefs(template: string): string[] {
+  const ids: string[] = [];
+  const pattern = /\{\{\s*node\.([A-Za-z0-9_]+)\.output\s*\}\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(template)) !== null) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+/** 提取 prompt 模板里引用的运行输入键({{input.<key>}}),供校验悬空引用。 */
+function extractInputRefs(template: string): string[] {
+  const keys: string[] = [];
+  const pattern = /\{\{\s*input\.([A-Za-z0-9_]+)\s*\}\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(template)) !== null) {
+    keys.push(match[1]);
+  }
+  return keys;
+}
+
 /**
  * 工作流搭建器:在画布上拖拽节点、连线,组成「并行分叉 + 汇总」的断卦流程(DAG)。
  *
@@ -225,6 +252,18 @@ function WorkflowBuilderInner({
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  // 运行前输入项:新建时默认给一个"本次要问的事";编辑旧工作流(inputs=[])则为空,运行页回退默认框。
+  const [runInputs, setRunInputs] = useState<WorkflowRunInput[]>(
+    () =>
+      initial?.inputs ?? [
+        {
+          key: 'question',
+          label: t('workflows.builder.defaultInputLabel'),
+          type: 'textarea',
+          required: false,
+        },
+      ],
+  );
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
     initialFlow.nodes,
   );
@@ -337,6 +376,38 @@ function WorkflowBuilderInner({
     setSelectedId(null);
   }, [selectedId, setNodes, setEdges]);
 
+  // 运行前输入项编辑:增 / 改 / 删。
+  const addRunInput = useCallback(() => {
+    setRunInputs((prev) => [
+      ...prev,
+      { key: '', label: '', type: 'text', required: false },
+    ]);
+  }, []);
+
+  const updateRunInput = useCallback(
+    (index: number, patch: Partial<WorkflowRunInput>) => {
+      setRunInputs((prev) =>
+        prev.map((item, i) =>
+          i === index
+            ? {
+                ...item,
+                ...patch,
+                // key 仅允许字母数字下划线(供 {{input.<key>}} 引用),输入时即时过滤。
+                ...(patch.key !== undefined
+                  ? { key: patch.key.replace(/[^A-Za-z0-9_]/g, '') }
+                  : {}),
+              }
+            : item,
+        ),
+      );
+    },
+    [],
+  );
+
+  const removeRunInput = useCallback((index: number) => {
+    setRunInputs((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleSave = useCallback(async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -356,6 +427,20 @@ function WorkflowBuilderInner({
         toast('error', t('workflows.builder.errAiPrompt'));
         return;
       }
+    }
+
+    // 校验运行前输入项:key 与 label 必填、key 不重复。
+    const seenInputKeys = new Set<string>();
+    for (const input of runInputs) {
+      if (!input.key.trim() || !input.label.trim()) {
+        toast('error', t('workflows.builder.errInputIncomplete'));
+        return;
+      }
+      if (seenInputKeys.has(input.key)) {
+        toast('error', t('workflows.builder.errInputDupKey'));
+        return;
+      }
+      seenInputKeys.add(input.key);
     }
 
     // 画布 → 上行图 DTO(AI 节点不带 skillSnapshotIds,由服务端保存时生成)。
@@ -401,6 +486,7 @@ function WorkflowBuilderInner({
         name: trimmedName,
         description: description.trim(),
         graph,
+        inputs: runInputs,
         enabled,
       };
       if (mode === 'edit' && workflowId) {
@@ -424,12 +510,66 @@ function WorkflowBuilderInner({
     enabled,
     nodes,
     edges,
+    runInputs,
     mode,
     workflowId,
     router,
     t,
     toast,
   ]);
+
+  // 搭建期校验:算每个节点的告警(孤立未连线 / AI 引用了非上游产出),供画布徽标与配置面板提示。
+  const nodeWarnings = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (nodes.length === 0) return map;
+    const hasIn = new Set<string>();
+    const hasOut = new Set<string>();
+    for (const edge of edges) {
+      hasOut.add(edge.source);
+      hasIn.add(edge.target);
+    }
+    for (const node of nodes) {
+      const warnings: string[] = [];
+      // 多于一个节点时,完全没连线的节点很可能是漏接。
+      if (nodes.length > 1 && !hasIn.has(node.id) && !hasOut.has(node.id)) {
+        warnings.push(t('workflows.builder.warnIsolated'));
+      }
+      // AI 节点引用了非上游节点的产出:运行时会解析成空串,几乎一定是接线 / 引用没对上。
+      if (node.data.kind === 'ai') {
+        const upstream = new Set(upstreamAiNodeIds(node.id, nodes, edges));
+        const dangling = extractNodeRefs(node.data.promptTemplate).filter(
+          (ref) => !upstream.has(ref),
+        );
+        if (dangling.length > 0) {
+          warnings.push(t('workflows.builder.warnDanglingRef'));
+        }
+        // AI 节点引用了未定义的运行输入键(input 被删 / 改名后 prompt 仍引用旧 key 会静默变空)。
+        const inputKeys = new Set(runInputs.map((item) => item.key));
+        const danglingInputs = extractInputRefs(node.data.promptTemplate).filter(
+          (key) => !inputKeys.has(key),
+        );
+        if (danglingInputs.length > 0) {
+          warnings.push(t('workflows.builder.warnDanglingInputRef'));
+        }
+      }
+      if (warnings.length > 0) map.set(node.id, warnings);
+    }
+    return map;
+  }, [nodes, edges, runInputs, t]);
+
+  // 把告警标记同步进节点 data(供画布徽标渲染);无变化返回原引用,避免重渲染循环。
+  useEffect(() => {
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((node) => {
+        const has = (nodeWarnings.get(node.id)?.length ?? 0) > 0;
+        if (Boolean(node.data.hasWarning) === has) return node;
+        changed = true;
+        return { ...node, data: { ...node.data, hasWarning: has } } as FlowNode;
+      });
+      return changed ? next : nds;
+    });
+  }, [nodeWarnings, setNodes]);
 
   const nodeTypes = useMemo(
     () => ({ paipan: PaipanNodeView, ai: AiNodeView }),
@@ -487,6 +627,88 @@ function WorkflowBuilderInner({
         </label>
       </section>
 
+      {/* 运行前输入项:卦师运行这个工作流前要填的内容,AI 节点用 {{input.<key>}} 引用 */}
+      <section className="space-y-3 rounded-2xl border border-hairline bg-surface-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <span className="text-sm font-semibold text-ink">
+              {t('workflows.builder.runInputsTitle')}
+            </span>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted/80">
+              {t('workflows.builder.runInputsHint')}
+            </p>
+          </div>
+          <button type="button" onClick={addRunInput} className={addBtnClass}>
+            <Plus size={13} /> {t('workflows.builder.addRunInput')}
+          </button>
+        </div>
+        {runInputs.length === 0 ? (
+          <p className="text-[12px] text-muted">
+            {t('workflows.builder.runInputsEmpty')}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {runInputs.map((input, index) => (
+              <div key={index} className="flex flex-wrap items-center gap-2">
+                <input
+                  value={input.key}
+                  onChange={(event) =>
+                    updateRunInput(index, { key: event.target.value })
+                  }
+                  placeholder={t('workflows.builder.inputKeyPlaceholder')}
+                  maxLength={40}
+                  className={`${inputClass} w-32`}
+                />
+                <input
+                  value={input.label}
+                  onChange={(event) =>
+                    updateRunInput(index, { label: event.target.value })
+                  }
+                  placeholder={t('workflows.builder.inputLabelPlaceholder')}
+                  maxLength={60}
+                  className={`${inputClass} min-w-[140px] flex-1`}
+                />
+                <select
+                  value={input.type}
+                  onChange={(event) =>
+                    updateRunInput(index, {
+                      type: event.target.value as WorkflowRunInput['type'],
+                    })
+                  }
+                  className={`${inputClass} w-28`}
+                >
+                  <option value="text">
+                    {t('workflows.builder.inputTypeText')}
+                  </option>
+                  <option value="textarea">
+                    {t('workflows.builder.inputTypeTextarea')}
+                  </option>
+                </select>
+                <label className="flex cursor-pointer items-center gap-1 text-[12px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={input.required}
+                    onChange={(event) =>
+                      updateRunInput(index, { required: event.target.checked })
+                    }
+                    className="h-3.5 w-3.5 accent-[var(--primary)]"
+                  />
+                  {t('workflows.builder.inputRequired')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeRunInput(index)}
+                  aria-label={t('workflows.builder.removeInput')}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-error/10 hover:text-error"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* 工具条 */}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => addNode('paipan')} className={addBtnClass}>
@@ -533,6 +755,8 @@ function WorkflowBuilderInner({
               key={selected.id}
               node={selected}
               ownSkills={ownSkills}
+              warnings={nodeWarnings.get(selected.id) ?? []}
+              runInputs={runInputs}
               upstreamAi={upstreamAiNodeIds(selected.id, nodes, edges).map(
                 (id) => ({
                   id,
@@ -569,7 +793,16 @@ function PaipanNodeView({ data, selected }: NodeProps) {
         <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
           {t('workflows.builder.paipanBadge')}
         </span>
-        {node.pauseAfter && <PauseDot />}
+        <span className="ml-auto flex items-center gap-1">
+          {node.hasWarning && (
+            <AlertTriangle
+              size={12}
+              className="text-amber-500"
+              aria-label={t('workflows.builder.hasWarning')}
+            />
+          )}
+          {node.pauseAfter && <PauseDot />}
+        </span>
       </div>
       <p className="mt-1 truncate text-[12px] font-medium text-ink">
         {node.title || t('workflows.builder.paipanBadge')}
@@ -599,7 +832,16 @@ function AiNodeView({ data, selected }: NodeProps) {
         <span className="rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
           {t('workflows.builder.aiBadge')}
         </span>
-        {node.pauseAfter && <PauseDot />}
+        <span className="ml-auto flex items-center gap-1">
+          {node.hasWarning && (
+            <AlertTriangle
+              size={12}
+              className="text-amber-500"
+              aria-label={t('workflows.builder.hasWarning')}
+            />
+          )}
+          {node.pauseAfter && <PauseDot />}
+        </span>
       </div>
       <p className="mt-1 truncate text-[12px] font-medium text-ink">
         {node.title || t('workflows.builder.aiBadge')}
@@ -619,7 +861,7 @@ function PauseDot() {
   return (
     <span
       title={t('workflows.builder.pauseAfter')}
-      className="ml-auto h-2 w-2 rounded-full bg-amber-400"
+      className="h-2 w-2 rounded-full bg-amber-400"
     />
   );
 }
@@ -627,12 +869,16 @@ function PauseDot() {
 function NodeConfigPanel({
   node,
   ownSkills,
+  warnings,
+  runInputs,
   upstreamAi,
   onChange,
   onRemove,
 }: {
   node: FlowNode;
   ownSkills: OwnSkill[];
+  warnings: string[];
+  runInputs: WorkflowRunInput[];
   upstreamAi: { id: string; title: string }[];
   onChange: (patch: NodePatch) => void;
   onRemove: () => void;
@@ -656,6 +902,20 @@ function NodeConfigPanel({
         </button>
       </div>
 
+      {warnings.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-amber-300/60 bg-amber-50/70 p-2.5">
+          {warnings.map((warning, index) => (
+            <p
+              key={index}
+              className="flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-700"
+            >
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              {warning}
+            </p>
+          ))}
+        </div>
+      )}
+
       <Field label={t('workflows.builder.nodeName')}>
         <input
           value={data.title}
@@ -672,6 +932,7 @@ function NodeConfigPanel({
         <AiConfig
           data={data}
           ownSkills={ownSkills}
+          runInputs={runInputs}
           upstreamAi={upstreamAi}
           onChange={onChange}
         />
@@ -726,11 +987,13 @@ function PaipanConfig({
 function AiConfig({
   data,
   ownSkills,
+  runInputs,
   upstreamAi,
   onChange,
 }: {
   data: AiNodeData;
   ownSkills: OwnSkill[];
+  runInputs: WorkflowRunInput[];
   upstreamAi: { id: string; title: string }[];
   onChange: (patch: NodePatch) => void;
 }) {
@@ -766,28 +1029,34 @@ function AiConfig({
           <span className="text-[11px] text-muted">
             {t('workflows.builder.refHint')}
           </span>
-          <button
-            type="button"
-            onClick={() => insertRef('{{input.question}}')}
-            className={chipClass}
-          >
-            {t('workflows.builder.refQuestion')}
-          </button>
-          {upstreamAi.length === 0 ? (
+          {/* 运行前输入项的引用 chip(按搭建器配置的 inputs 动态生成) */}
+          {runInputs.map((input, index) =>
+            input.key ? (
+              <button
+                key={`ri-${index}`}
+                type="button"
+                onClick={() => insertRef(`{{input.${input.key}}}`)}
+                className={chipClass}
+              >
+                {input.label || input.key}
+              </button>
+            ) : null,
+          )}
+          {/* 上游 AI 节点产出的引用 chip */}
+          {upstreamAi.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => insertRef(`{{node.${item.id}.output}}`)}
+              className={chipClass}
+            >
+              {t('workflows.builder.refNode', { title: item.title })}
+            </button>
+          ))}
+          {upstreamAi.length === 0 && (
             <span className="text-[11px] text-muted/70">
               {t('workflows.builder.upstreamRefEmpty')}
             </span>
-          ) : (
-            upstreamAi.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => insertRef(`{{node.${item.id}.output}}`)}
-                className={chipClass}
-              >
-                {t('workflows.builder.refNode', { title: item.title })}
-              </button>
-            ))
           )}
         </div>
       </Field>

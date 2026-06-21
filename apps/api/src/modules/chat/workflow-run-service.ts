@@ -15,6 +15,7 @@
 import type {
   WorkflowAiNodeDto,
   WorkflowPaipanNodeDto,
+  WorkflowRunListResponseDto,
   WorkflowRunNodeDto,
   WorkflowRunNodeExecuteResponseDto,
   WorkflowRunStartResponseDto,
@@ -25,6 +26,7 @@ import {
   createChatSession,
   getSessionMessages,
   getWorkflowDefinition,
+  listWorkflowRunSessions,
   storeMessage,
   touchChatSession,
   updateOwnedMessageContent,
@@ -50,20 +52,6 @@ import {
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 8);
-}
-
-/** 找到会话里最近一条带盘面(tool_context)的消息 id,供 AI 节点把盘面挂进会话上下文。 */
-function findLatestBoardMessageId(messages: NewMessage[]): string | undefined {
-  let latest: NewMessage | undefined;
-  for (const message of messages) {
-    if (typeof message.tool_context !== 'string' || !message.tool_context) {
-      continue;
-    }
-    if (!latest || message.timestamp >= latest.timestamp) {
-      latest = message;
-    }
-  }
-  return latest?.id;
 }
 
 function toRunNodeDto(node: {
@@ -112,6 +100,13 @@ export async function startWorkflowRun(
     return fail(400, '该工作流还没有节点');
   }
 
+  // 必填输入项服务端校验(前端 handleStart 也校验,这里兜底防绕过前端直接打接口)。
+  for (const input of definition.inputs) {
+    if (input.required && !(options.input?.[input.key] ?? '').trim()) {
+      return fail(400, `请填写「${input.label}」`);
+    }
+  }
+
   const runtimeId = getWebChatRuntimeId(userId);
   const session = await createChatSession({
     id: `session-${Date.now()}-${randomSuffix()}`,
@@ -119,6 +114,9 @@ export async function startWorkflowRun(
     userId,
     title: normalizeOwnedChatSessionTitle(definition.name),
     clientId: options.clientId,
+    // 标记为 workflow 运行会话:不进对话历史侧栏,改在工作流运行历史里按 workflow 聚合展示。
+    origin: 'workflow_run',
+    workflowDefinitionId: definition.id,
   });
 
   // 运行起始消息:承载本次输入与关联客户,后续节点执行时据 workflow_definition_id 校验归属并取输入。
@@ -147,6 +145,33 @@ export async function startWorkflowRun(
     session: toChatSessionDto(session),
     nodes: definition.graph.nodes.map(toRunNodeDto),
     edges: definition.graph.edges,
+    inputs: definition.inputs,
+  });
+}
+
+/**
+ * 列出某工作流的运行历史(运行会话摘要,创建时间倒序)。
+ *
+ * @param userId 卦师用户 ID。
+ * @param definitionId 工作流定义 ID。
+ * @returns 运行摘要列表;定义不存在或无权限返回 404。
+ */
+export async function listWorkflowRuns(
+  userId: string,
+  definitionId: string,
+): Promise<ServiceResult<WorkflowRunListResponseDto>> {
+  const definition = await getWorkflowDefinition(definitionId, userId);
+  if (!definition) {
+    return fail(404, '工作流不存在');
+  }
+  const sessions = await listWorkflowRunSessions(userId, definitionId);
+  return ok({
+    runs: sessions.map((session) => ({
+      sessionId: session.id,
+      startedAt: session.created_at,
+      clientId: session.client_id ?? undefined,
+      title: session.title,
+    })),
   });
 }
 
@@ -213,6 +238,8 @@ async function executeAiNode(args: {
   node: WorkflowAiNodeDto;
   messages: NewMessage[];
   runInput: Record<string, string>;
+  /** 前端按"该 AI 直接入边排盘节点"算出的盘面 id 列表:只注入这些盘、首个为主盘,空=不带盘(隔离)。 */
+  boardMessageIds: string[];
 }): Promise<ServiceResult<WorkflowRunNodeExecuteResponseDto>> {
   // 收集会话里全部节点产出供模板引用;模板只会引用上游 id,故等价于"按入边收集上游"。
   const rendered =
@@ -242,7 +269,8 @@ async function executeAiNode(args: {
     {
       content: rendered,
       inputKind: 'normal',
-      selectedBoardMessageId: findLatestBoardMessageId(args.messages),
+      // 主盘面 = 入边排盘的第一个;只注入入边盘面(下方 restrictBoardMessageIds),实现分支隔离。
+      selectedBoardMessageId: args.boardMessageIds[0],
     },
     {
       userMessageId,
@@ -252,6 +280,11 @@ async function executeAiNode(args: {
       authorizedWorkflowSkillIds: args.node.skillSnapshotIds,
       authorizedSkillBundleIds:
         args.node.skillSnapshotIds.length > 0 ? undefined : [],
+      // 盘面隔离:只注入该 AI 直接入边排盘的盘面(空数组=不带盘,如纯汇总节点)。
+      restrictBoardMessageIds: args.boardMessageIds,
+      // Pi 会话隔离:每个 AI 节点用独立 piSessionId(基于本轮唯一 userMessageId),
+      // 从而不 reload 兄弟 / 其它节点的 Pi 对话历史;产出仍按 sessionId 落到运行会话供展示与下游引用。
+      piSessionId: `${userMessageId}__pi`,
     },
   );
   if (!sendResult.ok) {
@@ -273,6 +306,7 @@ async function executeAiNode(args: {
  * @param definitionId 工作流定义 ID。
  * @param sessionId 运行会话 ID。
  * @param nodeId 节点 ID。
+ * @param boardMessageIds AI 节点直接入边排盘的盘面 id 列表(只注入这些盘、首个为主盘);排盘节点忽略。
  * @returns 执行结果(含 pauseAfter 供前端决定是否自动续跑);定义/节点/运行缺失返回 404。
  */
 export async function executeWorkflowRunNode(
@@ -280,6 +314,7 @@ export async function executeWorkflowRunNode(
   definitionId: string,
   sessionId: string,
   nodeId: string,
+  boardMessageIds: string[] = [],
 ): Promise<ServiceResult<WorkflowRunNodeExecuteResponseDto>> {
   const definition = await getWorkflowDefinition(definitionId, userId);
   if (!definition) {
@@ -326,6 +361,7 @@ export async function executeWorkflowRunNode(
     node,
     messages,
     runInput,
+    boardMessageIds,
   });
 }
 
@@ -350,14 +386,20 @@ function findLatestNodeReply(
 }
 
 /**
- * 保存某节点 AI 产出的润色结果(改回复消息正文),供下游节点渲染时读到润色版。
+ * 保存某节点的产出正文,供下游节点渲染 {{node.<id>.output}} 时读到。
+ *
+ * 两种用途:
+ * - **润色**:节点已有 AI 回复时,改其正文为润色版。
+ * - **手填**:节点执行失败、还没有回复消息时(如 AI 节点发起就 503/超时),卦师手动补写该节点
+ *   应有的产出 —— 此时按 id 约定补建一条 `wf-<nodeId>-…_reply` 消息,让下游节点能读到手填内容
+ *   (collectNodeOutputs 仅认该 id 约定,不看 metadata.kind)。
  *
  * @param userId 卦师用户 ID。
  * @param definitionId 工作流定义 ID(用于校验运行归属)。
  * @param sessionId 运行会话 ID。
  * @param nodeId 节点 ID。
- * @param content 润色后的正文。
- * @returns 成功响应;运行/产出缺失返回 404。
+ * @param content 润色 / 手填的正文。
+ * @returns 成功响应;运行缺失返回 404。
  */
 export async function saveWorkflowNodeOutput(
   userId: string,
@@ -378,19 +420,43 @@ export async function saveWorkflowNodeOutput(
   if (!runStart) {
     return fail(404, '工作流运行不存在或无权访问');
   }
+
   const reply = findLatestNodeReply(messages, nodeId);
-  if (!reply) {
-    return fail(404, '该节点还没有可润色的产出');
+  if (reply) {
+    // 已有产出:润色,改正文。
+    const updated = await updateOwnedMessageContent(
+      runtimeId,
+      sessionId,
+      reply.id,
+      content,
+    );
+    if (!updated) {
+      return fail(404, '产出不存在');
+    }
+    await touchChatSession(sessionId);
+    return ok({ success: true });
   }
-  const updated = await updateOwnedMessageContent(
-    runtimeId,
-    sessionId,
-    reply.id,
+
+  // 尚无产出(节点执行就失败):手填,补建一条节点回复消息让下游可读。
+  const manualReply: NewMessage = {
+    id: `wf-${nodeId}-${Date.now()}-${randomSuffix()}_reply`,
+    account_id: runtimeId,
+    user_id: userId,
+    sender: runtimeId,
+    sender_name: WEB_CHAT_ASSISTANT_NAME,
     content,
-  );
-  if (!updated) {
-    return fail(404, '产出不存在');
-  }
+    timestamp: new Date().toISOString(),
+    is_from_me: true,
+    is_bot_message: true,
+    session_id: sessionId,
+    metadata: {
+      kind: 'final',
+      workflow: 'workflow',
+      workflow_node_id: nodeId,
+      workflow_manual_fill: true,
+    },
+  };
+  await storeMessage(manualReply);
   await touchChatSession(sessionId);
   return ok({ success: true });
 }

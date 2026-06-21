@@ -78,6 +78,23 @@ export interface WorkflowGraphDto {
   edges: WorkflowEdgeDto[];
 }
 
+/**
+ * 运行前要卦师填写的输入项(定义级配置)。
+ *
+ * @remarks key 用于 AI 节点 prompt 的 {{input.<key>}} 引用,仅允许 [A-Za-z0-9_]、定义内唯一。
+ *          inputs 为空时,运行页回退为默认的单个 "question" 输入框(向后兼容旧工作流)。
+ */
+export interface WorkflowRunInputDto {
+  /** 引用键,用于 {{input.<key>}}。 */
+  key: string;
+  /** 卦师可读的标签(运行表单显示)。 */
+  label: string;
+  /** 输入控件类型。 */
+  type: 'text' | 'textarea';
+  /** 是否必填。 */
+  required: boolean;
+}
+
 /** 工作流定义(卦师作者作用域;运行不另建表,run = chat session,详见设计稿)。 */
 export interface WorkflowDefinitionDto {
   id: string;
@@ -85,6 +102,8 @@ export interface WorkflowDefinitionDto {
   description: string;
   /** 工作流图(DAG)。 */
   graph: WorkflowGraphDto;
+  /** 运行前要填的输入项;空数组表示沿用默认 question 输入。 */
+  inputs: WorkflowRunInputDto[];
   enabled: boolean;
   sort_order: number;
   created_at: string;
@@ -119,6 +138,8 @@ export interface WorkflowDefinitionUpsertDto {
   description?: string;
   /** 工作流图(至少 1 个节点)。 */
   graph: WorkflowGraphInputDto;
+  /** 运行前要填的输入项;不传则视为空数组。 */
+  inputs?: WorkflowRunInputDto[];
   enabled?: boolean;
   sort_order?: number;
 }
@@ -132,7 +153,7 @@ export interface WorkflowDefinitionUpsertDto {
 export interface WorkflowRunStartRequestDto {
   /** 可选关联客户档案:排盘节点会用其生辰预填。 */
   clientId?: string;
-  /** 卦师本次填写的输入(如 { question: '今年事业' });AI 节点可用 {{input.<key>}} 引用。 */
+  /** 卦师本次填写的输入(键为定义里 inputs 的 key);AI 节点可用 {{input.<key>}} 引用。 */
   input?: Record<string, string>;
 }
 
@@ -144,11 +165,40 @@ export interface WorkflowRunNodeDto {
   pauseAfter: boolean;
 }
 
-/** 启动运行的响应:新会话 + 图(节点清单 + 边,供前端算拓扑序)。 */
+/** 启动运行的响应:新会话 + 图(节点清单 + 边,供前端算拓扑序)+ 本次运行的输入项定义。 */
 export interface WorkflowRunStartResponseDto {
   session: ChatSessionDto;
   nodes: WorkflowRunNodeDto[];
   edges: WorkflowEdgeDto[];
+  /** 运行前要填的输入项(供运行页渲染表单);空数组时前端回退默认 question 框。 */
+  inputs: WorkflowRunInputDto[];
+}
+
+/** 一次工作流运行的摘要(运行历史列表用)。 */
+export interface WorkflowRunSummaryDto {
+  /** 运行会话 id(= 查看该次运行的入口)。 */
+  sessionId: string;
+  /** 运行开始时间(会话创建时间,ISO)。 */
+  startedAt: string;
+  /** 关联客户 id;未关联为空。 */
+  clientId?: string;
+  /** 运行标题(保存运行时的工作流名快照)。 */
+  title: string;
+}
+
+/** 工作流运行历史响应(按工作流聚合,创建时间倒序)。 */
+export interface WorkflowRunListResponseDto {
+  runs: WorkflowRunSummaryDto[];
+}
+
+/** 单节点执行的请求体。 */
+export interface WorkflowRunNodeExecuteRequestDto {
+  /**
+   * AI 节点**直接入边**排盘节点产出的盘面消息 id 列表 —— 前端按 graph 算出。
+   * 后端只把这些盘注入该 AI(实现分支上下文隔离),首个作主盘面;空数组 = 不带任何盘
+   * (如纯汇总节点,只吃上游 AI 的 output 文本)。
+   */
+  boardMessageIds?: string[];
 }
 
 /** 单节点执行的响应。 */

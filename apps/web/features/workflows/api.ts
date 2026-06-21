@@ -9,10 +9,14 @@ import type {
   WorkflowNodeDto,
   WorkflowNodeInputDto,
   WorkflowPaipanNodeDto,
+  WorkflowRunInputDto,
+  WorkflowRunListResponseDto,
   WorkflowRunNodeDto,
+  WorkflowRunNodeExecuteRequestDto,
   WorkflowRunNodeExecuteResponseDto,
   WorkflowRunStartRequestDto,
   WorkflowRunStartResponseDto,
+  WorkflowRunSummaryDto,
 } from '@fateclaw/contracts/workflow';
 import type { SimpleModelPolicyDto } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
@@ -30,11 +34,15 @@ export type WorkflowNodeInput = WorkflowNodeInputDto;
 export type WorkflowEdge = WorkflowEdgeDto;
 export type WorkflowGraph = WorkflowGraphDto;
 export type WorkflowGraphInput = WorkflowGraphInputDto;
+export type WorkflowRunInput = WorkflowRunInputDto;
 export type WorkflowRunNode = WorkflowRunNodeDto;
 export type WorkflowNodeModelPolicy = SimpleModelPolicyDto;
 export type WorkflowRunStartRequest = WorkflowRunStartRequestDto;
 export type WorkflowRunStartResponse = WorkflowRunStartResponseDto;
+export type WorkflowRunNodeExecuteRequest = WorkflowRunNodeExecuteRequestDto;
 export type WorkflowRunNodeExecuteResponse = WorkflowRunNodeExecuteResponseDto;
+export type WorkflowRunSummary = WorkflowRunSummaryDto;
+export type WorkflowRunListResponse = WorkflowRunListResponseDto;
 
 const seg = (value: string) => encodeURIComponent(value);
 
@@ -72,6 +80,10 @@ export const workflowsApi = {
       method: 'DELETE',
     }),
 
+  /** 列出某工作流的运行历史。 */
+  listRuns: (id: string) =>
+    requestJson<WorkflowRunListResponse>(`/api/workflows/${seg(id)}/runs`),
+
   /** 启动一次运行(建会话,可关联客户)。 */
   runStart: (id: string, data: WorkflowRunStartRequest) =>
     requestJson<WorkflowRunStartResponse>(`/api/workflows/${seg(id)}/runs`, {
@@ -80,11 +92,22 @@ export const workflowsApi = {
       exposeServerErrorMessage: true,
     }),
 
-  /** 执行运行中的某个节点。 */
-  runNode: (id: string, sessionId: string, nodeId: string) =>
+  /** 执行运行中的某个节点;boardMessageIds 为该 AI 直接入边排盘的盘面列表(只注入这些盘、隔离分支)。 */
+  runNode: (
+    id: string,
+    sessionId: string,
+    nodeId: string,
+    boardMessageIds: string[] = [],
+  ) =>
     requestJson<WorkflowRunNodeExecuteResponse>(
       `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/nodes/${seg(nodeId)}/execute`,
-      { method: 'POST', exposeServerErrorMessage: true },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          boardMessageIds,
+        } satisfies WorkflowRunNodeExecuteRequest),
+        exposeServerErrorMessage: true,
+      },
     ),
 
   /** 保存某节点润色结果(改该节点 AI 产出正文,供下游节点读到润色版)。 */

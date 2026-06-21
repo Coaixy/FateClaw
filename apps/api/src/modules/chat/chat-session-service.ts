@@ -127,6 +127,16 @@ export interface OwnedChatSessionTurnOptions {
   authorizedSkillBundleIds?: string[];
   /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
   authorizedWorkflowSkillIds?: string[];
+  /**
+   * 本轮只注入这些 id 的盘面(workflow 节点隔离用：AI 节点只看它直接入边排盘的盘)。
+   * 不传 = 注入全会话盘面(直接对话语义);传空数组 = 不注入任何盘面。
+   */
+  restrictBoardMessageIds?: string[];
+  /**
+   * Pi 运行时会话标识(与会话 id 解耦):workflow 每个 AI 节点传独立值,从而隔离 Pi 对话历史
+   * (不 reload 兄弟节点的轮次),而产出仍按会话 id 落库。不传则回退会话 id(直接对话即同一个)。
+   */
+  piSessionId?: string;
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -152,6 +162,7 @@ interface PreparedOwnedChatSessionTurn {
   sessionBoardContexts: SessionBoardContextDto[];
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
+  piSessionId?: string;
   sessionTitle: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
@@ -774,12 +785,16 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const session = sessionResult.data;
-  const continuation = await resolveSessionContinuationState(session);
-  if (continuation.blocked) {
-    return fail(
-      410,
-      continuation.message ?? SESSION_CONTINUATION_BLOCKED_MESSAGE,
-    );
+  // workflow 节点用独立隔离的 Pi 会话(piSessionId 每次唯一、必新建),其 Pi 文件不在 run session.id 下;
+  // "续聊需 run 会话 Pi 文件存在"的门禁语义对它不适用,跳过以免第 2+ 个 AI 节点被 410 拦死。
+  if (!options.piSessionId) {
+    const continuation = await resolveSessionContinuationState(session);
+    if (continuation.blocked) {
+      return fail(
+        410,
+        continuation.message ?? SESSION_CONTINUATION_BLOCKED_MESSAGE,
+      );
+    }
   }
 
   const entitlement = await getRuntimeEntitlementSnapshot(userId);
@@ -879,10 +894,16 @@ async function prepareOwnedChatSessionTurn(
       session_id: session.id,
     };
     await storeMessage(userMessage);
-    const boardMessages = await getSessionMessagesWithToolContext(
+    const allBoardMessages = await getSessionMessagesWithToolContext(
       session.account_id,
       session.id,
     );
+    // workflow 节点隔离:只注入指定(入边)盘面;不传则注入全会话盘面(直接对话语义)。
+    const boardMessages = options.restrictBoardMessageIds
+      ? allBoardMessages.filter((message) =>
+          options.restrictBoardMessageIds!.includes(message.id),
+        )
+      : allBoardMessages;
     const sessionBoardContexts = buildSessionBoardContexts(boardMessages, {
       selectedBoardMessageId,
       currentPastedBoard:
@@ -927,6 +948,7 @@ async function prepareOwnedChatSessionTurn(
       sessionBoardContexts,
       authorizedSkillBundleIds,
       authorizedWorkflowSkillIds,
+      piSessionId: options.piSessionId,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -965,6 +987,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,
       sessionId: session.id,
+      piSessionId: prepared.piSessionId,
       userMessageId: msgId,
       requestId,
       llmRuntime,
@@ -1023,6 +1046,7 @@ async function completeOwnedChatSessionTurn(
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,
       sessionId: session.id,
+      piSessionId: prepared.piSessionId,
       userMessageId: msgId,
       requestId,
       llmRuntime,

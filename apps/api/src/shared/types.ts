@@ -222,6 +222,10 @@ export interface ChatSession {
   pi_session_archive_restored_at?: string | null;
   /** 关联的客户档案 id；未关联或客户被删除时为空。 */
   client_id?: string | null;
+  /** 会话来源:'chat' 直接对话 / 'workflow_run' 工作流运行。workflow 运行不进对话历史侧栏。 */
+  origin?: string | null;
+  /** workflow 运行会话关联的工作流定义 id;直接对话为空。供运行历史按工作流聚合。 */
+  workflow_definition_id?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

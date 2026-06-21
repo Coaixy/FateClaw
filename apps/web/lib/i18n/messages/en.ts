@@ -39,7 +39,6 @@ export const enMessages = {
     runner: {
       title: 'Run workflow',
       questionLabel: 'What to ask this time (optional)',
-      questionPlaceholder: 'e.g. Will my career break through this year',
       start: 'Start run',
       nodePending: 'Pending',
       nodeRunning: 'Running...',
@@ -59,6 +58,17 @@ export const enMessages = {
       castBoard: 'Cast chart',
       progress: 'Done {done}/{total}',
       pickNode: 'Click a node on the canvas to see its output',
+      skip: 'Skip',
+      manualFill: 'Fill in & continue',
+      manualFilled: 'Filled in, continuing',
+      manualFillPlaceholder: 'Manually write the output this node should produce…',
+      manualFillHint:
+        'This node failed; what you fill in becomes its output for downstream nodes',
+      retryCast: 'Retry charting',
+      rerunFromHere: 'Re-run from here',
+      inputRequiredError: 'Please fill in "{label}"',
+      viewingRun: 'Viewing past run (read-only)',
+      backToRuns: 'Back to runs',
     },
     builder: {
       newTitle: 'New workflow',
@@ -79,7 +89,6 @@ export const enMessages = {
       prompt: 'Prompt',
       promptPlaceholder: 'Instructions for the AI; insert references below',
       refHint: 'Click a tag below to insert a reference:',
-      refQuestion: 'This question',
       refNode: "{title}'s output",
       upstreamRefEmpty: '(No upstream AI nodes to reference yet)',
       bindSkills: 'Bound skills',
@@ -109,6 +118,33 @@ export const enMessages = {
       configEmpty: 'Click a node on the canvas to configure it',
       paipanRunHint:
         'A charting form pops up at run time to fill in parameters (same as Direct Chat); birth info for destiny-based charts is prefilled from the client profile',
+      warnIsolated: 'This node has no connections and will not run',
+      warnDanglingRef:
+        'References a non-upstream node output; it will resolve to empty at run time',
+      warnDanglingInputRef:
+        'References an undefined input (possibly removed or renamed); it will resolve to empty at run time',
+      hasWarning: 'This node has a warning',
+      defaultInputLabel: 'What to ask this time',
+      runInputsTitle: 'Run inputs',
+      runInputsHint:
+        'Fields to fill in before running this workflow; insert them as references in AI nodes. Leave empty to just ask "what to ask this time".',
+      runInputsEmpty:
+        'No custom inputs; only "what to ask this time" is asked at run time',
+      addRunInput: 'Add input',
+      inputKeyPlaceholder: 'Reference key (latin)',
+      inputLabelPlaceholder: 'Label shown to you',
+      inputTypeText: 'Single line',
+      inputTypeTextarea: 'Multi-line',
+      inputRequired: 'Required',
+      removeInput: 'Remove input',
+      errInputIncomplete: 'Fill in the reference key and label for each input',
+      errInputDupKey: 'Input reference keys must be unique',
+    },
+    runs: {
+      title: 'Run history',
+      back: 'Back to workflows',
+      empty: 'No runs yet',
+      withClient: 'Linked to a client',
     },
   },
   common: {

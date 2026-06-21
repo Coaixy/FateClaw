@@ -10,6 +10,7 @@
 import type {
   WorkflowDefinitionDto,
   WorkflowGraphDto,
+  WorkflowRunInputDto,
 } from '@fateclaw/contracts/workflow';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
@@ -29,6 +30,7 @@ export interface WorkflowDefinitionWriteInput {
   name: string;
   description: string;
   graph: WorkflowGraphDto;
+  inputs: WorkflowRunInputDto[];
   enabled: boolean;
   sortOrder: number;
 }
@@ -45,6 +47,7 @@ function toWorkflowDefinitionDto(
     name: record.name,
     description: record.description,
     graph: record.graph,
+    inputs: record.inputs,
     enabled: record.enabled,
     sort_order: record.sort_order,
     created_at: record.created_at,
@@ -99,6 +102,7 @@ export async function createWorkflowDefinitionForOwnedUser(
       name: input.name,
       description: input.description,
       graph: input.graph,
+      inputs: input.inputs,
       enabled: input.enabled,
       sortOrder: input.sortOrder,
     });
@@ -129,6 +133,7 @@ export async function updateWorkflowDefinitionForOwnedUser(
       name: input.name,
       description: input.description,
       graph: input.graph,
+      inputs: input.inputs,
       enabled: input.enabled,
       sortOrder: input.sortOrder,
     });

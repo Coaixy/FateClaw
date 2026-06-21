@@ -214,6 +214,7 @@ async function processInboxMessage(
       {
         accountId,
         sessionId: request.sessionId,
+        piSessionId: request.piSessionId,
         llmRuntime: request.llmRuntime,
         userMessage: request.userMessage,
         inputKind: request.inputKind,

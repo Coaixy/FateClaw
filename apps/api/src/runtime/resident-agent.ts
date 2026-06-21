@@ -32,6 +32,7 @@ export async function dispatchAiChatPrompt(input: {
   history: HistoryMessage[];
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  piSessionId?: string;
   userMessageId?: string;
   requestId?: string;
   userName?: string;
@@ -56,6 +57,7 @@ export async function dispatchAiChatPrompt(input: {
     history: input.history,
     sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
+    piSessionId: input.piSessionId,
     userMessageId: input.userMessageId,
     requestId: input.requestId,
     userName: input.userName,

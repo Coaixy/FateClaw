@@ -63,6 +63,7 @@ function workflowRow(overrides: Record<string, unknown> = {}) {
     name: '深度事业分析',
     description: '',
     graph: singlePaipanGraph(),
+    inputs: [],
     enabled: true,
     sort_order: 0,
     created_at: '2026-06-21T00:00:00.000Z',
@@ -138,6 +139,28 @@ describe('workflow-definition-repository', () => {
     expect(record?.graph).toEqual({ nodes: [], edges: [] });
   });
 
+  it('归一脏 inputs:非数组落为空、缺 key/label 的项被剔除、type 兜底为 text', async () => {
+    mockPool([
+      {
+        rows: [
+          workflowRow({
+            inputs: [
+              { key: 'question', label: '问题', type: 'textarea', required: true },
+              { key: 'extra', label: '补充' }, // 缺 type/required → type 兜底 text、required 兜底 false
+              { label: '无键' }, // 缺 key → 剔除
+              'garbage', // 非对象 → 剔除
+            ],
+          }),
+        ],
+      },
+    ]);
+    const record = await getWorkflowDefinition('workflow-1', 'user-1');
+    expect(record?.inputs).toEqual([
+      { key: 'question', label: '问题', type: 'textarea', required: true },
+      { key: 'extra', label: '补充', type: 'text', required: false },
+    ]);
+  });
+
   it('创建无绑定 skill 的工作流:走事务,graph 序列化为 JSONB 入参', async () => {
     // 事务内 query 顺序:BEGIN → 清孤儿快照 UPDATE → INSERT RETURNING → COMMIT
     const { calls, connect } = mockPool([
@@ -151,6 +174,9 @@ describe('workflow-definition-repository', () => {
       name: '事业分析',
       description: 'd',
       graph: singlePaipanGraph(),
+      inputs: [
+        { key: 'question', label: '本次要问的事', type: 'textarea', required: false },
+      ],
       enabled: true,
       sortOrder: 0,
     });
@@ -160,6 +186,12 @@ describe('workflow-definition-repository', () => {
     expect(calls.some((c) => c.sql === 'COMMIT')).toBe(true);
     const insert = findCall(calls, 'INSERT INTO workflow_definitions');
     expect(insert?.params?.[4]).toBe(JSON.stringify(singlePaipanGraph()));
+    // inputs 作为第 6 个参数($6)写入
+    expect(insert?.params?.[5]).toBe(
+      JSON.stringify([
+        { key: 'question', label: '本次要问的事', type: 'textarea', required: false },
+      ]),
+    );
     // 没有绑定 skill 时不应读写 skill bundle
     expect(mockWriteFiles).not.toHaveBeenCalled();
   });
@@ -206,6 +238,7 @@ describe('workflow-definition-repository', () => {
       name: '事业分析',
       description: '',
       graph: aiGraph,
+      inputs: [],
       enabled: true,
       sortOrder: 0,
     });
@@ -247,9 +280,9 @@ describe('workflow-definition-repository', () => {
 
     expect(result?.name).toBe('新名字');
     const update = findCall(calls, 'UPDATE workflow_definitions');
-    // params: [id, userId, name, description, graphJson, enabled, sortOrder]
+    // params: [id, userId, name, description, graphJson, inputsJson, enabled, sortOrder]
     expect(update?.params?.[2]).toBe('新名字');
-    expect(update?.params?.[6]).toBe(3); // sort_order 沿用当前值
+    expect(update?.params?.[7]).toBe(3); // sort_order 沿用当前值
   });
 
   it('软删除命中记录返回 true,未命中返回 false', async () => {
