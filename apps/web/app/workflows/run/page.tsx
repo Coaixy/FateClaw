@@ -1,6 +1,13 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -336,6 +343,9 @@ function RunWorkflowInner() {
   const [busy, setBusy] = useState(false);
   const [savingOutput, setSavingOutput] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // 自动弹排盘:卦师取消过的排盘节点不再自动重弹(防无限重弹);本次提交是否成功(onClose 据此判断是否记取消)。
+  const dismissedPaipanRef = useRef<Set<string>>(new Set());
+  const committedRef = useRef(false);
 
   // 运行前输入项:定义为空时回退单个 question 框(向后兼容)。
   const effectiveInputs: WorkflowRunInput[] = useMemo(() => {
@@ -480,22 +490,40 @@ function RunWorkflowInner() {
     (nodeId: string) => {
       const node = workflow?.graph.nodes.find((item) => item.id === nodeId);
       if (!node || node.type !== 'paipan') return;
+      committedRef.current = false;
       setPaipanSheet({ nodeId, skill: node.skill });
     },
     [workflow],
   );
 
+  // 排盘节点进入 awaiting_paipan 时自动弹 PaipanSheet(沿用旧版自动弹体验);
+  // 卦师取消过的不再自动重弹;提交后该节点变 done、自动弹下一个待起盘节点。
+  useEffect(() => {
+    if (phase !== 'running' || paipanSheet || !runState) return;
+    const awaiting = runState.nodes.find(
+      (node) =>
+        node.status === 'awaiting_paipan' &&
+        !dismissedPaipanRef.current.has(node.nodeId),
+    );
+    if (awaiting) {
+      setSelectedNodeId(awaiting.nodeId);
+      openPaipan(awaiting.nodeId);
+    }
+  }, [phase, runState, paipanSheet, openPaipan]);
+
   // PaipanSheet 自落盘面后:把盘面 id 认领给排盘节点并推进。
   const handlePaipanCommitted = useCallback(
     async (result: PaipanCommitResponse) => {
       if (!runState || !paipanSheet) return;
-      await runAction(() =>
+      const ok = await runAction(() =>
         workflowsApi.run.commitPaipan(
           runState.runId,
           paipanSheet.nodeId,
           result.resultMessage.id,
         ),
       );
+      // 提交成功:标记本次为已提交,onClose 不记取消(节点也已变 done,不会再自动重弹)。
+      if (ok) committedRef.current = true;
     },
     [runState, paipanSheet, runAction],
   );
@@ -752,7 +780,13 @@ function RunWorkflowInner() {
           initialClientId={runState.clientId ?? clientId ?? null}
           lockSkill
           canCommit
-          onClose={() => setPaipanSheet(null)}
+          onClose={() => {
+            // 卦师取消(未提交)→ 记下该节点,不再自动重弹(可手动点"开始排盘")。
+            if (paipanSheet && !committedRef.current) {
+              dismissedPaipanRef.current.add(paipanSheet.nodeId);
+            }
+            setPaipanSheet(null);
+          }}
           onCommitted={handlePaipanCommitted}
         />
       )}
