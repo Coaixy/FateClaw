@@ -1,15 +1,24 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 
 import { AppShell } from '@/components/app-shell';
-import { WorkflowBuilder } from '@/components/workflows/workflow-builder';
 import {
   workflowsApi,
   type WorkflowDefinition,
 } from '@/features/workflows/api';
 import { useI18n } from '@/lib/i18n';
+
+// React Flow 画布依赖浏览器 API,仅客户端渲染。
+const WorkflowBuilder = dynamic(
+  () =>
+    import('@/components/workflows/workflow-builder').then(
+      (module) => module.WorkflowBuilder,
+    ),
+  { ssr: false, loading: () => <CenterSpinner /> },
+);
 
 function CenterSpinner() {
   return (

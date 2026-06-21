@@ -20,19 +20,19 @@ import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 import { useConfirm } from '@/lib/use-confirm';
 
-/** 统计某工作流的步骤构成,用于卡片摘要。 */
-function stepSummary(workflow: WorkflowDefinition): {
+/** 统计某工作流的节点构成,用于卡片摘要。 */
+function nodeSummary(workflow: WorkflowDefinition): {
   total: number;
   paipan: number;
   ai: number;
 } {
   let paipan = 0;
   let ai = 0;
-  for (const step of workflow.steps) {
-    if (step.type === 'paipan') paipan += 1;
-    else if (step.type === 'ai') ai += 1;
+  for (const node of workflow.graph.nodes) {
+    if (node.type === 'paipan') paipan += 1;
+    else if (node.type === 'ai') ai += 1;
   }
-  return { total: workflow.steps.length, paipan, ai };
+  return { total: workflow.graph.nodes.length, paipan, ai };
 }
 
 export default function WorkflowsPage() {
@@ -228,7 +228,7 @@ function WorkflowCard({
   onDelete: () => void;
 }) {
   const { t } = useI18n();
-  const summary = stepSummary(workflow);
+  const summary = nodeSummary(workflow);
 
   return (
     <div className="group rounded-2xl border border-hairline bg-surface-card p-4 transition-colors hover:border-primary/25">
@@ -258,7 +258,7 @@ function WorkflowCard({
               </span>
             )}
             <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted/80">
-              <span>{t('workflows.stepsCount', { count: summary.total })}</span>
+              <span>{t('workflows.nodesCount', { count: summary.total })}</span>
               <span>
                 {t('workflows.builder.paipanBadge')} × {summary.paipan} ·{' '}
                 {t('workflows.builder.aiBadge')} × {summary.ai}

@@ -25,7 +25,8 @@ import { chatSessionsApi } from '@/features/chat/api';
 import {
   workflowsApi,
   type WorkflowDefinition,
-  type WorkflowRunStep,
+  type WorkflowEdge,
+  type WorkflowRunNode,
 } from '@/features/workflows/api';
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
@@ -36,13 +37,50 @@ const POLL_MAX_ATTEMPTS = 160; // ~4 分钟兜底
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-type StepStatus = 'pending' | 'running' | 'done' | 'error';
+type NodeStatus = 'pending' | 'running' | 'done' | 'error';
 
-interface RunStepState {
-  step: WorkflowRunStep;
-  status: StepStatus;
+interface RunNodeState {
+  node: WorkflowRunNode;
+  status: NodeStatus;
   output: string;
   error?: string;
+}
+
+/**
+ * 拓扑排序(Kahn);并行分支按此顺序逐个串行执行(同会话有处理锁)。
+ * 入度为 0 的节点按原始顺序入队,保证确定性;有环/缺失时把剩余按原序补在末尾兜底。
+ */
+function topoOrder(
+  nodes: WorkflowRunNode[],
+  edges: WorkflowEdge[],
+): WorkflowRunNode[] {
+  const indegree = new Map<string, number>(nodes.map((n) => [n.id, 0]));
+  const adjacency = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
+  for (const edge of edges) {
+    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+    adjacency.get(edge.source)?.push(edge.target);
+  }
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const queue = nodes
+    .filter((n) => (indegree.get(n.id) ?? 0) === 0)
+    .map((n) => n.id);
+  const result: WorkflowRunNode[] = [];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = byId.get(id);
+    if (node) result.push(node);
+    for (const next of adjacency.get(id) ?? []) {
+      indegree.set(next, (indegree.get(next) ?? 0) - 1);
+      if ((indegree.get(next) ?? 0) === 0) queue.push(next);
+    }
+  }
+  for (const node of nodes) {
+    if (!seen.has(node.id)) result.push(node);
+  }
+  return result;
 }
 
 /**
@@ -107,14 +145,16 @@ function RunWorkflowInner() {
   const [workflow, setWorkflow] = useState<WorkflowDefinition | null>(null);
   const [question, setQuestion] = useState('');
   const [starting, setStarting] = useState(false);
-  const [stepStates, setStepStates] = useState<RunStepState[]>([]);
+  const [nodeStates, setNodeStates] = useState<RunNodeState[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [savingRefine, setSavingRefine] = useState(false);
 
   const sessionIdRef = useRef<string>('');
-  const stepsRef = useRef<WorkflowRunStep[]>([]);
+  const orderRef = useRef<WorkflowRunNode[]>([]);
+  // 末端(叶)节点 id:无出边者,各自是一份成品输出。
+  const leafIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!workflowId) {
@@ -137,36 +177,36 @@ function RunWorkflowInner() {
     };
   }, [workflowId]);
 
-  const patchStep = useCallback((index: number, patch: Partial<RunStepState>) => {
-    setStepStates((prev) =>
+  const patchNode = useCallback((index: number, patch: Partial<RunNodeState>) => {
+    setNodeStates((prev) =>
       prev.map((state, i) => (i === index ? { ...state, ...patch } : state)),
     );
   }, []);
 
-  // 执行第 index 步:排盘步同步、AI 步发起后轮询等回复;自动步连跑、暂停步停下。
-  const runStep = useCallback(
+  // 执行第 index 个节点(拓扑序):排盘同步、AI 发起后轮询等回复;自动节点连跑、暂停节点停下。
+  const runNode = useCallback(
     async (index: number) => {
       const sessionId = sessionIdRef.current;
-      const steps = stepsRef.current;
-      if (!sessionId || index >= steps.length) {
+      const order = orderRef.current;
+      if (!sessionId || index >= order.length) {
         setBusy(false);
         setAllDone(true);
         return;
       }
       setCurrentIndex(index);
       setBusy(true);
-      patchStep(index, { status: 'running', error: undefined });
+      patchNode(index, { status: 'running', error: undefined });
 
       let exec;
       try {
-        exec = await workflowsApi.runStep(workflowId, sessionId, steps[index].id);
+        exec = await workflowsApi.runNode(workflowId, sessionId, order[index].id);
       } catch (error) {
-        patchStep(index, {
+        patchNode(index, {
           status: 'error',
           error:
             error instanceof ApiError
               ? error.message
-              : t('workflows.runner.stepError'),
+              : t('workflows.runner.nodeError'),
         });
         setBusy(false);
         return;
@@ -175,28 +215,28 @@ function RunWorkflowInner() {
       if (exec.type === 'ai' && exec.assistantMessageId) {
         const reply = await waitForReply(sessionId, exec.assistantMessageId);
         if (!reply.ok) {
-          patchStep(index, {
+          patchNode(index, {
             status: 'error',
             output: reply.content,
-            error: reply.content || t('workflows.runner.stepError'),
+            error: reply.content || t('workflows.runner.nodeError'),
           });
           setBusy(false);
           return;
         }
-        patchStep(index, { status: 'done', output: reply.content });
+        patchNode(index, { status: 'done', output: reply.content });
       } else {
-        patchStep(index, {
+        patchNode(index, {
           status: 'done',
           output: t('workflows.runner.boardGenerated'),
         });
       }
 
       setBusy(false);
-      if (!steps[index].pauseAfter) {
-        await runStep(index + 1);
+      if (!order[index].pauseAfter) {
+        await runNode(index + 1);
       }
     },
-    [workflowId, patchStep, t],
+    [workflowId, patchNode, t],
   );
 
   const handleStart = useCallback(async () => {
@@ -207,12 +247,18 @@ function RunWorkflowInner() {
         input: { question: question.trim() },
       });
       sessionIdRef.current = res.session.id;
-      stepsRef.current = res.steps;
-      setStepStates(
-        res.steps.map((step) => ({ step, status: 'pending', output: '' })),
+      const order = topoOrder(res.nodes, res.edges);
+      orderRef.current = order;
+      leafIdsRef.current = new Set(
+        res.nodes
+          .filter((node) => !res.edges.some((edge) => edge.source === node.id))
+          .map((node) => node.id),
+      );
+      setNodeStates(
+        order.map((node) => ({ node, status: 'pending', output: '' })),
       );
       setPhase('running');
-      void runStep(0);
+      void runNode(0);
     } catch (error) {
       toast(
         'error',
@@ -223,18 +269,18 @@ function RunWorkflowInner() {
     } finally {
       setStarting(false);
     }
-  }, [workflowId, clientId, question, runStep, t, toast]);
+  }, [workflowId, clientId, question, runNode, t, toast]);
 
   const handleRefine = useCallback(
     async (index: number) => {
       const sessionId = sessionIdRef.current;
       setSavingRefine(true);
       try {
-        await workflowsApi.runStepSaveOutput(
+        await workflowsApi.runNodeSaveOutput(
           workflowId,
           sessionId,
-          stepStates[index].step.id,
-          stepStates[index].output,
+          nodeStates[index].node.id,
+          nodeStates[index].output,
         );
         toast('success', t('workflows.runner.refined'));
       } catch (error) {
@@ -246,7 +292,7 @@ function RunWorkflowInner() {
         setSavingRefine(false);
       }
     },
-    [workflowId, stepStates, t, toast],
+    [workflowId, nodeStates, t, toast],
   );
 
   if (phase === 'loading') {
@@ -264,6 +310,17 @@ function RunWorkflowInner() {
       </div>
     );
   }
+
+  // 跑完后的多输出:叶节点里有 AI 产出的,各自展示为一份成品。
+  const leafOutputs = allDone
+    ? nodeStates.filter(
+        (state) =>
+          leafIdsRef.current.has(state.node.id) &&
+          state.node.type === 'ai' &&
+          state.status === 'done' &&
+          state.output.trim().length > 0,
+      )
+    : [];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -298,44 +355,64 @@ function RunWorkflowInner() {
         </section>
       ) : (
         <section className="space-y-3">
-          {stepStates.map((state, index) => (
-            <StepRunCard
-              key={state.step.id}
+          {nodeStates.map((state, index) => (
+            <NodeRunCard
+              key={state.node.id}
               state={state}
               index={index}
+              isLeaf={leafIdsRef.current.has(state.node.id)}
               isPaused={
                 index === currentIndex &&
                 state.status === 'done' &&
-                state.step.pauseAfter &&
+                state.node.pauseAfter &&
                 !busy &&
                 !allDone
               }
               savingRefine={savingRefine}
-              onEditOutput={(value) => patchStep(index, { output: value })}
+              onEditOutput={(value) => patchNode(index, { output: value })}
               onRefine={() => handleRefine(index)}
-              onRerun={() => runStep(index)}
-              onNext={() => runStep(index + 1)}
+              onRerun={() => runNode(index)}
+              onNext={() => runNode(index + 1)}
             />
           ))}
 
           {allDone && (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-primary/25 bg-primary/5 py-8 text-center">
-              <Check className="h-6 w-6 text-primary" />
-              <p className="text-sm font-medium text-ink">
-                {t('workflows.runner.allDone')}
-              </p>
-              <Button
-                variant="secondary"
-                icon={<MessageSquare size={14} />}
-                onClick={() =>
-                  router.push(
-                    `/ai-chat?sid=${encodeURIComponent(sessionIdRef.current)}`,
-                  )
-                }
-              >
-                {t('workflows.runner.goToSession')}
-              </Button>
-            </div>
+            <>
+              {leafOutputs.length > 0 && (
+                <div className="space-y-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+                  <p className="text-[12px] font-semibold text-primary">
+                    {t('workflows.runner.outputsTitle')}
+                  </p>
+                  {leafOutputs.map((state) => (
+                    <div key={state.node.id} className="space-y-1">
+                      <p className="text-[12px] font-medium text-ink">
+                        {state.node.title}
+                      </p>
+                      <div className="whitespace-pre-wrap rounded-lg bg-surface-card px-3 py-2 text-[12px] leading-relaxed text-muted">
+                        {state.output}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-hairline bg-surface-card py-8 text-center">
+                <Check className="h-6 w-6 text-primary" />
+                <p className="text-sm font-medium text-ink">
+                  {t('workflows.runner.allDone')}
+                </p>
+                <Button
+                  variant="secondary"
+                  icon={<MessageSquare size={14} />}
+                  onClick={() =>
+                    router.push(
+                      `/ai-chat?sid=${encodeURIComponent(sessionIdRef.current)}`,
+                    )
+                  }
+                >
+                  {t('workflows.runner.goToSession')}
+                </Button>
+              </div>
+            </>
           )}
         </section>
       )}
@@ -343,9 +420,10 @@ function RunWorkflowInner() {
   );
 }
 
-function StepRunCard({
+function NodeRunCard({
   state,
   index,
+  isLeaf,
   isPaused,
   savingRefine,
   onEditOutput,
@@ -353,8 +431,9 @@ function StepRunCard({
   onRerun,
   onNext,
 }: {
-  state: RunStepState;
+  state: RunNodeState;
   index: number;
+  isLeaf: boolean;
   isPaused: boolean;
   savingRefine: boolean;
   onEditOutput: (value: string) => void;
@@ -363,7 +442,7 @@ function StepRunCard({
   onNext: () => void;
 }) {
   const { t } = useI18n();
-  const { step, status, output, error } = state;
+  const { node, status, output, error } = state;
 
   return (
     <div
@@ -377,26 +456,29 @@ function StepRunCard({
         </span>
         <span
           className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-            step.type === 'paipan'
+            node.type === 'paipan'
               ? 'bg-primary/10 text-primary'
               : 'bg-success/10 text-success'
           }`}
         >
-          {step.type === 'paipan'
+          {node.type === 'paipan'
             ? t('workflows.builder.paipanBadge')
             : t('workflows.builder.aiBadge')}
         </span>
+        {isLeaf && (
+          <span className="rounded-md border border-hairline px-1.5 py-0.5 text-[10px] text-muted">
+            {t('workflows.runner.outputBadge')}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
-          {step.title}
+          {node.title}
         </span>
         <StatusIndicator status={status} />
       </div>
 
-      {error && (
-        <p className="mt-2 text-[12px] text-error">{error}</p>
-      )}
+      {error && <p className="mt-2 text-[12px] text-error">{error}</p>}
 
-      {step.type === 'ai' && output && status !== 'error' && (
+      {node.type === 'ai' && output && status !== 'error' && (
         <div className="mt-3">
           {isPaused ? (
             <>
@@ -427,11 +509,7 @@ function StepRunCard({
                 >
                   {t('workflows.runner.rerun')}
                 </Button>
-                <Button
-                  size="sm"
-                  icon={<ArrowRight size={13} />}
-                  onClick={onNext}
-                >
+                <Button size="sm" icon={<ArrowRight size={13} />} onClick={onNext}>
                   {t('workflows.runner.next')}
                 </Button>
               </div>
@@ -444,8 +522,8 @@ function StepRunCard({
         </div>
       )}
 
-      {/* 排盘步暂停时也给"下一步" */}
-      {step.type === 'paipan' && isPaused && (
+      {/* 排盘节点暂停时也给"下一步" */}
+      {node.type === 'paipan' && isPaused && (
         <div className="mt-3 flex items-center gap-2">
           <span className="text-[12px] text-muted">
             {t('workflows.runner.boardGenerated')}
@@ -459,13 +537,13 @@ function StepRunCard({
   );
 }
 
-function StatusIndicator({ status }: { status: StepStatus }) {
+function StatusIndicator({ status }: { status: NodeStatus }) {
   const { t } = useI18n();
   if (status === 'running') {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-primary">
         <Loader2 size={12} className="animate-spin" />
-        {t('workflows.runner.stepRunning')}
+        {t('workflows.runner.nodeRunning')}
       </span>
     );
   }
@@ -473,7 +551,7 @@ function StatusIndicator({ status }: { status: StepStatus }) {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-success">
         <Check size={12} />
-        {t('workflows.runner.stepDone')}
+        {t('workflows.runner.nodeDone')}
       </span>
     );
   }
@@ -481,13 +559,13 @@ function StatusIndicator({ status }: { status: StepStatus }) {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-error">
         <AlertCircle size={12} />
-        {t('workflows.runner.stepError')}
+        {t('workflows.runner.nodeError')}
       </span>
     );
   }
   return (
     <span className="text-[11px] text-muted/70">
-      {t('workflows.runner.stepPending')}
+      {t('workflows.runner.nodePending')}
     </span>
   );
 }

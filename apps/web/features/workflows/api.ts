@@ -1,15 +1,18 @@
 import type {
-  WorkflowAiStepDto,
+  WorkflowAiNodeDto,
   WorkflowDefinitionDto,
   WorkflowDefinitionListResponseDto,
   WorkflowDefinitionUpsertDto,
-  WorkflowPaipanStepDto,
+  WorkflowEdgeDto,
+  WorkflowGraphDto,
+  WorkflowGraphInputDto,
+  WorkflowNodeDto,
+  WorkflowNodeInputDto,
+  WorkflowPaipanNodeDto,
+  WorkflowRunNodeDto,
+  WorkflowRunNodeExecuteResponseDto,
   WorkflowRunStartRequestDto,
   WorkflowRunStartResponseDto,
-  WorkflowRunStepDto,
-  WorkflowRunStepExecuteResponseDto,
-  WorkflowStepDto,
-  WorkflowStepInputDto,
 } from '@fateclaw/contracts/workflow';
 import type { SimpleModelPolicyDto } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
@@ -20,15 +23,18 @@ import { requestJson } from '@/lib/http/client';
 export type WorkflowDefinition = WorkflowDefinitionDto;
 export type WorkflowDefinitionListResponse = WorkflowDefinitionListResponseDto;
 export type WorkflowDefinitionUpsert = WorkflowDefinitionUpsertDto;
-export type WorkflowStep = WorkflowStepDto;
-export type WorkflowPaipanStep = WorkflowPaipanStepDto;
-export type WorkflowAiStep = WorkflowAiStepDto;
-export type WorkflowStepInput = WorkflowStepInputDto;
-export type WorkflowRunStep = WorkflowRunStepDto;
-export type WorkflowStepModelPolicy = SimpleModelPolicyDto;
+export type WorkflowNode = WorkflowNodeDto;
+export type WorkflowPaipanNode = WorkflowPaipanNodeDto;
+export type WorkflowAiNode = WorkflowAiNodeDto;
+export type WorkflowNodeInput = WorkflowNodeInputDto;
+export type WorkflowEdge = WorkflowEdgeDto;
+export type WorkflowGraph = WorkflowGraphDto;
+export type WorkflowGraphInput = WorkflowGraphInputDto;
+export type WorkflowRunNode = WorkflowRunNodeDto;
+export type WorkflowNodeModelPolicy = SimpleModelPolicyDto;
 export type WorkflowRunStartRequest = WorkflowRunStartRequestDto;
 export type WorkflowRunStartResponse = WorkflowRunStartResponseDto;
-export type WorkflowRunStepExecuteResponse = WorkflowRunStepExecuteResponseDto;
+export type WorkflowRunNodeExecuteResponse = WorkflowRunNodeExecuteResponseDto;
 
 const seg = (value: string) => encodeURIComponent(value);
 
@@ -74,22 +80,22 @@ export const workflowsApi = {
       exposeServerErrorMessage: true,
     }),
 
-  /** 执行运行中的某一步。 */
-  runStep: (id: string, sessionId: string, stepId: string) =>
-    requestJson<WorkflowRunStepExecuteResponse>(
-      `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/steps/${seg(stepId)}/execute`,
+  /** 执行运行中的某个节点。 */
+  runNode: (id: string, sessionId: string, nodeId: string) =>
+    requestJson<WorkflowRunNodeExecuteResponse>(
+      `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/nodes/${seg(nodeId)}/execute`,
       { method: 'POST', exposeServerErrorMessage: true },
     ),
 
-  /** 保存某步润色结果(改该步 AI 产出正文,供后续步读到润色版)。 */
-  runStepSaveOutput: (
+  /** 保存某节点润色结果(改该节点 AI 产出正文,供下游节点读到润色版)。 */
+  runNodeSaveOutput: (
     id: string,
     sessionId: string,
-    stepId: string,
+    nodeId: string,
     content: string,
   ) =>
     requestJson<SuccessResponse>(
-      `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/steps/${seg(stepId)}/output`,
+      `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/nodes/${seg(nodeId)}/output`,
       {
         method: 'PATCH',
         body: JSON.stringify({ content }),
