@@ -943,13 +943,6 @@ export const enMessages = {
       completedCount: '{count} done',
       aiReplying: 'AI is replying...',
       progressSuffix: '{label}...',
-      guashiScript: {
-        label: 'Talking points · sections',
-        copyForClient: 'Copy for client',
-        copied: 'Copied',
-        copyFailed: 'Copy failed',
-        guashiOnlyBadge: 'Diviner-only · excluded from export',
-      },
     },
     paipanRail: {
       title: 'Choose a system to create a chart',

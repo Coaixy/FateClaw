@@ -919,13 +919,6 @@ export const zhCNMessages = {
       completedCount: '{count} 完成',
       aiReplying: 'AI 正在回复...',
       progressSuffix: '{label}中...',
-      guashiScript: {
-        label: '话术稿 · 分节',
-        copyForClient: '复制给客户',
-        copied: '已复制',
-        copyFailed: '复制失败',
-        guashiOnlyBadge: '仅卦师可见 · 导出不含',
-      },
     },
     paipanRail: {
       title: '选择术数开始排盘',
