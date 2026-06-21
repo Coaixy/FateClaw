@@ -450,7 +450,7 @@ function WorkflowBuilderInner({
   const selected = nodes.find((node) => node.id === selectedId) ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-ink">
           {mode === 'edit'
@@ -511,9 +511,9 @@ function WorkflowBuilderInner({
         </span>
       </div>
 
-      {/* 画布 + 配置面板 */}
-      <div className="flex flex-col gap-4 lg:flex-row">
-        <div className="relative h-[64vh] min-h-[420px] flex-1 overflow-hidden rounded-2xl border border-hairline bg-canvas">
+      {/* 画布 + 配置面板;画布占满剩余视口高度,配置面板等高内滚 */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="relative h-[calc(100vh-17rem)] min-h-[560px] flex-1 overflow-hidden rounded-2xl border border-hairline bg-canvas">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -536,7 +536,7 @@ function WorkflowBuilderInner({
           )}
         </div>
 
-        <aside className="w-full shrink-0 lg:w-[340px]">
+        <aside className="w-full shrink-0 lg:w-[340px] lg:max-h-[calc(100vh-17rem)] lg:overflow-y-auto">
           {selected ? (
             <NodeConfigPanel
               key={selected.id}

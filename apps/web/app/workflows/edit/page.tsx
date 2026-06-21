@@ -73,7 +73,7 @@ function EditWorkflowInner() {
 
 export default function EditWorkflowPage() {
   return (
-    <AppShell>
+    <AppShell wide>
       <Suspense fallback={<CenterSpinner />}>
         <EditWorkflowInner />
       </Suspense>

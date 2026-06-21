@@ -23,7 +23,7 @@ function BuilderFallback() {
 
 export default function NewWorkflowPage() {
   return (
-    <AppShell>
+    <AppShell wide>
       <WorkflowBuilder mode="create" />
     </AppShell>
   );
