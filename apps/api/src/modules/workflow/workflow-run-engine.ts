@@ -9,24 +9,25 @@
 import type {
   WorkflowAiNodeDto,
   WorkflowGraphDto,
+  WorkflowRunHistoryResponseDto,
   WorkflowRunStateDto,
 } from '@fateclaw/contracts/workflow';
+
+import { listWorkflowRunsByDefinition } from '../../infrastructure/repositories/workflow-run-repository.js';
 
 import {
   createChatSession,
   getSessionMessages,
   getWorkflowDefinition,
+  setMessageWorkflowNodeId,
   storeMessage,
   touchChatSession,
   updateOwnedMessageContent,
 } from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 import { normalizeOwnedChatSessionTitle } from '../../shared/chat-session-title-policy.js';
 import type { NewMessage, SimpleModelPolicy } from '../../shared/types.js';
 import { sendOwnedChatSessionMessage } from '../chat/chat-session-service.js';
-import { applyClientProfilePrefill } from '../chat/client-profile-service.js';
-import { DirectPaipanError, executeDirectPaipan } from '../chat/paipan-runtime.js';
 import {
   getWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -302,6 +303,23 @@ export async function startWorkflowRunV2(
   return ok(await snapshotToDto(userId, snapshot));
 }
 
+/** 列出某工作流的后端编排运行历史(创建时间倒序)。 */
+export async function listWorkflowRunHistoryV2(
+  userId: string,
+  definitionId: string,
+): Promise<ServiceResult<WorkflowRunHistoryResponseDto>> {
+  const rows = await listWorkflowRunsByDefinition(userId, definitionId);
+  return ok({
+    runs: rows.map((row) => ({
+      runId: row.id,
+      startedAt: row.created_at,
+      status: row.status,
+      clientId: row.client_id ?? undefined,
+      title: row.title,
+    })),
+  });
+}
+
 /** 读取运行状态(先 reconcile 回灌已落库产出再返回)。 */
 export async function getWorkflowRunStateV2(
   userId: string,
@@ -312,12 +330,18 @@ export async function getWorkflowRunStateV2(
   return ok(await snapshotToDto(userId, snapshot));
 }
 
-/** 卦师起盘提交:跑排盘 runner、落盘面消息(带 workflow_node_id)、标记节点完成并推进。 */
+/**
+ * 卦师起盘提交:认领 PaipanSheet 已自落到会话的盘面消息。
+ *
+ * @remarks 排盘交互复用 PaipanSheet(它自己调 paipanApi.commit 落盘面);这里只把该盘面"认领"给
+ *          排盘节点(设 workflow_node_id 列)、标记节点完成并推进 —— 不重复排盘。
+ * @param boardMessageId PaipanSheet 提交后返回的盘面消息 id。
+ */
 export async function commitWorkflowPaipanNodeV2(
   userId: string,
   runId: string,
   nodeId: string,
-  input: Record<string, unknown>,
+  boardMessageId: string,
 ): Promise<ServiceResult<WorkflowRunStateDto>> {
   const loaded = await workflowRunStore.loadRun(runId, userId);
   if (!loaded) return fail(404, '工作流运行不存在或无权访问');
@@ -325,54 +349,22 @@ export async function commitWorkflowPaipanNodeV2(
   if (!node || node.type !== 'paipan') return fail(404, '排盘节点不存在');
 
   const runtimeId = getWebChatRuntimeId(userId);
-  const paipanInput = await applyClientProfilePrefill(
-    userId,
-    loaded.run.client_id ?? undefined,
-    { ...node.inputDefaults, ...input },
+  // 校验该盘面属于本运行会话且确是盘面消息(防越权/错挂)。
+  const messages = await getSessionMessages(runtimeId, loaded.run.chat_session_id);
+  const board = messages.find((message) => message.id === boardMessageId);
+  if (!board) return fail(404, '盘面不存在');
+  const kind = (board.metadata as { kind?: unknown } | null | undefined)?.kind;
+  if (kind !== 'board_result') return fail(400, '指定的消息不是盘面');
+
+  // 认领盘面到排盘节点(设列),供编排器关联 + 下游 AI 节点按入边盘面注入。
+  await setMessageWorkflowNodeId(
+    runtimeId,
+    loaded.run.chat_session_id,
+    boardMessageId,
+    nodeId,
   );
-
-  let skillContextEntry;
-  try {
-    const execution = await executeDirectPaipan({
-      accountId: runtimeId,
-      userId,
-      skillDir: node.skill,
-      input: paipanInput,
-    });
-    skillContextEntry = execution.skillContextEntry;
-  } catch (error) {
-    if (error instanceof DirectPaipanError) {
-      return fail(error.statusCode, error.message);
-    }
-    logger.error({ err: error, runId, nodeId }, '工作流排盘节点执行失败');
-    return fail(500, '排盘失败,请检查信息后重试');
-  }
-
-  const boardMessage: NewMessage = {
-    id: `wf-board-${node.id}-${Date.now()}-${randomSuffix()}`,
-    account_id: runtimeId,
-    user_id: userId,
-    sender: runtimeId,
-    sender_name: WEB_CHAT_ASSISTANT_NAME,
-    content: `已生成${skillContextEntry.artifactTitle ?? '盘面'}。`,
-    timestamp: new Date().toISOString(),
-    is_from_me: true,
-    is_bot_message: true,
-    session_id: loaded.run.chat_session_id,
-    tool_context: JSON.stringify([skillContextEntry]),
-    workflow_node_id: node.id,
-    metadata: {
-      kind: 'board_result',
-      workflow: 'workflow',
-      workflow_node_id: node.id,
-      board_skill: skillContextEntry.skill,
-    },
-  };
-  await storeMessage(boardMessage);
-  await touchChatSession(loaded.run.chat_session_id);
-
   const snapshot = await orchestrator.markNodeCompleted(runId, userId, nodeId, {
-    messageId: boardMessage.id,
+    messageId: boardMessageId,
     accountId: runtimeId,
   });
   return ok(await snapshotToDto(userId, snapshot));

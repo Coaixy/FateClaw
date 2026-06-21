@@ -19,6 +19,7 @@ import {
 import {
   commitWorkflowPaipanNodeV2,
   getWorkflowRunStateV2,
+  listWorkflowRunHistoryV2,
   rerunWorkflowNodeV2,
   resumeWorkflowRunV2,
   saveWorkflowNodeOutputV2,
@@ -184,9 +185,9 @@ const NodeOutputSchema = z.object({
   content: z.string().max(20000),
 });
 
-/** 起盘提交请求体校验(后端编排版:卦师在 PaipanSheet 填写的排盘参数)。 */
+/** 起盘提交请求体校验(后端编排版:PaipanSheet 自落盘面后返回的盘面消息 id,后端认领之)。 */
 const PaipanCommitSchema = z.object({
-  input: z.record(z.string(), z.unknown()).optional().default({}),
+  boardMessageId: z.string().trim().min(1, '缺少盘面消息 id'),
 });
 
 /**
@@ -417,6 +418,21 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /api/workflows/:id/run-history — 后端编排运行历史(按 runId)
+  app.get<{ Params: { id: string } }>(
+    '/:id/run-history',
+    async (request, reply) => {
+      const result = await listWorkflowRunHistoryV2(
+        request.user.userId,
+        request.params.id,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
   // GET /api/workflows/run/:runId — 读取运行状态(自动 reconcile 已落库产出)
   app.get<{ Params: { runId: string } }>(
     '/run/:runId',
@@ -461,7 +477,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
         request.user.userId,
         request.params.runId,
         request.params.nodeId,
-        parsed.data.input,
+        parsed.data.boardMessageId,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });

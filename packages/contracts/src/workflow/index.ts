@@ -256,6 +256,22 @@ export interface WorkflowRunNodeStateDto {
   error?: string;
 }
 
+/** 后端编排运行历史的单条摘要(按 runId 寻址)。 */
+export interface WorkflowRunHistoryItemDto {
+  runId: string;
+  /** 运行开始时间(ISO)。 */
+  startedAt: string;
+  status: WorkflowRunStatus;
+  /** 关联客户 id;未关联为空。 */
+  clientId?: string;
+  title: string;
+}
+
+/** 后端编排运行历史响应(某工作流,创建时间倒序)。 */
+export interface WorkflowRunHistoryResponseDto {
+  runs: WorkflowRunHistoryItemDto[];
+}
+
 /** 一次运行的完整状态快照(GET /runs/:id 返回;前端据此渲染画布与产出)。 */
 export interface WorkflowRunStateDto {
   runId: string;

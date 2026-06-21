@@ -172,6 +172,27 @@ export async function updateOwnedMessageContent(
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * 把某条消息认领为某 workflow 节点的产出(设 workflow_node_id 列)。
+ *
+ * @remarks 卦师起盘提交后,PaipanSheet 自落的盘面消息归到排盘节点名下,供编排器关联 + 下游引用。
+ * @returns 是否更新了一行(account+session 归属校验)。
+ */
+export async function setMessageWorkflowNodeId(
+  accountId: string,
+  sessionId: string,
+  messageId: string,
+  workflowNodeId: string,
+): Promise<boolean> {
+  const { rowCount } = await getDbPool().query(
+    `UPDATE messages
+     SET workflow_node_id = $4
+     WHERE account_id = $1 AND session_id = $2 AND id = $3 AND deleted_at IS NULL`,
+    [accountId, sessionId, messageId, workflowNodeId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function getSessionMessagesWithToolContext(
   accountId: string,
   sessionId: string,

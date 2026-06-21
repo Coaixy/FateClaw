@@ -12,6 +12,8 @@ import type {
   WorkflowRunInputDto,
   WorkflowRunListResponseDto,
   WorkflowRunNodeDto,
+  WorkflowRunHistoryItemDto,
+  WorkflowRunHistoryResponseDto,
   WorkflowRunNodeExecuteRequestDto,
   WorkflowRunNodeExecuteResponseDto,
   WorkflowRunNodeStateDto,
@@ -52,6 +54,8 @@ export type WorkflowRunState = WorkflowRunStateDto;
 export type WorkflowRunNodeState = WorkflowRunNodeStateDto;
 export type WorkflowRunStatus = WorkflowRunStatusDto;
 export type WorkflowRunNodeStatus = WorkflowRunNodeStatusDto;
+export type WorkflowRunHistoryResponse = WorkflowRunHistoryResponseDto;
+export type WorkflowRunHistoryItem = WorkflowRunHistoryItemDto;
 
 const seg = (value: string) => encodeURIComponent(value);
 
@@ -152,6 +156,12 @@ export const workflowsApi = {
     get: (runId: string) =>
       requestJson<WorkflowRunState>(`/api/workflows/run/${seg(runId)}`),
 
+    /** 列出某工作流的后端编排运行历史(按 runId)。 */
+    history: (workflowId: string) =>
+      requestJson<WorkflowRunHistoryResponse>(
+        `/api/workflows/${seg(workflowId)}/run-history`,
+      ),
+
     /** 从暂停续跑。 */
     resume: (runId: string) =>
       requestJson<WorkflowRunState>(
@@ -159,17 +169,13 @@ export const workflowsApi = {
         { method: 'POST', exposeServerErrorMessage: true },
       ),
 
-    /** 卦师起盘提交(input 为 PaipanSheet 填写的排盘参数)。 */
-    commitPaipan: (
-      runId: string,
-      nodeId: string,
-      input: Record<string, unknown>,
-    ) =>
+    /** 卦师起盘提交:认领 PaipanSheet 自落的盘面(传其盘面消息 id)。 */
+    commitPaipan: (runId: string, nodeId: string, boardMessageId: string) =>
       requestJson<WorkflowRunState>(
         `/api/workflows/run/${seg(runId)}/nodes/${seg(nodeId)}/paipan`,
         {
           method: 'POST',
-          body: JSON.stringify({ input }),
+          body: JSON.stringify({ boardMessageId }),
           exposeServerErrorMessage: true,
         },
       ),
