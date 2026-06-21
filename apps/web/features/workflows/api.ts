@@ -80,4 +80,20 @@ export const workflowsApi = {
       `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/steps/${seg(stepId)}/execute`,
       { method: 'POST', exposeServerErrorMessage: true },
     ),
+
+  /** 保存某步润色结果(改该步 AI 产出正文,供后续步读到润色版)。 */
+  runStepSaveOutput: (
+    id: string,
+    sessionId: string,
+    stepId: string,
+    content: string,
+  ) =>
+    requestJson<SuccessResponse>(
+      `/api/workflows/${seg(id)}/runs/${seg(sessionId)}/steps/${seg(stepId)}/output`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ content }),
+        exposeServerErrorMessage: true,
+      },
+    ),
 };

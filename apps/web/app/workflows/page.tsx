@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2,
   Pencil,
+  Play,
   Plus,
   Search,
   Trash2,
@@ -46,6 +47,12 @@ export default function WorkflowsPage() {
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [search, setSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // 从客户详情"用工作流断"进来时带 ?client=,运行链接会把它透传给运行页(排盘步用其生辰预填)。
+  const [clientId, setClientId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get('client');
+    setClientId(value ?? undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +142,12 @@ export default function WorkflowsPage() {
           </button>
         </header>
 
+        {clientId && (
+          <div className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-[12px] text-primary">
+            {t('workflows.pickForClient')}
+          </div>
+        )}
+
         <section className="space-y-3">
           {showSkeleton ? (
             <ListSkeleton />
@@ -174,6 +187,15 @@ export default function WorkflowsPage() {
                       key={workflow.id}
                       workflow={workflow}
                       deleting={deletingId === workflow.id}
+                      onRun={() =>
+                        router.push(
+                          `/workflows/run?id=${encodeURIComponent(workflow.id)}${
+                            clientId
+                              ? `&client=${encodeURIComponent(clientId)}`
+                              : ''
+                          }`,
+                        )
+                      }
                       onEdit={() =>
                         router.push(
                           `/workflows/edit?id=${encodeURIComponent(workflow.id)}`,
@@ -195,11 +217,13 @@ export default function WorkflowsPage() {
 function WorkflowCard({
   workflow,
   deleting,
+  onRun,
   onEdit,
   onDelete,
 }: {
   workflow: WorkflowDefinition;
   deleting: boolean;
+  onRun: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -244,6 +268,15 @@ function WorkflowCard({
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={!workflow.enabled}
+            className="mr-1 inline-flex h-8 items-center gap-1 rounded-lg border border-primary/25 bg-primary/8 px-2.5 text-[12px] font-medium text-primary hover:bg-primary/15 disabled:opacity-40"
+          >
+            <Play size={13} />
+            {t('workflows.runAction')}
+          </button>
           <button
             type="button"
             onClick={onEdit}

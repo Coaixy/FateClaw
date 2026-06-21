@@ -16,6 +16,7 @@ import {
   Sparkles,
   Trash2,
   Users,
+  Workflow,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -278,18 +279,32 @@ function ClientDetailContent() {
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    router.push(
-                      `/ai-chat?client=${encodeURIComponent(profile.id)}`,
-                    )
-                  }
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  <Sparkles size={14} />
-                  {t('clients.card.startReading')}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/workflows?client=${encodeURIComponent(profile.id)}`,
+                      )
+                    }
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/8 px-4 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Workflow size={14} />
+                    {t('workflows.runForClient')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/ai-chat?client=${encodeURIComponent(profile.id)}`,
+                      )
+                    }
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+                  >
+                    <Sparkles size={14} />
+                    {t('clients.card.startReading')}
+                  </button>
+                </div>
               </div>
             </header>
 
