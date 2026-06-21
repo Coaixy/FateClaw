@@ -176,11 +176,9 @@ import {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
-  getUserGuashiScriptTemplate,
   updateUserSoulEditEnabled,
   updateUserPasswordHash,
   updateUserSoulContent,
-  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
 } from './repositories/users-repository.js';
 import {
@@ -241,6 +239,18 @@ import type {
   RedeemSkillAccessInviteResult,
   SkillAccessInvitePreviewResult,
 } from './repositories/skills-repository.js';
+
+export {
+  createWorkflowDefinition,
+  getWorkflowDefinition,
+  listWorkflowDefinitionsByUserId,
+  softDeleteWorkflowDefinition,
+  updateWorkflowDefinition,
+  WorkflowSkillUnavailableError,
+} from './repositories/workflow-definition-repository.js';
+export type { WorkflowDefinitionRecord } from './repositories/workflow-definition-repository.js';
+export { updateOwnedMessageContent } from './repositories/chat-repository.js';
+export { listWorkflowRunSessions } from './repositories/chat-repository.js';
 
 export {
   adjustUserPurchasedBalance,
@@ -339,7 +349,6 @@ export {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
-  getUserGuashiScriptTemplate,
   getUserCustomSkill,
   getUserCustomSkillById,
   getUserCustomSkillCount,
@@ -423,7 +432,6 @@ export {
   updateUserPasswordHash,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
-  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
   unpublishSkillBundle,
   unpublishUserCustomSkill,

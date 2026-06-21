@@ -55,6 +55,11 @@
       "types": "./dist/membership/index.d.ts",
       "import": "./dist/membership/index.js",
       "default": "./dist/membership/index.js"
+    },
+    "./workflow": {
+      "types": "./dist/workflow/index.d.ts",
+      "import": "./dist/workflow/index.js",
+      "default": "./dist/workflow/index.js"
     }
   },
   "files": [

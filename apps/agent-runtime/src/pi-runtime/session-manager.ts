@@ -93,3 +93,25 @@ export function createFateClawPiSessionManager(args: {
     persisted: manager.isPersisted(),
   };
 }
+
+/**
+ * 删除某个 Pi 会话的文件对(.path 映射 + 其指向的 .jsonl)。
+ *
+ * 供 workflow 隔离节点用:每个 AI 节点的 piSessionId 一次性、永不 reload,产出已落运行会话,
+ * 跑完即删避免无限堆积(这类 `wf-…__pi` 命名不被按会话 id 的孤儿扫描识别)。删除失败静默忽略。
+ *
+ * @param args.cwd 运行目录。
+ * @param args.sessionId 要删除的 Pi 会话标识(此处即 piSessionId)。
+ */
+export function deletePiSessionFiles(args: {
+  cwd: string;
+  sessionId: string;
+}): void {
+  try {
+    const { mappingFile, sessionFile } = resolvePiSessionFile(args);
+    if (sessionFile) fs.rmSync(sessionFile, { force: true });
+    fs.rmSync(mappingFile, { force: true });
+  } catch {
+    // 清理失败不影响主流程:下次运行用新 piSessionId,旧文件最多残留。
+  }
+}

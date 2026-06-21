@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github-dark.css';
+/* 工作流画布(React Flow)基础样式;仅在 /workflows 搭建器用到 */
+@import '@xyflow/react/dist/style.css';
 
 @theme {
   /* Brand */
@@ -343,4 +345,25 @@ html { scroll-behavior: smooth; }
   }
   .reveal { opacity: 1; transform: none; }
   html { scroll-behavior: auto; }
+}
+
+/* 工作流画布:放大节点连接点(Handle),否则太小不好拉线;hover 再放大、给个抓手光环 */
+.react-flow__handle {
+  width: 14px;
+  height: 14px;
+  background-color: var(--color-primary);
+  border: 2px solid var(--color-canvas);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+.react-flow__handle:hover {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}
+/* 连线进行中,所有目标 Handle 放大并高亮,便于对准落点 */
+.react-flow__handle.connectingto,
+.react-flow__handle-valid {
+  width: 18px;
+  height: 18px;
+  background-color: var(--color-primary-active, var(--color-primary));
 }

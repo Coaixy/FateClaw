@@ -32,12 +32,12 @@ export async function dispatchAiChatPrompt(input: {
   history: HistoryMessage[];
   sessionBoardContexts?: SessionBoardContext[];
   sessionId: string;
+  piSessionId?: string;
   userMessageId?: string;
   requestId?: string;
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
-  guashiScriptTemplate?: string;
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
@@ -57,12 +57,12 @@ export async function dispatchAiChatPrompt(input: {
     history: input.history,
     sessionBoardContexts: input.sessionBoardContexts,
     sessionId: input.sessionId,
+    piSessionId: input.piSessionId,
     userMessageId: input.userMessageId,
     requestId: input.requestId,
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,
-    guashiScriptTemplate: input.guashiScriptTemplate,
     authorizedSkillBundleIds: input.authorizedSkillBundleIds,
     authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
     llmRuntime: input.llmRuntime,

@@ -214,6 +214,7 @@ async function processInboxMessage(
       {
         accountId,
         sessionId: request.sessionId,
+        piSessionId: request.piSessionId,
         llmRuntime: request.llmRuntime,
         userMessage: request.userMessage,
         inputKind: request.inputKind,
@@ -223,7 +224,6 @@ async function processInboxMessage(
         userName: request.userName,
         assistantName: request.assistantName,
         personaPrompt: request.personaPrompt,
-        guashiScriptTemplate: request.guashiScriptTemplate,
         authorizedSkillBundleIds: request.authorizedSkillBundleIds,
         authorizedWorkflowSkillIds: request.authorizedWorkflowSkillIds,
         outboxQueue: request.outboxQueue,

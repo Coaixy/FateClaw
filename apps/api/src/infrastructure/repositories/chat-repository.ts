@@ -146,6 +146,30 @@ export async function getSessionMessageById(
   return rows[0] as NewMessage | undefined;
 }
 
+/**
+ * 更新己方会话内某条消息的正文(工作流"润色"用:卦师改 AI 产出后供后续步骤读取)。
+ *
+ * @param accountId 运行时账号键(owner 隔离)。
+ * @param sessionId chat_sessions.id。
+ * @param messageId 目标消息 id。
+ * @param content 新正文。
+ * @returns 命中并更新返回 true,否则 false。
+ */
+export async function updateOwnedMessageContent(
+  accountId: string,
+  sessionId: string,
+  messageId: string,
+  content: string,
+): Promise<boolean> {
+  const { rowCount } = await getDbPool().query(
+    `UPDATE messages
+     SET content = $4
+     WHERE account_id = $1 AND session_id = $2 AND id = $3 AND deleted_at IS NULL`,
+    [accountId, sessionId, messageId, content],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function getSessionMessagesWithToolContext(
   accountId: string,
   sessionId: string,
@@ -197,19 +221,52 @@ export async function createChatSession(session: {
   title: string;
   /** 关联的客户档案 id；不传则会话不绑定客户。 */
   clientId?: string;
+  /** 会话来源:'chat'(默认,直接对话) / 'workflow_run'(工作流运行,不进对话历史)。 */
+  origin?: string;
+  /** workflow 运行会话关联的工作流定义 id。 */
+  workflowDefinitionId?: string;
 }): Promise<ChatSession> {
   const { rows } = await getDbPool().query(
-    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    `INSERT INTO chat_sessions
+       (id, account_id, user_id, title, client_id, origin, workflow_definition_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [
       session.id,
       session.accountId,
       session.userId,
       session.title,
       session.clientId ?? null,
+      session.origin ?? 'chat',
+      session.workflowDefinitionId ?? null,
     ],
   );
   return rows[0] as ChatSession;
+}
+
+/**
+ * 列出某工作流的全部运行会话(origin='workflow_run'),供 workflow 运行历史展示。
+ *
+ * @param userId 卦师用户 ID(owner 隔离)。
+ * @param workflowDefinitionId 工作流定义 ID。
+ * @param limit 返回上限。
+ * @returns 按创建时间倒序的运行会话列表。
+ */
+export async function listWorkflowRunSessions(
+  userId: string,
+  workflowDefinitionId: string,
+  limit = 50,
+): Promise<ChatSession[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM chat_sessions
+     WHERE user_id = $1
+       AND workflow_definition_id = $2
+       AND origin = 'workflow_run'
+       AND deleted_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [userId, workflowDefinitionId, Math.min(Math.max(limit, 1), 200)],
+  );
+  return rows as ChatSession[];
 }
 
 export async function getChatSessionsByUserId(
@@ -217,7 +274,8 @@ export async function getChatSessionsByUserId(
   limit = 100,
   clientId?: string,
 ): Promise<ChatSession[]> {
-  const conditions = ['user_id = $1', 'deleted_at IS NULL'];
+  // origin = 'chat':workflow 运行会话(origin='workflow_run')不进对话历史侧栏。
+  const conditions = ['user_id = $1', 'deleted_at IS NULL', "origin = 'chat'"];
   const params: unknown[] = [userId, Math.min(Math.max(limit, 1), 500)];
 
   // 传入 clientId 时只返回该客户名下的会话（客户档案详情页用）。
@@ -249,7 +307,7 @@ export async function getArchivedChatSessionsByUserId(
 ): Promise<ChatSession[]> {
   const { rows } = await getDbPool().query(
     `SELECT * FROM chat_sessions
-     WHERE user_id = $1 AND deleted_at IS NOT NULL
+     WHERE user_id = $1 AND deleted_at IS NOT NULL AND origin = 'chat'
      ORDER BY deleted_at DESC, updated_at DESC
      LIMIT $2`,
     [userId, Math.min(Math.max(limit, 1), 500)],
@@ -272,7 +330,7 @@ export async function getChatSessionsByClientId(
 ): Promise<ChatSession[]> {
   const { rows } = await getDbPool().query(
     `SELECT * FROM chat_sessions
-     WHERE user_id = $1 AND client_id = $2
+     WHERE user_id = $1 AND client_id = $2 AND origin = 'chat'
      ORDER BY updated_at DESC
      LIMIT $3`,
     [userId, clientId, Math.min(Math.max(limit, 1), 500)],

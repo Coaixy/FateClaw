@@ -34,6 +34,7 @@ import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
 import { normalizeHttpError } from './http-error.js';
 import { skillsRoutes } from './skills-routes.js';
 import { simpleWorkflowsRoutes } from './simple-workflows-routes.js';
+import { workflowsRoutes } from './workflows-routes.js';
 import { resolveStaticExportRequest } from './static-export.js';
 const API_PORT = parseInt(process.env.API_PORT || '3000', 10);
 const API_HOST = process.env.API_HOST || '0.0.0.0';
@@ -326,6 +327,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
     prefix: '/api/simple-workflows',
   });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
+  await app.register(workflowsRoutes, { prefix: '/api/workflows' });
 
   await app.register(billingRoutes, { prefix: '/api/billing' });
 

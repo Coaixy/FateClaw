@@ -53,6 +53,12 @@ export interface LlmRuntimeSnapshot {
 export interface ContainerInput {
   accountId: string;
   sessionId?: string;
+  /**
+   * Pi 运行时会话文件标识;与 sessionId 解耦。
+   * workflow 让每个 AI 节点用独立 piSessionId,从而获得隔离的 Pi 会话(不 reload 兄弟节点历史),
+   * 而产出仍按 sessionId 落到运行会话。缺省回退 sessionId(直接对话即两者相同)。
+   */
+  piSessionId?: string;
   /** 本次请求使用的显式 DB runtime 快照。 */
   llmRuntime: LlmRuntimeSnapshot;
   /** 用户当前消息。 */
@@ -71,8 +77,6 @@ export interface ContainerInput {
   assistantName?: string;
   /** 请求级 Persona 覆盖层；不是 Dashboard 维护的用户 Soul。 */
   personaPrompt?: string;
-  /** 卦师自定义的话术稿分节模板；为空/缺省时回退平台默认骨架。 */
-  guashiScriptTemplate?: string;
   /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
@@ -106,6 +110,8 @@ export interface ChatTaskInboxRequest {
   sessionBoardContexts?: SessionBoardContext[];
   /** AI Chat 真实会话 ID，用于同一 session 内查找历史工具上下文。 */
   sessionId?: string;
+  /** Pi 运行时会话文件标识(与 sessionId 解耦,见 ContainerInput.piSessionId)。 */
+  piSessionId?: string;
   /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
   userMessageId?: string;
   /** 请求归属用户 ID；最终响应回传给宿主机用于独立落库。 */
@@ -113,7 +119,6 @@ export interface ChatTaskInboxRequest {
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
-  guashiScriptTemplate?: string;
   /** 本轮明确授权可读取的 Skill Bundle；未传时保持用户全部有效 Skill 可见。 */
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */

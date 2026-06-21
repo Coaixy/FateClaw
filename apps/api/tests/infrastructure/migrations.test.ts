@@ -485,6 +485,10 @@ describe('runDatabaseMigrations', () => {
       '0059_drop_allowance_columns_and_table',
       '0060_client_crm_fields',
       '0061_client_follow_ups',
+      '0062_workflow_definitions',
+      '0063_workflow_definitions',
+      '0064_workflow_definition_inputs',
+      '0065_chat_session_workflow_origin',
     ]);
 
     await runDatabaseMigrations(client as never);

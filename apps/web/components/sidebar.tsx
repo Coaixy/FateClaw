@@ -4,10 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Archive,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
+  LayoutGrid,
   LogIn,
   MessageCircle,
   Monitor,
@@ -15,14 +13,11 @@ import {
   Menu,
   Moon,
   X,
-  SquarePen,
-  Search,
   Pencil,
   Check,
   Sun,
   ExternalLink,
   Send,
-  Sparkle,
   Users,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -54,20 +49,7 @@ function formatSessionTime(
   return formatDate(d, { month: 'short', day: 'numeric' });
 }
 
-type SessionDateFilter = 'all' | 'today' | '7d' | '30d' | 'older';
-
-const SESSION_DATE_FILTERS: readonly {
-  value: SessionDateFilter;
-  labelKey: string;
-}[] = [
-  { value: 'all', labelKey: 'sidebar.filters.all' },
-  { value: 'today', labelKey: 'sidebar.filters.today' },
-  { value: '7d', labelKey: 'sidebar.filters.sevenDays' },
-  { value: '30d', labelKey: 'sidebar.filters.thirtyDays' },
-  { value: 'older', labelKey: 'sidebar.filters.older' },
-];
 const SIDEBAR_SESSION_PREVIEW_LIMIT = 10;
-const SESSION_PANEL_PAGE_SIZE = 6;
 
 const SIDEBAR_THEME_OPTIONS: readonly {
   mode: ThemeMode;
@@ -82,42 +64,6 @@ const TELEGRAM_CHANNEL_URL =
   process.env.NEXT_PUBLIC_TELEGRAM_CHANNEL_URL?.trim() ?? '';
 
 type ContactQrType = 'wechat' | 'qq' | 'telegram';
-
-function matchSessionDateFilter(
-  updatedAt: string,
-  filter: SessionDateFilter,
-  now: Date,
-) {
-  if (filter === 'all') {
-    return true;
-  }
-
-  const updatedTime = new Date(updatedAt).getTime();
-  if (Number.isNaN(updatedTime)) {
-    return false;
-  }
-
-  const dayMs = 86400000;
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).getTime();
-
-  if (filter === 'today') {
-    return updatedTime >= startOfToday;
-  }
-
-  if (filter === '7d') {
-    return updatedTime >= startOfToday - 6 * dayMs;
-  }
-
-  if (filter === '30d') {
-    return updatedTime >= startOfToday - 29 * dayMs;
-  }
-
-  return updatedTime < startOfToday - 29 * dayMs;
-}
 
 function SidebarSessionSkeleton() {
   const { t } = useI18n();
@@ -179,21 +125,17 @@ function Logo({ compact = false }: { compact?: boolean }) {
 }
 
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
-  const { formatDate, formatNumber, locale, t } = useI18n();
+  const { formatDate, locale, t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
   const { loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState<SessionDateFilter>('all');
   const [editingSessionId, setEditingSessionId] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
   const [renamingSessionId, setRenamingSessionId] = useState('');
   const [sharingSessionId, setSharingSessionId] = useState('');
   const [contactOpen, setContactOpen] = useState(false);
-  const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false);
-  const [sessionPanelPage, setSessionPanelPage] = useState(1);
   const [contactQrType, setContactQrType] =
     useState<ContactQrType>('wechat');
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -249,38 +191,29 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => {
     setOpen(false);
-    setSessionsPanelOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (!contactOpen && !sessionsPanelOpen) {
+    if (!contactOpen) {
       return;
     }
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (contactOpen) {
-          setContactOpen(false);
-          return;
-        }
-        setSessionsPanelOpen(false);
+        setContactOpen(false);
       }
     };
 
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [contactOpen, sessionsPanelOpen]);
+  }, [contactOpen]);
 
   useEffect(() => {
-    // 登录态变化后复位筛选和编辑态，避免用户误以为列表丢失。
-    setSearch('');
-    setDateFilter('all');
+    // 登录态变化后复位编辑态，避免用户误以为列表丢失。
     setEditingSessionId('');
     setEditingTitle('');
     setRenamingSessionId('');
     setSharingSessionId('');
-    setSessionsPanelOpen(false);
-    setSessionPanelPage(1);
   }, [chatAvailable]);
 
   useEffect(() => {
@@ -302,51 +235,13 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   const closeSidebar = () => {
     setOpen(false);
-    setSessionsPanelOpen(false);
   };
 
-  // 搜索和日期筛选都只作用于展示层，不改动原始会话数组，避免影响当前选中和排序状态。
-  const now = new Date();
-  const dateFilteredSessions = sessions.filter((session) =>
-    matchSessionDateFilter(session.updated_at, dateFilter, now),
-  );
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredSessions = normalizedSearch
-    ? dateFilteredSessions.filter((session) =>
-        session.title.toLowerCase().includes(normalizedSearch),
-      )
-    : dateFilteredSessions;
-  const sidebarPreviewSessions = filteredSessions.slice(
+  // 侧栏只展示最近若干条会话作为快速切换入口;搜索/筛选/归档浏览已下线(入口统一到工作台)。
+  const sidebarPreviewSessions = sessions.slice(
     0,
     SIDEBAR_SESSION_PREVIEW_LIMIT,
   );
-  const sessionPanelPageCount = Math.max(
-    1,
-    Math.ceil(filteredSessions.length / SESSION_PANEL_PAGE_SIZE),
-  );
-  const currentSessionPanelPage = Math.min(
-    sessionPanelPage,
-    sessionPanelPageCount,
-  );
-  const pagedSessions = filteredSessions.slice(
-    (currentSessionPanelPage - 1) * SESSION_PANEL_PAGE_SIZE,
-    currentSessionPanelPage * SESSION_PANEL_PAGE_SIZE,
-  );
-  const activeDateFilterLabel =
-    t(
-      SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)
-        ?.labelKey ?? 'sidebar.filters.all',
-    );
-  const emptyStateMessage = normalizedSearch
-    ? dateFilter === 'all'
-      ? t('sidebar.noMatchedSearch', { query: search.trim() })
-      : t('sidebar.noMatchedSearchInFilter', {
-          query: search.trim(),
-          filter: activeDateFilterLabel,
-        })
-    : dateFilter === 'all'
-      ? t('sidebar.noSessions')
-      : t('sidebar.noSessionsInFilter', { filter: activeDateFilterLabel });
   const showSessionSkeleton =
     sessions.length === 0 && (authLoading || sessionsLoading);
   const contactQrOptions: ContactQrType[] =
@@ -381,26 +276,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           helper: t('sidebar.contact.groupHelper'),
         };
 
-  useEffect(() => {
-    setSessionPanelPage(1);
-  }, [dateFilter, normalizedSearch]);
-
-  useEffect(() => {
-    setSessionPanelPage((page) => Math.min(page, sessionPanelPageCount));
-  }, [sessionPanelPageCount]);
-
-  const goNewChat = () => {
-    // 手机端在当前页内切会话/新建对话时，pathname 不会变化，必须主动收起抽屉。
-    setSessionsPanelOpen(false);
-    closeSidebar();
-    // 统一走 ChatSessionsProvider 的路由同步逻辑，避免这里再补一次 router.push
-    // 把带参数的目标地址覆盖成裸 /ai-chat。
-    setSelectedSession('');
-  };
-
   const openChatSession = (sessionId: string) => {
-    // 弹层里选会话后要同步收起，避免跳转到 AI Chat 后仍遮住主内容。
-    setSessionsPanelOpen(false);
     closeSidebar();
     setSelectedSession(sessionId);
   };
@@ -528,290 +404,28 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        {/* 新建对话和归档入口 */}
-        <div className="relative px-3 shrink-0">
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSessionsPanelOpen((value) => !value)}
-              className={`flex h-12 min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 text-left shadow-sm transition-all duration-200 ${
-                sessionsPanelOpen || normalizedSearch || dateFilter !== 'all'
-                  ? 'border-primary/30 bg-primary/12 text-ink shadow-primary/5'
-                  : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
-              }`}
-              aria-label={t('sidebar.openArchivePanel')}
-              aria-expanded={sessionsPanelOpen}
-              aria-haspopup="dialog"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-                  <Archive size={14} strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-semibold leading-tight text-ink">
-                    {t('sidebar.archive')}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] leading-none text-muted">
-                    {formatNumber(filteredSessions.length)}/
-                    {formatNumber(sessions.length)} · {activeDateFilterLabel}
-                    {normalizedSearch ? ` · ${t('sidebar.searchActive')}` : ''}
-                  </span>
-                </span>
-              </span>
-              <ChevronDown
-                size={13}
-                strokeWidth={1.8}
-                className={`shrink-0 transition-transform duration-200 ${
-                  sessionsPanelOpen ? 'rotate-180 text-primary' : 'text-muted'
-                }`}
-              />
-            </button>
-
-            <button
-              onClick={goNewChat}
-              className="flex h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-2.5 text-[13px] font-semibold text-ink shadow-sm transition-all duration-200 hover:border-primary/40 hover:bg-primary/14"
-              aria-label={t('sidebar.newChat')}
-            >
-              <SquarePen size={15} className="shrink-0 text-primary" />
-              <span className="truncate">{t('sidebar.newChat')}</span>
-            </button>
-          </div>
-
-          {sessionsPanelOpen && (
-            <div
-              role="dialog"
-              aria-label={t('sidebar.archivePanel')}
-              className="absolute left-3 right-3 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-hairline/70 bg-canvas shadow-2xl"
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-hairline/50 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-[12px] font-semibold text-ink">
-                    {t('sidebar.archivePanel')}
-                  </p>
-                  <p className="text-[10px] leading-tight text-muted">
-                    {t('common.count', { count: formatNumber(sessions.length) })}
-                  </p>
-                </div>
-                <Link
-                  href="/ai-chat/archive"
-                  onClick={() => {
-                    setSessionsPanelOpen(false);
-                    closeSidebar();
-                  }}
-                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-hairline/60 bg-surface-card px-2 text-[11px] font-medium text-muted transition-all duration-200 hover:border-primary/25 hover:text-ink"
-                  aria-label={t('sidebar.viewArchived')}
-                  title={t('sidebar.archive')}
-                >
-                  <Archive size={12} strokeWidth={1.8} />
-                  {t('sidebar.archived')}
-                </Link>
-              </div>
-
-              <div className="space-y-2 px-3 py-3">
-                <div className="relative">
-                  <Search
-                    size={14}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/70"
-                  />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={t('sidebar.searchPlaceholder')}
-                    className="h-9 w-full rounded-xl border border-hairline bg-canvas pl-9 pr-8 text-[12px] text-ink placeholder:text-muted/75 transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-                  />
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch('')}
-                      className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted/70 transition-all duration-200 hover:bg-surface-card hover:text-ink"
-                      aria-label={t('sidebar.clearSearch')}
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                  {SESSION_DATE_FILTERS.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => setDateFilter(item.value)}
-                      className={`h-7 shrink-0 rounded-lg border px-2 text-[11px] font-medium transition-all duration-200 ${
-                        dateFilter === item.value
-                          ? 'border-primary/20 bg-primary/12 text-primary'
-                          : 'border-hairline/60 bg-surface-card text-muted hover:border-primary/20 hover:text-ink'
-                      }`}
-                      aria-pressed={dateFilter === item.value}
-                    >
-                      {t(item.labelKey)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="max-h-[18.5rem] overflow-y-auto px-2 pb-2 scrollbar-hide">
-                {showSessionSkeleton ? (
-                  <SidebarSessionSkeleton />
-                ) : sessions.length === 0 ? (
-                  <div className="px-3 py-6 text-center">
-                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-surface-card">
-                      <MessageCircle size={16} className="text-muted/40" />
-                    </div>
-                    <p className="text-[11px] text-muted/60">
-                      {chatAvailable
-                        ? t('sidebar.noSessions')
-                        : t('sidebar.loginToViewSessions')}
-                    </p>
-                  </div>
-                ) : filteredSessions.length === 0 ? (
-                  <div className="px-3 py-6 text-center">
-                    <Search size={16} className="mx-auto text-muted/40" />
-                    <p className="mt-2 text-[11px] text-muted/60">
-                      {emptyStateMessage}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {pagedSessions.map((session) => {
-                      const active =
-                        session.id === selectedSession &&
-                        pathname === '/ai-chat';
-
-                      return (
-                        <button
-                          key={session.id}
-                          type="button"
-                          onClick={() => openChatSession(session.id)}
-                          className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all duration-200 ${
-                            active
-                              ? 'bg-primary/10 text-ink shadow-sm'
-                              : 'text-muted hover:bg-surface-card hover:text-ink'
-                          }`}
-                        >
-                          <div
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
-                              active
-                                ? 'bg-primary/20 text-primary'
-                                : 'bg-surface-card text-muted/60'
-                            }`}
-                          >
-                            <MessageCircle size={12} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[12px] font-medium leading-tight">
-                              {session.title}
-                            </p>
-                            {session.client_id &&
-                              clientNameById.get(session.client_id) && (
-                                <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] leading-tight text-muted/60">
-                                  <Users size={9} className="shrink-0" />
-                                  {clientNameById.get(session.client_id)}
-                                </p>
-                              )}
-                            <p className="mt-0.5 text-[10px] leading-tight text-muted/50">
-                              {formatSessionTime(
-                                session.updated_at,
-                                t,
-                                formatDate,
-                              )}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-2 border-t border-hairline/50 px-3 py-2">
-                <span className="text-[10px] text-muted">
-                  {filteredSessions.length === 0
-                    ? t('common.pageStatus', { current: 0, total: 0 })
-                    : t('common.pageStatus', {
-                        current: formatNumber(currentSessionPanelPage),
-                        total: formatNumber(sessionPanelPageCount),
-                      })}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSessionPanelPage((page) => Math.max(1, page - 1))
-                    }
-                    disabled={currentSessionPanelPage <= 1}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-                    aria-label={t('sidebar.previousPage')}
-                  >
-                    <ChevronLeft size={13} strokeWidth={1.8} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSessionPanelPage((page) =>
-                        Math.min(sessionPanelPageCount, page + 1),
-                      )
-                    }
-                    disabled={currentSessionPanelPage >= sessionPanelPageCount}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
-                    aria-label={t('sidebar.nextPage')}
-                  >
-                    <ChevronRight size={13} strokeWidth={1.8} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 客户档案入口：B 端卦师的"给谁算"工作台 */}
+        {/* 工作台入口:把客户档案/技能开发/工作流/直接对话聚成一个导航页,侧栏只留一个入口 */}
         <div className="relative px-3 mt-2 shrink-0">
           <Link
-            href="/clients"
+            href="/"
             onClick={closeSidebar}
             className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
-              pathname === '/clients'
+              pathname === '/'
                 ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
                 : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
             }`}
-            aria-label={t('clients.nav')}
+            aria-label={t('hub.title')}
           >
             <span
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                pathname === '/clients'
+                pathname === '/'
                   ? 'bg-primary/20 text-primary'
                   : 'bg-primary/10 text-primary'
               }`}
             >
-              <Users size={14} strokeWidth={1.8} />
+              <LayoutGrid size={14} strokeWidth={1.8} />
             </span>
-            <span className="min-w-0 flex-1 truncate">{t('clients.nav')}</span>
-          </Link>
-        </div>
-
-        {/* 技能工作室入口:卦师沉淀/复用断卦技能的资产区 */}
-        <div className="relative px-3 mt-2 shrink-0">
-          <Link
-            href="/studio"
-            onClick={closeSidebar}
-            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
-              pathname.startsWith('/studio')
-                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
-                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
-            }`}
-            aria-label={t('userMenu.studio')}
-          >
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                pathname.startsWith('/studio')
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-primary/10 text-primary'
-              }`}
-            >
-              <Sparkle size={14} strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 flex-1 truncate">{t('userMenu.studio')}</span>
+            <span className="min-w-0 flex-1 truncate">{t('hub.title')}</span>
           </Link>
         </div>
 
@@ -840,15 +454,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                     {t('common.login')}
                   </button>
                 )}
-              </div>
-            ) : filteredSessions.length === 0 ? (
-              <div className="px-3 py-6 text-center">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-card flex items-center justify-center">
-                  <Search size={16} className="text-muted/40" />
-                </div>
-                <p className="text-[11px] text-muted/60">
-                  {emptyStateMessage}
-                </p>
               </div>
             ) : (
               <div className="space-y-1">
