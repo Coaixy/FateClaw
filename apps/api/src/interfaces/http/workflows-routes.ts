@@ -11,12 +11,6 @@ import {
   updateWorkflowDefinitionForOwnedUser,
 } from '../../modules/chat/workflow-definition-service.js';
 import {
-  executeWorkflowRunNode,
-  listWorkflowRuns,
-  saveWorkflowNodeOutput,
-  startWorkflowRun,
-} from '../../modules/chat/workflow-run-service.js';
-import {
   commitWorkflowPaipanNodeV2,
   getWorkflowRunStateV2,
   listWorkflowRunHistoryV2,
@@ -40,13 +34,10 @@ const PositionSchema = z.object({
   y: z.number(),
 });
 
-/** 节点公共字段;id 必填、需稳定(前端新增节点时生成、之后不变),且仅含字母数字下划线
- *  (运行侧用 `wf-<nodeId>-…` 的消息 id 约定关联节点产出,故 nodeId 不能含 '-')。 */
+/** 节点公共字段;id 必填、需稳定(前端新增节点时生成、之后不变)。
+ *  节点↔产出已走 messages.workflow_node_id 列结构化关联(不再靠 id 字符串约定),故 id 不再限字符集。 */
 const nodeBase = {
-  id: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9_]+$/, '节点 id 仅可含字母、数字、下划线'),
+  id: z.string().trim().min(1, '请填写节点 id').max(64),
   title: z.string().trim().min(1, '请填写节点名称').max(60),
   pauseAfter: z.boolean(),
   position: PositionSchema,
@@ -169,15 +160,6 @@ const WorkflowUpsertSchema = z.object({
 const RunStartSchema = z.object({
   clientId: z.string().trim().min(1).optional(),
   input: z.record(z.string(), z.string()).optional().default({}),
-});
-
-/** 执行单个节点请求体校验。 */
-const NodeExecuteSchema = z.object({
-  boardMessageIds: z
-    .array(z.string().trim().min(1))
-    .max(20)
-    .optional()
-    .default([]),
 });
 
 /** 保存某节点润色结果请求体校验。 */
@@ -306,95 +288,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     return result.data;
   });
 
-  // GET /api/workflows/:id/runs — 列出该工作流的运行历史
-  app.get<{ Params: { id: string } }>('/:id/runs', async (request, reply) => {
-    const result = await listWorkflowRuns(
-      request.user.userId,
-      request.params.id,
-    );
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // POST /api/workflows/:id/runs — 启动一次运行(建会话,可关联客户)
-  app.post<{ Params: { id: string }; Body: unknown }>(
-    '/:id/runs',
-    async (request, reply) => {
-      const parsed = RunStartSchema.safeParse(request.body ?? {});
-      if (!parsed.success) {
-        return reply
-          .code(400)
-          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-      }
-      const result = await startWorkflowRun(
-        request.user.userId,
-        request.params.id,
-        { clientId: parsed.data.clientId, input: parsed.data.input },
-      );
-      if (!result.ok) {
-        return reply.code(result.statusCode).send({ error: result.error });
-      }
-      return result.data;
-    },
-  );
-
-  // POST /api/workflows/:id/runs/:sessionId/nodes/:nodeId/execute — 执行单个节点
-  app.post<{
-    Params: { id: string; sessionId: string; nodeId: string };
-    Body: unknown;
-  }>(
-    '/:id/runs/:sessionId/nodes/:nodeId/execute',
-    async (request, reply) => {
-      const parsed = NodeExecuteSchema.safeParse(request.body ?? {});
-      if (!parsed.success) {
-        return reply
-          .code(400)
-          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-      }
-      const result = await executeWorkflowRunNode(
-        request.user.userId,
-        request.params.id,
-        request.params.sessionId,
-        request.params.nodeId,
-        parsed.data.boardMessageIds,
-      );
-      if (!result.ok) {
-        return reply.code(result.statusCode).send({ error: result.error });
-      }
-      return result.data;
-    },
-  );
-
-  // PATCH /api/workflows/:id/runs/:sessionId/nodes/:nodeId/output — 保存某节点润色结果
-  app.patch<{
-    Params: { id: string; sessionId: string; nodeId: string };
-    Body: unknown;
-  }>(
-    '/:id/runs/:sessionId/nodes/:nodeId/output',
-    async (request, reply) => {
-      const parsed = NodeOutputSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply
-          .code(400)
-          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-      }
-      const result = await saveWorkflowNodeOutput(
-        request.user.userId,
-        request.params.id,
-        request.params.sessionId,
-        request.params.nodeId,
-        parsed.data.content,
-      );
-      if (!result.ok) {
-        return reply.code(result.statusCode).send({ error: result.error });
-      }
-      return result.data;
-    },
-  );
-
-  // ───────────── 后端编排运行(架构升级 B 方案 P2;按 runId 寻址,与上面旧端点共存)─────────────
+  // ───────────── 后端编排运行(架构升级 B 方案;按 runId 寻址)─────────────
 
   // POST /api/workflows/:id/run — 启动一次后端编排运行,返回运行状态快照
   app.post<{ Params: { id: string }; Body: unknown }>(

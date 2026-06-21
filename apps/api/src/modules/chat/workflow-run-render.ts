@@ -27,7 +27,8 @@ export function renderWorkflowPrompt(
     if (ref.startsWith('input.')) {
       return context.input[ref.slice('input.'.length)] ?? '';
     }
-    const nodeMatch = /^node\.([A-Za-z0-9_]+)\.output$/.exec(ref);
+    // nodeId 字符集已放开(可含 '-',如 nanoid),引用正则同步允许 '-',否则 {{node.my-node.output}} 静默失效。
+    const nodeMatch = /^node\.([A-Za-z0-9_-]+)\.output$/.exec(ref);
     if (nodeMatch) {
       return context.nodeOutputs[nodeMatch[1]] ?? '';
     }

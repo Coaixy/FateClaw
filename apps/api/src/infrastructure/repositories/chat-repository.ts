@@ -266,32 +266,6 @@ export async function createChatSession(session: {
   return rows[0] as ChatSession;
 }
 
-/**
- * 列出某工作流的全部运行会话(origin='workflow_run'),供 workflow 运行历史展示。
- *
- * @param userId 卦师用户 ID(owner 隔离)。
- * @param workflowDefinitionId 工作流定义 ID。
- * @param limit 返回上限。
- * @returns 按创建时间倒序的运行会话列表。
- */
-export async function listWorkflowRunSessions(
-  userId: string,
-  workflowDefinitionId: string,
-  limit = 50,
-): Promise<ChatSession[]> {
-  const { rows } = await getDbPool().query(
-    `SELECT * FROM chat_sessions
-     WHERE user_id = $1
-       AND workflow_definition_id = $2
-       AND origin = 'workflow_run'
-       AND deleted_at IS NULL
-     ORDER BY created_at DESC
-     LIMIT $3`,
-    [userId, workflowDefinitionId, Math.min(Math.max(limit, 1), 200)],
-  );
-  return rows as ChatSession[];
-}
-
 export async function getChatSessionsByUserId(
   userId: string,
   limit = 100,
