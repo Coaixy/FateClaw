@@ -38,8 +38,17 @@ import {
 
 import { AppShell } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
-import { chatSessionsApi } from '@/features/chat/api';
-import { paipanApi, type PaipanCatalogItem } from '@/features/paipan/api';
+import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
+import {
+  chatSessionsApi,
+  parseToolContext,
+  type SkillContextEntry,
+} from '@/features/chat/api';
+import {
+  paipanApi,
+  type PaipanCatalogItem,
+  type PaipanCommitResponse,
+} from '@/features/paipan/api';
 import {
   workflowsApi,
   type WorkflowDefinition,
@@ -71,6 +80,8 @@ interface RunNodeState {
   status: NodeStatus;
   output: string;
   error?: string;
+  /** 该节点产出的盘面/artifact(排盘节点的盘面、AI 节点若带 artifact),用 ArtifactRenderer 渲染。 */
+  toolContext?: SkillContextEntry[];
 }
 
 // 画布上运行态节点的数据(用 type 别名以满足 React Flow v12 的 Node data 约束)。
@@ -124,7 +135,7 @@ function topoOrder(
 async function waitForReply(
   sessionId: string,
   messageId: string,
-): Promise<{ ok: boolean; content: string }> {
+): Promise<{ ok: boolean; content: string; toolContext: SkillContextEntry[] }> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt += 1) {
     let res;
     try {
@@ -136,8 +147,11 @@ async function waitForReply(
     const byId = res.messages.find((message) => message.id === messageId);
     if (byId) {
       const kind = byId.metadata?.kind;
-      if (kind === 'final') return { ok: true, content: byId.content };
-      if (kind === 'error') return { ok: false, content: byId.content };
+      const toolContext = parseToolContext(byId.tool_context);
+      if (kind === 'final')
+        return { ok: true, content: byId.content, toolContext };
+      if (kind === 'error')
+        return { ok: false, content: byId.content, toolContext };
     }
     if (!res.processing) {
       const finals = res.messages.filter(
@@ -153,13 +167,19 @@ async function waitForReply(
         return {
           ok: latest.metadata?.kind !== 'error',
           content: latest.content,
+          toolContext: parseToolContext(latest.tool_context),
         };
       }
-      if (byId) return { ok: true, content: byId.content };
+      if (byId)
+        return {
+          ok: true,
+          content: byId.content,
+          toolContext: parseToolContext(byId.tool_context),
+        };
     }
     await sleep(POLL_INTERVAL_MS);
   }
-  return { ok: false, content: '' };
+  return { ok: false, content: '', toolContext: [] };
 }
 
 function RunWorkflowInner() {
@@ -320,7 +340,11 @@ function RunWorkflowInner() {
           setBusy(false);
           return;
         }
-        patchNode(index, { status: 'done', output: reply.content });
+        patchNode(index, {
+          status: 'done',
+          output: reply.content,
+          toolContext: reply.toolContext,
+        });
       } else {
         patchNode(index, {
           status: 'done',
@@ -349,18 +373,23 @@ function RunWorkflowInner() {
     [executeFrom],
   );
 
-  const handlePaipanCommitted = useCallback(async () => {
-    if (!paipanSheet) return;
-    const index = paipanSheet.index;
-    paipanCommittedRef.current = true;
-    patchNode(index, {
-      status: 'done',
-      output: t('workflows.runner.boardGenerated'),
-    });
-    if (!orderRef.current[index]?.pauseAfter) {
-      void runNode(index + 1);
-    }
-  }, [paipanSheet, patchNode, runNode, t]);
+  const handlePaipanCommitted = useCallback(
+    async (result: PaipanCommitResponse) => {
+      if (!paipanSheet) return;
+      const index = paipanSheet.index;
+      paipanCommittedRef.current = true;
+      // commit 返回的 resultMessage 即盘面消息,解析其 tool_context 在画布详情面板渲染盘面。
+      patchNode(index, {
+        status: 'done',
+        output: t('workflows.runner.boardGenerated'),
+        toolContext: parseToolContext(result.resultMessage.tool_context),
+      });
+      if (!orderRef.current[index]?.pauseAfter) {
+        void runNode(index + 1);
+      }
+    },
+    [paipanSheet, patchNode, runNode, t],
+  );
 
   const handlePaipanClose = useCallback(() => {
     const current = paipanSheet;
@@ -775,6 +804,13 @@ function NodeDetailPanel({
       </div>
 
       {error && <p className="text-[12px] text-error">{error}</p>}
+
+      {/* 盘面/artifact:排盘节点出的盘、AI 节点若带 artifact 都在此渲染(复用 ArtifactRenderer)。 */}
+      {state.toolContext && state.toolContext.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-hairline bg-canvas p-2">
+          <ArtifactRenderer entries={state.toolContext} />
+        </div>
+      )}
 
       {canCast && (
         <Button size="sm" icon={<Compass size={13} />} onClick={onCast}>
