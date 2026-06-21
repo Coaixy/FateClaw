@@ -429,6 +429,8 @@ async function storeAiChatFinalResponseMessages(args: {
       is_from_me: true,
       is_bot_message: true,
       session_id: sessionId,
+      // workflow AI 节点失败:把节点 id 落列,供编排器 reconcile 检测到失败并置节点 error。
+      workflow_node_id: args.pending?.workflowNodeId ?? null,
       metadata: {
         ...args.finalMetadata,
         kind: 'error',

@@ -59,7 +59,8 @@ export function resolveNodeOutputId(
   message: Pick<WorkflowOutputMessage, 'id' | 'workflow_node_id' | 'metadata'>,
 ): string | undefined {
   const kind = (message.metadata as { kind?: unknown } | null | undefined)?.kind;
-  if (kind === 'board_result') return undefined;
+  // 盘面(board_result)与失败消息(error)虽可能带 node 列,但都不是 {{node.output}} 的文本产出。
+  if (kind === 'board_result' || kind === 'error') return undefined;
   if (message.workflow_node_id) return message.workflow_node_id;
   // 回退:旧消息无列,按 id 约定 `wf-<nodeId>-…_reply`(nodeId 不含 '-',按首个 '-' 切出)。
   if (!message.id.startsWith('wf-') || !message.id.endsWith('_reply')) {

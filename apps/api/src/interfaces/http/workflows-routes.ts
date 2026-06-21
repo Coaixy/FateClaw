@@ -16,6 +16,15 @@ import {
   saveWorkflowNodeOutput,
   startWorkflowRun,
 } from '../../modules/chat/workflow-run-service.js';
+import {
+  commitWorkflowPaipanNodeV2,
+  getWorkflowRunStateV2,
+  rerunWorkflowNodeV2,
+  resumeWorkflowRunV2,
+  saveWorkflowNodeOutputV2,
+  skipWorkflowNodeV2,
+  startWorkflowRunV2,
+} from '../../modules/workflow/workflow-run-engine.js';
 
 /** 模型策略校验(对齐契约 SimpleModelPolicyDto)。 */
 const ModelPolicySchema = z.object({
@@ -173,6 +182,11 @@ const NodeExecuteSchema = z.object({
 /** 保存某节点润色结果请求体校验。 */
 const NodeOutputSchema = z.object({
   content: z.string().max(20000),
+});
+
+/** 起盘提交请求体校验(后端编排版:卦师在 PaipanSheet 填写的排盘参数)。 */
+const PaipanCommitSchema = z.object({
+  input: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 /**
@@ -369,6 +383,138 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
         request.user.userId,
         request.params.id,
         request.params.sessionId,
+        request.params.nodeId,
+        parsed.data.content,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // ───────────── 后端编排运行(架构升级 B 方案 P2;按 runId 寻址,与上面旧端点共存)─────────────
+
+  // POST /api/workflows/:id/run — 启动一次后端编排运行,返回运行状态快照
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/:id/run',
+    async (request, reply) => {
+      const parsed = RunStartSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      const result = await startWorkflowRunV2(
+        request.user.userId,
+        request.params.id,
+        { clientId: parsed.data.clientId, input: parsed.data.input },
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // GET /api/workflows/run/:runId — 读取运行状态(自动 reconcile 已落库产出)
+  app.get<{ Params: { runId: string } }>(
+    '/run/:runId',
+    async (request, reply) => {
+      const result = await getWorkflowRunStateV2(
+        request.user.userId,
+        request.params.runId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/resume — 从暂停续跑
+  app.post<{ Params: { runId: string } }>(
+    '/run/:runId/resume',
+    async (request, reply) => {
+      const result = await resumeWorkflowRunV2(
+        request.user.userId,
+        request.params.runId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/paipan — 卦师起盘提交
+  app.post<{ Params: { runId: string; nodeId: string }; Body: unknown }>(
+    '/run/:runId/nodes/:nodeId/paipan',
+    async (request, reply) => {
+      const parsed = PaipanCommitSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      const result = await commitWorkflowPaipanNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+        parsed.data.input,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/rerun — 从该节点级联重跑
+  app.post<{ Params: { runId: string; nodeId: string } }>(
+    '/run/:runId/nodes/:nodeId/rerun',
+    async (request, reply) => {
+      const result = await rerunWorkflowNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // POST /api/workflows/run/:runId/nodes/:nodeId/skip — 跳过该节点
+  app.post<{ Params: { runId: string; nodeId: string } }>(
+    '/run/:runId/nodes/:nodeId/skip',
+    async (request, reply) => {
+      const result = await skipWorkflowNodeV2(
+        request.user.userId,
+        request.params.runId,
+        request.params.nodeId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // PATCH /api/workflows/run/:runId/nodes/:nodeId/output — 润色 / 手填节点产出
+  app.patch<{ Params: { runId: string; nodeId: string }; Body: unknown }>(
+    '/run/:runId/nodes/:nodeId/output',
+    async (request, reply) => {
+      const parsed = NodeOutputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      const result = await saveWorkflowNodeOutputV2(
+        request.user.userId,
+        request.params.runId,
         request.params.nodeId,
         parsed.data.content,
       );
