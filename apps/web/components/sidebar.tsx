@@ -24,6 +24,7 @@ import {
   Send,
   Sparkle,
   Users,
+  Workflow,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
@@ -812,6 +813,31 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               <Sparkle size={14} strokeWidth={1.8} />
             </span>
             <span className="min-w-0 flex-1 truncate">{t('userMenu.studio')}</span>
+          </Link>
+        </div>
+
+        {/* 工作流入口:卦师把排盘+AI解读串成可复用多步流程的中心 */}
+        <div className="relative px-3 mt-2 shrink-0">
+          <Link
+            href="/workflows"
+            onClick={closeSidebar}
+            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
+              pathname.startsWith('/workflows')
+                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
+                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
+            }`}
+            aria-label={t('workflows.nav')}
+          >
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                pathname.startsWith('/workflows')
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-primary/10 text-primary'
+              }`}
+            >
+              <Workflow size={14} strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{t('workflows.nav')}</span>
           </Link>
         </div>
 
