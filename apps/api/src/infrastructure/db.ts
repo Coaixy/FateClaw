@@ -243,6 +243,16 @@ import type {
 } from './repositories/skills-repository.js';
 
 export {
+  createWorkflowDefinition,
+  getWorkflowDefinition,
+  listWorkflowDefinitionsByUserId,
+  softDeleteWorkflowDefinition,
+  updateWorkflowDefinition,
+  WorkflowSkillUnavailableError,
+} from './repositories/workflow-definition-repository.js';
+export type { WorkflowDefinitionRecord } from './repositories/workflow-definition-repository.js';
+
+export {
   adjustUserPurchasedBalance,
   archiveChatSession,
   bindAccountToUser,
