@@ -1,4 +1,17 @@
 export const enMessages = {
+  hub: {
+    title: 'Workspace',
+    subtitle: 'Jump into each part of your divination workflow from here',
+    clientsTitle: 'Clients',
+    clientsDesc: 'Manage clients, birth info, and follow-ups',
+    studioTitle: 'Skill Studio',
+    studioDesc: 'Build and reuse your divination know-how',
+    workflowsTitle: 'Workflows',
+    workflowsDesc: 'Chain charting and AI readings into reusable flows',
+    chatTitle: 'Direct Chat',
+    chatDesc: 'Jump straight into AI chat to cast and interpret',
+    open: 'Open',
+  },
   workflows: {
     nav: 'Workflows',
     title: 'Workflows',

@@ -1,4 +1,17 @@
 export const zhCNMessages = {
+  hub: {
+    title: '工作台',
+    subtitle: '从这里进入断卦的各个环节',
+    clientsTitle: '客户档案',
+    clientsDesc: '管理客户、生辰与跟进记录',
+    studioTitle: '技能开发',
+    studioDesc: '沉淀与复用你的断卦套路',
+    workflowsTitle: '工作流',
+    workflowsDesc: '把排盘和 AI 解读连成可复用流程',
+    chatTitle: '直接对话',
+    chatDesc: '直接进入 AI 对话起盘断卦',
+    open: '进入',
+  },
   workflows: {
     nav: '工作流',
     title: '工作流',

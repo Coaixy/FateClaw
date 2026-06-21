@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  LayoutGrid,
   LogIn,
   MessageCircle,
   Monitor,
@@ -22,9 +23,7 @@ import {
   Sun,
   ExternalLink,
   Send,
-  Sparkle,
   Users,
-  Workflow,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
@@ -766,78 +765,28 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           )}
         </div>
 
-        {/* 客户档案入口：B 端卦师的"给谁算"工作台 */}
+        {/* 工作台入口:把客户档案/技能开发/工作流/直接对话聚成一个导航页,侧栏只留一个入口 */}
         <div className="relative px-3 mt-2 shrink-0">
           <Link
-            href="/clients"
+            href="/"
             onClick={closeSidebar}
             className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
-              pathname === '/clients'
+              pathname === '/'
                 ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
                 : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
             }`}
-            aria-label={t('clients.nav')}
+            aria-label={t('hub.title')}
           >
             <span
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                pathname === '/clients'
+                pathname === '/'
                   ? 'bg-primary/20 text-primary'
                   : 'bg-primary/10 text-primary'
               }`}
             >
-              <Users size={14} strokeWidth={1.8} />
+              <LayoutGrid size={14} strokeWidth={1.8} />
             </span>
-            <span className="min-w-0 flex-1 truncate">{t('clients.nav')}</span>
-          </Link>
-        </div>
-
-        {/* 技能工作室入口:卦师沉淀/复用断卦技能的资产区 */}
-        <div className="relative px-3 mt-2 shrink-0">
-          <Link
-            href="/studio"
-            onClick={closeSidebar}
-            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
-              pathname.startsWith('/studio')
-                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
-                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
-            }`}
-            aria-label={t('userMenu.studio')}
-          >
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                pathname.startsWith('/studio')
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-primary/10 text-primary'
-              }`}
-            >
-              <Sparkle size={14} strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 flex-1 truncate">{t('userMenu.studio')}</span>
-          </Link>
-        </div>
-
-        {/* 工作流入口:卦师把排盘+AI解读串成可复用多步流程的中心 */}
-        <div className="relative px-3 mt-2 shrink-0">
-          <Link
-            href="/workflows"
-            onClick={closeSidebar}
-            className={`flex h-11 items-center gap-2.5 rounded-xl border px-3 text-[13px] font-medium transition-all duration-200 ${
-              pathname.startsWith('/workflows')
-                ? 'border-primary/30 bg-primary/12 text-ink shadow-sm'
-                : 'border-hairline/70 bg-surface-card/75 text-muted hover:border-primary/30 hover:bg-primary/8 hover:text-ink'
-            }`}
-            aria-label={t('workflows.nav')}
-          >
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                pathname.startsWith('/workflows')
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-primary/10 text-primary'
-              }`}
-            >
-              <Workflow size={14} strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 flex-1 truncate">{t('workflows.nav')}</span>
+            <span className="min-w-0 flex-1 truncate">{t('hub.title')}</span>
           </Link>
         </div>
 

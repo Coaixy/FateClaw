@@ -1,4 +1,17 @@
 export const zhTWMessages = {
+  hub: {
+    title: '工作台',
+    subtitle: '從這裡進入斷卦的各個環節',
+    clientsTitle: '客戶檔案',
+    clientsDesc: '管理客戶、生辰與跟進記錄',
+    studioTitle: '技能開發',
+    studioDesc: '沉澱與複用你的斷卦套路',
+    workflowsTitle: '工作流程',
+    workflowsDesc: '把排盤和 AI 解讀連成可複用流程',
+    chatTitle: '直接對話',
+    chatDesc: '直接進入 AI 對話起盤斷卦',
+    open: '進入',
+  },
   workflows: {
     nav: '工作流程',
     title: '工作流程',
