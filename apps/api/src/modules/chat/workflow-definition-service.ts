@@ -9,7 +9,7 @@
  */
 import type {
   WorkflowDefinitionDto,
-  WorkflowStepDto,
+  WorkflowGraphDto,
 } from '@fateclaw/contracts/workflow';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
@@ -24,11 +24,11 @@ import {
 } from '../../infrastructure/db.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 
-/** 工作流创建/更新的归一化入参(steps 已是完整 WorkflowStepDto[])。 */
+/** 工作流创建/更新的归一化入参(graph 已是完整图,AI 节点 skillSnapshotIds 由仓储兜底)。 */
 export interface WorkflowDefinitionWriteInput {
   name: string;
   description: string;
-  steps: WorkflowStepDto[];
+  graph: WorkflowGraphDto;
   enabled: boolean;
   sortOrder: number;
 }
@@ -44,7 +44,7 @@ function toWorkflowDefinitionDto(
     id: record.id,
     name: record.name,
     description: record.description,
-    steps: record.steps,
+    graph: record.graph,
     enabled: record.enabled,
     sort_order: record.sort_order,
     created_at: record.created_at,
@@ -98,7 +98,7 @@ export async function createWorkflowDefinitionForOwnedUser(
       userId,
       name: input.name,
       description: input.description,
-      steps: input.steps,
+      graph: input.graph,
       enabled: input.enabled,
       sortOrder: input.sortOrder,
     });
@@ -128,7 +128,7 @@ export async function updateWorkflowDefinitionForOwnedUser(
     const record = await updateWorkflowDefinition(id, userId, {
       name: input.name,
       description: input.description,
-      steps: input.steps,
+      graph: input.graph,
       enabled: input.enabled,
       sortOrder: input.sortOrder,
     });

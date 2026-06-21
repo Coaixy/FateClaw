@@ -19,6 +19,7 @@ import { dropAllowanceColumnsAndTableMigrations } from './definitions/0059-drop-
 import { clientCrmFieldsMigrations } from './definitions/0060-client-crm-fields.js';
 import { clientFollowUpsMigrations } from './definitions/0061-client-follow-ups.js';
 import { workflowDefinitionsMigrations } from './definitions/0062-workflow-definitions.js';
+import { workflowDefinitionsGraphMigrations } from './definitions/0063-workflow-definitions-graph.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -46,4 +47,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...clientCrmFieldsMigrations,
   ...clientFollowUpsMigrations,
   ...workflowDefinitionsMigrations,
+  ...workflowDefinitionsGraphMigrations,
 ];

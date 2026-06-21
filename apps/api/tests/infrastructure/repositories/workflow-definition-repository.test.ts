@@ -25,6 +25,7 @@ import {
   softDeleteWorkflowDefinition,
   updateWorkflowDefinition,
 } from '../../../src/infrastructure/repositories/workflow-definition-repository.js';
+import type { WorkflowGraphDto } from '@fateclaw/contracts/workflow';
 
 interface QueryCall {
   sql: string;
@@ -36,23 +37,32 @@ interface QueryResponse {
   rowCount?: number;
 }
 
-/** 一行工作流定义(steps 含一个排盘步)。 */
+/** 一个只含单排盘节点的极简图。 */
+function singlePaipanGraph(): WorkflowGraphDto {
+  return {
+    nodes: [
+      {
+        id: 'n1',
+        type: 'paipan',
+        title: '排盘',
+        pauseAfter: false,
+        position: { x: 0, y: 0 },
+        skill: 'bazi-paipan',
+        inputDefaults: {},
+      },
+    ],
+    edges: [],
+  };
+}
+
+/** 一行工作流定义(graph 含一个排盘节点)。 */
 function workflowRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'workflow-1',
     user_id: 'user-1',
     name: '深度事业分析',
     description: '',
-    steps: [
-      {
-        id: 's1',
-        type: 'paipan',
-        title: '排盘',
-        pauseAfter: false,
-        skill: 'bazi-paipan',
-        inputDefaults: {},
-      },
-    ],
+    graph: singlePaipanGraph(),
     enabled: true,
     sort_order: 0,
     created_at: '2026-06-21T00:00:00.000Z',
@@ -101,7 +111,7 @@ describe('workflow-definition-repository', () => {
     const result = await listWorkflowDefinitionsByUserId('user-1');
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.steps).toHaveLength(1);
+    expect(result[0]?.graph.nodes).toHaveLength(1);
     expect(calls[0]?.sql).toContain('user_id = $1');
     expect(calls[0]?.sql).toContain('deleted_at IS NULL');
     expect(calls[0]?.params).toEqual(['user-1']);
@@ -122,13 +132,13 @@ describe('workflow-definition-repository', () => {
     expect(record).toBeUndefined();
   });
 
-  it('归一脏 steps:非数组落为空数组', async () => {
-    mockPool([{ rows: [workflowRow({ steps: 'not-an-array' })] }]);
+  it('归一脏 graph:非对象落为空图', async () => {
+    mockPool([{ rows: [workflowRow({ graph: 'not-an-object' })] }]);
     const record = await getWorkflowDefinition('workflow-1', 'user-1');
-    expect(record?.steps).toEqual([]);
+    expect(record?.graph).toEqual({ nodes: [], edges: [] });
   });
 
-  it('创建无绑定 skill 的工作流:走事务,steps 序列化为 JSONB 入参', async () => {
+  it('创建无绑定 skill 的工作流:走事务,graph 序列化为 JSONB 入参', async () => {
     // 事务内 query 顺序:BEGIN → 清孤儿快照 UPDATE → INSERT RETURNING → COMMIT
     const { calls, connect } = mockPool([
       { rows: [] },
@@ -140,7 +150,7 @@ describe('workflow-definition-repository', () => {
       userId: 'user-1',
       name: '事业分析',
       description: 'd',
-      steps: workflowRow().steps,
+      graph: singlePaipanGraph(),
       enabled: true,
       sortOrder: 0,
     });
@@ -149,21 +159,26 @@ describe('workflow-definition-repository', () => {
     expect(calls.some((c) => c.sql === 'BEGIN')).toBe(true);
     expect(calls.some((c) => c.sql === 'COMMIT')).toBe(true);
     const insert = findCall(calls, 'INSERT INTO workflow_definitions');
-    expect(insert?.params?.[4]).toBe(JSON.stringify(workflowRow().steps));
+    expect(insert?.params?.[4]).toBe(JSON.stringify(singlePaipanGraph()));
     // 没有绑定 skill 时不应读写 skill bundle
     expect(mockWriteFiles).not.toHaveBeenCalled();
   });
 
-  it('创建带绑定 skill 的 AI 步:生成快照并把快照 id 回填到该步', async () => {
-    const aiStep = {
-      id: 's2',
+  it('创建带绑定 skill 的 AI 节点:生成快照并把快照 id 回填到该节点', async () => {
+    const aiNode = {
+      id: 'n2',
       type: 'ai' as const,
       title: 'AI 初断',
       pauseAfter: true,
-      promptTemplate: '{{排盘.board}}',
+      position: { x: 200, y: 0 },
+      promptTemplate: '{{node.n1.output}}',
       skillIds: ['skill-a'],
       skillSnapshotIds: [],
       modelPolicy: { mode: 'user-current' as const },
+    };
+    const aiGraph: WorkflowGraphDto = {
+      nodes: [aiNode],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
     };
     // 事务内:BEGIN → listSnapshotSources SELECT → upsert 快照 INSERT → 清孤儿 UPDATE → INSERT 定义 → COMMIT
     const { calls } = mockPool([
@@ -182,7 +197,7 @@ describe('workflow-definition-repository', () => {
       }, // listSnapshotSources
       { rows: [] }, // upsert 快照
       { rows: [] }, // 清孤儿
-      { rows: [workflowRow({ steps: [aiStep] })] }, // INSERT 定义 RETURNING
+      { rows: [workflowRow({ graph: aiGraph })] }, // INSERT 定义 RETURNING
       { rows: [] }, // COMMIT
     ]);
 
@@ -190,7 +205,7 @@ describe('workflow-definition-repository', () => {
       userId: 'user-1',
       name: '事业分析',
       description: '',
-      steps: [aiStep],
+      graph: aiGraph,
       enabled: true,
       sortOrder: 0,
     });
@@ -200,10 +215,10 @@ describe('workflow-definition-repository', () => {
     const snapshotId = snapshotInsert?.params?.[0] as string;
     expect(snapshotId).toMatch(/^workflow-def-snapshot-/);
 
-    // 定义 INSERT 里该 AI 步的 skillSnapshotIds 应被回填为刚生成的快照 id
+    // 定义 INSERT 里该 AI 节点的 skillSnapshotIds 应被回填为刚生成的快照 id
     const defInsert = findCall(calls, 'INSERT INTO workflow_definitions');
-    const storedSteps = JSON.parse(defInsert?.params?.[4] as string);
-    expect(storedSteps[0].skillSnapshotIds).toEqual([snapshotId]);
+    const storedGraph = JSON.parse(defInsert?.params?.[4] as string);
+    expect(storedGraph.nodes[0].skillSnapshotIds).toEqual([snapshotId]);
   });
 
   it('更新会先按归属读取,缺失时直接返回 undefined 不开事务', async () => {
@@ -232,7 +247,7 @@ describe('workflow-definition-repository', () => {
 
     expect(result?.name).toBe('新名字');
     const update = findCall(calls, 'UPDATE workflow_definitions');
-    // params: [id, userId, name, description, stepsJson, enabled, sortOrder]
+    // params: [id, userId, name, description, graphJson, enabled, sortOrder]
     expect(update?.params?.[2]).toBe('新名字');
     expect(update?.params?.[6]).toBe(3); // sort_order 沿用当前值
   });

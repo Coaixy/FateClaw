@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import type { WorkflowStepDto } from '@fateclaw/contracts/workflow';
+import type { WorkflowGraphDto, WorkflowNodeDto } from '@fateclaw/contracts/workflow';
 
 import {
   createWorkflowDefinitionForOwnedUser,
@@ -11,8 +11,8 @@ import {
   updateWorkflowDefinitionForOwnedUser,
 } from '../../modules/chat/workflow-definition-service.js';
 import {
-  executeWorkflowRunStep,
-  saveWorkflowStepOutput,
+  executeWorkflowRunNode,
+  saveWorkflowNodeOutput,
   startWorkflowRun,
 } from '../../modules/chat/workflow-run-service.js';
 
@@ -23,41 +23,111 @@ const ModelPolicySchema = z.object({
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).optional(),
 });
 
-/** 步骤公共字段;id 必填、需稳定(前端新增步骤时生成、之后不变),且仅含字母数字下划线
- *  (运行侧用 `wf-<stepId>-…` 的消息 id 约定关联步骤产出,故 stepId 不能含 '-')。 */
-const stepBase = {
+/** 画布坐标。 */
+const PositionSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+
+/** 节点公共字段;id 必填、需稳定(前端新增节点时生成、之后不变),且仅含字母数字下划线
+ *  (运行侧用 `wf-<nodeId>-…` 的消息 id 约定关联节点产出,故 nodeId 不能含 '-')。 */
+const nodeBase = {
   id: z
     .string()
     .trim()
-    .regex(/^[A-Za-z0-9_]+$/, '步骤 id 仅可含字母、数字、下划线'),
-  title: z.string().trim().min(1, '请填写步骤名称').max(60),
+    .regex(/^[A-Za-z0-9_]+$/, '节点 id 仅可含字母、数字、下划线'),
+  title: z.string().trim().min(1, '请填写节点名称').max(60),
   pauseAfter: z.boolean(),
+  position: PositionSchema,
 };
 
-/** 排盘步:固定机械流程,不经 AI。 */
-const PaipanStepSchema = z.object({
-  ...stepBase,
+/** 排盘节点:固定机械流程,不经 AI。 */
+const PaipanNodeSchema = z.object({
+  ...nodeBase,
   type: z.literal('paipan'),
   skill: z.string().trim().min(1, '请选择术数'),
   inputDefaults: z.record(z.string(), z.unknown()).default({}),
 });
 
-/** AI 解读步。 */
-const AiStepSchema = z.object({
-  ...stepBase,
+/** AI 解读节点。 */
+const AiNodeSchema = z.object({
+  ...nodeBase,
   type: z.literal('ai'),
   promptTemplate: z.string().trim().min(1, '请填写 prompt 模板').max(8000),
   skillIds: z.array(z.string().trim().min(1)).max(20).default([]),
   modelPolicy: ModelPolicySchema,
 });
 
-const StepSchema = z.discriminatedUnion('type', [PaipanStepSchema, AiStepSchema]);
+const NodeSchema = z.discriminatedUnion('type', [PaipanNodeSchema, AiNodeSchema]);
+
+/** 有向边。 */
+const EdgeSchema = z.object({
+  id: z.string().trim().min(1),
+  source: z.string().trim().min(1),
+  target: z.string().trim().min(1),
+});
+
+/**
+ * 校验图为合法 DAG:节点 id 唯一、边两端都指向存在的节点、无自环、无环。
+ *
+ * @remarks 前端连线时已防环,这里是服务端二次兜底,挡住非法/构造的请求体。
+ */
+function validateGraphShape(
+  graph: { nodes: { id: string }[]; edges: { source: string; target: string }[] },
+  ctx: z.RefinementCtx,
+): void {
+  const ids = graph.nodes.map((node) => node.id);
+  const idSet = new Set(ids);
+  if (idSet.size !== ids.length) {
+    ctx.addIssue({ code: 'custom', message: '节点 id 重复' });
+    return;
+  }
+  for (const edge of graph.edges) {
+    if (!idSet.has(edge.source) || !idSet.has(edge.target)) {
+      ctx.addIssue({ code: 'custom', message: '存在指向不存在节点的连线' });
+      return;
+    }
+    if (edge.source === edge.target) {
+      ctx.addIssue({ code: 'custom', message: '节点不能连向自身' });
+      return;
+    }
+  }
+  // 拓扑排序(Kahn):若有节点入度始终不为 0,则存在环。
+  const indegree = new Map<string, number>(ids.map((id) => [id, 0]));
+  const adjacency = new Map<string, string[]>(ids.map((id) => [id, []]));
+  for (const edge of graph.edges) {
+    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+    adjacency.get(edge.source)?.push(edge.target);
+  }
+  const queue = ids.filter((id) => (indegree.get(id) ?? 0) === 0);
+  let visited = 0;
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    visited += 1;
+    for (const next of adjacency.get(current) ?? []) {
+      const left = (indegree.get(next) ?? 0) - 1;
+      indegree.set(next, left);
+      if (left === 0) queue.push(next);
+    }
+  }
+  if (visited !== ids.length) {
+    ctx.addIssue({ code: 'custom', message: '工作流不能有环路' });
+  }
+}
+
+/** 图(节点 + 边)。 */
+const GraphSchema = z
+  .object({
+    nodes: z.array(NodeSchema).min(1, '工作流至少要有一个节点').max(40),
+    edges: z.array(EdgeSchema).max(120).default([]),
+  })
+  .superRefine(validateGraphShape);
 
 /** 工作流创建/更新请求体校验(对齐契约 WorkflowDefinitionUpsertDto)。 */
 const WorkflowUpsertSchema = z.object({
   name: z.string().trim().min(1, '请填写工作流名称').max(60),
   description: z.string().trim().max(500).optional().default(''),
-  steps: z.array(StepSchema).min(1, '工作流至少要有一个步骤').max(20),
+  graph: GraphSchema,
   enabled: z.boolean().optional().default(true),
   sort_order: z.number().int().optional().default(0),
 });
@@ -68,24 +138,25 @@ const RunStartSchema = z.object({
   input: z.record(z.string(), z.string()).optional().default({}),
 });
 
-/** 保存某步润色结果请求体校验。 */
-const StepOutputSchema = z.object({
+/** 保存某节点润色结果请求体校验。 */
+const NodeOutputSchema = z.object({
   content: z.string().max(20000),
 });
 
 /**
- * 把校验后的步骤补成完整 WorkflowStepDto。
+ * 把校验后的图补成完整 WorkflowGraphDto。
  *
- * @remarks AI 步加上 skillSnapshotIds(服务端写入,此处先置空,服务层会再次兜底)。
+ * @remarks AI 节点加上 skillSnapshotIds(服务端写入,此处先置空,仓储层会再次兜底)。
  */
-function toFullSteps(
-  steps: z.infer<typeof StepSchema>[],
-): WorkflowStepDto[] {
-  return steps.map((step) =>
-    step.type === 'ai'
-      ? { ...step, skillSnapshotIds: [] as string[] }
-      : step,
-  );
+function toFullGraph(graph: z.infer<typeof GraphSchema>): WorkflowGraphDto {
+  return {
+    nodes: graph.nodes.map((node): WorkflowNodeDto =>
+      node.type === 'ai'
+        ? { ...node, skillSnapshotIds: [] as string[] }
+        : node,
+    ),
+    edges: graph.edges,
+  };
 }
 
 /**
@@ -123,7 +194,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
       {
         name: parsed.data.name,
         description: parsed.data.description,
-        steps: toFullSteps(parsed.data.steps),
+        graph: toFullGraph(parsed.data.graph),
         enabled: parsed.data.enabled,
         sortOrder: parsed.data.sort_order,
       },
@@ -162,7 +233,7 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
         {
           name: parsed.data.name,
           description: parsed.data.description,
-          steps: toFullSteps(parsed.data.steps),
+          graph: toFullGraph(parsed.data.graph),
           enabled: parsed.data.enabled,
           sortOrder: parsed.data.sort_order,
         },
@@ -208,17 +279,17 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/workflows/:id/runs/:sessionId/steps/:stepId/execute — 执行单步
+  // POST /api/workflows/:id/runs/:sessionId/nodes/:nodeId/execute — 执行单个节点
   app.post<{
-    Params: { id: string; sessionId: string; stepId: string };
+    Params: { id: string; sessionId: string; nodeId: string };
   }>(
-    '/:id/runs/:sessionId/steps/:stepId/execute',
+    '/:id/runs/:sessionId/nodes/:nodeId/execute',
     async (request, reply) => {
-      const result = await executeWorkflowRunStep(
+      const result = await executeWorkflowRunNode(
         request.user.userId,
         request.params.id,
         request.params.sessionId,
-        request.params.stepId,
+        request.params.nodeId,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });
@@ -227,24 +298,24 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /api/workflows/:id/runs/:sessionId/steps/:stepId/output — 保存某步润色结果
+  // PATCH /api/workflows/:id/runs/:sessionId/nodes/:nodeId/output — 保存某节点润色结果
   app.patch<{
-    Params: { id: string; sessionId: string; stepId: string };
+    Params: { id: string; sessionId: string; nodeId: string };
     Body: unknown;
   }>(
-    '/:id/runs/:sessionId/steps/:stepId/output',
+    '/:id/runs/:sessionId/nodes/:nodeId/output',
     async (request, reply) => {
-      const parsed = StepOutputSchema.safeParse(request.body);
+      const parsed = NodeOutputSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
           .code(400)
           .send({ error: parsed.error.issues[0]?.message || '参数错误' });
       }
-      const result = await saveWorkflowStepOutput(
+      const result = await saveWorkflowNodeOutput(
         request.user.userId,
         request.params.id,
         request.params.sessionId,
-        request.params.stepId,
+        request.params.nodeId,
         parsed.data.content,
       );
       if (!result.ok) {

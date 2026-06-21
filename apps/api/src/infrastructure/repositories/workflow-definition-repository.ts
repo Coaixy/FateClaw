@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 
 import type pg from 'pg';
 
-import type { WorkflowStepDto } from '@fateclaw/contracts/workflow';
+import type {
+  WorkflowEdgeDto,
+  WorkflowGraphDto,
+  WorkflowNodeDto,
+} from '@fateclaw/contracts/workflow';
 
 import {
   calculateTextSkillBundleChecksum,
@@ -11,28 +15,28 @@ import {
 } from '../../modules/skills/text-skill-bundle-store.js';
 import { getDbPool } from '../db-pool.js';
 
-/** 工作流定义表行;steps 为 JSONB,读出为 unknown 待归一。 */
+/** 工作流定义表行;graph 为 JSONB,读出为 unknown 待归一。 */
 interface WorkflowDefinitionRow {
   id: string;
   user_id: string;
   name: string;
   description: string;
-  steps: unknown;
+  graph: unknown;
   enabled: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
 }
 
-/** 归一后的工作流定义记录(steps 已归一为数组)。 */
+/** 归一后的工作流定义记录(graph 已归一为 { nodes, edges })。 */
 export interface WorkflowDefinitionRecord
-  extends Omit<WorkflowDefinitionRow, 'steps'> {
-  steps: WorkflowStepDto[];
+  extends Omit<WorkflowDefinitionRow, 'graph'> {
+  graph: WorkflowGraphDto;
 }
 
 /** SELECT 公共列(避免把 deleted_at 等内部列带出)。 */
 const SELECT_COLUMNS =
-  'id, user_id, name, description, steps, enabled, sort_order, created_at, updated_at';
+  'id, user_id, name, description, graph, enabled, sort_order, created_at, updated_at';
 
 /** 绑定 skill 不存在/不可用时抛出的错误,供服务层映射为 400。 */
 export class WorkflowSkillUnavailableError extends Error {
@@ -43,22 +47,36 @@ export class WorkflowSkillUnavailableError extends Error {
 }
 
 /**
- * 归一 steps:只接受对象数组,且每项带字符串 type 判别字段;其余丢弃。
+ * 归一 graph:接受 { nodes, edges };节点须带字符串 type 判别字段,边须有 source/target 字符串;
+ * 其余丢弃。非对象/缺字段时落为空图。
  *
  * @remarks 入库时由路由 zod 校验过结构,这里是读出兜底,避免脏 JSONB 影响下游。
  */
-function normalizeSteps(value: unknown): WorkflowStepDto[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (step): step is WorkflowStepDto =>
-      !!step &&
-      typeof step === 'object' &&
-      typeof (step as { type?: unknown }).type === 'string',
-  );
+function normalizeGraph(value: unknown): WorkflowGraphDto {
+  if (!value || typeof value !== 'object') return { nodes: [], edges: [] };
+  const raw = value as { nodes?: unknown; edges?: unknown };
+  const nodes = Array.isArray(raw.nodes)
+    ? raw.nodes.filter(
+        (node): node is WorkflowNodeDto =>
+          !!node &&
+          typeof node === 'object' &&
+          typeof (node as { type?: unknown }).type === 'string',
+      )
+    : [];
+  const edges = Array.isArray(raw.edges)
+    ? raw.edges.filter(
+        (edge): edge is WorkflowEdgeDto =>
+          !!edge &&
+          typeof edge === 'object' &&
+          typeof (edge as { source?: unknown }).source === 'string' &&
+          typeof (edge as { target?: unknown }).target === 'string',
+      )
+    : [];
+  return { nodes, edges };
 }
 
 function mapRow(row: WorkflowDefinitionRow): WorkflowDefinitionRecord {
-  return { ...row, steps: normalizeSteps(row.steps) };
+  return { ...row, graph: normalizeGraph(row.graph) };
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -215,29 +233,51 @@ async function upsertSnapshotSkill(
   return snapshotId;
 }
 
+/** 把图里所有 AI 节点的 skillSnapshotIds 重写为给定映射(无映射则置空),边保持不变。 */
+function rewriteGraphSnapshotIds(
+  graph: WorkflowGraphDto,
+  snapshotIdBySkillId: Map<string, string> | null,
+): WorkflowGraphDto {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) =>
+      node.type === 'ai'
+        ? {
+            ...node,
+            skillSnapshotIds: snapshotIdBySkillId
+              ? node.skillIds
+                  .map((id) => snapshotIdBySkillId.get(id))
+                  .filter((id): id is string => Boolean(id))
+              : [],
+          }
+        : node,
+    ),
+  };
+}
+
 /**
- * 为定义的所有 AI 步生成/刷新 skill 快照,并回填每个 AI 步的 skillSnapshotIds。
+ * 为定义图里所有 AI 节点生成/刷新 skill 快照,并回填每个 AI 节点的 skillSnapshotIds。
  *
  * @remarks 必须在事务内调用。绑定 skill 不存在/不可用时抛 WorkflowSkillUnavailableError,
- *          由上层回滚。返回的 steps 中,AI 步的 skillSnapshotIds 已按其 skillIds 顺序映射。
+ *          由上层回滚。返回的图中,AI 节点的 skillSnapshotIds 已按其 skillIds 顺序映射。
  */
 async function applyDefinitionSkillSnapshots(
   client: pg.PoolClient,
   definitionId: string,
-  steps: WorkflowStepDto[],
-): Promise<WorkflowStepDto[]> {
+  graph: WorkflowGraphDto,
+): Promise<WorkflowGraphDto> {
   const allSkillIds = Array.from(
     new Set(
-      steps.flatMap((step) => (step.type === 'ai' ? step.skillIds : [])),
+      graph.nodes.flatMap((node) =>
+        node.type === 'ai' ? node.skillIds : [],
+      ),
     ),
   );
 
-  // 没有任何绑定 skill:清掉该定义历史快照,AI 步快照置空。
+  // 没有任何绑定 skill:清掉该定义历史快照,AI 节点快照置空。
   if (allSkillIds.length === 0) {
     await deleteOrphanSnapshots(client, definitionId, []);
-    return steps.map((step) =>
-      step.type === 'ai' ? { ...step, skillSnapshotIds: [] } : step,
-    );
+    return rewriteGraphSnapshotIds(graph, null);
   }
 
   const sources = await listSnapshotSources(client, allSkillIds);
@@ -259,16 +299,7 @@ async function applyDefinitionSkillSnapshots(
     Array.from(snapshotIdBySkillId.values()),
   );
 
-  return steps.map((step) =>
-    step.type === 'ai'
-      ? {
-          ...step,
-          skillSnapshotIds: step.skillIds
-            .map((id) => snapshotIdBySkillId.get(id))
-            .filter((id): id is string => Boolean(id)),
-        }
-      : step,
-  );
+  return rewriteGraphSnapshotIds(graph, snapshotIdBySkillId);
 }
 
 /** 创建工作流定义的入参。 */
@@ -276,7 +307,7 @@ export interface CreateWorkflowDefinitionInput {
   userId: string;
   name: string;
   description: string;
-  steps: WorkflowStepDto[];
+  graph: WorkflowGraphDto;
   enabled: boolean;
   sortOrder: number;
 }
@@ -285,7 +316,7 @@ export interface CreateWorkflowDefinitionInput {
 export interface UpdateWorkflowDefinitionInput {
   name?: string;
   description?: string;
-  steps?: WorkflowStepDto[];
+  graph?: WorkflowGraphDto;
   enabled?: boolean;
   sortOrder?: number;
 }
@@ -342,10 +373,10 @@ export async function createWorkflowDefinition(
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    const steps = await applyDefinitionSkillSnapshots(client, id, input.steps);
+    const graph = await applyDefinitionSkillSnapshots(client, id, input.graph);
     const { rows } = await client.query(
       `INSERT INTO workflow_definitions
-         (id, user_id, name, description, steps, enabled, sort_order)
+         (id, user_id, name, description, graph, enabled, sort_order)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
        RETURNING ${SELECT_COLUMNS}`,
       [
@@ -353,7 +384,7 @@ export async function createWorkflowDefinition(
         input.userId,
         input.name,
         input.description,
-        JSON.stringify(steps),
+        JSON.stringify(graph),
         input.enabled,
         input.sortOrder,
       ],
@@ -386,19 +417,19 @@ export async function updateWorkflowDefinition(
 
   const nextName = input.name ?? current.name;
   const nextDescription = input.description ?? current.description;
-  const nextStepsInput = input.steps ?? current.steps;
+  const nextGraphInput = input.graph ?? current.graph;
   const nextEnabled = input.enabled ?? current.enabled;
   const nextSortOrder = input.sortOrder ?? current.sort_order;
 
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    const steps = await applyDefinitionSkillSnapshots(client, id, nextStepsInput);
+    const graph = await applyDefinitionSkillSnapshots(client, id, nextGraphInput);
     const { rows } = await client.query(
       `UPDATE workflow_definitions
        SET name = $3,
            description = $4,
-           steps = $5::jsonb,
+           graph = $5::jsonb,
            enabled = $6,
            sort_order = $7,
            updated_at = NOW()
@@ -409,7 +440,7 @@ export async function updateWorkflowDefinition(
         userId,
         nextName,
         nextDescription,
-        JSON.stringify(steps),
+        JSON.stringify(graph),
         nextEnabled,
         nextSortOrder,
       ],

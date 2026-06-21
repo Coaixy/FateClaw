@@ -486,6 +486,7 @@ describe('runDatabaseMigrations', () => {
       '0060_client_crm_fields',
       '0061_client_follow_ups',
       '0062_workflow_definitions',
+      '0063_workflow_definitions',
     ]);
 
     await runDatabaseMigrations(client as never);
