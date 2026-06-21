@@ -12,6 +12,7 @@ import {
 } from '../../modules/chat/workflow-definition-service.js';
 import {
   executeWorkflowRunStep,
+  saveWorkflowStepOutput,
   startWorkflowRun,
 } from '../../modules/chat/workflow-run-service.js';
 
@@ -65,6 +66,11 @@ const WorkflowUpsertSchema = z.object({
 const RunStartSchema = z.object({
   clientId: z.string().trim().min(1).optional(),
   input: z.record(z.string(), z.string()).optional().default({}),
+});
+
+/** 保存某步润色结果请求体校验。 */
+const StepOutputSchema = z.object({
+  content: z.string().max(20000),
 });
 
 /**
@@ -213,6 +219,33 @@ export async function workflowsRoutes(app: FastifyInstance): Promise<void> {
         request.params.id,
         request.params.sessionId,
         request.params.stepId,
+      );
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
+
+  // PATCH /api/workflows/:id/runs/:sessionId/steps/:stepId/output — 保存某步润色结果
+  app.patch<{
+    Params: { id: string; sessionId: string; stepId: string };
+    Body: unknown;
+  }>(
+    '/:id/runs/:sessionId/steps/:stepId/output',
+    async (request, reply) => {
+      const parsed = StepOutputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+      }
+      const result = await saveWorkflowStepOutput(
+        request.user.userId,
+        request.params.id,
+        request.params.sessionId,
+        request.params.stepId,
+        parsed.data.content,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });

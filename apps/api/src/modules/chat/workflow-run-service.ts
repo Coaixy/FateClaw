@@ -16,6 +16,7 @@ import type {
   WorkflowRunStepDto,
   WorkflowRunStepExecuteResponseDto,
 } from '@fateclaw/contracts/workflow';
+import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
   createChatSession,
@@ -23,6 +24,7 @@ import {
   getWorkflowDefinition,
   storeMessage,
   touchChatSession,
+  updateOwnedMessageContent,
 } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
 import { toChatSessionDto } from '../../contracts-adapter/chat-contract.js';
@@ -320,4 +322,70 @@ export async function executeWorkflowRunStep(
     messages,
     runInput,
   });
+}
+
+/** 找到某步最新的 AI 回复消息(id 约定 `wf-<stepId>-…_reply`)。 */
+function findLatestStepReply(
+  messages: NewMessage[],
+  stepId: string,
+): NewMessage | undefined {
+  let latest: NewMessage | undefined;
+  for (const message of messages) {
+    if (
+      !message.id.startsWith(`wf-${stepId}-`) ||
+      !message.id.endsWith('_reply')
+    ) {
+      continue;
+    }
+    if (!latest || message.timestamp >= latest.timestamp) {
+      latest = message;
+    }
+  }
+  return latest;
+}
+
+/**
+ * 保存某步 AI 产出的润色结果(改回复消息正文),供后续步骤渲染时读到润色版。
+ *
+ * @param userId 卦师用户 ID。
+ * @param definitionId 工作流定义 ID(用于校验运行归属)。
+ * @param sessionId 运行会话 ID。
+ * @param stepId 步骤 ID。
+ * @param content 润色后的正文。
+ * @returns 成功响应;运行/产出缺失返回 404。
+ */
+export async function saveWorkflowStepOutput(
+  userId: string,
+  definitionId: string,
+  sessionId: string,
+  stepId: string,
+  content: string,
+): Promise<ServiceResult<SuccessResponse>> {
+  const runtimeId = getWebChatRuntimeId(userId);
+  const messages = await getSessionMessages(runtimeId, sessionId);
+  const runStart = messages.find((message) => {
+    const meta = (message.metadata ?? {}) as Record<string, unknown>;
+    return (
+      meta.kind === 'workflow_run_start' &&
+      meta.workflow_definition_id === definitionId
+    );
+  });
+  if (!runStart) {
+    return fail(404, '工作流运行不存在或无权访问');
+  }
+  const reply = findLatestStepReply(messages, stepId);
+  if (!reply) {
+    return fail(404, '该步骤还没有可润色的产出');
+  }
+  const updated = await updateOwnedMessageContent(
+    runtimeId,
+    sessionId,
+    reply.id,
+    content,
+  );
+  if (!updated) {
+    return fail(404, '产出不存在');
+  }
+  await touchChatSession(sessionId);
+  return ok({ success: true });
 }

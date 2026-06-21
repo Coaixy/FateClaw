@@ -251,6 +251,7 @@ export {
   WorkflowSkillUnavailableError,
 } from './repositories/workflow-definition-repository.js';
 export type { WorkflowDefinitionRecord } from './repositories/workflow-definition-repository.js';
+export { updateOwnedMessageContent } from './repositories/chat-repository.js';
 
 export {
   adjustUserPurchasedBalance,

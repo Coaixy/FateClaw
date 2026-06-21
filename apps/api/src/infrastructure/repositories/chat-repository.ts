@@ -146,6 +146,30 @@ export async function getSessionMessageById(
   return rows[0] as NewMessage | undefined;
 }
 
+/**
+ * 更新己方会话内某条消息的正文(工作流"润色"用:卦师改 AI 产出后供后续步骤读取)。
+ *
+ * @param accountId 运行时账号键(owner 隔离)。
+ * @param sessionId chat_sessions.id。
+ * @param messageId 目标消息 id。
+ * @param content 新正文。
+ * @returns 命中并更新返回 true,否则 false。
+ */
+export async function updateOwnedMessageContent(
+  accountId: string,
+  sessionId: string,
+  messageId: string,
+  content: string,
+): Promise<boolean> {
+  const { rowCount } = await getDbPool().query(
+    `UPDATE messages
+     SET content = $4
+     WHERE account_id = $1 AND session_id = $2 AND id = $3 AND deleted_at IS NULL`,
+    [accountId, sessionId, messageId, content],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function getSessionMessagesWithToolContext(
   accountId: string,
   sessionId: string,
