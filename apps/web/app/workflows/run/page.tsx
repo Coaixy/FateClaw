@@ -196,7 +196,6 @@ function RunStartForm({
 /** 选中节点的详情面板:展示产出/盘面/错误 + 起盘/重跑/跳过/手填润色等操作。 */
 function NodeDetailPanel({
   node,
-  runStatus,
   draft,
   onDraftChange,
   onCast,
@@ -208,7 +207,6 @@ function NodeDetailPanel({
   t,
 }: {
   node: WorkflowRunNodeState;
-  runStatus: WorkflowRunState['status'];
   draft: string;
   onDraftChange: (value: string) => void;
   onCast: () => void;
@@ -307,10 +305,10 @@ function NodeDetailPanel({
           </Button>
         )}
       </div>
-      {runStatus === 'running' && node.status === 'running' && (
+      {node.status === 'running' && (
         <p className="flex items-center gap-1.5 text-[12px] text-muted">
           <Loader2 size={12} className="animate-spin" />
-          {t('workflows.runner.nodeRunning')}
+          {node.progressText || t('workflows.runner.nodeRunning')}
         </p>
       )}
     </div>
@@ -727,7 +725,6 @@ function RunWorkflowInner() {
           {selectedNode ? (
             <NodeDetailPanel
               node={selectedNode}
-              runStatus={runState?.status ?? 'running'}
               draft={drafts[selectedNode.nodeId] ?? selectedNode.output}
               onDraftChange={(value) =>
                 setDrafts((prev) => ({ ...prev, [selectedNode.nodeId]: value }))

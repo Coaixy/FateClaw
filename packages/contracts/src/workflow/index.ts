@@ -252,6 +252,11 @@ export interface WorkflowRunNodeStateDto {
    * artifact。前端 parseToolContext 后用 ArtifactRenderer 渲染。无 artifact 为空。
    */
   toolContext?: string | null;
+  /**
+   * 运行中(status='running')AI 节点的最新工具进度(tool_trace,如「排盘: bazi 中」),
+   * 让卦师看到 AI 在干什么、是否还在动而非黑盒转圈。非运行中为空。
+   */
+  progressText?: string;
   /** 失败时的错误信息。 */
   error?: string;
 }

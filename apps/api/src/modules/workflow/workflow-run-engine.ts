@@ -212,6 +212,13 @@ function toRunStateDto(
   const toolContextById = new Map(
     messages.map((m) => [m.id, m.tool_context ?? null]),
   );
+  // 串行执行下同一时刻只有一个 AI 节点在跑,故会话里最新的 tool_trace 即其当前进度。
+  const latestToolTrace = messages
+    .filter((m) => {
+      const kind = (m.metadata as { kind?: unknown } | null | undefined)?.kind;
+      return kind === 'tool_trace' && !!m.content;
+    })
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))[0];
   return {
     runId: snapshot.runId,
     sessionId: snapshot.sessionId,
@@ -240,6 +247,11 @@ function toRunStateDto(
       toolContext: node.outputMessageId
         ? (toolContextById.get(node.outputMessageId) ?? undefined)
         : undefined,
+      // 运行中 AI 节点的最新工具进度(让卦师看到在动而非黑盒转圈)。
+      progressText:
+        node.status === 'running'
+          ? (latestToolTrace?.content ?? undefined)
+          : undefined,
       error: node.error ?? undefined,
     })),
   };
