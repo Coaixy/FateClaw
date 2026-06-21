@@ -43,11 +43,10 @@ export default function AdminDashboardLayout({
 }) {
   const pathname = usePathname();
   const [session, setSession] = useState<AdminSession | null>(null);
-  const [accessDenied, setAccessDenied] = useState(false);
 
+  // 鉴权只在首次挂载校验一次：避免每次切页都把 session 置空闪一下 spinner、
+  // 并重复打一次 verify 网络。SPA（<Link>）切页时本布局不重挂，session 持续有效。
   useEffect(() => {
-    setSession(null);
-    setAccessDenied(false);
     const key = getAdminKey();
     if (!key) {
       replaceAdminDocument('/');
@@ -55,19 +54,19 @@ export default function AdminDashboardLayout({
     }
     admin
       .verify()
-      .then((nextSession) => {
-        setSession(nextSession);
-        if (!canAdminSessionAccessPath(nextSession, pathname)) {
-          setAccessDenied(true);
-        }
-      })
+      .then(setSession)
       .catch((err) => {
         if (isAdminUnauthorizedError(err)) {
           clearAdminKey();
         }
         replaceAdminDocument('/');
       });
-  }, [pathname]);
+  }, []);
+
+  // 访问权限随当前路径同步判定（拿到 session 后是纯计算，切页不触发网络、不闪屏）。
+  const accessDenied = session
+    ? !canAdminSessionAccessPath(session, pathname)
+    : false;
 
   if (!session) {
     return (

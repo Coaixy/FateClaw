@@ -19,7 +19,6 @@ import {
   ChevronRight,
   CircleStop,
   Loader2,
-  ScrollText,
   Sparkles,
 } from 'lucide-react';
 
@@ -27,7 +26,6 @@ import { AppShell } from '@/components/app-shell';
 import { AnnouncementBanner } from '@/components/announcements/announcement-banner';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
-import { InterpretationScriptPanel } from '@/components/ai-chat/interpretation-script-panel';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
 import { useOnboardingGuideStatus } from '@/components/ai-chat/use-onboarding-guide-status';
@@ -222,10 +220,6 @@ function AiChatWorkspaceContent() {
   const [modelSettingsError, setModelSettingsError] = useState('');
   const [modelToolbarBusy, setModelToolbarBusy] =
     useState<ModelToolbarBusy>('');
-  // 「整理为解读稿」：AI 汇总状态、可编辑面板开关与稿件草稿。
-  const [compilingScript, setCompilingScript] = useState(false);
-  const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
-  const [scriptDraft, setScriptDraft] = useState('');
   const wasSendingRef = useRef(false);
   const stopRequestedRef = useRef(false);
   const modelSettingsRequestIdRef = useRef(0);
@@ -256,26 +250,6 @@ function AiChatWorkspaceContent() {
     },
     [router],
   );
-
-  // 「整理为解读稿」：把整段断卦交给 AI 汇总成一篇可编辑解读稿。
-  const handleCompileScript = useCallback(async () => {
-    if (!selectedSession || compilingScript || chatMessages.sending) return;
-    setCompilingScript(true);
-    try {
-      const result = await chatSessionsApi.compileScript(selectedSession);
-      setScriptDraft(result.script);
-      setScriptPanelOpen(true);
-      // 汇总轮会在会话里落一对消息，刷新让其展示在对话流。
-      await chatMessages.refreshMessages();
-    } catch (err) {
-      toast(
-        'error',
-        err instanceof Error ? err.message : t('aiChat.compileScript.failed'),
-      );
-    } finally {
-      setCompilingScript(false);
-    }
-  }, [selectedSession, compilingScript, chatMessages, toast, t]);
 
   useEffect(() => {
     if (!chatAvailable || typeof window === 'undefined') {
@@ -986,22 +960,6 @@ function AiChatWorkspaceContent() {
                 onSelectThinking={selectThinkingLevel}
               />
             </div>
-            <div className="mb-1.5 flex justify-center">
-              <button
-                type="button"
-                onClick={() => void handleCompileScript()}
-                disabled={compilingScript || chatMessages.sending}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-hairline bg-surface-card px-3.5 text-[12px] font-medium text-muted transition-colors hover:border-primary/35 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ScrollText
-                  size={13}
-                  className={compilingScript ? 'animate-pulse' : ''}
-                />
-                {compilingScript
-                  ? t('aiChat.compileScript.compiling')
-                  : t('aiChat.compileScript.button')}
-              </button>
-            </div>
             {composer}
             <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[10px] text-muted/50 select-none">
               <Sparkles size={10} strokeWidth={1.8} aria-hidden="true" />
@@ -1035,12 +993,6 @@ function AiChatWorkspaceContent() {
         catalog={paipanCatalog}
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
-      />
-
-      <InterpretationScriptPanel
-        open={scriptPanelOpen}
-        script={scriptDraft}
-        onClose={() => setScriptPanelOpen(false)}
       />
 
       <OnboardingGuideDialog

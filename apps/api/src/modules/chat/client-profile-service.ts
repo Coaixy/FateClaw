@@ -103,7 +103,7 @@ function isUniqueViolation(error: unknown): boolean {
  * @param profile 客户档案表行。
  * @param stats 可选的会话聚合统计（列表查询时提供）。
  */
-function toClientProfileDto(
+export function toClientProfileDto(
   profile: ClientProfile,
   stats?: { session_count: number; last_session_at: string | null },
 ): ClientProfileDto {

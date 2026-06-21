@@ -1,7 +1,9 @@
 import {
   expireUserBonusBalanceBefore,
   getBillingRequestReservationByRequestId,
+  getMembershipConfig,
   getMembershipPlanConfigs,
+  updateMembershipConfig,
   getMembershipOverview,
   getMembershipOverviewsByUserIds,
   getMonthlyModelChargeCoins,
@@ -23,8 +25,10 @@ import {
 } from '../../shared/balance-coins.js';
 import {
   normalizeMembershipPlanKey,
+  resolveMembershipConfigId,
   resolveMembershipPlanKey,
 } from '../../shared/membership-plans.js';
+import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 
 export interface BillingReservation {
   userId: string;
@@ -347,6 +351,104 @@ export async function getMembershipPlanSummaries(): Promise<
     displayPriceCoins: config.display_price_coins,
     updatedAt: config.updated_at,
   }));
+}
+
+/**
+ * 读取全部会员套餐配置（含已停用），仅供管理后台改价界面使用。
+ *
+ * @returns 套餐摘要列表（不过滤 enabled）。
+ * @remarks 用户侧只看在售（enabled）套餐；后台需看到全部以便切换启用状态。单层化后仅 clarity 一档。
+ */
+export async function getMembershipPlanConfigsForAdmin(): Promise<
+  MembershipPlanSummary[]
+> {
+  const config = await getMembershipConfig();
+  return [
+    {
+      planKey: resolveMembershipPlanKey(config.id),
+      name: config.name,
+      enabled: config.enabled,
+      monthlyPriceCoins: config.monthly_price_coins,
+      displayPriceCoins: config.display_price_coins,
+      updatedAt: config.updated_at,
+    },
+  ];
+}
+
+/**
+ * 管理后台更新会员套餐配置（价格 / 展示价 / 名称 / 启用状态）。
+ *
+ * 单层化后 planKey 实际只会是 clarity；其它值会被归一回 clarity。
+ * 校验：价格非负、展示价不低于月费、名称非空。写入后无缓存层，
+ * 用户侧下次 GET /api/billing 即读到新价。
+ *
+ * @param planKey 套餐 key（当前仅 clarity 有效）。
+ * @param patch 可选更新字段。
+ * @returns 成功返回更新后的套餐摘要；校验失败或套餐不存在返回 fail。
+ */
+export async function updateMembershipPlanConfig(
+  planKey: string,
+  patch: {
+    monthlyPriceCoins?: number;
+    displayPriceCoins?: number;
+    name?: string;
+    enabled?: boolean;
+  },
+): Promise<ServiceResult<MembershipPlanSummary>> {
+  const normalizedPlanKey = normalizeMembershipPlanKey(planKey);
+  const configId = resolveMembershipConfigId(normalizedPlanKey);
+
+  if (
+    patch.monthlyPriceCoins !== undefined &&
+    (!Number.isFinite(patch.monthlyPriceCoins) || patch.monthlyPriceCoins < 0)
+  ) {
+    return fail(400, '月费积分不能为负数');
+  }
+  if (
+    patch.displayPriceCoins !== undefined &&
+    (!Number.isFinite(patch.displayPriceCoins) || patch.displayPriceCoins < 0)
+  ) {
+    return fail(400, '展示价积分不能为负数');
+  }
+
+  // 展示价不得低于月费：只传其一时，与 DB 当前值交叉校验。
+  if (
+    patch.monthlyPriceCoins !== undefined ||
+    patch.displayPriceCoins !== undefined
+  ) {
+    const current = await getMembershipConfig(normalizedPlanKey);
+    const finalMonthly = patch.monthlyPriceCoins ?? current.monthly_price_coins;
+    const finalDisplay =
+      patch.displayPriceCoins ?? current.display_price_coins;
+    if (finalDisplay < finalMonthly) {
+      return fail(400, '展示价积分不能低于月费积分');
+    }
+  }
+
+  if (patch.name !== undefined && patch.name.trim().length === 0) {
+    return fail(400, '套餐名称不能为空');
+  }
+
+  const updated = await updateMembershipConfig({
+    id: configId,
+    monthlyPriceCoins: patch.monthlyPriceCoins,
+    displayPriceCoins: patch.displayPriceCoins,
+    name: patch.name?.trim(),
+    enabled: patch.enabled,
+  });
+
+  if (!updated) {
+    return fail(404, '会员套餐配置不存在');
+  }
+
+  return ok({
+    planKey: resolveMembershipPlanKey(updated.id),
+    name: updated.name,
+    enabled: updated.enabled,
+    monthlyPriceCoins: updated.monthly_price_coins,
+    displayPriceCoins: updated.display_price_coins,
+    updatedAt: updated.updated_at,
+  });
 }
 
 export async function getWalletBalanceSummary(

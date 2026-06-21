@@ -373,6 +373,59 @@ export async function getMembershipPlanConfigs(): Promise<
   return configs.filter((config) => config.enabled);
 }
 
+/**
+ * 更新指定会员套餐的可配置字段（价格 / 名称 / 启用状态）。
+ *
+ * 仅 UPDATE 既有行（不 INSERT），调用前应确保该行已 ensure（getMembershipConfig 会补齐）。
+ * 动态拼接 SET，只更新传入字段，未传字段保持原值。
+ *
+ * @param input.id 套餐配置 id（即 plan_key，单层化后只有 clarity）。
+ * @param input.monthlyPriceCoins 月费积分，可选。
+ * @param input.displayPriceCoins 展示价积分，可选。
+ * @param input.name 套餐名称，可选。
+ * @param input.enabled 是否启用，可选。
+ * @returns 更新后的套餐行；套餐不存在时返回 undefined。
+ */
+export async function updateMembershipConfig(input: {
+  id: string;
+  monthlyPriceCoins?: number;
+  displayPriceCoins?: number;
+  name?: string;
+  enabled?: boolean;
+}): Promise<MembershipConfigRow | undefined> {
+  const sets: string[] = ['updated_at = NOW()'];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (input.monthlyPriceCoins !== undefined) {
+    sets.push(`monthly_price_coins = $${idx++}`);
+    values.push(input.monthlyPriceCoins);
+  }
+  if (input.displayPriceCoins !== undefined) {
+    sets.push(`display_price_coins = $${idx++}`);
+    values.push(input.displayPriceCoins);
+  }
+  if (input.name !== undefined) {
+    sets.push(`name = $${idx++}`);
+    values.push(input.name);
+  }
+  if (input.enabled !== undefined) {
+    sets.push(`enabled = $${idx++}`);
+    values.push(input.enabled);
+  }
+
+  values.push(input.id);
+  const { rows } = await pool.query(
+    `UPDATE membership_config
+     SET ${sets.join(', ')}
+     WHERE id = $${idx}
+     RETURNING *`,
+    values,
+  );
+  const row = rows[0] as MembershipConfigRow | undefined;
+  return row ? normalizeMembershipConfigRow(row) : undefined;
+}
+
 async function getActiveMembershipsForUserUsing(
   client: pg.PoolClient,
   userId: string,

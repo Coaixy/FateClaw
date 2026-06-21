@@ -1,8 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { admin, type GlobalStats } from '@/lib/admin-api';
 import { formatCoins } from '@/lib/soft-currency';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useToast } from '@/lib/use-toast';
+import { AdminAlert, AdminLoadingState } from '@/components/ui/admin-states';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -142,6 +145,7 @@ function RevenueFooterItem({ label, value }: { label: string; value: string }) {
 // ─── 页面 ───
 
 export default function AdminOverviewPage() {
+  const { toast } = useToast();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,10 +156,25 @@ export default function AdminOverviewPage() {
   const [appliedRange, setAppliedRange] = useState<DateRange>(() =>
     getRelativeDateRange(30),
   );
+  // 区分「手动点刷新」与「日期范围自动重载」——仅手动刷新成功才弹 toast，
+  // 避免拖动日期时频繁打扰；用 ref 不进入渲染依赖。
+  const manualRefreshRef = useRef(false);
+
+  // 日期草稿防抖：停止改动 400ms 后才把合法范围提交为 appliedRange，
+  // 由此驱动服务端重查。只改触发时机，查询语义（custom + 起止日期）保持不变。
+  const debouncedDraftRange = useDebouncedValue(draftRange, 400);
 
   const dateRangeError = validateDateRange(draftRange);
-  const hasPendingDateRange = !isSameDateRange(draftRange, appliedRange);
-  const canApplyDateRange = !dateRangeError && hasPendingDateRange;
+  // 草稿与已生效范围不同且草稿合法：表示新范围正在（或即将）触发重查，用于“即将刷新”提示态
+  const dateRangePending =
+    !dateRangeError && !isSameDateRange(draftRange, appliedRange);
+
+  // 防抖值落地后自动应用合法的新范围（替代原来的「应用」按钮）
+  useEffect(() => {
+    if (validateDateRange(debouncedDraftRange)) return;
+    if (isSameDateRange(debouncedDraftRange, appliedRange)) return;
+    setAppliedRange(debouncedDraftRange);
+  }, [debouncedDraftRange, appliedRange]);
 
   const fetchStats = useCallback(async () => {
     setRefreshing(true);
@@ -168,41 +187,44 @@ export default function AdminOverviewPage() {
           rechargeEndDate: appliedRange.endDate,
         }),
       );
+      if (manualRefreshRef.current) toast('success', '数据已刷新');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      const message = err instanceof Error ? err.message : '加载失败';
+      setError(message);
+      if (manualRefreshRef.current) toast('error', `刷新失败：${message}`);
     } finally {
+      manualRefreshRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [appliedRange]);
+  }, [appliedRange, toast]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
-  const applyDraftRange = useCallback(() => {
-    if (validateDateRange(draftRange)) return;
-    setAppliedRange(draftRange);
-  }, [draftRange]);
+  // 手动刷新：标记后复用 fetchStats，成功/失败都给 toast
+  const handleManualRefresh = useCallback(() => {
+    manualRefreshRef.current = true;
+    void fetchStats();
+  }, [fetchStats]);
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 size={20} className="animate-spin text-muted" />
-      </div>
-    );
+    return <AdminLoadingState />;
   }
 
   if (error) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-[13px] text-error">{error}</p>
-        <button
-          onClick={fetchStats}
-          className="mt-2 cursor-pointer text-[13px] text-muted hover:text-ink"
-        >
-          重试
-        </button>
+      <div className="space-y-3 py-20">
+        <AdminAlert tone="error">{error}</AdminAlert>
+        <div className="text-center">
+          <button
+            onClick={handleManualRefresh}
+            className="cursor-pointer text-[13px] text-muted hover:text-ink"
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
@@ -219,9 +241,9 @@ export default function AdminOverviewPage() {
         <LayoutDashboard size={16} className="text-muted" />
         <h2 className="text-lg font-semibold">总览</h2>
         <button
-          onClick={fetchStats}
+          onClick={handleManualRefresh}
           disabled={refreshing}
-          className="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:text-ink disabled:opacity-50"
+          className="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           title="刷新"
         >
           <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
@@ -297,7 +319,8 @@ export default function AdminOverviewPage() {
               </div>
 
               <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                {/* 日期范围改动后自动重载（防抖），无需再点应用 */}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label className="min-w-0">
                     <span className="mb-1 block text-[11px] text-muted">
                       开始日期
@@ -311,7 +334,7 @@ export default function AdminOverviewPage() {
                           startDate: event.target.value,
                         }))
                       }
-                      className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                      className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none transition-colors focus:border-primary/45"
                     />
                   </label>
                   <label className="min-w-0">
@@ -327,25 +350,20 @@ export default function AdminOverviewPage() {
                           endDate: event.target.value,
                         }))
                       }
-                      className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
+                      className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none transition-colors focus:border-primary/45"
                     />
                   </label>
-                  <button
-                    type="button"
-                    onClick={applyDraftRange}
-                    disabled={!canApplyDateRange}
-                    className="h-9 cursor-pointer rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    应用
-                  </button>
                 </div>
               </div>
             </div>
-            {dateRangeError && (
-              <div className="mt-2 text-[12px] text-error">
-                {dateRangeError}
+            {dateRangeError ? (
+              <div className="mt-2 text-[12px] text-error">{dateRangeError}</div>
+            ) : dateRangePending ? (
+              <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-muted">
+                <Loader2 size={12} className="animate-spin" />
+                正在按新范围刷新…
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="grid gap-px bg-hairline sm:grid-cols-2 xl:grid-cols-4">

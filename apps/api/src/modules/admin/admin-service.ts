@@ -73,6 +73,9 @@ import {
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
+  getChatSessionByIdForAdmin,
+  getClientProfileByIdForAdmin,
+  getSessionMessagesForAdmin,
 } from '../../infrastructure/db.js';
 import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
 import {
@@ -93,6 +96,8 @@ import {
   getMembershipBillingSummary,
   getMembershipBillingSummariesByUserIds,
   getMembershipPlanSummaries,
+  getMembershipPlanConfigsForAdmin,
+  updateMembershipPlanConfig,
   getMonthlyMeteredBillingSummary,
   getMonthlyMeteredBillingSummariesByUserIds,
   getWalletBalanceSummary,
@@ -122,6 +127,17 @@ import {
   normalizePhoneNumber,
 } from '../user/phone.js';
 import type { User, UserRole } from '../../shared/types.js';
+import type {
+  ChatSessionDto,
+  ClientProfileDto,
+  MessageDto,
+} from '@fateclaw/contracts/chat';
+import {
+  toChatSessionDto,
+  toMessageDto,
+} from '../../contracts-adapter/chat-contract.js';
+import { toClientProfileDto } from '../chat/client-profile-service.js';
+import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 
 const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
 const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;
@@ -176,7 +192,50 @@ export {
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
   reviewSkillCommentForAdmin,
+  getMembershipPlanConfigsForAdmin,
+  updateMembershipPlanConfig,
 };
+
+/**
+ * 管理员查看单条会话完整详情：会话信息 + 全部消息 + 关联客户档案。
+ *
+ * 无 user 归属过滤、不过滤归档态（admin 有权查看任意会话）。消息与会话走与用户侧
+ * 完全相同的 DTO 适配器，保证后台看到的内容与用户一致（含卦象 tool_context、metadata）。
+ *
+ * @param sessionId chat_sessions.id。
+ * @returns session / messages / client（仅当会话绑定客户档案时）；会话不存在返回 404。
+ */
+export async function getAdminChatSessionDetail(
+  sessionId: string,
+): Promise<
+  ServiceResult<{
+    session: ChatSessionDto;
+    messages: MessageDto[];
+    client?: ClientProfileDto;
+  }>
+> {
+  const sessionRow = await getChatSessionByIdForAdmin(sessionId);
+  if (!sessionRow) {
+    return fail(404, '会话不存在');
+  }
+
+  const messageRows = await getSessionMessagesForAdmin(sessionId);
+
+  // 会话若绑定了客户档案，顺带返回客户信息（admin 视角无 owner 隔离）。
+  let client: ClientProfileDto | undefined;
+  if (sessionRow.client_id) {
+    const clientRow = await getClientProfileByIdForAdmin(sessionRow.client_id);
+    if (clientRow) {
+      client = toClientProfileDto(clientRow);
+    }
+  }
+
+  return ok({
+    session: toChatSessionDto(sessionRow),
+    messages: messageRows.map(toMessageDto),
+    ...(client !== undefined ? { client } : {}),
+  });
+}
 
 /** 管理后台用户会员状态组合视图。 */
 export interface AdminUserMembershipState {

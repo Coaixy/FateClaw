@@ -12,6 +12,7 @@ import {
   MapPin,
   MessageCircle,
   Plus,
+  RotateCcw,
   Sparkles,
   Trash2,
   Users,
@@ -28,6 +29,7 @@ import {
 } from '@/features/chat/client-profiles-api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useI18n } from '@/lib/i18n';
+import { useConfirm } from '@/lib/use-confirm';
 
 /** 客户状态徽章样式（与列表页保持一致）。 */
 const STATUS_BADGE_CLASS: Record<ClientStatus, string> = {
@@ -72,6 +74,7 @@ function ClientDetailContent() {
   const clientId = searchParams.get('id') ?? '';
   const { user } = useAuth();
   const { t, formatDate } = useI18n();
+  const { confirm } = useConfirm();
 
   const [profile, setProfile] = useState<ClientProfile | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -81,6 +84,9 @@ function ClientDetailContent() {
   const [newNote, setNewNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [followUpError, setFollowUpError] = useState('');
+  // 已归档会话的就地恢复:restoringSessionId 既做并发互斥,也驱动当前条目的加载态。
+  const [restoringSessionId, setRestoringSessionId] = useState('');
+  const [restoreError, setRestoreError] = useState('');
 
   useEffect(() => {
     if (!user || !clientId) {
@@ -135,9 +141,15 @@ function ClientDetailContent() {
     }
   };
 
-  // 软删除一条跟进记录，先确认再删。
+  // 软删除一条跟进记录，先弹自定义确认框（危险态）再删。
   const handleDeleteFollowUp = async (id: string) => {
-    if (!window.confirm(t('clients.detail.followUps.deleteConfirm'))) return;
+    const ok = await confirm({
+      title: t('clients.detail.followUps.deleteTitle'),
+      message: t('clients.detail.followUps.deleteConfirm'),
+      confirmLabel: t('clients.detail.followUps.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     setFollowUpError('');
     try {
       await clientFollowUpsApi.delete(clientId, id);
@@ -148,6 +160,32 @@ function ClientDetailContent() {
           ? err.message
           : t('clients.detail.followUps.deleteFailed'),
       );
+    }
+  };
+
+  // 就地恢复一条已归档会话:确认后调用 restore,成功则把该会话替换为恢复后的版本
+  // (deleted_at 置空),卡片随之从静态展示切回可点击的活跃样式;无需离开本页去归档页。
+  const handleRestoreSession = async (sessionId: string) => {
+    if (restoringSessionId) return;
+    const ok = await confirm({
+      title: t('clients.detail.restoreTitle'),
+      message: t('clients.detail.restoreConfirm'),
+      confirmLabel: t('clients.detail.restore'),
+    });
+    if (!ok) return;
+    setRestoringSessionId(sessionId);
+    setRestoreError('');
+    try {
+      const restored = await chatSessionsApi.restore(sessionId);
+      setSessions((prev) =>
+        prev.map((item) => (item.id === sessionId ? restored : item)),
+      );
+    } catch (err) {
+      setRestoreError(
+        err instanceof Error ? err.message : t('clients.detail.restoreFailed'),
+      );
+    } finally {
+      setRestoringSessionId('');
     }
   };
 
@@ -352,6 +390,12 @@ function ClientDetailContent() {
                 </span>
               </h2>
 
+              {restoreError && (
+                <p className="px-0.5 text-[12px] text-rose-500">
+                  {restoreError}
+                </p>
+              )}
+
               {sessions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-hairline py-12 text-center text-[12px] text-muted">
                   {t('clients.detail.empty')}
@@ -397,13 +441,28 @@ function ClientDetailContent() {
                       </>
                     );
 
-                    // 活跃会话可直接打开；已归档会话仅展示(需先到归档页恢复)。
+                    // 活跃会话可直接打开;已归档会话展示并提供就地"恢复"按钮。
                     return archived ? (
                       <div
                         key={session.id}
                         className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface-card/60 px-3.5 py-3"
                       >
                         {body}
+                        <button
+                          type="button"
+                          onClick={() => void handleRestoreSession(session.id)}
+                          disabled={Boolean(restoringSessionId)}
+                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {restoringSessionId === session.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <RotateCcw size={13} strokeWidth={1.8} />
+                          )}
+                          {restoringSessionId === session.id
+                            ? t('clients.detail.restoring')
+                            : t('clients.detail.restore')}
+                        </button>
                       </div>
                     ) : (
                       <Link

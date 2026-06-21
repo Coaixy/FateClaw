@@ -167,6 +167,25 @@ export async function getClientProfile(
 }
 
 /**
+ * 管理员按 id 读取客户档案（不带 user 归属过滤）。
+ *
+ * @param id 客户档案 ID。
+ * @returns 命中的客户档案；不存在或已删除时返回 undefined。
+ * @remarks 仅供后台 admin 查看会话详情时附带客户信息用，无 owner 隔离。
+ */
+export async function getClientProfileByIdForAdmin(
+  id: string,
+): Promise<ClientProfile | undefined> {
+  const { rows } = await pool.query(
+    `SELECT ${CLIENT_PROFILE_SELECT_COLUMNS}
+     FROM client_profiles c
+     WHERE c.id = $1 AND c.deleted_at IS NULL`,
+    [id],
+  );
+  return rows[0] as ClientProfile | undefined;
+}
+
+/**
  * 更新属于指定卦师的客户档案。
  *
  * @param id 客户档案 ID。

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   admin,
   adminLogs,
@@ -14,6 +14,9 @@ import {
 import { hasAdminScope, toAdminDocumentHref } from '@/lib/admin-navigation';
 import { useAdminSession } from '@/lib/admin-session';
 import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useEscapeKey } from '@/lib/use-escape-key';
+import { useToast } from '@/lib/use-toast';
 import {
   AdminAlert,
   AdminEmptyState,
@@ -21,6 +24,8 @@ import {
   AdminPageHeader,
   AdminPagination,
 } from '@/components/ui/admin-states';
+import { AdminSearchInput } from '@/components/ui/admin-search';
+import { AdminCopyButton } from '@/components/ui/admin-controls';
 import { BalanceGrantList } from '@/components/users/BalanceGrantList';
 import {
   Activity,
@@ -36,7 +41,6 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
-  Search,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -235,6 +239,7 @@ function CreateUserPanel({
   const [phoneVerified, setPhoneVerified] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!roleOptions.some((option) => option.value === role)) {
@@ -267,9 +272,13 @@ function CreateUserPanel({
       setRole('consumer');
       setPhoneVerified(true);
       setMessage('用户已创建');
+      // 操作反馈统一：创建成功后弹 toast，避免管理员错过内联提示
+      toast('success', '用户已创建');
       await onCreated();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '创建用户失败');
+      const text = err instanceof Error ? err.message : '创建用户失败';
+      setMessage(text);
+      toast('error', text);
     } finally {
       setSubmitting(false);
     }
@@ -395,6 +404,7 @@ function UserRow({
   const [balanceGrants, setBalanceGrants] = useState<AdminBalanceGrant[]>([]);
   const [balanceGrantsLoading, setBalanceGrantsLoading] = useState(false);
   const [includeExhaustedGrants, setIncludeExhaustedGrants] = useState(false);
+  const { toast } = useToast();
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -434,6 +444,10 @@ function UserRow({
     setExpanded(next);
     if (next && !detail) void loadDetail();
   };
+
+  // 展开详情面板支持 Esc 收起；仅在展开时启用监听
+  const collapse = useCallback(() => setExpanded(false), []);
+  useEscapeKey(collapse, expanded);
 
   useEffect(() => {
     if (!detail) return;
@@ -485,9 +499,12 @@ function UserRow({
     setDeleting(true);
     try {
       await admin.deleteUser(user.id);
+      toast('success', '用户已删除');
       void onRefresh();
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '删除失败'));
+      const text = formatAdminErrorMessage(err, '删除失败');
+      setMsg(text);
+      toast('error', text);
       setDeleting(false);
       setConfirmDelete(false);
     }
@@ -514,10 +531,13 @@ function UserRow({
       setBalanceDelta('');
       setBalanceNote('');
       setMsg('余额已更新');
+      toast('success', '余额已更新');
       void onRefresh();
       void loadDetail();
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '余额调整失败'));
+      const text = formatAdminErrorMessage(err, '余额调整失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setAdjustingBalance(false);
     }
@@ -549,11 +569,14 @@ function UserRow({
       setBonusNote('');
       setBonusExpiresAt('');
       setMsg('赠送余额已发放');
+      toast('success', '赠送余额已发放');
       void onRefresh();
       void loadDetail();
       void loadBalanceGrants();
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '赠送余额失败'));
+      const text = formatAdminErrorMessage(err, '赠送余额失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setGrantingBonus(false);
     }
@@ -589,9 +612,12 @@ function UserRow({
       });
       applyMembershipState(state);
       setMsg('会员状态已更新');
+      toast('success', '会员状态已更新');
       void onRefresh();
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '设置会员失败'));
+      const text = formatAdminErrorMessage(err, '设置会员失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setUpdatingMembership(false);
     }
@@ -609,9 +635,12 @@ function UserRow({
       applyMembershipState(state);
       setConfirmCancelMembership(false);
       setMsg('会员已停用');
+      toast('success', '会员已停用');
       void onRefresh();
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '停用会员失败'));
+      const text = formatAdminErrorMessage(err, '停用会员失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setCancellingMembership(false);
     }
@@ -634,8 +663,11 @@ function UserRow({
       setResetPassword('');
       setResetPasswordConfirm('');
       setMsg('密码已重置，旧登录态已失效');
+      toast('success', '密码已重置，旧登录态已失效');
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '重置密码失败'));
+      const text = formatAdminErrorMessage(err, '重置密码失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setResettingPassword(false);
     }
@@ -651,9 +683,12 @@ function UserRow({
     try {
       const result = await adminLogs.clearUser(user.id);
       setMsg(`已清空 ${result.deleted_count} 条对话日志`);
+      toast('success', `已清空 ${result.deleted_count} 条对话日志`);
       setConfirmClearLogs(false);
     } catch (err) {
-      setMsg(formatAdminErrorMessage(err, '清空日志失败'));
+      const text = formatAdminErrorMessage(err, '清空日志失败');
+      setMsg(text);
+      toast('error', text);
     } finally {
       setClearingLogs(false);
     }
@@ -719,6 +754,24 @@ function UserRow({
             </div>
           ) : detail ? (
             <div className="space-y-5">
+              {/* 身份信息条：展示完整 ID / 手机号，各自带一键复制（行头是 button，不能嵌套 button，故复制按钮放在此处） */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-hairline bg-surface-card px-3 py-2 text-[12px]">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-muted">ID</span>
+                  <span className="truncate font-mono text-ink">{user.id}</span>
+                  <AdminCopyButton text={user.id} />
+                </div>
+                {user.phone && (
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="text-muted">手机号</span>
+                    <span className="truncate font-mono text-ink">
+                      {user.phone}
+                    </span>
+                    <AdminCopyButton text={user.phone} />
+                  </div>
+                )}
+              </div>
+
               {msg && (
                 <div className="rounded-lg border border-hairline bg-surface-card px-3 py-2 text-[12px] text-muted">
                   {msg}
@@ -1250,6 +1303,9 @@ export default function AdminUsersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState(() => readInitialQueryValue('search'));
+  // 搜索即时化：输入框即时回显 search，真正驱动服务端重查的是 400ms 防抖后的 debouncedSearch，
+  // 保留原查询语义（仍按手机号/ID 服务端查），只把触发时机从「点查询/每次按键」改为停顿后自动触发。
+  const debouncedSearch = useDebouncedValue(search, 400);
   const [page, setPage] = useState(readInitialPageValue);
   const [pageSize] = useState(50);
   const [total, setTotal] = useState(0);
@@ -1264,7 +1320,7 @@ export default function AdminUsersPage() {
       const result = await admin.users({
         page,
         page_size: pageSize,
-        q: search,
+        q: debouncedSearch,
       });
       setUsers(result.items);
       setTotal(result.total);
@@ -1274,11 +1330,21 @@ export default function AdminUsersPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, debouncedSearch]);
+
+  // 防抖后的搜索词变化时回到第 1 页；首跑跳过以免清掉深链中的 ?page=N
+  const didMountSearchReset = useRef(false);
+  useEffect(() => {
+    if (!didMountSearchReset.current) {
+      didMountSearchReset.current = true;
+      return;
+    }
+    setPage(1);
+  }, [debouncedSearch]);
 
   useEffect(() => {
-    replaceUsersQuery(search, page);
-  }, [page, search]);
+    replaceUsersQuery(debouncedSearch, page);
+  }, [page, debouncedSearch]);
 
   useEffect(() => {
     void fetchUsers();
@@ -1360,22 +1426,13 @@ export default function AdminUsersPage() {
           }
         />
 
-        <div className="relative mt-3 w-full lg:w-80">
-          <Search
-            size={13}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="搜索手机号或 ID"
-            className="h-9 w-full rounded-md border border-hairline bg-canvas pl-8 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted focus:border-hairline"
-          />
-        </div>
+        {/* 统一搜索框：自带搜索图标 + 一键清除；输入即时回显，重查由防抖驱动（见 debouncedSearch） */}
+        <AdminSearchInput
+          value={search}
+          onValueChange={setSearch}
+          placeholder="搜索手机号或 ID"
+          className="mt-3 w-full lg:w-80"
+        />
       </div>
 
       {canCreateUsers && (

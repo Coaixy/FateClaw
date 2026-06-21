@@ -388,11 +388,3 @@ export interface SimpleWorkflowStartResponseDto {
   requestId?: string;
   warning?: string;
 }
-
-/** 「整理为解读稿」端点响应：把一次断卦会话汇总成的可编辑解读稿。 */
-export interface CompileScriptResponseDto {
-  /** AI 汇总出的完整解读稿文本（供卦师润色后交付，定位为复盘素材而非直发成品）。 */
-  script: string;
-  /** 本次汇总的后台请求 ID，可用于关联流式事件。 */
-  request_id?: string;
-}

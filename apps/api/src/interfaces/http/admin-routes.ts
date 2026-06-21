@@ -66,11 +66,15 @@ import {
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
   updateSimpleWorkflowPreset,
+  getMembershipPlanConfigsForAdmin,
+  updateMembershipPlanConfig,
+  getAdminChatSessionDetail,
 } from '../../modules/admin/admin-service.js';
 import {
   toAdminSkillCommentDto,
   toAdminSkillCommentDtos,
 } from '../../contracts-adapter/skills-contract.js';
+import { toMembershipPlanDto } from '../../contracts-adapter/billing-contract.js';
 import {
   rateLimitCheck,
   rateLimitRecordFail,
@@ -242,6 +246,21 @@ const AdminSetUserMembershipSchema = z
       });
     }
   });
+
+/**
+ * 管理员更新会员套餐配置的请求体；所有字段可选，至少提供一个才生效。
+ */
+const UpdateMembershipConfigSchema = z
+  .object({
+    monthly_price_coins: z.number().min(0).optional(),
+    display_price_coins: z.number().min(0).optional(),
+    name: z.string().trim().min(1).max(80).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((v) => v !== undefined),
+    '至少需要提供一个更新字段',
+  );
 
 const PiSessionCleanupSchema = z.object({
   mode: z.enum(['soft_deleted', 'inactive']),
@@ -841,6 +860,34 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         error: error instanceof Error ? error.message : '更新运行时配置失败',
       });
     }
+  });
+
+  // GET /api/admin/membership-config — 读取全部会员套餐配置（含已停用，后台改价用）
+  app.get('/membership-config', async () => {
+    const summaries = await getMembershipPlanConfigsForAdmin();
+    // 转为对外稳定的 snake_case DTO，与用户侧 /api/billing 的套餐字段一致。
+    return { plans: summaries.map(toMembershipPlanDto) };
+  });
+
+  // PATCH /api/admin/membership-config/:planKey — 更新套餐价格/展示价/名称/启用状态
+  app.patch('/membership-config/:planKey', async (request, reply) => {
+    const { planKey } = request.params as { planKey: string };
+    const parsed = UpdateMembershipConfigSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
+    }
+    const result = await updateMembershipPlanConfig(planKey, {
+      monthlyPriceCoins: parsed.data.monthly_price_coins,
+      displayPriceCoins: parsed.data.display_price_coins,
+      name: parsed.data.name,
+      enabled: parsed.data.enabled,
+    });
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return toMembershipPlanDto(result.data);
   });
 
   // GET /api/admin/recharge-config — 读取数据库中的充值配置
@@ -1473,6 +1520,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       offset: query.offset ? Number(query.offset) : undefined,
     });
   });
+
+  // GET /api/admin/chat-sessions/:sessionId — 查看任意会话完整内容（消息 + 卦象 + 关联客户）
+  // 权限：admin:*（不在 user_manager 允许表内，仅 owner 可用；含 tool_context 等高敏感字段）
+  app.get<{ Params: { sessionId: string } }>(
+    '/chat-sessions/:sessionId',
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      const result = await getAdminChatSessionDetail(sessionId);
+      if (!result.ok) {
+        return reply.code(result.statusCode).send({ error: result.error });
+      }
+      return result.data;
+    },
+  );
 
   // POST /api/admin/chat-sessions/pi-sessions/cleanup — 清理站内 AI Chat 的 Pi session 本地文件
   app.post('/chat-sessions/pi-sessions/cleanup', async (request, reply) => {
