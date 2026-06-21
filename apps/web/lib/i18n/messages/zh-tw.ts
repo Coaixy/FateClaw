@@ -56,6 +56,7 @@ export const zhTWMessages = {
       startError: '啟動失敗',
       outputsTitle: '本次產出(各末端節點)',
       outputBadge: '輸出',
+      castBoard: '排盤',
     },
     builder: {
       newTitle: '新建工作流程',
@@ -104,9 +105,8 @@ export const zhTWMessages = {
       canvasEmpty: '點上方按鈕新增節點,再連線組成分叉 / 彙總流程',
       configTitle: '節點設定',
       configEmpty: '點選畫布上的節點進行設定',
-      paipanParams: '排盤參數(預設值)',
-      paipanParamsNone: '該術數無可在此設定的參數',
-      paipanParamsHint: '命理類(八字/紫微)生辰會在執行時依客戶檔案自動填入',
+      paipanRunHint:
+        '執行到此節點時會彈出排盤表單當場填參(同直接對話);命理類生辰依客戶檔案預填',
     },
   },
   common: {

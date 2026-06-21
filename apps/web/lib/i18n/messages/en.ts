@@ -56,6 +56,7 @@ export const enMessages = {
       startError: 'Failed to start',
       outputsTitle: 'Outputs from this run (terminal nodes)',
       outputBadge: 'Output',
+      castBoard: 'Cast chart',
     },
     builder: {
       newTitle: 'New workflow',
@@ -104,9 +105,8 @@ export const enMessages = {
       canvasEmpty: 'Click the buttons above to add nodes, then connect them to build a branching / merging flow',
       configTitle: 'Node config',
       configEmpty: 'Click a node on the canvas to configure it',
-      paipanParams: 'Charting parameters (defaults)',
-      paipanParamsNone: 'This chart type has no configurable parameters here',
-      paipanParamsHint: 'Birth info for destiny-based charts (BaZi, Zi Wei) is filled automatically from the client profile at run time',
+      paipanRunHint:
+        'A charting form pops up at run time to fill in parameters (same as Direct Chat); birth info for destiny-based charts is prefilled from the client profile',
     },
   },
   common: {

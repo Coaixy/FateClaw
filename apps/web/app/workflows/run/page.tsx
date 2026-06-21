@@ -7,11 +7,13 @@ import {
   useRef,
   useState,
 } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowRight,
   Check,
+  Compass,
   Loader2,
   MessageSquare,
   Play,
@@ -22,6 +24,7 @@ import {
 import { AppShell } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
 import { chatSessionsApi } from '@/features/chat/api';
+import { paipanApi, type PaipanCatalogItem } from '@/features/paipan/api';
 import {
   workflowsApi,
   type WorkflowDefinition,
@@ -31,6 +34,16 @@ import {
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
+
+// 复用"直接对话"的排盘表单:运行到排盘节点时弹出,卦师当场引导填参+提交出盘到本次会话。
+// 依赖浏览器 API,仅客户端渲染。
+const PaipanSheet = dynamic(
+  () =>
+    import('@/components/ai-chat/paipan-sheet').then(
+      (module) => module.PaipanSheet,
+    ),
+  { ssr: false },
+);
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 160; // ~4 分钟兜底
@@ -150,6 +163,13 @@ function RunWorkflowInner() {
   const [busy, setBusy] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [savingRefine, setSavingRefine] = useState(false);
+  // 排盘节点用:当前要弹出的排盘表单(节点序号 + 锁定术数);null = 不弹。
+  const [paipanSheet, setPaipanSheet] = useState<{
+    index: number;
+    skill: string;
+  } | null>(null);
+  const [catalog, setCatalog] = useState<PaipanCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   const sessionIdRef = useRef<string>('');
   const orderRef = useRef<WorkflowRunNode[]>([]);
@@ -158,6 +178,10 @@ function RunWorkflowInner() {
   // 串行闸:一条执行链在跑时,外部触发(下一步/重跑/启动)直接忽略,避免快速双击
   // 并发自触发——排盘节点无后端处理锁,并发会落重复盘面 + 双重续跑链。
   const runningRef = useRef(false);
+  // 排盘节点 id → 术数(运行节点视图不带 skill,从已加载的完整定义取)。
+  const skillByNodeIdRef = useRef<Record<string, string>>({});
+  // 区分排盘表单"提交出盘"与"取消":提交后 onClose 不应把节点回退为待执行。
+  const paipanCommittedRef = useRef(false);
 
   useEffect(() => {
     if (!workflowId) {
@@ -180,13 +204,34 @@ function RunWorkflowInner() {
     };
   }, [workflowId]);
 
+  // 排盘表单需要术数目录;运行前预拉,避免开表单时再等。
+  useEffect(() => {
+    let cancelled = false;
+    setCatalogLoading(true);
+    paipanApi
+      .catalog()
+      .then((items) => {
+        if (!cancelled) setCatalog(items);
+      })
+      .catch(() => {
+        /* 目录拉取失败不阻断,开表单时表单内自行兜底 */
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const patchNode = useCallback((index: number, patch: Partial<RunNodeState>) => {
     setNodeStates((prev) =>
       prev.map((state, i) => (i === index ? { ...state, ...patch } : state)),
     );
   }, []);
 
-  // 递归执行 worker(拓扑序):排盘同步、AI 发起后轮询等回复;自动节点连跑、暂停节点停下。
+  // 递归执行 worker(拓扑序):排盘节点弹"直接对话"排盘表单(在此暂停,提交回调里恢复);
+  // AI 节点发起后轮询等回复;自动节点连跑、暂停节点停下。
   // 假定调用方已持有 runningRef 闸;自动续跑在链内部递归调用自身,不重新抢闸。
   const executeFrom = useCallback(
     async (index: number) => {
@@ -197,13 +242,24 @@ function RunWorkflowInner() {
         setAllDone(true);
         return;
       }
+      const node = order[index];
       setCurrentIndex(index);
+
+      // 排盘节点:打开排盘表单交给卦师当场填参+提交出盘,执行链在此停下,handlePaipanCommitted 里续跑。
+      if (node.type === 'paipan') {
+        setBusy(false);
+        patchNode(index, { status: 'running', error: undefined });
+        paipanCommittedRef.current = false;
+        setPaipanSheet({ index, skill: skillByNodeIdRef.current[node.id] ?? '' });
+        return;
+      }
+
       setBusy(true);
       patchNode(index, { status: 'running', error: undefined });
 
       let exec;
       try {
-        exec = await workflowsApi.runNode(workflowId, sessionId, order[index].id);
+        exec = await workflowsApi.runNode(workflowId, sessionId, node.id);
       } catch (error) {
         patchNode(index, {
           status: 'error',
@@ -216,7 +272,7 @@ function RunWorkflowInner() {
         return;
       }
 
-      if (exec.type === 'ai' && exec.assistantMessageId) {
+      if (exec.assistantMessageId) {
         const reply = await waitForReply(sessionId, exec.assistantMessageId);
         if (!reply.ok) {
           patchNode(index, {
@@ -236,7 +292,7 @@ function RunWorkflowInner() {
       }
 
       setBusy(false);
-      if (!order[index].pauseAfter) {
+      if (!node.pauseAfter) {
         await executeFrom(index + 1);
       }
     },
@@ -257,6 +313,44 @@ function RunWorkflowInner() {
     [executeFrom],
   );
 
+  // 排盘表单提交出盘:标记该节点完成,按 pauseAfter 决定续跑还是停下让卦师看盘。
+  // 注:表单提交后会先调 onCommitted 再调 onClose,故这里置 committed 标记,避免 onClose 把节点回退。
+  const handlePaipanCommitted = useCallback(async () => {
+    if (!paipanSheet) return;
+    const index = paipanSheet.index;
+    paipanCommittedRef.current = true;
+    patchNode(index, {
+      status: 'done',
+      output: t('workflows.runner.boardGenerated'),
+    });
+    if (!orderRef.current[index]?.pauseAfter) {
+      void runNode(index + 1);
+    }
+  }, [paipanSheet, patchNode, runNode, t]);
+
+  // 关闭排盘表单:若是"取消"(未出盘),把节点退回待执行,卡片给"排盘"按钮重开。
+  const handlePaipanClose = useCallback(() => {
+    const current = paipanSheet;
+    setPaipanSheet(null);
+    if (current && !paipanCommittedRef.current) {
+      patchNode(current.index, { status: 'pending' });
+    }
+    paipanCommittedRef.current = false;
+  }, [paipanSheet, patchNode]);
+
+  // 卡片上的"排盘"按钮:重开某排盘节点的表单(取消后重试)。
+  const openPaipanFor = useCallback(
+    (index: number) => {
+      const node = orderRef.current[index];
+      if (!node) return;
+      setCurrentIndex(index);
+      patchNode(index, { status: 'running', error: undefined });
+      paipanCommittedRef.current = false;
+      setPaipanSheet({ index, skill: skillByNodeIdRef.current[node.id] ?? '' });
+    },
+    [patchNode],
+  );
+
   const handleStart = useCallback(async () => {
     setStarting(true);
     try {
@@ -267,6 +361,12 @@ function RunWorkflowInner() {
       sessionIdRef.current = res.session.id;
       const order = topoOrder(res.nodes, res.edges);
       orderRef.current = order;
+      // 运行节点视图不带 skill,从已加载的完整定义建 nodeId→术数 映射,供排盘表单锁定术数。
+      const skillMap: Record<string, string> = {};
+      for (const graphNode of workflow?.graph.nodes ?? []) {
+        if (graphNode.type === 'paipan') skillMap[graphNode.id] = graphNode.skill;
+      }
+      skillByNodeIdRef.current = skillMap;
       leafIdsRef.current = new Set(
         res.nodes
           .filter((node) => !res.edges.some((edge) => edge.source === node.id))
@@ -287,7 +387,7 @@ function RunWorkflowInner() {
     } finally {
       setStarting(false);
     }
-  }, [workflowId, clientId, question, runNode, t, toast]);
+  }, [workflowId, clientId, question, runNode, t, toast, workflow]);
 
   const handleRefine = useCallback(
     async (index: number) => {
@@ -386,11 +486,21 @@ function RunWorkflowInner() {
                 !busy &&
                 !allDone
               }
+              // 排盘节点被取消(退回待执行)时,给"排盘"按钮重开表单。
+              canCast={
+                state.node.type === 'paipan' &&
+                index === currentIndex &&
+                state.status === 'pending' &&
+                paipanSheet === null &&
+                !busy &&
+                !allDone
+              }
               savingRefine={savingRefine}
               onEditOutput={(value) => patchNode(index, { output: value })}
               onRefine={() => handleRefine(index)}
               onRerun={() => runNode(index)}
               onNext={() => runNode(index + 1)}
+              onCast={() => openPaipanFor(index)}
             />
           ))}
 
@@ -434,6 +544,21 @@ function RunWorkflowInner() {
           )}
         </section>
       )}
+
+      {/* 排盘节点的"直接对话"式排盘表单:运行到排盘节点时弹出,提交出盘到本次会话 */}
+      <PaipanSheet
+        open={paipanSheet !== null}
+        mode="current-session"
+        catalog={catalog}
+        catalogLoading={catalogLoading}
+        sessionId={sessionIdRef.current || undefined}
+        initialSkill={paipanSheet?.skill ?? null}
+        initialClientId={clientId ?? null}
+        lockSkill
+        canCommit
+        onClose={handlePaipanClose}
+        onCommitted={handlePaipanCommitted}
+      />
     </div>
   );
 }
@@ -443,21 +568,25 @@ function NodeRunCard({
   index,
   isLeaf,
   isPaused,
+  canCast,
   savingRefine,
   onEditOutput,
   onRefine,
   onRerun,
   onNext,
+  onCast,
 }: {
   state: RunNodeState;
   index: number;
   isLeaf: boolean;
   isPaused: boolean;
+  canCast: boolean;
   savingRefine: boolean;
   onEditOutput: (value: string) => void;
   onRefine: () => void;
   onRerun: () => void;
   onNext: () => void;
+  onCast: () => void;
 }) {
   const { t } = useI18n();
   const { node, status, output, error } = state;
@@ -537,6 +666,15 @@ function NodeRunCard({
               {output}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 排盘节点被取消后:给"排盘"按钮重开填参表单 */}
+      {canCast && (
+        <div className="mt-3">
+          <Button size="sm" icon={<Compass size={13} />} onClick={onCast}>
+            {t('workflows.runner.castBoard')}
+          </Button>
         </div>
       )}
 

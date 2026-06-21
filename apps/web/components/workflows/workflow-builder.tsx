@@ -21,7 +21,6 @@ import {
 import { Compass, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { paipanApi, type PaipanCatalogItem } from '@/features/paipan/api';
 import { skillsApi } from '@/features/skills/api';
 import {
   workflowsApi,
@@ -32,7 +31,6 @@ import {
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
-import { PaipanParamsForm } from './paipan-params-form';
 
 /** 可选术数(排盘节点)。值为后端 skillDir,标签为卦师可读名。 */
 const PAIPAN_OPTIONS: readonly { value: string; label: string }[] = [
@@ -235,10 +233,9 @@ function WorkflowBuilderInner({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ownSkills, setOwnSkills] = useState<OwnSkill[]>([]);
-  const [catalog, setCatalog] = useState<PaipanCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // 拉取卦师自己的技能(供 AI 节点绑定)与排盘目录(供排盘节点参数表单)。
+  // 拉取卦师自己的技能,供 AI 节点绑定。(排盘参数改为运行时按"直接对话"表单填,搭建期只选术数)
   useEffect(() => {
     let cancelled = false;
     skillsApi
@@ -253,14 +250,6 @@ function WorkflowBuilderInner({
       })
       .catch(() => {
         /* 技能拉取失败不阻断搭建,仅 AI 节点无法绑定 */
-      });
-    paipanApi
-      .catalog()
-      .then((items) => {
-        if (!cancelled) setCatalog(items);
-      })
-      .catch(() => {
-        /* 目录拉取失败不阻断,排盘节点回退为仅选术数 */
       });
     return () => {
       cancelled = true;
@@ -542,7 +531,6 @@ function WorkflowBuilderInner({
               key={selected.id}
               node={selected}
               ownSkills={ownSkills}
-              catalog={catalog}
               upstreamAi={upstreamAiNodeIds(selected.id, nodes, edges).map(
                 (id) => ({
                   id,
@@ -637,14 +625,12 @@ function PauseDot() {
 function NodeConfigPanel({
   node,
   ownSkills,
-  catalog,
   upstreamAi,
   onChange,
   onRemove,
 }: {
   node: FlowNode;
   ownSkills: OwnSkill[];
-  catalog: PaipanCatalogItem[];
   upstreamAi: { id: string; title: string }[];
   onChange: (patch: NodePatch) => void;
   onRemove: () => void;
@@ -679,7 +665,7 @@ function NodeConfigPanel({
       </Field>
 
       {data.kind === 'paipan' ? (
-        <PaipanConfig data={data} catalog={catalog} onChange={onChange} />
+        <PaipanConfig data={data} onChange={onChange} />
       ) : (
         <AiConfig
           data={data}
@@ -704,25 +690,19 @@ function NodeConfigPanel({
 
 function PaipanConfig({
   data,
-  catalog,
   onChange,
 }: {
   data: PaipanNodeData;
-  catalog: PaipanCatalogItem[];
   onChange: (patch: NodePatch) => void;
 }) {
   const { t } = useI18n();
-  const schema = catalog.find((item) => item.skill === data.skill)?.parameters;
 
   return (
     <div className="space-y-3">
       <Field label={t('workflows.builder.skill')}>
         <select
           value={data.skill}
-          onChange={(event) =>
-            // 切术数时清空旧参数(不同术数参数集不同)。
-            onChange({ skill: event.target.value, inputDefaults: {} })
-          }
+          onChange={(event) => onChange({ skill: event.target.value })}
           className={inputClass}
         >
           <option value="">—</option>
@@ -733,20 +713,10 @@ function PaipanConfig({
           ))}
         </select>
       </Field>
-
-      {data.skill && (
-        <Field label={t('workflows.builder.paipanParams')}>
-          <PaipanParamsForm
-            schema={schema}
-            value={data.inputDefaults}
-            onChange={(next) => onChange({ inputDefaults: next })}
-            emptyHint={t('workflows.builder.paipanParamsNone')}
-          />
-          <p className="mt-1.5 text-[11px] text-muted/80">
-            {t('workflows.builder.paipanParamsHint')}
-          </p>
-        </Field>
-      )}
+      {/* 参数改为运行时按"直接对话"那种排盘表单当场填,搭建期只需选术数。 */}
+      <p className="text-[11px] leading-relaxed text-muted/80">
+        {t('workflows.builder.paipanRunHint')}
+      </p>
     </div>
   );
 }

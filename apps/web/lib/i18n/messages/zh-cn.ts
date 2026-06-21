@@ -56,6 +56,7 @@ export const zhCNMessages = {
       startError: '启动失败',
       outputsTitle: '本次产出(各末端节点)',
       outputBadge: '输出',
+      castBoard: '排盘',
     },
     builder: {
       newTitle: '新建工作流',
@@ -104,9 +105,8 @@ export const zhCNMessages = {
       canvasEmpty: '点上方按钮添加节点,再连线组成分叉 / 汇总流程',
       configTitle: '节点配置',
       configEmpty: '点选画布上的节点进行配置',
-      paipanParams: '排盘参数(默认值)',
-      paipanParamsNone: '该术数无可在此设置的参数',
-      paipanParamsHint: '命理类(八字/紫微)生辰会在运行时按客户档案自动填入',
+      paipanRunHint:
+        '运行到此节点时会弹出排盘表单当场填参(同直接对话);命理类生辰按客户档案预填',
     },
   },
   common: {
