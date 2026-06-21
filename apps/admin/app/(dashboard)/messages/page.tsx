@@ -18,18 +18,24 @@ import {
   AdminUser,
 } from '@/lib/admin-api';
 import {
-  Bot,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Loader2,
   MessageSquare,
   MonitorSmartphone,
   RefreshCw,
   Search,
   Trash2,
-  User,
 } from 'lucide-react';
-import { MarkdownContent } from '@/components/chat/markdown-content';
+import { AdminSessionDetailModal } from '@/components/chat/admin-session-detail-modal';
+import {
+  DeletedBadge,
+  MessageTimeline,
+} from '@/components/messages/message-timeline';
+import { AdminSearchInput } from '@/components/ui/admin-search';
+import { AdminCopyButton } from '@/components/ui/admin-controls';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useConfirm } from '@/lib/use-confirm';
 import { useToast } from '@/lib/use-toast';
 
@@ -54,13 +60,6 @@ function replaceMessagesQuery(input: {
   );
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return '暂无';
   return new Date(iso).toLocaleString('zh-CN', {
@@ -69,160 +68,6 @@ function formatDateTime(iso: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function DeletedBadge() {
-  return (
-    <span className="inline-flex items-center rounded-full border border-error/30 bg-error/10 px-2 py-0.5 text-[10px] font-medium text-error">
-      已删除
-    </span>
-  );
-}
-
-function formatDateLabel(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return `${days} 天前`;
-  return d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
-}
-
-function groupByDate(
-  msgs: AdminMessage[],
-): { label: string; date: string; messages: AdminMessage[] }[] {
-  const groups: {
-    label: string;
-    date: string;
-    messages: AdminMessage[];
-  }[] = [];
-  for (const msg of msgs) {
-    const date = msg.timestamp.slice(0, 10);
-    const last = groups[groups.length - 1];
-    if (last && last.date === date) {
-      last.messages.push(msg);
-    } else {
-      groups.push({
-        label: formatDateLabel(msg.timestamp),
-        date,
-        messages: [msg],
-      });
-    }
-  }
-  return groups;
-}
-
-function MessageTimeline({
-  messages,
-  searchText,
-  emptyText,
-}: {
-  messages: AdminMessage[];
-  searchText: string;
-  emptyText: string;
-}) {
-  const filtered = searchText
-    ? messages.filter(
-        (m) =>
-          m.content.toLowerCase().includes(searchText.toLowerCase()) ||
-          m.sender_name?.toLowerCase().includes(searchText.toLowerCase()) ||
-          m.session_title?.toLowerCase().includes(searchText.toLowerCase()),
-      )
-    : messages;
-
-  const sorted = [...filtered].reverse();
-  const groups = groupByDate(sorted);
-
-  if (sorted.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <MessageSquare size={24} className="mx-auto mb-2 text-muted" />
-        <p className="text-[13px] text-muted">{emptyText}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-3xl mx-auto">
-      {groups.map((group) => (
-        <div key={group.date}>
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-hairline" />
-            <span className="text-[11px] text-muted shrink-0">
-              {group.label}
-            </span>
-            <div className="flex-1 h-px bg-hairline" />
-          </div>
-
-          <div className="space-y-3">
-            {group.messages.map((msg) => {
-              const isBot = msg.is_from_me || msg.is_bot_message;
-              const isDeleted = Boolean(
-                msg.deleted_at || msg.session_deleted_at,
-              );
-              return (
-                <div
-                  key={`${msg.id}-${msg.account_id}`}
-                  className={`flex items-end gap-2 ${isBot ? '' : 'flex-row-reverse'}`}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                      isBot
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-primary text-on-primary'
-                    }`}
-                  >
-                    {isBot ? <Bot size={14} /> : <User size={14} />}
-                  </div>
-
-                  <div className="max-w-[80%] group relative">
-                    {!isBot && (
-                      <p className="text-[11px] text-muted mb-0.5 text-right mr-1">
-                        {msg.sender_name || msg.sender}
-                      </p>
-                    )}
-                    {isDeleted ? (
-                      <div
-                        className={`mb-1 px-1 flex ${
-                          isBot ? 'justify-start' : 'justify-end'
-                        }`}
-                      >
-                        <DeletedBadge />
-                      </div>
-                    ) : null}
-                    <div
-                      className={`rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
-                        isBot
-                          ? 'bg-surface-card border border-hairline border-l-2 border-l-primary/60 rounded-bl-md'
-                          : 'bg-primary text-on-primary rounded-br-md'
-                      }`}
-                    >
-                      {isBot ? (
-                        <MarkdownContent content={msg.content} isBot={isBot} />
-                      ) : (
-                        <p className="whitespace-pre-wrap break-words">
-                          {msg.content}
-                        </p>
-                      )}
-                    </div>
-                    <p
-                      className={`text-[10px] mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
-                        isBot ? 'text-muted text-left' : 'text-muted text-right'
-                      }`}
-                    >
-                      {formatTime(msg.timestamp)}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function AdminMessagesContent() {
@@ -247,11 +92,15 @@ function AdminMessagesContent() {
   );
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionId);
+  // 「查看完整详情」弹层目标会话 id；非空时挂载详情弹层（像用户一样看完整对话）。
+  const [detailSessionId, setDetailSessionId] = useState('');
   const [accounts, setAccounts] = useState<
     { id: string; name: string; enabled: boolean }[]
   >([]);
   const [page, setPage] = useState(0);
   const [searchText, setSearchText] = useState('');
+  // 会话/消息内搜索为纯客户端过滤，输入即时回显、用 200ms 防抖驱动过滤与消息高亮，避免抖动。
+  const debouncedSearchText = useDebouncedValue(searchText, 200);
   const [inactiveDays, setInactiveDays] = useState('30');
   const [cleanupLoading, setCleanupLoading] = useState<
     'soft_deleted' | 'inactive' | null
@@ -408,17 +257,19 @@ function AdminMessagesContent() {
     });
   }, [selectedAccountId, selectedSessionId, selectedUserId]);
 
-  const filteredSessions = searchText
+  const filteredSessions = debouncedSearchText
     ? sessions.filter(
         (session) =>
-          session.title.toLowerCase().includes(searchText.toLowerCase()) ||
+          session.title
+            .toLowerCase()
+            .includes(debouncedSearchText.toLowerCase()) ||
           session.account_name
             .toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          (session.owner_phone || '').includes(searchText) ||
+            .includes(debouncedSearchText.toLowerCase()) ||
+          (session.owner_phone || '').includes(debouncedSearchText) ||
           session.last_message_preview
             ?.toLowerCase()
-            .includes(searchText.toLowerCase()),
+            .includes(debouncedSearchText.toLowerCase()),
       )
     : sessions;
 
@@ -579,19 +430,13 @@ function AdminMessagesContent() {
                 </div>
               </div>
 
-              <div className="relative">
-                <Search
-                  size={12}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
-                />
-                <input
-                  type="text"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="搜索会话或内容..."
-                  className="h-8 w-44 pl-7 pr-2 rounded-md border border-hairline bg-canvas text-[13px] placeholder:text-muted focus:outline-none"
-                />
-              </div>
+              {/* 会话/消息内搜索：统一搜索框（自带图标 + 一键清除），输入即时过滤、防抖驱动 */}
+              <AdminSearchInput
+                value={searchText}
+                onValueChange={setSearchText}
+                placeholder="搜索会话或内容..."
+                className="w-full sm:w-56"
+              />
             </div>
 
             <details className="rounded-xl border border-hairline bg-surface-card px-3 py-2.5">
@@ -734,7 +579,7 @@ function AdminMessagesContent() {
                     className="mx-auto mb-2 text-muted"
                   />
                   <p className="text-[12px] text-muted">
-                    {searchText ? '无匹配会话' : '暂无网页会话'}
+                    {debouncedSearchText ? '无匹配会话' : '暂无网页会话'}
                   </p>
                 </div>
               ) : (
@@ -750,7 +595,7 @@ function AdminMessagesContent() {
                         }}
                         className={`w-full text-left rounded-xl border p-3 transition-colors cursor-pointer ${
                           active
-                            ? 'border-primary bg-primary/8'
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary/30 shadow-sm'
                             : 'border-hairline hover:border-primary/40 hover:bg-canvas'
                         }`}
                       >
@@ -853,9 +698,23 @@ function AdminMessagesContent() {
                         ) : null}
                       </div>
                     </div>
-                    <p className="text-[11px] text-muted mt-2 font-mono break-all">
-                      session: {selectedSession.id}
-                    </p>
+                    <div className="mt-2 flex items-start gap-1 text-[11px] text-muted">
+                      <span className="font-mono break-all">
+                        session: {selectedSession.id}
+                      </span>
+                      {/* session id 旁一键复制，方便排查时直接取用 */}
+                      <AdminCopyButton text={selectedSession.id} />
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setDetailSessionId(selectedSession.id)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
+                      >
+                        <Eye size={13} />
+                        查看完整详情
+                      </button>
+                    </div>
                   </div>
 
                   {msgLoading ? (
@@ -865,9 +724,11 @@ function AdminMessagesContent() {
                   ) : (
                     <MessageTimeline
                       messages={messages}
-                      searchText={searchText}
+                      searchText={debouncedSearchText}
                       emptyText={
-                        searchText ? '当前会话无匹配消息' : '当前会话暂无消息'
+                        debouncedSearchText
+                          ? '当前会话无匹配消息'
+                          : '当前会话暂无消息'
                       }
                     />
                   )}
@@ -901,6 +762,12 @@ function AdminMessagesContent() {
           ) : null}
         </>
       )}
+      {detailSessionId ? (
+        <AdminSessionDetailModal
+          sessionId={detailSessionId}
+          onClose={() => setDetailSessionId('')}
+        />
+      ) : null}
     </>
   );
 }

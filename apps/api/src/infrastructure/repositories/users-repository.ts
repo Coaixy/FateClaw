@@ -177,15 +177,11 @@ export async function listUsersPageForAdmin(opts: {
   let index = 1;
   const trimmedQuery = opts.query?.trim();
   if (trimmedQuery) {
-    if (/^[a-z0-9_-]+$/i.test(trimmedQuery)) {
-      where.push(`(u.phone LIKE $${index} OR u.id LIKE $${index})`);
-      values.push(`${trimmedQuery}%`);
-      index += 1;
-    } else {
-      where.push(`(u.phone ILIKE $${index} OR u.id ILIKE $${index})`);
-      values.push(`%${trimmedQuery}%`);
-      index += 1;
-    }
+    // 手机号 / ID 一律按子串匹配且不区分大小写：支持搜手机号中间几位（如「23」命中「1234」），
+    // 而非仅前缀。（原先纯数字/字母的查询走前缀 LIKE 'q%'，导致输入手机号中段搜不到。）
+    where.push(`(u.phone ILIKE $${index} OR u.id ILIKE $${index})`);
+    values.push(`%${trimmedQuery}%`);
+    index += 1;
   }
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
   const countValues = [...values];

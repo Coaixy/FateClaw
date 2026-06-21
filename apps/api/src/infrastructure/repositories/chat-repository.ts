@@ -109,6 +109,26 @@ export async function getSessionMessages(
   return rows as NewMessage[];
 }
 
+/**
+ * 管理员按 sessionId 读取一条会话的全部消息（不带 account 归属过滤）。
+ *
+ * @param sessionId chat_sessions.id。
+ * @returns 该会话全部未删除消息，按时间升序（含 tool_context / metadata，与用户侧一致）。
+ * @remarks 仅供后台 admin 查看会话详情用；一条会话消息量可能很大，调用方需注意性能。
+ */
+export async function getSessionMessagesForAdmin(
+  sessionId: string,
+): Promise<NewMessage[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM messages
+     WHERE session_id = $1
+       AND deleted_at IS NULL
+     ORDER BY timestamp ASC`,
+    [sessionId],
+  );
+  return rows as NewMessage[];
+}
+
 export async function getSessionMessageById(
   accountId: string,
   sessionId: string,
@@ -265,6 +285,23 @@ export async function getChatSession(
 ): Promise<ChatSession | undefined> {
   const { rows } = await getDbPool().query(
     'SELECT * FROM chat_sessions WHERE id = $1 AND deleted_at IS NULL',
+    [id],
+  );
+  return rows[0] as ChatSession | undefined;
+}
+
+/**
+ * 管理员按 id 读取任意会话（不过滤 deleted_at，可见已归档）。
+ *
+ * @param id chat_sessions.id。
+ * @returns 会话行；不存在时返回 undefined。
+ * @remarks 仅供后台 admin 查看会话详情用，无 user 归属过滤、不过滤归档态。
+ */
+export async function getChatSessionByIdForAdmin(
+  id: string,
+): Promise<ChatSession | undefined> {
+  const { rows } = await getDbPool().query(
+    'SELECT * FROM chat_sessions WHERE id = $1',
     [id],
   );
   return rows[0] as ChatSession | undefined;

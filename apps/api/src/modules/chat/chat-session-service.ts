@@ -100,20 +100,6 @@ const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
 
-/** 「整理为解读稿」给用户端展示的轮次内容（会落为一条会话消息）。 */
-const COMPILE_SCRIPT_USER_LABEL = '【整理本次解读为完整解读稿】';
-
-/** 「整理为解读稿」送入 runtime 的汇总指令。 */
-const COMPILE_SCRIPT_PROMPT = [
-  '请回顾本次会话里围绕这个盘面的全部断卦与追问，',
-  '把多轮解读整合成一篇完整、结构化、可直接交付的解读稿。',
-  '要求：',
-  '1. 按盘面解读的章节骨架组织（如总论、各事项分述、行动建议等），不要遗漏前面几轮已给出的关键结论；',
-  '2. 用连贯的成稿语气书写，而非问答式罗列；',
-  '3. 保留必要的「分寸提示」等仅供卦师参考的内容，卦师会自行润色后再交付客户；',
-  '4. 只输出解读稿正文，不要附加寒暄或元说明。',
-].join('\n');
-
 /**
  * AI Chat turn 的来源元信息。
  *
@@ -774,38 +760,6 @@ export async function runOwnedChatSessionTurn(
   }
 
   return completeOwnedChatSessionTurn(prepared.data);
-}
-
-/**
- * 把一次断卦会话汇总成单篇可编辑解读稿。
- *
- * 复用 runOwnedChatSessionTurn 在同一 Pi session 内追加一轮「汇总」请求，
- * agent 自带本次会话的全部上下文，产出结构化解读稿文本返回前端。
- * 该轮仍按 token 正常计费；会员门禁/欠费仍照常拦截。
- *
- * @param userId 会话归属用户。
- * @param sessionId chat_sessions.id。
- * @returns 解读稿文本与本次请求 ID；门禁/欠费/忙碌/归档等错误透传对应状态码。
- */
-export async function compileSessionScriptForOwnedUser(
-  userId: string,
-  sessionId: string,
-): Promise<ServiceResult<{ script: string; requestId?: string }>> {
-  const result = await runOwnedChatSessionTurn(
-    userId,
-    sessionId,
-    { content: COMPILE_SCRIPT_USER_LABEL, inputKind: 'normal' },
-    {
-      runtimeUserMessageOverride: COMPILE_SCRIPT_PROMPT,
-    },
-  );
-  if (!result.ok) {
-    return result;
-  }
-  return ok({
-    script: result.data.response.text ?? '',
-    requestId: result.data.response.request_id,
-  });
 }
 
 async function prepareOwnedChatSessionTurn(

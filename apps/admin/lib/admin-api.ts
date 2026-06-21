@@ -1,4 +1,7 @@
 import type {
+  ChatSessionDto,
+  ClientProfileDto,
+  MessageDto,
   SimpleModelPolicyDto,
   SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
@@ -435,6 +438,29 @@ export interface AdminChatSession {
 export interface AdminChatSessionsResponse {
   sessions: AdminChatSession[];
   total: number;
+}
+
+/** 管理后台查看单条会话完整内容的响应（含消息列表与可选客户档案，复用用户侧 DTO）。 */
+export interface AdminChatSessionDetailResponse {
+  session: ChatSessionDto;
+  messages: MessageDto[];
+  client?: ClientProfileDto;
+}
+
+/** 管理后台会员套餐配置视图（复用 contracts 的 MembershipPlanDto，含已停用套餐）。 */
+export type AdminMembershipPlanConfig = MembershipPlanDto;
+
+/** 管理后台会员套餐配置列表响应。 */
+export interface AdminMembershipConfigResponse {
+  plans: AdminMembershipPlanConfig[];
+}
+
+/** 管理后台更新会员套餐配置请求体（字段均可选，至少传一个）。 */
+export interface AdminMembershipConfigUpdate {
+  monthly_price_coins?: number;
+  display_price_coins?: number;
+  name?: string;
+  enabled?: boolean;
 }
 
 /** 管理后台 Pi session 文件清理结果。 */
@@ -1086,6 +1112,20 @@ export const admin = {
       `/api/admin/chat-sessions${qs ? `?${qs}` : ''}`,
     );
   },
+  /** 查看任意会话的完整内容（消息 + 卦象 + 关联客户档案）。 */
+  chatSessionDetail: (sessionId: string) =>
+    adminRequest<AdminChatSessionDetailResponse>(
+      `/api/admin/chat-sessions/${encodeURIComponent(sessionId)}`,
+    ),
+  /** 读取全部会员套餐配置（含已停用，后台改价用）。 */
+  membershipConfig: () =>
+    adminRequest<AdminMembershipConfigResponse>('/api/admin/membership-config'),
+  /** 更新指定套餐配置（planKey 当前只有 fateclaw_clarity）。 */
+  updateMembershipConfig: (planKey: string, data: AdminMembershipConfigUpdate) =>
+    adminRequest<AdminMembershipPlanConfig>(
+      `/api/admin/membership-config/${encodeURIComponent(planKey)}`,
+      { method: 'PATCH', body: JSON.stringify(data) },
+    ),
   cleanupPiSessions: (data: {
     mode: 'soft_deleted' | 'inactive';
     inactive_days?: number;

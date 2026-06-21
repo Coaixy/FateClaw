@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Activity,
   Cpu,
   Gauge,
-  Loader2,
   MessageSquareText,
   RefreshCw,
   RadioTower,
@@ -14,6 +13,12 @@ import {
 } from 'lucide-react';
 
 import { admin, type AdminStatusStats } from '@/lib/admin-api';
+import { useToast } from '@/lib/use-toast';
+import {
+  AdminAlert,
+  AdminEmptyState,
+  AdminLoadingState,
+} from '@/components/ui/admin-states';
 
 type TokenUsagePoint = AdminStatusStats['token_usage_series'][number];
 
@@ -118,9 +123,11 @@ function TokenUsagePanel({ stats }: { stats: AdminStatusStats }) {
       </div>
 
       {tokenRows.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-lg border border-hairline bg-canvas px-4 text-[12px] text-muted">
-          暂无 Token 消耗记录
-        </div>
+        <AdminEmptyState
+          icon={Cpu}
+          title="暂无 Token 消耗记录"
+          description="最近 7 天没有产生 Token 消耗，有请求后这里会展示趋势"
+        />
       ) : (
         <>
           <div className="relative flex h-56 items-end gap-3 overflow-hidden rounded-lg border border-hairline bg-canvas px-4 pb-8 pt-4">
@@ -171,25 +178,30 @@ function TokenUsagePanel({ stats }: { stats: AdminStatusStats }) {
             </span>
           </div>
 
-          <div className="mt-3 overflow-x-auto rounded-lg border border-hairline bg-canvas">
+          {/* 外层同时具备横向(min-w)与纵向(max-h)滚动，使 thead sticky 生效 */}
+          <div className="mt-3 max-h-72 overflow-auto rounded-lg border border-hairline bg-canvas">
             <table className="w-full min-w-[480px] text-left text-[12px]">
               <thead className="text-muted">
                 <tr className="border-b border-hairline">
-                  <th className="px-3 py-2 font-medium">日期</th>
-                  <th className="px-3 py-2 text-right font-medium">
+                  <th className="sticky top-0 z-10 bg-canvas px-3 py-2 font-medium">
+                    日期
+                  </th>
+                  <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
                     输入 Token
                   </th>
-                  <th className="px-3 py-2 text-right font-medium">
+                  <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
                     输出 Token
                   </th>
-                  <th className="px-3 py-2 text-right font-medium">总计</th>
+                  <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
+                    总计
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((row) => (
                   <tr
                     key={row.date}
-                    className="border-b border-hairline/50 last:border-0"
+                    className="border-b border-hairline/50 transition-colors last:border-0 hover:bg-surface-card"
                   >
                     <td className="px-3 py-2 font-mono text-muted">
                       {row.date}
@@ -229,11 +241,14 @@ function TelemetryPill({ label, value }: { label: string; value: string }) {
  * @returns 全站运行指标、处理队列和 Token 趋势视图。
  */
 export default function AdminStatusPage() {
+  const { toast } = useToast();
   const [stats, setStats] = useState<AdminStatusStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  // 区分首屏加载与手动刷新：仅手动刷新才弹 toast，避免首屏自动加载打扰
+  const manualRefreshRef = useRef(false);
 
   const fetchStats = useCallback(async () => {
     setRefreshing(true);
@@ -241,36 +256,44 @@ export default function AdminStatusPage() {
     try {
       setStats(await admin.status());
       setUpdatedAt(new Date());
+      if (manualRefreshRef.current) toast('success', '运行状态已刷新');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败');
+      const message = err instanceof Error ? err.message : '加载失败';
+      setError(message);
+      if (manualRefreshRef.current) toast('error', `刷新失败：${message}`);
     } finally {
+      manualRefreshRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void fetchStats();
   }, [fetchStats]);
 
+  // 手动刷新：标记后复用 fetchStats，成功/失败都给 toast
+  const handleManualRefresh = useCallback(() => {
+    manualRefreshRef.current = true;
+    void fetchStats();
+  }, [fetchStats]);
+
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 size={20} className="animate-spin text-muted" />
-      </div>
-    );
+    return <AdminLoadingState />;
   }
 
   if (error) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-[13px] text-error">{error}</p>
-        <button
-          onClick={fetchStats}
-          className="mt-2 cursor-pointer text-[13px] text-muted hover:text-ink"
-        >
-          重试
-        </button>
+      <div className="space-y-3 py-20">
+        <AdminAlert tone="error">{error}</AdminAlert>
+        <div className="text-center">
+          <button
+            onClick={handleManualRefresh}
+            className="cursor-pointer text-[13px] text-muted hover:text-ink"
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
@@ -283,9 +306,9 @@ export default function AdminStatusPage() {
         <RadioTower size={16} className="text-muted" />
         <h2 className="text-lg font-semibold">运行状态</h2>
         <button
-          onClick={fetchStats}
+          onClick={handleManualRefresh}
           disabled={refreshing}
-          className="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:text-ink disabled:opacity-50"
+          className="cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           title="刷新"
         >
           <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />

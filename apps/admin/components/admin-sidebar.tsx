@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clearAdminKey } from '@/lib/admin-api';
 import type { AdminScope, AdminSession } from '@/lib/admin-api';
@@ -7,7 +8,6 @@ import {
   hasAdminScope,
   normalizeAdminPathname,
   replaceAdminDocument,
-  toAdminDocumentHref,
 } from '@/lib/admin-navigation';
 import {
   Activity,
@@ -17,6 +17,7 @@ import {
   Puzzle,
   ScrollText,
   Bot,
+  Crown,
   Landmark,
   ReceiptText,
   WalletCards,
@@ -91,6 +92,12 @@ const navItems = [
     icon: WalletCards,
     requiredScopes: ['admin:*'],
   },
+  {
+    href: '/system/membership',
+    label: '会员配置',
+    icon: Crown,
+    requiredScopes: ['admin:*'],
+  },
 ] satisfies {
   href: string;
   label: string;
@@ -158,9 +165,10 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
             const active = normalizedPathname === item.href;
             const Icon = item.icon;
             return (
-              <a
+              <Link
                 key={item.href}
-                href={toAdminDocumentHref(item.href)}
+                href={item.href}
+                prefetch={false}
                 className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors duration-100 cursor-pointer ${
                   active
                     ? 'bg-surface-cream-strong text-ink font-medium'
@@ -169,7 +177,7 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
               >
                 <Icon size={16} strokeWidth={active ? 2 : 1.5} />
                 {item.label}
-              </a>
+              </Link>
             );
           })}
         </nav>

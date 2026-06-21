@@ -16,6 +16,8 @@ import {
 import { formatCoins, formatSignedCoins } from '@/lib/soft-currency';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
 import { useConfirm } from '@/lib/use-confirm';
+import { useToast } from '@/lib/use-toast';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import {
   AdminAlert,
   AdminFilterSection,
@@ -23,6 +25,8 @@ import {
   AdminPageHeader,
   AdminPagination,
 } from '@/components/ui/admin-states';
+import { AdminCopyButton } from '@/components/ui/admin-controls';
+import { AdminSearchInput } from '@/components/ui/admin-search';
 import { ReconcileSection } from '@/components/billing/ReconcileSection';
 import {
   Banknote,
@@ -293,7 +297,9 @@ function DataTable({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-hairline bg-surface-card">
+    // 横向滚动 + 限高滚动容器：配合 sticky thead，长表格表头始终可见，
+    // 窄屏下宽表横向滚动不撑破布局。
+    <div className="max-h-[70vh] overflow-auto rounded-xl border border-hairline bg-surface-card">
       <table className="min-w-full border-separate border-spacing-0 text-left">
         {children}
       </table>
@@ -303,7 +309,8 @@ function DataTable({
 
 function TableHead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="text-[11px] uppercase text-muted">
+    // sticky 表头：随容器纵向滚动时钉在顶部；不透明背景避免行内容透出。
+    <thead className="sticky top-0 z-10 bg-surface-card text-[11px] uppercase text-muted">
       <tr>{children}</tr>
     </thead>
   );
@@ -311,7 +318,7 @@ function TableHead({ children }: { children: React.ReactNode }) {
 
 function HeadCell({ children }: { children: React.ReactNode }) {
   return (
-    <th className="border-b border-hairline px-4 py-2.5 font-medium">
+    <th className="border-b border-hairline bg-surface-card px-4 py-2.5 font-medium">
       {children}
     </th>
   );
@@ -348,14 +355,18 @@ function OrdersTable({ orders }: { orders: AdminRechargeOrder[] }) {
           <EmptyRows colSpan={7} text="暂无充值订单" />
         ) : (
           orders.map((order) => (
-            <tr key={order.id} className="last:[&_td]:border-b-0">
+            <tr
+              key={order.id}
+              className="transition-colors last:[&_td]:border-b-0 hover:bg-canvas"
+            >
               <BodyCell className="whitespace-nowrap text-muted">
                 {formatDateTime(order.created_at)}
               </BodyCell>
               <BodyCell>
                 <div className="font-medium">{userLabel(order.user_phone, order.user_id)}</div>
-                <div className="mt-0.5 text-[11px] text-muted">
-                  {shortId(order.user_id)}
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                  <span>{shortId(order.user_id)}</span>
+                  <AdminCopyButton text={order.user_id} />
                 </div>
               </BodyCell>
               <BodyCell className="whitespace-nowrap font-semibold tabular-nums">
@@ -371,10 +382,18 @@ function OrdersTable({ orders }: { orders: AdminRechargeOrder[] }) {
                 {payTypeLabel(order.pay_type)}
               </BodyCell>
               <BodyCell className="font-mono text-[12px]">
-                {shortId(order.trade_id)}
+                <span className="inline-flex items-center gap-1">
+                  {shortId(order.trade_id)}
+                  {order.trade_id ? <AdminCopyButton text={order.trade_id} /> : null}
+                </span>
               </BodyCell>
               <BodyCell className="font-mono text-[12px] text-muted">
-                {shortId(order.provider_trade_id)}
+                <span className="inline-flex items-center gap-1">
+                  {shortId(order.provider_trade_id)}
+                  {order.provider_trade_id ? (
+                    <AdminCopyButton text={order.provider_trade_id} />
+                  ) : null}
+                </span>
               </BodyCell>
             </tr>
           ))
@@ -405,7 +424,10 @@ function TransactionsTable({
           <EmptyRows colSpan={7} text="暂无余额流水" />
         ) : (
           transactions.map((transaction) => (
-            <tr key={transaction.id} className="last:[&_td]:border-b-0">
+            <tr
+              key={transaction.id}
+              className="transition-colors last:[&_td]:border-b-0 hover:bg-canvas"
+            >
               <BodyCell className="whitespace-nowrap text-muted">
                 {formatDateTime(transaction.created_at)}
               </BodyCell>
@@ -413,8 +435,9 @@ function TransactionsTable({
                 <div className="font-medium">
                   {userLabel(transaction.user_phone, transaction.user_id)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted">
-                  {shortId(transaction.user_id)}
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                  <span>{shortId(transaction.user_id)}</span>
+                  <AdminCopyButton text={transaction.user_id} />
                 </div>
               </BodyCell>
               <BodyCell className="whitespace-nowrap">
@@ -435,7 +458,12 @@ function TransactionsTable({
                 {transaction.balance_source || '—'}
               </BodyCell>
               <BodyCell className="font-mono text-[12px] text-muted">
-                {shortId(transaction.request_id)}
+                <span className="inline-flex items-center gap-1">
+                  {shortId(transaction.request_id)}
+                  {transaction.request_id ? (
+                    <AdminCopyButton text={transaction.request_id} />
+                  ) : null}
+                </span>
               </BodyCell>
             </tr>
           ))
@@ -469,13 +497,16 @@ function ReservationsTable({
           reservations.map((reservation) => (
             <tr
               key={reservation.request_id}
-              className="last:[&_td]:border-b-0"
+              className="transition-colors last:[&_td]:border-b-0 hover:bg-canvas"
             >
               <BodyCell className="whitespace-nowrap text-muted">
                 {formatDateTime(reservation.updated_at)}
               </BodyCell>
               <BodyCell className="font-mono text-[12px]">
-                {shortId(reservation.user_id)}
+                <span className="inline-flex items-center gap-1">
+                  {shortId(reservation.user_id)}
+                  <AdminCopyButton text={reservation.user_id} />
+                </span>
               </BodyCell>
               <BodyCell className="whitespace-nowrap">
                 {reservation.year_month}
@@ -496,7 +527,12 @@ function ReservationsTable({
                 {reservation.total_overage_tokens.toLocaleString('zh-CN')}
               </BodyCell>
               <BodyCell className="font-mono text-[12px] text-muted">
-                {shortId(reservation.request_id)}
+                <span className="inline-flex items-center gap-1">
+                  {shortId(reservation.request_id)}
+                  {reservation.request_id ? (
+                    <AdminCopyButton text={reservation.request_id} />
+                  ) : null}
+                </span>
               </BodyCell>
             </tr>
           ))
@@ -513,6 +549,7 @@ function ReservationsTable({
  */
 export default function AdminBillingPage() {
   const { confirm } = useConfirm();
+  const { toast } = useToast();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
   const [orderTotal, setOrderTotal] = useState(0);
@@ -566,7 +603,11 @@ export default function AdminBillingPage() {
   const [reconcileMessage, setReconcileMessage] = useState('');
   const [reconcileRequestIds, setReconcileRequestIds] = useState<string[]>([]);
 
-  const appliedUserId = userId.trim() || undefined;
+  // 用户 ID 筛选即时化：输入框即时回显（userId），但真正驱动服务端重查的是
+  // 防抖后的值（400ms），避免逐字符打 4 个接口。查询语义不变——仍按 trim 后的
+  // user_id 过滤三张表。
+  const debouncedUserId = useDebouncedValue(userId, 400);
+  const appliedUserId = debouncedUserId.trim() || undefined;
 
   const resetPages = useCallback(() => {
     setOrderPage(0);
@@ -615,7 +656,10 @@ export default function AdminBillingPage() {
       setReservations(nextReservations.reservations);
       setReservationTotal(nextReservations.total);
     } catch (err) {
-      setError(formatAdminErrorMessage(err, '加载失败'));
+      const message = formatAdminErrorMessage(err, '加载失败');
+      setError(message);
+      // 加载/刷新失败时除顶部告警外再弹 toast，保证手动刷新有即时反馈。
+      toast('error', message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -630,6 +674,7 @@ export default function AdminBillingPage() {
     reservationPage,
     transactionPage,
     walletKind,
+    toast,
   ]);
 
   useEffect(() => {
@@ -700,6 +745,7 @@ export default function AdminBillingPage() {
       (!Number.isFinite(minutes) || minutes < 1)
     ) {
       setReconcileMessage('陈旧分钟数必须大于等于 1');
+      toast('error', '陈旧分钟数必须大于等于 1');
       return;
     }
     if (
@@ -707,6 +753,7 @@ export default function AdminBillingPage() {
       (!Number.isInteger(limit) || limit < 1 || limit > 1000)
     ) {
       setReconcileMessage('处理上限必须是 1 到 1000 的整数');
+      toast('error', '处理上限必须是 1 到 1000 的整数');
       return;
     }
 
@@ -727,19 +774,22 @@ export default function AdminBillingPage() {
         stale_ms: minutes === undefined ? undefined : minutes * 60_000,
         limit,
       });
-      setReconcileMessage(
+      const summaryText =
         result.released > 0
           ? `已释放 ${result.released.toLocaleString('zh-CN')} 条陈旧预留`
-          : '没有需要修复的陈旧预留',
-      );
+          : '没有需要修复的陈旧预留';
+      setReconcileMessage(summaryText);
       setReconcileRequestIds(result.requestIds);
+      toast('success', summaryText);
       await load();
     } catch (err) {
-      setReconcileMessage(formatAdminErrorMessage(err, '修复陈旧预留失败'));
+      const message = formatAdminErrorMessage(err, '修复陈旧预留失败');
+      setReconcileMessage(message);
+      toast('error', message);
     } finally {
       setReconciling(false);
     }
-  }, [confirm, load, reconcileLimit, reconcileStaleMinutes]);
+  }, [confirm, load, reconcileLimit, reconcileStaleMinutes, toast]);
 
   if (loading) {
     return <AdminLoadingState label="加载账单中" />;
@@ -786,14 +836,18 @@ export default function AdminBillingPage() {
         <div className="grid gap-3 lg:grid-cols-[minmax(180px,1.2fr)_repeat(5,minmax(130px,1fr))]">
           <label className="min-w-0">
             <span className="mb-1 block text-[12px] text-muted">用户 ID</span>
-            <input
+            {/* 统一搜索框：自带搜索图标 + 一键清除；输入即时回显，重查走 400ms 防抖。 */}
+            <AdminSearchInput
               value={userId}
-              onChange={(event) => {
-                setUserId(event.target.value);
+              onValueChange={(value) => {
+                setUserId(value);
+                resetPages();
+              }}
+              onClear={() => {
+                setUserId('');
                 resetPages();
               }}
               placeholder="可留空"
-              className="h-9 w-full rounded-md border border-hairline bg-canvas px-2.5 text-[13px] outline-none focus:border-hairline"
             />
           </label>
           <label className="min-w-0">
