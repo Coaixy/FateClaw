@@ -58,6 +58,7 @@ import {
   type WorkflowRunInput,
   type WorkflowRunNode,
 } from '@/features/workflows/api';
+import { resolveNodePositions } from '@/features/workflows/layout';
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -355,11 +356,12 @@ function RunWorkflowInner() {
             t('workflows.runner.boardGenerated'),
           ),
         );
+        const viewPositions = resolveNodePositions(data.graph);
         setRfNodes(
           data.graph.nodes.map((graphNode) => ({
             id: graphNode.id,
             type: 'run',
-            position: graphNode.position ?? { x: 0, y: 0 },
+            position: viewPositions[graphNode.id] ?? { x: 0, y: 0 },
             data: {
               title: graphNode.title,
               kind: graphNode.type,
@@ -784,12 +786,13 @@ function RunWorkflowInner() {
       setNodeStates(
         order.map((node) => ({ node, status: 'pending', output: '' })),
       );
-      // 画布按定义里的坐标布局渲染(只读),运行时节点变色。
+      // 画布坐标:无坐标/全同坐标的旧工作流自动分层布局,避免堆在原点重叠;运行时节点变色。
+      const runPositions = workflow ? resolveNodePositions(workflow.graph) : {};
       setRfNodes(
         (workflow?.graph.nodes ?? []).map((graphNode) => ({
           id: graphNode.id,
           type: 'run',
-          position: graphNode.position ?? { x: 0, y: 0 },
+          position: runPositions[graphNode.id] ?? { x: 0, y: 0 },
           data: {
             title: graphNode.title,
             kind: graphNode.type,
