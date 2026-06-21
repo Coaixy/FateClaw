@@ -513,6 +513,8 @@ function WorkflowBuilderInner({
             onNodeClick={(_event, node) => setSelectedId(node.id)}
             onPaneClick={() => setSelectedId(null)}
             fitView
+            // 加大连线吸附半径,落点不必精确对准小圆点,连线更省力。
+            connectionRadius={36}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={16} />
