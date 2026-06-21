@@ -1,8 +1,5 @@
 import type { HistoryMessage } from '../../shared/token-budget.js';
-import {
-  getUserSoulContent,
-  getUserGuashiScriptTemplate,
-} from '../../infrastructure/db.js';
+import { getUserSoulContent } from '../../infrastructure/db.js';
 
 export interface StructuredInput {
   userMessage: string;
@@ -11,8 +8,6 @@ export interface StructuredInput {
   assistantName: string;
   /** 用户级 Soul 作为本轮人格覆盖层（卦师话术风格）；无 soul 时为 undefined。 */
   personaPrompt?: string;
-  /** 卦师自定义的话术稿分节模板;无自定义时为 undefined,由 runtime 回退默认骨架。 */
-  guashiScriptTemplate?: string;
 }
 
 /**
@@ -46,17 +41,11 @@ export async function buildStructuredInputForSession(
   const personaPrompt = identity.soulUserId
     ? (await getUserSoulContent(identity.soulUserId)).trim() || undefined
     : undefined;
-  // 话术稿模板:卦师自定义的分节骨架;为空时归一化为 undefined,由 runtime 回退默认骨架。
-  const guashiScriptTemplate = identity.soulUserId
-    ? (await getUserGuashiScriptTemplate(identity.soulUserId)).trim() ||
-      undefined
-    : undefined;
   return {
     userMessage,
     history: [],
     userName: identity.userName,
     assistantName: identity.assistantName,
     personaPrompt,
-    guashiScriptTemplate,
   };
 }

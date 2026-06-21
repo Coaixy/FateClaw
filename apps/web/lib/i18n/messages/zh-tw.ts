@@ -398,13 +398,6 @@ export const zhTWMessages = {
       description: '維護統一注入站內 AI Chat 和微信對話的 Soul。',
       soulTitle: '自訂人格 Soul',
       soulDescription: '統一注入站內 AI Chat 和微信對話的 Pi Runtime。',
-      scriptTitle: '話術稿範本',
-      scriptDescription:
-        '自訂 AI 解讀的分節骨架(Markdown ## 章節);留空則用平台預設骨架。標題帶「⚠」或「[僅卦師]」的章節僅卦師可見,匯出給客戶時自動剔除。',
-      scriptPlaceholder:
-        '每行一個 ## 章節,如「## 核心論斷 —— 一句話結論」;留空使用平台預設骨架。',
-      scriptFillDefault: '填入預設骨架',
-      scriptHint: '留空將使用平台預設骨架',
       loadFailed: '載入自訂人格失敗',
       saved: '自訂人格已儲存並注入執行環境',
       saveFailed: '儲存自訂人格失敗',

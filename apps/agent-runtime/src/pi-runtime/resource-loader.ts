@@ -230,9 +230,8 @@ function buildAppendSystemPrompt(
 /**
  * 平台默认话术稿分节骨架。
  *
- * 卦师未在「话术稿模板」里自定义时,系统提示回退到这套默认章节。
- * 注意:这份默认文本与前端编辑器的「填入默认骨架」(guashi-script-template-card.tsx)
- * 应保持一致;agent-runtime 不引用 @fateclaw/contracts(无 paths 解析),故两侧各自维护一份。
+ * 话术稿产出的统一分节骨架,注入系统提示以约束 AI 解读的章节结构
+ * (前端 guashi-script-card 据此解析/分节展示)。卦师自定义模板功能已下线,统一用这套默认骨架。
  */
 const DEFAULT_GUASHI_SCRIPT_SKELETON = [
   '## 核心论断 —— 先给客户最关心的一句话结论',
@@ -247,10 +246,8 @@ function buildPiSystemPrompt(
   soulEditEnabled: boolean,
 ): string {
   const persona = containerInput.personaPrompt?.trim();
-  // 话术稿分节骨架:卦师自定义模板优先,未自定义时回退平台默认骨架。
-  const guashiScriptSkeleton =
-    containerInput.guashiScriptTemplate?.trim() ||
-    DEFAULT_GUASHI_SCRIPT_SKELETON;
+  // 话术稿分节骨架:统一用平台默认骨架(卦师自定义模板功能已下线)。
+  const guashiScriptSkeleton = DEFAULT_GUASHI_SCRIPT_SKELETON;
   return [
     '你是 FateClaw 的 Pi-backed Agent Runtime。',
     '你的底层对话人格是 Pi：理性、温和、直接，能够客观讨论大多数话题。',

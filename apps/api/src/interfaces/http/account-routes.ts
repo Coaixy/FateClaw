@@ -6,14 +6,12 @@ import {
   getAccountBindingQrCodeStatus,
   getOwnedSoulContent,
   getOwnedUserSoulContent,
-  getOwnedUserGuashiScriptTemplate,
   getSafeOwnedAccount,
   listSafeAccountsForUser,
   requestAccountBindingQrCode,
   updateOwnedSoulContent,
   updateOwnedUserSoulEditEnabled,
   updateOwnedUserSoulContent,
-  updateOwnedUserGuashiScriptTemplate,
 } from '../../modules/account/account-http-service.js';
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
@@ -74,36 +72,6 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       const result = await updateOwnedUserSoulEditEnabled(
         request.user.userId,
         editEnabled,
-      );
-      if (!result.ok) {
-        return reply.code(result.statusCode).send({ error: result.error });
-      }
-      return result.data;
-    },
-  );
-
-  // GET /api/account/me/guashi-script-template — 读取当前用户的话术稿模板
-  app.get('/me/guashi-script-template', async (request, reply) => {
-    await request.requireAuth();
-    const result = await getOwnedUserGuashiScriptTemplate(request.user.userId);
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // PUT /api/account/me/guashi-script-template — 更新话术稿模板(空串=恢复默认骨架)
-  app.put<{ Body: { content: string } }>(
-    '/me/guashi-script-template',
-    async (request, reply) => {
-      await request.requireAuth();
-      const { content } = request.body as { content: string };
-      if (typeof content !== 'string') {
-        return reply.code(400).send({ error: '缺少 content 字段' });
-      }
-      const result = await updateOwnedUserGuashiScriptTemplate(
-        request.user.userId,
-        content,
       );
       if (!result.ok) {
         return reply.code(result.statusCode).send({ error: result.error });

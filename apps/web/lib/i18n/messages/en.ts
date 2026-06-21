@@ -412,13 +412,6 @@ export const enMessages = {
       soulTitle: 'Custom Soul',
       soulDescription:
         'Injected into AI Chat and WeChat conversations through Pi Runtime.',
-      scriptTitle: 'Talking-points template',
-      scriptDescription:
-        'Customize the section skeleton (Markdown ## headings) for AI readings; leave empty to use the platform default. Sections whose heading contains ⚠ or [仅卦师] are diviner-only and stripped when copying for clients.',
-      scriptPlaceholder:
-        'One ## section per line, e.g. "## Key verdict — one-line conclusion". Leave empty to use the platform default.',
-      scriptFillDefault: 'Insert default skeleton',
-      scriptHint: 'Leave empty to use the platform default skeleton',
       loadFailed: 'Failed to load custom persona',
       saved: 'Custom persona saved and injected into runtime',
       saveFailed: 'Failed to save custom persona',
