@@ -730,6 +730,21 @@ function AiChatWorkspaceContent() {
     setPreselectedClientId(null);
   }, []);
 
+  // 工作台"直接对话"会带 ?new=1 进入：强制开新对话，清空可能残留的会话选择，
+  // 避免被路由残留的 ?sid= 或 provider 旧状态带回最近一条对话；
+  // setSelectedSession('') 同时会把地址栏收敛回 /ai-chat（顺带剥掉 new 参数）。
+  const newChatHandledRef = useRef(false);
+  useEffect(() => {
+    if (newChatHandledRef.current) {
+      return;
+    }
+    if (!searchParams.get('new')) {
+      return;
+    }
+    newChatHandledRef.current = true;
+    setSelectedSession('');
+  }, [searchParams, setSelectedSession]);
+
   // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
   const clientParamHandledRef = useRef(false);
   useEffect(() => {

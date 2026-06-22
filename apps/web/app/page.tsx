@@ -52,7 +52,9 @@ const HUB_CARDS: readonly {
     mobileHidden: true,
   },
   {
-    href: '/ai-chat',
+    // 携带 new=1 显式表达"开新对话"意图：工作台落地时据此强制清空会话选择，
+    // 避免被路由残留的 ?sid= 或 provider 旧状态带回最近一条对话。
+    href: '/ai-chat?new=1',
     icon: MessageCircle,
     titleKey: 'hub.chatTitle',
     descKey: 'hub.chatDesc',
