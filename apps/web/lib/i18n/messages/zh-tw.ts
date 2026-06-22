@@ -1,4 +1,10 @@
 export const zhTWMessages = {
+  artifact: {
+    copyText: '複製盤面文字',
+    copied: '盤面文字已複製到剪貼簿',
+    copyEmpty: '此盤面暫無可複製的文字',
+    copyFailed: '複製失敗，請重試',
+  },
   hub: {
     title: '工作台',
     subtitle: '從這裡進入斷卦的各個環節',

@@ -1,4 +1,10 @@
 export const enMessages = {
+  artifact: {
+    copyText: 'Copy board text',
+    copied: 'Board text copied to clipboard',
+    copyEmpty: 'No board text available to copy',
+    copyFailed: 'Copy failed, please try again',
+  },
   hub: {
     title: 'Workspace',
     subtitle: 'Jump into each part of your divination workflow from here',

@@ -1,4 +1,10 @@
 export const zhCNMessages = {
+  artifact: {
+    copyText: '复制盘面文本',
+    copied: '盘面文本已复制到剪贴板',
+    copyEmpty: '该盘面暂无可复制的文本',
+    copyFailed: '复制失败，请重试',
+  },
   hub: {
     title: '工作台',
     subtitle: '从这里进入断卦的各个环节',
