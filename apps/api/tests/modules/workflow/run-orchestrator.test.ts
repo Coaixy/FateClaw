@@ -27,12 +27,11 @@ import {
 const USER = 'u1';
 const TS = '2026-06-21T00:00:00Z';
 
-function aiNode(id: string, pauseAfter = false): WorkflowAiNodeDto {
+function aiNode(id: string): WorkflowAiNodeDto {
   return {
     id,
     type: 'ai',
     title: id,
-    pauseAfter,
     position: { x: 0, y: 0 },
     promptTemplate: '',
     skillIds: [],
@@ -41,12 +40,11 @@ function aiNode(id: string, pauseAfter = false): WorkflowAiNodeDto {
   };
 }
 
-function paipanNode(id: string, pauseAfter = false): WorkflowPaipanNodeDto {
+function paipanNode(id: string): WorkflowPaipanNodeDto {
   return {
     id,
     type: 'paipan',
     title: id,
-    pauseAfter,
     position: { x: 0, y: 0 },
     skill: 'bazi-paipan',
     inputDefaults: {},
@@ -83,7 +81,6 @@ function makeMemStore(graph: WorkflowGraphDto): WorkflowRunStore {
           node_id: n.nodeId,
           node_type: n.nodeType,
           title: n.title,
-          pause_after: n.pauseAfter,
           status: 'pending',
           output_message_id: null,
           output_account_id: null,
@@ -169,42 +166,46 @@ function statusOf(snap: OrchestratorRunSnapshot, id: string) {
 }
 
 describe('run-orchestrator 拓扑推进', () => {
-  it('线性 A→B:全程自动跑到 done', async () => {
+  it('线性 A→B:跑完停在 paused 待确认,resume(点完成)后 done', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B')],
       edges: [edge('A', 'B')],
     };
-    const { snap } = await startWith(graph);
-    expect(snap.status).toBe('done');
+    const { orch, snap } = await startWith(graph);
+    // 方案A:全部节点完成 → 整体 paused 等卦师润色/确认(不直接 done)。
+    expect(snap.status).toBe('paused');
     expect(statusOf(snap, 'A')).toBe('done');
     expect(statusOf(snap, 'B')).toBe('done');
     expect(snap.nodes.find((n) => n.nodeId === 'B')?.outputMessageId).toBe(
       'msg-B',
     );
+    // 卦师点「完成」→ done。
+    const resumed = await orch.resume('run-1', USER);
+    expect(resumed.status).toBe('done');
   });
 
-  it('分叉 A→B / A→C:A 完成后 B、C 都跑', async () => {
+  it('分叉 A→B / A→C:A 完成后 B、C 都跑,跑完 paused', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B'), aiNode('C')],
       edges: [edge('A', 'B'), edge('A', 'C')],
     };
     const { snap } = await startWith(graph);
-    expect(snap.status).toBe('done');
+    expect(snap.status).toBe('paused');
     expect(statusOf(snap, 'B')).toBe('done');
     expect(statusOf(snap, 'C')).toBe('done');
   });
 
-  it('汇总(菱形)A→B,A→C,B→D,C→D:D 等 B、C 都完成才跑', async () => {
+  it('汇总(菱形)A→B,A→C,B→D,C→D:D 等 B、C 都完成才跑,跑完 paused', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B'), aiNode('C'), aiNode('D')],
       edges: [edge('A', 'B'), edge('A', 'C'), edge('B', 'D'), edge('C', 'D')],
     };
     const { snap } = await startWith(graph);
-    expect(snap.status).toBe('done');
+    expect(snap.status).toBe('paused');
     expect(statusOf(snap, 'D')).toBe('done');
   });
 
-  it('排盘节点:就绪后置 awaiting_paipan 等卦师提交,提交后继续', async () => {
+  it('排盘节点:就绪后置 awaiting_paipan 等卦师提交,提交后跑完 paused', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [paipanNode('P'), aiNode('A')],
       edges: [edge('P', 'A')],
@@ -215,42 +216,47 @@ describe('run-orchestrator 拓扑推进', () => {
     expect(statusOf(snap, 'A')).toBe('pending');
     expect(snap.status).toBe('running');
 
-    // 卦师起盘提交 → P 完成 → A 自动跑 → done。
+    // 卦师起盘提交 → P 完成 → A 自动跑 → 全部完成 → paused。
     const after = await orch.markNodeCompleted('run-1', USER, 'P', {
       messageId: 'board-P',
       accountId: 'web:u1',
     });
-    expect(after.status).toBe('done');
+    expect(after.status).toBe('paused');
     expect(statusOf(after, 'P')).toBe('done');
     expect(statusOf(after, 'A')).toBe('done');
   });
 
-  it('pauseAfter:命中暂停节点后整体 paused,resume 续跑', async () => {
+  it('方案A 多叶子:B、C 两个终端成品跑完只整体 paused 一次,resume 后 done', async () => {
+    // A 分叉到 B、C 两个叶节点(各是一份成品)。验证不会"每个成品停一次"。
     const graph: WorkflowGraphDto = {
-      nodes: [aiNode('A', true), aiNode('B')],
-      edges: [edge('A', 'B')],
+      nodes: [aiNode('A'), aiNode('B'), aiNode('C')],
+      edges: [edge('A', 'B'), edge('A', 'C')],
     };
     const { orch, snap } = await startWith(graph);
+    // 两个叶子都完成,但运行只 paused 一次(整体待确认),不会卡住任一分支。
     expect(snap.status).toBe('paused');
     expect(statusOf(snap, 'A')).toBe('done');
-    expect(statusOf(snap, 'B')).toBe('pending');
+    expect(statusOf(snap, 'B')).toBe('done');
+    expect(statusOf(snap, 'C')).toBe('done');
 
+    // 卦师润色完两份成品后点「完成」→ done。
     const resumed = await orch.resume('run-1', USER);
     expect(resumed.status).toBe('done');
     expect(statusOf(resumed, 'B')).toBe('done');
+    expect(statusOf(resumed, 'C')).toBe('done');
   });
 
-  it('从节点级联重跑:A→B→C 全 done 后 rerunFrom(B) 只重置 B、C,A 不动', async () => {
+  it('从节点级联重跑:A→B→C 跑完 paused 后 rerunFrom(B) 只重置 B、C,A 不动,重跑完仍 paused', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B'), aiNode('C')],
       edges: [edge('A', 'B'), edge('B', 'C')],
     };
     const { orch, snap } = await startWith(graph);
-    expect(snap.status).toBe('done');
+    expect(snap.status).toBe('paused');
     const aMsgBefore = snap.nodes.find((n) => n.nodeId === 'A')?.outputMessageId;
 
     const reran = await orch.rerunFromNode('run-1', USER, 'B');
-    expect(reran.status).toBe('done');
+    expect(reran.status).toBe('paused');
     // A 未被触碰(产出消息 id 不变),B、C 重新跑过(仍 done)。
     expect(reran.nodes.find((n) => n.nodeId === 'A')?.outputMessageId).toBe(
       aMsgBefore,
@@ -259,7 +265,7 @@ describe('run-orchestrator 拓扑推进', () => {
     expect(statusOf(reran, 'C')).toBe('done');
   });
 
-  it('跳过节点:skip(A) 后其下游照常放行', async () => {
+  it('跳过节点:skip(A) 后其下游照常放行,跑完 paused', async () => {
     const graph: WorkflowGraphDto = {
       nodes: [aiNode('A'), aiNode('B')],
       edges: [edge('A', 'B')],
@@ -285,7 +291,7 @@ describe('run-orchestrator 拓扑推进', () => {
     const skipped = await orch.skipNode('run-1', USER, 'A');
     expect(statusOf(skipped, 'A')).toBe('skipped');
     expect(statusOf(skipped, 'B')).toBe('done');
-    expect(skipped.status).toBe('done');
+    expect(skipped.status).toBe('paused');
   });
 
   it('串行发起:就绪的并行 AI 节点一次只发起一个(防会话锁 409 误判失败)', async () => {

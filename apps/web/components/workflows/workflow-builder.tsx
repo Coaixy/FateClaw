@@ -18,10 +18,10 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import { AlertTriangle, Compass, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Compass, Plus, Sparkles, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { skillsApi } from '@/features/skills/api';
+import { skillsApi, type SubscribedSkill } from '@/features/skills/api';
 import {
   workflowsApi,
   type WorkflowDefinition,
@@ -33,6 +33,8 @@ import { resolveNodePositions } from '@/features/workflows/layout';
 import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
+
+import { AiSkillPicker } from './ai-skill-picker';
 
 /** 可选术数(排盘节点)。值为后端 skillDir,标签为卦师可读名。 */
 const PAIPAN_OPTIONS: readonly { value: string; label: string }[] = [
@@ -52,7 +54,6 @@ type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 type PaipanNodeData = {
   kind: 'paipan';
   title: string;
-  pauseAfter: boolean;
   skill: string;
   inputDefaults: Record<string, unknown>;
   // 搭建期校验:该节点是否有告警(孤立未连线等),仅用于画布徽标,不上行保存。
@@ -62,7 +63,6 @@ type PaipanNodeData = {
 type AiNodeData = {
   kind: 'ai';
   title: string;
-  pauseAfter: boolean;
   promptTemplate: string;
   skillIds: string[];
   modelPolicy: {
@@ -109,7 +109,6 @@ function toFlow(workflow: WorkflowDefinition): {
         data: {
           kind: 'paipan',
           title: node.title,
-          pauseAfter: node.pauseAfter,
           skill: node.skill,
           inputDefaults: node.inputDefaults ?? {},
         },
@@ -128,7 +127,6 @@ function toFlow(workflow: WorkflowDefinition): {
       data: {
         kind: 'ai',
         title: node.title,
-        pauseAfter: node.pauseAfter,
         promptTemplate: node.promptTemplate,
         skillIds: node.skillIds ?? [],
         modelPolicy: { mode, thinkingLevel },
@@ -275,9 +273,13 @@ function WorkflowBuilderInner({
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ownSkills, setOwnSkills] = useState<OwnSkill[]>([]);
+  const [subscribedSkills, setSubscribedSkills] = useState<SubscribedSkill[]>(
+    [],
+  );
   const [saving, setSaving] = useState(false);
 
-  // 拉取卦师自己的技能,供 AI 节点绑定。(排盘参数改为运行时按"直接对话"表单填,搭建期只选术数)
+  // 拉取卦师可绑定的技能:自有 + 订阅(含捆绑包),供 AI 节点弹窗选择。
+  // (排盘参数改为运行时按"直接对话"表单填,搭建期只选术数)
   useEffect(() => {
     let cancelled = false;
     skillsApi
@@ -288,6 +290,14 @@ function WorkflowBuilderInner({
           res.own
             .filter((skill) => skill.install_status === 'installed')
             .map((skill) => ({ id: skill.id, name: skill.skill_name })),
+        );
+        // 仅展示已安装且订阅未停用的订阅技能(与后端绑定校验口径对齐)。
+        setSubscribedSkills(
+          res.subscribed.filter(
+            (skill) =>
+              skill.install_status === 'installed' &&
+              skill.subscription_enabled,
+          ),
         );
       })
       .catch(() => {
@@ -335,14 +345,12 @@ function WorkflowBuilderInner({
           ? {
               kind: 'paipan',
               title: '',
-              pauseAfter: false,
               skill: '',
               inputDefaults: {},
             }
           : {
               kind: 'ai',
               title: '',
-              pauseAfter: true,
               promptTemplate: '',
               skillIds: [],
               modelPolicy: { mode: 'system-default', thinkingLevel: 'medium' },
@@ -455,7 +463,6 @@ function WorkflowBuilderInner({
           (node.data.kind === 'paipan'
             ? t('workflows.builder.paipanBadge')
             : t('workflows.builder.aiBadge')),
-        pauseAfter: node.data.pauseAfter,
         position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
       };
       if (node.data.kind === 'paipan') {
@@ -758,6 +765,7 @@ function WorkflowBuilderInner({
               key={selected.id}
               node={selected}
               ownSkills={ownSkills}
+              subscribedSkills={subscribedSkills}
               warnings={nodeWarnings.get(selected.id) ?? []}
               runInputs={runInputs}
               upstreamAi={upstreamAiNodeIds(selected.id, nodes, edges).map(
@@ -804,7 +812,6 @@ function PaipanNodeView({ data, selected }: NodeProps) {
               aria-label={t('workflows.builder.hasWarning')}
             />
           )}
-          {node.pauseAfter && <PauseDot />}
         </span>
       </div>
       <p className="mt-1 truncate text-[12px] font-medium text-ink">
@@ -843,7 +850,6 @@ function AiNodeView({ data, selected }: NodeProps) {
               aria-label={t('workflows.builder.hasWarning')}
             />
           )}
-          {node.pauseAfter && <PauseDot />}
         </span>
       </div>
       <p className="mt-1 truncate text-[12px] font-medium text-ink">
@@ -859,19 +865,10 @@ function AiNodeView({ data, selected }: NodeProps) {
   );
 }
 
-function PauseDot() {
-  const { t } = useI18n();
-  return (
-    <span
-      title={t('workflows.builder.pauseAfter')}
-      className="h-2 w-2 rounded-full bg-amber-400"
-    />
-  );
-}
-
 function NodeConfigPanel({
   node,
   ownSkills,
+  subscribedSkills,
   warnings,
   runInputs,
   upstreamAi,
@@ -880,6 +877,7 @@ function NodeConfigPanel({
 }: {
   node: FlowNode;
   ownSkills: OwnSkill[];
+  subscribedSkills: SubscribedSkill[];
   warnings: string[];
   runInputs: WorkflowRunInput[];
   upstreamAi: { id: string; title: string }[];
@@ -935,21 +933,12 @@ function NodeConfigPanel({
         <AiConfig
           data={data}
           ownSkills={ownSkills}
+          subscribedSkills={subscribedSkills}
           runInputs={runInputs}
           upstreamAi={upstreamAi}
           onChange={onChange}
         />
       )}
-
-      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-muted">
-        <input
-          type="checkbox"
-          checked={data.pauseAfter}
-          onChange={(event) => onChange({ pauseAfter: event.target.checked })}
-          className="h-3.5 w-3.5 accent-[var(--primary)]"
-        />
-        {t('workflows.builder.pauseAfter')}
-      </label>
     </div>
   );
 }
@@ -990,17 +979,28 @@ function PaipanConfig({
 function AiConfig({
   data,
   ownSkills,
+  subscribedSkills,
   runInputs,
   upstreamAi,
   onChange,
 }: {
   data: AiNodeData;
   ownSkills: OwnSkill[];
+  subscribedSkills: SubscribedSkill[];
   runInputs: WorkflowRunInput[];
   upstreamAi: { id: string; title: string }[];
   onChange: (patch: NodePatch) => void;
 }) {
   const { t } = useI18n();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // 已选 skill id → 名称(自有 + 订阅),用于已绑摘要 chip 展示。
+  const skillNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of ownSkills) map.set(s.id, s.name);
+    for (const s of subscribedSkills) map.set(s.id, s.skill_name);
+    return map;
+  }, [ownSkills, subscribedSkills]);
 
   const insertRef = (token: string) => {
     const base = data.promptTemplate;
@@ -1065,36 +1065,53 @@ function AiConfig({
       </Field>
 
       <Field label={t('workflows.builder.bindSkills')}>
-        {ownSkills.length === 0 ? (
-          <p className="text-[12px] text-muted">
-            {t('workflows.builder.noOwnSkills')}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {ownSkills.map((skill) => {
-              const active = data.skillIds.includes(skill.id);
-              return (
-                <button
-                  key={skill.id}
-                  type="button"
-                  onClick={() => toggleSkill(skill.id)}
-                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[12px] transition-colors ${
-                    active
-                      ? 'border-primary/40 bg-primary/10 text-primary'
-                      : 'border-hairline bg-canvas text-muted hover:border-primary/30'
-                  }`}
+        <div className="space-y-2">
+          {data.skillIds.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {data.skillIds.map((id) => (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-[12px] text-primary"
                 >
                   <Sparkles size={11} />
-                  {skill.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  {skillNameById.get(id) ?? id}
+                  <button
+                    type="button"
+                    onClick={() => toggleSkill(id)}
+                    aria-label={t('workflows.builder.skillRemove')}
+                    className="ml-0.5 text-primary/60 hover:text-primary"
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted">
+              {t('workflows.builder.noBoundSkills')}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-canvas px-3 py-1.5 text-[12px] text-ink hover:border-primary/30"
+          >
+            <Plus size={12} /> {t('workflows.builder.selectSkills')}
+          </button>
+        </div>
         <p className="mt-1.5 text-[11px] text-muted/80">
           {t('workflows.builder.bindSkillsHint')}
         </p>
       </Field>
+
+      <AiSkillPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        ownSkills={ownSkills}
+        subscribedSkills={subscribedSkills}
+        selectedIds={data.skillIds}
+        onToggle={toggleSkill}
+      />
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('workflows.builder.model')}>

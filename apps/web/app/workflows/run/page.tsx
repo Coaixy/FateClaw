@@ -23,11 +23,11 @@ import {
 } from '@xyflow/react';
 import {
   AlertCircle,
-  ArrowRight,
   Check,
   Compass,
   Loader2,
-  MessageSquare,
+  Maximize2,
+  Pencil,
   Play,
   RefreshCw,
   Save,
@@ -37,7 +37,9 @@ import {
 
 import { AppShell } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
+import { MarkdownContent } from '@/components/chat/markdown-content';
 import { parseToolContext } from '@/features/chat/api';
 import {
   paipanApi,
@@ -84,6 +86,8 @@ type RunNodeData = {
   kind: 'paipan' | 'ai';
   status: RunNodeStatus;
   selected: boolean;
+  /** 双击节点打开详情弹窗。React Flow 的 onNodeDoubleClick 在自定义节点上不稳定,改用节点内部 DOM 双击事件。 */
+  onOpenDetail: () => void;
 };
 type RunFlowNode = Node<RunNodeData>;
 
@@ -105,6 +109,7 @@ function statusIcon(status: RunNodeStatus) {
 
 /** 画布上的运行态节点卡片。 */
 function RunFlowNodeView({ data }: NodeProps) {
+  const { t } = useI18n();
   const d = data as RunNodeData;
   const ring = d.selected
     ? 'border-primary ring-2 ring-primary/30'
@@ -117,7 +122,15 @@ function RunFlowNodeView({ data }: NodeProps) {
           : 'border-hairline';
   return (
     <div
-      className={`min-w-[150px] rounded-xl border bg-surface-card px-3 py-2 shadow-sm transition-colors ${ring}`}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        d.onOpenDetail();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        d.onOpenDetail();
+      }}
+      className={`min-w-[150px] cursor-pointer rounded-xl border bg-surface-card px-3 py-2 shadow-sm transition-colors ${ring}`}
     >
       <Handle type="target" position={Position.Left} className="!opacity-0" />
       <div className="flex items-center gap-1.5">
@@ -129,7 +142,21 @@ function RunFlowNodeView({ data }: NodeProps) {
         <span className="truncate text-[12px] font-medium text-ink">
           {d.title}
         </span>
-        <span className="ml-auto flex items-center">{statusIcon(d.status)}</span>
+        <span className="ml-auto flex items-center gap-1">
+          {statusIcon(d.status)}
+          <button
+            type="button"
+            className="nodrag rounded p-0.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary"
+            onClick={(event) => {
+              event.stopPropagation();
+              d.onOpenDetail();
+            }}
+            title={t('workflows.runner.expandNode')}
+            aria-label={t('workflows.runner.expandNode')}
+          >
+            <Maximize2 size={12} />
+          </button>
+        </span>
       </div>
       <Handle type="source" position={Position.Right} className="!opacity-0" />
     </div>
@@ -217,13 +244,12 @@ function NodeDetailPanel({
   busy: boolean;
   t: (key: string) => string;
 }) {
+  const [editing, setEditing] = useState(false);
   const artifacts = parseToolContext(node.toolContext ?? null);
   const isPaipan = node.type === 'paipan';
   const isError = node.status === 'error';
   const isDoneLike = node.status === 'done' || node.status === 'manual';
   const isAwaitingPaipan = node.status === 'awaiting_paipan';
-  // 文本产出可编辑场景:AI/手填节点已完成(润色),或任意节点出错后手填补救。
-  const editable = (!isPaipan && isDoneLike) || isError;
 
   return (
     <div className="space-y-3 rounded-2xl border border-hairline bg-surface-card p-4">
@@ -245,7 +271,20 @@ function NodeDetailPanel({
 
       {artifacts.length > 0 && <ArtifactRenderer entries={artifacts} />}
 
-      {!isPaipan && (isDoneLike || isError) && (
+      {/* AI/手填产出:done 默认渲染 markdown;点"编辑"切到源码 textarea;出错手填直接 textarea。 */}
+      {!isPaipan &&
+        isDoneLike &&
+        !editing &&
+        (node.output ? (
+          <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-hairline bg-canvas px-3 py-2 text-[13px]">
+            <MarkdownContent content={node.output} isBot />
+          </div>
+        ) : (
+          <p className="text-[12px] text-muted">
+            {t('workflows.runner.outputEmpty')}
+          </p>
+        ))}
+      {!isPaipan && ((isDoneLike && editing) || isError) && (
         <textarea
           className={`${inputClass} min-h-[140px] resize-y`}
           value={draft}
@@ -275,7 +314,46 @@ function NodeDetailPanel({
             <Compass size={14} /> {t('workflows.runner.retryCast')}
           </Button>
         )}
-        {editable && (
+        {/* done AI:展示态给"编辑";编辑态给"保存润色"+"取消";出错手填直接保存补救。 */}
+        {!isPaipan && isDoneLike && !editing && (
+          <Button
+            onClick={() => setEditing(true)}
+            disabled={busy}
+            variant="secondary"
+            className="gap-1.5"
+          >
+            <Pencil size={14} /> {t('workflows.runner.edit')}
+          </Button>
+        )}
+        {!isPaipan && isDoneLike && editing && (
+          <>
+            <Button
+              onClick={() => {
+                onSaveOutput();
+                setEditing(false);
+              }}
+              disabled={savingOutput || busy || !draft.trim()}
+              variant="secondary"
+              className="gap-1.5"
+            >
+              {savingOutput ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              {t('workflows.runner.refineSave')}
+            </Button>
+            <Button
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              variant="ghost"
+              className="gap-1.5"
+            >
+              {t('workflows.runner.cancel')}
+            </Button>
+          </>
+        )}
+        {isError && (
           <Button
             onClick={onSaveOutput}
             disabled={savingOutput || busy || !draft.trim()}
@@ -284,14 +362,10 @@ function NodeDetailPanel({
           >
             {savingOutput ? (
               <Loader2 size={14} className="animate-spin" />
-            ) : isError ? (
-              <Check size={14} />
             ) : (
-              <Save size={14} />
+              <Check size={14} />
             )}
-            {isError
-              ? t('workflows.runner.manualFill')
-              : t('workflows.runner.refineSave')}
+            {t('workflows.runner.manualFill')}
           </Button>
         )}
         {isError && (
@@ -332,6 +406,8 @@ function RunWorkflowInner() {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [runState, setRunState] = useState<WorkflowRunState | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // 双击节点打开的详情弹窗(大空间看 / 编辑产出);null = 关闭。
+  const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
   const [paipanSheet, setPaipanSheet] = useState<{
     nodeId: string;
     skill: string;
@@ -551,7 +627,10 @@ function RunWorkflowInner() {
   const handleSaveOutput = useCallback(
     async (nodeId: string) => {
       if (!runState) return;
-      const content = drafts[nodeId] ?? '';
+      // 草稿未改过时回退到该节点当前产出,与详情面板 textarea 的显示口径(drafts[nodeId] ?? node.output)
+      // 保持一致;否则"未编辑直接点保存"会把产出存成空串、导致产出被清空。
+      const node = runState.nodes.find((n) => n.nodeId === nodeId);
+      const content = drafts[nodeId] ?? node?.output ?? '';
       setSavingOutput(true);
       const ok = await runAction(
         () => workflowsApi.run.saveOutput(runState.runId, nodeId, content),
@@ -581,6 +660,7 @@ function RunWorkflowInner() {
           kind: node.type,
           status: node.status,
           selected: node.nodeId === selectedNodeId,
+          onOpenDetail: () => setDetailNodeId(node.nodeId),
         },
       })),
     [runState?.nodes, positions, selectedNodeId],
@@ -599,9 +679,9 @@ function RunWorkflowInner() {
 
   const nodeTypes = useMemo(() => ({ run: RunFlowNodeView }), []);
 
-  const selectedNode = useMemo(
-    () => runState?.nodes.find((node) => node.nodeId === selectedNodeId) ?? null,
-    [runState?.nodes, selectedNodeId],
+  const detailNode = useMemo(
+    () => runState?.nodes.find((node) => node.nodeId === detailNodeId) ?? null,
+    [runState?.nodes, detailNodeId],
   );
 
   // 末端叶节点(无出边)的已完成产出 = 本次运行成品。
@@ -675,7 +755,7 @@ function RunWorkflowInner() {
         <div className="ml-auto flex items-center gap-2">
           {runState?.status === 'paused' && (
             <Button onClick={handleResume} disabled={busy} className="gap-1.5">
-              <ArrowRight size={14} /> {t('workflows.runner.next')}
+              <Check size={14} /> {t('workflows.runner.confirmComplete')}
             </Button>
           )}
           <Button
@@ -687,19 +767,6 @@ function RunWorkflowInner() {
           >
             {t('workflows.runner.backToRuns')}
           </Button>
-          {runState?.sessionId && (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                router.push(
-                  `/ai-chat?sid=${encodeURIComponent(runState.sessionId)}`,
-                )
-              }
-              className="gap-1.5"
-            >
-              <MessageSquare size={14} /> {t('workflows.runner.goToSession')}
-            </Button>
-          )}
         </div>
       </header>
 
@@ -721,29 +788,8 @@ function RunWorkflowInner() {
           </ReactFlow>
         </div>
 
-        <aside className="w-full shrink-0 space-y-4 lg:w-[360px] lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto">
-          {selectedNode ? (
-            <NodeDetailPanel
-              node={selectedNode}
-              draft={drafts[selectedNode.nodeId] ?? selectedNode.output}
-              onDraftChange={(value) =>
-                setDrafts((prev) => ({ ...prev, [selectedNode.nodeId]: value }))
-              }
-              onCast={() => openPaipan(selectedNode.nodeId)}
-              onRerun={() => handleRerun(selectedNode.nodeId)}
-              onSkip={() => handleSkip(selectedNode.nodeId)}
-              onSaveOutput={() => handleSaveOutput(selectedNode.nodeId)}
-              savingOutput={savingOutput}
-              busy={busy}
-              t={t}
-            />
-          ) : (
-            <div className="rounded-2xl border border-dashed border-hairline bg-surface-card p-6 text-center text-[12px] text-muted">
-              {t('workflows.runner.pickNode')}
-            </div>
-          )}
-
-          {leafOutputs.length > 0 && (
+        <aside className="w-full shrink-0 space-y-4 lg:w-[300px] lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto">
+          {leafOutputs.length > 0 ? (
             <div className="space-y-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
               <p className="text-sm font-semibold text-ink">
                 {t('workflows.runner.outputsTitle')}
@@ -752,7 +798,7 @@ function RunWorkflowInner() {
                 <button
                   key={node.nodeId}
                   type="button"
-                  onClick={() => setSelectedNodeId(node.nodeId)}
+                  onClick={() => setDetailNodeId(node.nodeId)}
                   className="block w-full rounded-lg bg-surface-card px-3 py-2 text-left text-[12px] text-body hover:bg-primary/5"
                 >
                   <span className="font-medium text-ink">{node.title}</span>
@@ -762,9 +808,43 @@ function RunWorkflowInner() {
                 </button>
               ))}
             </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-hairline bg-surface-card p-6 text-center text-[12px] text-muted">
+              {t('workflows.runner.pickNode')}
+            </div>
           )}
         </aside>
       </div>
+
+      {detailNode && (
+        <BottomSheet
+          open
+          onClose={() => setDetailNodeId(null)}
+          size="lg"
+          aria-label={detailNode.title}
+        >
+          <div className="p-3 sm:p-4">
+            <NodeDetailPanel
+              key={detailNode.nodeId}
+              node={detailNode}
+              draft={drafts[detailNode.nodeId] ?? detailNode.output}
+              onDraftChange={(value) =>
+                setDrafts((prev) => ({ ...prev, [detailNode.nodeId]: value }))
+              }
+              onCast={() => {
+                setDetailNodeId(null);
+                openPaipan(detailNode.nodeId);
+              }}
+              onRerun={() => handleRerun(detailNode.nodeId)}
+              onSkip={() => handleSkip(detailNode.nodeId)}
+              onSaveOutput={() => handleSaveOutput(detailNode.nodeId)}
+              savingOutput={savingOutput}
+              busy={busy}
+              t={t}
+            />
+          </div>
+        </BottomSheet>
+      )}
 
       {paipanSheet && runState && (
         <PaipanSheet

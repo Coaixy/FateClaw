@@ -6,7 +6,7 @@
  *   - 一个排盘节点起盘 → 盘面分叉到多个 AI 节点(各绑不同 skill)。
  *   - 多条分支可汇入一个新 AI 节点(prompt 引用各上游产出)。
  *   - 多个末端(叶)节点 = 多份成品输出。
- * 运行: 混合(每节点可设 pauseAfter); 节点类型两种: 排盘 + AI 解读。
+ * 运行: 全自动推进,跑完全部成品后停在 paused 等卦师润色/确认; 节点类型两种: 排盘 + AI 解读。
  *
  * schema 决策(2026-06-21):
  *   - 排盘节点是固定机械流程、不经 AI,因此只有 skill + inputDefaults,没有 prompt。
@@ -32,8 +32,6 @@ export interface WorkflowNodeBaseDto {
   id: string;
   /** 卦师可读的节点名称。 */
   title: string;
-  /** 此节点产出后是否暂停等卦师接管("自动过"= false,"停下来让我看/润色"= true)。 */
-  pauseAfter: boolean;
   /** 画布坐标(编辑器布局用)。 */
   position: WorkflowNodePositionDto;
 }
@@ -145,9 +143,9 @@ export interface WorkflowDefinitionUpsertDto {
 }
 
 // ───────────────────────────── 运行(run) ─────────────────────────────
-// 运行不另建状态表:一次运行 = 一个 chat session,每节点产出 = 一条 message。
-// 前端驱动循环:启动拿到图(节点+边)→ 按拓扑序逐个 execute 就绪节点 →
-// 按 pauseAfter 决定自动续跑或停;末端(叶)节点各自是一份成品。
+// 运行态独立领域实体(B 方案):后端拓扑编排状态机推进,产出落 messages 供润色。
+// 全自动推进就绪节点;全部节点完成后停在 paused 等卦师润色/确认,
+// 卦师点「完成」(resume)才落 done;末端(叶)节点各自是一份成品。
 
 /** 启动一次运行的请求体。 */
 export interface WorkflowRunStartRequestDto {
@@ -165,7 +163,7 @@ export interface WorkflowRunStartRequestDto {
 /** 运行整体状态。 */
 export type WorkflowRunStatus =
   | 'running' // 推进中
-  | 'paused' // 命中某 pauseAfter 节点,等卦师接管
+  | 'paused' // 全部成品完成,等卦师润色/确认(点「完成」落 done)
   | 'done' // 全部叶子节点完成
   | 'error' // 某节点失败且未恢复
   | 'canceled'; // 卦师取消
@@ -185,7 +183,6 @@ export interface WorkflowRunNodeStateDto {
   nodeId: string;
   type: WorkflowNodeDto['type'];
   title: string;
-  pauseAfter: boolean;
   status: WorkflowRunNodeStatus;
   /** 文本产出(AI / 手填);排盘节点为空,盘面经 toolContext 渲染。 */
   output: string;

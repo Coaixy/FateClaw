@@ -36,7 +36,7 @@ import {
   collectNodeOutputs,
   renderWorkflowPrompt,
   resolveNodeOutputId,
-} from '../chat/workflow-run-render.js';
+} from './workflow-run-render.js';
 import { resolveSimpleWorkflowLlmRuntime } from '../system/system-config.js';
 import {
   createWorkflowRunOrchestrator,
@@ -210,6 +210,15 @@ async function reconcile(
   return orchestrator.getRunSnapshot(runId, userId);
 }
 
+/** 判断一条 tool_trace 消息是否仍处于"工具进行中"(metadata.tool_status==='running')。 */
+function isToolTraceRunning(message: NewMessage | undefined): boolean {
+  if (!message) return false;
+  const status = (
+    message.metadata as { tool_status?: unknown } | null | undefined
+  )?.tool_status;
+  return status === 'running';
+}
+
 /** 把编排器快照 + 会话消息正文组装为对外 WorkflowRunStateDto。 */
 function toRunStateDto(
   snapshot: OrchestratorRunSnapshot,
@@ -240,7 +249,6 @@ function toRunStateDto(
       nodeId: node.nodeId,
       type: node.type,
       title: node.title,
-      pauseAfter: node.pauseAfter,
       status: node.status,
       // 文本产出:AI/手填取消息正文;排盘节点正文为空(盘面经 outputMessageId 关联 tool_context)。
       output:
@@ -254,9 +262,11 @@ function toRunStateDto(
       toolContext: node.outputMessageId
         ? (toolContextById.get(node.outputMessageId) ?? undefined)
         : undefined,
-      // 运行中 AI 节点的最新工具进度(让卦师看到在动而非黑盒转圈)。
+      // 运行中 AI 节点的进度提示:仅当最新 tool_trace 仍是"工具进行中"才显示具体工具进度;
+      // 工具已完成(进入生成正文阶段,outbox 在此期间不落库、DB 静默)或尚未调工具时返回 undefined,
+      // 由前端回退为"AI 解读生成中…",避免一直卡在最后一个已完成的工具名上。
       progressText:
-        node.status === 'running'
+        node.status === 'running' && isToolTraceRunning(latestToolTrace)
           ? (latestToolTrace?.content ?? undefined)
           : undefined,
       error: node.error ?? undefined,

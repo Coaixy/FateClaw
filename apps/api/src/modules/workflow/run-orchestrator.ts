@@ -9,7 +9,7 @@
  *   advance 先把"本轮就绪"节点一次性持久化为在途(AI→running、排盘→awaiting_paipan),
  *   再逐个发起 AI 节点 —— 先持久化在途再发起,保证完成事件重入 advance 时不会重复发起。
  *   AI 完成由 outbox 经 markNodeCompleted 驱动;排盘完成由前端起盘提交经 markNodeCompleted 驱动。
- *   命中 pauseAfter 节点完成 → 运行整体 paused(与既有前端循环行为一致),resume 后继续。
+ *   全部节点完成 → 运行整体 paused(等卦师润色/确认全部成品),resume(卦师点「完成」)后落 done。
  */
 import type {
   WorkflowAiNodeDto,
@@ -93,7 +93,6 @@ export interface OrchestratorRunNode {
   nodeId: string;
   type: WorkflowNodeDto['type'];
   title: string;
-  pauseAfter: boolean;
   status: WorkflowRunNodeStatus;
   outputMessageId: string | null;
   outputAccountId: string | null;
@@ -147,7 +146,6 @@ function toSnapshot(loaded: LoadedWorkflowRun): OrchestratorRunSnapshot {
         nodeId: node.id,
         type: node.type,
         title: node.title,
-        pauseAfter: node.pauseAfter,
         status: row?.status ?? 'pending',
         outputMessageId: row?.output_message_id ?? null,
         outputAccountId: row?.output_account_id ?? null,
@@ -194,10 +192,13 @@ export function createWorkflowRunOrchestrator(deps: {
     const statusByNode = statusMapOf(loaded.nodes);
     const derived = deriveRunStatus(loaded.graph, statusByNode);
     if (derived !== 'running') {
-      await store.updateRunStatus(runId, derived);
+      // 方案A:全部节点完成不直接收束为 done,先停在 paused 等卦师润色/确认全部成品;
+      // resume(卦师点「完成」)才落 done。error 仍直接置 error。
+      const settled = derived === 'done' ? 'paused' : derived;
+      await store.updateRunStatus(runId, settled);
       return toSnapshot({
         ...loaded,
-        run: { ...loaded.run, status: derived },
+        run: { ...loaded.run, status: settled },
       });
     }
 
@@ -252,9 +253,9 @@ export function createWorkflowRunOrchestrator(deps: {
   }
 
   /**
-   * 标记某节点完成(产出落库后调用:AI 由 outbox、排盘由前端起盘提交)。
+   * 标记某节点完成(产出落库后调用:AI 由 outbox、排盘由前端起盘提交),随即推进。
    *
-   * @remarks 命中 pauseAfter 节点 → 运行整体暂停;否则继续推进。
+   * @remarks 推进到全部节点完成时,advance 会把运行整体置 paused 等卦师确认(方案A)。
    */
   async function markNodeCompleted(
     runId: string,
@@ -262,18 +263,13 @@ export function createWorkflowRunOrchestrator(deps: {
     nodeId: string,
     output: NodeOutputRef,
   ): Promise<OrchestratorRunSnapshot> {
-    const loaded = await load(runId, userId);
+    await load(runId, userId);
     await store.updateNode(runId, nodeId, {
       status: 'done',
       outputMessageId: output.messageId,
       outputAccountId: output.accountId,
       error: null,
     });
-    const node = loaded.graph.nodes.find((item) => item.id === nodeId);
-    if (node?.pauseAfter) {
-      await store.updateRunStatus(runId, 'paused');
-      return toSnapshot(await load(runId, userId));
-    }
     return advance(runId, userId);
   }
 
@@ -295,18 +291,13 @@ export function createWorkflowRunOrchestrator(deps: {
     nodeId: string,
     output: NodeOutputRef,
   ): Promise<OrchestratorRunSnapshot> {
-    const loaded = await load(runId, userId);
+    await load(runId, userId);
     await store.updateNode(runId, nodeId, {
       status: 'manual',
       outputMessageId: output.messageId,
       outputAccountId: output.accountId,
       error: null,
     });
-    const node = loaded.graph.nodes.find((item) => item.id === nodeId);
-    if (node?.pauseAfter) {
-      await store.updateRunStatus(runId, 'paused');
-      return toSnapshot(await load(runId, userId));
-    }
     // 手填是恢复动作:运行可能已因该节点失败而落 error,先复活为 running 再推进。
     await store.updateRunStatus(runId, 'running');
     return advance(runId, userId);
@@ -325,7 +316,12 @@ export function createWorkflowRunOrchestrator(deps: {
     return advance(runId, userId);
   }
 
-  /** 从暂停恢复:paused → running 并继续推进。 */
+  /**
+   * 卦师点「完成」:确认全部成品、收束运行(方案A)。
+   *
+   * @remarks paused 表示全部节点已完成、等卦师润色/确认;确认即落 done。
+   *          防御:若此刻仍有未完成节点(理论上不会,只有全完成才会 paused),回到 running 继续推进。
+   */
   async function resume(
     runId: string,
     userId: string,
@@ -333,6 +329,11 @@ export function createWorkflowRunOrchestrator(deps: {
     const loaded = await load(runId, userId);
     if (loaded.run.status !== 'paused') {
       return toSnapshot(loaded);
+    }
+    const derived = deriveRunStatus(loaded.graph, statusMapOf(loaded.nodes));
+    if (derived === 'done') {
+      await store.updateRunStatus(runId, 'done');
+      return toSnapshot({ ...loaded, run: { ...loaded.run, status: 'done' } });
     }
     await store.updateRunStatus(runId, 'running');
     return advance(runId, userId);
@@ -369,7 +370,6 @@ export function createWorkflowRunOrchestrator(deps: {
       nodeId: node.id,
       nodeType: node.type,
       title: node.title,
-      pauseAfter: node.pauseAfter,
     }));
     await store.createRun(
       {

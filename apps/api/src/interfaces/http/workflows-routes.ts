@@ -9,7 +9,7 @@ import {
   getWorkflowDefinitionForOwnedUser,
   listWorkflowDefinitionsForOwnedUser,
   updateWorkflowDefinitionForOwnedUser,
-} from '../../modules/chat/workflow-definition-service.js';
+} from '../../modules/workflow/workflow-definition-service.js';
 import {
   commitWorkflowPaipanNodeV2,
   getWorkflowRunStateV2,
@@ -39,7 +39,6 @@ const PositionSchema = z.object({
 const nodeBase = {
   id: z.string().trim().min(1, '请填写节点 id').max(64),
   title: z.string().trim().min(1, '请填写节点名称').max(60),
-  pauseAfter: z.boolean(),
   position: PositionSchema,
 };
 

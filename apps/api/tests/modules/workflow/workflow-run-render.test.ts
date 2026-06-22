@@ -4,7 +4,7 @@ import {
   collectNodeOutputs,
   renderWorkflowPrompt,
   resolveNodeOutputId,
-} from '../../../src/modules/chat/workflow-run-render.js';
+} from '../../../src/modules/workflow/workflow-run-render.js';
 
 describe('renderWorkflowPrompt', () => {
   it('替换 {{input.<key>}} 为本次运行输入', () => {
