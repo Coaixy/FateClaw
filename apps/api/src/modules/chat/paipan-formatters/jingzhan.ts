@@ -4,11 +4,9 @@ import {
   arrayField,
   asRecord,
   formatQueryTime,
-  joinList,
   pushSection,
   recordField,
   scalarArray,
-  scalarText,
   textField,
 } from './utils.js';
 
@@ -19,6 +17,14 @@ const YAO_LABELS: Record<number, string> = {
   4: '四爻',
   5: '五爻',
   6: '上爻',
+};
+
+/** 爻值（揲蓍数）到老少阴阳的换算：6 老阴、7 少阳、8 少阴、9 老阳。 */
+const YAO_VALUE_LABELS: Record<number, string> = {
+  6: '老阴',
+  7: '少阳',
+  8: '少阴',
+  9: '老阳',
 };
 
 function movingPositions(gua: Record<string, unknown> | undefined): number[] {
@@ -36,36 +42,23 @@ function formatGuaSummary(label: string, value: unknown): string | undefined {
   if (!gua) return undefined;
   const name = textField(gua, 'guaName');
   if (!name) return undefined;
-  const detail = joinList([
-    textField(gua, 'palace') ? `${textField(gua, 'palace')}宫` : undefined,
-    textField(gua, 'palaceWuXing')
-      ? `五行${textField(gua, 'palaceWuXing')}`
-      : undefined,
-    textField(gua, 'palaceLevel'),
-    textField(gua, 'wuXingStar')
-      ? `五星${textField(gua, 'wuXingStar')}`
-      : undefined,
-    textField(gua, 'shenYao') ? `身爻${textField(gua, 'shenYao')}` : undefined,
-  ]);
-  return detail ? `${label}：${name}（${detail}）` : `${label}：${name}`;
+  // 经占只取卦名，宫/五行/世应等卦宫纳甲信息不列。
+  return `${label}：${name}`;
 }
 
+/** 列出指定爻位的爻辞；positions 为空（无动爻）则不列爻辞。 */
 function formatMovingYaoCi(
   gua: Record<string, unknown>,
   positions: number[],
 ): string[] {
   const yaoCi = scalarArray(gua.yaoCi);
-  if (positions.length === 0) {
-    return yaoCi.map(
-      (text, index) => `${YAO_LABELS[index + 1] ?? `${index + 1}爻`}：${text}`,
-    );
-  }
   return positions.flatMap((position) => {
     const text = yaoCi[position - 1];
     return text ? [`${YAO_LABELS[position] ?? `${position}爻`}：${text}`] : [];
   });
 }
 
+/** 经文取辞：列卦辞 + 指定爻位的爻辞（不列彖辞，经占以卦辞、动爻爻辞断）。 */
 function formatScripture(
   label: string,
   value: unknown,
@@ -73,48 +66,57 @@ function formatScripture(
 ): string[] {
   const gua = asRecord(value);
   if (!gua) return [];
-  const lines = [
-    textField(gua, 'guaCi')
-      ? `${label}卦辞：${textField(gua, 'guaCi')}`
-      : undefined,
-    textField(gua, 'tuanCi')
-      ? `${label}彖辞：${textField(gua, 'tuanCi')}`
-      : undefined,
-  ].filter((line): line is string => Boolean(line));
+  const lines: string[] = [];
+  const guaCi = textField(gua, 'guaCi');
+  if (guaCi) lines.push(`${label}卦辞：${guaCi}`);
   for (const line of formatMovingYaoCi(gua, positions)) {
     lines.push(`${label}${line}`);
   }
   return lines;
 }
 
-function formatYaoValues(label: string, value: unknown): string | undefined {
-  const gua = asRecord(value);
-  if (!gua) return undefined;
-  const values = arrayField(gua, 'yaoList')
+/** 取卦的爻记录列表（过滤掉非对象项）。 */
+function yaoRecords(
+  gua: Record<string, unknown> | undefined,
+): Record<string, unknown>[] {
+  if (!gua) return [];
+  return arrayField(gua, 'yaoList')
     .map(asRecord)
-    .filter((yao): yao is Record<string, unknown> => Boolean(yao))
-    .map((yao) => {
-      const position = Number(yao.position);
-      const name = YAO_LABELS[position] ?? `${position}爻`;
-      return joinList([
-        name,
-        textField(yao, 'yaoValue')
-          ? `爻值${textField(yao, 'yaoValue')}`
-          : undefined,
-        yao.isMoving === true ? '动' : '静',
-        textField(yao, 'naYin') ? `纳音${textField(yao, 'naYin')}` : undefined,
-      ]);
-    });
-  return values.length > 0 ? `${label}：${values.join('；')}` : undefined;
+    .filter((yao): yao is Record<string, unknown> => Boolean(yao));
 }
 
-function formatShenSha(value: unknown): string | undefined {
-  const values = scalarArray(value);
-  if (values.length > 0) return values.join('、');
-  return scalarText(value);
+/**
+ * 爻值摘要：逐爻列出本卦各爻的老少阴阳。
+ *
+ * 动爻（老阴/老阳）会变，附带其在变卦中变成的阴阳作为变爻；
+ * 静爻（少阴/少阳）不变，不显示变爻。经占以卦爻辞断，不掺纳甲。
+ */
+function formatYaoValues(
+  benGua: Record<string, unknown> | undefined,
+  zhiGua: Record<string, unknown> | undefined,
+): string[] {
+  const zhiList = yaoRecords(zhiGua);
+  return yaoRecords(benGua).map((yao) => {
+    const position = Number(yao.position);
+    const name = YAO_LABELS[position] ?? `${position}爻`;
+    const label =
+      YAO_VALUE_LABELS[Number(yao.yaoValue)] ?? textField(yao, 'yaoValue') ?? '';
+    if (yao.isMoving !== true) {
+      // 静爻不变，只列阴阳。
+      return label ? `${name}：${label}` : name;
+    }
+    // 动爻附带变卦同爻位的阴阳（变爻）。
+    const zhiYao = zhiList.find((item) => Number(item.position) === position);
+    const zhiLabel = zhiYao
+      ? YAO_VALUE_LABELS[Number(zhiYao.yaoValue)]
+      : undefined;
+    return zhiLabel
+      ? `${name}：${label}（动，变${zhiLabel}）`
+      : `${name}：${label}（动）`;
+  });
 }
 
-/** 经占 formatter：按取辞、卦辞爻辞和神煞落点重排结果。 */
+/** 经占 formatter：按取辞、卦辞爻辞重排结果（经占以卦爻辞断，不含纳甲、神煞）。 */
 export const formatJingzhanPaipan: PaipanFormatter = (artifactData) => {
   const root = asRecord(artifactData);
   if (!root || !recordField(root, 'benGua'))
@@ -149,24 +151,13 @@ export const formatJingzhanPaipan: PaipanFormatter = (artifactData) => {
   ]);
   pushSection(lines, '经文取辞', [
     ...formatScripture('本卦', benGua, moves),
-    ...formatScripture('变卦', recordField(root, 'zhiGua'), []),
+    ...formatScripture('变卦', recordField(root, 'zhiGua'), moves),
     ...formatScripture('互卦', recordField(root, 'huGua'), []),
-  ]);
-  pushSection(lines, '爻值摘要', [
-    formatYaoValues('本卦', benGua),
-    formatYaoValues('变卦', recordField(root, 'zhiGua')),
-    formatYaoValues('互卦', recordField(root, 'huGua')),
   ]);
   pushSection(
     lines,
-    '神煞',
-    Object.entries(recordField(root, 'shenSha') ?? {}).flatMap(
-      ([name, value]) => {
-        const text = formatShenSha(value);
-        return text ? [`${name}：${text}`] : [];
-      },
-    ),
+    '爻值摘要',
+    formatYaoValues(benGua, recordField(root, 'zhiGua')),
   );
-
   return lines.join('\n').trim();
 };
