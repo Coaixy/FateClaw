@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Brain,
@@ -33,6 +33,26 @@ import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
 
 type AiChatBillingNotice = 'arrears' | 'plus-required';
+
+// 流式时每个 token 都会 setMessages,但只有"正在打字"那条消息对象引用会变
+// (upsertStreamingAssistantMessage 保留其余消息引用)。据此按引用比较,让每个 token
+// 只重渲染流式那一条,而不是整段历史(含排盘图表/markdown)——这是恢复"真流式"手感的关键。
+// 轮询每 1.2s 会把整列换成新引用,那一刻整列重渲染一次,可接受。
+function areMessageRowsEqual(
+  a: { message: Message; toolTraces: Message[]; animationIndex: number },
+  b: { message: Message; toolTraces: Message[]; animationIndex: number },
+): boolean {
+  if (a.animationIndex !== b.animationIndex) return false;
+  if (a.message !== b.message) return false;
+  if (a.toolTraces === b.toolTraces) return true;
+  if (a.toolTraces.length !== b.toolTraces.length) return false;
+  for (let i = 0; i < a.toolTraces.length; i += 1) {
+    if (a.toolTraces[i] !== b.toolTraces[i]) return false;
+  }
+  return true;
+}
+
+const AiChatMessageRow = memo(AiChatMessageRowImpl, areMessageRowsEqual);
 
 export function AiChatMessageList({
   messages,
@@ -294,7 +314,7 @@ function shouldShowWalletRecovery(content: string) {
   );
 }
 
-function AiChatMessageRow({
+function AiChatMessageRowImpl({
   message,
   toolTraces,
   animationIndex,

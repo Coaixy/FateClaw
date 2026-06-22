@@ -955,6 +955,36 @@ export function useChatMessages(options: {
     let reconnectTimeoutId: number | null = null;
     let reconnectAttempt = 0;
 
+    // 流式增量按帧合并:assistant/thinking 的 delta 携带的是累积全量快照,合并到"最新一帧"
+    // 不丢任何字;每帧最多 setState 一次,避免长回复时每个 token 都重解析整条 markdown。
+    let streamFlushFrame: number | null = null;
+    let pendingAssistant: { snapshot: string; key: string | null } | null = null;
+    let pendingThinking: { snapshot: string; turnIndex?: number } | null = null;
+    const flushStreamDeltas = () => {
+      streamFlushFrame = null;
+      if (pendingThinking) {
+        const next = pendingThinking;
+        pendingThinking = null;
+        upsertThinkingMessage(sessionId, next.snapshot, next.turnIndex);
+      }
+      if (pendingAssistant) {
+        const next = pendingAssistant;
+        pendingAssistant = null;
+        upsertStreamingAssistantMessage(sessionId, next.snapshot, next.key);
+      }
+    };
+    const scheduleStreamFlush = () => {
+      if (streamFlushFrame === null) {
+        streamFlushFrame = window.requestAnimationFrame(flushStreamDeltas);
+      }
+    };
+    const cancelStreamFlush = () => {
+      if (streamFlushFrame !== null) {
+        window.cancelAnimationFrame(streamFlushFrame);
+        streamFlushFrame = null;
+      }
+    };
+
     const clearReconnectTimeout = () => {
       if (reconnectTimeoutId === null) return;
       window.clearTimeout(reconnectTimeoutId);
@@ -1003,6 +1033,16 @@ export function useChatMessages(options: {
       // 收到任何有效流事件 = 后端仍在推进,刷新看门狗静默窗口
       lastStreamActivityRef.current = Date.now();
 
+      // 非增量事件(最终态/工具轨迹/错误等)依赖最新流式文本且要保持插入顺序:
+      // 先把 pending 的增量同步刷出,再处理本事件。
+      if (
+        payload.type !== 'assistant_delta' &&
+        payload.type !== 'thinking_delta'
+      ) {
+        cancelStreamFlush();
+        flushStreamDeltas();
+      }
+
       if (payload.type === 'connected') {
         reconnectAttempt = 0;
         setMessages((previous) => withoutReconnectNoticeMessages(previous));
@@ -1025,24 +1065,29 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'assistant_delta') {
-        upsertStreamingAssistantMessage(
-          sessionId,
-          payload.snapshot,
-          typeof payload.turnIndex === 'number'
-            ? `turn-${payload.turnIndex}`
-            : latestStreamingMessageKeyRef.current,
-        );
+        // 合并到最新快照,按帧 flush(见上方 scheduleStreamFlush)
+        pendingAssistant = {
+          snapshot: payload.snapshot,
+          key:
+            typeof payload.turnIndex === 'number'
+              ? `turn-${payload.turnIndex}`
+              : latestStreamingMessageKeyRef.current,
+        };
         updateProcessing(true);
+        scheduleStreamFlush();
         return;
       }
 
       if (payload.type === 'thinking_delta') {
-        upsertThinkingMessage(
-          sessionId,
-          payload.snapshot,
-          typeof payload.turnIndex === 'number' ? payload.turnIndex : undefined,
-        );
+        pendingThinking = {
+          snapshot: payload.snapshot,
+          turnIndex:
+            typeof payload.turnIndex === 'number'
+              ? payload.turnIndex
+              : undefined,
+        };
         updateProcessing(true);
+        scheduleStreamFlush();
         return;
       }
 
@@ -1265,6 +1310,7 @@ export function useChatMessages(options: {
     return () => {
       closedByEffect = true;
       clearReconnectTimeout();
+      cancelStreamFlush();
       socket?.close();
       if (streamSocketRef.current === socket) {
         streamSocketRef.current = null;

@@ -822,6 +822,14 @@ async function processAiChatProgress(
       : 'progress';
   const text = payload.text?.trim() || '处理中';
 
+  // 工具"运行中"是瞬态进度:实时态已由上面的 publishAiChatStreamEvent 推给前端,
+  // 不再落库——避免一次工具密集的回合产生大量 storeMessage("不停落库"),回合结束后
+  // 仍会持久化完成/失败态,轨迹页脚照常可见。
+  const toolStatus = (metadata as { tool_status?: unknown }).tool_status;
+  if (kind === 'tool_trace' && (toolStatus === 'running' || stage === 'tool_running')) {
+    return;
+  }
+
   const ownerUserId = await resolveOwnerUserId({ accountId, pending });
   await storeMessage({
     id: buildProgressMessageId(payload),
