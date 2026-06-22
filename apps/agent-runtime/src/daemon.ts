@@ -26,6 +26,15 @@ const AGENT_RUNTIME_ACCOUNT_CONCURRENCY = Math.max(
   1,
   Math.trunc(Number(process.env.AGENT_RUNTIME_ACCOUNT_CONCURRENCY ?? '1')) || 1,
 );
+// 单次请求最长处理时长(默认 30 分钟)。超时后强制中断会话并抛错,由 catch 写一条
+// error 终止响应——否则 LLM provider 挂起会让 executeContainerInput 永久 await:
+// 既不产出也不报错,daemon 占满账号唯一并发槽,该用户后续所有消息全部卡死,
+// 宿主机也只能等 35 分钟锁 TTL。详见对话偶发卡死排查。
+const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = Math.max(
+  60_000,
+  Math.trunc(Number(process.env.AGENT_RUNTIME_REQUEST_TIMEOUT_MS ?? '1800000')) ||
+    1_800_000,
+);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -210,7 +219,8 @@ async function processInboxMessage(
       `正在处理收件箱请求 requestId=${request.requestId} type=${request.type} accountId=${request.accountId}${request.outboxQueue ? ` outboxQueue=${request.outboxQueue}` : ''}`,
     );
 
-    const output = await executeContainerInput(
+    const inboxRequestId = request.requestId;
+    const containerExecution = executeContainerInput(
       {
         accountId,
         sessionId: request.sessionId,
@@ -232,13 +242,38 @@ async function processInboxMessage(
       undefined,
       {
         onSessionReady(sessionControls) {
-          activeSessions.set(request!.requestId, sessionControls);
-          if (pendingCancelRequests.delete(request!.requestId)) {
+          activeSessions.set(inboxRequestId, sessionControls);
+          if (pendingCancelRequests.delete(inboxRequestId)) {
             void sessionControls.abort();
           }
         },
       },
     );
+    // 超时后这条执行链会被遗弃(executeContainerInput 内部 catch,不会抛),先挂一个
+    // 兜底 catch 防止极端情况下的未处理 promise 异常。
+    containerExecution.catch(() => {});
+
+    // 给单次请求套一个可中断的超时:超时则尽力 abort 已就绪的会话(尽快释放底层 LLM
+    // 连接与账号并发槽),并抛错落入下方 catch 写出 error 终止响应,绝不无限等待。
+    let requestTimeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const output = await Promise.race([
+      containerExecution,
+      new Promise<never>((_, reject) => {
+        requestTimeoutTimer = setTimeout(() => {
+          void activeSessions
+            .get(inboxRequestId)
+            ?.abort()
+            .catch(() => {});
+          reject(
+            new Error(
+              `agent 请求超时(${AGENT_RUNTIME_REQUEST_TIMEOUT_MS}ms 未完成)`,
+            ),
+          );
+        }, AGENT_RUNTIME_REQUEST_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (requestTimeoutTimer) clearTimeout(requestTimeoutTimer);
+    });
 
     const response: OutboxResponse = {
       type: 'response',

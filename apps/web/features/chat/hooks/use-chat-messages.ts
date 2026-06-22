@@ -32,6 +32,13 @@ const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
 const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
 const GENERIC_REQUEST_FAILED_MESSAGE = '请求失败，请检查后重试';
 const AI_CHAT_RECONNECTING_MESSAGE = '请求断开，正在重连';
+// 流式静默看门狗:对话进入 pending(显示"AI正在回复")后,若连续 STUCK 毫秒既没有任何
+// WebSocket 流事件、也没有新消息落库,判定后端可能已挂死且终止事件丢失。此时前端不再
+// 无限转圈——主动取消(经 cancel 接口权威释放后端会话锁,保证可立即重试)并提示用户。
+// 详见对话偶发卡死排查:后端兜底要等 30~35 分钟,看门狗把用户感知恢复缩短到秒级。
+const CHAT_STUCK_TIMEOUT_MS = 90_000;
+const CHAT_STUCK_CHECK_INTERVAL_MS = 5_000;
+const CHAT_STUCK_MESSAGE = '这次回复似乎中断了，请重试';
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
@@ -272,6 +279,10 @@ export function useChatMessages(options: {
   const streamingSequenceRef = useRef(0);
   const toolTraceSequenceRef = useRef(0);
   const localMessageSequenceRef = useRef(0);
+  // 最近一次"流仍在推进"的时间戳:WS 流事件或新消息落库都会刷新它,看门狗据此判定静默卡死。
+  const lastStreamActivityRef = useRef(0);
+  // 最近一次已知的服务端消息条数,用于在轮询中识别"有新消息落库"=本轮仍在推进。
+  const lastSeenMessageCountRef = useRef(0);
   const isPending = sending || processing || awaitingRefresh;
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
@@ -356,6 +367,11 @@ export function useChatMessages(options: {
         databaseProcessingRef.current = data.processing;
 
         const nextMessages = data.messages.reverse();
+        if (nextMessages.length !== lastSeenMessageCountRef.current) {
+          // 有新消息落库,说明本轮仍在推进,刷新看门狗静默窗口
+          lastSeenMessageCountRef.current = nextMessages.length;
+          lastStreamActivityRef.current = Date.now();
+        }
         if (isBackground && isStreamInterrupted(sessionId)) {
           databaseProcessingRef.current = false;
           return {
@@ -859,6 +875,73 @@ export function useChatMessages(options: {
     [options.sessions],
   );
 
+  // 看门狗判定卡死后的收尾:与 stopGenerating 同一套释放逻辑,额外追加一条错误提示。
+  const handleStuckTurn = useCallback(
+    (sessionId: string) => {
+      // 后端会话可能已挂死且终止事件丢失:必须主动取消以权威释放后端会话锁,否则用户
+      // 重试会撞 409"会话正在处理其他请求"。随后关闭当前流、清空本地 pending 状态。
+      interruptedStreamSessionRef.current = sessionId;
+      void chatSessionsApi.cancel(sessionId).catch(() => undefined);
+      sendAbortControllerRef.current?.abort();
+      const socket = streamSocketRef.current;
+      if (socket) {
+        streamSocketRef.current = null;
+        socket.close();
+      }
+      const activeStreamingMessageIds = getActiveStreamingMessageIds();
+      databaseProcessingRef.current = false;
+      finalizeRunningToolTraceMessages('failed');
+      resetStreamingMessageRefs();
+      setSending(false);
+      updateProcessing(false);
+      updateAwaitingRefresh(false);
+      appendAssistantErrorMessage(sessionId, CHAT_STUCK_MESSAGE, {
+        removeMessageIds: activeStreamingMessageIds,
+      });
+    },
+    [
+      appendAssistantErrorMessage,
+      finalizeRunningToolTraceMessages,
+      getActiveStreamingMessageIds,
+      resetStreamingMessageRefs,
+      updateAwaitingRefresh,
+      updateProcessing,
+    ],
+  );
+
+  // 用 ref 持有最新 handleStuckTurn:它依赖 sessions,若直接进 effect 依赖会随 sessions
+  // 频繁变化导致看门狗 effect 重建、不断刷新静默窗口而永远触发不了。
+  const handleStuckTurnRef = useRef(handleStuckTurn);
+  useEffect(() => {
+    handleStuckTurnRef.current = handleStuckTurn;
+  }, [handleStuckTurn]);
+
+  // 流式静默看门狗:仅在 pending 期间运行(isPending 持续为 true 时 effect 不重建,
+  // 故静默窗口只由真实流事件/新消息刷新),静默超过阈值则判定卡死并收尾。
+  useEffect(() => {
+    if (!options.selectedSession || !isPending) return;
+    // 进入 pending 时刷新窗口,避免页面刚加载/切回会话时带着陈旧时间戳被立即误判。
+    lastStreamActivityRef.current = Date.now();
+    const timerId = window.setInterval(() => {
+      const stillPending =
+        sendingRef.current ||
+        processingRef.current ||
+        awaitingRefreshRef.current;
+      if (
+        !stillPending ||
+        activeSessionRef.current !== options.selectedSession ||
+        document.visibilityState === 'hidden' // 后台标签页不计时,回到前台再判
+      ) {
+        return;
+      }
+      if (Date.now() - lastStreamActivityRef.current < CHAT_STUCK_TIMEOUT_MS) {
+        return;
+      }
+      handleStuckTurnRef.current(options.selectedSession);
+    }, CHAT_STUCK_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(timerId);
+  }, [isPending, options.selectedSession]);
+
   useEffect(() => {
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
@@ -917,6 +1000,8 @@ export function useChatMessages(options: {
       } catch {
         return;
       }
+      // 收到任何有效流事件 = 后端仍在推进,刷新看门狗静默窗口
+      lastStreamActivityRef.current = Date.now();
 
       if (payload.type === 'connected') {
         reconnectAttempt = 0;
@@ -1274,6 +1359,7 @@ export function useChatMessages(options: {
       const abortController = new AbortController();
       sendAbortControllerRef.current = abortController;
       setSending(true);
+      lastStreamActivityRef.current = Date.now();
       shouldAutoScrollRef.current = true;
 
       try {
