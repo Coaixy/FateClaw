@@ -24,6 +24,7 @@ import { workflowDefinitionInputsMigrations } from './definitions/0064-workflow-
 import { chatSessionWorkflowOriginMigrations } from './definitions/0065-chat-session-workflow-origin.js';
 import { messagesWorkflowNodeIdMigrations } from './definitions/0066-messages-workflow-node-id.js';
 import { workflowRunsMigrations } from './definitions/0067-workflow-runs.js';
+import { runtimeAgentTimeoutConcurrencyMigrations } from './definitions/0068-runtime-agent-timeout-concurrency.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -56,4 +57,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...chatSessionWorkflowOriginMigrations,
   ...messagesWorkflowNodeIdMigrations,
   ...workflowRunsMigrations,
+  ...runtimeAgentTimeoutConcurrencyMigrations,
 ];

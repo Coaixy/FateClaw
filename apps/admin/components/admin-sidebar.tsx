@@ -23,6 +23,7 @@ import {
   WalletCards,
   Workflow,
   Megaphone,
+  SlidersHorizontal,
   LogOut,
   Menu,
   X,
@@ -84,6 +85,12 @@ const navItems = [
     href: '/system/models',
     label: '模型配置',
     icon: Bot,
+    requiredScopes: ['admin:*'],
+  },
+  {
+    href: '/system/runtime',
+    label: '运行时配置',
+    icon: SlidersHorizontal,
     requiredScopes: ['admin:*'],
   },
   {

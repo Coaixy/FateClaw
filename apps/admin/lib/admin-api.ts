@@ -693,6 +693,8 @@ export interface AdminModelBillingConfig {
 
 export interface AdminRuntimeConfig {
   agent_concurrency_limit: number;
+  agent_request_timeout_ms: number;
+  agent_account_concurrency: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
   default_official_model_id: string | null;
@@ -763,6 +765,12 @@ export interface AdminSystemConfigOverview {
   model_billing: AdminModelBillingConfig;
   runtime: AdminRuntimeConfig;
   audit_logs: AdminConfigAuditLog[];
+}
+
+/** 配置变更审计日志分页结果。 */
+export interface AdminConfigAuditLogPage {
+  items: AdminConfigAuditLog[];
+  total: number;
 }
 
 export const admin = {
@@ -851,6 +859,10 @@ export const admin = {
     }),
   systemConfig: () =>
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
+  configAuditLogs: (params: { offset: number; limit: number }) =>
+    adminRequest<AdminConfigAuditLogPage>(
+      `/api/admin/system-config/audit-logs?offset=${params.offset}&limit=${params.limit}`,
+    ),
   rechargeConfig: () =>
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config'),
   updateRechargeConfig: (data: AdminRechargePaymentConfigUpdate) =>
@@ -910,6 +922,8 @@ export const admin = {
     ),
   updateRuntimeConfig: (data: {
     agent_concurrency_limit: number;
+    agent_request_timeout_ms?: number;
+    agent_account_concurrency?: number;
     local_agent_max_processes?: number;
     local_agent_idle_ttl_ms?: number;
     default_official_model_id?: string | null;

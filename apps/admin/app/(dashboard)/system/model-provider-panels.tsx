@@ -197,6 +197,8 @@ export function RuntimeConfigPanel({
   busy: boolean;
   onSave: (config: {
     agent_concurrency_limit: number;
+    agent_request_timeout_ms: number;
+    agent_account_concurrency: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
     default_official_model_id: string | null;
@@ -212,6 +214,13 @@ export function RuntimeConfigPanel({
   }) => Promise<void>;
 }) {
   const [limit, setLimit] = useState(runtime.agent_concurrency_limit);
+  // 单请求超时在 UI 用分钟展示,保存时换算回毫秒
+  const [requestTimeoutMinutes, setRequestTimeoutMinutes] = useState(
+    Math.round(runtime.agent_request_timeout_ms / 60000),
+  );
+  const [accountConcurrency, setAccountConcurrency] = useState(
+    runtime.agent_account_concurrency,
+  );
   const [maxProcesses, setMaxProcesses] = useState(
     runtime.local_agent_max_processes,
   );
@@ -251,6 +260,8 @@ export function RuntimeConfigPanel({
 
   useEffect(() => {
     setLimit(runtime.agent_concurrency_limit);
+    setRequestTimeoutMinutes(Math.round(runtime.agent_request_timeout_ms / 60000));
+    setAccountConcurrency(runtime.agent_account_concurrency);
     setMaxProcesses(runtime.local_agent_max_processes);
     setIdleSeconds(Math.round(runtime.local_agent_idle_ttl_ms / 1000));
     setDefaultOfficialModelId(runtime.default_official_model_id ?? '');
@@ -267,6 +278,8 @@ export function RuntimeConfigPanel({
     );
   }, [
     runtime.agent_concurrency_limit,
+    runtime.agent_request_timeout_ms,
+    runtime.agent_account_concurrency,
     runtime.default_official_model_id,
     runtime.default_thinking_level,
     runtime.local_agent_idle_ttl_ms,
@@ -287,6 +300,14 @@ export function RuntimeConfigPanel({
   );
   const normalized = {
     agent_concurrency_limit: Math.max(1, Math.floor(limit)),
+    agent_request_timeout_ms: Math.min(
+      3_600_000,
+      Math.max(60_000, Math.floor(requestTimeoutMinutes) * 60_000),
+    ),
+    agent_account_concurrency: Math.min(
+      16,
+      Math.max(1, Math.floor(accountConcurrency)),
+    ),
     local_agent_max_processes: Math.min(
       100,
       Math.max(1, Math.floor(maxProcesses)),
@@ -324,6 +345,9 @@ export function RuntimeConfigPanel({
   };
   const dirty =
     normalized.agent_concurrency_limit !== runtime.agent_concurrency_limit ||
+    normalized.agent_request_timeout_ms !== runtime.agent_request_timeout_ms ||
+    normalized.agent_account_concurrency !==
+      runtime.agent_account_concurrency ||
     normalized.local_agent_max_processes !==
       runtime.local_agent_max_processes ||
     normalized.local_agent_idle_ttl_ms !== runtime.local_agent_idle_ttl_ms ||
@@ -356,7 +380,11 @@ export function RuntimeConfigPanel({
           </div>
           <div className="mt-3 grid gap-1 text-[12px] text-muted">
             <div>
-              当前 Agent：{runtime.agent_concurrency_limit} 并发 /{' '}
+              当前 Agent：{runtime.agent_concurrency_limit} 全站并发 /{' '}
+              {runtime.agent_account_concurrency} 账号并发 /{' '}
+              {Math.round(runtime.agent_request_timeout_ms / 60000)} 分钟超时
+            </div>
+            <div>
               {runtime.local_agent_max_processes} runtime /{' '}
               {Math.round(runtime.local_agent_idle_ttl_ms / 1000)} 秒回收
             </div>
@@ -387,6 +415,20 @@ export function RuntimeConfigPanel({
                 onChange={setLimit}
                 min={1}
                 max={1000}
+              />
+              <NumberField
+                label="每账号并发"
+                value={accountConcurrency}
+                onChange={setAccountConcurrency}
+                min={1}
+                max={16}
+              />
+              <NumberField
+                label="单请求超时(分钟)"
+                value={requestTimeoutMinutes}
+                onChange={setRequestTimeoutMinutes}
+                min={1}
+                max={60}
               />
               <NumberField
                 label="最大常驻 runtime"

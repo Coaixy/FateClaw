@@ -13,6 +13,7 @@ import {
   getUserModelConfig,
   getUserModelSelection,
   listConfigAuditLogs,
+  listConfigAuditLogsPaged,
   listOfficialModelConfigs,
   updateOfficialModelConfig,
   updateModelBillingConfig,
@@ -789,6 +790,8 @@ export async function getSystemConfigOverview(): Promise<{
   };
   runtime: {
     agent_concurrency_limit: number;
+    agent_request_timeout_ms: number;
+    agent_account_concurrency: number;
     local_agent_max_processes: number;
     local_agent_idle_ttl_ms: number;
     default_official_model_id: string | null;
@@ -822,6 +825,8 @@ export async function getSystemConfigOverview(): Promise<{
     },
     runtime: {
       agent_concurrency_limit: runtime.agent_concurrency_limit,
+      agent_request_timeout_ms: runtime.agent_request_timeout_ms,
+      agent_account_concurrency: runtime.agent_account_concurrency,
       local_agent_max_processes: runtime.local_agent_max_processes,
       local_agent_idle_ttl_ms: runtime.local_agent_idle_ttl_ms,
       default_official_model_id: runtime.default_official_model_id ?? null,
@@ -846,6 +851,22 @@ export async function getSystemConfigOverview(): Promise<{
     },
     audit_logs: auditLogs,
   };
+}
+
+/**
+ * 分页读取配置变更审计日志(后台审计列表独立分页用)。
+ *
+ * @param args.limit 每页条数(1~100)。
+ * @param args.offset 偏移量(>=0)。
+ */
+export async function getConfigAuditLogsPage(args: {
+  limit: number;
+  offset: number;
+}): Promise<{
+  items: Awaited<ReturnType<typeof listConfigAuditLogs>>;
+  total: number;
+}> {
+  return listConfigAuditLogsPaged(args);
 }
 
 /**
@@ -972,6 +993,8 @@ export async function getUserSkillLimitPolicy(): Promise<number> {
  */
 export async function updateRuntimeSettings(args: {
   agentConcurrencyLimit: number;
+  agentRequestTimeoutMs?: number;
+  agentAccountConcurrency?: number;
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
   defaultOfficialModelId?: string | null;
@@ -987,6 +1010,8 @@ export async function updateRuntimeSettings(args: {
   actor?: string;
 }): Promise<{
   agent_concurrency_limit: number;
+  agent_request_timeout_ms: number;
+  agent_account_concurrency: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
   default_official_model_id: string | null;
@@ -1013,6 +1038,8 @@ export async function updateRuntimeSettings(args: {
   }
   const updated = await updateRuntimeConfig({
     agentConcurrencyLimit: args.agentConcurrencyLimit,
+    agentRequestTimeoutMs: args.agentRequestTimeoutMs,
+    agentAccountConcurrency: args.agentAccountConcurrency,
     localAgentMaxProcesses: args.localAgentMaxProcesses,
     localAgentIdleTtlMs: args.localAgentIdleTtlMs,
     defaultOfficialModelId: args.defaultOfficialModelId,
@@ -1044,6 +1071,8 @@ export async function updateRuntimeSettings(args: {
   );
   return {
     agent_concurrency_limit: updated.agent_concurrency_limit,
+    agent_request_timeout_ms: updated.agent_request_timeout_ms,
+    agent_account_concurrency: updated.agent_account_concurrency,
     local_agent_max_processes: updated.local_agent_max_processes,
     local_agent_idle_ttl_ms: updated.local_agent_idle_ttl_ms,
     default_official_model_id: updated.default_official_model_id ?? null,

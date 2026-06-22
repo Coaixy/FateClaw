@@ -7,6 +7,7 @@
 
 import { DATABASE_URL, REDIS_URL, TIMEZONE } from '../infrastructure/config.js';
 import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
+import { getRuntimeConfig } from '../infrastructure/repositories/config-repository.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import { resolveProjectRoot } from '../infrastructure/project-root.js';
@@ -35,6 +36,12 @@ export interface AgentEnv {
   /** 当前部署根目录，避免误清理同机其他 FateClaw 实例。 */
   FATECLAW_PROJECT_ROOT: string;
 
+  // --- 运行时策略(后台 runtime_config 注入,daemon 读同名 env 生效)---
+  /** 单次请求最长处理毫秒数;daemon 据此强制中断挂死请求,防止占满账号并发槽。 */
+  AGENT_RUNTIME_REQUEST_TIMEOUT_MS?: string;
+  /** 单账号 agent-runtime 同时处理的请求数。 */
+  AGENT_RUNTIME_ACCOUNT_CONCURRENCY?: string;
+
   // --- 连接 ---
   REDIS_URL?: string;
   DATABASE_URL?: string;
@@ -61,9 +68,11 @@ export interface AgentEnv {
  */
 export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
-  const user = webUserId
-    ? await getUserById(webUserId)
-    : await getUserByAccountId(accountId);
+  const [user, runtime] = await Promise.all([
+    webUserId ? getUserById(webUserId) : getUserByAccountId(accountId),
+    // 后台可调的运行时策略;spawn 时注入,故修改后对"新拉起的 daemon"生效。
+    getRuntimeConfig(),
+  ]);
   const systemEnv = pickSystemEnv();
 
   const env: AgentEnv = {
@@ -79,6 +88,10 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     FATECLAW_LOCAL_AGENT_RUNTIME: '1',
     FATECLAW_AGENT_PARENT_PID: String(process.pid),
     FATECLAW_PROJECT_ROOT: resolveProjectRoot(),
+
+    // 运行时策略(后台 runtime_config → 注入 daemon 同名 env)
+    AGENT_RUNTIME_REQUEST_TIMEOUT_MS: String(runtime.agent_request_timeout_ms),
+    AGENT_RUNTIME_ACCOUNT_CONCURRENCY: String(runtime.agent_account_concurrency),
 
     // 连接
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,

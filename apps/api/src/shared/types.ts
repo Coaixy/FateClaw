@@ -357,6 +357,10 @@ export interface ModelBillingConfig {
 export interface RuntimeConfig {
   id: 'default' | string;
   agent_concurrency_limit: number;
+  /** 单次 AI 请求最长处理毫秒数;超时强制中断会话,防 LLM 挂起卡死。注入 agent-runtime 生效。 */
+  agent_request_timeout_ms: number;
+  /** 单账号 agent-runtime 同时处理的请求数(=1 时一条挂死会堵后续)。注入 agent-runtime 生效。 */
+  agent_account_concurrency: number;
   local_agent_max_processes: number;
   local_agent_idle_ttl_ms: number;
   /** 后台指定的系统默认官方模型；为空时按价格最低的可用官方模型兜底。 */

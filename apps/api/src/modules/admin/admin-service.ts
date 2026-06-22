@@ -85,6 +85,7 @@ import {
 } from '../../infrastructure/daily-usage.js';
 import {
   createOfficialModel,
+  getConfigAuditLogsPage,
   getPiSessionHealthPolicy,
   getSystemConfigOverview,
   removeOfficialModel,
@@ -163,6 +164,7 @@ export {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
+  getConfigAuditLogsPage,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,

@@ -14,6 +14,13 @@ vi.mock('../../src/modules/chat/web-chat-runtime.js', () => ({
   getUserIdFromWebChatRuntimeId: vi.fn(() => null),
 }));
 
+vi.mock('../../src/infrastructure/repositories/config-repository.js', () => ({
+  getRuntimeConfig: vi.fn(async () => ({
+    agent_request_timeout_ms: 1_800_000,
+    agent_account_concurrency: 1,
+  })),
+}));
+
 import {
   agentEnvToRecord,
   buildAgentEnv,

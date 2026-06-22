@@ -6,13 +6,11 @@ import {
   formatAdminErrorMessage,
   type AdminSystemConfigOverview,
 } from '@/lib/admin-api';
-import { AuditLogViewer } from '@/components/system/AuditLogViewer';
 import { Bot, RefreshCw } from 'lucide-react';
 import {
   ModelBillingPanel,
   ProviderCreatePanel,
   ProviderRow,
-  RuntimeConfigPanel,
   RuntimeSummary,
 } from '../model-provider-panels';
 import {
@@ -126,17 +124,6 @@ export default function AdminModelConfigPage() {
         }
       />
 
-      <RuntimeConfigPanel
-        runtime={overview.runtime}
-        providers={overview.providers}
-        busy={busyId === 'runtime'}
-        onSave={async (config) =>
-          withBusy('runtime', async () => {
-            await admin.updateRuntimeConfig(config);
-          })
-        }
-      />
-
       <ProviderCreatePanel
         draft={newProvider}
         busy={busyId === 'create-provider'}
@@ -227,8 +214,6 @@ export default function AdminModelConfigPage() {
           </div>
         )}
       </div>
-
-      <AuditLogViewer logs={overview.audit_logs} />
     </div>
   );
 }

@@ -284,6 +284,8 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
  */
 export async function updateRuntimeConfig(input: {
   agentConcurrencyLimit?: number;
+  agentRequestTimeoutMs?: number;
+  agentAccountConcurrency?: number;
   localAgentMaxProcesses?: number;
   localAgentIdleTtlMs?: number;
   defaultOfficialModelId?: string | null;
@@ -301,6 +303,26 @@ export async function updateRuntimeConfig(input: {
   const agentConcurrencyLimit = Math.max(
     1,
     Math.floor(input.agentConcurrencyLimit ?? current.agent_concurrency_limit),
+  );
+  // 单请求超时:1~60 分钟,默认 30 分钟。注入 agent-runtime 后由 daemon 强制中断挂死请求。
+  const agentRequestTimeoutMs = Math.min(
+    3_600_000,
+    Math.max(
+      60_000,
+      Math.floor(
+        input.agentRequestTimeoutMs ?? current.agent_request_timeout_ms,
+      ),
+    ),
+  );
+  // 每账号并发:1~16,默认 1。注入 agent-runtime 后控制单账号同时处理的请求数。
+  const agentAccountConcurrency = Math.min(
+    16,
+    Math.max(
+      1,
+      Math.floor(
+        input.agentAccountConcurrency ?? current.agent_account_concurrency,
+      ),
+    ),
   );
   const localAgentMaxProcesses = Math.min(
     100,
@@ -384,9 +406,10 @@ export async function updateRuntimeConfig(input: {
        user_skill_max_count,
        skill_bundle_max_files, skill_bundle_max_file_chars,
        skill_bundle_max_total_chars, skill_bundle_max_zip_bytes,
+       agent_request_timeout_ms, agent_account_concurrency,
        updated_at
      )
-     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+     VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
      ON CONFLICT (id) DO UPDATE SET
        agent_concurrency_limit = EXCLUDED.agent_concurrency_limit,
        local_agent_max_processes = EXCLUDED.local_agent_max_processes,
@@ -401,6 +424,8 @@ export async function updateRuntimeConfig(input: {
        skill_bundle_max_file_chars = EXCLUDED.skill_bundle_max_file_chars,
        skill_bundle_max_total_chars = EXCLUDED.skill_bundle_max_total_chars,
        skill_bundle_max_zip_bytes = EXCLUDED.skill_bundle_max_zip_bytes,
+       agent_request_timeout_ms = EXCLUDED.agent_request_timeout_ms,
+       agent_account_concurrency = EXCLUDED.agent_account_concurrency,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -417,6 +442,8 @@ export async function updateRuntimeConfig(input: {
       skillBundleMaxFileChars,
       skillBundleMaxTotalChars,
       skillBundleMaxZipBytes,
+      agentRequestTimeoutMs,
+      agentAccountConcurrency,
     ],
   );
   return rows[0] as RuntimeConfig;
@@ -540,4 +567,33 @@ export async function listConfigAuditLogs(
     [Math.min(Math.max(limit, 1), 200)],
   );
   return rows as ConfigAuditLog[];
+}
+
+/**
+ * 分页读取配置变更审计日志。
+ *
+ * @param args.limit 每页条数(1~100)。
+ * @param args.offset 偏移量(>=0)。
+ * @returns 当前页条目与总条数;total 用单独的 COUNT 查询保证 offset 越界时仍准确。
+ */
+export async function listConfigAuditLogsPaged(args: {
+  limit: number;
+  offset: number;
+}): Promise<{ items: ConfigAuditLog[]; total: number }> {
+  const limit = Math.min(Math.max(Math.floor(args.limit), 1), 100);
+  const offset = Math.max(Math.floor(args.offset), 0);
+  const [page, count] = await Promise.all([
+    getDbPool().query(
+      `SELECT *
+       FROM config_audit_logs
+       ORDER BY created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+    getDbPool().query(`SELECT COUNT(*)::int AS total FROM config_audit_logs`),
+  ]);
+  return {
+    items: page.rows as ConfigAuditLog[],
+    total: (count.rows[0]?.total as number | undefined) ?? 0,
+  };
 }

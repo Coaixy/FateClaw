@@ -27,6 +27,7 @@ import {
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
+  getConfigAuditLogsPage,
   getSystemConfigOverview,
   getUserById,
   getUserCustomSkillById,
@@ -439,6 +440,18 @@ const RuntimeConfigSchema = z
       .int('并发上限必须是整数')
       .min(1, '并发上限必须至少为 1')
       .max(1000, '并发上限不能超过 1000'),
+    agent_request_timeout_ms: z
+      .number()
+      .int('单请求超时必须是整数')
+      .min(60_000, '单请求超时不能少于 1 分钟')
+      .max(3_600_000, '单请求超时不能超过 60 分钟')
+      .optional(),
+    agent_account_concurrency: z
+      .number()
+      .int('每账号并发必须是整数')
+      .min(1, '每账号并发必须至少为 1')
+      .max(16, '每账号并发不能超过 16')
+      .optional(),
     local_agent_max_processes: z
       .number()
       .int('常驻进程上限必须是整数')
@@ -814,6 +827,22 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return getSystemConfigOverview();
   });
 
+  // GET /api/admin/system-config/audit-logs — 分页读取配置变更审计日志
+  app.get<{ Querystring: { offset?: string; limit?: string } }>(
+    '/system-config/audit-logs',
+    async (request) => {
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.parseInt(request.query.limit ?? '20', 10) || 20),
+      );
+      const offset = Math.max(
+        0,
+        Number.parseInt(request.query.offset ?? '0', 10) || 0,
+      );
+      return getConfigAuditLogsPage({ limit, offset });
+    },
+  );
+
   // PUT /api/admin/system-config/model-billing — 更新自配模型平台服务费
   app.put('/system-config/model-billing', async (request, reply) => {
     const parsed = ModelBillingSchema.safeParse(request.body);
@@ -840,6 +869,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     try {
       return await updateRuntimeSettings({
         agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
+        agentRequestTimeoutMs: parsed.data.agent_request_timeout_ms,
+        agentAccountConcurrency: parsed.data.agent_account_concurrency,
         localAgentMaxProcesses: parsed.data.local_agent_max_processes,
         localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
         defaultOfficialModelId: parsed.data.default_official_model_id,

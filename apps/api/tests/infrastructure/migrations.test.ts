@@ -491,6 +491,7 @@ describe('runDatabaseMigrations', () => {
       '0065_chat_session_workflow_origin',
       '0066_messages_workflow_node_id',
       '0067_workflow_runs',
+      '0068_runtime_agent_timeout_concurrency',
     ]);
 
     await runDatabaseMigrations(client as never);
