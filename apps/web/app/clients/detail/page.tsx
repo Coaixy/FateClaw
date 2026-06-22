@@ -223,7 +223,8 @@ function ClientDetailContent() {
           <>
             {/* 客户信息头部 */}
             <header className="rounded-2xl border border-hairline bg-surface-card p-5">
-              <div className="flex items-start justify-between gap-4">
+              {/* 窄屏纵向堆叠(信息在上、操作按钮在下,避免按钮挤压用户信息);sm 及以上恢复左右并排 */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Users size={20} strokeWidth={1.8} />
