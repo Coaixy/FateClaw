@@ -8,8 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 
+import { Copy } from 'lucide-react';
+
 import type { SkillContextEntry } from '@/features/chat/api';
 import { ChartErrorBoundary } from '@/components/charts/chart-error-boundary';
+import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
+import { useToast } from '@/lib/use-toast';
 import { cn } from '@/utils/chart/cn';
 
 const BaziChart = dynamic(() => import('@/components/charts/bazi-chart'), {
@@ -263,6 +268,8 @@ function ArtifactBlock({
   index: number;
   fitViewportHeight: boolean;
 }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
   const chart = resolveChart(entry);
   if (!chart || entry.artifactData == null) return null;
 
@@ -270,6 +277,23 @@ function ArtifactBlock({
   const shellClassName =
     CHART_SHELL_CLASSNAME[entry.skill] ?? 'lg:max-w-[880px] xl:max-w-[940px]';
   const fitMobileChatHeight = FIT_MOBILE_CHAT_HEIGHT_SKILLS.has(entry.skill);
+
+  // entry.output 是后端为盘面生成的 formatter 文本（已分小节、预标回头生克/进退神），
+  // 给卦师一个「复制盘面文本」入口，方便拿去复盘或归档。导出内容即 formatter 正文原文。
+  const exportText = entry.output.trim();
+  const handleCopyBoardText = async () => {
+    if (!exportText) {
+      toast('error', t('artifact.copyEmpty'));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(exportText);
+      toast('success', t('artifact.copied'));
+    } catch {
+      // 剪贴板 API 在非安全上下文或权限被拒时会抛错，统一兜底提示。
+      toast('error', t('artifact.copyFailed'));
+    }
+  };
 
   return (
     <div className="mt-1">
@@ -289,6 +313,19 @@ function ArtifactBlock({
           </ResponsiveArtifactFrame>
         </div>
       </ChartErrorBoundary>
+      {/* 复制按钮放在错误边界外：即便盘面图渲染失败，formatter 文本仍可导出。 */}
+      {exportText ? (
+        <div className={cn('mx-auto mt-1.5 flex justify-end', shellClassName)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Copy size={14} />}
+            onClick={() => void handleCopyBoardText()}
+          >
+            {t('artifact.copyText')}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

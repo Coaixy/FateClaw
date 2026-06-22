@@ -1,4 +1,10 @@
 export const enMessages = {
+  artifact: {
+    copyText: 'Copy board text',
+    copied: 'Board text copied to clipboard',
+    copyEmpty: 'No board text available to copy',
+    copyFailed: 'Copy failed, please try again',
+  },
   common: {
     appName: 'Shouyi AI',
     productTitle: 'FateClaw · Shouyi',
