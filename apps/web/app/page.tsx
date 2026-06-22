@@ -23,6 +23,8 @@ const HUB_CARDS: readonly {
   tile: string;
   /** 卡片悬浮时的描边/光晕色。 */
   glow: string;
+  /** 手机端是否隐藏:工作流编排在小屏不适合操作,仅在 sm 及以上展示。 */
+  mobileHidden?: boolean;
 }[] = [
   {
     href: '/clients',
@@ -47,6 +49,7 @@ const HUB_CARDS: readonly {
     descKey: 'hub.workflowsDesc',
     tile: 'from-emerald-500/20 to-emerald-500/5 text-emerald-600',
     glow: 'hover:border-emerald-500/40',
+    mobileHidden: true,
   },
   {
     href: '/ai-chat',
@@ -67,9 +70,9 @@ export default function HomePage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-3xl space-y-8">
-        {/* 英雄区:品牌质感的欢迎面板,带柔和光晕 */}
-        <section className="relative overflow-hidden rounded-3xl border border-hairline bg-gradient-to-br from-primary/[0.07] via-surface-card to-surface-card p-8 sm:p-10">
+      <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8">
+        {/* 英雄区:品牌质感的欢迎面板,带柔和光晕(手机端收紧内边距,给下方卡片让出首屏) */}
+        <section className="relative overflow-hidden rounded-3xl border border-hairline bg-gradient-to-br from-primary/[0.07] via-surface-card to-surface-card p-6 sm:p-10">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-3xl"
@@ -83,7 +86,7 @@ export default function HomePage() {
               <Sparkles size={12} strokeWidth={2} />
               FATECLAW
             </span>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-ink sm:mt-4 sm:text-4xl">
               {t('hub.title')}
             </h1>
             <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
@@ -92,28 +95,30 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 四个环节入口 */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* 四个环节入口(工作流卡片在手机端隐藏,仅 sm 及以上展示) */}
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           {HUB_CARDS.map((card) => {
             const Icon = card.icon;
             return (
               <Link
                 key={card.href}
                 href={card.href}
-                className={`group relative overflow-hidden rounded-2xl border border-hairline bg-surface-card p-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${card.glow}`}
+                className={`group relative overflow-hidden rounded-2xl border border-hairline bg-surface-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-5 ${card.glow} ${
+                  card.mobileHidden ? 'hidden sm:block' : ''
+                }`}
               >
                 <span
-                  className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${card.tile}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br sm:h-12 sm:w-12 ${card.tile}`}
                 >
-                  <Icon size={26} strokeWidth={1.7} />
+                  <Icon size={22} strokeWidth={1.7} />
                 </span>
-                <h2 className="mt-4 text-[17px] font-semibold text-ink">
+                <h2 className="mt-3 text-[15px] font-semibold text-ink sm:text-[16px]">
                   {t(card.titleKey)}
                 </h2>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+                <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-[13px]">
                   {t(card.descKey)}
                 </p>
-                <span className="mt-4 inline-flex items-center gap-1 text-[12px] font-medium text-muted transition-colors group-hover:text-primary">
+                <span className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-muted transition-colors group-hover:text-primary">
                   {t('hub.open')}
                   <ArrowRight
                     size={13}

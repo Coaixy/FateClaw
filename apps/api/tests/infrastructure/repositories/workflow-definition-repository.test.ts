@@ -45,7 +45,6 @@ function singlePaipanGraph(): WorkflowGraphDto {
         id: 'n1',
         type: 'paipan',
         title: '排盘',
-        pauseAfter: false,
         position: { x: 0, y: 0 },
         skill: 'bazi-paipan',
         inputDefaults: {},
@@ -201,7 +200,6 @@ describe('workflow-definition-repository', () => {
       id: 'n2',
       type: 'ai' as const,
       title: 'AI 初断',
-      pauseAfter: true,
       position: { x: 200, y: 0 },
       promptTemplate: '{{node.n1.output}}',
       skillIds: ['skill-a'],
@@ -252,6 +250,61 @@ describe('workflow-definition-repository', () => {
     const defInsert = findCall(calls, 'INSERT INTO workflow_definitions');
     const storedGraph = JSON.parse(defInsert?.params?.[4] as string);
     expect(storedGraph.nodes[0].skillSnapshotIds).toEqual([snapshotId]);
+  });
+
+  it('绑订阅来的他人技能:快照归当前卦师而非源作者,且 listSnapshotSources 带 userId 校验', async () => {
+    const aiNode = {
+      id: 'n2',
+      type: 'ai' as const,
+      title: 'AI 初断',
+      position: { x: 200, y: 0 },
+      promptTemplate: '{{node.n1.output}}',
+      skillIds: ['skill-b'],
+      skillSnapshotIds: [],
+      modelPolicy: { mode: 'user-current' as const },
+    };
+    const aiGraph: WorkflowGraphDto = { nodes: [aiNode], edges: [] };
+    // listSnapshotSources 返回的源 skill 属于作者 author-9(卦师 user-1 订阅来的)。
+    const { calls } = mockPool([
+      { rows: [] }, // BEGIN
+      {
+        rows: [
+          {
+            skill_id: 'skill-b',
+            user_id: 'author-9', // 源作者(非当前卦师)
+            skill_name: '他人技能',
+            dir_name: 'others',
+            description: '',
+            bundle_uri: 'uri-b',
+          },
+        ],
+      }, // listSnapshotSources
+      { rows: [] }, // upsert 快照
+      { rows: [] }, // 清孤儿
+      { rows: [workflowRow({ graph: aiGraph })] }, // INSERT 定义 RETURNING
+      { rows: [] }, // COMMIT
+    ]);
+
+    await createWorkflowDefinition({
+      userId: 'user-1',
+      name: '事业分析',
+      description: '',
+      graph: aiGraph,
+      inputs: [],
+      enabled: true,
+      sortOrder: 0,
+    });
+
+    // 访问校验:listSnapshotSources SQL 的第 3 个参数必须是当前卦师 user-1。
+    const sourcesQuery = findCall(calls, 'FROM user_custom_skills s');
+    expect(sourcesQuery?.params?.[2]).toBe('user-1');
+    // 快照拷贝进当前卦师库:INSERT user_custom_skills 的 user_id($2)= user-1,而非源作者 author-9。
+    const snapshotInsert = findCall(calls, 'INSERT INTO user_custom_skills');
+    expect(snapshotInsert?.params?.[1]).toBe('user-1');
+    // 写文件时 ownerId 也应是当前卦师。
+    expect(mockWriteFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user-1' }),
+    );
   });
 
   it('更新会先按归属读取,缺失时直接返回 undefined 不开事务', async () => {

@@ -32,7 +32,6 @@ export interface WorkflowRunNodeRow {
   node_id: string;
   node_type: 'paipan' | 'ai';
   title: string;
-  pause_after: boolean;
   status: WorkflowRunNodeStatus;
   output_message_id: string | null;
   output_account_id: string | null;
@@ -58,7 +57,6 @@ export interface NewWorkflowRunNode {
   nodeId: string;
   nodeType: 'paipan' | 'ai';
   title: string;
-  pauseAfter: boolean;
 }
 
 /** 节点状态/产出的局部更新补丁。 */
@@ -102,9 +100,9 @@ export async function createWorkflowRun(
     for (const node of nodes) {
       await client.query(
         `INSERT INTO workflow_run_nodes
-           (run_id, node_id, node_type, title, pause_after, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending')`,
-        [run.id, node.nodeId, node.nodeType, node.title, node.pauseAfter],
+           (run_id, node_id, node_type, title, status)
+         VALUES ($1, $2, $3, $4, 'pending')`,
+        [run.id, node.nodeId, node.nodeType, node.title],
       );
     }
     await client.query('COMMIT');
@@ -137,7 +135,7 @@ export async function getWorkflowRunWithNodes(
     return null;
   }
   const { rows: nodeRows } = await pool.query(
-    `SELECT run_id, node_id, node_type, title, pause_after, status,
+    `SELECT run_id, node_id, node_type, title, status,
             output_message_id, output_account_id, error, attempt, created_at, updated_at
        FROM workflow_run_nodes
        WHERE run_id = $1

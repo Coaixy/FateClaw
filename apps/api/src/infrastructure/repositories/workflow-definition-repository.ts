@@ -153,10 +153,17 @@ function snapshotDirName(
   return `workflow-def-${sourceDirName}-${hash}`.slice(0, 120);
 }
 
-/** 拉取可作为快照来源的 skill(排除快照自身,避免快照套快照)。 */
+/**
+ * 拉取可作为快照来源的 skill(排除快照自身,避免快照套快照)。
+ *
+ * @remarks 访问校验:只放行卦师有权绑定的 skill —— 自有,或对其有有效订阅(直接订阅 / 经已订阅捆绑包)。
+ *          无权的 skill 不会出现在结果里,上层据 sources 数量不足抛 WorkflowSkillUnavailableError 拦截越权。
+ *          订阅有效性口径与 getSubscribedSkills 对齐(active + 未过期 + 来源合法)。
+ */
 async function listSnapshotSources(
   client: pg.PoolClient,
   skillIds: string[],
+  userId: string,
 ): Promise<WorkflowSkillSourceRow[]> {
   if (skillIds.length === 0) return [];
   const { rows } = await client.query<WorkflowSkillSourceRow>(
@@ -172,8 +179,22 @@ async function listSnapshotSources(
        AND s.deleted_at IS NULL
        AND s.install_status = 'installed'
        AND COALESCE(s.audit_metadata->>'source', '') <> $2
+       AND (
+         s.user_id = $3
+         OR EXISTS (
+           SELECT 1 FROM user_skill_subscriptions sub
+           WHERE sub.skill_id = s.id
+             AND sub.subscriber_id = $3
+             AND sub.status = 'active'
+             AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
+             AND (
+               s.visibility IN ('link_shared', 'shared')
+               OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
+             )
+         )
+       )
      ORDER BY array_position($1::text[], s.id), s.dir_name`,
-    [skillIds, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [skillIds, WORKFLOW_SNAPSHOT_AUDIT_SOURCE, userId],
   );
   return rows;
 }
@@ -197,11 +218,18 @@ async function deleteOrphanSnapshots(
   );
 }
 
-/** 为单个源 skill 写入/更新快照副本,返回快照 id。 */
+/**
+ * 为单个源 skill 写入/更新快照副本,返回快照 id。
+ *
+ * @param ownerUserId 快照归属用户(= 工作流所属卦师)。即便源是订阅来的他人技能,
+ *        快照也拷贝进当前卦师名下(「绑定即拷贝进我的库」),保证运行时按卦师身份可加载、
+ *        且取消订阅/作者下架后已绑工作流仍能跑。
+ */
 async function upsertSnapshotSkill(
   client: pg.PoolClient,
   definitionId: string,
   source: WorkflowSkillSourceRow,
+  ownerUserId: string,
 ): Promise<string> {
   const snapshotId = snapshotSkillId(definitionId, source.skill_id);
   const files = readTextSkillBundleFiles(source.bundle_uri);
@@ -217,7 +245,7 @@ async function upsertSnapshotSkill(
   );
   const bundle = writeTextSkillBundleFiles({
     skillId: snapshotId,
-    ownerId: source.user_id,
+    ownerId: ownerUserId,
     dirName,
     fallbackSkillName: source.skill_name,
     files,
@@ -251,7 +279,7 @@ async function upsertSnapshotSkill(
        updated_at = NOW()`,
     [
       snapshotId,
-      source.user_id,
+      ownerUserId,
       source.skill_name,
       dirName,
       source.description,
@@ -295,6 +323,7 @@ async function applyDefinitionSkillSnapshots(
   client: pg.PoolClient,
   definitionId: string,
   graph: WorkflowGraphDto,
+  userId: string,
 ): Promise<WorkflowGraphDto> {
   const allSkillIds = Array.from(
     new Set(
@@ -310,7 +339,8 @@ async function applyDefinitionSkillSnapshots(
     return rewriteGraphSnapshotIds(graph, null);
   }
 
-  const sources = await listSnapshotSources(client, allSkillIds);
+  // 仅放行卦师有权绑定的 skill;数量不足 = 含无权/不存在的 skill,抛错由上层回滚。
+  const sources = await listSnapshotSources(client, allSkillIds, userId);
   if (sources.length !== allSkillIds.length) {
     throw new WorkflowSkillUnavailableError();
   }
@@ -320,7 +350,7 @@ async function applyDefinitionSkillSnapshots(
     if (snapshotIdBySkillId.has(source.skill_id)) continue;
     snapshotIdBySkillId.set(
       source.skill_id,
-      await upsertSnapshotSkill(client, definitionId, source),
+      await upsertSnapshotSkill(client, definitionId, source, userId),
     );
   }
   await deleteOrphanSnapshots(
@@ -405,7 +435,12 @@ export async function createWorkflowDefinition(
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    const graph = await applyDefinitionSkillSnapshots(client, id, input.graph);
+    const graph = await applyDefinitionSkillSnapshots(
+      client,
+      id,
+      input.graph,
+      input.userId,
+    );
     const { rows } = await client.query(
       `INSERT INTO workflow_definitions
          (id, user_id, name, description, graph, inputs, enabled, sort_order)
@@ -458,7 +493,12 @@ export async function updateWorkflowDefinition(
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
-    const graph = await applyDefinitionSkillSnapshots(client, id, nextGraphInput);
+    const graph = await applyDefinitionSkillSnapshots(
+      client,
+      id,
+      nextGraphInput,
+      userId,
+    );
     const { rows } = await client.query(
       `UPDATE workflow_definitions
        SET name = $3,

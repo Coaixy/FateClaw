@@ -354,6 +354,7 @@ function mergeMessageMetadata(
 async function getOwnedSession(
   userId: string,
   sessionId: string,
+  rejectWorkflowRun = true,
 ): Promise<ServiceResult<ChatSession>> {
   const session = await getChatSession(sessionId);
   if (!session) {
@@ -362,6 +363,14 @@ async function getOwnedSession(
 
   if (session.user_id !== userId) {
     return fail(403, '无权操作');
+  }
+
+  // origin 守卫:聊天域接口拒绝 workflow_run 会话(视为"不存在"),避免被聊天接口
+  // (改名/归档/分享/读消息/发消息)当聊天会话操作或泄漏存在性。仅拦明确的 workflow_run、
+  // 不误伤 origin 缺省的历史会话(与 admin 查询的 origin <> 'workflow_run' 同口径);
+  // workflow 自身复用 prepareOwnedChatSessionTurn 时传 false 放行。
+  if (rejectWorkflowRun && session.origin === 'workflow_run') {
+    return fail(404, '会话不存在');
   }
 
   return ok(session);
@@ -811,7 +820,9 @@ async function prepareOwnedChatSessionTurn(
   input: NormalizedChatSessionMessageInput,
   options: OwnedChatSessionTurnOptions = {},
 ): Promise<ServiceResult<PreparedOwnedChatSessionTurn>> {
-  const sessionResult = await getOwnedSession(userId, sessionId);
+  // 有 workflow 上下文 = workflow 编排发起的确定性单轮,目标会话是 workflow_run,放行;
+  // 无 workflow 上下文 = 真人聊天发消息,只认 origin='chat'(防止把 workflow_run 会话当聊天发消息)。
+  const sessionResult = await getOwnedSession(userId, sessionId, !options.workflow);
   if (!sessionResult.ok) {
     return sessionResult;
   }
