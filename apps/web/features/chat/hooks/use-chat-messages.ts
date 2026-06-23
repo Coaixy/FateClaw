@@ -269,9 +269,6 @@ export function useChatMessages(options: {
   const streamSocketRef = useRef<WebSocket | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const interruptedStreamSessionRef = useRef<string | null>(null);
-  // 停止后延迟刷新计时器:取消回合的"停止前内容 + 消耗"由后端落库为终态消息,
-  // 停止后延迟拉回展示(见 stopGenerating)。
-  const stopRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
     [],
   );
@@ -1343,16 +1340,6 @@ export function useChatMessages(options: {
     };
   }, []);
 
-  // 组件卸载时清掉停止后延迟刷新计时器,避免卸载后的游离刷新。
-  useEffect(() => {
-    return () => {
-      if (stopRefreshTimerRef.current) {
-        clearTimeout(stopRefreshTimerRef.current);
-        stopRefreshTimerRef.current = null;
-      }
-    };
-  }, []);
-
   useLayoutEffect(() => {
     if (!scrollRef.current || !shouldAutoScrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -1384,28 +1371,10 @@ export function useChatMessages(options: {
     updateProcessing(false);
     updateAwaitingRefresh(false);
     inputRef.current?.focus();
-
-    // 取消回合的"停止前已生成内容 + 本次消耗"由后端落库为终态消息(cancelled 标记)。
-    // 上面已即时关 socket/标记 interrupted 保证"秒停",这里延迟一次后台刷新把该终态拉回
-    // 展示(显示「积分实扣 X」等)。延迟需略大于 abort→落库链路耗时;始终以持久化为准,
-    // 手动重载也正确。
-    if (sessionId) {
-      if (stopRefreshTimerRef.current) clearTimeout(stopRefreshTimerRef.current);
-      stopRefreshTimerRef.current = setTimeout(() => {
-        stopRefreshTimerRef.current = null;
-        // 已切到别的会话,或已开始新回合(正在流式),都不刷新,避免打断。
-        if (activeSessionRef.current !== sessionId) return;
-        if (processingRef.current) return;
-        // 放行这次后台刷新(socket 已关,无残留事件会被误用)。
-        if (interruptedStreamSessionRef.current === sessionId) {
-          interruptedStreamSessionRef.current = null;
-        }
-        void loadMessages(sessionId, { background: true });
-      }, 3500);
-    }
+    // 取消即丢弃这条回合的 AI 回复(后端不落库、不推流):本地已展示的流式内容保留到下次
+    // 刷新/切换时自然消失,刷新后该回合只剩用户的提问。不做延迟刷新(无终态可拉)。
   }, [
     options.selectedSession,
-    loadMessages,
     resetStreamingMessageRefs,
     updateAwaitingRefresh,
     updateProcessing,

@@ -580,73 +580,19 @@ async function processAiChatResponse(
     }
 
     // 已取消(stop)的回合:turn promise 已被 cancelAiChatSessionRequest 即时 resolve。
-    // 这里把"停止前已生成的内容(agent-runtime 在 abort 时回传的 partial)"作为终态:
-    // 按真实用量结算 + 记账 + 落库 partial + 推一个带消耗的终态事件(标记 cancelled),
-    // 但【不】再 resolve(已 resolve)。这样取消回合像正常回答一样保留内容并显示消耗,
-    // 又不会把"完整/陈旧的整条回复"当新回复冒出来(落的是 partial、且标 cancelled)。
+    // 产品取舍 = 取消即【丢弃回复】:这里只按已消耗 token 结算(不白嫖)+ 记 token 用量,
+    // 然后清理 pending。【不】落库、不推流、不再 resolve —— 这条 AI 回复不保留,刷新后该
+    // 回合只剩用户的提问。(尝试过"保留 partial / 终态展示",会冒出来历不明/不一致的内容,
+    // 故按用户选择回退为最可预测的丢弃。)
     if (pending?.cancelled) {
-      const cancelledUsage = normalizeRuntimeTokenUsage(payload.usage);
-      const cancelledPayload =
-        cancelledUsage.totalTokens > 0
-          ? { ...payload, usage: cancelledUsage }
-          : payload;
-      await recordAiChatTokenUsage({
+      await recordAiChatTokenUsage({ accountId, pending, payload });
+      // 取消按真实(partial)用量结算;不回退预冻结额(0 用量=早中断,据实记 0,不估扣)。
+      await settleAiChatBilling({
         accountId,
         pending,
-        payload: cancelledPayload,
-      });
-      // 取消按真实 partial 用量结算;不回退预冻结额(0 用量=早中断,据实记 0,不估扣)。
-      const billing = await settleAiChatBilling({
-        accountId,
-        pending,
-        payload: cancelledPayload,
+        payload,
         chargeReserveOnMissingUsage: false,
       });
-
-      // 仅当确有"停止前内容"才落库 + 推流;纯早中断(无文本)只结算,不落空回复。
-      const partialText = resolveAiChatResponseText(cancelledPayload);
-      if (partialText) {
-        const durationMs = resolvePendingDurationMs(pending);
-        const sessionId = resolveAiChatFinalSessionId(pending, cancelledPayload);
-        const finalText = appendFinalTurnMarker(
-          partialText,
-          cancelledPayload.usage,
-        );
-        const finalMetadata = {
-          ...buildFinalMetadata({
-            payload: cancelledPayload,
-            durationMs,
-            billing,
-          }),
-          // 取消终态:前端可据此标"已停止",并照常从 actual_charge_coins 显示消耗。
-          cancelled: true,
-          turn_complete: false,
-        };
-        const assistantMessages = buildAssistantMessagesForResponse({
-          payload: cancelledPayload,
-          responseText: partialText,
-          finalText,
-        });
-        await storeAiChatFinalResponseMessages({
-          accountId,
-          pending,
-          payload: cancelledPayload,
-          responseText: partialText,
-          assistantMessages,
-          finalMetadata,
-        });
-        await publishAiChatStreamEvent({
-          sessionId,
-          event: streamEventFromResponsePayload({
-            payload: cancelledPayload,
-            accountId,
-            sessionId,
-            text: finalText,
-            metadata: finalMetadata,
-          }),
-        });
-      }
-
       clearTimeout(pending.timeout);
       pendingRequests.delete(payload.requestId!);
       if (pending.sessionId) {
@@ -662,7 +608,7 @@ async function processAiChatResponse(
       });
       logger.info(
         { accountId, requestId: payload.requestId },
-        'AI Chat: 回合已取消,落库 partial 内容并按真实用量结算',
+        'AI Chat: 回合已取消,按真实用量结算并丢弃回复(不落库)',
       );
       return;
     }

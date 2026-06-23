@@ -182,7 +182,7 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
   });
 
-  it('finalizes a cancelled turn: settles real usage, persists partial with cancelled marker, no re-resolve', async () => {
+  it('discards a cancelled turn reply: settles real usage but never stores or re-resolves', async () => {
     const timeout = setTimeout(() => undefined, 10_000);
     const pendingRequests = new Map<string, PendingInboxRequest>([
       [
@@ -193,7 +193,7 @@ describe('processAiChatOutboxPayload', () => {
           autoDeliver: false,
           sessionId: 'session-c',
           userMessageId: 'user-msg-c',
-          // 用户已 stop:这条响应是"停止前已生成的 partial",作为终态落库+展示+结算。
+          // 用户已 stop:这条响应只用于按真实用量结算,回复本身丢弃(不落库/不展示)。
           cancelled: true,
           llmRuntime: {
             source: 'official',
@@ -236,19 +236,9 @@ describe('processAiChatOutboxPayload', () => {
       }),
     );
     expect(mockIncrementDailyTokens).toHaveBeenCalled();
-    // 落库 partial 内容,且终态消息标记 cancelled、turn_complete=false(消耗照常带)
-    expect(mockStoreMessage).toHaveBeenCalled();
-    const finalStore = mockStoreMessage.mock.calls
-      .map((call) => call[0])
-      .find(
-        (msg) =>
-          (msg as { metadata?: { kind?: string } }).metadata?.kind === 'final',
-      );
-    expect(finalStore).toBeTruthy();
-    expect(
-      (finalStore as { metadata?: { cancelled?: boolean } }).metadata?.cancelled,
-    ).toBe(true);
-    // 关键:不再 resolve(turn 已由取消即时 resolve),pending 已清理
+    // 关键:取消即丢弃回复 —— 不落库、不 touch 会话、不再 resolve(turn 已由取消即时 resolve)。
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockTouchChatSession).not.toHaveBeenCalled();
     expect(mockResolve).not.toHaveBeenCalled();
     expect(pendingRequests.has('req-cancel')).toBe(false);
   });
