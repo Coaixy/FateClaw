@@ -265,6 +265,14 @@ export async function runPiSession(args: {
         messages: session.state.messages,
       }),
     };
+  } catch (err) {
+    // turn 被中断(用户取消 / session.abort)或在执行中报错时:此刻 usage 对象已通过
+    // 事件流累计为「截至中断点的真实已消耗 token」。必须把它挂到错误对象上随异常上抛,
+    // 让宿主对中断/失败的 turn 也能按真实用量结算 —— 否则「未正常收尾 = 免单」即计费白嫖。
+    if (err && typeof err === 'object') {
+      (err as { partialUsage?: TokenUsage }).partialUsage = { ...usage };
+    }
+    throw err;
   } finally {
     unsubscribe();
     session.dispose();

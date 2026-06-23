@@ -15,6 +15,7 @@ import { traceEvent } from './trace.js';
 import {
   ContainerInput,
   ContainerOutput,
+  TokenUsage,
 } from './types.js';
 
 function buildSessionId(sessionId?: string): string {
@@ -93,12 +94,17 @@ export async function executeContainerInput(
     // 丢弃它们等于对排障场景丢失最有价值的信息。
     const transcript = listTranscriptEvents(requestScope);
     const traceEvents = listScopedTraceEvents(requestScope);
+    // 中断/报错时,pi-runtime 已把「截至中断点的真实 usage」挂在错误对象的 partialUsage 上。
+    // 回传给宿主,使中断/失败的 turn 也按真实消耗结算,堵死「中断即免单」的计费白嫖。
+    const partialUsage = (error as { partialUsage?: TokenUsage } | null)
+      ?.partialUsage;
     return {
       status: 'error',
       result: null,
       newSessionId: sessionId,
       error: errorMessage,
       ...mapContainerErrorToPublicError(errorMessage, { llmRuntime }),
+      usage: partialUsage,
       transcript: transcript.length > 0 ? transcript : undefined,
       model,
       provider,
