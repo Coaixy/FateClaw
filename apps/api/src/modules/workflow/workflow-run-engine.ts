@@ -29,12 +29,13 @@ import { normalizeOwnedChatSessionTitle } from '../../shared/chat-session-title-
 import type { NewMessage, SimpleModelPolicy } from '../../shared/types.js';
 import { sendOwnedChatSessionMessage } from '../chat/chat-session-service.js';
 import {
-  getWebChatRuntimeId,
+  getWebWorkflowRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
 } from '../chat/web-chat-runtime.js';
 import {
   collectNodeOutputs,
   renderWorkflowPrompt,
+  resolveNodeErrorId,
   resolveNodeOutputId,
 } from './workflow-run-render.js';
 import { resolveSimpleWorkflowLlmRuntime } from '../system/system-config.js';
@@ -90,7 +91,7 @@ function inboundBoardMessageIds(
 /** 真实节点执行器:AI 节点 → 渲染 prompt + 注入入边盘面 + 发起一轮 AI(异步回复经 outbox)。 */
 const executor: WorkflowRunExecutor = {
   async startAiNode(node: WorkflowAiNodeDto, ctx: NodeExecContext): Promise<void> {
-    const runtimeId = getWebChatRuntimeId(ctx.userId);
+    const runtimeId = getWebWorkflowRuntimeId(ctx.userId);
     const messages = await getSessionMessages(runtimeId, ctx.sessionId);
     const boards = inboundBoardMessageIds(ctx.graph, node.id, messages);
     const rendered =
@@ -164,10 +165,8 @@ function latestNodeErrorMessage(
 ): NewMessage | undefined {
   let latest: NewMessage | undefined;
   for (const message of messages) {
-    if (message.workflow_node_id !== nodeId) continue;
-    const kind = (message.metadata as { kind?: unknown } | null | undefined)
-      ?.kind;
-    if (kind !== 'error') continue;
+    // 列优先 + id 回退(见 resolveNodeErrorId):pending 丢失致列为 null 时仍能识别失败节点。
+    if (resolveNodeErrorId(message) !== nodeId) continue;
     if (!latest || message.timestamp >= latest.timestamp) latest = message;
   }
   return latest;
@@ -184,7 +183,7 @@ async function reconcile(
 ): Promise<OrchestratorRunSnapshot | null> {
   const loaded = await workflowRunStore.loadRun(runId, userId);
   if (!loaded) return null;
-  const runtimeId = getWebChatRuntimeId(userId);
+  const runtimeId = getWebWorkflowRuntimeId(userId);
   const messages = await getSessionMessages(runtimeId, loaded.run.chat_session_id);
 
   for (const nodeRow of loaded.nodes) {
@@ -279,7 +278,7 @@ async function snapshotToDto(
   userId: string,
   snapshot: OrchestratorRunSnapshot,
 ): Promise<WorkflowRunStateDto> {
-  const runtimeId = getWebChatRuntimeId(userId);
+  const runtimeId = getWebWorkflowRuntimeId(userId);
   const messages = await getSessionMessages(runtimeId, snapshot.sessionId);
   return toRunStateDto(snapshot, messages);
 }
@@ -306,7 +305,10 @@ export async function startWorkflowRunV2(
     }
   }
 
-  const runtimeId = getWebChatRuntimeId(userId);
+  // workflow 运行会话用独立 runtime(web:wf:{userId})创建:会话的 account_id 即此值,
+  // 后续 startAiNode/reconcile 的所有读写都从 session.account_id 派生,故工作流的 AI 节点
+  // 会被 agent-runtime 派生到独立 daemon/inbox 处理,不再占用普通对话的 chat daemon 槽。
+  const runtimeId = getWebWorkflowRuntimeId(userId);
   const sessionId = `session-${Date.now()}-${randomSuffix()}`;
   await createChatSession({
     id: sessionId,
@@ -377,7 +379,7 @@ export async function commitWorkflowPaipanNodeV2(
   const node = loaded.graph.nodes.find((item) => item.id === nodeId);
   if (!node || node.type !== 'paipan') return fail(404, '排盘节点不存在');
 
-  const runtimeId = getWebChatRuntimeId(userId);
+  const runtimeId = getWebWorkflowRuntimeId(userId);
   // 校验该盘面属于本运行会话且确是盘面消息(防越权/错挂)。
   const messages = await getSessionMessages(runtimeId, loaded.run.chat_session_id);
   const board = messages.find((message) => message.id === boardMessageId);
@@ -450,7 +452,7 @@ export async function saveWorkflowNodeOutputV2(
   const nodeRow = loaded.nodes.find((item) => item.node_id === nodeId);
   if (!nodeRow) return fail(404, '工作流节点不存在');
 
-  const runtimeId = getWebChatRuntimeId(userId);
+  const runtimeId = getWebWorkflowRuntimeId(userId);
 
   if (nodeRow.output_message_id) {
     // 润色:改已有产出正文(单一真相在 message,run_node 不动)。

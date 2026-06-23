@@ -112,7 +112,10 @@ import {
   toMembershipStatusDto,
 } from '../../contracts-adapter/billing-contract.js';
 import { listPaipanRegistry } from '../chat/paipan-registry.js';
-import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
+import {
+  getWebChatRuntimeId,
+  getWebWorkflowRuntimeId,
+} from '../chat/web-chat-runtime.js';
 import {
   deletePiSessionFilesForSession,
   deletePiSessionOrphanFiles,
@@ -317,7 +320,11 @@ export async function deleteConversationLogsForAdminUser(
   userId: string,
 ): Promise<number> {
   const accounts = await getAccountsByUserId(userId);
-  const accountIds = new Set<string>([getWebChatRuntimeId(userId)]);
+  // 同时覆盖普通对话(web:{userId})与 workflow 运行(web:wf:{userId})两个 runtime 的日志。
+  const accountIds = new Set<string>([
+    getWebChatRuntimeId(userId),
+    getWebWorkflowRuntimeId(userId),
+  ]);
   for (const account of accounts) {
     accountIds.add(account.id);
   }

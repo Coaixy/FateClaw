@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectNodeOutputs,
   renderWorkflowPrompt,
+  resolveNodeErrorId,
   resolveNodeOutputId,
 } from '../../../src/modules/workflow/workflow-run-render.js';
 
@@ -141,5 +142,43 @@ describe('resolveNodeOutputId', () => {
     expect(resolveNodeOutputId({ id: 'wf-n1-100-aaa_reply' })).toBe('n1');
     expect(resolveNodeOutputId({ id: 'wf-n1-100-aaa' })).toBeUndefined();
     expect(resolveNodeOutputId({ id: 'session-x-1' })).toBeUndefined();
+  });
+});
+
+describe('resolveNodeErrorId', () => {
+  it('列优先 → 失败消息返回 workflow_node_id 列', () => {
+    expect(
+      resolveNodeErrorId({
+        id: 'x_error',
+        workflow_node_id: 'n1',
+        metadata: { kind: 'error' },
+      }),
+    ).toBe('n1');
+  });
+
+  it('pending 丢失致列为空时回退 id 约定 wf-<nodeId>-…_error', () => {
+    // outbox 落失败回复用 `${userMessageId}_error`,userMessageId 形如 wf-<nodeId>-<ts>-<suffix>
+    expect(
+      resolveNodeErrorId({
+        id: 'wf-n1-100-aaa_error',
+        workflow_node_id: null,
+        metadata: { kind: 'error' },
+      }),
+    ).toBe('n1');
+  });
+
+  it('非 error 消息一律返回 undefined(不误把成功/盘面当失败)', () => {
+    expect(
+      resolveNodeErrorId({ id: 'wf-n1-100-aaa_reply', workflow_node_id: 'n1' }),
+    ).toBeUndefined();
+    expect(
+      resolveNodeErrorId({
+        id: 'wf-n1-100-aaa_error',
+        metadata: { kind: 'final' },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveNodeErrorId({ id: 'session-x-1', metadata: { kind: 'error' } }),
+    ).toBeUndefined();
   });
 });

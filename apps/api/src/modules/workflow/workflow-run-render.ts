@@ -74,6 +74,32 @@ export function resolveNodeOutputId(
 }
 
 /**
+ * 解出"该消息作为节点失败回报所归属的节点 id";非失败消息返回 undefined。
+ *
+ * @remarks 与 resolveNodeOutputId 对称(成功路径有列 + id 双兜底,失败路径原先只认列):
+ *   - 列优先:workflow_node_id 列;
+ *   - 列为空时回退旧 id 约定 `wf-<nodeId>-…_error`(outbox 落失败回复用 `${userMessageId}_error`,
+ *     而 userMessageId 形如 `wf-<nodeId>-…`,nodeId 不含 '-')。
+ *   修复点:AI 节点 in-flight 期间进程内 pending 丢失(如 30min pending 超时竞态/进程重启)致
+ *   workflow_node_id 列写不上 null 时,失败节点仍能被 reconcile 识别 → markNodeFailed,
+ *   避免该节点永远停在 running、整个 run 永不收敛(只能人工跳过/手填)。
+ */
+export function resolveNodeErrorId(
+  message: Pick<WorkflowOutputMessage, 'id' | 'workflow_node_id' | 'metadata'>,
+): string | undefined {
+  const kind = (message.metadata as { kind?: unknown } | null | undefined)?.kind;
+  if (kind !== 'error') return undefined;
+  if (message.workflow_node_id) return message.workflow_node_id;
+  if (!message.id.startsWith('wf-') || !message.id.endsWith('_error')) {
+    return undefined;
+  }
+  const rest = message.id.slice('wf-'.length);
+  const dashIndex = rest.indexOf('-');
+  if (dashIndex <= 0) return undefined;
+  return rest.slice(0, dashIndex);
+}
+
+/**
  * 从会话消息里收集各 AI 节点的最新文本产出(nodeId → 回复文本)。
  *
  * @remarks 关联走 resolveNodeOutputId(列优先 + id 回退);同一节点多次运行/重跑时按时间戳取最新,

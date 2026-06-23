@@ -9,6 +9,10 @@ import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 import {
+  buildAiChatStreamEvent,
+  publishAiChatStreamEvent,
+} from './ai-chat-stream.js';
+import {
   getRuntimeEntitlementSnapshot,
   type RuntimeEntitlementSnapshot,
 } from '../modules/billing/entitlements.js';
@@ -898,6 +902,13 @@ const AI_CHAT_REQUEST_TIMEOUT = parseInt(
 );
 
 /**
+ * 排队心跳间隔(毫秒)。等待全局并发槽期间每隔该时长向会话流推一条无正文的"排队中"进度,
+ * 刷新前端 90s 静默看门狗(use-chat-messages.ts:CHAT_STUCK_TIMEOUT_MS),避免高峰排队被误判中断。
+ * 取 25s < 90s 以留足余量;槽位立即可得时此心跳从不 fire。
+ */
+const AI_CHAT_QUEUE_HEARTBEAT_MS = 25_000;
+
+/**
  * AI Chat 专属的入队函数。
  * 响应写入 `ipc:{accountId}:ai-chat:outbox`，永远不发微信。
  */
@@ -938,6 +949,13 @@ export function submitAiChatInboxRequest(input: {
       let concurrencySlotId: string | undefined;
       let localAgentLeaseAccountId: string | undefined;
       let runtimeReadyPromise: Promise<void> | undefined;
+      let queueHeartbeat: ReturnType<typeof setInterval> | undefined;
+      const stopQueueHeartbeat = () => {
+        if (queueHeartbeat) {
+          clearInterval(queueHeartbeat);
+          queueHeartbeat = undefined;
+        }
+      };
 
       try {
         const ownerUserId =
@@ -967,6 +985,7 @@ export function submitAiChatInboxRequest(input: {
         const priority = resolveInboxPriority(entitlement);
 
         timeout = setTimeout(async () => {
+          stopQueueHeartbeat();
           const pending = pendingAiChatRequests.get(requestId);
           pendingAiChatRequests.delete(requestId);
           // 清除当前请求持有的会话忙碌标记，避免误删后续请求的锁。
@@ -1031,6 +1050,20 @@ export function submitAiChatInboxRequest(input: {
         })();
         void runtimeReadyPromise.catch(() => {});
 
+        // 仅在真的需要等待全局并发槽时心跳;槽位立即可得时下面的 stopQueueHeartbeat 会在
+        // 第一次 fire(25s)前就清掉它,普通低峰路径零额外开销。
+        queueHeartbeat = setInterval(() => {
+          void publishAiChatStreamEvent({
+            sessionId: input.sessionId,
+            event: buildAiChatStreamEvent({
+              event: { type: 'progress', text: '排队中', stage: 'queued' },
+              requestId,
+              accountId: input.accountId,
+              sessionId: input.sessionId,
+            }),
+          }).catch(() => {});
+        }, AI_CHAT_QUEUE_HEARTBEAT_MS);
+
         concurrencySlotId = await acquireGlobalAgentSlot({
           requestId,
           priority,
@@ -1052,6 +1085,8 @@ export function submitAiChatInboxRequest(input: {
             }
           },
         });
+        // 已拿到槽,进入"即将入队/执行"阶段:停止排队心跳,后续由真实 daemon 流事件接管。
+        stopQueueHeartbeat();
         if (!pendingAiChatRequests.has(requestId)) {
           throw new Error('请求已取消或超时');
         }
@@ -1114,6 +1149,7 @@ export function submitAiChatInboxRequest(input: {
           'AI Chat 请求已提交到 Redis',
         );
       } catch (err) {
+        stopQueueHeartbeat();
         if (acceptedEarly && !payloadQueued) {
           await releaseGlobalAgentSlot(concurrencySlotId);
           const pending = pendingAiChatRequests.get(requestId);
