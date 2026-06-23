@@ -582,8 +582,9 @@ describe('billing repository', () => {
       created_at: '2026-04-01T00:00:00.000Z',
       updated_at: '2026-04-01T00:00:00.000Z',
     };
+    // 第一个 pool 查询是无锁预检(SELECT 1):返回非空才进入加锁过期流程。
     const { clientCalls, client } = createMockPool(
-      [],
+      [[{ exists: 1 }]],
       [[], [grant], [], [], [], []],
     );
 
@@ -603,6 +604,21 @@ describe('billing repository', () => {
     expect(clientCalls[4]?.params?.[2]).toBe('bonus_expire');
     expect(clientCalls[5]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('skips the locked transaction when there is nothing to expire', async () => {
+    // 无锁预检返回空集 → 直接返回,不 connect/BEGIN/抢 users 行锁(perf-1)。
+    const { calls, clientCalls, client } = createMockPool([[]], []);
+
+    await expect(
+      expireUserBonusBalanceBefore('user-1', '2026-06-01T00:00:00.000Z'),
+    ).resolves.toEqual({ expired: 0, totalCoinsExpired: 0 });
+
+    // 仅一次只读预检,无任何事务/客户端查询。
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toContain('FROM balance_grants');
+    expect(clientCalls).toHaveLength(0);
+    expect(client.release).not.toHaveBeenCalled();
   });
 
   it('charges the rounded per-request model cost directly', async () => {

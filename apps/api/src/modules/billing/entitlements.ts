@@ -57,11 +57,26 @@ export interface RuntimeEntitlementSnapshot {
  */
 export async function getRuntimeEntitlementSnapshot(
   userId: string,
+  options?: {
+    // 调用方已持有的同一用户行(如 getOwnerByRuntimeId 的结果),用于省掉重复 getUserById。
+    // 仅在本次未发生 bonus 过期时复用 —— 否则其余额是过期前的陈旧值。
+    user?: {
+      purchased_coins: number;
+      bonus_coins: number;
+      reserved_coins: number;
+    } | null;
+  },
 ): Promise<RuntimeEntitlementSnapshot> {
-  await expireUserBonusBalanceBefore(userId, new Date().toISOString());
+  const expireResult = await expireUserBonusBalanceBefore(
+    userId,
+    new Date().toISOString(),
+  );
+  // 复用预取用户行的前提:本次没有发生过期(余额未变);发生过期则必须重新读取,
+  // 否则会用过期前的余额误判欠费(perf-1:常态无过期时省一次 getUserById)。
+  const canReuseUser = Boolean(options?.user) && expireResult.expired === 0;
   const [membership, user] = await Promise.all([
     getMembershipOverview(userId),
-    getUserById(userId),
+    canReuseUser ? Promise.resolve(options!.user!) : getUserById(userId),
   ]);
   const activePlanKey =
     membership.active && membership.membership?.plan_key

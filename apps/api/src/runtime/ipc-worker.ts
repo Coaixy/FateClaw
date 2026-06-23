@@ -640,7 +640,10 @@ export function submitInboxRequest(input: {
           reject(new Error('账号未绑定平台用户，无法处理 AI 请求'));
           return;
         }
-        const entitlement = await getRuntimeEntitlementSnapshot(owner.id);
+        // 复用刚取到的 owner 行,省掉快照内重复的 getUserById(perf-1)。
+        const entitlement = await getRuntimeEntitlementSnapshot(owner.id, {
+          user: owner,
+        });
         const priority = resolveInboxPriority(entitlement);
         if ((input.autoDeliver ?? true) && !entitlement.canUseWechatClaw) {
           reject(new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE));
@@ -953,9 +956,12 @@ export function submitAiChatInboxRequest(input: {
       };
 
       try {
-        const ownerUserId =
-          input.entitlementSnapshot?.userId ??
-          (await getOwnerByRuntimeId(input.accountId))?.id;
+        // 已带 entitlementSnapshot 时无需查 owner;否则取完整 owner 行,后续复用给
+        // getRuntimeEntitlementSnapshot,省掉快照内重复的 getUserById(perf-1)。
+        const owner = input.entitlementSnapshot
+          ? undefined
+          : await getOwnerByRuntimeId(input.accountId);
+        const ownerUserId = input.entitlementSnapshot?.userId ?? owner?.id;
         if (!ownerUserId) {
           // 未绑定平台用户的账号不应消费 token：拒绝并明确日志，避免无追踪计费泄漏。
           logger.warn(
@@ -970,7 +976,7 @@ export function submitAiChatInboxRequest(input: {
           : await resolveLlmRuntimeSnapshot(ownerUserId);
         const entitlement =
           input.entitlementSnapshot ??
-          (await getRuntimeEntitlementSnapshot(ownerUserId));
+          (await getRuntimeEntitlementSnapshot(ownerUserId, { user: owner }));
         billingReservation = await reserveBillingForRequest({
           userId: ownerUserId,
           requestId,

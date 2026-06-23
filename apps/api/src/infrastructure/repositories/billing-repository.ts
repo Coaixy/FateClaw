@@ -1948,6 +1948,24 @@ export async function expireUserBonusBalanceBefore(
   userId: string,
   beforeIso: string,
 ): Promise<{ expired: number; totalCoinsExpired: number }> {
+  // 无锁快速预检(perf):此函数在每条消息的余额读取前都被调用,而绝大多数请求并无到期
+  // 批次。先用一次轻量只读查询判断,命中空集直接返回,避免每请求都 connect+BEGIN+抢
+  // users 行写锁(与同用户的结算事务争锁、放大尾延迟)。下方加锁路径仍会重新校验,
+  // 预检与实扣之间出现新到期批次也只是顺延到下次请求处理,无正确性损失。
+  const { rows: hasExpirable } = await pool.query(
+    `SELECT 1 FROM balance_grants
+     WHERE user_id = $1
+       AND status = 'active'
+       AND remaining_coins > 0
+       AND expires_at IS NOT NULL
+       AND expires_at < $2
+     LIMIT 1`,
+    [userId, beforeIso],
+  );
+  if (hasExpirable.length === 0) {
+    return { expired: 0, totalCoinsExpired: 0 };
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
