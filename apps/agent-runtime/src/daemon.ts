@@ -27,6 +27,9 @@ type CancelQueueRedis = {
 };
 
 const PENDING_CANCEL_TTL_MS = 35 * 60 * 1000;
+// 单账号并发。注意:并发≥2 时主循环会在某轮任务仍在生成时继续 brpop 抓下一个任务,故
+// brpop 必须走 getBlockingRedis() 的独立连接(见 loop()),否则它会把发流式 token 的
+// 主连接 publish 憋到回合结束才一次性 flush。改并发前务必保持这条隔离不变量。
 const AGENT_RUNTIME_ACCOUNT_CONCURRENCY = Math.max(
   1,
   Math.trunc(Number(process.env.AGENT_RUNTIME_ACCOUNT_CONCURRENCY ?? '1')) || 1,
