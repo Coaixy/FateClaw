@@ -262,4 +262,31 @@ describe('createRechargeOrderForUser', () => {
     expect(mockInsertRechargeOrder).not.toHaveBeenCalled();
     expect(mockCreateEpayPayment).not.toHaveBeenCalled();
   });
+
+  it('keeps the order pending (not failed) when the gateway call throws', async () => {
+    // 网关调用抛异常(网络超时/响应解析失败):网关可能已创建会话,不能置 failed,
+    // 否则后续 notify/sync 会因状态非 pending 被拒,造成用户付款无法入账。
+    mockGetUserById.mockResolvedValue({ id: 'user-1' });
+    mockInsertRechargeOrder.mockResolvedValue(rechargeOrder());
+    mockCreateEpayPayment.mockRejectedValue(new Error('network timeout'));
+
+    const result = await createRechargeOrderForUser({
+      userId: 'user-1',
+      amountCoins: '10.00',
+      payType: 'alipay',
+      clientIp: '127.0.0.1',
+      callbackUrls: {
+        notifyUrl: 'https://app.example.test/api/billing/recharge/notify',
+        returnUrl: 'https://app.example.test/wallet/recharge/result',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.statusCode).toBe(502);
+    }
+    // 订单已以 pending 落库,但绝不能被标记为 failed。
+    expect(mockInsertRechargeOrder).toHaveBeenCalledOnce();
+    expect(mockMarkRechargeOrderFailed).not.toHaveBeenCalled();
+  });
 });

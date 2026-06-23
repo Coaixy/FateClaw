@@ -362,9 +362,16 @@ export async function createRechargeOrderForUser(input: {
       pay_url: order.pay_url ?? response.pay_info,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '创建支付单失败';
-    await markRechargeOrderFailed(tradeId, message);
-    logger.warn({ err, tradeId }, '创建充值支付单失败');
+    // 网络超时/响应解析失败等异常下,易支付网关【可能已创建可支付会话】(请求已抵达网关、
+    // 仅响应回传链路出错)。此时【不能】把订单置 failed:否则后续真实 notify 或用户主动 sync
+    // 都会因订单状态非 pending 被拒,造成"用户付了款却永远无法入账"的资损。
+    // 故保留订单 pending —— 网关确有会话时仍可由 notify/sync 正常入账;用户侧未拿到 pay_url
+    // 会自然重试(新建订单),旧 pending 订单无支付则为无害孤儿。
+    // markFailed 仅留给网关【明确返回业务失败】(上方 response.code !== 0)的确定性分支。
+    logger.warn(
+      { err, tradeId },
+      '创建充值支付单异常,保留订单 pending 待 notify/sync 兜底',
+    );
     return fail(502, '创建支付单失败，请稍后重试');
   }
 }
