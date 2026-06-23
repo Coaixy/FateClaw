@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import {
   BILLING_RESERVATION_STALE_MS,
+  BILLING_RESERVATION_MIN_STALE_MS,
   MANAGER_KEY,
   USER_MANAGER_KEY,
 } from '../../infrastructure/config.js';
@@ -1488,8 +1489,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/admin/billing/reconcile — 手动触发陈旧预留修复
   app.post('/billing/reconcile', async (request) => {
     const body = (request.body as { stale_ms?: number; limit?: number }) || {};
+    // 下限抬到 BILLING_RESERVATION_MIN_STALE_MS(= 请求超时):reconcile 现在按预估补扣,
+    // 阈值过小会把飞行中的 pending 误判补扣锁死,吞掉真实结算。
     const staleMs = Math.max(
-      60_000,
+      BILLING_RESERVATION_MIN_STALE_MS,
       body.stale_ms ?? BILLING_RESERVATION_STALE_MS,
     );
     const staleBeforeIso = new Date(Date.now() - staleMs).toISOString();

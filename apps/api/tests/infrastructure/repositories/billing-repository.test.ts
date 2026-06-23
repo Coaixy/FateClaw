@@ -184,18 +184,82 @@ describe('billing repository', () => {
     expect(calls[0]?.params).toEqual(['user-1', 'held', 'pending', 200, 0]);
   });
 
-  it('selects stale billing reservations in SQL before reconciliation', async () => {
+  it('selects stale pending reservations in SQL before reconciliation', async () => {
     const { calls } = createMockPool([[]]);
 
     await expect(
       reconcileStaleBillingReservations('2026-05-30T00:00:00.000Z', 999),
-    ).resolves.toEqual({ released: 0, requestIds: [] });
+    ).resolves.toEqual({ charged: 0, released: 0, requestIds: [] });
 
-    expect(calls[0]?.sql).toContain("hold_state = 'held'");
+    // 放宽到所有 charge_state='pending' 的陈旧预留(不再仅 hold_state='held')。
     expect(calls[0]?.sql).toContain("charge_state = 'pending'");
+    expect(calls[0]?.sql).not.toContain("hold_state = 'held'");
     expect(calls[0]?.sql).toContain('updated_at < $1');
     expect(calls[0]?.sql).toContain('ORDER BY updated_at ASC');
     expect(calls[0]?.params).toEqual(['2026-05-30T00:00:00.000Z', 200]);
+  });
+
+  it('back-charges held stale reservations by their frozen estimate', async () => {
+    const heldReservation = {
+      request_id: 'req-stale',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0.5,
+      hold_state: 'held',
+      charge_state: 'pending',
+      actual_charge_coins: 0,
+      total_overage_tokens: 0,
+      total_overage_cost_coins: 0,
+    };
+    // pool.query 第一次返回待处理预留列表;随后 settleUserModelChargeCoins 走 client 事务。
+    const settleUser = {
+      id: 'user-1',
+      purchased_coins: 9.5,
+      bonus_coins: 0,
+      reserved_coins: 0.5,
+    };
+    mockGetUserByIdUsing.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: 10,
+      bonus_coins: 0,
+      reserved_coins: 0.5,
+    });
+    const { clientCalls } = createMockPool(
+      [[heldReservation]],
+      [
+        [],
+        [heldReservation],
+        [],
+        [{ user_id: 'user-1', year_month: '2026-05', billed_overage_cost_coins: 0 }],
+        [],
+        [settleUser],
+        [],
+        [],
+        [],
+        [],
+        [],
+      ],
+    );
+
+    const result = await reconcileStaleBillingReservations(
+      '2026-05-30T00:00:00.000Z',
+      100,
+    );
+
+    expect(result).toEqual({
+      charged: 1,
+      released: 0,
+      requestIds: ['req-stale'],
+    });
+    // 补扣走 overage_charge 流水,且带 reconcile 专属备注(索引无关断言)。
+    const chargeTx = clientCalls.find(
+      (call) =>
+        call.sql.includes('INSERT INTO wallet_transactions') &&
+        call.params?.includes('overage_charge'),
+    );
+    expect(chargeTx).toBeTruthy();
+    expect(chargeTx?.params).toContain('请求未正常结算,按预冻结额补扣');
   });
 
   it('lists admin billing reservations with filters and total count', async () => {

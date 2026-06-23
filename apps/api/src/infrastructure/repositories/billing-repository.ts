@@ -1422,20 +1422,36 @@ export async function listBillingRequestReservationsPageForAdmin(
   };
 }
 
+/**
+ * 兜底对账:对超过陈旧阈值仍未结算的预留按【预冻结额补扣】并释放冻结。
+ *
+ * 这是所有"响应未能触达存活 pending"场景的统一安全网:请求超时(30min 后 pending 被删)、
+ * API 进程在 turn 进行中重启(内存 pending 丢失)、daemon 崩溃/丢包导致 response 未回。
+ * 这些情况下真实 usage 已不可得,故按请求前冻结的预估额(reserved_coins)补扣 —— 既释放
+ * 冻结、又确保已消耗的 token 不被白嫖,损失天然封顶在预估额内。
+ *
+ * @param staleBeforeIso 只处理 updated_at 早于此刻的预留。调用方【必须】保证该阈值
+ *   大于单请求最大生命周期(请求超时),否则会把仍在飞行中的 pending 误判补扣并锁死,
+ *   吞掉其真实结算。admin 入口已用 BILLING_RESERVATION_MIN_STALE_MS 兜底下限。
+ * @param limit 单次处理条数上限(1..200)。
+ * @returns charged=按预估补扣的条数,released=无冻结额仅做状态收尾的条数,requestIds=全部处理到的请求。
+ */
 export async function reconcileStaleBillingReservations(
   staleBeforeIso: string,
   limit = 100,
-): Promise<{ released: number; requestIds: string[] }> {
+): Promise<{ charged: number; released: number; requestIds: string[] }> {
   const { rows } = await pool.query(
+    // 放宽到所有 charge_state='pending' 的陈旧预留(不再仅 hold_state='held'):
+    // 既覆盖新模型的 held 冻结,也兜底历史 hold_state='none' 的孤儿预留。
     `SELECT *
      FROM billing_request_reservations
-     WHERE hold_state = 'held'
-       AND charge_state = 'pending'
+     WHERE charge_state = 'pending'
        AND updated_at < $1
      ORDER BY updated_at ASC
      LIMIT $2`,
     [staleBeforeIso, Math.min(Math.max(limit, 1), 200)],
   );
+  let charged = 0;
   let released = 0;
   const requestIds: string[] = [];
 
@@ -1443,17 +1459,33 @@ export async function reconcileStaleBillingReservations(
     normalizeBillingRequestReservationRow,
   )) {
     try {
-      await releaseUserBalanceReservation(row.request_id, '陈旧预留自动释放', {
-        source: 'reconcile',
-      });
-      released++;
+      if (row.hold_state === 'held' && row.reserved_coins > 0) {
+        // 按预冻结额补扣:settleUserModelChargeCoins 会扣实际 coins、释放冻结、置 charged
+        // (幂等)。requestTokens 传 0 —— 真实 token 数已不可得,仅按预估金额入账。
+        await settleUserModelChargeCoins(
+          row.request_id,
+          0,
+          row.reserved_coins,
+          '请求未正常结算,按预冻结额补扣',
+        );
+        charged++;
+      } else {
+        // 无冻结额(历史 hold_state='none' 或已释放):无可补扣金额,仅做状态收尾。
+        await releaseUserBalanceReservation(row.request_id, '陈旧预留自动释放', {
+          source: 'reconcile',
+        });
+        released++;
+      }
       requestIds.push(row.request_id);
     } catch (err) {
-      logger.warn({ requestId: row.request_id, err }, '自动释放陈旧预留失败');
+      logger.warn(
+        { requestId: row.request_id, err },
+        '自动结算/释放陈旧预留失败',
+      );
     }
   }
 
-  return { released, requestIds };
+  return { charged, released, requestIds };
 }
 
 async function getModelChargeSettlementMetadataUsing(
@@ -2184,6 +2216,8 @@ export async function settleUserModelChargeCoins(
   requestId: string,
   requestTokens: number,
   requestCostCoins: number,
+  // 流水备注覆盖:reconcile 按预冻结额补扣陈旧预留时传入独立文案,与正常 Token 扣费区分。
+  noteOverride?: string,
 ): Promise<ModelChargeSettlementResult> {
   const client = await pool.connect();
   try {
@@ -2322,7 +2356,7 @@ export async function settleUserModelChargeCoins(
         amountCoins: -actualChargeCoins,
         balanceSource: deduction.balanceSource,
         requestId,
-        note: '模型 Token 扣费',
+        note: noteOverride ?? '模型 Token 扣费',
         metadata: {
           yearMonth: reservation.year_month,
           requestTokens,

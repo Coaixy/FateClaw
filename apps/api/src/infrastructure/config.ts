@@ -210,12 +210,18 @@ export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
     '',
 );
 
-// 超过该时长仍未完成结算的预留请求会被自动释放占用，但保留账务记录，
-// 便于晚到响应继续补结算。
+// 超过该时长仍未完成结算的预留请求被视为陈旧:reconcile 会按预冻结额补扣并释放冻结
+// （覆盖超时/进程重启/丢包等真实 usage 已不可得的场景）。默认 40 分钟,需大于单请求
+// 最大生命周期(请求超时 30 分钟),确保只处理确已废弃的预留。
 export const BILLING_RESERVATION_STALE_MS = parseInt(
   process.env.BILLING_RESERVATION_STALE_MS || '2400000',
   10,
 );
+
+// reconcile 陈旧阈值的安全下限(30 分钟,= 单请求最大生命周期/请求超时)。
+// reconcile 现在会"补扣"而非仅释放,若阈值小于请求超时,会把仍在飞行中的 pending 预留
+// 误判为陈旧并按预估锁死结算,吞掉其真实 usage。故所有入口的 stale_ms 都不得低于此值。
+export const BILLING_RESERVATION_MIN_STALE_MS = 1_800_000;
 
 const PROJECT_ROOT = process.cwd();
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');

@@ -383,6 +383,9 @@ export interface AdminBillingReservationsResponse {
 
 /** 手动修复陈旧计费预留后的摘要。 */
 export interface AdminBillingReconcileResult {
+  /** 按预冻结额补扣的陈旧预留条数(超时/崩溃/丢包导致真实 usage 不可得)。 */
+  charged: number;
+  /** 无冻结额、仅做状态收尾的陈旧预留条数。 */
   released: number;
   requestIds: string[];
 }

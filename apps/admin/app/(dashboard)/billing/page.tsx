@@ -774,9 +774,12 @@ export default function AdminBillingPage() {
         stale_ms: minutes === undefined ? undefined : minutes * 60_000,
         limit,
       });
+      const handled = result.charged + result.released;
       const summaryText =
-        result.released > 0
-          ? `已释放 ${result.released.toLocaleString('zh-CN')} 条陈旧预留`
+        handled > 0
+          ? `已处理 ${handled.toLocaleString('zh-CN')} 条陈旧预留` +
+            `(补扣 ${result.charged.toLocaleString('zh-CN')} 条、` +
+            `释放 ${result.released.toLocaleString('zh-CN')} 条)`
           : '没有需要修复的陈旧预留';
       setReconcileMessage(summaryText);
       setReconcileRequestIds(result.requestIds);
