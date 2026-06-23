@@ -205,11 +205,19 @@ export async function reserveBillingForRequest(input: {
 /**
  * 按模型 Token 用量完成计费结算，并返回原始费用、会员免费额度抵扣和积分实扣明细。
  */
+// 最小计费单位:有真实用量但费用不足一分(亚分被取整为 0)时,按此下限计费,
+// 避免极短/低价请求免费。与冻结估算的最小额一致(一分)。
+const MIN_CHARGE_COINS = 0.01;
+
 export async function settleBillingReservationDetailed(input: {
   requestId: string;
   runtime?: LlmRuntimeSnapshot | null;
   promptTokens: number;
   completionTokens: number;
+  // 成功完成但缺失真实 usage 时,是否回退按预冻结额入账(防"成功却 0 usage 免单")。
+  // 仅对成功 turn 传 true;失败 turn 传 false —— 失败若确有消耗会经 partialUsage 上报为
+  // totalTokens>0,故 totalTokens<=0 的失败视为真正零消耗,不应误扣。
+  chargeReserveOnMissingUsage?: boolean;
 }): Promise<BillingSettlementSummary> {
   // BYOK（自配模型，source==='custom'）用的是卦师自己的 API Key，平台不再按 token 计费，
   // 实现"使用权 / 余额"解耦：买了使用权即可自带 key 免费跑，余额只用于平台官方模型。
@@ -241,7 +249,7 @@ export async function settleBillingReservationDetailed(input: {
     };
   }
   const totalTokens = input.promptTokens + input.completionTokens;
-  const costCoins = calculateTokenCostCoins({
+  let costCoins = calculateTokenCostCoins({
     promptTokens: input.promptTokens,
     completionTokens: input.completionTokens,
     inputTokenPricePerMillionCoins:
@@ -249,10 +257,32 @@ export async function settleBillingReservationDetailed(input: {
     outputTokenPricePerMillionCoins:
       input.runtime.outputTokenPricePerMillionCoins ?? 0,
   });
+  let noteOverride: string | undefined;
+  if (totalTokens <= 0) {
+    // 没有真实用量。成功完成的 metered turn 却报 0 usage(provider 未回/流式异常/被代理
+    // 吞掉)是异常:不能免单,回退按预冻结额入账并告警。失败 turn(及无冻结额)保持 0,
+    // 结算仍会释放冻结并置 charged。
+    if (input.chargeReserveOnMissingUsage && reservation.reserved_coins > 0) {
+      costCoins = reservation.reserved_coins;
+      noteOverride = '真实用量缺失,按预冻结额入账';
+      logger.warn(
+        {
+          requestId: input.requestId,
+          modelConfigId: input.runtime.modelConfigId,
+          reservedCoins: reservation.reserved_coins,
+        },
+        'metered 成功请求缺失真实 usage,回退按预冻结额计费',
+      );
+    }
+  } else {
+    // 有真实用量:设最小计费,避免亚分被取整为 0 的极短请求免费。
+    costCoins = Math.max(costCoins, MIN_CHARGE_COINS);
+  }
   const result = await settleUserModelChargeCoins(
     input.requestId,
     totalTokens,
     costCoins,
+    noteOverride,
   );
   return {
     actualChargeCoins: result.actualChargeCoins,
@@ -265,6 +295,7 @@ export async function settleBillingReservation(input: {
   runtime?: LlmRuntimeSnapshot | null;
   promptTokens: number;
   completionTokens: number;
+  chargeReserveOnMissingUsage?: boolean;
 }): Promise<number> {
   const result = await settleBillingReservationDetailed(input);
   return result.actualChargeCoins;

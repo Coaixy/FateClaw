@@ -189,6 +189,90 @@ describe('metered billing plans', () => {
       'request-1',
       141_873,
       0.63,
+      undefined,
+    );
+  });
+
+  it('applies the minimum charge when real usage rounds below one cent', async () => {
+    await expect(
+      settleBillingReservation({
+        requestId: 'request-1',
+        runtime: {
+          billingMode: 'metered',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
+        } as never,
+        promptTokens: 1,
+        completionTokens: 0,
+      }),
+    ).resolves.toBe(1);
+
+    // 1 token * 3/百万 = 0.000003 → 取整为 0 → 设最小计费 0.01。
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-1',
+      1,
+      0.01,
+      undefined,
+    );
+  });
+
+  it('falls back to the frozen estimate when a successful turn reports no usage', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-1',
+      reserved_coins: 0.5,
+      hold_state: 'held',
+      charge_state: 'pending',
+    });
+
+    await expect(
+      settleBillingReservation({
+        requestId: 'request-1',
+        runtime: {
+          billingMode: 'metered',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
+        } as never,
+        promptTokens: 0,
+        completionTokens: 0,
+        chargeReserveOnMissingUsage: true,
+      }),
+    ).resolves.toBe(1);
+
+    // 成功但 0 usage → 按预冻结额 0.5 入账,带专属备注。
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-1',
+      0,
+      0.5,
+      '真实用量缺失,按预冻结额入账',
+    );
+  });
+
+  it('does not back-charge a failed turn that reports no usage', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-1',
+      reserved_coins: 0.5,
+      hold_state: 'held',
+      charge_state: 'pending',
+    });
+
+    await settleBillingReservation({
+      requestId: 'request-1',
+      runtime: {
+        billingMode: 'metered',
+        inputTokenPricePerMillionCoins: 3,
+        outputTokenPricePerMillionCoins: 8,
+      } as never,
+      promptTokens: 0,
+      completionTokens: 0,
+      chargeReserveOnMissingUsage: false,
+    });
+
+    // 失败 turn 的 0 usage 视为真正零消耗,按 0 结算(仍会释放冻结/置 charged)。
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-1',
+      0,
+      0,
+      undefined,
     );
   });
 

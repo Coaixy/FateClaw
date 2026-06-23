@@ -266,6 +266,9 @@ async function settleAiChatBilling(args: {
     runtime: args.pending.llmRuntime,
     promptTokens: normalizedUsage.promptTokens,
     completionTokens: normalizedUsage.completionTokens,
+    // 成功完成却没有真实 usage 时回退按预冻结额入账,防"成功却 0 usage 免单";
+    // 失败 turn 不回退(真正零消耗的早失败不应被误扣,有消耗会经 partialUsage 上报)。
+    chargeReserveOnMissingUsage: args.payload.status !== 'error',
   });
   logger.info(
     {
