@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo } from 'react';
 import {
   ArrowRight,
+  ChevronRight,
   MessageCircle,
   SquarePen,
   Sparkles,
@@ -19,7 +20,8 @@ const RECENT_SESSION_LIMIT = 5;
 
 /**
  * 主页工作台 hub:卦师进门的统一入口,聚合「新建对话 / 技能开发 / 客户档案」三张卡片,
- * 下方接最近对话快捷区。移动端单列堆叠,sm 及以上三列并排。
+ * 下方接最近对话快捷区。
+ * 移动端卡片为横向紧凑行,sm 及以上为竖向三列卡片。
  */
 export default function WorkspaceHubPage() {
   return (
@@ -37,7 +39,6 @@ function HubContent() {
   // 清空选中会话 → ChatSessionsProvider 自动跳转 /ai-chat 开新对话
   const { sessions, setSelectedSession } = useChatSessions();
 
-  // 按更新时间倒序取最近若干条,避免依赖后端排序。
   const recentSessions = useMemo(
     () =>
       [...sessions]
@@ -50,18 +51,20 @@ function HubContent() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
+        <h1 className="text-[1.6rem] font-bold tracking-tight text-ink sm:text-2xl">
           {t('hub.title')}
         </h1>
         <p className="mt-1.5 text-sm text-muted">{t('hub.subtitle')}</p>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
         <HubCard
           as="button"
           icon={<SquarePen size={20} strokeWidth={1.8} />}
+          accentIcon="bg-primary/10 text-primary"
+          accentBorder="hover:border-primary/40"
           title={t('hub.newChat')}
           description={t('hub.newChatDesc')}
           onClick={() => setSelectedSession('')}
@@ -70,6 +73,8 @@ function HubContent() {
           as="link"
           href="/studio"
           icon={<Sparkles size={20} strokeWidth={1.8} />}
+          accentIcon="bg-emerald-400/10 text-emerald-500"
+          accentBorder="hover:border-emerald-400/40"
           title={t('hub.studio')}
           description={t('hub.studioDesc')}
         />
@@ -77,6 +82,8 @@ function HubContent() {
           as="link"
           href="/clients"
           icon={<Users size={20} strokeWidth={1.8} />}
+          accentIcon="bg-amber-400/10 text-amber-500"
+          accentBorder="hover:border-amber-400/40"
           title={t('hub.clients')}
           description={t('hub.clientsDesc')}
         />
@@ -84,30 +91,32 @@ function HubContent() {
 
       {recentSessions.length > 0 && (
         <section>
-          <h2 className="px-1 text-[13px] font-semibold text-muted">
+          <h2 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-muted/80">
             {t('hub.recentChats')}
           </h2>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-hairline bg-surface-card">
+          <div className="mt-2.5 overflow-hidden rounded-2xl border border-hairline bg-surface-card">
             {recentSessions.map((session, index) => (
               <button
                 key={session.id}
                 type="button"
                 onClick={() => setSelectedSession(session.id)}
-                className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-primary/5 ${
+                className={`group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-primary/5 ${
                   index > 0 ? 'border-t border-hairline/50' : ''
                 }`}
               >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-cream-strong text-muted/70">
-                    <MessageCircle size={13} strokeWidth={1.8} />
-                  </span>
-                  <span className="truncate text-[13px] font-medium text-ink">
-                    {session.title}
-                  </span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-cream-strong text-muted/70 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                  <MessageCircle size={14} strokeWidth={1.8} />
                 </span>
-                <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
+                  {session.title}
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-muted/80">
                   {formatRecentTime(session.updated_at, t, formatDate)}
                 </span>
+                <ChevronRight
+                  size={15}
+                  className="shrink-0 text-muted/30 transition-all group-hover:translate-x-0.5 group-hover:text-muted/70"
+                />
               </button>
             ))}
           </div>
@@ -138,10 +147,14 @@ function formatRecentTime(
 }
 
 /**
- * 工作台卡片:统一外观,既可作按钮(新建对话)也可作链接(技能开发/客户档案)。
+ * 工作台卡片:既可作按钮(新建对话)也可作链接(技能开发/客户档案)。
+ * 移动端横向紧凑(图标左、文字右、尾部 chevron),sm 及以上竖向卡片(图标上、文字下)。
+ * accentIcon / accentBorder 传入静态完整类名,避免 Tailwind 动态拼接被 purge。
  */
 function HubCard({
   icon,
+  accentIcon,
+  accentBorder,
   title,
   description,
   as,
@@ -149,30 +162,39 @@ function HubCard({
   onClick,
 }: {
   icon: React.ReactNode;
+  accentIcon: string;
+  accentBorder: string;
   title: string;
   description: string;
   as: 'button' | 'link';
   href?: string;
   onClick?: () => void;
 }) {
-  const className =
-    'group flex h-full flex-col rounded-2xl border border-hairline bg-surface-card p-5 text-left transition-all duration-200 hover:border-primary/30 hover:shadow-sm';
+  const className = `group flex items-center gap-3.5 rounded-2xl border border-hairline bg-surface-card p-3.5 text-left transition-all duration-200 hover:shadow-md sm:flex-col sm:items-start sm:gap-0 sm:p-5 sm:hover:-translate-y-0.5 ${accentBorder}`;
 
   const inner = (
     <>
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <span
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 ${accentIcon}`}
+      >
         {icon}
       </span>
-      <span className="mt-4 flex items-center gap-1.5 text-[15px] font-semibold text-ink">
-        {title}
-        <ArrowRight
-          size={15}
-          className="-translate-x-1 text-primary opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
-        />
+      <span className="flex min-w-0 flex-1 flex-col sm:mt-4 sm:flex-none">
+        <span className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
+          {title}
+          <ArrowRight
+            size={15}
+            className="hidden -translate-x-1 text-muted opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 sm:inline"
+          />
+        </span>
+        <span className="mt-0.5 text-[12.5px] leading-relaxed text-muted">
+          {description}
+        </span>
       </span>
-      <span className="mt-1 text-[13px] leading-relaxed text-muted">
-        {description}
-      </span>
+      <ChevronRight
+        size={18}
+        className="shrink-0 text-muted/35 sm:hidden"
+      />
     </>
   );
 
