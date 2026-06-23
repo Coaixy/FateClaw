@@ -21,7 +21,6 @@ import {
   Landmark,
   ReceiptText,
   WalletCards,
-  Workflow,
   Megaphone,
   LogOut,
   Menu,
@@ -67,12 +66,6 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
-  {
-    href: '/workflows',
-    label: 'Workflow',
-    icon: Workflow,
-    requiredScopes: ['admin:*'],
-  },
   { href: '/logs', label: '日志', icon: ScrollText, requiredScopes: ['admin:*'] },
   {
     href: '/about',

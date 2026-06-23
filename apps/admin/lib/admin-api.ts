@@ -2,8 +2,6 @@ import type {
   ChatSessionDto,
   ClientProfileDto,
   MessageDto,
-  SimpleModelPolicyDto,
-  SimpleWorkflowPresetDto,
 } from '@fateclaw/contracts/chat';
 import type {
   AdminSkillCommentDto,
@@ -714,41 +712,6 @@ export interface AdminRuntimeConfig {
   updated_at: string;
 }
 
-export type AdminSimpleWorkflowPreset = SimpleWorkflowPresetDto;
-
-export interface AdminSimpleWorkflowPresetListResponse {
-  presets: AdminSimpleWorkflowPreset[];
-}
-
-export interface AdminSimpleWorkflowPresetUpdate {
-  name?: string;
-  enabled?: boolean;
-  is_default?: boolean;
-  entry_title?: string;
-  entry_description?: string;
-  paipan_input_defaults?: Record<string, unknown>;
-  model_policy?: SimpleModelPolicyDto;
-  skill_ids?: string[];
-  prompt_template?: string;
-  sort_order?: number;
-}
-
-export interface AdminWorkflowSkillSummary {
-  id: string;
-  user_id: string;
-  owner_phone: string | null;
-  skill_name: string;
-  dir_name: string;
-  description: string;
-  visibility: 'private' | 'link_shared' | 'shared';
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AdminSimpleWorkflowResourcesResponse {
-  skills: AdminWorkflowSkillSummary[];
-}
-
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -927,27 +890,6 @@ export const admin = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  simpleWorkflows: () =>
-    adminRequest<AdminSimpleWorkflowPresetListResponse>(
-      '/api/admin/simple-workflows',
-    ),
-  simpleWorkflowResources: () =>
-    adminRequest<AdminSimpleWorkflowResourcesResponse>(
-      '/api/admin/simple-workflows/resources',
-    ),
-  updateSimpleWorkflowPreset: (
-    id: string,
-    data: AdminSimpleWorkflowPresetUpdate,
-    options?: Pick<RequestInit, 'signal'>,
-  ) =>
-    adminRequest<AdminSimpleWorkflowPreset>(
-      `/api/admin/simple-workflows/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-        signal: options?.signal,
-      },
-    ),
   createOfficialModel: (data: {
     model_key: string;
     pi_api: AdminModelPiApi;

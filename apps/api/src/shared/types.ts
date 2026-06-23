@@ -398,45 +398,6 @@ export interface ConfigAuditLog {
   created_at: string;
 }
 
-export type SimpleWorkflowKind = 'divination' | 'natal';
-
-export type SimpleWorkflowPaipanSkill = 'iching-paipan' | 'bazi-paipan';
-
-export type SimpleModelPolicyMode = 'system-default' | 'user-current' | 'fixed';
-
-export type SimpleModelThinkingLevel =
-  | 'off'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'xhigh';
-
-export interface SimpleModelPolicy {
-  mode: SimpleModelPolicyMode;
-  fixedModelId?: string;
-  thinkingLevel?: SimpleModelThinkingLevel;
-}
-
-export interface SimpleWorkflowPreset {
-  id: string;
-  kind: SimpleWorkflowKind;
-  name: string;
-  enabled: boolean;
-  is_default: boolean;
-  entry_title: string;
-  entry_description: string;
-  paipan_skill: SimpleWorkflowPaipanSkill;
-  paipan_input_defaults: Record<string, unknown>;
-  model_policy: SimpleModelPolicy;
-  skill_bundle_ids: string[];
-  skill_ids: string[];
-  skill_snapshot_ids: string[];
-  prompt_template: string;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
 // --- Channel abstraction ---
 
 export interface Channel {

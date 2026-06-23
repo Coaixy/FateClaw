@@ -30,7 +30,6 @@ import type {
   ModelProviderType,
   OfficialModelConfig,
   PiThinkingLevel,
-  SimpleModelPolicy,
   UserModelConfig,
   UserModelSelection,
 } from '../../shared/types.js';
@@ -681,66 +680,6 @@ export async function resolveUserLlmRuntime(
     }
     throw error;
   }
-}
-
-function normalizeSimplePolicyThinkingLevel(
-  value: SimpleModelPolicy['thinkingLevel'],
-): PiThinkingLevel {
-  return normalizeThinkingLevel(value ?? DEFAULT_PI_THINKING_LEVEL);
-}
-
-async function resolveFixedOfficialRuntime(
-  officialModelId: string | undefined,
-  thinkingLevel: PiThinkingLevel,
-): Promise<EffectiveLlmRuntimeConfig | null> {
-  const id = officialModelId?.trim();
-  if (!id) return null;
-  const model = await getOfficialModelConfig(id);
-  if (!model) return null;
-  const candidate = await resolveUsableOfficialModelCandidate(model);
-  return candidate
-    ? buildOfficialRuntime(candidate.model, candidate.secret, thinkingLevel)
-    : null;
-}
-
-/**
- * 按简易模式 workflow preset 的模型策略解析本轮模型运行时。
- *
- * @param userId 当前用户 ID。
- * @param policy 后台 preset 保存的模型策略。
- * @returns 可直接传给 agent-runtime 的模型运行时快照。
- * @remarks 只供简易模式内部调用；普通聊天仍使用用户当前模型选择。
- */
-export async function resolveSimpleWorkflowLlmRuntime(
-  userId: string,
-  policy: SimpleModelPolicy,
-): Promise<EffectiveLlmRuntimeConfig> {
-  const thinkingLevel = normalizeSimplePolicyThinkingLevel(
-    policy.thinkingLevel,
-  );
-
-  if (policy.mode === 'user-current') {
-    try {
-      return await resolveUserLlmRuntime(userId);
-    } catch (error) {
-      const fallbackRuntime =
-        await resolveFallbackOfficialRuntime(thinkingLevel);
-      if (fallbackRuntime) return fallbackRuntime;
-      throw error;
-    }
-  }
-
-  if (policy.mode === 'fixed') {
-    const fixedRuntime = await resolveFixedOfficialRuntime(
-      policy.fixedModelId,
-      thinkingLevel,
-    );
-    if (fixedRuntime) return fixedRuntime;
-  }
-
-  const fallbackRuntime = await resolveFallbackOfficialRuntime(thinkingLevel);
-  if (fallbackRuntime) return fallbackRuntime;
-  throw new Error('当前没有可用官方模型，请联系管理员');
 }
 
 export async function getEffectiveAgentRuntimeConfig(

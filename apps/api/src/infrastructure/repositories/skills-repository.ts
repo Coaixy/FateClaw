@@ -1577,18 +1577,6 @@ export interface AdminSkillBundleSummary {
   updated_at: string;
 }
 
-export interface AdminWorkflowSkillSummary {
-  id: string;
-  user_id: string;
-  owner_phone: string | null;
-  skill_name: string;
-  dir_name: string;
-  description: string;
-  visibility: UserCustomSkill['visibility'];
-  created_at: string;
-  updated_at: string;
-}
-
 /** 查询管理后台 workflow 配置可绑定的 Skill Bundle 摘要。 */
 export async function listAdminSkillBundleSummaries(): Promise<
   AdminSkillBundleSummary[]
@@ -1629,32 +1617,6 @@ export async function listAdminSkillBundleSummaries(): Promise<
      ORDER BY b.updated_at DESC, b.created_at DESC`,
   );
   return rows as AdminSkillBundleSummary[];
-}
-
-/** 查询管理后台 workflow 配置可绑定的具体 Skill 摘要。 */
-export async function listAdminWorkflowSkillSummaries(): Promise<
-  AdminWorkflowSkillSummary[]
-> {
-  const { rows } = await pool.query(
-    `SELECT
-       s.id,
-       s.user_id,
-       u.phone AS owner_phone,
-       s.skill_name,
-       s.dir_name,
-       s.description,
-       s.visibility,
-       s.created_at,
-       s.updated_at
-     FROM user_custom_skills s
-     LEFT JOIN users u ON u.id = s.user_id
-     WHERE s.deleted_at IS NULL
-       AND s.install_status = 'installed'
-       AND COALESCE(s.audit_metadata->>'source', '') <> $1
-     ORDER BY s.updated_at DESC, s.created_at DESC`,
-    [WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
-  );
-  return rows as AdminWorkflowSkillSummary[];
 }
 
 export async function updateSkillBundle(

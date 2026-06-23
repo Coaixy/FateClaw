@@ -37,14 +37,12 @@ import {
   cleanupPiSessionFilesForAdmin,
   scanPiSessionOrphanFilesForAdmin,
   listAdminGlobalSkills,
-  listAdminWorkflowSkillSummaries,
   listSkillCommentsForAdmin,
   listAdminUsersWithStats,
   listBillingRequestReservations,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
   listWalletTransactionsForAdmin,
-  listSimpleWorkflowPresets,
   reconcileStaleBillingReservations,
   removeOfficialModel,
   resetAdminUserPassword,
@@ -65,7 +63,6 @@ import {
   getAdminStatusOverview,
   updateAnnouncement,
   updatePublicFinancialLedgerEntry,
-  updateSimpleWorkflowPreset,
   getMembershipPlanConfigsForAdmin,
   updateMembershipPlanConfig,
   getAdminChatSessionDetail,
@@ -272,26 +269,6 @@ const PiSessionOrphanScanSchema = z.object({
   action: z.enum(['audit', 'delete']).default('audit'),
   limit: z.number().int().min(1).max(50_000).optional(),
   sample_limit: z.number().int().min(1).max(100).optional(),
-});
-
-const SimpleModelPolicySchema = z.object({
-  mode: z.enum(['system-default', 'user-current', 'fixed']),
-  fixedModelId: z.string().trim().min(1).max(120).optional(),
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).optional(),
-});
-
-const SimpleWorkflowPresetUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(80).optional(),
-  enabled: z.boolean().optional(),
-  is_default: z.boolean().optional(),
-  entry_title: z.string().trim().min(1).max(40).optional(),
-  entry_description: z.string().trim().max(240).optional(),
-  paipan_input_defaults: z.record(z.string(), z.unknown()).optional(),
-  model_policy: SimpleModelPolicySchema.optional(),
-  skill_bundle_ids: z.array(z.string().trim().min(1)).max(50).optional(),
-  skill_ids: z.array(z.string().trim().min(1)).max(100).optional(),
-  prompt_template: z.string().trim().min(1).max(4000).optional(),
-  sort_order: z.number().int().min(0).max(10000).optional(),
 });
 
 const DateOnlySchema = z
@@ -940,44 +917,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       limit: parsed.data.limit,
       offset: parsed.data.offset,
     });
-  });
-
-  // GET /api/admin/simple-workflows — 查看简易模式 workflow preset
-  app.get('/simple-workflows', async () => {
-    return { presets: await listSimpleWorkflowPresets() };
-  });
-
-  // GET /api/admin/simple-workflows/resources — 简易模式配置可选资源
-  app.get('/simple-workflows/resources', async () => {
-    return { skills: await listAdminWorkflowSkillSummaries() };
-  });
-
-  // PATCH /api/admin/simple-workflows/:id — 更新简易模式 workflow preset
-  app.patch('/simple-workflows/:id', async (request, reply) => {
-    const parsed = SimpleWorkflowPresetUpdateSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    const updated = await updateSimpleWorkflowPreset({
-      id: (request.params as { id: string }).id,
-      name: parsed.data.name,
-      enabled: parsed.data.enabled,
-      isDefault: parsed.data.is_default,
-      entryTitle: parsed.data.entry_title,
-      entryDescription: parsed.data.entry_description,
-      paipanInputDefaults: parsed.data.paipan_input_defaults,
-      modelPolicy: parsed.data.model_policy,
-      skillBundleIds: parsed.data.skill_bundle_ids,
-      skillIds: parsed.data.skill_ids,
-      promptTemplate: parsed.data.prompt_template,
-      sortOrder: parsed.data.sort_order,
-    });
-    if (!updated) {
-      return reply.code(404).send({ error: '简易模式 workflow 不存在' });
-    }
-    return updated;
   });
 
   // GET /api/admin/announcements — 公告管理列表

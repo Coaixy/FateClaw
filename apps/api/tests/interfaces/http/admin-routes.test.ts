@@ -54,14 +54,12 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listAdminGlobalSkills: vi.fn(),
   listAdminAnnouncements: vi.fn(),
   listSkillCommentsForAdmin: vi.fn(),
-  listAdminWorkflowSkillSummaries: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
   listBillingRequestReservationsPageForAdmin: vi.fn(),
   listRechargeOrdersForAdmin: vi.fn(),
   listPublicFinancialLedgerEntries: vi.fn(),
   listWalletTransactionsForAdmin: vi.fn(),
-  listSimpleWorkflowPresets: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   removeOfficialModel: vi.fn(),
   reviewSkillCommentForAdmin: vi.fn(),
@@ -77,7 +75,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   updateOfficialModel: vi.fn(),
   updatePublicFinancialLedgerEntry: vi.fn(),
   updateRuntimeSettings: vi.fn(),
-  updateSimpleWorkflowPreset: vi.fn(),
 }));
 
 vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
@@ -105,7 +102,6 @@ import {
   listAdminAnnouncements,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
-  listAdminWorkflowSkillSummaries,
   listAdminUsersWithStats,
   listSkillCommentsForAdmin,
   listWalletTransactionsForAdmin,
@@ -115,7 +111,6 @@ import {
   setAdminUserMembership,
   setSkillCommentPinnedForAdmin,
   updateAnnouncement,
-  updateSimpleWorkflowPreset,
   updateRuntimeSettings,
 } from '../../../src/modules/admin/admin-service.js';
 
@@ -181,7 +176,6 @@ describe('adminRoutes authentication throttling', () => {
     } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
     vi.mocked(listAdminAnnouncements).mockResolvedValue([]);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
-    vi.mocked(listAdminWorkflowSkillSummaries).mockResolvedValue([]);
     vi.mocked(listSkillCommentsForAdmin).mockResolvedValue([]);
     vi.mocked(listBillingRequestReservationsPageForAdmin).mockResolvedValue({
       reservations: [],
@@ -1046,93 +1040,6 @@ describe('adminRoutes authentication throttling', () => {
 
     expect(response.statusCode).toBe(400);
     expect(scanPiSessionOrphanFilesForAdmin).not.toHaveBeenCalled();
-  });
-
-  it('returns simple workflow selectable resources for owner admins', async () => {
-    vi.mocked(listAdminWorkflowSkillSummaries).mockResolvedValueOnce([
-      {
-        id: 'skill-1',
-        user_id: 'user-1',
-        owner_phone: '13800000000',
-        skill_name: '六爻入门',
-        dir_name: 'liuyao-basic',
-        description: '六爻基础',
-        visibility: 'private',
-        created_at: '2026-06-09T00:00:00.000Z',
-        updated_at: '2026-06-09T00:00:00.000Z',
-      },
-    ]);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/simple-workflows/resources',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      skills: [
-        expect.objectContaining({
-          id: 'skill-1',
-          skill_name: '六爻入门',
-        }),
-      ],
-    });
-  });
-
-  it('accepts xhigh thinking level for simple workflow model policy', async () => {
-    vi.mocked(updateSimpleWorkflowPreset).mockResolvedValueOnce({
-      id: 'simple-divination-default',
-      kind: 'divination',
-      name: '默认占卜问事',
-      enabled: true,
-      is_default: true,
-      entry_title: '占卜问事',
-      entry_description: '',
-      paipan_skill: 'iching-paipan',
-      paipan_input_defaults: { method: 'dayan' },
-      model_policy: {
-        mode: 'fixed',
-        fixedModelId: 'model-1',
-        thinkingLevel: 'xhigh',
-      },
-      skill_bundle_ids: [],
-      skill_ids: [],
-      skill_snapshot_ids: [],
-      prompt_template: '模板',
-      sort_order: 10,
-      created_at: '2026-06-09T00:00:00.000Z',
-      updated_at: '2026-06-09T00:00:00.000Z',
-    });
-
-    const response = await app.inject({
-      method: 'PATCH',
-      url: '/simple-workflows/simple-divination-default',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        model_policy: {
-          mode: 'fixed',
-          fixedModelId: 'model-1',
-          thinkingLevel: 'xhigh',
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(updateSimpleWorkflowPreset).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'simple-divination-default',
-        modelPolicy: {
-          mode: 'fixed',
-          fixedModelId: 'model-1',
-          thinkingLevel: 'xhigh',
-        },
-      }),
-    );
   });
 
   it('lists Skill comments with review filters for owner admins', async () => {
