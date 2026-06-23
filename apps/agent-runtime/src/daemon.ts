@@ -9,7 +9,12 @@ import {
   listScopedTraceEvents,
   setRequestId,
 } from './request-scope.js';
-import { connectRedis, disconnectRedis, getRedis } from './redis.js';
+import {
+  connectRedis,
+  disconnectRedis,
+  getBlockingRedis,
+  getRedis,
+} from './redis.js';
 import {
   CancelInboxRequest,
   InboxRequest,
@@ -382,7 +387,9 @@ async function cleanup(): Promise<void> {
 async function loop(): Promise<void> {
   const ctx = initContext();
   await connectRedis();
-  const redis = getRedis();
+  // brpop 走专用阻塞连接,绝不与发流式 token 的主连接(getRedis)共用,否则并发≥2 时
+  // brpop 会把同连接上的 publish 憋到回合结束才一次性 flush(见 redis.ts 注释)。
+  const blockingRedis = getBlockingRedis();
 
   // 退出协调：收到信号后停止接收新消息，等待正在处理的请求完成（最多 N 秒），
   // 然后清理 Redis/DB 连接。避免 in-flight 请求被强杀导致响应丢失。
@@ -451,7 +458,7 @@ async function loop(): Promise<void> {
       }
       if (shuttingDown) break;
       // 30s timeout 让退出信号能在合理时间内被察觉，并允许 ioredis 自动重连
-      const result = await redis.brpop(
+      const result = await blockingRedis.brpop(
         `ipc:${ctx.accountId}:inbox:member`,
         `ipc:${ctx.accountId}:inbox`,
         30,
