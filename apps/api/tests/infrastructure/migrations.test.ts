@@ -492,6 +492,7 @@ describe('runDatabaseMigrations', () => {
       '0066_messages_workflow_node_id',
       '0067_workflow_runs',
       '0068_runtime_agent_timeout_concurrency',
+      '0069_billing_perf_indexes',
     ]);
 
     await runDatabaseMigrations(client as never);
