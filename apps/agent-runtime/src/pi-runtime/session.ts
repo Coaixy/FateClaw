@@ -20,10 +20,7 @@ import {
   buildVisibleSessionBoardContexts,
   createPiSessionContext,
 } from './context-layer.js';
-import {
-  createPiEventCollector,
-  extractAssistantTextFromMessages,
-} from './events.js';
+import { createPiEventCollector } from './events.js';
 import {
   enrichAiChatStreamEvent,
   publishAiChatStreamEvent,
@@ -230,16 +227,14 @@ export async function runPiSession(args: {
     }),
   );
 
-  // 统一构造返回结果(成功 / 用户中断 两条路径共用)。中断时返回截至中断点已生成的
-  // partial 文本 + 已累计 usage,供宿主落库展示"停止前内容"并按真实用量结算。
-  // textOverride:中断路径显式传入「当前请求」的 partial(lastAssistantText),避免从
-  // 复用的 Pi 会话 state 里误取到上一回合的 assistant 回复(否则会"把上一条回复插进来")。
-  const buildRunResult = (textOverride?: string | null): PiSessionRunResult => ({
-    text:
-      textOverride !== undefined
-        ? textOverride
-        : (extractAssistantTextFromMessages(session.state.messages) ??
-          lastAssistantText),
+  // 统一构造返回结果(成功 / 用户中断 两条路径共用)。
+  // text 只取「当前请求」累计的 assistant 文本(lastAssistantText):它由本次 runPiSession 的
+  // 流式 message_update / turn_end 事件填充,每次请求初始为 null,【绝不会】是复用 Pi 会话里
+  // 上一回合的回复。此前用 extractAssistantTextFromMessages(session.state.messages) 会扫到
+  // 跨回合复用会话里上一回合的 assistant 消息 —— 当前回合没产出时就把"上一条回复插进来"。
+  // 当前回合无产出时为 null,宿主据此不落空回复(取消/早停即丢弃)。
+  const buildRunResult = (): PiSessionRunResult => ({
+    text: lastAssistantText,
     usage,
     records,
     persistedSkillContext: sessionContext.persistedSkillContext,
@@ -282,10 +277,9 @@ export async function runPiSession(args: {
   } catch (err) {
     if (aborted) {
       // 用户主动中断(stop)/宿主超时触发的 abort:不当作错误抛弃。
-      // 只返回「当前请求」累计的 partial(lastAssistantText)——它由本次 runPiSession 的
-      // 流式事件填充,绝不会是复用 Pi 会话里上一回合的回复;无 partial 时为 null,宿主据此
-      // 不落空回复。usage 仍为已累计真实消耗,按真实用量结算(不白嫖)。
-      return buildRunResult(lastAssistantText);
+      // buildRunResult 已只取「当前请求」的 partial(无产出则 null,绝不取上一回合);
+      // usage 为已累计真实消耗,让宿主按真实用量结算(不白嫖),回复本身按取消语义丢弃。
+      return buildRunResult();
     }
     // 真实错误:把已累计的 usage 挂到错误对象上随异常上抛,让宿主对失败的 turn
     // 也能按真实用量结算 —— 否则「未正常收尾 = 免单」即计费白嫖。

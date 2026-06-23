@@ -353,6 +353,34 @@ describe('runPiSession', () => {
     expect(innerAbort).toHaveBeenCalledTimes(1);
   });
 
+  it('on success with no current-turn output does not leak a reused-session prior reply', async () => {
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: {
+        // 复用的 Pi 会话里残留上一回合的 assistant 回复
+        state: { messages: [{ role: 'assistant', content: '上一回合的回复' }] },
+        subscribe() {
+          return vi.fn();
+        },
+        // 本回合正常完成,但未产出任何 assistant 文本(无 turn_end/message_update 文本事件)
+        async prompt() {},
+        abort: vi.fn(),
+        dispose: vi.fn(),
+      },
+    }));
+
+    const deps = createDeps();
+    const runtime: RequestRuntime = { deps };
+    const requestScope = createRequestScope();
+    const result = await runPiSession({
+      containerInput: createInput(),
+      runtime,
+      requestScope,
+    });
+
+    // 本回合无产出 → text 为 null,绝不回退到复用会话里上一回合的回复。
+    expect(result.text).toBeNull();
+  });
+
   it('injects the no-board policy for normal chat without authorized board context', async () => {
     const userMessage = '我是 1990-01-01 早上八点出生，帮我排盘看事业';
     let capturedPrompt = '';
