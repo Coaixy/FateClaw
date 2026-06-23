@@ -14,6 +14,7 @@ export const zhCNMessages = {
     studioDesc: '沉淀和复用你的断卦技能',
     clients: '客户档案',
     clientsDesc: '管理客户、生辰与跟进',
+    recentChats: '最近对话',
   },
   common: {
     appName: '守义AI',

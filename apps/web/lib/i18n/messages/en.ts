@@ -14,6 +14,7 @@ export const enMessages = {
     studioDesc: 'Build and reuse your divination know-how',
     clients: 'Clients',
     clientsDesc: 'Manage clients, birth info, and follow-ups',
+    recentChats: 'Recent chats',
   },
   common: {
     appName: 'Shouyi AI',
