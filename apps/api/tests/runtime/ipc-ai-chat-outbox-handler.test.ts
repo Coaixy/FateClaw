@@ -181,7 +181,7 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
   });
 
-  it('settles a cancelled turn by real usage but never stores or re-resolves a reply', async () => {
+  it('finalizes a cancelled turn: settles real usage, persists partial with cancelled marker, no re-resolve', async () => {
     const timeout = setTimeout(() => undefined, 10_000);
     const pendingRequests = new Map<string, PendingInboxRequest>([
       [
@@ -191,7 +191,8 @@ describe('processAiChatOutboxPayload', () => {
           ownerUserId: 'user-1',
           autoDeliver: false,
           sessionId: 'session-c',
-          // 用户已 stop:随后到达的(可能已完成/陈旧的)回复只用于结算,不得展示。
+          userMessageId: 'user-msg-c',
+          // 用户已 stop:这条响应是"停止前已生成的 partial",作为终态落库+展示+结算。
           cancelled: true,
           llmRuntime: {
             source: 'official',
@@ -218,7 +219,7 @@ describe('processAiChatOutboxPayload', () => {
         type: 'response',
         accountId: 'web:user-1',
         requestId: 'req-cancel',
-        text: '陈旧或已完成的整条回复内容',
+        text: '停止前已生成的部分内容',
         status: 'success',
         usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
       },
@@ -226,16 +227,28 @@ describe('processAiChatOutboxPayload', () => {
       pendingRequests,
     );
 
-    // 计费仍按真实用量结算(不白嫖)
+    // 计费按真实 partial 用量结算,且取消不回退预冻结额(chargeReserveOnMissingUsage:false)
     expect(mockSettleBillingReservationDetailed).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: 'req-cancel' }),
+      expect.objectContaining({
+        requestId: 'req-cancel',
+        chargeReserveOnMissingUsage: false,
+      }),
     );
     expect(mockIncrementDailyTokens).toHaveBeenCalled();
-    // 关键:绝不落库这条回复、绝不再 resolve(turn 已由取消即时 resolve)
-    expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockTouchChatSession).not.toHaveBeenCalled();
+    // 落库 partial 内容,且终态消息标记 cancelled、turn_complete=false(消耗照常带)
+    expect(mockStoreMessage).toHaveBeenCalled();
+    const finalStore = mockStoreMessage.mock.calls
+      .map((call) => call[0])
+      .find(
+        (msg) =>
+          (msg as { metadata?: { kind?: string } }).metadata?.kind === 'final',
+      );
+    expect(finalStore).toBeTruthy();
+    expect(
+      (finalStore as { metadata?: { cancelled?: boolean } }).metadata?.cancelled,
+    ).toBe(true);
+    // 关键:不再 resolve(turn 已由取消即时 resolve),pending 已清理
     expect(mockResolve).not.toHaveBeenCalled();
-    // pending 已清理
     expect(pendingRequests.has('req-cancel')).toBe(false);
   });
 

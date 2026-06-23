@@ -183,8 +183,14 @@ export async function runPiSession(args: {
     customTools,
   });
 
+  // 标记"是否由 abort 触发"。用户 stop / 宿主超时都经此置位,据此把 session.prompt 抛出的
+  // 中断异常与真实错误区分开:中断时返回已生成的 partial,而非当作错误丢弃。
+  let aborted = false;
   args.onSessionReady?.({
-    abort: () => session.abort(),
+    abort: async () => {
+      aborted = true;
+      await session.abort();
+    },
   });
 
   const unsubscribe = session.subscribe(
@@ -224,6 +230,33 @@ export async function runPiSession(args: {
     }),
   );
 
+  // 统一构造返回结果(成功 / 用户中断 两条路径共用)。中断时返回截至中断点已生成的
+  // partial 文本 + 已累计 usage,供宿主落库展示"停止前内容"并按真实用量结算。
+  const buildRunResult = (): PiSessionRunResult => ({
+    text:
+      extractAssistantTextFromMessages(session.state.messages) ??
+      lastAssistantText,
+    usage,
+    records,
+    persistedSkillContext: sessionContext.persistedSkillContext,
+    piSession: buildPiSessionSnapshot({
+      id: piSession.piSessionId,
+      file: piSession.sessionFile,
+      persisted: piSession.persisted,
+      provider: args.containerInput.llmRuntime.piApi,
+      model: args.containerInput.llmRuntime.model,
+      userPrompt: args.containerInput.userMessage,
+      systemPrompt,
+      appendSystemPrompt,
+      allowedTools: allowedToolNames,
+      readableSkills: readableSkills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+      })),
+      messages: session.state.messages,
+    }),
+  });
+
   try {
     traceEvent(
       {
@@ -241,34 +274,16 @@ export async function runPiSession(args: {
     await session.prompt(args.containerInput.userMessage, {
       source: 'extension',
     });
-    return {
-      text:
-        extractAssistantTextFromMessages(session.state.messages) ??
-        lastAssistantText,
-      usage,
-      records,
-      persistedSkillContext: sessionContext.persistedSkillContext,
-      piSession: buildPiSessionSnapshot({
-        id: piSession.piSessionId,
-        file: piSession.sessionFile,
-        persisted: piSession.persisted,
-        provider: args.containerInput.llmRuntime.piApi,
-        model: args.containerInput.llmRuntime.model,
-        userPrompt: args.containerInput.userMessage,
-        systemPrompt,
-        appendSystemPrompt,
-        allowedTools: allowedToolNames,
-        readableSkills: readableSkills.map((skill) => ({
-          name: skill.name,
-          description: skill.description,
-        })),
-        messages: session.state.messages,
-      }),
-    };
+    return buildRunResult();
   } catch (err) {
-    // turn 被中断(用户取消 / session.abort)或在执行中报错时:此刻 usage 对象已通过
-    // 事件流累计为「截至中断点的真实已消耗 token」。必须把它挂到错误对象上随异常上抛,
-    // 让宿主对中断/失败的 turn 也能按真实用量结算 —— 否则「未正常收尾 = 免单」即计费白嫖。
+    if (aborted) {
+      // 用户主动中断(stop)/宿主超时触发的 abort:不当作错误抛弃。
+      // session.prompt 因 abort 抛出,但已生成的 partial 文本与累计 usage 都还在,
+      // 正常返回它们,让宿主把"停止前内容"落库展示并按真实消耗结算(不白嫖)。
+      return buildRunResult();
+    }
+    // 真实错误:把已累计的 usage 挂到错误对象上随异常上抛,让宿主对失败的 turn
+    // 也能按真实用量结算 —— 否则「未正常收尾 = 免单」即计费白嫖。
     if (err && typeof err === 'object') {
       (err as { partialUsage?: TokenUsage }).partialUsage = { ...usage };
     }

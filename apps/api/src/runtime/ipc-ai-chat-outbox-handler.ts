@@ -256,6 +256,9 @@ async function settleAiChatBilling(args: {
   accountId: string;
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
+  // 显式覆盖"缺失用量是否回退按预冻结额入账"。默认按 status!=='error' 推断;
+  // 取消分区传 false(取消回合的真实 partial 用量即真相,0 用量=早中断据实记 0,不估扣)。
+  chargeReserveOnMissingUsage?: boolean;
 }): Promise<BillingSettlementSummary | null> {
   if (!args.payload.requestId) return null;
   if (args.pending?.llmRuntime?.billingMode !== 'metered') return null;
@@ -268,7 +271,8 @@ async function settleAiChatBilling(args: {
     completionTokens: normalizedUsage.completionTokens,
     // 成功完成却没有真实 usage 时回退按预冻结额入账,防"成功却 0 usage 免单";
     // 失败 turn 不回退(真正零消耗的早失败不应被误扣,有消耗会经 partialUsage 上报)。
-    chargeReserveOnMissingUsage: args.payload.status !== 'error',
+    chargeReserveOnMissingUsage:
+      args.chargeReserveOnMissingUsage ?? args.payload.status !== 'error',
   });
   logger.info(
     {
@@ -572,13 +576,74 @@ async function processAiChatResponse(
       throw new Error('无法为 AI Chat response 解析 accountId');
     }
 
-    // 已取消(stop)的回合:turn promise 已被 cancelAiChatSessionRequest 即时 resolve,
-    // 这里【只】按真实用量结算计费 + 记 token 用量,然后清理 pending —— 【不】落库、不推流、
-    // 不再 resolve。否则会把这条(可能已完成或陈旧的)daemon 回复当成新回复展示给已停止的
-    // 用户(出现"取消后又冒出一整条回复"的 bug)。计费仍按真实消耗,杜绝取消白嫖。
+    // 已取消(stop)的回合:turn promise 已被 cancelAiChatSessionRequest 即时 resolve。
+    // 这里把"停止前已生成的内容(agent-runtime 在 abort 时回传的 partial)"作为终态:
+    // 按真实用量结算 + 记账 + 落库 partial + 推一个带消耗的终态事件(标记 cancelled),
+    // 但【不】再 resolve(已 resolve)。这样取消回合像正常回答一样保留内容并显示消耗,
+    // 又不会把"完整/陈旧的整条回复"当新回复冒出来(落的是 partial、且标 cancelled)。
     if (pending?.cancelled) {
-      await recordAiChatTokenUsage({ accountId, pending, payload });
-      await settleAiChatBilling({ accountId, pending, payload });
+      const cancelledUsage = normalizeRuntimeTokenUsage(payload.usage);
+      const cancelledPayload =
+        cancelledUsage.totalTokens > 0
+          ? { ...payload, usage: cancelledUsage }
+          : payload;
+      await recordAiChatTokenUsage({
+        accountId,
+        pending,
+        payload: cancelledPayload,
+      });
+      // 取消按真实 partial 用量结算;不回退预冻结额(0 用量=早中断,据实记 0,不估扣)。
+      const billing = await settleAiChatBilling({
+        accountId,
+        pending,
+        payload: cancelledPayload,
+        chargeReserveOnMissingUsage: false,
+      });
+
+      // 仅当确有"停止前内容"才落库 + 推流;纯早中断(无文本)只结算,不落空回复。
+      const partialText = resolveAiChatResponseText(cancelledPayload);
+      if (partialText) {
+        const durationMs = resolvePendingDurationMs(pending);
+        const sessionId = resolveAiChatFinalSessionId(pending, cancelledPayload);
+        const finalText = appendFinalTurnMarker(
+          partialText,
+          cancelledPayload.usage,
+        );
+        const finalMetadata = {
+          ...buildFinalMetadata({
+            payload: cancelledPayload,
+            durationMs,
+            billing,
+          }),
+          // 取消终态:前端可据此标"已停止",并照常从 actual_charge_coins 显示消耗。
+          cancelled: true,
+          turn_complete: false,
+        };
+        const assistantMessages = buildAssistantMessagesForResponse({
+          payload: cancelledPayload,
+          responseText: partialText,
+          finalText,
+        });
+        await storeAiChatFinalResponseMessages({
+          accountId,
+          pending,
+          payload: cancelledPayload,
+          responseText: partialText,
+          assistantMessages,
+          finalMetadata,
+        });
+        await publishAiChatStreamEvent({
+          sessionId,
+          event: streamEventFromResponsePayload({
+            payload: cancelledPayload,
+            accountId,
+            sessionId,
+            text: finalText,
+            metadata: finalMetadata,
+          }),
+        });
+      }
+
       clearTimeout(pending.timeout);
       pendingRequests.delete(payload.requestId!);
       if (pending.sessionId) {
@@ -594,7 +659,7 @@ async function processAiChatResponse(
       });
       logger.info(
         { accountId, requestId: payload.requestId },
-        'AI Chat: 回合已取消,按真实用量结算但不展示回复',
+        'AI Chat: 回合已取消,落库 partial 内容并按真实用量结算',
       );
       return;
     }
