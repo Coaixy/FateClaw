@@ -970,6 +970,10 @@ export const enMessages = {
       recommended: 'Recommended',
       answerCompleted: 'Answer complete',
       outputStopped: 'Output stopped',
+      stuckTitle: 'Reply seems slow',
+      stuckWait: 'Keep waiting',
+      stuckRetry: 'Retry',
+      stuckStop: 'Stop',
     },
     guideEntry: {
       title: 'Continue setup guide',

@@ -938,6 +938,13 @@ function AiChatWorkspaceContent() {
         {!showCenteredComposer && replyStatus && (
           <AiChatFloatingStatus status={replyStatus} />
         )}
+        {!showCenteredComposer && chatMessages.stuckPrompt && (
+          <AiChatStuckPrompt
+            onWait={chatMessages.dismissStuckPrompt}
+            onRetry={() => void chatMessages.retryStuckTurn()}
+            onStop={handleStopGenerating}
+          />
+        )}
       </div>
 
       {!showCenteredComposer && (
@@ -1049,6 +1056,51 @@ function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
         <StatusIcon size={12} />
         <span>{statusLabel}</span>
       </span>
+    </div>
+  );
+}
+
+/**
+ * 静默看门狗的非破坏式提示条:回合静默超阈值时浮现,把决定权交给用户
+ * (继续等待 / 重试 / 停止),不自动取消那一轮——避免误杀推理模型长思考等健康慢回复。
+ */
+function AiChatStuckPrompt({
+  onWait,
+  onRetry,
+  onStop,
+}: {
+  onWait: () => void;
+  onRetry: () => void;
+  onStop: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="sticky bottom-2 z-10 mt-2 flex justify-center px-3">
+      <div className="inline-flex items-center gap-1 rounded-lg border border-hairline bg-surface-card/95 px-2.5 py-1.5 text-[11px] text-muted shadow-sm backdrop-blur">
+        <Loader2 size={12} className="animate-spin" />
+        <span className="mr-1">{t('aiChat.home.stuckTitle')}</span>
+        <button
+          type="button"
+          onClick={onWait}
+          className="rounded px-1.5 py-0.5 text-ink transition-colors hover:bg-surface"
+        >
+          {t('aiChat.home.stuckWait')}
+        </button>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded px-1.5 py-0.5 text-primary transition-colors hover:bg-surface"
+        >
+          {t('aiChat.home.stuckRetry')}
+        </button>
+        <button
+          type="button"
+          onClick={onStop}
+          className="rounded px-1.5 py-0.5 text-rose-500 transition-colors hover:bg-surface"
+        >
+          {t('aiChat.home.stuckStop')}
+        </button>
+      </div>
     </div>
   );
 }

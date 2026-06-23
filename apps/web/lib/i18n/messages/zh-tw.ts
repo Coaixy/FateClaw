@@ -942,6 +942,10 @@ export const zhTWMessages = {
       recommended: '推薦入口',
       answerCompleted: '回答完成',
       outputStopped: '已停止輸出',
+      stuckTitle: '回覆似乎慢了',
+      stuckWait: '繼續等待',
+      stuckRetry: '重試',
+      stuckStop: '停止',
     },
     guideEntry: {
       title: '繼續完成啟動向導',

@@ -942,6 +942,10 @@ export const zhCNMessages = {
       recommended: '推荐入口',
       answerCompleted: '回答完成',
       outputStopped: '已停止输出',
+      stuckTitle: '回复似乎慢了',
+      stuckWait: '继续等待',
+      stuckRetry: '重试',
+      stuckStop: '停止',
     },
     guideEntry: {
       title: '继续完成启动向导',
