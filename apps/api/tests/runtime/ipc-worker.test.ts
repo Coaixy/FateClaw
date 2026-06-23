@@ -183,13 +183,11 @@ describe('cancelAiChatSessionRequest', () => {
       'ipc:web:user-1:cancel',
       expect.stringContaining('"requestId":"req-1"'),
     );
-    expect(mockSettleBillingReservation).toHaveBeenCalledWith({
-      requestId: 'req-1',
-      runtime: undefined,
-      promptTokens: 0,
-      completionTokens: 0,
-    });
+    // 取消不再做 0-token 结算(旧实现会把预留锁死为 charged=0 造成白嫖);
+    // 真实 usage 的结算改由随后到达的 abort 响应按真实消耗完成。
+    expect(mockSettleBillingReservation).not.toHaveBeenCalled();
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
+    // 即时 resolve 保证「停止」手感。
     expect(pending.resolve).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: 'req-1',
@@ -197,7 +195,8 @@ describe('cancelAiChatSessionRequest', () => {
         publicReasonCode: 'user_stop',
       }),
     );
-    expect(pendingRequests.has('req-1')).toBe(false);
+    // 关键:pending 仍保留在 map 中,等待 abort 响应触发按真实 usage 的结算与清理。
+    expect(pendingRequests.has('req-1')).toBe(true);
   });
 
   it('returns false when no request is currently processing', async () => {

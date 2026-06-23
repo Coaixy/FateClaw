@@ -45,10 +45,7 @@ import {
 } from './ipc-payloads.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import {
-  reserveBillingForRequest,
-  settleBillingReservation,
-} from '../modules/billing/plans.js';
+import { reserveBillingForRequest } from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   getAgentConcurrencyLimit,
@@ -402,10 +399,9 @@ export async function cancelAiChatSessionRequest(
     return false;
   }
 
-  if (pending) {
-    clearTimeout(pending.timeout);
-    pendingAiChatRequests.delete(requestId);
-  }
+  // 即时释放并发资源(幂等:槽位 zrem、会话锁按 requestId 守卫、租约可重复释放),
+  // 让排队中的其它请求尽快推进。注意:这里【不】删除 pending、【不】清除 timeout、
+  // 也【不】做 0-token 结算。
   await releaseSessionProcessingLock(sessionId, requestId);
   await releaseGlobalAgentSlot(pending?.concurrencySlotId);
   await releaseLocalAgentLeaseForPending(pending, {
@@ -413,19 +409,14 @@ export async function cancelAiChatSessionRequest(
     requestId,
     reason: 'cancel',
   });
-  if (pending) {
-    await settleBillingReservation({
-      requestId,
-      runtime: pending.llmRuntime,
-      promptTokens: 0,
-      completionTokens: 0,
-    }).catch((err) => {
-      logger.warn(
-        { accountId: pending.accountId, requestId, err },
-        'AI Chat 取消时结算预留失败',
-      );
-    });
-  }
+
+  // 仅下发中断信号给 daemon。daemon 收到 abort 后会让当前 turn 抛出并回传
+  // 【截至中断点的真实 usage】(见 request-boundary 的 partialUsage 回传),该响应经
+  // ai-chat:outbox 正常流程触发 settleAiChatBilling 按【真实消耗】结算,并由
+  // resolvePendingAiChatResponse 最终删除 pending / 清 timeout。
+  // 这彻底取代旧实现「取消时按 0 token 结算并把预留锁死为 charged」的白嫖:
+  // 取消 = 按真实已耗 token 扣费,而非免单,也不会按预估全额多扣。
+  // daemon 万一不回包,pending 的 timeout 作兜底(超时路径同样会按真实/预估结算)。
   await getRedis().lpush(
     `ipc:${runtimeAccountId}:cancel`,
     buildAiChatCancelPayload({
@@ -435,6 +426,10 @@ export async function cancelAiChatSessionRequest(
       reason,
     }),
   );
+
+  // 即时 resolve 原 turn promise,保证前端「停止」手感不变(停止转圈);
+  // pending 仍保留在 map 中,真实 usage 的结算与落库由随后到达的 abort 响应完成。
+  // 二次 resolve 由 JS Promise 语义保证为无副作用空操作。
   pending?.resolve({
     requestId,
     status: 'error',
