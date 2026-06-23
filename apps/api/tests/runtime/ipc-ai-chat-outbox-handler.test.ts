@@ -25,6 +25,7 @@ const {
   mockSettleBillingReservationDetailed: vi.fn(async () => ({
     actualChargeCoins: 1.23,
     rawChargeCoins: 1.23,
+    metered: true,
   })),
   mockSettleBillingReservation: vi.fn(async () => 1.23),
   mockStoreConversationLog: vi.fn(async () => undefined),

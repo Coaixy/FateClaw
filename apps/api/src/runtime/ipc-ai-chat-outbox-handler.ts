@@ -261,12 +261,13 @@ async function settleAiChatBilling(args: {
   chargeReserveOnMissingUsage?: boolean;
 }): Promise<BillingSettlementSummary | null> {
   if (!args.payload.requestId) return null;
-  if (args.pending?.llmRuntime?.billingMode !== 'metered') return null;
   const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
 
   const billing = await settleBillingReservationDetailed({
     requestId: args.payload.requestId,
-    runtime: args.pending.llmRuntime,
+    // pending 在 → 用其 runtime;pending 缺失(进程重启/崩溃丢内存)→ 传 null,
+    // 由 settleBillingReservationDetailed 从持久化的预留行重建 runtime 完成结算。
+    runtime: args.pending?.llmRuntime ?? null,
     promptTokens: normalizedUsage.promptTokens,
     completionTokens: normalizedUsage.completionTokens,
     // 成功完成却没有真实 usage 时回退按预冻结额入账,防"成功却 0 usage 免单";
@@ -274,6 +275,8 @@ async function settleAiChatBilling(args: {
     chargeReserveOnMissingUsage:
       args.chargeReserveOnMissingUsage ?? args.payload.status !== 'error',
   });
+  // 非计费(免费/BYOK/无 pending 且无法从预留重建)→ 不返回摘要,避免显示「实扣 0」消耗行。
+  if (!billing.metered) return null;
   logger.info(
     {
       accountId: args.accountId,

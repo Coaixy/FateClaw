@@ -276,6 +276,40 @@ describe('metered billing plans', () => {
     );
   });
 
+  it('reconstructs runtime from the reservation when no runtime is passed (pending lost)', async () => {
+    // pending 缺失(进程重启/崩溃丢内存):不传 runtime,从预留 metadata 重建单价完成结算。
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-1',
+      reserved_coins: 0.5,
+      hold_state: 'held',
+      charge_state: 'pending',
+      model_config_id: 'model-1',
+      metadata: {
+        billingMode: 'metered',
+        source: 'official',
+        modelConfigId: 'model-1',
+        inputTokenPricePerMillionCoins: 3,
+        outputTokenPricePerMillionCoins: 8,
+      },
+    });
+
+    const result = await settleBillingReservationDetailed({
+      requestId: 'request-1',
+      runtime: null,
+      promptTokens: 100_000,
+      completionTokens: 41_873,
+    });
+
+    // 重建出 metered runtime → 按重建单价结算(与传入 runtime 时一致:0.63)。
+    expect(result).toMatchObject({ metered: true });
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-1',
+      141_873,
+      0.63,
+      undefined,
+    );
+  });
+
   it('marks metered settlement as missing when reservation is absent', async () => {
     mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce(
       undefined,
@@ -325,6 +359,7 @@ describe('metered billing plans', () => {
     expect(result).toEqual({
       actualChargeCoins: 0,
       rawChargeCoins: 0,
+      metered: false,
     });
     // BYOK（自带 key）走早返回，既不查待结算记录，也不实际扣费。
     expect(mockGetBillingRequestReservationByRequestId).not.toHaveBeenCalled();

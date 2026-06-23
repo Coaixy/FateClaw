@@ -80,6 +80,11 @@ export interface BillingSettlementSummary {
   actualChargeCoins: number;
   rawChargeCoins: number;
   missingReservation?: boolean;
+  /**
+   * 本次是否为「计费(metered 官方模型)」结算。用于区分"免费/BYOK/无法计费"(false,
+   * 调用方不显示消耗行)与"计费但实扣 0"(true,显示「实扣 0」)。
+   */
+  metered?: boolean;
 }
 
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
@@ -188,6 +193,12 @@ export async function reserveBillingForRequest(input: {
       billingMode: input.runtime.billingMode,
       modelConfigId: input.runtime.modelConfigId,
       model: input.runtime.model,
+      // 把单价也存进预留:进程重启/崩溃丢失内存 pending 后,响应仍可据此重建 runtime 完成
+      // 结算并落库消耗(见 settleBillingReservationDetailed 的 runtime 重建)。
+      inputTokenPricePerMillionCoins:
+        input.runtime.inputTokenPricePerMillionCoins ?? 0,
+      outputTokenPricePerMillionCoins:
+        input.runtime.outputTokenPricePerMillionCoins ?? 0,
       estimateReserveCoins: estimateCoins,
       entitlementSnapshot: input.entitlementSnapshot ?? null,
     },
@@ -209,6 +220,59 @@ export async function reserveBillingForRequest(input: {
 // 避免极短/低价请求免费。与冻结估算的最小额一致(一分)。
 const MIN_CHARGE_COINS = 0.01;
 
+/** 结算只需要 runtime 的计费相关字段,无需完整快照(便于从预留 metadata 重建)。 */
+type BillingRuntimeFields = Pick<
+  LlmRuntimeSnapshot,
+  | 'billingMode'
+  | 'source'
+  | 'modelConfigId'
+  | 'inputTokenPricePerMillionCoins'
+  | 'outputTokenPricePerMillionCoins'
+>;
+
+/**
+ * 从持久化的预留行重建结算所需的 runtime 计费字段。
+ *
+ * 用于进程重启/崩溃丢失内存 pending 后的鲁棒结算:reserveBillingForRequest 已把
+ * billingMode/source/modelConfigId/单价 存进预留 metadata,这里读回重建。
+ *
+ * @returns metered runtime 字段;非 metered / 元数据缺失 / 解析失败 → null(表示不可计费)。
+ */
+function reconstructBillingRuntimeFromReservation(
+  reservation: { metadata: unknown; model_config_id: string | null } | undefined,
+): BillingRuntimeFields | null {
+  if (!reservation) return null;
+  let meta: unknown = reservation.metadata;
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      return null;
+    }
+  }
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const m = meta as Record<string, unknown>;
+  if (m.billingMode !== 'metered') return null;
+  return {
+    billingMode: 'metered',
+    source: (typeof m.source === 'string'
+      ? m.source
+      : 'official') as LlmRuntimeSnapshot['source'],
+    modelConfigId:
+      typeof m.modelConfigId === 'string'
+        ? m.modelConfigId
+        : (reservation.model_config_id ?? ''),
+    inputTokenPricePerMillionCoins:
+      typeof m.inputTokenPricePerMillionCoins === 'number'
+        ? m.inputTokenPricePerMillionCoins
+        : 0,
+    outputTokenPricePerMillionCoins:
+      typeof m.outputTokenPricePerMillionCoins === 'number'
+        ? m.outputTokenPricePerMillionCoins
+        : 0,
+  };
+}
+
 export async function settleBillingReservationDetailed(input: {
   requestId: string;
   runtime?: LlmRuntimeSnapshot | null;
@@ -219,26 +283,37 @@ export async function settleBillingReservationDetailed(input: {
   // totalTokens>0,故 totalTokens<=0 的失败视为真正零消耗,不应误扣。
   chargeReserveOnMissingUsage?: boolean;
 }): Promise<BillingSettlementSummary> {
-  // BYOK（自配模型，source==='custom'）用的是卦师自己的 API Key，平台不再按 token 计费，
-  // 实现"使用权 / 余额"解耦：买了使用权即可自带 key 免费跑，余额只用于平台官方模型。
+  // 有传入 runtime 且明确不计费(BYOK source==='custom' 或非 metered):直接免费,无需查预留。
+  // BYOK 用卦师自己的 key,平台不按 token 计费(使用权/余额解耦)。
   if (
-    input.runtime?.billingMode !== 'metered' ||
-    input.runtime?.source === 'custom'
+    input.runtime &&
+    (input.runtime.billingMode !== 'metered' ||
+      input.runtime.source === 'custom')
   ) {
-    return {
-      actualChargeCoins: 0,
-      rawChargeCoins: 0,
-    };
+    return { actualChargeCoins: 0, rawChargeCoins: 0, metered: false };
   }
+
   const reservation = await getBillingRequestReservationByRequestId(
     input.requestId,
   );
+  // runtime 优先用调用方传入的(有内存 pending 时);缺失(进程重启/崩溃丢内存)则从预留
+  // metadata 重建,使结算与消耗落库对重启鲁棒 —— 否则重启后回包的 turn 会漏结算、不显消耗。
+  const runtime: BillingRuntimeFields | null =
+    input.runtime ?? reconstructBillingRuntimeFromReservation(reservation);
+  if (
+    !runtime ||
+    runtime.billingMode !== 'metered' ||
+    runtime.source === 'custom'
+  ) {
+    // 不可计费(BYOK / 非 metered / 无 pending 且无法从预留重建)→ 免费,不显示消耗行。
+    return { actualChargeCoins: 0, rawChargeCoins: 0, metered: false };
+  }
   if (!reservation) {
     logger.warn(
       {
         requestId: input.requestId,
-        modelConfigId: input.runtime.modelConfigId,
-        runtimeSource: input.runtime.source,
+        modelConfigId: runtime.modelConfigId,
+        runtimeSource: runtime.source,
       },
       '计费结算缺失待结算记录',
     );
@@ -246,16 +321,16 @@ export async function settleBillingReservationDetailed(input: {
       actualChargeCoins: 0,
       rawChargeCoins: 0,
       missingReservation: true,
+      metered: true,
     };
   }
   const totalTokens = input.promptTokens + input.completionTokens;
   let costCoins = calculateTokenCostCoins({
     promptTokens: input.promptTokens,
     completionTokens: input.completionTokens,
-    inputTokenPricePerMillionCoins:
-      input.runtime.inputTokenPricePerMillionCoins ?? 0,
+    inputTokenPricePerMillionCoins: runtime.inputTokenPricePerMillionCoins ?? 0,
     outputTokenPricePerMillionCoins:
-      input.runtime.outputTokenPricePerMillionCoins ?? 0,
+      runtime.outputTokenPricePerMillionCoins ?? 0,
   });
   let noteOverride: string | undefined;
   if (totalTokens <= 0) {
@@ -268,7 +343,7 @@ export async function settleBillingReservationDetailed(input: {
       logger.warn(
         {
           requestId: input.requestId,
-          modelConfigId: input.runtime.modelConfigId,
+          modelConfigId: runtime.modelConfigId,
           reservedCoins: reservation.reserved_coins,
         },
         'metered 成功请求缺失真实 usage,回退按预冻结额计费',
@@ -287,6 +362,7 @@ export async function settleBillingReservationDetailed(input: {
   return {
     actualChargeCoins: result.actualChargeCoins,
     rawChargeCoins: result.rawChargeCoins,
+    metered: true,
   };
 }
 
