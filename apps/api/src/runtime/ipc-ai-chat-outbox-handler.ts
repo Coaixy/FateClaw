@@ -605,16 +605,21 @@ async function processAiChatResponse(
     );
 
     storeAiChatConversationLog({ accountId, payload: payloadForUsage });
-    await recordAiChatTokenUsage({
-      accountId,
-      pending,
-      payload: payloadForUsage,
-    });
-    const billing = await settleAiChatBilling({
-      accountId,
-      pending,
-      payload: payloadForUsage,
-    });
+    // token 用量落库(daily_usage)与计费结算(wallet/monthly)写不同表、互不依赖,
+    // 并行执行缩短每条消息回合末尾的收尾时间、减少 pending/连接占用窗口(perf-4)。
+    // finalMetadata 依赖 billing 结果,故在二者完成后再构建。
+    const [, billing] = await Promise.all([
+      recordAiChatTokenUsage({
+        accountId,
+        pending,
+        payload: payloadForUsage,
+      }),
+      settleAiChatBilling({
+        accountId,
+        pending,
+        payload: payloadForUsage,
+      }),
+    ]);
     const finalMetadata = buildFinalMetadata({
       payload: payloadForUsage,
       durationMs,
