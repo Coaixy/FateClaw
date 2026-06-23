@@ -38,6 +38,7 @@ import {
   getWalletBalanceSummary,
 } from './plans.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+import { getRedis } from '../../infrastructure/redis.js';
 import {
   toBillingStatusDto,
   toDailyUsageRowsDto,
@@ -90,12 +91,24 @@ export async function subscribeCurrentUserMembership(
   if (!user) {
     return fail(404, '用户不存在');
   }
+  // 幂等防抖(membership-3):订阅接口无幂等键,误触双击/客户端重试会连续多扣多个月会费
+  // (每次都真实扣费+真实加期,用户亏)。用 SETNX + 短 TTL 作轻量去重锁:同一用户 10s 内
+  // 只放行第一笔订阅请求,后续重复提交直接拒绝。
+  const lockKey = `billing:subscribe:lock:${user.id}`;
+  const acquired = await getRedis().set(lockKey, '1', 'EX', 10, 'NX');
+  if (acquired !== 'OK') {
+    return fail(429, '操作过于频繁，请勿重复提交');
+  }
   try {
     const result = await subscribeMembershipWithWallet(user.id, planKey);
     const wallet = await getWalletBalanceSummary(result.user.id);
     const membership = await getMembershipBillingSummary(result.user.id);
     return ok(toMembershipSubscribeResultDto({ membership, wallet }));
   } catch (err) {
+    // 失败未扣费,释放去重锁以便用户立即重试(成功则保留锁满足防抖窗口)。
+    await getRedis()
+      .del(lockKey)
+      .catch(() => {});
     return fail(400, err instanceof Error ? err.message : '开通会员失败');
   }
 }
