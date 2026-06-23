@@ -55,9 +55,12 @@ describe('metered billing plans', () => {
       bonus_coins: 0,
       reserved_coins: 0,
     });
-    mockReserveUserBalanceCoins.mockResolvedValue({
-      reservedCoins: 0,
-    });
+    // 模拟原子冻结:回显本次冻结的预估额,使返回的 reservedCoins 等于实际冻结额。
+    mockReserveUserBalanceCoins.mockImplementation(
+      async ({ amountCoins }: { amountCoins: number }) => ({
+        reservedCoins: amountCoins,
+      }),
+    );
     mockExpireUserBonusBalanceBefore.mockResolvedValue({
       expired: 0,
       totalCoinsExpired: 0,
@@ -84,7 +87,8 @@ describe('metered billing plans', () => {
     vi.useRealTimers();
   });
 
-  it('records metered requests without reserving balance', async () => {
+  it('freezes an estimated reserve for metered requests', async () => {
+    // 估算 = 32000 输入 * 3/百万 + 8000 输出 * 8/百万 = 0.096 + 0.064 = 0.16
     await expect(
       reserveBillingForRequest({
         userId: 'user-1',
@@ -94,17 +98,20 @@ describe('metered billing plans', () => {
           source: 'official',
           modelConfigId: 'model-1',
           model: 'gpt-test',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
+          maxOutputTokens: 8000,
         } as never,
       }),
     ).resolves.toMatchObject({
       requestId: 'request-1',
-      reservedCoins: 0,
+      reservedCoins: 0.16,
     });
 
     expect(mockReserveUserBalanceCoins).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
-        amountCoins: 0,
+        amountCoins: 0.16,
         requestId: 'request-1',
       }),
     );
@@ -135,7 +142,8 @@ describe('metered billing plans', () => {
       }),
     ).resolves.toMatchObject({
       requestId: 'request-1',
-      reservedCoins: 0,
+      // 该 runtime 未带单价,估算退化为最小冻结额 0.01。
+      reservedCoins: 0.01,
     });
 
     expect(mockExpireUserBonusBalanceBefore).not.toHaveBeenCalled();

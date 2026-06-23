@@ -327,15 +327,20 @@ describe('billing repository', () => {
     expect(calls[1]?.params).toEqual(['user-1', 'overage_charge', 30, 5]);
   });
 
-  it('records metered requests without reserving balance', async () => {
-    const user = {
+  it('atomically freezes the estimated reserve into reserved_coins', async () => {
+    // 冻结前 reserved=3,冻结 20 后 reserved=23(由条件 UPDATE 的 RETURNING * 返回)。
+    const frozenUser = {
       id: 'user-1',
       purchased_coins: 10,
       bonus_coins: 2,
-      reserved_coins: 3,
+      reserved_coins: 23,
     };
-    mockGetUserByIdUsing.mockResolvedValue(user);
-    const { clientCalls, client } = createMockPool([], [[], [], []]);
+    // client 序列:BEGIN, SELECT reservation FOR UPDATE(无既有), UPDATE users 条件冻结(返回行),
+    // INSERT reservation, COMMIT。
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [], [frozenUser], [], []],
+    );
 
     await expect(
       reserveUserBalanceCoins({
@@ -345,24 +350,64 @@ describe('billing repository', () => {
         yearMonth: '2026-05',
       }),
     ).resolves.toEqual({
-      user,
-      reservedCoins: 0,
+      user: frozenUser,
+      reservedCoins: 20,
     });
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1');
+    // 既有预留检查
+    expect(clientCalls[1]?.sql).toContain('billing_request_reservations');
+    expect(clientCalls[1]?.sql).toContain('FOR UPDATE');
+    // 原子条件冻结:仅当未欠费时才把预估额加进 reserved_coins
+    expect(clientCalls[2]?.sql).toContain('SET reserved_coins = reserved_coins +');
     expect(clientCalls[2]?.sql).toContain(
+      '(purchased_coins + bonus_coins - reserved_coins) >= 0',
+    );
+    expect(clientCalls[2]?.params).toEqual(['user-1', 20]);
+    // 成功路径不再单独 getUserById(直接用 UPDATE 的 RETURNING)
+    expect(mockGetUserByIdUsing).not.toHaveBeenCalled();
+    expect(clientCalls[3]?.sql).toContain(
       'INSERT INTO billing_request_reservations',
     );
-    expect(clientCalls[2]?.params?.slice(0, 6)).toEqual([
+    expect(clientCalls[3]?.params?.slice(0, 6)).toEqual([
       'request-1',
       'user-1',
       null,
       '2026-05',
-      0,
-      'none',
+      20,
+      'held',
     ]);
-    expect(clientCalls[3]?.sql).toBe('COMMIT');
+    expect(clientCalls[4]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('rejects the reservation when the wallet is already in arrears', async () => {
+    mockGetUserByIdUsing.mockResolvedValue({
+      id: 'user-1',
+      purchased_coins: -1,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    });
+    // 条件 UPDATE 命中 0 行(已欠费),随后甄别用户存在 → 抛余额不足,事务回滚。
+    const { clientCalls, client } = createMockPool([], [[], [], []]);
+
+    await expect(
+      reserveUserBalanceCoins({
+        userId: 'user-1',
+        amountCoins: 5,
+        requestId: 'request-1',
+        yearMonth: '2026-05',
+      }),
+    ).rejects.toThrow('积分不足');
+
+    // 0 行更新后调用 getUserByIdUsing 甄别用户是否存在
+    expect(mockGetUserByIdUsing).toHaveBeenCalledWith(client, 'user-1');
+    expect(clientCalls.some((c) => c.sql === 'ROLLBACK')).toBe(true);
+    expect(
+      clientCalls.some((c) =>
+        c.sql.includes('INSERT INTO billing_request_reservations'),
+      ),
+    ).toBe(false);
     expect(client.release).toHaveBeenCalledOnce();
   });
 
@@ -575,6 +620,75 @@ describe('billing repository', () => {
     );
     expect(chargeTransaction?.params?.[3]).toBe(-0.63);
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('releases the held reserve and charges real cost on settlement', async () => {
+    const user = {
+      id: 'user-1',
+      purchased_coins: 10,
+      bonus_coins: 0,
+      reserved_coins: 0.5,
+    };
+    const reservation = {
+      request_id: 'request-1',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0.5,
+      hold_state: 'held',
+      charge_state: 'pending',
+      actual_charge_coins: 0,
+      total_overage_tokens: 0,
+      total_overage_cost_coins: 0,
+    };
+    const monthlyState = {
+      user_id: 'user-1',
+      year_month: '2026-05',
+      billed_overage_tokens: 0,
+      billed_overage_cost_coins: 0,
+    };
+    const deductUpdated = {
+      ...user,
+      purchased_coins: 9.5,
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    // 持有冻结的结算序列:BEGIN, SELECT reservation, advisory_lock, INSERT monthly,
+    // SELECT balance_grants, UPDATE users(实扣), UPDATE users(释放冻结), UPDATE monthly,
+    // UPDATE reservation, INSERT wallet_tx, COMMIT。
+    const { clientCalls } = createMockPool(
+      [],
+      [
+        [],
+        [reservation],
+        [],
+        [monthlyState],
+        [],
+        [deductUpdated],
+        [],
+        [],
+        [],
+        [],
+        [],
+      ],
+    );
+
+    const { settleUserModelChargeCoins } = await import(
+      '../../../src/infrastructure/repositories/billing-repository.js'
+    );
+
+    await expect(
+      settleUserModelChargeCoins('request-1', 1000, 0.5),
+    ).resolves.toMatchObject({
+      actualChargeCoins: 0.5,
+      // JS 侧同步把返回用户的冻结额减去已释放的 0.5 → 0。
+      user: { reserved_coins: 0 },
+    });
+
+    const releaseCall = clientCalls.find((call) =>
+      call.sql.includes('SET reserved_coins = GREATEST(0, reserved_coins -'),
+    );
+    expect(releaseCall).toBeTruthy();
+    expect(releaseCall?.params).toEqual([0.5, 'user-1']);
   });
 
   it('returns existing settlement metadata for already-charged requests idempotently', async () => {

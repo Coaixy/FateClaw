@@ -9,7 +9,10 @@ import type {
   User,
   UserMembership,
 } from '../../shared/types.js';
-import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
+import {
+  assertSufficientSpendableCoins,
+  INSUFFICIENT_BALANCE_MESSAGE,
+} from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
@@ -2066,9 +2069,28 @@ export async function reserveUserBalanceCoins(input: {
       };
     }
 
-    const user = await getUserByIdUsing(client, input.userId);
-    if (!user) {
-      throw new Error('用户不存在');
+    const reserveCoins = roundCoinsToCents(Math.max(0, input.amountCoins));
+
+    // 原子条件冻结:仅当当前未欠费(purchased+bonus-reserved >= 0)时,把预估额加进
+    // reserved_coins。这一条 UPDATE 同时承担三件事:
+    //   1) 并发安全:第二笔并发请求会读到第一笔已抬高的 reserved,若已把可用压到 0 以下
+    //      则匹配不到行(rowCount=0)被拒,天然杜绝「并发双花透支」;
+    //   2) 限额欠费:允许「未欠费时再开一笔」,本次冻结把可用最多压到 -reserveCoins,
+    //      即欠费上限≈一次请求的预估额(与产品选择的「允许有限欠费」一致);
+    //   3) 余额关卡:已欠费用户直接被挡,不再放行新的计费请求。
+    const { rows: updatedRows } = await client.query(
+      `UPDATE users
+         SET reserved_coins = reserved_coins + $2
+       WHERE id = $1
+         AND (purchased_coins + bonus_coins - reserved_coins) >= 0
+       RETURNING *`,
+      [input.userId, reserveCoins],
+    );
+    if (updatedRows.length === 0) {
+      // rowCount=0 有两种可能:用户不存在,或已欠费/并发预留已耗尽余额。
+      // 事务此时仍打开(0 行更新不算错误),先甄别用户是否存在再抛对应错误,由 catch 统一回滚。
+      const exists = await getUserByIdUsing(client, input.userId);
+      throw new Error(exists ? INSUFFICIENT_BALANCE_MESSAGE : '用户不存在');
     }
 
     await insertBillingRequestReservation(client, {
@@ -2076,16 +2098,16 @@ export async function reserveUserBalanceCoins(input: {
       userId: input.userId,
       modelConfigId: input.modelConfigId ?? null,
       yearMonth: input.yearMonth,
-      reservedCoins: 0,
-      holdState: 'none',
+      reservedCoins: reserveCoins,
+      holdState: 'held',
       note: input.note ?? null,
       metadata: input.metadata,
     });
 
     await client.query('COMMIT');
     return {
-      user: normalizeUserCoins(user),
-      reservedCoins: 0,
+      user: normalizeUserCoins(updatedRows[0] as User),
+      reservedCoins: reserveCoins,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -2238,12 +2260,32 @@ export async function settleUserModelChargeCoins(
       previousChargeCoins + actualChargeCoins,
     );
 
-    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值积分扣成负数。
+    // 结算 = 释放预冻结 + 按真实 Token 费用实扣(多退少补):
+    //   - 请求前已把预估额冻结进 users.reserved_coins(hold_state='held'),此处先按真实费用
+    //     从 purchased/bonus 实扣(允许扣成负数,欠费上限由预留闸门保证),
+    //   - 再把当初冻结的预估额从 reserved_coins 释放,使可用余额回到「仅扣真实成本」的状态。
+    // 二者在同一事务内完成,保证「冻结↔释放」严格配对,杜绝冻结悬空或重复释放。
     const deduction = await deductModelChargeCoinsAllowDebt(
       client,
       normalizeUserCoins(user),
       actualChargeCoins,
     );
+
+    const releaseReservedCoins =
+      reservation.hold_state === 'held' ? reservation.reserved_coins : 0;
+    if (releaseReservedCoins > 0) {
+      await client.query(
+        `UPDATE users
+           SET reserved_coins = GREATEST(0, reserved_coins - $1)
+         WHERE id = $2`,
+        [releaseReservedCoins, reservation.user_id],
+      );
+      // 同步返回用户对象的冻结额,供调用方读到结算后的最终钱包状态。
+      deduction.user.reserved_coins = Math.max(
+        0,
+        deduction.user.reserved_coins - releaseReservedCoins,
+      );
+    }
 
     await client.query(
       `UPDATE monthly_billing_state

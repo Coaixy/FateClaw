@@ -33,7 +33,8 @@ import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 export interface BillingReservation {
   userId: string;
   requestId: string;
-  reservedCoins: 0;
+  /** 本次请求冻结进 reserved_coins 的预估额(coins),结算时按真实费用多退少补后释放。 */
+  reservedCoins: number;
   modelConfigId: string;
   yearMonth: string;
 }
@@ -109,6 +110,38 @@ function calculateTokenCostCoins(input: {
   return roundCoinsToCents(inputCost + outputCost);
 }
 
+// 预留(冻结)金额估算的保守参数。
+// 说明:冻结额的作用是「限流并发 + 封顶单 turn 漏结算的损失」,而非精确计费
+// (精确扣费由 settle 按真实 usage 完成),因此取一个适中的保守上限即可:
+// 过大反而会冻结远超实际成本的余额、过早拦住后续请求、在前端显示吓人的冻结额;
+// 单 turn 实际超出预估时,差额由 settle 据实多扣,并由下一次请求入口因欠费而拦截,
+// 损失天然封顶在「一次请求的溢出」内。两个常量可按线上观测调优。
+const ESTIMATE_PROMPT_TOKENS = 32_000;
+const ESTIMATE_MAX_OUTPUT_TOKENS = 8_000;
+const MIN_RESERVE_COINS = 0.01;
+
+/**
+ * 估算单次模型请求需冻结的 coins(用于请求前预留)。
+ *
+ * @param runtime 当前请求的模型运行时快照(含输入/输出单价、上下文窗口、最大输出)。
+ * @returns 不小于 MIN_RESERVE_COINS 的预估冻结额;按「保守 prompt 估算 + 最大输出」计价。
+ * @remarks 仅供冻结/限流使用,非最终账单。单价缺失(理论上不应 metered)时退化为最小冻结额,
+ *          确保预留始终持有非零额度,避免预留形同虚设。
+ */
+export function estimateRequestReserveCoins(runtime: LlmRuntimeSnapshot): number {
+  const inputPrice = runtime.inputTokenPricePerMillionCoins ?? 0;
+  const outputPrice = runtime.outputTokenPricePerMillionCoins ?? 0;
+  const promptTokens = Math.min(
+    runtime.contextWindowTokens ?? ESTIMATE_PROMPT_TOKENS,
+    ESTIMATE_PROMPT_TOKENS,
+  );
+  const outputTokens = runtime.maxOutputTokens ?? ESTIMATE_MAX_OUTPUT_TOKENS;
+  const estimate =
+    (promptTokens * inputPrice) / TOKEN_PRICE_DENOMINATOR +
+    (outputTokens * outputPrice) / TOKEN_PRICE_DENOMINATOR;
+  return Math.max(roundCoinsToCents(estimate), MIN_RESERVE_COINS);
+}
+
 export async function reserveBillingForRequest(input: {
   userId: string;
   requestId: string;
@@ -132,24 +165,30 @@ export async function reserveBillingForRequest(input: {
     }
     walletState = user;
   }
+  // 快照层面的欠费预检:提供清晰的面向用户文案并快速失败。
+  // 真正并发安全的余额关卡在 reserveUserBalanceCoins 的原子条件 UPDATE 中(rowCount=0 即拒)。
   const inArrears =
     walletState.inArrears ?? isSpendableBalanceInArrears(walletState);
   if (inArrears) {
     throw new Error(BILLING_ARREARS_MESSAGE);
   }
+  const estimateCoins = estimateRequestReserveCoins(input.runtime);
   const yearMonth = currentYearMonth();
-  await reserveUserBalanceCoins({
+  // 原子冻结预估额:并发第二笔会看到已抬高的 reserved 而被拒,杜绝并发透支;
+  // 余额不足(已欠费)时本调用抛错,请求不会进入运行时,不产生 token 消耗。
+  const reservation = await reserveUserBalanceCoins({
     userId: input.userId,
-    amountCoins: 0,
+    amountCoins: estimateCoins,
     requestId: input.requestId,
     yearMonth,
     modelConfigId: input.runtime.modelConfigId,
-    note: '模型请求开始，登记待结算 Token 费用',
+    note: '模型请求开始，冻结预估 Token 费用',
     metadata: {
       source: input.runtime.source,
       billingMode: input.runtime.billingMode,
       modelConfigId: input.runtime.modelConfigId,
       model: input.runtime.model,
+      estimateReserveCoins: estimateCoins,
       entitlementSnapshot: input.entitlementSnapshot ?? null,
     },
   });
@@ -157,7 +196,7 @@ export async function reserveBillingForRequest(input: {
   return {
     userId: input.userId,
     requestId: input.requestId,
-    reservedCoins: 0,
+    reservedCoins: reservation.reservedCoins,
     modelConfigId: input.runtime.modelConfigId,
     yearMonth,
   };
