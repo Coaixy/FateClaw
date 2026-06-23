@@ -333,20 +333,42 @@ async function getMembershipConfigUsing(input: {
   const planKey = normalizeMembershipPlanKey(input.planKey);
   const configId = resolveMembershipConfigId(planKey);
   const name = resolveMembershipPlanName(planKey);
-  // 单层「卦师使用权」：首次访问补齐默认价（10），存量行走 ON CONFLICT 保留 DB 实际价。
+  // 单层「卦师使用权」：首次访问补齐默认价（10），存量行保留 DB 实际价。
   // allowance 列已随单层化移除（迁移 0059 DROP membership_config 两列），不再写入。
   const monthlyPriceCoins = 10;
   const displayPriceCoins = monthlyPriceCoins;
-  const { rows } = await input.query(
+
+  // 读优先(perf):此函数在每条消息的 entitlement 快照等高频路径被调用。旧实现用
+  // `INSERT ... ON CONFLICT DO UPDATE SET id=id RETURNING *` 把"读配置"变成了每次写
+  // (即使值不变也产生死元组、抢行写锁、与并发结算/订阅争锁)。改为先 SELECT 命中即返回,
+  // 仅首次未命中时才惰性 INSERT(ON CONFLICT DO NOTHING 防并发重复插,空返回则回查)。
+  const existing = await input.query(
+    `SELECT * FROM membership_config WHERE id = $1`,
+    [configId],
+  );
+  if (existing.rows[0]) {
+    return normalizeMembershipConfigRow(existing.rows[0] as MembershipConfigRow);
+  }
+
+  const inserted = await input.query(
     `INSERT INTO membership_config (
        id, name, monthly_price_coins, display_price_coins
      )
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+     ON CONFLICT (id) DO NOTHING
      RETURNING *`,
     [configId, name, monthlyPriceCoins, displayPriceCoins],
   );
-  return normalizeMembershipConfigRow(rows[0] as MembershipConfigRow);
+  if (inserted.rows[0]) {
+    return normalizeMembershipConfigRow(inserted.rows[0] as MembershipConfigRow);
+  }
+
+  // 并发下他人已抢先插入(ON CONFLICT DO NOTHING 无返回):回查取行。
+  const refetched = await input.query(
+    `SELECT * FROM membership_config WHERE id = $1`,
+    [configId],
+  );
+  return normalizeMembershipConfigRow(refetched.rows[0] as MembershipConfigRow);
 }
 
 /**
