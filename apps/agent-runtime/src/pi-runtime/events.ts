@@ -252,6 +252,11 @@ export function createPiEventCollector(args: {
               snapshot,
             });
           }
+          // 流式过程中也同步当前请求的最新 assistant 文本(不止 turn_end):用户中途 stop 时,
+          // 宿主据此取到「当前回合的实时 partial」,而非从复用 Pi 会话里误取上一回合的回复。
+          if (snapshot.trim()) {
+            args.setLastAssistantText(snapshot);
+          }
         }
         break;
       case 'turn_end':

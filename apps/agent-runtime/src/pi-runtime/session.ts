@@ -232,10 +232,14 @@ export async function runPiSession(args: {
 
   // 统一构造返回结果(成功 / 用户中断 两条路径共用)。中断时返回截至中断点已生成的
   // partial 文本 + 已累计 usage,供宿主落库展示"停止前内容"并按真实用量结算。
-  const buildRunResult = (): PiSessionRunResult => ({
+  // textOverride:中断路径显式传入「当前请求」的 partial(lastAssistantText),避免从
+  // 复用的 Pi 会话 state 里误取到上一回合的 assistant 回复(否则会"把上一条回复插进来")。
+  const buildRunResult = (textOverride?: string | null): PiSessionRunResult => ({
     text:
-      extractAssistantTextFromMessages(session.state.messages) ??
-      lastAssistantText,
+      textOverride !== undefined
+        ? textOverride
+        : (extractAssistantTextFromMessages(session.state.messages) ??
+          lastAssistantText),
     usage,
     records,
     persistedSkillContext: sessionContext.persistedSkillContext,
@@ -278,9 +282,10 @@ export async function runPiSession(args: {
   } catch (err) {
     if (aborted) {
       // 用户主动中断(stop)/宿主超时触发的 abort:不当作错误抛弃。
-      // session.prompt 因 abort 抛出,但已生成的 partial 文本与累计 usage 都还在,
-      // 正常返回它们,让宿主把"停止前内容"落库展示并按真实消耗结算(不白嫖)。
-      return buildRunResult();
+      // 只返回「当前请求」累计的 partial(lastAssistantText)——它由本次 runPiSession 的
+      // 流式事件填充,绝不会是复用 Pi 会话里上一回合的回复;无 partial 时为 null,宿主据此
+      // 不落空回复。usage 仍为已累计真实消耗,按真实用量结算(不白嫖)。
+      return buildRunResult(lastAssistantText);
     }
     // 真实错误:把已累计的 usage 挂到错误对象上随异常上抛,让宿主对失败的 turn
     // 也能按真实用量结算 —— 否则「未正常收尾 = 免单」即计费白嫖。

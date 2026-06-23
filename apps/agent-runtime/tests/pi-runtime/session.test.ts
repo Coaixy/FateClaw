@@ -299,6 +299,60 @@ describe('runPiSession', () => {
     );
   });
 
+  it('on abort returns the current-turn partial, not a reused-session prior reply', async () => {
+    let subscribed:
+      | ((event: {
+          type: 'message_update';
+          message: { role: 'assistant'; content: string };
+        }) => void)
+      | null = null;
+    let abortControl: (() => Promise<void>) | null = null;
+    const innerAbort = vi.fn(async () => {});
+    const onSessionReady = vi.fn(
+      (controls: { abort: () => Promise<void> }) => {
+        abortControl = controls.abort;
+      },
+    );
+
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: {
+        // 复用的 Pi 会话里残留着上一回合的 assistant 回复
+        state: { messages: [{ role: 'assistant', content: '上一回合的回复' }] },
+        subscribe(listener: NonNullable<typeof subscribed>) {
+          subscribed = listener;
+          return vi.fn();
+        },
+        async prompt() {
+          // 当前回合先流式产出部分内容
+          subscribed?.({
+            type: 'message_update',
+            message: { role: 'assistant', content: '当前回合的部分内容' },
+          });
+          // 用户中断:触发 abort 控制(置 aborted 标志),随后 prompt 因 abort 抛出
+          await abortControl?.();
+          throw new Error('aborted by user');
+        },
+        abort: innerAbort,
+        dispose: vi.fn(),
+      },
+    }));
+
+    const deps = createDeps();
+    const runtime: RequestRuntime = { deps };
+    const requestScope = createRequestScope();
+    const result = await runPiSession({
+      containerInput: createInput(),
+      runtime,
+      requestScope,
+      onSessionReady,
+    });
+
+    // 关键:中断返回「当前回合」的 partial,绝不取复用会话里上一回合的回复。
+    expect(result.text).toBe('当前回合的部分内容');
+    expect(result.text).not.toBe('上一回合的回复');
+    expect(innerAbort).toHaveBeenCalledTimes(1);
+  });
+
   it('injects the no-board policy for normal chat without authorized board context', async () => {
     const userMessage = '我是 1990-01-01 早上八点出生，帮我排盘看事业';
     let capturedPrompt = '';
