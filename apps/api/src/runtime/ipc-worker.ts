@@ -399,6 +399,12 @@ export async function cancelAiChatSessionRequest(
     return false;
   }
 
+  // 标记取消:随后到达的 daemon 响应只用于按真实用量结算,不再落库/推流/展示
+  // (见 processAiChatResponse 的 cancelled 分支),避免把已完成或陈旧的回复当新回复显示。
+  if (pending) {
+    pending.cancelled = true;
+  }
+
   // 即时释放并发资源(幂等:槽位 zrem、会话锁按 requestId 守卫、租约可重复释放),
   // 让排队中的其它请求尽快推进。注意:这里【不】删除 pending、【不】清除 timeout、
   // 也【不】做 0-token 结算。

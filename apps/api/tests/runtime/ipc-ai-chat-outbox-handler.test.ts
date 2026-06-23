@@ -181,6 +181,64 @@ describe('processAiChatOutboxPayload', () => {
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
   });
 
+  it('settles a cancelled turn by real usage but never stores or re-resolves a reply', async () => {
+    const timeout = setTimeout(() => undefined, 10_000);
+    const pendingRequests = new Map<string, PendingInboxRequest>([
+      [
+        'req-cancel',
+        {
+          accountId: 'web:user-1',
+          ownerUserId: 'user-1',
+          autoDeliver: false,
+          sessionId: 'session-c',
+          // 用户已 stop:随后到达的(可能已完成/陈旧的)回复只用于结算,不得展示。
+          cancelled: true,
+          llmRuntime: {
+            source: 'official',
+            billingMode: 'metered',
+            modelConfigId: 'official-1',
+            piApi: 'openai-completions',
+            model: 'gpt-4.1',
+            apiKey: 'secret',
+            authMode: 'openai_api_key',
+            providerKey: 'openai-main',
+            inputTokenPricePerMillionCoins: 1000,
+            outputTokenPricePerMillionCoins: 5000,
+          },
+          localAgentLeaseAccountId: 'web:user-1',
+          resolve: mockResolve,
+          reject: mockReject,
+          timeout,
+        },
+      ],
+    ]);
+
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        accountId: 'web:user-1',
+        requestId: 'req-cancel',
+        text: '陈旧或已完成的整条回复内容',
+        status: 'success',
+        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      },
+      'web:user-1',
+      pendingRequests,
+    );
+
+    // 计费仍按真实用量结算(不白嫖)
+    expect(mockSettleBillingReservationDetailed).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'req-cancel' }),
+    );
+    expect(mockIncrementDailyTokens).toHaveBeenCalled();
+    // 关键:绝不落库这条回复、绝不再 resolve(turn 已由取消即时 resolve)
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockTouchChatSession).not.toHaveBeenCalled();
+    expect(mockResolve).not.toHaveBeenCalled();
+    // pending 已清理
+    expect(pendingRequests.has('req-cancel')).toBe(false);
+  });
+
   it('uses normalized total token usage for markers, stats, billing, stream, and logs', async () => {
     const timeout = setTimeout(() => undefined, 10_000);
     const pendingRequests = new Map<string, PendingInboxRequest>([

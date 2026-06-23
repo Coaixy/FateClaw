@@ -572,6 +572,33 @@ async function processAiChatResponse(
       throw new Error('无法为 AI Chat response 解析 accountId');
     }
 
+    // 已取消(stop)的回合:turn promise 已被 cancelAiChatSessionRequest 即时 resolve,
+    // 这里【只】按真实用量结算计费 + 记 token 用量,然后清理 pending —— 【不】落库、不推流、
+    // 不再 resolve。否则会把这条(可能已完成或陈旧的)daemon 回复当成新回复展示给已停止的
+    // 用户(出现"取消后又冒出一整条回复"的 bug)。计费仍按真实消耗,杜绝取消白嫖。
+    if (pending?.cancelled) {
+      await recordAiChatTokenUsage({ accountId, pending, payload });
+      await settleAiChatBilling({ accountId, pending, payload });
+      clearTimeout(pending.timeout);
+      pendingRequests.delete(payload.requestId!);
+      if (pending.sessionId) {
+        await releaseSessionProcessingLock(
+          pending.sessionId,
+          pending.sessionProcessingRequestId ?? payload.requestId,
+        ).catch(() => {});
+      }
+      await releaseLocalAgentLeaseForPending(pending, {
+        accountId,
+        requestId: payload.requestId,
+        reason: 'ai_chat_cancelled',
+      });
+      logger.info(
+        { accountId, requestId: payload.requestId },
+        'AI Chat: 回合已取消,按真实用量结算但不展示回复',
+      );
+      return;
+    }
+
     const normalizedPayloadUsage = normalizeRuntimeTokenUsage(payload.usage);
     const hasRealUsage = normalizedPayloadUsage.totalTokens > 0;
     const payloadForUsage = hasRealUsage

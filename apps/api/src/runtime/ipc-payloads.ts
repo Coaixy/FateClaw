@@ -157,6 +157,12 @@ export interface PendingInboxRequest {
   localAgentLeaseAccountId?: string;
   /** 请求提交到本机运行时的毫秒时间戳，用于计算最终回复耗时。 */
   startedAtMs?: number;
+  /**
+   * 用户已主动取消(stop)本回合。置位后:turn promise 已被即时 resolve;随后到达的
+   * daemon 响应只用于【按真实用量结算计费】,【不】落库、不推流、不再 resolve —— 避免把
+   * 这条(可能已完成或陈旧的)回复当成新回复展示给已停止的用户。
+   */
+  cancelled?: boolean;
   resolve: (result: InboxRequestResult) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
