@@ -38,6 +38,7 @@ import {
   getWalletBalanceSummary,
 } from './plans.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+import { getRedis } from '../../infrastructure/redis.js';
 import {
   toBillingStatusDto,
   toDailyUsageRowsDto,
@@ -82,6 +83,9 @@ export async function getBillingOverview(
   );
 }
 
+/** 订阅去抖窗口：同一用户同档位在此窗口内的重复提交会被拒，防连点/重试重复扣费。 */
+const SUBSCRIBE_DEBOUNCE_MS = 10_000;
+
 export async function subscribeCurrentUserMembership(
   userId: string,
   planKey?: string,
@@ -90,12 +94,39 @@ export async function subscribeCurrentUserMembership(
   if (!user) {
     return fail(404, '用户不存在');
   }
+
+  // 幂等去抖：订阅每次调用都实扣月费（subscribeMembershipWithWallet 无幂等键），
+  // 连点/网络重试会重复扣费并叠加月数。用 Redis SET NX 短锁做去抖：
+  // - 成功开通后锁保留到 TTL 自然过期，挡住窗口内的重复点击；
+  // - 开通失败（未扣费）主动释放锁，允许用户（如充值后）立即重试；
+  // - Redis 异常时 fail-open，绝不因去抖阻断正常开通。
+  const lockKey = `membership:subscribe:lock:${user.id}:${planKey ?? 'default'}`;
+  let lockAcquired = false;
+  try {
+    lockAcquired =
+      (await getRedis().set(
+        lockKey,
+        '1',
+        'PX',
+        SUBSCRIBE_DEBOUNCE_MS,
+        'NX',
+      )) !== null;
+  } catch {
+    lockAcquired = true;
+  }
+  if (!lockAcquired) {
+    return fail(409, '订阅处理中，请勿重复提交');
+  }
+
   try {
     const result = await subscribeMembershipWithWallet(user.id, planKey);
     const wallet = await getWalletBalanceSummary(result.user.id);
     const membership = await getMembershipBillingSummary(result.user.id);
     return ok(toMembershipSubscribeResultDto({ membership, wallet }));
   } catch (err) {
+    await getRedis()
+      .del(lockKey)
+      .catch(() => {});
     return fail(400, err instanceof Error ? err.message : '开通会员失败');
   }
 }

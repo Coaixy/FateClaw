@@ -83,7 +83,10 @@ import {
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
-import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
+import {
+  calculateAvailableSpendableCoins,
+  roundCoinsToCents,
+} from '../../shared/balance-coins.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 
 type AdminRole = 'owner' | 'user_manager';
@@ -166,11 +169,6 @@ function hasAdminScope(
   return (
     principal.scopes.includes('admin:*') || principal.scopes.includes(required)
   );
-}
-
-function roundCoinsToCents(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Object.is(value, -0) ? 0 : Math.round(value * 100) / 100;
 }
 
 function hasAtMostTwoDecimalPlaces(value: number): boolean {

@@ -5,6 +5,7 @@ import {
   assertSufficientSpendableCoins,
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
+  roundCoinsToCents,
 } from '../../src/shared/balance-coins.js';
 
 describe('balance coins guards', () => {
@@ -50,5 +51,33 @@ describe('balance coins guards', () => {
         reserved_coins: 0,
       }),
     ).toBe(true);
+  });
+});
+
+describe('roundCoinsToCents (统一取整口径)', () => {
+  it('四舍五入到分', () => {
+    expect(roundCoinsToCents(1.234)).toBe(1.23);
+    expect(roundCoinsToCents(1.235)).toBe(1.24);
+    expect(roundCoinsToCents(0.1 + 0.2)).toBe(0.3); // 浮点误差被收敛
+  });
+
+  it('非有限数（NaN/Infinity）归 0', () => {
+    expect(roundCoinsToCents(Number.NaN)).toBe(0);
+    expect(roundCoinsToCents(Number.POSITIVE_INFINITY)).toBe(0);
+    expect(roundCoinsToCents(Number.NEGATIVE_INFINITY)).toBe(0);
+  });
+
+  it('-0 输入归一为 +0（避免 -0 写库）', () => {
+    expect(Object.is(roundCoinsToCents(-0), 0)).toBe(true);
+  });
+
+  it('极小负数舍入到零（数值意义上为 0）', () => {
+    // 注：结果可能是 -0，但 -0 === 0 且 PG numeric 存为 0，无副作用。
+    expect(roundCoinsToCents(-0.001) === 0).toBe(true);
+  });
+
+  it('保留负数符号（余额增减/退款可为负）', () => {
+    expect(roundCoinsToCents(-1.235)).toBe(-1.24);
+    expect(roundCoinsToCents(-10)).toBe(-10);
   });
 });

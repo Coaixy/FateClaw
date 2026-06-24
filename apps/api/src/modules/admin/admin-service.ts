@@ -8,6 +8,7 @@
 import crypto from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
+import { logger } from '../../infrastructure/logger.js';
 import type {
   AdminStatusStatsDto,
   MembershipEntitlementDto,
@@ -19,6 +20,7 @@ import {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
   createAnnouncement,
+  createConfigAuditLog,
   createPublicFinancialLedgerEntry,
   createUser,
   deleteDraftAnnouncement,
@@ -199,9 +201,7 @@ export {
  * @param sessionId chat_sessions.id。
  * @returns session / messages / client（仅当会话绑定客户档案时）；会话不存在返回 404。
  */
-export async function getAdminChatSessionDetail(
-  sessionId: string,
-): Promise<
+export async function getAdminChatSessionDetail(sessionId: string): Promise<
   ServiceResult<{
     session: ChatSessionDto;
     messages: MessageDto[];
@@ -871,6 +871,25 @@ export async function setAdminUserMembership(input: {
     planKey: input.planKey,
     currentPeriodEnd: input.currentPeriodEnd,
   });
+  // 管理员直接发会员既不扣费也不写钱包流水，这里补一条审计日志，
+  // 便于事后对账区分「免费发放」与「正常付费开通」。actorUserId 为空：
+  // 管理员经 manager key 鉴权，无对应平台 userId。
+  await createConfigAuditLog({
+    id: crypto.randomUUID(),
+    actorUserId: null,
+    action: 'admin_set_membership',
+    targetType: 'user_membership',
+    targetKey: input.userId,
+    after: {
+      planKey: input.planKey,
+      currentPeriodEnd: input.currentPeriodEnd,
+    },
+  }).catch((err) => {
+    logger.warn(
+      { err, userId: input.userId },
+      '管理员设置会员审计日志写入失败',
+    );
+  });
   return getAdminUserMembershipState(input.userId);
 }
 
@@ -884,7 +903,19 @@ export async function setAdminUserMembership(input: {
 export async function cancelAdminUserMembership(
   userId: string,
 ): Promise<AdminUserMembershipState> {
-  await cancelUserMembershipsForAdmin(userId);
+  const result = await cancelUserMembershipsForAdmin(userId);
+  // 取消是「通用撤销」（可用于风控/纠错），不自动退款——自动退款会把钱退给被风控的用户。
+  // 这里补审计日志记录该撤销动作；确需退款时管理员另走「调整积分」手动退。
+  await createConfigAuditLog({
+    id: crypto.randomUUID(),
+    actorUserId: null,
+    action: 'admin_cancel_membership',
+    targetType: 'user_membership',
+    targetKey: userId,
+    after: { cancelledCount: result.cancelledCount, refunded: false },
+  }).catch((err) => {
+    logger.warn({ err, userId }, '管理员取消会员审计日志写入失败');
+  });
   return getAdminUserMembershipState(userId);
 }
 

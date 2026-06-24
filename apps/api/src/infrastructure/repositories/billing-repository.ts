@@ -9,7 +9,10 @@ import type {
   User,
   UserMembership,
 } from '../../shared/types.js';
-import { assertSufficientSpendableCoins } from '../../shared/balance-coins.js';
+import {
+  assertSufficientSpendableCoins,
+  roundCoinsToCents,
+} from '../../shared/balance-coins.js';
 import { resolveMembershipAllowancePeriod } from '../../shared/membership-cycle.js';
 import {
   MEMBERSHIP_CLARITY_PLAN_KEY,
@@ -31,16 +34,9 @@ const pool = {
   },
 };
 
-const COIN_CENTS = 100;
-
 function toCoins(value: unknown): number {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function roundCoinsToCents(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * COIN_CENTS) / COIN_CENTS;
 }
 
 function addMonths(date: Date, months: number): Date {

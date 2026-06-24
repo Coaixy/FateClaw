@@ -19,6 +19,26 @@ import {
 } from '../../modules/billing/recharge-service.js';
 import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
+import { getRedis } from '../../infrastructure/redis.js';
+
+// 易支付 notify 是免登录入口、验签是唯一闸门。加一道**宽松**的 per-IP 限流，
+// 防止用无效签名洪泛放大验签（RSA）和单行 upsert 写的 CPU/DB 负载。
+// 限额远高于正当 epay（每单仅几次通知），正常回调绝不触顶；
+// Redis 异常时 fail-open（放行），绝不因限流误丢正当支付通知。
+const RECHARGE_NOTIFY_RATE_LIMIT_PER_MIN = 120;
+
+async function allowRechargeNotify(ip: string): Promise<boolean> {
+  try {
+    const key = `ratelimit:recharge-notify:${ip || 'unknown'}`;
+    const count = await getRedis().incr(key);
+    if (count === 1) {
+      await getRedis().expire(key, 60);
+    }
+    return count <= RECHARGE_NOTIFY_RATE_LIMIT_PER_MIN;
+  } catch {
+    return true; // fail-open：限流设施异常不阻断正当通知
+  }
+}
 
 const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
 
@@ -153,6 +173,9 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/billing/recharge/notify — 易支付异步通知入口（免登录）
   app.get('/recharge/notify', async (request, reply) => {
+    if (!(await allowRechargeNotify(request.ip))) {
+      return reply.code(429).type('text/plain; charset=utf-8').send('fail');
+    }
     const result = await handleRechargeNotification(request.query);
     if (!result.ok) {
       return reply
@@ -165,6 +188,9 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/billing/recharge/notify — 兼容表单 POST 通知
   app.post('/recharge/notify', async (request, reply) => {
+    if (!(await allowRechargeNotify(request.ip))) {
+      return reply.code(429).type('text/plain; charset=utf-8').send('fail');
+    }
     const result = await handleRechargeNotification(request.body);
     if (!result.ok) {
       return reply
