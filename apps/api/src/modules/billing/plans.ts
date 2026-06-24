@@ -21,6 +21,7 @@ import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
+  roundCoinsToCents,
   type SpendableBalanceState,
 } from '../../shared/balance-coins.js';
 import {
@@ -82,7 +83,6 @@ export interface BillingSettlementSummary {
 }
 
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
-const COIN_CENTS = 100;
 export const BILLING_ARREARS_MESSAGE = '积分已欠费，请补充积分后继续使用';
 export const BILLING_PRICE_MISCONFIGURED_MESSAGE =
   '模型计费未正确配置，请联系管理员';
@@ -94,11 +94,6 @@ function numberFromMetaOr0(value: unknown): number {
 
 function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
-}
-
-function roundCoinsToCents(coins: number): number {
-  if (!Number.isFinite(coins) || coins <= 0) return 0;
-  return Math.round(coins * COIN_CENTS) / COIN_CENTS;
 }
 
 function calculateTokenCostCoins(input: {

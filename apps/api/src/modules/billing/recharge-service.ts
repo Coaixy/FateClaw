@@ -29,6 +29,7 @@ import {
   toRechargeStatsDto,
 } from '../../contracts-adapter/billing-contract.js';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+import { roundCoinsToCents } from '../../shared/balance-coins.js';
 import {
   createEpayPayment,
   isSafeEpayUrlPrefix,
@@ -115,11 +116,6 @@ function isHttpUrl(value: string): boolean {
   if (!URL.canParse(value)) return false;
   const url = new URL(value);
   return url.protocol === 'http:' || url.protocol === 'https:';
-}
-
-function roundCoinsToCents(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Object.is(value, -0) ? 0 : Math.round(value * 100) / 100;
 }
 
 function resolveEpayConfig(

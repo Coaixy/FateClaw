@@ -1,5 +1,19 @@
 export const INSUFFICIENT_BALANCE_MESSAGE = '积分不足，请补充积分后继续使用';
 
+/**
+ * 把积分金额四舍五入到「分」（2 位小数）——全局唯一取整口径。
+ *
+ * @param value 原始积分金额。
+ * @returns 非有限数（NaN/Infinity）返回 0；-0 归一为 0；其余按分四舍五入并**保留符号**
+ *          （余额增减、退款等场景金额可为负，不在此夹断；需非负的成本由调用方自行 clamp）。
+ * @remarks 收敛此前分散在 billing-repository / plans / recharge-service / admin-routes 的
+ *          四份实现，消除负数/-0 处理不一致。
+ */
+export function roundCoinsToCents(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Object.is(value, -0) ? 0 : Math.round(value * 100) / 100;
+}
+
 /** 钱包可消费余额计算需要的最小字段集合。 */
 export interface SpendableBalanceState {
   readonly purchased_coins: number;
@@ -23,10 +37,7 @@ export function calculateAvailableSpendableCoins(
   state: SpendableBalanceState,
   options: SpendableBalanceOptions = {},
 ): number {
-  const releasedReservedCoins = Math.max(
-    0,
-    options.releasedReservedCoins ?? 0,
-  );
+  const releasedReservedCoins = Math.max(0, options.releasedReservedCoins ?? 0);
   const effectiveReservedCoins = Math.max(
     0,
     state.reserved_coins - releasedReservedCoins,
@@ -61,10 +72,7 @@ export function isSpendableBalanceInArrears(
   state: SpendableBalanceState,
   options: SpendableBalanceOptions = {},
 ): boolean {
-  const releasedReservedCoins = Math.max(
-    0,
-    options.releasedReservedCoins ?? 0,
-  );
+  const releasedReservedCoins = Math.max(0, options.releasedReservedCoins ?? 0);
   const effectiveReservedCoins = Math.max(
     0,
     state.reserved_coins - releasedReservedCoins,
