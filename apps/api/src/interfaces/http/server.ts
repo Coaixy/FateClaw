@@ -15,6 +15,7 @@ import {
   ALLOWED_ORIGINS,
   JWT_SECRET,
   PUBLIC_WEB_BASE_URL,
+  TRUST_PROXY,
 } from '../../infrastructure/config.js';
 import { getUserById } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
@@ -153,6 +154,9 @@ function shouldBlockFontAssetRequest(
 export async function createApiServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false, // use our own pino logger
+    // 信任反向代理以还原真实客户端 IP；否则 request.ip 取到代理 IP，
+    // 所有按 IP 的限流/验证码绑定/登录爆破锁定会坍缩成全局单桶。
+    trustProxy: TRUST_PROXY,
   });
 
   // Allow empty body with application/json content-type

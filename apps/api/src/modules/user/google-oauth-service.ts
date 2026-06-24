@@ -12,6 +12,7 @@ import {
   getUserByOAuthIdentityUsing,
   upsertOAuthIdentityUsing,
 } from '../../infrastructure/db.js';
+import { getRedis } from '../../infrastructure/redis.js';
 import type { User } from '../../shared/types.js';
 
 const GOOGLE_AUTHORIZATION_ENDPOINT =
@@ -361,4 +362,52 @@ export async function findOrCreateGoogleOAuthUser(
   } finally {
     client.release();
   }
+}
+
+// 一次性 OAuth 交换码：把已签发的站内 JWT 暂存 Redis，URL 只回传不敏感的 code，
+// 前端再用 code 换回 token。避免 30 天 JWT 经浏览器历史 / Referer / 访问日志泄漏。
+const OAUTH_EXCHANGE_KEY_PREFIX = 'oauth:exchange:';
+const OAUTH_EXCHANGE_CODE_TTL_SECONDS = 60;
+
+/**
+ * 暂存 OAuth 登录签发的站内 JWT，返回一次性交换码（64 位十六进制）。
+ *
+ * @param token 已用 signAuthToken 签发的站内 JWT。
+ * @returns 一次性交换码，60 秒内有效、单次消费。
+ */
+export async function storeOAuthExchangeToken(token: string): Promise<string> {
+  const code = crypto.randomBytes(32).toString('hex');
+  await getRedis().set(
+    `${OAUTH_EXCHANGE_KEY_PREFIX}${code}`,
+    token,
+    'EX',
+    OAUTH_EXCHANGE_CODE_TTL_SECONDS,
+  );
+  return code;
+}
+
+/**
+ * 原子消费 OAuth 交换码（GET+DEL），返回对应站内 JWT。
+ *
+ * @param code 前端回传的一次性交换码。
+ * @returns 对应 JWT；code 非法、已用、过期均返回 null。
+ */
+export async function consumeOAuthExchangeToken(
+  code: string,
+): Promise<string | null> {
+  // 仅接受预期格式，避免任意输入参与 Redis key 构造。
+  if (!/^[a-f0-9]{64}$/.test(code)) return null;
+  const raw = await getRedis().eval(
+    `
+local value = redis.call("GET", KEYS[1])
+if not value then
+  return nil
+end
+redis.call("DEL", KEYS[1])
+return value
+`,
+    1,
+    `${OAUTH_EXCHANGE_KEY_PREFIX}${code}`,
+  );
+  return typeof raw === 'string' ? raw : null;
 }

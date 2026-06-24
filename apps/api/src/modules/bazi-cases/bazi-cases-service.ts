@@ -20,6 +20,8 @@ import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 const DEFAULT_LIMIT = 20;
 /** 单页上限，防止一次性拉走过多数据（开放 API 的基础防爬）。 */
 const MAX_LIMIT = 100;
+/** 关键词最大长度，防止超长串触发 job/job_info 的 ILIKE 全表慢扫。 */
+const MAX_QUERY_LENGTH = 64;
 
 /** 命例表行 → 对外 DTO（字段 1:1）。 */
 function toDto(row: BaziCaseRow): BaziCaseDto {
@@ -76,7 +78,7 @@ export async function listBaziCases(
     wealth: input.wealth,
     education: input.education,
     jobType: input.jobType,
-    q: input.q,
+    q: input.q?.slice(0, MAX_QUERY_LENGTH),
     limit,
     offset,
   });

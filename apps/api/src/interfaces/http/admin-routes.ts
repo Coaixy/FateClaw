@@ -176,10 +176,17 @@ function hasAtMostTwoDecimalPlaces(value: number): boolean {
   return Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
 }
 
+// 金额绝对值上限：避免超大值导致 JS number 精度失真（>2^53）与荒谬调账。
+const MAX_SOFT_CURRENCY_AMOUNT = 1_000_000;
+
 const SoftCurrencyNumberSchema = z
   .number()
   .refine(Number.isFinite, '金额格式不正确')
   .refine(hasAtMostTwoDecimalPlaces, '金额最多支持 2 位小数')
+  .refine(
+    (value) => Math.abs(value) <= MAX_SOFT_CURRENCY_AMOUNT,
+    '金额超出允许范围',
+  )
   .transform(roundCoinsToCents);
 
 const GrantBonusBalanceSchema = z.object({

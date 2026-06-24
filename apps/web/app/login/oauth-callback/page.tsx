@@ -1,12 +1,13 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import { setAuthToken } from '@/lib/auth-scoped-cache';
 import { normalizeAuthRedirect } from '@/lib/auth-redirect';
+import { ApiError, requestJson } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 
 export default function OAuthCallbackPage() {
@@ -28,25 +29,40 @@ function OAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState('');
+  // 一次性交换码只能消费一次；用 ref 守卫避免 StrictMode 双调用导致第二次换码失败。
+  const exchangedRef = useRef(false);
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const next =
-      normalizeAuthRedirect(searchParams.get('next')) ?? '/ai-chat';
+    const code = searchParams.get('code');
+    const next = normalizeAuthRedirect(searchParams.get('next')) ?? '/ai-chat';
     const callbackError = searchParams.get('error');
 
     if (callbackError) {
       setError(callbackError);
       return;
     }
-    if (!token) {
+    if (!code) {
       setError(t('login.oauthCallbackError'));
       return;
     }
+    if (exchangedRef.current) return;
+    exchangedRef.current = true;
 
-    // OAuth 回调只负责落本地登录态；用户资料由 AuthProvider 后续按 token 重新拉取。
-    setAuthToken(token);
-    router.replace(next);
+    // 用一次性交换码换回站内 JWT（长期 token 不再经 URL 传输）；
+    // 用户资料由 AuthProvider 后续按 token 重新拉取。
+    requestJson<{ token: string }>('/api/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    })
+      .then(({ token }) => {
+        setAuthToken(token);
+        router.replace(next);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof ApiError ? err.message : t('login.oauthCallbackError'),
+        );
+      });
   }, [router, searchParams, t]);
 
   if (error) {

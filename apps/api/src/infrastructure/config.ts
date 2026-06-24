@@ -26,6 +26,7 @@ const envConfig = readEnvFile([
   'GOOGLE_OAUTH_CLIENT_SECRET',
   'GOOGLE_OAUTH_REDIRECT_URI',
   'PAYMENT_CALLBACK_ALLOWED_HOSTS',
+  'TRUST_PROXY',
 ]);
 
 export const ASSISTANT_NAME =
@@ -210,6 +211,25 @@ export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
     '',
 );
 
+// 反向代理信任拓扑解析。Fastify 据此从 X-Forwarded-For 还原真实客户端 IP。
+function parseTrustProxy(raw: string): boolean | number | string {
+  const value = raw.trim();
+  // 默认仅信任本机回环代理：外部客户端的连接源永远不是回环地址，无法伪造
+  // X-Forwarded-For；同机 Nginx 反代的常见部署可直接生效，裸暴露公网时也安全。
+  if (!value) return 'loopback';
+  if (value === 'true') return true; // 信任全部代理：仅限已知可信内网，谨慎使用
+  if (value === 'false') return false;
+  if (/^\d+$/.test(value)) return Number(value); // 信任的代理跳数
+  return value; // 逗号分隔的 IP/CIDR 白名单，交给 Fastify 解析
+}
+
+// 反向代理信任配置。生产部署在 Nginx/ALB/CDN 后必须按真实拓扑设置，否则
+// request.ip 取到代理 IP，导致所有按 IP 的限流/验证码绑定/登录爆破锁定坍缩成
+// 全局单桶。切勿设为 'true'（会无条件信任可伪造的 X-Forwarded-For，限流反被绕过）。
+export const TRUST_PROXY = parseTrustProxy(
+  process.env.TRUST_PROXY || envConfig.TRUST_PROXY || '',
+);
+
 // 超过该时长仍未完成结算的预留请求会被自动释放占用，但保留账务记录，
 // 便于晚到响应继续补结算。
 export const BILLING_RESERVATION_STALE_MS = parseInt(
@@ -223,6 +243,18 @@ export const BILLING_RESERVATION_STALE_MS = parseInt(
 export const LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS = parseFloat(
   process.env.LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS || '5',
 );
+
+// 单账户欠费深度上限（积分）。模型结算最多把可消费余额扣到 -MAX_OVERDRAFT_COINS，
+// 超出部分平台兜底吸收（rawChargeCoins 仍记真实成本供审计）。配合入口 arrears 拦截 +
+// 低余额并发门，把单账户最坏赊账损失锁死在此值，防止低余额用户用一个超长请求透支任意
+// 金额后弃号薅羊毛。误配置（非有限值/负数）回退默认值，避免静默停止扣费。
+const RAW_MAX_OVERDRAFT_COINS = parseFloat(
+  process.env.MAX_OVERDRAFT_COINS || '50',
+);
+export const MAX_OVERDRAFT_COINS =
+  Number.isFinite(RAW_MAX_OVERDRAFT_COINS) && RAW_MAX_OVERDRAFT_COINS >= 0
+    ? RAW_MAX_OVERDRAFT_COINS
+    : 50;
 
 const PROJECT_ROOT = process.cwd();
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');

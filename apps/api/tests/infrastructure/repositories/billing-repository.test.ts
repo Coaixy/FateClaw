@@ -19,6 +19,11 @@ vi.mock('../../../src/infrastructure/repositories/users-repository.js', () => ({
 vi.mock('../../../src/infrastructure/logger.js', () => ({
   logger: {
     warn: mockLoggerWarn,
+    // billing-repository 现引入 config.js → env.js，后者在无 .env 时会调 logger.debug
+    // （CI 环境无 .env）。补全常用方法，避免 mock 缺失导致整个 suite 加载即崩。
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -532,18 +537,7 @@ describe('billing repository', () => {
     // UPDATE reservation, INSERT wallet_transactions(overage_charge), COMMIT。
     const { clientCalls, client } = createMockPool(
       [],
-      [
-        [],
-        [reservation],
-        [],
-        [monthlyState],
-        [],
-        [updated],
-        [],
-        [],
-        [],
-        [],
-      ],
+      [[], [reservation], [], [monthlyState], [], [updated], [], [], [], []],
     );
 
     const { settleUserModelChargeCoins } =
@@ -574,6 +568,77 @@ describe('billing repository', () => {
         call.params?.[2] === 'overage_charge',
     );
     expect(chargeTransaction?.params?.[3]).toBe(-0.63);
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('caps overdraft at MAX_OVERDRAFT_COINS and lets the platform absorb the excess', async () => {
+    // 余额为 0 的用户发起真实成本 500 的超大请求：可消费 0 + 欠费上限 50 = 最多实扣 50，
+    // 剩余 450 平台兜底吸收，防止透支任意金额后弃号薅羊毛。
+    const user = {
+      id: 'user-1',
+      purchased_coins: 0,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    const reservation = {
+      request_id: 'request-1',
+      user_id: 'user-1',
+      model_config_id: 'model-1',
+      year_month: '2026-05',
+      reserved_coins: 0,
+      hold_state: 'none',
+      charge_state: 'pending',
+      actual_charge_coins: 0,
+      total_overage_tokens: 0,
+      total_overage_cost_coins: 0,
+    };
+    const monthlyState = {
+      user_id: 'user-1',
+      year_month: '2026-05',
+      billed_overage_tokens: 0,
+      billed_overage_cost_coins: 0,
+    };
+    const updated = {
+      ...user,
+      purchased_coins: -50, // 实扣 50 后充值积分恰好降到欠费下限
+    };
+    mockGetUserByIdUsing.mockResolvedValue(user);
+    const { clientCalls, client } = createMockPool(
+      [],
+      [[], [reservation], [], [monthlyState], [], [updated], [], [], [], []],
+    );
+
+    const { settleUserModelChargeCoins } =
+      await import('../../../src/infrastructure/repositories/billing-repository.js');
+
+    await expect(
+      settleUserModelChargeCoins('request-1', 2_000_000, 500),
+    ).resolves.toMatchObject({
+      actualChargeCoins: 50,
+      rawChargeCoins: 500,
+      user: updated,
+    });
+
+    // 月度累计与钱包流水只记被封顶的实扣 50，reservation 仍登记真实成本 500（供审计兜底差额）。
+    const monthlyUpdate = clientCalls.find((call) =>
+      call.sql.includes('UPDATE monthly_billing_state'),
+    );
+    expect(monthlyUpdate?.params).toEqual([2_000_000, 50, 'user-1', '2026-05']);
+    const reservationUpdate = clientCalls.find((call) =>
+      call.sql.includes('UPDATE billing_request_reservations'),
+    );
+    expect(reservationUpdate?.params).toEqual([
+      'request-1',
+      50,
+      2_000_000,
+      500,
+    ]);
+    const chargeTransaction = clientCalls.find(
+      (call) =>
+        call.sql.includes('INSERT INTO wallet_transactions') &&
+        call.params?.[2] === 'overage_charge',
+    );
+    expect(chargeTransaction?.params?.[3]).toBe(-50);
     expect(client.release).toHaveBeenCalledOnce();
   });
 

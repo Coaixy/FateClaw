@@ -142,7 +142,9 @@ async function consumeCaptchaChallenge(
 // ----------------------------------------------------------------------------
 
 function randInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  // 用 CSPRNG 取整数：验证码答案与视觉随机统一走 crypto，杜绝 Math.random 状态可预测。
+  // crypto.randomInt 上界开区间，+1 还原 [min, max] 闭区间语义。
+  return crypto.randomInt(min, max + 1);
 }
 
 function randColor(): string {

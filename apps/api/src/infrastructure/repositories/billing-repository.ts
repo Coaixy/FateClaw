@@ -2,6 +2,7 @@ import pg from 'pg';
 
 import { getDbPool } from '../db-pool.js';
 import { logger } from '../logger.js';
+import { MAX_OVERDRAFT_COINS } from '../config.js';
 import { getUserByIdUsing } from './users-repository.js';
 import type {
   BalanceGrantSource,
@@ -2254,17 +2255,29 @@ export async function settleUserModelChargeCoins(
     );
     const previousChargeCoins = toCoins(monthlyState.billed_overage_cost_coins);
     const rawChargeCoins = roundCoinsToCents(Math.max(0, requestCostCoins));
-    // 单层化后会员不含 AI 免费额度（clarity allowance 已移除），模型费用按真实 Token 全额实扣；
+    // 单层化后会员不含 AI 免费额度（clarity allowance 已移除），模型费用按真实 Token 计费；
     // BYOK（自配模型）已在 plans 层结算时短路为 0，不会走到这里。
-    const actualChargeCoins = rawChargeCoins;
+    // 欠费封顶：单次结算最多把可消费余额扣到 -MAX_OVERDRAFT_COINS，超出部分平台兜底吸收。
+    // 入口 arrears 检查会拦住欠费用户的后续请求，此处只为低余额并发门放行的那个请求兜底，
+    // 把单账户最坏赊账损失锁死在 MAX_OVERDRAFT_COINS，防止透支任意金额后弃号薅羊毛。
+    const normalizedUser = normalizeUserCoins(user);
+    const spendableCoins =
+      normalizedUser.bonus_coins + normalizedUser.purchased_coins;
+    const maxDeductibleCoins = Math.max(
+      0,
+      spendableCoins + MAX_OVERDRAFT_COINS,
+    );
+    const actualChargeCoins = roundCoinsToCents(
+      Math.min(rawChargeCoins, maxDeductibleCoins),
+    );
     const nextChargeCoins = roundCoinsToCents(
       previousChargeCoins + actualChargeCoins,
     );
 
-    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值积分扣成负数。
+    // 模型扣费不再请求前冻结余额；结束后按真实 Token 费用入账，可把充值积分扣成负数（有下限）。
     const deduction = await deductModelChargeCoinsAllowDebt(
       client,
-      normalizeUserCoins(user),
+      normalizedUser,
       actualChargeCoins,
     );
 

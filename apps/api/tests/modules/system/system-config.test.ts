@@ -774,13 +774,16 @@ describe('listOfficialModelViews', () => {
     ]);
   });
 
-  it('includes official model API keys for the admin overview', async () => {
+  it('exposes only a masked preview of official model API keys for the admin overview', async () => {
     await expect(getSystemConfigOverview()).resolves.toMatchObject({
       providers: [
         {
           id: 'official-1',
           has_secret: true,
-          api_key: 'db-secret',
+          // 明文密钥不再回显，只暴露后 4 位预览 + 指纹供管理端识别。
+          api_key: null,
+          api_key_preview: '...cret',
+          api_key_fingerprint: expect.any(String),
         },
       ],
     });
