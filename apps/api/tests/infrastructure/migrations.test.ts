@@ -485,6 +485,8 @@ describe('runDatabaseMigrations', () => {
       '0059_drop_allowance_columns_and_table',
       '0060_client_crm_fields',
       '0061_client_follow_ups',
+      '0062_bazi_cases',
+      '0063_bazi_cases_solar_date',
     ]);
 
     await runDatabaseMigrations(client as never);

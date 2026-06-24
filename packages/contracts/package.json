@@ -55,6 +55,11 @@
       "types": "./dist/membership/index.d.ts",
       "import": "./dist/membership/index.js",
       "default": "./dist/membership/index.js"
+    },
+    "./bazi-cases": {
+      "types": "./dist/bazi-cases/index.d.ts",
+      "import": "./dist/bazi-cases/index.js",
+      "default": "./dist/bazi-cases/index.js"
     }
   },
   "files": [

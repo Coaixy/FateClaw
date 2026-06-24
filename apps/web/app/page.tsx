@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import {
   ArrowRight,
   ChevronRight,
+  Library,
   MessageCircle,
   SquarePen,
   Sparkles,
@@ -88,6 +89,28 @@ function HubContent() {
           description={t('hub.clientsDesc')}
         />
       </div>
+
+      {/* 次级入口:八字命例库(查阅性资源,免登录公开,可分享) */}
+      <Link
+        href="/bazi-cases"
+        className="group flex items-center gap-3.5 rounded-2xl border border-hairline bg-surface-card p-3.5 transition-all duration-200 hover:border-sky-400/40 hover:shadow-md"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-400/10 text-sky-500">
+          <Library size={20} strokeWidth={1.8} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold text-ink">
+            八字命例库
+          </span>
+          <span className="mt-0.5 block text-[12.5px] leading-relaxed text-muted">
+            1606 例真实命盘与人生轨迹，断卦参考（免登录可分享）
+          </span>
+        </span>
+        <ChevronRight
+          size={18}
+          className="shrink-0 text-muted/35 transition-all group-hover:translate-x-0.5 group-hover:text-muted/70"
+        />
+      </Link>
 
       {recentSessions.length > 0 && (
         <section>
