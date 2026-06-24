@@ -19,6 +19,11 @@ vi.mock('../../../src/infrastructure/repositories/users-repository.js', () => ({
 vi.mock('../../../src/infrastructure/logger.js', () => ({
   logger: {
     warn: mockLoggerWarn,
+    // billing-repository 现引入 config.js → env.js，后者在无 .env 时会调 logger.debug
+    // （CI 环境无 .env）。补全常用方法，避免 mock 缺失导致整个 suite 加载即崩。
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
