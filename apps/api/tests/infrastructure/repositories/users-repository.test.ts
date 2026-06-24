@@ -168,7 +168,7 @@ describe('users repository', () => {
     ]);
   });
 
-  it('uses index-friendly prefix search for admin ASCII user queries', async () => {
+  it('matches admin user queries by case-insensitive substring on phone and id', async () => {
     const { calls } = createMockPool();
 
     await expect(
@@ -182,8 +182,9 @@ describe('users repository', () => {
       total: 0,
     });
 
-    expect(calls[0]?.sql).toContain('u.phone LIKE $1 OR u.id LIKE $1');
-    expect(calls[0]?.sql).not.toContain('ILIKE $1');
-    expect(calls[0]?.params).toEqual(['user-%', 20, 0]);
+    // 手机号 / ID 一律按不区分大小写的子串匹配，支持搜手机号中段（如「23」命中「1234」）。
+    // 注：曾短暂改为 ASCII 前缀 LIKE 'q%' 做 index 优化，但会导致中段搜不到，已回退为子串。
+    expect(calls[0]?.sql).toContain('u.phone ILIKE $1 OR u.id ILIKE $1');
+    expect(calls[0]?.params).toEqual(['%user-%', 20, 0]);
   });
 });
