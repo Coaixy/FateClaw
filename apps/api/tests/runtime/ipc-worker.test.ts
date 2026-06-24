@@ -297,6 +297,52 @@ describe('global agent concurrency gate', () => {
   });
 });
 
+describe('per-user metered concurrency gate', () => {
+  const lowBalanceEntitlement = {
+    userId: 'user-1',
+    membershipActive: true,
+    planKey: 'clarity',
+    planRank: 1,
+    hasPaidMembership: true,
+    hasPriorityQueue: true,
+    canUseCustomModel: true,
+    canUseWechatClaw: false,
+    wallet: {
+      purchasedCoins: 1,
+      bonusCoins: 0,
+      reservedCoins: 0,
+      availableCoins: 1, // < 5 阈值 → 进入 per-user 并发门
+      inArrears: false,
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetIpcWorkerForTests();
+    mockLpush.mockResolvedValue(1);
+  });
+
+  it('低余额用户名额已满时拒绝并发的 metered 请求', async () => {
+    mockEval.mockResolvedValueOnce(0); // per-user acquire：名额已满
+
+    await expect(
+      submitAiChatInboxRequest({
+        accountId: 'web:user-1',
+        userMessage: 'hi',
+        history: [],
+        sessionId: 'session-1',
+        llmRuntime: effectiveRuntime, // metered
+        entitlementSnapshot: lowBalanceEntitlement as never,
+        waitForResponse: false,
+      }),
+    ).rejects.toThrow('积分不足以同时进行多个解读');
+
+    // 被拒发生在抢全局槽之前：只有 per-user acquire 这一次 eval，且未入全局等待队列。
+    expect(mockEval).toHaveBeenCalledTimes(1);
+    expect(mockLpush).not.toHaveBeenCalled();
+  });
+});
+
 describe('runtime lease lifecycle for submitted inbox requests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -306,7 +352,8 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     vi.mocked(getUserByAccountId).mockResolvedValue({ id: 'user-1' } as never);
     vi.mocked(getUserById).mockResolvedValue({
       id: 'user-1',
-      purchased_coins: 0,
+      // 健康余额：跳过 per-user 低余额并发门，本组用例只验证全局并发/租约生命周期。
+      purchased_coins: 100,
       bonus_coins: 0,
       reserved_coins: 0,
     } as never);

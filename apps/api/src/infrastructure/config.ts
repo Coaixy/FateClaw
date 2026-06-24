@@ -217,6 +217,13 @@ export const BILLING_RESERVATION_STALE_MS = parseInt(
   10,
 );
 
+// 低余额并发门槛（积分）。可消费积分低于此值的用户，同一时刻只能有 1 个 metered
+// 官方模型请求在跑，防止多 session 并发把余额刷成大额欠费（白嫖）。
+// 健康余额用户不受影响（不进入 per-user 并发门，沿用全局并发上限）。
+export const LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS = parseFloat(
+  process.env.LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS || '5',
+);
+
 const PROJECT_ROOT = process.cwd();
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 
