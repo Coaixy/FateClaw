@@ -17,9 +17,11 @@ import {
 } from '../../modules/user/auth-service.js';
 import {
   buildGoogleAuthorizationUrl,
+  consumeOAuthExchangeToken,
   createGoogleOAuthState,
   exchangeGoogleCodeForProfile,
   findOrCreateGoogleOAuthUser,
+  storeOAuthExchangeToken,
   verifyGoogleOAuthState,
 } from '../../modules/user/google-oauth-service.js';
 import {
@@ -33,6 +35,11 @@ import {
 import { toUserDto } from '../../contracts-adapter/auth-contract.js';
 import { OAUTH_WEB_BASE_URL } from '../../infrastructure/config.js';
 import { generateCaptcha, verifyCaptcha } from './captcha.js';
+import {
+  rateLimitCheck,
+  rateLimitClear,
+  rateLimitRecordFail,
+} from './rate-limit.js';
 
 type AuthTokenUser = {
   id: string;
@@ -143,7 +150,7 @@ function clearOAuthNonceCookie(): string {
 }
 
 function oauthCallbackRedirectUrl(input: {
-  token?: string;
+  code?: string;
   next: string;
   error?: string;
 }): string {
@@ -152,8 +159,9 @@ function oauthCallbackRedirectUrl(input: {
   }
   const url = new URL('/login/oauth-callback', OAUTH_WEB_BASE_URL);
   url.searchParams.set('next', input.next);
-  if (input.token) {
-    url.searchParams.set('token', input.token);
+  // 只回传一次性交换码（60s、单次消费），不再把长期 JWT 暴露在 URL 里。
+  if (input.code) {
+    url.searchParams.set('code', input.code);
   }
   if (input.error) {
     url.searchParams.set('error', input.error);
@@ -206,9 +214,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const profile = await exchangeGoogleCodeForProfile(query.code);
       const user = await findOrCreateGoogleOAuthUser(profile);
       const token = signAuthToken(app, user);
+      // JWT 不进 URL：暂存 Redis 换一次性 code，前端再用 code 调 /oauth/exchange 取回。
+      const code = await storeOAuthExchangeToken(token);
       return reply
         .code(302)
-        .header('Location', oauthCallbackRedirectUrl({ token, next }))
+        .header('Location', oauthCallbackRedirectUrl({ code, next }))
         .send();
     } catch (err) {
       request.log.warn({ err }, 'google oauth callback failed');
@@ -224,6 +234,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         )
         .send();
     }
+  });
+
+  // POST /api/auth/oauth/exchange —— 用一次性交换码换回 OAuth 登录签发的站内 JWT。
+  // OAuth 回调只把 code 放进 URL，真正的长期 JWT 经此端点单次取回，不经浏览器历史/日志。
+  app.post('/oauth/exchange', async (request, reply) => {
+    const body = z.object({ code: z.string() }).parse(request.body);
+    const token = await consumeOAuthExchangeToken(body.code);
+    if (!token) {
+      return reply
+        .code(400)
+        .send({ error: '登录凭证无效或已过期，请重新发起登录' });
+    }
+    return { token };
   });
 
   // POST /api/auth/send-sms-captcha
@@ -319,6 +342,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/login', async (request, reply) => {
     const body = LoginSchema.parse(request.body);
 
+    // 在线密码爆破限流：按手机号做指数退避（与 admin 密钥校验同款 rate-limit）。
+    // 仅按手机号、不按 IP——在反代未正确配置 trustProxy 时 request.ip 可能坍缩成
+    // 单一代理 IP，按 IP 记失败会把单个攻击者的失败算到全体头上、制造全站登录锁定。
+    // 按手机号只节流对单一账户的猜测，无连带误伤，且 10 分钟封顶后自动恢复。
+    const loginRateKey = `login:${normalizePhoneNumber(body.phone)}`;
+    const limit = await rateLimitCheck(loginRateKey);
+    if (!limit.allowed) {
+      return reply
+        .code(429)
+        .header('Retry-After', Math.ceil((limit.retryAfterMs ?? 1000) / 1000))
+        .send({ error: '登录尝试过于频繁，请稍后再试' });
+    }
+
     const cap = await verifyCaptcha(
       body.captcha_token,
       body.captcha_answer,
@@ -332,10 +368,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     try {
       const user = await loginUser(body.phone, body.password);
       const token = signAuthToken(app, user);
+      await rateLimitClear(loginRateKey); // 登录成功清除该手机号的退避状态
       const safe: UserDto = toUserDto(user);
       const response: AuthResponseDto = { token, user: safe };
       return response;
     } catch (err) {
+      await rateLimitRecordFail(loginRateKey); // 失败记一次，触发指数退避
       const message = err instanceof Error ? err.message : '登录失败';
       return reply.code(401).send({ error: message });
     }

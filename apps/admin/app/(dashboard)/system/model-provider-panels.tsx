@@ -362,9 +362,10 @@ export function RuntimeConfigPanel({
             </div>
             <div>
               当前 Pi：
-              {runtime.pi_session_health_enabled ? '自动维护' : '手动维护'} /{' '}
-              {runtime.pi_session_inactive_cleanup_days} 天未活跃 /{' '}
-              {runtime.pi_session_orphan_grace_days} 天孤儿保护
+              {runtime.pi_session_health_enabled
+                ? '自动维护'
+                : '手动维护'} / {runtime.pi_session_inactive_cleanup_days}{' '}
+              天未活跃 / {runtime.pi_session_orphan_grace_days} 天孤儿保护
             </div>
             <div>
               当前 Skill：每人 {runtime.user_skill_max_count} 个 /{' '}
@@ -659,7 +660,11 @@ export function ProviderRow({
 
       {!expanded ? null : (
         <>
-          <ProviderBasicFields draft={draft} setDraft={setDraft} />
+          <ProviderBasicFields
+            draft={draft}
+            setDraft={setDraft}
+            keyPreview={provider.api_key_preview}
+          />
           <div className="mt-5 flex flex-wrap gap-2 border-t border-hairline/70 pt-4">
             <button
               type="button"
@@ -689,9 +694,12 @@ export function ProviderRow({
 function ProviderBasicFields({
   draft,
   setDraft,
+  keyPreview,
 }: {
   draft: ProviderDraft;
   setDraft: React.Dispatch<React.SetStateAction<ProviderDraft>>;
+  // 已配置密钥的后 4 位预览（如「...cret」）；明文不回显，留空保存即保持原密钥。
+  keyPreview?: string | null;
 }) {
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -712,7 +720,11 @@ function ProviderBasicFields({
       <TextField
         label="API Key"
         value={draft.api_key}
-        placeholder="明文填写，保存后生效"
+        placeholder={
+          keyPreview
+            ? `已配置 ${keyPreview}，留空保持不变`
+            : '明文填写，保存后生效'
+        }
         onChange={(value) => setDraft((prev) => ({ ...prev, api_key: value }))}
       />
       <TextAreaField

@@ -554,8 +554,7 @@ export type AdminSkillComment = AdminSkillCommentDto;
 export type AdminSkillCommentStatus = AdminSkillCommentStatusDto;
 
 /** 管理后台 Skill 评论审核列表响应。 */
-export interface AdminSkillCommentsResponse
-  extends AdminSkillCommentsResponseDto {}
+export interface AdminSkillCommentsResponse extends AdminSkillCommentsResponseDto {}
 
 export type AdminModelPiApi =
   | 'openai-completions'
@@ -579,7 +578,10 @@ export interface AdminModelProvider {
   output_token_price_per_million_coins: number;
   extra_json: Record<string, unknown> | null;
   has_secret: boolean;
+  // api_key 恒为 null（明文永不回显）；后端只下发后 4 位预览 + 指纹供识别。
   api_key: string | null;
+  api_key_preview: string | null;
+  api_key_fingerprint: string | null;
   secret_source: 'database' | 'missing';
   auth_mode:
     | 'openai_api_key'
@@ -807,7 +809,10 @@ export const admin = {
       `/api/admin/billing/reservations${query ? `?${query}` : ''}`,
     );
   },
-  reconcileBillingReservations: (data?: { stale_ms?: number; limit?: number }) =>
+  reconcileBillingReservations: (data?: {
+    stale_ms?: number;
+    limit?: number;
+  }) =>
     adminRequest<AdminBillingReconcileResult>('/api/admin/billing/reconcile', {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
@@ -1063,7 +1068,10 @@ export const admin = {
   membershipConfig: () =>
     adminRequest<AdminMembershipConfigResponse>('/api/admin/membership-config'),
   /** 更新指定套餐配置（planKey 当前只有 fateclaw_clarity）。 */
-  updateMembershipConfig: (planKey: string, data: AdminMembershipConfigUpdate) =>
+  updateMembershipConfig: (
+    planKey: string,
+    data: AdminMembershipConfigUpdate,
+  ) =>
     adminRequest<AdminMembershipPlanConfig>(
       `/api/admin/membership-config/${encodeURIComponent(planKey)}`,
       { method: 'PATCH', body: JSON.stringify(data) },

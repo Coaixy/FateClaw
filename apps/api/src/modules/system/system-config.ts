@@ -104,7 +104,10 @@ export interface AdminOfficialModelView extends OfficialModelConfig {
   auth_mode: ProviderAuthMode;
   context_window_tokens: number | null;
   description: string;
+  // 永不回显明文密钥：api_key 始终为 null；管理端识别用后 4 位预览 + 指纹。
   api_key: string | null;
+  api_key_preview: string | null;
+  api_key_fingerprint: string | null;
 }
 
 export interface UserModelSettingsOverview {
@@ -693,7 +696,8 @@ export async function getEffectiveAgentModel(userId: string): Promise<string> {
 }
 
 export async function listOfficialModelViews(options?: {
-  includeSecretValue?: boolean;
+  // 仅控制是否附带「后 4 位预览 + 指纹」用于管理端识别；明文密钥永不回显。
+  includeSecretPreview?: boolean;
 }): Promise<AdminOfficialModelView[]> {
   const models = await listOfficialModelConfigs();
   return Promise.all(
@@ -708,7 +712,14 @@ export async function listOfficialModelViews(options?: {
         has_secret: Boolean(secret.value),
         secret_source: secret.source,
         auth_mode: secret.authMode,
-        api_key: options?.includeSecretValue ? secret.value : null,
+        // 明文密钥永不出库；管理端只拿脱敏预览 + 指纹，普通用户连预览也不给。
+        api_key: null,
+        api_key_preview: options?.includeSecretPreview
+          ? apiKeyPreview(secret.value)
+          : null,
+        api_key_fingerprint: options?.includeSecretPreview
+          ? apiKeyFingerprint(secret.value)
+          : null,
         context_window_tokens: normalizeModelContextWindowTokens(
           model.extra_json,
           model.display_name,
@@ -745,7 +756,7 @@ export async function getSystemConfigOverview(): Promise<{
   audit_logs: Awaited<ReturnType<typeof listConfigAuditLogs>>;
 }> {
   const [models, auditLogs, modelBilling, runtime] = await Promise.all([
-    listOfficialModelViews({ includeSecretValue: true }),
+    listOfficialModelViews({ includeSecretPreview: true }),
     listConfigAuditLogs(50),
     getModelBillingConfig(),
     getRuntimeConfig(),

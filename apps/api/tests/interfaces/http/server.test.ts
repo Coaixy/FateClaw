@@ -11,6 +11,7 @@ vi.mock('../../../src/infrastructure/config.js', () => ({
   ALLOWED_ORIGINS: ['https://admin.letfate.test'],
   JWT_SECRET: 'test-jwt-secret',
   PUBLIC_WEB_BASE_URL: 'https://www.letfate.test',
+  TRUST_PROXY: 'loopback',
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
