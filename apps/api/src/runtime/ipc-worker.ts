@@ -41,10 +41,7 @@ import {
 } from './ipc-payloads.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import {
-  reserveBillingForRequest,
-  settleBillingReservation,
-} from '../modules/billing/plans.js';
+import { reserveBillingForRequest } from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   getAgentConcurrencyLimit,
@@ -409,19 +406,9 @@ export async function cancelAiChatSessionRequest(
     requestId,
     reason: 'cancel',
   });
-  if (pending) {
-    await settleBillingReservation({
-      requestId,
-      runtime: pending.llmRuntime,
-      promptTokens: 0,
-      completionTokens: 0,
-    }).catch((err) => {
-      logger.warn(
-        { accountId: pending.accountId, requestId, err },
-        'AI Chat 取消时结算预留失败',
-      );
-    });
-  }
+  // 取消不再就地 settle(0,0)：那会把已消耗的 Token 标记 charged@0、永久关账，
+  // 导致取消前真实消耗的 token 全部免费。改为保留预留 charge_state='pending'，
+  // 由 billing-sweeper 按 daemon 中断响应落库的真实 usage 兜底补结算。
   await getRedis().lpush(
     `ipc:${runtimeAccountId}:cancel`,
     buildAiChatCancelPayload({

@@ -1453,6 +1453,33 @@ export async function reconcileStaleBillingReservations(
   return { released, requestIds };
 }
 
+/**
+ * 列出陈旧的未结算预留，供 billing-sweeper 兜底结算。
+ *
+ * @param staleBeforeIso 仅返回创建早于此时刻的预留，避免误碰仍在途的请求。
+ * @param limit 单批上限（1-500）。
+ * @returns charge_state='pending' 且创建超期的预留，按创建时间升序（最旧先处理）。
+ * @remarks 与 reconcileStaleBillingReservations 不同：这里不限 hold_state（新预留恒为 'none'），
+ *          按 charge_state 维度兜底真正未结算的请求，而非只释放历史冻结。
+ */
+export async function listStalePendingReservations(
+  staleBeforeIso: string,
+  limit = 100,
+): Promise<BillingRequestReservationRow[]> {
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM billing_request_reservations
+     WHERE charge_state = 'pending'
+       AND created_at < $1
+     ORDER BY created_at ASC
+     LIMIT $2`,
+    [staleBeforeIso, Math.min(Math.max(limit, 1), 500)],
+  );
+  return (rows as BillingRequestReservationRow[]).map(
+    normalizeBillingRequestReservationRow,
+  );
+}
+
 async function getModelChargeSettlementMetadataUsing(
   client: pg.PoolClient,
   requestId: string,

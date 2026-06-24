@@ -84,6 +84,13 @@ export interface BillingSettlementSummary {
 const TOKEN_PRICE_DENOMINATOR = 1_000_000;
 const COIN_CENTS = 100;
 export const BILLING_ARREARS_MESSAGE = '积分已欠费，请补充积分后继续使用';
+export const BILLING_PRICE_MISCONFIGURED_MESSAGE =
+  '模型计费未正确配置，请联系管理员';
+
+/** 从预留 metadata 中安全读取数值字段；非有限数回退 0。 */
+function numberFromMetaOr0(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
 
 function currentYearMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -137,6 +144,31 @@ export async function reserveBillingForRequest(input: {
   if (inArrears) {
     throw new Error(BILLING_ARREARS_MESSAGE);
   }
+
+  // metered 官方模型必须有正价。否则计费流程照常跑、结算成本却恒为 0（免费白嫖）。
+  // 输入/输出价格只要其一 ≤0 就告警留痕（疑似漏配某档价格）；
+  // 两者都 ≤0 则视为彻底误配，直接拒绝起请求，避免静默漏收。
+  // BYOK（source==='custom'）自带 key、结算本就为 0，不要求平台价，跳过本校验。
+  const inputPrice = input.runtime.inputTokenPricePerMillionCoins ?? 0;
+  const outputPrice = input.runtime.outputTokenPricePerMillionCoins ?? 0;
+  if (input.runtime.source !== 'custom') {
+    if (inputPrice <= 0 || outputPrice <= 0) {
+      logger.warn(
+        {
+          userId: input.userId,
+          modelConfigId: input.runtime.modelConfigId,
+          model: input.runtime.model,
+          inputPrice,
+          outputPrice,
+        },
+        'metered 模型存在 ≤0 价格，疑似计费配置缺失',
+      );
+    }
+    if (inputPrice <= 0 && outputPrice <= 0) {
+      throw new Error(BILLING_PRICE_MISCONFIGURED_MESSAGE);
+    }
+  }
+
   const yearMonth = currentYearMonth();
   await reserveUserBalanceCoins({
     userId: input.userId,
@@ -150,6 +182,10 @@ export async function reserveBillingForRequest(input: {
       billingMode: input.runtime.billingMode,
       modelConfigId: input.runtime.modelConfigId,
       model: input.runtime.model,
+      // 记录"当时价格"：sweeper 兜底结算陈旧预留时按下单时价重算，
+      // 避免管理员事后改价导致补结算金额与用户实际请求时不一致。
+      inputTokenPricePerMillionCoins: inputPrice,
+      outputTokenPricePerMillionCoins: outputPrice,
       entitlementSnapshot: input.entitlementSnapshot ?? null,
     },
   });
@@ -229,6 +265,68 @@ export async function settleBillingReservation(input: {
 }): Promise<number> {
   const result = await settleBillingReservationDetailed(input);
   return result.actualChargeCoins;
+}
+
+/**
+ * 兜底结算一条陈旧的未结算预留（供 billing-sweeper 调用）。
+ *
+ * 正常结算依赖 API 进程内存里的 pending（携带 runtime 价格）；当请求被取消、超时、
+ * 或进程重启导致 pending 丢失时，结算被跳过、预留行永久停在 charge_state='pending'。
+ * 本函数不依赖内存态：从预留 metadata 取下单时记录的价格，配合调用方从对话日志找回的
+ * 真实 usage 重算成本并实扣；非 metered / BYOK / 找不回 usage 时以 0 关账，
+ * 确保悬挂预留被收尾、不再被反复扫描。
+ *
+ * @param input.requestId 预留对应的请求 ID。
+ * @param input.promptTokens 从对话日志找回的真实输入 Token（找不回传 0）。
+ * @param input.completionTokens 从对话日志找回的真实输出 Token（找不回传 0）。
+ * @returns 结算摘要；预留不存在或已结算时返回 null。
+ * @remarks settleUserModelChargeCoins 以 charge_state 幂等，本函数与正常结算并发安全。
+ */
+export async function recoverStalePendingReservation(input: {
+  requestId: string;
+  promptTokens: number;
+  completionTokens: number;
+}): Promise<BillingSettlementSummary | null> {
+  const reservation = await getBillingRequestReservationByRequestId(
+    input.requestId,
+  );
+  if (!reservation || reservation.charge_state === 'charged') {
+    return null;
+  }
+
+  const metadata = (reservation.metadata ?? {}) as Record<string, unknown>;
+  const isMetered = metadata.billingMode === 'metered';
+  const isCustom = metadata.source === 'custom';
+
+  // 非 metered 或 BYOK：成本恒 0，直接以 0 关账收尾。
+  if (!isMetered || isCustom) {
+    const result = await settleUserModelChargeCoins(input.requestId, 0, 0);
+    return {
+      actualChargeCoins: result.actualChargeCoins,
+      rawChargeCoins: result.rawChargeCoins,
+    };
+  }
+
+  const totalTokens = input.promptTokens + input.completionTokens;
+  const costCoins = calculateTokenCostCoins({
+    promptTokens: input.promptTokens,
+    completionTokens: input.completionTokens,
+    inputTokenPricePerMillionCoins: numberFromMetaOr0(
+      metadata.inputTokenPricePerMillionCoins,
+    ),
+    outputTokenPricePerMillionCoins: numberFromMetaOr0(
+      metadata.outputTokenPricePerMillionCoins,
+    ),
+  });
+  const result = await settleUserModelChargeCoins(
+    input.requestId,
+    totalTokens,
+    costCoins,
+  );
+  return {
+    actualChargeCoins: result.actualChargeCoins,
+    rawChargeCoins: result.rawChargeCoins,
+  };
 }
 
 export async function getMonthlyMeteredBillingSummary(
@@ -418,8 +516,7 @@ export async function updateMembershipPlanConfig(
   ) {
     const current = await getMembershipConfig(normalizedPlanKey);
     const finalMonthly = patch.monthlyPriceCoins ?? current.monthly_price_coins;
-    const finalDisplay =
-      patch.displayPriceCoins ?? current.display_price_coins;
+    const finalDisplay = patch.displayPriceCoins ?? current.display_price_coins;
     if (finalDisplay < finalMonthly) {
       return fail(400, '展示价积分不能低于月费积分');
     }

@@ -36,6 +36,7 @@ vi.mock('../src/request-scope.js', async () => {
 
 import { createRequestScope } from '../src/request-scope.js';
 import { executeContainerInput } from '../src/request-boundary.js';
+import { attachPartialUsage } from '../src/partial-usage.js';
 import type { LlmRuntimeSnapshot } from '../src/types.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
@@ -116,5 +117,52 @@ describe('executeContainerInput user pasted board persistence', () => {
       }),
     );
     expect(result.skillContext).toBeUndefined();
+  });
+
+  it('在请求中途报错时回传截至出错的真实 partial usage', async () => {
+    // 模拟:executePiRuntime 在跑了若干轮后抛错,error 上已挂载 partial usage。
+    const partialUsage = {
+      promptTokens: 1200,
+      completionTokens: 340,
+      totalTokens: 1540,
+    };
+    const boom = new Error('provider 第 3 轮返回错误');
+    attachPartialUsage(boom, partialUsage);
+    mockExecutePiRuntime.mockRejectedValueOnce(boom);
+
+    const result = await executeContainerInput(
+      {
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        llmRuntime,
+        userMessage: '看看事业',
+        inputKind: 'normal',
+        history: [],
+      },
+      createRequestScope(),
+    );
+
+    expect(result.status).toBe('error');
+    // 出错前已消耗的 token 必须随 error 响应回传,供宿主按真实用量结算。
+    expect(result.usage).toEqual(partialUsage);
+  });
+
+  it('error 上未挂载 partial usage 时,usage 为 undefined', async () => {
+    mockExecutePiRuntime.mockRejectedValueOnce(new Error('启动前就失败'));
+
+    const result = await executeContainerInput(
+      {
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        llmRuntime,
+        userMessage: '看看事业',
+        inputKind: 'normal',
+        history: [],
+      },
+      createRequestScope(),
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.usage).toBeUndefined();
   });
 });

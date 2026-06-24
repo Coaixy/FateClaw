@@ -40,6 +40,8 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
+  BILLING_PRICE_MISCONFIGURED_MESSAGE,
+  recoverStalePendingReservation,
   reserveBillingForRequest,
   settleBillingReservation,
   settleBillingReservationDetailed,
@@ -94,6 +96,8 @@ describe('metered billing plans', () => {
           source: 'official',
           modelConfigId: 'model-1',
           model: 'gpt-test',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
         } as never,
       }),
     ).resolves.toMatchObject({
@@ -106,6 +110,11 @@ describe('metered billing plans', () => {
         userId: 'user-1',
         amountCoins: 0,
         requestId: 'request-1',
+        // 下单时价格写入预留 metadata，供 sweeper 兜底结算按当时价重算。
+        metadata: expect.objectContaining({
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
+        }),
       }),
     );
   });
@@ -120,6 +129,8 @@ describe('metered billing plans', () => {
           source: 'official',
           modelConfigId: 'model-1',
           model: 'gpt-test',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 8,
         } as never,
         entitlementSnapshot: {
           planKey: null,
@@ -213,6 +224,119 @@ describe('metered billing plans', () => {
       }),
       '计费结算缺失待结算记录',
     );
+    expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
+  });
+
+  it('rejects metered requests whose input and output prices are both <= 0', async () => {
+    await expect(
+      reserveBillingForRequest({
+        userId: 'user-1',
+        requestId: 'request-1',
+        runtime: {
+          billingMode: 'metered',
+          source: 'official',
+          modelConfigId: 'model-1',
+          model: 'gpt-test',
+          inputTokenPricePerMillionCoins: 0,
+          outputTokenPricePerMillionCoins: 0,
+        } as never,
+      }),
+    ).rejects.toThrow(BILLING_PRICE_MISCONFIGURED_MESSAGE);
+    // 误配（全免费）直接拒绝起请求，不落预留。
+    expect(mockReserveUserBalanceCoins).not.toHaveBeenCalled();
+  });
+
+  it('warns but still reserves when only one price is <= 0', async () => {
+    await expect(
+      reserveBillingForRequest({
+        userId: 'user-1',
+        requestId: 'request-1',
+        runtime: {
+          billingMode: 'metered',
+          source: 'official',
+          modelConfigId: 'model-1',
+          model: 'gpt-test',
+          inputTokenPricePerMillionCoins: 3,
+          outputTokenPricePerMillionCoins: 0,
+        } as never,
+      }),
+    ).resolves.toMatchObject({ requestId: 'request-1' });
+    // 仅其一 ≤0：告警留痕但放行（避免误伤可能的特殊计价模型）。
+    expect(logger.warn).toHaveBeenCalled();
+    expect(mockReserveUserBalanceCoins).toHaveBeenCalledOnce();
+  });
+
+  it('recovers a stale pending reservation using prices recorded in metadata', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-stale',
+      charge_state: 'pending',
+      metadata: {
+        billingMode: 'metered',
+        source: 'official',
+        inputTokenPricePerMillionCoins: 3,
+        outputTokenPricePerMillionCoins: 8,
+      },
+    });
+    mockSettleUserModelChargeCoins.mockResolvedValueOnce({
+      actualChargeCoins: 0.63,
+      rawChargeCoins: 0.63,
+    });
+
+    const result = await recoverStalePendingReservation({
+      requestId: 'request-stale',
+      promptTokens: 100_000,
+      completionTokens: 41_873,
+    });
+
+    expect(result).toMatchObject({ actualChargeCoins: 0.63 });
+    // 按"当时价"重算：100000*3/1e6 + 41873*8/1e6 = 0.3 + 0.334984 → 0.63（四舍五入到分）。
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-stale',
+      141_873,
+      0.63,
+    );
+  });
+
+  it('closes a stale BYOK reservation at zero charge', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-byok-stale',
+      charge_state: 'pending',
+      metadata: { billingMode: 'metered', source: 'custom' },
+    });
+    mockSettleUserModelChargeCoins.mockResolvedValueOnce({
+      actualChargeCoins: 0,
+      rawChargeCoins: 0,
+    });
+
+    const result = await recoverStalePendingReservation({
+      requestId: 'request-byok-stale',
+      promptTokens: 1000,
+      completionTokens: 500,
+    });
+
+    expect(result).toEqual({ actualChargeCoins: 0, rawChargeCoins: 0 });
+    // BYOK 成本恒 0，以 0 关账收尾。
+    expect(mockSettleUserModelChargeCoins).toHaveBeenCalledWith(
+      'request-byok-stale',
+      0,
+      0,
+    );
+  });
+
+  it('skips an already-charged reservation', async () => {
+    mockGetBillingRequestReservationByRequestId.mockResolvedValueOnce({
+      request_id: 'request-charged',
+      charge_state: 'charged',
+      metadata: { billingMode: 'metered', source: 'official' },
+    });
+
+    const result = await recoverStalePendingReservation({
+      requestId: 'request-charged',
+      promptTokens: 100,
+      completionTokens: 100,
+    });
+
+    expect(result).toBeNull();
     expect(mockSettleUserModelChargeCoins).not.toHaveBeenCalled();
   });
 

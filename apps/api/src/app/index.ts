@@ -30,6 +30,10 @@ import {
   stopRetentionWorker,
 } from '../runtime/retention.js';
 import {
+  startBillingSweepWorker,
+  stopBillingSweepWorker,
+} from '../runtime/billing-sweeper.js';
+import {
   startPiSessionHealthWorker,
   stopPiSessionHealthWorker,
 } from '../runtime/pi-session-health-worker.js';
@@ -86,6 +90,8 @@ export async function main(): Promise<void> {
 
   // 启动数据保留策略后台任务（定时清理过期 trace_events）
   startRetentionWorker();
+  // 启动计费兜底扫描任务（补结算取消/超时/重启遗留的未结算预留，防漏收）
+  startBillingSweepWorker();
   // 启动 Pi session 健康维护任务（未启用时只定时检查后台配置）
   startPiSessionHealthWorker();
 
@@ -101,6 +107,7 @@ export async function main(): Promise<void> {
     try {
       stopAllLocalAgents();
       stopRetentionWorker();
+      stopBillingSweepWorker();
       stopPiSessionHealthWorker();
       await disconnectRedis();
       await closeDatabase();
