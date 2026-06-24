@@ -30,6 +30,7 @@ import {
   pushAiChatOutboxMessage,
 } from '../ai-chat-stream.js';
 import { log } from '../io.js';
+import { attachPartialUsage } from '../partial-usage.js';
 import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
@@ -260,6 +261,13 @@ export async function runPiSession(args: {
         messages: session.state.messages,
       }),
     };
+  } catch (err) {
+    // usage 已被事件采集器就地累加为"截至出错时的真实 partial 用量"。
+    // 挂到 error 上,供 request-boundary 的 catch 取出回传给宿主结算,
+    // 否则请求中途报错(provider 报错 / 工具异常 / compaction 失败 / 中断)时,
+    // 出错前已消耗的 token 会按 0 关账,全部免费(漏收)。
+    attachPartialUsage(err, usage);
+    throw err;
   } finally {
     unsubscribe();
     session.dispose();

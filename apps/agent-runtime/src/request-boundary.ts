@@ -3,6 +3,7 @@ import { mapContainerErrorToPublicError } from './public-error.js';
 import { listTranscriptEvents } from './transcript-store.js';
 import { createRequestRuntime } from './runtime.js';
 import type { AgentRuntimeDeps } from './deps.js';
+import { readPartialUsage } from './partial-usage.js';
 import { executePiRuntime } from './pi-runtime/index.js';
 import {
   createRequestScope,
@@ -93,12 +94,16 @@ export async function executeContainerInput(
     // 丢弃它们等于对排障场景丢失最有价值的信息。
     const transcript = listTranscriptEvents(requestScope);
     const traceEvents = listScopedTraceEvents(requestScope);
+    // 回传截至出错时的真实 partial usage(由 runPiSession 挂在 error 上),
+    // 让宿主对中途报错的请求也按真实已消耗 token 结算,而非按 0 关账漏收。
+    const partialUsage = readPartialUsage(error);
     return {
       status: 'error',
       result: null,
       newSessionId: sessionId,
       error: errorMessage,
       ...mapContainerErrorToPublicError(errorMessage, { llmRuntime }),
+      usage: partialUsage,
       transcript: transcript.length > 0 ? transcript : undefined,
       model,
       provider,

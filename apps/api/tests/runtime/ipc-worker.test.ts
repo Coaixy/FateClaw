@@ -183,12 +183,9 @@ describe('cancelAiChatSessionRequest', () => {
       'ipc:web:user-1:cancel',
       expect.stringContaining('"requestId":"req-1"'),
     );
-    expect(mockSettleBillingReservation).toHaveBeenCalledWith({
-      requestId: 'req-1',
-      runtime: undefined,
-      promptTokens: 0,
-      completionTokens: 0,
-    });
+    // 取消不再就地 settle(0,0)：预留保留为 charge_state='pending'，
+    // 由 billing-sweeper 按 daemon 中断响应落库的真实 usage 兜底补结算，避免取消前 token 免费。
+    expect(mockSettleBillingReservation).not.toHaveBeenCalled();
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
     expect(pending.resolve).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -323,14 +320,16 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     let releaseGate: ((value: unknown) => void) | undefined;
     let releaseRuntime: (() => void) | undefined;
     mockEval.mockImplementationOnce(
-      () => new Promise((resolve) => {
-        releaseGate = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          releaseGate = resolve;
+        }),
     );
     mockEnsureLocalAgentRunning.mockImplementationOnce(
-      () => new Promise<void>((resolve) => {
-        releaseRuntime = resolve;
-      }),
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRuntime = resolve;
+        }),
     );
 
     const result = await submitAiChatInboxRequest({
