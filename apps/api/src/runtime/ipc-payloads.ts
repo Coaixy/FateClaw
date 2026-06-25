@@ -206,6 +206,18 @@ export interface ProgressIpcPayload {
     tool_label?: string;
     tool_status?: 'running' | 'completed' | 'failed';
     tool_path?: string;
+    /** 工具输入摘要 / 搜索词，用作富卡片标题。 */
+    query_text?: string;
+    /** 所属 agent 回合序号；思考块稳定 id 与穿插排序用。 */
+    turn_index?: number;
+    /** 工具调用结果预览（已归一化限长），供历史富卡片回看。 */
+    tool_result?: {
+      query?: string;
+      count?: number;
+      items?: Array<{ title: string; url?: string; domain?: string }>;
+      text?: string;
+      truncated?: boolean;
+    };
   };
 }
 

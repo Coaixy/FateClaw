@@ -1,14 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Brain,
   ChevronDown,
   Crown,
+  Globe,
   Loader2,
-  Wrench,
+  Search,
 } from 'lucide-react';
 
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
@@ -18,6 +19,7 @@ import { CollapsibleMessage } from '@/components/chat/collapsible-message';
 import { GuashiScriptCard } from '@/components/ai-chat/guashi-script-card';
 import { MessageFooter } from '@/components/chat/message-footer';
 import { Message } from '@/features/chat/api';
+import type { ToolResultPreviewDto } from '@fateclaw/contracts/chat';
 import { useI18n } from '@/lib/i18n';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
@@ -29,7 +31,7 @@ import {
   isKnowledgeTrajectoryMessage,
   isStreamingAssistantMessage,
   isThinkingMessage,
-  isToolTraceMessage,
+  isTrajectoryBlockMessage,
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
@@ -136,17 +138,19 @@ export function AiChatMessageList({
     return <ChatLoadingState count={4} />;
   }
 
-  const { rows, pendingToolTraces } = buildDisplayRows(messages);
+  const { rows, pendingTrajectory } = buildDisplayRows(messages);
   const hasStreamingAssistantMessage = messages.some(
     isStreamingAssistantMessage,
   );
   const hasThinkingMessage = messages.some(isThinkingMessage);
   const hasCompletedAssistantTurn = hasFinalAssistantAfterLatestUser(messages);
-  const showThinkingIndicator =
+  // 回答正文还没开始流式输出时，把"挂起的过程时间线 + 思考中"作为流式态展示；
+  // 一旦回答开始流式（streaming 消息成为 host），过程块会上移挂到回答上方，此处不再显示。
+  const showStreamingTrajectory =
     !hasCompletedAssistantTurn &&
     sending &&
-    ((!hasStreamingAssistantMessage && !hasThinkingMessage) ||
-      pendingToolTraces.length > 0);
+    !hasStreamingAssistantMessage &&
+    (pendingTrajectory.length > 0 || !hasThinkingMessage);
 
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
@@ -155,14 +159,25 @@ export function AiChatMessageList({
           <Loader2 size={15} className="animate-spin text-muted" />
         </div>
       )}
-      {rows.map(({ message, toolTraces }, index) => (
-        <AiChatMessageRow
-          key={message.id}
-          message={message}
-          toolTraces={toolTraces}
-          animationIndex={index}
-        />
-      ))}
+      {rows.map((row, index) =>
+        row.trajectoryOnly ? (
+          <div
+            key={row.message.id}
+            className="max-w-2xl mx-auto flex justify-start animate-message-in"
+          >
+            <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+              <TrajectoryTimeline blocks={row.trajectory} completed />
+            </div>
+          </div>
+        ) : (
+          <AiChatMessageRow
+            key={row.message.id}
+            message={row.message}
+            trajectory={row.trajectory}
+            animationIndex={index}
+          />
+        ),
+      )}
 
       {rows.length > 0 && latestMessageNotice && (
         <LatestMessageBillingNotice
@@ -171,65 +186,64 @@ export function AiChatMessageList({
         />
       )}
 
-      {showThinkingIndicator && (
-        <ThinkingIndicator
+      {showStreamingTrajectory && (
+        <StreamingTrajectory
           progressLabel={progressLabel}
-          toolTraces={pendingToolTraces}
+          pendingTrajectory={pendingTrajectory}
         />
       )}
     </div>
   );
 }
 
+type DisplayRow = {
+  message: Message;
+  trajectory: Message[];
+  trajectoryOnly?: boolean;
+};
+
+/**
+ * 把扁平消息列表按 assistant 回合归并：思考 / 工具调用 / 知识检索这些「过程块」
+ * 收束到紧随其后的真实回答上方，渲染为左侧穿插时间线（Claude web 风格）。
+ *
+ * @returns rows 为可渲染行；pendingTrajectory 为尾部尚未等到回答的过程块（流式态用）。
+ */
 function buildDisplayRows(messages: Message[]) {
-  const rows: Array<{ message: Message; toolTraces: Message[] }> = [];
-  let pendingToolTraces: Message[] = [];
-  let latestToolTraceHostIndex: number | null = null;
+  const rows: DisplayRow[] = [];
+  let pending: Message[] = [];
 
-  // tool 事件可能出现在回复文本之前或之后；统一收束到最近的真实 AI 回复底部。
-  const attachPendingToolTracesToLatestHost = () => {
-    if (
-      pendingToolTraces.length === 0 ||
-      latestToolTraceHostIndex === null
-    ) {
-      return;
-    }
-
-    const hostRow = rows[latestToolTraceHostIndex];
-    rows[latestToolTraceHostIndex] = {
-      ...hostRow,
-      toolTraces: [...hostRow.toolTraces, ...pendingToolTraces],
-    };
-    pendingToolTraces = [];
+  // 极少数情况下过程块后面直接来了用户消息（没有回答），单独成一行避免丢失。
+  const flushPendingAsRow = () => {
+    if (pending.length === 0) return;
+    rows.push({
+      message: pending[pending.length - 1],
+      trajectory: pending,
+      trajectoryOnly: true,
+    });
+    pending = [];
   };
 
   for (const message of messages) {
-    if (message.is_bot_message && isToolTraceMessage(message)) {
-      pendingToolTraces = [...pendingToolTraces, message];
+    if (message.is_bot_message && isTrajectoryBlockMessage(message)) {
+      pending = [...pending, message];
       continue;
     }
 
     if (!message.is_bot_message) {
-      attachPendingToolTracesToLatestHost();
-      latestToolTraceHostIndex = null;
-      rows.push({ message, toolTraces: [] });
+      flushPendingAsRow();
+      rows.push({ message, trajectory: [] });
       continue;
     }
 
-    const canAttachToolTraces = canHostToolTraceFooter(message);
-    rows.push({
-      message,
-      toolTraces: canAttachToolTraces ? pendingToolTraces : [],
-    });
-    if (canAttachToolTraces) {
-      pendingToolTraces = [];
-      latestToolTraceHostIndex = rows.length - 1;
+    // 真实 AI 回答：把它上方累积的过程块挂上来。
+    const canHost = canHostToolTraceFooter(message);
+    rows.push({ message, trajectory: canHost ? pending : [] });
+    if (canHost) {
+      pending = [];
     }
   }
 
-  attachPendingToolTracesToLatestHost();
-
-  return { rows, pendingToolTraces };
+  return { rows, pendingTrajectory: pending };
 }
 
 function LatestMessageBillingNotice({
@@ -306,11 +320,11 @@ function shouldShowWalletRecovery(content: string) {
 
 function AiChatMessageRow({
   message,
-  toolTraces,
+  trajectory,
   animationIndex,
 }: {
   message: Message;
-  toolTraces: Message[];
+  trajectory: Message[];
   animationIndex: number;
 }) {
   const { locale, t } = useI18n();
@@ -322,7 +336,6 @@ function AiChatMessageRow({
       ? message.metadata
       : null;
   const isErrorMessage = isBot && messageMetadata?.kind === 'error';
-  const isThinkingBubble = isBot && isThinkingMessage(message);
   const isFinalMessage = messageMetadata?.kind === 'final' || isErrorMessage;
   const { body: displayContent } = isBot
     ? splitFinalTurnMarker(message.content)
@@ -342,46 +355,11 @@ function AiChatMessageRow({
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
   const showWalletRecovery =
     isErrorMessage && shouldShowWalletRecovery(displayContent);
-
-  // 知识检索轨迹：紧凑时间线样式
-  if (isBot && isKnowledgeTrajectoryMessage(message)) {
-    const stage = messageMetadata?.stage as string | undefined;
-    const isSectionRead = stage === 'knowledge_section';
-    return (
-      <div
-        className="max-w-2xl mx-auto flex items-center gap-2 animate-message-in"
-        style={{ animationDelay: `${Math.min(animationIndex * 30, 120)}ms` }}
-      >
-        <div
-          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-            stage === 'knowledge_hit'
-              ? 'bg-primary'
-              : isSectionRead
-                ? 'bg-primary/50'
-                : 'bg-muted'
-          }`}
-        />
-        <span
-          className={`text-[11px] sm:text-[12px] ${
-            stage === 'knowledge_hit'
-              ? 'text-primary font-medium'
-              : 'text-muted'
-          }`}
-        >
-          {displayContent}
-        </span>
-      </div>
-    );
-  }
-
-  if (isThinkingBubble) {
-    return (
-      <ThinkingMessageBox
-        content={displayContent}
-        animationIndex={animationIndex}
-      />
-    );
-  }
+  // 过程时间线展示在回答上方（Claude web 风格）；回答为最终态时把仍在「运行中」的工具收尾。
+  const trajectoryNode =
+    isBot && trajectory.length > 0 ? (
+      <TrajectoryTimeline blocks={trajectory} completed={isFinalMessage} />
+    ) : null;
 
   if (hasChart && !isFinalMessage) {
     return (
@@ -389,9 +367,9 @@ function AiChatMessageRow({
         className="w-full max-w-6xl mx-auto animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
       >
+        {trajectoryNode && <div className="mb-2">{trajectoryNode}</div>}
         <ArtifactRenderer entries={toolContext} />
         <ArtifactDebug entries={toolContext} />
-        {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
         <MessageFooter
           isBot={isBot}
           durationLabel={durationLabel}
@@ -413,6 +391,8 @@ function AiChatMessageRow({
           isBot ? 'items-start sm:max-w-[78%]' : 'items-end sm:max-w-[74%]'
         }`}
       >
+        {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
+
         <div className="group relative max-w-full">
           <div
             role={isErrorMessage ? 'alert' : undefined}
@@ -450,13 +430,6 @@ function AiChatMessageRow({
           </div>
         )}
 
-        {isBot && toolTraces.length > 0 && (
-          <ToolTraceList
-            messages={toolTraces}
-            forceComplete={isFinalMessage}
-          />
-        )}
-
         <MessageFooter
           isBot={isBot}
           durationLabel={durationLabel}
@@ -467,190 +440,379 @@ function AiChatMessageRow({
   );
 }
 
-function ThinkingMessageBox({
-  content,
-  animationIndex,
+type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
+
+type TrajectoryNode =
+  | { id: string; type: 'thinking'; content: string }
+  | {
+      id: string;
+      type: 'tool';
+      label: string;
+      query?: string;
+      path?: string;
+      status: ToolTraceStatus;
+      result?: ToolResultPreviewDto | null;
+    }
+  | { id: string; type: 'knowledge'; text: string; stage?: string };
+
+function readMetadataRecord(message: Message): Record<string, unknown> | null {
+  return message.metadata &&
+    typeof message.metadata === 'object' &&
+    !Array.isArray(message.metadata)
+    ? (message.metadata as Record<string, unknown>)
+    : null;
+}
+
+/** 把一条过程消息解析成时间线节点视图模型。 */
+function readTrajectoryNode(message: Message): TrajectoryNode {
+  const metadata = readMetadataRecord(message);
+
+  if (isThinkingMessage(message)) {
+    return { id: message.id, type: 'thinking', content: message.content };
+  }
+
+  if (isKnowledgeTrajectoryMessage(message)) {
+    return {
+      id: message.id,
+      type: 'knowledge',
+      text: message.content,
+      stage: typeof metadata?.stage === 'string' ? metadata.stage : undefined,
+    };
+  }
+
+  const rawStatus = metadata?.tool_status;
+  const status: ToolTraceStatus =
+    rawStatus === 'running' || rawStatus === 'completed' || rawStatus === 'failed'
+      ? rawStatus
+      : undefined;
+  const result =
+    metadata?.tool_result &&
+    typeof metadata.tool_result === 'object' &&
+    !Array.isArray(metadata.tool_result)
+      ? (metadata.tool_result as ToolResultPreviewDto)
+      : null;
+
+  return {
+    id: message.id,
+    type: 'tool',
+    label:
+      (typeof metadata?.tool_name === 'string' && metadata.tool_name) ||
+      (typeof metadata?.tool_label === 'string' && metadata.tool_label) ||
+      'tool',
+    query:
+      typeof metadata?.query_text === 'string' ? metadata.query_text : undefined,
+    path:
+      typeof metadata?.tool_path === 'string'
+        ? sanitizeToolPath(metadata.tool_path)
+        : undefined,
+    status,
+    result,
+  };
+}
+
+/**
+ * assistant 回合的过程时间线：左侧竖线 + 图标节点，思考/工具/检索按时序穿插。
+ *
+ * @param blocks 过程消息（思考 / 工具调用 / 知识检索），保持原始顺序。
+ * @param forceComplete 回答已是最终态时，把仍标记「运行中」的工具按完成展示。
+ */
+type ThinkingNode = Extract<TrajectoryNode, { type: 'thinking' }>;
+type TrajectoryChildNode = Exclude<TrajectoryNode, { type: 'thinking' }>;
+type TrajectoryGroup = {
+  thinking: ThinkingNode | null;
+  children: TrajectoryChildNode[];
+};
+
+/**
+ * 按思考分组：每个思考块是一组的父级，其后的工具/检索作为子内容挂在该思考下
+ * （层级上思考 > 工具）。思考之前出现的工具/检索归入一个无思考头的组，平铺在顶层。
+ */
+function groupTrajectoryNodes(nodes: TrajectoryNode[]): TrajectoryGroup[] {
+  const groups: TrajectoryGroup[] = [];
+  let current: TrajectoryGroup | null = null;
+  for (const node of nodes) {
+    if (node.type === 'thinking') {
+      current = { thinking: node, children: [] };
+      groups.push(current);
+    } else {
+      if (!current) {
+        current = { thinking: null, children: [] };
+        groups.push(current);
+      }
+      current.children.push(node);
+    }
+  }
+  return groups;
+}
+
+/** 渲染一个子节点（工具调用 / 知识检索）。 */
+function renderTrajectoryChild(node: TrajectoryChildNode, completed: boolean) {
+  if (node.type === 'knowledge') {
+    return <KnowledgeNode key={node.id} text={node.text} stage={node.stage} />;
+  }
+  return <ToolNode key={node.id} node={node} completed={completed} />;
+}
+
+function TrajectoryTimeline({
+  blocks,
+  completed = false,
 }: {
-  content: string;
-  animationIndex: number;
+  blocks: Message[];
+  completed?: boolean;
 }) {
-  const { t } = useI18n();
-  const displayContent = content.trim() || t('aiChat.messageList.thinkingFallback');
+  const groups = groupTrajectoryNodes(blocks.map(readTrajectoryNode));
 
   return (
-    <div
-      className="max-w-2xl mx-auto flex justify-start animate-message-in"
-      style={{ animationDelay: `${Math.min(animationIndex * 30, 120)}ms` }}
-    >
-      <div className="flex min-w-0 max-w-[82%] flex-col items-start sm:max-w-[62%]">
-        <div className="max-w-full overflow-hidden rounded-lg border border-hairline bg-surface-card/80 px-2.5 py-2 shadow-sm">
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium leading-4 text-muted-soft">
-            <Brain size={11} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t('aiChat.messageList.thinking')}</span>
-          </div>
-          <div className="thinking-scrollbar max-h-24 overflow-y-auto overscroll-contain pr-1 text-[11px] leading-5 text-muted whitespace-pre-wrap break-words">
-            {displayContent}
-          </div>
-        </div>
+    <div className="w-full max-w-full">
+      <div className="relative flex flex-col gap-2.5 border-l border-hairline pl-4">
+        {groups.map((group, index) =>
+          group.thinking ? (
+            <ThinkingGroup
+              key={group.thinking.id}
+              thinking={group.thinking}
+              childNodes={group.children}
+              completed={completed}
+            />
+          ) : (
+            <Fragment key={`orphan-${index}`}>
+              {group.children.map((child) =>
+                renderTrajectoryChild(child, completed),
+              )}
+            </Fragment>
+          ),
+        )}
       </div>
     </div>
   );
 }
 
-type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
-
-function getToolTraceStatusLabel(status: ToolTraceStatus) {
-  if (status === 'running') return 'aiChat.messageList.toolStatusRunning';
-  if (status === 'completed') return 'aiChat.messageList.toolStatusCompleted';
-  if (status === 'failed') return 'aiChat.messageList.toolStatusFailed';
-  return 'aiChat.messageList.toolStatusUnknown';
+/** 时间线左侧的图标圆点，覆盖在竖线上。 */
+function TimelineBullet({
+  children,
+  tone = 'muted',
+}: {
+  children: React.ReactNode;
+  tone?: 'muted' | 'primary' | 'error';
+}) {
+  const toneClass =
+    tone === 'primary'
+      ? 'text-primary'
+      : tone === 'error'
+        ? 'text-error'
+        : 'text-muted-soft';
+  return (
+    <span
+      aria-hidden="true"
+      className={`absolute -left-[23px] top-0 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-hairline bg-surface-card ${toneClass}`}
+    >
+      {children}
+    </span>
+  );
 }
 
-function ToolTraceList({
-  messages,
-  forceComplete = false,
+/**
+ * 思考组：灰色正文 + 其下嵌套的工具/检索子内容（思考 > 工具）。
+ *
+ * 流式中默认展开，回答完成（completed）后默认折叠；用户手动切换后不再被默认值覆盖。
+ */
+function ThinkingGroup({
+  thinking,
+  childNodes,
+  completed,
 }: {
-  messages: Message[];
-  forceComplete?: boolean;
+  thinking: ThinkingNode;
+  childNodes: TrajectoryChildNode[];
+  completed: boolean;
 }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
-  const traces = messages.map((message) => {
-    const metadata =
-      message.metadata &&
-      typeof message.metadata === 'object' &&
-      !Array.isArray(message.metadata)
-        ? message.metadata
-        : null;
-    const rawStatus = metadata?.tool_status as ToolTraceStatus;
-    const status =
-      forceComplete && rawStatus === 'running' ? 'completed' : rawStatus;
-    const path =
-      typeof metadata?.tool_path === 'string'
-        ? sanitizeToolPath(metadata.tool_path)
-        : undefined;
-    const label =
-      (metadata?.tool_name as string | undefined) ||
-      (metadata?.tool_label as string | undefined) ||
-      'tool';
-
-    return {
-      id: message.id,
-      label,
-      path,
-      status,
-      statusLabel: getToolTraceStatusLabel(status),
-    };
-  });
-  const runningCount = traces.filter((trace) => trace.status === 'running').length;
-  const failedCount = traces.filter((trace) => trace.status === 'failed').length;
-  const completedCount = traces.filter(
-    (trace) => trace.status === 'completed',
-  ).length;
-  const latestTrace = traces[traces.length - 1];
-  const statusSummary =
-    runningCount > 0
-      ? t('aiChat.messageList.runningCount', { count: runningCount })
-      : failedCount > 0
-        ? t('aiChat.messageList.failedCount', { count: failedCount })
-        : completedCount > 0
-          ? t('aiChat.messageList.completedCount', { count: completedCount })
-          : t('aiChat.messageList.toolStatusPending');
+  const [expanded, setExpanded] = useState(!completed);
+  const userToggledRef = useRef(false);
+  // 完成态翻转时同步默认折叠/展开，但尊重用户的手动选择。
+  useEffect(() => {
+    if (!userToggledRef.current) {
+      setExpanded(!completed);
+    }
+  }, [completed]);
+  const text =
+    thinking.content.trim() || t('aiChat.messageList.thinkingFallback');
 
   return (
-    <div className="mt-1 max-w-full">
+    <div className="relative">
+      <TimelineBullet>
+        <Brain size={11} strokeWidth={1.8} />
+      </TimelineBullet>
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        className="group inline-flex min-h-7 max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-hairline/70 bg-surface-card/70 px-2 py-1 text-[10px] font-medium text-muted shadow-sm transition-colors hover:border-primary/30 hover:bg-surface-cream-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        onClick={() => {
+          userToggledRef.current = true;
+          setExpanded((value) => !value);
+        }}
+        className="group inline-flex items-center gap-1 text-[11px] font-medium text-muted-soft transition-colors hover:text-ink focus-visible:outline-none"
       >
-        <Wrench
-          size={11}
-          strokeWidth={1.8}
-          aria-hidden="true"
-          className="shrink-0 text-muted-soft group-hover:text-primary"
-        />
-        <span className="shrink-0">{t('aiChat.messageList.toolTrace')}</span>
-        <span className="shrink-0 rounded-full bg-surface-soft px-1.5 py-0.5 tabular-nums text-muted-soft">
-          {traces.length}
-        </span>
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 tabular-nums ${
-            runningCount > 0
-              ? 'bg-primary/10 text-primary'
-              : failedCount > 0
-                ? 'bg-error/10 text-error'
-                : 'bg-surface-soft text-muted-soft'
-          }`}
-        >
-          {statusSummary}
-        </span>
-        {latestTrace?.path && (
-          <span className="hidden min-w-0 max-w-[180px] truncate font-mono text-[9px] text-muted-soft sm:inline">
-            {latestTrace.path}
+        <span>{t('aiChat.messageList.thinking')}</span>
+        {!expanded && childNodes.length > 0 && (
+          <span className="text-muted-soft/70">
+            · {t('aiChat.messageList.toolCallCount', { count: childNodes.length })}
           </span>
         )}
         <ChevronDown
           size={12}
           strokeWidth={1.8}
-          aria-hidden="true"
-          className={`shrink-0 text-muted-soft transition-transform duration-150 group-hover:text-primary ${
+          className={`transition-transform duration-150 ${
             expanded ? 'rotate-180' : ''
           }`}
         />
       </button>
-
       {expanded && (
-        <div className="mt-1.5 flex max-w-full flex-col gap-1 rounded-lg border border-hairline/70 bg-surface-card/45 p-1.5 shadow-sm">
-          {traces.map((trace) => (
-            <div key={trace.id} className="flex min-w-0">
-              <div className="min-w-0 flex flex-wrap items-center gap-1.5 text-[10px]">
-                <ToolTraceLabel label="Tool" value={trace.label} />
-                <ToolTraceLabel label="Status" value={t(trace.statusLabel)} />
-                {trace.path && (
-                  <ToolTraceLabel
-                    label="Path"
-                    value={trace.path}
-                    valueClassName="font-mono text-[9px]"
-                  />
-                )}
-              </div>
+        <>
+          <div className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-6 text-muted">
+            {text}
+          </div>
+          {childNodes.length > 0 && (
+            <div className="mt-2 flex flex-col gap-2 border-l border-hairline/60 pl-4">
+              {childNodes.map((child) => renderTrajectoryChild(child, completed))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function ToolTraceLabel({
-  label,
-  value,
-  valueClassName = '',
-}: {
-  label: string;
-  value: string;
-  valueClassName?: string;
-}) {
+/** 知识检索轨迹节点。 */
+function KnowledgeNode({ text, stage }: { text: string; stage?: string }) {
+  const isHit = stage === 'knowledge_hit';
   return (
-    <span className="inline-flex max-w-full min-w-0 overflow-hidden rounded border border-hairline bg-surface-card text-muted shadow-sm">
-      <span className="shrink-0 border-r border-hairline bg-surface-soft px-1.5 py-0.5 text-muted-soft">
-        {label}
+    <div className="relative">
+      <TimelineBullet tone={isHit ? 'primary' : 'muted'}>
+        <Search size={11} strokeWidth={1.8} />
+      </TimelineBullet>
+      <span
+        className={`text-[12px] leading-6 ${
+          isHit ? 'font-medium text-primary' : 'text-muted'
+        }`}
+      >
+        {text}
       </span>
-      <span className={`min-w-0 truncate px-1.5 py-0.5 ${valueClassName}`}>
-        {value}
-      </span>
-    </span>
+    </div>
   );
 }
 
-function ThinkingIndicator({
+// 这些工具有友好中文标签（见 i18n aiChat.messageList.toolLabels）；未知工具回退裸名。
+const FRIENDLY_TOOL_NAMES = new Set([
+  'grep',
+  'read',
+  'read_soul',
+  'edit_soul',
+  'reverse_ganzhi',
+  'get_ganzhi_by_datetime',
+  'get_current_time',
+  'get_session_board',
+]);
+
+/** 老数据可能把原始 JSON 包装存进了 text，遇到 JSON 直接不展示，避免脏卡片。 */
+function looksLikeRawJson(value: string): boolean {
+  return /^\s*[{[]/.test(value);
+}
+
+/** 工具调用节点：标题 + 结果计数 + 来源列表（无结果数据时降级为简化行）。 */
+function ToolNode({
+  node,
+  completed,
+}: {
+  node: Extract<TrajectoryNode, { type: 'tool' }>;
+  completed: boolean;
+}) {
+  const { t } = useI18n();
+  const status =
+    completed && node.status === 'running' ? 'completed' : node.status;
+  const result = node.result ?? undefined;
+  const friendlyLabel = FRIENDLY_TOOL_NAMES.has(node.label)
+    ? t(`aiChat.messageList.toolLabels.${node.label}`)
+    : node.label;
+  const title = node.query || result?.query || friendlyLabel;
+  const items = result?.items ?? [];
+  const count =
+    typeof result?.count === 'number'
+      ? result.count
+      : items.length > 0
+        ? items.length
+        : undefined;
+
+  const tone = status === 'failed' ? 'error' : status === 'running' ? 'primary' : 'muted';
+
+  return (
+    <div className="relative">
+      <TimelineBullet tone={tone}>
+        {status === 'running' ? (
+          <Loader2 size={11} className="animate-spin" />
+        ) : status === 'failed' ? (
+          <AlertCircle size={11} strokeWidth={1.8} />
+        ) : (
+          <Globe size={11} strokeWidth={1.8} />
+        )}
+      </TimelineBullet>
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-[12px] leading-6 text-ink">
+          {title}
+        </span>
+        {typeof count === 'number' && (
+          <span className="shrink-0 text-[11px] text-muted-soft">
+            {t('aiChat.messageList.resultsCount', { count })}
+          </span>
+        )}
+      </div>
+
+      {node.path && !node.query && (
+        <div className="mt-0.5 truncate font-mono text-[10px] text-muted-soft">
+          {node.path}
+        </div>
+      )}
+
+      {items.length > 0 ? (
+        <div className="mt-1.5 max-h-44 overflow-y-auto rounded-lg border border-hairline bg-surface-card/60">
+          {items.map((item, index) => (
+            <div
+              key={`${node.id}-${index}`}
+              className="flex items-center justify-between gap-3 border-b border-hairline/60 px-2.5 py-1.5 last:border-b-0"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Globe
+                  size={12}
+                  strokeWidth={1.8}
+                  className="shrink-0 text-muted-soft"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 truncate text-[12px] text-ink">
+                  {item.title}
+                </span>
+              </span>
+              {item.domain && (
+                <span className="shrink-0 truncate text-[11px] text-muted-soft">
+                  {item.domain}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : result?.text && !looksLikeRawJson(result.text) ? (
+        <div className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[11px] leading-5 text-muted">
+          {result.text}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** 流式态：回答还没开始输出时，展示已累积的过程时间线 + "正在回复"提示。 */
+function StreamingTrajectory({
   progressLabel,
-  toolTraces,
+  pendingTrajectory,
 }: {
   progressLabel: string | null;
-  toolTraces: Message[];
+  pendingTrajectory: Message[];
 }) {
   const { t } = useI18n();
   const statusLabel = progressLabel
@@ -659,21 +821,21 @@ function ThinkingIndicator({
 
   return (
     <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
-      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
-        <div className="max-w-full rounded-xl px-3 py-2 bg-surface-card border border-hairline shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] leading-6 text-muted">
-            <div className="flex items-center gap-1" aria-hidden="true">
-              {[0, 1, 2].map((index) => (
-                <div
-                  key={index}
-                  className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
-                  style={{ animationDelay: `${index * 0.2}s` }}
-                />
-              ))}
-            </div>
-            <span>{statusLabel}</span>
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2 sm:max-w-[78%]">
+        {pendingTrajectory.length > 0 && (
+          <TrajectoryTimeline blocks={pendingTrajectory} />
+        )}
+        <div className="flex items-center gap-2 text-[12px] leading-6 text-muted">
+          <div className="flex items-center gap-1" aria-hidden="true">
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
+                style={{ animationDelay: `${index * 0.2}s` }}
+              />
+            ))}
           </div>
-          {toolTraces.length > 0 && <ToolTraceList messages={toolTraces} />}
+          <span>{statusLabel}</span>
         </div>
       </div>
     </div>

@@ -141,49 +141,46 @@ function withoutReconnectNoticeMessages(messages: Message[]) {
   return messages.filter((message) => !isReconnectNoticeMessage(message));
 }
 
-function appendTransientAssistantMessages(
-  nextMessages: Message[],
-  previousMessages: Message[],
-  activeStreamingMessageIds: string[],
-) {
-  const existingIds = new Set(nextMessages.map((message) => message.id));
-  const streamingMessages = activeStreamingMessageIds.flatMap((id) => {
-    if (existingIds.has(id)) return [];
-    const streamingMessage = previousMessages.find(
-      (message) => message.id === id,
-    );
-    return streamingMessage ? [streamingMessage] : [];
-  });
-  const streamingMessageIds = new Set(
-    streamingMessages.map((message) => message.id),
-  );
-  const shouldPreserveLocalErrors =
-    !hasFinalAssistantAfterLatestUser(nextMessages);
-  let latestUserIndex = -1;
-
-  for (let index = previousMessages.length - 1; index >= 0; index -= 1) {
-    if (!previousMessages[index].is_bot_message) {
-      latestUserIndex = index;
-      break;
+/** 找到列表里最后一条用户（非 bot）消息的下标；没有则返回 -1。 */
+function findLastUserMessageIndex(messages: Message[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (!messages[index].is_bot_message) {
+      return index;
     }
   }
+  return -1;
+}
 
-  // 后台刷新可能早于 HTTP 失败响应返回，需保留本地错误气泡避免界面短暂或永久空白。
-  const localErrorMessages = shouldPreserveLocalErrors
-    ? previousMessages.slice(latestUserIndex + 1).filter((message) => {
-        return (
-          Boolean(message.is_bot_message) &&
-          message.metadata?.kind === 'error' &&
-          !existingIds.has(message.id) &&
-          !streamingMessageIds.has(message.id)
-        );
-      })
-    : [];
-  const transientMessages = [...streamingMessages, ...localErrorMessages];
-
-  return transientMessages.length > 0
-    ? [...nextMessages, ...transientMessages]
-    : nextMessages;
+/**
+ * 流式进行中的后台刷新合并：历史以 DB 为准，但「最后一条用户消息之后」的当前回合
+ * 完全用实时 previous。
+ *
+ * 这样当前回合的思考/工具/回答轨迹顺序由 WS 事件决定，避免 DB 工具（途中即落库）与
+ * 实时思考（末尾追加）交错错位、以及 DB/实时同一工具因 id 不同而重复闪烁。
+ * 实时错误气泡也天然包含在实时尾部里，无需单独保留。
+ */
+function mergeStreamingTurnMessages(
+  dbMessages: Message[],
+  previousMessages: Message[],
+  activeStreamingMessageIds: string[],
+): Message[] {
+  if (activeStreamingMessageIds.length === 0) {
+    return dbMessages;
+  }
+  const prevUserIndex = findLastUserMessageIndex(previousMessages);
+  if (prevUserIndex === -1) {
+    return dbMessages;
+  }
+  const liveTail = previousMessages.slice(prevUserIndex + 1);
+  if (liveTail.length === 0) {
+    return dbMessages;
+  }
+  const dbUserIndex = findLastUserMessageIndex(dbMessages);
+  if (dbUserIndex === -1) {
+    // 极少：全新会话首轮，用户消息还没落库——直接用实时（含本回合用户消息）。
+    return previousMessages.slice(prevUserIndex);
+  }
+  return [...dbMessages.slice(0, dbUserIndex + 1), ...liveTail];
 }
 
 function readToolPath(value: unknown): string | undefined {
@@ -416,7 +413,7 @@ export function useChatMessages(options: {
         setMessages((previous) => {
           const visibleMessages =
             isBackground && !streamingResolved
-              ? appendTransientAssistantMessages(
+              ? mergeStreamingTurnMessages(
                   nextMessages,
                   previous,
                   activeStreamingMessageIds,

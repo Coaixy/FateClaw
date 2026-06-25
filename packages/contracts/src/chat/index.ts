@@ -4,6 +4,35 @@
 
 import type { TextResponse } from '../common/api.js';
 
+/** 工具/检索结果的来源条目（搜索、知识检索类工具的单条结果）。 */
+export interface ToolResultItemDto {
+  /** 结果标题。 */
+  title: string;
+  /** 结果链接（如有）。 */
+  url?: string;
+  /** 结果来源域名（如 finance.yahoo.com），用于卡片右侧展示。 */
+  domain?: string;
+}
+
+/**
+ * 工具调用结果的轻量预览，随消息 metadata 落库供历史回看。
+ *
+ * 为避免 JSONB 膨胀，落库前会做归一化与限长截断：能识别的搜索/检索类结果存为 items 列表，
+ * 其余统一降级为截断后的 text 摘要。
+ */
+export interface ToolResultPreviewDto {
+  /** 工具输入摘要，通常是搜索/查询词，用作卡片标题。 */
+  query?: string;
+  /** 结果条数（如 "10 results"）。 */
+  count?: number;
+  /** 结构化结果/来源列表。 */
+  items?: ToolResultItemDto[];
+  /** 无法结构化时的纯文本结果摘要（已截断）。 */
+  text?: string;
+  /** 结果是否因限长被截断。 */
+  truncated?: boolean;
+}
+
 export interface MessageMetadataDto {
   kind?: string;
   stage?: string;
@@ -15,6 +44,10 @@ export interface MessageMetadataDto {
   tool_label?: string;
   tool_status?: 'running' | 'completed' | 'failed';
   tool_path?: string;
+  /** 工具调用结果预览；持久化富卡片所需，缺省时前端降级为简化节点。 */
+  tool_result?: ToolResultPreviewDto;
+  /** 所属 agent 回合序号；用于思考块的稳定 id 与穿插排序。 */
+  turn_index?: number;
   turn_complete?: boolean;
   request_id?: string;
   /** 本轮 AI 回复从提交到最终响应的耗时，单位毫秒。 */

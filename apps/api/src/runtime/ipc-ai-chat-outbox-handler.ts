@@ -509,6 +509,17 @@ function buildProgressMessageId(payload: ProgressIpcPayload): string {
     ].join('-');
   }
 
+  // 思考块：每回合一条，用 requestId + 回合序号做稳定 id，避免重试重复落库。
+  if (metadata.kind === 'thinking' && payload.requestId) {
+    const turnIndex =
+      typeof metadata.turn_index === 'number' ? metadata.turn_index : 0;
+    return [
+      'aichat-thinking',
+      normalizeMessageIdPart(payload.requestId),
+      String(turnIndex),
+    ].join('-');
+  }
+
   return `aichat-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 

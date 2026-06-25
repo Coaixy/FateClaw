@@ -287,6 +287,20 @@ export function isToolTraceMessage(message: Message): boolean {
   return message.metadata?.kind === 'tool_trace';
 }
 
+/**
+ * 是否为 assistant 回合的「过程块」——思考、工具调用、知识检索轨迹。
+ *
+ * 这些块会被折叠进回答上方的左侧穿插时间线，而不作为独立气泡渲染。
+ */
+export function isTrajectoryBlockMessage(message: Message): boolean {
+  return (
+    Boolean(message.is_bot_message) &&
+    (isThinkingMessage(message) ||
+      isToolTraceMessage(message) ||
+      isKnowledgeTrajectoryMessage(message))
+  );
+}
+
 function isHiddenDisplayMessage(message: Message): boolean {
   const metadata = message.metadata;
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
