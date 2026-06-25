@@ -22,7 +22,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import { isAiChatPath, useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { buildLoginHref } from '@/lib/auth-redirect';
@@ -566,7 +566,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             ) : (
               <div className="space-y-1">
                 {sidebarPreviewSessions.map((session) => {
-                  const active = session.id === selectedSession && pathname === '/ai-chat';
+                  const active = session.id === selectedSession && isAiChatPath(pathname);
                   const isEditing = session.id === editingSessionId;
                   const isRenaming = session.id === renamingSessionId;
                   const isSharing = session.id === sharingSessionId;
