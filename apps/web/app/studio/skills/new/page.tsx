@@ -40,6 +40,7 @@ export default function NewStudioSkillPage() {
             skill_name: '我的 Skill',
             dir_name: '',
             description: '',
+            category: '',
             version: '1.0.0',
             bundle_uri: '',
             checksum: null,

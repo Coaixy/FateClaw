@@ -271,7 +271,8 @@ describe('skills repository official skill settings', () => {
     await listMarketSkills({ limit: 500, offset: 30 });
 
     expect(calls[0]?.sql).toContain("s.visibility = 'shared'");
-    expect(calls[0]?.sql).not.toContain('s.category');
+    // 市场查询现需带回 category 以支持 discover 按术数门类筛选（复活初版分类维度）。
+    expect(calls[0]?.sql).toContain('s.category');
     expect(calls[0]?.sql).toContain('LIMIT $1 OFFSET $2');
     expect(calls[0]?.params).toEqual([100, 30]);
   });
@@ -360,6 +361,8 @@ describe('skills repository official skill settings', () => {
       'My Skill',
       'my-skill',
       'desc',
+      // 自动归类：名称/描述无术数关键词命中，落到兜底门类 '通用'。
+      '通用',
       'text-skill://skill-1',
       'checksum-1',
       expect.any(String),

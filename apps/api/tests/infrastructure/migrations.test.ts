@@ -487,6 +487,8 @@ describe('runDatabaseMigrations', () => {
       '0061_client_follow_ups',
       '0062_bazi_cases',
       '0063_bazi_cases_solar_date',
+      '0064_skill_category',
+      '0065_skill_category_methods_to_divination',
     ]);
 
     await runDatabaseMigrations(client as never);

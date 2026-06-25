@@ -136,6 +136,7 @@ export const zhTWMessages = {
       title: '技能庫',
       description: '瀏覽並訂閱可複用的斷卦技能,裝進你的工作台',
       searchPlaceholder: '搜尋技能...',
+      categoryAll: '全部',
       empty: '暫無公開內容',
       bundlesTitle: '優先推薦 · 公開捆綁包',
       bundlesDescription: '一次訂閱整組技能，適合直接整包使用',

@@ -13,6 +13,7 @@ function skill(
     skill_name: `skill-${id}`,
     dir_name: `dir-${id}`,
     description: '',
+    category: '通用',
     version: '1.0.0',
     bundle_uri: '/tmp/fateclaw-test-skill',
     checksum: null,

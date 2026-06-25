@@ -19,6 +19,37 @@ export const MAX_SKILL_BUNDLE_TOTAL_LENGTH = 500_000;
 /** ZIP 导入文件允许的最大字节数。 */
 export const MAX_SKILL_BUNDLE_ZIP_BYTES = 8 * 1024 * 1024;
 
+/**
+ * 受控技能分类白名单（按广义用途/场景维度）。
+ *
+ * @remarks
+ * Skill 不局限于术数——平台上也有角色扮演、分析、写作等用途，故顶层分类按「拿来做什么」
+ * 划分用途桶，「术数」只是其中一个桶。术数桶之下细分的术数门类见
+ * category-aliases.json，目前仅作为自动归类的判定依据，不作为顶层分类暴露。
+ * 末位 '通用' 为兜底默认。
+ * 此常量是前后端的**唯一事实源**：API 写入校验与 web 端分类下拉/筛选均引用它，
+ * 增删用途桶只改这一处，无需改 DB 约束。顺序即 UI 展示顺序。
+ */
+export const SKILL_CATEGORIES = [
+  '术数',
+  '角色扮演',
+  '分析',
+  '写作',
+  '效率工具',
+  '学习',
+  '娱乐',
+  '通用',
+] as const;
+
+/** 技能分类取值类型。 */
+export type SkillCategoryDto = (typeof SKILL_CATEGORIES)[number];
+
+/** 自动归类未命中时的兜底分类。 */
+export const DEFAULT_SKILL_CATEGORY: SkillCategoryDto = '通用';
+
+/** 自动归类命中术数关键词时归入的用途桶（见后端 deriveSkillCategory）。 */
+export const DIVINATION_SKILL_CATEGORY: SkillCategoryDto = '术数';
+
 /** 当前生效的 Skill Bundle 文件限制。 */
 export interface SkillBundleLimitsDto {
   max_files: number;
@@ -38,6 +69,8 @@ export interface UserCustomSkillDto {
   skill_name: string;
   dir_name: string;
   description: string;
+  /** 受控用途分类，取值见 {@link SKILL_CATEGORIES}，默认 '通用'。 */
+  category: string;
   version: string;
   bundle_uri: string;
   checksum: string | null;
@@ -183,6 +216,8 @@ export interface MarketSkillDto {
   id: string;
   skill_name: string;
   description: string;
+  /** 受控用途分类，取值见 {@link SKILL_CATEGORIES}，默认 '通用'，供市场按类筛选。 */
+  category: string;
   stat_subscriber_count: number;
   share_token: string | null;
   author_label: string;

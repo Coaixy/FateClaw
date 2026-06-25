@@ -65,6 +65,7 @@ function customSkill(patch: Partial<UserCustomSkill> = {}): UserCustomSkill {
     skill_name: '八字基础',
     dir_name: 'bazi-basic',
     description: '测试 Skill',
+    category: '八字',
     version: '1.0.0',
     bundle_uri: 'file:///skill',
     checksum: null,

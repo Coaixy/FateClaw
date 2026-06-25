@@ -37,6 +37,7 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     skill_name: skill.skill_name,
     dir_name: skill.dir_name,
     description: skill.description,
+    category: skill.category,
     version: skill.version,
     bundle_uri: skill.bundle_uri,
     checksum: skill.checksum,
@@ -186,6 +187,7 @@ type MarketSkillSource = {
   id: string;
   skill_name: string;
   description: string;
+  category: string;
   stat_subscriber_count: number;
   share_token: string | null;
 };
@@ -195,6 +197,7 @@ export function toMarketSkillDto(skill: MarketSkillSource): MarketSkillDto {
     id: skill.id,
     skill_name: skill.skill_name,
     description: skill.description,
+    category: skill.category,
     stat_subscriber_count: skill.stat_subscriber_count,
     share_token: skill.share_token,
     author_label: PUBLIC_AUTHOR_LABEL,

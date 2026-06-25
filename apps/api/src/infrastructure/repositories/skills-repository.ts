@@ -8,6 +8,7 @@ import {
   readTextSkillBundleFiles,
   writeTextSkillBundleFiles,
 } from '../../modules/skills/text-skill-bundle-store.js';
+import { deriveSkillCategory } from '../../modules/skills/category-map.js';
 import type {
   SkillAccessInvite,
   SkillAccessInviteTargetType,
@@ -157,6 +158,7 @@ export interface MarketSkillListRow {
   id: string;
   skill_name: string;
   description: string;
+  category: string;
   stat_subscriber_count: number;
   share_token: string | null;
 }
@@ -199,7 +201,7 @@ export async function listMarketSkills(opts: {
   });
   params.push(pagination.limit, pagination.offset);
   const { rows } = await getDbPool().query(
-    `SELECT s.id, s.skill_name, s.description,
+    `SELECT s.id, s.skill_name, s.description, s.category,
             s.stat_subscriber_count,
             s.stat_view_count, s.share_token
      FROM user_custom_skills s
@@ -269,6 +271,7 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.skill_name,
   s.dir_name,
   s.description,
+  s.category,
   s.version,
   s.bundle_uri,
   s.checksum,
@@ -351,6 +354,8 @@ export interface CreateUserCustomSkillInput {
   skill_name: string;
   dir_name: string;
   files: TextSkillBundleFile[];
+  /** 作者显式指定的门类；缺省时由 deriveSkillCategory 自动归类。 */
+  category?: string;
 }
 
 export async function createUserCustomSkill(
@@ -362,6 +367,9 @@ export async function createUserCustomSkill(
     skill.skill_name,
   );
   const displayName = metadata.name || skill.skill_name;
+  // 混合分类：作者显式指定优先，否则按「名称+描述」自动归类（兜底 '通用'）。
+  const category =
+    skill.category ?? deriveSkillCategory(displayName, metadata.description);
   const bundle = writeTextSkillBundleFiles({
     skillId: skill.id,
     ownerId: skill.user_id,
@@ -374,17 +382,18 @@ export async function createUserCustomSkill(
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO user_custom_skills
-         (id, user_id, skill_name, dir_name, description,
+         (id, user_id, skill_name, dir_name, description, category,
           version, bundle_uri, checksum, install_status, acl, billing_policy, audit_metadata,
           visibility)
-       VALUES ($1, $2, $3, $4, $5, '1.0.0', $6, $7, 'installed',
-               '{}'::jsonb, '{}'::jsonb, $8::jsonb, 'private')`,
+       VALUES ($1, $2, $3, $4, $5, $6, '1.0.0', $7, $8, 'installed',
+               '{}'::jsonb, '{}'::jsonb, $9::jsonb, 'private')`,
       [
         skill.id,
         skill.user_id,
         displayName,
         skill.dir_name,
         metadata.description,
+        category,
         bundle.bundleUri,
         bundle.checksum,
         JSON.stringify({
@@ -451,13 +460,16 @@ export async function getUserCustomSkillById(
 export async function updateUserCustomSkill(
   id: string,
   userId: string,
-  updates: Partial<Pick<UserCustomSkill, 'skill_name' | 'dir_name' | 'files'>>,
+  updates: Partial<
+    Pick<UserCustomSkill, 'skill_name' | 'dir_name' | 'files' | 'category'>
+  >,
 ): Promise<UserCustomSkill | undefined> {
   const skillFields: string[] = [];
   const values: unknown[] = [];
   let paramIdx = 1;
 
-  const allowed = ['skill_name', 'dir_name'] as const;
+  // category 列入允许更新列：作者可显式改门类（更新不自动重算，仅认显式传入）。
+  const allowed = ['skill_name', 'dir_name', 'category'] as const;
   for (const key of allowed) {
     if (updates[key] !== undefined) {
       skillFields.push(`${key} = $${paramIdx++}`);
@@ -1442,7 +1454,6 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
     })[],
   );
 }
-
 
 // =====================
 // --- Skill Bundles ---

@@ -140,6 +140,7 @@ export const enMessages = {
       description:
         'Browse and subscribe to reusable divination skills for your workspace',
       searchPlaceholder: 'Search skills...',
+      categoryAll: 'All',
       empty: 'No public content yet',
       bundlesTitle: 'Featured · Public bundles',
       bundlesDescription: 'Subscribe to a full skill set at once',

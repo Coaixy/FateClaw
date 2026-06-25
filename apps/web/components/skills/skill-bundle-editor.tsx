@@ -19,6 +19,8 @@ import {
   Upload,
 } from 'lucide-react';
 
+import { SKILL_CATEGORIES } from '@fateclaw/contracts/skills';
+
 import { useConfirm } from '@/lib/use-confirm';
 import {
   DEFAULT_SKILL_BUNDLE_LIMITS,
@@ -36,6 +38,8 @@ import {
 export type SkillBundleEditorData = {
   skill_name: string;
   files: TextSkillBundleFile[];
+  /** 作者选定的分类；取值见 contracts 的 SKILL_CATEGORIES。 */
+  category: string;
 };
 
 type SkillFrontmatter = {
@@ -365,6 +369,9 @@ export function SkillBundleEditor({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [limits, setLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
+  // 作者选定的分类：空串是「自动归类」sentinel（交后端按内容判断），
+  // 编辑态回填技能已存的分类，新建态默认自动。显式选某分类（含 '通用'）才算覆盖。
+  const [category, setCategory] = useState(initial?.category ?? '');
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const newFilePathInputRef = useRef<HTMLInputElement>(null);
@@ -522,6 +529,7 @@ export function SkillBundleEditor({
       await onSave({
         skill_name: displayName.trim() || DEFAULT_SKILL_NAME,
         files,
+        category,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -820,6 +828,26 @@ export function SkillBundleEditor({
                     rows={5}
                     className={`${inputClass} min-h-[132px] resize-y`}
                   />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-[13px] font-medium text-ink">
+                    分类
+                  </span>
+                  <select
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">自动归类（按技能内容判断）</option>
+                    {SKILL_CATEGORIES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="block text-[12px] text-muted">
+                    用于「技能库」按分类检索；默认自动判断（目前仅术数可自动识别），其余请手动指定，选「通用」表示不归类。
+                  </span>
                 </label>
                 <label className="block space-y-2">
                   <span className="text-[13px] font-medium text-ink">
