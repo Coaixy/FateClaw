@@ -280,7 +280,11 @@ function ArtifactBlock({
 
   // entry.output 是后端为盘面生成的 formatter 文本（已分小节、预标回头生克/进退神），
   // 给卦师一个「复制盘面文本」入口，方便拿去复盘或归档。导出内容即 formatter 正文原文。
-  const exportText = entry.output.trim();
+  // entry.output 理论上是 formatter 文本字符串，但历史脏数据 / 被截断的 tool_context
+  // 可能把它写成 null 或非字符串，render 期直接 .trim() 会抛 TypeError 触发整页报错，
+  // 这里收紧为安全取值（非字符串按空文本处理，复制入口随之自然隐藏）。
+  const exportText =
+    typeof entry.output === 'string' ? entry.output.trim() : '';
   const handleCopyBoardText = async () => {
     if (!exportText) {
       toast('error', t('artifact.copyEmpty'));

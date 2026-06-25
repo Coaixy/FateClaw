@@ -142,8 +142,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   );
 
   const formatDate = useCallback(
-    (value: string | number | Date, options?: Intl.DateTimeFormatOptions) =>
-      new Intl.DateTimeFormat(htmlLang, options).format(new Date(value)),
+    (value: string | number | Date, options?: Intl.DateTimeFormatOptions) => {
+      // 非法日期（空串 / 后端脏数据串 / NaN / '0000-00-00' 等）传给 Intl.format 会抛
+      // RangeError: Invalid time value，在渲染期冒泡到 ErrorBoundary 直接整页「页面渲染出错」。
+      // 这里统一在格式化根因处兜底为空串，调用方拿到空文案即可，避免单条坏数据拖垮整页。
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return new Intl.DateTimeFormat(htmlLang, options).format(date);
+    },
     [htmlLang],
   );
 

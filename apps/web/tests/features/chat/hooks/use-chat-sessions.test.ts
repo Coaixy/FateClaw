@@ -13,7 +13,10 @@ vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
 }));
 
-import { shouldClearChatSelection } from '../../../../features/chat/hooks/use-chat-sessions';
+import {
+  isAiChatPath,
+  shouldClearChatSelection,
+} from '../../../../features/chat/hooks/use-chat-sessions';
 
 describe('shouldClearChatSelection', () => {
   it('keeps the selected session while auth is still loading', () => {
@@ -54,5 +57,26 @@ describe('shouldClearChatSelection', () => {
         hasToken: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('isAiChatPath', () => {
+  // 开发环境 usePathname 返回不带尾斜杠。
+  it('matches the dev pathname without trailing slash', () => {
+    expect(isAiChatPath('/ai-chat')).toBe(true);
+  });
+
+  // 生产 trailingSlash:true 下 usePathname 返回带尾斜杠，必须同样命中，
+  // 否则聊天页内的会话切换/新建会误走 router.push 导致「新建却进上一个对话」。
+  it('matches the production pathname with trailing slash', () => {
+    expect(isAiChatPath('/ai-chat/')).toBe(true);
+  });
+
+  it('does not match other routes or sub-paths', () => {
+    expect(isAiChatPath('/')).toBe(false);
+    expect(isAiChatPath('/ai-chat/share')).toBe(false);
+    expect(isAiChatPath('/ai-chat/archive')).toBe(false);
+    expect(isAiChatPath(null)).toBe(false);
+    expect(isAiChatPath(undefined)).toBe(false);
   });
 });

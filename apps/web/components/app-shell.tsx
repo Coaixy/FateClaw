@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   ChatSessionsProvider,
+  isAiChatPath,
   useChatSessions,
 } from '@/features/chat/hooks/use-chat-sessions';
 import { buildLoginHref } from '@/lib/auth-redirect';
@@ -134,7 +135,7 @@ function ComplianceFooterSlot({
   // 具体会话页已经进入盘面/解读上下文，隐藏备案页脚以免占用移动端输入区下方空间。
   const showComplianceFooter =
     !noPadding &&
-    (pathname === '/' || (pathname === '/ai-chat' && !selectedSession));
+    (pathname === '/' || (isAiChatPath(pathname) && !selectedSession));
 
   if (!showComplianceFooter) {
     return null;
