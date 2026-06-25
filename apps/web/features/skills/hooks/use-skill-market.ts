@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { SKILL_CATEGORIES } from '@fateclaw/contracts/skills';
 
 import {
   skillsApi,
@@ -42,6 +43,8 @@ export function useSkillMarket(
   const [bundles, setBundles] = useState<MarketBundle[]>([]);
   const [skills, setSkills] = useState<MarketSkill[]>([]);
   const [search, setSearch] = useState('');
+  // 选中的用途分类，空串表示「全部」；分类只作用于技能区（bundle 不分类）。
+  const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -80,18 +83,26 @@ export function useSkillMarket(
     );
   }, [bundles, search]);
 
+  // 当前结果集中实际出现过的门类，按 SKILL_CATEGORIES 规范顺序排列。
+  // 只展示有技能的门类，避免出现点了没结果的空筛选项。
+  const availableCategories = useMemo(() => {
+    const present = new Set(skills.map((skill) => skill.category));
+    return SKILL_CATEGORIES.filter((item) => present.has(item));
+  }, [skills]);
+
   const filteredSkills = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return skills;
-
-    return sortSkillsByHeat(
-      skills.filter(
-        (skill) =>
-          skill.skill_name.toLowerCase().includes(query) ||
-          skill.description.toLowerCase().includes(query),
-      ),
-    );
-  }, [search, skills]);
+    const filtered = skills.filter((skill) => {
+      // 先按门类过滤；category 为空串时不限门类。
+      if (category && skill.category !== category) return false;
+      if (!query) return true;
+      return (
+        skill.skill_name.toLowerCase().includes(query) ||
+        skill.description.toLowerCase().includes(query)
+      );
+    });
+    return sortSkillsByHeat(filtered);
+  }, [skills, search, category]);
 
   return {
     bundles,
@@ -100,6 +111,9 @@ export function useSkillMarket(
     filteredSkills,
     search,
     setSearch,
+    category,
+    setCategory,
+    availableCategories,
     loading,
   };
 }

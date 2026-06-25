@@ -81,6 +81,8 @@ export interface UserCustomSkill {
   skill_name: string;
   dir_name: string;
   description: string;
+  /** 受控用途分类，默认 '通用'；取值见 contracts 的 SKILL_CATEGORIES。 */
+  category: string;
   version: string;
   bundle_uri: string;
   checksum: string | null;

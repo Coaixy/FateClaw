@@ -20,6 +20,8 @@ import { clientCrmFieldsMigrations } from './definitions/0060-client-crm-fields.
 import { clientFollowUpsMigrations } from './definitions/0061-client-follow-ups.js';
 import { baziCasesMigrations } from './definitions/0062-bazi-cases.js';
 import { baziCasesSolarDateMigrations } from './definitions/0063-bazi-cases-solar-date.js';
+import { skillCategoryMigrations } from './definitions/0064-skill-category.js';
+import { skillCategoryDivinationBucketMigrations } from './definitions/0065-skill-category-divination-bucket.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -48,4 +50,6 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...clientFollowUpsMigrations,
   ...baziCasesMigrations,
   ...baziCasesSolarDateMigrations,
+  ...skillCategoryMigrations,
+  ...skillCategoryDivinationBucketMigrations,
 ];

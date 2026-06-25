@@ -73,6 +73,7 @@ export const skillsApi = {
     skill_name: string;
     dir_name?: string;
     files: TextSkillBundleFile[];
+    category?: string;
   }) =>
     requestJson<UserCustomSkill>('/api/skills/user', {
       method: 'POST',
@@ -83,6 +84,7 @@ export const skillsApi = {
     data: {
       skill_name?: string;
       files?: TextSkillBundleFile[];
+      category?: string;
     },
   ) =>
     requestJson<UserCustomSkill>(`/api/skills/user/${pathSegment(id)}`, {

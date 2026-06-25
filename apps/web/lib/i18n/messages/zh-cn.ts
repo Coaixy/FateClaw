@@ -136,6 +136,7 @@ export const zhCNMessages = {
       title: '技能库',
       description: '浏览并订阅可复用的断卦技能,装进你的工作台',
       searchPlaceholder: '搜索技能...',
+      categoryAll: '全部',
       empty: '暂无公开内容',
       bundlesTitle: '优先推荐 · 公开捆绑包',
       bundlesDescription: '一次订阅整组技能，适合直接整包使用',

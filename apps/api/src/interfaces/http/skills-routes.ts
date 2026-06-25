@@ -7,6 +7,7 @@ import type {
   SkillBundleLimitsDto,
   SkillAccessInviteTargetTypeDto,
 } from '@fateclaw/contracts/skills';
+import { SKILL_CATEGORIES } from '@fateclaw/contracts/skills';
 
 import {
   createSkillAccessInvite,
@@ -141,6 +142,11 @@ function isAccessInviteTargetType(
   return value === 'skill' || value === 'bundle';
 }
 
+/** 校验作者传入的门类是否在受控白名单内（含兜底 '通用'）。 */
+function isValidSkillCategory(value: string): boolean {
+  return (SKILL_CATEGORIES as readonly string[]).includes(value);
+}
+
 function accessInviteRedeemError(status: string): string {
   switch (status) {
     case 'expired':
@@ -186,11 +192,18 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       skill_name?: string;
       dir_name?: string;
       files?: unknown;
+      category?: string;
     };
 
     const skillName = body.skill_name?.trim() ?? '';
     if (!skillName || skillName.length > 50) {
       return reply.code(400).send({ error: '技能名称必填且不超过 50 字' });
+    }
+
+    // 作者可显式指定门类；空/缺省时交由仓储自动归类。非法值直接拒绝。
+    const category = body.category?.trim() || undefined;
+    if (category !== undefined && !isValidSkillCategory(category)) {
+      return reply.code(400).send({ error: '分类不在受控列表内' });
     }
     let files: TextSkillBundleFile[] | null;
     try {
@@ -219,6 +232,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
         skill_name: skillName,
         dir_name: slugifySkillName(body.dir_name || skillName),
         files,
+        category,
       });
 
       return skill;
@@ -249,10 +263,17 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const body = request.body as {
       skill_name?: string;
       files?: unknown;
+      category?: string;
     };
 
     if (body.skill_name !== undefined && body.skill_name.trim().length > 50) {
       return reply.code(400).send({ error: '技能名称不超过 50 字' });
+    }
+
+    // 作者改门类：更新不自动重算，仅认显式传入的合法值。
+    const category = body.category?.trim() || undefined;
+    if (category !== undefined && !isValidSkillCategory(category)) {
+      return reply.code(400).send({ error: '分类不在受控列表内' });
     }
 
     let files: TextSkillBundleFile[] | undefined;
@@ -273,11 +294,13 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     const updates: {
       skill_name?: string;
       files?: TextSkillBundleFile[];
+      category?: string;
     } = {};
     if (body.skill_name !== undefined) {
       updates.skill_name = body.skill_name.trim();
     }
     if (files !== undefined) updates.files = files;
+    if (category !== undefined) updates.category = category;
 
     let skill;
     try {
