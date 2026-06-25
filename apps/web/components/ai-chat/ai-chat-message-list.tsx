@@ -7,6 +7,7 @@ import {
   Brain,
   ChevronDown,
   Crown,
+  Loader2,
   Wrench,
 } from 'lucide-react';
 
@@ -45,6 +46,7 @@ export function AiChatMessageList({
   switchingSession,
   showCenteredComposer,
   latestMessageNotice,
+  loadingOlder,
   composer,
   emptyStateTitle,
   emptyStateDescription,
@@ -60,6 +62,7 @@ export function AiChatMessageList({
   switchingSession: boolean;
   showCenteredComposer: boolean;
   latestMessageNotice?: AiChatBillingNotice | null;
+  loadingOlder?: boolean;
   composer: React.ReactNode;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
@@ -147,6 +150,11 @@ export function AiChatMessageList({
 
   return (
     <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
+      {loadingOlder && (
+        <div className="flex justify-center py-1.5">
+          <Loader2 size={15} className="animate-spin text-muted" />
+        </div>
+      )}
       {rows.map(({ message, toolTraces }, index) => (
         <AiChatMessageRow
           key={message.id}

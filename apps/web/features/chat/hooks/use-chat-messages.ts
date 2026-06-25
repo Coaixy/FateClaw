@@ -26,6 +26,10 @@ import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
 const CHAT_POLL_INTERVAL_MS = 1200;
+// 单页消息加载条数;上滑到顶时按此步长向更早翻页。
+const MESSAGE_PAGE_SIZE = 50;
+// 滚动到距顶部多少像素内触发「加载更早消息」。
+const OLDER_LOAD_THRESHOLD_PX = 120;
 const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
 const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
 const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
@@ -247,6 +251,10 @@ export function useChatMessages(options: {
   const [continuationBlocked, setContinuationBlocked] = useState(false);
   const [continuationBlockMessage, setContinuationBlockMessage] = useState('');
   const [streamReconnectNonce, setStreamReconnectNonce] = useState(0);
+  // 是否还有更早的历史消息可加载(上滑分页用)。
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  // 是否正在加载更早消息(供顶部 loading 指示)。
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollInFlightRef = useRef(false);
@@ -257,6 +265,15 @@ export function useChatMessages(options: {
   const activeSessionRef = useRef('');
   const previousSelectedSessionRef = useRef('');
   const shouldAutoScrollRef = useRef(true);
+  // 当前已展开的消息窗口大小;后台刷新用它做 limit,确保不把已加载的历史截断回最近一页。
+  const loadedWindowSizeRef = useRef(MESSAGE_PAGE_SIZE);
+  // 持有最新 messages 引用,供 loadOlderMessages 在闭包外读取最早一条做游标。
+  const messagesRef = useRef<Message[]>([]);
+  // 加载更早消息的重入/可用状态镜像,供 scroll 事件同步读取。
+  const loadingOlderRef = useRef(false);
+  const hasMoreOlderRef = useRef(false);
+  // 上滑插入前记录的滚动几何,用于插入后把视口锚回原位,避免跳动。
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const creatingRef = useRef(false);
   const streamSocketRef = useRef<WebSocket | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
@@ -332,6 +349,15 @@ export function useChatMessages(options: {
     activeSessionRef.current = options.selectedSession || '';
   }, [options.selectedSession]);
 
+  // 把最新的 messages / hasMoreOlder 同步到 ref,供 scroll 事件与翻页回调无闭包读取。
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    hasMoreOlderRef.current = hasMoreOlder;
+  }, [hasMoreOlder]);
+
   const loadMessages = useCallback(
     async (
       sessionId: string,
@@ -345,7 +371,10 @@ export function useChatMessages(options: {
       }
 
       try {
-        const data = await chatSessionsApi.messages(sessionId);
+        // 用当前已展开窗口大小作为 limit:首次加载为一页;用户上滑撑大窗口后,
+        // 后台刷新仍能覆盖整窗,避免把已加载历史重新截断回最近一页。
+        const requestLimit = loadedWindowSizeRef.current;
+        const data = await chatSessionsApi.messages(sessionId, requestLimit);
         if (activeSessionRef.current !== sessionId) {
           return { ok: true, active: false };
         }
@@ -354,6 +383,11 @@ export function useChatMessages(options: {
         setContinuationBlocked(Boolean(data.continuation_blocked));
         setContinuationBlockMessage(data.continuation_block_message || '');
         databaseProcessingRef.current = data.processing;
+        // 仅在前台(切换/刷新)时据返回条数判断是否还有更早消息;
+        // 后台轮询不改动该标记,避免大窗口刷新时误判。
+        if (!isBackground) {
+          setHasMoreOlder(data.messages.length >= requestLimit);
+        }
 
         const nextMessages = data.messages.reverse();
         if (isBackground && isStreamInterrupted(sessionId)) {
@@ -448,9 +482,83 @@ export function useChatMessages(options: {
     ],
   );
 
+  /**
+   * 向更早翻页:以当前最早一条消息的 timestamp 作游标拉取上一页,前置插入。
+   *
+   * 通过 ref 读取重入/可用状态,可安全地由 scroll 事件高频触发。
+   */
+  const loadOlderMessages = useCallback(async () => {
+    const sessionId = activeSessionRef.current;
+    if (!sessionId || loadingOlderRef.current || !hasMoreOlderRef.current) {
+      return;
+    }
+    // 列表按时间升序,[0] 即最早一条;以其 timestamp 作 before 游标(后端 timestamp < before)。
+    const oldest = messagesRef.current[0];
+    if (!oldest) return;
+
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    // 记录加载前滚动几何,插入后据此把视口锚回原位(见下方 useLayoutEffect)。
+    const scrollElement = scrollRef.current;
+    prependAnchorRef.current = scrollElement
+      ? { height: scrollElement.scrollHeight, top: scrollElement.scrollTop }
+      : null;
+
+    try {
+      const data = await chatSessionsApi.messages(
+        sessionId,
+        MESSAGE_PAGE_SIZE,
+        oldest.timestamp,
+      );
+      if (activeSessionRef.current !== sessionId) {
+        prependAnchorRef.current = null;
+        return;
+      }
+      const olderMessages = data.messages.reverse();
+      if (olderMessages.length === 0) {
+        setHasMoreOlder(false);
+        prependAnchorRef.current = null;
+        return;
+      }
+      let appendedCount = 0;
+      setMessages((previous) => {
+        // 按 id 去重,防止游标边界处同 timestamp 消息重复插入;updater 幂等可安全重跑。
+        const existingIds = new Set(previous.map((message) => message.id));
+        const merged = olderMessages.filter(
+          (message) => !existingIds.has(message.id),
+        );
+        appendedCount = merged.length;
+        if (merged.length === 0) return previous;
+        return [...merged, ...previous];
+      });
+      if (appendedCount > 0) {
+        // 扩大已展开窗口,使后台刷新覆盖到新加载的历史。
+        loadedWindowSizeRef.current += appendedCount;
+      } else {
+        // 全部被去重(messagesRef 尚未追上)时不锚定,避免无新增却偏移视口。
+        prependAnchorRef.current = null;
+      }
+      // 后端返回满一页即认为仍有更早消息。
+      setHasMoreOlder(olderMessages.length >= MESSAGE_PAGE_SIZE);
+    } catch {
+      // 加载失败静默放行,保留 hasMore 允许用户再次上滑重试。
+      prependAnchorRef.current = null;
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, []);
+
   useEffect(() => {
     const previousSelectedSession = previousSelectedSessionRef.current;
     previousSelectedSessionRef.current = options.selectedSession;
+
+    // 切换会话:重置分页窗口与状态,避免沿用上一会话的窗口大小/游标标记。
+    loadedWindowSizeRef.current = MESSAGE_PAGE_SIZE;
+    loadingOlderRef.current = false;
+    prependAnchorRef.current = null;
+    setLoadingOlder(false);
+    setHasMoreOlder(false);
 
     if (options.selectedSession) {
       updateProcessing(false);
@@ -1211,6 +1319,14 @@ export function useChatMessages(options: {
 
     const handleScroll = () => {
       shouldAutoScrollRef.current = isNearBottom(element);
+      // 接近顶部且仍有更早消息时,自动加载上一页历史。
+      if (
+        element.scrollTop <= OLDER_LOAD_THRESHOLD_PX &&
+        hasMoreOlderRef.current &&
+        !loadingOlderRef.current
+      ) {
+        void loadOlderMessages();
+      }
     };
 
     handleScroll();
@@ -1219,7 +1335,18 @@ export function useChatMessages(options: {
     return () => {
       element.removeEventListener('scroll', handleScroll);
     };
-  }, []);
+  }, [loadOlderMessages]);
+
+  // 上滑加载更早消息后顶部增高,这里把滚动位置补偿回原视口,避免「加载即跳动」。
+  // 与下方自动贴底互斥:上滑时用户不在底部,shouldAutoScrollRef 为 false。
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current;
+    if (!anchor || !scrollRef.current) return;
+    prependAnchorRef.current = null;
+    const element = scrollRef.current;
+    // 维持「距底部距离」不变:新 scrollTop = 旧 scrollTop + 本次高度增量。
+    element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
+  }, [messages]);
 
   useLayoutEffect(() => {
     if (!scrollRef.current || !shouldAutoScrollRef.current) return;
@@ -1449,6 +1576,8 @@ export function useChatMessages(options: {
     continuationBlockMessage: activeContinuationBlocked
       ? continuationBlockMessage
       : '',
+    hasMoreOlder,
+    loadingOlder,
     scrollRef,
     inputRef,
     sendMessage,

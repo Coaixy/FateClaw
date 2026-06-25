@@ -911,6 +911,7 @@ function AiChatWorkspaceContent() {
           progressLabel={progressLabel}
           selectedSession={selectedSession}
           switchingSession={switchingSession}
+          loadingOlder={chatMessages.loadingOlder}
           showCenteredComposer={showCenteredComposer}
           latestMessageNotice={latestMessageNotice}
           composer={showCenteredComposer ? centeredContent : composer}
