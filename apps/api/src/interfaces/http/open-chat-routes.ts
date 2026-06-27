@@ -77,9 +77,15 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data;
 
-    // 取最后一条 user 消息作为本轮 prompt；system 消息作为 persona。
-    const lastUser = [...body.messages].reverse().find((m) => m.role === 'user');
-    if (!lastUser) {
+    // 取最后一条 user 消息作为本轮 prompt；其前的轮次作为多轮历史；system 消息作为 persona。
+    let lastUserIndex = -1;
+    for (let i = body.messages.length - 1; i >= 0; i--) {
+      if (body.messages[i].role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex < 0) {
       return sendOpenAiError(
         reply,
         400,
@@ -88,7 +94,19 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         'invalid_request',
       );
     }
+    const lastUser = body.messages[lastUserIndex];
     const systemPrompt = body.messages.find((m) => m.role === 'system')?.content;
+
+    // 末条 user 之前的 user/assistant 轮 → 多轮历史，按真实角色注入 runtime 会话。
+    // 排除 system（已并入 persona）与空内容；保持原始顺序。对外每次调用会话独立，
+    // 不依赖服务端状态，多轮上下文完全由本次 messages 决定（OpenAI 无状态语义）。
+    const history = body.messages
+      .slice(0, lastUserIndex)
+      .filter((m) => m.role !== 'system' && m.content.trim().length > 0)
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
 
     // 强制官方 metered 运行时；未知/不可用模型直接 400。
     const runtime = await resolveOfficialRuntimeByModelKey(
@@ -296,7 +314,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         userMessage: lastUser.content,
         inputKind: pastedBoard ? 'user_pasted_board' : 'normal',
         pastedBoard,
-        history: [],
+        history,
         sessionId,
         personaPrompt: systemPrompt,
         authorizedSkillIds,
@@ -326,7 +344,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
       userMessage: lastUser.content,
       inputKind: pastedBoard ? 'user_pasted_board' : 'normal',
       pastedBoard,
-      history: [], // 对外单轮调用，不携带历史（多轮历史映射见设计文档）。
+      history,
       sessionId,
       personaPrompt: systemPrompt,
       authorizedSkillIds,

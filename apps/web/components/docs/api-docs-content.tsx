@@ -241,7 +241,7 @@ const PAIPAN_SPECS: PaipanSpec[] = [
 /** Agent（解读）请求参数，含 fateclaw.* 扩展（点号表示嵌套）。 */
 const AGENT_PARAMS: ParamRow[] = [
   { name: 'model', type: 'string', req: '是', def: '', constraints: '取 GET /api/v1/models 返回的 id', desc: '目标官方模型，只支持平台官方模型。' },
-  { name: 'messages', type: 'array', req: '是', def: '', constraints: '≥1 条，且至少一条 role="user"', desc: 'OpenAI 风格消息数组（见下方单轮说明）。' },
+  { name: 'messages', type: 'array', req: '是', def: '', constraints: '≥1 条，且至少一条 role="user"', desc: 'OpenAI 风格消息数组，支持多轮（见下方说明）。' },
   { name: 'messages[].role', type: 'string', req: '是', def: '', constraints: 'system | user | assistant', desc: '消息角色。' },
   { name: 'messages[].content', type: 'string', req: '是', def: '', constraints: '允许空串', desc: '消息文本。' },
   { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'SSE 流式', desc: '是否流式返回（Server-Sent Events，OpenAI chunk 格式）。' },
@@ -659,9 +659,9 @@ export function ApiDocsContent() {
                 把排盘返回的内容放进 <C>fateclaw.board</C> 即可（OpenAI SDK 经 <C>extra_body</C> 传 <C>fateclaw</C>）。
               </P>
               <Note>
-                <strong className="text-ink">当前为单轮模式：</strong>每次请求独立、不带历史；只用 <C>messages</C> 里
-                <strong className="text-ink">最后一条 user</strong>（提问）和<strong className="text-ink">第一条 system</strong>
-                （人设），其余消息忽略。多轮上下文支持开发中。响应的 <C>usage</C> 为真实 token 数；
+                <strong className="text-ink">支持多轮对话：</strong>和 OpenAI 一样，上下文由本次 <C>messages</C> 决定（服务端不存历史）。
+                <strong className="text-ink">最后一条 user</strong> 是本轮提问，它前面的 user / assistant 轮会作为对话历史，
+                <strong className="text-ink">第一条 system</strong> 作为人设。响应的 <C>usage</C> 为真实 token 数；
                 <C>stream=true</C> 走 SSE 流式（OpenAI chunk 格式）。
               </Note>
 
