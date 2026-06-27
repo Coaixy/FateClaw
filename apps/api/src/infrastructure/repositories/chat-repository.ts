@@ -217,7 +217,13 @@ export async function getChatSessionsByUserId(
   limit = 100,
   clientId?: string,
 ): Promise<ChatSession[]> {
-  const conditions = ['user_id = $1', 'deleted_at IS NULL'];
+  // 排除对外开放 API 自建的兜底会话（id 形如 openapi:<uuid>，仅为兜住 messages 表外键）：
+  // 这类会话不属于站内聊天，不应出现在 Web 历史列表里。
+  const conditions = [
+    'user_id = $1',
+    'deleted_at IS NULL',
+    "id NOT LIKE 'openapi:%'",
+  ];
   const params: unknown[] = [userId, Math.min(Math.max(limit, 1), 500)];
 
   // 传入 clientId 时只返回该客户名下的会话（客户档案详情页用）。
@@ -247,9 +253,11 @@ export async function getArchivedChatSessionsByUserId(
   userId: string,
   limit = 100,
 ): Promise<ChatSession[]> {
+  // 同 getChatSessionsByUserId：排除对外 API 的兜底会话（openapi:<uuid>），不进站内归档列表。
   const { rows } = await getDbPool().query(
     `SELECT * FROM chat_sessions
      WHERE user_id = $1 AND deleted_at IS NOT NULL
+       AND id NOT LIKE 'openapi:%'
      ORDER BY deleted_at DESC, updated_at DESC
      LIMIT $2`,
     [userId, Math.min(Math.max(limit, 1), 500)],

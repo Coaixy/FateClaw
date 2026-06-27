@@ -11,6 +11,8 @@ import {
   releaseSessionProcessingLock,
 } from '../../runtime/ipc-payloads.js';
 import {
+  archiveChatSession,
+  createChatSession,
   createOpenSession,
   findOpenSessionByIdForUser,
   softDeleteOpenSession,
@@ -126,9 +128,21 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
+    // 先建一行 chat_sessions 兜住 messages 表外键（dispatchAiChatPrompt 的 outbox 持久化
+    // 会按 sessionId 写 messages，FK → chat_sessions(id)）。runtime_session_id 即该行 id，
+    // 与 open_sessions 行一致。必须先于 open_sessions 创建，确保发消息时外键已就绪。
+    const runtimeSessionId = `openapi:${randomUUID()}`;
+    await createChatSession({
+      id: runtimeSessionId,
+      accountId: getWebChatRuntimeId(principal.userId),
+      userId: principal.userId,
+      title: 'API 会话',
+    });
+
     const row = await createOpenSession({
       userId: principal.userId,
       apiKeyId: principal.apiKeyId,
+      runtimeSessionId,
       modelKey: body.model,
       thinkingLevel: body.fateclaw?.thinking_level ?? null,
       persona: body.system ?? null,
@@ -259,6 +273,18 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
           total_tokens: usage?.totalTokens ?? 0,
         },
       };
+    } catch (err) {
+      // dispatch reject（agent 超时 / 运行时不可用 / 入队失败等上游问题）→ 映射为结构化 502，
+      // 而非裸 500：让调用方能稳定区分「请求本身没问题、是 AI 后端失败」。真实错误仅进服务器日志，
+      // 不外泄内部细节。
+      request.log.error({ err, sid }, '对外会话发消息失败');
+      return sendOpenAiError(
+        reply,
+        502,
+        'AI 服务暂时不可用，请稍后重试',
+        'api_error',
+        'agent_error',
+      );
     } finally {
       // 本轮处理完毕（成功 / 失败 / 异常）即释放会话忙碌锁。
       void releaseSessionProcessingLock(runtimeSessionId, requestId).catch(
@@ -288,11 +314,11 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/:sid', async (request, reply) => {
     const principal = requireApiKeyPrincipal(request);
     const { sid } = request.params as { sid: string };
-    const deleted = await softDeleteOpenSession({
+    const runtimeSessionId = await softDeleteOpenSession({
       id: sid,
       userId: principal.userId,
     });
-    if (!deleted) {
+    if (!runtimeSessionId) {
       return sendOpenAiError(
         reply,
         404,
@@ -301,6 +327,8 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
         'session_not_found',
       );
     }
+    // 同步归档对应 chat_sessions（软删，不再出现在历史列表）。
+    await archiveChatSession(runtimeSessionId).catch(() => {});
     return { id: sid, object: 'session', deleted: true };
   });
 }

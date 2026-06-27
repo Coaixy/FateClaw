@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { getDbPool } from '../db-pool.js';
 
@@ -91,6 +91,11 @@ export function toOpenSessionDto(row: OpenSessionRow): OpenSessionDto {
 export async function createOpenSession(input: {
   userId: string;
   apiKeyId: string | null;
+  /**
+   * 内部 runtime sessionId（openapi:<uuid>）。由路由先用它建一行 chat_sessions（兜住
+   * messages 表的外键），再传进来建本行，二者 id 一致。
+   */
+  runtimeSessionId: string;
   modelKey: string;
   thinkingLevel?: string | null;
   persona?: string | null;
@@ -98,7 +103,7 @@ export async function createOpenSession(input: {
   board?: OpenSessionBoardSnapshot | null;
 }): Promise<OpenSessionRow> {
   const id = generateOpenSessionId();
-  const runtimeSessionId = `openapi:${randomUUID()}`;
+  const runtimeSessionId = input.runtimeSessionId;
   const { rows } = await getDbPool().query<OpenSessionRow>(
     `INSERT INTO open_sessions
        (id, user_id, api_key_id, runtime_session_id, model_key, thinking_level,
@@ -164,17 +169,19 @@ export async function touchOpenSessionActivity(
 /**
  * 软删某用户名下的一个会话。
  *
- * @returns 是否实际删除了一行；false 表示不存在 / 不归属 / 已删。
+ * @returns 实际删除行的 runtime_session_id（供调用方同步归档对应 chat_sessions）；
+ *   null 表示不存在 / 不归属 / 已删。
  */
 export async function softDeleteOpenSession(input: {
   id: string;
   userId: string;
-}): Promise<boolean> {
-  const { rowCount } = await getDbPool().query(
+}): Promise<string | null> {
+  const { rows } = await getDbPool().query<{ runtime_session_id: string }>(
     `UPDATE open_sessions
         SET status = 'deleted'
-      WHERE id = $1 AND user_id = $2 AND status = 'active'`,
+      WHERE id = $1 AND user_id = $2 AND status = 'active'
+      RETURNING runtime_session_id`,
     [input.id, input.userId],
   );
-  return (rowCount ?? 0) > 0;
+  return rows[0]?.runtime_session_id ?? null;
 }
