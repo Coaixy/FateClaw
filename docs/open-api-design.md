@@ -64,7 +64,7 @@
 
 **两条数据通路的根本差异**：
 - **排盘**是进程内纯函数调用，同步、确定性、零计费。
-- **Agent** 底层是按账号隔离的 Redis-IPC 异步守护进程（站内聊天是「入队 → `request_id` → WebSocket 推流」模型），对外 sid 会话接口需要把它**桥接**成同步 JSON 或 SSE 流（见 §7.4）。
+- **Agent** 底层是按账号隔离的 Redis-IPC 异步守护进程（站内聊天是「入队 → `request_id` → WebSocket 推流」模型），对外 sid 会话接口需要把它**桥接**成同步 JSON（单次阻塞返回，不对外流式；见 §7.4）。
 
 ## 4. 鉴权层：API Key 体系（全新建）
 
@@ -224,7 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 | 方法 | 路径 | 作用 |
 |---|---|---|
 | POST | `/api/v1/sessions` | 建会话：一次性设定 model/system/board/skills，返回不可猜的 public sid |
-| POST | `/api/v1/sessions/{sid}/messages` | 发一轮消息（流式 SSE / 非流式），usage 真实回填 |
+| POST | `/api/v1/sessions/{sid}/messages` | 发一轮消息（非流式，单次阻塞返回），usage 真实回填 |
 | GET | `/api/v1/sessions/{sid}` | 查会话元信息 |
 | DELETE | `/api/v1/sessions/{sid}` | 软删会话（之后续聊即 404） |
 
@@ -255,11 +255,10 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 
 ```jsonc
 {
-  "content": "帮我解读事业走向",            // 本轮提问；历史/盘面服务端记着，无需重发
-  "stream": false,                         // false=同步 JSON；true=SSE 流
-  "stream_options": { "include_usage": true } // 仅 stream=true：末尾追加仅含 usage 的 chunk
+  "content": "帮我解读事业走向"             // 本轮提问；历史/盘面服务端记着，无需重发
 }
 ```
+> 仅非流式：整段解读生成完才返回（单次阻塞请求）。不提供 SSE 流式——它是这条路由最复杂、bug 面最大的部分，MVP 砍掉换取稳定；长解读请把反代 read-timeout 调宽松。有 token 级流式需求时再加回。
 
 ### 7.3 存储与映射
 
@@ -277,7 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 
 **生命周期**：滑动 TTL `expires_at`（建会话与每轮活动都顺延 30 天）；查询按 `expires_at > NOW()` 过滤，过期即视为不存在（不依赖 status，省去翻 expired 的 sweeper）。无单用户数量上限。`status` active/deleted（DELETE 端点软删）。
 
-### 7.4 核心难点：异步 Redis-IPC → 同步/SSE 桥接
+### 7.4 核心难点：异步 Redis-IPC → 同步桥接
 
 agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信。每轮发消息的桥接流程：
 
@@ -295,23 +294,15 @@ agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信�
    - authorizedSkillIds   ← authorized_skill_ids
    - llmRuntime           ← resolveOfficialRuntimeByModelKey(model_key, thinking_level)（强制 official metered）
    - entitlementSnapshot  ← getRuntimeEntitlementSnapshot(userId)
-4. 调 dispatchAiChatPrompt(...)：内部已完成
+4. 调 dispatchAiChatPrompt(..., waitForResponse:true)：内部已完成
    ensureLocalAgentRunning（保活）+ addAccountListener + reserve/settle 计费 + 等 final。
    ⚠️ 对外路由绝不重复 reserve/settle，否则双重计费。成功后 touchOpenSessionActivity 顺延 TTL。
-
-   ┌─ stream=false（同步）──────────────────────────────────┐
-   │ waitForResponse:true → 取 InboxRequestResult.text/usage │
-   │ → 翻译成 OpenAI chat.completion JSON                     │
-   └────────────────────────────────────────────────────────┘
-   ┌─ stream=true（SSE）────────────────────────────────────┐
-   │ 先 SUBSCRIBE aiChatStreamChannel(runtime_session_id)     │
-   │ 再 dispatch(waitForResponse:false)，避免漏早期 delta；   │
-   │ assistant_delta → content chunk，final → finish_reason  │
-   │ (+ 可选 usage chunk)，收尾 data: [DONE]；断连 cancel。  │
-   └────────────────────────────────────────────────────────┘
+   → 取 InboxRequestResult.text/usage → 翻译成 OpenAI chat.completion JSON（单次阻塞返回）。
 5. usage：dispatchAiChatPrompt 经 IPC 回传 InboxRequestResult.usage
    （normalizeRuntimeTokenUsage 归一化，与计费同口径）；provider 未上报时回退 0。
 ```
+
+> **不提供流式（SSE）**：流式分支需 `reply.hijack` + 裸 socket 写 + Redis pub/sub 订阅 + 心跳/断连/取消 + 跨多出口释放锁，是这条路由最复杂、bug 面最大的部分（对抗式审查的若干问题即出自此）。MVP 砍掉换取稳定，只留非流式单次阻塞返回。代价：长解读是一个挂很久、中途不发字节的请求，需反代 read-timeout 给足（原流式靠心跳帧防 idle 超时）。有 token 级流式需求时再加回。
 
 > **并发**：发消息前先抢会话忙碌锁 `claimOrRefreshSessionProcessingLock(runtime_session_id, requestId, 2100s)`（与站内 AI Chat 同一把锁）；同 sid 并发的第二条立即 **409 session_busy**，不进入 reserve/槽位分配。`requestId` 透传给 `dispatchAiChatPrompt`，使其内部续期与路由同 owner；本轮结束（成功/失败/异常/断连）释放锁。另有 daemon 每账号并发=1（`AGENT_RUNTIME_ACCOUNT_CONCURRENCY`）作底层兜底。
 
@@ -358,7 +349,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 }
 ```
 
-> `usage` 为真实 token 数（`normalizeRuntimeTokenUsage` 归一化，与计费同口径）；provider 未上报时三项回退 0。流式下需 `stream_options.include_usage=true` 才在末尾追加 usage chunk（OpenAI 约定）。
+> `usage` 为真实 token 数（`normalizeRuntimeTokenUsage` 归一化，与计费同口径）；provider 未上报时三项回退 0。
 
 ### 7.9 计费
 
@@ -426,13 +417,13 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 | 6 | `apps/api/src/interfaces/http/open-paipan-routes.ts` | `/api/v1/paipan/catalog` + `/api/v1/paipan/{type}` |
 | 7 | `apps/api/src/infrastructure/migrations/definitions/0067-open-sessions.ts` | `open_sessions` 表迁移（幂等），并在 `definitions.ts` 追加 |
 | 8 | `apps/api/src/infrastructure/repositories/open-sessions-repository.ts` | `createOpenSession / findOpenSessionByIdForUser / touchOpenSessionActivity / softDeleteOpenSession / toOpenSessionDto`，经 `db.ts` 再导出 |
-| 9 | `apps/api/src/interfaces/http/open-session-routes.ts` | `/api/v1/sessions` 四端点（建会话 / 发消息含 SSE / GET / DELETE）；IPC 桥接：usage 回填 / SSE 流式 / 单 skill 授权 / board 会话级注入 |
+| 9 | `apps/api/src/interfaces/http/open-session-routes.ts` | `/api/v1/sessions` 四端点（建会话 / 发消息(非流式) / GET / DELETE）；IPC 桥接：usage 回填 / 单 skill 授权 / board 会话级注入 / 会话忙碌锁 |
 | 10 | `apps/api/src/interfaces/http/open-api-routes.ts` | 注册 sessions 子插件（取代已删的 open-chat-routes） |
 | 11 | `apps/agent-runtime` `agent-db.ts` / `resource-loader.ts` / `ContainerInput` | 新增 `authorizedSkillIds` 按 skill id 过滤（§7.6） |
 
 弃用：`open-chat-routes.ts`（OpenAI `/chat/completions`）已删除；`session.ts` 的 `injectHistoryMessages`（无状态多轮的手动历史重放）已回退——sid 方案靠 runtime 原生 resume 复原历史，不再需要。
 
-落地范围：鉴权链路 + 排盘端点跑通；Agent 改为 sid 有状态会话，四项能力（usage 回填 / 多轮(原生 resume) / SSE 流式 / 单 skill 授权）均已实现，详见 §7.3–§7.6。
+落地范围：鉴权链路 + 排盘端点跑通；Agent 改为 sid 有状态会话，能力（usage 回填 / 多轮(原生 resume) / 单 skill 授权 / board 会话级注入）均已实现，详见 §7.3–§7.6。仅非流式（SSE 已砍，见 §7.4）。
 
 ## 12. 实施步骤
 
@@ -443,6 +434,6 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 4. /api/v1/paipan/*                 → verify: 用真实 key curl 出八字盘面
 5. POST /api/v1/sessions            → verify: 拿到 sess_ sid；换用户 key 用同 sid →404
 6. POST /sessions/{sid}/messages    → verify: 非流式拿 content+usage；连发两轮第二轮能引用上下文
-7. 流式与管理端点                   → verify: stream=true 收到 SSE+[DONE]；GET/DELETE 闭环
+7. 并发与管理端点                   → verify: 同 sid 并发第二条 409 session_busy；GET/DELETE 闭环
 8. 同步 docs（设计文档 + web API 文档）
 ```

@@ -254,8 +254,6 @@ const SESSION_CREATE_PARAMS: ParamRow[] = [
 /** 发消息（POST /sessions/:sid/messages）请求参数：每轮只发本轮文本。 */
 const SESSION_MESSAGE_PARAMS: ParamRow[] = [
   { name: 'content', type: 'string', req: '是', def: '', constraints: '非空', desc: '本轮提问；历史与盘面由会话记着，无需重发。' },
-  { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'SSE 流式', desc: '是否流式返回（Server-Sent Events，OpenAI chunk 格式）。' },
-  { name: 'stream_options.include_usage', type: 'boolean', req: '否', def: 'false', constraints: '仅 stream=true', desc: '流式时在末尾追加一条仅含 usage 的 chunk。' },
 ];
 
 /** 错误码（调用方视角）。 */
@@ -663,8 +661,8 @@ export function ApiDocsContent() {
               </P>
               <Note>
                 两步走：<strong className="text-ink">① POST /sessions</strong> 建会话（带 <C>model</C> / <C>system</C> / <C>fateclaw.board</C> / <C>fateclaw.skills</C>）→ 拿 <C>id</C>；
-                <strong className="text-ink">② POST /sessions/{'{id}'}/messages</strong> 发提问，可多轮。响应 <C>usage</C> 为真实 token 数；<C>stream=true</C> 走 SSE 流式（OpenAI chunk 格式）。
-                会话 30 天不活动自动过期（每次发消息顺延）。
+                <strong className="text-ink">② POST /sessions/{'{id}'}/messages</strong> 发提问，可多轮。响应 <C>usage</C> 为真实 token 数。
+                同一会话需<strong className="text-ink">串行</strong>发消息（上一条未完成时发下一条返回 409）。会话 30 天不活动自动过期（每次发消息顺延）。
               </Note>
 
               <Label>① 建会话</Label>
@@ -730,7 +728,7 @@ print(r2["choices"][0]["message"]["content"])`}</Code>
               <Label>返回</Label>
               <P>
                 解读正文在 <C>choices[0].message.content</C>，<C>usage</C> 为真实 token 用量（OpenAI <C>chat.completion</C> 风格响应体）。
-                <C>stream=true</C> 时返回 <C>chat.completion.chunk</C> 的 SSE 流，正文在 <C>choices[0].delta.content</C>，以 <C>data: [DONE]</C> 收尾。
+                整段解读生成完才返回，长解读请把客户端读超时设宽松些。
               </P>
 
               <Label>管理会话</Label>
