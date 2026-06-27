@@ -244,7 +244,8 @@ const AGENT_PARAMS: ParamRow[] = [
   { name: 'messages', type: 'array', req: '是', def: '', constraints: '≥1 条，且至少一条 role="user"', desc: 'OpenAI 风格消息数组（见下方单轮说明）。' },
   { name: 'messages[].role', type: 'string', req: '是', def: '', constraints: 'system | user | assistant', desc: '消息角色。' },
   { name: 'messages[].content', type: 'string', req: '是', def: '', constraints: '允许空串', desc: '消息文本。' },
-  { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'true 暂未开放', desc: '是否流式；传 true 返回 501。' },
+  { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'SSE 流式', desc: '是否流式返回（Server-Sent Events，OpenAI chunk 格式）。' },
+  { name: 'stream_options.include_usage', type: 'boolean', req: '否', def: 'false', constraints: '仅 stream=true', desc: '流式时在末尾追加一条仅含 usage 的 chunk。' },
   { name: 'max_tokens', type: 'integer', req: '否', def: '模型默认', constraints: '正整数', desc: '本次输出 token 上限。' },
   { name: 'fateclaw', type: 'object', req: '否', def: '', constraints: 'OpenAI SDK 经 extra_body 传入', desc: 'FateClaw 扩展：skills / thinking_level / board。' },
   { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'string[]', desc: '开启的技能（技能 id 列表）。' },
@@ -266,7 +267,6 @@ const ERROR_CODES: Array<{ status: string; code: string; type: string; when: str
   { status: '500', code: 'PAIPAN.EXECUTION_FAILED', type: 'invalid_request_error', when: '排盘执行出错（如时间非法、漏传该方式必需的参数）' },
   { status: '400', code: 'invalid_request', type: 'invalid_request_error', when: 'Agent 请求体有误，或没有 user 消息' },
   { status: '400', code: 'model_not_found', type: 'invalid_request_error', when: 'model 不是可用的官方模型' },
-  { status: '501', code: 'stream_not_implemented', type: 'api_error', when: '流式（stream=true）暂未开放' },
   { status: '502', code: 'agent_error', type: 'api_error', when: 'Agent 执行失败' },
   { status: '429', code: 'rate_limit_exceeded', type: 'rate_limit_exceeded', when: '调用过于频繁（带 Retry-After 头）' },
   { status: '500', code: 'internal_error', type: 'api_error', when: '服务器内部错误' },
@@ -661,8 +661,8 @@ export function ApiDocsContent() {
               <Note>
                 <strong className="text-ink">当前为单轮模式：</strong>每次请求独立、不带历史；只用 <C>messages</C> 里
                 <strong className="text-ink">最后一条 user</strong>（提问）和<strong className="text-ink">第一条 system</strong>
-                （人设），其余消息忽略。另外：<C>stream=true</C> 暂未开放（返回 501）；响应里的 <C>usage</C> 当前是
-                占位 0、非真实 token 数。
+                （人设），其余消息忽略。多轮上下文支持开发中。响应的 <C>usage</C> 为真实 token 数；
+                <C>stream=true</C> 走 SSE 流式（OpenAI chunk 格式）。
               </Note>
 
               <Label>请求参数</Label>
