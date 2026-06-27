@@ -142,14 +142,22 @@ export async function findOpenSessionByIdForUser(
   return rows[0] ?? null;
 }
 
-/** 刷新会话活动时间并顺延 TTL（每轮发消息成功后调用）。 */
-export async function touchOpenSessionActivity(id: string): Promise<void> {
+/**
+ * 刷新会话活动时间并顺延 TTL（每轮发消息成功后调用）。
+ *
+ * @remarks 与 find/softDelete 一致地自带 user_id + status='active' 约束，落实「所有读写都带
+ *   user_id 过滤」不变量——既防误用成无归属写入面，也避免给已软删会话续期 TTL。
+ */
+export async function touchOpenSessionActivity(
+  id: string,
+  userId: string,
+): Promise<void> {
   await getDbPool().query(
     `UPDATE open_sessions
         SET last_active_at = NOW(),
-            expires_at = NOW() + ($2 || ' days')::interval
-      WHERE id = $1`,
-    [id, String(OPEN_SESSION_TTL_DAYS)],
+            expires_at = NOW() + ($3 || ' days')::interval
+      WHERE id = $1 AND user_id = $2 AND status = 'active'`,
+    [id, userId, String(OPEN_SESSION_TTL_DAYS)],
   );
 }
 

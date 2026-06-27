@@ -268,7 +268,12 @@ function buildPiSystemPrompt(
   containerInput: ContainerInput,
   soulEditEnabled: boolean,
 ): string {
-  const persona = containerInput.personaPrompt?.trim();
+  // persona 来自调用方（对外 API 的 system / 站内 Soul），属不可信文本。剥离其中伪造的
+  // <fateclaw_persona_override> 成对标签字面量，防止它提前闭合覆盖层、把后续文本顶成平台级
+  // 指令而逃逸下方「覆盖层使用规则/边界」护栏（与 board 的 XML 转义同理的纵深防御）。
+  const persona = containerInput.personaPrompt
+    ?.replace(/<\/?fateclaw_persona_override>/gi, '')
+    .trim();
   // 话术稿分节骨架:卦师自定义模板优先,未自定义时回退平台默认骨架。
   const guashiScriptSkeleton =
     containerInput.guashiScriptTemplate?.trim() ||

@@ -11,6 +11,10 @@ import {
   type AiChatStreamEvent,
 } from '../../runtime/ai-chat-stream.js';
 import { cancelAiChatSessionRequest } from '../../runtime/ipc-worker.js';
+import {
+  claimOrRefreshSessionProcessingLock,
+  releaseSessionProcessingLock,
+} from '../../runtime/ipc-payloads.js';
 import { getRedis } from '../../infrastructure/redis.js';
 import {
   createOpenSession,
@@ -50,6 +54,9 @@ const CreateSessionSchema = z.object({
   system: z.string().optional(),
   fateclaw: FateclawSessionExtSchema,
 });
+
+/** 会话忙碌锁 TTL（秒）：与站内 AI Chat 一致，防同会话并发写同一 jsonl 致会话树错乱。 */
+const SESSION_PROCESSING_TTL_SECONDS = 2100;
 
 /** POST /api/v1/sessions/:sid/messages 请求体：发一轮消息，只需本轮文本。 */
 const SendMessageSchema = z.object({
@@ -196,6 +203,24 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
     const personaPrompt = session.persona_prompt ?? undefined;
     const authorizedSkillIds = session.authorized_skill_ids ?? undefined;
 
+    // 进 dispatch 前先抢会话忙碌锁（按 runtime_session_id）：同 sid 并发的第二条立即 409，
+    // 不进入 reserve/槽位分配做无用功；requestId 透传给 dispatch，使内部续期与此处同 owner。
+    const requestId = randomUUID();
+    const lockClaimed = await claimOrRefreshSessionProcessingLock(
+      runtimeSessionId,
+      requestId,
+      SESSION_PROCESSING_TTL_SECONDS,
+    );
+    if (!lockClaimed) {
+      return sendOpenAiError(
+        reply,
+        409,
+        '上一条消息仍在处理中，请稍后再试',
+        'invalid_request_error',
+        'session_busy',
+      );
+    }
+
     if (body.stream) {
       // 真流式：订阅会话的 Redis 流 channel，把内部增量事件译成 OpenAI chat.completion.chunk SSE。
       // 先订阅再 dispatch，避免错过早期 assistant_delta；dispatch 用 waitForResponse:false 不阻塞，
@@ -214,6 +239,9 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
           '开放会话流式订阅失败',
         );
         await sub.quit().catch(() => {});
+        void releaseSessionProcessingLock(runtimeSessionId, requestId).catch(
+          () => {},
+        );
         return sendOpenAiError(
           reply,
           500,
@@ -242,9 +270,15 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       }, 15000);
       heartbeat.unref();
 
+      // 本轮是否已转发过 assistant_delta 增量：决定 final 是否需要用 final.text 兜底补正文。
+      let sawDelta = false;
       const cleanup = async (cancel: boolean) => {
         clearInterval(heartbeat);
         await sub.quit().catch(() => {});
+        // 释放会话忙碌锁（与 dispatch 内部续期同 owner，安全删除）。
+        void releaseSessionProcessingLock(runtimeSessionId, requestId).catch(
+          () => {},
+        );
         // 客户端中途断开时取消 agent，避免空跑继续计费。
         if (cancel) {
           void cancelAiChatSessionRequest(
@@ -286,6 +320,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
           case 'assistant_delta':
             // 只转发增量正文；assistant_message/message 含整段文本，转发会与 delta 重复。
             if (event.delta) {
+              sawDelta = true;
               writeChunk({
                 id: chunkId,
                 object: 'chat.completion.chunk',
@@ -302,6 +337,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
             }
             break;
           case 'final':
+            // 防御性分支：final 实际只在成功时发布（error 走下方 case 'error'），此处恒不命中。
             if (event.status === 'error') {
               writeChunk({
                 error: {
@@ -315,7 +351,20 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
               break;
             }
             // 成功一轮：刷新会话活动时间并顺延 TTL。
-            void touchOpenSessionActivity(sid).catch(() => {});
+            void touchOpenSessionActivity(sid, principal.userId).catch(() => {});
+            // 兜底：若本轮无任何 assistant_delta 增量（如某轮仅 turn_end 出文本），用 final.text
+            // 补一条 content chunk，避免流式丢失正文、与非流式口径不一致。
+            if (!sawDelta && event.text) {
+              writeChunk({
+                id: chunkId,
+                object: 'chat.completion.chunk',
+                created,
+                model: session.model_key,
+                choices: [
+                  { index: 0, delta: { content: event.text }, finish_reason: null },
+                ],
+              });
+            }
             // 终止 chunk：空 delta + finish_reason。
             writeChunk({
               id: chunkId,
@@ -373,6 +422,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
         history: [],
         sessionBoardContexts,
         sessionId: runtimeSessionId,
+        requestId,
         personaPrompt,
         authorizedSkillIds,
         llmRuntime: runtime,
@@ -399,53 +449,61 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
 
-    const result = await dispatchAiChatPrompt({
-      accountId,
-      userMessage: body.content,
-      history: [],
-      sessionBoardContexts,
-      sessionId: runtimeSessionId,
-      personaPrompt,
-      authorizedSkillIds,
-      llmRuntime: runtime,
-      entitlementSnapshot: entitlement,
-      waitForResponse: true,
-    });
+    try {
+      const result = await dispatchAiChatPrompt({
+        accountId,
+        userMessage: body.content,
+        history: [],
+        sessionBoardContexts,
+        sessionId: runtimeSessionId,
+        requestId,
+        personaPrompt,
+        authorizedSkillIds,
+        llmRuntime: runtime,
+        entitlementSnapshot: entitlement,
+        waitForResponse: true,
+      });
 
-    if (result.status === 'error') {
-      return sendOpenAiError(
-        reply,
-        502,
-        result.publicErrorText ?? result.error ?? 'Agent 执行失败',
-        'api_error',
-        result.publicReasonCode ?? 'agent_error',
+      if (result.status === 'error') {
+        return sendOpenAiError(
+          reply,
+          502,
+          result.publicErrorText ?? result.error ?? 'Agent 执行失败',
+          'api_error',
+          result.publicReasonCode ?? 'agent_error',
+        );
+      }
+
+      // 成功一轮：刷新会话活动时间并顺延 TTL。
+      void touchOpenSessionActivity(sid, principal.userId).catch(() => {});
+
+      // 真实 token 用量由 dispatchAiChatPrompt 经 IPC 回传（result.usage，归一化口径、与计费一致）；
+      // provider 未上报时回退 0。
+      const usage = result.usage;
+      return {
+        id: `chatcmpl-${result.requestId}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: session.model_key,
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: result.text ?? '' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: usage?.promptTokens ?? 0,
+          completion_tokens: usage?.completionTokens ?? 0,
+          total_tokens: usage?.totalTokens ?? 0,
+        },
+      };
+    } finally {
+      // 本轮处理完毕（成功 / 失败 / 异常）即释放会话忙碌锁。
+      void releaseSessionProcessingLock(runtimeSessionId, requestId).catch(
+        () => {},
       );
     }
-
-    // 成功一轮：刷新会话活动时间并顺延 TTL。
-    void touchOpenSessionActivity(sid).catch(() => {});
-
-    // 真实 token 用量由 dispatchAiChatPrompt 经 IPC 回传（result.usage，归一化口径、与计费一致）；
-    // provider 未上报时回退 0。
-    const usage = result.usage;
-    return {
-      id: `chatcmpl-${result.requestId}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: session.model_key,
-      choices: [
-        {
-          index: 0,
-          message: { role: 'assistant', content: result.text ?? '' },
-          finish_reason: 'stop',
-        },
-      ],
-      usage: {
-        prompt_tokens: usage?.promptTokens ?? 0,
-        completion_tokens: usage?.completionTokens ?? 0,
-        total_tokens: usage?.totalTokens ?? 0,
-      },
-    };
   });
 
   // GET /api/v1/sessions/:sid — 查会话元信息（不返回历史正文）。

@@ -270,6 +270,7 @@ const ERROR_CODES: Array<{ status: string; code: string; type: string; when: str
   { status: '400', code: 'invalid_request', type: 'invalid_request_error', when: '请求体有误（缺字段、类型不对等）' },
   { status: '400', code: 'model_not_found', type: 'invalid_request_error', when: 'model 不是可用的官方模型，或会话模型已下线' },
   { status: '404', code: 'session_not_found', type: 'invalid_request_error', when: '会话不存在、无权访问、已删除或已过期' },
+  { status: '409', code: 'session_busy', type: 'invalid_request_error', when: '同一会话上一条消息仍在处理中（每会话需串行发消息）' },
   { status: '502', code: 'agent_error', type: 'api_error', when: 'Agent 执行失败' },
   { status: '429', code: 'rate_limit_exceeded', type: 'rate_limit_exceeded', when: '调用过于频繁（带 Retry-After 头）' },
   { status: '500', code: 'internal_error', type: 'api_error', when: '服务器内部错误' },

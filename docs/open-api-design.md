@@ -313,7 +313,9 @@ agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信�
    （normalizeRuntimeTokenUsage 归一化，与计费同口径）；provider 未上报时回退 0。
 ```
 
-> **并发**：daemon 默认每账号并发=1（`AGENT_RUNTIME_ACCOUNT_CONCURRENCY`），同用户所有会话经同一 daemon 串行消费，天然避免并发写同一 jsonl 致会话树错乱。MVP 未在路由层加 `session:processing` 锁——若将该并发上调，需补会话级串行锁（见 §10）。
+> **并发**：发消息前先抢会话忙碌锁 `claimOrRefreshSessionProcessingLock(runtime_session_id, requestId, 2100s)`（与站内 AI Chat 同一把锁）；同 sid 并发的第二条立即 **409 session_busy**，不进入 reserve/槽位分配。`requestId` 透传给 `dispatchAiChatPrompt`，使其内部续期与路由同 owner；本轮结束（成功/失败/异常/断连）释放锁。另有 daemon 每账号并发=1（`AGENT_RUNTIME_ACCOUNT_CONCURRENCY`）作底层兜底。
+
+> ⚠️ **部署约束（resume 可靠性）**：历史 jsonl 落在 daemon 所在主机本地盘（`cwd/.fateclaw/pi-sessions`）。`ipc:{accountId}:inbox` 是全局 Redis 队列、无主机亲和，多实例下第 N 轮可能被缺少该会话文件的实例 daemon 取走 → `SessionManager.create` 新建空会话 → **历史静默丢失但仍照常计费**。站内 web 有 DB 归档回灌（`pi_session_archive_payload`）兜底，**open_sessions 当前没有这条链路**。可靠前提：单机 / 或 `FATECLAW_PI_SESSION_DIR` 指向所有实例共享存储（NFS/EFS）/ 或按 accountId 做实例亲和。多实例上线前须固化其一（见 §10）。
 
 ### 7.5 board 注入（会话级，客户端只传一次）
 
