@@ -32,6 +32,13 @@ import {
   touchApiKeyLastUsed,
 } from './repositories/api-keys-repository.js';
 import {
+  createOpenSession,
+  findOpenSessionByIdForUser,
+  softDeleteOpenSession,
+  toOpenSessionDto,
+  touchOpenSessionActivity,
+} from './repositories/open-sessions-repository.js';
+import {
   getAdminGlobalStats,
   getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
@@ -268,6 +275,11 @@ export {
   revokeUserApiKey,
   toApiKeyDto,
   touchApiKeyLastUsed,
+  createOpenSession,
+  findOpenSessionByIdForUser,
+  softDeleteOpenSession,
+  toOpenSessionDto,
+  touchOpenSessionActivity,
   adjustUserPurchasedBalance,
   archiveChatSession,
   bindAccountToUser,

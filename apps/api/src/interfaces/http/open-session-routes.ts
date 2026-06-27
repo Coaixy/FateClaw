@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
+import type { SessionBoardContext } from '../../shared/token-budget.js';
 import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
 import {
   aiChatStreamChannel,
@@ -11,25 +12,27 @@ import {
 } from '../../runtime/ai-chat-stream.js';
 import { cancelAiChatSessionRequest } from '../../runtime/ipc-worker.js';
 import { getRedis } from '../../infrastructure/redis.js';
+import {
+  createOpenSession,
+  findOpenSessionByIdForUser,
+  softDeleteOpenSession,
+  toOpenSessionDto,
+  touchOpenSessionActivity,
+} from '../../infrastructure/db.js';
+import type { OpenSessionRow } from '../../infrastructure/repositories/open-sessions-repository.js';
 import { getWebChatRuntimeId } from '../../modules/chat/web-chat-runtime.js';
 import { resolveOfficialRuntimeByModelKey } from '../../modules/system/system-config.js';
 import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
 
-/** OpenAI 风格消息。 */
-const ChatMessageSchema = z.object({
-  role: z.enum(['system', 'user', 'assistant']),
-  content: z.string(),
-});
-
-/** FateClaw 扩展字段（非 OpenAI 标准，OpenAI SDK 经 extra_body 传入）。 */
-const FateclawExtSchema = z
+/** FateClaw 扩展字段（建会话时一次性传入，服务端按会话存快照）。 */
+const FateclawSessionExtSchema = z
   .object({
-    // 开启的 skill：用户自有/订阅且启用的 skill id（UUID）；按单个 skill id 授权，归属+启用校验在 runtime 完成。
+    // 开启的 skill：调用方自有/订阅且启用的 skill id（UUID）；归属+启用校验在 runtime 完成。
     skills: z.array(z.string().uuid()).optional(),
     // 思考等级；缺省 medium。
     thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
-    // 排盘结果（解读场景）：来自 /api/v1/paipan/:type 的输出。
+    // 排盘结果（解读场景）：来自 /api/v1/paipan/:type 的输出，会话级注入、每轮无需重发。
     board: z
       .object({
         type: z.string().optional(),
@@ -40,32 +43,67 @@ const FateclawExtSchema = z
   })
   .optional();
 
-/** POST /api/v1/chat/completions 请求体（OpenAI 兼容 + fateclaw 扩展）。 */
-const ChatCompletionSchema = z.object({
+/** POST /api/v1/sessions 请求体：建会话，一次性传 model / system(persona) / fateclaw 扩展。 */
+const CreateSessionSchema = z.object({
   model: z.string().min(1),
-  messages: z.array(ChatMessageSchema).min(1),
+  // 人设（OpenAI 的 system 语义）：作为受约束的 persona 覆盖层，优先级低于平台核心 system。
+  system: z.string().optional(),
+  fateclaw: FateclawSessionExtSchema,
+});
+
+/** POST /api/v1/sessions/:sid/messages 请求体：发一轮消息，只需本轮文本。 */
+const SendMessageSchema = z.object({
+  content: z.string().min(1),
   stream: z.boolean().optional().default(false),
   // OpenAI 流式可选项；include_usage=true 时在流末尾追加一条仅含 usage 的 chunk。
   stream_options: z
     .object({ include_usage: z.boolean().optional() })
     .optional(),
-  max_tokens: z.number().int().positive().optional(),
-  fateclaw: FateclawExtSchema,
 });
 
 /**
- * 对外开放 Agent 路由（OpenAI 兼容，挂在 /api/v1/chat 下）。
+ * 把会话存的盘面快照重建为单个 SessionBoardContext（每轮服务端注入，客户端不重发）。
  *
- * 桥接现有异步 Redis-IPC 运行时：把 OpenAI Chat Completions 请求映射为 ContainerInput，
- * 经 dispatchAiChatPrompt 执行。**计费（reserve/settle）已在该函数内部完成，本路由绝不重复结算。**
- * 强制使用平台官方 metered 模型（忽略调用方个人模型选择），符合「仅官方模型按 token 计费」决策。
+ * 对外调用方提供的盘面一律按「用户自贴盘面」语义对待（而非平台权威排盘）：调用方能任意构造
+ * 请求体，平台不应把其 board 当作可信的官方计算事实，故 source 用 user_pasted_board。
  */
-export async function openChatRoutes(app: FastifyInstance): Promise<void> {
-  // POST /api/v1/chat/completions
-  app.post('/completions', async (request, reply) => {
+function buildSessionBoardContexts(
+  session: OpenSessionRow,
+): SessionBoardContext[] | undefined {
+  const board = session.board;
+  if (!board) return undefined;
+  const text =
+    board.text?.trim() ||
+    (board.data !== undefined ? JSON.stringify(board.data) : '');
+  if (!text) return undefined;
+  const category = board.type?.trim() || 'board';
+  return [
+    {
+      sourceMessageId: `openapi-board:${session.id}`,
+      source: 'user_pasted_board',
+      skill: `user-pasted-board::${category}`,
+      artifactTitle: `盘面: ${category}`,
+      promptText: text,
+      artifactData: board.data,
+      isCurrent: true,
+    },
+  ];
+}
+
+/**
+ * 对外开放「有状态会话」路由（挂在 /api/v1/sessions 下，鉴权 + 错误体由父插件统一注入）。
+ *
+ * 取代旧的 OpenAI 无状态 /chat/completions：调用方建会话时一次性传 model/system/board/skills 拿到
+ * 不可猜的 public sid（DB 映射到内部 runtime sessionId，绝不外泄后者）；之后每轮只发 {content}，
+ * 历史由 runtime 原生 resume 复原（history 恒传 []），board/persona/skills 每轮从会话快照重建注入。
+ * 计费（reserve/settle）与 usage 回填全在 dispatchAiChatPrompt 内部完成，本路由绝不重复结算。
+ */
+export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
+  // POST /api/v1/sessions — 建会话。
+  app.post('/', async (request, reply) => {
     const principal = requireApiKeyPrincipal(request);
 
-    const parsed = ChatCompletionSchema.safeParse(request.body);
+    const parsed = CreateSessionSchema.safeParse(request.body);
     if (!parsed.success) {
       return sendOpenAiError(
         reply,
@@ -77,38 +115,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data;
 
-    // 取最后一条 user 消息作为本轮 prompt；其前的轮次作为多轮历史；system 消息作为 persona。
-    let lastUserIndex = -1;
-    for (let i = body.messages.length - 1; i >= 0; i--) {
-      if (body.messages[i].role === 'user') {
-        lastUserIndex = i;
-        break;
-      }
-    }
-    if (lastUserIndex < 0) {
-      return sendOpenAiError(
-        reply,
-        400,
-        'messages 中至少需要一条 user 消息',
-        'invalid_request_error',
-        'invalid_request',
-      );
-    }
-    const lastUser = body.messages[lastUserIndex];
-    const systemPrompt = body.messages.find((m) => m.role === 'system')?.content;
-
-    // 末条 user 之前的 user/assistant 轮 → 多轮历史，按真实角色注入 runtime 会话。
-    // 排除 system（已并入 persona）与空内容；保持原始顺序。对外每次调用会话独立，
-    // 不依赖服务端状态，多轮上下文完全由本次 messages 决定（OpenAI 无状态语义）。
-    const history = body.messages
-      .slice(0, lastUserIndex)
-      .filter((m) => m.role !== 'system' && m.content.trim().length > 0)
-      .map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-
-    // 强制官方 metered 运行时；未知/不可用模型直接 400。
+    // 强制官方 metered 运行时；未知/不可用模型直接 400（建会话期即校验，避免事后才发现模型不可用）。
     const runtime = await resolveOfficialRuntimeByModelKey(
       body.model,
       body.fateclaw?.thinking_level,
@@ -122,31 +129,77 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         'model_not_found',
       );
     }
-    if (body.max_tokens) {
-      runtime.maxOutputTokens = body.max_tokens;
+
+    const row = await createOpenSession({
+      userId: principal.userId,
+      apiKeyId: principal.apiKeyId,
+      modelKey: body.model,
+      thinkingLevel: body.fateclaw?.thinking_level ?? null,
+      persona: body.system ?? null,
+      skillIds: body.fateclaw?.skills ?? null,
+      board: body.fateclaw?.board ?? null,
+    });
+    reply.code(201);
+    return toOpenSessionDto(row);
+  });
+
+  // POST /api/v1/sessions/:sid/messages — 发一轮消息（核心）。
+  app.post('/:sid/messages', async (request, reply) => {
+    const principal = requireApiKeyPrincipal(request);
+    const { sid } = request.params as { sid: string };
+
+    const parsed = SendMessageSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendOpenAiError(
+        reply,
+        400,
+        parsed.error.issues[0]?.message ?? '请求体无效',
+        'invalid_request_error',
+        'invalid_request',
+      );
+    }
+    const body = parsed.data;
+
+    // 按 sid + 归属用户取会话；不命中即 404（不存在/不归属/已删/已过期），杜绝跨用户 resume。
+    const session = await findOpenSessionByIdForUser(sid, principal.userId);
+    if (!session) {
+      return sendOpenAiError(
+        reply,
+        404,
+        '会话不存在或无权访问',
+        'invalid_request_error',
+        'session_not_found',
+      );
+    }
+
+    // 用会话快照重新解析官方运行时；模型在建会话后被下线则 400。
+    const runtime = await resolveOfficialRuntimeByModelKey(
+      session.model_key,
+      (session.thinking_level as (typeof PI_THINKING_LEVELS)[number]) ??
+        undefined,
+    );
+    if (!runtime) {
+      return sendOpenAiError(
+        reply,
+        400,
+        `会话使用的模型已不可用: ${session.model_key}`,
+        'invalid_request_error',
+        'model_not_found',
+      );
     }
 
     const entitlement = await getRuntimeEntitlementSnapshot(principal.userId);
     const accountId = getWebChatRuntimeId(principal.userId);
-    const sessionId = `openapi:${randomUUID()}`; // 对外每次调用独立会话。
-
-    // 排盘 board → pastedBoard 注入（解读场景）。
-    const board = body.fateclaw?.board;
-    const pastedBoard = board
-      ? {
-          category: board.type ?? 'paipan',
-          content: board.text ?? JSON.stringify(board.data ?? {}),
-          question: lastUser.content,
-        }
-      : undefined;
-
-    // 按「单个 skill id」授权（用户自有/订阅且启用的 skill）；无权/未启用的 id 在 runtime 内静默丢弃。
-    const authorizedSkillIds = body.fateclaw?.skills;
+    // 复用会话内部持久 sessionId → runtime 原生 resume 复原历史；history 恒传 []。
+    const runtimeSessionId = session.runtime_session_id;
+    const sessionBoardContexts = buildSessionBoardContexts(session);
+    const personaPrompt = session.persona_prompt ?? undefined;
+    const authorizedSkillIds = session.authorized_skill_ids ?? undefined;
 
     if (body.stream) {
       // 真流式：订阅会话的 Redis 流 channel，把内部增量事件译成 OpenAI chat.completion.chunk SSE。
       // 先订阅再 dispatch，避免错过早期 assistant_delta；dispatch 用 waitForResponse:false 不阻塞，
-      // agent 仍由内部 outbox listener 驱动，计费照常结算、final 事件照常发布，路由不重复结算。
+      // agent 仍由内部 outbox listener 驱动，计费照常结算，路由不重复结算。
       const chunkId = `chatcmpl-${randomUUID()}`;
       const created = Math.floor(Date.now() / 1000);
       const includeUsage = body.stream_options?.include_usage === true;
@@ -154,9 +207,12 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
 
       try {
         await sub.connect();
-        await sub.subscribe(aiChatStreamChannel(sessionId));
+        await sub.subscribe(aiChatStreamChannel(runtimeSessionId));
       } catch (err) {
-        request.log.error({ err, sessionId }, '开放 API 流式订阅失败');
+        request.log.error(
+          { err, sid, runtimeSessionId },
+          '开放会话流式订阅失败',
+        );
         await sub.quit().catch(() => {});
         return sendOpenAiError(
           reply,
@@ -192,7 +248,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         // 客户端中途断开时取消 agent，避免空跑继续计费。
         if (cancel) {
           void cancelAiChatSessionRequest(
-            sessionId,
+            runtimeSessionId,
             accountId,
             'client_disconnect',
           ).catch(() => {});
@@ -212,7 +268,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         id: chunkId,
         object: 'chat.completion.chunk',
         created,
-        model: body.model,
+        model: session.model_key,
         choices: [
           { index: 0, delta: { role: 'assistant' }, finish_reason: null },
         ],
@@ -234,7 +290,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
                 id: chunkId,
                 object: 'chat.completion.chunk',
                 created,
-                model: body.model,
+                model: session.model_key,
                 choices: [
                   {
                     index: 0,
@@ -258,12 +314,14 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
               finish();
               break;
             }
+            // 成功一轮：刷新会话活动时间并顺延 TTL。
+            void touchOpenSessionActivity(sid).catch(() => {});
             // 终止 chunk：空 delta + finish_reason。
             writeChunk({
               id: chunkId,
               object: 'chat.completion.chunk',
               created,
-              model: body.model,
+              model: session.model_key,
               choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
             });
             // 可选 usage chunk（仅当客户端 stream_options.include_usage 且有用量；usage 已归一化）。
@@ -272,7 +330,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
                 id: chunkId,
                 object: 'chat.completion.chunk',
                 created,
-                model: body.model,
+                model: session.model_key,
                 choices: [],
                 usage: {
                   prompt_tokens: event.usage.promptTokens ?? 0,
@@ -311,18 +369,20 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
       // 触发执行（不阻塞）；dispatch 期错误手动写 error 帧后收尾。
       void dispatchAiChatPrompt({
         accountId,
-        userMessage: lastUser.content,
-        inputKind: pastedBoard ? 'user_pasted_board' : 'normal',
-        pastedBoard,
-        history,
-        sessionId,
-        personaPrompt: systemPrompt,
+        userMessage: body.content,
+        history: [],
+        sessionBoardContexts,
+        sessionId: runtimeSessionId,
+        personaPrompt,
         authorizedSkillIds,
         llmRuntime: runtime,
         entitlementSnapshot: entitlement,
         waitForResponse: false,
       }).catch((err) => {
-        request.log.error({ err, sessionId }, '开放 API 流式分发失败');
+        request.log.error(
+          { err, sid, runtimeSessionId },
+          '开放会话流式分发失败',
+        );
         if (!finished) {
           writeChunk({
             error: {
@@ -341,12 +401,11 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
 
     const result = await dispatchAiChatPrompt({
       accountId,
-      userMessage: lastUser.content,
-      inputKind: pastedBoard ? 'user_pasted_board' : 'normal',
-      pastedBoard,
-      history,
-      sessionId,
-      personaPrompt: systemPrompt,
+      userMessage: body.content,
+      history: [],
+      sessionBoardContexts,
+      sessionId: runtimeSessionId,
+      personaPrompt,
       authorizedSkillIds,
       llmRuntime: runtime,
       entitlementSnapshot: entitlement,
@@ -363,6 +422,9 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
+    // 成功一轮：刷新会话活动时间并顺延 TTL。
+    void touchOpenSessionActivity(sid).catch(() => {});
+
     // 真实 token 用量由 dispatchAiChatPrompt 经 IPC 回传（result.usage，归一化口径、与计费一致）；
     // provider 未上报时回退 0。
     const usage = result.usage;
@@ -370,7 +432,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
       id: `chatcmpl-${result.requestId}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: body.model,
+      model: session.model_key,
       choices: [
         {
           index: 0,
@@ -384,5 +446,42 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         total_tokens: usage?.totalTokens ?? 0,
       },
     };
+  });
+
+  // GET /api/v1/sessions/:sid — 查会话元信息（不返回历史正文）。
+  app.get('/:sid', async (request, reply) => {
+    const principal = requireApiKeyPrincipal(request);
+    const { sid } = request.params as { sid: string };
+    const session = await findOpenSessionByIdForUser(sid, principal.userId);
+    if (!session) {
+      return sendOpenAiError(
+        reply,
+        404,
+        '会话不存在或无权访问',
+        'invalid_request_error',
+        'session_not_found',
+      );
+    }
+    return toOpenSessionDto(session);
+  });
+
+  // DELETE /api/v1/sessions/:sid — 软删会话（之后该 sid 续聊即 404）。
+  app.delete('/:sid', async (request, reply) => {
+    const principal = requireApiKeyPrincipal(request);
+    const { sid } = request.params as { sid: string };
+    const deleted = await softDeleteOpenSession({
+      id: sid,
+      userId: principal.userId,
+    });
+    if (!deleted) {
+      return sendOpenAiError(
+        reply,
+        404,
+        '会话不存在或无权访问',
+        'invalid_request_error',
+        'session_not_found',
+      );
+    }
+    return { id: sid, object: 'session', deleted: true };
   });
 }

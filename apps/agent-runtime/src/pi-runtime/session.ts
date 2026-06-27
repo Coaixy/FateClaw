@@ -1,7 +1,6 @@
 import {
   createAgentSession,
   SettingsManager,
-  type SessionManager,
 } from '@earendil-works/pi-coding-agent';
 
 import { getContext } from '../context.js';
@@ -43,57 +42,6 @@ function resolveThinkingLevel(
   level: PiThinkingLevel | undefined,
 ): PiThinkingLevel {
   return level ?? DEFAULT_THINKING_LEVEL;
-}
-
-/**
- * 把对外多轮历史（HistoryMessage）按真实 user/assistant 角色注入 pi 会话上下文。
- *
- * 仅用于对外 OpenAI 兼容入口的「无状态多轮」：每次请求会话独立（sessionId 随机），
- * 需把 messages 中末条 user 之前的轮次以真实角色补进会话树，createAgentSession 才能
- * 经 buildSessionContext 读到这些历史并送入 LLM。Web 内部多轮走持久化 sessionId，
- * history 恒为空、不进此分支。
- *
- * 注意：必须在 createAgentSession 之前调用——createAgentSession 在构造时一次性读取
- * manager 当前的会话上下文（sdk 内 buildSessionContext），之后追加的消息不再纳入本轮。
- *
- * AssistantMessage 的 api/provider/model 等元数据仅用于会话本地记账，不会回传给 provider；
- * usage 一律置零、stopReason 固定 'stop'——这些是「重放」的历史，而非本次真实生成结果。
- */
-function injectHistoryMessages(
-  manager: SessionManager,
-  history: ContainerInput['history'],
-  runtime: ContainerInput['llmRuntime'],
-): void {
-  for (const item of history) {
-    const content = item.content?.trim();
-    if (!content) continue;
-    const timestamp = Date.now();
-    if (item.role === 'user') {
-      manager.appendMessage({
-        role: 'user',
-        content,
-        timestamp,
-      });
-    } else {
-      manager.appendMessage({
-        role: 'assistant',
-        content: [{ type: 'text', text: content }],
-        api: runtime.piApi,
-        provider: runtime.providerKey,
-        model: runtime.model,
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp,
-      });
-    }
-  }
 }
 
 export interface PiSessionRunResult {
@@ -214,14 +162,6 @@ export async function runPiSession(args: {
     cwd,
     sessionId: args.containerInput.sessionId,
   });
-  // 对外多轮历史按角色注入（Web 内部 history 恒为空，跳过）；必须先于 createAgentSession。
-  if (args.containerInput.history.length > 0) {
-    injectHistoryMessages(
-      piSession.manager,
-      args.containerInput.history,
-      args.containerInput.llmRuntime,
-    );
-  }
   const { session } = await createAgentSession({
     cwd,
     agentDir: cwd,

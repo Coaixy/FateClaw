@@ -23,6 +23,7 @@ import { baziCasesSolarDateMigrations } from './definitions/0063-bazi-cases-sola
 import { skillCategoryMigrations } from './definitions/0064-skill-category.js';
 import { skillCategoryDivinationBucketMigrations } from './definitions/0065-skill-category-divination-bucket.js';
 import { userApiKeysMigrations } from './definitions/0066-user-api-keys.js';
+import { openSessionsMigrations } from './definitions/0067-open-sessions.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -54,4 +55,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...skillCategoryMigrations,
   ...skillCategoryDivinationBucketMigrations,
   ...userApiKeysMigrations,
+  ...openSessionsMigrations,
 ];

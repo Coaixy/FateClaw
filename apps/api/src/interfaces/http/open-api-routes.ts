@@ -3,8 +3,8 @@ import type { FastifyError, FastifyInstance } from 'fastify';
 import { DirectPaipanError } from '../../modules/chat/paipan-runtime.js';
 import { listPublicOfficialModels } from '../../modules/system/system-config.js';
 import { apiKeyAuthOnRequest, sendOpenAiError } from './api-key-auth.js';
-import { openChatRoutes } from './open-chat-routes.js';
 import { openPaipanRoutes } from './open-paipan-routes.js';
+import { openSessionRoutes } from './open-session-routes.js';
 
 /**
  * 对外开放 API 的 /api/v1 域父插件。
@@ -76,5 +76,5 @@ export async function openApiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   await app.register(openPaipanRoutes, { prefix: '/paipan' });
-  await app.register(openChatRoutes, { prefix: '/chat' });
+  await app.register(openSessionRoutes, { prefix: '/sessions' });
 }
