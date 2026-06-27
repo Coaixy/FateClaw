@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Compass,
   Crown,
+  KeyRound,
   LogOut,
   ServerCog,
   Sparkle,
@@ -72,6 +73,12 @@ export function UserMenuDropdown({
             href="/settings/advanced"
             icon={ServerCog}
             label={t('userMenu.modelSettings')}
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/settings/api-keys"
+            icon={KeyRound}
+            label="API Key"
             onNavigate={onNavigate}
           />
           <MenuItem

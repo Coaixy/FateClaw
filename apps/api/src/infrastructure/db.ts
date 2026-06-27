@@ -22,6 +22,16 @@ import {
   updateSoulContent,
 } from './repositories/accounts-repository.js';
 import {
+  countActiveUserApiKeys,
+  createUserApiKey,
+  findActiveApiKeyByHash,
+  hashApiKey,
+  listUserApiKeys,
+  revokeUserApiKey,
+  toApiKeyDto,
+  touchApiKeyLastUsed,
+} from './repositories/api-keys-repository.js';
+import {
   getAdminGlobalStats,
   getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
@@ -250,6 +260,14 @@ import type {
 } from './repositories/skills-repository.js';
 
 export {
+  countActiveUserApiKeys,
+  createUserApiKey,
+  findActiveApiKeyByHash,
+  hashApiKey,
+  listUserApiKeys,
+  revokeUserApiKey,
+  toApiKeyDto,
+  touchApiKeyLastUsed,
   adjustUserPurchasedBalance,
   archiveChatSession,
   bindAccountToUser,

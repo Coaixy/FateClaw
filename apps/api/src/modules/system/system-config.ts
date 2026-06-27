@@ -558,6 +558,47 @@ async function resolveFallbackOfficialRuntime(
   );
 }
 
+/**
+ * 按官方模型的 model_key 构造一个「官方 + metered」运行时快照。
+ *
+ * @param modelKey official_models.model_key；对外开放 API 的 model 别名当前直接用它。
+ * @param thinkingLevel 思考等级；缺省用平台默认。
+ * @returns 命中且可用（启用 + 已配置密钥）返回 metered 运行时；未命中或不可用返回 null。
+ * @remarks
+ * 对外开放 API 专用：强制走平台官方模型按 token 计费，**不**采用调用方的个人模型选择
+ * （个人选择可能是 BYOK / source='custom'，会导致不计费，与「仅官方模型」决策冲突）。
+ */
+export async function resolveOfficialRuntimeByModelKey(
+  modelKey: string,
+  thinkingLevel?: PiThinkingLevel,
+): Promise<EffectiveLlmRuntimeConfig | null> {
+  const models = await listOfficialModelConfigs();
+  const model = models.find((candidate) => candidate.model_key === modelKey);
+  if (!model) return null;
+  const candidate = await resolveUsableOfficialModelCandidate(model);
+  return candidate
+    ? buildOfficialRuntime(candidate.model, candidate.secret, thinkingLevel)
+    : null;
+}
+
+/**
+ * 列出对外开放 API 可暴露的官方模型（启用且已配置模型名）。
+ *
+ * @returns 每项含 model_key（对外 model 标识）与 display_name。
+ * @remarks 供 GET /api/v1/models 使用；MVP 直接暴露 model_key，未来可叠加 public_alias 别名层。
+ */
+export async function listPublicOfficialModels(): Promise<
+  Array<{ model_key: string; display_name: string }>
+> {
+  const models = await listOfficialModelConfigs();
+  return models
+    .filter((model) => model.enabled && model.model_name.trim().length > 0)
+    .map((model) => ({
+      model_key: model.model_key,
+      display_name: model.display_name,
+    }));
+}
+
 async function resolveOfficialRuntime(
   selection: UserModelSelection,
 ): Promise<EffectiveLlmRuntimeConfig> {
