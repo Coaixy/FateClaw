@@ -68,11 +68,22 @@ function normalizeAuthorizedWorkflowSkillIds(input: ContainerInput): string[] {
   );
 }
 
+function normalizeAuthorizedSkillIds(input: ContainerInput): string[] {
+  return Array.from(
+    new Set(
+      (input.authorizedSkillIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  );
+}
+
 function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
-  // 内部 workflow 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
+  // 内部 workflow / 对外开放 API 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
   return (
     input.authorizedWorkflowSkillIds !== undefined ||
-    input.authorizedSkillBundleIds !== undefined
+    input.authorizedSkillBundleIds !== undefined ||
+    input.authorizedSkillIds !== undefined
   );
 }
 
@@ -89,6 +100,9 @@ async function loadRequestScopedSkills(
   const authorizedWorkflowSkillIds = normalizeAuthorizedWorkflowSkillIds(
     options.containerInput,
   );
+  const authorizedSkillIds = normalizeAuthorizedSkillIds(
+    options.containerInput,
+  );
   const explicitSkillBundleScope = hasExplicitSkillBundleScope(
     options.containerInput,
   );
@@ -98,6 +112,13 @@ async function loadRequestScopedSkills(
         options.deps.skillCatalog.listWorkflowSnapshotSkills
         ? await options.deps.skillCatalog.listWorkflowSnapshotSkills(
             authorizedWorkflowSkillIds,
+          )
+        : authorizedSkillIds.length > 0 &&
+            options.userId &&
+            options.deps.skillCatalog.listEffectiveUserSkillsByIds
+        ? await options.deps.skillCatalog.listEffectiveUserSkillsByIds(
+            options.userId,
+            authorizedSkillIds,
           )
         : authorizedSkillBundleIds.length > 0
         ? options.deps.skillCatalog.listWorkflowBundleSkills
@@ -143,6 +164,7 @@ async function loadRequestScopedSkills(
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
       authorizedSkillBundleCount: authorizedSkillBundleIds.length,
       authorizedWorkflowSkillCount: authorizedWorkflowSkillIds.length,
+      authorizedSkillIdCount: authorizedSkillIds.length,
       isolation: 'request_scoped',
     },
     options.requestScope,

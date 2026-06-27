@@ -248,7 +248,7 @@ const AGENT_PARAMS: ParamRow[] = [
   { name: 'stream_options.include_usage', type: 'boolean', req: '否', def: 'false', constraints: '仅 stream=true', desc: '流式时在末尾追加一条仅含 usage 的 chunk。' },
   { name: 'max_tokens', type: 'integer', req: '否', def: '模型默认', constraints: '正整数', desc: '本次输出 token 上限。' },
   { name: 'fateclaw', type: 'object', req: '否', def: '', constraints: 'OpenAI SDK 经 extra_body 传入', desc: 'FateClaw 扩展：skills / thinking_level / board。' },
-  { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'string[]', desc: '开启的技能（技能 id 列表）。' },
+  { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'UUID[]', desc: '开启的技能：你拥有/订阅且已启用的 skill id；无权或未启用的会被忽略。' },
   { name: 'fateclaw.thinking_level', type: 'string', req: '否', def: 'medium', constraints: 'off | minimal | low | medium | high | xhigh', desc: '思考等级。' },
   { name: 'fateclaw.board', type: 'object', req: '否', def: '', constraints: '{ type?, text?, data? }', desc: '排盘结果，通常回填 /api/v1/paipan 的输出。' },
   { name: 'fateclaw.board.type', type: 'string', req: '否', def: 'paipan', constraints: '—', desc: '盘面类型。' },

@@ -25,8 +25,8 @@ const ChatMessageSchema = z.object({
 /** FateClaw 扩展字段（非 OpenAI 标准，OpenAI SDK 经 extra_body 传入）。 */
 const FateclawExtSchema = z
   .object({
-    // 开启的 skill；当前按 bundle 维度透传（见下方 TODO）。用 skill id(UUID)。
-    skills: z.array(z.string()).optional(),
+    // 开启的 skill：用户自有/订阅且启用的 skill id（UUID）；按单个 skill id 授权，归属+启用校验在 runtime 完成。
+    skills: z.array(z.string().uuid()).optional(),
     // 思考等级；缺省 medium。
     thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
     // 排盘结果（解读场景）：来自 /api/v1/paipan/:type 的输出。
@@ -122,9 +122,8 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         }
       : undefined;
 
-    // TODO(skills): 当前按 bundle 维度透传 fateclaw.skills。按「单个 skill id」开启需新增
-    //   agent-db queryEffectiveUserSkillsByIds + ContainerInput.authorizedSkillIds（设计文档 §7.6）。
-    const authorizedSkillBundleIds = body.fateclaw?.skills;
+    // 按「单个 skill id」授权（用户自有/订阅且启用的 skill）；无权/未启用的 id 在 runtime 内静默丢弃。
+    const authorizedSkillIds = body.fateclaw?.skills;
 
     if (body.stream) {
       // 真流式：订阅会话的 Redis 流 channel，把内部增量事件译成 OpenAI chat.completion.chunk SSE。
@@ -300,7 +299,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
         history: [],
         sessionId,
         personaPrompt: systemPrompt,
-        authorizedSkillBundleIds,
+        authorizedSkillIds,
         llmRuntime: runtime,
         entitlementSnapshot: entitlement,
         waitForResponse: false,
@@ -330,7 +329,7 @@ export async function openChatRoutes(app: FastifyInstance): Promise<void> {
       history: [], // 对外单轮调用，不携带历史（多轮历史映射见设计文档）。
       sessionId,
       personaPrompt: systemPrompt,
-      authorizedSkillBundleIds,
+      authorizedSkillIds,
       llmRuntime: runtime,
       entitlementSnapshot: entitlement,
       waitForResponse: true,
