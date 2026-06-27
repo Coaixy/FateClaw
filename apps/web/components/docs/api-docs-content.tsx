@@ -238,22 +238,24 @@ const PAIPAN_SPECS: PaipanSpec[] = [
   },
 ];
 
-/** Agent（解读）请求参数，含 fateclaw.* 扩展（点号表示嵌套）。 */
-const AGENT_PARAMS: ParamRow[] = [
-  { name: 'model', type: 'string', req: '是', def: '', constraints: '取 GET /api/v1/models 返回的 id', desc: '目标官方模型，只支持平台官方模型。' },
-  { name: 'messages', type: 'array', req: '是', def: '', constraints: '≥1 条，且至少一条 role="user"', desc: 'OpenAI 风格消息数组，支持多轮（见下方说明）。' },
-  { name: 'messages[].role', type: 'string', req: '是', def: '', constraints: 'system | user | assistant', desc: '消息角色。' },
-  { name: 'messages[].content', type: 'string', req: '是', def: '', constraints: '允许空串', desc: '消息文本。' },
-  { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'SSE 流式', desc: '是否流式返回（Server-Sent Events，OpenAI chunk 格式）。' },
-  { name: 'stream_options.include_usage', type: 'boolean', req: '否', def: 'false', constraints: '仅 stream=true', desc: '流式时在末尾追加一条仅含 usage 的 chunk。' },
-  { name: 'max_tokens', type: 'integer', req: '否', def: '模型默认', constraints: '正整数', desc: '本次输出 token 上限。' },
-  { name: 'fateclaw', type: 'object', req: '否', def: '', constraints: 'OpenAI SDK 经 extra_body 传入', desc: 'FateClaw 扩展：skills / thinking_level / board。' },
+/** 建会话（POST /sessions）请求参数：一次性设定模型、人设、盘面、技能，含 fateclaw.* 扩展。 */
+const SESSION_CREATE_PARAMS: ParamRow[] = [
+  { name: 'model', type: 'string', req: '是', def: '', constraints: '取 GET /api/v1/models 返回的 id', desc: '会话固定使用的官方模型；只支持平台官方模型，建会话后不可改。' },
+  { name: 'system', type: 'string', req: '否', def: '', constraints: '—', desc: '人设：作为附加的角色/口吻层；不会覆盖平台核心指令。' },
+  { name: 'fateclaw', type: 'object', req: '否', def: '', constraints: '—', desc: 'FateClaw 扩展：skills / thinking_level / board。' },
   { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'UUID[]', desc: '开启的技能：你拥有/订阅且已启用的 skill id；无权或未启用的会被忽略。' },
   { name: 'fateclaw.thinking_level', type: 'string', req: '否', def: 'medium', constraints: 'off | minimal | low | medium | high | xhigh', desc: '思考等级。' },
-  { name: 'fateclaw.board', type: 'object', req: '否', def: '', constraints: '{ type?, text?, data? }', desc: '排盘结果，通常回填 /api/v1/paipan 的输出。' },
-  { name: 'fateclaw.board.type', type: 'string', req: '否', def: 'paipan', constraints: '—', desc: '盘面类型。' },
+  { name: 'fateclaw.board', type: 'object', req: '否', def: '', constraints: '{ type?, text?, data? }', desc: '排盘结果，通常回填 /api/v1/paipan 的输出；只需在建会话时传一次，之后每轮自动带上。' },
+  { name: 'fateclaw.board.type', type: 'string', req: '否', def: 'board', constraints: '—', desc: '盘面类型。' },
   { name: 'fateclaw.board.text', type: 'string', req: '否', def: '', constraints: '—', desc: '中文盘面文本（来自 /api/v1/paipan 的 text）。' },
   { name: 'fateclaw.board.data', type: 'unknown', req: '否', def: '', constraints: '任意 JSON', desc: '结构化盘面；仅当 text 缺失时兜底使用。' },
+];
+
+/** 发消息（POST /sessions/:sid/messages）请求参数：每轮只发本轮文本。 */
+const SESSION_MESSAGE_PARAMS: ParamRow[] = [
+  { name: 'content', type: 'string', req: '是', def: '', constraints: '非空', desc: '本轮提问；历史与盘面由会话记着，无需重发。' },
+  { name: 'stream', type: 'boolean', req: '否', def: 'false', constraints: 'SSE 流式', desc: '是否流式返回（Server-Sent Events，OpenAI chunk 格式）。' },
+  { name: 'stream_options.include_usage', type: 'boolean', req: '否', def: 'false', constraints: '仅 stream=true', desc: '流式时在末尾追加一条仅含 usage 的 chunk。' },
 ];
 
 /** 错误码（调用方视角）。 */
@@ -265,8 +267,9 @@ const ERROR_CODES: Array<{ status: string; code: string; type: string; when: str
   { status: '404', code: 'unknown_paipan_type', type: 'invalid_request_error', when: '排盘类型不存在' },
   { status: '400', code: 'PAIPAN.PARAM_INVALID', type: 'invalid_request_error', when: '排盘参数错误（缺必填、类型 / 枚举 / 范围不对）' },
   { status: '500', code: 'PAIPAN.EXECUTION_FAILED', type: 'invalid_request_error', when: '排盘执行出错（如时间非法、漏传该方式必需的参数）' },
-  { status: '400', code: 'invalid_request', type: 'invalid_request_error', when: 'Agent 请求体有误，或没有 user 消息' },
-  { status: '400', code: 'model_not_found', type: 'invalid_request_error', when: 'model 不是可用的官方模型' },
+  { status: '400', code: 'invalid_request', type: 'invalid_request_error', when: '请求体有误（缺字段、类型不对等）' },
+  { status: '400', code: 'model_not_found', type: 'invalid_request_error', when: 'model 不是可用的官方模型，或会话模型已下线' },
+  { status: '404', code: 'session_not_found', type: 'invalid_request_error', when: '会话不存在、无权访问、已删除或已过期' },
   { status: '502', code: 'agent_error', type: 'api_error', when: 'Agent 执行失败' },
   { status: '429', code: 'rate_limit_exceeded', type: 'rate_limit_exceeded', when: '调用过于频繁（带 Retry-After 头）' },
   { status: '500', code: 'internal_error', type: 'api_error', when: '服务器内部错误' },
@@ -543,7 +546,7 @@ export function ApiDocsContent() {
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink">FateClaw 开放 API</h1>
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted">
             用 API Key 程序化调用两类能力：确定性<strong className="text-ink">排盘</strong>
-            （八字 / 紫微 / 六爻 / 经占 / 梅花 / 奇门 / 六壬）与 OpenAI 兼容的{' '}
+            （八字 / 紫微 / 六爻 / 经占 / 梅花 / 奇门 / 六壬）与有状态多轮的{' '}
             <strong className="text-ink">AI 解读（Agent）</strong>。在
             <Link href="/settings/api-keys" className="mx-1 text-primary hover:underline">
               设置 · API Key
@@ -652,69 +655,86 @@ export function ApiDocsContent() {
         {/* 解读 · Agent */}
         {tab === 'agent' && (
           <div className="space-y-12">
-            <Section id="agent-chat" title="AI 解读（OpenAI 兼容）">
-              <Endpoint method="POST" path="/api/v1/chat/completions" />
+            <Section id="agent-chat" title="AI 解读（有状态会话）">
               <P>
-                兼容 OpenAI Chat Completions，可直接用 OpenAI SDK 改 <C>base_url</C> 调用。要让 AI 解读一张盘，
-                把排盘返回的内容放进 <C>fateclaw.board</C> 即可（OpenAI SDK 经 <C>extra_body</C> 传 <C>fateclaw</C>）。
+                解读是<strong className="text-ink">有状态会话</strong>：先建一个会话，一次性设定模型、人设、盘面、技能，拿到一个
+                <C>sid</C>；之后每轮只发本轮提问，<strong className="text-ink">历史和盘面服务端记着</strong>，无需重发。
               </P>
               <Note>
-                <strong className="text-ink">支持多轮对话：</strong>和 OpenAI 一样，上下文由本次 <C>messages</C> 决定（服务端不存历史）。
-                <strong className="text-ink">最后一条 user</strong> 是本轮提问，它前面的 user / assistant 轮会作为对话历史，
-                <strong className="text-ink">第一条 system</strong> 作为人设。响应的 <C>usage</C> 为真实 token 数；
-                <C>stream=true</C> 走 SSE 流式（OpenAI chunk 格式）。
+                两步走：<strong className="text-ink">① POST /sessions</strong> 建会话（带 <C>model</C> / <C>system</C> / <C>fateclaw.board</C> / <C>fateclaw.skills</C>）→ 拿 <C>id</C>；
+                <strong className="text-ink">② POST /sessions/{'{id}'}/messages</strong> 发提问，可多轮。响应 <C>usage</C> 为真实 token 数；<C>stream=true</C> 走 SSE 流式（OpenAI chunk 格式）。
+                会话 30 天不活动自动过期（每次发消息顺延）。
               </Note>
 
-              <Label>请求参数</Label>
-              <ParamTable params={AGENT_PARAMS} />
-
-              <div className="space-y-2">
-                <Label>解读一张盘</Label>
-                <P>
-                  把 <C>/api/v1/paipan/:type</C> 的返回填进 <C>board</C>：优先用 <C>text</C> 作为解读内容，
-                  <C>text</C> 缺失时才用 <C>data</C>；用户问题取自最后一条 user 消息。
-                </P>
-              </div>
-
-              <P>示例：Python（openai SDK）</P>
-              <Code lang="python">{`from openai import OpenAI
-
-client = OpenAI(base_url="${baseUrl}", api_key="fc_live_xxxxxxxx")
-
-resp = client.chat.completions.create(
-    model="<official-model-key>",          # 来自 GET /api/v1/models
-    messages=[
-        {"role": "system", "content": "你是一位严谨的命理解读师。"},
-        {"role": "user", "content": "请帮我解读这张盘的事业走向。"},
-    ],
-    extra_body={
-        "fateclaw": {
-            "thinking_level": "high",       # off|minimal|low|medium|high|xhigh，默认 medium
-            "board": {                       # 把 /api/v1/paipan 的返回放进来
-                "type": "bazi",
-                "text": "<来自 /api/v1/paipan/bazi 的 text>",
-            },
-        }
-    },
-)
-print(resp.choices[0].message.content)`}</Code>
-
-              <P>示例：curl</P>
-              <Code lang="curl">{`curl -X POST ${baseUrl}/chat/completions \\
+              <Label>① 建会话</Label>
+              <Endpoint method="POST" path="/api/v1/sessions" />
+              <ParamTable params={SESSION_CREATE_PARAMS} />
+              <P>
+                解读一张盘：把 <C>/api/v1/paipan/:type</C> 的返回填进 <C>fateclaw.board</C>（优先 <C>text</C>，缺失才用 <C>data</C>）。盘面只在这里传一次。
+              </P>
+              <Code lang="curl">{`curl -X POST ${baseUrl}/sessions \\
   -H "Authorization: Bearer fc_live_xxxxxxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "<official-model-key>",
-    "messages": [
-      {"role": "system", "content": "你是一位严谨的命理解读师。"},
-      {"role": "user", "content": "请帮我解读这张盘的事业走向。"}
-    ],
-    "fateclaw": { "thinking_level": "high" }
+    "system": "你是一位严谨的命理解读师。",
+    "fateclaw": {
+      "thinking_level": "high",
+      "board": {
+        "type": "bazi",
+        "text": "<来自 /api/v1/paipan/bazi 的 text>"
+      }
+    }
   }'`}</Code>
+              <Code lang="json">{`{
+  "id": "sess_xxxxxxxx",          // 之后发消息用这个 sid
+  "object": "session",
+  "model": "<official-model-key>",
+  "status": "active",
+  "created_at": "2026-06-27T...",
+  "last_active_at": "2026-06-27T...",
+  "expires_at": "2026-07-27T..."
+}`}</Code>
+
+              <Label>② 发消息（可多轮）</Label>
+              <Endpoint method="POST" path="/api/v1/sessions/{id}/messages" />
+              <ParamTable params={SESSION_MESSAGE_PARAMS} />
+              <Code lang="curl">{`curl -X POST ${baseUrl}/sessions/sess_xxxxxxxx/messages \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "content": "请帮我解读这张盘的事业走向。" }'`}</Code>
+              <P>示例：Python（标准 requests，无需 OpenAI SDK）</P>
+              <Code lang="python">{`import requests
+
+BASE = "${baseUrl}"
+H = {"Authorization": "Bearer fc_live_xxxxxxxx"}
+
+# 建会话（带盘面，只传一次）
+sid = requests.post(f"{BASE}/sessions", headers=H, json={
+    "model": "<official-model-key>",
+    "system": "你是一位严谨的命理解读师。",
+    "fateclaw": {"thinking_level": "high",
+                 "board": {"type": "bazi", "text": "<paipan text>"}},
+}).json()["id"]
+
+# 多轮提问，每轮只发 content
+r1 = requests.post(f"{BASE}/sessions/{sid}/messages", headers=H,
+                   json={"content": "解读事业走向。"}).json()
+print(r1["choices"][0]["message"]["content"])
+
+r2 = requests.post(f"{BASE}/sessions/{sid}/messages", headers=H,
+                   json={"content": "那感情呢？"}).json()  # 自动带上上一轮上下文
+print(r2["choices"][0]["message"]["content"])`}</Code>
 
               <Label>返回</Label>
               <P>
-                标准 OpenAI <C>chat.completion</C>：解读正文在 <C>choices[0].message.content</C>。
+                解读正文在 <C>choices[0].message.content</C>，<C>usage</C> 为真实 token 用量（OpenAI <C>chat.completion</C> 风格响应体）。
+                <C>stream=true</C> 时返回 <C>chat.completion.chunk</C> 的 SSE 流，正文在 <C>choices[0].delta.content</C>，以 <C>data: [DONE]</C> 收尾。
+              </P>
+
+              <Label>管理会话</Label>
+              <P>
+                <C>GET /api/v1/sessions/{'{id}'}</C> 查会话元信息；<C>DELETE /api/v1/sessions/{'{id}'}</C> 删除会话（之后该 sid 续聊返回 404）。
               </P>
             </Section>
 

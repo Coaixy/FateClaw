@@ -16,7 +16,7 @@
 | 维度 | 决策 | 理由 |
 |---|---|---|
 | 本轮产出 | 设计文档 + 骨架代码 | 文档先行 review，再落地迁移/鉴权/路由骨架 |
-| Agent 形态 | **OpenAI 兼容** `/api/v1/chat/completions` | 第三方可直接用 OpenAI SDK 改 `base_url` 调用，迁移成本最低；FateClaw 特性走 `fateclaw` 扩展字段 |
+| Agent 形态 | **sid 有状态会话** `/api/v1/sessions` | 建会话传一次 model/system/board/skills 拿 sid；之后每轮只发 content，历史/盘面由服务端记着、runtime 原生 resume 复原——贴合 runtime 天生的持久会话纹理，省带宽、board 不重发（原 OpenAI 无状态 `/chat/completions` 已弃用） |
 | 计费 / 模型 | **仅平台官方模型，按 token 扣 coins** | 不做 BYOK，直接复用现有 metered 结算链路，设计大幅简化 |
 | Key 权限 | **单一全权 key** | 一个 key 调排盘 + Agent，无 scope 分支；后续可平滑加 scope |
 | 生成 key 门槛 | **会员（`fateclaw_clarity`）才能生成** | 复用 `hasPaidMembershipEntitlement()` |
@@ -24,9 +24,9 @@
 ## 2. 设计原则
 
 1. **复用优先，不另起炉灶**：排盘 runner、Agent 运行时、token 计费、会员门控均已存在，对外 API 只新增"鉴权 + 边界 + 桥接"薄层。
-2. **对外路由统一前缀 `/api/v1`**：放在全站 `/api/*` 之下（而非顶层 `/v1`），天然走现有 dev 代理与生产反代规则、无需额外路由配置；用独立的 `v1` 版本段与内部 `/api/<域>` 区隔、避免污染站内接口，同时契合 OpenAI SDK 的 `base_url` 约定。
+2. **对外路由统一前缀 `/api/v1`**：放在全站 `/api/*` 之下（而非顶层 `/v1`），天然走现有 dev 代理与生产反代规则、无需额外路由配置；用独立的 `v1` 版本段与内部 `/api/<域>` 区隔、避免污染站内接口。
 3. **延续既有约定**：对外 contract 用 `snake_case`（转换只在 `contracts-adapter`）、密钥永不回显明文（只给前缀 + 后 4 位）、Redis 限流、`trustProxy` 还原真实 IP。
-4. **错误体的唯一例外**：`/api/v1/chat/completions` 必须返回 **OpenAI 风格错误体**（否则 OpenAI SDK 无法解析报错），因此整个 `/api/v1` 对外域统一采用 OpenAI 风格错误体，与内部 `/api` 的 `{ "error": "中文" }` 区分（见 §9）。
+4. **错误体统一 OpenAI 风格**：整个 `/api/v1` 对外域统一采用 OpenAI 风格错误体 `{ error: { message, type, code, param } }`，与内部 `/api` 的 `{ "error": "中文" }` 区分（见 §9）；会话发消息的响应体也沿用 OpenAI `chat.completion` 风格，便于调用方解析。
 5. **Key 挂在 `user` 上**，不挂 `account`（`account` 是已停用的微信 bot 实体）。
 
 ## 3. 架构总览
@@ -41,7 +41,8 @@
 │  /api/v1/* 对外域   ──requireApiKey()──┐                          │
 │   ├─ GET  /api/v1/paipan/catalog       │ 解析 key → sha256 → 查表 │
 │   ├─ POST /api/v1/paipan/{type}        │ 校验 status/expires      │
-│   └─ POST /api/v1/chat/completions     │ 校验会员有效 + 未欠费     │
+│   ├─ POST /api/v1/sessions             │ 校验会员有效 + 未欠费     │
+│   └─ POST /api/v1/sessions/{sid}/messages                       │
 │                                    │ request.user = {userId}  │
 │  /api/api-keys 管理域 ──requireAuth()(站内 JWT)               │
 │   ├─ POST   生成 (会员校验, 明文返回一次)                      │
@@ -63,7 +64,7 @@
 
 **两条数据通路的根本差异**：
 - **排盘**是进程内纯函数调用，同步、确定性、零计费。
-- **Agent** 底层是按账号隔离的 Redis-IPC 异步守护进程（站内聊天是「入队 → `request_id` → WebSocket 推流」模型），对外 OpenAI 兼容接口需要把它**桥接**成同步 JSON 或 SSE 流（见 §7.4）。
+- **Agent** 底层是按账号隔离的 Redis-IPC 异步守护进程（站内聊天是「入队 → `request_id` → WebSocket 推流」模型），对外 sid 会话接口需要把它**桥接**成同步 JSON 或 SSE 流（见 §7.4）。
 
 ## 4. 鉴权层：API Key 体系（全新建）
 
@@ -146,7 +147,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 | Key 管理 | `/api/api-keys` | 站内 JWT | 项目统一 `{error:"中文"}` |
 | 内部既有 | `/api/<域>` | JWT / X-Admin-Key | 项目统一 |
 
-OpenAI SDK 用法：`base_url = https://<host>/api/v1`，SDK 自动拼成 `/api/v1/chat/completions`。
+对外基址：`base = https://<host>/api/v1`；排盘 `POST {base}/paipan/{type}`，会话 `POST {base}/sessions` → `POST {base}/sessions/{sid}/messages`。
 
 ## 6. 排盘 API
 
@@ -216,138 +217,154 @@ OpenAI SDK 用法：`base_url = https://<host>/api/v1`，SDK 自动拼成 `/api/
 - 受 api-key 维度限流约束（§8），防滥用。
 - 未来若要对排盘按次计费，在路由层加一道 reserve/settle 即可（预留扩展点）。
 
-## 7. Agent API（OpenAI 兼容）
+## 7. Agent API（sid 有状态会话）
 
-### 7.1 `POST /api/v1/chat/completions`
+### 7.1 端点总览
 
-OpenAI Chat Completions 兼容。第三方用标准 OpenAI SDK 改 `base_url` 即可调用；FateClaw 特性通过 `fateclaw` 扩展字段表达（OpenAI SDK 用 `extra_body` 传递）。
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| POST | `/api/v1/sessions` | 建会话：一次性设定 model/system/board/skills，返回不可猜的 public sid |
+| POST | `/api/v1/sessions/{sid}/messages` | 发一轮消息（流式 SSE / 非流式），usage 真实回填 |
+| GET | `/api/v1/sessions/{sid}` | 查会话元信息 |
+| DELETE | `/api/v1/sessions/{sid}` | 软删会话（之后续聊即 404） |
+
+**为何 sid 有状态、而非 OpenAI 无状态**：runtime 天生有状态（pi 会话靠持久化 sessionId 存盘、`SessionManager.open` resume 复原历史，站内 web 多轮即如此）。无状态 `/chat/completions` 反而要把 messages 历史**手动重放**进会话——与 runtime 纹理对着干。sid 顺着纹理走：历史由原生 resume 复原，board/persona/skills 建会话存一次、服务端每轮重建注入，调用方每轮只发本轮 content。
 
 ### 7.2 请求体
 
+**建会话** `POST /api/v1/sessions`：
+
 ```jsonc
 {
-  "model": "<official_models.model_key>", // MVP 直传内部 model_key；稳定别名 fateclaw-pro 待实现（见 §7.3）
-  "messages": [
-    { "role": "system", "content": "你是一位命理师" },
-    { "role": "user", "content": "帮我解读这个八字" }
-  ],
-  "stream": false,                    // false=同步 JSON；true=SSE 流
-  "max_tokens": 2048,                 // → llmRuntime.maxOutputTokens
-
-  "fateclaw": {                       // FateClaw 扩展字段（非 OpenAI 标准）
-    "skills": ["<skill-uuid>", "..."],// 开启的 skill，用 skill id(UUID)
-    "thinking_level": "high",         // off|minimal|low|medium|high|xhigh，默认 medium
-    "board": {                        // 可选：排盘结果（解读场景）
+  "model": "<official_models.model_key>", // 取 GET /api/v1/models 的 id；会话固定使用，建后不可改
+  "system": "你是一位严谨的命理解读师",     // 可选：人设（受约束的 persona 覆盖层，不覆盖平台核心 system）
+  "fateclaw": {
+    "skills": ["<skill-uuid>", "..."],     // 可选：开启的 skill，用 skill id(UUID)
+    "thinking_level": "high",              // 可选：off|minimal|low|medium|high|xhigh，默认 medium
+    "board": {                             // 可选：排盘结果（解读场景），只在此传一次
       "type": "bazi",
-      "data": { /* 来自 /api/v1/paipan/bazi 的 data */ },
-      "text": "..."
+      "text": "...",                       // 来自 /api/v1/paipan/bazi 的 text（优先）
+      "data": { /* 结构化盘面，text 缺失时兜底 */ }
     }
   }
 }
 ```
+响应 `201`：`{ id: "sess_…", object: "session", model, status, created_at, last_active_at, expires_at }`。其中 `id` 即对外 sid。
 
-**字段映射到 `ContainerInput`**：
+**发消息** `POST /api/v1/sessions/{sid}/messages`：
 
-| OpenAI / 扩展字段 | → ContainerInput | 备注 |
+```jsonc
+{
+  "content": "帮我解读事业走向",            // 本轮提问；历史/盘面服务端记着，无需重发
+  "stream": false,                         // false=同步 JSON；true=SSE 流
+  "stream_options": { "include_usage": true } // 仅 stream=true：末尾追加仅含 usage 的 chunk
+}
+```
+
+### 7.3 存储与映射
+
+会话落 `open_sessions` 表（迁移 0067）。**public sid（`id`，`sess_…`）与内部 runtime sessionId（`runtime_session_id`，`openapi:<uuid>`）分离**：对外只给 public sid，内部 dispatch 只用 runtime sessionId，二者经 DB 映射、绝不外泄后者（防猜测/串话）。
+
+| 建会话字段 | → 存储列 | 发消息时如何用 |
 |---|---|---|
-| `messages` 中最后一条 user 内容 | `userMessage` | 之前的轮次→ `history`，多轮映射见 §7.4 |
-| `fateclaw.skills` | `authorizedSkillIds` | 按单个 skill id 授权，见 §7.6 |
-| `fateclaw.thinking_level` | `llmRuntime.thinkingLevel` | 枚举一致，可直接透传 |
-| `model` | `llmRuntime.model` 等 | 经别名映射，见 §7.3 |
-| `max_tokens` | `llmRuntime.maxOutputTokens` | |
-| `fateclaw.board` | `pastedBoard` (`inputKind:'user_pasted_board'`) | 对外无 session，用 pasted 形态注入 |
+| `model` | `model_key` | 每轮 `resolveOfficialRuntimeByModelKey(model_key, thinking_level)` 重建 official metered 运行时 |
+| `fateclaw.thinking_level` | `thinking_level` | 同上 |
+| `system` | `persona_prompt` | 每轮作为 `personaPrompt` 注入 |
+| `fateclaw.skills` | `authorized_skill_ids`(JSONB) | 每轮作为 `authorizedSkillIds` 注入（见 §7.6） |
+| `fateclaw.board` | `board`(JSONB) | 每轮重建单个 `SessionBoardContext` 注入（见 §7.5） |
+| — | `runtime_session_id` UNIQUE | dispatch 的 `sessionId`，原生 resume 复原历史 |
+| 归属/审计 | `user_id` / `api_key_id` | 读写都按 `user_id` 过滤，防跨用户 resume |
 
-### 7.3 模型映射
-
-- **MVP（当前骨架）**：对外 `model` 字段**直接传内部 `official_models.model_key`**。`resolveOfficialRuntimeByModelKey(model_key, thinking_level)` 精确匹配并构造 `source='official'` + `billingMode='metered'` 的运行时（带 `input/output_token_price_per_million_coins`）。未知/不可用 model → 400。
-- **稳定别名（待实现，见 §10 决策点 7）**：未来加 `official_models.public_alias` 列或映射表，对外暴露 `fateclaw-pro` 这类稳定别名以解耦内部标识；届时 §7.2 示例的 `fateclaw-pro` 才生效。当前请用 `GET /api/v1/models` 返回的 `model_key`。
-- `GET /api/v1/models`（OpenAI 兼容）列出当前可用的官方 `model_key`（部分 SDK 会探测）。
+**生命周期**：滑动 TTL `expires_at`（建会话与每轮活动都顺延 30 天）；查询按 `expires_at > NOW()` 过滤，过期即视为不存在（不依赖 status，省去翻 expired 的 sweeper）。无单用户数量上限。`status` active/deleted（DELETE 端点软删）。
 
 ### 7.4 核心难点：异步 Redis-IPC → 同步/SSE 桥接
 
-agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信。对外同步/SSE 接口的桥接流程：
+agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信。每轮发消息的桥接流程：
 
 > 实现关键：无需手写 enqueue/listener/计费 —— 高层入口 `dispatchAiChatPrompt()`（resident-agent.ts）已封装保活 + 监听 + reserve/settle 计费 + 等 final。
 
 ```
-1. accountId = getWebChatRuntimeId(userId) = web:{userId}
-   （对外调用与站内共用同一 resident 进程，不新增进程）
-2. 构造 dispatchAiChatPrompt 入参（§7.2 映射）：
-   - userMessage      ← messages 末条 user
-   - history          ← 末条 user 之前的 user/assistant 轮（排除 system、空内容；见 §7.8）
-   - personaPrompt    ← 第一条 system 消息
-   - pastedBoard      ← fateclaw.board（inputKind:'user_pasted_board'）
-   - authorizedSkillIds ← fateclaw.skills（按单个 skill id 授权，见 §7.6）
-   - llmRuntime       ← resolveOfficialRuntimeByModelKey(model, thinking_level)（强制 official metered）
-   - entitlementSnapshot ← getRuntimeEntitlementSnapshot(userId)
-   - sessionId        ← 一次性 openapi:{uuid}（对外每次调用独立会话）
-3. 调 dispatchAiChatPrompt(...)：内部已完成
+1. 按 sid + userId 取会话行（findOpenSessionByIdForUser）；不命中 → 404 session_not_found。
+2. accountId = getWebChatRuntimeId(userId) = web:{userId}（与站内共用同一 resident 进程）。
+3. 构造 dispatchAiChatPrompt 入参（§7.3 映射）：
+   - userMessage          ← body.content
+   - history              ← []（恒空！历史由 runtime 原生 resume 复原，不手动重放）
+   - sessionId            ← 会话行的 runtime_session_id（持久；命中 .path 映射即 SessionManager.open resume）
+   - sessionBoardContexts ← 由 board 快照每轮重建（见 §7.5）
+   - personaPrompt        ← persona_prompt
+   - authorizedSkillIds   ← authorized_skill_ids
+   - llmRuntime           ← resolveOfficialRuntimeByModelKey(model_key, thinking_level)（强制 official metered）
+   - entitlementSnapshot  ← getRuntimeEntitlementSnapshot(userId)
+4. 调 dispatchAiChatPrompt(...)：内部已完成
    ensureLocalAgentRunning（保活）+ addAccountListener + reserve/settle 计费 + 等 final。
-   ⚠️ 对外路由绝不重复 reserve/settle，否则双重计费。
+   ⚠️ 对外路由绝不重复 reserve/settle，否则双重计费。成功后 touchOpenSessionActivity 顺延 TTL。
 
    ┌─ stream=false（同步）──────────────────────────────────┐
-   │ waitForResponse:true → 取 InboxRequestResult.text       │
-   │ → 翻译成 OpenAI ChatCompletion JSON                     │
+   │ waitForResponse:true → 取 InboxRequestResult.text/usage │
+   │ → 翻译成 OpenAI chat.completion JSON                     │
    └────────────────────────────────────────────────────────┘
    ┌─ stream=true（SSE）────────────────────────────────────┐
-   │ 先 SUBSCRIBE aiChatStreamChannel(sessionId) 再 dispatch │
-   │ (waitForResponse:false)，避免漏早期 assistant_delta；    │
+   │ 先 SUBSCRIBE aiChatStreamChannel(runtime_session_id)     │
+   │ 再 dispatch(waitForResponse:false)，避免漏早期 delta；   │
    │ assistant_delta → content chunk，final → finish_reason  │
    │ (+ 可选 usage chunk)，收尾 data: [DONE]；断连 cancel。  │
    └────────────────────────────────────────────────────────┘
-4. usage：dispatchAiChatPrompt 经 IPC 回传 InboxRequestResult.usage
+5. usage：dispatchAiChatPrompt 经 IPC 回传 InboxRequestResult.usage
    （normalizeRuntimeTokenUsage 归一化，与计费同口径）；provider 未上报时回退 0。
 ```
 
-### 7.5 非流式响应（`stream: false`）
+> **并发**：daemon 默认每账号并发=1（`AGENT_RUNTIME_ACCOUNT_CONCURRENCY`），同用户所有会话经同一 daemon 串行消费，天然避免并发写同一 jsonl 致会话树错乱。MVP 未在路由层加 `session:processing` 锁——若将该并发上调，需补会话级串行锁（见 §10）。
+
+### 7.5 board 注入（会话级，客户端只传一次）
+
+pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是**每轮从 ContainerInput 重建注入 system prompt**（不存 pi 会话）。因此 board 选 `sessionBoardContexts` 机制（web 已验证范式），而非 `pastedBoard`（一次性、客户端每次重发）：
+
+- 建会话把 `fateclaw.board` 快照存 `open_sessions.board`；
+- 每轮发消息由路由把快照重建为单个 `SessionBoardContext`（`isCurrent:true`）放入 `sessionBoardContexts`，`inputKind` 保持 `normal`；
+- **source 用 `user_pasted_board`**：调用方能任意构造请求体，平台不应把其 board 当作可信的官方计算事实，按「用户自贴盘面」语义对待更稳妥；`promptText` 优先取 `board.text`，缺失才用 `JSON.stringify(board.data)`。
+
+### 7.6 skill 注入
+
+`fateclaw.skills` 用 **skill id(UUID)** —— skill 的唯一稳定标识（`dir_name` 可变、`skill_name` 不唯一）。建会话存一次、每轮注入。
+
+- `apps/agent-runtime/src/agent-db.ts`：`queryEffectiveUserSkillsByIds(userId, skillIds)` 复用 `queryEffectiveUserSkills` 的归属/订阅/`enabled` 校验后按 id 过滤。
+- `ContainerInput` / `ChatTaskInboxRequest` 带 `authorizedSkillIds?: string[]`；`resource-loader.ts` 经 `listEffectiveUserSkillsByIds` 走 by-id 分支。
+- 取值约束：只放行「调用方自有 enabled + active 订阅且 enabled」的 skill id；无权/未启用的 id 在 runtime 内**静默丢弃**（不报错）。
+
+> token 影响：开启更多 skill 仅让 system prompt 多几行索引（小）；真正计费大头是模型用 read/grep 把 skill 正文读进对话后计入后续 `promptTokens`。属正常 token 计费，无需额外定价。
+
+### 7.7 模型映射
+
+- 对外 `model` 字段**直接传内部 `official_models.model_key`**。`resolveOfficialRuntimeByModelKey(model_key, thinking_level)` 精确匹配并构造 `source='official'` + `billingMode='metered'` 的运行时。建会话期即校验，未知/不可用 → 400 model_not_found；模型在建会话后被下线，则发消息时同样 400。
+- `GET /api/v1/models`（OpenAI 兼容 list 结构）列出当前可用的官方 `model_key`。
+- 稳定别名（`public_alias`）待实现（见 §10）；当前请用 `GET /api/v1/models` 返回的 `model_key`。
+
+### 7.8 非流式响应
 
 ```jsonc
 {
   "id": "chatcmpl-<requestId>",
-  "object": "chat.completion",
+  "object": "chat.completion",          // 沿用 OpenAI 风格响应体，便于解析
   "created": 1700000000,
-  "model": "fateclaw-pro",
+  "model": "<model_key>",
   "choices": [{
     "index": 0,
     "message": { "role": "assistant", "content": "你的八字……" },
     "finish_reason": "stop"
   }],
-  "usage": {
-    "prompt_tokens": 1234,        // = promptTokens（含 cacheRead/Write 折入）
-    "completion_tokens": 567,
-    "total_tokens": 1801
-  }
+  "usage": { "prompt_tokens": 1234, "completion_tokens": 567, "total_tokens": 1801 }
 }
 ```
 
-> `usage` 为真实 token 数：由 `dispatchAiChatPrompt` 经 IPC 回传（`InboxRequestResult.usage`，`normalizeRuntimeTokenUsage` 归一化，与计费同口径）。provider 未上报用量时三项回退 0。流式下需 `stream_options.include_usage=true` 才在末尾追加 usage chunk（OpenAI 约定）。
+> `usage` 为真实 token 数（`normalizeRuntimeTokenUsage` 归一化，与计费同口径）；provider 未上报时三项回退 0。流式下需 `stream_options.include_usage=true` 才在末尾追加 usage chunk（OpenAI 约定）。
 
-### 7.6 skill 注入（需小改动）
+### 7.9 计费
 
-`fateclaw.skills` 用 **skill id(UUID)** —— skill 的唯一稳定标识（`dir_name` 可变、`skill_name` 不唯一）。
-
-**按单个 skill id 授权**（已实现）：
-- `apps/agent-runtime/src/agent-db.ts`：`queryEffectiveUserSkillsByIds(userId, skillIds)` 复用 `queryEffectiveUserSkills` 的归属/订阅/`enabled` 校验后按 id 过滤。
-- `ContainerInput` / `ChatTaskInboxRequest` 增 `authorizedSkillIds?: string[]`；`resource-loader.ts` 经 `listEffectiveUserSkillsByIds` 走 by-id 分支（`hasExplicitSkillBundleScope` 也认这个字段）。
-- 取值约束：只放行「调用方自有 enabled + active 订阅且 enabled」的 skill id；无权/未启用的 id 在 runtime 内**静默丢弃**（不报错）。
-
-> token 影响：开启更多 skill 仅让 system prompt 多几行索引（小）；真正计费大头是模型用 read/grep 把 skill 正文读进对话后计入后续 `promptTokens`。属正常 token 计费，无需额外定价。
-
-### 7.8 多轮历史映射（真·按角色注入）
-
-对外是 **OpenAI 无状态语义**：服务端不存历史，上下文完全由本次 `messages` 决定。但内部 runtime 走「一次性 `sessionId`」、每次调用独立会话，因此需把 `messages` 里的历史轮**主动注入**会话上下文：
-
-- **路由层**（`open-chat-routes.ts`）：定位最后一条 `user`（本轮 prompt），取其**之前**的 `user`/`assistant` 轮为 `history`（排除 `system`——已并入 `personaPrompt`——与空内容，保持原顺序）。
-- **runtime 层**（`pi-runtime/session.ts`）：`createAgentSession` 之前，按真实角色 `SessionManager.appendMessage()` 把 `history` 逐条写入会话树（`user` → `UserMessage`；`assistant` → `AssistantMessage`，其 api/provider/model 取 `llmRuntime`，`usage` 置零、`stopReason:'stop'`，仅本地记账、不回传 provider）。createAgentSession 经 `buildSessionContext` 一次性读取，故**必须先注入再创建**。
-- Web 内部多轮走持久化 `sessionId`，`history` 恒为空、跳过该分支，互不影响。
-
-### 7.7 计费
-
-计费**完全由 `dispatchAiChatPrompt` 内部链路完成**：reserve（入口校验欠费）→ 执行 → 按真实 usage `settleBillingReservationDetailed` 扣 coins（`promptTokens*inputPrice/1M + completionTokens*outputPrice/1M`，`roundCoinsToCents`）→ `incrementDailyTokens` → sweeper 兜底；口径与站内 AI Chat 完全一致。
+计费**完全由 `dispatchAiChatPrompt` 内部链路完成**：reserve（入口校验欠费）→ 执行 → 按真实 usage `settleBillingReservationDetailed` 扣 coins（`promptTokens*inputPrice/1M + completionTokens*outputPrice/1M`，`roundCoinsToCents`）→ `incrementDailyTokens` → sweeper 兜底；口径与站内 AI Chat 完全一致。建会话本身不触发 runtime、零计费。
 
 > ⚠️ **对外路由绝不重复 reserve/settle**，否则双重计费。对外只需用 `resolveOfficialRuntimeByModelKey` 构造 `source='official'` + `billingMode='metered'` 的 `llmRuntime` 传入，计费即自然发生（BYOK/custom 会被短路为 0，故必须强制官方模型）。
 
-**新增 api_key 维度**：MVP 把 `apiKeyId` 塞进 `billing_request_reservations.metadata`（jsonb，现成透传）。若需 per-key 可查询报表，再给 `billing_request_reservations` / `daily_usage` 加 `api_key_id` 列（列为决策点 §10）。
+**api_key 维度**：MVP 把 `apiKeyId` 塞进 `billing_request_reservations.metadata`（jsonb，现成透传）。若需 per-key 报表，再给计费表加 `api_key_id` 列（决策点 §10）。
 
 ## 8. 限流与配额
 
@@ -405,22 +422,25 @@ agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信�
 | 4 | `apps/api/src/interfaces/http/api-key-auth.ts` | `requireApiKey()` 中间件（仿 admin 范式） |
 | 5 | `apps/api/src/interfaces/http/api-keys-routes.ts` | `/api/api-keys` 管理路由（站内 JWT） |
 | 6 | `apps/api/src/interfaces/http/open-paipan-routes.ts` | `/api/v1/paipan/catalog` + `/api/v1/paipan/{type}` |
-| 7 | `apps/api/src/interfaces/http/open-chat-routes.ts` | `/api/v1/chat/completions`（OpenAI 兼容 + IPC 桥接：真实 usage 回填 / 多轮历史 / SSE 流式 / 单 skill 授权均已接线） |
-| 8 | `apps/api/src/interfaces/http/server.ts` | 注册以上路由 |
-| 9 | `apps/agent-runtime` `agent-db.ts` / `resource-loader.ts` / `ContainerInput` | 新增 `authorizedSkillIds` 按 skill id 过滤（§7.6） |
-| 10 | `apps/agent-runtime/src/pi-runtime/session.ts` | 多轮历史按角色注入会话上下文（§7.8） |
+| 7 | `apps/api/src/infrastructure/migrations/definitions/0067-open-sessions.ts` | `open_sessions` 表迁移（幂等），并在 `definitions.ts` 追加 |
+| 8 | `apps/api/src/infrastructure/repositories/open-sessions-repository.ts` | `createOpenSession / findOpenSessionByIdForUser / touchOpenSessionActivity / softDeleteOpenSession / toOpenSessionDto`，经 `db.ts` 再导出 |
+| 9 | `apps/api/src/interfaces/http/open-session-routes.ts` | `/api/v1/sessions` 四端点（建会话 / 发消息含 SSE / GET / DELETE）；IPC 桥接：usage 回填 / SSE 流式 / 单 skill 授权 / board 会话级注入 |
+| 10 | `apps/api/src/interfaces/http/open-api-routes.ts` | 注册 sessions 子插件（取代已删的 open-chat-routes） |
+| 11 | `apps/agent-runtime` `agent-db.ts` / `resource-loader.ts` / `ContainerInput` | 新增 `authorizedSkillIds` 按 skill id 过滤（§7.6） |
 
-落地范围：鉴权链路 + 排盘端点接线跑通；Agent 桥接四项集成（usage 回填 / 多轮历史 / SSE 流式 / 单 skill 粒度授权）已全部实现，详见 §7.4 / §7.6 / §7.8。
+弃用：`open-chat-routes.ts`（OpenAI `/chat/completions`）已删除；`session.ts` 的 `injectHistoryMessages`（无状态多轮的手动历史重放）已回退——sid 方案靠 runtime 原生 resume 复原历史，不再需要。
+
+落地范围：鉴权链路 + 排盘端点跑通；Agent 改为 sid 有状态会话，四项能力（usage 回填 / 多轮(原生 resume) / SSE 流式 / 单 skill 授权）均已实现，详见 §7.3–§7.6。
 
 ## 12. 实施步骤
 
 ```
-1. 迁移 0066 + repository           → verify: 迁移幂等执行、表结构正确
-2. contracts DTO                    → verify: tsc 通过
-3. requireApiKey() 中间件           → verify: 无 key/坏 key/过期 各分支返回正确
-4. /api/api-keys 管理路由           → verify: 生成→列出→吊销 闭环，明文仅一次
-5. /api/v1/paipan/*                     → verify: 用真实 key curl 出八字盘面
-6. /api/v1/chat/completions 桥接        → verify: stream=false/true 各跑通一次
-7. 更新 docs/api-reference.md       → 同步对外 API 说明
-8. workflow 多维度审查骨架          → 一致性/鉴权/接线/遗漏
+1. 迁移 0066/0067 + repository       → verify: 迁移幂等执行、表结构正确
+2. requireApiKey() 中间件           → verify: 无 key/坏 key/过期 各分支返回正确
+3. /api/api-keys 管理路由           → verify: 生成→列出→吊销 闭环，明文仅一次
+4. /api/v1/paipan/*                 → verify: 用真实 key curl 出八字盘面
+5. POST /api/v1/sessions            → verify: 拿到 sess_ sid；换用户 key 用同 sid →404
+6. POST /sessions/{sid}/messages    → verify: 非流式拿 content+usage；连发两轮第二轮能引用上下文
+7. 流式与管理端点                   → verify: stream=true 收到 SSE+[DONE]；GET/DELETE 闭环
+8. 同步 docs（设计文档 + web API 文档）
 ```
