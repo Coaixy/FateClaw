@@ -264,16 +264,38 @@ const DEFAULT_GUASHI_SCRIPT_SKELETON = [
   '## ⚠分寸提示 —— 仅供卦师参考：哪些话不宜对客户说死、客户可能追问什么；此节是给卦师的内部提示，不要写成直接对客户说的话',
 ].join('\n');
 
+/**
+ * 循环剥离 persona 中伪造的 <fateclaw_persona_override> 成对标签，直到文本不再变化。
+ *
+ * @remarks 单次 String.replace 是单趟扫描，删除匹配后从匹配末尾继续，不重扫拼接缝隙——故
+ *   `</fateclaw_persona_override</fateclaw_persona_override>>` 这类拆分/嵌套构造在一次剥离后会
+ *   「重新成形」为完整标签而存活，可逃逸覆盖层护栏。循环到稳定点即堵死该绕过。
+ * @param text persona 原文（可能为 undefined）。
+ * @returns 剥离干净的文本；输入为空时返回 undefined。
+ */
+function stripPersonaOverrideTags(
+  text: string | undefined,
+): string | undefined {
+  if (!text) return undefined;
+  const re = /<\/?fateclaw_persona_override>/gi;
+  let prev: string;
+  let out = text;
+  do {
+    prev = out;
+    out = out.replace(re, '');
+  } while (out !== prev);
+  return out;
+}
+
 function buildPiSystemPrompt(
   containerInput: ContainerInput,
   soulEditEnabled: boolean,
 ): string {
-  // persona 来自调用方（对外 API 的 system / 站内 Soul），属不可信文本。剥离其中伪造的
-  // <fateclaw_persona_override> 成对标签字面量，防止它提前闭合覆盖层、把后续文本顶成平台级
-  // 指令而逃逸下方「覆盖层使用规则/边界」护栏（与 board 的 XML 转义同理的纵深防御）。
-  const persona = containerInput.personaPrompt
-    ?.replace(/<\/?fateclaw_persona_override>/gi, '')
-    .trim();
+  // persona 来自调用方（对外 API 的 system / 站内 Soul），属不可信文本。循环剥离其中伪造的
+  // <fateclaw_persona_override> 成对标签字面量（见 stripPersonaOverrideTags 说明），防止它提前
+  // 闭合覆盖层、把后续文本顶成平台级指令而逃逸下方「覆盖层使用规则/边界」护栏（与 board 的
+  // XML 转义同理的纵深防御）。
+  const persona = stripPersonaOverrideTags(containerInput.personaPrompt)?.trim();
   // 话术稿分节骨架:卦师自定义模板优先,未自定义时回退平台默认骨架。
   const guashiScriptSkeleton =
     containerInput.guashiScriptTemplate?.trim() ||
