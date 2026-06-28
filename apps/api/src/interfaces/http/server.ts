@@ -22,6 +22,7 @@ import { logger } from '../../infrastructure/logger.js';
 import { resolveProjectRoot } from '../../infrastructure/project-root.js';
 import { accountRoutes } from './account-routes.js';
 import { adminRoutes } from './admin-routes.js';
+import { apiKeysRoutes } from './api-keys-routes.js';
 import { authRoutes } from './auth-routes.js';
 import { baziCasesRoutes } from './bazi-cases-routes.js';
 import { billingRoutes } from './billing-routes.js';
@@ -29,6 +30,8 @@ import { chatSessionsRoutes } from './chat-sessions-routes.js';
 import { clientProfilesRoutes } from './client-profiles-routes.js';
 import { messagesRoutes } from './messages-routes.js';
 import { modelSettingsRoutes } from './model-settings-routes.js';
+import { openApiRoutes } from './open-api-routes.js';
+import { openSessionsAdminRoutes } from './open-sessions-admin-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
 import { publicRoutes } from './public-routes.js';
 import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
@@ -330,6 +333,14 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 
   await app.register(billingRoutes, { prefix: '/api/billing' });
+
+  // 对外开放 API：会员用 api-key 程序化调用排盘/Agent。
+  // /api/api-keys 是站内管理面（JWT 鉴权）；/api/v1 是对外调用面（api-key 鉴权 + OpenAI 风格错误体）。
+  // 挂在 /api/v1 而非顶层 /v1：与全站 /api/* 一致，天然走现有 dev 代理与生产反代规则，无需额外配置。
+  await app.register(apiKeysRoutes, { prefix: '/api/api-keys' });
+  // 站内「API 使用详情」面板：用户查看自己经 API Key 创建的会话与对话（JWT 鉴权）。
+  await app.register(openSessionsAdminRoutes, { prefix: '/api/open-sessions' });
+  await app.register(openApiRoutes, { prefix: '/api/v1' });
 
   // Liveness：进程是否存活，不依赖外部组件，k8s livenessProbe 用
   app.get('/api/health', async () => ({ status: 'ok' }));

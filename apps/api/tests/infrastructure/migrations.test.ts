@@ -489,6 +489,8 @@ describe('runDatabaseMigrations', () => {
       '0063_bazi_cases_solar_date',
       '0064_skill_category',
       '0065_skill_category_methods_to_divination',
+      '0066_user_api_keys',
+      '0067_open_sessions',
     ]);
 
     await runDatabaseMigrations(client as never);

@@ -22,6 +22,25 @@ import {
   updateSoulContent,
 } from './repositories/accounts-repository.js';
 import {
+  countActiveUserApiKeys,
+  createUserApiKey,
+  findActiveApiKeyByHash,
+  hashApiKey,
+  listUserApiKeys,
+  revokeUserApiKey,
+  toApiKeyDto,
+  touchApiKeyLastUsed,
+} from './repositories/api-keys-repository.js';
+import {
+  createOpenSession,
+  findOpenSessionByIdForUser,
+  getOpenSessionForUserAnyStatus,
+  listOpenSessionsByUserId,
+  softDeleteOpenSession,
+  toOpenSessionDto,
+  touchOpenSessionActivity,
+} from './repositories/open-sessions-repository.js';
+import {
   getAdminGlobalStats,
   getChatSessionPiArchiveStates,
   getChatSessionPiCleanupCandidates,
@@ -250,6 +269,21 @@ import type {
 } from './repositories/skills-repository.js';
 
 export {
+  countActiveUserApiKeys,
+  createUserApiKey,
+  findActiveApiKeyByHash,
+  hashApiKey,
+  listUserApiKeys,
+  revokeUserApiKey,
+  toApiKeyDto,
+  touchApiKeyLastUsed,
+  createOpenSession,
+  findOpenSessionByIdForUser,
+  getOpenSessionForUserAnyStatus,
+  listOpenSessionsByUserId,
+  softDeleteOpenSession,
+  toOpenSessionDto,
+  touchOpenSessionActivity,
   adjustUserPurchasedBalance,
   archiveChatSession,
   bindAccountToUser,

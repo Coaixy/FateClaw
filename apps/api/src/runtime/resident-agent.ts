@@ -40,6 +40,7 @@ export async function dispatchAiChatPrompt(input: {
   guashiScriptTemplate?: string;
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
+  authorizedSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
   entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
@@ -65,6 +66,7 @@ export async function dispatchAiChatPrompt(input: {
     guashiScriptTemplate: input.guashiScriptTemplate,
     authorizedSkillBundleIds: input.authorizedSkillBundleIds,
     authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
+    authorizedSkillIds: input.authorizedSkillIds,
     llmRuntime: input.llmRuntime,
     entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: input.waitForResponse,

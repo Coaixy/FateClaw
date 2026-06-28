@@ -1000,6 +1000,7 @@ export function submitAiChatInboxRequest(input: {
   guashiScriptTemplate?: string;
   authorizedSkillBundleIds?: string[];
   authorizedWorkflowSkillIds?: string[];
+  authorizedSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
   entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
@@ -1186,6 +1187,7 @@ export function submitAiChatInboxRequest(input: {
           guashiScriptTemplate: input.guashiScriptTemplate,
           authorizedSkillBundleIds: input.authorizedSkillBundleIds,
           authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
+          authorizedSkillIds: input.authorizedSkillIds,
           llmRuntime,
           timestamp: new Date().toISOString(),
           outboxQueue: aiChatOutboxQueue, // 指定响应队列

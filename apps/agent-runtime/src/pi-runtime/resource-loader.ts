@@ -68,11 +68,22 @@ function normalizeAuthorizedWorkflowSkillIds(input: ContainerInput): string[] {
   );
 }
 
+function normalizeAuthorizedSkillIds(input: ContainerInput): string[] {
+  return Array.from(
+    new Set(
+      (input.authorizedSkillIds ?? [])
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  );
+}
+
 function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
-  // 内部 workflow 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
+  // 内部 workflow / 对外开放 API 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
   return (
     input.authorizedWorkflowSkillIds !== undefined ||
-    input.authorizedSkillBundleIds !== undefined
+    input.authorizedSkillBundleIds !== undefined ||
+    input.authorizedSkillIds !== undefined
   );
 }
 
@@ -89,6 +100,9 @@ async function loadRequestScopedSkills(
   const authorizedWorkflowSkillIds = normalizeAuthorizedWorkflowSkillIds(
     options.containerInput,
   );
+  const authorizedSkillIds = normalizeAuthorizedSkillIds(
+    options.containerInput,
+  );
   const explicitSkillBundleScope = hasExplicitSkillBundleScope(
     options.containerInput,
   );
@@ -98,6 +112,13 @@ async function loadRequestScopedSkills(
         options.deps.skillCatalog.listWorkflowSnapshotSkills
         ? await options.deps.skillCatalog.listWorkflowSnapshotSkills(
             authorizedWorkflowSkillIds,
+          )
+        : authorizedSkillIds.length > 0 &&
+            options.userId &&
+            options.deps.skillCatalog.listEffectiveUserSkillsByIds
+        ? await options.deps.skillCatalog.listEffectiveUserSkillsByIds(
+            options.userId,
+            authorizedSkillIds,
           )
         : authorizedSkillBundleIds.length > 0
         ? options.deps.skillCatalog.listWorkflowBundleSkills
@@ -143,6 +164,7 @@ async function loadRequestScopedSkills(
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
       authorizedSkillBundleCount: authorizedSkillBundleIds.length,
       authorizedWorkflowSkillCount: authorizedWorkflowSkillIds.length,
+      authorizedSkillIdCount: authorizedSkillIds.length,
       isolation: 'request_scoped',
     },
     options.requestScope,
@@ -246,7 +268,12 @@ function buildPiSystemPrompt(
   containerInput: ContainerInput,
   soulEditEnabled: boolean,
 ): string {
-  const persona = containerInput.personaPrompt?.trim();
+  // persona 来自调用方（对外 API 的 system / 站内 Soul），属不可信文本。剥离其中伪造的
+  // <fateclaw_persona_override> 成对标签字面量，防止它提前闭合覆盖层、把后续文本顶成平台级
+  // 指令而逃逸下方「覆盖层使用规则/边界」护栏（与 board 的 XML 转义同理的纵深防御）。
+  const persona = containerInput.personaPrompt
+    ?.replace(/<\/?fateclaw_persona_override>/gi, '')
+    .trim();
   // 话术稿分节骨架:卦师自定义模板优先,未自定义时回退平台默认骨架。
   const guashiScriptSkeleton =
     containerInput.guashiScriptTemplate?.trim() ||

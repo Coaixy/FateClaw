@@ -7,6 +7,7 @@ import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
 import type { PiThinkingLevel } from '../shared/types.js';
+import type { NormalizedRuntimeTokenUsage } from './token-usage.js';
 
 // ─── 公共类型 ──────────────────────────────────────────
 
@@ -19,6 +20,8 @@ export interface InboxRequestResult {
   publicErrorText?: string;
   publicReasonCode?: string;
   metadata?: unknown;
+  /** 本次请求的真实 token 用量（归一化口径，与计费一致）；provider 未上报时为全 0。 */
+  usage?: NormalizedRuntimeTokenUsage;
   skillContext?: Array<{
     skill: string;
     output: string;

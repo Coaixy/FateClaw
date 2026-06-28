@@ -320,6 +320,8 @@ async function resolvePendingAiChatResponse(args: {
     publicErrorText: args.payload.publicErrorText,
     publicReasonCode: args.payload.publicReasonCode,
     metadata: args.finalMetadata,
+    // 回传真实 token 用量（args.payload 即 payloadForUsage，usage 已归一化）；供对外 API 回填 OpenAI usage。
+    usage: normalizeRuntimeTokenUsage(args.payload.usage),
     skillContext: args.payload.skillContext,
   });
 }

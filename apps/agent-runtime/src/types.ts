@@ -77,6 +77,8 @@ export interface ContainerInput {
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
   authorizedWorkflowSkillIds?: string[];
+  /** 本轮按单个 Skill id 授权（对外开放 API 用）；空数组=本轮不加载任何用户 Skill。 */
+  authorizedSkillIds?: string[];
   /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
   outboxQueue?: string;
 }
@@ -118,6 +120,8 @@ export interface ChatTaskInboxRequest {
   authorizedSkillBundleIds?: string[];
   /** 本轮明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
   authorizedWorkflowSkillIds?: string[];
+  /** 本轮按单个 Skill id 授权（对外开放 API 用）；空数组=本轮不加载任何用户 Skill。 */
+  authorizedSkillIds?: string[];
   /** 指定响应写入的 outbox 队列（不指定则用默认队列） */
   outboxQueue?: string;
 }

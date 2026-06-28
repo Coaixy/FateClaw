@@ -148,6 +148,28 @@ export async function queryEffectiveUserSkills(
 }
 
 /**
+ * 按单个 Skill id 查询用户的有效自定义 Skill（自有 + 订阅且启用的）。
+ *
+ * @param userId 平台用户 ID。
+ * @param skillIds 请求级 Skill id 白名单。
+ * @returns 交集结果——只返回用户实际拥有/订阅且启用的 Skill；无权或未启用的 id 自动丢弃。
+ * @remarks 复用 queryEffectiveUserSkills 的归属/启用/安装/订阅有效期校验（不加 Bundle 过滤=全量有效），
+ *   再按 id 取交集；对外开放 API 用其按「单个 skill id」授权。
+ */
+export async function queryEffectiveUserSkillsByIds(
+  userId: string,
+  skillIds: string[],
+): Promise<EffectiveUserSkill[]> {
+  if (!userId) return [];
+  const wanted = new Set(
+    skillIds.map((id) => id.trim()).filter((id) => id.length > 0),
+  );
+  if (wanted.size === 0) return [];
+  const all = await queryEffectiveUserSkills(userId);
+  return all.filter((skill) => wanted.has(skill.id));
+}
+
+/**
  * 按 workflow 已授权的 Bundle ID 读取 Skill。
  *
  * @param skillBundleIds 管理后台 workflow 显式绑定的 Bundle ID 列表。

@@ -60,6 +60,11 @@
       "types": "./dist/bazi-cases/index.d.ts",
       "import": "./dist/bazi-cases/index.js",
       "default": "./dist/bazi-cases/index.js"
+    },
+    "./api-keys": {
+      "types": "./dist/api-keys/index.d.ts",
+      "import": "./dist/api-keys/index.js",
+      "default": "./dist/api-keys/index.js"
     }
   },
   "files": [
