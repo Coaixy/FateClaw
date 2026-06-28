@@ -279,3 +279,12 @@ export const TRACE_RETENTION_DAYS = parseInt(
   process.env.TRACE_RETENTION_DAYS || '7',
   10,
 );
+
+// 对外会话（open_sessions）过期后再保留多少天才物理清理。会话本身有 30 天滑动 TTL
+// （OPEN_SESSION_TTL_DAYS），过期后仍保留一段时间供「API 使用详情」面板对账；超过本保留期
+// 才由后台保留任务整套物理删除（open_sessions + 兜底 chat_sessions + messages）。
+// 实际数据留存 ≈ 末次活动 + 30(TTL) + 本值 天。
+export const OPEN_SESSION_RETENTION_DAYS = parseInt(
+  process.env.OPEN_SESSION_RETENTION_DAYS || '30',
+  10,
+);
