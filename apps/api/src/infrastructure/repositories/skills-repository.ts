@@ -1455,6 +1455,61 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
   );
 }
 
+/** 对外开放 API 的有效 skill 列表项：只暴露 id / 名称 / 简介 / 来源，隐去 dir/checksum 等内部字段。 */
+export interface OpenApiEffectiveSkill {
+  id: string;
+  name: string;
+  description: string | null;
+  /** 'self' = 自有；'subscribed' = 订阅而来。 */
+  source: 'self' | 'subscribed';
+}
+
+/**
+ * 列出用户「有效可用」的自定义 skill（自有且启用 + 订阅且启用），供对外开放 API 的
+ * `GET /api/v1/skills` 用，让调用方拿到建会话 `fateclaw.skills` 所需的 skill id(UUID)。
+ *
+ * **口径必须与 agent-runtime `queryEffectiveUserSkills` 完全一致**——那是建会话授权的权威来源
+ * （runtime 用 `queryEffectiveUserSkillsByIds` 按同口径取交集，无权/未启用的 id 会被静默丢弃）。
+ * 因此此处刻意**不**复用 `getUserCustomSkills` / `getSubscribedSkills`：后者为站内 UI 服务，
+ * 会返回未启用 / 未安装的 skill，口径更宽，拿来列表会出现「填进去却被丢弃」的幽灵项。
+ * 改动授权口径时，本函数与 agent-runtime 那份需**同步**。
+ *
+ * @param userId 平台用户 ID。
+ * @returns 该用户当前可填入 `fateclaw.skills` 的 skill（按名称升序，不含 dir/checksum 等内部字段）。
+ */
+export async function listEffectiveUserSkillsForOpenApi(
+  userId: string,
+): Promise<OpenApiEffectiveSkill[]> {
+  if (!userId) return [];
+  const { rows } = await pool.query(
+    `SELECT s.id, s.skill_name AS name, s.description, 'self' AS source
+       FROM user_custom_skills s
+      WHERE s.user_id = $1
+        AND s.enabled = true
+        AND s.deleted_at IS NULL
+        AND s.install_status = 'installed'
+        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
+     UNION ALL
+     SELECT s.id, s.skill_name AS name, s.description, 'subscribed' AS source
+       FROM user_skill_subscriptions sub
+       JOIN user_custom_skills s ON s.id = sub.skill_id
+      WHERE sub.subscriber_id = $1
+        AND sub.enabled = true
+        AND sub.status = 'active'
+        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
+        AND s.deleted_at IS NULL
+        AND (
+          s.visibility IN ('link_shared', 'shared')
+          OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
+        )
+        AND s.install_status = 'installed'
+        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
+      ORDER BY name ASC`,
+    [userId],
+  );
+  return rows as OpenApiEffectiveSkill[];
+}
+
 // =====================
 // --- Skill Bundles ---
 // =====================

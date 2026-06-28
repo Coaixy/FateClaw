@@ -2,7 +2,12 @@ import type { FastifyError, FastifyInstance } from 'fastify';
 
 import { DirectPaipanError } from '../../modules/chat/paipan-runtime.js';
 import { listPublicOfficialModels } from '../../modules/system/system-config.js';
-import { apiKeyAuthOnRequest, sendOpenAiError } from './api-key-auth.js';
+import { listEffectiveUserSkillsForOpenApi } from '../../infrastructure/repositories/skills-repository.js';
+import {
+  apiKeyAuthOnRequest,
+  requireApiKeyPrincipal,
+  sendOpenAiError,
+} from './api-key-auth.js';
 import { openPaipanRoutes } from './open-paipan-routes.js';
 import { openSessionRoutes } from './open-session-routes.js';
 
@@ -71,6 +76,24 @@ export async function openApiRoutes(app: FastifyInstance): Promise<void> {
         id: model.model_key,
         object: 'model',
         owned_by: 'fateclaw',
+      })),
+    };
+  });
+
+  // GET /api/v1/skills — 列出调用方「有效可用」的 skill（其 id 即建会话 fateclaw.skills 所需的 UUID）。
+  // 与 /models 对称：调用方先在此拿到 skill id，再填入 POST /sessions 的 fateclaw.skills。
+  // 口径与建会话授权完全一致（自有启用 + 订阅启用），故列出的 id 不会被 runtime 静默丢弃。
+  app.get('/skills', async (request) => {
+    const principal = requireApiKeyPrincipal(request);
+    const skills = await listEffectiveUserSkillsForOpenApi(principal.userId);
+    return {
+      object: 'list',
+      data: skills.map((skill) => ({
+        id: skill.id,
+        object: 'skill',
+        name: skill.name,
+        description: skill.description,
+        source: skill.source,
       })),
     };
   });
