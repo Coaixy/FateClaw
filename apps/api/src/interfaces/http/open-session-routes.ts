@@ -208,7 +208,11 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
     const runtimeSessionId = session.runtime_session_id;
     const sessionBoardContexts = buildSessionBoardContexts(session);
     const personaPrompt = session.persona_prompt ?? undefined;
-    const authorizedSkillIds = session.authorized_skill_ids ?? undefined;
+    // 省略 fateclaw.skills 时必须传空数组（显式空作用域），不能传 undefined：runtime 的
+    // hasExplicitSkillBundleScope 把三个 skill 字段全 undefined 视为「非显式」，会降级为加载
+    // 该用户全部 skill（站内 web chat 的语义）。对外 API 是 opt-in 白名单，不传即不加载，
+    // 故归一化为 []，与建会话时 skills:[] 入库后的口径一致。
+    const authorizedSkillIds = session.authorized_skill_ids ?? [];
 
     // 进 dispatch 前先抢会话忙碌锁（按 runtime_session_id）：同 sid 并发的第二条立即 409，
     // 不进入 reserve/槽位分配做无用功；requestId 透传给 dispatch，使内部续期与此处同 owner。

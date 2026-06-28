@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { API_KEY_LIVE_PREFIX } from '@fateclaw/contracts/api-keys';
@@ -11,12 +9,7 @@ import {
 } from '../../infrastructure/db.js';
 import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
 import { getRedis } from '../../infrastructure/redis.js';
-import {
-  fixedWindowRateLimit,
-  rateLimitCheck,
-  rateLimitClear,
-  rateLimitRecordFail,
-} from './rate-limit.js';
+import { fixedWindowRateLimit } from './rate-limit.js';
 
 /**
  * 对外 API 单个 key 的调用频率上限（次/分钟）。
@@ -86,46 +79,26 @@ async function touchLastUsedThrottled(keyId: string): Promise<void> {
  * 对外开放 API（/api/v1/*）的鉴权 onRequest 钩子。
  *
  * 流程（仿 admin-routes 范式，叠加会员/欠费门槛）：
- *   1. 按来源 IP 做失败退避，挡住对未知 key 的脚本爆破；
- *   2. 解析 Authorization: Bearer fc_live_xxx；
- *   3. sha256 哈希反查有效（active）key；
- *   4. 校验未过期；
+ *   1. 解析 Authorization: Bearer fc_live_xxx；
+ *   2. sha256 哈希反查有效（active）key；
+ *   3. 校验未过期；
+ *   4. 按 key 维度做调用频率限流（防单个 key 被滥用）；
  *   5. 校验会员有效 + 钱包未欠费（会员过期不物理失效 key，续费即恢复）；
  *   6. 写入 request.apiKeyPrincipal 供下游取 userId；
- *   7. 按 key 维度做调用频率限流；
- *   8. 节流更新 last_used_at。
+ *   7. 节流更新 last_used_at。
  *
  * @remarks 任一步失败均以 OpenAI 风格错误体响应并中断（return reply）。
+ *   不对「未知 key」做按来源 IP 的失败退避：对外 API 多为机器调用、常共享云出口 IP / CGNAT，
+ *   按 IP 退避会把同出口某个坏 key 的失败算到全体头上，连累同 IP 的合法会员被锁死（参见
+ *   auth-routes 当初为同一原因弃用 IP 退避、改按手机号的教训）。爆破防护由 256-bit key 空间
+ *   本身 + 按 key 的固定窗口限流承担。
  */
 export async function apiKeyAuthOnRequest(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void | FastifyReply> {
-  const ipHash = crypto
-    .createHash('sha256')
-    .update(request.ip)
-    .digest('hex')
-    .slice(0, 16);
-  const failKey = `openapi-auth:${ipHash}`;
-
-  const backoff = await rateLimitCheck(failKey);
-  if (!backoff.allowed) {
-    reply.header(
-      'Retry-After',
-      Math.ceil((backoff.retryAfterMs ?? 1000) / 1000),
-    );
-    return sendOpenAiError(
-      reply,
-      429,
-      '鉴权尝试过于频繁，请稍后再试',
-      'rate_limit_exceeded',
-      'rate_limit_exceeded',
-    );
-  }
-
   const token = parseBearerToken(request.headers['authorization']);
   if (!token || !token.startsWith(API_KEY_LIVE_PREFIX)) {
-    await rateLimitRecordFail(failKey);
     return sendOpenAiError(
       reply,
       401,
@@ -137,7 +110,6 @@ export async function apiKeyAuthOnRequest(
 
   const row = await findActiveApiKeyByHash(hashApiKey(token));
   if (!row) {
-    await rateLimitRecordFail(failKey);
     return sendOpenAiError(
       reply,
       401,
@@ -203,7 +175,6 @@ export async function apiKeyAuthOnRequest(
     apiKeyId: row.id,
     keyName: row.name,
   };
-  await rateLimitClear(failKey);
   void touchLastUsedThrottled(row.id);
 }
 
