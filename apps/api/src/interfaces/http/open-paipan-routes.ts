@@ -49,9 +49,10 @@ export async function openPaipanRoutes(app: FastifyInstance): Promise<void> {
           type: SKILL_DIR_TO_TYPE[item.skill],
           name: item.name,
           description: item.description,
-          // 对外展示 snake_case schema（registry 内部为 camelCase）。
+          // 对外展示 snake_case schema（registry 内部为 camelCase）。示例值已包含在
+          // parameters.examples 中并随之 snake 化；不再单独输出顶层 examples（原顶层那份未转换、
+          // 为 camelCase，与 parameters.examples 自相矛盾，属对外契约不一致）。
           parameters: paipanSchemaToSnakeCase(item.parameters),
-          examples: item.examples,
         })),
     };
   });

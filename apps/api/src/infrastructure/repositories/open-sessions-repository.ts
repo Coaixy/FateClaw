@@ -271,3 +271,51 @@ export async function listOpenSessionsByUserId(
     api_key_name: (row.api_key_name as string | null) ?? null,
   }));
 }
+
+/**
+ * 物理清理「过期已久」的对外会话及其衍生数据（供后台保留任务调用）。
+ *
+ * 删除 expires_at 早于 (NOW() - retentionDays) 的 open_sessions，连同其兜底 chat_sessions
+ * （id = runtime_session_id，形如 openapi:<uuid>）与该会话的全部 messages。
+ *
+ * @remarks messages → chat_sessions 的外键是 ON DELETE SET NULL（非 CASCADE），若只删
+ *   chat_sessions 会把 messages.session_id 置空、行仍残留，故必须显式先删 messages。三步在
+ *   单事务内完成：Postgres 的 NOW() 取事务开始时间，三条语句 cutoff 一致、不会错删边界行。
+ * @param retentionDays 会话过期后再保留的天数。
+ * @returns 物理删除的 open_sessions 行数。
+ */
+export async function purgeExpiredOpenSessions(
+  retentionDays: number,
+): Promise<number> {
+  const client = await getDbPool().connect();
+  try {
+    await client.query('BEGIN');
+    // 过期且超过保留期的筛选条件（三条语句共用；事务内 NOW() 一致，cutoff 不漂移）。
+    const expiredFilter = `expires_at IS NOT NULL
+        AND expires_at < NOW() - ($1 || ' days')::interval`;
+    const expiredRuntimeIds = `SELECT runtime_session_id FROM open_sessions WHERE ${expiredFilter}`;
+    const params = [String(retentionDays)];
+    // 1) 先删 messages（FK SET NULL，不随 chat_sessions 级联删除）。
+    await client.query(
+      `DELETE FROM messages WHERE session_id IN (${expiredRuntimeIds})`,
+      params,
+    );
+    // 2) 删兜底 chat_sessions（id = runtime_session_id）。
+    await client.query(
+      `DELETE FROM chat_sessions WHERE id IN (${expiredRuntimeIds})`,
+      params,
+    );
+    // 3) 删 open_sessions 本体，返回删除行数。
+    const { rowCount } = await client.query(
+      `DELETE FROM open_sessions WHERE ${expiredFilter}`,
+      params,
+    );
+    await client.query('COMMIT');
+    return rowCount ?? 0;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}

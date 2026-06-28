@@ -3,7 +3,7 @@
  *
  * @remarks
  * 排盘 registry 的参数 schema 与校验用 camelCase（如 solarDate / zishiMode），但对外契约
- * 约定 snake_case（设计文档 §2.3）。故在 /api/v1/paipan 边界做转换：请求体 snake→camel 后喂给
+ * 约定 snake_case（设计文档 §2 第 3 条）。故在 /api/v1/paipan 边界做转换：请求体 snake→camel 后喂给
  * 校验，catalog 输出的 schema camel→snake 后对外展示，保证「对外只见 snake_case」。
  */
 

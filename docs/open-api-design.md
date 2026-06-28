@@ -9,7 +9,7 @@
 为会员提供**程序化调用能力**，让第三方系统（用户自己的应用、自动化脚本等）通过 API Key 调用 FateClaw 的两类能力：
 
 1. **排盘 API** —— 调用 7 种确定性排盘（八字 / 六爻 / 经占 / 梅花 / 奇门 / 六壬 / 紫微），输入生辰或起卦参数，返回结构化盘面 + AI 可读文本。
-2. **Agent API** —— OpenAI 兼容的对话补全接口，把"用户提示词 + 开启的 skill + 模型 + 思考等级"交给 FateClaw Agent 运行时执行，按 token 计费。
+2. **Agent API** —— sid 有状态会话接口（建会话一次设定 model / system(persona) / board / skills 并拿到不可猜的 sid，之后每轮只发 content，历史由 runtime 原生 resume 复原；响应体沿用 OpenAI `chat.completion` 风格），把"用户提示词 + 开启的 skill + 模型 + 思考等级"交给 FateClaw Agent 运行时执行，按 token 计费。
 
 ### 核心决策（已拍板）
 
@@ -25,7 +25,7 @@
 
 1. **复用优先，不另起炉灶**：排盘 runner、Agent 运行时、token 计费、会员门控均已存在，对外 API 只新增"鉴权 + 边界 + 桥接"薄层。
 2. **对外路由统一前缀 `/api/v1`**：放在全站 `/api/*` 之下（而非顶层 `/v1`），天然走现有 dev 代理与生产反代规则、无需额外路由配置；用独立的 `v1` 版本段与内部 `/api/<域>` 区隔、避免污染站内接口。
-3. **延续既有约定**：对外 contract 用 `snake_case`（转换只在 `contracts-adapter`）、密钥永不回显明文（只给前缀 + 后 4 位）、Redis 限流、`trustProxy` 还原真实 IP。
+3. **延续既有约定**：对外 contract 用 `snake_case`（排盘边界的 snake↔camel 转换在 `interfaces/http/open-api-case.ts`）、密钥永不回显明文（只给前缀 + 后 4 位）、Redis 限流、`trustProxy` 还原真实 IP。
 4. **错误体统一 OpenAI 风格**：整个 `/api/v1` 对外域统一采用 OpenAI 风格错误体 `{ error: { message, type, code, param } }`，与内部 `/api` 的 `{ "error": "中文" }` 区分（见 §9）；会话发消息的响应体也沿用 OpenAI `chat.completion` 风格，便于调用方解析。
 5. **Key 挂在 `user` 上**，不挂 `account`（`account` 是已停用的微信 bot 实体）。
 
@@ -384,7 +384,8 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 | 状态码 | 场景 | type / code |
 |---|---|---|
 | 401 | key 缺失/无效/吊销/过期 | `invalid_request_error` / `invalid_api_key` |
-| 402/403 | 会员过期 / 钱包欠费 | `insufficient_quota` / `membership_required` |
+| 403 | 会员过期 | `insufficient_quota` / `membership_required` |
+| 402 | 钱包欠费 | `insufficient_quota` / `insufficient_quota` |
 | 400 | 参数错误（排盘 schema 不过、未知 model） | `invalid_request_error` |
 | 429 | 限流 | `rate_limit_exceeded` |
 | 500/503 | 服务/上游错误 | `api_error` |
@@ -420,7 +421,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 | 7 | `apps/api/src/infrastructure/migrations/definitions/0067-open-sessions.ts` | `open_sessions` 表迁移（幂等），并在 `definitions.ts` 追加 |
 | 8 | `apps/api/src/infrastructure/repositories/open-sessions-repository.ts` | `createOpenSession / findOpenSessionByIdForUser / touchOpenSessionActivity / softDeleteOpenSession / toOpenSessionDto`，经 `db.ts` 再导出 |
 | 9 | `apps/api/src/interfaces/http/open-session-routes.ts` | `/api/v1/sessions` 四端点（建会话 / 发消息(非流式) / GET / DELETE）；IPC 桥接：usage 回填 / 单 skill 授权 / board 会话级注入 / 会话忙碌锁 |
-| 10 | `apps/api/src/interfaces/http/open-api-routes.ts` | 注册 sessions 子插件（取代已删的 open-chat-routes） |
+| 10 | `apps/api/src/interfaces/http/open-api-routes.ts` | `/api/v1` 域父插件：统一注入鉴权钩子 + OpenAI 错误体；挂 `GET /models`、`GET /skills`；注册 `paipan`、`sessions` 子插件 |
 | 11 | `apps/agent-runtime` `agent-db.ts` / `resource-loader.ts` / `ContainerInput` | 新增 `authorizedSkillIds` 按 skill id 过滤（§7.6） |
 
 弃用：`open-chat-routes.ts`（OpenAI `/chat/completions`）已删除；`session.ts` 的 `injectHistoryMessages`（无状态多轮的手动历史重放）已回退——sid 方案靠 runtime 原生 resume 复原历史，不再需要。

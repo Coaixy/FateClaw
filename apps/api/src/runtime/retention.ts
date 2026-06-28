@@ -1,15 +1,22 @@
 /**
- * 数据保留策略：定时清理过期的调试数据。
+ * 数据保留策略：定时清理过期数据。
  *
- * 当前只清 conversation_log_payloads.trace_events 列——trace 是纯调试数据，
- * 保留 N 天足够排障，过期即置 NULL 释放存储空间。transcript / usage /
- * agent_graph_summary 等业务数据不在此处清理。
+ * 两类清理：
+ *  - conversation_log_payloads.trace_events 列：纯调试数据，保留 N 天足够排障，过期即置 NULL。
+ *  - 过期已久的对外会话 open_sessions 及其兜底 chat_sessions、messages：会话有 30 天滑动
+ *    TTL，过期后再宽限 OPEN_SESSION_RETENTION_DAYS 天供对账，超过即整套物理删除。
  *
- * 未来可扩展：清理整条 log、归档历史消息等。
+ * transcript / usage / agent_graph_summary 等其它业务数据不在此处清理。
  */
 
-import { TRACE_RETENTION_DAYS } from '../infrastructure/config.js';
-import { purgeExpiredTraceEvents } from '../infrastructure/db.js';
+import {
+  OPEN_SESSION_RETENTION_DAYS,
+  TRACE_RETENTION_DAYS,
+} from '../infrastructure/config.js';
+import {
+  purgeExpiredOpenSessions,
+  purgeExpiredTraceEvents,
+} from '../infrastructure/db.js';
 import { logger } from '../infrastructure/logger.js';
 
 /** 清理任务运行间隔：每 24 小时一次。 */
@@ -33,6 +40,27 @@ async function runRetentionOnce(): Promise<void> {
     }
   } catch (err) {
     logger.warn({ err }, 'trace_events 清理任务出错');
+  }
+
+  // 清理过期已久的对外会话（open_sessions）及其兜底 chat_sessions、messages。独立 try/catch，
+  // 与 trace 清理互不连累：一者失败不影响另一者。
+  try {
+    const purgedSessions = await purgeExpiredOpenSessions(
+      OPEN_SESSION_RETENTION_DAYS,
+    );
+    if (purgedSessions > 0) {
+      logger.info(
+        { purgedSessions, retentionDays: OPEN_SESSION_RETENTION_DAYS },
+        '已清理过期对外会话及其衍生数据',
+      );
+    } else {
+      logger.debug(
+        { retentionDays: OPEN_SESSION_RETENTION_DAYS },
+        '对外会话清理任务无需处理的行',
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, '对外会话清理任务出错');
   }
 }
 
