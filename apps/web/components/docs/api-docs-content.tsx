@@ -243,7 +243,7 @@ const SESSION_CREATE_PARAMS: ParamRow[] = [
   { name: 'model', type: 'string', req: '是', def: '', constraints: '取 GET /api/v1/models 返回的 id', desc: '会话固定使用的官方模型；只支持平台官方模型，建会话后不可改。' },
   { name: 'system', type: 'string', req: '否', def: '', constraints: '—', desc: '人设：作为附加的角色/口吻层；不会覆盖平台核心指令。' },
   { name: 'fateclaw', type: 'object', req: '否', def: '', constraints: '—', desc: 'FateClaw 扩展：skills / thinking_level / board。' },
-  { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'UUID[]', desc: '开启的技能：你拥有/订阅且已启用的 skill id；无权或未启用的会被忽略。' },
+  { name: 'fateclaw.skills', type: 'array', req: '否', def: '', constraints: 'UUID[]', desc: '开启的技能：skill id（UUID），用 GET /api/v1/skills 获取；无权或未启用的会被忽略。' },
   { name: 'fateclaw.thinking_level', type: 'string', req: '否', def: 'medium', constraints: 'off | minimal | low | medium | high | xhigh', desc: '思考等级。' },
   { name: 'fateclaw.board', type: 'object', req: '否', def: '', constraints: '{ type?, text?, data? }', desc: '排盘结果，通常回填 /api/v1/paipan 的输出；只需在建会话时传一次，之后每轮自动带上。' },
   { name: 'fateclaw.board.type', type: 'string', req: '否', def: 'board', constraints: '—', desc: '盘面类型。' },
@@ -472,6 +472,27 @@ function Note({ children }: { children: ReactNode }) {
   );
 }
 
+/** 流程步骤块：左侧序号徽标 + 标题 + 子内容，用于「完整流程」把多接口调用分步散开展示。 */
+function Step({
+  n,
+  title,
+  children,
+}: {
+  n: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative pl-11">
+      <span className="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
+        {n}
+      </span>
+      <h4 className="mb-2 text-[14px] font-semibold text-ink">{title}</h4>
+      <div className="space-y-2.5">{children}</div>
+    </div>
+  );
+}
+
 /** 单个排盘类型的文档卡片（精简版）。 */
 function PaipanType({ spec, baseUrl }: { spec: PaipanSpec; baseUrl: string }) {
   const curl = `curl -X POST ${baseUrl}/paipan/${spec.type} \\
@@ -618,6 +639,87 @@ export function ApiDocsContent() {
   "data": { /* 结构化盘面 */ }
 }`}</Code>
             </Section>
+
+            <Section id="start-flow" title="完整流程：排盘 → 解读">
+              <P>
+                把确定性<strong className="text-ink">排盘</strong>和 AI{' '}
+                <strong className="text-ink">解读</strong>串成一次完整调用，照抄即可跑通。盘面只在建会话时传一次，之后多轮自动带上。
+              </P>
+              <div className="space-y-7">
+                <Step n={1} title="生成 API Key">
+                  <P>
+                    在「设置 · API Key」生成（仅会员，最多 10 个）。明文只显示一次，下文用{' '}
+                    <C>fc_live_xxxxxxxx</C> 代指。
+                  </P>
+                </Step>
+
+                <Step n={2} title="选模型">
+                  <Code lang="curl">{`curl ${baseUrl}/models \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
+                  <P>
+                    取返回 <C>data[].id</C> 作为下一步建会话的 <C>model</C>。
+                  </P>
+                </Step>
+
+                <Step n={3} title="排盘（拿盘面）">
+                  <Code lang="curl">{`curl -X POST ${baseUrl}/paipan/bazi \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"solar_date":"2000-08-16","hour":14,"gender":"male"}'`}</Code>
+                  <Code lang="json">{`{ "type": "bazi", "text": "八字排盘（系统排盘结果）……", "data": { /* 结构化盘面 */ } }`}</Code>
+                  <P>
+                    留下其中的 <C>text</C>，下一步作为盘面传入。
+                  </P>
+                </Step>
+
+                <Step n={4} title="（可选）查可用技能">
+                  <Code lang="curl">{`curl ${baseUrl}/skills \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
+                  <P>
+                    取返回 <C>data[].id</C> 填入下一步的 <C>fateclaw.skills</C>；没有技能可跳过这步。
+                  </P>
+                </Step>
+
+                <Step n={5} title="建会话（设定模型 / 盘面 / 技能）">
+                  <Code lang="curl">{`curl -X POST ${baseUrl}/sessions \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "<第 2 步选的 model id>",
+    "system": "你是一位严谨的命理解读师",
+    "fateclaw": {
+      "board": { "type": "bazi", "text": "<第 3 步返回的 text>" },
+      "skills": ["<第 4 步的 skill id，可省略>"]
+    }
+  }'`}</Code>
+                  <Code lang="json">{`{ "id": "sess_AbC123...", "object": "session", "model": "...", "status": "active" }`}</Code>
+                  <P>
+                    拿到 <C>id</C>（即 <C>sid</C>），后续多轮都用它。
+                  </P>
+                </Step>
+
+                <Step n={6} title="发消息解读（可多轮）">
+                  <Code lang="curl">{`curl -X POST ${baseUrl}/sessions/sess_AbC123.../messages \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"content":"帮我解读事业走向"}'`}</Code>
+                  <Code lang="json">{`{
+  "object": "chat.completion",
+  "choices": [{ "message": { "role": "assistant", "content": "……解读正文……" } }],
+  "usage": { "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0 }
+}`}</Code>
+                  <P>
+                    再发一条即多轮，历史自动延续、盘面无需重发。同一会话需<strong className="text-ink">串行</strong>（上一条没返回就发下一条会得到 409）。
+                  </P>
+                </Step>
+
+                <Step n={7} title="结束（可选）">
+                  <Code lang="curl">{`curl -X DELETE ${baseUrl}/sessions/sess_AbC123... \\
+  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
+                  <P>删除会话；不删也会在 30 天不活动后自动过期。</P>
+                </Step>
+              </div>
+            </Section>
           </div>
         )}
 
@@ -749,6 +851,20 @@ print(r2["choices"][0]["message"]["content"])`}</Code>
   ]
 }`}</Code>
               <Note>列表可能包含暂时不可用的模型；用它调用时若不可用会返回 <C>model_not_found</C>。</Note>
+            </Section>
+
+            <Section id="agent-skills" title="技能">
+              <Endpoint method="GET" path="/api/v1/skills" />
+              <P>
+                返回你<strong className="text-ink">有效可用</strong>的技能（自有已启用 + 订阅已启用），其 <C>id</C> 即建会话 <C>fateclaw.skills</C> 所需的 UUID。先调它拿 <C>id</C>，再填进 <C>POST /sessions</C>。
+              </P>
+              <Code lang="json">{`{
+  "object": "list",
+  "data": [
+    { "id": "<skill-uuid>", "object": "skill", "name": "技能名", "description": "简介", "source": "self" }
+  ]
+}`}</Code>
+              <Note>只列出当前可用的技能；这里没有的 id 即便填进 <C>fateclaw.skills</C> 也会被静默忽略。<C>source</C>：<C>self</C>=自有，<C>subscribed</C>=订阅。</Note>
             </Section>
           </div>
         )}

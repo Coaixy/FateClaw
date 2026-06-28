@@ -227,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 | POST | `/api/v1/sessions/{sid}/messages` | 发一轮消息（非流式，单次阻塞返回），usage 真实回填 |
 | GET | `/api/v1/sessions/{sid}` | 查会话元信息 |
 | DELETE | `/api/v1/sessions/{sid}` | 软删会话（之后续聊即 404） |
+| GET | `/api/v1/skills` | 列出调用方有效可用的 skill（`id` 即 `fateclaw.skills` 所需的 UUID）|
 
 **为何 sid 有状态、而非 OpenAI 无状态**：runtime 天生有状态（pi 会话靠持久化 sessionId 存盘、`SessionManager.open` resume 复原历史，站内 web 多轮即如此）。无状态 `/chat/completions` 反而要把 messages 历史**手动重放**进会话——与 runtime 纹理对着干。sid 顺着纹理走：历史由原生 resume 复原，board/persona/skills 建会话存一次、服务端每轮重建注入，调用方每轮只发本轮 content。
 
@@ -320,6 +321,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 
 `fateclaw.skills` 用 **skill id(UUID)** —— skill 的唯一稳定标识（`dir_name` 可变、`skill_name` 不唯一）。建会话存一次、每轮注入。
 
+- **获取途径**：调用方用 `GET /api/v1/skills`（fc_live key 鉴权）列出自己有效可用的 skill（`{ id, name, description, source }`），`id` 即填入 `fateclaw.skills` 的 UUID。后端 `skills-repository.ts: listEffectiveUserSkillsForOpenApi` 与下面的授权口径**完全一致**（同样的 self enabled + 订阅 enabled 过滤），故列出的 id 不会被 runtime 静默丢弃；改授权口径时两处需同步。
 - `apps/agent-runtime/src/agent-db.ts`：`queryEffectiveUserSkillsByIds(userId, skillIds)` 复用 `queryEffectiveUserSkills` 的归属/订阅/`enabled` 校验后按 id 过滤。
 - `ContainerInput` / `ChatTaskInboxRequest` 带 `authorizedSkillIds?: string[]`；`resource-loader.ts` 经 `listEffectiveUserSkillsByIds` 走 by-id 分支。
 - 取值约束：只放行「调用方自有 enabled + active 订阅且 enabled」的 skill id；无权/未启用的 id 在 runtime 内**静默丢弃**（不报错）。
