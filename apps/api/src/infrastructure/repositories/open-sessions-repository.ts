@@ -55,6 +55,19 @@ export interface OpenSessionDto {
   expires_at: string | null;
 }
 
+/**
+ * 站内「API 使用详情」页的会话列表项：在脱敏 DTO 基础上附带消息条数与来源 Key 名称。
+ *
+ * @remarks 仅供登录用户在网页端查看自己的 API 会话用，绝不经对外 /api/v1 返回。
+ *   含已软删（status='deleted'）会话，便于用户回看历史调用记录。
+ */
+export interface OpenSessionListItem extends OpenSessionDto {
+  /** 该会话累计的未删除消息条数（用户 + AI，含中间事件）。 */
+  message_count: number;
+  /** 创建该会话所用 API Key 的名称；Key 已删或当时未记录则为 null。 */
+  api_key_name: string | null;
+}
+
 /** 生成一个不可猜的 public sid。 */
 function generateOpenSessionId(): string {
   // 24 字节随机熵 → base64url（URL 安全、无填充），拼上前缀。
@@ -184,4 +197,77 @@ export async function softDeleteOpenSession(input: {
     [input.id, input.userId],
   );
   return rows[0]?.runtime_session_id ?? null;
+}
+
+/**
+ * 按 sid + 归属用户查找会话行（不限状态、不限是否过期）。
+ *
+ * 与 {@link findOpenSessionByIdForUser} 的区别：后者只命中 active 且未过期的会话（供发消息前置校验）；
+ * 本函数仅做 user_id 归属隔离，连已软删 / 已过期的会话也返回——供「API 使用详情」页回看任意历史会话。
+ *
+ * @returns 命中行；不存在或不归属当前用户时返回 null。
+ */
+export async function getOpenSessionForUserAnyStatus(
+  id: string,
+  userId: string,
+): Promise<OpenSessionRow | null> {
+  const { rows } = await getDbPool().query<OpenSessionRow>(
+    `SELECT * FROM open_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+    [id, userId],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * 列出某用户名下的全部对外会话（含已软删），供站内「API 使用详情」页展示。
+ *
+ * @param userId 归属用户。
+ * @param opts.limit 单页条数（默认 100，封顶 200，防一次拉爆）。
+ * @param opts.offset 偏移量（默认 0）。
+ * @returns 按最近活跃倒序的会话列表项，附带消息条数与来源 Key 名称。
+ * @remarks 消息条数用 LATERAL 子查询按 runtime_session_id 关联 messages：对外会话落库时
+ *   account_id 恒为 web:{userId}，故仅按 session_id + 未删除即可精确计数。来源 Key 用 LEFT JOIN
+ *   （Key 行删除时 api_key_id 置 NULL，名称回退 null）。
+ */
+export async function listOpenSessionsByUserId(
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<OpenSessionListItem[]> {
+  // 收敛分页参数，防止调用方传入越界值一次拉爆查询。
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const { rows } = await getDbPool().query(
+    `SELECT
+        s.id,
+        s.model_key,
+        s.status,
+        s.created_at,
+        s.last_active_at,
+        s.expires_at,
+        COALESCE(m.cnt, 0)::int AS message_count,
+        k.name AS api_key_name
+       FROM open_sessions s
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS cnt
+           FROM messages
+          WHERE session_id = s.runtime_session_id
+            AND deleted_at IS NULL
+       ) m ON TRUE
+       LEFT JOIN user_api_keys k ON k.id = s.api_key_id
+      WHERE s.user_id = $1
+      ORDER BY s.last_active_at DESC
+      LIMIT $2 OFFSET $3`,
+    [userId, limit, offset],
+  );
+  return rows.map((row) => ({
+    id: row.id as string,
+    object: 'session' as const,
+    model: row.model_key as string,
+    status: row.status as 'active' | 'deleted',
+    created_at: (row.created_at as Date).toISOString(),
+    last_active_at: (row.last_active_at as Date).toISOString(),
+    expires_at: row.expires_at ? (row.expires_at as Date).toISOString() : null,
+    message_count: row.message_count as number,
+    api_key_name: (row.api_key_name as string | null) ?? null,
+  }));
 }

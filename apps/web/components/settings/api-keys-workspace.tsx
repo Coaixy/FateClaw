@@ -140,6 +140,12 @@ export function ApiKeysWorkspace() {
             <Link href="/docs/api" className="ml-1 text-primary hover:underline">
               查看 API 文档 →
             </Link>
+            <Link
+              href="/settings/api-usage"
+              className="ml-2 text-primary hover:underline"
+            >
+              使用详情 →
+            </Link>
           </p>
         </div>
 

@@ -34,6 +34,8 @@ import {
 import {
   createOpenSession,
   findOpenSessionByIdForUser,
+  getOpenSessionForUserAnyStatus,
+  listOpenSessionsByUserId,
   softDeleteOpenSession,
   toOpenSessionDto,
   touchOpenSessionActivity,
@@ -277,6 +279,8 @@ export {
   touchApiKeyLastUsed,
   createOpenSession,
   findOpenSessionByIdForUser,
+  getOpenSessionForUserAnyStatus,
+  listOpenSessionsByUserId,
   softDeleteOpenSession,
   toOpenSessionDto,
   touchOpenSessionActivity,
