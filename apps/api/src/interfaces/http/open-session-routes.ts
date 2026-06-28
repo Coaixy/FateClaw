@@ -16,11 +16,15 @@ import {
   createOpenSession,
   findOpenSessionByIdForUser,
   softDeleteOpenSession,
+  storeMessage,
   toOpenSessionDto,
   touchOpenSessionActivity,
 } from '../../infrastructure/db.js';
 import type { OpenSessionRow } from '../../infrastructure/repositories/open-sessions-repository.js';
-import { getWebChatRuntimeId } from '../../modules/chat/web-chat-runtime.js';
+import {
+  WEB_CHAT_USER_NAME,
+  getWebChatRuntimeId,
+} from '../../modules/chat/web-chat-runtime.js';
 import { resolveOfficialRuntimeByModelKey } from '../../modules/system/system-config.js';
 import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
@@ -225,6 +229,30 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
+      // 先持久化调用方这条用户消息：站内由 chat-session-service 在 dispatch 前存，对外路由
+      // 不走那一层，必须在此自己存，否则「API 使用详情」面板只见 AI 回复、看不到用户输入。
+      // 放在 dispatch 之前 → timestamp 早于 AI 回复（AI 回复经 outbox 落库），详情页按时间
+      // 升序排列时顺序才正确。存失败不阻断本轮回复（仅影响事后归档展示），降级记日志即可。
+      try {
+        await storeMessage({
+          id: randomUUID(),
+          account_id: accountId,
+          user_id: principal.userId,
+          sender: principal.userId,
+          sender_name: WEB_CHAT_USER_NAME,
+          content: body.content,
+          timestamp: new Date().toISOString(),
+          is_from_me: false,
+          is_bot_message: false,
+          session_id: runtimeSessionId,
+        });
+      } catch (storeErr) {
+        request.log.warn(
+          { err: storeErr, sid },
+          '对外会话用户消息持久化失败（不影响本轮回复）',
+        );
+      }
+
       const result = await dispatchAiChatPrompt({
         accountId,
         userMessage: body.content,
