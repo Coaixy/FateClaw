@@ -1,4 +1,5 @@
-import { promises as fs, type Dirent, type Stats } from 'fs';
+import { createReadStream, promises as fs, type Dirent, type Stats } from 'fs';
+import readline from 'node:readline';
 import path from 'path';
 
 import {
@@ -24,7 +25,9 @@ import {
 const MAX_GREP_RESULTS = 80;
 const DEFAULT_GREP_LIMIT = 40;
 const MAX_MATCH_PREVIEW_CHARS = 220;
-const MAX_FILE_BYTES = 256 * 1024;
+// grep 改用流式逐行读取，不把整文件载入内存；此处仅作单文件大小安全阀：超过则跳过并上报，
+// 避免病态超大文件拖垮逐行匹配（尤其正则）。8MB 足以覆盖正常 Skill Markdown 知识库。
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const SKIPPED_DIRS = new Set([
   '.git',
   'node_modules',
@@ -36,12 +39,19 @@ const SKIPPED_DIRS = new Set([
 
 const grepParamsSchema = Type.Object({
   query: Type.String({
-    description: '要在授权 Skill Markdown 文件中查找的关键词。',
+    description:
+      '要在授权 Skill Markdown 文件中查找的内容；默认按字面子串匹配，regex=true 时按 JavaScript 正则表达式匹配。',
   }),
   path: Type.Optional(
     Type.String({
       description:
         '可选搜索范围；必须是 <available_skills> 中授权 Skill 目录内的 Markdown 文件或目录。相对路径按每个授权 Skill 目录解析。',
+    }),
+  ),
+  regex: Type.Optional(
+    Type.Boolean({
+      description:
+        '是否把 query 当作 JavaScript 正则表达式匹配；默认 false（字面子串）。需要模式匹配（如 “甲.{0,4}流年”、行首 ^、择一 a|b）时设为 true。',
     }),
   ),
   caseSensitive: Type.Optional(
@@ -80,12 +90,14 @@ interface PiSkillGrepDetails {
   isError: boolean;
   query: string;
   path?: string;
+  regex: boolean;
   caseSensitive: boolean;
   matches: GrepMatch[];
   total: number;
   totalIsExact: boolean;
   truncated: boolean;
   searchedFiles?: number;
+  skippedLargeFiles?: number;
   error?: string;
 }
 
@@ -111,6 +123,7 @@ function normalizeParams(args: unknown): GrepParams {
   return {
     query: readString(raw.query) ?? '',
     path: readString(raw.path),
+    regex: readBoolean(raw.regex),
     caseSensitive: readBoolean(raw.caseSensitive),
     limit: clampLimit(raw.limit, DEFAULT_GREP_LIMIT, MAX_GREP_RESULTS),
   };
@@ -265,48 +278,107 @@ function truncateLine(line: string, column: number): string {
   ].join('');
 }
 
+/** 行匹配器：返回命中起始列（0-based），未命中返回 -1。 */
+type LineMatcher = (line: string) => number;
+
+/**
+ * 把 query 编译成逐行匹配器。
+ *
+ * - regex=false：字面子串匹配（indexOf）；caseSensitive=false 时双方转小写。
+ * - regex=true：编译为 JavaScript 正则；caseSensitive=false 时附加 i 标志。
+ *
+ * 返回：成功时给出 matcher，正则非法时给出 error（由调用方转成 isError 结果）。
+ * 注意：正则由模型提供并逐行执行，单行规模受文件大小安全阀约束，灾难性回溯风险有限但非零；
+ *       这里不对单行做额外超时保护，仅依赖上层 MAX_FILE_BYTES 兜底。
+ */
+function buildMatcher(
+  query: string,
+  regex: boolean,
+  caseSensitive: boolean,
+): { matcher?: LineMatcher; error?: string } {
+  if (regex) {
+    let compiled: RegExp;
+    try {
+      compiled = new RegExp(query, caseSensitive ? '' : 'i');
+    } catch (err) {
+      return {
+        error: `搜索失败：正则表达式无效：${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    return {
+      // 非 global 正则，exec 每次从行首匹配，无 lastIndex 残留状态。
+      matcher: (line) => {
+        const match = compiled.exec(line);
+        return match ? match.index : -1;
+      },
+    };
+  }
+  const needle = caseSensitive ? query : query.toLowerCase();
+  return {
+    matcher: (line) => {
+      const haystack = caseSensitive ? line : line.toLowerCase();
+      return haystack.indexOf(needle);
+    },
+  };
+}
+
 async function grepFile(args: {
   filePath: string;
   scope: SearchScope;
-  normalizedQuery: string;
-  caseSensitive: boolean;
+  matcher: LineMatcher;
   remaining: number;
-}): Promise<{ matches: GrepMatch[]; total: number; truncated: boolean }> {
+}): Promise<{
+  matches: GrepMatch[];
+  total: number;
+  truncated: boolean;
+  skippedLarge: boolean;
+}> {
   const stat = await safeStat(args.filePath);
-  if (!stat?.isFile() || stat.size > MAX_FILE_BYTES) {
-    return { matches: [], total: 0, truncated: false };
+  if (!stat?.isFile()) {
+    return { matches: [], total: 0, truncated: false, skippedLarge: false };
   }
-
-  let content: string;
-  try {
-    content = await fs.readFile(args.filePath, 'utf-8');
-  } catch {
-    return { matches: [], total: 0, truncated: false };
+  // 超过安全阀的单文件跳过，但不再静默：上报 skippedLarge，让“查无此词”可与“文件太大没搜”区分。
+  if (stat.size > MAX_FILE_BYTES) {
+    return { matches: [], total: 0, truncated: false, skippedLarge: true };
   }
 
   const matches: GrepMatch[] = [];
   let total = 0;
-  const lines = content.split('\n');
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    const haystack = args.caseSensitive ? line : line.toLowerCase();
-    const columnIndex = haystack.indexOf(args.normalizedQuery);
-    if (columnIndex < 0) continue;
-    total += 1;
-    if (matches.length < args.remaining) {
-      matches.push({
-        path: args.filePath,
-        relativePath: formatRelativePath(args.filePath, args.scope.baseDir),
-        skill: args.scope.skill.name,
-        line: index + 1,
-        column: columnIndex + 1,
-        text: truncateLine(line, columnIndex + 1),
-      });
-    } else {
-      return { matches, total, truncated: true };
+  let truncated = false;
+  let lineNo = 0;
+  // 流式逐行读取，避免把大文件整体载入内存；crlfDelay=Infinity 让 \r\n 按单个换行处理。
+  const rl = readline.createInterface({
+    input: createReadStream(args.filePath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  });
+  try {
+    for await (const line of rl) {
+      lineNo += 1;
+      const columnIndex = args.matcher(line);
+      if (columnIndex < 0) continue;
+      total += 1;
+      if (matches.length < args.remaining) {
+        matches.push({
+          path: args.filePath,
+          relativePath: formatRelativePath(args.filePath, args.scope.baseDir),
+          skill: args.scope.skill.name,
+          line: lineNo,
+          column: columnIndex + 1,
+          text: truncateLine(line, columnIndex + 1),
+        });
+      } else {
+        // 命中已填满本文件配额：标记截断并停止读取后续行。
+        truncated = true;
+        break;
+      }
     }
+  } catch {
+    // 读取中途失败（IO/权限）：返回已收集的命中，按未截断处理。
+    return { matches, total, truncated: false, skippedLarge: false };
+  } finally {
+    rl.close();
   }
-  return { matches, total, truncated: false };
+  return { matches, total, truncated, skippedLarge: false };
 }
 
 async function runGrep(
@@ -321,6 +393,7 @@ async function runGrep(
   totalIsExact: boolean;
   truncated: boolean;
   searchedFiles?: number;
+  skippedLargeFiles?: number;
   error?: string;
 }> {
   const query = readString(params.query);
@@ -351,11 +424,26 @@ async function runGrep(
     };
   }
   const caseSensitive = readBoolean(params.caseSensitive) ?? false;
-  const normalizedQuery = caseSensitive ? query : query.toLowerCase();
+  const useRegex = readBoolean(params.regex) ?? false;
+  const built = buildMatcher(query, useRegex, caseSensitive);
+  if (!built.matcher) {
+    const error = built.error ?? '搜索失败：无法解析查询。';
+    return {
+      output: error,
+      isError: true,
+      matches: [],
+      total: 0,
+      totalIsExact: true,
+      truncated: false,
+      error,
+    };
+  }
+  const matcher = built.matcher;
   const limit = clampLimit(params.limit, DEFAULT_GREP_LIMIT, MAX_GREP_RESULTS);
   const matches: GrepMatch[] = [];
   let total = 0;
   let searchedFiles = 0;
+  let skippedLargeFiles = 0;
   let truncated = false;
 
   searchScopes:
@@ -366,10 +454,12 @@ async function runGrep(
       const fileResult = await grepFile({
         filePath,
         scope,
-        normalizedQuery,
-        caseSensitive,
+        matcher,
         remaining: Math.max(0, limit - matches.length),
       });
+      if (fileResult.skippedLarge) {
+        skippedLargeFiles += 1;
+      }
       total += fileResult.total;
       if (matches.length < limit) {
         matches.push(...fileResult.matches.slice(0, limit - matches.length));
@@ -384,8 +474,11 @@ async function runGrep(
   const output = toJsonOutput({
     query,
     path: params.path,
+    regex: useRegex,
     caseSensitive,
     searchedFiles,
+    // 0 时省略，避免给模型噪音；非 0 时提示有文件因超过 8MB 安全阀未被检索。
+    skippedLargeFiles: skippedLargeFiles || undefined,
     total,
     totalIsExact: !truncated,
     truncated,
@@ -399,6 +492,7 @@ async function runGrep(
     totalIsExact: !truncated,
     truncated,
     searchedFiles,
+    skippedLargeFiles,
   };
 }
 
@@ -435,6 +529,7 @@ export function createPiSkillGrepTool(
     ): Promise<AgentToolResult<PiSkillGrepDetails>> {
       const startedAt = Date.now();
       const query = readString(params.query) ?? '';
+      const regex = readBoolean(params.regex) ?? false;
       const caseSensitive = readBoolean(params.caseSensitive) ?? false;
       const grepResult = await runGrep(
         params,
@@ -453,6 +548,7 @@ export function createPiSkillGrepTool(
         startedAt,
         traceFields: {
           path: params.path,
+          regex,
           total: grepResult.total,
           truncated: grepResult.truncated,
         },
@@ -461,12 +557,14 @@ export function createPiSkillGrepTool(
           isError: grepResult.isError,
           query,
           path: params.path,
+          regex,
           caseSensitive,
           matches: grepResult.matches,
           total: grepResult.total,
           totalIsExact: grepResult.totalIsExact,
           truncated: grepResult.truncated,
           searchedFiles: grepResult.searchedFiles,
+          skippedLargeFiles: grepResult.skippedLargeFiles,
           error: grepResult.error,
         },
       });
