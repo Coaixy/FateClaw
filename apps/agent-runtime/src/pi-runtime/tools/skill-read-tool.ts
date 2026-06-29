@@ -60,6 +60,15 @@ export interface CreatePiSkillReadToolOptions extends PiToolRuntimeOptions {
   readableSkills: Skill[];
 }
 
+/** 安全 stat：路径不存在或不可访问时返回 undefined，不抛异常。 */
+function safeStatSync(filePath: string): Stats | undefined {
+  try {
+    return fs.statSync(filePath);
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveReadablePath(
   rawPath: string,
   readableSkills: Skill[],
@@ -71,21 +80,40 @@ function resolveReadablePath(
     };
   }
 
-  // 取第一个落在某个授权 Skill 边界内的候选；非 Markdown 直接拒绝。
+  // 遍历所有授权 Skill 边界内的候选，逐个 stat 校验存在性，优先返回第一个真实存在的 .md 文件。
+  // 不能像旧实现那样盲取第一个候选：当本轮授权多个 Skill 时，相对路径会被拼到每个 Skill 的
+  // baseDir 上，盲取第一个会把文件归错 Skill —— 要么拼出不存在的路径报 ENOENT，要么命中另一个
+  // Skill 的同名文件而静默读错内容。grep 走 stat 不受影响，read 必须对齐同样的存在性校验。
+  let sawNonMarkdown = false; // 候选落在某个 Skill 内，但扩展名不是 .md
+  let sawMissingMarkdown = false; // 候选是 Skill 内的 .md，但文件不存在或不可读
   for (const { candidates } of resolveSkillPathCandidates(
     trimmed,
     readableSkills,
   )) {
     for (const candidate of candidates) {
       if (!isMarkdownPath(candidate)) {
-        return {
-          error: `读取被拒绝：${rawPath} 不是授权 Skill 内的 Markdown 文件。`,
-        };
+        sawNonMarkdown = true;
+        continue;
+      }
+      if (!safeStatSync(candidate)?.isFile()) {
+        sawMissingMarkdown = true;
+        continue;
       }
       return { filePath: candidate };
     }
   }
 
+  // 错误优先级：扩展名就不对（非 .md）> 是 .md 但不存在 > 完全不在任何 Skill 边界内。
+  if (sawNonMarkdown) {
+    return {
+      error: `读取被拒绝：${rawPath} 不是授权 Skill 内的 Markdown 文件。`,
+    };
+  }
+  if (sawMissingMarkdown) {
+    return {
+      error: `读取失败：路径不存在或不可访问：${rawPath}`,
+    };
+  }
   return {
     error: `读取被拒绝：${rawPath} 不属于本轮可见 Skill 目录。`,
   };

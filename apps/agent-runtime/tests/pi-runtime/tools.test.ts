@@ -888,6 +888,45 @@ describe('createPiCustomTools', () => {
     });
   });
 
+  it('reads the existing markdown when multiple skills share a relative path', async () => {
+    const first = createReadableSkillFixture();
+    const second: Skill = {
+      ...createReadableSkillFixture(),
+      name: 'second-bazi',
+    };
+    // 相对路径 docs/knowledge.md 只在「第二个」skill 真实存在
+    const secondDocs = path.join(second.baseDir, 'docs');
+    fs.mkdirSync(secondDocs);
+    fs.writeFileSync(
+      path.join(secondDocs, 'knowledge.md'),
+      '只有第二个 skill 有的内容',
+    );
+    const tools = createTools({
+      readableSkills: [first, second],
+      recordExecution: vi.fn(),
+    });
+    const readTool = tools.find((tool) => tool.name === 'read')!;
+
+    const result = await readTool.execute(
+      'read-multi-skill',
+      { path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    // 修复前：相对路径被盲归到数组第一个 skill → ENOENT；
+    // 修复后：解析阶段 stat 跳过不存在候选，命中第二个 skill 的真实文件
+    expect(result.details).toMatchObject({
+      isError: false,
+      path: path.join(secondDocs, 'knowledge.md'),
+    });
+    expect(result.content[0]).toEqual({
+      type: 'text',
+      text: '只有第二个 skill 有的内容',
+    });
+  });
+
   it('does not expose FateClaw deterministic or legacy domain-specific tools as Pi custom tools', () => {
     const tools = createTools({
       recordExecution: vi.fn(),
