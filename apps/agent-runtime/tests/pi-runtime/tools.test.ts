@@ -615,11 +615,14 @@ describe('createPiCustomTools', () => {
       undefined as never,
     );
 
+    // 相对文件路径只在 second-bazi 命中；命中文件后范围扩展到 second-bazi 整个目录
+    //（SKILL.md + docs/knowledge.md 共 2 个文件），needle 只在 knowledge.md 出现。
     expect(result.details).toMatchObject({
       isError: false,
       total: 1,
       totalIsExact: true,
-      searchedFiles: 1,
+      searchedFiles: 2,
+      expandedToSkillDir: true,
       matches: [
         {
           path: knowledgePath,
@@ -630,6 +633,44 @@ describe('createPiCustomTools', () => {
         },
       ],
     });
+  });
+
+  it('expands a file path to the whole skill directory so sibling docs are searched', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const docsDir = path.join(readableSkill.baseDir, 'docs');
+    fs.mkdirSync(docsDir);
+    // 关键词只在兄弟文件 docs/ch1.md 里，SKILL.md 正文并不含它
+    fs.writeFileSync(path.join(docsDir, 'ch1.md'), '甲木格局详解 needle');
+    const tools = createTools({
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    // 模型只知道 SKILL.md 的路径（<available_skills> 的 location），把它当搜索范围传入。
+    // 旧行为只搜 SKILL.md → 0 命中；新行为扩展到整个 Skill 目录 → 命中 docs/ch1.md。
+    const result = await grepTool.execute(
+      'grep-expand-file',
+      { query: 'needle', path: readableSkill.filePath },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      total: 1,
+      expandedToSkillDir: true,
+      matches: [
+        {
+          relativePath: 'docs/ch1.md',
+          text: '甲木格局详解 needle',
+        },
+      ],
+    });
+    // 扩展行为对模型透明：output 里出现说明
+    const expanded = result.details as { output: string };
+    expect(expanded.output).toContain('扩展');
   });
 
   it('greps with regex by default and falls back to literal on invalid pattern', async () => {

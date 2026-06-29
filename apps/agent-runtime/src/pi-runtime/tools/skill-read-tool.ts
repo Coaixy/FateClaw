@@ -269,7 +269,7 @@ export function createPiSkillReadTool(
     name: 'read',
     label: 'read',
     description:
-      '读取本轮可见的 Pi Skill 文件。只能读取 <available_skills> 中 location 指向的授权 Skill 目录，不能读取任意本地文件。',
+      '读取本轮可见的 Pi Skill 文件。只能读取 <available_skills> 中 location 指向的授权 Skill 文件（或其同目录内的其他 Markdown），不能读取任意本地文件。',
     promptSnippet: 'Read an authorized Pi Skill file exposed in <available_skills>.',
     promptGuidelines: [
       '只用 read 读取 <available_skills> 中 location 指向的授权 Skill 文件。',
