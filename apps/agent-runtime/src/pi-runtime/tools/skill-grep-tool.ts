@@ -45,7 +45,7 @@ const grepParamsSchema = Type.Object({
   path: Type.Optional(
     Type.String({
       description:
-        '可选搜索范围；必须是 <available_skills> 中授权 Skill 目录内的 Markdown 文件或目录。相对路径按每个授权 Skill 目录解析。',
+        '可选搜索范围。省略则检索所有授权 Skill。可传 <available_skills> 中的 SKILL.md 路径，或授权 Skill 目录内的相对 Markdown 路径；当传入指向单个文件的路径时，会自动把检索范围扩展到该文件所属 Skill 的整个目录（覆盖 docs/examples 等兄弟 Markdown）。',
     }),
   ),
   regex: Type.Optional(
@@ -81,6 +81,11 @@ interface SearchScope {
   skill: Skill;
   baseDir: string;
   targetPath: string;
+  /**
+   * 非空表示：模型传入的 path 指向单个文件，grep 已自动把检索范围从该文件
+   * 扩展到所属 Skill 的整个目录（baseDir）。保留原文件路径用于对模型透明上报。
+   */
+  expandedFromFile?: string;
 }
 
 type MarkdownFileListCache = Map<string, Promise<string[]>>;
@@ -98,6 +103,8 @@ interface PiSkillGrepDetails {
   truncated: boolean;
   searchedFiles?: number;
   skippedLargeFiles?: number;
+  /** path 指向文件时，grep 是否已自动把范围扩展到所属 Skill 目录。 */
+  expandedToSkillDir?: boolean;
   error?: string;
 }
 
@@ -171,7 +178,18 @@ async function resolveSearchScopes(
           sawUnsupportedPath = true;
           continue;
         }
-        scopes.push({ skill, baseDir, targetPath: candidate });
+        // <available_skills> 只把每个 Skill 的 SKILL.md 文件路径（location=filePath）暴露给模型，
+        // 模型看不到目录，也不知道 docs/examples 等兄弟文件叫什么名字（常是 ch1.md 这类无信息量的名），
+        // 于是常把这个文件路径直接当搜索范围传进来 —— 结果 grep 只搜单个文件、漏掉真正承载正文的兄弟
+        // Markdown，表现为“查无此词”。这里把“指向文件的 path”当作“定位到这个 Skill”的锚点，自动把检索
+        // 范围扩展到该文件所属 Skill 的整个目录（baseDir），并记录 expandedFromFile 以便透明上报。
+        // 代价：无法再只搜单个文件；但 grep 的语境本就是“不确定在哪才搜”，要精确读单文件应改用 read。
+        scopes.push({
+          skill,
+          baseDir,
+          targetPath: baseDir,
+          expandedFromFile: candidate,
+        });
         break;
       }
       if (stat.isDirectory()) {
@@ -389,6 +407,7 @@ async function runGrep(
   output: string;
   isError: boolean;
   regex?: boolean;
+  expandedToSkillDir?: boolean;
   matches: GrepMatch[];
   total: number;
   totalIsExact: boolean;
@@ -424,6 +443,16 @@ async function runGrep(
       error,
     };
   }
+  // path 指向文件时 resolveSearchScopes 已把范围扩展到所属 Skill 目录；收集这些 Skill 名
+  // （去重）用于对模型透明上报，避免它困惑于“传了某文件却命中了未点名的兄弟文件”。
+  const expandedSkillNames = [
+    ...new Set(
+      resolved.scopes
+        .filter((scope) => scope.expandedFromFile)
+        .map((scope) => scope.skill.name),
+    ),
+  ];
+  const expandedToSkillDir = expandedSkillNames.length > 0;
   const caseSensitive = readBoolean(params.caseSensitive) ?? false;
   // 默认按正则匹配（不传 regex 即视为 true）；非法正则在 buildMatcher 内自动回退字面。
   const wantRegex = readBoolean(params.regex) ?? true;
@@ -460,6 +489,10 @@ async function runGrep(
     }
   }
 
+  // 仅在发生“文件→目录”扩展时附说明，让模型知道范围已变（不扩展时为 undefined，会被 JSON 省略）。
+  const expansionNote = expandedToSkillDir
+    ? `path 指向单个文件，已自动把检索范围扩展到所属 Skill 的整个目录（${expandedSkillNames.join('、')}），以覆盖 docs/examples 等兄弟 Markdown。若只想搜某个文件，请用更精确的 query，或改用 read 直接读取。`
+    : undefined;
   const output = toJsonOutput({
     query,
     path: params.path,
@@ -468,6 +501,8 @@ async function runGrep(
     searchedFiles,
     // 0 时省略，避免给模型噪音；非 0 时提示有文件因超过 8MB 安全阀未被检索。
     skippedLargeFiles: skippedLargeFiles || undefined,
+    // 仅在 path 指向文件被扩展为整个 Skill 目录时出现，向模型透明说明范围变化。
+    note: expansionNote,
     total,
     totalIsExact: !truncated,
     truncated,
@@ -477,6 +512,7 @@ async function runGrep(
     output,
     isError: false,
     regex: usedRegex,
+    expandedToSkillDir,
     matches,
     total,
     totalIsExact: !truncated,
@@ -508,7 +544,7 @@ export function createPiSkillGrepTool(
     promptGuidelines: [
       '当已知具体 Markdown 文件时，可以直接用 read；当只知道关键词或不确定位置时，可用 grep 搜索。',
       'grep 只能搜索 <available_skills> 中授权 Skill 目录内的 Markdown 文件。',
-      'path 可省略以搜索所有授权 Skill；也可指定授权目录内的相对 Markdown 文件或目录。',
+      'path 可省略以搜索所有授权 Skill；传某个 Skill 的 SKILL.md 路径或其目录，会搜索该 Skill 的全部 Markdown（含 docs/examples 等子目录），无需逐个文件试。',
       'query 默认按正则匹配（普通关键词照常使用）；只在需要把 . * ( ) 等字符当字面查找时设 regex=false。',
     ],
     parameters: grepParamsSchema,
@@ -543,6 +579,7 @@ export function createPiSkillGrepTool(
           regex,
           total: grepResult.total,
           truncated: grepResult.truncated,
+          expandedToSkillDir: grepResult.expandedToSkillDir,
         },
         details: {
           output: grepResult.output,
@@ -557,6 +594,7 @@ export function createPiSkillGrepTool(
           truncated: grepResult.truncated,
           searchedFiles: grepResult.searchedFiles,
           skippedLargeFiles: grepResult.skippedLargeFiles,
+          expandedToSkillDir: grepResult.expandedToSkillDir,
           error: grepResult.error,
         },
       });
