@@ -42,7 +42,10 @@ import {
 } from './ipc-payloads.js';
 import { logger } from '../infrastructure/logger.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import { reserveBillingForRequest } from '../modules/billing/plans.js';
+import {
+  applyNonMemberPricingMarkup,
+  reserveBillingForRequest,
+} from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
   getAgentConcurrencyLimit,
@@ -729,9 +732,14 @@ export function submitInboxRequest(input: {
           reject(new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE));
           return;
         }
-        const llmRuntime = input.llmRuntime
+        const baseRuntime = input.llmRuntime
           ? llmRuntimeToSnapshot(input.llmRuntime)
           : await resolveLlmRuntimeSnapshot(owner.id);
+        // 非会员专家模式加价：把官方模型 token 单价烙进快照，贯穿 reserve/settle/recover。
+        const llmRuntime = applyNonMemberPricingMarkup(
+          baseRuntime,
+          entitlement.membershipActive,
+        );
         billingReservation = await reserveBillingForRequest({
           userId: owner.id,
           requestId,
@@ -1034,12 +1042,17 @@ export function submitAiChatInboxRequest(input: {
           reject(new Error('账号未绑定平台用户，无法处理 AI 请求'));
           return;
         }
-        const llmRuntime = input.llmRuntime
+        const baseRuntime = input.llmRuntime
           ? llmRuntimeToSnapshot(input.llmRuntime)
           : await resolveLlmRuntimeSnapshot(ownerUserId);
         const entitlement =
           input.entitlementSnapshot ??
           (await getRuntimeEntitlementSnapshot(ownerUserId));
+        // 非会员专家模式加价：把官方模型 token 单价烙进快照，贯穿 reserve/settle/recover。
+        const llmRuntime = applyNonMemberPricingMarkup(
+          baseRuntime,
+          entitlement.membershipActive,
+        );
 
         // per-user 余额感知并发门：低余额用户同一时刻只允许 1 个 metered 请求在跑，
         // 封住「多 session 并发把余额刷成大额欠费」的白嫖。健康余额用户不进入此门。

@@ -94,8 +94,6 @@ import {
 
 const SESSION_PROCESSING_TTL_SECONDS = 2100;
 const SESSION_PROCESSING_BUSY_ERROR = '上一条消息仍在处理中，请稍后再试';
-const MEMBERSHIP_REQUIRED_MESSAGE =
-  '需要有效的卦师使用权才能发起解读，请先开通或续费';
 const SESSION_CONTINUATION_BLOCKED_MESSAGE =
   '此对话长期未活跃，历史上下文已归档，不支持继续追问。请新建对话。';
 const CHAT_SESSION_SHARE_TOKEN_BYTES = 18;
@@ -783,11 +781,9 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const entitlement = await getRuntimeEntitlementSnapshot(userId);
-  // 卦师使用权门禁：无有效使用权（membership.active）不得发起解读。
-  // 站内 AI Chat、自贴盘面、简易模式都经此处准备入队，统一在这里硬拦截。
-  if (!entitlement.membershipActive) {
-    return fail(403, MEMBERSHIP_REQUIRED_MESSAGE);
-  }
+  // 专家模式（AI 解读）已对非会员放开：非会员可发起，下游 worker 按非会员加价系数计费。
+  // 站内 AI Chat、自贴盘面、简易模式都经此处准备入队，统一在此放行——仅保留欠费硬门禁，
+  // 余额不足者（含非会员）不得发起，避免无上限赊账。
   if (entitlement.wallet.inArrears) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }

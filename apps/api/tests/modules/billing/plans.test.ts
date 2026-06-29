@@ -40,13 +40,57 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
+  applyNonMemberPricingMarkup,
   BILLING_PRICE_MISCONFIGURED_MESSAGE,
+  NON_MEMBER_PRICE_MULTIPLIER,
   recoverStalePendingReservation,
   reserveBillingForRequest,
   settleBillingReservation,
   settleBillingReservationDetailed,
 } from '../../../src/modules/billing/plans.js';
 import { logger } from '../../../src/infrastructure/logger.js';
+
+describe('applyNonMemberPricingMarkup（非会员专家模式加价）', () => {
+  // 工厂：默认造一个 metered 官方模型快照，按 overrides 改字段；字段不全用 as never 绕类型。
+  const make = (overrides: Record<string, unknown> = {}) =>
+    ({
+      billingMode: 'metered',
+      source: 'official',
+      modelConfigId: 'model-1',
+      model: 'gpt-test',
+      inputTokenPricePerMillionCoins: 3,
+      outputTokenPricePerMillionCoins: 8,
+      ...overrides,
+    }) as never;
+
+  it('会员原价：membershipActive=true 时原样返回，不加价', () => {
+    const result = applyNonMemberPricingMarkup(make(), true);
+    expect(result.inputTokenPricePerMillionCoins).toBe(3);
+    expect(result.outputTokenPricePerMillionCoins).toBe(8);
+  });
+
+  it('非会员加价：metered 官方模型 input/output 单价均 ×系数', () => {
+    const result = applyNonMemberPricingMarkup(make(), false);
+    expect(result.inputTokenPricePerMillionCoins).toBe(
+      3 * NON_MEMBER_PRICE_MULTIPLIER,
+    );
+    expect(result.outputTokenPricePerMillionCoins).toBe(
+      8 * NON_MEMBER_PRICE_MULTIPLIER,
+    );
+  });
+
+  it('BYOK 豁免：source=custom 即便非会员也不加价（结算恒 0）', () => {
+    const result = applyNonMemberPricingMarkup(make({ source: 'custom' }), false);
+    expect(result.inputTokenPricePerMillionCoins).toBe(3);
+    expect(result.outputTokenPricePerMillionCoins).toBe(8);
+  });
+
+  it('非计费豁免：billingMode=none 不加价', () => {
+    const result = applyNonMemberPricingMarkup(make({ billingMode: 'none' }), false);
+    expect(result.inputTokenPricePerMillionCoins).toBe(3);
+    expect(result.outputTokenPricePerMillionCoins).toBe(8);
+  });
+});
 
 describe('metered billing plans', () => {
   beforeEach(() => {

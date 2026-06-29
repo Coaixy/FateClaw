@@ -78,12 +78,12 @@ async function touchLastUsedThrottled(keyId: string): Promise<void> {
 /**
  * 对外开放 API（/api/v1/*）的鉴权 onRequest 钩子。
  *
- * 流程（仿 admin-routes 范式，叠加会员/欠费门槛）：
+ * 流程（仿 admin-routes 范式，叠加欠费门槛）：
  *   1. 解析 Authorization: Bearer fc_live_xxx；
  *   2. sha256 哈希反查有效（active）key；
  *   3. 校验未过期；
  *   4. 按 key 维度做调用频率限流（防单个 key 被滥用）；
- *   5. 校验会员有效 + 钱包未欠费（会员过期不物理失效 key，续费即恢复）；
+ *   5. 校验钱包未欠费（专家模式已放开非会员，会员过期不再拦截、按加价计费，续费享原价）；
  *   6. 写入 request.apiKeyPrincipal 供下游取 userId；
  *   7. 节流更新 last_used_at。
  *
@@ -149,17 +149,9 @@ export async function apiKeyAuthOnRequest(
     );
   }
 
-  // 会员 + 欠费一次快照搞定（hasPaidMembership 做会员门槛，wallet.inArrears 做欠费门槛）。
+  // 专家模式已对非会员放开：持合法 key 者（含过期会员）均可调用，按非会员加价计费；
+  // 仅保留欠费门禁（wallet.inArrears）。注：创建 key 仍是会员特权（api-keys-routes 未放开）。
   const entitlement = await getRuntimeEntitlementSnapshot(row.user_id);
-  if (!entitlement.hasPaidMembership) {
-    return sendOpenAiError(
-      reply,
-      403,
-      '会员已过期，请续费后继续调用 API',
-      'insufficient_quota',
-      'membership_required',
-    );
-  }
   if (entitlement.wallet.inArrears) {
     return sendOpenAiError(
       reply,

@@ -385,7 +385,7 @@ export const zhCNMessages = {
       monthlyToken: '本月 Token',
       freeAccount: '当前为免费账户',
       freeDescription:
-        '可使用简易模式与手动排盘；专家模式和追问需开通卦师使用权。',
+        '可使用简易模式与手动排盘；专家模式与追问非会员按 1.5 倍积分计费，开通会员享原价。',
       freeBadgeWallet: '积分余额计费',
       freeBadgeUpgrade: '可随时升级',
       freeBadgeInactive: '未开通会员',

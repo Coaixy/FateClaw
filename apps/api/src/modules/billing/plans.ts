@@ -111,6 +111,60 @@ function calculateTokenCostCoins(input: {
   return roundCoinsToCents(inputCost + outputCost);
 }
 
+/**
+ * 非会员专家模式加价系数。
+ *
+ * 专家模式（AI 解读）已对非会员放开：非会员可发起，但平台官方计费模型按此倍率
+ * 抬高 token 单价——既扩大散户转化漏斗，又保住会员的价格落差。会员仍享原价。
+ *
+ * @remarks MVP 以常量固化；后续若需运营自助调价，再迁到配置表 / 环境变量。
+ */
+export const NON_MEMBER_PRICE_MULTIPLIER = 1.5;
+
+/**
+ * 对非会员请求的平台计费模型应用加价系数，返回价格抬高后的新 runtime 快照。
+ *
+ * 设计要点：加价被「烙进」runtime 快照的 token 单价字段。由于该快照贯穿
+ * reserve（写入预留 metadata）→ settle（直接复用 pending.llmRuntime）→
+ * sweeper recover（读回 metadata 价格）三处，**一处加价即三处自动一致**，
+ * 无需在每个计费函数里各自传系数。
+ *
+ * 豁免（原样返回、不加价）：
+ *  - 会员（membershipActive === true）：享原价；
+ *  - BYOK 自配模型（runtime.source === 'custom'）：结算恒 0，加价无意义；
+ *  - 非计费模型（runtime.billingMode !== 'metered'）：本就不扣费。
+ *
+ * @param runtime 待计费的 LLM 运行时快照。
+ * @param membershipActive 是否为有效会员（取自 entitlement 快照）。
+ * @returns 会员 / 豁免场景返回原 runtime；非会员计费模型返回价格 ×系数 的新快照。
+ */
+export function applyNonMemberPricingMarkup(
+  runtime: LlmRuntimeSnapshot,
+  membershipActive: boolean,
+): LlmRuntimeSnapshot {
+  // 豁免（原价返回）：会员享原价；BYOK 自配（custom）结算恒 0、加价无意义；
+  // 非计费模型（billingMode!=='metered'）本就不扣费。任一命中即原样返回。
+  if (
+    membershipActive ||
+    runtime.source === 'custom' ||
+    runtime.billingMode !== 'metered'
+  ) {
+    return runtime;
+  }
+  // 非会员 metered 官方模型：input/output 单价同步 ×系数，返回新快照
+  //（不原地改 runtime，避免共享引用被意外污染）。单价可选，以 ?? 0 兜底后再乘，
+  // 与 reserve/settle 里既有的 `?? 0` 口径保持一致。
+  return {
+    ...runtime,
+    inputTokenPricePerMillionCoins:
+      (runtime.inputTokenPricePerMillionCoins ?? 0) *
+      NON_MEMBER_PRICE_MULTIPLIER,
+    outputTokenPricePerMillionCoins:
+      (runtime.outputTokenPricePerMillionCoins ?? 0) *
+      NON_MEMBER_PRICE_MULTIPLIER,
+  };
+}
+
 export async function reserveBillingForRequest(input: {
   userId: string;
   requestId: string;
