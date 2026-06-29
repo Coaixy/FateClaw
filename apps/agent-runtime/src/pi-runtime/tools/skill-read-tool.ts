@@ -1,5 +1,4 @@
 import fs, { type Stats } from 'fs';
-import path from 'path';
 
 import {
   defineTool,
@@ -10,6 +9,10 @@ import {
 import { Type, type Static } from 'typebox';
 
 import { completePiToolExecution, type PiToolRuntimeOptions } from './tool-execution.js';
+import {
+  isMarkdownPath,
+  resolveSkillPathCandidates,
+} from './skill-path.js';
 
 const MAX_SKILL_READ_LINES = 2_000;
 const MAX_SKILL_READ_BYTES = 50 * 1024;
@@ -57,15 +60,6 @@ export interface CreatePiSkillReadToolOptions extends PiToolRuntimeOptions {
   readableSkills: Skill[];
 }
 
-function isPathInside(target: string, root: string): boolean {
-  const relative = path.relative(root, target);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function isMarkdownPath(filePath: string): boolean {
-  return path.extname(filePath).toLowerCase() === '.md';
-}
-
 function resolveReadablePath(
   rawPath: string,
   readableSkills: Skill[],
@@ -77,26 +71,19 @@ function resolveReadablePath(
     };
   }
 
-  const cwdCandidate = path.resolve(trimmed);
-  const candidates = readableSkills.flatMap((skill) => {
-    const baseDir = path.resolve(skill.baseDir);
-    const candidate = path.isAbsolute(trimmed)
-      ? path.resolve(trimmed)
-      : path.resolve(baseDir, trimmed);
-    return [
-      { filePath: candidate, baseDir },
-      { filePath: cwdCandidate, baseDir },
-    ];
-  });
-
-  for (const candidate of candidates) {
-    if (!isPathInside(candidate.filePath, candidate.baseDir)) continue;
-    if (!isMarkdownPath(candidate.filePath)) {
-      return {
-        error: `读取被拒绝：${rawPath} 不是授权 Skill 内的 Markdown 文件。`,
-      };
+  // 取第一个落在某个授权 Skill 边界内的候选；非 Markdown 直接拒绝。
+  for (const { candidates } of resolveSkillPathCandidates(
+    trimmed,
+    readableSkills,
+  )) {
+    for (const candidate of candidates) {
+      if (!isMarkdownPath(candidate)) {
+        return {
+          error: `读取被拒绝：${rawPath} 不是授权 Skill 内的 Markdown 文件。`,
+        };
+      }
+      return { filePath: candidate };
     }
-    return { filePath: candidate.filePath };
   }
 
   return {

@@ -91,7 +91,6 @@ function createTools(
     requestScope: createRequestScope(),
     accountId: 'web:user-1',
     soulStore,
-    userMessage: '你好',
     recordExecution: vi.fn(),
     ...overrides,
   });

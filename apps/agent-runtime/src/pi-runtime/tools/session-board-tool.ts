@@ -7,9 +7,10 @@ import { Type, type Static } from 'typebox';
 
 import type { SessionBoardContext } from '../../types.js';
 import {
-  completePiToolExecution,
+  makeToolResponder,
   type PiToolRuntimeOptions,
 } from './tool-execution.js';
+import { readInteger, readString, toJsonOutput } from './param-utils.js';
 
 const BOARD_PREVIEW_CHARS = 240;
 const BOARD_DETAIL_TEXT_CHARS = 12_000;
@@ -84,15 +85,6 @@ interface PiSessionBoardDetails {
 export interface CreatePiSessionBoardToolOptions
   extends PiToolRuntimeOptions {
   sessionBoards: SessionBoardContext[];
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readInteger(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return Math.trunc(value);
 }
 
 function readMode(value: unknown): 'list' | 'detail' | undefined {
@@ -243,10 +235,6 @@ function findBoard(
   return { error: '当前会话没有可读取的盘面。' };
 }
 
-function buildOutput(details: Omit<PiSessionBoardDetails, 'output'>): string {
-  return JSON.stringify(details, null, 2);
-}
-
 /**
  * 创建 Pi 的当前会话盘面只读工具。
  *
@@ -277,6 +265,14 @@ export function createPiSessionBoardTool(
       params,
     ): Promise<AgentToolResult<PiSessionBoardDetails>> {
       const startedAt = Date.now();
+      const respond = makeToolResponder({
+        options,
+        toolCallId,
+        toolName: 'get_session_board',
+        params: params as Record<string, unknown>,
+        traceType: 'pi_session_board_completed',
+        startedAt,
+      });
       const mode = resolveMode(params);
       const boards = options.sessionBoards;
 
@@ -288,19 +284,8 @@ export function createPiSessionBoardTool(
           total: boards.length,
           boards: boards.map(buildSummary),
         };
-        details.output = buildOutput(details);
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_session_board',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: false,
-          traceType: 'pi_session_board_completed',
-          startedAt,
-          traceFields: { mode, total: boards.length },
-        });
+        details.output = toJsonOutput(details);
+        return respond(details, { mode, total: boards.length });
       }
 
       const found = findBoard(boards, params);
@@ -312,19 +297,8 @@ export function createPiSessionBoardTool(
           total: boards.length,
           error: found.error ?? '未找到匹配盘面。',
         };
-        details.output = buildOutput(details);
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_session_board',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_session_board_completed',
-          startedAt,
-          traceFields: { mode, total: boards.length },
-        });
+        details.output = toJsonOutput(details);
+        return respond(details, { mode, total: boards.length });
       }
 
       const details: PiSessionBoardDetails = {
@@ -334,24 +308,13 @@ export function createPiSessionBoardTool(
         total: boards.length,
         board: buildDetail(found.board, found.index),
       };
-      details.output = buildOutput(details);
-      return completePiToolExecution({
-        options,
-        toolCallId,
-        toolName: 'get_session_board',
-        params: params as Record<string, unknown>,
-        output: details.output,
-        details,
-        isError: false,
-        traceType: 'pi_session_board_completed',
-        startedAt,
-        traceFields: {
-          mode,
-          total: boards.length,
-          index: found.index + 1,
-          source: found.board.source,
-          skill: found.board.skill,
-        },
+      details.output = toJsonOutput(details);
+      return respond(details, {
+        mode,
+        total: boards.length,
+        index: found.index + 1,
+        source: found.board.source,
+        skill: found.board.skill,
       });
     },
   });

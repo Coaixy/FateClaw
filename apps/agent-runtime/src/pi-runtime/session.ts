@@ -144,7 +144,6 @@ export async function runPiSession(args: {
     accountId: args.containerInput.accountId,
     soulStore: args.runtime.deps.soulStore,
     soulEditEnabled,
-    userMessage: args.containerInput.userMessage,
     recordExecution(record) {
       records.push(record);
     },

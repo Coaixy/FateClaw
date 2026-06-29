@@ -10,6 +10,16 @@ import {
 import { Type, type Static } from 'typebox';
 
 import { completePiToolExecution, type PiToolRuntimeOptions } from './tool-execution.js';
+import {
+  clampLimit,
+  readBoolean,
+  readString,
+  toJsonOutput,
+} from './param-utils.js';
+import {
+  isMarkdownPath,
+  resolveSkillPathCandidates,
+} from './skill-path.js';
 
 const MAX_GREP_RESULTS = 80;
 const DEFAULT_GREP_LIMIT = 40;
@@ -93,28 +103,6 @@ export interface CreatePiSkillGrepToolOptions extends PiToolRuntimeOptions {
   readableSkills: Skill[];
 }
 
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return undefined;
-}
-
-function readInteger(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return Math.trunc(value);
-}
-
-function normalizeLimit(value: unknown): number {
-  const limit = readInteger(value) ?? DEFAULT_GREP_LIMIT;
-  if (limit <= 0) return DEFAULT_GREP_LIMIT;
-  return Math.min(limit, MAX_GREP_RESULTS);
-}
-
 function normalizeParams(args: unknown): GrepParams {
   if (!args || typeof args !== 'object' || Array.isArray(args)) {
     return { query: '' };
@@ -124,17 +112,8 @@ function normalizeParams(args: unknown): GrepParams {
     query: readString(raw.query) ?? '',
     path: readString(raw.path),
     caseSensitive: readBoolean(raw.caseSensitive),
-    limit: normalizeLimit(raw.limit),
+    limit: clampLimit(raw.limit, DEFAULT_GREP_LIMIT, MAX_GREP_RESULTS),
   };
-}
-
-function isPathInside(target: string, root: string): boolean {
-  const relative = path.relative(root, target);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function isMarkdownPath(filePath: string): boolean {
-  return path.extname(filePath).toLowerCase() === '.md';
 }
 
 function isSkippedDir(name: string): boolean {
@@ -160,23 +139,16 @@ async function resolveSearchScopes(
     return { error: '搜索被拒绝：(空路径) 不是本轮可见 Skill 内的 Markdown 文件或目录。' };
   }
 
-  const cwdCandidate = path.resolve(trimmed);
   const scopes: SearchScope[] = [];
   let sawAuthorizedCandidate = false;
   let sawUnsupportedPath = false;
 
-  for (const skill of readableSkills) {
-    const baseDir = path.resolve(skill.baseDir);
-    const targetPath = path.isAbsolute(trimmed)
-      ? path.resolve(trimmed)
-      : path.resolve(baseDir, trimmed);
-    const candidates = [targetPath, cwdCandidate];
-    const seenCandidates = new Set<string>();
-
+  for (const { skill, baseDir, candidates } of resolveSkillPathCandidates(
+    trimmed,
+    readableSkills,
+  )) {
     for (const candidate of candidates) {
-      if (seenCandidates.has(candidate)) continue;
-      seenCandidates.add(candidate);
-      if (!isPathInside(candidate, baseDir)) continue;
+      // resolveSkillPathCandidates 已保证 candidate 在 baseDir 边界内。
       sawAuthorizedCandidate = true;
 
       const stat = await safeStat(candidate);
@@ -273,24 +245,6 @@ async function collectMarkdownFiles(
   const promise = collectMarkdownFilesUncached(scope);
   cache.set(key, promise);
   return promise;
-}
-
-async function validateSearchScopes(
-  scopes: SearchScope[],
-): Promise<string | undefined> {
-  for (const scope of scopes) {
-    const stat = await safeStat(scope.targetPath);
-    if (!stat) {
-      return `搜索失败：路径不存在或不可访问：${scope.targetPath}`;
-    }
-    if (stat.isFile() && !isMarkdownPath(scope.targetPath)) {
-      return `搜索被拒绝：${scope.targetPath} 不是授权 Skill 内的 Markdown 文件或目录。`;
-    }
-    if (!stat.isFile() && !stat.isDirectory()) {
-      return `搜索被拒绝：${scope.targetPath} 不是授权 Skill 内的 Markdown 文件或目录。`;
-    }
-  }
-  return undefined;
 }
 
 function formatRelativePath(filePath: string, baseDir: string): string {
@@ -396,24 +350,9 @@ async function runGrep(
       error,
     };
   }
-  const validationError = params.path
-    ? await validateSearchScopes(resolved.scopes)
-    : undefined;
-  if (validationError) {
-    return {
-      output: validationError,
-      isError: true,
-      matches: [],
-      total: 0,
-      totalIsExact: true,
-      truncated: false,
-      error: validationError,
-    };
-  }
-
   const caseSensitive = readBoolean(params.caseSensitive) ?? false;
   const normalizedQuery = caseSensitive ? query : query.toLowerCase();
-  const limit = normalizeLimit(params.limit);
+  const limit = clampLimit(params.limit, DEFAULT_GREP_LIMIT, MAX_GREP_RESULTS);
   const matches: GrepMatch[] = [];
   let total = 0;
   let searchedFiles = 0;
@@ -442,20 +381,16 @@ async function runGrep(
     }
   }
 
-  const output = JSON.stringify(
-    {
-      query,
-      path: params.path,
-      caseSensitive,
-      searchedFiles,
-      total,
-      totalIsExact: !truncated,
-      truncated,
-      matches,
-    },
-    null,
-    2,
-  );
+  const output = toJsonOutput({
+    query,
+    path: params.path,
+    caseSensitive,
+    searchedFiles,
+    total,
+    totalIsExact: !truncated,
+    truncated,
+    matches,
+  });
   return {
     output,
     isError: false,
