@@ -632,13 +632,13 @@ describe('createPiCustomTools', () => {
     });
   });
 
-  it('greps with a regular expression and reports invalid patterns', async () => {
+  it('greps with regex by default and falls back to literal on invalid pattern', async () => {
     const readableSkill = createReadableSkillFixture();
     const docsDir = path.join(readableSkill.baseDir, 'docs');
     fs.mkdirSync(docsDir);
     fs.writeFileSync(
       path.join(docsDir, 'knowledge.md'),
-      ['甲木生于寅月', '乙木见流年庚金', '丙火无关行'].join('\n'),
+      ['甲木生于寅月', '乙木见流年庚金', '丙火无关行', '括号示例 (甲)'].join('\n'),
     );
     const tools = createTools({
       readableSkills: [readableSkill],
@@ -646,44 +646,48 @@ describe('createPiCustomTools', () => {
     });
     const grepTool = tools.find((tool) => tool.name === 'grep')!;
 
-    const regexHit = await grepTool.execute(
-      'grep-regex',
-      { query: '[甲乙]木', regex: true, path: 'docs/knowledge.md' },
-      undefined,
-      undefined,
-      undefined as never,
-    );
-    const literalMiss = await grepTool.execute(
-      'grep-literal',
+    // 默认按正则：[甲乙]木 命中「甲木」「乙木」两行
+    const defaultRegex = await grepTool.execute(
+      'grep-default-regex',
       { query: '[甲乙]木', path: 'docs/knowledge.md' },
       undefined,
       undefined,
       undefined as never,
     );
-    const invalid = await grepTool.execute(
-      'grep-bad-regex',
-      { query: '(', regex: true, path: 'docs/knowledge.md' },
+    // 强制字面：文件里没有「[甲乙]木」整串 → 0 命中
+    const literal = await grepTool.execute(
+      'grep-literal',
+      { query: '[甲乙]木', regex: false, path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    // 非法正则「(」→ 自动回退字面，命中含「(」的行
+    const fallback = await grepTool.execute(
+      'grep-fallback',
+      { query: '(', path: 'docs/knowledge.md' },
       undefined,
       undefined,
       undefined as never,
     );
 
-    // 正则命中「甲木」「乙木」两行
-    expect(regexHit.details).toMatchObject({
+    // 默认正则命中两行，regex 标注为 true
+    expect(defaultRegex.details).toMatchObject({
       isError: false,
       regex: true,
       total: 2,
     });
-    // 同样的 query 走字面匹配，文件里没有「[甲乙]木」整串 → 0 命中
-    expect(literalMiss.details).toMatchObject({
+    // regex=false 强制字面，整串不存在 → 0
+    expect(literal.details).toMatchObject({
       isError: false,
       regex: false,
       total: 0,
     });
-    // 非法正则显式报错，而非静默返回空
-    expect(invalid.details).toMatchObject({
-      isError: true,
-      output: expect.stringContaining('正则表达式无效'),
+    // 非法正则回退字面：不报错、regex 标注为 false、命中字面「(」一行
+    expect(fallback.details).toMatchObject({
+      isError: false,
+      regex: false,
+      total: 1,
     });
   });
 
@@ -1013,6 +1017,48 @@ describe('createPiCustomTools', () => {
       type: 'text',
       text: '只有第二个 skill 有的内容',
     });
+  });
+
+  it('flags ambiguity when the same relative path exists in multiple skills', async () => {
+    const first: Skill = {
+      ...createReadableSkillFixture(),
+      name: 'first-bazi',
+    };
+    const second: Skill = {
+      ...createReadableSkillFixture(),
+      name: 'second-bazi',
+    };
+    // 两个 skill 都有 docs/knowledge.md，内容不同
+    for (const [skill, body] of [
+      [first, 'FIRST 的内容'],
+      [second, 'SECOND 的内容'],
+    ] as const) {
+      const dir = path.join(skill.baseDir, 'docs');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'knowledge.md'), body);
+    }
+    const tools = createTools({
+      readableSkills: [first, second],
+      recordExecution: vi.fn(),
+    });
+    const readTool = tools.find((tool) => tool.name === 'read')!;
+
+    const result = await readTool.execute(
+      'read-ambiguous',
+      { path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    // 仍返回第一个 skill 的内容（行为不变），但带回其余命中 skill 名并在 output 提示
+    expect(result.details).toMatchObject({
+      isError: false,
+      otherSkillMatches: ['second-bazi'],
+    });
+    expect(result.content[0].text).toContain('FIRST 的内容');
+    expect(result.content[0].text).toContain('second-bazi');
+    expect(result.content[0].text).toContain('多个授权 Skill');
   });
 
   it('does not expose FateClaw deterministic or legacy domain-specific tools as Pi custom tools', () => {
