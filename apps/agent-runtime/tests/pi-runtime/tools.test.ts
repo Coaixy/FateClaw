@@ -632,6 +632,94 @@ describe('createPiCustomTools', () => {
     });
   });
 
+  it('greps with a regular expression and reports invalid patterns', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const docsDir = path.join(readableSkill.baseDir, 'docs');
+    fs.mkdirSync(docsDir);
+    fs.writeFileSync(
+      path.join(docsDir, 'knowledge.md'),
+      ['甲木生于寅月', '乙木见流年庚金', '丙火无关行'].join('\n'),
+    );
+    const tools = createTools({
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    const regexHit = await grepTool.execute(
+      'grep-regex',
+      { query: '[甲乙]木', regex: true, path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const literalMiss = await grepTool.execute(
+      'grep-literal',
+      { query: '[甲乙]木', path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const invalid = await grepTool.execute(
+      'grep-bad-regex',
+      { query: '(', regex: true, path: 'docs/knowledge.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    // 正则命中「甲木」「乙木」两行
+    expect(regexHit.details).toMatchObject({
+      isError: false,
+      regex: true,
+      total: 2,
+    });
+    // 同样的 query 走字面匹配，文件里没有「[甲乙]木」整串 → 0 命中
+    expect(literalMiss.details).toMatchObject({
+      isError: false,
+      regex: false,
+      total: 0,
+    });
+    // 非法正则显式报错，而非静默返回空
+    expect(invalid.details).toMatchObject({
+      isError: true,
+      output: expect.stringContaining('正则表达式无效'),
+    });
+  });
+
+  it('greps large markdown files beyond the legacy in-memory cap', async () => {
+    const readableSkill = createReadableSkillFixture();
+    const bigFile = path.join(readableSkill.baseDir, 'big.md');
+    // 构造超过旧 256KB 上限的文件（约 320KB），命中行藏在末尾，验证不再被静默跳过
+    const lines = Array.from({ length: 20_000 }, (_, i) => `填充行 ${i}`);
+    lines.push('稀有关键词 needle 出现在末尾');
+    fs.writeFileSync(bigFile, lines.join('\n'));
+    const tools = createTools({
+      readableSkills: [readableSkill],
+      recordExecution: vi.fn(),
+    });
+    const grepTool = tools.find((tool) => tool.name === 'grep')!;
+
+    const result = await grepTool.execute(
+      'grep-large',
+      { query: 'needle', path: 'big.md' },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.details).toMatchObject({
+      isError: false,
+      total: 1,
+      matches: [
+        {
+          relativePath: 'big.md',
+          text: '稀有关键词 needle 出现在末尾',
+        },
+      ],
+    });
+  });
+
   it('caches markdown file discovery for repeated grep calls in one tool instance', async () => {
     const readableSkill = createReadableSkillFixture();
     const docsDir = path.join(readableSkill.baseDir, 'docs');
