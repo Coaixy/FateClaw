@@ -24,12 +24,12 @@ apps/web/
 │   ├── layout.tsx
 │   ├── page.tsx
 │   ├── login/page.tsx
-│   ├── dashboard/page.tsx
-│   ├── chat/page.tsx
 │   ├── ai-chat/page.tsx
-│   ├── devices/page.tsx
 │   ├── discover/page.tsx
-│   ├── plans/page.tsx
+│   ├── bazi-cases/page.tsx
+│   ├── clients/page.tsx
+│   ├── announcements/page.tsx
+│   ├── membership/page.tsx
 │   ├── profile/page.tsx
 │   ├── wallet/page.tsx
 │   ├── studio/
@@ -85,7 +85,6 @@ apps/web/
 - `app/skills/bundle/install/page.tsx`: Bundle 安装页
 - `app/wallet/page.tsx`: 钱包与充值
 - `app/devices/page.tsx`: 设备与账号绑定入口
-- `app/plans/page.tsx`: 会员 / Token Plan 预留页
 - `app/profile/page.tsx`: 个人资料
 - `app/settings/page.tsx`: 设置
 
@@ -93,7 +92,6 @@ apps/web/
 
 - `features/*/api.ts`: 普通用户各业务域 API client
 - `features/paipan/api.ts`: 直排盘 API client
-- `features/simple-workflows/api.ts`: 简易模式 workflow 启动 API client
 - `features/auth/hooks/use-auth.ts`: 登录态 hook
 - `features/auth/providers/auth-provider.tsx`: 认证上下文
 
@@ -108,7 +106,7 @@ apps/web/
 - 实时输出先调用 `chatSessionsApi.createStreamTicket()`，再通过 `buildChatSessionStreamUrl()` 连接 WebSocket。
 - 最终消息仍以服务端落库为准；WebSocket 断开时应能通过重新拉取消息列表恢复展示。
 - `PaipanSheet` 调 `/api/paipan/preview` 和 `/api/paipan/commit`，排盘结果以消息 `tool_context` 形式进入会话。
-- `SimpleModeWorkspace` 调 `/api/simple-workflows/start`，后端会先创建会话和盘面，再后台启动首轮 AI 解读。
+- 简易模式经统一 AI Chat 会话回合发起，无独立 workflow 路由 / client。
 
 ## UI 特征
 

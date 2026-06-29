@@ -1,6 +1,6 @@
 # Agent 架构
 
-最近核对：2026-06-14。
+最近核对：2026-06-29。
 
 这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runtime，agent-runtime 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
 
@@ -87,8 +87,6 @@ notes/
 ```
 
 私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`apps/agent-runtime/src/text-skill-bundle.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
-
-简易模式是排盘和 AI Chat 的组合 workflow：`simple-workflow-service.ts` 读取后台 preset，先调用直接排盘创建会话和盘面消息，再异步发起首轮 AI Chat。preset 可指定模型策略、Skill Bundle 白名单或 workflow Skill 快照；这些授权会随本轮 IPC payload 传给 ResourceLoader。
 
 ## 宿主请求链路
 

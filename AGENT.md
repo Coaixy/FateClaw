@@ -149,9 +149,9 @@ Admin 是独立管理后台静态站点，负责：
 
 系统排盘由 API 侧确定性 runner 执行，目录和参数 schema 在 `paipan-registry.ts`；用户知识库是 Text Skill Bundle，正文在 `.fateclaw/text-skills` 文件系统目录。Pi Runtime 不应自行“调用排盘工具”，只读取本轮授权 Markdown Skill，并结合已写入会话的盘面 artifact 推理。
 
-### 7. 简易模式是 preset 驱动的组合 workflow
+### 7. 简易模式是 `/ai-chat` 内的会话模式
 
-`/api/simple-workflows/start` 会读取后台 preset，先调用直接排盘创建会话和盘面消息，再异步发送首轮 AI Chat。它可能覆盖模型策略，并把 preset 绑定的 `skill_bundle_ids` 或 `skill_snapshot_ids` 限定为本轮授权知识来源。
+简易模式现在是 `/ai-chat` 内的一种会话模式，经统一会话回合 `prepareOwnedChatSessionTurn` 入队，受同一会员门禁约束。独立的 `/api/simple-workflows/start` 路由与 `simple-workflow-service.ts` 文件均已删除，不再有单独的 preset 排盘入口。
 
 ### 8. 测试按改动范围聚焦运行
 
@@ -164,9 +164,9 @@ Admin 是独立管理后台静态站点，负责：
 
 根级 `pnpm test` 使用 Vitest；大改动不要只依赖 `--passWithNoTests` 的空覆盖结果。
 
-### 9. 微信链路是“既有账号后端可跑，新绑定前端关闭”
+### 9. 微信链路是“代码保留但整体停用，新绑定前端关闭”
 
-`apps/api/src/app/index.ts` 当前会初始化 DB、Redis、系统排盘开关、IPC worker、retention worker 和 Fastify API，并为已启用且会员有效的既有微信账号启动 `startAccountPolling()` 与对应 IPC listener。`activateAccount()` 也会热激活绑定账号。
+`apps/api/src/app/index.ts` 当前会初始化 DB、Redis、系统排盘开关、IPC worker、retention worker 和 Fastify API，并保留为已启用且会员有效的既有微信账号启动 `startAccountPolling()` 与对应 IPC listener 的代码路径。但该循环被功能总开关 `WECHAT_CLAW_FEATURE_ENABLED=false` 与迁移 0057（账号 `enabled` 全置 false）双重短路，条件永不成立、实际零启动；`activateAccount()` 的热激活同理不会被触发，整套链路仅代码保留待恢复。
 
 但 Web 侧 `DevicesPanel` 里 `canBindWeixin` 当前为 `false`，新扫码绑定入口仍显示暂未开放。排查主链路时仍优先按站内 AI Chat 的 `web:{userId}` runtime 理解；排查微信链路时要同时看后端轮询、会员状态、账号启用状态和前端绑定开关。
 
@@ -176,7 +176,7 @@ Admin 是独立管理后台静态站点，负责：
 - `apps/api/src/modules/skills/`: Text Skill Bundle 写入和技能 HTTP 服务
 - `apps/api/src/modules/chat/paipan-registry.ts`: 系统排盘目录清单、参数 schema 和 runner 绑定
 - `apps/api/src/modules/chat/paipan-runners/`: 系统排盘 TypeScript 确定性实现
-- `apps/api/src/modules/chat/simple-workflow-service.ts`: 简易模式 preset、直接排盘和首轮 AI Chat 编排
+- `apps/api/src/modules/chat/chat-session-service.ts`: 站内会话回合统一收口 `prepareOwnedChatSessionTurn`，简易模式也走这里（原独立 `simple-workflow-service.ts` 已删除）
 - `apps/api/src/runtime/ai-chat-stream.ts`: AI Chat WebSocket stream ticket 与 Redis pub/sub
 - `apps/api/src/runtime/ipc-ai-chat-outbox-handler.ts`: 站内 AI Chat 最终回复落库、结算、日志和推流
 - `apps/agent-runtime/src/request-boundary.ts`: 单次请求的边界、错误映射和 trace 汇总

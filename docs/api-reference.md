@@ -15,21 +15,21 @@
 - `/api/public`
 - `/api/referrals`
 - `/api/skills`
-- `/api/simple-workflows`
 - `/api/billing`
+- `/api/api-keys`
+- `/api/v1`
 - `/api/admin`
 - `/api/health`
 - `/api/ready`
 
 ## 运行模式速记
 
-当前稳定主链路是站内 AI Chat、手动排盘、简易模式 workflow 和 Text Skill Bundle 知识库。微信 OpenClaw/iLink 后端轮询与发送链路仍保留，但 Web 新扫码绑定入口暂未开放。
+当前稳定主链路是站内 AI Chat、手动排盘和 Text Skill Bundle 知识库。微信 OpenClaw/iLink 已整体可逆停用（`WECHAT_CLAW_FEATURE_ENABLED=false` + 迁移 0057），`canUseWechatClaw` 恒为 `false`，相关扫码绑定与轮询/发送链路恒不可用。
 
 - AI Chat 请求会由 API 写入用户消息、解析请求级 `llmRuntime`、抢占会话 busy 锁，再通过 Redis IPC 投递到 `web:{userId}` 对应的本地 agent-runtime。
 - `POST /api/chat-sessions/s/:sessionId/messages` 通常只表示请求已入队；最终 assistant 消息由 `ipc:{runtimeId}:ai-chat:outbox` handler 异步落库、结算并通过 WebSocket 推送。
 - 手动排盘不调用模型。API 侧直接执行 `paipan-runners/*.ts`，把结构化盘面作为 `tool_context/artifactData` 写入会话。
 - Text Skill Bundle 正文写在 `.fateclaw/text-skills` 文件系统目录，数据库只保存 metadata、权限、版本和 `bundle_uri`。agent-runtime 每轮只读取本次请求授权的 Bundle。
-- 简易模式会先按后台 preset 直接排盘并创建会话，再异步启动首轮 AI 解读。
 
 ## 认证
 
@@ -209,7 +209,7 @@ Authorization: Bearer <token>
 
 ## Account 账号管理
 
-账号管理接口均需认证。当前 Web 设备页仍关闭新微信扫码绑定入口，但后端保留扫码、状态轮询和既有账号管理接口。
+账号管理接口均需认证。微信 OpenClaw/iLink 已整体可逆停用（`WECHAT_CLAW_FEATURE_ENABLED=false` + 迁移 0057），`canUseWechatClaw` 恒为 `false`，扫码绑定、状态轮询和发送链路恒不可用；下列接口仍在路由表中注册，但在停用开关下不会真正生效。
 
 ### GET /api/account
 
@@ -476,57 +476,6 @@ ws://localhost:3000/api/chat-sessions/s/:sessionId/stream?ticket=single-use-tick
 
 ---
 
-## Simple Workflows 简易模式
-
-简易模式是面向普通用户的组合入口，当前后端路由只有启动接口。它会读取后台默认 preset，先执行确定性排盘并创建 AI Chat 会话，再异步入队首轮 AI 解读。
-
-### POST /api/simple-workflows/start
-
-需认证。
-
-占卜问事请求：
-
-```json
-{
-  "kind": "divination",
-  "question": "这个项目下个月适合推进吗？",
-  "background": "可选背景"
-}
-```
-
-命理分析请求：
-
-```json
-{
-  "kind": "natal",
-  "solarDate": "1998-08-16",
-  "hour": 8,
-  "minute": 30,
-  "gender": "男",
-  "questionDirection": "事业方向"
-}
-```
-
-**Response 200**
-
-```json
-{
-  "session": {
-    "id": "session-...",
-    "account_id": "web:user-id",
-    "title": "占卜问事：这个项目下个月适合推进吗？",
-    "created_at": "2026-06-14T10:00:00.000Z",
-    "updated_at": "2026-06-14T10:00:00.000Z"
-  },
-  "boardMessageId": "simple-workflow-board-...",
-  "assistantMessageId": "simple-workflow-user-..._reply"
-}
-```
-
-首轮 AI 解读是后台异步启动的。若模型请求没有成功入队，服务端会保留会话和盘面，并写入一条失败说明消息；用户仍可在该会话里追问。
-
----
-
 ## Model Settings 用户模型设置
 
 以下接口均需认证，用于普通用户选择官方模型或保存自配模型。
@@ -647,7 +596,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 ```json
 {
   "monthly_tokens_used": 905000,
-  "estimated_monthly_total_coins": 12.5,
+  "monthly_charged_coins": 12.5,
   "purchased_coins": 100,
   "bonus_coins": 20,
   "reserved_coins": 0,
@@ -659,25 +608,15 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
     "monthly_price_coins": 30,
     "display_price_coins": 30,
     "current_period_start": null,
-    "current_period_end": null,
-    "allowance_reset_at": null,
-    "allowance_used_ratio": 0,
-    "allowance_status": "inactive"
+    "current_period_end": null
   },
   "membership_entitlements": [
     {
-      "plan_key": "fateclaw_deep",
-      "name": "FateClaw Deep",
+      "plan_key": "fateclaw_clarity",
+      "name": "FateClaw Clarity",
       "effective_start": "2026-06-10T00:00:00.000Z",
       "effective_end": "2026-07-10T00:00:00.000Z",
       "is_current": true
-    },
-    {
-      "plan_key": "fateclaw_insight",
-      "name": "FateClaw Insight",
-      "effective_start": "2026-07-10T00:00:00.000Z",
-      "effective_end": "2027-07-01T00:00:00.000Z",
-      "is_current": false
     }
   ],
   "membership_plans": []
@@ -686,7 +625,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 **会员权益时间轴**
 
-`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。Insight 与 Deep 同时存在时，Deep 覆盖期间只返回 Deep 片段，之后再返回回落的 Insight 片段，例如 Insight 延长到 `2027-07-01`。
+`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。会员已单层化（迁移 0058 全量归一为 `fateclaw_clarity`），不再有多档叠加或覆盖回落逻辑，单层下至多只有一段当前生效的 Clarity 权益及其后续续费片段。
 
 ---
 
@@ -853,13 +792,24 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 ### POST /api/billing/membership/subscribe
 
-使用钱包余额开通或续费 FateClaw 会员套餐。需认证。请求体可传 `plan_key`，当前支持 `fateclaw_clarity`、`fateclaw_insight`、`fateclaw_deep`；省略时默认开通 Clarity。
+使用钱包余额开通或续费 FateClaw 会员套餐。需认证。请求体可传 `plan_key`，当前仅支持 `fateclaw_clarity`（单层化，迁移 0058 已将旧档 insight/deep 全量归一）；省略时默认开通 Clarity。
 
 ---
 
 ### POST /api/billing/reset
 
 按 scope 软重置当前用户数据。需认证。`scope` 支持 `all`、`messages`、`memories`、`tasks`，默认 `all`。
+
+---
+
+## API Keys 与开放 API
+
+面向「会员用 API Key 程序化调用」：`/api/api-keys` 是站内管理面（JWT 鉴权），用户在此创建、列出、吊销自己的 API Key；`/api/v1` 是对外调用面（API Key 鉴权，OpenAI 兼容的请求/响应与错误体）。完整的鉴权、端点、计费与会话留存设计见 `docs/open-api-design.md`。
+
+| 前缀 | 鉴权 | 说明 |
+| --- | --- | --- |
+| `/api/api-keys` | JWT | 站内 API Key 管理面：创建、列出、吊销当前用户的 API Key |
+| `/api/v1` | API Key | 对外开放 API：OpenAI 兼容入口，会员凭 API Key 程序化调用排盘/Agent |
 
 ---
 

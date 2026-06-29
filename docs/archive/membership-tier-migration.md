@@ -1,5 +1,11 @@
 # 会员等级完整迁移方案
 
+> ⚠️ **本文已过时（历史方案，勿据此判断现状）。** 文中的 Free / Clarity / Insight / Deep
+> 四档权限矩阵是一个中间阶段的设计，**之后又被"单层化"重构整体取代**：迁移 `0058` 已把所有
+> 历史档位归一为单一的 `clarity`，系统现在只有"有/无有效会员"二元判断，AI 解读对非会员一律
+> 拦截（不再有 Free 简易模式免费路径）。当前事实请以
+> [`membership-entitlement-current.md`](../membership-entitlement-current.md) 为准。本文仅作历史归档。
+
 最近核对：2026-06-15。
 
 这份文档记录 Free、Clarity、Insight、Deep 四档权限重划分的完整迁移方案。目标是把现在混在一起的“会员”判断拆成明确的能力判断，避免新增 Clarity 后误拿到 Insight/Deep 权限。

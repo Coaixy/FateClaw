@@ -1,6 +1,6 @@
 # FateClaw 对外开放 API 设计文档
 
-> 状态：设计草案（待 review）
+> 状态：已实现（迁移 0066/0067 及路由/仓储/鉴权中间件均已落地）
 > 目标读者：FateClaw 内部研发；后续将派生出面向第三方开发者的对外文档。
 > 关联代码：`apps/api`（HTTP/鉴权/计费）、`apps/agent-runtime`（Agent 运行时）、`packages/contracts`（对外契约）。
 
@@ -15,7 +15,7 @@
 
 | 维度 | 决策 | 理由 |
 |---|---|---|
-| 本轮产出 | 设计文档 + 骨架代码 | 文档先行 review，再落地迁移/鉴权/路由骨架 |
+| 本轮产出 | 设计文档 + 落地实现 | 迁移/鉴权/路由均已落地，文档与实现保持一致 |
 | Agent 形态 | **sid 有状态会话** `/api/v1/sessions` | 建会话传一次 model/system/board/skills 拿 sid；之后每轮只发 content，历史/盘面由服务端记着、runtime 原生 resume 复原——贴合 runtime 天生的持久会话纹理，省带宽、board 不重发（原 OpenAI 无状态 `/chat/completions` 已弃用） |
 | 计费 / 模型 | **仅平台官方模型，按 token 扣 coins** | 不做 BYOK，直接复用现有 metered 结算链路，设计大幅简化 |
 | Key 权限 | **单一全权 key** | 一个 key 调排盘 + Agent，无 scope 分支；后续可平滑加 scope |
@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
   ON user_api_keys (user_id) WHERE status = 'active';
 ```
 
-- 迁移遵循现有约定：在 `definitions/` 下新建 `0066-user-api-keys.ts`，导出 `readonly DatabaseMigration[]`，在 `definitions.ts` 末尾**追加**（只追加不重排）；用 `CREATE TABLE IF NOT EXISTS` 等幂等写法。
+- 迁移遵循现有约定：`definitions/` 下的 `0066-user-api-keys.ts` 导出 `readonly DatabaseMigration[]`，已在 `definitions.ts` 末尾**追加**（只追加不重排）；用 `CREATE TABLE IF NOT EXISTS` 等幂等写法。
 - 每用户 key 数量上限：建议 **10**（在路由层 `MAX_API_KEYS_PER_USER` 常量校验，不加 DB 约束，便于调）。
 
 ### 4.3 Key 管理路由（站内，JWT 鉴权）
@@ -408,7 +408,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 - **per-key 计费报表**：先用 `billing_request_reservations.metadata` 透传 `apiKeyId`；如需可查询报表再加 `api_key_id` 列。
 - **每用户 key 上限**：10（`MAX_API_KEYS_PER_USER`，路由层校验）。
 
-## 11. 骨架代码清单（本轮落地）
+## 11. 实现代码清单（均已落地）
 
 | # | 文件 | 内容 |
 |---|---|---|

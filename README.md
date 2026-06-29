@@ -2,7 +2,7 @@
 
 FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + 用户知识库检索 + Pi Runtime 解读”。它不是把大模型套在一个聊天框里，而是把术数排盘、知识沉淀、模型调用、工具执行、对话留痕和微信 OpenClaw/iLink 接入拆成清晰的运行时边界。
 
-当前稳定主链路是站内 AI Chat、手动排盘和用户知识库检索。微信 OpenClaw/iLink Bot 对接代码仍保留：正式 API 启动入口会为已启用且会员有效的账号启动轮询和 IPC 监听，但 Web 侧新扫码绑定仍暂未开放；对外恢复完整微信链路前仍需重新确认外部平台协议、账号风控和部署安全边界。
+当前稳定主链路是站内 AI Chat、手动排盘和用户知识库检索。微信 OpenClaw/iLink Bot 对接代码仍保留，但已整体可逆停用：功能总开关 `WECHAT_CLAW_FEATURE_ENABLED=false` 加上迁移 0057 把所有账号 `enabled` 置为 false，启动时不会拉起任何轮询或 IPC 监听，仅保留代码路径待恢复；对外恢复完整微信链路前仍需重新确认外部平台协议、账号风控和部署安全边界。
 
 > 本项目内容仅用于软件工程、排盘工具和个人研究场景，不构成医疗、法律、投资或其他专业建议。
 
@@ -14,7 +14,7 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 - **Pi Runtime 编排**：模型 loop、用户知识读取和最终回复都由 Pi SDK 承接，FateClaw 只保留排盘等确定性业务能力。
 - **请求级模型配置**：模型 Provider、密钥、价格和上下文窗口由宿主解析成 `llmRuntime` 快照随请求下发，不依赖 agent 进程全局模型环境变量。
 - **可观测对话链路**：每次请求返回 transcript、trace events、agent graph 和 token usage，后台可回看工具调用、知识命中和模型链路。
-- **OpenClaw/iLink 保留接入**：微信账号、消息转换、轮询和发送路径仍在仓库内；正式入口会启动符合条件的既有账号，Web 新绑定入口当前关闭。
+- **OpenClaw/iLink 保留接入**：微信账号、消息转换、轮询和发送路径仍在仓库内；但微信已整体可逆停用（功能总开关 false + 迁移 0057 账号 `enabled` 全置 false），启动时不会拉起任何轮询或 listener，仅代码保留待恢复。
 
 ## 接手速记
 
@@ -27,8 +27,8 @@ FateClaw 是一个开源玄学 Agent 系统，核心能力是“本地排盘 + �
 - 系统排盘不是 Pi Skill。排盘由 API 侧 `paipan-registry.ts` 和 `paipan-runners/*.ts` 确定性执行，结果作为盘面 artifact 写入会话；Pi Runtime 只负责基于盘面、问题和授权知识推理。
 - 用户知识正文不存数据库，写在 `.fateclaw/text-skills/<owner>/<dir>-<id>/`。数据库保存 metadata、权限、版本、安装状态和 `bundle_uri`；运行时只通过 request-scoped ResourceLoader 暴露本轮授权 Bundle。
 - 站内 AI Chat 默认是异步体验：`POST /api/chat-sessions/s/:sessionId/messages` 入队后返回 `accepted` 和 `request_id`，Web 通过短期 stream ticket 建 WebSocket，最终回复由 `ai-chat:outbox` handler 落库、结算并推流。
-- 简易模式 `POST /api/simple-workflows/start` 会先按 preset 直接排盘并创建会话，再异步发起首轮 AI 解读，可绑定指定模型策略和 workflow Skill 快照。
-- 微信 OpenClaw/iLink 是保留链路：正式 API 会为已启用且会员有效的既有账号启动轮询和 listener，但 Web 新扫码绑定入口仍关闭。恢复前要重新确认外部平台协议、风控和部署边界。
+- 简易模式现在是 `/ai-chat` 内的一种会话模式，经统一会话回合 `prepareOwnedChatSessionTurn` 入队，受同一会员门禁约束；已无独立的 `/api/simple-workflows` 路由或 service。
+- 微信 OpenClaw/iLink 已整体可逆停用：功能总开关 false 加上迁移 0057 把账号 `enabled` 全置 false，启动时不会拉起任何轮询或 listener，仅代码保留待恢复。恢复前要重新确认外部平台协议、风控和部署边界。
 
 ## 系统总览
 
@@ -87,7 +87,7 @@ flowchart LR
   Fastify --> Web
 ```
 
-当前稳定主链路是 Web AI Chat。微信接入相关代码路径仍保留，正式入口会启动符合条件的既有账号轮询；Web 新扫码绑定入口当前未开放。
+当前稳定主链路是 Web AI Chat。微信接入相关代码路径仍保留，但已整体可逆停用（功能总开关 false + 迁移 0057 账号 `enabled` 全置 false），启动时不会拉起任何轮询或 listener，仅代码保留待恢复。
 
 ## Pi Runtime
 
@@ -145,12 +145,12 @@ sequenceDiagram
 | 排盘 | Web/API 调用 `apps/api/src/modules/chat/paipan-runners/*.ts`，返回结构化 artifact |
 | 解读 | Pi Runtime 基于当前盘面、问题和授权用户知识直接回复 |
 | 用户知识库 | Web 创建 Text Skill Bundle，DB 只存 metadata、权限、版本和 `bundle_uri` |
-| 简易模式 | API 读取 simple workflow preset，先直接排盘创建会话，再异步入队首轮 AI 解读 |
+| 简易模式 | `/ai-chat` 内的会话模式，经统一会话回合 `prepareOwnedChatSessionTurn` 入队，已无独立 `/api/simple-workflows` 路由 |
 | Agent 调度 | `apps/agent-runtime/src/pi-runtime/` 通过 Pi SDK 统一处理模型 loop 和授权 Skill 文件读取 |
 | IPC | Redis list 队列：inbox、member inbox、outbox、ai-chat outbox、cancel；WebSocket 流走 Redis pub/sub |
 | 模型 | AI 请求使用请求级 `llmRuntime` 快照，由 Pi Runtime 适配 OpenAI-compatible、OpenAI Responses、Anthropic、Gemini |
 | 可观测性 | `conversation_logs` 保存元数据、计数、摘要和 usage；`conversation_log_payloads` 保存 transcript、traceEvents、agentGraph 正文 |
-| 微信接入 | OpenClaw/iLink 代码路径保留；正式入口启动已启用会员账号轮询，Web 新绑定暂未开放 |
+| 微信接入 | OpenClaw/iLink 代码路径保留但整体可逆停用（功能总开关 false + 迁移 0057 账号 `enabled` 全置 false），启动时不拉起任何轮询或 listener |
 
 ## 技术栈
 
@@ -289,7 +289,7 @@ AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runtime`，模型密�
 仓库保留了微信 OpenClaw/iLink 对接相关模块，包括账号管理、扫码登录、消息转换、消息发送和轮询处理。当前代码状态是：
 
 - 站内 AI Chat 和手动排盘可以作为当前主链路运行。
-- 正式 API 启动入口会为已启用且会员有效的既有微信账号启动 iLink 长轮询，并启动对应 IPC listener。
+- 微信已整体可逆停用：功能总开关 `WECHAT_CLAW_FEATURE_ENABLED=false` 加上迁移 0057 把所有账号 `enabled` 置为 false，正式 API 启动入口的轮询/listener 条件永不成立、实际启动 0 个账号，仅保留代码路径待恢复。
 - `pnpm run dev:api-only` 轻量入口仍会跳过轮询、IPC worker 和 runtime 激活。
 - Web 侧扫码绑定按钮当前被禁用，设备页会显示微信设备暂时关闭；若要重新开放新绑定，需要同步恢复前端开关并确认 OpenClaw/iLink Bot API 的可用性和部署安全边界。
 
@@ -300,7 +300,6 @@ AI 请求会携带请求级 `llmRuntime` 快照给 `agent-runtime`，模型密�
 - [docs/agent-architecture.md](docs/agent-architecture.md)：Agent 运行架构、Redis IPC、Pi Runtime 和 request-scoped Skill 资源。
 - [docs/api-reference.md](docs/api-reference.md)：HTTP API 参考。
 - [docs/openclaw-integration.md](docs/openclaw-integration.md)：微信 OpenClaw/iLink 对接边界。
-- [DESIGN.md](DESIGN.md)：历史/外部设计参考；当前内容不是 FateClaw 专属设计规范，使用前需重新确认。
 - [AGENT.md](AGENT.md)：给代码协作者和 AI Agent 的仓库入口说明。
 - [CONTRIBUTING.md](CONTRIBUTING.md)：贡献指南。
 - [SECURITY.md](SECURITY.md)：安全策略和漏洞报告方式。

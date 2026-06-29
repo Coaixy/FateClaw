@@ -1,5 +1,11 @@
 # API 会员与余额领域清理修改文档
 
+> ⚠️ **部分过时。** 文中**会员档位相关内容已废弃**：四档 key（plus/pro/insight/deep）、
+> Free 专家每日次数、会员 allowance、按档位推导优先队列/自配模型等，均已被"单层化"重构取代
+> （迁移 `0058` 全量归一为 `clarity`，会员不再含 AI 免费额度）。**钱包四字段、`available_coins`
+> 公式、metered 预留→结算计费命名等领域规范仍然有效。** 会员/AI 解读门禁的当前事实请以
+> [`membership-entitlement-current.md`](../membership-entitlement-current.md) 为准。
+
 最近核对：2026-06-17。
 
 本文描述 `apps/api` 和 `apps/api/src/runtime` 中会员、余额、配额和 runtime 权限判断的统一清理方案。本文按领域归类，不表达实施优先级。目标是让同一个业务概念在数据库、repository、service、HTTP contract 和 runtime 中只有一种主语义，历史字段只停留在兼容边界内。

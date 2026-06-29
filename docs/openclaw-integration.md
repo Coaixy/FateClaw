@@ -1,6 +1,6 @@
 # 微信 OpenClaw/iLink 对接说明
 
-FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径。当前后端正式启动入口会为已启用且会员有效的既有账号启动 iLink 长轮询和 IPC listener，但 Web 侧新扫码绑定入口仍暂未开放。本文档用于说明现状和完整恢复这条链路时需要检查的边界。
+FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径。后端正式启动入口仍保留为已启用且会员有效的既有账号启动 iLink 长轮询和 IPC listener 的相关代码，但因 `WECHAT_CLAW_FEATURE_ENABLED=false` 与迁移 0057（`accounts.enabled=false`）双重短路，启动时实际启动 0 个账号；Web 侧新扫码绑定入口同样暂未开放。本文档用于说明现状和完整恢复这条链路时需要检查的边界。
 
 ## 当前状态
 
@@ -9,7 +9,7 @@ FateClaw 保留了微信 OpenClaw/iLink Bot 的对接代码路径。当前后端
 - 正式启动会读取 `getEnabledAccounts()`，仅为有 `owner_id` 且会员状态有效的账号启动 `startAccountPolling()`，并把这些账号注册到 `startIpcWorker(memberAccounts)`。
 - `activateAccount()` 会调用 `addAccountListener(account.id)` 并启动该账号轮询，用于绑定后的热激活。
 - `pnpm run dev:api-only` 轻量入口只启动 DB、Redis 和 API Server，会跳过 iLink 轮询、IPC worker 和 runtime 激活。
-- Web 侧设备绑定页面仍把 `canBindWeixin` 固定为 `false`，因此新扫码绑定显示为暂未开放。
+- Web 侧设备绑定入口暂未开放：前端用 `WECHAT_DEVICE_BINDING_DISABLED_MESSAGE` 常量（`account-service.ts`）提示暂未开放，后端 `checkAccountBindingLimit`（`account-http-service.ts`）拦截新绑定请求。
 
 这意味着：后端已有微信运行链路，但产品层面没有重新开放新绑定；完整恢复微信入口时不能只看后端轮询，还要同步前端开关、会员/账号策略和外部平台协议。
 

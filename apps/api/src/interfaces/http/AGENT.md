@@ -52,16 +52,17 @@ apps/api/src/interfaces/http/
 - `/api/auth`
 - `/api/account`
 - `/api/chat-sessions`
+- `/api/client-profiles`
 - `/api/messages`
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
-- `/api/referrals`
+- `/api/bazi-cases`
 - `/api/skills`
-- `/api/simple-workflows`
 - `/api/billing`
-- `/api/health`
-- `/api/ready`
+- `/api/api-keys`
+- `/api/open-sessions`
+- `/api/v1`（开放 API）
 
 加路由时，优先沿用现有 prefix 分组，不要新建风格不一致的前缀。
 
@@ -73,6 +74,7 @@ apps/api/src/interfaces/http/
 - `request.requireAuth()` 在 `onRequest` hook 里注入
 - 大部分登录态接口由路由内部主动调用 `request.requireAuth()`
 - 管理后台通常走 `MANAGER_KEY` 体系，和普通用户 JWT 不是一套认证入口
+- 开放 API `/api/v1` 走 `api-key-auth.ts`，经 `hasPaidMembership` 做会员门禁（非会员 403）
 
 ### 错误处理
 
@@ -102,7 +104,7 @@ apps/api/src/interfaces/http/
 ### 排盘与简易模式
 
 - `/api/paipan/*` 是 API 内部 TypeScript runner 的确定性排盘，不需要模型 runtime。
-- `/api/simple-workflows/start` 先按后台 preset 直接排盘创建会话和盘面消息，再异步启动首轮 AI Chat；preset 可以限制模型策略和本轮授权 Skill。
+- 简易模式不再有独立 `/api/simple-workflows` 路由，已收口到 AI Chat 会话回合 `prepareOwnedChatSessionTurn`，与普通对话共用统一会员门禁。
 
 ### 健康探针
 
