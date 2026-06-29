@@ -44,6 +44,8 @@ interface PiSkillReadDetails {
   limit?: number;
   totalLines?: number;
   nextOffset?: number;
+  /** 同一相对路径在其余授权 Skill 中也命中时，列出那些 Skill 名（歧义提示用）。 */
+  otherSkillMatches?: string[];
 }
 
 /**
@@ -72,7 +74,7 @@ function safeStatSync(filePath: string): Stats | undefined {
 function resolveReadablePath(
   rawPath: string,
   readableSkills: Skill[],
-): { filePath?: string; error?: string } {
+): { filePath?: string; error?: string; otherSkills?: string[] } {
   const trimmed = rawPath.trim();
   if (!trimmed) {
     return {
@@ -80,13 +82,15 @@ function resolveReadablePath(
     };
   }
 
-  // 遍历所有授权 Skill 边界内的候选，逐个 stat 校验存在性，优先返回第一个真实存在的 .md 文件。
-  // 不能像旧实现那样盲取第一个候选：当本轮授权多个 Skill 时，相对路径会被拼到每个 Skill 的
+  // 遍历所有授权 Skill 边界内的候选，逐个 stat 校验存在性，收集所有真实存在的 .md 命中。
+  // 不能像最初实现那样盲取第一个候选：当本轮授权多个 Skill 时，相对路径会被拼到每个 Skill 的
   // baseDir 上，盲取第一个会把文件归错 Skill —— 要么拼出不存在的路径报 ENOENT，要么命中另一个
   // Skill 的同名文件而静默读错内容。grep 走 stat 不受影响，read 必须对齐同样的存在性校验。
+  // 仍返回第一个命中（行为不变），但带回其余命中的 Skill 名，供上层提示歧义、引导用绝对路径。
+  const hits: { filePath: string; skill: string }[] = [];
   let sawNonMarkdown = false; // 候选落在某个 Skill 内，但扩展名不是 .md
   let sawMissingMarkdown = false; // 候选是 Skill 内的 .md，但文件不存在或不可读
-  for (const { candidates } of resolveSkillPathCandidates(
+  for (const { skill, candidates } of resolveSkillPathCandidates(
     trimmed,
     readableSkills,
   )) {
@@ -99,8 +103,15 @@ function resolveReadablePath(
         sawMissingMarkdown = true;
         continue;
       }
-      return { filePath: candidate };
+      hits.push({ filePath: candidate, skill: skill.name });
+      break; // 每个 Skill 取第一个存在的候选即可
     }
+  }
+  if (hits.length > 0) {
+    return {
+      filePath: hits[0].filePath,
+      otherSkills: hits.slice(1).map((hit) => hit.skill),
+    };
   }
 
   // 错误优先级：扩展名就不对（非 .md）> 是 .md 但不存在 > 完全不在任何 Skill 边界内。
@@ -291,7 +302,13 @@ export function createPiSkillReadTool(
             isError: true,
           };
       const isError = readResult.isError;
-      const output = readResult.output;
+      const otherSkills = resolvedPath.otherSkills ?? [];
+      // 多个授权 Skill 都有该相对路径时，提示读了哪个、还有哪些，引导用绝对路径精确选择。
+      const ambiguityNote =
+        filePath && otherSkills.length
+          ? `\n\n⚠️ 相对路径 “${params.path}” 在多个授权 Skill 中都存在；本次读取的是命中的第一个，其余同名文件还出现在：${otherSkills.join('、')}。如需读取它们，请改用 <available_skills> 中对应的绝对路径。`
+          : '';
+      const output = `${readResult.output}${ambiguityNote}`;
 
       return completePiToolExecution({
         options,
@@ -313,6 +330,7 @@ export function createPiSkillReadTool(
           limit: readResult.limit,
           totalLines: readResult.totalLines,
           nextOffset: readResult.nextOffset,
+          otherSkillMatches: otherSkills.length ? otherSkills : undefined,
         },
       });
     },

@@ -51,7 +51,7 @@ const grepParamsSchema = Type.Object({
   regex: Type.Optional(
     Type.Boolean({
       description:
-        '是否把 query 当作 JavaScript 正则表达式匹配；默认 false（字面子串）。需要模式匹配（如 “甲.{0,4}流年”、行首 ^、择一 a|b）时设为 true。',
+        '匹配模式：默认按 JavaScript 正则表达式匹配（普通关键词不含元字符时等价子串）。当需要把含 . * ( ) [ ] 等字符的内容当字面查找时设为 false。正则非法时自动回退为字面匹配。',
     }),
   ),
   caseSensitive: Type.Optional(
@@ -281,13 +281,21 @@ function truncateLine(line: string, column: number): string {
 /** 行匹配器：返回命中起始列（0-based），未命中返回 -1。 */
 type LineMatcher = (line: string) => number;
 
+/** 生成字面子串匹配器；caseSensitive=false 时双方转小写。 */
+function literalMatcher(query: string, caseSensitive: boolean): LineMatcher {
+  const needle = caseSensitive ? query : query.toLowerCase();
+  return (line) =>
+    (caseSensitive ? line : line.toLowerCase()).indexOf(needle);
+}
+
 /**
  * 把 query 编译成逐行匹配器。
  *
- * - regex=false：字面子串匹配（indexOf）；caseSensitive=false 时双方转小写。
- * - regex=true：编译为 JavaScript 正则；caseSensitive=false 时附加 i 标志。
+ * - regex=true（默认）：编译为 JavaScript 正则（caseSensitive=false 时附加 i 标志）；
+ *   普通关键词不含元字符时等价子串匹配。正则非法时**自动回退字面子串**，并标记 usedRegex=false。
+ * - regex=false：强制字面子串匹配。
  *
- * 返回：成功时给出 matcher，正则非法时给出 error（由调用方转成 isError 结果）。
+ * 返回：matcher 与 usedRegex（实际是否按正则匹配；强制字面或非法回退时为 false，供结果标注）。
  * 注意：正则由模型提供并逐行执行，单行规模受文件大小安全阀约束，灾难性回溯风险有限但非零；
  *       这里不对单行做额外超时保护，仅依赖上层 MAX_FILE_BYTES 兜底。
  */
@@ -295,31 +303,23 @@ function buildMatcher(
   query: string,
   regex: boolean,
   caseSensitive: boolean,
-): { matcher?: LineMatcher; error?: string } {
+): { matcher: LineMatcher; usedRegex: boolean } {
   if (regex) {
-    let compiled: RegExp;
     try {
-      compiled = new RegExp(query, caseSensitive ? '' : 'i');
-    } catch (err) {
+      const compiled = new RegExp(query, caseSensitive ? '' : 'i');
       return {
-        error: `搜索失败：正则表达式无效：${err instanceof Error ? err.message : String(err)}`,
+        // 非 global 正则，exec 每次从行首匹配，无 lastIndex 残留状态。
+        matcher: (line) => {
+          const match = compiled.exec(line);
+          return match ? match.index : -1;
+        },
+        usedRegex: true,
       };
+    } catch {
+      // 正则非法：退化为字面子串，保证仍能给出结果而非报错或空（grep -E 退回 grep -F 的语义）。
     }
-    return {
-      // 非 global 正则，exec 每次从行首匹配，无 lastIndex 残留状态。
-      matcher: (line) => {
-        const match = compiled.exec(line);
-        return match ? match.index : -1;
-      },
-    };
   }
-  const needle = caseSensitive ? query : query.toLowerCase();
-  return {
-    matcher: (line) => {
-      const haystack = caseSensitive ? line : line.toLowerCase();
-      return haystack.indexOf(needle);
-    },
-  };
+  return { matcher: literalMatcher(query, caseSensitive), usedRegex: false };
 }
 
 async function grepFile(args: {
@@ -388,6 +388,7 @@ async function runGrep(
 ): Promise<{
   output: string;
   isError: boolean;
+  regex?: boolean;
   matches: GrepMatch[];
   total: number;
   totalIsExact: boolean;
@@ -424,21 +425,9 @@ async function runGrep(
     };
   }
   const caseSensitive = readBoolean(params.caseSensitive) ?? false;
-  const useRegex = readBoolean(params.regex) ?? false;
-  const built = buildMatcher(query, useRegex, caseSensitive);
-  if (!built.matcher) {
-    const error = built.error ?? '搜索失败：无法解析查询。';
-    return {
-      output: error,
-      isError: true,
-      matches: [],
-      total: 0,
-      totalIsExact: true,
-      truncated: false,
-      error,
-    };
-  }
-  const matcher = built.matcher;
+  // 默认按正则匹配（不传 regex 即视为 true）；非法正则在 buildMatcher 内自动回退字面。
+  const wantRegex = readBoolean(params.regex) ?? true;
+  const { matcher, usedRegex } = buildMatcher(query, wantRegex, caseSensitive);
   const limit = clampLimit(params.limit, DEFAULT_GREP_LIMIT, MAX_GREP_RESULTS);
   const matches: GrepMatch[] = [];
   let total = 0;
@@ -474,7 +463,7 @@ async function runGrep(
   const output = toJsonOutput({
     query,
     path: params.path,
-    regex: useRegex,
+    regex: usedRegex,
     caseSensitive,
     searchedFiles,
     // 0 时省略，避免给模型噪音；非 0 时提示有文件因超过 8MB 安全阀未被检索。
@@ -487,6 +476,7 @@ async function runGrep(
   return {
     output,
     isError: false,
+    regex: usedRegex,
     matches,
     total,
     totalIsExact: !truncated,
@@ -519,6 +509,7 @@ export function createPiSkillGrepTool(
       '当已知具体 Markdown 文件时，可以直接用 read；当只知道关键词或不确定位置时，可用 grep 搜索。',
       'grep 只能搜索 <available_skills> 中授权 Skill 目录内的 Markdown 文件。',
       'path 可省略以搜索所有授权 Skill；也可指定授权目录内的相对 Markdown 文件或目录。',
+      'query 默认按正则匹配（普通关键词照常使用）；只在需要把 . * ( ) 等字符当字面查找时设 regex=false。',
     ],
     parameters: grepParamsSchema,
     executionMode: 'sequential',
@@ -529,13 +520,14 @@ export function createPiSkillGrepTool(
     ): Promise<AgentToolResult<PiSkillGrepDetails>> {
       const startedAt = Date.now();
       const query = readString(params.query) ?? '';
-      const regex = readBoolean(params.regex) ?? false;
       const caseSensitive = readBoolean(params.caseSensitive) ?? false;
       const grepResult = await runGrep(
         params,
         options.readableSkills,
         markdownFileListCache,
       );
+      // 实际匹配模式（正则 / 非法回退字面）由 runGrep 决定，用于 trace 与 details 标注。
+      const regex = grepResult.regex ?? false;
 
       return completePiToolExecution({
         options,
