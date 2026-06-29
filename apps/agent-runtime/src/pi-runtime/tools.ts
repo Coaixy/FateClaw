@@ -28,7 +28,6 @@ import type { SoulStore } from '../deps.js';
  * - accountId：当前 agent-runtime 账号 ID，用于读写 Dashboard 维护的唯一 Soul。
  * - soulStore：Soul 读写存储。
  * - soulEditEnabled：是否允许本轮注册 edit_soul；默认开启用于兼容测试和历史调用。
- * - userMessage：用户本轮原始输入。
  * - recordExecution：工具执行记录回调。
  * - now：可选时钟函数，用于固定当前时间工具的测试结果。
  * - defaultTimeZone：当前时间工具默认时区。
@@ -42,7 +41,6 @@ export interface CreatePiToolsOptions {
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
-  userMessage: string;
   recordExecution(record: PiToolExecutionRecord): void;
   now?: () => Date;
   defaultTimeZone?: string;
@@ -79,7 +77,6 @@ export function createPiCustomTools(
       accountId: options.accountId,
       soulStore: options.soulStore,
       soulEditEnabled: options.soulEditEnabled,
-      userMessage: options.userMessage,
     }),
   ];
   if (options.soulEditEnabled ?? true) {
@@ -90,7 +87,6 @@ export function createPiCustomTools(
         accountId: options.accountId,
         soulStore: options.soulStore,
         soulEditEnabled: options.soulEditEnabled,
-        userMessage: options.userMessage,
       }),
     );
   }

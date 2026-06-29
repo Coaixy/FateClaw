@@ -12,9 +12,15 @@ import {
 import { Type, type Static } from 'typebox';
 
 import {
-  completePiToolExecution,
+  makeToolResponder,
   type PiToolRuntimeOptions,
 } from './tool-execution.js';
+import {
+  clampLimit,
+  readInteger,
+  readString,
+  toJsonOutput,
+} from './param-utils.js';
 
 const MAX_REVERSE_YEAR_SPAN = 240;
 const DEFAULT_REVERSE_LIMIT = 50;
@@ -93,21 +99,6 @@ interface PiGanzhiReverseDetails {
 export interface CreatePiGanzhiReverseToolOptions
   extends PiToolRuntimeOptions {}
 
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readInteger(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return Math.trunc(value);
-}
-
-function normalizeLimit(value: unknown): number {
-  const limit = readInteger(value) ?? DEFAULT_REVERSE_LIMIT;
-  if (limit <= 0) return DEFAULT_REVERSE_LIMIT;
-  return Math.min(limit, MAX_REVERSE_LIMIT);
-}
-
 function normalizeParams(args: unknown): GanzhiReverseParams {
   if (!args || typeof args !== 'object' || Array.isArray(args)) {
     return {
@@ -126,7 +117,7 @@ function normalizeParams(args: unknown): GanzhiReverseParams {
     hour: readString(raw.hour),
     startYear: readInteger(raw.startYear) ?? Number.NaN,
     endYear: readInteger(raw.endYear) ?? Number.NaN,
-    limit: normalizeLimit(raw.limit),
+    limit: clampLimit(raw.limit, DEFAULT_REVERSE_LIMIT, MAX_REVERSE_LIMIT),
   };
 }
 
@@ -138,12 +129,8 @@ function buildInput(params: GanzhiReverseParams): ReverseInput {
     hour: readString(params.hour),
     startYear: Number.isFinite(params.startYear) ? params.startYear : undefined,
     endYear: Number.isFinite(params.endYear) ? params.endYear : undefined,
-    limit: normalizeLimit(params.limit),
+    limit: clampLimit(params.limit, DEFAULT_REVERSE_LIMIT, MAX_REVERSE_LIMIT),
   };
-}
-
-function buildOutput(details: Omit<PiGanzhiReverseDetails, 'output'>): string {
-  return JSON.stringify(details, null, 2);
 }
 
 function solarDayToMatch(day: SolarDay): ReverseMatch {
@@ -213,6 +200,14 @@ export function createPiGanzhiReverseTool(
       params,
     ): Promise<AgentToolResult<PiGanzhiReverseDetails>> {
       const startedAt = Date.now();
+      const respond = makeToolResponder({
+        options,
+        toolCallId,
+        toolName: 'reverse_ganzhi',
+        params: params as Record<string, unknown>,
+        traceType: 'pi_ganzhi_reverse_completed',
+        startedAt,
+      });
       const input = buildInput(params);
       const mode = input.hour ? 'eight_char' : 'three_pillars';
       const validationError = validateInput(input);
@@ -228,19 +223,8 @@ export function createPiGanzhiReverseTool(
           truncated: false,
           error: validationError,
         };
-        details.output = buildOutput(details);
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'reverse_ganzhi',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_ganzhi_reverse_completed',
-          startedAt,
-          traceFields: { mode },
-        });
+        details.output = toJsonOutput(details);
+        return respond(details, { mode });
       }
 
       try {
@@ -268,23 +252,12 @@ export function createPiGanzhiReverseTool(
           total: candidates.length,
           truncated: candidates.length > matches.length,
         };
-        details.output = buildOutput(details);
+        details.output = toJsonOutput(details);
 
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'reverse_ganzhi',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: false,
-          traceType: 'pi_ganzhi_reverse_completed',
-          startedAt,
-          traceFields: {
-            mode,
-            total: candidates.length,
-            truncated: details.truncated,
-          },
+        return respond(details, {
+          mode,
+          total: candidates.length,
+          truncated: details.truncated,
         });
       } catch (err) {
         const details: PiGanzhiReverseDetails = {
@@ -297,20 +270,9 @@ export function createPiGanzhiReverseTool(
           truncated: false,
           error: err instanceof Error ? err.message : String(err),
         };
-        details.output = buildOutput(details);
+        details.output = toJsonOutput(details);
 
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'reverse_ganzhi',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_ganzhi_reverse_completed',
-          startedAt,
-          traceFields: { mode },
-        });
+        return respond(details, { mode });
       }
     },
   });

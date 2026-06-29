@@ -7,16 +7,18 @@ import { SolarTime } from 'tyme4ts';
 import { Type, type Static } from 'typebox';
 
 import {
-  completePiToolExecution,
+  makeToolResponder,
   type PiToolRuntimeOptions,
 } from './tool-execution.js';
 import {
   buildCalendarDetailsFromSolarTime,
+  eightCharProviderSchema,
   isValidIanaTimeZone,
   normalizeEightCharProvider,
   type PiCalendarDetails,
   type PiEightCharProvider,
 } from './calendar-details.js';
+import { readBoolean, readString, toJsonOutput } from './param-utils.js';
 
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 
@@ -33,12 +35,7 @@ const currentTimeParamsSchema = Type.Object({
         '是否返回当前时刻对应的农历、节气和干支详情；默认 false。',
     }),
   ),
-  eightCharProvider: Type.Optional(
-    Type.String({
-      description:
-        '八字流派：default 使用 tyme4ts 默认流派；lunar_sect2 使用 LunarSect2EightCharProvider。',
-    }),
-  ),
+  eightCharProvider: eightCharProviderSchema,
 });
 
 type CurrentTimeParams = Static<typeof currentTimeParamsSchema>;
@@ -85,23 +82,12 @@ export interface CreatePiCurrentTimeToolOptions
   defaultTimeZone?: string;
 }
 
-function readStringParam(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readBooleanParam(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return undefined;
-}
-
 function normalizeParams(args: unknown): CurrentTimeParams {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return {};
   const raw = args as Record<string, unknown>;
   return {
-    timezone: readStringParam(raw.timezone),
-    includeCalendar: readBooleanParam(raw.includeCalendar),
+    timezone: readString(raw.timezone),
+    includeCalendar: readBoolean(raw.includeCalendar),
     eightCharProvider: normalizeEightCharProvider(raw.eightCharProvider),
   };
 }
@@ -149,10 +135,6 @@ function getZonedParts(date: Date, timezone: string): ZonedDateTimeParts {
   };
 }
 
-function buildOutput(details: Omit<PiCurrentTimeDetails, 'output'>): string {
-  return JSON.stringify(details, null, 2);
-}
-
 /**
  * 创建 Pi 的当前时间工具。
  *
@@ -183,6 +165,14 @@ export function createPiCurrentTimeTool(
       params,
     ): Promise<AgentToolResult<PiCurrentTimeDetails>> {
       const startedAt = Date.now();
+      const respond = makeToolResponder({
+        options,
+        toolCallId,
+        toolName: 'get_current_time',
+        params: params as Record<string, unknown>,
+        traceType: 'pi_current_time_completed',
+        startedAt,
+      });
       const timezone =
         params.timezone ?? options.defaultTimeZone ?? DEFAULT_TIME_ZONE;
       const includeCalendar = params.includeCalendar ?? false;
@@ -200,19 +190,8 @@ export function createPiCurrentTimeTool(
           eightCharProvider: provider,
           error: `无效时区：${timezone}`,
         };
-        details.output = buildOutput(details);
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_current_time',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_current_time_completed',
-          startedAt,
-          traceFields: { timezone },
-        });
+        details.output = toJsonOutput(details);
+        return respond(details, { timezone });
       }
 
       const parts = getZonedParts(date, timezone);
@@ -241,20 +220,9 @@ export function createPiCurrentTimeTool(
         eightCharProvider: provider,
         calendar,
       };
-      details.output = buildOutput(details);
+      details.output = toJsonOutput(details);
 
-      return completePiToolExecution({
-        options,
-        toolCallId,
-        toolName: 'get_current_time',
-        params: params as Record<string, unknown>,
-        output: details.output,
-        details,
-        isError: false,
-        traceType: 'pi_current_time_completed',
-        startedAt,
-        traceFields: { timezone },
-      });
+      return respond(details, { timezone });
     },
   });
 }

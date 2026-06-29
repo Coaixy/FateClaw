@@ -3,9 +3,18 @@ import {
   LunarSect2EightCharProvider,
   type SolarTime,
 } from 'tyme4ts';
+import { Type } from 'typebox';
 
 /** Pi 时间工具支持的八字流派标识。 */
 export type PiEightCharProvider = 'default' | 'lunar_sect2';
+
+/** Pi 时间/干支工具共享的八字流派可选参数 schema 片段（default / lunar_sect2）。 */
+export const eightCharProviderSchema = Type.Optional(
+  Type.String({
+    description:
+      '八字流派：default 使用 tyme4ts 默认流派；lunar_sect2 使用 LunarSect2EightCharProvider。',
+  }),
+);
 
 /** 四柱和完整八字字符串。 */
 export interface PiGanZhiPillars {

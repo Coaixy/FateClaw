@@ -98,3 +98,39 @@ export function completePiToolExecution<TDetails extends { output: string }>({
     details,
   };
 }
+
+/**
+ * 为单次工具调用创建收尾器。
+ *
+ * 固化本次 execute 内不变的参数（options/toolCallId/toolName/params/traceType/startedAt），
+ * 各分支只需 respond(details, traceFields)，isError 直接取 details.isError，
+ * 省去在校验失败/成功/异常多个分支里重复传同一批固定参数。
+ *
+ * 参数：base —— 本次工具调用的固定上下文。
+ * 返回：收尾函数；传入的 details 必须自带已序列化好的 output 字段。
+ */
+export function makeToolResponder(base: {
+  options: PiToolRuntimeOptions;
+  toolCallId: string;
+  toolName: string;
+  params: Record<string, unknown>;
+  traceType: string;
+  startedAt: number;
+}) {
+  return <TDetails extends { output: string; isError: boolean }>(
+    details: TDetails,
+    traceFields?: Record<string, unknown>,
+  ): AgentToolResult<TDetails> =>
+    completePiToolExecution({
+      options: base.options,
+      toolCallId: base.toolCallId,
+      toolName: base.toolName,
+      params: base.params,
+      output: details.output,
+      details,
+      isError: details.isError,
+      traceType: base.traceType,
+      startedAt: base.startedAt,
+      traceFields,
+    });
+}

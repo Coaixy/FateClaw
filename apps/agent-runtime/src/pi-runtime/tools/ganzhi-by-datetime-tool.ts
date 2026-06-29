@@ -10,16 +10,23 @@ import {
 import { Type, type Static } from 'typebox';
 
 import {
-  completePiToolExecution,
+  makeToolResponder,
   type PiToolRuntimeOptions,
 } from './tool-execution.js';
 import {
   buildCalendarDetailsFromSolarTime,
+  eightCharProviderSchema,
   isValidIanaTimeZone,
   normalizeEightCharProvider,
   type PiCalendarDetails,
   type PiEightCharProvider,
 } from './calendar-details.js';
+import {
+  readBoolean,
+  readInteger,
+  readString,
+  toJsonOutput,
+} from './param-utils.js';
 
 const ganzhiByDatetimeParamsSchema = Type.Object({
   inputCalendar: Type.Optional(
@@ -65,12 +72,7 @@ const ganzhiByDatetimeParamsSchema = Type.Object({
         'IANA 时区名称；用于标注输入民用时间所属时区，不传时不做时区标注。',
     }),
   ),
-  eightCharProvider: Type.Optional(
-    Type.String({
-      description:
-        '八字流派：default 使用 tyme4ts 默认流派；lunar_sect2 使用 LunarSect2EightCharProvider。',
-    }),
-  ),
+  eightCharProvider: eightCharProviderSchema,
 });
 
 type GanzhiByDatetimeParams = Static<typeof ganzhiByDatetimeParamsSchema>;
@@ -110,22 +112,6 @@ interface PiGanzhiByDatetimeDetails {
 export interface CreatePiGanzhiByDatetimeToolOptions
   extends PiToolRuntimeOptions {}
 
-function readInteger(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return Math.trunc(value);
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return undefined;
-}
-
 function normalizeInputCalendar(value: unknown): 'gregorian' | 'lunar' {
   return value === 'lunar' ? 'lunar' : 'gregorian';
 }
@@ -155,34 +141,32 @@ function normalizeParams(args: unknown): GanzhiByDatetimeParams {
 }
 
 function buildInput(params: GanzhiByDatetimeParams): PiGanzhiByDatetimeDetails['input'] {
+  // params 已由 normalizeParams 规范化：数值字段为整数或 NaN、布尔/字符串已归一，
+  // 因此这里直接信任，不再二次 readInteger/readBoolean/readString。
   const inputCalendar = normalizeInputCalendar(params.inputCalendar);
-  const rawMonth = readInteger(params.month);
+  const month = Number.isFinite(params.month) ? params.month : undefined;
   const isNegativeLunarMonth =
-    inputCalendar === 'lunar' && rawMonth !== undefined && rawMonth < 0;
+    inputCalendar === 'lunar' && month !== undefined && month < 0;
   return {
     inputCalendar,
     year: Number.isFinite(params.year) ? params.year : undefined,
     month:
-      rawMonth !== undefined
+      month !== undefined
         ? inputCalendar === 'lunar'
-          ? Math.abs(rawMonth)
-          : rawMonth
+          ? Math.abs(month)
+          : month
         : undefined,
     day: Number.isFinite(params.day) ? params.day : undefined,
-    hour: readInteger(params.hour) ?? 0,
-    minute: readInteger(params.minute) ?? 0,
-    second: readInteger(params.second) ?? 0,
+    hour: params.hour ?? 0,
+    minute: params.minute ?? 0,
+    second: params.second ?? 0,
     isLeapMonth:
       inputCalendar === 'lunar'
-        ? (readBoolean(params.isLeapMonth) ?? isNegativeLunarMonth)
+        ? (params.isLeapMonth ?? isNegativeLunarMonth)
         : false,
-    timezone: readString(params.timezone),
+    timezone: params.timezone,
     eightCharProvider: normalizeEightCharProvider(params.eightCharProvider),
   };
-}
-
-function buildOutput(details: Omit<PiGanzhiByDatetimeDetails, 'output'>): string {
-  return JSON.stringify(details, null, 2);
 }
 
 function buildSolarTime(
@@ -243,6 +227,14 @@ export function createPiGanzhiByDatetimeTool(
       params,
     ): Promise<AgentToolResult<PiGanzhiByDatetimeDetails>> {
       const startedAt = Date.now();
+      const respond = makeToolResponder({
+        options,
+        toolCallId,
+        toolName: 'get_ganzhi_by_datetime',
+        params: params as Record<string, unknown>,
+        traceType: 'pi_ganzhi_by_datetime_completed',
+        startedAt,
+      });
       const input = buildInput(params);
       const provider = input.eightCharProvider;
 
@@ -253,23 +245,12 @@ export function createPiGanzhiByDatetimeTool(
           input,
           error: `无效时区：${input.timezone}`,
         };
-        details.output = buildOutput(details);
+        details.output = toJsonOutput(details);
 
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_ganzhi_by_datetime',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_ganzhi_by_datetime_completed',
-          startedAt,
-          traceFields: {
-            provider,
-            inputCalendar: input.inputCalendar,
-            timezone: input.timezone,
-          },
+        return respond(details, {
+          provider,
+          inputCalendar: input.inputCalendar,
+          timezone: input.timezone,
         });
       }
 
@@ -287,24 +268,13 @@ export function createPiGanzhiByDatetimeTool(
           ganzhi: calendar.ganzhi,
           solarTerm: calendar.solarTerm,
         };
-        details.output = buildOutput(details);
+        details.output = toJsonOutput(details);
 
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_ganzhi_by_datetime',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: false,
-          traceType: 'pi_ganzhi_by_datetime_completed',
-          startedAt,
-          traceFields: {
-            provider,
-            inputCalendar: input.inputCalendar,
-            timezone: input.timezone,
-            solar: details.solar,
-          },
+        return respond(details, {
+          provider,
+          inputCalendar: input.inputCalendar,
+          timezone: input.timezone,
+          solar: details.solar,
         });
       } catch (err) {
         const details: PiGanzhiByDatetimeDetails = {
@@ -313,23 +283,12 @@ export function createPiGanzhiByDatetimeTool(
           input,
           error: err instanceof Error ? err.message : String(err),
         };
-        details.output = buildOutput(details);
+        details.output = toJsonOutput(details);
 
-        return completePiToolExecution({
-          options,
-          toolCallId,
-          toolName: 'get_ganzhi_by_datetime',
-          params: params as Record<string, unknown>,
-          output: details.output,
-          details,
-          isError: true,
-          traceType: 'pi_ganzhi_by_datetime_completed',
-          startedAt,
-          traceFields: {
-            provider,
-            inputCalendar: input.inputCalendar,
-            timezone: input.timezone,
-          },
+        return respond(details, {
+          provider,
+          inputCalendar: input.inputCalendar,
+          timezone: input.timezone,
         });
       }
     },

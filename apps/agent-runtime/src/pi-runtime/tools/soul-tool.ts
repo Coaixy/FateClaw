@@ -61,7 +61,6 @@ interface PiSoulEditDetails {
  * - recordExecution：工具执行记录回调。
  * - accountId：当前 agent-runtime 账号 ID，用于定位 Dashboard 维护的唯一 Soul。
  * - soulStore：Soul 读写存储，实际读写 users.soul_content 或历史账号级 fallback。
- * - userMessage：用户本轮原始输入，保留给工具创建边界追踪。
  *
  * 注意：Soul 是用户唯一长期记忆/人格配置，不要把它拆成额外 memory 或 persona。
  */
@@ -69,7 +68,6 @@ export interface CreatePiSoulToolOptions extends PiToolRuntimeOptions {
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
-  userMessage: string;
 }
 
 function hashSoul(content: string): string {
