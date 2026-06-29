@@ -1553,14 +1553,37 @@ async function validateBundleSkillOwnershipUsing(
 ): Promise<string[]> {
   const unique = Array.from(new Set(skillIds));
   if (unique.length === 0) throw new Error('bundle 至少包含 1 个技能');
-  const { rows } = await client.query<{ cnt: string }>(
-    `SELECT COUNT(*) as cnt FROM user_custom_skills
-     WHERE id = ANY($1) AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $3`,
-    [unique, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+  // 拉取这批 id 的归属/状态明细（不加任何过滤条件），以便逐个判定非法原因；
+  // 不能直接 COUNT，否则只知道数量对不上、无法告诉调用方究竟是哪条 / 为什么。
+  const { rows } = await client.query<{
+    id: string;
+    user_id: string;
+    deleted_at: Date | null;
+    source: string | null;
+  }>(
+    `SELECT id, user_id, deleted_at, audit_metadata->>'source' AS source
+       FROM user_custom_skills
+      WHERE id = ANY($1)`,
+    [unique],
   );
-  if (Number(rows[0].cnt) !== unique.length) {
-    throw new Error('bundle 包含非法 skill');
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const invalid: string[] = [];
+  for (const id of unique) {
+    const row = byId.get(id);
+    // 原因判定优先级：不存在 > 非本人拥有 > 已删除 > 工作流快照（不可打包）。
+    const reason = !row
+      ? '不存在'
+      : row.user_id !== userId
+        ? '非本人拥有'
+        : row.deleted_at !== null
+          ? '已删除'
+          : row.source === WORKFLOW_SNAPSHOT_AUDIT_SOURCE
+            ? '工作流快照不可打包'
+            : null;
+    if (reason) invalid.push(`${id}(${reason})`);
+  }
+  if (invalid.length > 0) {
+    throw new Error(`bundle 包含非法 skill：${invalid.join('、')}`);
   }
   return unique;
 }
