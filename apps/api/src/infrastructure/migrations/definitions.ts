@@ -1,59 +1,17 @@
 import type { DatabaseMigration } from './types.js';
-import { initialSchemaMigrations } from './definitions/0001-0002-core.js';
-import { applicationSchemaMigrations } from './definitions/0003-application.js';
-import { userBillingMigrations } from './definitions/0004-0011-user-billing.js';
-import { financeArchiveMigrations } from './definitions/0012-0019-finance-archive.js';
-import { runtimeSkillMigrations } from './definitions/0020-0028-runtime-skills.js';
-import { sqlReviewFixMigrations } from './definitions/0045-sql-review-fixes.js';
-import { guashiAccessMigrations } from './definitions/0049-guashi-access.js';
-import { clientProfilesMigrations } from './definitions/0050-client-profiles.js';
-import { guashiScriptTemplateMigrations } from './definitions/0051-guashi-script-template.js';
-import { disableLegacyPlusProMigrations } from './definitions/0052-disable-legacy-plus-pro.js';
-import { clarityNoAllowanceMigrations } from './definitions/0053-clarity-no-allowance.js';
-import { migrateLegacyMembersToClarityMigrations } from './definitions/0054-migrate-legacy-members-to-clarity.js';
-import { allowanceUnitsNonnegativeMigrations } from './definitions/0055-allowance-units-nonnegative.js';
-import { referralRewardClarityMigrations } from './definitions/0056-referral-reward-clarity.js';
-import { disableWechatAccountsMigrations } from './definitions/0057-disable-wechat-claw-accounts.js';
-import { normalizeAllPlanKeysToClarityMigrations } from './definitions/0058-normalize-all-plan-keys-to-clarity.js';
-import { dropAllowanceColumnsAndTableMigrations } from './definitions/0059-drop-allowance-columns-and-table.js';
-import { clientCrmFieldsMigrations } from './definitions/0060-client-crm-fields.js';
-import { clientFollowUpsMigrations } from './definitions/0061-client-follow-ups.js';
-import { baziCasesMigrations } from './definitions/0062-bazi-cases.js';
-import { baziCasesSolarDateMigrations } from './definitions/0063-bazi-cases-solar-date.js';
-import { skillCategoryMigrations } from './definitions/0064-skill-category.js';
-import { skillCategoryDivinationBucketMigrations } from './definitions/0065-skill-category-divination-bucket.js';
-import { userApiKeysMigrations } from './definitions/0066-user-api-keys.js';
-import { openSessionsMigrations } from './definitions/0067-open-sessions.js';
+import { baselineMigrations } from './definitions/0001-core-baseline.js';
+import { agentRuntimeAndBillingPerfMigrations } from './definitions/0070-agent-runtime-and-billing-perf.js';
 
 /**
  * FateClaw 数据库迁移清单。
  *
- * @remarks 只在分段文件末尾追加新迁移；不要重排、改写或删除已发布迁移。
+ * @remarks
+ * 历史 0001-0067 共 67 条迁移已压平为单一基线 {@link baselineMigrations}（见该文件说明，
+ * 基线产出经逐行比对验证与原迁移完全等价）。基线之后从 0070 续号（跳过 0002-0069，因远程
+ * ledger 已有这些历史编号）。今后新增迁移一律在本数组末尾追加新文件并展开，
+ * 不要改写基线、重排顺序或复用已发布 id。
  */
 export const MIGRATIONS: readonly DatabaseMigration[] = [
-  ...initialSchemaMigrations,
-  ...applicationSchemaMigrations,
-  ...userBillingMigrations,
-  ...financeArchiveMigrations,
-  ...runtimeSkillMigrations,
-  ...sqlReviewFixMigrations,
-  ...guashiAccessMigrations,
-  ...clientProfilesMigrations,
-  ...guashiScriptTemplateMigrations,
-  ...disableLegacyPlusProMigrations,
-  ...clarityNoAllowanceMigrations,
-  ...migrateLegacyMembersToClarityMigrations,
-  ...allowanceUnitsNonnegativeMigrations,
-  ...referralRewardClarityMigrations,
-  ...disableWechatAccountsMigrations,
-  ...normalizeAllPlanKeysToClarityMigrations,
-  ...dropAllowanceColumnsAndTableMigrations,
-  ...clientCrmFieldsMigrations,
-  ...clientFollowUpsMigrations,
-  ...baziCasesMigrations,
-  ...baziCasesSolarDateMigrations,
-  ...skillCategoryMigrations,
-  ...skillCategoryDivinationBucketMigrations,
-  ...userApiKeysMigrations,
-  ...openSessionsMigrations,
+  ...baselineMigrations,
+  ...agentRuntimeAndBillingPerfMigrations,
 ];
