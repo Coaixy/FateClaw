@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { FileText, Loader2, RotateCcw, Save } from 'lucide-react';
 
 import { accountsApi } from '@/features/accounts/api';
@@ -20,6 +20,42 @@ const DEFAULT_GUASHI_SCRIPT_TEMPLATE = `## 核心论断 —— 先给客户最�
 ## ⚠分寸提示 —— 仅供卦师参考：哪些话不宜对客户说死、客户可能追问什么；此节是给卦师的内部提示，不要写成直接对客户说的话`;
 
 /**
+ * 话术稿模板的异步状态：加载中、保存中与错误提示。
+ *
+ * 这三者都围绕同一组远程读写流转，故合并为 reducer；编辑内容本身仍是独立 state。
+ */
+interface ScriptTemplateStatus {
+  loading: boolean;
+  saving: boolean;
+  error: string;
+}
+
+type ScriptTemplateStatusAction =
+  | { type: 'loadStart' }
+  | { type: 'loadEnd' }
+  | { type: 'saveStart' }
+  | { type: 'saveEnd' }
+  | { type: 'error'; message: string };
+
+function scriptTemplateStatusReducer(
+  state: ScriptTemplateStatus,
+  action: ScriptTemplateStatusAction,
+): ScriptTemplateStatus {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true, error: '' };
+    case 'loadEnd':
+      return { ...state, loading: false };
+    case 'saveStart':
+      return { ...state, saving: true, error: '' };
+    case 'saveEnd':
+      return { ...state, saving: false };
+    case 'error':
+      return { ...state, error: action.message };
+  }
+}
+
+/**
  * 用户级话术稿模板编辑器。
  *
  * 卦师在此自定义 AI 解读的分节骨架(Markdown ## 章节);留空则解读时回退平台默认骨架。
@@ -30,17 +66,19 @@ export function GuashiScriptTemplateCard() {
   const { formatNumber, t } = useI18n();
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [status, statusDispatch] = useReducer(scriptTemplateStatusReducer, {
+    loading: true,
+    saving: false,
+    error: '',
+  });
+  const { loading, saving, error } = status;
   const dirty = content !== savedContent;
 
   useEffect(() => {
     let alive = true;
 
     async function loadTemplate() {
-      setLoading(true);
-      setError('');
+      statusDispatch({ type: 'loadStart' });
       try {
         const result = await accountsApi.getUserGuashiScriptTemplate();
         if (!alive) return;
@@ -48,11 +86,13 @@ export function GuashiScriptTemplateCard() {
         setSavedContent(result.content);
       } catch (err) {
         if (!alive) return;
-        setError(
-          err instanceof Error ? err.message : t('pages.persona.loadFailed'),
-        );
+        statusDispatch({
+          type: 'error',
+          message:
+            err instanceof Error ? err.message : t('pages.persona.loadFailed'),
+        });
       } finally {
-        if (alive) setLoading(false);
+        if (alive) statusDispatch({ type: 'loadEnd' });
       }
     }
 
@@ -64,18 +104,19 @@ export function GuashiScriptTemplateCard() {
 
   const saveTemplate = async () => {
     if (!dirty || saving) return;
-    setSaving(true);
-    setError('');
+    statusDispatch({ type: 'saveStart' });
     try {
       await accountsApi.updateUserGuashiScriptTemplate(content);
       setSavedContent(content);
       toast('success', t('pages.persona.saved'));
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t('pages.persona.saveFailed'),
-      );
+      statusDispatch({
+        type: 'error',
+        message:
+          err instanceof Error ? err.message : t('pages.persona.saveFailed'),
+      });
     } finally {
-      setSaving(false);
+      statusDispatch({ type: 'saveEnd' });
     }
   };
 

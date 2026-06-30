@@ -1,6 +1,13 @@
 'use client';
 
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from 'react';
 import {
   CalendarDays,
   ChevronDown,
@@ -937,6 +944,151 @@ function SchemaFields({
   );
 }
 
+// ===== 排盘弹层向导状态 =====
+// 整个弹层是一台向导状态机：选术数 → 填表单 → 生成预览 → 入会话。
+// 选中术数变化、开合切换会成组重置这些字段，拆成多个 useState 会产生级联渲染，
+// 故合并为单一 reducer，单次 dispatch 完成一组关联更新。
+type PaipanSheetState = {
+  selectedSkill: string;
+  selectedClientId: string | null;
+  draft: Record<string, unknown>;
+  previewResult: PaipanPreviewResponse | null;
+  // previewSkillName 当前不参与渲染，仅作为预览快照的附带元数据保留。
+  previewSkillName: string;
+  resultStepActive: boolean;
+  submitting: boolean;
+  advancedOpen: boolean;
+};
+
+type PaipanSheetAction =
+  | { type: 'resolveSkill'; catalog: PaipanCatalogItem[]; initialSkill?: string | null }
+  | { type: 'selectSkill'; skill: string }
+  | { type: 'clearForNoSkill' }
+  | { type: 'applySkill'; draft: Record<string, unknown>; clearClient: boolean }
+  | { type: 'changeDraft'; path: string[]; value: unknown }
+  | { type: 'changeManyDraft'; changes: Array<{ path: string[]; value: unknown }> }
+  | {
+      type: 'selectClient';
+      clientId: string | null;
+      changes?: Array<{ path: string[]; value: unknown }>;
+    }
+  | { type: 'previewSuccess'; result: PaipanPreviewResponse; skillName: string }
+  | { type: 'setResultStepActive'; active: boolean }
+  | { type: 'setSubmitting'; value: boolean }
+  | { type: 'toggleAdvanced' }
+  | { type: 'reset' };
+
+const INITIAL_PAIPAN_SHEET_STATE: PaipanSheetState = {
+  selectedSkill: '',
+  selectedClientId: null,
+  draft: {},
+  previewResult: null,
+  previewSkillName: '',
+  resultStepActive: false,
+  submitting: false,
+  advancedOpen: false,
+};
+
+// 选中（或清除）预览时一并复位的预览三元组。
+const PREVIEW_RESET = {
+  previewResult: null,
+  previewSkillName: '',
+  resultStepActive: false,
+} as const;
+
+function paipanSheetReducer(
+  state: PaipanSheetState,
+  action: PaipanSheetAction,
+): PaipanSheetState {
+  switch (action.type) {
+    case 'resolveSkill': {
+      // 打开弹层时按 initialSkill / 既有选择 / 目录首项的优先级解析所选术数。
+      const { catalog, initialSkill } = action;
+      if (catalog.length === 0) {
+        return { ...state, selectedSkill: '' };
+      }
+      if (initialSkill && catalog.some((item) => item.skill === initialSkill)) {
+        return { ...state, selectedSkill: initialSkill };
+      }
+      if (
+        state.selectedSkill &&
+        catalog.some((item) => item.skill === state.selectedSkill)
+      ) {
+        return state;
+      }
+      return { ...state, selectedSkill: catalog[0]?.skill ?? '' };
+    }
+    case 'selectSkill':
+      return { ...state, selectedSkill: action.skill };
+    case 'clearForNoSkill':
+      return { ...state, draft: {}, resultStepActive: false };
+    case 'applySkill':
+      // 切换术数：重建初始草稿、复位预览与高级区；不支持客户预填时清除客户关联。
+      return {
+        ...state,
+        draft: action.draft,
+        ...PREVIEW_RESET,
+        advancedOpen: false,
+        selectedClientId: action.clearClient ? null : state.selectedClientId,
+      };
+    case 'changeDraft':
+      // 用户改单个字段：复位预览并写回草稿对应路径。
+      return {
+        ...state,
+        ...PREVIEW_RESET,
+        draft: setValueAtPath(state.draft, action.path, action.value),
+      };
+    case 'changeManyDraft':
+      return {
+        ...state,
+        ...PREVIEW_RESET,
+        draft: action.changes.reduce(
+          (nextDraft, change) =>
+            setValueAtPath(nextDraft, change.path, change.value),
+          state.draft,
+        ),
+      };
+    case 'selectClient': {
+      // 选中客户：记录关联 id；若带来预填改动则复位预览并写入草稿（无改动则只改 id）。
+      const next: PaipanSheetState = {
+        ...state,
+        selectedClientId: action.clientId,
+      };
+      if (action.changes && action.changes.length > 0) {
+        return {
+          ...next,
+          ...PREVIEW_RESET,
+          draft: action.changes.reduce(
+            (nextDraft, change) =>
+              setValueAtPath(nextDraft, change.path, change.value),
+            next.draft,
+          ),
+        };
+      }
+      return next;
+    }
+    case 'previewSuccess':
+      return {
+        ...state,
+        previewResult: action.result,
+        previewSkillName: action.skillName,
+      };
+    case 'setResultStepActive':
+      return { ...state, resultStepActive: action.active };
+    case 'setSubmitting':
+      return { ...state, submitting: action.value };
+    case 'toggleAdvanced':
+      return { ...state, advancedOpen: !state.advancedOpen };
+    case 'reset':
+      // 关闭弹层：复位除草稿外的所有字段。此处保留 draft，但 selectedSkill 归空后
+      // 会触发 clearForNoSkill 在同一周期把 draft 清掉；重新打开时 applySkill 必定重建，
+      // 故残留与否用户均观测不到。
+      return { ...INITIAL_PAIPAN_SHEET_STATE, draft: state.draft };
+    default:
+      return state;
+  }
+}
+
 export function PaipanSheet({
   open,
   mode,
@@ -953,18 +1105,15 @@ export function PaipanSheet({
 }: PaipanSheetProps) {
   const { toast } = useToast();
   const { t } = useI18n();
-  const [selectedSkill, setSelectedSkill] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Record<string, unknown>>({});
-  const [previewResult, setPreviewResult] = useState<PaipanPreviewResponse | null>(null);
-  const [previewSkillName, setPreviewSkillName] = useState('');
-  const [resultStepActive, setResultStepActive] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // 弹层向导状态机（所选术数 / 客户 / 草稿 / 预览 / 提交中 / 高级区）合并为单一 reducer。
+  const [sheet, dispatchSheet] = useReducer(
+    paipanSheetReducer,
+    INITIAL_PAIPAN_SHEET_STATE,
+  );
 
   const selectedCatalogItem = useMemo(
-    () => catalog.find((item) => item.skill === selectedSkill) ?? null,
-    [catalog, selectedSkill],
+    () => catalog.find((item) => item.skill === sheet.selectedSkill) ?? null,
+    [catalog, sheet.selectedSkill],
   );
   const selectedFlow = selectedCatalogItem
     ? resolvePaipanFlow(selectedCatalogItem.skill)
@@ -991,78 +1140,51 @@ export function PaipanSheet({
     if (!open) {
       return;
     }
-
-    if (catalog.length === 0) {
-      setSelectedSkill('');
-      return;
-    }
-
-    setSelectedSkill((current) => {
-      if (initialSkill && catalog.some((item) => item.skill === initialSkill)) {
-        return initialSkill;
-      }
-      if (current && catalog.some((item) => item.skill === current)) {
-        return current;
-      }
-      return catalog[0]?.skill ?? '';
-    });
+    // 解析所选术数（initialSkill / 既有选择 / 目录首项）的优先级逻辑下沉到 reducer。
+    dispatchSheet({ type: 'resolveSkill', catalog, initialSkill });
   }, [catalog, initialSkill, open]);
 
   useEffect(() => {
     if (!selectedCatalogItem) {
-      setDraft({});
-      setResultStepActive(false);
+      dispatchSheet({ type: 'clearForNoSkill' });
       return;
     }
-    // 每次切换术数时重建一份更适合普通用户的初始表单状态。
-    setDraft(buildInitialDraftForSkill(selectedCatalogItem.skill, selectedCatalogItem.parameters));
-    setPreviewResult(null);
-    setPreviewSkillName('');
-    setResultStepActive(false);
-    setAdvancedOpen(false);
-    // 切换到不支持客户预填的术数时清除客户关联，避免错把客户绑到无关会话。
-    if (!CLIENT_PREFILL_SKILLS.has(selectedCatalogItem.skill)) {
-      setSelectedClientId(null);
-    }
+    // 每次切换术数时重建一份更适合普通用户的初始表单状态，并复位预览/高级区。
+    dispatchSheet({
+      type: 'applySkill',
+      draft: buildInitialDraftForSkill(
+        selectedCatalogItem.skill,
+        selectedCatalogItem.parameters,
+      ),
+      // 切换到不支持客户预填的术数时清除客户关联，避免错把客户绑到无关会话。
+      clearClient: !CLIENT_PREFILL_SKILLS.has(selectedCatalogItem.skill),
+    });
   }, [selectedCatalogItem]);
 
   useEffect(() => {
     if (!open) {
-      setSelectedSkill('');
-      setSelectedClientId(null);
-      setPreviewResult(null);
-      setPreviewSkillName('');
-      setResultStepActive(false);
-      setSubmitting(false);
-      setAdvancedOpen(false);
+      dispatchSheet({ type: 'reset' });
     }
   }, [open]);
 
-  const resetPreviewState = () => {
-    setPreviewResult(null);
-    setPreviewSkillName('');
-    setResultStepActive(false);
-  };
-
   const handleChange = (path: string[], value: unknown) => {
-    resetPreviewState();
-    setDraft((previous) => setValueAtPath(previous, path, value));
+    dispatchSheet({ type: 'changeDraft', path, value });
   };
 
-  const handleManyChanges = (changes: Array<{ path: string[]; value: unknown }>) => {
-    resetPreviewState();
-    setDraft((previous) =>
-      changes.reduce(
-        (nextDraft, change) => setValueAtPath(nextDraft, change.path, change.value),
-        previous,
-      ),
-    );
+  const handleManyChanges = (
+    changes: Array<{ path: string[]; value: unknown }>,
+  ) => {
+    dispatchSheet({ type: 'changeManyDraft', changes });
   };
+
+  const handleResultStepChange = useCallback((active: boolean) => {
+    dispatchSheet({ type: 'setResultStepActive', active });
+  }, []);
 
   // 选中（或清除）客户档案：记录关联 id，并把客户生辰预填到排盘表单的对应字段。
   const handleSelectClient = (profile: ClientProfile | null) => {
-    setSelectedClientId(profile?.id ?? null);
     if (!profile) {
+      dispatchSheet({ type: 'selectClient', clientId: null });
       return;
     }
 
@@ -1080,9 +1202,11 @@ export function PaipanSheet({
     if (profile.gender === '男' || profile.gender === '女') {
       changes.push({ path: ['gender'], value: profile.gender });
     }
-    if (changes.length > 0) {
-      handleManyChanges(changes);
-    }
+    dispatchSheet({
+      type: 'selectClient',
+      clientId: profile.id ?? null,
+      changes,
+    });
   };
 
   const buildCurrentSubmitInput = (): Record<string, unknown> | null => {
@@ -1092,7 +1216,7 @@ export function PaipanSheet({
 
     const validationError = validateDraftForSkill(
       selectedCatalogItem.skill,
-      draft,
+      sheet.draft,
       t,
     );
     if (validationError) {
@@ -1100,7 +1224,7 @@ export function PaipanSheet({
       return null;
     }
 
-    return buildSubmitInputForSkill(selectedCatalogItem.skill, draft);
+    return buildSubmitInputForSkill(selectedCatalogItem.skill, sheet.draft);
   };
 
   const handlePreview = async () => {
@@ -1114,14 +1238,17 @@ export function PaipanSheet({
       return;
     }
 
-    setSubmitting(true);
+    dispatchSheet({ type: 'setSubmitting', value: true });
     try {
       const result = await paipanApi.preview({
         skill: selectedCatalogItem.skill,
         input: submitInput,
       });
-      setPreviewResult(result);
-      setPreviewSkillName(selectedCatalogItem.name);
+      dispatchSheet({
+        type: 'previewSuccess',
+        result,
+        skillName: selectedCatalogItem.name,
+      });
     } catch (error) {
       toast(
         'error',
@@ -1130,7 +1257,7 @@ export function PaipanSheet({
           : t('aiChat.paipanSheet.toast.previewFailed'),
       );
     } finally {
-      setSubmitting(false);
+      dispatchSheet({ type: 'setSubmitting', value: false });
     }
   };
 
@@ -1150,14 +1277,14 @@ export function PaipanSheet({
       return;
     }
 
-    setSubmitting(true);
+    dispatchSheet({ type: 'setSubmitting', value: true });
     try {
       const result = await paipanApi.commit({
         target: 'current_session',
         sessionId,
         skill: selectedCatalogItem.skill,
         input: submitInput,
-        client_id: selectedClientId,
+        client_id: sheet.selectedClientId,
       });
       await onCommitted(result);
       onClose();
@@ -1169,7 +1296,7 @@ export function PaipanSheet({
           : t('aiChat.paipanSheet.toast.insertFailed'),
       );
     } finally {
-      setSubmitting(false);
+      dispatchSheet({ type: 'setSubmitting', value: false });
     }
   };
 
@@ -1179,16 +1306,16 @@ export function PaipanSheet({
       return;
     }
 
-    if (!previewResult) {
+    if (!sheet.previewResult) {
       toast('error', t('aiChat.paipanSheet.toast.missingPreview'));
       return;
     }
-    setSubmitting(true);
+    dispatchSheet({ type: 'setSubmitting', value: true });
     try {
       const result = await paipanApi.commit({
         target: 'new_session_from_preview',
-        previewId: previewResult.previewId,
-        client_id: selectedClientId,
+        previewId: sheet.previewResult.previewId,
+        client_id: sheet.selectedClientId,
       });
       await onCommitted(result);
       onClose();
@@ -1200,14 +1327,14 @@ export function PaipanSheet({
           : t('aiChat.paipanSheet.toast.createSessionFailed'),
       );
     } finally {
-      setSubmitting(false);
+      dispatchSheet({ type: 'setSubmitting', value: false });
     }
   };
 
   const flowFinalAction =
     <Button
       onClick={() => void handlePreview()}
-      loading={submitting}
+      loading={sheet.submitting}
       icon={<Sparkles size={14} />}
       className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
     >
@@ -1217,7 +1344,7 @@ export function PaipanSheet({
     mode === 'pre-chat' ? (
       <Button
         onClick={() => void handleStartChatFromPreview()}
-        loading={submitting}
+        loading={sheet.submitting}
         icon={<MessageCircle size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
@@ -1228,7 +1355,7 @@ export function PaipanSheet({
     ) : (
       <Button
         onClick={() => void handleCommitIntoCurrentSession()}
-        loading={submitting}
+        loading={sheet.submitting}
         icon={<Sparkles size={14} />}
         className="h-9 w-full rounded-xl text-[12px] sm:w-auto sm:rounded-lg"
       >
@@ -1237,24 +1364,24 @@ export function PaipanSheet({
           : t('aiChat.paipanSheet.actions.loginInsertCurrent')}
       </Button>
     );
-  const flowResultContent = previewResult ? (
+  const flowResultContent = sheet.previewResult ? (
     <div className="rounded-[24px] border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-2 sm:p-3">
       <ArtifactRenderer
         fitViewportHeight
         entries={[
           {
-            skill: previewResult.skillContextEntry.skill,
-            output: previewResult.skillContextEntry.output,
-            artifactType: previewResult.skillContextEntry.artifactType,
-            artifactTitle: previewResult.skillContextEntry.artifactTitle,
-            artifactData: previewResult.skillContextEntry.artifactData,
+            skill: sheet.previewResult.skillContextEntry.skill,
+            output: sheet.previewResult.skillContextEntry.output,
+            artifactType: sheet.previewResult.skillContextEntry.artifactType,
+            artifactTitle: sheet.previewResult.skillContextEntry.artifactTitle,
+            artifactData: sheet.previewResult.skillContextEntry.artifactData,
           },
         ]}
       />
     </div>
   ) : null;
   // 结果页主动作固定在弹层底部；只保留按钮，把垂直空间让给盘面本身。
-  const resultFooter = previewResult && resultStepActive ? (
+  const resultFooter = sheet.previewResult && sheet.resultStepActive ? (
     <div className="px-4 py-3 sm:px-6">
       <div className="w-full shrink-0 sm:ml-auto sm:w-auto">
         {flowResultAction}
@@ -1290,7 +1417,7 @@ export function PaipanSheet({
           </div>
         ) : (
           <>
-            {!resultStepActive &&
+            {!sheet.resultStepActive &&
               (lockSkill && selectedCatalogItem ? (
                 <div className="rounded-[24px] border border-hairline bg-surface-card/45 px-4 py-4">
                   <p className="text-[11px] font-medium tracking-[0.08em] text-muted">
@@ -1314,9 +1441,9 @@ export function PaipanSheet({
                     required
                   />
                   <select
-                    value={selectedSkill}
+                    value={sheet.selectedSkill}
                     onChange={(event) =>
-                      setSelectedSkill(event.currentTarget.value)
+                      dispatchSheet({ type: 'selectSkill', skill: event.currentTarget.value })
                     }
                     className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none"
                   >
@@ -1331,24 +1458,24 @@ export function PaipanSheet({
 
             {selectedCatalogItem ? (
               <div className="space-y-4">
-                {!resultStepActive &&
+                {!sheet.resultStepActive &&
                   CLIENT_PREFILL_SKILLS.has(selectedCatalogItem.skill) && (
                     <ClientProfileSelector
-                      selectedClientId={selectedClientId}
+                      selectedClientId={sheet.selectedClientId}
                       onSelect={handleSelectClient}
                       autoSelectClientId={initialClientId}
                     />
                   )}
                 {SelectedFlow ? (
                   <SelectedFlow
-                    draft={draft}
+                    draft={sheet.draft}
                     fieldKit={PAIPAN_FLOW_FIELD_KIT}
                     helpers={PAIPAN_FLOW_HELPERS}
                     onChange={handleChange}
                     onManyChanges={handleManyChanges}
                     finalAction={flowFinalAction}
                     resultContent={flowResultContent}
-                    onResultStepChange={setResultStepActive}
+                    onResultStepChange={handleResultStepChange}
                   />
                 ) : (
                   <div className="rounded-2xl border border-hairline bg-surface-card/35 px-4 py-3 text-[12px] leading-5 text-muted">
@@ -1360,7 +1487,7 @@ export function PaipanSheet({
                   <div className="rounded-[26px] border border-hairline bg-surface-card/35">
                     <button
                       type="button"
-                      onClick={() => setAdvancedOpen((previous) => !previous)}
+                      onClick={() => dispatchSheet({ type: 'toggleAdvanced' })}
                       className="flex min-h-[60px] w-full items-center justify-between gap-3 px-4 py-4 text-left"
                     >
                       <div>
@@ -1374,16 +1501,16 @@ export function PaipanSheet({
                       <ChevronDown
                         size={18}
                         className={`shrink-0 text-muted transition-transform duration-200 ${
-                          advancedOpen ? 'rotate-180' : ''
+                          sheet.advancedOpen ? 'rotate-180' : ''
                         }`}
                       />
                     </button>
 
-                    {advancedOpen && (
+                    {sheet.advancedOpen && (
                       <div className="border-t border-hairline px-4 py-4">
                         <SchemaFields
                           schema={selectedCatalogItem.parameters}
-                          draft={draft}
+                          draft={sheet.draft}
                           hiddenPaths={hiddenPaths}
                           t={t}
                           onChange={handleChange}

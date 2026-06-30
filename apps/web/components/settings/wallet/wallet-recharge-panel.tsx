@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useReducer, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -95,6 +95,76 @@ function isFreshPendingOrder(order: RechargeOrder): boolean {
     : false;
 }
 
+/** 分步补充积分表单的草稿：金额、支付方式、当前步骤。 */
+type FormState = {
+  amount: string;
+  payType: RechargePayType;
+  step: RechargeStep;
+};
+
+type FormAction =
+  | { type: 'setAmount'; amount: string }
+  | { type: 'setPayType'; payType: RechargePayType }
+  | { type: 'setStep'; step: RechargeStep };
+
+/** 表单 reducer：金额 / 支付方式 / 步骤三个字段各自独立更新。 */
+function formReducer(state: FormState, action: FormAction): FormState {
+  switch (action.type) {
+    case 'setAmount':
+      return { ...state, amount: action.amount };
+    case 'setPayType':
+      return { ...state, payType: action.payType };
+    case 'setStep':
+      return { ...state, step: action.step };
+    default:
+      return state;
+  }
+}
+
+const FORM_INITIAL: FormState = {
+  amount: '50',
+  payType: 'alipay',
+  step: 'amount',
+};
+
+/** 订单操作状态：下单中、正在同步的订单号、当前活跃订单。 */
+type OrderState = {
+  creating: boolean;
+  syncingTradeId: string | null;
+  activeOrder: RechargeOrder | null;
+};
+
+type OrderAction =
+  | { type: 'createStart' }
+  | { type: 'createDone' }
+  | { type: 'syncStart'; tradeId: string }
+  | { type: 'syncDone' }
+  | { type: 'setActiveOrder'; order: RechargeOrder };
+
+/** 订单 reducer：下单与同步各自的进行中标志，以及共享的活跃订单。 */
+function orderReducer(state: OrderState, action: OrderAction): OrderState {
+  switch (action.type) {
+    case 'createStart':
+      return { ...state, creating: true };
+    case 'createDone':
+      return { ...state, creating: false };
+    case 'syncStart':
+      return { ...state, syncingTradeId: action.tradeId };
+    case 'syncDone':
+      return { ...state, syncingTradeId: null };
+    case 'setActiveOrder':
+      return { ...state, activeOrder: action.order };
+    default:
+      return state;
+  }
+}
+
+const ORDER_INITIAL: OrderState = {
+  creating: false,
+  syncingTradeId: null,
+  activeOrder: null,
+};
+
 /**
  * 渲染补充积分面板。
  *
@@ -116,12 +186,15 @@ export function WalletRechargePanel({
   onChanged: () => Promise<void> | void;
 }) {
   const { formatNumber, locale, t } = useI18n();
-  const [amountCoins, setAmountCoins] = useState('50');
-  const [payType, setPayType] = useState<RechargePayType>('alipay');
-  const [rechargeStep, setRechargeStep] = useState<RechargeStep>('amount');
-  const [creating, setCreating] = useState(false);
-  const [syncingTradeId, setSyncingTradeId] = useState<string | null>(null);
-  const [activeOrder, setActiveOrder] = useState<RechargeOrder | null>(null);
+  // 分步表单字段合并为一个 reducer；保留 amountCoins/payType/rechargeStep 读名。
+  const [{ amount: amountCoins, payType, step: rechargeStep }, formDispatch] =
+    useReducer(formReducer, FORM_INITIAL);
+  // 订单操作状态合并为一个 reducer；保留 creating/syncingTradeId/activeOrder 读名。
+  const [{ creating, syncingTradeId, activeOrder }, orderDispatch] = useReducer(
+    orderReducer,
+    ORDER_INITIAL,
+  );
+  // 历史订单展开（纯 UI 开关）与错误文案（表单校验与订单操作共享）各自保持轻量 useState。
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [error, setError] = useState('');
 
@@ -147,42 +220,42 @@ export function WalletRechargePanel({
       return;
     }
     setError('');
-    setRechargeStep('payment');
+    formDispatch({ type: 'setStep', step: 'payment' });
   };
 
   async function createOrder() {
     if (!amountValid) {
       setError(t('pages.wallet.amountPositive'));
-      setRechargeStep('amount');
+      formDispatch({ type: 'setStep', step: 'amount' });
       return;
     }
-    setCreating(true);
+    orderDispatch({ type: 'createStart' });
     setError('');
     try {
       const result = await billingApi.createRechargeOrder({
         amount_coins: amountCoins,
         pay_type: payType,
       });
-      setActiveOrder(result.order);
+      orderDispatch({ type: 'setActiveOrder', order: result.order });
       await onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('pages.wallet.createOrderFailed'));
     } finally {
-      setCreating(false);
+      orderDispatch({ type: 'createDone' });
     }
   }
 
   async function syncOrder(tradeId: string) {
-    setSyncingTradeId(tradeId);
+    orderDispatch({ type: 'syncStart', tradeId });
     setError('');
     try {
       const order = await billingApi.syncRechargeOrder(tradeId);
-      setActiveOrder(order);
+      orderDispatch({ type: 'setActiveOrder', order });
       await onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('pages.wallet.syncOrderFailed'));
     } finally {
-      setSyncingTradeId(null);
+      orderDispatch({ type: 'syncDone' });
     }
   }
 
@@ -230,7 +303,7 @@ export function WalletRechargePanel({
               type="button"
               onClick={() => {
                 if (index <= activeStepIndex) {
-                  setRechargeStep(step.key);
+                  formDispatch({ type: 'setStep', step: step.key });
                 }
               }}
               disabled={index > activeStepIndex}
@@ -262,7 +335,9 @@ export function WalletRechargePanel({
                 <button
                   key={preset}
                   type="button"
-                  onClick={() => setAmountCoins(preset)}
+                  onClick={() =>
+                    formDispatch({ type: 'setAmount', amount: preset })
+                  }
                   className={`min-h-[58px] rounded-xl border px-2.5 py-2 text-center transition-all ${
                     amountCoins === preset
                       ? 'border-primary bg-primary/10 shadow-[0_10px_24px_rgba(0,0,0,0.06)]'
@@ -297,7 +372,9 @@ export function WalletRechargePanel({
                 </span>
                 <input
                   value={amountCoins}
-                  onChange={(event) => setAmountCoins(event.target.value)}
+                  onChange={(event) =>
+                    formDispatch({ type: 'setAmount', amount: event.target.value })
+                  }
                   inputMode="decimal"
                   className="h-full min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums outline-none"
                   placeholder={t('pages.wallet.amountPlaceholder')}
@@ -339,7 +416,7 @@ export function WalletRechargePanel({
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setPayType(key)}
+                    onClick={() => formDispatch({ type: 'setPayType', payType: key })}
                     className={`h-11 rounded-xl border text-[13px] font-semibold transition-colors ${
                       payType === key
                         ? 'border-primary bg-primary/10 text-primary'
@@ -354,7 +431,7 @@ export function WalletRechargePanel({
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
               <button
                 type="button"
-                onClick={() => setRechargeStep('amount')}
+                onClick={() => formDispatch({ type: 'setStep', step: 'amount' })}
                 className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-hairline px-3 text-[12px] font-medium text-muted transition-colors hover:text-ink"
               >
                 <ArrowLeft size={14} />
@@ -362,7 +439,7 @@ export function WalletRechargePanel({
               </button>
               <button
                 type="button"
-                onClick={() => setRechargeStep('confirm')}
+                onClick={() => formDispatch({ type: 'setStep', step: 'confirm' })}
                 className="flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
               >
                 {t('pages.wallet.confirmRecharge')}
@@ -411,7 +488,7 @@ export function WalletRechargePanel({
             </div>
             <button
               type="button"
-              onClick={() => setRechargeStep('payment')}
+              onClick={() => formDispatch({ type: 'setStep', step: 'payment' })}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-muted transition-colors hover:bg-canvas/55 hover:text-ink"
             >
               <ArrowLeft size={13} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -347,6 +347,125 @@ function MarkdownBundlePreview({
   );
 }
 
+// 编辑器「文件工作区」状态：当前文件列表、选中文件、编辑/预览标签页、文件下拉菜单，
+// 以及新建文件表单（是否展开、草稿路径、路径校验错误）。这些字段在新建/删除/导入/切换
+// 文件等操作里经常一起变动，聚合到一个 reducer，用单次 dispatch 表达整组变更，
+// 避免散落的级联 setState。
+type EditorState = {
+  files: TextSkillBundleFile[];
+  selectedPath: string;
+  activeTab: 'edit' | 'preview';
+  fileMenuOpen: boolean;
+  addingFile: boolean;
+  newFilePath: string;
+  pathError: string;
+};
+
+type EditorAction =
+  | { type: 'toggleFileMenu' }
+  | { type: 'closeFileMenu' }
+  | { type: 'updateFileContent'; path: string; content: string }
+  | { type: 'selectFile'; path: string }
+  | { type: 'startAddFile' }
+  | { type: 'cancelAddFile' }
+  | { type: 'setNewFilePath'; value: string }
+  | { type: 'setPathError'; message: string }
+  | { type: 'addFile'; path: string }
+  | { type: 'removeFile'; path: string }
+  | { type: 'setActiveTab'; tab: 'edit' | 'preview' }
+  | { type: 'importFiles'; files: TextSkillBundleFile[] };
+
+// 用 initial 技能数据派生编辑器初始态：回填已有文件，默认选中 SKILL.md、停在编辑标签页。
+function createInitialEditorState(initial?: UserCustomSkill): EditorState {
+  return {
+    files: normalizeFiles(initial?.files),
+    selectedPath: 'SKILL.md',
+    activeTab: 'edit',
+    fileMenuOpen: false,
+    addingFile: false,
+    newFilePath: '',
+    pathError: '',
+  };
+}
+
+function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  switch (action.type) {
+    case 'toggleFileMenu':
+      return { ...state, fileMenuOpen: !state.fileMenuOpen };
+    case 'closeFileMenu':
+      return { ...state, fileMenuOpen: false };
+    case 'updateFileContent':
+      return {
+        ...state,
+        files: state.files.map((file) =>
+          file.path === action.path
+            ? { ...file, content: action.content }
+            : file,
+        ),
+      };
+    case 'selectFile':
+      // 切换文件时收起新建表单的报错和文件菜单，并回到编辑标签页。
+      return {
+        ...state,
+        selectedPath: action.path,
+        pathError: '',
+        activeTab: 'edit',
+        fileMenuOpen: false,
+      };
+    case 'startAddFile':
+      return {
+        ...state,
+        addingFile: true,
+        newFilePath: '',
+        pathError: '',
+        fileMenuOpen: false,
+      };
+    case 'cancelAddFile':
+      return { ...state, addingFile: false, newFilePath: '', pathError: '' };
+    case 'setNewFilePath':
+      return { ...state, newFilePath: action.value };
+    case 'setPathError':
+      return { ...state, pathError: action.message };
+    case 'addFile': {
+      // 新建文件的初始内容沿用原逻辑：用文件名（去掉 .md 后缀）作为一级标题。
+      const fileName =
+        action.path.split('/').pop()?.replace(/\.md$/, '') || '新文件';
+      return {
+        ...state,
+        pathError: '',
+        files: [
+          ...state.files,
+          { path: action.path, content: `# ${fileName}\n` },
+        ].sort((left, right) => left.path.localeCompare(right.path)),
+        selectedPath: action.path,
+        activeTab: 'edit',
+        addingFile: false,
+        newFilePath: '',
+      };
+    }
+    case 'removeFile':
+      return {
+        ...state,
+        files: state.files.filter((file) => file.path !== action.path),
+        selectedPath: 'SKILL.md',
+      };
+    case 'setActiveTab':
+      return { ...state, activeTab: action.tab };
+    case 'importFiles':
+      // 导入 ZIP 后用压缩包内容整体替换草稿，并复位选中文件与表单/菜单态。
+      return {
+        ...state,
+        files: action.files,
+        selectedPath: 'SKILL.md',
+        activeTab: 'edit',
+        addingFile: false,
+        fileMenuOpen: false,
+      };
+    default:
+      return state;
+  }
+}
+
 export function SkillBundleEditor({
   initial,
   onSave,
@@ -356,19 +475,26 @@ export function SkillBundleEditor({
   onCancel?: () => void;
 }) {
   const { confirm: confirmDialog } = useConfirm();
-  const [files, setFiles] = useState<TextSkillBundleFile[]>(
-    normalizeFiles(initial?.files),
+  const [editor, dispatchEditor] = useReducer(
+    editorReducer,
+    initial,
+    createInitialEditorState,
   );
-  const [selectedPath, setSelectedPath] = useState('SKILL.md');
-  const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
-  const [fileMenuOpen, setFileMenuOpen] = useState(false);
-  const [addingFile, setAddingFile] = useState(false);
-  const [newFilePath, setNewFilePath] = useState('');
-  const [pathError, setPathError] = useState('');
+  const {
+    files,
+    selectedPath,
+    activeTab,
+    fileMenuOpen,
+    addingFile,
+    newFilePath,
+    pathError,
+  } = editor;
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
-  const [limits, setLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
+  // bundle 体积上限：仅在保存/导入/导出等事件处理里读取做校验，不参与渲染，
+  // 因此用 ref 持有；异步拉取到的最新值随取随用，不触发无谓重渲染。
+  const limitsRef = useRef(DEFAULT_SKILL_BUNDLE_LIMITS);
   // 作者选定的分类：空串是「自动归类」sentinel（交后端按内容判断），
   // 编辑态回填技能已存的分类，新建态默认自动。显式选某分类（含 '通用'）才算覆盖。
   const [category, setCategory] = useState(initial?.category ?? '');
@@ -392,10 +518,10 @@ export function SkillBundleEditor({
     if (!fileMenuOpen) return;
     const onDocumentMouseDown = (event: MouseEvent) => {
       if (fileMenuRef.current?.contains(event.target as Node)) return;
-      setFileMenuOpen(false);
+      dispatchEditor({ type: 'closeFileMenu' });
     };
     const onDocumentKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFileMenuOpen(false);
+      if (event.key === 'Escape') dispatchEditor({ type: 'closeFileMenu' });
     };
     document.addEventListener('mousedown', onDocumentMouseDown);
     document.addEventListener('keydown', onDocumentKeyDown);
@@ -414,7 +540,7 @@ export function SkillBundleEditor({
     skillsApi
       .limits()
       .then((nextLimits) => {
-        if (!cancelled) setLimits(nextLimits);
+        if (!cancelled) limitsRef.current = nextLimits;
       })
       .catch(() => undefined);
     return () => {
@@ -423,9 +549,7 @@ export function SkillBundleEditor({
   }, []);
 
   const updateFile = (path: string, content: string) => {
-    setFiles((prev) =>
-      prev.map((file) => (file.path === path ? { ...file, content } : file)),
-    );
+    dispatchEditor({ type: 'updateFileContent', path, content });
   };
 
   const updateSkillDraft = (patch: Partial<SkillFrontmatter>) => {
@@ -434,47 +558,33 @@ export function SkillBundleEditor({
   };
 
   const selectFile = (path: string) => {
-    setSelectedPath(path);
-    setPathError('');
-    setActiveTab('edit');
-    setFileMenuOpen(false);
+    dispatchEditor({ type: 'selectFile', path });
   };
 
   const startAddFile = () => {
-    setAddingFile(true);
-    setNewFilePath('');
-    setPathError('');
-    setFileMenuOpen(false);
+    dispatchEditor({ type: 'startAddFile' });
   };
 
   const cancelAddFile = () => {
-    setAddingFile(false);
-    setNewFilePath('');
-    setPathError('');
+    dispatchEditor({ type: 'cancelAddFile' });
   };
 
   const handleAddFile = (rawPath: string) => {
-    setPathError('');
+    dispatchEditor({ type: 'setPathError', message: '' });
     try {
       const path = validateRelativeTextPath(rawPath);
       if (files.some((file) => file.path === path)) {
-        setPathError('同名文件已存在');
+        dispatchEditor({ type: 'setPathError', message: '同名文件已存在' });
         return false;
       }
       setError('');
-      setPathError('');
-      setFiles((prev) =>
-        [...prev, { path, content: `# ${path.split('/').pop()?.replace(/\.md$/, '') || '新文件'}\n` }].sort(
-          (left, right) => left.path.localeCompare(right.path),
-        ),
-      );
-      setSelectedPath(path);
-      setActiveTab('edit');
-      setAddingFile(false);
-      setNewFilePath('');
+      dispatchEditor({ type: 'addFile', path });
       return true;
     } catch (err) {
-      setPathError(err instanceof Error ? err.message : '文件路径不合法');
+      dispatchEditor({
+        type: 'setPathError',
+        message: err instanceof Error ? err.message : '文件路径不合法',
+      });
       return false;
     }
   };
@@ -490,11 +600,11 @@ export function SkillBundleEditor({
       variant: 'danger',
     });
     if (!ok) return;
-    setFiles((prev) => prev.filter((file) => file.path !== selectedFile.path));
-    setSelectedPath('SKILL.md');
+    dispatchEditor({ type: 'removeFile', path: selectedFile.path });
   };
 
   const handleSubmit = async () => {
+    const limits = limitsRef.current;
     const hasSkill = files.some((file) => file.path === 'SKILL.md');
     if (!hasSkill) {
       setError('Bundle 必须包含 SKILL.md');
@@ -549,14 +659,10 @@ export function SkillBundleEditor({
 
     setImporting(true);
     setError('');
-    setPathError('');
+    dispatchEditor({ type: 'setPathError', message: '' });
     try {
-      const imported = await importSkillBundleFromZip(file, limits);
-      setFiles(imported.files);
-      setSelectedPath('SKILL.md');
-      setActiveTab('edit');
-      setAddingFile(false);
-      setFileMenuOpen(false);
+      const imported = await importSkillBundleFromZip(file, limitsRef.current);
+      dispatchEditor({ type: 'importFiles', files: imported.files });
     } catch (err) {
       setError(err instanceof Error ? err.message : '导入 ZIP 失败');
     } finally {
@@ -567,7 +673,7 @@ export function SkillBundleEditor({
   const handleExportZip = () => {
     setError('');
     try {
-      downloadSkillBundleZip(displayName, files, limits);
+      downloadSkillBundleZip(displayName, files, limitsRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : '导出 ZIP 失败');
     }
@@ -586,7 +692,7 @@ export function SkillBundleEditor({
             type="button"
             aria-haspopup="listbox"
             aria-expanded={fileMenuOpen}
-            onClick={() => setFileMenuOpen((open) => !open)}
+            onClick={() => dispatchEditor({ type: 'toggleFileMenu' })}
             className={`group flex min-h-14 w-full items-center gap-3 rounded-xl border bg-surface-card px-3.5 py-2.5 text-left shadow-sm transition-all hover:border-primary/40 hover:bg-surface-cream-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15 ${
               fileMenuOpen ? 'border-primary/50 bg-surface-cream-strong' : 'border-hairline'
             }`}
@@ -733,7 +839,12 @@ export function SkillBundleEditor({
               ref={newFilePathInputRef}
               id="new-skill-bundle-file-path"
               value={newFilePath}
-              onChange={(event) => setNewFilePath(event.currentTarget.value)}
+              onChange={(event) =>
+                dispatchEditor({
+                  type: 'setNewFilePath',
+                  value: event.currentTarget.value,
+                })
+              }
               placeholder="docs/example.md"
               className="h-10 min-w-0 rounded-lg border border-hairline bg-canvas px-3 font-mono text-[13px] text-ink placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
             />
@@ -757,7 +868,7 @@ export function SkillBundleEditor({
         <div className="grid grid-cols-2 rounded-lg border border-hairline bg-surface-card">
           <button
             type="button"
-            onClick={() => setActiveTab('edit')}
+            onClick={() => dispatchEditor({ type: 'setActiveTab', tab: 'edit' })}
             aria-pressed={activeTab === 'edit'}
             className={`relative inline-flex h-12 items-center justify-center gap-2 text-[14px] font-semibold transition-colors ${
               activeTab === 'edit' ? 'text-primary' : 'text-muted hover:text-ink'
@@ -771,7 +882,9 @@ export function SkillBundleEditor({
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('preview')}
+            onClick={() =>
+              dispatchEditor({ type: 'setActiveTab', tab: 'preview' })
+            }
             aria-pressed={activeTab === 'preview'}
             className={`relative inline-flex h-12 items-center justify-center gap-2 border-l border-hairline text-[14px] font-semibold transition-colors ${
               activeTab === 'preview' ? 'text-primary' : 'text-muted hover:text-ink'

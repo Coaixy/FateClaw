@@ -146,17 +146,27 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [selectedSession, setSelectedSessionState] = useState('');
-  const [selectedSessionRevision, setSelectedSessionRevision] = useState(0);
+  // 选中会话与其修订号始终成对更新（每次切换/同步都要 bump revision），
+  // 合并到同一个 state 用一次 setSelection 翻转，避免分散的双 setState 级联重渲染。
+  const [selection, setSelection] = useState<{ id: string; revision: number }>({
+    id: '',
+    revision: 0,
+  });
+  const selectedSession = selection.id;
+  const selectedSessionRevision = selection.revision;
   const [loading, setLoading] = useState(false);
 
   const latestSessionsRequestRef = useRef(0);
 
+  // 切换/同步选中会话：替换 id 并自增 revision，保持「每次选择都触发一次显示切换」语义。
+  const applySelectedSession = useCallback((id: string) => {
+    setSelection((previous) => ({ id, revision: previous.revision + 1 }));
+  }, []);
+
   useEffect(() => {
     // 首次进入和浏览器前进/后退都从地址栏同步 sid，避免依赖 useSearchParams 触发整页 CSR。
     const syncSelectedSession = () => {
-      setSelectedSessionState(readSelectedSessionFromUrl());
-      setSelectedSessionRevision((value) => value + 1);
+      applySelectedSession(readSelectedSessionFromUrl());
     };
 
     syncSelectedSession();
@@ -172,7 +182,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener('popstate', syncSelectedSession);
     return () => window.removeEventListener('popstate', syncSelectedSession);
-  }, []);
+  }, [applySelectedSession]);
 
   const loadSessions = useCallback(async () => {
     if (authLoading) {
@@ -209,8 +219,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     const hasToken = hasStoredAuthToken();
     if (shouldClearChatSelection({ user, authLoading, hasToken })) {
       setSessions([]);
-      setSelectedSessionState('');
-      setSelectedSessionRevision((value) => value + 1);
+      applySelectedSession('');
       latestSessionsRequestRef.current = 0;
       return;
     }
@@ -220,12 +229,11 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     }
 
     void loadSessions();
-  }, [authLoading, loadSessions, user]);
+  }, [applySelectedSession, authLoading, loadSessions, user]);
 
   const setSelectedSession = useCallback(
     (id: string) => {
-      setSelectedSessionState(id);
-      setSelectedSessionRevision((value) => value + 1);
+      applySelectedSession(id);
       if (isAiChatPath(pathname)) {
         // 已在聊天页：原地替换 URL 即可，靠 selectedSession state + revision 切换显示，
         // 避免触发整页软导航/重挂 Provider。
@@ -242,7 +250,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         router.push(target);
       }
     },
-    [pathname, router],
+    [applySelectedSession, pathname, router],
   );
 
   const createSession = useCallback(async () => {

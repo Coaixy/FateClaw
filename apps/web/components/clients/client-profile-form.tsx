@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useReducer, useState } from 'react';
 import { Loader2, X, XCircle } from 'lucide-react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
@@ -100,6 +100,73 @@ function buildInitialBirthState(initial?: ClientProfile): BirthState {
   };
 }
 
+/** 客户档案表单的录入字段（生辰另由 BirthState 维护）。 */
+interface ProfileFormState {
+  name: string;
+  gender: GenderValue;
+  birthplace: string;
+  notes: string;
+  status: StatusValue;
+  tags: string[];
+  /** 标签输入框的临时文本，回车 / 确认后才并入 tags。 */
+  tagInput: string;
+}
+
+type ProfileFormAction =
+  | { type: 'field'; name: 'name' | 'birthplace' | 'notes' | 'tagInput'; value: string }
+  | { type: 'gender'; value: GenderValue }
+  | { type: 'status'; value: StatusValue }
+  | { type: 'addTag' }
+  | { type: 'removeTag'; tag: string };
+
+/** 根据既有客户档案构造表单字段初值；新建时各字段取空。 */
+function buildInitialFormState(initial?: ClientProfile): ProfileFormState {
+  return {
+    name: initial?.name ?? '',
+    gender:
+      initial?.gender === '男' || initial?.gender === '女' ? initial.gender : '',
+    birthplace: initial?.birthplace ?? '',
+    notes: initial?.notes ?? '',
+    status: initial?.status ?? '',
+    tags: initial?.tags ?? [],
+    tagInput: '',
+  };
+}
+
+/**
+ * 表单字段归约器。
+ *
+ * 文本类字段走通用 field action；性别/状态因取值是受限联合类型单列；
+ * 标签的增删保留原有去重、长度截断与数量上限校验。
+ */
+function profileFormReducer(
+  state: ProfileFormState,
+  action: ProfileFormAction,
+): ProfileFormState {
+  switch (action.type) {
+    case 'field':
+      return { ...state, [action.name]: action.value };
+    case 'gender':
+      return { ...state, gender: action.value };
+    case 'status':
+      return { ...state, status: action.value };
+    case 'addTag': {
+      // 截断到最大长度后再做去重 / 数量校验，校验不过也要清空输入框。
+      const value = state.tagInput.trim().slice(0, TAG_MAX_LENGTH);
+      if (
+        !value ||
+        state.tags.includes(value) ||
+        state.tags.length >= TAG_MAX_COUNT
+      ) {
+        return { ...state, tagInput: '' };
+      }
+      return { ...state, tags: [...state.tags, value], tagInput: '' };
+    }
+    case 'removeTag':
+      return { ...state, tags: state.tags.filter((item) => item !== action.tag) };
+  }
+}
+
 function NumberSelect({
   label,
   value,
@@ -154,18 +221,15 @@ export function ClientProfileForm({
 }) {
   const { t } = useI18n();
   const { confirm: confirmDialog } = useConfirm();
-  const [name, setName] = useState(initial?.name ?? '');
-  const [gender, setGender] = useState<GenderValue>(
-    initial?.gender === '男' || initial?.gender === '女' ? initial.gender : '',
+  const [form, dispatchForm] = useReducer(
+    profileFormReducer,
+    initial,
+    buildInitialFormState,
   );
+  const { name, gender, birthplace, notes, status, tags, tagInput } = form;
   const [birth, setBirth] = useState<BirthState>(() =>
     buildInitialBirthState(initial),
   );
-  const [birthplace, setBirthplace] = useState(initial?.birthplace ?? '');
-  const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [status, setStatus] = useState<StatusValue>(initial?.status ?? '');
-  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
-  const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -233,19 +297,9 @@ export function ClientProfileForm({
     });
   };
 
-  const addTag = () => {
-    const value = tagInput.trim().slice(0, TAG_MAX_LENGTH);
-    if (!value || tags.includes(value) || tags.length >= TAG_MAX_COUNT) {
-      setTagInput('');
-      return;
-    }
-    setTags((previous) => [...previous, value]);
-    setTagInput('');
-  };
+  const addTag = () => dispatchForm({ type: 'addTag' });
 
-  const removeTag = (tag: string) => {
-    setTags((previous) => previous.filter((item) => item !== tag));
-  };
+  const removeTag = (tag: string) => dispatchForm({ type: 'removeTag', tag });
 
   const handleCloseAttempt = async () => {
     if (!isDirty || saving) {
@@ -357,7 +411,13 @@ export function ClientProfileForm({
               </label>
               <input
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) =>
+                  dispatchForm({
+                    type: 'field',
+                    name: 'name',
+                    value: event.target.value,
+                  })
+                }
                 maxLength={NAME_MAX_LENGTH}
                 placeholder={t('clients.form.namePlaceholder')}
                 autoFocus
@@ -382,7 +442,9 @@ export function ClientProfileForm({
                     <button
                       key={option.label}
                       type="button"
-                      onClick={() => setGender(option.value)}
+                      onClick={() =>
+                        dispatchForm({ type: 'gender', value: option.value })
+                      }
                       className={`h-10 rounded-xl border text-[13px] font-medium transition-all duration-150 ${
                         active
                           ? 'border-primary bg-primary/12 text-ink'
@@ -484,7 +546,13 @@ export function ClientProfileForm({
             </label>
             <input
               value={birthplace}
-              onChange={(event) => setBirthplace(event.target.value)}
+              onChange={(event) =>
+                dispatchForm({
+                  type: 'field',
+                  name: 'birthplace',
+                  value: event.target.value,
+                })
+              }
               maxLength={BIRTHPLACE_MAX_LENGTH}
               placeholder={t('clients.form.birthplacePlaceholder')}
               className={inputClass}
@@ -502,7 +570,13 @@ export function ClientProfileForm({
           </div>
           <textarea
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) =>
+              dispatchForm({
+                type: 'field',
+                name: 'notes',
+                value: event.target.value,
+              })
+            }
             maxLength={NOTES_MAX_LENGTH}
             rows={4}
             placeholder={t('clients.form.notesPlaceholder')}
@@ -535,7 +609,9 @@ export function ClientProfileForm({
                     <button
                       key={option.labelKey}
                       type="button"
-                      onClick={() => setStatus(option.value)}
+                      onClick={() =>
+                        dispatchForm({ type: 'status', value: option.value })
+                      }
                       className={`h-10 rounded-xl border text-[12px] font-medium transition-all duration-150 ${
                         active
                           ? 'border-primary bg-primary/12 text-ink'
@@ -574,7 +650,13 @@ export function ClientProfileForm({
               )}
               <input
                 value={tagInput}
-                onChange={(event) => setTagInput(event.target.value)}
+                onChange={(event) =>
+                  dispatchForm({
+                    type: 'field',
+                    name: 'tagInput',
+                    value: event.target.value,
+                  })
+                }
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();

@@ -1,11 +1,54 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { Loader2, Save, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { accountsApi } from '@/features/accounts/api';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
+
+/**
+ * Soul 编辑器的异步状态：加载中、保存中、切换开关中与错误提示。
+ *
+ * 这几者都围绕同一组远程读写流转，故合并为 reducer；内容与开关本身仍是独立 state。
+ */
+interface SoulStatus {
+  loading: boolean;
+  saving: boolean;
+  savingEditEnabled: boolean;
+  error: string;
+}
+
+type SoulStatusAction =
+  | { type: 'loadStart' }
+  | { type: 'loadEnd' }
+  | { type: 'saveStart' }
+  | { type: 'saveEnd' }
+  | { type: 'toggleStart' }
+  | { type: 'toggleEnd' }
+  | { type: 'error'; message: string };
+
+function soulStatusReducer(
+  state: SoulStatus,
+  action: SoulStatusAction,
+): SoulStatus {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true, error: '' };
+    case 'loadEnd':
+      return { ...state, loading: false };
+    case 'saveStart':
+      return { ...state, saving: true, error: '' };
+    case 'saveEnd':
+      return { ...state, saving: false };
+    case 'toggleStart':
+      return { ...state, savingEditEnabled: true, error: '' };
+    case 'toggleEnd':
+      return { ...state, savingEditEnabled: false };
+    case 'error':
+      return { ...state, error: action.message };
+  }
+}
 
 /**
  * 用户级 Soul 编辑器。
@@ -18,18 +61,20 @@ export function UserSoulCard() {
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
   const [editEnabled, setEditEnabled] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [savingEditEnabled, setSavingEditEnabled] = useState(false);
-  const [error, setError] = useState('');
+  const [status, statusDispatch] = useReducer(soulStatusReducer, {
+    loading: true,
+    saving: false,
+    savingEditEnabled: false,
+    error: '',
+  });
+  const { loading, saving, savingEditEnabled, error } = status;
   const dirty = content !== savedContent;
 
   useEffect(() => {
     let alive = true;
 
     async function loadSoul() {
-      setLoading(true);
-      setError('');
+      statusDispatch({ type: 'loadStart' });
       try {
         const result = await accountsApi.getUserSoul();
         if (!alive) return;
@@ -38,9 +83,13 @@ export function UserSoulCard() {
         setEditEnabled(result.edit_enabled);
       } catch (err) {
         if (!alive) return;
-        setError(err instanceof Error ? err.message : t('pages.persona.loadFailed'));
+        statusDispatch({
+          type: 'error',
+          message:
+            err instanceof Error ? err.message : t('pages.persona.loadFailed'),
+        });
       } finally {
-        if (alive) setLoading(false);
+        if (alive) statusDispatch({ type: 'loadEnd' });
       }
     }
 
@@ -52,16 +101,19 @@ export function UserSoulCard() {
 
   const saveSoul = async () => {
     if (!dirty || saving) return;
-    setSaving(true);
-    setError('');
+    statusDispatch({ type: 'saveStart' });
     try {
       await accountsApi.updateUserSoul(content, editEnabled);
       setSavedContent(content);
       toast('success', t('pages.persona.saved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('pages.persona.saveFailed'));
+      statusDispatch({
+        type: 'error',
+        message:
+          err instanceof Error ? err.message : t('pages.persona.saveFailed'),
+      });
     } finally {
-      setSaving(false);
+      statusDispatch({ type: 'saveEnd' });
     }
   };
 
@@ -69,8 +121,7 @@ export function UserSoulCard() {
     if (loading || saving || savingEditEnabled) return;
     const nextValue = !editEnabled;
     setEditEnabled(nextValue);
-    setSavingEditEnabled(true);
-    setError('');
+    statusDispatch({ type: 'toggleStart' });
     try {
       await accountsApi.updateUserSoulEditEnabled(nextValue);
       toast(
@@ -81,11 +132,15 @@ export function UserSoulCard() {
       );
     } catch (err) {
       setEditEnabled(!nextValue);
-      setError(
-        err instanceof Error ? err.message : t('pages.persona.editToggleFailed'),
-      );
+      statusDispatch({
+        type: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : t('pages.persona.editToggleFailed'),
+      });
     } finally {
-      setSavingEditEnabled(false);
+      statusDispatch({ type: 'toggleEnd' });
     }
   };
 

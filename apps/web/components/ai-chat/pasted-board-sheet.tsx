@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ClipboardPaste } from 'lucide-react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
@@ -29,6 +29,29 @@ interface PastedBoardSheetProps {
  * @param props.onClose 关闭弹层回调；提交中会被阻止，避免丢失正在发送的盘面。
  * @param props.onSubmit 通过基础校验后的提交回调。
  */
+/** 自贴盘面表单草稿：类型与原文是同一份表单输入，打开弹层时一并重置。 */
+interface DraftState {
+  category: string;
+  content: string;
+}
+
+/** 草稿动作；'reset' 在弹层打开时一次性写入完整草稿快照，避免 effect 内多次 setState。 */
+type DraftAction =
+  | { type: 'reset'; category: string; content: string }
+  | { type: 'set-category'; value: string }
+  | { type: 'set-content'; value: string };
+
+function draftReducer(state: DraftState, action: DraftAction): DraftState {
+  switch (action.type) {
+    case 'reset':
+      return { category: action.category, content: action.content };
+    case 'set-category':
+      return { ...state, category: action.value };
+    case 'set-content':
+      return { ...state, content: action.value };
+  }
+}
+
 export function PastedBoardSheet({
   open,
   initialContent,
@@ -43,8 +66,13 @@ export function PastedBoardSheet({
     return catalog.map((item) => item.name);
   }, [catalog]);
 
-  const [category, setCategory] = useState(categoryOptions[0] ?? '');
-  const [content, setContent] = useState(initialContent);
+  // category/content 是同一份表单草稿（打开弹层时一并重置），合并到 reducer；
+  // submitting 是独立的异步提交生命周期，保持单独 state。
+  const [draft, dispatchDraft] = useReducer(draftReducer, {
+    category: categoryOptions[0] ?? '',
+    content: initialContent,
+  });
+  const { category, content } = draft;
   const [submitting, setSubmitting] = useState(false);
   const wasOpenRef = useRef(false);
 
@@ -56,8 +84,11 @@ export function PastedBoardSheet({
     }
     if (wasOpenRef.current) return;
     wasOpenRef.current = true;
-    setCategory(categoryOptions[0] ?? '');
-    setContent(initialContent);
+    dispatchDraft({
+      type: 'reset',
+      category: categoryOptions[0] ?? '',
+      content: initialContent,
+    });
   }, [categoryOptions, initialContent, open]);
 
   const trimmedCategory = category.trim();
@@ -147,7 +178,12 @@ export function PastedBoardSheet({
                 : undefined
             }
             value={category}
-            onChange={(event) => setCategory(event.currentTarget.value)}
+            onChange={(event) =>
+              dispatchDraft({
+                type: 'set-category',
+                value: event.currentTarget.value,
+              })
+            }
             disabled={busy}
             placeholder={t('aiChat.pastedBoard.categoryPlaceholder')}
             className="w-full rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] text-ink focus:border-primary/40 focus:outline-none disabled:opacity-50"
@@ -174,7 +210,12 @@ export function PastedBoardSheet({
           <textarea
             id="pasted-board-content"
             value={content}
-            onChange={(event) => setContent(event.currentTarget.value)}
+            onChange={(event) =>
+              dispatchDraft({
+                type: 'set-content',
+                value: event.currentTarget.value,
+              })
+            }
             disabled={busy}
             rows={10}
             className="min-h-[180px] max-h-[38dvh] w-full resize-y rounded-2xl border border-hairline bg-surface-card px-3 py-2.5 text-[13px] leading-6 text-ink placeholder:text-muted/60 focus:border-primary/40 focus:outline-none disabled:opacity-50 sm:min-h-[220px] sm:max-h-none"

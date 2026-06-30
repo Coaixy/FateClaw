@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   useState,
 } from 'react';
@@ -152,6 +153,207 @@ function findSelectedOfficialModel(
   );
 }
 
+// ===== 模型设置工具条状态 =====
+// 模型总览、加载态、错误信息与工具条忙碌标记在加载/切换模型时总是成组变化，
+// 拆成多个 useState 会触发级联渲染、也让加载生命周期难以追踪，故合并为一个 reducer。
+type ModelSettingsState = {
+  overview: ModelSettingsOverview | null;
+  loading: boolean;
+  error: string;
+  toolbarBusy: ModelToolbarBusy;
+};
+
+type ModelSettingsAction =
+  | { type: 'loadStart' }
+  | { type: 'loadSuccess'; overview: ModelSettingsOverview }
+  | { type: 'loadError'; error: string }
+  | { type: 'setToolbarBusy'; value: ModelToolbarBusy }
+  | { type: 'reset' };
+
+const INITIAL_MODEL_SETTINGS_STATE: ModelSettingsState = {
+  overview: null,
+  loading: false,
+  error: '',
+  toolbarBusy: '',
+};
+
+function modelSettingsReducer(
+  state: ModelSettingsState,
+  action: ModelSettingsAction,
+): ModelSettingsState {
+  switch (action.type) {
+    case 'loadStart':
+      // 仅切到加载中并清空旧错误，工具条忙碌标记保持不变（与原始 setState 一致）。
+      return { ...state, loading: true, error: '' };
+    case 'loadSuccess':
+      return { ...state, overview: action.overview, loading: false };
+    case 'loadError':
+      return { ...state, overview: null, loading: false, error: action.error };
+    case 'setToolbarBusy':
+      return { ...state, toolbarBusy: action.value };
+    case 'reset':
+      return INITIAL_MODEL_SETTINGS_STATE;
+    default:
+      return state;
+  }
+}
+
+// ===== 术数目录状态 =====
+// 目录列表与加载态由工作台统一拉取、成组变化。
+type PaipanCatalogState = {
+  items: PaipanCatalogItem[];
+  loading: boolean;
+};
+
+type PaipanCatalogAction =
+  | { type: 'load' }
+  | { type: 'success'; items: PaipanCatalogItem[] }
+  | { type: 'error' };
+
+const INITIAL_PAIPAN_CATALOG_STATE: PaipanCatalogState = {
+  items: [],
+  loading: false,
+};
+
+function paipanCatalogReducer(
+  state: PaipanCatalogState,
+  action: PaipanCatalogAction,
+): PaipanCatalogState {
+  switch (action.type) {
+    case 'load':
+      return { items: [], loading: true };
+    case 'success':
+      return { items: action.items, loading: false };
+    case 'error':
+      return { items: [], loading: false };
+    default:
+      return state;
+  }
+}
+
+// ===== 排盘弹层开合配置 =====
+// 弹层模式、预选术数、是否锁定术数、预选客户 id 总是被同一个打开/关闭动作整体改写。
+type PaipanSheetConfigState = {
+  mode: PaipanSheetMode | null;
+  skill: string | null;
+  lockSkill: boolean;
+  clientId: string | null;
+};
+
+type PaipanSheetConfigAction =
+  | { type: 'openPreChat'; skill?: string }
+  | { type: 'openCurrentSession'; skill?: string }
+  | { type: 'openForClient'; clientId: string }
+  | { type: 'close' };
+
+const INITIAL_PAIPAN_SHEET_CONFIG_STATE: PaipanSheetConfigState = {
+  mode: null,
+  skill: null,
+  lockSkill: false,
+  clientId: null,
+};
+
+function paipanSheetConfigReducer(
+  state: PaipanSheetConfigState,
+  action: PaipanSheetConfigAction,
+): PaipanSheetConfigState {
+  switch (action.type) {
+    case 'openPreChat':
+      // 仅改写模式/术数/锁定，保留既有客户预选（与原 openPreChatPaipan 一致）。
+      return {
+        ...state,
+        mode: 'pre-chat',
+        skill: action.skill ?? null,
+        lockSkill: Boolean(action.skill),
+      };
+    case 'openCurrentSession':
+      return {
+        ...state,
+        mode: 'current-session',
+        skill: action.skill ?? null,
+        lockSkill: Boolean(action.skill),
+      };
+    case 'openForClient':
+      // 客户卡片"发起排盘"：默认八字、不锁定、记录客户 id。
+      return {
+        mode: 'pre-chat',
+        skill: 'bazi-paipan',
+        lockSkill: false,
+        clientId: action.clientId,
+      };
+    case 'close':
+      return INITIAL_PAIPAN_SHEET_CONFIG_STATE;
+    default:
+      return state;
+  }
+}
+
+// ===== 粘贴成盘弹层草稿 =====
+// 草稿内容、弹层开合、草稿来源在打开弹层时一起写入；来源决定提交后是否清空输入框。
+type PastedBoardState = {
+  draft: string;
+  sheetOpen: boolean;
+  draftSource: PastedBoardDraftSource;
+};
+
+type PastedBoardAction =
+  | { type: 'open'; draft: string; source: PastedBoardDraftSource }
+  | { type: 'close' };
+
+const INITIAL_PASTED_BOARD_STATE: PastedBoardState = {
+  draft: '',
+  sheetOpen: false,
+  draftSource: 'manual',
+};
+
+function pastedBoardReducer(
+  state: PastedBoardState,
+  action: PastedBoardAction,
+): PastedBoardState {
+  switch (action.type) {
+    case 'open':
+      return {
+        draft: action.draft,
+        sheetOpen: true,
+        draftSource: action.source,
+      };
+    case 'close':
+      return { ...state, sheetOpen: false };
+    default:
+      return state;
+  }
+}
+
+// ===== 粘贴选择气泡 =====
+// 用户在输入框粘贴疑似排盘文本时，记录候选文本与原选区，供"作为盘面/作为消息"二选一。
+type PasteChoiceState = {
+  text: string;
+  selection: PasteChoiceSelection | null;
+};
+
+type PasteChoiceAction =
+  | { type: 'prompt'; text: string; selection: PasteChoiceSelection }
+  | { type: 'clear' };
+
+const INITIAL_PASTE_CHOICE_STATE: PasteChoiceState = {
+  text: '',
+  selection: null,
+};
+
+function pasteChoiceReducer(
+  state: PasteChoiceState,
+  action: PasteChoiceAction,
+): PasteChoiceState {
+  switch (action.type) {
+    case 'prompt':
+      return { text: action.text, selection: action.selection };
+    case 'clear':
+      return INITIAL_PASTE_CHOICE_STATE;
+    default:
+      return state;
+  }
+}
+
 export function AiChatWorkspace() {
   return (
     <Suspense
@@ -194,32 +396,32 @@ function AiChatWorkspaceContent() {
     touchSession,
   } = useChatSessions();
   const [input, setInput] = useState('');
-  const [paipanSheetMode, setPaipanSheetMode] =
-    useState<PaipanSheetMode | null>(null);
-  const [paipanCatalog, setPaipanCatalog] = useState<PaipanCatalogItem[]>([]);
-  const [paipanCatalogLoading, setPaipanCatalogLoading] = useState(false);
-  const [preselectedPaipanSkill, setPreselectedPaipanSkill] = useState<
-    string | null
-  >(null);
-  const [lockPaipanSkill, setLockPaipanSkill] = useState(false);
-  // 从客户卡片"发起排盘"带入的客户 id，开排盘时自动预选并预填生辰。
-  const [preselectedClientId, setPreselectedClientId] = useState<string | null>(
-    null,
+  // 排盘弹层开合配置（模式 / 预选术数 / 锁定 / 预选客户 id）合并为单一 reducer。
+  const [paipanSheetConfig, dispatchPaipanSheetConfig] = useReducer(
+    paipanSheetConfigReducer,
+    INITIAL_PAIPAN_SHEET_CONFIG_STATE,
   );
-  const [pastedBoardDraft, setPastedBoardDraft] = useState('');
-  const [pastedBoardSheetOpen, setPastedBoardSheetOpen] = useState(false);
-  const [pastedBoardDraftSource, setPastedBoardDraftSource] =
-    useState<PastedBoardDraftSource>('manual');
-  const [pasteChoiceText, setPasteChoiceText] = useState('');
-  const [pasteChoiceSelection, setPasteChoiceSelection] =
-    useState<PasteChoiceSelection | null>(null);
+  // 术数目录列表与加载态。
+  const [paipanCatalogState, dispatchPaipanCatalog] = useReducer(
+    paipanCatalogReducer,
+    INITIAL_PAIPAN_CATALOG_STATE,
+  );
+  // 粘贴成盘弹层草稿（内容 / 开合 / 来源）。
+  const [pastedBoardSheet, dispatchPastedBoard] = useReducer(
+    pastedBoardReducer,
+    INITIAL_PASTED_BOARD_STATE,
+  );
+  // 输入框粘贴疑似排盘文本时的二选一气泡（候选文本 + 原选区）。
+  const [pasteChoice, dispatchPasteChoice] = useReducer(
+    pasteChoiceReducer,
+    INITIAL_PASTE_CHOICE_STATE,
+  );
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
-  const [modelOverview, setModelOverview] =
-    useState<ModelSettingsOverview | null>(null);
-  const [modelSettingsLoading, setModelSettingsLoading] = useState(false);
-  const [modelSettingsError, setModelSettingsError] = useState('');
-  const [modelToolbarBusy, setModelToolbarBusy] =
-    useState<ModelToolbarBusy>('');
+  // 模型设置工具条状态（总览 / 加载 / 错误 / 忙碌标记）。
+  const [modelSettings, dispatchModelSettings] = useReducer(
+    modelSettingsReducer,
+    INITIAL_MODEL_SETTINGS_STATE,
+  );
   const wasSendingRef = useRef(false);
   const stopRequestedRef = useRef(false);
   const modelSettingsRequestIdRef = useRef(0);
@@ -272,35 +474,30 @@ function AiChatWorkspaceContent() {
 
     const requestId = modelSettingsRequestIdRef.current + 1;
     modelSettingsRequestIdRef.current = requestId;
-    setModelSettingsLoading(true);
-    setModelSettingsError('');
+    dispatchModelSettings({ type: 'loadStart' });
 
     try {
       const data = await modelSettingsApi.overview();
       if (modelSettingsRequestIdRef.current !== requestId) return;
-      setModelOverview(data);
+      // 加载完成时一并落定 loading=false（旧实现由 finally 的 requestId 守卫完成，
+      // 这里因前置 return 守卫等价：仅当请求未过期才 dispatch）。
+      dispatchModelSettings({ type: 'loadSuccess', overview: data });
     } catch (error) {
       if (modelSettingsRequestIdRef.current !== requestId) return;
-      setModelOverview(null);
-      setModelSettingsError(
-        error instanceof Error
-          ? error.message
-          : t('aiChat.loadModelSettingsFailed'),
-      );
-    } finally {
-      if (modelSettingsRequestIdRef.current === requestId) {
-        setModelSettingsLoading(false);
-      }
+      dispatchModelSettings({
+        type: 'loadError',
+        error:
+          error instanceof Error
+            ? error.message
+            : t('aiChat.loadModelSettingsFailed'),
+      });
     }
   }, [authLoading, chatAvailable, t]);
 
   useEffect(() => {
     if (!chatAvailable || authLoading) {
       modelSettingsRequestIdRef.current += 1;
-      setModelOverview(null);
-      setModelSettingsLoading(false);
-      setModelSettingsError('');
-      setModelToolbarBusy('');
+      dispatchModelSettings({ type: 'reset' });
       return;
     }
 
@@ -309,8 +506,7 @@ function AiChatWorkspaceContent() {
 
   useEffect(() => {
     let cancelled = false;
-    setPaipanCatalog([]);
-    setPaipanCatalogLoading(true);
+    dispatchPaipanCatalog({ type: 'load' });
 
     const cancelIdleTask = scheduleIdleTask(() => {
       if (cancelled) return;
@@ -320,22 +516,18 @@ function AiChatWorkspaceContent() {
         .catalog()
         .then((items) => {
           if (cancelled) return;
-          setPaipanCatalog(items);
+          // success/error 各自把 loading 落定为 false（原 finally 的职责合并进来）。
+          dispatchPaipanCatalog({ type: 'success', items });
         })
         .catch((error) => {
           if (cancelled) return;
-          setPaipanCatalog([]);
+          dispatchPaipanCatalog({ type: 'error' });
           toast(
             'error',
             error instanceof Error
               ? error.message
               : t('aiChat.loadPaipanFailed'),
           );
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setPaipanCatalogLoading(false);
-          }
         });
     });
 
@@ -398,17 +590,14 @@ function AiChatWorkspaceContent() {
 
   const openPastedBoardSheet = useCallback(
     (content = '', source: PastedBoardDraftSource = 'manual') => {
-      setPastedBoardDraft(content);
-      setPastedBoardDraftSource(source);
-      setPastedBoardSheetOpen(true);
-      setPasteChoiceText('');
-      setPasteChoiceSelection(null);
+      dispatchPastedBoard({ type: 'open', draft: content, source });
+      dispatchPasteChoice({ type: 'clear' });
     },
     [],
   );
 
   const closePastedBoardSheet = useCallback(() => {
-    setPastedBoardSheetOpen(false);
+    dispatchPastedBoard({ type: 'close' });
   }, []);
 
   const handleComposerPaste = useCallback(
@@ -421,41 +610,43 @@ function AiChatWorkspaceContent() {
       if (!shouldPromptForPastedBoard(text)) return;
 
       event.preventDefault();
-      setPasteChoiceSelection({
-        start: event.currentTarget.selectionStart,
-        end: event.currentTarget.selectionEnd,
+      dispatchPasteChoice({
+        type: 'prompt',
+        text,
+        selection: {
+          start: event.currentTarget.selectionStart,
+          end: event.currentTarget.selectionEnd,
+        },
       });
-      setPasteChoiceText(text);
     },
     [chatAvailable, continuationBlocked, chatMessages.sending],
   );
 
   const handleUsePasteAsBoard = useCallback(() => {
-    openPastedBoardSheet(pasteChoiceText, 'paste');
-    setPasteChoiceText('');
-    setPasteChoiceSelection(null);
-  }, [openPastedBoardSheet, pasteChoiceText]);
+    // openPastedBoardSheet 内部已清空气泡，这里再清一次保持与原实现一致。
+    openPastedBoardSheet(pasteChoice.text, 'paste');
+    dispatchPasteChoice({ type: 'clear' });
+  }, [openPastedBoardSheet, pasteChoice.text]);
 
   const handleKeepPasteAsMessage = useCallback(() => {
-    if (!pasteChoiceText) return;
+    if (!pasteChoice.text) return;
     setInput((previous) => {
       if (
-        pasteChoiceSelection &&
-        pasteChoiceSelection.start >= 0 &&
-        pasteChoiceSelection.end >= pasteChoiceSelection.start &&
-        pasteChoiceSelection.end <= previous.length
+        pasteChoice.selection &&
+        pasteChoice.selection.start >= 0 &&
+        pasteChoice.selection.end >= pasteChoice.selection.start &&
+        pasteChoice.selection.end <= previous.length
       ) {
-        const beforeSelection = previous.slice(0, pasteChoiceSelection.start);
-        const afterSelection = previous.slice(pasteChoiceSelection.end);
-        return `${beforeSelection}${pasteChoiceText}${afterSelection}`;
+        const beforeSelection = previous.slice(0, pasteChoice.selection.start);
+        const afterSelection = previous.slice(pasteChoice.selection.end);
+        return `${beforeSelection}${pasteChoice.text}${afterSelection}`;
       }
 
       const separator = previous && !previous.endsWith('\n') ? '\n' : '';
-      return `${previous}${separator}${pasteChoiceText}`;
+      return `${previous}${separator}${pasteChoice.text}`;
     });
-    setPasteChoiceText('');
-    setPasteChoiceSelection(null);
-  }, [pasteChoiceSelection, pasteChoiceText]);
+    dispatchPasteChoice({ type: 'clear' });
+  }, [pasteChoice.selection, pasteChoice.text]);
 
   const handlePastedBoardSubmit = useCallback(
     (pastedBoard: UserPastedBoardInput) => {
@@ -478,9 +669,9 @@ function AiChatWorkspaceContent() {
       startUserPastedBoardSubmission({
         pastedBoard,
         sendMessage: chatMessages.sendMessageWithOptions,
-        closeSheet: () => setPastedBoardSheetOpen(false),
+        closeSheet: () => dispatchPastedBoard({ type: 'close' }),
         clearComposerInput:
-          pastedBoardDraftSource === 'composer'
+          pastedBoardSheet.draftSource === 'composer'
             ? () => setInput('')
             : undefined,
         onSendFailure: () => {
@@ -494,7 +685,7 @@ function AiChatWorkspaceContent() {
       continuationBlocked,
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
-      pastedBoardDraftSource,
+      pastedBoardSheet.draftSource,
       requestLogin,
       t,
       toast,
@@ -576,9 +767,7 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      setPreselectedPaipanSkill(skill ?? null);
-      setLockPaipanSkill(Boolean(skill));
-      setPaipanSheetMode('pre-chat');
+      dispatchPaipanSheetConfig({ type: 'openPreChat', skill });
     },
     [authLoading],
   );
@@ -589,11 +778,11 @@ function AiChatWorkspaceContent() {
 
   const selectOfficialModel = useCallback(
     async (officialModelId: string) => {
-      if (!modelOverview || modelToolbarBusy || !officialModelId) {
+      if (!modelSettings.overview || modelSettings.toolbarBusy || !officialModelId) {
         return;
       }
 
-      const officialModels = getAvailableOfficialModels(modelOverview);
+      const officialModels = getAvailableOfficialModels(modelSettings.overview);
       const nextModel = officialModels.find(
         (model) => model.id === officialModelId,
       );
@@ -603,15 +792,15 @@ function AiChatWorkspaceContent() {
       }
 
       if (
-        modelOverview.selection?.source === 'official' &&
-        modelOverview.selection.official_model_id === nextModel.id
+        modelSettings.overview.selection?.source === 'official' &&
+        modelSettings.overview.selection.official_model_id === nextModel.id
       ) {
         return;
       }
 
-      const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
+      const thinkingLevel = resolveToolbarThinkingLevel(modelSettings.overview);
 
-      setModelToolbarBusy('model');
+      dispatchModelSettings({ type: 'setToolbarBusy', value: 'model' });
       try {
         await modelSettingsApi.select({
           source: 'official',
@@ -628,13 +817,13 @@ function AiChatWorkspaceContent() {
             : t('aiChat.switchModelFailed'),
         );
       } finally {
-        setModelToolbarBusy('');
+        dispatchModelSettings({ type: 'setToolbarBusy', value: '' });
       }
     },
     [
       loadModelSettings,
-      modelOverview,
-      modelToolbarBusy,
+      modelSettings.overview,
+      modelSettings.toolbarBusy,
       onboardingGuide,
       t,
       toast,
@@ -643,30 +832,41 @@ function AiChatWorkspaceContent() {
 
   const selectThinkingLevel = useCallback(
     async (nextThinkingLevel: ModelThinkingLevel) => {
-      if (!modelOverview || modelToolbarBusy || !modelOverview.selection) {
+      if (
+        !modelSettings.overview ||
+        modelSettings.toolbarBusy ||
+        !modelSettings.overview.selection
+      ) {
         return;
       }
 
-      if (nextThinkingLevel === resolveToolbarThinkingLevel(modelOverview)) {
+      if (
+        nextThinkingLevel === resolveToolbarThinkingLevel(modelSettings.overview)
+      ) {
         return;
       }
 
-      const selectedOfficial = findSelectedOfficialModel(modelOverview);
-      const fallbackOfficial = getAvailableOfficialModels(modelOverview)[0];
+      const selectedOfficial = findSelectedOfficialModel(modelSettings.overview);
+      const fallbackOfficial = getAvailableOfficialModels(
+        modelSettings.overview,
+      )[0];
       const officialModelId =
-        modelOverview.selection.source === 'official'
+        modelSettings.overview.selection.source === 'official'
           ? (selectedOfficial?.id ?? fallbackOfficial?.id ?? null)
           : null;
 
-      if (modelOverview.selection.source === 'official' && !officialModelId) {
+      if (
+        modelSettings.overview.selection.source === 'official' &&
+        !officialModelId
+      ) {
         toast('error', t('aiChat.noAvailableOfficialModel'));
         return;
       }
 
-      setModelToolbarBusy('thinking');
+      dispatchModelSettings({ type: 'setToolbarBusy', value: 'thinking' });
       try {
         await modelSettingsApi.select({
-          source: modelOverview.selection.source,
+          source: modelSettings.overview.selection.source,
           official_model_id: officialModelId,
           thinking_level: nextThinkingLevel,
         });
@@ -680,13 +880,13 @@ function AiChatWorkspaceContent() {
             : t('aiChat.switchThinkingFailed'),
         );
       } finally {
-        setModelToolbarBusy('');
+        dispatchModelSettings({ type: 'setToolbarBusy', value: '' });
       }
     },
     [
       loadModelSettings,
-      modelOverview,
-      modelToolbarBusy,
+      modelSettings.overview,
+      modelSettings.toolbarBusy,
       onboardingGuide,
       t,
       toast,
@@ -716,18 +916,13 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      setPreselectedPaipanSkill(skill ?? null);
-      setLockPaipanSkill(Boolean(skill));
-      setPaipanSheetMode('current-session');
+      dispatchPaipanSheetConfig({ type: 'openCurrentSession', skill });
     },
     [authLoading, continuationBlocked],
   );
 
   const handleClosePaipanSheet = useCallback(() => {
-    setPaipanSheetMode(null);
-    setPreselectedPaipanSkill(null);
-    setLockPaipanSkill(false);
-    setPreselectedClientId(null);
+    dispatchPaipanSheetConfig({ type: 'close' });
   }, []);
 
   // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
@@ -741,10 +936,7 @@ function AiChatWorkspaceContent() {
       return;
     }
     clientParamHandledRef.current = true;
-    setPreselectedClientId(clientId);
-    setPreselectedPaipanSkill('bazi-paipan');
-    setLockPaipanSkill(false);
-    setPaipanSheetMode('pre-chat');
+    dispatchPaipanSheetConfig({ type: 'openForClient', clientId });
     // 清掉 URL 上的 client 参数，避免刷新或重渲染重复触发。
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -777,27 +969,31 @@ function AiChatWorkspaceContent() {
   ]);
   const pastedBoardDisabled =
     authLoading || chatMessages.sending || continuationBlocked;
-  const availableOfficialModels = getAvailableOfficialModels(modelOverview);
-  const selectedOfficialModel = findSelectedOfficialModel(modelOverview);
+  const availableOfficialModels = getAvailableOfficialModels(
+    modelSettings.overview,
+  );
+  const selectedOfficialModel = findSelectedOfficialModel(
+    modelSettings.overview,
+  );
   const modelControlsDisabled =
     authLoading ||
     !chatAvailable ||
     chatMessages.sending ||
     continuationBlocked;
   const canSelectOfficialModel =
-    !modelSettingsError && availableOfficialModels.length > 0;
+    !modelSettings.error && availableOfficialModels.length > 0;
   const canSelectThinkingLevel =
-    !modelSettingsError && Boolean(modelOverview?.selection);
-  const aiControlTitle = modelSettingsError;
-  const modelSwitchLabel = modelSettingsLoading
+    !modelSettings.error && Boolean(modelSettings.overview?.selection);
+  const aiControlTitle = modelSettings.error;
+  const modelSwitchLabel = modelSettings.loading
     ? t('aiChat.toolbar.loading')
-    : modelSettingsError
+    : modelSettings.error
       ? t('aiChat.toolbar.unavailable')
       : (selectedOfficialModel?.display_name ??
         (availableOfficialModels.length > 0
           ? t('aiChat.toolbar.officialModel')
           : t('aiChat.toolbar.noOfficialModel')));
-  const thinkingLevel = resolveToolbarThinkingLevel(modelOverview);
+  const thinkingLevel = resolveToolbarThinkingLevel(modelSettings.overview);
   const thinkingSwitchLabel = t(`aiChat.thinkingLevels.${thinkingLevel}`);
   const paipanActionTitle = t('aiChat.toolbar.jointPaipan');
   const composer = (
@@ -811,28 +1007,27 @@ function AiChatWorkspaceContent() {
       paipanAction={
         selectedSession
           ? {
-              loading: paipanCatalogLoading,
+              loading: paipanCatalogState.loading,
               disabled:
                 authLoading ||
                 chatMessages.sending ||
                 continuationBlocked ||
-                paipanCatalogLoading ||
-                paipanCatalog.length === 0,
+                paipanCatalogState.loading ||
+                paipanCatalogState.items.length === 0,
               title: paipanActionTitle,
               onOpen: () => openCurrentSessionPaipan(),
             }
           : undefined
       }
-      pasteChoiceOpen={Boolean(pasteChoiceText)}
-      pasteChoicePreview={pasteChoiceText}
+      pasteChoiceOpen={Boolean(pasteChoice.text)}
+      pasteChoicePreview={pasteChoice.text}
       onInputChange={handleInputChange}
       onPaste={handleComposerPaste}
       onKeyDown={handleKeyDown}
       onUsePasteAsBoard={handleUsePasteAsBoard}
       onKeepPasteAsMessage={handleKeepPasteAsMessage}
       onDismissPasteChoice={() => {
-        setPasteChoiceText('');
-        setPasteChoiceSelection(null);
+        dispatchPasteChoice({ type: 'clear' });
       }}
       onSend={() => void handleSend()}
       onStop={handleStopGenerating}
@@ -848,12 +1043,12 @@ function AiChatWorkspaceContent() {
       {selectedSession ? (
         <ChatToolStrip
           modelLabel={modelSwitchLabel}
-          modelLoading={modelSettingsLoading}
-          modelBusy={modelToolbarBusy === 'model'}
+          modelLoading={modelSettings.loading}
+          modelBusy={modelSettings.toolbarBusy === 'model'}
           modelDisabled={
             modelControlsDisabled ||
-            modelSettingsLoading ||
-            Boolean(modelToolbarBusy) ||
+            modelSettings.loading ||
+            Boolean(modelSettings.toolbarBusy) ||
             !canSelectOfficialModel
           }
           modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
@@ -861,11 +1056,11 @@ function AiChatWorkspaceContent() {
           officialModels={availableOfficialModels}
           onSelectModel={selectOfficialModel}
           thinkingLabel={thinkingSwitchLabel}
-          thinkingBusy={modelToolbarBusy === 'thinking'}
+          thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
           thinkingDisabled={
             modelControlsDisabled ||
-            modelSettingsLoading ||
-            Boolean(modelToolbarBusy) ||
+            modelSettings.loading ||
+            Boolean(modelSettings.toolbarBusy) ||
             !canSelectThinkingLevel
           }
           thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
@@ -874,8 +1069,8 @@ function AiChatWorkspaceContent() {
         />
       ) : (
         <PaipanSkillRail
-          catalog={paipanCatalog}
-          loading={paipanCatalogLoading}
+          catalog={paipanCatalogState.items}
+          loading={paipanCatalogState.loading}
           disabled={authLoading || chatMessages.sending}
           pastedBoardDisabled={pastedBoardDisabled}
           onSelectSkill={(skill) => openPreChatPaipan(skill)}
@@ -932,12 +1127,12 @@ function AiChatWorkspaceContent() {
             <div className="mb-1.5">
               <ChatToolStrip
                 modelLabel={modelSwitchLabel}
-                modelLoading={modelSettingsLoading}
-                modelBusy={modelToolbarBusy === 'model'}
+                modelLoading={modelSettings.loading}
+                modelBusy={modelSettings.toolbarBusy === 'model'}
                 modelDisabled={
                   modelControlsDisabled ||
-                  modelSettingsLoading ||
-                  Boolean(modelToolbarBusy) ||
+                  modelSettings.loading ||
+                  Boolean(modelSettings.toolbarBusy) ||
                   !canSelectOfficialModel
                 }
                 modelTitle={
@@ -947,11 +1142,11 @@ function AiChatWorkspaceContent() {
                 officialModels={availableOfficialModels}
                 onSelectModel={selectOfficialModel}
                 thinkingLabel={thinkingSwitchLabel}
-                thinkingBusy={modelToolbarBusy === 'thinking'}
+                thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
                 thinkingDisabled={
                   modelControlsDisabled ||
-                  modelSettingsLoading ||
-                  Boolean(modelToolbarBusy) ||
+                  modelSettings.loading ||
+                  Boolean(modelSettings.toolbarBusy) ||
                   !canSelectThinkingLevel
                 }
                 thinkingTitle={
@@ -971,17 +1166,17 @@ function AiChatWorkspaceContent() {
       )}
 
       <PaipanSheet
-        open={paipanSheetMode !== null}
-        mode={paipanSheetMode ?? 'pre-chat'}
-        catalog={paipanCatalog}
-        catalogLoading={paipanCatalogLoading}
+        open={paipanSheetConfig.mode !== null}
+        mode={paipanSheetConfig.mode ?? 'pre-chat'}
+        catalog={paipanCatalogState.items}
+        catalogLoading={paipanCatalogState.loading}
         sessionId={selectedSession || undefined}
-        initialSkill={preselectedPaipanSkill}
-        initialClientId={preselectedClientId}
-        lockSkill={lockPaipanSkill}
+        initialSkill={paipanSheetConfig.skill}
+        initialClientId={paipanSheetConfig.clientId}
+        lockSkill={paipanSheetConfig.lockSkill}
         canCommit={
           chatAvailable &&
-          (paipanSheetMode !== 'current-session' || !continuationBlocked)
+          (paipanSheetConfig.mode !== 'current-session' || !continuationBlocked)
         }
         onClose={handleClosePaipanSheet}
         onAuthRequired={() => requestLogin(input)}
@@ -989,9 +1184,9 @@ function AiChatWorkspaceContent() {
       />
 
       <PastedBoardSheet
-        open={pastedBoardSheetOpen}
-        initialContent={pastedBoardDraft}
-        catalog={paipanCatalog}
+        open={pastedBoardSheet.sheetOpen}
+        initialContent={pastedBoardSheet.draft}
+        catalog={paipanCatalogState.items}
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
       />

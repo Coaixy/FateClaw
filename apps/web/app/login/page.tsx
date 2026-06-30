@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useReducer, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
@@ -16,6 +16,128 @@ const AUTH_MODES: ReadonlyArray<readonly [AuthMode, string]> = [
   ['login', 'login.authModes.login'],
   ['register', 'login.authModes.register'],
 ];
+
+/**
+ * 登录/注册表单中「用户可编辑 + 即时校验提示」的一组状态。
+ *
+ * 它们在切换登录注册、重新校验时经常被一起清空，故合并为一个 reducer。
+ */
+interface LoginFormState {
+  mode: AuthMode;
+  phone: string;
+  password: string;
+  showPassword: boolean;
+  phoneError: string;
+  error: string;
+  smsCaptchaCode: string;
+  captchaInput: string;
+}
+
+const initialLoginForm: LoginFormState = {
+  mode: 'login',
+  phone: '',
+  password: '',
+  showPassword: false,
+  phoneError: '',
+  error: '',
+  smsCaptchaCode: '',
+  captchaInput: '',
+};
+
+// setText 仅覆盖类型为 string 的字段，保证计算属性写入的类型安全。
+type LoginFormAction =
+  | {
+      type: 'setText';
+      field:
+        | 'phone'
+        | 'password'
+        | 'phoneError'
+        | 'error'
+        | 'smsCaptchaCode'
+        | 'captchaInput';
+      value: string;
+    }
+  | { type: 'setShowPassword'; value: boolean }
+  | { type: 'switchMode'; mode: AuthMode }
+  | { type: 'clearErrors' };
+
+function loginFormReducer(
+  state: LoginFormState,
+  action: LoginFormAction,
+): LoginFormState {
+  switch (action.type) {
+    case 'setText':
+      return { ...state, [action.field]: action.value };
+    case 'setShowPassword':
+      return { ...state, showPassword: action.value };
+    case 'switchMode':
+      // 切换登录/注册时清掉上一模式残留的错误与验证码输入。
+      return {
+        ...state,
+        mode: action.mode,
+        error: '',
+        phoneError: '',
+        smsCaptchaCode: '',
+        captchaInput: '',
+      };
+    case 'clearErrors':
+      return { ...state, error: '', phoneError: '' };
+  }
+}
+
+/**
+ * 登录/注册表单中「异步标记 + 远程拉取 + 倒计时」的一组状态。
+ *
+ * 这些字段都随提交、发码、验证码刷新等异步流程流转，故与可编辑表单分开成一个 reducer。
+ */
+interface LoginStatusState {
+  submitting: boolean;
+  oauthStarting: boolean;
+  smsSending: boolean;
+  smsCooldown: number;
+  captcha: CaptchaChallenge | null;
+  captchaLoading: boolean;
+}
+
+const initialLoginStatus: LoginStatusState = {
+  submitting: false,
+  oauthStarting: false,
+  smsSending: false,
+  smsCooldown: 0,
+  captcha: null,
+  captchaLoading: false,
+};
+
+// setFlag 仅覆盖布尔型的进行中标记，保证计算属性写入的类型安全。
+type LoginStatusAction =
+  | {
+      type: 'setFlag';
+      field: 'submitting' | 'oauthStarting' | 'smsSending' | 'captchaLoading';
+      value: boolean;
+    }
+  | { type: 'setCaptcha'; value: CaptchaChallenge | null }
+  | { type: 'setCooldown'; value: number }
+  | { type: 'tickCooldown' };
+
+function loginStatusReducer(
+  state: LoginStatusState,
+  action: LoginStatusAction,
+): LoginStatusState {
+  switch (action.type) {
+    case 'setFlag':
+      return { ...state, [action.field]: action.value };
+    case 'setCaptcha':
+      return { ...state, captcha: action.value };
+    case 'setCooldown':
+      return { ...state, smsCooldown: action.value };
+    case 'tickCooldown':
+      // 前端倒计时每秒自减，到 0 停止；真实冷却仍以后端 Redis TTL 为准。
+      return {
+        ...state,
+        smsCooldown: state.smsCooldown <= 1 ? 0 : state.smsCooldown - 1,
+      };
+  }
+}
 
 export default function LoginPage() {
   return (
@@ -35,7 +157,29 @@ function LoginContent() {
   const { locale, t } = useI18n();
   const router = useRouter();
   const { user, loading, login, register } = useAuth();
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [form, formDispatch] = useReducer(loginFormReducer, initialLoginForm);
+  const [status, statusDispatch] = useReducer(
+    loginStatusReducer,
+    initialLoginStatus,
+  );
+  const {
+    mode,
+    phone,
+    password,
+    showPassword,
+    phoneError,
+    error,
+    smsCaptchaCode,
+    captchaInput,
+  } = form;
+  const {
+    submitting,
+    oauthStarting,
+    smsSending,
+    smsCooldown,
+    captcha,
+    captchaLoading,
+  } = status;
   const phoneAuthEnabled = locale === 'zh-CN';
   const requiresSMSCaptcha = mode === 'register';
 
@@ -45,49 +189,38 @@ function LoginContent() {
     }
   }, [loading, user, router]);
 
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [oauthStarting, setOAuthStarting] = useState(false);
-  const [smsSending, setSMSSending] = useState(false);
-  const [smsCaptchaCode, setSMSCaptchaCode] = useState('');
-  const [smsCooldown, setSMSCooldown] = useState(0);
-
-  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
-  const [captchaLoading, setCaptchaLoading] = useState(false);
-  const [captchaInput, setCaptchaInput] = useState('');
-
   const refreshCaptcha = useCallback(async () => {
-    setCaptchaLoading(true);
-    setCaptchaInput('');
+    statusDispatch({ type: 'setFlag', field: 'captchaLoading', value: true });
+    formDispatch({ type: 'setText', field: 'captchaInput', value: '' });
     try {
       const c = await authApi.captcha();
-      setCaptcha(c);
+      statusDispatch({ type: 'setCaptcha', value: c });
     } catch {
-      setError(t('login.captchaLoadFailed'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.captchaLoadFailed'),
+      });
     } finally {
-      setCaptchaLoading(false);
+      statusDispatch({
+        type: 'setFlag',
+        field: 'captchaLoading',
+        value: false,
+      });
     }
   }, [t]);
 
   useEffect(() => {
     if (!phoneAuthEnabled) {
-      setCaptcha(null);
-      setCaptchaInput('');
+      statusDispatch({ type: 'setCaptcha', value: null });
+      formDispatch({ type: 'setText', field: 'captchaInput', value: '' });
       return;
     }
     void refreshCaptcha();
   }, [phoneAuthEnabled, refreshCaptcha]);
 
   const switchMode = (nextMode: AuthMode) => {
-    setMode(nextMode);
-    setError('');
-    setPhoneError('');
-    setSMSCaptchaCode('');
-    setCaptchaInput('');
+    formDispatch({ type: 'switchMode', mode: nextMode });
     void refreshCaptcha();
   };
 
@@ -97,7 +230,7 @@ function LoginContent() {
     }
     // 前端倒计时只负责交互提示，真实冷却仍以后端 Redis TTL 为准。
     const timer = window.setInterval(() => {
-      setSMSCooldown((current) => (current <= 1 ? 0 : current - 1));
+      statusDispatch({ type: 'tickCooldown' });
     }, 1000);
     return () => window.clearInterval(timer);
   }, [smsCooldown]);
@@ -105,30 +238,41 @@ function LoginContent() {
   const validatePhone = () => {
     const normalizedPhone = normalizePhoneNumber(phone);
     if (!isValidMainlandChinaPhone(normalizedPhone)) {
-      setPhoneError(t('login.invalidPhone'));
+      formDispatch({
+        type: 'setText',
+        field: 'phoneError',
+        value: t('login.invalidPhone'),
+      });
       return null;
     }
     return normalizedPhone;
   };
 
   const handleSendSMSCaptcha = async () => {
-    setError('');
-    setPhoneError('');
+    formDispatch({ type: 'clearErrors' });
 
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
       return;
     }
     if (!captcha) {
-      setError(t('login.captchaNotLoaded'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.captchaNotLoaded'),
+      });
       return;
     }
     if (!captchaInput.trim()) {
-      setError(t('login.enterImageCaptcha'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.enterImageCaptcha'),
+      });
       return;
     }
 
-    setSMSSending(true);
+    statusDispatch({ type: 'setFlag', field: 'smsSending', value: true });
     try {
       await authApi.sendSMSCaptcha(
         1,
@@ -136,12 +280,16 @@ function LoginContent() {
         captcha.token,
         captchaInput,
       );
-      setSMSCooldown(180);
-      setError('');
+      statusDispatch({ type: 'setCooldown', value: 180 });
+      formDispatch({ type: 'setText', field: 'error', value: '' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('login.smsSendFailed'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: err instanceof Error ? err.message : t('login.smsSendFailed'),
+      });
     } finally {
-      setSMSSending(false);
+      statusDispatch({ type: 'setFlag', field: 'smsSending', value: false });
       // 图形验证码 token 可能已被服务端标记为已使用，发完后统一刷新。
       await refreshCaptcha();
     }
@@ -149,23 +297,30 @@ function LoginContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setPhoneError('');
+    formDispatch({ type: 'clearErrors' });
 
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
       return;
     }
     if (!requiresSMSCaptcha && !captcha) {
-      setError(t('login.captchaNotLoaded'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.captchaNotLoaded'),
+      });
       return;
     }
     if (requiresSMSCaptcha && !smsCaptchaCode.trim()) {
-      setError(t('login.enterSmsCaptcha'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.enterSmsCaptcha'),
+      });
       return;
     }
 
-    setSubmitting(true);
+    statusDispatch({ type: 'setFlag', field: 'submitting', value: true });
     try {
       if (mode === 'register') {
         await register(normalizedPhone, password, smsCaptchaCode.trim());
@@ -174,19 +329,23 @@ function LoginContent() {
       }
       router.replace(readLoginRedirect('/clients'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('login.operationFailed'));
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: err instanceof Error ? err.message : t('login.operationFailed'),
+      });
       // 登录失败或图形码失败都刷新，避免继续使用已经失效的 nonce。
       if (!requiresSMSCaptcha) {
         await refreshCaptcha();
       }
     } finally {
-      setSubmitting(false);
+      statusDispatch({ type: 'setFlag', field: 'submitting', value: false });
     }
   };
 
   const handleGoogleOAuthStart = () => {
-    setError('');
-    setOAuthStarting(true);
+    formDispatch({ type: 'setText', field: 'error', value: '' });
+    statusDispatch({ type: 'setFlag', field: 'oauthStarting', value: true });
     window.location.assign(
       authApi.googleOAuthStartUrl(readLoginRedirect('/clients')),
     );
@@ -220,21 +379,31 @@ function LoginContent() {
               <PhoneField
                 value={phone}
                 error={phoneError}
-                onChange={setPhone}
-                onErrorChange={setPhoneError}
+                onChange={(value) =>
+                  formDispatch({ type: 'setText', field: 'phone', value })
+                }
+                onErrorChange={(value) =>
+                  formDispatch({ type: 'setText', field: 'phoneError', value })
+                }
               />
               <PasswordField
                 value={password}
                 visible={showPassword}
-                onChange={setPassword}
-                onVisibilityChange={setShowPassword}
+                onChange={(value) =>
+                  formDispatch({ type: 'setText', field: 'password', value })
+                }
+                onVisibilityChange={(value) =>
+                  formDispatch({ type: 'setShowPassword', value })
+                }
               />
               <CaptchaField
                 value={captchaInput}
                 captchaSrc={captchaSrc}
                 loading={captchaLoading}
                 requiresSMSCaptcha={requiresSMSCaptcha}
-                onChange={setCaptchaInput}
+                onChange={(value) =>
+                  formDispatch({ type: 'setText', field: 'captchaInput', value })
+                }
                 onRefresh={refreshCaptcha}
               />
               {requiresSMSCaptcha ? (
@@ -244,7 +413,13 @@ function LoginContent() {
                   captchaReady={Boolean(captcha)}
                   captchaLoading={captchaLoading}
                   cooldown={smsCooldown}
-                  onChange={setSMSCaptchaCode}
+                  onChange={(value) =>
+                    formDispatch({
+                      type: 'setText',
+                      field: 'smsCaptchaCode',
+                      value,
+                    })
+                  }
                   onSend={handleSendSMSCaptcha}
                 />
               ) : null}

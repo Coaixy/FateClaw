@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useReducer, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -44,6 +44,124 @@ const STATUS_LABEL_KEY: Record<ClientStatus, string> = {
   done: 'clients.status.done',
 };
 
+/** 客户详情页的服务端数据切片:档案、会话、跟进记录及其加载生命周期。 */
+type ClientDataState = {
+  profile: ClientProfile | null;
+  sessions: ChatSession[];
+  followUps: ClientFollowUp[];
+  loading: boolean;
+  error: string;
+};
+
+/** {@link ClientDataState} 的动作集合。 */
+type ClientDataAction =
+  | { type: 'load-start' }
+  | {
+      type: 'load-success';
+      profile: ClientProfile;
+      sessions: ChatSession[];
+      followUps: ClientFollowUp[];
+    }
+  | { type: 'load-error'; message: string }
+  | { type: 'add-follow-up'; followUp: ClientFollowUp }
+  | { type: 'remove-follow-up'; id: string }
+  | { type: 'replace-session'; session: ChatSession };
+
+const initialClientData: ClientDataState = {
+  profile: null,
+  sessions: [],
+  followUps: [],
+  loading: true,
+  error: '',
+};
+
+/**
+ * 客户详情数据 reducer。
+ *
+ * 把档案 / 会话 / 跟进记录及其加载态合并为单一切片:加载流程用
+ * load-start → load-success/load-error 一次性切换,避免散落在 effect 里的级联 setState;
+ * 跟进的增删与会话恢复也在此切片内就地更新。
+ */
+function clientDataReducer(
+  state: ClientDataState,
+  action: ClientDataAction,
+): ClientDataState {
+  switch (action.type) {
+    case 'load-start':
+      return { ...state, loading: true, error: '' };
+    case 'load-success':
+      return {
+        profile: action.profile,
+        sessions: action.sessions,
+        followUps: action.followUps,
+        loading: false,
+        error: '',
+      };
+    case 'load-error':
+      return { ...state, loading: false, error: action.message };
+    case 'add-follow-up':
+      return { ...state, followUps: [action.followUp, ...state.followUps] };
+    case 'remove-follow-up':
+      return {
+        ...state,
+        followUps: state.followUps.filter((item) => item.id !== action.id),
+      };
+    case 'replace-session':
+      return {
+        ...state,
+        sessions: state.sessions.map((item) =>
+          item.id === action.session.id ? action.session : item,
+        ),
+      };
+    default:
+      return state;
+  }
+}
+
+/** 「新增跟进」表单切片:输入内容、提交中状态与错误信息。 */
+type FollowUpFormState = {
+  note: string;
+  submitting: boolean;
+  error: string;
+};
+
+/** {@link FollowUpFormState} 的动作集合。 */
+type FollowUpFormAction =
+  | { type: 'set-note'; value: string }
+  | { type: 'submit-start' }
+  | { type: 'submit-success' }
+  | { type: 'set-error'; message: string };
+
+const initialFollowUpForm: FollowUpFormState = {
+  note: '',
+  submitting: false,
+  error: '',
+};
+
+/**
+ * 跟进表单 reducer。
+ *
+ * 新增提交用 submit-start → submit-success 串起;新增失败与删除失败统一走 set-error
+ * (set-error 也负责清空提交态),删除前清错误则 dispatch 一条空 message 的 set-error。
+ */
+function followUpFormReducer(
+  state: FollowUpFormState,
+  action: FollowUpFormAction,
+): FollowUpFormState {
+  switch (action.type) {
+    case 'set-note':
+      return { ...state, note: action.value };
+    case 'submit-start':
+      return { ...state, submitting: true, error: '' };
+    case 'submit-success':
+      return { note: '', submitting: false, error: '' };
+    case 'set-error':
+      return { ...state, submitting: false, error: action.message };
+    default:
+      return state;
+  }
+}
+
 /**
  * 客户档案详情 / 断卦历史页。
  *
@@ -76,14 +194,14 @@ function ClientDetailContent() {
   const { t, formatDate } = useI18n();
   const { confirm } = useConfirm();
 
-  const [profile, setProfile] = useState<ClientProfile | null>(null);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [followUps, setFollowUps] = useState<ClientFollowUp[]>([]);
-  const [newNote, setNewNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [followUpError, setFollowUpError] = useState('');
+  // 服务端数据与跟进表单各自合并为一个 reducer 切片;再按原字段名解构,使下方 JSX/逻辑零改动。
+  const [data, dispatchData] = useReducer(clientDataReducer, initialClientData);
+  const [form, dispatchForm] = useReducer(
+    followUpFormReducer,
+    initialFollowUpForm,
+  );
+  const { profile, sessions, loading, error, followUps } = data;
+  const { note: newNote, submitting, error: followUpError } = form;
   // 已归档会话的就地恢复:restoringSessionId 既做并发互斥,也驱动当前条目的加载态。
   const [restoringSessionId, setRestoringSessionId] = useState('');
   const [restoreError, setRestoreError] = useState('');
@@ -93,8 +211,7 @@ function ClientDetailContent() {
       return;
     }
     let cancelled = false;
-    setLoading(true);
-    setError('');
+    dispatchData({ type: 'load-start' });
     Promise.all([
       clientProfilesApi.get(clientId),
       chatSessionsApi.byClient(clientId),
@@ -102,18 +219,20 @@ function ClientDetailContent() {
     ])
       .then(([loadedProfile, loadedSessions, loadedFollowUps]) => {
         if (cancelled) return;
-        setProfile(loadedProfile);
-        setSessions(loadedSessions);
-        setFollowUps(loadedFollowUps.follow_ups);
+        dispatchData({
+          type: 'load-success',
+          profile: loadedProfile,
+          sessions: loadedSessions,
+          followUps: loadedFollowUps.follow_ups,
+        });
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : t('clients.detail.loadFailed'),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatchData({
+          type: 'load-error',
+          message:
+            err instanceof Error ? err.message : t('clients.detail.loadFailed'),
+        });
       });
     return () => {
       cancelled = true;
@@ -124,20 +243,19 @@ function ClientDetailContent() {
   const handleAddFollowUp = async () => {
     const content = newNote.trim();
     if (!content || submitting) return;
-    setSubmitting(true);
-    setFollowUpError('');
+    dispatchForm({ type: 'submit-start' });
     try {
       const created = await clientFollowUpsApi.create(clientId, { content });
-      setFollowUps((prev) => [created, ...prev]);
-      setNewNote('');
+      dispatchData({ type: 'add-follow-up', followUp: created });
+      dispatchForm({ type: 'submit-success' });
     } catch (err) {
-      setFollowUpError(
-        err instanceof Error
-          ? err.message
-          : t('clients.detail.followUps.addFailed'),
-      );
-    } finally {
-      setSubmitting(false);
+      dispatchForm({
+        type: 'set-error',
+        message:
+          err instanceof Error
+            ? err.message
+            : t('clients.detail.followUps.addFailed'),
+      });
     }
   };
 
@@ -150,16 +268,18 @@ function ClientDetailContent() {
       variant: 'danger',
     });
     if (!ok) return;
-    setFollowUpError('');
+    dispatchForm({ type: 'set-error', message: '' });
     try {
       await clientFollowUpsApi.delete(clientId, id);
-      setFollowUps((prev) => prev.filter((item) => item.id !== id));
+      dispatchData({ type: 'remove-follow-up', id });
     } catch (err) {
-      setFollowUpError(
-        err instanceof Error
-          ? err.message
-          : t('clients.detail.followUps.deleteFailed'),
-      );
+      dispatchForm({
+        type: 'set-error',
+        message:
+          err instanceof Error
+            ? err.message
+            : t('clients.detail.followUps.deleteFailed'),
+      });
     }
   };
 
@@ -177,9 +297,7 @@ function ClientDetailContent() {
     setRestoreError('');
     try {
       const restored = await chatSessionsApi.restore(sessionId);
-      setSessions((prev) =>
-        prev.map((item) => (item.id === sessionId ? restored : item)),
-      );
+      dispatchData({ type: 'replace-session', session: restored });
     } catch (err) {
       setRestoreError(
         err instanceof Error ? err.message : t('clients.detail.restoreFailed'),
@@ -308,7 +426,9 @@ function ClientDetailContent() {
               <div className="rounded-2xl border border-hairline bg-surface-card p-3">
                 <textarea
                   value={newNote}
-                  onChange={(event) => setNewNote(event.target.value)}
+                  onChange={(event) =>
+                    dispatchForm({ type: 'set-note', value: event.target.value })
+                  }
                   placeholder={t('clients.detail.followUps.placeholder')}
                   rows={2}
                   className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-ink placeholder:text-muted/60 focus:outline-none"

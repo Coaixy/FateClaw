@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Loader2, MessageCircle, Share2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
@@ -13,42 +13,75 @@ import {
 } from '@/features/chat/api';
 import { filterProgressMessages } from '@/features/chat/utils/display';
 
+/** 分享对话页的加载状态：会话数据、加载中、错误三者属同一份请求生命周期。 */
+interface SharedSessionState {
+  session: SharedChatSession | null;
+  loading: boolean;
+  error: string;
+}
+
+/** 请求生命周期动作；每个动作都返回完整的下一状态快照，避免一次 effect 内多次 setState。 */
+type SharedSessionAction =
+  | { type: 'start' }
+  | { type: 'missing-token' }
+  | { type: 'success'; session: SharedChatSession }
+  | { type: 'error'; message: string };
+
+function sharedSessionReducer(
+  state: SharedSessionState,
+  action: SharedSessionAction,
+): SharedSessionState {
+  switch (action.type) {
+    case 'start':
+      // 开始拉取：进入加载态并清空旧错误，沿用既有会话（界面此时显示 spinner）。
+      return { ...state, loading: true, error: '' };
+    case 'missing-token':
+      return { session: null, loading: false, error: '分享链接缺少 token' };
+    case 'success':
+      return { session: action.session, loading: false, error: '' };
+    case 'error':
+      return { session: null, loading: false, error: action.message };
+  }
+}
+
+const initialSharedSessionState: SharedSessionState = {
+  session: null,
+  loading: true,
+  error: '',
+};
+
 export function SharedChatSessionView() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
-  const [session, setSession] = useState<SharedChatSession | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [state, dispatch] = useReducer(
+    sharedSessionReducer,
+    initialSharedSessionState,
+  );
+  const { session, loading, error } = state;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError('');
 
     if (!token.trim()) {
-      setSession(null);
-      setError('分享链接缺少 token');
-      setLoading(false);
+      dispatch({ type: 'missing-token' });
       return () => {
         cancelled = true;
       };
     }
 
+    dispatch({ type: 'start' });
     void chatSessionsApi
       .shared(token)
       .then((result) => {
         if (cancelled) return;
-        setSession(result);
+        dispatch({ type: 'success', session: result });
       })
       .catch((err) => {
         if (cancelled) return;
-        setSession(null);
-        setError(err instanceof Error ? err.message : '分享链接加载失败');
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        dispatch({
+          type: 'error',
+          message: err instanceof Error ? err.message : '分享链接加载失败',
+        });
       });
 
     return () => {

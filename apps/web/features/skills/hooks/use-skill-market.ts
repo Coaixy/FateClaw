@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { SKILL_CATEGORIES } from '@fateclaw/contracts/skills';
 
 import {
@@ -37,37 +37,68 @@ function sortSkillsByHeat(skills: MarketSkill[]): MarketSkill[] {
   });
 }
 
+/**
+ * 技能市场拉取状态：bundles / skills / loading 三者随同一次请求整体翻转，
+ * 用 reducer 一次 dispatch 给出完整快照，避免一个 effect 内多次 setState 级联重渲染。
+ */
+interface MarketFetchState {
+  bundles: MarketBundle[];
+  skills: MarketSkill[];
+  loading: boolean;
+}
+
+type MarketFetchAction =
+  | { type: 'start' }
+  | { type: 'success'; bundles: MarketBundle[]; skills: MarketSkill[] }
+  | { type: 'error' };
+
+function marketFetchReducer(
+  state: MarketFetchState,
+  action: MarketFetchAction,
+): MarketFetchState {
+  switch (action.type) {
+    case 'start':
+      return { ...state, loading: true };
+    case 'success':
+      return { bundles: action.bundles, skills: action.skills, loading: false };
+    case 'error':
+      return { bundles: [], skills: [], loading: false };
+  }
+}
+
 export function useSkillMarket(
   notify: (type: 'success' | 'error', message: string) => void,
 ) {
-  const [bundles, setBundles] = useState<MarketBundle[]>([]);
-  const [skills, setSkills] = useState<MarketSkill[]>([]);
+  const [{ bundles, skills, loading }, dispatch] = useReducer(
+    marketFetchReducer,
+    { bundles: [], skills: [], loading: true },
+  );
   const [search, setSearch] = useState('');
   // 选中的用途分类，空串表示「全部」；分类只作用于技能区（bundle 不分类）。
   const [category, setCategory] = useState('');
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
+    dispatch({ type: 'start' });
     Promise.all([
       skillsApi.marketBundles({ limit: 20 }),
       skillsApi.market({ limit: 50 }),
     ])
       .then(([bundleData, skillData]) => {
-        setBundles(
-          sortBundlesForMarket(Array.isArray(bundleData) ? bundleData : []),
-        );
-        setSkills(sortSkillsByHeat(Array.isArray(skillData) ? skillData : []));
+        dispatch({
+          type: 'success',
+          bundles: sortBundlesForMarket(
+            Array.isArray(bundleData) ? bundleData : [],
+          ),
+          skills: sortSkillsByHeat(Array.isArray(skillData) ? skillData : []),
+        });
       })
       .catch((err) => {
-        setBundles([]);
-        setSkills([]);
+        dispatch({ type: 'error' });
         notify(
           'error',
           err instanceof Error ? err.message : '加载技能市场失败',
         );
-      })
-      .finally(() => setLoading(false));
+      });
   }, [notify]);
 
   const filteredBundles = useMemo(() => {

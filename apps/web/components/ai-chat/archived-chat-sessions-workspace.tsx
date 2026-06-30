@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
   Archive,
   ChevronLeft,
@@ -19,6 +19,45 @@ import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useToast } from '@/lib/use-toast';
+
+/**
+ * 归档会话的拉取状态：列表数据、加载中标记与错误提示。
+ *
+ * 三者同属一次远程拉取的结果，故合并为 reducer；搜索/客户过滤/恢复中仍是独立 state。
+ */
+interface ArchivedLoadState {
+  sessions: ChatSession[];
+  loading: boolean;
+  error: string;
+}
+
+type ArchivedLoadAction =
+  | { type: 'loadStart' }
+  | { type: 'loadSuccess'; sessions: ChatSession[] }
+  | { type: 'loadError'; message: string }
+  | { type: 'removeSession'; id: string };
+
+function archivedLoadReducer(
+  state: ArchivedLoadState,
+  action: ArchivedLoadAction,
+): ArchivedLoadState {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true, error: '' };
+    case 'loadSuccess':
+      return { sessions: action.sessions, loading: false, error: '' };
+    case 'loadError':
+      return { ...state, loading: false, error: action.message };
+    case 'removeSession':
+      // 恢复成功后把该会话从归档列表中剔除。
+      return {
+        ...state,
+        sessions: state.sessions.filter(
+          (session) => session.id !== action.id,
+        ),
+      };
+  }
+}
 
 function formatArchivedTime(value?: string | null) {
   if (!value) return '未知时间';
@@ -38,22 +77,28 @@ function ArchivedSessionsContent() {
   const { toast } = useToast();
   const { profiles: clientProfiles, loadProfiles: loadClientProfiles } =
     useClientProfiles(() => {});
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadState, loadDispatch] = useReducer(archivedLoadReducer, {
+    sessions: [],
+    loading: true,
+    error: '',
+  });
+  const { sessions, loading, error } = loadState;
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('all');
   const [restoringSessionId, setRestoringSessionId] = useState('');
 
   const loadArchivedSessions = useCallback(async () => {
-    setLoading(true);
-    setError('');
+    loadDispatch({ type: 'loadStart' });
     try {
-      setSessions(await chatSessionsApi.archived());
+      loadDispatch({
+        type: 'loadSuccess',
+        sessions: await chatSessionsApi.archived(),
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载归档对话失败');
-    } finally {
-      setLoading(false);
+      loadDispatch({
+        type: 'loadError',
+        message: err instanceof Error ? err.message : '加载归档对话失败',
+      });
     }
   }, []);
 
@@ -107,9 +152,7 @@ function ArchivedSessionsContent() {
     setRestoringSessionId(sessionId);
     try {
       await restoreSession(sessionId);
-      setSessions((previous) =>
-        previous.filter((session) => session.id !== sessionId),
-      );
+      loadDispatch({ type: 'removeSession', id: sessionId });
       toast('success', '已恢复到最近对话');
     } catch (err) {
       toast(

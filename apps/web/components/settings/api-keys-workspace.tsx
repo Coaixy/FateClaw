@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, Copy, KeyRound, Plus } from 'lucide-react';
 
@@ -27,6 +27,75 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+/** API Key 列表的加载状态：数据、加载中、错误文案。 */
+type ListState = {
+  keys: ApiKey[];
+  loading: boolean;
+  error: string | null;
+};
+
+type ListAction =
+  | { type: 'loadStart' }
+  | { type: 'loaded'; keys: ApiKey[] }
+  | { type: 'failed'; error: string };
+
+/** 列表 reducer：拉取开始 / 成功 / 失败三态流转；成功与失败都复位 loading，等价于原 finally。 */
+function listReducer(state: ListState, action: ListAction): ListState {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true, error: null };
+    case 'loaded':
+      return { ...state, keys: action.keys, loading: false };
+    case 'failed':
+      return { ...state, error: action.error, loading: false };
+    default:
+      return state;
+  }
+}
+
+const LIST_INITIAL: ListState = { keys: [], loading: true, error: null };
+
+/** 生成 API Key 的命名流程状态：命名 sheet 开关、输入名称、提交中。 */
+type CreateState = {
+  open: boolean;
+  name: string;
+  submitting: boolean;
+};
+
+type CreateAction =
+  | { type: 'open' }
+  | { type: 'close' }
+  | { type: 'setName'; name: string }
+  | { type: 'submitStart' }
+  | { type: 'submitSuccess' }
+  | { type: 'submitStop' };
+
+/**
+ * 命名流程 reducer。
+ * 提交成功只关闭 sheet 并清空输入，submitting 交由 finally 的 submitStop 复位，
+ * 保持与原逻辑「loading 持续到 refresh 结束」的时序一致。
+ */
+function createReducer(state: CreateState, action: CreateAction): CreateState {
+  switch (action.type) {
+    case 'open':
+      return { ...state, open: true, name: '' };
+    case 'close':
+      return { ...state, open: false };
+    case 'setName':
+      return { ...state, name: action.name };
+    case 'submitStart':
+      return { ...state, submitting: true };
+    case 'submitSuccess':
+      return { ...state, open: false, name: '' };
+    case 'submitStop':
+      return { ...state, submitting: false };
+    default:
+      return state;
+  }
+}
+
+const CREATE_INITIAL: CreateState = { open: false, name: '', submitting: false };
+
 /**
  * API Key 管理设置页（站内，需登录）。
  *
@@ -37,16 +106,17 @@ export function ApiKeysWorkspace() {
   const { toast } = useToast();
   const { confirm } = useConfirm();
 
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // 列表加载状态合并为一个 reducer；保留 keys/loading/loadError 三个读名不变。
+  const [{ keys, loading, error: loadError }, listDispatch] = useReducer(
+    listReducer,
+    LIST_INITIAL,
+  );
 
-  // 生成流程：输入名称的 sheet。
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
+  // 生成流程：输入名称的 sheet（开关 + 输入 + 提交中）合并为一个 reducer。
+  const [{ open: createOpen, name: newName, submitting: creating }, createDispatch] =
+    useReducer(createReducer, CREATE_INITIAL);
 
-  // 生成结果：明文 key 一次性展示的 sheet。
+  // 生成结果：明文 key 一次性展示的 sheet（与命名流程相互独立，保持两个轻量 useState）。
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -54,15 +124,12 @@ export function ApiKeysWorkspace() {
   const reachedLimit = activeCount >= MAX_API_KEYS_PER_USER;
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+    listDispatch({ type: 'loadStart' });
     try {
       const res = await apiKeysApi.list();
-      setKeys(res.api_keys);
+      listDispatch({ type: 'loaded', keys: res.api_keys });
     } catch (error) {
-      setLoadError(errorMessage(error, '加载失败，请稍后重试'));
-    } finally {
-      setLoading(false);
+      listDispatch({ type: 'failed', error: errorMessage(error, '加载失败，请稍后重试') });
     }
   }, []);
 
@@ -76,11 +143,10 @@ export function ApiKeysWorkspace() {
       toast('warning', '请填写 Key 名称');
       return;
     }
-    setCreating(true);
+    createDispatch({ type: 'submitStart' });
     try {
       const created = await apiKeysApi.create({ name });
-      setCreateOpen(false);
-      setNewName('');
+      createDispatch({ type: 'submitSuccess' }); // 关闭命名 sheet 并清空输入。
       setGeneratedKey(created.key); // 明文仅此一次。
       setCopied(false);
       await refresh();
@@ -88,7 +154,7 @@ export function ApiKeysWorkspace() {
       // 会员过期/欠费等由后端返回 403/402，文案原样透出。
       toast('error', errorMessage(error, '生成失败，请稍后重试'));
     } finally {
-      setCreating(false);
+      createDispatch({ type: 'submitStop' });
     }
   }
 
@@ -159,10 +225,7 @@ export function ApiKeysWorkspace() {
             size="sm"
             icon={<Plus size={14} />}
             disabled={reachedLimit}
-            onClick={() => {
-              setNewName('');
-              setCreateOpen(true);
-            }}
+            onClick={() => createDispatch({ type: 'open' })}
           >
             生成 API Key
           </Button>
@@ -234,7 +297,7 @@ export function ApiKeysWorkspace() {
       {/* 生成：输入名称 */}
       <BottomSheet
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => createDispatch({ type: 'close' })}
         title="生成 API Key"
         size="sm"
       >
@@ -244,7 +307,9 @@ export function ApiKeysWorkspace() {
             <input
               autoFocus
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
+              onChange={(e) =>
+                createDispatch({ type: 'setName', name: e.target.value })
+              }
               maxLength={50}
               placeholder="例如：我的自动化脚本"
               className="mt-1.5 w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-[14px] text-ink outline-none transition-colors focus:border-primary/40"

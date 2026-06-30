@@ -21,7 +21,7 @@ import {
   Send,
   Users,
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useReducer, useState, useEffect, useMemo } from 'react';
 import { isAiChatPath, useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -63,7 +63,6 @@ const SESSION_DATE_FILTERS: readonly {
   { value: 'older', labelKey: 'sidebar.filters.older' },
 ];
 const SIDEBAR_SESSION_PREVIEW_LIMIT = 10;
-const SESSION_PANEL_PAGE_SIZE = 6;
 
 const SIDEBAR_THEME_OPTIONS: readonly {
   mode: ThemeMode;
@@ -174,6 +173,72 @@ function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// 侧栏会话列表的临时交互状态：搜索词、日期筛选、行内改名（编辑中的会话与标题、
+// 改名提交中）、分享提交中、展开的会话面板是否打开。这些都属于「会话列表视图态」，且在登录态
+// 变化时需要整体复位，因此聚合到一个 reducer 里统一管理，用单次 dispatch 表达整组变更。
+type SessionListState = {
+  search: string;
+  dateFilter: SessionDateFilter;
+  editingSessionId: string;
+  editingTitle: string;
+  renamingSessionId: string;
+  sharingSessionId: string;
+  sessionsPanelOpen: boolean;
+};
+
+const INITIAL_SESSION_LIST_STATE: SessionListState = {
+  search: '',
+  dateFilter: 'all',
+  editingSessionId: '',
+  editingTitle: '',
+  renamingSessionId: '',
+  sharingSessionId: '',
+  sessionsPanelOpen: false,
+};
+
+type SessionListAction =
+  | { type: 'reset' } // 登录态变化后整体复位
+  | { type: 'closePanel' } // 收起展开的会话面板
+  | { type: 'clearEditing' } // 退出行内改名
+  | { type: 'startEditing'; sessionId: string; title: string }
+  | { type: 'setEditingTitle'; title: string }
+  | { type: 'setRenaming'; sessionId: string }
+  | { type: 'setSharing'; sessionId: string };
+
+function sessionListReducer(
+  state: SessionListState,
+  action: SessionListAction,
+): SessionListState {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_SESSION_LIST_STATE;
+    case 'closePanel':
+      return { ...state, sessionsPanelOpen: false };
+    case 'clearEditing':
+      return {
+        ...state,
+        editingSessionId: '',
+        editingTitle: '',
+        renamingSessionId: '',
+      };
+    case 'startEditing':
+      return {
+        ...state,
+        editingSessionId: action.sessionId,
+        editingTitle: action.title,
+        renamingSessionId: '',
+      };
+    case 'setEditingTitle':
+      return { ...state, editingTitle: action.title };
+    case 'setRenaming':
+      return { ...state, renamingSessionId: action.sessionId };
+    case 'setSharing':
+      return { ...state, sharingSessionId: action.sessionId };
+    default:
+      return state;
+  }
+}
+
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const { formatDate, formatNumber, locale, t } = useI18n();
   const pathname = usePathname();
@@ -181,15 +246,20 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const { toast } = useToast();
   const { loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState<SessionDateFilter>('all');
-  const [editingSessionId, setEditingSessionId] = useState('');
-  const [editingTitle, setEditingTitle] = useState('');
-  const [renamingSessionId, setRenamingSessionId] = useState('');
-  const [sharingSessionId, setSharingSessionId] = useState('');
+  const [sessionList, dispatchSessionList] = useReducer(
+    sessionListReducer,
+    INITIAL_SESSION_LIST_STATE,
+  );
+  const {
+    search,
+    dateFilter,
+    editingSessionId,
+    editingTitle,
+    renamingSessionId,
+    sharingSessionId,
+    sessionsPanelOpen,
+  } = sessionList;
   const [contactOpen, setContactOpen] = useState(false);
-  const [sessionsPanelOpen, setSessionsPanelOpen] = useState(false);
-  const [sessionPanelPage, setSessionPanelPage] = useState(1);
   const [contactQrType, setContactQrType] =
     useState<ContactQrType>('wechat');
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -245,7 +315,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => {
     setOpen(false);
-    setSessionsPanelOpen(false);
+    dispatchSessionList({ type: 'closePanel' });
   }, [pathname]);
 
   useEffect(() => {
@@ -259,7 +329,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           setContactOpen(false);
           return;
         }
-        setSessionsPanelOpen(false);
+        dispatchSessionList({ type: 'closePanel' });
       }
     };
 
@@ -269,14 +339,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => {
     // 登录态变化后复位筛选和编辑态，避免用户误以为列表丢失。
-    setSearch('');
-    setDateFilter('all');
-    setEditingSessionId('');
-    setEditingTitle('');
-    setRenamingSessionId('');
-    setSharingSessionId('');
-    setSessionsPanelOpen(false);
-    setSessionPanelPage(1);
+    dispatchSessionList({ type: 'reset' });
   }, [chatAvailable]);
 
   useEffect(() => {
@@ -291,14 +354,12 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       return;
     }
 
-    setEditingSessionId('');
-    setEditingTitle('');
-    setRenamingSessionId('');
+    dispatchSessionList({ type: 'clearEditing' });
   }, [editingSessionId, sessions]);
 
   const closeSidebar = () => {
     setOpen(false);
-    setSessionsPanelOpen(false);
+    dispatchSessionList({ type: 'closePanel' });
   };
 
   // 搜索和日期筛选都只作用于展示层，不改动原始会话数组，避免影响当前选中和排序状态。
@@ -315,18 +376,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const sidebarPreviewSessions = filteredSessions.slice(
     0,
     SIDEBAR_SESSION_PREVIEW_LIMIT,
-  );
-  const sessionPanelPageCount = Math.max(
-    1,
-    Math.ceil(filteredSessions.length / SESSION_PANEL_PAGE_SIZE),
-  );
-  const currentSessionPanelPage = Math.min(
-    sessionPanelPage,
-    sessionPanelPageCount,
-  );
-  const pagedSessions = filteredSessions.slice(
-    (currentSessionPanelPage - 1) * SESSION_PANEL_PAGE_SIZE,
-    currentSessionPanelPage * SESSION_PANEL_PAGE_SIZE,
   );
   const activeDateFilterLabel =
     t(
@@ -377,36 +426,24 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           helper: t('sidebar.contact.groupHelper'),
         };
 
-  useEffect(() => {
-    setSessionPanelPage(1);
-  }, [dateFilter, normalizedSearch]);
-
-  useEffect(() => {
-    setSessionPanelPage((page) => Math.min(page, sessionPanelPageCount));
-  }, [sessionPanelPageCount]);
-
   const openChatSession = (sessionId: string) => {
     // 弹层里选会话后要同步收起，避免跳转到 AI Chat 后仍遮住主内容。
-    setSessionsPanelOpen(false);
+    dispatchSessionList({ type: 'closePanel' });
     closeSidebar();
     setSelectedSession(sessionId);
   };
 
   const resetEditingState = () => {
-    setEditingSessionId('');
-    setEditingTitle('');
-    setRenamingSessionId('');
+    dispatchSessionList({ type: 'clearEditing' });
   };
 
   const startEditingSession = (sessionId: string, title: string) => {
-    setEditingSessionId(sessionId);
-    setEditingTitle(title);
-    setRenamingSessionId('');
+    dispatchSessionList({ type: 'startEditing', sessionId, title });
   };
 
   const copySessionShareLink = async (sessionId: string) => {
     if (sharingSessionId) return;
-    setSharingSessionId(sessionId);
+    dispatchSessionList({ type: 'setSharing', sessionId });
     try {
       const token = await shareSession(sessionId);
       const url = `${window.location.origin}/ai-chat/share?token=${encodeURIComponent(token)}`;
@@ -418,7 +455,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         error instanceof Error ? error.message : t('sidebar.shareFailed'),
       );
     } finally {
-      setSharingSessionId('');
+      dispatchSessionList({ type: 'setSharing', sessionId: '' });
     }
   };
 
@@ -441,14 +478,14 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       return;
     }
 
-    setRenamingSessionId(sessionId);
+    dispatchSessionList({ type: 'setRenaming', sessionId });
 
     try {
       await renameSession(sessionId, normalizedTitle);
       toast('success', t('sidebar.titleUpdated'));
       resetEditingState();
     } catch (error) {
-      setRenamingSessionId('');
+      dispatchSessionList({ type: 'setRenaming', sessionId: '' });
       toast(
         'error',
         error instanceof Error ? error.message : t('sidebar.titleUpdateFailed'),
@@ -602,7 +639,12 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                               autoFocus
                               maxLength={80}
                               onClick={(event) => event.stopPropagation()}
-                              onChange={(event) => setEditingTitle(event.target.value)}
+                              onChange={(event) =>
+                                dispatchSessionList({
+                                  type: 'setEditingTitle',
+                                  title: event.target.value,
+                                })
+                              }
                               onKeyDown={(event) => {
                                 event.stopPropagation();
 

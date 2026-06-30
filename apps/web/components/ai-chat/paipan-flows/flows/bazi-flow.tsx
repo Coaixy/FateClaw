@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Loader2, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useReducer, useState } from 'react';
 
 import { PaipanStepFrame } from '../shared/paipan-step-frame';
 import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
@@ -24,6 +24,59 @@ interface BaziGanzhiReverseForm {
 }
 
 const GANZHI_REVERSE_LIMIT = 20;
+
+/**
+ * 干支反查子流程的状态：四柱表单、请求中标记、错误提示与候选结果。
+ *
+ * 这些字段同属一次反查交互，编辑/查询任一动作都会联动清理错误，故用 reducer 收敛。
+ */
+interface ReverseSearchState {
+  form: BaziGanzhiReverseForm;
+  loading: boolean;
+  error: string;
+  result: PaipanGanzhiReverseResponse | null;
+}
+
+type ReverseSearchAction =
+  | { type: 'updateField'; field: keyof BaziGanzhiReverseForm; value: string }
+  | { type: 'searchStart' }
+  | {
+      type: 'searchSuccess';
+      result: PaipanGanzhiReverseResponse;
+      emptyMessage: string;
+    }
+  | { type: 'setError'; message: string }
+  | { type: 'searchError'; message: string };
+
+function reverseSearchReducer(
+  state: ReverseSearchState,
+  action: ReverseSearchAction,
+): ReverseSearchState {
+  switch (action.type) {
+    case 'updateField':
+      // 编辑任一字段时顺手清空上一次的错误提示，与原逐字段更新行为一致。
+      return {
+        ...state,
+        form: { ...state.form, [action.field]: action.value },
+        error: '',
+      };
+    case 'searchStart':
+      return { ...state, loading: true, error: '' };
+    case 'searchSuccess':
+      // 命中为空时回填「无匹配」提示，命中非空则保持无错误。
+      return {
+        ...state,
+        loading: false,
+        result: action.result,
+        error: action.result.matches.length === 0 ? action.emptyMessage : '',
+      };
+    case 'setError':
+      // 仅用于提交前的本地校验失败，不触碰已有结果。
+      return { ...state, error: action.message };
+    case 'searchError':
+      return { ...state, loading: false, result: null, error: action.message };
+  }
+}
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -158,18 +211,25 @@ export function BaziFlow({
   const { getValueAtPath, normalizeGenderValue } = helpers;
   const currentYear = new Date().getFullYear();
   const [inputMode, setInputMode] = useState<BaziInputMode>('solar');
-  const [reverseForm, setReverseForm] = useState<BaziGanzhiReverseForm>({
-    year: '',
-    month: '',
-    day: '',
-    hour: '',
-    startYear: '1900',
-    endYear: String(currentYear),
+  const [reverseState, reverseDispatch] = useReducer(reverseSearchReducer, {
+    form: {
+      year: '',
+      month: '',
+      day: '',
+      hour: '',
+      startYear: '1900',
+      endYear: String(currentYear),
+    },
+    loading: false,
+    error: '',
+    result: null,
   });
-  const [reverseLoading, setReverseLoading] = useState(false);
-  const [reverseError, setReverseError] = useState('');
-  const [reverseResult, setReverseResult] =
-    useState<PaipanGanzhiReverseResponse | null>(null);
+  const {
+    form: reverseForm,
+    loading: reverseLoading,
+    error: reverseError,
+    result: reverseResult,
+  } = reverseState;
   const gender = normalizeGenderValue(getValueAtPath(draft, ['gender']));
   const birthDate =
     typeof getValueAtPath(draft, ['solarDate']) === 'string'
@@ -189,28 +249,35 @@ export function BaziFlow({
     field: keyof BaziGanzhiReverseForm,
     value: string,
   ) => {
-    setReverseForm((previous) => ({ ...previous, [field]: value }));
-    setReverseError('');
+    reverseDispatch({ type: 'updateField', field, value });
   };
 
   const runReverseSearch = async () => {
     const startYear = parseYearInput(reverseForm.startYear);
     const endYear = parseYearInput(reverseForm.endYear);
     if (!reverseForm.year || !reverseForm.month || !reverseForm.day) {
-      setReverseError(t('aiChat.paipanFlows.bazi.missingPillars'));
+      reverseDispatch({
+        type: 'setError',
+        message: t('aiChat.paipanFlows.bazi.missingPillars'),
+      });
       return;
     }
     if (!reverseForm.hour) {
-      setReverseError(t('aiChat.paipanFlows.bazi.missingHourPillar'));
+      reverseDispatch({
+        type: 'setError',
+        message: t('aiChat.paipanFlows.bazi.missingHourPillar'),
+      });
       return;
     }
     if (startYear === null || endYear === null) {
-      setReverseError(t('aiChat.paipanFlows.bazi.invalidYearRange'));
+      reverseDispatch({
+        type: 'setError',
+        message: t('aiChat.paipanFlows.bazi.invalidYearRange'),
+      });
       return;
     }
 
-    setReverseLoading(true);
-    setReverseError('');
+    reverseDispatch({ type: 'searchStart' });
     try {
       const result = await paipanApi.ganzhiReverse({
         year: reverseForm.year,
@@ -221,19 +288,19 @@ export function BaziFlow({
         endYear,
         limit: GANZHI_REVERSE_LIMIT,
       });
-      setReverseResult(result);
-      if (result.matches.length === 0) {
-        setReverseError(t('aiChat.paipanFlows.bazi.noMatches'));
-      }
+      reverseDispatch({
+        type: 'searchSuccess',
+        result,
+        emptyMessage: t('aiChat.paipanFlows.bazi.noMatches'),
+      });
     } catch (error) {
-      setReverseResult(null);
-      setReverseError(
-        error instanceof Error
-          ? error.message
-          : t('aiChat.paipanFlows.bazi.reverseFailed'),
-      );
-    } finally {
-      setReverseLoading(false);
+      reverseDispatch({
+        type: 'searchError',
+        message:
+          error instanceof Error
+            ? error.message
+            : t('aiChat.paipanFlows.bazi.reverseFailed'),
+      });
     }
   };
 

@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -109,6 +116,167 @@ function paginateItems<T>(items: T[], page: number, pageSize: number) {
   };
 }
 
+/** 三个列表区(订阅 / 捆绑包 / 我的技能)的标识,用于复用搜索 + 分页 reducer。 */
+type StudioListKey = 'subscription' | 'bundle' | 'skill';
+
+/** 三个列表各自的搜索关键词与当前页码,合并为一个切片。 */
+type StudioListsState = {
+  subscriptionSearch: string;
+  subscriptionPage: number;
+  bundleSearch: string;
+  bundlePage: number;
+  skillSearch: string;
+  skillPage: number;
+};
+
+type StudioListsAction =
+  | { type: 'set-search'; list: StudioListKey; value: string }
+  | { type: 'set-page'; list: StudioListKey; page: number };
+
+const initialStudioLists: StudioListsState = {
+  subscriptionSearch: '',
+  subscriptionPage: 1,
+  bundleSearch: '',
+  bundlePage: 1,
+  skillSearch: '',
+  skillPage: 1,
+};
+
+/**
+ * 列表搜索 / 分页 reducer。
+ *
+ * 关键点:set-search 在改写关键词的同时把对应列表页码重置回第 1 页,
+ * 由此替代原先三个「搜索变更则重置页码」的 useEffect。
+ */
+function studioListsReducer(
+  state: StudioListsState,
+  action: StudioListsAction,
+): StudioListsState {
+  switch (action.type) {
+    case 'set-search': {
+      if (action.list === 'subscription')
+        return {
+          ...state,
+          subscriptionSearch: action.value,
+          subscriptionPage: 1,
+        };
+      if (action.list === 'bundle')
+        return { ...state, bundleSearch: action.value, bundlePage: 1 };
+      return { ...state, skillSearch: action.value, skillPage: 1 };
+    }
+    case 'set-page': {
+      if (action.list === 'subscription')
+        return { ...state, subscriptionPage: action.page };
+      if (action.list === 'bundle')
+        return { ...state, bundlePage: action.page };
+      return { ...state, skillPage: action.page };
+    }
+    default:
+      return state;
+  }
+}
+
+/** 批量选择切片:我的技能 / 订阅技能各一套(模式开关 + 跨页选中 id 集),外加批量执行态。 */
+type StudioSelectionState = {
+  ownMode: boolean;
+  ownIds: Set<string>;
+  subMode: boolean;
+  subIds: Set<string>;
+  busy: boolean;
+};
+
+type StudioSelectionAction =
+  | { type: 'enter-own' }
+  | { type: 'exit-own' }
+  | { type: 'enter-sub' }
+  | { type: 'exit-sub' }
+  | { type: 'toggle-own'; id: string }
+  | { type: 'toggle-sub'; id: string }
+  | { type: 'set-own-ids'; ids: Set<string> }
+  | { type: 'set-sub-ids'; ids: Set<string> }
+  | { type: 'set-busy'; value: boolean };
+
+const initialStudioSelection: StudioSelectionState = {
+  ownMode: false,
+  ownIds: new Set(),
+  subMode: false,
+  subIds: new Set(),
+  busy: false,
+};
+
+/** 在选中集里翻转某个 id,返回新集合(不可变更新)。 */
+function toggleInSet(set: Set<string>, id: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
+/** 批量选择 reducer:退出选择模式时一并清空对应选中集。 */
+function studioSelectionReducer(
+  state: StudioSelectionState,
+  action: StudioSelectionAction,
+): StudioSelectionState {
+  switch (action.type) {
+    case 'enter-own':
+      return { ...state, ownMode: true };
+    case 'exit-own':
+      return { ...state, ownMode: false, ownIds: new Set() };
+    case 'enter-sub':
+      return { ...state, subMode: true };
+    case 'exit-sub':
+      return { ...state, subMode: false, subIds: new Set() };
+    case 'toggle-own':
+      return { ...state, ownIds: toggleInSet(state.ownIds, action.id) };
+    case 'toggle-sub':
+      return { ...state, subIds: toggleInSet(state.subIds, action.id) };
+    case 'set-own-ids':
+      return { ...state, ownIds: action.ids };
+    case 'set-sub-ids':
+      return { ...state, subIds: action.ids };
+    case 'set-busy':
+      return { ...state, busy: action.value };
+    default:
+      return state;
+  }
+}
+
+/** 「已复制」指示切片:技能分享与捆绑包分享各一个,2 秒后自动清除。 */
+type StudioCopiedState = {
+  skillId: string | null;
+  bundleId: string | null;
+};
+
+type StudioCopiedAction =
+  | { type: 'set-skill'; id: string }
+  | { type: 'clear-skill' }
+  | { type: 'set-bundle'; id: string }
+  | { type: 'clear-bundle' };
+
+const initialStudioCopied: StudioCopiedState = {
+  skillId: null,
+  bundleId: null,
+};
+
+/** 复制指示 reducer。 */
+function studioCopiedReducer(
+  state: StudioCopiedState,
+  action: StudioCopiedAction,
+): StudioCopiedState {
+  switch (action.type) {
+    case 'set-skill':
+      return { ...state, skillId: action.id };
+    case 'clear-skill':
+      return { ...state, skillId: null };
+    case 'set-bundle':
+      return { ...state, bundleId: action.id };
+    case 'clear-bundle':
+      return { ...state, bundleId: null };
+    default:
+      return state;
+  }
+}
+
 export default function StudioPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -117,24 +285,45 @@ export default function StudioPage() {
   const { formatNumber, t } = useI18n();
 
   const [loading, setLoading] = useState(true);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingBundle, setEditingBundle] = useState<SkillBundle | null>(null);
-  const [copiedBundleId, setCopiedBundleId] = useState<string | null>(null);
   const [importingSkill, setImportingSkill] = useState(false);
-  const [skillLimits, setSkillLimits] = useState(DEFAULT_SKILL_BUNDLE_LIMITS);
-  const [subscriptionSearch, setSubscriptionSearch] = useState('');
-  const [bundleSearch, setBundleSearch] = useState('');
-  const [skillSearch, setSkillSearch] = useState('');
-  const [subscriptionPage, setSubscriptionPage] = useState(1);
-  const [bundlePage, setBundlePage] = useState(1);
-  const [skillPage, setSkillPage] = useState(1);
-  // 批量选择:我的知识技能 / 订阅技能 各一套独立状态(跨页按 id 记录选中)
-  const [ownSelectionMode, setOwnSelectionMode] = useState(false);
-  const [ownSelectedIds, setOwnSelectedIds] = useState<Set<string>>(new Set());
-  const [subSelectionMode, setSubSelectionMode] = useState(false);
-  const [subSelectedIds, setSubSelectedIds] = useState<Set<string>>(new Set());
-  const [batchBusy, setBatchBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<StudioTabKey>('subscribed');
+  // skillLimits 仅在导入/导出事件处理器里读取,从不参与渲染,也不是任何 hook 依赖 → 用 ref 承载,避免无谓重渲染
+  const skillLimitsRef = useRef(DEFAULT_SKILL_BUNDLE_LIMITS);
+
+  // 三个列表的搜索 + 分页合并为一个切片;搜索变更时在 reducer 内重置页码(替代三个 useEffect)
+  const [lists, dispatchLists] = useReducer(
+    studioListsReducer,
+    initialStudioLists,
+  );
+  const {
+    subscriptionSearch,
+    subscriptionPage,
+    bundleSearch,
+    bundlePage,
+    skillSearch,
+    skillPage,
+  } = lists;
+
+  // 批量选择(我的知识技能 / 订阅技能 各一套,跨页按 id 记录选中)与批量执行态合并为一个切片
+  const [selection, dispatchSelection] = useReducer(
+    studioSelectionReducer,
+    initialStudioSelection,
+  );
+  const {
+    ownMode: ownSelectionMode,
+    ownIds: ownSelectedIds,
+    subMode: subSelectionMode,
+    subIds: subSelectedIds,
+    busy: batchBusy,
+  } = selection;
+
+  // 「已复制」指示(技能分享 / 捆绑包分享各一个)
+  const [copied, dispatchCopied] = useReducer(
+    studioCopiedReducer,
+    initialStudioCopied,
+  );
+  const { skillId: copiedId, bundleId: copiedBundleId } = copied;
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
@@ -157,7 +346,7 @@ export default function StudioPage() {
         if (cancelled) return;
         applyUserSkills(s);
         setBundles(Array.isArray(b) ? b : []);
-        setSkillLimits(limits);
+        skillLimitsRef.current = limits;
       })
       .catch((err) => {
         if (cancelled) return;
@@ -305,18 +494,6 @@ export default function StudioPage() {
     own: ownSkills.length,
   };
 
-  useEffect(() => {
-    setSubscriptionPage(1);
-  }, [subscriptionSearch]);
-
-  useEffect(() => {
-    setBundlePage(1);
-  }, [bundleSearch]);
-
-  useEffect(() => {
-    setSkillPage(1);
-  }, [skillSearch]);
-
   const runWithToast = async (
     fn: () => Promise<void>,
     fallbackMsg: string,
@@ -349,7 +526,7 @@ export default function StudioPage() {
     if (!file) return;
     setImportingSkill(true);
     await runWithToast(async () => {
-      const imported = await importSkillBundleFromZip(file, skillLimits);
+      const imported = await importSkillBundleFromZip(file, skillLimitsRef.current);
       await skillsApi.userCreate({
         skill_name: imported.skillName,
         files: imported.files,
@@ -362,7 +539,7 @@ export default function StudioPage() {
 
   const handleExportSkillZip = (skill: UserCustomSkill) => {
     try {
-      downloadSkillBundleZip(skill.skill_name, skill.files, skillLimits);
+      downloadSkillBundleZip(skill.skill_name, skill.files, skillLimitsRef.current);
     } catch (err) {
       toast(
         'error',
@@ -390,9 +567,9 @@ export default function StudioPage() {
       if (!shareToken) throw new Error(t('pages.studio.shareLinkMissing'));
       const url = `${window.location.origin}/skills/install?token=${encodeURIComponent(shareToken)}`;
       await navigator.clipboard.writeText(url);
-      setCopiedId(id);
+      dispatchCopied({ type: 'set-skill', id });
       toast('success', t('pages.studio.privateLinkCopied'));
-      setTimeout(() => setCopiedId(null), 2000);
+      setTimeout(() => dispatchCopied({ type: 'clear-skill' }), 2000);
     }, t('pages.studio.copyLinkFailed'));
   };
 
@@ -441,35 +618,29 @@ export default function StudioPage() {
 
   // —— 批量选择与批量启停 ——
   const toggleOwnSelect = (id: string) => {
-    setOwnSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    dispatchSelection({ type: 'toggle-own', id });
   };
   const toggleSubSelect = (id: string) => {
-    setSubSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    dispatchSelection({ type: 'toggle-sub', id });
   };
   const exitOwnSelection = () => {
-    setOwnSelectionMode(false);
-    setOwnSelectedIds(new Set());
+    dispatchSelection({ type: 'exit-own' });
   };
   const exitSubSelection = () => {
-    setSubSelectionMode(false);
-    setSubSelectedIds(new Set());
+    dispatchSelection({ type: 'exit-sub' });
   };
   // 全选/取消:全选作用于当前过滤结果全集,取消则清空整个选择集
   const selectAllOwn = () => {
-    setOwnSelectedIds(allOwnSelected ? new Set() : new Set(ownSelectableIds));
+    dispatchSelection({
+      type: 'set-own-ids',
+      ids: allOwnSelected ? new Set() : new Set(ownSelectableIds),
+    });
   };
   const selectAllSub = () => {
-    setSubSelectedIds(allSubSelected ? new Set() : new Set(subSelectableIds));
+    dispatchSelection({
+      type: 'set-sub-ids',
+      ids: allSubSelected ? new Set() : new Set(subSelectableIds),
+    });
   };
 
   // 批量启停:后端 /toggle 只能翻转,故前端只对「选中且当前状态 != 目标」的项调用,
@@ -482,13 +653,13 @@ export default function StudioPage() {
       toast('error', t('pages.studio.batchNoChange'));
       return;
     }
-    setBatchBusy(true);
+    dispatchSelection({ type: 'set-busy', value: true });
     const results = await Promise.allSettled(
       targets.map((skill) => skillsApi.userToggle(skill.id)),
     );
     const failed = results.filter((r) => r.status === 'rejected').length;
     await loadUserSkills();
-    setBatchBusy(false);
+    dispatchSelection({ type: 'set-busy', value: false });
     exitOwnSelection();
     const done = targets.length - failed;
     if (failed === 0) {
@@ -518,7 +689,7 @@ export default function StudioPage() {
       toast('error', t('pages.studio.batchNoChange'));
       return;
     }
-    setBatchBusy(true);
+    dispatchSelection({ type: 'set-busy', value: true });
     const results = await Promise.allSettled(
       targets.map((skill) =>
         skillsApi.subscriptionToggle(skill.subscription_id),
@@ -526,7 +697,7 @@ export default function StudioPage() {
     );
     const failed = results.filter((r) => r.status === 'rejected').length;
     await loadUserSkills();
-    setBatchBusy(false);
+    dispatchSelection({ type: 'set-busy', value: false });
     exitSubSelection();
     const done = targets.length - failed;
     if (failed === 0) {
@@ -614,9 +785,9 @@ export default function StudioPage() {
       if (!bundleToken) throw new Error(t('pages.studio.shareLinkMissing'));
       const url = `${window.location.origin}/skills/bundle/install?token=${encodeURIComponent(bundleToken)}`;
       await navigator.clipboard.writeText(url);
-      setCopiedBundleId(id);
+      dispatchCopied({ type: 'set-bundle', id });
       toast('success', t('pages.studio.privateLinkCopied'));
-      setTimeout(() => setCopiedBundleId(null), 2000);
+      setTimeout(() => dispatchCopied({ type: 'clear-bundle' }), 2000);
     }, t('pages.studio.copyLinkFailed'));
   };
 
@@ -781,7 +952,7 @@ export default function StudioPage() {
             {!loading && hasSubscribedSkills && !subSelectionMode && (
               <button
                 type="button"
-                onClick={() => setSubSelectionMode(true)}
+                onClick={() => dispatchSelection({ type: 'enter-sub' })}
                 className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
               >
                 <ListChecks size={12} />
@@ -804,7 +975,13 @@ export default function StudioPage() {
               <>
                 <ListSearch
                   value={subscriptionSearch}
-                  onChange={setSubscriptionSearch}
+                  onChange={(value) =>
+                    dispatchLists({
+                      type: 'set-search',
+                      list: 'subscription',
+                      value,
+                    })
+                  }
                   placeholder={t('pages.studio.subscribedSearchPlaceholder')}
                 />
                 {subSelectionMode && (
@@ -856,7 +1033,13 @@ export default function StudioPage() {
                       totalPages={pagedSubscribedItems.totalPages}
                       totalItems={filteredSubscribedItems.length}
                       pageSize={STUDIO_LIST_PAGE_SIZE}
-                      onPageChange={setSubscriptionPage}
+                      onPageChange={(page) =>
+                        dispatchLists({
+                          type: 'set-page',
+                          list: 'subscription',
+                          page,
+                        })
+                      }
                       formatNumber={formatNumber}
                       t={t}
                     />
@@ -900,7 +1083,9 @@ export default function StudioPage() {
               <>
                 <ListSearch
                   value={bundleSearch}
-                  onChange={setBundleSearch}
+                  onChange={(value) =>
+                    dispatchLists({ type: 'set-search', list: 'bundle', value })
+                  }
                   placeholder={t('pages.studio.bundlesSearchPlaceholder')}
                 />
                 {filteredBundles.length === 0 ? (
@@ -932,7 +1117,9 @@ export default function StudioPage() {
                       totalPages={pagedBundles.totalPages}
                       totalItems={filteredBundles.length}
                       pageSize={STUDIO_LIST_PAGE_SIZE}
-                      onPageChange={setBundlePage}
+                      onPageChange={(page) =>
+                        dispatchLists({ type: 'set-page', list: 'bundle', page })
+                      }
                       formatNumber={formatNumber}
                       t={t}
                     />
@@ -957,7 +1144,7 @@ export default function StudioPage() {
             {!loading && ownSkills.length > 0 && !ownSelectionMode && (
               <button
                 type="button"
-                onClick={() => setOwnSelectionMode(true)}
+                onClick={() => dispatchSelection({ type: 'enter-own' })}
                 className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors"
               >
                 <ListChecks size={12} />
@@ -1028,7 +1215,9 @@ export default function StudioPage() {
               <>
                 <ListSearch
                   value={skillSearch}
-                  onChange={setSkillSearch}
+                  onChange={(value) =>
+                    dispatchLists({ type: 'set-search', list: 'skill', value })
+                  }
                   placeholder={t('pages.studio.ownSkillsSearchPlaceholder')}
                 />
                 {ownSelectionMode && (
@@ -1082,7 +1271,9 @@ export default function StudioPage() {
                       totalPages={pagedOwnSkills.totalPages}
                       totalItems={filteredOwnSkills.length}
                       pageSize={STUDIO_LIST_PAGE_SIZE}
-                      onPageChange={setSkillPage}
+                      onPageChange={(page) =>
+                        dispatchLists({ type: 'set-page', list: 'skill', page })
+                      }
                       formatNumber={formatNumber}
                       t={t}
                     />

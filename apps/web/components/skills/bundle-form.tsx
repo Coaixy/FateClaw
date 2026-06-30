@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useReducer, useState } from 'react';
 import { BookOpen, Check, Loader2, Share2, XCircle } from 'lucide-react';
 
 import { SkillBundle, UserCustomSkill } from '@/features/skills/api';
@@ -12,6 +12,41 @@ export type BundleFormData = {
   description: string;
   skill_ids: string[];
 };
+
+/**
+ * 捆绑包表单的可编辑内容：名称、描述与已选技能集合。
+ *
+ * 三者同属一份待保存的表单数据，故合并为 reducer；保存中/错误提示仍是独立 state。
+ */
+interface BundleFormState {
+  name: string;
+  desc: string;
+  selected: Set<string>;
+}
+
+type BundleFormAction =
+  | { type: 'setName'; value: string }
+  | { type: 'setDesc'; value: string }
+  | { type: 'toggle'; id: string };
+
+function bundleFormReducer(
+  state: BundleFormState,
+  action: BundleFormAction,
+): BundleFormState {
+  switch (action.type) {
+    case 'setName':
+      return { ...state, name: action.value };
+    case 'setDesc':
+      return { ...state, desc: action.value };
+    case 'toggle': {
+      // 在已选集合上做不可变切换，保证引用变化触发 useMemo 重算。
+      const next = new Set(state.selected);
+      if (next.has(action.id)) next.delete(action.id);
+      else next.add(action.id);
+      return { ...state, selected: next };
+    }
+  }
+}
 
 export function BundleForm({
   initial,
@@ -27,22 +62,16 @@ export function BundleForm({
   variant?: 'sheet' | 'page';
 }) {
   const { confirm: confirmDialog } = useConfirm();
-  const [name, setName] = useState(initial?.name || '');
-  const [desc, setDesc] = useState(initial?.description || '');
-  const [selected, setSelected] = useState<Set<string>>(
-    new Set(initial?.skill_ids || []),
-  );
+  const [form, formDispatch] = useReducer(bundleFormReducer, {
+    name: initial?.name || '',
+    desc: initial?.description || '',
+    selected: new Set(initial?.skill_ids || []),
+  });
+  const { name, desc, selected } = form;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const toggle = (id: string) => formDispatch({ type: 'toggle', id });
 
   const sortedSkills = useMemo(() => {
     return [...ownSkills].sort((a, b) => {
@@ -160,7 +189,9 @@ export function BundleForm({
             </label>
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) =>
+                formDispatch({ type: 'setName', value: e.target.value })
+              }
               maxLength={80}
               placeholder="例如：八字入门合集"
               autoFocus
@@ -179,7 +210,9 @@ export function BundleForm({
             </label>
             <input
               value={desc}
-              onChange={(e) => setDesc(e.target.value)}
+              onChange={(e) =>
+                formDispatch({ type: 'setDesc', value: e.target.value })
+              }
               maxLength={300}
               placeholder="简单介绍一下这个捆绑包"
               className={inputClass}

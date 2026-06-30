@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 
 import type {
@@ -35,16 +35,88 @@ interface Filters {
   job_type?: string;
 }
 
+/** 列表查询条件（筛选 + 搜索 + 翻页），合并为一组以便原子更新。 */
+interface QueryState {
+  filters: Filters;
+  search: string;
+  /** 防抖后的搜索词，仅用于请求参数，从不直接渲染。 */
+  debouncedSearch: string;
+  page: number;
+}
+
+type QueryAction =
+  | { type: 'search'; value: string }
+  | { type: 'debounce'; value: string }
+  | { type: 'filter'; key: keyof Filters; value: string | undefined }
+  | { type: 'clear' }
+  | { type: 'page'; value: number };
+
+const INITIAL_QUERY: QueryState = {
+  filters: {},
+  search: '',
+  debouncedSearch: '',
+  page: 1,
+};
+
+/** 查询条件 reducer：改筛选 / 防抖落定时一并回到第一页（避免多次 setState）。 */
+function queryReducer(state: QueryState, action: QueryAction): QueryState {
+  switch (action.type) {
+    case 'search':
+      return { ...state, search: action.value };
+    case 'debounce':
+      // 防抖落定：更新请求用搜索词并回第一页（原 setDebouncedSearch + setPage 合一）
+      return { ...state, debouncedSearch: action.value, page: 1 };
+    case 'filter':
+      return {
+        ...state,
+        filters: { ...state.filters, [action.key]: action.value },
+        page: 1,
+      };
+    case 'clear':
+      // 清空筛选/搜索：连同防抖搜索词一并清零，避免列表 effect 先用旧词发一次错误请求
+      return { ...state, filters: {}, search: '', debouncedSearch: '', page: 1 };
+    case 'page':
+      return { ...state, page: action.value };
+    default:
+      return state;
+  }
+}
+
+/** 列表异步加载状态（数据 / 加载中 / 错误），三者总是一起变化。 */
+interface ListState {
+  data: BaziCaseListResponseDto | null;
+  loading: boolean;
+  error: string | null;
+}
+
+type ListAction =
+  | { type: 'start' }
+  | { type: 'success'; data: BaziCaseListResponseDto }
+  | { type: 'error'; message: string };
+
+const INITIAL_LIST: ListState = { data: null, loading: true, error: null };
+
+/** 列表加载 reducer：一次 dispatch 原子切换加载态，避免一个 effect 里多次 setState。 */
+function listReducer(state: ListState, action: ListAction): ListState {
+  switch (action.type) {
+    case 'start':
+      // 开始加载：进入 loading 并清空上一轮错误
+      return { ...state, loading: true, error: null };
+    case 'success':
+      return { data: action.data, loading: false, error: null };
+    case 'error':
+      // 失败：保留上一轮数据，仅落定错误信息
+      return { ...state, loading: false, error: action.message };
+    default:
+      return state;
+  }
+}
+
 export default function BaziCasesPage() {
   const [overview, setOverview] = useState<BaziCaseOverviewDto | null>(null);
-  const [filters, setFilters] = useState<Filters>({});
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState<BaziCaseListResponseDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<BaziCaseDto | null>(null);
+  const [query, dispatchQuery] = useReducer(queryReducer, INITIAL_QUERY);
+  const [list, dispatchList] = useReducer(listReducer, INITIAL_LIST);
 
   // 概览只加载一次；失败时静默（不阻塞列表）
   useEffect(() => {
@@ -54,50 +126,47 @@ export default function BaziCasesPage() {
       .catch(() => undefined);
   }, []);
 
-  // 搜索词防抖 300ms，并回到第一页
+  // 搜索词防抖 300ms，落定后回到第一页
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
+      dispatchQuery({ type: 'debounce', value: query.search.trim() });
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [query.search]);
 
   // 筛选 / 搜索 / 翻页变化时拉列表
   useEffect(() => {
     const params: BaziCaseListParams = {
-      ...filters,
-      q: debouncedSearch || undefined,
+      ...query.filters,
+      q: query.debouncedSearch || undefined,
       limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      offset: (query.page - 1) * PAGE_SIZE,
     };
-    setLoading(true);
-    setError(null);
+    dispatchList({ type: 'start' });
     baziCasesApi
       .list(params)
-      .then(setData)
+      .then((d) => dispatchList({ type: 'success', data: d }))
       .catch((err) =>
-        setError(err instanceof Error ? err.message : '加载失败，请稍后重试'),
-      )
-      .finally(() => setLoading(false));
-  }, [filters, debouncedSearch, page]);
+        dispatchList({
+          type: 'error',
+          message: err instanceof Error ? err.message : '加载失败，请稍后重试',
+        }),
+      );
+  }, [query.filters, query.debouncedSearch, query.page]);
 
   // 设置某个筛选字段并回到第一页
   const setField = (key: keyof Filters) => (value: string | undefined) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-    setPage(1);
+    dispatchQuery({ type: 'filter', key, value });
   };
 
   const hasActiveFilter =
-    Boolean(search) || Object.values(filters).some(Boolean);
+    Boolean(query.search) || Object.values(query.filters).some(Boolean);
 
   const clearAll = () => {
-    setFilters({});
-    setSearch('');
-    setPage(1);
+    dispatchQuery({ type: 'clear' });
   };
 
-  const total = data?.total ?? 0;
+  const total = list.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -123,8 +192,10 @@ export default function BaziCasesPage() {
             />
             <input
               type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={query.search}
+              onChange={(e) =>
+                dispatchQuery({ type: 'search', value: e.target.value })
+              }
               placeholder="搜索职业 / 经历关键词"
               className="h-9 w-full rounded-lg border border-hairline bg-surface-card pl-8 pr-3 text-[12px] text-ink placeholder:text-muted focus:border-primary focus:outline-none"
             />
@@ -132,31 +203,31 @@ export default function BaziCasesPage() {
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <FilterSelect
               label="性别"
-              value={filters.gender}
+              value={query.filters.gender}
               options={overview?.by_gender}
               onChange={setField('gender')}
             />
             <FilterSelect
               label="婚姻"
-              value={filters.marriage}
+              value={query.filters.marriage}
               options={overview?.by_marriage}
               onChange={setField('marriage')}
             />
             <FilterSelect
               label="当前财富"
-              value={filters.wealth}
+              value={query.filters.wealth}
               options={overview?.by_current_wealth}
               onChange={setField('wealth')}
             />
             <FilterSelect
               label="学历"
-              value={filters.education}
+              value={query.filters.education}
               options={overview?.by_education}
               onChange={setField('education')}
             />
             <FilterSelect
               label="职业类型"
-              value={filters.job_type}
+              value={query.filters.job_type}
               options={overview?.by_job_type}
               onChange={setField('job_type')}
             />
@@ -175,23 +246,25 @@ export default function BaziCasesPage() {
 
         {/* 结果统计 */}
         <div className="text-[12px] text-muted">
-          {loading ? '加载中…' : `共 ${total} 条命例`}
+          {list.loading ? '加载中…' : `共 ${total} 条命例`}
         </div>
 
         {/* 列表 */}
-        {loading ? (
+        {list.loading ? (
           <div className="flex justify-center py-16 text-muted">
             <Loader2 className="animate-spin" size={20} />
           </div>
-        ) : error ? (
-          <div className="py-16 text-center text-sm text-error">{error}</div>
-        ) : !data || data.entries.length === 0 ? (
+        ) : list.error ? (
+          <div className="py-16 text-center text-sm text-error">
+            {list.error}
+          </div>
+        ) : !list.data || list.data.entries.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted">
             没有符合条件的命例
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {data.entries.map((c) => (
+            {list.data.entries.map((c) => (
               <CaseCard key={c.id} c={c} onClick={() => setSelected(c)} />
             ))}
           </div>
@@ -200,10 +273,17 @@ export default function BaziCasesPage() {
         {/* 分页 */}
         {total > PAGE_SIZE && (
           <Pagination
-            page={page}
+            page={query.page}
             totalPages={totalPages}
-            onPrev={() => setPage((p) => Math.max(1, p - 1))}
-            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onPrev={() =>
+              dispatchQuery({ type: 'page', value: Math.max(1, query.page - 1) })
+            }
+            onNext={() =>
+              dispatchQuery({
+                type: 'page',
+                value: Math.min(totalPages, query.page + 1),
+              })
+            }
           />
         )}
       </div>

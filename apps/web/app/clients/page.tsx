@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CalendarDays,
@@ -60,6 +60,44 @@ type FormState =
   | { mode: 'edit'; profile: ClientProfile }
   | null;
 
+/** 客户列表的查询态：搜索词、状态筛选与当前页码，三者共同决定可见列表。 */
+interface ListQueryState {
+  search: string;
+  statusFilter: ClientStatus | 'all';
+  page: number;
+}
+
+type ListQueryAction =
+  | { type: 'search'; value: string }
+  | { type: 'statusFilter'; value: ClientStatus | 'all' }
+  | { type: 'page'; value: number };
+
+const initialListQuery: ListQueryState = {
+  search: '',
+  statusFilter: 'all',
+  page: 1,
+};
+
+/**
+ * 列表查询态归约器。
+ *
+ * 改变搜索词或状态筛选时一并把页码重置为 1，保持与原先「筛选变化即回到首页」
+ * 的交互一致；翻页则只更新 page。
+ */
+function listQueryReducer(
+  state: ListQueryState,
+  action: ListQueryAction,
+): ListQueryState {
+  switch (action.type) {
+    case 'search':
+      return { ...state, search: action.value, page: 1 };
+    case 'statusFilter':
+      return { ...state, statusFilter: action.value, page: 1 };
+    case 'page':
+      return { ...state, page: action.value };
+  }
+}
+
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
 }
@@ -87,9 +125,8 @@ export default function ClientsPage() {
     useClientProfiles(notify);
 
   const [initialLoaded, setInitialLoaded] = useState(false);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ClientStatus | 'all'>('all');
-  const [page, setPage] = useState(1);
+  const [query, dispatchQuery] = useReducer(listQueryReducer, initialListQuery);
+  const { search, statusFilter, page } = query;
   const [formState, setFormState] = useState<FormState>(null);
   const [deletingId, setDeletingId] = useState('');
 
@@ -124,10 +161,6 @@ export default function ClientsPage() {
     (currentPage - 1) * CLIENTS_PAGE_SIZE,
     currentPage * CLIENTS_PAGE_SIZE,
   );
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter]);
 
   const showSkeleton = loading && !initialLoaded;
 
@@ -210,7 +243,9 @@ export default function ClientsPage() {
                 <input
                   type="search"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) =>
+                    dispatchQuery({ type: 'search', value: event.target.value })
+                  }
                   placeholder={t('clients.searchPlaceholder')}
                   aria-label={t('clients.searchPlaceholder')}
                   className="w-full h-10 pl-9 pr-3 rounded-xl border border-hairline bg-surface-card text-[13px] placeholder:text-muted focus:border-primary focus:outline-none transition-all"
@@ -223,7 +258,9 @@ export default function ClientsPage() {
                   <button
                     key={item.value}
                     type="button"
-                    onClick={() => setStatusFilter(item.value)}
+                    onClick={() =>
+                      dispatchQuery({ type: 'statusFilter', value: item.value })
+                    }
                     className={`h-8 rounded-lg border px-3 text-[12px] font-medium transition-all ${
                       statusFilter === item.value
                         ? 'border-primary/30 bg-primary/12 text-primary'
@@ -292,7 +329,12 @@ export default function ClientsPage() {
                       </span>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => setPage((value) => Math.max(1, value - 1))}
+                          onClick={() =>
+                            dispatchQuery({
+                              type: 'page',
+                              value: Math.max(1, page - 1),
+                            })
+                          }
                           disabled={currentPage <= 1}
                           className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] text-muted transition-all hover:bg-surface-cream-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
                         >
@@ -307,7 +349,10 @@ export default function ClientsPage() {
                         </span>
                         <button
                           onClick={() =>
-                            setPage((value) => Math.min(totalPages, value + 1))
+                            dispatchQuery({
+                              type: 'page',
+                              value: Math.min(totalPages, page + 1),
+                            })
                           }
                           disabled={currentPage >= totalPages}
                           className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] text-muted transition-all hover:bg-surface-cream-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"

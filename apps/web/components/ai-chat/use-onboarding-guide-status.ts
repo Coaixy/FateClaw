@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 
 import type { EnabledSkillSummary } from '@/components/ai-chat/paipan-skill-rail';
 import {
@@ -188,6 +195,114 @@ export function resolveGuideStep({
 }
 
 /**
+ * 启动向导的两路数据拉取状态：模型总览与用户 Skill 各自的 data/loading/error，
+ * 随同一次 refresh 整体翻转。用 reducer 把「开始拉取」「拉取结算」「清空」各收敛成一次
+ * dispatch，避免一个 effect 内连发多次 setState 造成级联重渲染。
+ */
+interface GuideFetchState {
+  modelOverview: ModelSettingsOverview | null;
+  userSkills: UserSkillsResponse | null;
+  modelLoading: boolean;
+  skillLoading: boolean;
+  modelError: string;
+  skillError: string;
+}
+
+type GuideFetchAction =
+  | { type: 'reset' }
+  | { type: 'load-start' }
+  | {
+      type: 'load-settled';
+      modelResult: PromiseSettledResult<ModelSettingsOverview>;
+      skillResult: PromiseSettledResult<UserSkillsResponse>;
+    };
+
+const INITIAL_GUIDE_FETCH_STATE: GuideFetchState = {
+  modelOverview: null,
+  userSkills: null,
+  modelLoading: false,
+  skillLoading: false,
+  modelError: '',
+  skillError: '',
+};
+
+function guideFetchReducer(
+  state: GuideFetchState,
+  action: GuideFetchAction,
+): GuideFetchState {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_GUIDE_FETCH_STATE;
+    case 'load-start':
+      return {
+        ...state,
+        modelLoading: true,
+        skillLoading: true,
+        modelError: '',
+        skillError: '',
+      };
+    case 'load-settled': {
+      const { modelResult, skillResult } = action;
+      return {
+        modelOverview:
+          modelResult.status === 'fulfilled' ? modelResult.value : null,
+        modelError:
+          modelResult.status === 'fulfilled'
+            ? ''
+            : modelResult.reason instanceof Error
+              ? modelResult.reason.message
+              : '暂时无法读取官方模型',
+        userSkills:
+          skillResult.status === 'fulfilled' ? skillResult.value : null,
+        skillError:
+          skillResult.status === 'fulfilled'
+            ? ''
+            : skillResult.reason instanceof Error
+              ? skillResult.reason.message
+              : 'Skill 市场暂时不可用',
+        modelLoading: false,
+        skillLoading: false,
+      };
+    }
+  }
+}
+
+/**
+ * 启动向导弹层的呈现状态：是否打开（open）与当前步骤（step）始终一起决定弹层外观，
+ * 用 reducer 把「设步骤」「打开」「关闭」「直达完成」等转换收敛成单次 dispatch，
+ * 避免 setStep + setOpen 在同一 effect 内级联重渲染。
+ */
+interface GuidePresentationState {
+  open: boolean;
+  step: OnboardingGuideStep;
+}
+
+type GuidePresentationAction =
+  | { type: 'set-step'; step: OnboardingGuideStep }
+  | { type: 'open' }
+  | { type: 'close' }
+  | { type: 'show-done' }
+  | { type: 'open-at'; step: OnboardingGuideStep };
+
+function guidePresentationReducer(
+  state: GuidePresentationState,
+  action: GuidePresentationAction,
+): GuidePresentationState {
+  switch (action.type) {
+    case 'set-step':
+      return { ...state, step: action.step };
+    case 'open':
+      return { ...state, open: true };
+    case 'close':
+      return { ...state, open: false };
+    case 'show-done':
+      return { open: true, step: 'done' };
+    case 'open-at':
+      return { open: true, step: action.step };
+  }
+}
+
+/**
  * 读取 AI Chat 启动向导所需的模型、Skill 与 session 状态。
  *
  * @param options 控制是否发起状态检查；通常只在已登录且 AI Chat 可用时启用。
@@ -196,15 +311,14 @@ export function resolveGuideStep({
 export function useOnboardingGuideStatus({
   enabled,
 }: UseOnboardingGuideStatusOptions) {
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<OnboardingGuideStep>('welcome');
-  const [modelOverview, setModelOverview] =
-    useState<ModelSettingsOverview | null>(null);
-  const [userSkills, setUserSkills] = useState<UserSkillsResponse | null>(null);
-  const [modelLoading, setModelLoading] = useState(false);
-  const [skillLoading, setSkillLoading] = useState(false);
-  const [modelError, setModelError] = useState('');
-  const [skillError, setSkillError] = useState('');
+  const [{ open, step }, dispatchPresentation] = useReducer(
+    guidePresentationReducer,
+    { open: false, step: 'welcome' },
+  );
+  const [
+    { modelOverview, userSkills, modelLoading, skillLoading, modelError, skillError },
+    dispatchFetch,
+  ] = useReducer(guideFetchReducer, INITIAL_GUIDE_FETCH_STATE);
   const [complianceReady, setComplianceReady] = useState(false);
   const [resumeRequested, setResumeRequested] = useState(false);
   const requestIdRef = useRef(0);
@@ -214,10 +328,7 @@ export function useOnboardingGuideStatus({
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setModelLoading(true);
-    setSkillLoading(true);
-    setModelError('');
-    setSkillError('');
+    dispatchFetch({ type: 'load-start' });
 
     const [modelResult, skillResult] = await Promise.allSettled([
       modelSettingsApi.overview(),
@@ -226,41 +337,13 @@ export function useOnboardingGuideStatus({
 
     if (requestIdRef.current !== requestId) return;
 
-    if (modelResult.status === 'fulfilled') {
-      setModelOverview(modelResult.value);
-    } else {
-      setModelOverview(null);
-      setModelError(
-        modelResult.reason instanceof Error
-          ? modelResult.reason.message
-          : '暂时无法读取官方模型',
-      );
-    }
-
-    if (skillResult.status === 'fulfilled') {
-      setUserSkills(skillResult.value);
-    } else {
-      setUserSkills(null);
-      setSkillError(
-        skillResult.reason instanceof Error
-          ? skillResult.reason.message
-          : 'Skill 市场暂时不可用',
-      );
-    }
-
-    setModelLoading(false);
-    setSkillLoading(false);
+    dispatchFetch({ type: 'load-settled', modelResult, skillResult });
   }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
-      setOpen(false);
-      setModelOverview(null);
-      setUserSkills(null);
-      setModelLoading(false);
-      setSkillLoading(false);
-      setModelError('');
-      setSkillError('');
+      dispatchPresentation({ type: 'close' });
+      dispatchFetch({ type: 'reset' });
       return;
     }
 
@@ -317,7 +400,7 @@ export function useOnboardingGuideStatus({
       modelError,
       skillError,
     });
-    setStep(nextStep);
+    dispatchPresentation({ type: 'set-step', step: nextStep });
   }, [
     enabled,
     settled,
@@ -339,8 +422,7 @@ export function useOnboardingGuideStatus({
     const shouldShowDone =
       modelReady && skillReady && (resumeRequested || storedStep);
     if (shouldShowDone) {
-      setStep('done');
-      setOpen(true);
+      dispatchPresentation({ type: 'show-done' });
       return;
     }
 
@@ -348,7 +430,7 @@ export function useOnboardingGuideStatus({
       return;
     }
 
-    setOpen(true);
+    dispatchPresentation({ type: 'open' });
   }, [
     enabled,
     settled,
@@ -361,7 +443,7 @@ export function useOnboardingGuideStatus({
 
   const saveStep = useCallback((nextStep: OnboardingGuideStep) => {
     writeStoredStep(nextStep);
-    setStep(nextStep);
+    dispatchPresentation({ type: 'set-step', step: nextStep });
   }, []);
 
   const openGuide = useCallback(() => {
@@ -375,19 +457,18 @@ export function useOnboardingGuideStatus({
       skillError,
     });
     writeStoredStep(nextStep);
-    setStep(nextStep);
-    setOpen(true);
+    dispatchPresentation({ type: 'open-at', step: nextStep });
   }, [modelReady, skillReady, modelError, skillError]);
 
   const dismissGuide = useCallback(() => {
     markGuideDismissed();
-    setOpen(false);
+    dispatchPresentation({ type: 'close' });
   }, []);
 
   const completeGuide = useCallback(() => {
     markGuideDismissed();
     removeStoredStep();
-    setOpen(false);
+    dispatchPresentation({ type: 'close' });
   }, []);
 
   return {

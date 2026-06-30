@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   useState,
   type Dispatch,
@@ -164,10 +165,61 @@ function buildDefaultOfficialSelection(
   };
 }
 
+/** 概览资源状态：已加载的概览数据与初始加载标志。 */
+type OverviewState = {
+  data: ModelSettingsOverview | null;
+  loading: boolean;
+};
+
+type OverviewAction =
+  | { type: 'loadStart' }
+  | { type: 'loaded'; data: ModelSettingsOverview }
+  | { type: 'loadStop' }
+  | { type: 'patchThinkingLevel'; level: ModelThinkingLevel };
+
+/**
+ * 概览 reducer。
+ * loadStop 单独复位 loading，保持与原逻辑「loading 仅在 finally 置 false」一致；
+ * patchThinkingLevel 对应思考档位保存时的乐观更新与失败回滚，仅在已有 selection 时改写。
+ */
+function overviewReducer(
+  state: OverviewState,
+  action: OverviewAction,
+): OverviewState {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true };
+    case 'loaded':
+      return { ...state, data: action.data };
+    case 'loadStop':
+      return { ...state, loading: false };
+    case 'patchThinkingLevel':
+      return state.data?.selection
+        ? {
+            ...state,
+            data: {
+              ...state.data,
+              selection: {
+                ...state.data.selection,
+                thinking_level: action.level,
+              },
+            },
+          }
+        : state;
+    default:
+      return state;
+  }
+}
+
+const OVERVIEW_INITIAL: OverviewState = { data: null, loading: true };
+
 export function ModelSettingsPanel() {
   const { t } = useI18n();
-  const [overview, setOverview] = useState<ModelSettingsOverview | null>(null);
-  const [loading, setLoading] = useState(true);
+  // 概览数据与加载态合并为一个 reducer；保留 overview/loading 读名不变。
+  const [{ data: overview, loading }, overviewDispatch] = useReducer(
+    overviewReducer,
+    OVERVIEW_INITIAL,
+  );
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const thinkingSaveVersion = useRef(0);
@@ -180,7 +232,7 @@ export function ModelSettingsPanel() {
   });
 
   const load = useCallback(async () => {
-    setLoading(true);
+    overviewDispatch({ type: 'loadStart' });
     setMessage('');
     try {
       const data = await modelSettingsApi.overview();
@@ -196,7 +248,7 @@ export function ModelSettingsPanel() {
           model: defaultOfficialModel.display_name,
         });
       }
-      setOverview(nextOverview);
+      overviewDispatch({ type: 'loaded', data: nextOverview });
       setCustom(customDraftFromOverview(nextOverview));
       if (defaultSelectionMessage) {
         setMessage(defaultSelectionMessage);
@@ -206,7 +258,7 @@ export function ModelSettingsPanel() {
         error instanceof Error ? error.message : t('pages.modelSettings.loadFailed'),
       );
     } finally {
-      setLoading(false);
+      overviewDispatch({ type: 'loadStop' });
     }
   }, []);
 
@@ -285,17 +337,8 @@ export function ModelSettingsPanel() {
     const previousThinkingLevel = resolveSelectionThinkingLevel(overview);
     const saveVersion = thinkingSaveVersion.current + 1;
     thinkingSaveVersion.current = saveVersion;
-    setOverview((prev) =>
-      prev?.selection
-        ? {
-            ...prev,
-            selection: {
-              ...prev.selection,
-              thinking_level: thinkingLevel,
-            },
-          }
-        : prev,
-    );
+    // 乐观更新：先把档位改到目标值，失败再回滚。
+    overviewDispatch({ type: 'patchThinkingLevel', level: thinkingLevel });
     try {
       await modelSettingsApi.select({
         source: selection.source,
@@ -304,17 +347,11 @@ export function ModelSettingsPanel() {
       });
     } catch (error) {
       if (thinkingSaveVersion.current === saveVersion) {
-        setOverview((prev) =>
-          prev?.selection
-            ? {
-                ...prev,
-                selection: {
-                  ...prev.selection,
-                  thinking_level: previousThinkingLevel,
-                },
-              }
-            : prev,
-        );
+        // 仅当没有更新的保存覆盖时才回滚到先前档位。
+        overviewDispatch({
+          type: 'patchThinkingLevel',
+          level: previousThinkingLevel,
+        });
       }
       setMessage(
         error instanceof Error ? error.message : t('pages.modelSettings.saveFailed'),

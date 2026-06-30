@@ -37,12 +37,12 @@ function OAuthCallbackContent() {
     const next = normalizeAuthRedirect(searchParams.get('next')) ?? '/ai-chat';
     const callbackError = searchParams.get('error');
 
-    if (callbackError) {
-      setError(callbackError);
-      return;
-    }
-    if (!code) {
-      setError(t('login.oauthCallbackError'));
+    // 两个同步错误分支写的是同一份 error 状态，合并为一次 setError：
+    // URL 回调错误优先于缺失交换码；空字符串按缺失处理，与原 if 判断一致。
+    const initialError =
+      callbackError || (!code ? t('login.oauthCallbackError') : '');
+    if (initialError) {
+      setError(initialError);
       return;
     }
     if (exchangedRef.current) return;

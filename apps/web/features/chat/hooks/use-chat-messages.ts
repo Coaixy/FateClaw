@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useReducer,
   useRef,
   useState,
 } from 'react';
@@ -231,6 +232,104 @@ export async function sendChatSessionMessageWithOptions(
   return sender(sessionId, content, sendOptions);
 }
 
+/**
+ * 已加载会话的元信息：当前已加载哪个会话、是否被续聊门禁拦截、拦截文案。
+ * 三者在 loadMessages 成功时一起写入、切换/清空会话时一起重置，属同一份快照，
+ * 用 reducer 一次 dispatch 翻转，避免在同一 effect 内三连 setState 级联重渲染。
+ */
+interface LoadedSessionMetaState {
+  loadedSessionId: string;
+  continuationBlocked: boolean;
+  continuationBlockMessage: string;
+}
+
+type LoadedSessionMetaAction =
+  | { type: 'loaded'; sessionId: string; blocked: boolean; message: string }
+  | { type: 'reset' };
+
+const INITIAL_LOADED_SESSION_META: LoadedSessionMetaState = {
+  loadedSessionId: '',
+  continuationBlocked: false,
+  continuationBlockMessage: '',
+};
+
+function loadedSessionMetaReducer(
+  // 该 reducer 每个分支都返回全新快照，不依赖旧 state，故参数前缀下划线表明有意未用。
+  _state: LoadedSessionMetaState,
+  action: LoadedSessionMetaAction,
+): LoadedSessionMetaState {
+  switch (action.type) {
+    case 'loaded':
+      return {
+        loadedSessionId: action.sessionId,
+        continuationBlocked: action.blocked,
+        continuationBlockMessage: action.message,
+      };
+    case 'reset':
+      return INITIAL_LOADED_SESSION_META;
+  }
+}
+
+/**
+ * 上滑分页状态：是否还有更早消息、是否正在加载更早消息。两者同属一套翻页流程，
+ * 切换会话时一起重置，用 reducer 单次 dispatch 收敛，避免级联重渲染。
+ * 注意：与之并存的 hasMoreOlderRef / loadingOlderRef 仍由各自原有逻辑维护（供 scroll 事件同步读取）。
+ */
+interface PaginationState {
+  hasMoreOlder: boolean;
+  loadingOlder: boolean;
+}
+
+type PaginationAction =
+  | { type: 'set-has-more'; value: boolean }
+  | { type: 'older-start' }
+  | { type: 'older-end' }
+  | { type: 'reset' };
+
+function paginationReducer(
+  state: PaginationState,
+  action: PaginationAction,
+): PaginationState {
+  switch (action.type) {
+    case 'set-has-more':
+      return { ...state, hasMoreOlder: action.value };
+    case 'older-start':
+      return { ...state, loadingOlder: true };
+    case 'older-end':
+      return { ...state, loadingOlder: false };
+    case 'reset':
+      return { hasMoreOlder: false, loadingOlder: false };
+  }
+}
+
+/**
+ * 请求在途状态：加载历史（loading）与发送消息（sending）两个互相独立但同属「请求是否在途」的标志。
+ * 它们在切换会话时一起重置，用 reducer 翻转使该重置只需一次 dispatch，避免级联重渲染。
+ */
+interface RequestStatusState {
+  loading: boolean;
+  sending: boolean;
+}
+
+type RequestStatusAction =
+  | { type: 'set-loading'; value: boolean }
+  | { type: 'set-sending'; value: boolean }
+  | { type: 'reset' };
+
+function requestStatusReducer(
+  state: RequestStatusState,
+  action: RequestStatusAction,
+): RequestStatusState {
+  switch (action.type) {
+    case 'set-loading':
+      return { ...state, loading: action.value };
+    case 'set-sending':
+      return { ...state, sending: action.value };
+    case 'reset':
+      return { loading: false, sending: false };
+  }
+}
+
 export function useChatMessages(options: {
   chatAvailable: boolean;
   selectedSession: string;
@@ -240,18 +339,24 @@ export function useChatMessages(options: {
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
+  // 请求在途状态(loading/sending)合并到 reducer,切换会话时一次 dispatch 重置。
+  const [{ loading, sending }, dispatchRequestStatus] = useReducer(
+    requestStatusReducer,
+    { loading: false, sending: false },
+  );
   const [processing, setProcessing] = useState(false);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
-  const [loadedSessionId, setLoadedSessionId] = useState('');
-  const [continuationBlocked, setContinuationBlocked] = useState(false);
-  const [continuationBlockMessage, setContinuationBlockMessage] = useState('');
+  // 已加载会话元信息(loadedSessionId/continuationBlocked/continuationBlockMessage)合并到 reducer。
+  const [
+    { loadedSessionId, continuationBlocked, continuationBlockMessage },
+    dispatchLoadedSessionMeta,
+  ] = useReducer(loadedSessionMetaReducer, INITIAL_LOADED_SESSION_META);
   const [streamReconnectNonce, setStreamReconnectNonce] = useState(0);
-  // 是否还有更早的历史消息可加载(上滑分页用)。
-  const [hasMoreOlder, setHasMoreOlder] = useState(false);
-  // 是否正在加载更早消息(供顶部 loading 指示)。
-  const [loadingOlder, setLoadingOlder] = useState(false);
+  // 上滑分页状态(hasMoreOlder/loadingOlder)合并到 reducer。
+  const [{ hasMoreOlder, loadingOlder }, dispatchPagination] = useReducer(
+    paginationReducer,
+    { hasMoreOlder: false, loadingOlder: false },
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollInFlightRef = useRef(false);
@@ -364,7 +469,7 @@ export function useChatMessages(options: {
 
       const isBackground = loadOptions?.background ?? false;
       if (!isBackground) {
-        setLoading(true);
+        dispatchRequestStatus({ type: 'set-loading', value: true });
       }
 
       try {
@@ -376,14 +481,20 @@ export function useChatMessages(options: {
           return { ok: true, active: false };
         }
 
-        setLoadedSessionId(sessionId);
-        setContinuationBlocked(Boolean(data.continuation_blocked));
-        setContinuationBlockMessage(data.continuation_block_message || '');
+        dispatchLoadedSessionMeta({
+          type: 'loaded',
+          sessionId,
+          blocked: Boolean(data.continuation_blocked),
+          message: data.continuation_block_message || '',
+        });
         databaseProcessingRef.current = data.processing;
         // 仅在前台(切换/刷新)时据返回条数判断是否还有更早消息;
         // 后台轮询不改动该标记,避免大窗口刷新时误判。
         if (!isBackground) {
-          setHasMoreOlder(data.messages.length >= requestLimit);
+          dispatchPagination({
+            type: 'set-has-more',
+            value: data.messages.length >= requestLimit,
+          });
         }
 
         const nextMessages = data.messages.reverse();
@@ -466,7 +577,7 @@ export function useChatMessages(options: {
         return { ok: false };
       } finally {
         if (activeSessionRef.current === sessionId && !isBackground) {
-          setLoading(false);
+          dispatchRequestStatus({ type: 'set-loading', value: false });
         }
       }
     },
@@ -494,7 +605,7 @@ export function useChatMessages(options: {
     if (!oldest) return;
 
     loadingOlderRef.current = true;
-    setLoadingOlder(true);
+    dispatchPagination({ type: 'older-start' });
     // 记录加载前滚动几何,插入后据此把视口锚回原位(见下方 useLayoutEffect)。
     const scrollElement = scrollRef.current;
     prependAnchorRef.current = scrollElement
@@ -513,7 +624,7 @@ export function useChatMessages(options: {
       }
       const olderMessages = data.messages.reverse();
       if (olderMessages.length === 0) {
-        setHasMoreOlder(false);
+        dispatchPagination({ type: 'set-has-more', value: false });
         prependAnchorRef.current = null;
         return;
       }
@@ -536,13 +647,16 @@ export function useChatMessages(options: {
         prependAnchorRef.current = null;
       }
       // 后端返回满一页即认为仍有更早消息。
-      setHasMoreOlder(olderMessages.length >= MESSAGE_PAGE_SIZE);
+      dispatchPagination({
+        type: 'set-has-more',
+        value: olderMessages.length >= MESSAGE_PAGE_SIZE,
+      });
     } catch {
       // 加载失败静默放行,保留 hasMore 允许用户再次上滑重试。
       prependAnchorRef.current = null;
     } finally {
       loadingOlderRef.current = false;
-      setLoadingOlder(false);
+      dispatchPagination({ type: 'older-end' });
     }
   }, []);
 
@@ -554,16 +668,13 @@ export function useChatMessages(options: {
     loadedWindowSizeRef.current = MESSAGE_PAGE_SIZE;
     loadingOlderRef.current = false;
     prependAnchorRef.current = null;
-    setLoadingOlder(false);
-    setHasMoreOlder(false);
+    dispatchPagination({ type: 'reset' });
 
     if (options.selectedSession) {
       updateProcessing(false);
       updateAwaitingRefresh(false);
       databaseProcessingRef.current = false;
-      setLoadedSessionId('');
-      setContinuationBlocked(false);
-      setContinuationBlockMessage('');
+      dispatchLoadedSessionMeta({ type: 'reset' });
       void loadMessages(options.selectedSession, {
         background:
           sendingRef.current &&
@@ -572,15 +683,12 @@ export function useChatMessages(options: {
       return;
     }
 
-    setLoading(false);
     setMessages([]);
-    setSending(false);
+    dispatchRequestStatus({ type: 'reset' });
     updateProcessing(false);
     updateAwaitingRefresh(false);
     databaseProcessingRef.current = false;
-    setLoadedSessionId('');
-    setContinuationBlocked(false);
-    setContinuationBlockMessage('');
+    dispatchLoadedSessionMeta({ type: 'reset' });
   }, [
     loadMessages,
     options.selectedSession,
@@ -1372,7 +1480,7 @@ export function useChatMessages(options: {
 
     databaseProcessingRef.current = false;
     resetStreamingMessageRefs();
-    setSending(false);
+    dispatchRequestStatus({ type: 'set-sending', value: false });
     updateProcessing(false);
     updateAwaitingRefresh(false);
     inputRef.current?.focus();
@@ -1397,7 +1505,7 @@ export function useChatMessages(options: {
       }
       const abortController = new AbortController();
       sendAbortControllerRef.current = abortController;
-      setSending(true);
+      dispatchRequestStatus({ type: 'set-sending', value: true });
       shouldAutoScrollRef.current = true;
 
       try {
@@ -1536,7 +1644,7 @@ export function useChatMessages(options: {
         if (sendAbortControllerRef.current === abortController) {
           sendAbortControllerRef.current = null;
         }
-        setSending(false);
+        dispatchRequestStatus({ type: 'set-sending', value: false });
         inputRef.current?.focus();
       }
     },

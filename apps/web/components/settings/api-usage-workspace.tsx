@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import Link from 'next/link';
 import { Activity, ArrowLeft, KeyRound, MessageSquare } from 'lucide-react';
 
@@ -33,6 +33,88 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+/** 页面主数据加载状态：会话列表、账户用量、加载中、错误文案。 */
+type ListState = {
+  sessions: ApiSessionListItem[];
+  usage: UsageStats | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type ListAction =
+  | { type: 'loadStart' }
+  | { type: 'loaded'; sessions: ApiSessionListItem[] }
+  | { type: 'failed'; error: string }
+  | { type: 'setUsage'; usage: UsageStats | null };
+
+/**
+ * 列表 reducer：会话列表拉取的三态流转，外加用量的独立写入。
+ * 用量是辅助信息（失败只置 null、不影响主列表），因此用单独 action 承载。
+ */
+function listReducer(state: ListState, action: ListAction): ListState {
+  switch (action.type) {
+    case 'loadStart':
+      return { ...state, loading: true, error: null };
+    case 'loaded':
+      return { ...state, sessions: action.sessions, loading: false };
+    case 'failed':
+      return { ...state, error: action.error, loading: false };
+    case 'setUsage':
+      return { ...state, usage: action.usage };
+    default:
+      return state;
+  }
+}
+
+const LIST_INITIAL: ListState = {
+  sessions: [],
+  usage: null,
+  loading: true,
+  error: null,
+};
+
+/** 对话详情状态：选中的会话、其消息、消息加载中、消息错误。 */
+type DetailState = {
+  session: ApiSessionListItem | null;
+  messages: ApiSessionMessage[];
+  loading: boolean;
+  error: string | null;
+};
+
+type DetailAction =
+  | { type: 'open'; session: ApiSessionListItem }
+  | { type: 'loaded'; messages: ApiSessionMessage[] }
+  | { type: 'failed'; error: string }
+  | { type: 'close' };
+
+/** 详情 reducer：打开会话即重置消息并进入加载，成功/失败各自复位 loading。 */
+function detailReducer(state: DetailState, action: DetailAction): DetailState {
+  switch (action.type) {
+    case 'open':
+      return {
+        session: action.session,
+        messages: [],
+        loading: true,
+        error: null,
+      };
+    case 'loaded':
+      return { ...state, messages: action.messages, loading: false };
+    case 'failed':
+      return { ...state, error: action.error, loading: false };
+    case 'close':
+      return { ...state, session: null };
+    default:
+      return state;
+  }
+}
+
+const DETAIL_INITIAL: DetailState = {
+  session: null,
+  messages: [],
+  loading: false,
+  error: null,
+};
+
 /**
  * API 使用详情设置页（站内，需登录）。
  *
@@ -41,35 +123,34 @@ function errorMessage(error: unknown, fallback: string): string {
  * （含站内对话），因为后端 daily_usage 未按 API 调用单独拆分 Token。
  */
 export function ApiUsageWorkspace() {
-  const [sessions, setSessions] = useState<ApiSessionListItem[]>([]);
-  const [usage, setUsage] = useState<UsageStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // 页面主数据（会话列表 + 用量）合并为一个 reducer；保留 sessions/usage/loading/loadError 读名。
+  const [{ sessions, usage, loading, error: loadError }, listDispatch] =
+    useReducer(listReducer, LIST_INITIAL);
 
-  // 对话详情：选中的会话 + 其消息。
-  const [activeSession, setActiveSession] = useState<ApiSessionListItem | null>(
-    null,
-  );
-  const [messages, setMessages] = useState<ApiSessionMessage[]>([]);
-  const [msgLoading, setMsgLoading] = useState(false);
-  const [msgError, setMsgError] = useState<string | null>(null);
+  // 对话详情：选中会话 + 其消息合并为一个 reducer；保留 activeSession/messages/msgLoading/msgError 读名。
+  const [
+    {
+      session: activeSession,
+      messages,
+      loading: msgLoading,
+      error: msgError,
+    },
+    detailDispatch,
+  ] = useReducer(detailReducer, DETAIL_INITIAL);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+    listDispatch({ type: 'loadStart' });
     try {
       const res = await apiUsageApi.listSessions();
-      setSessions(res.sessions);
+      listDispatch({ type: 'loaded', sessions: res.sessions });
     } catch (error) {
-      setLoadError(errorMessage(error, '加载失败，请稍后重试'));
-    } finally {
-      setLoading(false);
+      listDispatch({ type: 'failed', error: errorMessage(error, '加载失败，请稍后重试') });
     }
     // 账户整体用量是辅助信息，失败不影响主列表。
     try {
-      setUsage(await billingApi.usage());
+      listDispatch({ type: 'setUsage', usage: await billingApi.usage() });
     } catch {
-      setUsage(null);
+      listDispatch({ type: 'setUsage', usage: null });
     }
   }, []);
 
@@ -78,17 +159,15 @@ export function ApiUsageWorkspace() {
   }, [refresh]);
 
   const openSession = useCallback(async (session: ApiSessionListItem) => {
-    setActiveSession(session);
-    setMessages([]);
-    setMsgError(null);
-    setMsgLoading(true);
+    detailDispatch({ type: 'open', session });
     try {
       const res = await apiUsageApi.sessionMessages(session.id);
-      setMessages(res.messages);
+      detailDispatch({ type: 'loaded', messages: res.messages });
     } catch (error) {
-      setMsgError(errorMessage(error, '对话加载失败，请稍后重试'));
-    } finally {
-      setMsgLoading(false);
+      detailDispatch({
+        type: 'failed',
+        error: errorMessage(error, '对话加载失败，请稍后重试'),
+      });
     }
   }, []);
 
@@ -204,7 +283,7 @@ export function ApiUsageWorkspace() {
       {/* 对话详情 */}
       <BottomSheet
         open={activeSession !== null}
-        onClose={() => setActiveSession(null)}
+        onClose={() => detailDispatch({ type: 'close' })}
         title="会话对话"
         size="md"
       >

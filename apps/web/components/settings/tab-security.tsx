@@ -10,7 +10,13 @@ import {
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useState,
+  type FormEvent,
+} from 'react';
 
 import { authApi, type CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -34,6 +40,137 @@ const PASSWORD_MIN_LENGTH = 8;
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+/** 修改密码表单态：当前/新/确认密码及错误与提交状态。 */
+interface ChangeFormState {
+  currentPassword: string;
+  nextPassword: string;
+  confirmPassword: string;
+  error: string;
+  submitting: boolean;
+}
+
+type ChangeFormAction =
+  | {
+      type: 'field';
+      name: 'currentPassword' | 'nextPassword' | 'confirmPassword';
+      value: string;
+    }
+  | { type: 'error'; value: string }
+  | { type: 'submitting'; value: boolean }
+  | { type: 'resetSecret' };
+
+const initialChangeForm: ChangeFormState = {
+  currentPassword: '',
+  nextPassword: '',
+  confirmPassword: '',
+  error: '',
+  submitting: false,
+};
+
+/** 修改密码表单归约器；resetSecret 在改密成功后清空三处密码输入。 */
+function changeFormReducer(
+  state: ChangeFormState,
+  action: ChangeFormAction,
+): ChangeFormState {
+  switch (action.type) {
+    case 'field':
+      return { ...state, [action.name]: action.value };
+    case 'error':
+      return { ...state, error: action.value };
+    case 'submitting':
+      return { ...state, submitting: action.value };
+    case 'resetSecret':
+      return {
+        ...state,
+        currentPassword: '',
+        nextPassword: '',
+        confirmPassword: '',
+      };
+  }
+}
+
+/** 找回密码表单态：图形验证码、短信验证码与新密码等。 */
+interface RecoverFormState {
+  captcha: CaptchaChallenge | null;
+  captchaInput: string;
+  captchaLoading: boolean;
+  smsCode: string;
+  /** 前端短信冷却秒数，仅用于交互反馈，真实冷却以后端为准。 */
+  smsCooldown: number;
+  smsSending: boolean;
+  password: string;
+  confirmPassword: string;
+  error: string;
+  submitting: boolean;
+}
+
+type RecoverFormAction =
+  | {
+      type: 'field';
+      name: 'captchaInput' | 'smsCode' | 'password' | 'confirmPassword';
+      value: string;
+    }
+  | { type: 'captchaLoading' }
+  | { type: 'captchaLoaded'; captcha: CaptchaChallenge }
+  | { type: 'captchaLoadEnd' }
+  | { type: 'error'; value: string }
+  | { type: 'sending'; value: boolean }
+  | { type: 'cooldown'; value: number }
+  | { type: 'cooldownTick' }
+  | { type: 'submitting'; value: boolean }
+  | { type: 'resetSecret' };
+
+const initialRecoverForm: RecoverFormState = {
+  captcha: null,
+  captchaInput: '',
+  captchaLoading: false,
+  smsCode: '',
+  smsCooldown: 0,
+  smsSending: false,
+  password: '',
+  confirmPassword: '',
+  error: '',
+  submitting: false,
+};
+
+/**
+ * 找回密码表单归约器。
+ *
+ * captchaLoading 开始刷新图形验证码时同时清空已输入的验证码（对应原先
+ * setCaptchaLoading(true)+setCaptchaInput('')）；cooldownTick 用于每秒递减冷却；
+ * resetSecret 在重置成功后清空短信码与新密码。
+ */
+function recoverFormReducer(
+  state: RecoverFormState,
+  action: RecoverFormAction,
+): RecoverFormState {
+  switch (action.type) {
+    case 'field':
+      return { ...state, [action.name]: action.value };
+    case 'captchaLoading':
+      return { ...state, captchaLoading: true, captchaInput: '' };
+    case 'captchaLoaded':
+      return { ...state, captcha: action.captcha };
+    case 'captchaLoadEnd':
+      return { ...state, captchaLoading: false };
+    case 'error':
+      return { ...state, error: action.value };
+    case 'sending':
+      return { ...state, smsSending: action.value };
+    case 'cooldown':
+      return { ...state, smsCooldown: action.value };
+    case 'cooldownTick':
+      return {
+        ...state,
+        smsCooldown: state.smsCooldown <= 1 ? 0 : state.smsCooldown - 1,
+      };
+    case 'submitting':
+      return { ...state, submitting: action.value };
+    case 'resetSecret':
+      return { ...state, smsCode: '', password: '', confirmPassword: '' };
+  }
 }
 
 function PasswordInput({
@@ -93,22 +230,34 @@ export function TabSecurity() {
   const { t } = useI18n();
   const [mode, setMode] = useState<SecurityMode>('change');
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [nextPassword, setNextPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [changeError, setChangeError] = useState('');
-  const [changeSubmitting, setChangeSubmitting] = useState(false);
+  const [change, dispatchChange] = useReducer(
+    changeFormReducer,
+    initialChangeForm,
+  );
+  const {
+    currentPassword,
+    nextPassword,
+    confirmPassword,
+    error: changeError,
+    submitting: changeSubmitting,
+  } = change;
 
-  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
-  const [captchaInput, setCaptchaInput] = useState('');
-  const [captchaLoading, setCaptchaLoading] = useState(false);
-  const [smsCode, setSMSCode] = useState('');
-  const [smsCooldown, setSMSCooldown] = useState(0);
-  const [smsSending, setSMSSending] = useState(false);
-  const [recoverPassword, setRecoverPassword] = useState('');
-  const [recoverConfirmPassword, setRecoverConfirmPassword] = useState('');
-  const [recoverError, setRecoverError] = useState('');
-  const [recoverSubmitting, setRecoverSubmitting] = useState(false);
+  const [recover, dispatchRecover] = useReducer(
+    recoverFormReducer,
+    initialRecoverForm,
+  );
+  const {
+    captcha,
+    captchaInput,
+    captchaLoading,
+    smsCode,
+    smsCooldown,
+    smsSending,
+    password: recoverPassword,
+    confirmPassword: recoverConfirmPassword,
+    error: recoverError,
+    submitting: recoverSubmitting,
+  } = recover;
 
   const phone = user?.phone_masked ?? user?.phone ?? '';
   const phoneVerified = user?.phone_verified ?? false;
@@ -129,15 +278,17 @@ export function TabSecurity() {
       : t('pages.profile.phoneWaiting');
 
   const refreshCaptcha = useCallback(async () => {
-    setCaptchaLoading(true);
-    setCaptchaInput('');
+    dispatchRecover({ type: 'captchaLoading' });
     try {
       const challenge = await authApi.captcha();
-      setCaptcha(challenge);
+      dispatchRecover({ type: 'captchaLoaded', captcha: challenge });
     } catch (error) {
-      setRecoverError(getErrorMessage(error, t('login.captchaLoadFailed')));
+      dispatchRecover({
+        type: 'error',
+        value: getErrorMessage(error, t('login.captchaLoadFailed')),
+      });
     } finally {
-      setCaptchaLoading(false);
+      dispatchRecover({ type: 'captchaLoadEnd' });
     }
   }, [t]);
 
@@ -151,7 +302,7 @@ export function TabSecurity() {
     if (smsCooldown <= 0) return;
     // 前端倒计时只负责交互反馈，真实发送冷却仍以后端 Redis 为准。
     const timer = window.setInterval(() => {
-      setSMSCooldown((current) => (current <= 1 ? 0 : current - 1));
+      dispatchRecover({ type: 'cooldownTick' });
     }, 1000);
     return () => window.clearInterval(timer);
   }, [smsCooldown]);
@@ -171,87 +322,103 @@ export function TabSecurity() {
 
   async function handleChangePassword(event: FormEvent) {
     event.preventDefault();
-    setChangeError('');
+    dispatchChange({ type: 'error', value: '' });
 
     if (!canChangePassword) {
-      setChangeError(t('pages.profile.passwordNotSet'));
+      dispatchChange({ type: 'error', value: t('pages.profile.passwordNotSet') });
       return;
     }
     if (!currentPassword) {
-      setChangeError(t('pages.profile.enterCurrentPassword'));
+      dispatchChange({
+        type: 'error',
+        value: t('pages.profile.enterCurrentPassword'),
+      });
       return;
     }
     const validationError = validatePasswordPair(nextPassword, confirmPassword);
     if (validationError) {
-      setChangeError(validationError);
+      dispatchChange({ type: 'error', value: validationError });
       return;
     }
 
-    setChangeSubmitting(true);
+    dispatchChange({ type: 'submitting', value: true });
     try {
       await authApi.changePassword(currentPassword, nextPassword);
-      setCurrentPassword('');
-      setNextPassword('');
-      setConfirmPassword('');
+      dispatchChange({ type: 'resetSecret' });
       toast('success', t('pages.profile.passwordUpdated'));
     } catch (error) {
-      setChangeError(
-        getErrorMessage(error, t('pages.profile.changePasswordFailed')),
-      );
+      dispatchChange({
+        type: 'error',
+        value: getErrorMessage(error, t('pages.profile.changePasswordFailed')),
+      });
     } finally {
-      setChangeSubmitting(false);
+      dispatchChange({ type: 'submitting', value: false });
     }
   }
 
   async function handleSendSMSCaptcha() {
-    setRecoverError('');
+    dispatchRecover({ type: 'error', value: '' });
     if (!canUsePhoneSecurity) {
-      setRecoverError(
-        phone
+      dispatchRecover({
+        type: 'error',
+        value: phone
           ? t('pages.profile.phoneNotVerified')
           : t('pages.profile.accountPhoneUnbound'),
-      );
+      });
       return;
     }
     if (!captcha) {
-      setRecoverError(t('pages.profile.loadCaptchaFirst'));
+      dispatchRecover({
+        type: 'error',
+        value: t('pages.profile.loadCaptchaFirst'),
+      });
       return;
     }
     if (!captchaInput.trim()) {
-      setRecoverError(t('pages.profile.enterImageCaptcha'));
+      dispatchRecover({
+        type: 'error',
+        value: t('pages.profile.enterImageCaptcha'),
+      });
       return;
     }
 
-    setSMSSending(true);
+    dispatchRecover({ type: 'sending', value: true });
     try {
       await authApi.sendCurrentUserSMSCaptcha(
         captcha.token,
         captchaInput.trim(),
       );
-      setSMSCooldown(180);
+      dispatchRecover({ type: 'cooldown', value: 180 });
       toast('success', t('pages.profile.smsSent'));
     } catch (error) {
-      setRecoverError(getErrorMessage(error, t('pages.profile.smsSendFailed')));
+      dispatchRecover({
+        type: 'error',
+        value: getErrorMessage(error, t('pages.profile.smsSendFailed')),
+      });
     } finally {
-      setSMSSending(false);
+      dispatchRecover({ type: 'sending', value: false });
       await refreshCaptcha();
     }
   }
 
   async function handleResetPassword(event: FormEvent) {
     event.preventDefault();
-    setRecoverError('');
+    dispatchRecover({ type: 'error', value: '' });
 
     if (!canUsePhoneSecurity) {
-      setRecoverError(
-        phone
+      dispatchRecover({
+        type: 'error',
+        value: phone
           ? t('pages.profile.phoneNotVerified')
           : t('pages.profile.accountPhoneUnbound'),
-      );
+      });
       return;
     }
     if (!smsCode.trim()) {
-      setRecoverError(t('pages.profile.enterSmsCaptcha'));
+      dispatchRecover({
+        type: 'error',
+        value: t('pages.profile.enterSmsCaptcha'),
+      });
       return;
     }
     const validationError = validatePasswordPair(
@@ -259,11 +426,11 @@ export function TabSecurity() {
       recoverConfirmPassword,
     );
     if (validationError) {
-      setRecoverError(validationError);
+      dispatchRecover({ type: 'error', value: validationError });
       return;
     }
 
-    setRecoverSubmitting(true);
+    dispatchRecover({ type: 'submitting', value: true });
     try {
       const response = await authApi.resetCurrentUserPassword(
         recoverPassword,
@@ -271,16 +438,15 @@ export function TabSecurity() {
       );
       setAuthToken(response.token);
       await refresh();
-      setSMSCode('');
-      setRecoverPassword('');
-      setRecoverConfirmPassword('');
+      dispatchRecover({ type: 'resetSecret' });
       toast('success', t('pages.profile.passwordReset'));
     } catch (error) {
-      setRecoverError(
-        getErrorMessage(error, t('pages.profile.resetPasswordFailed')),
-      );
+      dispatchRecover({
+        type: 'error',
+        value: getErrorMessage(error, t('pages.profile.resetPasswordFailed')),
+      });
     } finally {
-      setRecoverSubmitting(false);
+      dispatchRecover({ type: 'submitting', value: false });
     }
   }
 
@@ -358,8 +524,8 @@ export function TabSecurity() {
                   type="button"
                   onClick={() => {
                     setMode(item);
-                    setChangeError('');
-                    setRecoverError('');
+                    dispatchChange({ type: 'error', value: '' });
+                    dispatchRecover({ type: 'error', value: '' });
                   }}
                   className={`inline-flex h-[34px] items-center justify-center rounded-lg border px-3 text-[11px] font-medium transition-all cursor-pointer ${
                     mode === item
@@ -394,7 +560,13 @@ export function TabSecurity() {
                     hideLabel={t('pages.profile.hidePassword')}
                     showLabel={t('pages.profile.showPassword')}
                     value={currentPassword}
-                    onChange={setCurrentPassword}
+                    onChange={(value) =>
+                      dispatchChange({
+                        type: 'field',
+                        name: 'currentPassword',
+                        value,
+                      })
+                    }
                     disabled={changeSubmitting || !canChangePassword}
                   />
                 </div>
@@ -404,7 +576,13 @@ export function TabSecurity() {
                   hideLabel={t('pages.profile.hidePassword')}
                   showLabel={t('pages.profile.showPassword')}
                   value={nextPassword}
-                  onChange={setNextPassword}
+                  onChange={(value) =>
+                    dispatchChange({
+                      type: 'field',
+                      name: 'nextPassword',
+                      value,
+                    })
+                  }
                   disabled={changeSubmitting || !canChangePassword}
                 />
                 <PasswordInput
@@ -413,7 +591,13 @@ export function TabSecurity() {
                   hideLabel={t('pages.profile.hidePassword')}
                   showLabel={t('pages.profile.showPassword')}
                   value={confirmPassword}
-                  onChange={setConfirmPassword}
+                  onChange={(value) =>
+                    dispatchChange({
+                      type: 'field',
+                      name: 'confirmPassword',
+                      value,
+                    })
+                  }
                   disabled={changeSubmitting || !canChangePassword}
                 />
               </div>
@@ -457,7 +641,13 @@ export function TabSecurity() {
                   </span>
                   <input
                     value={captchaInput}
-                    onChange={(event) => setCaptchaInput(event.target.value)}
+                    onChange={(event) =>
+                      dispatchRecover({
+                        type: 'field',
+                        name: 'captchaInput',
+                        value: event.target.value,
+                      })
+                    }
                     disabled={captchaLoading || smsSending}
                     className="h-10 w-full rounded-lg border border-hairline bg-canvas/92 px-3 text-[13px] transition-all duration-150 placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/18 disabled:cursor-not-allowed disabled:opacity-70"
                     placeholder={t('pages.profile.imageCaptchaPlaceholder')}
@@ -500,7 +690,13 @@ export function TabSecurity() {
                   </span>
                   <input
                     value={smsCode}
-                    onChange={(event) => setSMSCode(event.target.value)}
+                    onChange={(event) =>
+                      dispatchRecover({
+                        type: 'field',
+                        name: 'smsCode',
+                        value: event.target.value,
+                      })
+                    }
                     disabled={recoverSubmitting}
                     className="h-10 w-full rounded-lg border border-hairline bg-canvas/92 px-3 text-[13px] transition-all duration-150 placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/18 disabled:cursor-not-allowed disabled:opacity-70"
                     placeholder={t('pages.profile.smsCaptchaPlaceholder')}
@@ -531,7 +727,9 @@ export function TabSecurity() {
                   hideLabel={t('pages.profile.hidePassword')}
                   showLabel={t('pages.profile.showPassword')}
                   value={recoverPassword}
-                  onChange={setRecoverPassword}
+                  onChange={(value) =>
+                    dispatchRecover({ type: 'field', name: 'password', value })
+                  }
                   disabled={recoverSubmitting}
                 />
                 <PasswordInput
@@ -540,7 +738,13 @@ export function TabSecurity() {
                   hideLabel={t('pages.profile.hidePassword')}
                   showLabel={t('pages.profile.showPassword')}
                   value={recoverConfirmPassword}
-                  onChange={setRecoverConfirmPassword}
+                  onChange={(value) =>
+                    dispatchRecover({
+                      type: 'field',
+                      name: 'confirmPassword',
+                      value,
+                    })
+                  }
                   disabled={recoverSubmitting}
                 />
               </div>
