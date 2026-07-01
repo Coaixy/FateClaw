@@ -313,8 +313,12 @@ const SKILL_BUNDLE_SELECT_COLUMNS = `
   b.description,
   COALESCE(
     (
+      -- 技能被删除后 skill_bundle_items 里的关联行不会被自动清理（历史遗留数据），
+      -- 这里必须 join 过滤已删除技能，否则会把已删除的 skill_id 回传给前端表单，
+      -- 表单据此预选中这些看不见、也点不掉的 id，一保存就被后端校验拒绝。
       SELECT array_agg(sbi.skill_id ORDER BY sbi.sort_order)
       FROM skill_bundle_items sbi
+      JOIN user_custom_skills s ON s.id = sbi.skill_id AND s.deleted_at IS NULL
       WHERE sbi.bundle_id = b.id
     ),
     ARRAY[]::text[]
@@ -568,14 +572,42 @@ export async function deleteUserCustomSkill(
   id: string,
   userId: string,
 ): Promise<boolean> {
-  const { rowCount } = await pool.query(
-    `UPDATE user_custom_skills
-     SET deleted_at = NOW()
-     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $3`,
-    [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
-  );
-  return (rowCount ?? 0) > 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(
+      `UPDATE user_custom_skills
+       SET deleted_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+         AND COALESCE(audit_metadata->>'source', '') <> $3`,
+      [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    );
+    if ((rowCount ?? 0) > 0) {
+      // 技能删除后同步清理它在各 bundle 里的关联行，并重算受影响 bundle 的
+      // stat_skill_count；否则关联行会一直留存成孤儿数据。
+      await client.query(
+        `WITH removed AS (
+           DELETE FROM skill_bundle_items WHERE skill_id = $1
+           RETURNING bundle_id
+         )
+         UPDATE skill_bundles b
+         SET stat_skill_count = (
+               SELECT COUNT(*) FROM skill_bundle_items i WHERE i.bundle_id = b.id
+             ),
+             updated_at = NOW()
+         FROM (SELECT DISTINCT bundle_id FROM removed) r
+         WHERE b.id = r.bundle_id`,
+        [id],
+      );
+    }
+    await client.query('COMMIT');
+    return (rowCount ?? 0) > 0;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function toggleUserCustomSkill(

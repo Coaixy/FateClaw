@@ -28,6 +28,7 @@ vi.mock('../../../src/modules/skills/text-skill-bundle-store.js', () => ({
 import {
   createSkillAccessInvite,
   createUserCustomSkill,
+  deleteUserCustomSkill,
   getBundleByToken,
   getSkillAccessInvitePreviewByToken,
   getSubscribedSkills,
@@ -36,6 +37,7 @@ import {
   listSkillCommentsForAdmin,
   listMarketBundles,
   listMarketSkills,
+  listUserBundles,
   reviewSkillCommentForAdmin,
   seedOfficialSkills,
   setSkillCommentPinnedForAdmin,
@@ -679,5 +681,65 @@ describe('skills repository official skill settings', () => {
 
     expect(calls[0]?.sql).toContain("WHERE id = $1 AND status = 'approved'");
     expect(calls[0]?.params).toEqual(['comment-1', true]);
+  });
+
+  it('excludes deleted skills from bundle skill_ids so stale ids never reach the edit form', async () => {
+    const { calls } = createMockPool([
+      {
+        id: 'bundle-1',
+        user_id: 'user-1',
+        name: 'Bundle',
+        description: '',
+        skill_ids: ['skill-1'],
+        bundle_token: null,
+        visibility: 'private',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+        deleted_at: null,
+      },
+    ]);
+
+    await listUserBundles('user-1');
+
+    expect(calls[0]?.sql).toContain(
+      'JOIN user_custom_skills s ON s.id = sbi.skill_id AND s.deleted_at IS NULL',
+    );
+  });
+
+  it('cleans up bundle membership and recomputes stat_skill_count when a skill is deleted', async () => {
+    const { clientCalls, client } = createSequencedClientMockPool([
+      [{}], // UPDATE user_custom_skills ... 命中一行
+      [{ bundle_id: 'bundle-1' }], // WITH removed AS (DELETE ...) 清理关联行
+    ]);
+
+    await expect(
+      deleteUserCustomSkill('skill-1', 'user-1'),
+    ).resolves.toBe(true);
+
+    expect(clientCalls[0]?.sql).toBe('BEGIN');
+    expect(clientCalls[1]?.sql).toContain('UPDATE user_custom_skills');
+    expect(clientCalls[2]?.sql).toContain(
+      'DELETE FROM skill_bundle_items WHERE skill_id = $1',
+    );
+    expect(clientCalls[2]?.sql).toContain(
+      'SET stat_skill_count = (',
+    );
+    expect(clientCalls[2]?.params).toEqual(['skill-1']);
+    expect(clientCalls[3]?.sql).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it('skips bundle cleanup when the skill delete matches no row', async () => {
+    const { clientCalls } = createSequencedClientMockPool([[]]);
+
+    await expect(
+      deleteUserCustomSkill('skill-1', 'user-1'),
+    ).resolves.toBe(false);
+
+    expect(clientCalls.map((c) => c.sql)).toEqual([
+      'BEGIN',
+      expect.stringContaining('UPDATE user_custom_skills'),
+      'COMMIT',
+    ]);
   });
 });
