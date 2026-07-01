@@ -187,8 +187,8 @@ importers:
         specifier: ^5.8.5
         version: 5.8.5
       iching-shifa:
-        specifier: ^1.7.1
-        version: 1.7.1
+        specifier: ^1.8.0
+        version: 1.8.0
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
@@ -2731,8 +2731,8 @@ packages:
   i18next@23.16.8:
     resolution: {integrity: sha512-06r/TitrM88Mg5FdUXAKL96dJMzgqLE5dv3ryBAra4KCwD9mJ4ndOTS95ZuymIGoE+2hzfdaMak2X11/es7ZWg==}
 
-  iching-shifa@1.7.1:
-    resolution: {integrity: sha512-F764oLm4K/KA30WUCqdcvDHHnQdfD4rpdG7I2ckS/jvFkGTny8BiNHT+TLySEi19CcC/fSDK2nOeAKTHlPHcqQ==}
+  iching-shifa@1.8.0:
+    resolution: {integrity: sha512-Ym4tC1i3VUkNM11HqIaJSN8q6lzVsjeF5kQHpvpgnmFBslSoaJ9kZUrpJqryyBQAxF0lz8MlserMJ5TZokXmOA==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -7362,7 +7362,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.2
 
-  iching-shifa@1.7.1:
+  iching-shifa@1.8.0:
     dependencies:
       tyme4ts: 1.5.2
 
