@@ -67,9 +67,6 @@ function formatGuaSummary(label: string, value: unknown): string | undefined {
       ? `五行${textField(gua, 'palaceWuXing')}`
       : undefined,
     textField(gua, 'palaceLevel'),
-    textField(gua, 'wuXingStar')
-      ? `五星${textField(gua, 'wuXingStar')}`
-      : undefined,
     textField(gua, 'shenYao') ? `身爻${textField(gua, 'shenYao')}` : undefined,
   ]);
   return details ? `${label}：${name}（${details}）` : `${label}：${name}`;

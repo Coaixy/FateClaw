@@ -33,7 +33,6 @@ export interface IchingGua {
   palace?: string;
   palaceWuXing?: string;
   palaceLevel?: string;
-  wuXingStar?: string;
   yaoList: IchingYao[];
   guaCi?: string;
   yaoCi?: string[];
