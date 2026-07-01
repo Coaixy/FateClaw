@@ -12,6 +12,7 @@ const {
   mockEnsureLocalAgentRunning,
   mockReleaseLocalAgent,
   mockRetainLocalAgent,
+  mockOnLocalAgentProcessExit,
   mockRpop,
   mockRpush,
   mockSettleBillingReservation,
@@ -28,6 +29,7 @@ const {
   mockEnsureLocalAgentRunning: vi.fn(async () => undefined),
   mockReleaseLocalAgent: vi.fn(async () => undefined),
   mockRetainLocalAgent: vi.fn((accountId: string) => accountId),
+  mockOnLocalAgentProcessExit: vi.fn(),
   mockRpop: vi.fn(),
   mockRpush: vi.fn(async () => 1),
   mockSettleBillingReservation: vi.fn(async () => 0),
@@ -80,6 +82,7 @@ vi.mock('../../src/runtime/local-runner.js', () => ({
   ensureLocalAgentRunning: mockEnsureLocalAgentRunning,
   releaseLocalAgent: mockReleaseLocalAgent,
   retainLocalAgent: mockRetainLocalAgent,
+  onLocalAgentProcessExit: mockOnLocalAgentProcessExit,
 }));
 
 vi.mock('../../src/modules/billing/plans.js', () => ({
@@ -106,10 +109,12 @@ import {
   _resetIpcWorkerForTests,
   __getPendingAiChatRequestsForTests,
   cancelAiChatSessionRequest,
+  startIpcWorker,
   submitAiChatInboxRequest,
   submitInboxRequest,
 } from '../../src/runtime/ipc-worker.js';
 import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
+import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
 import {
   getMembershipOverview,
   getUserByAccountId,
@@ -470,5 +475,75 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
 
     expect(mockRetainLocalAgent).not.toHaveBeenCalled();
     expect(mockLpush).not.toHaveBeenCalled();
+  });
+});
+
+describe('local agent-runtime process exit notifies in-flight AI Chat requests', () => {
+  beforeEach(() => {
+    _resetIpcWorkerForTests();
+    mockOnLocalAgentProcessExit.mockClear();
+    vi.mocked(processAiChatOutboxPayload).mockReset();
+    vi.mocked(processAiChatOutboxPayload).mockResolvedValue(undefined);
+  });
+
+  it('registers a crash handler with local-runner on startup', () => {
+    startIpcWorker([]);
+    expect(mockOnLocalAgentProcessExit).toHaveBeenCalledTimes(1);
+    expect(mockOnLocalAgentProcessExit.mock.calls[0][0]).toBeTypeOf('function');
+  });
+
+  it('fails in-flight requests only for the crashed account, with a detailed error and friendly public message', async () => {
+    startIpcWorker([]);
+    const handler = mockOnLocalAgentProcessExit.mock.calls[0][0] as (
+      accountId: string,
+      info: {
+        reason: 'exit' | 'error';
+        code: number | null;
+        signal: string | null;
+      },
+    ) => void;
+
+    const pending = __getPendingAiChatRequestsForTests();
+    pending.set(
+      'req-crash-1',
+      createPending({ accountId: 'web:crash-acct', sessionId: 'session-a' }),
+    );
+    pending.set(
+      'req-other',
+      createPending({ accountId: 'web:other-acct', sessionId: 'session-b' }),
+    );
+
+    handler('web:crash-acct', { reason: 'exit', code: 137, signal: null });
+
+    await vi.waitFor(() => {
+      expect(processAiChatOutboxPayload).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload, accountId] = vi.mocked(processAiChatOutboxPayload).mock
+      .calls[0] as [Record<string, unknown>, string];
+    expect(accountId).toBe('web:crash-acct');
+    expect(payload.requestId).toBe('req-crash-1');
+    expect(payload.status).toBe('error');
+    expect(payload.publicReasonCode).toBe('agent_process_exited');
+    // 详细诊断信息（退出码/OOM 提示）应保留在内部 error 字段，不直接暴露给用户文案。
+    expect(payload.error).toContain('137');
+    expect(payload.error).toContain('OOM');
+    expect(payload.publicErrorText).not.toContain('137');
+
+    // 未受影响账号的在途请求不应被处理，也不应从表中删除。
+    expect(pending.has('req-other')).toBe(true);
+  });
+
+  it('does nothing when the crashed account has no in-flight requests', async () => {
+    startIpcWorker([]);
+    const handler = mockOnLocalAgentProcessExit.mock.calls[0][0] as (
+      accountId: string,
+      info: { reason: 'exit'; code: number | null; signal: string | null },
+    ) => void;
+
+    handler('web:idle-acct', { reason: 'exit', code: 0, signal: null });
+    await Promise.resolve();
+
+    expect(processAiChatOutboxPayload).not.toHaveBeenCalled();
   });
 });

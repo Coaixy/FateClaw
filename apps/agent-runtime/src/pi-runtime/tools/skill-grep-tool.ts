@@ -28,6 +28,9 @@ const MAX_MATCH_PREVIEW_CHARS = 220;
 // grep 改用流式逐行读取，不把整文件载入内存；此处仅作单文件大小安全阀：超过则跳过并上报，
 // 避免病态超大文件拖垮逐行匹配（尤其正则）。8MB 足以覆盖正常 Skill Markdown 知识库。
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+// 正则匹配单行时的最大截断长度：灾难性回溯的最坏耗时随输入长度指数级增长，
+// 限制单次匹配喂给正则引擎的字符数，把风险敞口控制在正常文本行规模内。
+const MAX_REGEX_MATCH_LINE_CHARS = 4000;
 const SKIPPED_DIRS = new Set([
   '.git',
   'node_modules',
@@ -314,8 +317,9 @@ function literalMatcher(query: string, caseSensitive: boolean): LineMatcher {
  * - regex=false：强制字面子串匹配。
  *
  * 返回：matcher 与 usedRegex（实际是否按正则匹配；强制字面或非法回退时为 false，供结果标注）。
- * 注意：正则由模型提供并逐行执行，单行规模受文件大小安全阀约束，灾难性回溯风险有限但非零；
- *       这里不对单行做额外超时保护，仅依赖上层 MAX_FILE_BYTES 兜底。
+ * 注意：正则由模型提供并逐行执行，无法杜绝灾难性回溯；对超过 MAX_REGEX_MATCH_LINE_CHARS
+ *       的行只在截断后的前缀内匹配，把单次同步匹配的最坏输入规模限制在可控范围（无法
+ *       覆盖所有病态模式，但能大幅降低真实触发概率与影响范围）。
  */
 function buildMatcher(
   query: string,
@@ -328,7 +332,11 @@ function buildMatcher(
       return {
         // 非 global 正则，exec 每次从行首匹配，无 lastIndex 残留状态。
         matcher: (line) => {
-          const match = compiled.exec(line);
+          const candidate =
+            line.length > MAX_REGEX_MATCH_LINE_CHARS
+              ? line.slice(0, MAX_REGEX_MATCH_LINE_CHARS)
+              : line;
+          const match = compiled.exec(candidate);
           return match ? match.index : -1;
         },
         usedRegex: true,
@@ -339,6 +347,8 @@ function buildMatcher(
   }
   return { matcher: literalMatcher(query, caseSensitive), usedRegex: false };
 }
+
+export const __buildMatcherForTests = buildMatcher;
 
 async function grepFile(args: {
   filePath: string;

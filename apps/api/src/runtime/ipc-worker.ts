@@ -56,6 +56,8 @@ import {
   ensureLocalAgentRunning,
   releaseLocalAgent,
   retainLocalAgent,
+  onLocalAgentProcessExit,
+  type LocalAgentProcessExitInfo,
 } from './local-runner.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
@@ -893,11 +895,96 @@ export function submitInboxRequest(input: {
   });
 }
 
+/**
+ * 把本地 agent-runtime 子进程的退出详情，格式化成便于排障的详细描述。
+ *
+ * @param info local-runner.ts 上报的子进程退出/出错详情。
+ * @returns 写入日志和 error 字段用的详细文案（不面向终端用户）。
+ */
+function describeLocalAgentExitInfo(info: LocalAgentProcessExitInfo): string {
+  if (info.reason === 'error') {
+    return `子进程触发 error 事件：${info.error?.message ?? String(info.error)}`;
+  }
+  const looksLikeOom = info.signal === 'SIGKILL' || info.code === 137;
+  const base = `进程退出，code=${info.code ?? 'null'}，signal=${info.signal ?? 'null'}`;
+  return looksLikeOom
+    ? `${base}（code=137 或 SIGKILL 通常意味着被系统 OOM-Killer 强制终止，建议排查内存占用）`
+    : base;
+}
+
+/**
+ * 本地 agent-runtime 子进程异常退出/崩溃时，把该账号名下所有仍在等待响应的
+ * AI Chat 请求统一标记为失败。
+ *
+ * 背景：正常情况下请求失败会由 agent-runtime 自己推一条 error 响应到 outbox；
+ * 但如果子进程本身崩溃或被系统杀死，它根本没机会推任何东西——若不在这里主动兜底，
+ * 用户只能干等到 AI_CHAT_REQUEST_TIMEOUT（默认 30 分钟）粗粒度超时才会收到提示。
+ * 复用 processAiChatOutboxPayload 走和真实 error 响应完全一致的落库/推送/清理流程。
+ *
+ * @param accountId 崩溃/退出的本地 agent-runtime 进程所属账号 ID。
+ * @param info 子进程退出详情（退出码/信号/异常），写入 error 字段供排障使用；
+ *             面向用户的文案是更友好的固定提示，不直接暴露这些内部细节。
+ */
+async function failInFlightAiChatRequestsForAccount(
+  accountId: string,
+  info: LocalAgentProcessExitInfo,
+): Promise<void> {
+  const affected = [...pendingAiChatRequests.entries()].filter(
+    ([, pending]) => pending.accountId === accountId,
+  );
+  if (affected.length === 0) return;
+
+  const detail = describeLocalAgentExitInfo(info);
+  logger.warn(
+    {
+      accountId,
+      requestIds: affected.map(([requestId]) => requestId),
+      detail,
+    },
+    'AI Chat: 本地 agent-runtime 进程异常退出，批量标记在途请求为失败',
+  );
+
+  for (const [requestId, pending] of affected) {
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        accountId,
+        requestId,
+        sessionId: pending.sessionId,
+        userMessageId: pending.userMessageId,
+        ownerUserId: pending.ownerUserId,
+        status: 'error',
+        error: `本地 agent-runtime 进程异常退出：${detail}`,
+        publicErrorText:
+          '处理这次请求的后台进程意外退出（可能是资源不足或内部错误），本轮回复未完成，请重新发送试试。',
+        publicReasonCode: 'agent_process_exited',
+        timestamp: new Date().toISOString(),
+      },
+      accountId,
+      pendingAiChatRequests,
+    ).catch((err) => {
+      logger.error(
+        { accountId, requestId, err },
+        'AI Chat: 进程崩溃后标记失败响应也失败了',
+      );
+    });
+  }
+}
+
 export function startIpcWorker(enabledAccountIds: string[]): void {
   if (ipcWorkerRunning) {
     logger.debug('IPC 工作线程已在运行，跳过重复启动');
     return;
   }
+
+  onLocalAgentProcessExit((accountId, info) => {
+    void failInFlightAiChatRequestsForAccount(accountId, info).catch((err) => {
+      logger.error(
+        { accountId, err },
+        'AI Chat: 处理本地 agent-runtime 崩溃通知失败',
+      );
+    });
+  });
 
   ipcWorkerRunning = true;
   logger.info(

@@ -43,6 +43,37 @@ let cachedLocalAgentPolicy: {
   expiresAtMs: number;
 } | null = null;
 
+/** 本地 agent-runtime 子进程异常退出时的详情，供上层生成失败响应文案/日志。 */
+export interface LocalAgentProcessExitInfo {
+  reason: 'exit' | 'error';
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  error?: Error;
+}
+
+type LocalAgentProcessExitHandler = (
+  accountId: string,
+  info: LocalAgentProcessExitInfo,
+) => void;
+
+let onProcessExitHandler: LocalAgentProcessExitHandler | undefined;
+
+/**
+ * 注册"本地 agent-runtime 子进程异常退出"的通知回调。
+ *
+ * local-runner.ts 只负责管理子进程生命周期，不认识"某账号有哪些请求正在等待响应"
+ * 这件事（那是 ipc-worker.ts 的职责）。ipc-worker.ts 已经反过来 import 了本模块，
+ * 若本模块再直接 import ipc-worker.ts 会形成循环依赖；因此改为由 ipc-worker.ts
+ * 在启动时注册这个回调，子进程退出/出错时在这里回调通知，而不是直接互相引用。
+ *
+ * @param handler 子进程 exit/error 时调用的回调；重复注册会覆盖前一个。
+ */
+export function onLocalAgentProcessExit(
+  handler: LocalAgentProcessExitHandler,
+): void {
+  onProcessExitHandler = handler;
+}
+
 type LocalAgentEntryMode = 'auto' | 'src' | 'dist';
 
 function resolveLocalAgentEntry(args: { agentRunnerBase: string }): {
@@ -463,6 +494,9 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
       localAgentProcesses.delete(accountId);
     }
     logger.warn({ accountId, code, signal }, '本地 agent 进程已退出');
+    // 通知上层：该账号名下若有仍在等待响应的在途请求，进程已经没有机会再回复了，
+    // 应立即标记失败，而不是让请求方干等到粗粒度超时。
+    onProcessExitHandler?.(accountId, { reason: 'exit', code, signal });
   });
 
   child.on('error', (err) => {
@@ -471,6 +505,12 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
       localAgentProcesses.delete(accountId);
     }
     logger.error({ accountId, err }, '本地 agent 进程出错');
+    onProcessExitHandler?.(accountId, {
+      reason: 'error',
+      code: null,
+      signal: null,
+      error: err,
+    });
   });
 
   localAgentProcesses.set(accountId, record);
