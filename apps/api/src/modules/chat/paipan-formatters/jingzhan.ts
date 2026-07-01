@@ -116,6 +116,32 @@ function formatYaoValues(
   });
 }
 
+/**
+ * 高岛易断解读：仅略筮法起卦时可能附带，含本卦总论与逐条动爻详解。
+ * 属历史卦例参考，不是经占“以卦爻辞断”的正式断法，单独成节以作区分。
+ */
+function formatGaoDaoYiDuan(root: Record<string, unknown>): string[] {
+  const entry = recordField(root, 'gaoDaoYiDuan');
+  if (!entry) return [];
+  const lines: string[] = [];
+  const intro = textField(entry, 'intro');
+  if (intro) lines.push(`本卦总论：${intro}`);
+  for (const raw of arrayField(entry, 'movingLines')) {
+    const line = asRecord(raw);
+    if (!line) continue;
+    const position = Number(line.line);
+    const label = YAO_LABELS[position] ?? (Number.isFinite(position) ? `${position}爻` : undefined);
+    if (!label) continue;
+    const title = textField(line, 'title');
+    if (title) lines.push(`${label}辞：${title}`);
+    const xiang = textField(line, 'xiang');
+    if (xiang) lines.push(`${label}象：${xiang}`);
+    const commentary = textField(line, 'commentary');
+    if (commentary) lines.push(`${label}详解：${commentary}`);
+  }
+  return lines;
+}
+
 /** 经占 formatter：按取辞、卦辞爻辞重排结果（经占以卦爻辞断，不含纳甲、神煞）。 */
 export const formatJingzhanPaipan: PaipanFormatter = (artifactData) => {
   const root = asRecord(artifactData);
@@ -159,5 +185,6 @@ export const formatJingzhanPaipan: PaipanFormatter = (artifactData) => {
     '爻值摘要',
     formatYaoValues(benGua, recordField(root, 'zhiGua')),
   );
+  pushSection(lines, '高岛易断解读', formatGaoDaoYiDuan(root));
   return lines.join('\n').trim();
 };

@@ -1,12 +1,14 @@
 import {
   dayan,
   decodePan,
+  getGaoDaoYiDuan,
   lueshifa,
   manualQiGua,
   numberArrayQiGua,
   solarToLunar,
   threeNumberQiGua,
   timeQiGua,
+  type GaoDaoYiDuanResult,
   type PanResult,
   type YaoString,
 } from 'iching-shifa';
@@ -31,6 +33,7 @@ interface JingzhanInput {
 
 export type JingzhanPaipanResult = PanResult & {
   method: JingzhanMethod;
+  gaoDaoYiDuan?: GaoDaoYiDuanResult;
 };
 
 function parseDatetime(value: string | undefined): Date {
@@ -117,8 +120,14 @@ export async function runJingzhanPaipan(
     minute: when.getMinutes(),
   });
 
+  // 略筮法起卦不经缜密推演，附带《高岛易断》历史卦例解读供直接参考；
+  // 其余起卦方式（大衍筮法等）沿用经占“以卦爻辞断”的传统，不附带。
+  const gaoDaoYiDuan =
+    method === 'lueshifa' ? getGaoDaoYiDuan(yaoString) : undefined;
+
   return {
     method,
     ...pan,
+    gaoDaoYiDuan,
   };
 }

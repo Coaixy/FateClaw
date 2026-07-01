@@ -42,6 +42,21 @@ export interface IchingGua {
   pangFuShen?: IchingFuShen[];
 }
 
+// 高岛易断单条动爻详解（爻辞 + 象辞 + 逐句详解）。
+export interface GaoDaoYiDuanLine {
+  line: number;
+  title: string;
+  xiang: string;
+  commentary: string;
+}
+
+// 高岛易断解读：本卦总论 + 动爻详解，经占仅略筮法起卦时附带。
+export interface GaoDaoYiDuan {
+  guaName: string;
+  intro: string;
+  movingLines: GaoDaoYiDuanLine[];
+}
+
 // true 表示阳爻（—），false 表示阴爻（x）
 export function isYang(value: number): boolean {
   return value === 7 || value === 9;

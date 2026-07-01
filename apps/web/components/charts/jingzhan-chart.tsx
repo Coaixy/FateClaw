@@ -1,7 +1,11 @@
 'use client';
 
 import React from 'react';
-import type { IchingGua, IchingYao } from '@/utils/chart/iching-utils';
+import type {
+  GaoDaoYiDuan,
+  IchingGua,
+  IchingYao,
+} from '@/utils/chart/iching-utils';
 import { CHART } from './chart-theme';
 
 interface JingzhanData {
@@ -12,6 +16,8 @@ interface JingzhanData {
   zongGua?: IchingGua;
   cuoGua?: IchingGua;
   dongYaoCount?: number;
+  // 仅略筮法起卦时可能附带：高岛易断历史卦例解读。
+  gaoDaoYiDuan?: GaoDaoYiDuan;
 }
 
 const YAO_POS = ['初', '二', '三', '四', '五', '上'];
@@ -83,7 +89,16 @@ function SubGuaBox({ label, gua }: { label: string, gua: IchingGua }) {
 }
 
 export default function JingzhanChart({ data }: { data: JingzhanData }) {
-  const { benGua, zhiGua, huGua, zongGua, cuoGua, method, dongYaoCount } = data;
+  const {
+    benGua,
+    zhiGua,
+    huGua,
+    zongGua,
+    cuoGua,
+    method,
+    dongYaoCount,
+    gaoDaoYiDuan,
+  } = data;
 
   if (!benGua?.yaoList || !zhiGua?.yaoList) {
     return (
@@ -175,6 +190,24 @@ export default function JingzhanChart({ data }: { data: JingzhanData }) {
         {benGua.tuanCi && <div><span className="font-bold text-ink">【本卦大象】</span>：{benGua.tuanCi}</div>}
         {zhiGua.tuanCi && <div><span className="font-bold text-ink">【变卦大象】</span>：{zhiGua.tuanCi}</div>}
       </div>
+
+      {/* 高岛易断解读：仅略筮法起卦时附带，属历史卦例参考，与上方经文取辞区分展示 */}
+      {gaoDaoYiDuan && (
+        <div className="border-t border-hairline-soft bg-surface-soft p-3 sm:p-4 text-[12px] sm:text-[13px] text-body leading-7 space-y-2">
+          <div className={`font-bold ${CHART.primary}`}>【高岛易断解读】</div>
+          {gaoDaoYiDuan.intro && (
+            <div><span className="font-bold text-ink">本卦总论</span>：{gaoDaoYiDuan.intro}</div>
+          )}
+          {gaoDaoYiDuan.movingLines.map((line) => (
+            <div key={line.line}>
+              <span className="font-bold text-ink">【{YAO_POS[line.line - 1] ?? line.line}爻详解】</span>
+              {line.title && <div>{line.title}</div>}
+              {line.xiang && <div className={CHART.muted}>{line.xiang}</div>}
+              {line.commentary && <div>{line.commentary}</div>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
