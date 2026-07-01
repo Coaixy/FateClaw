@@ -211,6 +211,11 @@ export const enMessages = {
       batchEnabled: 'Enabled {count} item(s)',
       batchDisabled: 'Disabled {count} item(s)',
       batchPartial: '{success} succeeded, {failed} failed',
+      batchDelete: 'Batch delete',
+      batchDeleteTitle: 'Batch delete skills',
+      batchDeleteMessage:
+        'Delete the selected {count} skill(s)? This cannot be undone.',
+      batchDeleted: 'Deleted {count} item(s)',
       shareLinkMissing: 'Failed to create share link',
       privateLinkCopied: 'Private link copied to clipboard',
       copyLinkFailed: 'Failed to copy link',
@@ -227,6 +232,11 @@ export const enMessages = {
       unsubscribeConfirm: 'Unsubscribe',
       unsubscribeFailed: 'Unsubscribe failed',
       unsubscribed: 'Unsubscribed',
+      batchUnsubscribe: 'Batch unsubscribe',
+      batchUnsubscribeTitle: 'Batch unsubscribe',
+      batchUnsubscribeMessage:
+        'Unsubscribe from the selected {count} skill(s)?',
+      batchUnsubscribed: 'Unsubscribed from {count} item(s)',
       bundleUnsubscribeTitle: 'Unsubscribe bundle',
       bundleUnsubscribeMessage: 'Unsubscribe from every skill in this bundle?',
       bundleUnsubscribeConfirm: 'Unsubscribe bundle',

@@ -23,6 +23,7 @@ import {
   Share2,
   ToggleLeft,
   ToggleRight,
+  Trash2,
   Upload,
   Users,
   X,
@@ -616,7 +617,7 @@ export default function StudioPage() {
     }, t('pages.studio.toggleFailed'));
   };
 
-  // —— 批量选择与批量启停 ——
+  // —— 批量选择、批量启停与批量删除 ——
   const toggleOwnSelect = (id: string) => {
     dispatchSelection({ type: 'toggle-own', id });
   };
@@ -706,6 +707,83 @@ export default function StudioPage() {
         t(target ? 'pages.studio.batchEnabled' : 'pages.studio.batchDisabled', {
           count: formatNumber(done),
         }),
+      );
+    } else {
+      toast(
+        'error',
+        t('pages.studio.batchPartial', {
+          success: formatNumber(done),
+          failed: formatNumber(failed),
+        }),
+      );
+    }
+  };
+
+  // 批量删除:后端没有批量接口,先经二次确认,再并发调用单项删除并汇总结果。
+  // 订阅技能没有真正的「删除」,批量删除即批量取消订阅,故复用 unsubscribe。
+  const batchDeleteOwn = async () => {
+    const targets = ownSkills.filter((skill) => ownSelectedIds.has(skill.id));
+    if (targets.length === 0) return;
+    const ok = await confirmDialog({
+      title: t('pages.studio.batchDeleteTitle'),
+      message: t('pages.studio.batchDeleteMessage', {
+        count: formatNumber(targets.length),
+      }),
+      confirmLabel: t('pages.studio.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    dispatchSelection({ type: 'set-busy', value: true });
+    const results = await Promise.allSettled(
+      targets.map((skill) => skillsApi.userDelete(skill.id)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    await loadUserSkills();
+    dispatchSelection({ type: 'set-busy', value: false });
+    exitOwnSelection();
+    const done = targets.length - failed;
+    if (failed === 0) {
+      toast(
+        'success',
+        t('pages.studio.batchDeleted', { count: formatNumber(done) }),
+      );
+    } else {
+      toast(
+        'error',
+        t('pages.studio.batchPartial', {
+          success: formatNumber(done),
+          failed: formatNumber(failed),
+        }),
+      );
+    }
+  };
+  const batchDeleteSub = async () => {
+    const targets = subscribedSkills.filter((skill) =>
+      subSelectedIds.has(skill.subscription_id),
+    );
+    if (targets.length === 0) return;
+    const ok = await confirmDialog({
+      title: t('pages.studio.batchUnsubscribeTitle'),
+      message: t('pages.studio.batchUnsubscribeMessage', {
+        count: formatNumber(targets.length),
+      }),
+      confirmLabel: t('pages.studio.unsubscribeConfirm'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    dispatchSelection({ type: 'set-busy', value: true });
+    const results = await Promise.allSettled(
+      targets.map((skill) => skillsApi.unsubscribe(skill.subscription_id)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    await loadUserSkills();
+    dispatchSelection({ type: 'set-busy', value: false });
+    exitSubSelection();
+    const done = targets.length - failed;
+    if (failed === 0) {
+      toast(
+        'success',
+        t('pages.studio.batchUnsubscribed', { count: formatNumber(done) }),
       );
     } else {
       toast(
@@ -993,6 +1071,8 @@ export default function StudioPage() {
                     onSelectAll={selectAllSub}
                     onEnable={() => batchToggleSub(true)}
                     onDisable={() => batchToggleSub(false)}
+                    onDelete={batchDeleteSub}
+                    deleteLabel={t('pages.studio.batchUnsubscribe')}
                     onExit={exitSubSelection}
                     t={t}
                   />
@@ -1229,6 +1309,8 @@ export default function StudioPage() {
                     onSelectAll={selectAllOwn}
                     onEnable={() => batchToggleOwn(true)}
                     onDisable={() => batchToggleOwn(false)}
+                    onDelete={batchDeleteOwn}
+                    deleteLabel={t('pages.studio.batchDelete')}
                     onExit={exitOwnSelection}
                     t={t}
                   />
@@ -1463,8 +1545,10 @@ function SectionTitle({
 /**
  * 批量操作栏:进入选择模式后显示在搜索框下方。
  *
- * 提供全选/取消、批量启用、批量关闭、退出选择;启用/关闭按钮在执行中或
- * 未选中任何项时禁用。具体的「只对状态不符项 toggle」幂等逻辑在页面层处理。
+ * 提供全选/取消、批量启用、批量关闭、批量删除、退出选择;启用/关闭/删除
+ * 按钮在执行中或未选中任何项时禁用。「只对状态不符项 toggle」的幂等逻辑与
+ * 删除前的二次确认均在页面层处理,本组件只负责渲染与回调转发。
+ * deleteLabel 由调用方传入,因为「我的技能」是真删除、「订阅」实为取消订阅,文案不同。
  */
 function BatchActionBar({
   selectedCount,
@@ -1474,6 +1558,8 @@ function BatchActionBar({
   onSelectAll,
   onEnable,
   onDisable,
+  onDelete,
+  deleteLabel,
   onExit,
   t,
 }: {
@@ -1484,6 +1570,8 @@ function BatchActionBar({
   onSelectAll: () => void;
   onEnable: () => void;
   onDisable: () => void;
+  onDelete: () => void;
+  deleteLabel: string;
   onExit: () => void;
   t: (
     key: string,
@@ -1529,6 +1617,15 @@ function BatchActionBar({
       >
         <ToggleLeft size={14} />
         {t('pages.studio.batchDisable')}
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={busy || selectedCount === 0}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-[12px] font-semibold text-red-500 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Trash2 size={14} />
+        {deleteLabel}
       </button>
       <button
         type="button"
