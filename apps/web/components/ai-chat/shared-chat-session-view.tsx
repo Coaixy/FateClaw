@@ -113,7 +113,7 @@ export function SharedChatSessionView() {
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary transition-colors hover:bg-primary-active"
             >
               <MessageCircle size={12} />
-              继续提问
+              新建对话
             </Link>
           </div>
         </div>
