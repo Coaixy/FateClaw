@@ -1381,11 +1381,6 @@ export async function unsubscribeFromSkill(
       return false;
     }
 
-    if (!subscription.has_direct_source) {
-      await client.query('COMMIT');
-      return true;
-    }
-
     const { rows: sourceRows } = await client.query(
       `SELECT 1
        FROM user_skill_subscription_bundle_sources
@@ -1393,7 +1388,8 @@ export async function unsubscribeFromSkill(
        LIMIT 1`,
       [subscriptionId],
     );
-    if (sourceRows.length > 0) {
+
+    if (subscription.has_direct_source && sourceRows.length > 0) {
       // 仍有 Bundle 授权时只移除 direct source，不能删除整条订阅。
       await client.query(
         `UPDATE user_skill_subscriptions
@@ -1405,6 +1401,17 @@ export async function unsubscribeFromSkill(
       return true;
     }
 
+    if (!subscription.has_direct_source && sourceRows.length > 0) {
+      // 没有直接来源、但仍挂着 Bundle 授权来源：这条订阅本该通过退订对应
+      // Bundle 处理，维持原状（正常不会走到这条分支，只是防御性保留）。
+      await client.query('COMMIT');
+      return true;
+    }
+
+    // 没有任何 Bundle 授权来源了——要么本来就是纯直接订阅，要么是
+    // has_direct_source 已被清空、Bundle 来源也已清空的孤儿记录（例如历史遗留
+    // 数据）。两种情况都应该被彻底删除，否则"取消订阅"会在孤儿记录上
+    // 静默空转，前端显示成功但列表纹丝不动。
     await client.query('DELETE FROM user_skill_subscriptions WHERE id = $1', [
       subscriptionId,
     ]);
@@ -2063,9 +2070,16 @@ export async function unsubscribeFromBundle(
        JOIN affected a ON a.id = sub.id
        WHERE sub.has_direct_source = false
          AND NOT EXISTS (
+           -- 同一 WITH 内的多个数据修改子句共享同一份查询起始快照，互相看不到
+           -- 彼此的写入效果（PG 文档明确说明），所以这里不能通过重新查询
+           -- user_skill_subscription_bundle_sources 来判断 deleted_sources 是否
+           -- 已经删掉了本 bundle 的来源行——那样查到的永远是删除前的快照，
+           -- 这条订阅会被误判为"仍有来源"而永远不会被清理，变成孤儿记录。
+           -- 正确做法是直接排除本次要移除的 bundle_id，判断是否还有别的来源。
            SELECT 1
            FROM user_skill_subscription_bundle_sources src
            WHERE src.subscription_id = sub.id
+             AND src.bundle_id <> $2
          )
      ),
      deleted_subscriptions AS (
