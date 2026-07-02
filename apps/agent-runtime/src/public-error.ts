@@ -1,4 +1,4 @@
-import type { LlmRuntimeSnapshot } from './types.js';
+import type { LlmRuntimeSnapshot, PublicReasonCode } from './types.js';
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
@@ -117,7 +117,8 @@ export function mapContainerErrorToPublicError(
   options?: { llmRuntime?: LlmRuntimeSnapshot },
 ): {
   publicErrorText: string;
-  publicReasonCode: string;
+  /** 机器可读的失败原因码，取值集合与 contracts 的 PUBLIC_REASON_CODES 一致。 */
+  publicReasonCode: PublicReasonCode;
 } {
   if (options?.llmRuntime?.source === 'custom') {
     return {

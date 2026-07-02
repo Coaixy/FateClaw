@@ -1,6 +1,9 @@
+import type { PublicReasonCode } from '@fateclaw/contracts';
+
 export interface PublicErrorInfo {
   publicMessage: string;
-  publicReasonCode: string;
+  /** 机器可读的失败原因码，取值集合由 contracts 统一约束。 */
+  publicReasonCode: PublicReasonCode;
   debugReason?: string;
 }
 

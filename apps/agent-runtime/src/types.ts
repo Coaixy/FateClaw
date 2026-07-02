@@ -1,3 +1,32 @@
+/**
+ * 失败原因码（publicReasonCode）取值清单。
+ *
+ * 这是 `packages/contracts/src/common/reason-codes.ts` 中 PUBLIC_REASON_CODES
+ * 的镜像：agent-runtime 的构建产物刻意不依赖 contracts 包（可独立部署），
+ * 因此在此维护一份同名副本。两侧一致性由
+ * `apps/api/tests/shared/reason-codes-contract.test.ts` 锁定——新增取值时
+ * 必须两边同步修改，否则该测试会失败。
+ */
+export const PUBLIC_REASON_CODES = [
+  'agent_timeout',
+  'rate_limited',
+  'context_too_long',
+  'missing_input',
+  'protocol_error',
+  'router_error',
+  'custom_model_error',
+  'daemon_fatal_error',
+  'daemon_error',
+  'submit_error',
+  'inbox_stall_timeout',
+  'agent_process_exited',
+  'user_stop',
+  'internal_error',
+] as const;
+
+/** 失败原因码联合类型（contracts PublicReasonCode 的镜像）。 */
+export type PublicReasonCode = (typeof PUBLIC_REASON_CODES)[number];
+
 /** 对话历史中的单条消息。 */
 export interface HistoryMessage {
   role: 'user' | 'assistant';

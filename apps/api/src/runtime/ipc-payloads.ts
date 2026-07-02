@@ -3,6 +3,8 @@
  * 所有 IPC payload 接口和 type guard 集中在此模块。
  */
 
+import type { PublicReasonCode } from '@fateclaw/contracts';
+
 import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
@@ -335,7 +337,8 @@ export function buildAiChatErrorResponsePayload(params: {
   ownerUserId?: string;
   publicErrorText: string;
   error: string;
-  reasonCode: string;
+  /** 机器可读的失败原因码，编译期收窄到 contracts 约定的取值集合。 */
+  reasonCode: PublicReasonCode;
   usage?: ResponseIpcPayload['usage'];
 }): ResponseIpcPayload {
   return {
