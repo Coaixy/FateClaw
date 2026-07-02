@@ -16,7 +16,12 @@ const {
   mockRpop,
   mockRpush,
   mockSettleBillingReservation,
+  mockZadd,
+  mockZrange,
   mockZrem,
+  mockHset,
+  mockHdel,
+  mockPexpire,
 } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockDel: vi.fn(async () => 1),
@@ -33,7 +38,12 @@ const {
   mockRpop: vi.fn(),
   mockRpush: vi.fn(async () => 1),
   mockSettleBillingReservation: vi.fn(async () => 0),
+  mockZadd: vi.fn(async () => 1),
+  mockZrange: vi.fn(async () => [] as string[]),
   mockZrem: vi.fn(async () => 1),
+  mockHset: vi.fn(async () => 1),
+  mockHdel: vi.fn(async () => 1),
+  mockPexpire: vi.fn(async () => 1),
 }));
 
 vi.mock('../../src/infrastructure/db.js', () => ({
@@ -57,7 +67,12 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
     lrem: mockLrem,
     rpop: mockRpop,
     rpush: mockRpush,
+    zadd: mockZadd,
+    zrange: mockZrange,
     zrem: mockZrem,
+    hset: mockHset,
+    hdel: mockHdel,
+    pexpire: mockPexpire,
   })),
 }));
 
@@ -86,6 +101,10 @@ vi.mock('../../src/runtime/local-runner.js', () => ({
 }));
 
 vi.mock('../../src/modules/billing/plans.js', () => ({
+  // 非会员加价直通：测试关注并发/租约生命周期，不关心价格改写细节。
+  applyNonMemberPricingMarkup: vi.fn(
+    (runtime: unknown, _membershipActive: boolean) => runtime,
+  ),
   reserveBillingForRequest: vi.fn(),
   settleBillingReservation: mockSettleBillingReservation,
 }));
@@ -237,6 +256,9 @@ describe('global agent concurrency gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLindex.mockReset();
+    // mockReset 清掉 mockResolvedValueOnce 排队值，避免用例间泄漏。
+    mockZrange.mockReset();
+    mockZrange.mockResolvedValue([]);
   });
 
   it('exposes member and normal wait queues separately', async () => {
@@ -251,38 +273,41 @@ describe('global agent concurrency gate', () => {
   });
 
   it('peeks member waiters before normal waiters', async () => {
-    mockLindex
-      .mockResolvedValueOnce('member-request')
-      .mockResolvedValueOnce('normal-request');
+    mockZrange
+      .mockResolvedValueOnce(['member-request'])
+      .mockResolvedValueOnce(['normal-request']);
 
     const next = await (
       await import('../../src/runtime/ipc-worker.js')
     ).__peekNextGlobalAgentWaiterForTests();
 
     expect(next).toBe('member-request');
-    expect(mockLindex).toHaveBeenCalledWith(
-      'agent:concurrency:wait:member',
-      -1,
+    expect(mockZrange).toHaveBeenCalledWith(
+      'agent:concurrency:waitq:member',
+      0,
+      0,
     );
-    expect(mockLindex).not.toHaveBeenCalledWith(
-      'agent:concurrency:wait:normal',
-      -1,
+    expect(mockZrange).not.toHaveBeenCalledWith(
+      'agent:concurrency:waitq:normal',
+      0,
+      0,
     );
   });
 
   it('falls back to normal waiters when there is no member waiter', async () => {
-    mockLindex
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce('normal-request');
+    mockZrange
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(['normal-request']);
 
     const next = await (
       await import('../../src/runtime/ipc-worker.js')
     ).__peekNextGlobalAgentWaiterForTests();
 
     expect(next).toBe('normal-request');
-    expect(mockLindex).toHaveBeenCalledWith(
-      'agent:concurrency:wait:normal',
-      -1,
+    expect(mockZrange).toHaveBeenCalledWith(
+      'agent:concurrency:waitq:normal',
+      0,
+      0,
     );
   });
 
@@ -401,8 +426,9 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       text: '',
     });
     expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
-    expect(mockLpush).toHaveBeenCalledWith(
-      'agent:concurrency:wait:member',
+    expect(mockZadd).toHaveBeenCalledWith(
+      'agent:concurrency:waitq:member',
+      expect.any(Number),
       result.requestId,
     );
     expect(getUserByAccountId).not.toHaveBeenCalled();

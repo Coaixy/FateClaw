@@ -14,19 +14,39 @@ import {
   type RuntimeEntitlementSnapshot,
 } from '../modules/billing/entitlements.js';
 
-/** Agent 请求超时时间（默认 30 分钟） */
-const AGENT_REQUEST_TIMEOUT = parseInt(
-  process.env.AGENT_REQUEST_TIMEOUT || '1800000',
-  10,
-);
+import {
+  AGENT_REQUEST_TIMEOUT_MS as AGENT_REQUEST_TIMEOUT,
+  AI_CHAT_REQUEST_TIMEOUT_MS as AI_CHAT_REQUEST_TIMEOUT,
+  MAX_REQUEST_TIMEOUT_MS,
+  SESSION_PROCESSING_LOCK_TTL_SECONDS,
+} from '../shared/timeout-chain.js';
+
 const DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT = Math.max(
   1,
   parseInt(process.env.AGENT_CONCURRENCY_LIMIT || '10', 10) || 10,
 );
 const GLOBAL_AGENT_CONCURRENCY_KEY = 'agent:concurrency:active';
-const GLOBAL_AGENT_MEMBER_WAIT_QUEUE = 'agent:concurrency:wait:member';
-const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:wait:normal';
+// 等待队列：ZSET（score=入队毫秒时间戳，天然按入队先后排序）。
+// 曾用 LIST 实现（agent:concurrency:wait:member/normal）：把 requestId 移出队列的唯一
+// 路径是等待者自己 catch 里的 LREM——API 进程在排队期间崩溃/重启时，孤儿 requestId
+// 永卡队尾，同优先级所有后继请求永远轮不到（活性死锁），只能人工清 Redis。
+// 改为 ZSET + 心跳哈希：等待者每次轮询报活，任何存活等待者的 Lua 调用都会原子驱逐
+// 心跳超时的死亡队头，毒化窗口从「无限」缩到心跳超时（秒级）。
+const GLOBAL_AGENT_MEMBER_WAIT_QUEUE = 'agent:concurrency:waitq:member';
+const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:waitq:normal';
+/** 等待者心跳哈希：field=requestId，value=最近一次轮询的毫秒时间戳。 */
+const GLOBAL_AGENT_WAIT_HEARTBEAT_KEY = 'agent:concurrency:wait:heartbeat';
+/** 旧版 LIST 等待队列 key，仅用于启动时一次性清理残留（见 startIpcWorker）。 */
+const LEGACY_GLOBAL_AGENT_WAIT_LIST_KEYS = [
+  'agent:concurrency:wait:member',
+  'agent:concurrency:wait:normal',
+];
 const GLOBAL_AGENT_GATE_POLL_MS = 500;
+/**
+ * 等待者心跳过期阈值：超过此时长没报活视为进程已死，可被其他等待者驱逐。
+ * 取轮询间隔（500ms）的 30 倍，对 GC 停顿/事件循环卡顿留足余量。
+ */
+const GLOBAL_AGENT_WAITER_HEARTBEAT_STALE_MS = 15_000;
 const GLOBAL_AGENT_LIMIT_CACHE_MS = 2_000;
 const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
 const IPC_LISTENER_RESTART_MAX_MS = 30_000;
@@ -113,6 +133,16 @@ const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<string, { running: boolean; redis: Redis }>();
 const desiredAccountListeners = new Set<string>();
 const listenerSupervisors = new Map<string, { running: boolean }>();
+/**
+ * 常驻（pinned）监听账号：微信 Claw 账号随进程生命周期常驻，不参与空闲回收。
+ * 站内 AI Chat 的 `web:{userId}` 监听是发消息时懒创建的，历史上只增不删——
+ * 每个监听器独占一条 Redis duplicate 连接 + 常驻 BRPOP 协程，随活跃用户数
+ * 无界增长。非 pinned 监听器空闲超时且无在途请求时自动退出（见 listenForAccount），
+ * 回收后迟到的 outbox 消息由 inbox-stall-sweeper 的 outbox 巡检兜底消费，不会丢。
+ */
+const pinnedAccountListeners = new Set<string>();
+/** 非 pinned 监听器的空闲回收阈值：超过此时长无任何 outbox 消息且无在途请求即退出。 */
+const ACCOUNT_LISTENER_IDLE_TTL_MS = 10 * 60 * 1000;
 let cachedGlobalAgentConcurrencyLimit: {
   value: number;
   expiresAtMs: number;
@@ -170,44 +200,107 @@ async function resolveGlobalAgentConcurrencyLimit(): Promise<number> {
   }
 }
 
+/**
+ * 把 requestId 登记进全局并发等待队列（ZSET）并写入初始心跳。
+ *
+ * @param queueKey 目标等待队列（会员或普通）。
+ * @param requestId 等待者请求 ID。
+ * @remarks 心跳哈希带滚动 PEXPIRE 兜底：即使所有清理路径都失效，
+ *          哈希本身也会在最大请求超时后整体过期，不会永久泄漏。
+ */
+async function enqueueGlobalAgentWaiter(
+  queueKey: string,
+  requestId: string,
+): Promise<void> {
+  const now = Date.now();
+  const redis = getRedis();
+  await redis.zadd(queueKey, now, requestId);
+  await redis.hset(GLOBAL_AGENT_WAIT_HEARTBEAT_KEY, requestId, now);
+  await redis.pexpire(
+    GLOBAL_AGENT_WAIT_HEARTBEAT_KEY,
+    MAX_REQUEST_TIMEOUT_MS,
+  );
+}
+
+/**
+ * 把 requestId 从全局并发等待队列移除（取消/超时/异常时的自清理路径）。
+ *
+ * @param queueKey 等待队列 key。
+ * @param requestId 等待者请求 ID。
+ */
+async function removeGlobalAgentWaiter(
+  queueKey: string,
+  requestId: string,
+): Promise<void> {
+  const redis = getRedis();
+  await redis.zrem(queueKey, requestId);
+  await redis.hdel(GLOBAL_AGENT_WAIT_HEARTBEAT_KEY, requestId);
+}
+
 async function tryAcquireQueuedGlobalAgentSlot(input: {
   requestId: string;
   limit: number;
 }): Promise<{ acquired: boolean; reason: string }> {
+  // Lua 原子逻辑：
+  // 1. 先为自己报活（HSET 心跳），保证只要还在轮询就不会被别人驱逐；
+  // 2. 惰性清理 active ZSET 中的陈旧槽位（持有超过最大请求超时=已死）；
+  // 3. liveHead：取等待队列队头时，跳过并驱逐心跳超时的死亡等待者
+  //    （单次最多驱逐 10 个，防单次调用过长；漏网的下一次轮询继续清）；
+  // 4. 会员队列优先；只有队头是自己才允许占槽（保序）。
+  // 返回 {acquired, reason}；reason='missing' 表示自己已不在任何队列
+  // （被误判驱逐或从未入队），调用方需重新入队。
   const result = await getRedis().eval(
     `
+    redis.call('HSET', KEYS[4], ARGV[4], ARGV[2])
     redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[3])
+    local now = tonumber(ARGV[2])
+    local hbStale = tonumber(ARGV[5])
+    local function liveHead(zkey)
+      for i = 1, 10 do
+        local head = redis.call('ZRANGE', zkey, 0, 0)[1]
+        if not head then return nil end
+        local hb = tonumber(redis.call('HGET', KEYS[4], head) or '0')
+        if now - hb <= hbStale then return head end
+        redis.call('ZREM', zkey, head)
+        redis.call('HDEL', KEYS[4], head)
+      end
+      return redis.call('ZRANGE', zkey, 0, 0)[1]
+    end
     if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) then
       return {0, 'busy'}
     end
-    local memberTail = redis.call('LINDEX', KEYS[2], -1)
-    if memberTail then
-      if memberTail ~= ARGV[4] then
+    local memberHead = liveHead(KEYS[2])
+    if memberHead then
+      if memberHead ~= ARGV[4] then
         return {0, 'not_turn'}
       end
-      redis.call('RPOP', KEYS[2])
+      redis.call('ZREM', KEYS[2], ARGV[4])
+      redis.call('HDEL', KEYS[4], ARGV[4])
       redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
       return {1, 'member'}
     end
-    local normalTail = redis.call('LINDEX', KEYS[3], -1)
-    if normalTail then
-      if normalTail ~= ARGV[4] then
+    local normalHead = liveHead(KEYS[3])
+    if normalHead then
+      if normalHead ~= ARGV[4] then
         return {0, 'not_turn'}
       end
-      redis.call('RPOP', KEYS[3])
+      redis.call('ZREM', KEYS[3], ARGV[4])
+      redis.call('HDEL', KEYS[4], ARGV[4])
       redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
       return {1, 'normal'}
     end
     return {0, 'missing'}
     `,
-    3,
+    4,
     GLOBAL_AGENT_CONCURRENCY_KEY,
     GLOBAL_AGENT_MEMBER_WAIT_QUEUE,
     GLOBAL_AGENT_NORMAL_WAIT_QUEUE,
+    GLOBAL_AGENT_WAIT_HEARTBEAT_KEY,
     input.limit,
     Date.now(),
-    Date.now() - Math.max(AGENT_REQUEST_TIMEOUT, AI_CHAT_REQUEST_TIMEOUT),
+    Date.now() - MAX_REQUEST_TIMEOUT_MS,
     input.requestId,
+    GLOBAL_AGENT_WAITER_HEARTBEAT_STALE_MS,
   );
   if (Array.isArray(result)) {
     return {
@@ -228,10 +321,19 @@ function waitQueueForPriority(priority: 'member' | 'normal'): string {
 }
 
 async function dequeueGlobalAgentWaiter(): Promise<string | null> {
-  return (
-    (await getRedis().lindex(GLOBAL_AGENT_MEMBER_WAIT_QUEUE, -1)) ??
-    (await getRedis().lindex(GLOBAL_AGENT_NORMAL_WAIT_QUEUE, -1))
+  // ZSET 队头（score 最小 = 最早入队）即下一个候选；会员队列优先。
+  const memberHead = await getRedis().zrange(
+    GLOBAL_AGENT_MEMBER_WAIT_QUEUE,
+    0,
+    0,
   );
+  if (memberHead[0]) return memberHead[0];
+  const normalHead = await getRedis().zrange(
+    GLOBAL_AGENT_NORMAL_WAIT_QUEUE,
+    0,
+    0,
+  );
+  return normalHead[0] ?? null;
 }
 
 function delay(ms: number): Promise<void> {
@@ -284,7 +386,7 @@ async function acquireGlobalAgentSlot(input: {
     }
   };
   assertActive();
-  await getRedis().lpush(queue, input.requestId);
+  await enqueueGlobalAgentWaiter(queue, input.requestId);
   input.onQueued?.();
   try {
     while (true) {
@@ -303,14 +405,17 @@ async function acquireGlobalAgentSlot(input: {
         }
         return input.requestId;
       }
+      if (acquired.reason === 'missing') {
+        // 自己已不在任何等待队列：极端情况下（心跳误判、Redis 被清）会被驱逐，
+        // 重新入队继续等（排到队尾，公平性可接受——被误逐说明心跳已断很久）。
+        await enqueueGlobalAgentWaiter(queue, input.requestId);
+      }
       await delay(GLOBAL_AGENT_GATE_POLL_MS);
     }
   } catch (err) {
-    await getRedis()
-      .lrem(queue, 0, input.requestId)
-      .catch(() => {
-        // 等待队列清理失败不应覆盖原始入队/抢占错误。
-      });
+    await removeGlobalAgentWaiter(queue, input.requestId).catch(() => {
+      // 等待队列清理失败不应覆盖原始入队/抢占错误；残留项会被心跳驱逐兜底。
+    });
     throw err;
   }
 }
@@ -360,7 +465,7 @@ async function tryAcquirePerUserMeteredSlot(input: {
 }): Promise<boolean> {
   const now = Date.now();
   // 超时窗口：取两类请求超时的较大值，确保不会把仍可能在途的请求误剪。
-  const staleMs = Math.max(AGENT_REQUEST_TIMEOUT, AI_CHAT_REQUEST_TIMEOUT);
+  const staleMs = MAX_REQUEST_TIMEOUT_MS;
   const acquired = await getRedis().eval(
     `
     redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[3])
@@ -397,8 +502,9 @@ async function tryAcquirePerUserMeteredSlot(input: {
  *
  * @remarks 幂等：未 gate 或已释放的请求查不到反查键 → 直接返回，无副作用；
  *          可在所有全局槽释放点无条件调用，对非 gated（含微信）请求是空操作。
+ *          导出供 inbox-stall-sweeper 在代消费无主 outbox 响应时释放对应名额。
  */
-async function releasePerUserMeteredSlotByRequestId(
+export async function releasePerUserMeteredSlotByRequestId(
   requestId?: string,
 ): Promise<void> {
   if (!requestId) return;
@@ -543,12 +649,29 @@ async function getOwnerByRuntimeId(
 }
 
 /**
+ * 判断指定账号当前是否还有等待响应的在途请求（微信或 AI Chat 任一）。
+ *
+ * @param accountId 运行时账号 ID。
+ * @returns 存在在途请求时返回 true。
+ */
+function hasPendingRequestsForAccount(accountId: string): boolean {
+  for (const pending of pendingAiChatRequests.values()) {
+    if (pending.accountId === accountId) return true;
+  }
+  for (const pending of pendingInboxRequests.values()) {
+    if (pending.accountId === accountId) return true;
+  }
+  return false;
+}
+
+/**
  * 为单个 account 启动 BRPOP 监听协程。
  */
 async function listenForAccount(accountId: string): Promise<void> {
   const redis = getRedis().duplicate();
   const listener = { running: true, redis };
   accountListeners.set(accountId, listener);
+  let lastActivityAtMs = Date.now();
 
   logger.info({ accountId }, '启动 Redis IPC 监听');
 
@@ -560,7 +683,25 @@ async function listenForAccount(accountId: string): Promise<void> {
         1, // 1s 超时，允许优雅退出
       );
 
-      if (!result) continue;
+      if (!result) {
+        // 空闲回收：非 pinned 监听器长时间没有任何消息、且账号名下无在途请求时
+        // 自行退出，释放 duplicate 连接。同时摘掉 desired 标记，让 supervisor
+        // 一并退出而不是立刻重启。
+        if (
+          !pinnedAccountListeners.has(accountId) &&
+          Date.now() - lastActivityAtMs > ACCOUNT_LISTENER_IDLE_TTL_MS &&
+          !hasPendingRequestsForAccount(accountId)
+        ) {
+          desiredAccountListeners.delete(accountId);
+          listener.running = false;
+          logger.info(
+            { accountId, idleTtlMs: ACCOUNT_LISTENER_IDLE_TTL_MS },
+            'Redis IPC 监听空闲超时，自动回收',
+          );
+        }
+        continue;
+      }
+      lastActivityAtMs = Date.now();
 
       const [queue, raw] = result;
 
@@ -589,8 +730,10 @@ async function listenForAccount(accountId: string): Promise<void> {
           );
         }
       } catch (error) {
+        // 死信日志：payload 校验失败/处理抛错的消息已被 BRPOP 消费、不会重投，
+        // 保留原文前缀，避免"消息静默消失"后无从排障。
         logger.error(
-          { accountId, queue, err: error },
+          { accountId, queue, err: error, rawPreview: raw.slice(0, 300) },
           '处理 Redis IPC 消息失败',
         );
 
@@ -832,7 +975,7 @@ export function submitInboxRequest(input: {
           const processingClaimed = await claimOrRefreshSessionProcessingLock(
             input.sessionId,
             requestId,
-            2100,
+            SESSION_PROCESSING_LOCK_TTL_SECONDS,
           );
           if (!processingClaimed) {
             throw new Error('会话正在处理其他请求');
@@ -991,18 +1134,40 @@ export function startIpcWorker(enabledAccountIds: string[]): void {
     'Redis IPC 工作线程已启动',
   );
 
+  // 一次性清理旧版 LIST 等待队列残留：等待队列已迁移为 ZSET（key 名不同，避免
+  // WRONGTYPE），旧 LIST 里的 requestId 全部属于已死进程，直接删除即可。
+  void getRedis()
+    .del(...LEGACY_GLOBAL_AGENT_WAIT_LIST_KEYS)
+    .catch((err) => {
+      logger.warn({ err }, '清理旧版并发等待队列残留失败（不影响运行）');
+    });
+
   for (const accountId of enabledAccountIds) {
-    desiredAccountListeners.add(accountId);
-    startAccountListenerSupervisor(accountId);
+    // 微信 Claw 账号监听随进程常驻，不参与空闲回收。
+    addAccountListener(accountId, { pinned: true });
   }
 }
 
-export function addAccountListener(accountId: string): void {
+/**
+ * 为指定账号确保 outbox 监听协程存在。
+ *
+ * @param accountId 运行时账号 ID（微信账号或 `web:{userId}`）。
+ * @param options.pinned 为 true 时监听器常驻、不参与空闲回收（微信场景）；
+ *                       默认 false（站内 AI Chat 懒创建监听，空闲自动回收）。
+ */
+export function addAccountListener(
+  accountId: string,
+  options?: { pinned?: boolean },
+): void {
+  if (options?.pinned) {
+    pinnedAccountListeners.add(accountId);
+  }
   desiredAccountListeners.add(accountId);
   startAccountListenerSupervisor(accountId);
 }
 
 export function removeAccountListener(accountId: string): void {
+  pinnedAccountListeners.delete(accountId);
   desiredAccountListeners.delete(accountId);
   const supervisor = listenerSupervisors.get(accountId);
   if (supervisor) {
@@ -1013,6 +1178,32 @@ export function removeAccountListener(accountId: string): void {
     listener.running = false;
     logger.info({ accountId }, '正在停止 Redis IPC 监听');
   }
+}
+
+/** IPC 监听与 pending 请求的状态快照（供运维状态面板展示）。 */
+export interface IpcWorkerStatus {
+  /** 活跃监听器账号列表。 */
+  listenerAccounts: string[];
+  /** 常驻（pinned，微信）监听器数量。 */
+  pinnedListenerCount: number;
+  /** 微信 pending 请求数。 */
+  pendingInboxCount: number;
+  /** AI Chat pending 请求数。 */
+  pendingAiChatCount: number;
+}
+
+/**
+ * 读取 IPC worker 的运行状态快照。
+ *
+ * @returns 监听器与 pending 计数；无副作用，仅用于运维观测。
+ */
+export function getIpcWorkerStatus(): IpcWorkerStatus {
+  return {
+    listenerAccounts: [...accountListeners.keys()],
+    pinnedListenerCount: pinnedAccountListeners.size,
+    pendingInboxCount: pendingInboxRequests.size,
+    pendingAiChatCount: pendingAiChatRequests.size,
+  };
 }
 
 export function _resetIpcWorkerForTests(): void {
@@ -1029,6 +1220,7 @@ export function _resetIpcWorkerForTests(): void {
   }
   accountListeners.clear();
   desiredAccountListeners.clear();
+  pinnedAccountListeners.clear();
   for (const supervisor of listenerSupervisors.values()) {
     supervisor.running = false;
   }
@@ -1067,12 +1259,6 @@ export async function __peekNextGlobalAgentWaiterForTests(): Promise<
 > {
   return dequeueGlobalAgentWaiter();
 }
-
-/** AI Chat 请求超时时间（默认 30 分钟） */
-const AI_CHAT_REQUEST_TIMEOUT = parseInt(
-  process.env.AI_CHAT_REQUEST_TIMEOUT || '1800000',
-  10,
-);
 
 /**
  * AI Chat 专属的入队函数。
@@ -1296,7 +1482,7 @@ export function submitAiChatInboxRequest(input: {
         const processingClaimed = await claimOrRefreshSessionProcessingLock(
           input.sessionId,
           requestId,
-          2100, // 35 分钟 TTL
+          SESSION_PROCESSING_LOCK_TTL_SECONDS, // 从超时链派生（API 超时 + 5 分钟缓冲）
         );
         if (!processingClaimed) {
           throw new Error('会话正在处理其他请求');

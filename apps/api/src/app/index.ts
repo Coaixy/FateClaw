@@ -59,7 +59,8 @@ export {
 export async function activateAccount(
   account: import('../shared/types.js').Account,
 ): Promise<void> {
-  addAccountListener(account.id);
+  // 微信 Claw 账号监听常驻（pinned），不参与站内监听的空闲回收。
+  addAccountListener(account.id, { pinned: true });
   await startAccountPolling(account);
 }
 
@@ -111,7 +112,9 @@ export async function main(): Promise<void> {
     shuttingDown = true;
     logger.info({ signal }, '开始优雅退出');
     try {
-      stopAllLocalAgents();
+      // 等待所有子进程真正退出（给足 daemon 的 30s drain 窗口，内部有等待上限），
+      // 再断开 Redis/DB——否则子进程排空中的响应会因连接先被关闭而丢失。
+      await stopAllLocalAgents();
       stopRetentionWorker();
       stopBillingSweepWorker();
       stopPiSessionHealthWorker();
