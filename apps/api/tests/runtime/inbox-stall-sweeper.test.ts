@@ -9,6 +9,10 @@ const {
   mockLoggerWarn,
   mockLoggerError,
   mockProcessAiChatOutboxPayload,
+  mockGet,
+  mockSendOpsAlert,
+  mockReleaseGlobalAgentSlot,
+  mockReleasePerUserMeteredSlotByRequestId,
 } = vi.hoisted(() => ({
   mockScan: vi.fn(),
   mockLrange: vi.fn(),
@@ -18,6 +22,10 @@ const {
   mockLoggerWarn: vi.fn(),
   mockLoggerError: vi.fn(),
   mockProcessAiChatOutboxPayload: vi.fn(async () => undefined),
+  mockGet: vi.fn(async () => null as string | null),
+  mockSendOpsAlert: vi.fn(async () => undefined),
+  mockReleaseGlobalAgentSlot: vi.fn(async () => undefined),
+  mockReleasePerUserMeteredSlotByRequestId: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../src/infrastructure/redis.js', () => ({
@@ -27,6 +35,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
     scan: mockScan,
     lrange: mockLrange,
     eval: mockEval,
+    get: mockGet, // runtime 心跳读取
   })),
   acquireRedisWorkerLock: mockAcquireRedisWorkerLock,
 }));
@@ -42,6 +51,15 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
 
 vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
   processAiChatOutboxPayload: mockProcessAiChatOutboxPayload,
+}));
+
+vi.mock('../../src/infrastructure/alerts.js', () => ({
+  sendOpsAlert: mockSendOpsAlert,
+}));
+
+vi.mock('../../src/runtime/ipc-worker.js', () => ({
+  releaseGlobalAgentSlot: mockReleaseGlobalAgentSlot,
+  releasePerUserMeteredSlotByRequestId: mockReleasePerUserMeteredSlotByRequestId,
 }));
 
 import { runInboxStallSweepOnce } from '../../src/runtime/inbox-stall-sweeper.js';
@@ -93,7 +111,16 @@ describe('runInboxStallSweepOnce', () => {
     mockLockRelease.mockResolvedValue(undefined);
     mockAcquireRedisWorkerLock.mockResolvedValue({ release: mockLockRelease });
     mockEvalByScriptContent(1);
-    mockScan.mockResolvedValue(['0', ['ipc:web:acct-1:inbox:member']]);
+    // scan 按 MATCH 模式区分：inbox 巡检返回队列 key，outbox 巡检默认无 key。
+    mockScan.mockImplementation(
+      async (_cursor: string, _m: string, match: string) => [
+        '0',
+        match.includes('ai-chat:outbox')
+          ? []
+          : ['ipc:web:acct-1:inbox:member'],
+      ],
+    );
+    mockGet.mockResolvedValue(null);
   });
 
   it('堆积超过清理阈值的 AI Chat 消息会被弹出并标记为超时失败', async () => {
@@ -212,5 +239,124 @@ describe('runInboxStallSweepOnce', () => {
     await runInboxStallSweepOnce();
 
     expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(1);
+  });
+
+  it('inbox 有堆积且心跳缺失时，未到清理阈值也会发运维告警', async () => {
+    mockLrange.mockResolvedValue([
+      buildPayload({
+        timestamp: new Date(Date.now() - 6 * 60_000).toISOString(),
+      }),
+    ]);
+    mockGet.mockResolvedValue(null); // 无心跳
+
+    await runInboxStallSweepOnce();
+
+    expect(mockSendOpsAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent_heartbeat_missing' }),
+    );
+    expect(mockProcessAiChatOutboxPayload).not.toHaveBeenCalled();
+  });
+
+  it('inbox 有堆积但心跳存活时，不发掉线告警', async () => {
+    mockLrange.mockResolvedValue([
+      buildPayload({
+        timestamp: new Date(Date.now() - 6 * 60_000).toISOString(),
+      }),
+    ]);
+    mockGet.mockResolvedValue(String(Date.now())); // 心跳存活
+
+    await runInboxStallSweepOnce();
+
+    expect(mockSendOpsAlert).not.toHaveBeenCalled();
+  });
+});
+
+describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () => {
+  const OUTBOX_KEY = 'ipc:web:acct-1:ai-chat:outbox';
+
+  function buildOutboxResponse(overrides: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      type: 'response',
+      requestId: 'aichat-9-zzz',
+      accountId: 'web:acct-1',
+      sessionId: 'session-9',
+      status: 'success',
+      text: '这是生成好的回复',
+      // 超过无主阈值（3 分钟）
+      timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLockRelease.mockResolvedValue(undefined);
+    mockAcquireRedisWorkerLock.mockResolvedValue({ release: mockLockRelease });
+    mockGet.mockResolvedValue(null);
+    // inbox 巡检无 key，outbox 巡检返回目标队列。
+    mockScan.mockImplementation(
+      async (_cursor: string, _m: string, match: string) => [
+        '0',
+        match.includes('ai-chat:outbox') ? [OUTBOX_KEY] : [],
+      ],
+    );
+  });
+
+  function useStatefulOutboxQueue(rawItems: string[]): void {
+    const queue = [...rawItems];
+    mockLrange.mockImplementation(async () =>
+      queue.length > 0 ? [queue[queue.length - 1]] : [],
+    );
+    mockEval.mockImplementation(async (script: unknown) => {
+      if (typeof script === 'string' && script.includes('rpop')) {
+        queue.pop();
+        return 1;
+      }
+      return 1;
+    });
+  }
+
+  it('超过无主阈值的最终响应被代消费落库，并释放并发槽位', async () => {
+    useStatefulOutboxQueue([buildOutboxResponse()]);
+
+    await runInboxStallSweepOnce();
+
+    expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(1);
+    const [payload, fallbackAccountId] = mockProcessAiChatOutboxPayload.mock
+      .calls[0] as [Record<string, unknown>, string];
+    expect(payload.type).toBe('response');
+    expect(payload.requestId).toBe('aichat-9-zzz');
+    // accountId 从队列 key 剥离而来（accountId 自身含冒号也要正确）。
+    expect(fallbackAccountId).toBe('web:acct-1');
+    expect(mockReleaseGlobalAgentSlot).toHaveBeenCalledWith('aichat-9-zzz');
+    expect(mockReleasePerUserMeteredSlotByRequestId).toHaveBeenCalledWith(
+      'aichat-9-zzz',
+    );
+    expect(mockSendOpsAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'ai_chat_outbox_orphan' }),
+    );
+  });
+
+  it('未到无主阈值的新消息不代消费（可能有活跃消费者）', async () => {
+    useStatefulOutboxQueue([
+      buildOutboxResponse({ timestamp: new Date().toISOString() }),
+    ]);
+
+    await runInboxStallSweepOnce();
+
+    expect(mockProcessAiChatOutboxPayload).not.toHaveBeenCalled();
+  });
+
+  it('解析不了的脏数据按死信弹出丢弃，不堵死队列', async () => {
+    useStatefulOutboxQueue(['{oops not json', buildOutboxResponse()]);
+
+    await runInboxStallSweepOnce();
+
+    // 脏数据被丢弃后，其后的正常响应也在同一轮被代消费。
+    expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(1);
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ rawPreview: expect.stringContaining('oops') }),
+      expect.stringContaining('死信'),
+    );
   });
 });

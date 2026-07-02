@@ -35,6 +35,12 @@ const AGENT_REQUEST_TIMEOUT_MS = Math.max(
   Math.trunc(Number(process.env.AGENT_RUNTIME_REQUEST_TIMEOUT_MS ?? '')) ||
     8 * 60 * 1000,
 );
+// 存活心跳：周期性写 `agent:heartbeat:{accountId}`（带 TTL）。宿主侧巡检任务
+// （inbox-stall-sweeper）用它把「runtime 掉线」的发现时间从 inbox 堆积的分钟级
+// 压到心跳 TTL 级；事件循环被同步阻塞（如灾难性正则回溯）时心跳会自然停跳，
+// 也能被同一机制发现。优雅退出时主动删除 key，避免误报。
+const HEARTBEAT_INTERVAL_MS = 10_000;
+const HEARTBEAT_TTL_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -430,6 +436,21 @@ async function loop(): Promise<void> {
   process.stdout.write('__FATECLAW_AGENT_READY__\n');
   const redis = getRedis();
 
+  // 存活心跳：立即写一次，此后周期续写。SET 带 PX 过期，进程死亡/事件循环
+  // 卡死后 key 自动消失，宿主侧即可判定掉线。
+  const heartbeatKey = `agent:heartbeat:${ctx.accountId}`;
+  const writeHeartbeat = () => {
+    void redis
+      .set(heartbeatKey, String(Date.now()), 'PX', HEARTBEAT_TTL_MS)
+      .catch(() => {
+        // 心跳写失败（如 Redis 抖动）不影响主流程；持续失败会表现为心跳缺失，
+        // 由宿主侧告警接管。
+      });
+  };
+  writeHeartbeat();
+  const heartbeatTimer = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+
   // 退出协调：收到信号后停止接收新消息，等待正在处理的请求完成（最多 N 秒），
   // 然后清理 Redis/DB 连接。避免 in-flight 请求被强杀导致响应丢失。
   let shuttingDown = false;
@@ -505,6 +526,9 @@ async function loop(): Promise<void> {
         sleep(SHUTDOWN_DRAIN_MS),
       ]);
     }
+    // 优雅退出：停跳并主动删除心跳 key，避免宿主侧把正常回收误报为掉线。
+    clearInterval(heartbeatTimer);
+    await redis.del(heartbeatKey).catch(() => {});
     try {
       await cleanup();
     } catch (err) {

@@ -19,6 +19,7 @@ import {
   getConversationLogByRequestId,
   listStalePendingReservations,
 } from '../infrastructure/db.js';
+import { sendOpsAlert } from '../infrastructure/alerts.js';
 import { logger } from '../infrastructure/logger.js';
 import { recoverStalePendingReservation } from '../modules/billing/plans.js';
 import {
@@ -154,6 +155,16 @@ export async function runBillingSweepOnce(): Promise<void> {
       },
       '计费兜底扫描完成',
     );
+    // 按 0 关账 = 真实消耗的 token 永久漏收，属于需要人工关注的异常（可能意味着
+    // conversation_logs 落库链路出了问题），升级为运维告警。
+    if (closedAsLost > 0) {
+      void sendOpsAlert({
+        kind: 'billing_reservation_lost',
+        title: '计费兜底扫描发现无法恢复的预留，已按 0 关账',
+        detail: `本轮按 0 关账 ${closedAsLost} 条（无对话日志且超过丢失阈值），存在漏收`,
+        context: { closedAsLost, settledWithUsage, scanned: reservations.length },
+      });
+    }
   } else {
     logger.debug(
       { scanned: reservations.length, skipped },

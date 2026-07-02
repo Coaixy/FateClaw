@@ -20,7 +20,11 @@ vi.mock('../../src/modules/billing/plans.js', () => ({
 }));
 
 vi.mock('../../src/infrastructure/logger.js', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('../../src/infrastructure/alerts.js', () => ({
+  sendOpsAlert: vi.fn(async () => undefined),
 }));
 
 import { runBillingSweepOnce } from '../../src/runtime/billing-sweeper.js';
