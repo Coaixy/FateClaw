@@ -37,6 +37,10 @@ const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
 const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
 const GENERIC_REQUEST_FAILED_MESSAGE = '请求失败，请检查后重试';
 const AI_CHAT_RECONNECTING_MESSAGE = '请求断开，正在重连';
+// WS 连续静默超过这个时长(自最近一次收到任意流事件算起)，判定"回复较慢"，
+// 提示用户并给出一键重试；间隔决定检测粒度，不需要很密。
+const REPLY_SILENCE_THRESHOLD_MS = 60_000;
+const REPLY_SILENCE_CHECK_INTERVAL_MS = 5_000;
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
 
@@ -346,6 +350,8 @@ export function useChatMessages(options: {
   );
   const [processing, setProcessing] = useState(false);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
+  // WS 长时间静默(见 REPLY_SILENCE_THRESHOLD_MS)时置 true，驱动"回复较慢"提示 + 重试入口。
+  const [replySlow, setReplySlow] = useState(false);
   // 已加载会话元信息(loadedSessionId/continuationBlocked/continuationBlockMessage)合并到 reducer。
   const [
     { loadedSessionId, continuationBlocked, continuationBlockMessage },
@@ -391,6 +397,15 @@ export function useChatMessages(options: {
   const streamingSequenceRef = useRef(0);
   const toolTraceSequenceRef = useRef(0);
   const localMessageSequenceRef = useRef(0);
+  // 最近一次收到任意可识别 WS 流事件的时间戳；发送时先设一次初始值，
+  // 覆盖"WS 还没收到任何事件"这种起始静默状态。配合下方静默检测判断要不要提示"回复较慢"。
+  const lastStreamEventAtRef = useRef<number | null>(null);
+  // 本轮实际发送给后端的用户消息原文和选项(含贴盘面等场景要原样带上的字段)，
+  // 供"一键重试"在不知道用户是否已经清空输入框的情况下，仍能重新发出同一条消息。
+  const lastSentMessageContentRef = useRef<string | null>(null);
+  const lastSentMessageOptionsRef = useRef<ChatMessageSendOptions | undefined>(
+    undefined,
+  );
   const isPending = sending || processing || awaitingRefresh;
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
@@ -729,6 +744,29 @@ export function useChatMessages(options: {
       window.clearInterval(intervalId);
     };
   }, [awaitingRefresh, options.selectedSession, pollMessages, processing]);
+
+  // WS 静默检测：仅在有请求在途时跑，每隔 REPLY_SILENCE_CHECK_INTERVAL_MS 检查一次
+  // 距最近一次收到流事件过去了多久，超过阈值就提示"回复较慢"；请求结束后自动清掉。
+  useEffect(() => {
+    if (!isPending) {
+      setReplySlow(false);
+      return;
+    }
+
+    const checkSilence = () => {
+      const lastAt = lastStreamEventAtRef.current ?? Date.now();
+      setReplySlow(Date.now() - lastAt >= REPLY_SILENCE_THRESHOLD_MS);
+    };
+    checkSilence();
+    const intervalId = window.setInterval(
+      checkSilence,
+      REPLY_SILENCE_CHECK_INTERVAL_MS,
+    );
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isPending]);
 
   useEffect(() => {
     if (!options.selectedSession) return;
@@ -1137,6 +1175,11 @@ export function useChatMessages(options: {
         return;
       }
 
+      // connected 只是连接层面的握手确认，不代表业务有进展，不计入静默判断——
+      // 否则断线重连本身就会不断掩盖"AI 其实一直没真正开始处理"这件事。
+      // 走到这里说明是下面这批真正表示业务进展的事件类型之一。
+      lastStreamEventAtRef.current = Date.now();
+
       if (payload.type === 'turn_start') {
         beginStreamingAssistantTurn(payload.turnIndex);
         updateProcessing(true);
@@ -1464,13 +1507,12 @@ export function useChatMessages(options: {
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [isPending]);
 
-  const stopGenerating = useCallback(() => {
-    const sessionId = activeSessionRef.current || options.selectedSession;
-    if (sessionId) {
-      interruptedStreamSessionRef.current = sessionId;
-      void chatSessionsApi.cancel(sessionId).catch(() => undefined);
-    }
-
+  /**
+   * 取消当前请求后重置本地流式状态；不含"是否等待取消接口真正返回"这个决定，
+   * 交由调用方处理——stopGenerating 要立即响应用户点击，retrySending 要等
+   * 取消真正生效、会话锁已释放，再发新请求，避免和新请求抢锁产生竞态。
+   */
+  const resetStreamingStateForInterrupt = useCallback(() => {
     sendAbortControllerRef.current?.abort();
     const socket = streamSocketRef.current;
     if (socket) {
@@ -1483,13 +1525,18 @@ export function useChatMessages(options: {
     dispatchRequestStatus({ type: 'set-sending', value: false });
     updateProcessing(false);
     updateAwaitingRefresh(false);
+  }, [resetStreamingMessageRefs, updateAwaitingRefresh, updateProcessing]);
+
+  const stopGenerating = useCallback(() => {
+    const sessionId = activeSessionRef.current || options.selectedSession;
+    if (sessionId) {
+      interruptedStreamSessionRef.current = sessionId;
+      void chatSessionsApi.cancel(sessionId).catch(() => undefined);
+    }
+
+    resetStreamingStateForInterrupt();
     inputRef.current?.focus();
-  }, [
-    options.selectedSession,
-    resetStreamingMessageRefs,
-    updateAwaitingRefresh,
-    updateProcessing,
-  ]);
+  }, [options.selectedSession, resetStreamingStateForInterrupt]);
 
   const sendMessageWithOptions = useCallback(
     async (text: string, sendOptions?: ChatMessageSendOptions) => {
@@ -1507,6 +1554,11 @@ export function useChatMessages(options: {
       sendAbortControllerRef.current = abortController;
       dispatchRequestStatus({ type: 'set-sending', value: true });
       shouldAutoScrollRef.current = true;
+      // 供"一键重试"复用；初始化静默计时起点，覆盖 WS 还没收到任何事件的起始状态。
+      lastSentMessageContentRef.current = content;
+      lastSentMessageOptionsRef.current = sendOptions;
+      lastStreamEventAtRef.current = Date.now();
+      setReplySlow(false);
 
       try {
         let sessionId = options.selectedSession;
@@ -1665,6 +1717,32 @@ export function useChatMessages(options: {
     [sendMessageWithOptions],
   );
 
+  /**
+   * "回复较慢"提示里的一键重试：取消当前请求、确认取消真正生效后，
+   * 用上一次实际发送的原文重新发一遍，用户不用重新打字。
+   */
+  const retrySending = useCallback(async () => {
+    const sessionId = activeSessionRef.current || options.selectedSession;
+    const content = lastSentMessageContentRef.current;
+    if (!sessionId || !content) return false;
+
+    interruptedStreamSessionRef.current = sessionId;
+    try {
+      await chatSessionsApi.cancel(sessionId);
+    } catch {
+      // cancel 对"没有在途请求"本就幂等成功；真失败大概率是网络抖动，
+      // 此时继续重发也是合理兜底，不应阻塞用户重试。
+    }
+    resetStreamingStateForInterrupt();
+    setReplySlow(false);
+
+    return sendMessageWithOptions(content, lastSentMessageOptionsRef.current);
+  }, [
+    options.selectedSession,
+    resetStreamingStateForInterrupt,
+    sendMessageWithOptions,
+  ]);
+
   const refreshMessages = useCallback(async () => {
     if (!options.selectedSession) {
       return;
@@ -1689,5 +1767,7 @@ export function useChatMessages(options: {
     sendMessageWithOptions,
     stopGenerating,
     refreshMessages,
+    replySlow,
+    retrySending,
   };
 }

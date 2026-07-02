@@ -853,6 +853,8 @@ export const zhTWMessages = {
       completedCount: '{count} 完成',
       aiReplying: 'AI 正在回覆...',
       progressSuffix: '{label}中...',
+      replySlowNotice: 'AI 回覆較慢，可能遇到問題。',
+      resend: '重新發送',
       guashiScript: {
         label: '話術稿 · 分節',
         copyForClient: '複製給客戶',

@@ -1104,6 +1104,8 @@ function AiChatWorkspaceContent() {
           loading={chatMessages.loading}
           sending={chatMessages.sending}
           progressLabel={progressLabel}
+          replySlow={chatMessages.replySlow}
+          onRetry={() => void chatMessages.retrySending()}
           selectedSession={selectedSession}
           switchingSession={switchingSession}
           loadingOlder={chatMessages.loadingOlder}

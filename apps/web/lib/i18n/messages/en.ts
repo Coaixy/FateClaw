@@ -879,6 +879,8 @@ export const enMessages = {
       completedCount: '{count} done',
       aiReplying: 'AI is replying...',
       progressSuffix: '{label}...',
+      replySlowNotice: 'The reply is taking longer than usual.',
+      resend: 'Resend',
       guashiScript: {
         label: 'Talking points · sections',
         copyForClient: 'Copy for client',

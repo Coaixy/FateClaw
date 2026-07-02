@@ -266,6 +266,9 @@ export const chatSessionsApi = {
       headers: {
         'x-no-compression': '1',
       },
+      // 纵深防御兜底，不是本次卡死场景的根因修复——正常情况下这个请求会很快
+      // 返回（后端排队即提前 accept），真正长时间无响应更可能是连接层面异常。
+      timeoutMs: 90_000,
     };
 
     if (requestOptions?.signal) {

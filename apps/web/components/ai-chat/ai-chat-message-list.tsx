@@ -44,6 +44,8 @@ export function AiChatMessageList({
   loading,
   sending,
   progressLabel,
+  replySlow,
+  onRetry,
   selectedSession,
   switchingSession,
   showCenteredComposer,
@@ -60,6 +62,9 @@ export function AiChatMessageList({
   loading: boolean;
   sending: boolean;
   progressLabel: string | null;
+  /** WS 长时间静默时为 true，驱动"回复较慢"提示 + 重试入口。 */
+  replySlow?: boolean;
+  onRetry?: () => void;
   selectedSession: string;
   switchingSession: boolean;
   showCenteredComposer: boolean;
@@ -191,6 +196,10 @@ export function AiChatMessageList({
           progressLabel={progressLabel}
           pendingTrajectory={pendingTrajectory}
         />
+      )}
+
+      {sending && replySlow && onRetry && (
+        <ReplySlowNotice onRetry={onRetry} />
       )}
     </div>
   );
@@ -836,6 +845,50 @@ function StreamingTrajectory({
             ))}
           </div>
           <span>{statusLabel}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * WS 长时间静默时的兜底提示：不管当前是"过程时间线还没结束"还是"已经开始流式
+ * 吐字但中途卡住"，只要还在等待中且长时间没有新事件，都会出现，视觉上参照
+ * LatestMessageBillingNotice（同一个内嵌提示条 + 操作按钮结构）。
+ */
+function ReplySlowNotice({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n();
+
+  return (
+    <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+        <div
+          role="status"
+          aria-live="polite"
+          className="max-w-full rounded-xl border border-hairline bg-surface-card/60 px-3 py-2 shadow-sm"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle
+              size={15}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className="mt-1 shrink-0 text-muted-soft"
+            />
+            <div className="min-w-0">
+              <p className="text-[12px] leading-5 text-ink/70">
+                {t('aiChat.messageList.replySlowNotice')}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
+                >
+                  {t('aiChat.messageList.resend')}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
