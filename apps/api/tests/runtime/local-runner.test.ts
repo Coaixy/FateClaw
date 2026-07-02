@@ -22,6 +22,7 @@ const {
       stderr: InstanceType<typeof PassThrough>;
       kill: ReturnType<typeof vi.fn>;
       on: (event: string, listener: (...args: unknown[]) => void) => unknown;
+      once: (event: string, listener: (...args: unknown[]) => void) => unknown;
       emit: (event: string, ...args: unknown[]) => boolean;
     };
     command: string;
@@ -49,6 +50,11 @@ const {
         return true;
       }),
       on: (event: string, listener: (...args: unknown[]) => void) => {
+        listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+        return child;
+      },
+      once: (event: string, listener: (...args: unknown[]) => void) => {
+        // 测试里 exit 只触发一次，直接委托给 on 即可。
         listeners.set(event, [...(listeners.get(event) ?? []), listener]);
         return child;
       },
@@ -117,6 +123,10 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
+vi.mock('../../src/infrastructure/alerts.js', () => ({
+  sendOpsAlert: vi.fn(async () => undefined),
+}));
+
 vi.mock('../../src/infrastructure/project-root.js', () => ({
   resolveProjectRoot: vi.fn(() => '/project'),
 }));
@@ -139,6 +149,7 @@ import {
   ensureLocalAgentRunning,
   releaseLocalAgent,
   retainLocalAgent,
+  stopAllLocalAgents,
 } from '../../src/runtime/local-runner.js';
 
 describe('local-runner', () => {
@@ -356,5 +367,65 @@ describe('local-runner', () => {
         new Set(),
       ),
     ).toBe(false);
+  });
+});
+
+describe('stopAllLocalAgents（停机时序）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetLocalRunnerForTests();
+    spawnedChildren.length = 0;
+    mockSpawn.mockClear();
+    mockExistsSync.mockReturnValue(true);
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 4,
+      idleTtlMs: 30_000,
+    });
+    process.env.LOCAL_AGENT_ENTRY_MODE = 'dist';
+  });
+
+  afterEach(() => {
+    __resetLocalRunnerForTests();
+    vi.useRealTimers();
+    delete process.env.LOCAL_AGENT_ENTRY_MODE;
+  });
+
+  it('对所有子进程发 SIGTERM，并等它们真正退出后才 resolve', async () => {
+    await ensureLocalAgentRunning('account-a');
+    await ensureLocalAgentRunning('account-b');
+
+    let resolved = false;
+    const stopPromise = stopAllLocalAgents().then(() => {
+      resolved = true;
+    });
+
+    expect(spawnedChildren[0].child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(spawnedChildren[1].child.kill).toHaveBeenCalledWith('SIGTERM');
+    // 子进程尚未退出：不应提前 resolve（历史缺陷是同步返回导致 drain 被掐断）。
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    for (const spawned of spawnedChildren) {
+      spawned.child.exitCode = 0;
+      spawned.child.emit('exit', 0, null);
+    }
+    await stopPromise;
+    expect(resolved).toBe(true);
+  });
+
+  it('子进程拒不退出时到达等待上限也 resolve，且 shutdown 强杀延迟晚于 daemon 的 30s drain', async () => {
+    await ensureLocalAgentRunning('account-a');
+
+    const stopPromise = stopAllLocalAgents();
+
+    // 30 秒内（daemon drain 窗口）绝不能 SIGKILL。
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spawnedChildren[0].child.kill).not.toHaveBeenCalledWith('SIGKILL');
+
+    // 到 36 秒：强杀定时器（35s）触发 + 等待上限（36s）到期。
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(spawnedChildren[0].child.kill).toHaveBeenCalledWith('SIGKILL');
+    await stopPromise;
   });
 });

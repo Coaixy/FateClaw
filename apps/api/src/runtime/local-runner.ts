@@ -11,6 +11,7 @@ import path from 'path';
 import { createInterface } from 'readline';
 
 import { agentEnvToRecord, buildAgentEnv } from './agent-env.js';
+import { sendOpsAlert } from '../infrastructure/alerts.js';
 import { logger } from '../infrastructure/logger.js';
 import { resolveProjectRoot } from '../infrastructure/project-root.js';
 import {
@@ -21,6 +22,15 @@ import {
 
 const LOCAL_AGENT_POLICY_CACHE_MS = 2_000;
 const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
+/**
+ * 宿主整体停机（shutdown）场景的强杀延迟：必须大于 daemon 的优雅 drain 上限
+ * （apps/agent-runtime/src/daemon.ts 的 SHUTDOWN_DRAIN_MS = 30s），否则子进程
+ * 正在排空的 in-flight 请求会被提前 SIGKILL、响应丢失。空闲回收/容量回收场景
+ * 沿用 10s（此时子进程无在途请求，SIGTERM 后应立即退出）。
+ */
+const LOCAL_AGENT_SHUTDOWN_FORCE_KILL_DELAY_MS = 35_000;
+/** stopAllLocalAgents 等待全部子进程退出的上限（略大于 shutdown 强杀延迟）。 */
+const LOCAL_AGENT_SHUTDOWN_WAIT_MS = 36_000;
 /**
  * 子进程 stdout 就绪信号：daemon.ts 连上 Redis、具备处理请求能力后会打印这行。
  * spawn() 不报错只代表进程被创建成功，不代表它已经能干活——等这个信号才算数。
@@ -231,6 +241,11 @@ function stopLocalAgentRecord(
     record.child.kill('SIGTERM');
   }
   clearForceKillTimer(record);
+  // shutdown 场景给足 daemon 的 30s drain 窗口；其余回收场景子进程必然空闲，10s 足够。
+  const forceKillDelayMs =
+    reason === 'shutdown'
+      ? LOCAL_AGENT_SHUTDOWN_FORCE_KILL_DELAY_MS
+      : LOCAL_AGENT_FORCE_KILL_DELAY_MS;
   record.forceKillTimer = setTimeout(() => {
     if (record.child.exitCode !== null || record.child.signalCode !== null) {
       return;
@@ -247,7 +262,7 @@ function stopLocalAgentRecord(
         '强制终止本地 agent 进程失败',
       );
     }
-  }, LOCAL_AGENT_FORCE_KILL_DELAY_MS);
+  }, forceKillDelayMs);
   unrefTimer(record.forceKillTimer);
 
   logger.info(
@@ -538,6 +553,15 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
       localAgentProcesses.delete(accountId);
     }
     logger.warn({ accountId, code, signal }, '本地 agent 进程已退出');
+    // 非主动停止且非 0 退出码：大概率是崩溃/OOM，升级为运维告警（按 kind 节流）。
+    if (!record.stopping && code !== 0) {
+      void sendOpsAlert({
+        kind: 'agent_process_exited',
+        title: 'agent-runtime 子进程异常退出',
+        detail: `accountId=${accountId}，code=${code ?? 'null'}，signal=${signal ?? 'null'}（code=137/SIGKILL 通常是 OOM）`,
+        context: { accountId, code, signal },
+      });
+    }
     // 通知上层：该账号名下若有仍在等待响应的在途请求，进程已经没有机会再回复了，
     // 应立即标记失败，而不是让请求方干等到粗粒度超时。
     onProcessExitHandler?.(accountId, { reason: 'exit', code, signal });
@@ -612,11 +636,42 @@ export function stopLocalAgent(accountId: string): void {
   }
 }
 
-export function stopAllLocalAgents(): void {
-  for (const record of [...localAgentProcesses.values()]) {
+/**
+ * 停止所有本地 agent-runtime 子进程，并等待它们真正退出。
+ *
+ * 历史缺陷：此前只发 SIGTERM 就同步返回，宿主 shutdown 随即断开 Redis/DB 并
+ * `process.exit(0)`——子进程 30s 的优雅 drain 窗口完全用不满，in-flight 请求
+ * 的响应被丢弃。现在返回 Promise：等所有子进程 exit（或到达上限
+ * `LOCAL_AGENT_SHUTDOWN_WAIT_MS`）后才 resolve，宿主 shutdown 应 await 它。
+ *
+ * @returns 所有子进程退出或等待超时后 resolve；超时的进程已由强杀定时器接管。
+ */
+export async function stopAllLocalAgents(): Promise<void> {
+  const records = [...localAgentProcesses.values()];
+  const exitPromises = records
+    .filter((record) => isChildAlive(record.child))
+    .map(
+      (record) =>
+        new Promise<void>((resolve) => {
+          record.child.once('exit', () => resolve());
+        }),
+    );
+  for (const record of records) {
     stopLocalAgentRecord(record, 'shutdown');
   }
-  logger.info('所有本地 agent 进程已停止');
+  if (exitPromises.length > 0) {
+    await Promise.race([
+      Promise.all(exitPromises),
+      new Promise<void>((resolve) => {
+        const waitTimer = setTimeout(resolve, LOCAL_AGENT_SHUTDOWN_WAIT_MS);
+        unrefTimer(waitTimer);
+      }),
+    ]);
+  }
+  logger.info(
+    { stopped: records.length },
+    '所有本地 agent 进程已停止（或已到等待上限）',
+  );
 }
 
 function parseProcEnviron(raw: Buffer | string): Record<string, string> {
@@ -723,6 +778,36 @@ export function cleanupStaleLocalAgentsOnStartup(): void {
   } else {
     logger.debug({ scanned }, '未发现需要清理的旧本地 agent-runtime 进程');
   }
+}
+
+/** 单个本地 agent-runtime 子进程的状态快照（供运维状态面板展示）。 */
+export interface LocalAgentStatusItem {
+  accountId: string;
+  /** 在途请求租约数。 */
+  busyCount: number;
+  /** 最近一次被使用的毫秒时间戳。 */
+  lastUsedAt: number;
+  pid?: number;
+  /** 是否正在停止（已发 SIGTERM 等待退出）。 */
+  stopping: boolean;
+  /** 子进程当前是否存活。 */
+  alive: boolean;
+}
+
+/**
+ * 读取当前所有本地 agent-runtime 子进程的状态快照。
+ *
+ * @returns 每个账号一条记录；无副作用，仅用于运维观测。
+ */
+export function getLocalAgentRuntimeStatus(): LocalAgentStatusItem[] {
+  return [...localAgentProcesses.values()].map((record) => ({
+    accountId: record.accountId,
+    busyCount: record.busyCount,
+    lastUsedAt: record.lastUsedAt,
+    pid: record.child.pid,
+    stopping: record.stopping,
+    alive: isChildAlive(record.child),
+  }));
 }
 
 /**
