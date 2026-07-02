@@ -12,7 +12,11 @@ import {
   Users,
 } from 'lucide-react';
 
-import { admin, type AdminStatusStats } from '@/lib/admin-api';
+import {
+  admin,
+  type AdminRuntimeStatus,
+  type AdminStatusStats,
+} from '@/lib/admin-api';
 import { useToast } from '@/lib/use-toast';
 import {
   AdminAlert,
@@ -235,6 +239,133 @@ function TelemetryPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+
+/**
+ * 运行时基础设施面板：本地 agent-runtime 子进程、IPC 监听器、队列深度、
+ * runtime 心跳与全局并发闸门的实时快照。用于主动发现「账号级 runtime 掉线 /
+ * 队列堆积 / 监听器泄漏」这类过去只能靠翻日志发现的问题。
+ */
+function RuntimeInfraPanel({ runtime }: { runtime: AdminRuntimeStatus }) {
+  const staleQueues = runtime.queues.filter((queue) => queue.depth >= 3);
+  return (
+    <section className="rounded-xl border border-hairline bg-surface-card p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-[14px] font-semibold">
+            <Cpu size={15} className="text-muted" />
+            运行时基础设施
+          </div>
+          <div className="mt-1 text-[12px] text-muted">
+            agent-runtime 子进程 / IPC 监听 / 队列 / 心跳 / 并发闸门
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
+          <TelemetryPill
+            label="在跑请求"
+            value={String(
+              runtime.ipc.pendingAiChatCount + runtime.ipc.pendingInboxCount,
+            )}
+          />
+          <TelemetryPill
+            label="并发槽"
+            value={`${runtime.concurrency.activeSlots} 活跃 / ${
+              runtime.concurrency.memberWaiters +
+              runtime.concurrency.normalWaiters
+            } 排队`}
+          />
+          <TelemetryPill
+            label="监听器"
+            value={`${runtime.ipc.listenerAccounts.length}（常驻 ${runtime.ipc.pinnedListenerCount}）`}
+          />
+        </div>
+      </div>
+
+      {staleQueues.length > 0 && (
+        <div className="mb-3">
+          <AdminAlert tone="error">
+            检测到 {staleQueues.length} 个队列存在堆积（
+            {staleQueues
+              .slice(0, 3)
+              .map((queue) => `${queue.key}×${queue.depth}`)
+              .join('、')}
+            {staleQueues.length > 3 ? ' 等' : ''}
+            ）。若持续不消退，说明对应 runtime 停止消费。
+          </AdminAlert>
+        </div>
+      )}
+
+      {runtime.localAgents.length === 0 ? (
+        <AdminEmptyState
+          icon={Cpu}
+          title="当前没有运行中的 agent-runtime 子进程"
+          description="有用户发起 AI 对话后，这里会展示每个账号的常驻子进程与心跳"
+        />
+      ) : (
+        <div className="max-h-72 overflow-auto rounded-lg border border-hairline bg-canvas">
+          <table className="w-full min-w-[560px] text-left text-[12px]">
+            <thead className="text-muted">
+              <tr className="border-b border-hairline">
+                <th className="sticky top-0 z-10 bg-canvas px-3 py-2 font-medium">
+                  账号
+                </th>
+                <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
+                  PID
+                </th>
+                <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
+                  在途请求
+                </th>
+                <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
+                  心跳
+                </th>
+                <th className="sticky top-0 z-10 bg-canvas px-3 py-2 text-right font-medium">
+                  状态
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {runtime.localAgents.map((agent) => {
+                const hasHeartbeat = runtime.heartbeatAccounts.includes(
+                  agent.accountId,
+                );
+                return (
+                  <tr
+                    key={agent.accountId}
+                    className="border-b border-hairline last:border-b-0"
+                  >
+                    <td className="px-3 py-2 font-mono text-[11px]">
+                      {agent.accountId}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {agent.pid ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {agent.busyCount}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {hasHeartbeat ? (
+                        <span className="text-accent-teal">正常</span>
+                      ) : (
+                        <span className="text-primary">缺失</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {agent.stopping
+                        ? '停止中'
+                        : agent.alive
+                          ? '运行中'
+                          : '已退出'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * 渲染管理后台完整运行状态页。
  *
@@ -243,6 +374,7 @@ function TelemetryPill({ label, value }: { label: string; value: string }) {
 export default function AdminStatusPage() {
   const { toast } = useToast();
   const [stats, setStats] = useState<AdminStatusStats | null>(null);
+  const [runtime, setRuntime] = useState<AdminRuntimeStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -254,7 +386,16 @@ export default function AdminStatusPage() {
     setRefreshing(true);
     setError('');
     try {
-      setStats(await admin.status());
+      // 并行拉取业务统计与运行时基础设施快照；后者失败不阻塞前者展示。
+      const [statsResult, runtimeResult] = await Promise.allSettled([
+        admin.status(),
+        admin.runtimeStatus(),
+      ]);
+      if (statsResult.status === 'rejected') throw statsResult.reason;
+      setStats(statsResult.value);
+      setRuntime(
+        runtimeResult.status === 'fulfilled' ? runtimeResult.value : null,
+      );
       setUpdatedAt(new Date());
       if (manualRefreshRef.current) toast('success', '运行状态已刷新');
     } catch (err) {
@@ -370,6 +511,8 @@ export default function AdminStatusPage() {
             caption="输入 + 输出"
           />
         </div>
+
+        {runtime && <RuntimeInfraPanel runtime={runtime} />}
 
         <TokenUsagePanel stats={stats} />
       </div>

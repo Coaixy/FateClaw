@@ -109,12 +109,14 @@ notes/
 
 宿主在请求进入 agent-runtime 前后维护几类运行态保护：
 
-- 会话级忙碌锁：`session:processing:{sessionId}` 防止同一 AI Chat 会话并发多轮；只有当前 requestId 才能续期或释放。
-- 全局 agent 并发槽：`agent:concurrency:active` 限制全站同时进入模型 loop 的请求数；会员请求进入 `agent:concurrency:wait:member`，普通请求进入 `agent:concurrency:wait:normal`，释放槽位时优先会员队列。
+- 会话级忙碌锁：`session:processing:{sessionId}` 防止同一 AI Chat 会话并发多轮；只有当前 requestId 才能续期或释放；TTL 由超时链派生（API 超时 + 5 分钟）。
+- 全局 agent 并发槽：`agent:concurrency:active` 限制全站同时进入模型 loop 的请求数；等待队列为 ZSET（`agent:concurrency:waitq:member` / `waitq:normal`，score=入队时间），配合心跳哈希 `agent:concurrency:wait:heartbeat`——等待者每次轮询报活，任何存活等待者的 Lua 调用都会原子驱逐心跳超时（15 秒）的死亡队头，进程崩溃不会永久毒化队列；释放槽位时优先会员队列。
 - 本地 agent 租约：请求持有 runtime 子进程，最终响应、取消、出错或超时时释放，之后按 idle TTL 回收。
+- 监听器回收：站内 `web:{userId}` 的 outbox 监听是懒创建的，空闲 10 分钟且无在途请求时自动退出释放 Redis 连接；微信账号监听常驻（pinned）。回收/进程重启后迟到的 outbox 消息由 `inbox-stall-sweeper` 的 outbox 巡检代为消费落库（无主阈值 3 分钟），不会丢失。
 - 取消队列：前端中断会向 `ipc:{runtimeId}:cancel` 写入 cancel payload；agent-runtime 在处理当前请求时轮询该队列并调用 Pi session `abort()`。
-- 账务预留与结算：入队前按 `llmRuntime` 预留；最终 outbox 根据真实 usage 结算，取消和超时会释放或补偿预留。
-- 超时兜底：`AI_CHAT_REQUEST_TIMEOUT` 和 `AGENT_REQUEST_TIMEOUT` 默认 30 分钟，超时会清 pending、释放锁/槽位/租约，避免会话永久卡住。
+- 账务预留与结算：入队前按 `llmRuntime` 预留；最终响应「先落库交付、再结算扣费」——落库失败则预留保持 pending 由 billing-sweeper 按对话日志补收，杜绝"已扣费但用户收不到消息"；结算完成后把扣费金额回填进最终消息 metadata。
+- 超时链：全部请求链路超时由 `apps/api/src/shared/timeout-chain.ts` 单一来源派生（daemon 硬超时 8 分钟 < inbox 清理阈值 < API 超时 30 分钟 < 会话锁 TTL），daemon 侧的值由宿主 spawn 时经 env 注入，违例配置启动即报错。
+- 存活心跳：daemon 每 10 秒写 `agent:heartbeat:{accountId}`（TTL 30 秒），优雅退出时主动删除；巡检任务对"inbox 有堆积但心跳缺失"的账号立即发运维告警（`ALERT_WEBHOOK_URL`，可选），无需等到清理阈值。
 
 ## Agent Runtime 单次请求
 

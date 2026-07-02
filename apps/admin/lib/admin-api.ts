@@ -730,11 +730,39 @@ export interface AdminSystemConfigOverview {
   audit_logs: AdminConfigAuditLog[];
 }
 
+/** 运行时基础设施状态快照（对应 GET /api/admin/runtime-status）。 */
+export interface AdminRuntimeStatus {
+  generatedAt: string;
+  localAgents: Array<{
+    accountId: string;
+    busyCount: number;
+    lastUsedAt: number;
+    pid?: number;
+    stopping: boolean;
+    alive: boolean;
+  }>;
+  ipc: {
+    listenerAccounts: string[];
+    pinnedListenerCount: number;
+    pendingInboxCount: number;
+    pendingAiChatCount: number;
+  };
+  heartbeatAccounts: string[];
+  queues: Array<{ key: string; depth: number }>;
+  concurrency: {
+    activeSlots: number;
+    memberWaiters: number;
+    normalWaiters: number;
+  };
+}
+
 export const admin = {
   verify: () =>
     adminRequest<AdminSession>('/api/admin/verify', {
       method: 'POST',
     }),
+  runtimeStatus: () =>
+    adminRequest<AdminRuntimeStatus>('/api/admin/runtime-status'),
   stats: (options?: {
     rechargeRange?: AdminRechargeStatsRange;
     rechargeStartDate?: string;

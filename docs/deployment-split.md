@@ -89,7 +89,34 @@ LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB=128
 ALLOWED_ORIGINS=https://www.example.com,https://admin.example.com
 PUBLIC_API_BASE_URL=https://api.example.com
 PUBLIC_WEB_BASE_URL=https://www.example.com
+# 可选：运维告警 webhook（inbox/outbox 堆积、子进程崩溃、计费按 0 关账时 POST JSON）
+ALERT_WEBHOOK_URL=https://your-webhook-endpoint.example.com/alert
 ```
+
+### 使用 PM2 托管（可选）
+
+仓库根目录提供 `ecosystem.config.cjs`（读取 `.env`）。使用 PM2 时直接：
+
+```bash
+pm2 start ecosystem.config.cjs
+```
+
+配置里已设 `kill_timeout: 45000`：API 优雅停机会等所有 agent-runtime 子进程
+排空 in-flight 请求（daemon drain 最多 30 秒 + 强杀 35 秒），PM2 默认的 1.6 秒
+kill 窗口会掐断这条链，切勿删除该配置。不用 PM2 的话，`npm run start` +
+1Panel/systemd 托管同样可行，但要保证进程管理器给 SIGTERM 后至少 40 秒再 SIGKILL。
+
+### 健康检查与运行时观测
+
+- liveness：`GET /api/health`；readiness（检查 PG+Redis）：`GET /api/ready`——
+  建议在 Nginx/负载均衡与进程管理器中接入。
+- 管理后台「运行状态」页展示运行时基础设施快照（agent-runtime 子进程、
+  IPC 队列深度、runtime 心跳、并发闸门），对应接口 `GET /api/admin/runtime-status`。
+- 请求链路超时由 `apps/api/src/shared/timeout-chain.ts` 统一派生：通常只需
+  （可选地）配置 `AGENT_RUNTIME_REQUEST_TIMEOUT_MS`（daemon 单请求硬超时，
+  默认 8 分钟）与 `AGENT_REQUEST_TIMEOUT` / `AI_CHAT_REQUEST_TIMEOUT`
+  （API 侧兜底超时，默认 30 分钟），堆积清理阈值与会话锁 TTL 自动跟随，
+  违例配置会在启动时直接报错。
 
 Agent 并发槽位、常驻 runtime 上限和空闲回收时间在管理后台写入数据库。
 2G 服务器可先使用 `1` 并发、`2` 个常驻 runtime、`120` 秒空闲回收。

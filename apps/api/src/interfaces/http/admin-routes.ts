@@ -88,6 +88,7 @@ import {
   roundCoinsToCents,
 } from '../../shared/balance-coins.js';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
+import { collectRuntimeStatus } from '../../runtime/runtime-status.js';
 
 type AdminRole = 'owner' | 'user_manager';
 type AdminScope = 'admin:*' | 'users:read' | 'users:create' | 'messages:read';
@@ -773,6 +774,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       scopes: principal.scopes,
       home_path: principal.home_path,
     };
+  });
+
+  // GET /api/admin/runtime-status — 运行时状态快照（本地子进程 / IPC 监听 /
+  // 队列深度 / runtime 心跳 / 并发闸门），用于主动发现掉线与堆积。
+  app.get('/runtime-status', async () => {
+    return collectRuntimeStatus();
   });
 
   // GET /api/admin/stats — 全局统计数据，可按时间范围聚合充值收入
