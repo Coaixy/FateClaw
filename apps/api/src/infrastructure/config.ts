@@ -27,6 +27,7 @@ const envConfig = readEnvFile([
   'GOOGLE_OAUTH_REDIRECT_URI',
   'PAYMENT_CALLBACK_ALLOWED_HOSTS',
   'TRUST_PROXY',
+  'ALERT_WEBHOOK_URL',
 ]);
 
 export const ASSISTANT_NAME =
@@ -236,6 +237,14 @@ export const BILLING_RESERVATION_STALE_MS = parseInt(
   process.env.BILLING_RESERVATION_STALE_MS || '2400000',
   10,
 );
+
+// 运维告警 webhook 地址（可选）。配置后关键运行时异常（inbox/outbox 堆积清理、
+// 子进程异常退出、计费按 0 关账等）会 POST JSON 到该地址；未配置时降级为仅记日志。
+export const ALERT_WEBHOOK_URL = (
+  process.env.ALERT_WEBHOOK_URL ||
+  envConfig.ALERT_WEBHOOK_URL ||
+  ''
+).trim();
 
 // 低余额并发门槛（积分）。可消费积分低于此值的用户，同一时刻只能有 1 个 metered
 // 官方模型请求在跑，防止多 session 并发把余额刷成大额欠费（白嫖）。
