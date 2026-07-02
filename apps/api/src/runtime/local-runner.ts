@@ -21,6 +21,13 @@ import {
 
 const LOCAL_AGENT_POLICY_CACHE_MS = 2_000;
 const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
+/**
+ * 子进程 stdout 就绪信号：daemon.ts 连上 Redis、具备处理请求能力后会打印这行。
+ * spawn() 不报错只代表进程被创建成功，不代表它已经能干活——等这个信号才算数。
+ */
+const LOCAL_AGENT_READY_SENTINEL = '__FATECLAW_AGENT_READY__';
+/** 等待就绪信号的超时上限；超时视为启动失败，主动杀掉半死不活的子进程。 */
+const LOCAL_AGENT_READY_TIMEOUT_MS = 20_000;
 
 interface LocalAgentRuntimePolicy {
   maxProcesses: number;
@@ -421,6 +428,23 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     cwd: projectRoot,
   });
 
+  // 就绪等待：spawn() 不报错只说明进程被创建成功，不代表它已经连上 Redis、能开始
+  // 处理请求。四个来源之一敲定即生效（只生效一次，靠 settleReady 置空防重复）：
+  // stdout 收到就绪信号 → 成功；就绪前 exit/error → 失败；超时都没等到 → 失败。
+  let settleReady: ((error?: Error) => void) | null = null;
+  const readyPromise = new Promise<void>((resolve, reject) => {
+    settleReady = (error) => {
+      if (error) reject(error);
+      else resolve();
+    };
+  });
+  const readyTimeoutTimer = setTimeout(() => {
+    settleReady?.(
+      new Error(`本地 agent 进程 ${LOCAL_AGENT_READY_TIMEOUT_MS}ms 内未上报就绪`),
+    );
+    settleReady = null;
+  }, LOCAL_AGENT_READY_TIMEOUT_MS);
+
   if (child.stdout) {
     let stdoutBuf: string[] = [];
     let stdoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -434,6 +458,12 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     const rl = createInterface({ input: child.stdout });
     rl.on('line', (line) => {
       if (!line) return;
+      if (line === LOCAL_AGENT_READY_SENTINEL) {
+        clearTimeout(readyTimeoutTimer);
+        settleReady?.();
+        settleReady = null;
+        return; // 控制信号，不计入日志缓冲
+      }
       stdoutBuf.push(line);
       if (stdoutTimer) clearTimeout(stdoutTimer);
       stdoutTimer = setTimeout(flushStdout, 50);
@@ -489,6 +519,9 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   };
 
   child.on('exit', (code, signal) => {
+    clearTimeout(readyTimeoutTimer);
+    settleReady?.(new Error('本地 agent 进程在就绪前已退出'));
+    settleReady = null;
     clearRecordTimers(record);
     if (localAgentProcesses.get(accountId) === record) {
       localAgentProcesses.delete(accountId);
@@ -500,6 +533,9 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   });
 
   child.on('error', (err) => {
+    clearTimeout(readyTimeoutTimer);
+    settleReady?.(new Error('本地 agent 进程 error 事件'));
+    settleReady = null;
     clearRecordTimers(record);
     if (localAgentProcesses.get(accountId) === record) {
       localAgentProcesses.delete(accountId);
@@ -513,9 +549,16 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     });
   });
 
+  try {
+    await readyPromise;
+  } catch (err) {
+    child.kill();
+    throw err;
+  }
+
   localAgentProcesses.set(accountId, record);
   scheduleIdleStop(record, policy.idleTtlMs);
-  logger.info({ accountId, pid: child.pid }, '本地 agent 进程已启动');
+  logger.info({ accountId, pid: child.pid }, '本地 agent 进程已就绪');
 }
 
 /**

@@ -423,6 +423,11 @@ async function cleanup(): Promise<void> {
 async function loop(): Promise<void> {
   const ctx = initContext();
   await connectRedis();
+  // 宿主机（local-runner.ts）通过 stdout 管道识别这行就绪信号，用来确认子进程
+  // 真的连上了 Redis、具备处理请求的能力，而不是只看 spawn() 有没有抛错。
+  // 用原始 write 而不是 log()：log() 走 stderr 且带日志前缀，容易和真实日志混在一起，
+  // 这里要的是干净、无歧义的控制信号。
+  process.stdout.write('__FATECLAW_AGENT_READY__\n');
   const redis = getRedis();
 
   // 退出协调：收到信号后停止接收新消息，等待正在处理的请求完成（最多 N 秒），

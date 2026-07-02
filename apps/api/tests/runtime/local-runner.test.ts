@@ -1,4 +1,8 @@
+import { PassThrough } from 'node:stream';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const READY_SENTINEL = '__FATECLAW_AGENT_READY__';
 
 const {
   mockBuildAgentEnv,
@@ -6,6 +10,7 @@ const {
   mockGetLocalAgentRuntimePolicy,
   mockSpawn,
   spawnedChildren,
+  createChild,
 } = vi.hoisted(() => {
   const spawned: Array<{
     child: {
@@ -13,8 +18,8 @@ const {
       killed: boolean;
       exitCode: number | null;
       signalCode: string | null;
-      stdout: null;
-      stderr: null;
+      stdout: InstanceType<typeof PassThrough>;
+      stderr: InstanceType<typeof PassThrough>;
       kill: ReturnType<typeof vi.fn>;
       on: (event: string, listener: (...args: unknown[]) => void) => unknown;
       emit: (event: string, ...args: unknown[]) => boolean;
@@ -25,6 +30,8 @@ const {
   }> = [];
   let nextPid = 10_000;
 
+  // 不在这里自动发就绪信号：由 mockSpawn 的默认实现统一处理，方便个别测试
+  // 用 mockImplementationOnce 覆盖出"不就绪"的子进程。
   function createChild() {
     const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
     const child = {
@@ -32,8 +39,8 @@ const {
       killed: false,
       exitCode: null as number | null,
       signalCode: null as string | null,
-      stdout: null,
-      stderr: null,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
       kill: vi.fn((signal?: string) => {
         child.killed = true;
         if (signal === 'SIGKILL') {
@@ -56,6 +63,18 @@ const {
     return child;
   }
 
+  const mockSpawn = vi.fn(
+    (command: string, args: string[], options: unknown) => {
+      const child = createChild();
+      spawned.push({ child, command, args, options });
+      // 默认：子进程"立刻"上报就绪，模拟绝大多数正常启动场景，
+      // 现有测试用例不需要为此额外改动。个别测试需要"未就绪"路径时，
+      // 用 mockSpawn.mockImplementationOnce(...) 单独覆盖这一次，不写入信号。
+      child.stdout.write(`${READY_SENTINEL}\n`);
+      return child;
+    },
+  );
+
   return {
     mockBuildAgentEnv: vi.fn(async (accountId: string) => ({
       FATECLAW_ACCOUNT_ID: accountId,
@@ -71,12 +90,9 @@ const {
       maxProcesses: 4,
       idleTtlMs: 30_000,
     })),
-    mockSpawn: vi.fn((command: string, args: string[], options: unknown) => {
-      const child = createChild();
-      spawned.push({ child, command, args, options });
-      return child;
-    }),
+    mockSpawn,
     spawnedChildren: spawned,
+    createChild,
   };
 });
 
@@ -234,6 +250,70 @@ describe('local-runner', () => {
     spawnedChildren[0].child.emit('exit', 0, null);
 
     expect(__getLocalAgentStateForTests()).toEqual([]);
+  });
+
+  describe('readiness handshake', () => {
+    it('does not register the runtime until stdout reports the ready sentinel', async () => {
+      // 默认实现是"立刻"写入就绪信号，这里手动接管这一次 spawn，验证在收到
+      // 信号之前 ensureLocalAgentRunning 确实还在等待、不会提前记录runtime。
+      mockSpawn.mockImplementationOnce(
+        (command: string, args: string[], options: unknown) => {
+          const child = createChild();
+          spawnedChildren.push({ child, command, args, options });
+          return child;
+        },
+      );
+
+      const pending = ensureLocalAgentRunning('account-slow-ready');
+      // 让 ensureLocalAgentCapacityForNewStart 等前置 await 都走完，真正跑到 spawn()。
+      await vi.advanceTimersByTimeAsync(0);
+      expect(__getLocalAgentStateForTests()).toEqual([]);
+
+      spawnedChildren[0].child.stdout.write(`${READY_SENTINEL}\n`);
+      await pending;
+
+      expect(__getLocalAgentStateForTests()).toEqual([
+        expect.objectContaining({ accountId: 'account-slow-ready' }),
+      ]);
+    });
+
+    it('rejects when the child exits before reporting ready', async () => {
+      mockSpawn.mockImplementationOnce(
+        (command: string, args: string[], options: unknown) => {
+          const child = createChild();
+          spawnedChildren.push({ child, command, args, options });
+          return child; // 不写入就绪信号
+        },
+      );
+
+      const pending = ensureLocalAgentRunning('account-crash-before-ready');
+      await vi.advanceTimersByTimeAsync(0);
+      spawnedChildren[0].child.emit('exit', 1, null);
+
+      await expect(pending).rejects.toThrow('本地 agent 进程在就绪前已退出');
+      expect(__getLocalAgentStateForTests()).toEqual([]);
+    });
+
+    it('rejects and kills the child when the ready sentinel never arrives', async () => {
+      mockSpawn.mockImplementationOnce(
+        (command: string, args: string[], options: unknown) => {
+          const child = createChild();
+          spawnedChildren.push({ child, command, args, options });
+          return child; // 不写入就绪信号
+        },
+      );
+
+      const pending = ensureLocalAgentRunning('account-timeout');
+      // 断言拒绝的同时推进计时器，避免 unhandledRejection 先于断言触发。
+      const assertion = expect(pending).rejects.toThrow(
+        '本地 agent 进程 20000ms 内未上报就绪',
+      );
+      await vi.advanceTimersByTimeAsync(20_000);
+      await assertion;
+
+      expect(spawnedChildren[0].child.kill).toHaveBeenCalled();
+      expect(__getLocalAgentStateForTests()).toEqual([]);
+    });
   });
 
   it('passes LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB to dist node args', async () => {
