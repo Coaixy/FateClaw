@@ -26,7 +26,7 @@ export function TabAccount() {
 
   return (
     <section className="overflow-hidden rounded-xl border border-hairline">
-      <div className="border-b border-hairline bg-surface-card px-4 py-2.5">
+      <div className="border-b border-hairline bg-surface-raised px-4 py-2.5">
         <div className="flex items-center gap-2.5">
           <UserRound size={14} className="text-muted" />
           <div>
@@ -40,7 +40,7 @@ export function TabAccount() {
         </div>
       </div>
 
-      <div className="bg-surface-card px-4 py-3">
+      <div className="bg-surface-raised px-4 py-3">
         <div className="overflow-hidden rounded-xl border border-hairline bg-canvas/36">
           {rows.map(({ icon: Icon, label, value }, i) => (
             <div

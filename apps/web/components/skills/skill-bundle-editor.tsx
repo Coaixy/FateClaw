@@ -816,7 +816,7 @@ export function SkillBundleEditor({
             type="button"
             onClick={handleDeleteFile}
             disabled={selectedRequired}
-            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-error transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 sm:gap-2 sm:text-[14px]"
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-2 text-[13px] font-semibold text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-40 sm:gap-2 sm:text-[14px]"
             title={selectedRequired ? '核心文件不能删除' : '删除文件'}
           >
             <Trash2 size={17} />
@@ -850,7 +850,7 @@ export function SkillBundleEditor({
             />
             <button
               type="submit"
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-primary px-3 text-[13px] font-semibold text-white transition-colors hover:bg-primary/90"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-hairline btn-tactile-primary px-3 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary/90"
             >
               <Plus size={15} />
               创建
@@ -899,14 +899,14 @@ export function SkillBundleEditor({
         </div>
 
         {pathError ? (
-          <p className="text-[12px] leading-relaxed text-red-300">
+          <p className="text-[12px] leading-relaxed text-error">
             {pathError}
           </p>
         ) : null}
       </div>
 
       {error ? (
-        <div className="flex items-start gap-2 border-b border-red-500/20 bg-red-500/10 px-5 py-3 text-[13px] leading-relaxed text-red-200 sm:px-6">
+        <div className="flex items-start gap-2 border-b border-error/20 bg-error/10 px-5 py-3 text-[13px] leading-relaxed text-error sm:px-6">
           <AlertCircle size={15} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>

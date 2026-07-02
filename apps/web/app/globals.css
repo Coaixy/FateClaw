@@ -2,39 +2,49 @@
 @import 'highlight.js/styles/github-dark.css';
 
 @theme {
-  /* Brand */
-  --color-primary: #cc785c;
-  --color-primary-active: #a9583e;
-  --color-primary-disabled: #e6dfd8;
+  /* ==== 宣纸朱砂主题：古籍装帧气质 ====
+     画布是微黄的宣纸、文字是松烟墨、唯一 accent 是朱砂红，
+     印章红(seal)仅用于品牌印章等点睛处。 */
 
-  /* Ink / Text */
-  --color-ink: #141413;
-  --color-body: #3d3d3a;
-  --color-body-strong: #252523;
-  --color-muted: #6c6a64;
-  --color-muted-soft: #8e8b82;
+  /* Brand：朱砂 */
+  --color-primary: #c03f2b;
+  --color-primary-active: #9e3222;
+  --color-primary-disabled: #e8ddc9;
+  /* 印章红：比朱砂更深沉,只用于品牌印章、点睛小元素,不作常规 accent。 */
+  --color-seal: #9c2436;
 
-  /* Surface */
-  --color-canvas: #faf9f5;
-  --color-surface-soft: #f5f0e8;
-  --color-surface-card: #efe9de;
-  --color-surface-cream-strong: #e8e0d2;
-  --color-surface-dark: #181715;
-  --color-surface-dark-elevated: #252320;
-  --color-surface-dark-soft: #1f1e1b;
+  /* Ink / Text：松烟墨系 */
+  --color-ink: #26221c;
+  --color-body: #433d33;
+  --color-body-strong: #2e2921;
+  --color-muted: #766a58;
+  --color-muted-soft: #988b76;
 
-  /* Hairline / Border */
-  --color-hairline: #e6dfd8;
-  --color-hairline-soft: #ebe6df;
+  /* Surface：三层纵深 — 侧栏(笺色,最深) < 画布(宣纸) < 浮起层(暖白,最亮)。
+     raised 亮于画布才有「浮起」感，配合 shadow-raised 使用。 */
+  --color-canvas: #f7f2e7;
+  --color-surface-raised: #fffdf8;
+  --color-surface-soft: #f1ead9;
+  --color-surface-card: #eae1cc;
+  /* 侧栏专用笺色：与宣纸画布形成肉眼可见的分层。 */
+  --color-sidebar: #ede5d2;
+  --color-surface-cream-strong: #e4d9c2;
+  --color-surface-dark: #1b1712;
+  --color-surface-dark-elevated: #262118;
+  --color-surface-dark-soft: #201b14;
+
+  /* Hairline / Border：笺纹线 */
+  --color-hairline: #e0d5bf;
+  --color-hairline-soft: #e7ddc9;
 
   /* On-colors */
   --color-on-primary: #ffffff;
-  --color-on-dark: #faf9f5;
-  --color-on-dark-soft: #a09d96;
+  --color-on-dark: #f2ead8;
+  --color-on-dark-soft: #a3988a;
 
   /* Accent */
-  --color-accent-teal: #5db8a6;
-  --color-accent-amber: #e8a55a;
+  --color-accent-teal: #5b9e8c;
+  --color-accent-amber: #d19a4a;
 
   /* Semantic */
   --color-success: #5db872;
@@ -45,18 +55,32 @@
   --color-chart-metal: #c8983a;
   --color-chart-wood: #4f8f66;
   --color-chart-water: #5a9fc0;
-  --color-chart-fire: #cc785c;
+  --color-chart-fire: #c04a30;
   --color-chart-earth: #8b6b45;
   --color-chart-line: #3d3d3a;
   --color-chart-line-muted: #8e8b82;
-  --color-chart-highlight: rgba(204, 120, 92, 0.1);
+  --color-chart-highlight: rgba(192, 63, 43, 0.1);
   --color-chart-badge: rgba(232, 165, 90, 0.14);
 
-  /* Typography */
-  --font-sans: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
-  --font-display: var(--font-sans);
+  /* Typography：Claude 式混排 — 大标题走衬线（display），正文与 UI 小字走系统无衬线（sans/body），
+     对应 claude.ai 的 Copernicus（衬线标题）+ Styrene（无衬线正文）结构。
+     display 首选自托管思源宋体（真 500-700 字重、屏显质量高），系统宋体仅作回退：
+     Songti/SimSun 笔画细且 bold 靠算法加粗，是「老网页廉价感」的主要来源，不能当主力。 */
+  --font-sans: -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: 'Noto Serif SC', 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
   --font-body: var(--font-sans);
   --font-mono: 'SFMono-Regular', 'Menlo', 'Consolas', ui-monospace, monospace;
+
+  /* 中文标题禁用负字距：tracking-tight(-0.025em) 是西文排印习惯，中文字符满格，
+     负值会让标题发挤。全局把 tight 归零，免去逐处清理 44 处 tracking-tight。 */
+  --tracking-tight: 0em;
+  --tracking-tighter: 0em;
+
+  /* Shadow：浮起层专用暖调阴影（色相跟随 ink，避免纯黑投影发灰）。
+     扩散半径要足够大才能形成可感知的「浮起」，太淡等于没有。 */
+  --shadow-raised:
+    0 1px 2px rgba(20, 20, 19, 0.05),
+    0 8px 32px rgba(20, 20, 19, 0.09);
 
   /* Radius */
   --radius-xs: 4px;
@@ -68,27 +92,37 @@
   --radius-full: 9999px;
 }
 
-/* 全站正文和 Tailwind font-sans 工具类统一走系统宋体/衬线回退，避免加载大体积字体文件。 */
+/* 正文/UI 小字走系统无衬线保证小字号屏显清晰；大标题走自托管思源宋体（@fontsource 按
+   unicode-range 分片，浏览器只下载标题实际用到的字形分片，体积可控），保留命理垂类书卷气。 */
 :root {
-  --font-sans: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
-  --font-display: var(--font-sans);
+  --font-sans: -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: 'Noto Serif SC', 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
   --font-body: var(--font-sans);
 }
 
-/* Dark Mode: Navy Surface Mapping */
+/* Dark Mode: 暗墨映射（宣纸朱砂主题的夜间版：墨底、朱砂提亮保证对比） */
 :root.dark {
-  --color-canvas: #181715;
-  --color-surface-soft: #1f1e1b;
-  --color-surface-card: #1f1e1b;
-  --color-surface-cream-strong: #252320;
-  --color-hairline: #2a2824;
-  --color-hairline-soft: #22201d;
-  --color-ink: #faf9f5;
-  --color-body: #a09d96;
-  --color-body-strong: #d4d1cb;
-  --color-muted: #a09d96;
-  --color-muted-soft: #6c6a64;
-  --color-primary-disabled: #3d3a36;
+  --color-canvas: #1b1712;
+  /* 深色模式侧栏比画布更深（浮起方向相反：暗色下越低的层越黑）。 */
+  --color-sidebar: #13100c;
+  --color-surface-raised: #262118;
+  --shadow-raised:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 24px rgba(0, 0, 0, 0.3);
+  --color-surface-soft: #211c15;
+  --color-surface-card: #211c15;
+  --color-surface-cream-strong: #262118;
+  --color-hairline: #2e281f;
+  --color-hairline-soft: #241f17;
+  --color-ink: #f2ead8;
+  --color-body: #a3988a;
+  --color-body-strong: #d6ccba;
+  --color-muted: #a3988a;
+  --color-muted-soft: #6f6555;
+  /* 朱砂在暗底对比不足,夜间提亮一档。 */
+  --color-primary: #d65a41;
+  --color-primary-active: #e06a50;
+  --color-primary-disabled: #3d352c;
   --color-chart-metal: #ecc864;
   --color-chart-wood: #79c892;
   --color-chart-water: #7ac0e0;
@@ -96,24 +130,31 @@
   --color-chart-earth: #c49a6a;
   --color-chart-line: #d4d1cb;
   --color-chart-line-muted: #8e8b82;
-  --color-chart-highlight: rgba(204, 120, 92, 0.16);
+  --color-chart-highlight: rgba(192, 63, 43, 0.16);
   --color-chart-badge: rgba(232, 165, 90, 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --color-canvas: #181715;
-    --color-surface-soft: #1f1e1b;
-    --color-surface-card: #1f1e1b;
-    --color-surface-cream-strong: #252320;
-    --color-hairline: #2a2824;
-    --color-hairline-soft: #22201d;
-    --color-ink: #faf9f5;
-    --color-body: #a09d96;
-    --color-body-strong: #d4d1cb;
-    --color-muted: #a09d96;
-    --color-muted-soft: #6c6a64;
-    --color-primary-disabled: #3d3a36;
+    --color-canvas: #1b1712;
+    --color-sidebar: #13100c;
+    --color-surface-raised: #262118;
+    --shadow-raised:
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 6px 24px rgba(0, 0, 0, 0.3);
+    --color-surface-soft: #211c15;
+    --color-surface-card: #211c15;
+    --color-surface-cream-strong: #262118;
+    --color-hairline: #2e281f;
+    --color-hairline-soft: #241f17;
+    --color-ink: #f2ead8;
+    --color-body: #a3988a;
+    --color-body-strong: #d6ccba;
+    --color-muted: #a3988a;
+    --color-muted-soft: #6f6555;
+    --color-primary: #d65a41;
+    --color-primary-active: #e06a50;
+    --color-primary-disabled: #3d352c;
     --color-chart-metal: #ecc864;
     --color-chart-wood: #79c892;
     --color-chart-water: #7ac0e0;
@@ -121,7 +162,7 @@
     --color-chart-earth: #c49a6a;
     --color-chart-line: #d4d1cb;
     --color-chart-line-muted: #8e8b82;
-    --color-chart-highlight: rgba(204, 120, 92, 0.16);
+    --color-chart-highlight: rgba(192, 63, 43, 0.16);
     --color-chart-badge: rgba(232, 165, 90, 0.18);
   }
 }
@@ -143,8 +184,85 @@ body {
   font-family: var(--font-display);
 }
 
+/* ---- 按钮物理质感（微拟物 tactile）----
+   实体按键的三要素：顶部内高光（受光面）、底缘内压边（背光面）、贴地投影。
+   配合使用方的 active:scale 形成「按下」反馈。
+   注意：btn-tactile-primary 用 background-image 渐变，会覆盖 bg-* 底色类，
+   使用时不要再叠加 bg-primary / hover:bg-primary-active。 */
+.btn-tactile {
+  /* 浅色实体按键（白底次级按钮、胶囊） */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(20, 20, 19, 0.05),
+    0 1px 2px rgba(20, 20, 19, 0.08);
+}
+.btn-tactile:active {
+  box-shadow: inset 0 1px 2px rgba(20, 20, 19, 0.1);
+}
+
+.btn-tactile-primary {
+  /* 陶土色主按键：上亮下实的微渐变 + 高光 + 压边 + 投影 */
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-primary) 88%, #ffffff),
+    var(--color-primary)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 1px 2.5px rgba(20, 20, 19, 0.22);
+}
+.btn-tactile-primary:hover {
+  background-image: linear-gradient(
+    to bottom,
+    var(--color-primary),
+    color-mix(in srgb, var(--color-primary) 82%, #000000)
+  );
+}
+.btn-tactile-primary:active {
+  background-image: linear-gradient(
+    to bottom,
+    var(--color-primary-active),
+    var(--color-primary-active)
+  );
+  box-shadow: inset 0 1.5px 3px rgba(0, 0, 0, 0.22);
+}
+.btn-tactile-primary:disabled {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* 深色模式：高光减弱、投影加深，维持同样的立体方向。 */
+:root.dark .btn-tactile {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+:root.dark .btn-tactile:active {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .btn-tactile {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+      0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+  :root:not(.light) .btn-tactile:active {
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* 页面级大标题（h1）统一衬线：全站 h1 均为页面主标题（15px 起），
+   自动获得「衬线标题 + 无衬线正文」的混排层级，无需逐页加 font-display。 */
+h1 {
+  font-family: var(--font-display);
+}
+
 ::selection {
-  background: rgba(204, 120, 92, 0.18);
+  background: rgba(192, 63, 43, 0.16);
 }
 
 :focus-visible {
@@ -319,8 +437,8 @@ html { scroll-behavior: smooth; }
   40% { opacity: 1; transform: scale(1); }
 }
 @keyframes step-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(204, 120, 92, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(204, 120, 92, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 63, 43, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(192, 63, 43, 0); }
 }
 @keyframes step-complete {
   from { transform: scale(0); opacity: 0; }

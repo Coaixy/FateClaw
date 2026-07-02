@@ -69,17 +69,20 @@ export function AppShell({
     router.replace('/login');
   };
 
+  // 桌面端没有顶栏（Claude 式结构：用户区在侧栏底部，主画布完整留给内容），
+  // 移动端保留 pt-14 顶栏；noPadding（聊天页）时内容区纵向 flex、主体内部滚动。
   const shellClassName = noPadding ? 'h-dvh overflow-hidden' : 'min-h-dvh';
   const contentFrameClassName = noPadding
-    ? 'h-full overflow-hidden pt-14 lg:ml-[260px] lg:pt-0'
+    ? 'flex h-full flex-col overflow-hidden pt-14 lg:ml-[260px] lg:pt-0'
     : 'pt-14 lg:pt-0 lg:ml-[260px]';
+  // noPadding(聊天页) lg:pt-16 为右上角悬浮胶囊预留空间,避免消息被压住。
   const mainClassName = wide
     ? noPadding
-      ? 'mx-auto flex h-full min-h-0 max-w-[1400px] flex-col overflow-hidden px-4 pb-0 lg:px-8 lg:pt-16 animate-page-enter'
-      : 'mx-auto max-w-[1400px] px-4 pb-10 lg:px-8 lg:pt-20 lg:pb-10 animate-page-enter'
+      ? 'mx-auto flex w-full flex-1 min-h-0 max-w-[1400px] flex-col overflow-hidden px-4 pb-0 lg:px-8 lg:pt-16 animate-page-enter'
+      : 'mx-auto max-w-[1400px] px-4 pb-10 lg:px-8 lg:pt-12 lg:pb-16 animate-page-enter'
     : noPadding
-      ? 'mx-auto flex h-full min-h-0 max-w-3xl flex-col overflow-hidden px-4 pb-0 lg:px-10 lg:pt-16 animate-page-enter'
-      : 'mx-auto max-w-3xl px-4 pb-10 lg:px-10 lg:pt-20 lg:pb-10 animate-page-enter';
+      ? 'mx-auto flex w-full flex-1 min-h-0 max-w-3xl flex-col overflow-hidden px-4 pb-0 lg:px-10 lg:pt-16 animate-page-enter'
+      : 'mx-auto max-w-3xl px-4 pb-10 lg:px-10 lg:pt-12 lg:pb-16 animate-page-enter';
 
   return (
     <ChatSessionsProvider>
@@ -92,14 +95,8 @@ export function AppShell({
           {t('shell.skipMain')}
         </a>
 
-        {/* Global background grid & subtle glow */}
-        <div className="fixed inset-0 pointer-events-none z-[-1] bg-canvas" aria-hidden="true">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--color-ink)_2%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--color-ink)_2%,transparent)_1px,transparent_1px)] bg-[size:48px_48px] opacity-30" />
-          <div className="absolute top-0 right-0 w-[700px] h-[500px] bg-[radial-gradient(ellipse_at_top_right,color-mix(in_srgb,var(--color-primary)_6%,transparent),transparent_70%)]" />
-          <div className="absolute bottom-0 left-0 w-[500px] h-[400px] bg-[radial-gradient(ellipse_at_bottom_left,color-mix(in_srgb,var(--color-accent-teal)_5%,transparent),transparent_70%)]" />
-        </div>
-
         <Sidebar onLogout={handleLogout} />
+        {/* 桌面用户入口:悬浮右上角胶囊(不占整条顶栏,避免空白带)。 */}
         <div className="hidden lg:flex fixed top-4 right-6 z-30 items-center">
           <TopBar onLogout={handleLogout} />
         </div>

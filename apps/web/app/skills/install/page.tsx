@@ -42,7 +42,7 @@ function InstallActionContent({
     <>
       {error ? (
         <div
-          className="mb-3 flex items-center gap-1.5 rounded-lg bg-red-400/10 px-3 py-2 text-[12px] text-red-400"
+          className="mb-3 flex items-center gap-1.5 rounded-lg bg-error/10 px-3 py-2 text-[12px] text-error"
           role="alert"
         >
           <AlertCircle size={12} className="shrink-0" />
@@ -58,7 +58,7 @@ function InstallActionContent({
       ) : null}
       {!accessActive ? (
         <div
-          className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-[12px] text-amber-400"
+          className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-center text-[12px] text-warning"
           role="status"
         >
           {inactiveAccessLabel}
@@ -68,7 +68,7 @@ function InstallActionContent({
         <button
           onClick={onLogin}
           disabled={!accessActive}
-          className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
+          className="w-full h-11 rounded-lg btn-tactile-primary text-on-primary text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
         >
           {inviteMode ? '登录后领取授权' : '登录后订阅并使用'}
         </button>
@@ -83,7 +83,7 @@ function InstallActionContent({
         <button
           onClick={onSubscribe}
           disabled={subscribing || !accessActive}
-          className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+          className="w-full h-11 rounded-lg btn-tactile-primary text-on-primary text-sm font-medium disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
         >
           {subscribing ? <Loader2 size={14} className="animate-spin" /> : null}
           {inviteMode ? '领取授权并使用' : '订阅并用于 AI Chat'}
@@ -170,8 +170,8 @@ function SkillInstallContent() {
           </div>
         ) : install.error && !preview ? (
           <div className="rounded-xl border border-hairline bg-surface-card px-6 py-16 text-center animate-fade-in">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-              <AlertCircle size={20} className="text-red-400" />
+            <div className="w-12 h-12 rounded-2xl bg-error/10 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={20} className="text-error" />
             </div>
             <p className="text-sm font-medium mb-1">无法加载</p>
             <p className="text-[13px] text-muted">{install.error}</p>

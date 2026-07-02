@@ -31,11 +31,11 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useI18n } from '@/lib/i18n';
 import { useConfirm } from '@/lib/use-confirm';
 
-/** 客户状态徽章样式（与列表页保持一致）。 */
+/** 客户状态徽章样式（与列表页保持一致：vip→primary、待跟进→warning、已完成→success）。 */
 const STATUS_BADGE_CLASS: Record<ClientStatus, string> = {
-  vip: 'border-amber-400/40 bg-amber-400/10 text-amber-500',
-  follow_up: 'border-primary/35 bg-primary/10 text-primary',
-  done: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
+  vip: 'border-primary/40 bg-primary/10 text-primary',
+  follow_up: 'border-warning/40 bg-warning/10 text-warning',
+  done: 'border-success/40 bg-success/10 text-success',
 };
 
 const STATUS_LABEL_KEY: Record<ClientStatus, string> = {
@@ -339,7 +339,7 @@ function ClientDetailContent() {
         ) : (
           <>
             {/* 客户信息头部 */}
-            <header className="rounded-2xl border border-hairline bg-surface-card p-5">
+            <header className="rounded-2xl border border-hairline bg-surface-raised p-5 shadow-raised">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -403,7 +403,7 @@ function ClientDetailContent() {
                       `/ai-chat?client=${encodeURIComponent(profile.id)}`,
                     )
                   }
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full btn-tactile-primary px-4 text-[13px] font-medium text-on-primary transition-opacity hover:opacity-90"
                 >
                   <Sparkles size={14} />
                   {t('clients.card.startReading')}
@@ -423,7 +423,7 @@ function ClientDetailContent() {
               </h2>
 
               {/* 追加输入框 */}
-              <div className="rounded-2xl border border-hairline bg-surface-card p-3">
+              <div className="rounded-2xl border border-hairline bg-surface-raised p-3">
                 <textarea
                   value={newNote}
                   onChange={(event) =>
@@ -438,7 +438,7 @@ function ClientDetailContent() {
                     type="button"
                     onClick={handleAddFollowUp}
                     disabled={!newNote.trim() || submitting}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full btn-tactile-primary px-3.5 text-[12px] font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {submitting ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -453,7 +453,7 @@ function ClientDetailContent() {
               </div>
 
               {followUpError && (
-                <p className="px-0.5 text-[12px] text-rose-500">
+                <p className="px-0.5 text-[12px] text-error">
                   {followUpError}
                 </p>
               )}
@@ -468,7 +468,7 @@ function ClientDetailContent() {
                   {followUps.map((item) => (
                     <div
                       key={item.id}
-                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3"
+                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-raised px-3.5 py-3"
                     >
                       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <ClipboardList size={13} strokeWidth={1.8} />
@@ -491,7 +491,7 @@ function ClientDetailContent() {
                         type="button"
                         onClick={() => handleDeleteFollowUp(item.id)}
                         aria-label={t('clients.detail.followUps.delete')}
-                        className="shrink-0 rounded-md p-1 text-muted/50 opacity-0 transition-all hover:text-rose-500 group-hover:opacity-100"
+                        className="shrink-0 rounded-md p-1 text-muted/50 opacity-0 transition-all hover:text-error group-hover:opacity-100"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -511,7 +511,7 @@ function ClientDetailContent() {
               </h2>
 
               {restoreError && (
-                <p className="px-0.5 text-[12px] text-rose-500">
+                <p className="px-0.5 text-[12px] text-error">
                   {restoreError}
                 </p>
               )}
@@ -588,7 +588,7 @@ function ClientDetailContent() {
                       <Link
                         key={session.id}
                         href={`/ai-chat?sid=${encodeURIComponent(session.id)}`}
-                        className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 transition-colors hover:border-primary/30"
+                        className="flex items-center gap-3 rounded-2xl border border-hairline bg-surface-raised px-3.5 py-3 transition-colors hover:border-primary/30"
                       >
                         {body}
                       </Link>

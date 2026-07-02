@@ -64,14 +64,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 onClick={this.handleRetry}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-medium border border-hairline bg-surface-card text-ink hover:bg-surface-cream-strong transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-medium border border-hairline bg-surface-raised text-ink hover:border-primary/40 transition-colors cursor-pointer"
               >
                 <RotateCcw size={13} />
                 重试
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="h-9 px-4 rounded-lg text-[13px] font-medium bg-primary text-black hover:opacity-90 transition-opacity cursor-pointer"
+                className="btn-tactile-primary h-9 px-4 rounded-lg text-[13px] font-medium text-on-primary transition-all cursor-pointer active:scale-[0.98]"
               >
                 刷新页面
               </button>

@@ -31,7 +31,7 @@ function AnnouncementListItem({
   return (
     <Link
       href={`/announcements/${encodeURIComponent(announcement.slug)}`}
-      className="group block rounded-xl border border-hairline bg-surface-card p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] transition-colors hover:border-primary/30 hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      className="group block rounded-xl border border-hairline bg-surface-raised p-4 transition-colors hover:border-primary/30 hover:bg-surface-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -91,7 +91,7 @@ export function AnnouncementsWorkspace() {
   return (
     <AppShell requireAuth={false}>
       <div className="space-y-5">
-        <header className="rounded-xl border border-hairline bg-surface-card p-5 shadow-[0_14px_34px_rgba(15,23,42,0.04)]">
+        <header className="rounded-xl border border-hairline bg-surface-raised p-5 shadow-raised">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-primary">
             <Megaphone size={15} />
             运营公告
@@ -106,7 +106,7 @@ export function AnnouncementsWorkspace() {
 
         {loading ? (
           <div
-            className="flex justify-center rounded-xl border border-hairline bg-surface-card py-12"
+            className="flex justify-center rounded-xl border border-hairline bg-surface-raised py-12"
             role="status"
             aria-label="正在加载公告"
           >
@@ -127,7 +127,7 @@ export function AnnouncementsWorkspace() {
             </div>
           </div>
         ) : announcements.length === 0 ? (
-          <div className="rounded-xl border border-hairline bg-surface-card px-4 py-12 text-center text-[13px] text-muted">
+          <div className="rounded-xl border border-hairline bg-surface-raised px-4 py-12 text-center text-[13px] text-muted">
             暂无公告
           </div>
         ) : (

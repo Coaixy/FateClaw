@@ -34,7 +34,7 @@ export function WalletTransactionsPanel({
     : visibleTransactions.slice(0, TRANSACTION_PREVIEW_LIMIT);
 
   return (
-    <section className="rounded-2xl border border-hairline bg-surface-card overflow-hidden">
+    <section className="rounded-2xl border border-hairline bg-surface-raised overflow-hidden">
       {visibleTransactions.length === 0 ? (
         <div className="py-12 text-center text-[13px] text-muted">
           {t('pages.wallet.noTransactions')}

@@ -79,7 +79,7 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
         role="dialog"
         className="w-full max-w-lg"
       >
-        <div className="overflow-hidden rounded-lg border border-hairline bg-canvas shadow-2xl shadow-ink/20">
+        <div className="overflow-hidden rounded-lg border border-hairline bg-surface-raised shadow-2xl shadow-ink/20">
           <div className="border-b border-hairline px-4 py-4 sm:px-5">
             <div className="flex items-start gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">

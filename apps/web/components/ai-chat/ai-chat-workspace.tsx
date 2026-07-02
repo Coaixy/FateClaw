@@ -41,7 +41,10 @@ import {
 } from '@/features/chat/utils/display';
 import { chatSessionsApi } from '@/features/chat/api';
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
-import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import {
+  PENDING_CHAT_INPUT_KEY,
+  useChatSessions,
+} from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import {
@@ -68,7 +71,6 @@ type PasteChoiceSelection = {
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
 type ModelToolbarBusy = '' | 'model' | 'thinking';
-const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
 const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
 const THINKING_LEVEL_OPTIONS: Array<{
   value: ModelThinkingLevel;

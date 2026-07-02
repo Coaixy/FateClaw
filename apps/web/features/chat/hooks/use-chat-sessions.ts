@@ -97,6 +97,12 @@ export function isAiChatPath(pathname: string | null | undefined): boolean {
   return pathname.replace(/\/+$/, '') === '/ai-chat';
 }
 
+/**
+ * 跨页传递聊天草稿的 sessionStorage key：
+ * 登录回跳与主页工作台输入框共用同一通道，ai-chat workspace 挂载后读取并回填 composer。
+ */
+export const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
+
 // 新建对话导航用的一次性 query 参数名：仅为让 router.push 的目标 URL 唯一，
 // 绕开 Next App Router 对「导航到与缓存/历史相同 URL」做的树/状态复用；
 // 不承载任何业务语义，落地 /ai-chat 后会被立刻从地址栏清掉。

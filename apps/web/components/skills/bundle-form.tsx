@@ -153,7 +153,7 @@ export function BundleForm({
       <button
         onClick={handleSubmit}
         disabled={saving || selected.size === 0}
-        className="flex-1 sm:flex-none h-12 sm:h-10 px-4 sm:px-6 text-[13px] font-medium rounded-xl bg-primary text-white active:opacity-80 sm:hover:shadow-[0_4px_20px_color-mix(in_srgb,var(--color-primary)_35%,transparent)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transition-all duration-300"
+        className="flex-1 sm:flex-none h-12 sm:h-10 px-4 sm:px-6 text-[13px] font-medium rounded-xl btn-tactile-primary text-on-primary active:opacity-80 sm: disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transition-all duration-300"
       >
         {saving && <Loader2 size={14} className="animate-spin" />}
         {initial ? '保存' : '创建'}
@@ -165,10 +165,10 @@ export function BundleForm({
     <div className="px-4 sm:px-6 py-4 sm:py-5">
       {error && (
         <div
-          className="text-[12px] text-red-400 bg-red-400/10 border border-red-400/20 px-4 py-3 rounded-xl flex items-center gap-2.5 mb-5"
+          className="text-[12px] text-error bg-error/10 border border-error/20 px-4 py-3 rounded-xl flex items-center gap-2.5 mb-5"
           role="alert"
         >
-          <div className="w-6 h-6 rounded-lg bg-red-400/15 flex items-center justify-center shrink-0">
+          <div className="w-6 h-6 rounded-lg bg-error/15 flex items-center justify-center shrink-0">
             <XCircle size={14} />
           </div>
           {error}
@@ -185,7 +185,7 @@ export function BundleForm({
         <div className="space-y-3 sm:space-y-4">
           <div>
             <label className="text-[11px] sm:text-[12px] font-medium text-muted mb-1.5 sm:mb-2 flex items-center gap-1.5">
-              名称 <span className="text-red-400">*</span>
+              名称 <span className="text-error">*</span>
             </label>
             <input
               value={name}
@@ -223,7 +223,7 @@ export function BundleForm({
 
       <div>
         <div className="flex items-center gap-2 mb-3 sm:mb-4">
-          <div className="w-1 h-4 rounded-full bg-blue-400" />
+          <div className="w-1 h-4 rounded-full bg-primary" />
           <span className="text-[11px] sm:text-[12px] font-semibold text-ink uppercase tracking-wider">
             包含的技能
           </span>
@@ -270,11 +270,7 @@ export function BundleForm({
                       {sk.visibility !== 'private' && (
                         <Share2
                           size={10}
-                          className={`shrink-0 ${
-                            sk.visibility === 'shared'
-                              ? 'text-amber-400'
-                              : 'text-blue-400'
-                          }`}
+                          className="shrink-0 text-primary"
                           aria-label={
                             sk.visibility === 'shared'
                               ? '已公开上架'
@@ -305,7 +301,7 @@ export function BundleForm({
 
   if (variant === 'page') {
     return (
-      <div className="overflow-hidden rounded-[28px] border border-hairline bg-surface-card shadow-[0_24px_80px_color-mix(in_srgb,var(--color-ink)_10%,transparent)]">
+      <div className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-raised">
         {body}
         <div className="border-t border-hairline bg-[color-mix(in_srgb,var(--color-surface-card)_70%,var(--color-canvas))]">
           {footer}

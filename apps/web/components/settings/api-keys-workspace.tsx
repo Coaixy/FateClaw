@@ -16,7 +16,7 @@ import { MAX_API_KEYS_PER_USER } from '@fateclaw/contracts/api-keys';
 /** 把 ISO 时间格式化为 YYYY-MM-DD；非法日期返回占位符，避免脏数据导致整页崩溃。 */
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '-';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate(),
   ).padStart(2, '0')}`;
@@ -255,7 +255,7 @@ export function ApiKeysWorkspace() {
             {keys.map((key) => (
               <li
                 key={key.id}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface-card p-4"
+                className="flex items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface-raised p-4"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

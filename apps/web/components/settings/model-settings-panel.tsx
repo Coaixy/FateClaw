@@ -361,7 +361,7 @@ export function ModelSettingsPanel() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-hairline bg-surface-card px-4 py-8 text-center text-[13px] text-muted">
+      <div className="rounded-lg border border-hairline bg-surface-raised px-4 py-8 text-center text-[13px] text-muted">
         {t('pages.modelSettings.loading')}
       </div>
     );
@@ -397,7 +397,7 @@ export function ModelSettingsPanel() {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-lg border border-hairline bg-surface-card">
+      <section className="overflow-hidden rounded-lg border border-hairline bg-surface-raised">
         <div className="grid lg:grid-cols-[minmax(0,1.25fr)_360px]">
           <div className="p-4 sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -530,7 +530,7 @@ function ThinkingLevelSection({
   };
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+    <section className="rounded-lg border border-hairline bg-surface-raised p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary">
@@ -593,7 +593,7 @@ function ThinkingLevelSection({
                     stepKeyboard(rangeMax);
                   }
                 }}
-                className="absolute inset-0 z-10 h-7 w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-surface-card [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-sm [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-1.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-surface-card [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
+                className="absolute inset-0 z-10 h-7 w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-surface-raised [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:shadow-sm [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-1.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-surface-raised [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
               />
             </div>
           </div>
@@ -661,7 +661,7 @@ function CustomModelSection({
       className={`overflow-hidden rounded-lg border ${
         selected
           ? 'border-primary/40 bg-primary/8'
-          : 'border-hairline bg-surface-card'
+          : 'border-hairline bg-surface-raised'
       }`}
     >
       <div className="flex flex-col gap-3 border-b border-hairline/70 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
@@ -726,7 +726,7 @@ function CustomModelSection({
                 !custom.model_name.trim() ||
                 !custom.api_key.trim()
               }
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-transparent bg-primary px-4 text-sm font-medium text-on-primary shadow-[0_8px_18px_rgba(169,88,62,0.18)] transition-all duration-150 hover:bg-primary-active active:scale-[0.98] disabled:cursor-not-allowed disabled:border-hairline disabled:bg-surface-cream-strong disabled:text-muted-soft disabled:shadow-none disabled:active:scale-100"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-transparent bg-primary px-4 text-sm font-medium text-on-primary transition-all duration-150 hover:bg-primary-active active:scale-[0.98] disabled:cursor-not-allowed disabled:border-hairline disabled:bg-surface-cream-strong disabled:text-muted-soft disabled:active:scale-100"
             >
               {busy === 'custom' ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -926,7 +926,7 @@ function ProtocolSelectField({
           }`}
         />
         {open && (
-          <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-hairline bg-surface-card shadow-[0_14px_34px_rgba(0,0,0,0.12)] animate-scale-in">
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-hairline bg-surface-raised shadow-raised animate-scale-in">
             <div
               role="listbox"
               aria-label={t('pages.modelSettings.chooseProtocol')}
@@ -1014,7 +1014,7 @@ function OfficialModelsSection({
   ).length;
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface-card p-4 sm:p-5">
+    <section className="rounded-lg border border-hairline bg-surface-raised p-4 sm:p-5">
       <div className="flex flex-col gap-3 border-b border-hairline/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-canvas text-primary">
@@ -1085,7 +1085,7 @@ function OfficialModelOption({
       disabled={!available || busy}
       className={`flex min-h-[150px] flex-col justify-between rounded-lg border px-3.5 py-3.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         selected
-          ? 'border-primary bg-primary/10 shadow-[0_8px_18px_rgba(0,0,0,0.06)]'
+          ? 'border-primary bg-primary/10 shadow-sm'
           : 'border-hairline bg-canvas/55 hover:border-primary/35 hover:bg-surface-cream-strong'
       }`}
     >

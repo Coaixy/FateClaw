@@ -4,6 +4,11 @@ import { ToastProvider } from '@/components/ui/toast';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { PreUseNoticeDialog } from '@/components/compliance/pre-use-notice-dialog';
 import { I18nProvider } from '@/lib/i18n';
+// 标题衬线字体（思源宋体）：自托管、按 unicode-range 分片，浏览器只加载页面实际用到的字形分片。
+// 只引入标题会用到的 500/600/700 三档字重，正文无衬线走系统字体不产生额外加载。
+import '@fontsource/noto-serif-sc/500.css';
+import '@fontsource/noto-serif-sc/600.css';
+import '@fontsource/noto-serif-sc/700.css';
 import './globals.css';
 
 export const metadata: Metadata = {

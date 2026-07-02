@@ -144,7 +144,7 @@ function SubscriptionCard({
   );
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-hairline bg-surface-card">
+    <section className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-raised">
       <div className="border-b border-hairline/60 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -185,7 +185,7 @@ function SubscriptionCard({
               <CheckCircle2
                 size={13}
                 aria-hidden="true"
-                className="shrink-0 text-accent-teal"
+                className="shrink-0 text-primary"
               />
               <span>{benefit}</span>
             </div>

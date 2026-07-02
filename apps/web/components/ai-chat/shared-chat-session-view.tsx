@@ -98,7 +98,8 @@ export function SharedChatSessionView() {
               <Share2 size={12} />
               分享对话
             </div>
-            <h1 className="mt-0.5 truncate text-[15px] font-semibold text-ink">
+            {/* 15px 小标题覆盖全局 h1 衬线规则：小字号衬线屏显发虚。 */}
+            <h1 className="mt-0.5 truncate font-sans text-[15px] font-semibold text-ink">
               {session?.title || 'AI Chat 对话'}
             </h1>
           </div>

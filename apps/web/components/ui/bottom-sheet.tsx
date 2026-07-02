@@ -195,7 +195,7 @@ export function BottomSheet({
       {/* Panel */}
       <div
         ref={panelRef}
-        className={`relative w-full ${SIZE_CLASS[size]} ${containerHeightClass} ${panelRadiusClass} bg-surface-card border border-hairline shadow-2xl overflow-hidden flex flex-col animate-bottom-sheet-slide-up sm:animate-bottom-sheet-center-in`}
+        className={`relative w-full ${SIZE_CLASS[size]} ${containerHeightClass} ${panelRadiusClass} bg-surface-raised border border-hairline shadow-2xl overflow-hidden flex flex-col animate-bottom-sheet-slide-up sm:animate-bottom-sheet-center-in`}
         style={{ transform: `translateY(${dragY}px)`, transition: isDragging.current ? 'none' : 'transform 0.3s ease-out' }}
       >
         {/* 移动端 drag handle 指示条 */}

@@ -172,12 +172,12 @@ export default function BaziCasesPage() {
   return (
     <AppShell requireAuth={false} wide>
       <div className="space-y-5">
-        {/* 页头 */}
+        {/* 页头:标题放大与正文拉开层级 */}
         <header>
-          <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             八字命例库
           </h1>
-          <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-sm">
+          <p className="mt-2 text-[13px] leading-relaxed text-muted sm:text-sm">
             1606 例真实命盘与其人生轨迹（出身 / 学历 / 婚姻 / 子女 / 财富起落 / 职业）。
             数据开放查询，无需登录，亦可通过开放 API 调用。
           </p>
@@ -197,7 +197,7 @@ export default function BaziCasesPage() {
                 dispatchQuery({ type: 'search', value: e.target.value })
               }
               placeholder="搜索职业 / 经历关键词"
-              className="h-9 w-full rounded-lg border border-hairline bg-surface-card pl-8 pr-3 text-[12px] text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+              className="h-10 w-full rounded-xl border border-hairline bg-surface-raised pl-8 pr-3 text-[13px] text-ink placeholder:text-muted-soft focus:border-primary focus:outline-none"
             />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
@@ -312,7 +312,7 @@ function FilterSelect({
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value || undefined)}
-      className="h-9 w-full rounded-lg border border-hairline bg-surface-card px-2.5 text-[12px] text-ink focus:border-primary focus:outline-none sm:w-auto"
+      className="h-9 w-full rounded-lg border border-hairline bg-surface-raised px-2.5 text-[12px] text-ink focus:border-primary focus:outline-none sm:w-auto"
     >
       <option value="">{label}·全部</option>
       {options?.map((o) => (
@@ -340,7 +340,7 @@ function CaseCard({ c, onClick }: { c: BaziCaseDto; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="group flex flex-col gap-2.5 rounded-2xl border border-hairline bg-surface-card p-4 text-left transition-colors hover:border-primary/30"
+      className="group flex flex-col gap-2.5 rounded-2xl border border-hairline bg-surface-raised p-4 text-left transition-colors hover:border-primary/30"
     >
       <div className="flex items-start justify-between gap-2">
         <BaziPillars bazi={c.bazi} />

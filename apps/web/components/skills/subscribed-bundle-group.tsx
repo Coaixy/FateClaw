@@ -12,13 +12,11 @@ export function SubscribedBundleGroup({
   onUnsubscribeBundle: (bundleId: string) => void;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-hairline bg-surface-card hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))] transition-all duration-300">
-      <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.04),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
+    <div className="group relative overflow-hidden rounded-2xl border border-hairline bg-surface-raised hover:border-primary/40 transition-all duration-300">
       <div className="relative p-3.5 sm:p-4">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-500/12 shadow-[0_0_12px_rgb(59_130_246/0.08)]">
-            <Layers size={16} className="text-blue-400" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/15">
+            <Layers size={16} className="text-primary" />
           </div>
 
           <div className="flex-1 min-w-0 pt-0.5">
@@ -32,7 +30,7 @@ export function SubscribedBundleGroup({
 
           <button
             onClick={() => onUnsubscribeBundle(group.bundleId)}
-            className="shrink-0 h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-red-400 bg-red-500/10 hover:bg-red-500/15 transition-all cursor-pointer"
+            className="shrink-0 h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-error bg-error/10 hover:bg-error/15 transition-all cursor-pointer"
             title="取消整个捆绑包订阅"
             aria-label="取消整个捆绑包订阅"
           >

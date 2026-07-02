@@ -74,7 +74,7 @@ function TopBarSkeleton({ compact = false }: { compact?: boolean }) {
 }
 
 /**
- * 渲染全局右上角用户入口。
+ * 渲染全局右上角用户入口（余额胶囊 + 头像菜单）。
  *
  * @param compact 是否使用移动端紧凑尺寸。
  * @param onLogout 用户点击退出登录时的回调。
@@ -119,7 +119,7 @@ export function TopBar({
         <button
           type="button"
           onClick={() => router.push(buildLoginHref())}
-          className={`inline-flex items-center justify-center rounded-full border border-hairline bg-surface-card/80 text-ink backdrop-blur-sm transition-colors hover:border-primary/40 hover:bg-primary/10 ${compact ? 'h-8 px-2.5 gap-1.5 text-[11px]' : 'h-9 px-3.5 gap-2 text-[12px]'}`}
+          className={`btn-tactile inline-flex items-center justify-center rounded-full border border-hairline bg-surface-raised text-ink transition-colors hover:border-primary/40 ${compact ? 'h-8 px-2.5 gap-1.5 text-[11px]' : 'h-9 px-3.5 gap-2 text-[12px]'}`}
           aria-label={t('common.login')}
         >
           <LogIn size={compact ? 13 : 14} className="text-primary" />
@@ -159,7 +159,7 @@ export function TopBar({
               setUsageOpen((v) => !v);
               setMenuOpen(false);
             }}
-            className={`inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-card/80 backdrop-blur-sm text-ink hover:border-primary/40 hover:bg-primary/10 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
+            className={`btn-tactile inline-flex max-w-full items-center rounded-full border border-hairline/60 bg-surface-raised text-ink hover:border-primary/40 transition-all cursor-pointer ${pillPad} ${usageOpen ? 'border-primary/50 bg-primary/10' : ''}`}
             aria-label={
               balanceCoins === null
                 ? t('topBar.balanceLoading')
@@ -178,7 +178,7 @@ export function TopBar({
         )}
         {!billingLoading && usageOpen && (
           <div
-            className={`z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-card/95 shadow-xl backdrop-blur-xl animate-scale-in ${
+            className={`z-50 mt-2 origin-top-right overflow-hidden rounded-xl border border-hairline/60 bg-surface-raised/95 shadow-xl backdrop-blur-xl animate-scale-in ${
               compact
                 ? 'fixed right-3 top-14 w-[min(340px,calc(100vw-1.5rem))] max-h-[calc(100dvh-4.5rem)] overflow-y-auto'
                 : 'absolute right-0 top-full'

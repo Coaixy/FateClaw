@@ -45,15 +45,13 @@ export function BundleCard({
       : '可先私密分享再公开';
 
   return (
-    <div className="group relative rounded-2xl border border-hairline bg-surface-card hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-300">
-      <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_6%,transparent),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
+    <div className="group relative rounded-2xl border border-hairline bg-surface-raised hover:border-primary/40 transition-all duration-300">
       <div className="relative p-3.5 sm:p-4">
         <div className="flex items-start gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
               shared
-                ? 'bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] shadow-[0_0_12px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]'
+                ? 'bg-primary/15'
                 : 'bg-surface-cream-strong'
             }`}
           >
@@ -85,13 +83,7 @@ export function BundleCard({
               {bundle.skill_ids.length} 个技能
             </span>
             {shared && (
-              <span
-                className={`shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] ${
-                  isPublic
-                    ? 'bg-amber-500/10 text-amber-400'
-                    : 'bg-blue-500/10 text-blue-400'
-                }`}
-              >
+              <span className="shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] bg-primary/10 text-primary">
                 <Share2 size={10} />
                 {isPublic ? '公开上架' : '私密链接'}
               </span>
@@ -101,11 +93,9 @@ export function BundleCard({
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             <span
               className={`shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[11px] font-medium ${
-                isPublic
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : isLinkShared
-                    ? 'bg-blue-500/10 text-blue-400'
-                    : 'bg-surface-cream-strong text-muted'
+                shared
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-surface-cream-strong text-muted'
               }`}
             >
               {isPublic ? <Globe2 size={11} /> : <Link2 size={11} />}
@@ -122,7 +112,7 @@ export function BundleCard({
                 onClick={() => onCopyLink(bundle.id)}
                 className={`h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium transition-all cursor-pointer ${
                   shared
-                    ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/15'
+                    ? 'text-primary bg-primary/10 hover:bg-primary/15'
                     : 'text-ink bg-surface-cream-strong hover:bg-surface-cream-strong'
                 }`}
                 title={shared ? '复制私密链接' : '开启私密链接分享'}
@@ -130,7 +120,7 @@ export function BundleCard({
               >
                 {copiedId === bundle.id ? (
                   <>
-                    <Check size={13} className="text-green-400" />
+                    <Check size={13} className="text-primary" />
                     已复制
                   </>
                 ) : (
@@ -142,7 +132,7 @@ export function BundleCard({
               </button>
               <button
                 onClick={() => onCopyInviteLink(bundle.id)}
-                className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] transition-all cursor-pointer"
+                className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/15 transition-all cursor-pointer"
                 title="生成作者授权链接"
                 aria-label="生成作者授权链接"
               >
@@ -155,8 +145,8 @@ export function BundleCard({
                 }
                 className={`h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium transition-all cursor-pointer ${
                   isPublic
-                    ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/15'
-                    : 'text-ink bg-surface-cream-strong hover:text-amber-400 hover:bg-amber-500/10'
+                    ? 'text-primary bg-primary/10 hover:bg-primary/15'
+                    : 'text-ink bg-surface-cream-strong hover:text-primary hover:bg-primary/10'
                 }`}
                 title={isPublic ? '取消公开上架' : '公开上架'}
                 aria-label={isPublic ? '取消公开上架' : '公开上架'}
@@ -167,7 +157,7 @@ export function BundleCard({
               {isLinkShared && (
                 <button
                   onClick={() => onUnshare(bundle.id)}
-                  className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/15 transition-all cursor-pointer"
+                  className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/15 transition-all cursor-pointer"
                   title="关闭私密链接分享"
                   aria-label="关闭私密链接分享"
                 >
@@ -188,7 +178,7 @@ export function BundleCard({
               </button>
               <button
                 onClick={() => onDelete(bundle.id)}
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted hover:text-error hover:bg-error/10 transition-all cursor-pointer"
                 title="删除"
                 aria-label="删除"
               >

@@ -16,6 +16,7 @@ import {
   Search,
   Pencil,
   Check,
+  SquarePen,
   Sun,
   ExternalLink,
   Send,
@@ -29,6 +30,7 @@ import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 import { ThemeMode, useTheme } from '@/lib/use-theme';
+import { BrandSeal } from './brand/brand-marks';
 import { LanguageSwitcher } from './language-switcher';
 import { TopBar } from './top-bar';
 
@@ -130,7 +132,7 @@ function SidebarSessionSkeleton() {
           key={`${widthClass}-${index}`}
           className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
         >
-          <div className="h-6 w-6 shrink-0 animate-pulse rounded-lg bg-surface-card" />
+          <div className="h-6 w-6 shrink-0 animate-pulse rounded-lg bg-canvas/60" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div
               className={`h-3 animate-pulse rounded-full bg-muted/12 ${widthClass}`}
@@ -148,20 +150,11 @@ function Logo({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative">
-        <div className="absolute inset-0 rounded-xl bg-primary/15 blur-md" />
-        <div className="relative w-9 h-9 rounded-xl bg-canvas flex items-center justify-center border border-primary/25 shadow-sm">
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-primary">
-            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
-            <circle cx="12" cy="8" r="2" fill="currentColor" />
-            <circle cx="12" cy="16" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M12 2 A10 10 0 0 1 12 22" fill="currentColor" opacity="0.2" />
-          </svg>
-        </div>
-      </div>
+      {/* 品牌方印:「守义」白文印,宣纸朱砂主题的点睛元素。 */}
+      <BrandSeal className="h-9 w-9 shadow-sm" />
       {!compact && (
         <div className="flex flex-col">
-          <span className="text-[15px] font-bold tracking-tight text-ink">
+          <span className="font-display text-[15px] font-bold tracking-tight text-ink">
             {t('common.appName')}
           </span>
           <span className="text-[9px] text-primary/70 tracking-[0.2em] font-medium">
@@ -536,8 +529,10 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       )}
 
       {/* Sidebar */}
+      {/* 侧栏专用深底色(sidebar token,比画布深约 6%):与主画布形成肉眼可见的双色分层,
+          这是整页结构层次的地基。 */}
       <aside
-        className={`fixed top-0 left-0 h-full w-[260px] bg-canvas border-r border-hairline flex flex-col z-50 transition-transform duration-300 ease-out lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 h-full w-[260px] bg-sidebar border-r border-hairline flex flex-col z-50 transition-transform duration-300 ease-out lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
 
         {/* Logo 区域 */}
@@ -545,34 +540,51 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           <Logo />
           <button
             onClick={closeSidebar}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-surface-card transition-all duration-200 cursor-pointer lg:hidden"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-canvas/70 transition-all duration-200 cursor-pointer lg:hidden"
             aria-label={t('sidebar.closeMenu')}
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* 工作台入口:回到主页工作台(新建对话/技能开发/客户档案) */}
-        <div className="relative px-3 shrink-0">
+        {/* 主操作:新建对话(对齐 Claude 侧栏结构,任何页面一步发起);工作台降为普通导航行。 */}
+        <div className="relative space-y-1 px-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              closeSidebar();
+              // 清空选中会话 → ChatSessionsProvider 自动跳转 /ai-chat 开新对话
+              setSelectedSession('');
+            }}
+            className="flex h-10 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-semibold text-primary transition-colors duration-200 hover:bg-primary/10"
+            aria-label={t('hub.newChat')}
+          >
+            <SquarePen size={15} strokeWidth={2} className="shrink-0" />
+            <span className="truncate">{t('hub.newChat')}</span>
+          </button>
           <Link
             href="/"
             onClick={closeSidebar}
-            className="flex h-12 w-full min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-2.5 text-[13px] font-semibold text-ink shadow-sm transition-all duration-200 hover:border-primary/40 hover:bg-primary/14"
+            className="flex h-10 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium text-muted transition-colors duration-200 hover:bg-canvas/70 hover:text-ink"
             aria-label={t('sidebar.workspace')}
           >
-            <LayoutGrid size={15} className="shrink-0 text-primary" />
+            <LayoutGrid size={15} strokeWidth={1.8} className="shrink-0" />
             <span className="truncate">{t('sidebar.workspace')}</span>
           </Link>
         </div>
 
-        {/* 对话历史列表 */}
-        <div className="relative flex-1 min-h-0 flex flex-col mt-3">
+        {/* 对话历史列表:节标签让列表区有明确的分组起点(对齐 Claude 侧栏的 Recents)。 */}
+        <div className="relative flex-1 min-h-0 flex flex-col mt-5">
+          <p className="flex shrink-0 items-center gap-1.5 px-5 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted/60">
+            <span className="h-3 w-[2.5px] rounded-full bg-primary/70" aria-hidden="true" />
+            {t('hub.recentChats')}
+          </p>
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 scrollbar-hide">
             {showSessionSkeleton ? (
               <SidebarSessionSkeleton />
             ) : sessions.length === 0 ? (
               <div className="px-3 py-6 text-center">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-card flex items-center justify-center">
+                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-canvas/70 flex items-center justify-center">
                   <MessageCircle size={16} className="text-muted/40" />
                 </div>
                 <p className="text-[11px] text-muted/60">
@@ -584,7 +596,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                   <button
                     type="button"
                     onClick={() => router.push(buildLoginHref())}
-                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-surface-card px-3 text-[11px] font-medium text-ink transition-colors hover:border-primary/35 hover:bg-primary/10"
+                    className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline bg-canvas/70 px-3 text-[11px] font-medium text-ink transition-colors hover:border-primary/35 hover:bg-primary/10"
                   >
                     <LogIn size={12} className="text-primary" />
                     {t('common.login')}
@@ -593,7 +605,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               </div>
             ) : filteredSessions.length === 0 ? (
               <div className="px-3 py-6 text-center">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-card flex items-center justify-center">
+                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-canvas/70 flex items-center justify-center">
                   <Search size={16} className="text-muted/40" />
                 </div>
                 <p className="text-[11px] text-muted/60">
@@ -619,19 +631,10 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                         className={`w-full px-3 py-3 rounded-xl border transition-all duration-200 ${
                           active
                             ? 'border-primary/40 bg-primary/10'
-                            : 'border-hairline/60 bg-surface-card/70'
+                            : 'border-hairline/60 bg-canvas/60'
                         }`}
                       >
-                        <div className="flex items-start gap-2.5">
-                          <div
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-200 ${
-                              active
-                                ? 'bg-primary/20 text-primary'
-                                : 'bg-surface-card text-muted/60'
-                            }`}
-                          >
-                            <MessageCircle size={12} />
-                          </div>
+                        <div className="flex items-start">
                           <div className="flex-1 min-w-0 space-y-2">
                             <input
                               type="text"
@@ -683,7 +686,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                                 <button
                                   onClick={resetEditingState}
                                   disabled={isRenaming}
-                                  className="h-7 px-2.5 rounded-lg text-[11px] font-medium text-muted hover:text-ink hover:bg-surface-card transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="h-7 px-2.5 rounded-lg text-[11px] font-medium text-muted hover:text-ink hover:bg-canvas/70 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   {t('common.cancel')}
                                 </button>
@@ -707,23 +710,14 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                           openSession();
                         }
                       }}
-                      className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all duration-200 cursor-pointer ${
+                      className={`group w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors duration-200 cursor-pointer ${
                         active
-                          ? 'bg-primary/10 text-ink shadow-sm'
-                          : 'text-muted hover:text-ink hover:bg-surface-card'
+                          ? 'bg-primary/10 text-ink'
+                          : 'text-muted hover:text-ink hover:bg-canvas/70'
                       }`}
                     >
-                      <div
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-200 ${
-                          active
-                            ? 'bg-primary/20 text-primary'
-                            : 'bg-surface-card text-muted/60'
-                        }`}
-                      >
-                        <MessageCircle size={12} />
-                      </div>
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-[12px] font-medium leading-tight">
+                        <p className="truncate text-[13px] font-medium leading-tight">
                           {session.title}
                         </p>
                         {session.client_id &&
@@ -798,7 +792,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
 
-        {/* 底部：紧凑入口和全局外观偏好，尽量把纵向空间留给对话历史。 */}
+        {/* 底部：用户区（余额+头像，Claude 式左下角用户入口）+ 紧凑工具行。 */}
         <div className="relative px-3 py-3 shrink-0">
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
@@ -806,8 +800,9 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <LanguageSwitcher compact />
           </div>
 
+          {/* 无框 ghost 工具行:底部工具是最低层级,不用边框和常亮高亮抢会话列表的注意力。 */}
           <div
-            className="grid grid-cols-2 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
+            className="grid grid-cols-2 gap-1"
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
@@ -817,7 +812,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 setContactQrType(locale === 'zh-CN' ? 'wechat' : 'telegram');
                 setContactOpen(true);
               }}
-              className="group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
+              className="group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
               aria-label={t('sidebar.contactStationmaster')}
               title={t('sidebar.contactStationmaster')}
             >
@@ -834,7 +829,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <button
               type="button"
               onClick={cycleThemeMode}
-              className="flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg bg-primary/12 text-[10px] font-medium text-primary shadow-sm transition-all duration-200 hover:bg-primary/18"
+              className="flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
               aria-label={t('sidebar.switchTheme', {
                 theme: activeThemeLabel,
               })}
@@ -858,7 +853,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="contact-stationmaster-title"
-            className="w-full max-w-[320px] rounded-2xl border border-hairline bg-canvas p-4 shadow-2xl"
+            className="w-full max-w-[320px] rounded-2xl border border-hairline bg-surface-raised p-4 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
@@ -876,7 +871,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               <button
                 type="button"
                 onClick={() => setContactOpen(false)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-surface-card hover:text-ink"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
                 aria-label={t('sidebar.contact.close')}
               >
                 <X size={16} />

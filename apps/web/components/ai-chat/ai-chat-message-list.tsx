@@ -12,6 +12,7 @@ import {
   Search,
 } from 'lucide-react';
 
+import { BaguaRing } from '@/components/brand/brand-marks';
 import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
@@ -109,11 +110,12 @@ export function AiChatMessageList({
         <div
           className={`w-full ${emptyStateMaxWidthClassName ?? 'max-w-xl'} flex flex-col items-center gap-3.5`}
         >
-          <BaguaPattern />
+          {/* 空态图形对齐首页:同款先天八卦环,建立跨页面统一的品牌图形语言。 */}
+          <BaguaRing className="mb-2 h-24 w-24 text-primary opacity-[0.22]" />
           {(title || description) && (
             <div className="text-center space-y-1">
               {title && (
-                <h1 className="font-display text-[18px] sm:text-[20px] lg:text-[22px] font-semibold tracking-tight text-ink">
+                <h1 className="font-display text-[22px] sm:text-[26px] lg:text-[28px] font-semibold tracking-tight text-ink">
                   {title}
                 </h1>
               )}
@@ -895,50 +897,3 @@ function ReplySlowNotice({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function BaguaPattern() {
-  return (
-    <div className="relative w-12 h-12 mb-2">
-      <svg
-        viewBox="0 0 64 64"
-        className="w-full h-full text-primary/20"
-      >
-        <circle
-          cx="32"
-          cy="32"
-          r="30"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-        />
-        <circle
-          cx="32"
-          cy="32"
-          r="20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-        />
-        <circle
-          cx="32"
-          cy="32"
-          r="10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-        />
-        {[0, 45, 90, 135].map((angle) => (
-          <line
-            key={angle}
-            x1="32"
-            y1="2"
-            x2="32"
-            y2="62"
-            stroke="currentColor"
-            strokeWidth="1"
-            transform={`rotate(${angle} 32 32)`}
-          />
-        ))}
-      </svg>
-    </div>
-  );
-}

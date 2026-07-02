@@ -32,7 +32,7 @@ export function TabAppearance() {
 
   return (
     <section className="overflow-hidden rounded-xl border border-hairline">
-      <div className="border-b border-hairline bg-surface-card px-4 py-2.5">
+      <div className="border-b border-hairline bg-surface-raised px-4 py-2.5">
         <div className="flex items-center gap-2.5">
           <Palette size={14} className="text-muted" />
           <div>
@@ -46,7 +46,7 @@ export function TabAppearance() {
         </div>
       </div>
 
-      <div className="bg-surface-card px-4 py-3">
+      <div className="bg-surface-raised px-4 py-3">
         <div className="overflow-hidden rounded-xl border border-hairline bg-canvas/36">
           {options.map(({ mode, icon: Icon, label, desc }, i) => (
             <button

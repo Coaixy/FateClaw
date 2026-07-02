@@ -260,8 +260,8 @@ export function WalletRechargePanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-hairline bg-surface-card shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-      <div className="border-b border-hairline/60 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_12%,transparent),transparent_44%),linear-gradient(180deg,var(--color-surface-card),var(--color-canvas))] p-4 sm:p-5">
+    <section className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised">
+      <div className="border-b border-hairline/60 bg-primary/8 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
@@ -340,7 +340,7 @@ export function WalletRechargePanel({
                   }
                   className={`min-h-[58px] rounded-xl border px-2.5 py-2 text-center transition-all ${
                     amountCoins === preset
-                      ? 'border-primary bg-primary/10 shadow-[0_10px_24px_rgba(0,0,0,0.06)]'
+                      ? 'border-primary bg-primary/10 shadow-sm'
                       : 'border-hairline bg-canvas/60 hover:border-primary/35 hover:bg-surface-cream-strong'
                   }`}
                 >

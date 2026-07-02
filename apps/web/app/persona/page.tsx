@@ -25,11 +25,11 @@ export default function PersonaPage() {
           </p>
         </div>
 
-        <section className="rounded-2xl border border-hairline bg-surface-card/50 p-4 lg:p-5">
+        <section className="rounded-2xl border border-hairline bg-surface-raised p-4 lg:p-5">
           <UserSoulCard />
         </section>
 
-        <section className="rounded-2xl border border-hairline bg-surface-card/50 p-4 lg:p-5">
+        <section className="rounded-2xl border border-hairline bg-surface-raised p-4 lg:p-5">
           <GuashiScriptTemplateCard />
         </section>
       </div>

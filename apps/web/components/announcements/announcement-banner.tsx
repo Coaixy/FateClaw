@@ -111,7 +111,7 @@ export function AnnouncementBanner({
 
   return (
     <div className={containerClass}>
-      <section className="mb-4 overflow-hidden rounded-xl border border-primary/25 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_14%,transparent),color-mix(in_srgb,var(--color-accent-amber)_10%,transparent)_58%,var(--color-surface-card))] shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+      <section className="mb-4 overflow-hidden rounded-xl border border-primary/25 bg-primary/8">
         <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm">

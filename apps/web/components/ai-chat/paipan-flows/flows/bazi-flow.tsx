@@ -449,7 +449,7 @@ export function BaziFlow({
           </div>
 
           {reverseError && (
-            <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-[11px] leading-5 text-rose-400">
+            <p className="rounded-xl border border-error/20 bg-error/10 px-3 py-2 text-[11px] leading-5 text-error">
               {reverseError}
             </p>
           )}

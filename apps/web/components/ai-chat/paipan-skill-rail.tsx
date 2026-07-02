@@ -68,7 +68,7 @@ export function PaipanSkillRail({
   const isEmpty = !loading && catalog.length === 0;
 
   return (
-    <section className="rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-primary)_12%,var(--color-surface-card)),color-mix(in_srgb,var(--color-surface-card)_82%,var(--color-canvas)))] p-3 shadow-[0_12px_30px_color-mix(in_srgb,var(--color-ink)_6%,transparent)]">
+    <section className="rounded-2xl border border-hairline bg-surface-raised p-3 shadow-raised">
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -111,7 +111,7 @@ export function PaipanSkillRail({
         </div>
       </div>
 
-      <div className="mt-3 rounded-xl border border-primary/20 bg-[color-mix(in_srgb,var(--color-surface-card)_72%,var(--color-canvas))] p-2.5 shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_4%,transparent)_inset]">
+      <div className="mt-3 rounded-xl border border-hairline/70 bg-surface-soft/50 p-2.5">
         {isEmpty ? (
           <div className="rounded-xl border border-dashed border-primary/25 bg-surface-card/45 px-3 py-3 text-[11px] leading-5 text-muted">
             {t('aiChat.paipanRail.noSystems')}
@@ -141,7 +141,7 @@ export function PaipanSkillRail({
                       onClick={() => onSelectSkill(item.skill)}
                       disabled={disabled}
                       title={item.description || item.name}
-                      className="group flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-xl border border-primary/20 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface-cream-strong)_86%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)))] p-2 text-center shadow-[0_1px_0_color-mix(in_srgb,var(--color-on-primary)_7%,transparent)_inset] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,var(--color-surface-card))] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="btn-tactile group flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-xl border border-hairline bg-surface-raised p-2 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-[11px] font-semibold text-primary transition-colors duration-200 group-hover:bg-primary group-hover:text-on-primary">
                         {t('aiChat.paipanRail.skillGlyph')}

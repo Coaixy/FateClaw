@@ -132,10 +132,10 @@ export function AiChatComposer({
       )}
 
       <div
-        className={`flex items-end gap-0 rounded-xl border bg-surface-card transition-all duration-200 touch-manipulation ${
+        className={`flex items-end gap-0 rounded-xl border bg-surface-raised transition-all duration-200 touch-manipulation ${
           sending
             ? 'border-primary/40 shadow-lg shadow-primary/5'
-            : 'border-hairline focus-within:shadow-lg focus-within:shadow-primary/10'
+            : 'border-hairline shadow-raised focus-within:shadow-lg focus-within:shadow-primary/10'
         }`}
       >
         {paipanAction && (
@@ -183,7 +183,7 @@ export function AiChatComposer({
           type="button"
           onClick={sending ? onStop : onSend}
           disabled={actionDisabled}
-          className={`shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 bg-primary text-on-primary hover:bg-primary-active active:scale-90 ${
+          className={`btn-tactile-primary shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 text-on-primary active:scale-90 ${
             sending ? 'scale-110' : 'hover:scale-105'
           }`}
           aria-label={

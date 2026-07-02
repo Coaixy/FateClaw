@@ -344,9 +344,9 @@ function Code({ lang, children }: { lang?: string; children: string }) {
 function ReqBadge({ state }: { state: ReqState }) {
   const style =
     state === '是'
-      ? 'text-rose-600 bg-rose-500/10'
+      ? 'text-primary bg-primary/10'
       : state === '条件'
-        ? 'text-amber-600 bg-amber-500/10'
+        ? 'text-warning bg-warning/10'
         : 'text-muted bg-surface-cream-strong';
   return (
     <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${style}`}>
@@ -432,7 +432,7 @@ function Bullets({ items, tone = 'normal' }: { items: string[]; tone?: 'normal' 
     <ul className="space-y-1.5">
       {items.map((it, i) => (
         <li key={i} className="flex gap-2 text-[12px] leading-relaxed text-body">
-          <span className={`mt-1.5 h-1 w-1 shrink-0 rounded-full ${tone === 'warn' ? 'bg-amber-500' : 'bg-primary/60'}`} />
+          <span className={`mt-1.5 h-1 w-1 shrink-0 rounded-full ${tone === 'warn' ? 'bg-warning' : 'bg-primary/60'}`} />
           <span>{it}</span>
         </li>
       ))}
@@ -466,7 +466,7 @@ function C({ children }: { children: ReactNode }) {
 /** 提示框。 */
 function Note({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[12px] leading-relaxed text-ink">
+    <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-[12px] leading-relaxed text-ink">
       {children}
     </div>
   );

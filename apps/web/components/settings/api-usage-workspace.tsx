@@ -17,14 +17,14 @@ import { billingApi, type UsageStats } from '@/features/billing/api';
 /** 把 ISO 时间格式化为 YYYY-MM-DD HH:mm；非法日期返回占位符，避免脏数据导致整页崩溃。 */
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '-';
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** 千分位整数格式化；非数字返回占位符。 */
 function formatInt(n: number | undefined | null): string {
-  if (typeof n !== 'number' || Number.isNaN(n)) return '—';
+  if (typeof n !== 'number' || Number.isNaN(n)) return '-';
   return n.toLocaleString('en-US');
 }
 
@@ -241,7 +241,7 @@ export function ApiUsageWorkspace() {
                 <button
                   type="button"
                   onClick={() => void openSession(s)}
-                  className="flex w-full items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface-card p-4 text-left transition-colors hover:border-primary/40"
+                  className="flex w-full items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface-raised p-4 text-left transition-colors hover:border-primary/40"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -348,7 +348,7 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-card p-4">
+    <div className="rounded-2xl border border-hairline bg-surface-raised p-4">
       <div className="text-[11px] text-muted">{label}</div>
       <div className="mt-1 text-xl font-semibold tracking-tight text-ink">
         {value}

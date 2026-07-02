@@ -953,7 +953,7 @@ export default function StudioPage() {
             </Link>
             <Link
               href="/studio/skills/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full btn-tactile-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Plus className="w-4 h-4" />
               {t('pages.studio.createSkill')}
@@ -997,7 +997,7 @@ export default function StudioPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex flex-1 items-center justify-center gap-1.5 h-9 rounded-xl text-[12px] font-medium transition-colors sm:text-[13px] ${
                   active
-                    ? 'bg-primary text-white shadow-sm'
+                    ? 'btn-tactile-primary text-on-primary shadow-sm'
                     : 'text-muted hover:bg-surface-cream-strong hover:text-ink'
                 }`}
               >
@@ -1043,9 +1043,8 @@ export default function StudioPage() {
             {loading ? (
               <SkillSkeleton />
             ) : subscribedSkills.length === 0 ? (
-              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.02),transparent_70%)] pointer-events-none" />
-                <p className="relative text-[12px] text-muted opacity-60">
+              <div className="py-10 text-center rounded-2xl border border-dashed border-hairline">
+                <p className="text-[12px] text-muted opacity-60">
                   {t('pages.studio.subscribedEmpty')}
                 </p>
               </div>
@@ -1153,9 +1152,8 @@ export default function StudioPage() {
             {loading ? (
               <SkillSkeleton />
             ) : bundles.length === 0 ? (
-              <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
-                <p className="relative text-[12px] text-muted opacity-70">
+              <div className="py-10 text-center rounded-2xl border border-dashed border-hairline">
+                <p className="text-[12px] text-muted opacity-70">
                   {t('pages.studio.bundlesEmpty')}
                 </p>
               </div>
@@ -1240,10 +1238,9 @@ export default function StudioPage() {
                 <SkillSkeleton />
               </>
             ) : ownSkills.length === 0 ? (
-              <div className="group relative overflow-hidden rounded-2xl border border-dashed border-hairline py-14 transition-all duration-300 hover:border-[color-mix(in_srgb,var(--color-primary)_50%,var(--color-hairline))]">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
-                <div className="relative flex flex-col items-center text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-surface-card border border-hairline flex items-center justify-center mx-auto mb-4 group-hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-primary)_10%,transparent)] transition-shadow">
+              <div className="group rounded-2xl border border-dashed border-hairline py-14 transition-all duration-300 hover:border-primary/50">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-surface-card border border-hairline flex items-center justify-center mx-auto mb-4">
                     <BookOpen
                       size={20}
                       className="text-muted group-hover:text-primary transition-colors"
@@ -1258,7 +1255,7 @@ export default function StudioPage() {
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                     <Link
                       href="/studio/skills/new"
-                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg btn-tactile-primary px-3 text-[12px] font-semibold text-on-primary transition-opacity hover:opacity-90"
                     >
                       <Plus size={13} />
                       {t('pages.studio.newSkill')}
@@ -1435,9 +1432,8 @@ function ListSearch({
 
 function ListEmptyMessage({ message }: { message: string }) {
   return (
-    <div className="relative py-10 text-center rounded-2xl border border-dashed border-hairline overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--color-primary)_3%,transparent),transparent_70%)] pointer-events-none" />
-      <div className="relative flex flex-col items-center gap-2">
+    <div className="py-10 text-center rounded-2xl border border-dashed border-hairline">
+      <div className="flex flex-col items-center gap-2">
         <Search size={18} className="text-muted/55" />
         <p className="text-[12px] text-muted opacity-70">{message}</p>
       </div>
@@ -1600,7 +1596,7 @@ function BatchActionBar({
         type="button"
         onClick={onEnable}
         disabled={busy || selectedCount === 0}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg btn-tactile-primary px-3 text-[12px] font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? (
           <Loader2 size={13} className="animate-spin" />
@@ -1622,7 +1618,7 @@ function BatchActionBar({
         type="button"
         onClick={onDelete}
         disabled={busy || selectedCount === 0}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-[12px] font-semibold text-red-500 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-3 text-[12px] font-semibold text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Trash2 size={14} />
         {deleteLabel}

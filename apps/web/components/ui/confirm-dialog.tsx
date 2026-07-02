@@ -77,10 +77,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           />
 
           {/* Content */}
-          <div className="relative w-full max-w-[360px] bg-surface-card border border-hairline rounded-2xl p-6 shadow-2xl animate-dialog-content">
+          <div className="relative w-full max-w-[360px] bg-surface-raised border border-hairline rounded-2xl p-6 shadow-2xl animate-dialog-content">
             {isDanger && (
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-                <AlertTriangle size={20} className="text-red-400" />
+              <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center mb-4">
+                <AlertTriangle size={20} className="text-error" />
               </div>
             )}
 
@@ -95,7 +95,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <button
                 ref={cancelRef}
                 onClick={() => handleClose(false)}
-                className="h-9 px-4 rounded-lg text-[13px] font-medium text-muted hover:text-ink hover:bg-surface-cream-strong transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-lg text-[13px] font-medium text-muted hover:text-ink hover:bg-surface-soft transition-colors cursor-pointer"
               >
                 {dialog.cancelLabel || '取消'}
               </button>
@@ -104,7 +104,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 onClick={() => handleClose(true)}
                 className={`h-9 px-4 rounded-lg text-[13px] font-medium transition-all cursor-pointer active:scale-[0.97] ${
                   isDanger
-                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    ? 'bg-error text-on-primary hover:opacity-90'
                     : 'bg-ink text-canvas hover:opacity-90'
                 }`}
               >

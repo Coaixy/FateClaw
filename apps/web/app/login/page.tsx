@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useReducer, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { BrandSeal } from '@/components/brand/brand-marks';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -357,20 +358,18 @@ function LoginContent() {
     : null;
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4 bg-canvas">
-      <div
-        className="fixed inset-0 pointer-events-none z-[-1]"
-        aria-hidden="true"
-      >
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[radial-gradient(ellipse,color-mix(in_srgb,var(--color-primary)_6%,transparent),transparent_70%)]" />
+    <div className="relative min-h-dvh bg-canvas">
+      {/* 语言切换是最次要的功能,放右上角,不占页面视觉轴心。 */}
+      <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+        <LanguageSwitcher menuPlacement="bottom" />
       </div>
 
-      <div className="w-full max-w-[340px] px-4 sm:px-0">
-        <div className="mb-5 flex justify-center">
-          <LanguageSwitcher menuPlacement="bottom" />
-        </div>
-        <LoginHeader mode={mode} phoneAuthEnabled={phoneAuthEnabled} />
+      <div className="flex min-h-dvh items-center justify-center p-4">
+        <div className="w-full max-w-[400px]">
+          <LoginHeader mode={mode} phoneAuthEnabled={phoneAuthEnabled} />
 
+          {/* 表单装进浮起白卡:登录页有了明确的视觉主体,不再裸浮在画布上。 */}
+          <div className="rounded-2xl border border-hairline bg-surface-raised p-6 shadow-raised sm:p-7">
         {phoneAuthEnabled ? (
           <>
             <ModeTabs mode={mode} onSwitch={switchMode} />
@@ -445,10 +444,12 @@ function LoginContent() {
           </div>
         )}
 
-        <div className="mt-6 pt-4 border-t border-hairline">
-          <p className="text-[12px] text-muted text-center leading-6">
-            {t('login.newUserHint')}
-          </p>
+            <div className="mt-6 pt-4 border-t border-hairline">
+              <p className="text-[12px] text-muted text-center leading-6">
+                {t('login.newUserHint')}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -469,7 +470,7 @@ function GoogleOAuthButton({
       type="button"
       onClick={onStart}
       disabled={starting}
-      className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-canvas text-sm font-semibold text-ink transition-all duration-150 hover:border-primary/40 hover:bg-surface-card disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
+      className="btn-tactile flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-raised text-sm font-semibold text-ink transition-all duration-150 hover:border-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
     >
       {starting ? (
         <Loader2 size={14} className="animate-spin" />
@@ -492,25 +493,22 @@ function LoginHeader({
 }) {
   const { t } = useI18n();
 
+  const brandName = t('common.brandName');
+
   return (
-    <div className="mb-8 text-center">
-      <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 mb-4">
-        <span className="text-2xl">☯</span>
-      </div>
-      <div className="mb-4">
-        <span className="font-display text-xl font-bold tracking-tight">
-          {t('common.brandName')}
-        </span>
-        <span className="ml-2 text-sm text-muted">FateClaw</span>
-      </div>
-      <h1 className="text-lg font-semibold tracking-tight">
-        {phoneAuthEnabled
-          ? mode === 'register'
-            ? t('login.createPhoneAccount')
-            : t('login.phoneLogin')
-          : t('login.googleLogin')}
+    <div className="mb-7 text-center">
+      {/* 品牌方印:「守义」白文印,与侧栏 Logo 同源。 */}
+      <BrandSeal className="mx-auto mb-4 h-14 w-14 shadow-sm" />
+      {/* 品牌名是页面唯一的衬线大字;英文品牌名与 FateClaw 相同时不重复显示副名。 */}
+      <h1 className="font-display text-[26px] font-bold tracking-tight text-ink">
+        {brandName}
+        {brandName !== 'FateClaw' && (
+          <span className="ml-2 align-middle text-[13px] font-medium tracking-[0.12em] text-muted">
+            FATECLAW
+          </span>
+        )}
       </h1>
-      <p className="text-[13px] text-muted mt-1">
+      <p className="mt-2 text-[13px] text-muted">
         {phoneAuthEnabled
           ? mode === 'register'
             ? t('login.registerSubtitle')
@@ -539,7 +537,7 @@ function ModeTabs({
           onClick={() => onSwitch(value)}
           className={`inline-flex h-9 items-center justify-center rounded-lg text-[12px] font-medium transition-colors cursor-pointer ${
             mode === value
-              ? 'bg-primary text-on-primary'
+              ? 'btn-tactile-primary text-on-primary'
               : 'text-muted hover:text-ink hover:bg-canvas'
           }`}
         >
@@ -783,7 +781,7 @@ function SubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="w-full h-10 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary-active disabled:opacity-40 transition-colors duration-150 cursor-pointer flex items-center justify-center gap-1.5 mt-2"
+      className="btn-tactile-primary w-full h-10 rounded-lg text-on-primary text-sm font-semibold disabled:opacity-40 transition-all duration-150 cursor-pointer active:scale-[0.99] flex items-center justify-center gap-1.5 mt-2"
     >
       {submitting && <Loader2 size={14} className="animate-spin" />}
       {mode === 'register' ? t('login.submitRegister') : t('login.submitLogin')}

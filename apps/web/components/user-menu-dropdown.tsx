@@ -46,7 +46,7 @@ export function UserMenuDropdown({
   const { locale, t } = useI18n();
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-hairline/70 bg-surface-card/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
+    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-hairline/70 bg-surface-raised/95 backdrop-blur-xl shadow-xl overflow-hidden z-50 animate-scale-in">
       <div className="px-4 py-3 border-b border-hairline/40">
         <div className="flex items-center gap-2.5">
           {avatar}

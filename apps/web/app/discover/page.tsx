@@ -152,7 +152,7 @@ export default function DiscoverPage() {
                         `/skills/bundle/install?token=${bundle.bundle_token}`,
                         guideReturnQuery || DISCOVER_RETURN_QUERY,
                       )}
-                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-card px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
+                      className="group flex items-start gap-3 rounded-2xl border border-hairline bg-surface-raised px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)]">
@@ -231,7 +231,7 @@ export default function DiscoverPage() {
                             )
                           : '#'
                       }
-                      className="group flex min-h-[76px] items-start gap-3 rounded-2xl border border-hairline/80 bg-[color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas))] px-3.5 py-3 shadow-sm hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] hover:bg-surface-card transition-all duration-200 sm:items-center"
+                      className="group flex min-h-[76px] items-start gap-3 rounded-2xl border border-hairline bg-surface-raised px-3.5 py-3 hover:border-[color-mix(in_srgb,var(--color-primary)_40%,var(--color-hairline))] transition-all duration-200 sm:items-center"
                     >
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)]">

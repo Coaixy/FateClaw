@@ -86,7 +86,7 @@ export function PreUseNoticeDialog() {
         role="dialog"
         className="flex max-h-[calc(100dvh-24px)] w-full max-w-3xl sm:max-h-[calc(100dvh-48px)]"
       >
-        <div className="flex w-full flex-col overflow-hidden rounded-lg border border-hairline bg-canvas shadow-2xl shadow-ink/20">
+        <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-2xl shadow-ink/20">
           <div className="shrink-0 border-b border-hairline px-4 py-4 sm:px-7 sm:py-5">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:size-10">

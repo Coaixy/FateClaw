@@ -16,9 +16,8 @@ export function WalletBalanceCard({
   const { locale, t } = useI18n();
 
   return (
-    <section className="rounded-2xl border border-hairline bg-surface-card p-5 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-40 h-40 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--color-primary)_8%,transparent),transparent_70%)] pointer-events-none" />
-      <div className="relative z-10">
+    <section className="rounded-2xl border border-hairline bg-surface-raised p-5">
+      <div>
         <div className="text-[11px] font-medium text-muted uppercase tracking-wider mb-1">
           {t('pages.wallet.availableBalance')}
         </div>

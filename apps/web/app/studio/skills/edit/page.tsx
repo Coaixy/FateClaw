@@ -80,15 +80,15 @@ function EditStudioSkillPageContent() {
             <SkillSkeleton />
           </div>
         ) : error ? (
-          <div className="rounded-[28px] border border-red-400/20 bg-red-400/10 px-5 py-4 text-[13px] text-red-300">
+          <div className="rounded-2xl border border-error/20 bg-error/10 px-5 py-4 text-[13px] text-error">
             {error}
           </div>
         ) : !skillId ? (
-          <div className="rounded-[28px] border border-hairline bg-surface-card px-5 py-4 text-[13px] text-muted">
+          <div className="rounded-2xl border border-hairline bg-surface-card px-5 py-4 text-[13px] text-muted">
             缺少 skillId 参数，无法编辑技能。
           </div>
         ) : !skill ? (
-          <div className="rounded-[28px] border border-hairline bg-surface-card px-5 py-4 text-[13px] text-muted">
+          <div className="rounded-2xl border border-hairline bg-surface-card px-5 py-4 text-[13px] text-muted">
             没找到这个技能，可能已被删除或你没有访问权限。
           </div>
         ) : (

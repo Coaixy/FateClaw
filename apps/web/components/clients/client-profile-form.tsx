@@ -362,7 +362,7 @@ export function ClientProfileForm({
       <button
         onClick={handleSubmit}
         disabled={saving}
-        className="flex-1 sm:flex-none h-12 sm:h-10 px-4 sm:px-6 text-[13px] font-medium rounded-xl bg-primary text-white active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transition-all duration-300"
+        className="flex-1 sm:flex-none h-12 sm:h-10 px-4 sm:px-6 text-[13px] font-medium rounded-xl btn-tactile-primary text-on-primary active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transition-all duration-300"
       >
         {saving && <Loader2 size={14} className="animate-spin" />}
         {initial ? t('common.save') : t('clients.form.create')}
@@ -385,10 +385,10 @@ export function ClientProfileForm({
       <div className="px-4 sm:px-6 py-4 sm:py-5 space-y-5 sm:space-y-6">
         {error && (
           <div
-            className="text-[12px] text-red-400 bg-red-400/10 border border-red-400/20 px-4 py-3 rounded-xl flex items-center gap-2.5"
+            className="text-[12px] text-error bg-error/10 border border-error/20 px-4 py-3 rounded-xl flex items-center gap-2.5"
             role="alert"
           >
-            <div className="w-6 h-6 rounded-lg bg-red-400/15 flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-lg bg-error/15 flex items-center justify-center shrink-0">
               <XCircle size={14} />
             </div>
             {error}
@@ -407,7 +407,7 @@ export function ClientProfileForm({
             <div>
               <label className="text-[11px] sm:text-[12px] font-medium text-muted mb-1.5 sm:mb-2 flex items-center gap-1.5">
                 {t('clients.form.nameLabel')}{' '}
-                <span className="text-red-400">*</span>
+                <span className="text-error">*</span>
               </label>
               <input
                 value={name}
@@ -463,7 +463,7 @@ export function ClientProfileForm({
         {/* 生辰信息 */}
         <div>
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
-            <div className="w-1 h-4 rounded-full bg-blue-400" />
+            <div className="w-1 h-4 rounded-full bg-primary" />
             <span className="text-[11px] sm:text-[12px] font-semibold text-ink uppercase tracking-wider">
               {t('clients.form.birthSection')}
             </span>
@@ -563,7 +563,7 @@ export function ClientProfileForm({
         {/* 备注 */}
         <div>
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
-            <div className="w-1 h-4 rounded-full bg-amber-400" />
+            <div className="w-1 h-4 rounded-full bg-primary" />
             <span className="text-[11px] sm:text-[12px] font-semibold text-ink uppercase tracking-wider">
               {t('clients.form.notesSection')}
             </span>
@@ -592,7 +592,7 @@ export function ClientProfileForm({
         {/* 客户管理：状态 + 标签 */}
         <div>
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
-            <div className="w-1 h-4 rounded-full bg-emerald-400" />
+            <div className="w-1 h-4 rounded-full bg-primary" />
             <span className="text-[11px] sm:text-[12px] font-semibold text-ink uppercase tracking-wider">
               {t('clients.form.crmSection')}
             </span>

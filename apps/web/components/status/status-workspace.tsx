@@ -99,7 +99,7 @@ function ServiceStatusCard({
   const toneClass = statusToneClass(service.status);
 
   return (
-    <section className="rounded-lg border border-hairline bg-surface-card p-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+    <section className="rounded-lg border border-hairline bg-surface-raised p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
@@ -168,16 +168,8 @@ export function StatusWorkspace() {
   return (
     <AppShell wide requireAuth={false}>
       <div className="min-h-[70vh] space-y-4">
-        <section className="relative overflow-hidden rounded-lg border border-primary/20 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-surface-card)_88%,var(--color-canvas)),color-mix(in_srgb,var(--color-surface-soft)_70%,var(--color-canvas)))] p-5 shadow-[0_18px_48px_rgba(15,23,42,0.1)]">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-35"
-            aria-hidden="true"
-          >
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_srgb,var(--color-ink)_6%,transparent)_1px,transparent_1px)] bg-[size:32px_32px]" />
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
-          </div>
-
-          <div className="relative grid gap-5 md:grid-cols-[1fr_auto] md:items-end">
+        <section className="rounded-2xl border border-hairline bg-surface-raised p-5 shadow-raised">
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-end">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span

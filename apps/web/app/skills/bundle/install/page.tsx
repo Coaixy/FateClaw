@@ -96,8 +96,8 @@ function BundleInstallContent() {
           </div>
         ) : install.error && !install.preview ? (
           <div className="text-center py-16 animate-fade-in">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-              <AlertCircle size={20} className="text-red-400" />
+            <div className="w-12 h-12 rounded-2xl bg-error/10 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={20} className="text-error" />
             </div>
             <p className="text-sm font-medium mb-1">无法加载</p>
             <p className="text-[13px] text-muted">
@@ -196,7 +196,7 @@ function BundleInstallContent() {
             <div className="px-5 py-4 border-t border-hairline">
               {install.error && (
                 <div
-                  className="text-[12px] text-red-400 bg-red-400/10 px-3 py-2 rounded-lg mb-3 flex items-center gap-1.5"
+                  className="text-[12px] text-error bg-error/10 px-3 py-2 rounded-lg mb-3 flex items-center gap-1.5"
                   role="alert"
                 >
                   <AlertCircle size={12} className="shrink-0" />
@@ -212,7 +212,7 @@ function BundleInstallContent() {
               ) : null}
               {!accessActive ? (
                 <div
-                  className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-[12px] text-amber-400"
+                  className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-center text-[12px] text-warning"
                   role="status"
                 >
                   {inactiveAccessLabel}
@@ -222,7 +222,7 @@ function BundleInstallContent() {
                 <button
                   onClick={() => router.push(buildLoginHref())}
                   disabled={!accessActive}
-                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
+                  className="w-full h-11 rounded-lg btn-tactile-primary text-on-primary text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {inviteMode ? '登录后领取授权' : '登录后订阅并使用'}
                 </button>
@@ -244,7 +244,7 @@ function BundleInstallContent() {
                 <button
                   onClick={() => void install.subscribe()}
                   disabled={install.subscribing || total === 0 || !accessActive}
-                  className="w-full h-11 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-active disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+                  className="w-full h-11 rounded-lg btn-tactile-primary text-on-primary text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
                 >
                   {install.subscribing && (
                       <Loader2 size={14} className="animate-spin" />

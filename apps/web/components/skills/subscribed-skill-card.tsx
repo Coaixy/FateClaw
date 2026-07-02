@@ -24,19 +24,17 @@ export function SubscribedSkillCard({
 }) {
   return (
     <div
-      className={`group relative rounded-2xl border bg-surface-card transition-all duration-300 ${
+      className={`group relative rounded-2xl border bg-surface-raised transition-all duration-300 ${
         selectionMode
           ? selected
             ? 'cursor-pointer border-primary ring-1 ring-primary/40'
             : 'cursor-pointer border-hairline hover:border-primary/40'
-          : 'border-hairline hover:border-[color-mix(in_srgb,#3b82f6_30%,var(--color-hairline))]'
+          : 'border-hairline hover:border-primary/40'
       }`}
       onClick={
         selectionMode ? () => onToggleSelect?.(sk.subscription_id) : undefined
       }
     >
-      <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_at_center,rgb(59_130_246/0.04),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
       {/* 选择模式下内容区禁用指针事件,避免点到内部操作按钮;选中态由外层整卡点击处理 */}
       <div className={`relative p-3.5 sm:p-4 ${selectionMode ? 'pointer-events-none' : ''}`}>
         <div className="flex items-start gap-3">
@@ -44,7 +42,7 @@ export function SubscribedSkillCard({
             <div
               className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                 selected
-                  ? 'border-primary bg-primary text-white'
+                  ? 'border-primary btn-tactile-primary text-on-primary'
                   : 'border-hairline bg-surface-card'
               }`}
             >
@@ -54,7 +52,7 @@ export function SubscribedSkillCard({
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
               sk.subscription_enabled
-                ? 'bg-blue-500/12 shadow-[0_0_12px_rgb(59_130_246/0.08)]'
+                ? 'bg-primary/15'
                 : 'bg-surface-cream-strong'
             }`}
           >
@@ -62,7 +60,7 @@ export function SubscribedSkillCard({
               size={16}
               className={`transition-colors duration-300 ${
                 sk.subscription_enabled
-                  ? 'text-blue-400'
+                  ? 'text-primary'
                   : 'text-muted'
               }`}
             />
@@ -86,7 +84,7 @@ export function SubscribedSkillCard({
             aria-label={sk.subscription_enabled ? '禁用' : '启用'}
           >
             {sk.subscription_enabled ? (
-              <ToggleRight size={24} className="text-blue-400" />
+              <ToggleRight size={24} className="text-primary" />
             ) : (
               <ToggleLeft size={24} className="text-muted" />
             )}
@@ -98,7 +96,7 @@ export function SubscribedSkillCard({
             <span
               className={`shrink-0 inline-flex items-center h-6 px-2 rounded-md text-[11px] font-medium ${
                 sk.subscription_enabled
-                  ? 'bg-blue-500/10 text-blue-400'
+                  ? 'bg-primary/10 text-primary'
                   : 'bg-surface-cream-strong text-muted'
               }`}
             >
@@ -114,7 +112,7 @@ export function SubscribedSkillCard({
 
           <button
             onClick={() => onUnsubscribe(sk.subscription_id)}
-            className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer ml-2"
+            className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted hover:text-error hover:bg-error/10 transition-all cursor-pointer ml-2"
             title="取消订阅"
             aria-label="取消订阅"
           >

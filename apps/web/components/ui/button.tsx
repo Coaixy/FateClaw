@@ -14,10 +14,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<Variant, string> = {
+  // 主/次按钮走 tactile 物理质感(内高光+压边+投影);primary 的渐变由 btn-tactile-primary 提供,
+  // 不叠加 bg-primary(会被渐变覆盖)。
   primary:
-    'bg-primary text-on-primary hover:bg-primary-active',
+    'btn-tactile-primary text-on-primary',
   secondary:
-    'bg-canvas text-ink border border-hairline hover:border-primary/40',
+    'btn-tactile bg-surface-raised text-ink border border-hairline hover:border-primary/40',
   'secondary-on-dark':
     'bg-surface-dark-elevated text-on-dark border border-hairline hover:border-primary/40',
   danger:
@@ -29,9 +31,9 @@ const variantStyles: Record<Variant, string> = {
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: 'h-8 px-3 text-[12px] gap-1 rounded-md',
-  md: 'h-10 px-5 text-[14px] gap-1.5 rounded-md',
-  lg: 'h-12 px-6 text-[15px] gap-2 rounded-md',
+  sm: 'h-8 px-3 text-[12px] gap-1 rounded-lg',
+  md: 'h-10 px-5 text-[14px] gap-1.5 rounded-lg',
+  lg: 'h-12 px-6 text-[15px] gap-2 rounded-lg',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -40,7 +42,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || loading}
-        className={`inline-flex items-center justify-center font-medium rounded-md transition-all duration-150 cursor-pointer active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+        className={`inline-flex items-center justify-center font-medium transition-all duration-150 cursor-pointer active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
         {...props}
       >
         {loading ? <Loader2 size={size === 'sm' ? 12 : 14} className="animate-spin shrink-0" /> : icon ? <span className="shrink-0">{icon}</span> : null}

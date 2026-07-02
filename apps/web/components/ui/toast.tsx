@@ -15,9 +15,9 @@ const icons: Record<ToastType, typeof CheckCircle2> = {
 
 const styles: Record<ToastType, string> = {
   success: 'bg-success text-on-primary',
-  error: 'bg-error text-white',
+  error: 'bg-error text-on-primary',
   warning: 'bg-warning text-on-primary',
-  info: 'bg-surface-card text-ink border border-primary/30',
+  info: 'bg-surface-raised text-ink border border-primary/30',
 };
 
 /**

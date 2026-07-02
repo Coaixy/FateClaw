@@ -41,11 +41,16 @@ const STATUS_FILTERS: readonly { value: ClientStatus | 'all'; labelKey: string }
   { value: 'done', labelKey: 'clients.status.done' },
 ];
 
-/** 客户状态徽章样式（边框/底色/文字）。 */
+/**
+ * 客户状态徽章样式（边框/底色/文字）。
+ *
+ * 单一 accent 设计下按语义拆分三态：vip 用 primary 强调，待跟进映射 warning（提醒态），
+ * 已完成映射 success（完成态），避免用装饰色区分且保持三态可辨。
+ */
 const STATUS_BADGE_CLASS: Record<ClientStatus, string> = {
-  vip: 'border-amber-400/40 bg-amber-400/10 text-amber-500',
-  follow_up: 'border-primary/35 bg-primary/10 text-primary',
-  done: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-500',
+  vip: 'border-primary/40 bg-primary/10 text-primary',
+  follow_up: 'border-warning/40 bg-warning/10 text-warning',
+  done: 'border-success/40 bg-success/10 text-success',
 };
 
 /** 客户状态对应的 i18n 文案键。 */
@@ -215,7 +220,7 @@ export default function ClientsPage() {
           <button
             type="button"
             onClick={() => setFormState({ mode: 'create' })}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full btn-tactile-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity"
           >
             <Plus className="w-4 h-4" />
             {t('clients.newClient')}
@@ -423,7 +428,7 @@ function ClientCard({
   const sessionCount = profile.session_count ?? 0;
 
   return (
-    <div className="group rounded-2xl border border-hairline bg-surface-card p-4 transition-colors hover:border-primary/25">
+    <div className="group rounded-2xl border border-hairline bg-surface-raised p-4 transition-colors hover:border-primary/25">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -511,7 +516,7 @@ function ClientCard({
             type="button"
             onClick={onDelete}
             disabled={deleting}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-400/10 hover:text-red-400 disabled:cursor-wait disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-error/10 hover:text-error disabled:cursor-wait disabled:opacity-50"
             aria-label={t('clients.delete')}
             title={t('clients.delete')}
           >
@@ -553,7 +558,7 @@ function ClientsSkeleton() {
       {[0, 1, 2].map((index) => (
         <div
           key={index}
-          className="rounded-2xl border border-hairline bg-surface-card p-4"
+          className="rounded-2xl border border-hairline bg-surface-raised p-4"
         >
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-muted/10" />
@@ -598,7 +603,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-5 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+          className="mt-5 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg btn-tactile-primary px-3 text-[12px] font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
           <Plus size={13} />
           {actionLabel}

@@ -291,10 +291,10 @@ export function RechargeResultWorkspace() {
       </h2>
       <div className="flex min-h-[70vh] items-start justify-center py-2 sm:py-6">
         <section
-          className="w-full overflow-hidden rounded-2xl border border-hairline bg-surface-card shadow-[0_18px_48px_rgba(15,23,42,0.06)]"
+          className="w-full overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-raised"
           aria-live="polite"
         >
-          <div className="border-b border-hairline/60 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_12%,transparent),transparent_42%),linear-gradient(180deg,var(--color-surface-card),var(--color-canvas))] px-5 py-6 text-center sm:px-6 sm:py-7">
+          <div className="border-b border-hairline/60 bg-canvas px-5 py-6 text-center sm:px-6 sm:py-7">
             <div
               className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border ${statusTone(status)}`}
             >

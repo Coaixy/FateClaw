@@ -27,7 +27,8 @@ export function MarkdownContent({ content, isBot }: MarkdownContentProps) {
     ),
     // 标题
     h1: ({ children }) => (
-      <h1 className="text-[15px] font-semibold mb-2 mt-3 first:mt-0">{children}</h1>
+      // Markdown 正文里的 h1 只有 15px，覆盖全局 h1 衬线规则：小字号衬线屏显发虚。
+      <h1 className="font-sans text-[15px] font-semibold mb-2 mt-3 first:mt-0">{children}</h1>
     ),
     h2: ({ children }) => (
       <h2 className="text-[14px] font-semibold mb-1.5 mt-2.5 first:mt-0">{children}</h2>

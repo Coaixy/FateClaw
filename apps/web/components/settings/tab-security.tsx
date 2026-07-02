@@ -217,7 +217,7 @@ function InlineMessage({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[12px] leading-relaxed text-red-400"
+      className="rounded-lg border border-error/20 bg-error/10 px-3 py-2 text-[12px] leading-relaxed text-error"
     >
       {message}
     </div>
@@ -456,7 +456,7 @@ export function TabSecurity() {
 
   return (
     <section className="overflow-hidden rounded-xl border border-hairline">
-      <div className="border-b border-hairline bg-surface-card px-4 py-2.5">
+      <div className="border-b border-hairline bg-surface-raised px-4 py-2.5">
         <div className="flex items-center gap-2.5">
           <ShieldCheck size={14} className="text-muted" />
           <div>
@@ -470,7 +470,7 @@ export function TabSecurity() {
         </div>
       </div>
 
-      <div className="space-y-3.5 bg-surface-card px-4 py-3">
+      <div className="space-y-3.5 bg-surface-raised px-4 py-3">
         <div className="flex flex-col gap-2.5 rounded-xl border border-hairline bg-canvas/36 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -529,7 +529,7 @@ export function TabSecurity() {
                   }}
                   className={`inline-flex h-[34px] items-center justify-center rounded-lg border px-3 text-[11px] font-medium transition-all cursor-pointer ${
                     mode === item
-                      ? 'border-primary/20 bg-[color-mix(in_srgb,var(--color-primary)_85%,white_12%)] text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset]'
+                      ? 'btn-tactile-primary border-primary text-on-primary'
                       : 'border-transparent text-muted hover:bg-canvas hover:text-ink'
                   }`}
                 >
@@ -606,7 +606,7 @@ export function TabSecurity() {
                 <button
                   type="submit"
                   disabled={changeSubmitting || !canChangePassword}
-                  className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
+                  className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
                   {changeSubmitting && (
                     <Loader2 size={13} className="animate-spin" />
@@ -753,7 +753,7 @@ export function TabSecurity() {
                 <button
                   type="submit"
                   disabled={!canUsePhoneSecurity || recoverSubmitting}
-                  className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg border border-primary/18 bg-[color-mix(in_srgb,var(--color-primary)_78%,white_16%)] px-4 text-[12px] font-semibold text-on-primary shadow-[0_1px_0_rgba(255,255,255,0.22)_inset] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
+                  className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
                 >
                   {recoverSubmitting && (
                     <Loader2 size={13} className="animate-spin" />

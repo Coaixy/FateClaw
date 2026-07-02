@@ -130,7 +130,7 @@ export function AnnouncementDetailWorkspace() {
 
         {loading ? (
           <div
-            className="flex justify-center rounded-xl border border-hairline bg-surface-card py-16"
+            className="flex justify-center rounded-xl border border-hairline bg-surface-raised py-16"
             role="status"
             aria-label="正在加载公告详情"
           >
@@ -151,7 +151,7 @@ export function AnnouncementDetailWorkspace() {
             </div>
           </div>
         ) : announcement ? (
-          <article className="overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-[0_14px_34px_rgba(15,23,42,0.04)]">
+          <article className="overflow-hidden rounded-xl border border-hairline bg-surface-raised shadow-raised">
             <header className="border-b border-hairline px-5 py-5 sm:px-6">
               <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-0.5 font-medium text-primary">
