@@ -4,7 +4,8 @@ const {
   mockScan,
   mockLrange,
   mockEval,
-  mockSet,
+  mockAcquireRedisWorkerLock,
+  mockLockRelease,
   mockLoggerWarn,
   mockLoggerError,
   mockProcessAiChatOutboxPayload,
@@ -12,19 +13,22 @@ const {
   mockScan: vi.fn(),
   mockLrange: vi.fn(),
   mockEval: vi.fn(),
-  mockSet: vi.fn(),
+  mockAcquireRedisWorkerLock: vi.fn(),
+  mockLockRelease: vi.fn(async () => undefined),
   mockLoggerWarn: vi.fn(),
   mockLoggerError: vi.fn(),
   mockProcessAiChatOutboxPayload: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../src/infrastructure/redis.js', () => ({
+  // 锁逻辑已移入共享 helper acquireRedisWorkerLock，这里 mock 它以控制「拿到锁 /
+  // 被其他实例占用」；getRedis 仅用于队列读写（scan/lrange）与 pop 脚本（eval）。
   getRedis: vi.fn(() => ({
     scan: mockScan,
     lrange: mockLrange,
     eval: mockEval,
-    set: mockSet,
   })),
+  acquireRedisWorkerLock: mockAcquireRedisWorkerLock,
 }));
 
 vi.mock('../../src/infrastructure/logger.js', () => ({
@@ -66,16 +70,34 @@ function mockEvalByScriptContent(popResult: number) {
   });
 }
 
+// 用有状态队列模拟 Redis List：lrange -1 -1 读队尾，pop 脚本（含 rpop）弹出队尾。
+// sweepQueue 现在对同一队列循环清理，固定返回值的 mock 无法收敛（队尾永远有值会
+// 一直循环到上限）；清理类测试改用它，让队列被弹空后自然停止。
+function useStatefulQueue(rawItems: string[]): void {
+  const queue = [...rawItems];
+  mockLrange.mockImplementation(async () =>
+    queue.length > 0 ? [queue[queue.length - 1]] : [],
+  );
+  mockEval.mockImplementation(async (script: unknown) => {
+    if (typeof script === 'string' && script.includes('rpop')) {
+      queue.pop();
+      return 1;
+    }
+    return 1; // 锁释放脚本
+  });
+}
+
 describe('runInboxStallSweepOnce', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSet.mockResolvedValue('OK');
+    mockLockRelease.mockResolvedValue(undefined);
+    mockAcquireRedisWorkerLock.mockResolvedValue({ release: mockLockRelease });
     mockEvalByScriptContent(1);
     mockScan.mockResolvedValue(['0', ['ipc:web:acct-1:inbox:member']]);
   });
 
   it('堆积超过清理阈值的 AI Chat 消息会被弹出并标记为超时失败', async () => {
-    mockLrange.mockResolvedValue([buildPayload()]);
+    useStatefulQueue([buildPayload()]);
 
     await runInboxStallSweepOnce();
 
@@ -90,6 +112,15 @@ describe('runInboxStallSweepOnce', () => {
     expect(typeof payload.text).toBe('string');
     expect((payload.text as string).length).toBeGreaterThan(0);
     expect(payload.publicReasonCode).toBe('inbox_stall_timeout');
+  });
+
+  it('同一队列内多条超龄消息会在一轮内被连续清理', async () => {
+    // 消费者掉线时单队列可能堆积多条；循环清理应一轮清空，而非每轮只处理一条。
+    useStatefulQueue([buildPayload(), buildPayload(), buildPayload()]);
+
+    await runInboxStallSweepOnce();
+
+    expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(3);
   });
 
   it('堆积时长在告警阈值和清理阈值之间时只记日志，不清理', async () => {
@@ -139,7 +170,7 @@ describe('runInboxStallSweepOnce', () => {
   });
 
   it('其他实例持有巡检锁时跳过本轮，不触碰任何队列', async () => {
-    mockSet.mockResolvedValue(null);
+    mockAcquireRedisWorkerLock.mockResolvedValue(null);
     mockLrange.mockResolvedValue([buildPayload()]);
 
     await runInboxStallSweepOnce();
@@ -162,11 +193,20 @@ describe('runInboxStallSweepOnce', () => {
       '0',
       ['ipc:web:broken:inbox', 'ipc:web:acct-1:inbox:member'],
     ]);
+    // 正常队列用有状态模拟：清理一条后弹空，避免 sweepQueue 循环对固定队尾无限清理。
+    const goodQueue = [buildPayload()];
     mockLrange.mockImplementation(async (key: string) => {
       if (key === 'ipc:web:broken:inbox') {
         throw new Error('redis 抖动');
       }
-      return [buildPayload()];
+      return goodQueue.length > 0 ? [goodQueue[goodQueue.length - 1]] : [];
+    });
+    mockEval.mockImplementation(async (script: unknown) => {
+      if (typeof script === 'string' && script.includes('rpop')) {
+        goodQueue.pop();
+        return 1;
+      }
+      return 1;
     });
 
     await runInboxStallSweepOnce();

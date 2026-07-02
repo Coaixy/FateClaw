@@ -26,8 +26,14 @@ const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
  * spawn() 不报错只代表进程被创建成功，不代表它已经能干活——等这个信号才算数。
  */
 const LOCAL_AGENT_READY_SENTINEL = '__FATECLAW_AGENT_READY__';
-/** 等待就绪信号的超时上限；超时视为启动失败，主动杀掉半死不活的子进程。 */
-const LOCAL_AGENT_READY_TIMEOUT_MS = 20_000;
+/**
+ * 等待就绪信号的超时上限；超时视为启动失败，主动杀掉半死不活的子进程。
+ * 按入口模式区分：dist（预编译）只需 node 加载 + 连 Redis，20 秒足够；dev（tsx
+ * 源码）首次冷启动要现场编译整张 import 图，叠加 Redis 慢/重连时 20 秒可能不够、
+ * 会误杀马上就绪的进程并反复重启，故放宽到 60 秒。
+ */
+const LOCAL_AGENT_READY_TIMEOUT_DIST_MS = 20_000;
+const LOCAL_AGENT_READY_TIMEOUT_DEV_MS = 60_000;
 
 interface LocalAgentRuntimePolicy {
   maxProcesses: number;
@@ -438,12 +444,17 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
       else resolve();
     };
   });
+  // dev（tsx 冷启动）比 dist 需要更长就绪时间，按 mode 取对应超时上限，避免误杀。
+  const readyTimeoutMs =
+    mode === 'dev'
+      ? LOCAL_AGENT_READY_TIMEOUT_DEV_MS
+      : LOCAL_AGENT_READY_TIMEOUT_DIST_MS;
   const readyTimeoutTimer = setTimeout(() => {
     settleReady?.(
-      new Error(`本地 agent 进程 ${LOCAL_AGENT_READY_TIMEOUT_MS}ms 内未上报就绪`),
+      new Error(`本地 agent 进程 ${readyTimeoutMs}ms 内未上报就绪`),
     );
     settleReady = null;
-  }, LOCAL_AGENT_READY_TIMEOUT_MS);
+  }, readyTimeoutMs);
 
   if (child.stdout) {
     let stdoutBuf: string[] = [];

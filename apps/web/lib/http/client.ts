@@ -54,7 +54,14 @@ function createTimeoutSignal(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const onCallerAbort = () => controller.abort();
-  callerSignal?.addEventListener('abort', onCallerAbort);
+  // 调用方传入的信号可能在此刻已经是 aborted 状态——此时 abort 事件不会再次派发，
+  // 只 addEventListener 会永远等不到、组合信号不触发、本应立即取消的请求照常发出。
+  // 因此先主动检查一次，已中止就立即同步中止组合信号。
+  if (callerSignal?.aborted) {
+    controller.abort();
+  } else {
+    callerSignal?.addEventListener('abort', onCallerAbort);
+  }
 
   return {
     signal: controller.signal,

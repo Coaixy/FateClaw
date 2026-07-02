@@ -312,6 +312,51 @@ export function validateResponsePayload(
 
 // ─── 工具函数 ─────────────────────────────────────────
 
+/**
+ * 构造一条 AI Chat「错误响应」outbox payload。
+ *
+ * 三处失败兜底——本地 agent 进程崩溃、请求提交失败、inbox 堆积超时——此前各自
+ * 手工拼装同型 payload，极易漏掉 {@link validateResponsePayload} 要求的必填
+ * `text` 字段；一漏，整条 payload 会被判为无效格式抛出、兜底静默失效，用户
+ * 收不到任何错误提示（正是「发送后卡在正在回复、无内容」事故的一环）。统一从
+ * 这里出口，把 `text` 兜底为面向用户的 `publicErrorText`，保证必填字段只在
+ * 一处保证，杜绝漏传。
+ *
+ * @param params.publicErrorText 面向用户的错误文案；同时兜底为必填的 `text`。
+ * @param params.error 内部诊断信息（退出码/异常等），仅入库供排障，不直接暴露。
+ * @param params.reasonCode 机器可读的失败原因码（如 `agent_process_exited`）。
+ * @returns 一条通过 {@link validateResponsePayload} 校验的 error 响应 payload。
+ */
+export function buildAiChatErrorResponsePayload(params: {
+  accountId: string;
+  requestId: string;
+  sessionId?: string;
+  userMessageId?: string;
+  ownerUserId?: string;
+  publicErrorText: string;
+  error: string;
+  reasonCode: string;
+  usage?: ResponseIpcPayload['usage'];
+}): ResponseIpcPayload {
+  return {
+    type: 'response',
+    accountId: params.accountId,
+    requestId: params.requestId,
+    sessionId: params.sessionId,
+    userMessageId: params.userMessageId,
+    ownerUserId: params.ownerUserId,
+    status: 'error',
+    // text 是 validateResponsePayload 的必填字段，统一兜底为用户可见文案，
+    // 避免任何调用方漏传导致 payload 被判无效、错误提示静默丢失。
+    text: params.publicErrorText,
+    error: params.error,
+    publicErrorText: params.publicErrorText,
+    publicReasonCode: params.reasonCode,
+    timestamp: new Date().toISOString(),
+    usage: params.usage,
+  };
+}
+
 export async function resolveAccountId(
   explicitAccountId: unknown,
   fallbackAccountId?: string,

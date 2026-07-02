@@ -226,7 +226,10 @@ export const chatSessionsApi = {
   cancel: (sessionId: string) =>
     requestJson<SuccessResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages/cancel`,
-      { method: 'POST' },
+      // 取消请求本应很快返回；加兜底超时，避免连接降级时（正是「回复较慢」一键重试
+      // 入口存在的场景）无限挂起、拖住 retrySending 后续的重置与重发。超时会被
+      // requestJson 归一化为 ApiError，调用方 catch 后照常继续。
+      { method: 'POST', timeoutMs: 15_000 },
     ),
   messages: (sessionId: string, limit = 50, before?: string) =>
     requestJson<SessionMessageListResponseDto>(

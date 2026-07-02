@@ -14,12 +14,13 @@
  * 正常错误响应完全一致的落库/推流/释放锁流程，用户不用再干等到顶层粗粒度超时。
  */
 
-import crypto from 'node:crypto';
-
-import { getRedis } from '../infrastructure/redis.js';
+import { acquireRedisWorkerLock, getRedis } from '../infrastructure/redis.js';
 import { logger } from '../infrastructure/logger.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
-import type { PendingInboxRequest } from './ipc-payloads.js';
+import {
+  buildAiChatErrorResponsePayload,
+  type PendingInboxRequest,
+} from './ipc-payloads.js';
 
 /** 巡检运行间隔：每 1 分钟一次。 */
 const SWEEP_INTERVAL_MS = 60 * 1000;
@@ -35,6 +36,12 @@ const SWEEP_LOCK_KEY = 'inbox-stall-sweep:worker-lock';
 const SWEEP_LOCK_TTL_MS = 55 * 1000;
 const INBOX_SCAN_MATCH = 'ipc:*:inbox*';
 const INBOX_SCAN_COUNT = 200;
+/**
+ * 单个队列单轮最多清理的消息数：正常堆积（实测几十条）一轮即可清空；上限用于
+ * 防止极端堆积时单队列清理耗时超过锁 TTL（`SWEEP_LOCK_TTL_MS`）导致锁在处理
+ * 途中过期，剩余的留到下一轮继续。
+ */
+const MAX_CLEANUP_PER_QUEUE_PER_SWEEP = 200;
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -70,39 +77,7 @@ function isRecoverableAiChatInboxPayload(payload: StaleInboxPayload): boolean {
   );
 }
 
-async function acquireWorkerLock(): Promise<{
-  token: string;
-  release: () => Promise<void>;
-} | null> {
-  const token = crypto.randomUUID();
-  const acquired = await getRedis().set(
-    SWEEP_LOCK_KEY,
-    token,
-    'PX',
-    SWEEP_LOCK_TTL_MS,
-    'NX',
-  );
-  if (acquired !== 'OK') {
-    return null;
-  }
-
-  return {
-    token,
-    release: async () => {
-      // 只释放自己持有的锁，避免锁过期后误删其他实例新拿到的锁。
-      await getRedis().eval(
-        `if redis.call("get", KEYS[1]) == ARGV[1] then
-           return redis.call("del", KEYS[1])
-         end
-         return 0`,
-        1,
-        SWEEP_LOCK_KEY,
-        token,
-      );
-    },
-  };
-}
-
+/** 扫描所有 inbox 队列 key（`ipc:*:inbox*`），游标分批直到遍历完 keyspace。 */
 async function scanInboxKeys(): Promise<string[]> {
   const keys: string[] = [];
   let cursor = '0';
@@ -143,83 +118,98 @@ async function popIfStillTail(
 }
 
 async function sweepQueue(queueKey: string): Promise<void> {
-  // 只读队尾（最久未消费的一条），不影响正常消费者按 RPOP 顺序处理。
-  const tail = await getRedis().lrange(queueKey, -1, -1);
-  if (tail.length === 0) return;
-  const raw = tail[0];
+  // 连续清理队尾（RPOP 端 = 最久未消费）所有已超清理阈值的消息：消费者掉线时
+  // 单个队列可能堆积几十条，若每轮只处理一条，N 条要 N 个巡检周期（分钟级）才清完，
+  // 恢复太慢。因此这里对同一队列连续处理，直到遇到不该动的消息（未超阈值/脏数据/
+  // 非站内 AI Chat 形状/队尾被消费者取走）就停下。每次只从队尾读一条，并用
+  // popIfStillTail 原子确认后再弹出，绝不盲目 RPOP，避免和恰好复活的消费者踩踏。
+  let cleaned = 0;
+  while (cleaned < MAX_CLEANUP_PER_QUEUE_PER_SWEEP) {
+    const tail = await getRedis().lrange(queueKey, -1, -1);
+    if (tail.length === 0) return;
+    const raw = tail[0];
 
-  let payload: StaleInboxPayload;
-  try {
-    payload = JSON.parse(raw) as StaleInboxPayload;
-  } catch {
-    return; // 解析不了的脏数据不是本任务职责，不动它
-  }
+    let payload: StaleInboxPayload;
+    try {
+      payload = JSON.parse(raw) as StaleInboxPayload;
+    } catch {
+      return; // 解析不了的脏数据挡在队尾，不是本任务职责，本队列到此为止
+    }
 
-  const timestampMs =
-    typeof payload.timestamp === 'string' ? Date.parse(payload.timestamp) : NaN;
-  if (!Number.isFinite(timestampMs)) return;
-  const ageMs = Date.now() - timestampMs;
-  if (ageMs < WARN_THRESHOLD_MS) return;
+    const timestampMs =
+      typeof payload.timestamp === 'string'
+        ? Date.parse(payload.timestamp)
+        : NaN;
+    if (!Number.isFinite(timestampMs)) return;
+    const ageMs = Date.now() - timestampMs;
+    // 队尾是最久的一条；它都没到告警阈值，前面（更新的）更不可能到，结束本队列。
+    if (ageMs < WARN_THRESHOLD_MS) return;
 
-  if (ageMs < FAIL_THRESHOLD_MS) {
-    logger.warn(
-      { queueKey, requestId: payload.requestId, ageMs },
-      'AI Chat: inbox 队列消息堆积超过告警阈值，尚未到自动清理阈值',
-    );
-    return;
-  }
+    if (ageMs < FAIL_THRESHOLD_MS) {
+      logger.warn(
+        { queueKey, requestId: payload.requestId, ageMs },
+        'AI Chat: inbox 队列消息堆积超过告警阈值，尚未到自动清理阈值',
+      );
+      return; // 最久的一条尚未到清理阈值，本队列本轮无可清理
+    }
 
-  if (!isRecoverableAiChatInboxPayload(payload)) {
-    logger.warn(
-      { queueKey, requestId: payload.requestId, ageMs, type: payload.type },
-      'AI Chat: inbox 队列消息堆积超过清理阈值，但不是可识别的站内 AI Chat 消息，跳过自动清理',
-    );
-    return;
-  }
+    if (!isRecoverableAiChatInboxPayload(payload)) {
+      logger.warn(
+        { queueKey, requestId: payload.requestId, ageMs, type: payload.type },
+        'AI Chat: inbox 队列消息堆积超过清理阈值，但不是可识别的站内 AI Chat 消息，跳过自动清理',
+      );
+      return; // 不能安全清理的消息挡在队尾，不能越过它去动后面的，本队列到此为止
+    }
 
-  const popped = await popIfStillTail(queueKey, raw);
-  if (!popped) {
-    // 弹出时队尾已经变化（被真正复活的消费者取走，或有更新的消息顶上来），
-    // 本轮不处理，避免和消费者踩踏。
-    return;
-  }
+    const popped = await popIfStillTail(queueKey, raw);
+    if (!popped) {
+      // 弹出时队尾已经变化（被真正复活的消费者取走，或有更新的消息顶上来），
+      // 本轮不处理，避免和消费者踩踏。
+      return;
+    }
 
-  const requestId = payload.requestId as string;
-  const accountId = payload.accountId as string;
-  const sessionId = payload.sessionId as string;
-  const userMessageId =
-    typeof payload.userMessageId === 'string' ? payload.userMessageId : undefined;
-  const ownerUserId =
-    typeof payload.ownerUserId === 'string' ? payload.ownerUserId : undefined;
-  const text = '这条消息处理超时（后台长时间未响应），请重新发送试试。';
+    const requestId = payload.requestId as string;
+    const accountId = payload.accountId as string;
+    const sessionId = payload.sessionId as string;
+    const userMessageId =
+      typeof payload.userMessageId === 'string'
+        ? payload.userMessageId
+        : undefined;
+    const ownerUserId =
+      typeof payload.ownerUserId === 'string' ? payload.ownerUserId : undefined;
+    const text = '这条消息处理超时（后台长时间未响应），请重新发送试试。';
 
-  await processAiChatOutboxPayload(
-    {
-      type: 'response',
+    await processAiChatOutboxPayload(
+      buildAiChatErrorResponsePayload({
+        accountId,
+        requestId,
+        sessionId,
+        userMessageId,
+        ownerUserId,
+        publicErrorText: text,
+        error: `inbox 消息堆积超过 ${Math.round(FAIL_THRESHOLD_MS / 60_000)} 分钟未被消费，判定为处理超时`,
+        reasonCode: 'inbox_stall_timeout',
+      }),
       accountId,
-      requestId,
-      sessionId,
-      userMessageId,
-      ownerUserId,
-      status: 'error',
-      text,
-      error: `inbox 消息堆积超过 ${Math.round(FAIL_THRESHOLD_MS / 60_000)} 分钟未被消费，判定为处理超时`,
-      publicErrorText: text,
-      publicReasonCode: 'inbox_stall_timeout',
-      timestamp: new Date().toISOString(),
-    },
-    accountId,
-    new Map<string, PendingInboxRequest>(),
-  ).catch((err) => {
-    logger.error(
-      { queueKey, requestId, err },
-      'AI Chat: inbox 堆积自动清理时标记失败响应也失败了',
-    );
-  });
+      new Map<string, PendingInboxRequest>(),
+    ).catch((err) => {
+      logger.error(
+        { queueKey, requestId, err },
+        'AI Chat: inbox 堆积自动清理时标记失败响应也失败了',
+      );
+    });
 
-  logger.error(
-    { queueKey, requestId, sessionId, ageMs },
-    'AI Chat: inbox 消息堆积超过清理阈值，已自动标记为超时失败并清理',
+    logger.error(
+      { queueKey, requestId, sessionId, ageMs },
+      'AI Chat: inbox 消息堆积超过清理阈值，已自动标记为超时失败并清理',
+    );
+    cleaned += 1;
+  }
+
+  // 达到单轮上限仍未清空：剩余留待下一轮，避免单队列清理耗时超过锁 TTL。
+  logger.warn(
+    { queueKey, cleaned },
+    'AI Chat: inbox 单队列单轮清理达到上限，剩余留待下一轮继续',
   );
 }
 
@@ -234,7 +224,7 @@ export async function runInboxStallSweepOnce(): Promise<void> {
 
   running = true;
   try {
-    const lock = await acquireWorkerLock();
+    const lock = await acquireRedisWorkerLock(SWEEP_LOCK_KEY, SWEEP_LOCK_TTL_MS);
     if (!lock) {
       logger.debug('inbox 堆积巡检锁已被其他实例持有，跳过本轮');
       return;

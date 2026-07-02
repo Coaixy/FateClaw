@@ -32,6 +32,7 @@ const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
 const IPC_LISTENER_RESTART_MAX_MS = 30_000;
 const IPC_LISTENER_STABLE_MS = 60_000;
 import {
+  buildAiChatErrorResponsePayload,
   type CancelInboxRequestPayload,
   claimOrRefreshSessionProcessingLock,
   InboxRequestResult,
@@ -948,23 +949,16 @@ async function failInFlightAiChatRequestsForAccount(
     const publicErrorText =
       '处理这次请求的后台进程意外退出（可能是资源不足或内部错误），本轮回复未完成，请重新发送试试。';
     await processAiChatOutboxPayload(
-      {
-        type: 'response',
+      buildAiChatErrorResponsePayload({
         accountId,
         requestId,
         sessionId: pending.sessionId,
         userMessageId: pending.userMessageId,
         ownerUserId: pending.ownerUserId,
-        status: 'error',
-        // validateResponsePayload 要求 text 必须是 string，漏掉这个字段会导致
-        // 三个 type-guard 全部不匹配、payload 被当成无效格式抛出，这条兜底就会
-        // 静默失效（只留一条 catch 里的 error 日志，用户收不到任何错误提示）。
-        text: publicErrorText,
-        error: `本地 agent-runtime 进程异常退出：${detail}`,
         publicErrorText,
-        publicReasonCode: 'agent_process_exited',
-        timestamp: new Date().toISOString(),
-      },
+        error: `本地 agent-runtime 进程异常退出：${detail}`,
+        reasonCode: 'agent_process_exited',
+      }),
       accountId,
       pendingAiChatRequests,
     ).catch((err) => {
@@ -1338,24 +1332,23 @@ export function submitAiChatInboxRequest(input: {
           const pending = pendingAiChatRequests.get(requestId);
           if (pending) {
             await processAiChatOutboxPayload(
-              {
-                type: 'response',
+              // 统一构造，务必带上 validateResponsePayload 必填的 `text`——
+              // 漏掉会让这条兜底被判无效格式抛出、静默失效，用户永久卡在「正在回复」。
+              buildAiChatErrorResponsePayload({
                 accountId: input.accountId,
                 requestId,
                 sessionId: input.sessionId,
                 userMessageId: input.userMessageId,
                 ownerUserId: pending.ownerUserId,
-                status: 'error',
                 publicErrorText: '抱歉，AI 服务暂时不可用',
-                publicReasonCode: 'submit_error',
                 error: err instanceof Error ? err.message : String(err),
-                timestamp: new Date().toISOString(),
+                reasonCode: 'submit_error',
                 usage: {
                   promptTokens: 0,
                   completionTokens: 0,
                   totalTokens: 0,
                 },
-              },
+              }),
               input.accountId,
               pendingAiChatRequests,
             ).catch((handlerErr) => {

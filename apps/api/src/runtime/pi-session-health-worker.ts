@@ -5,9 +5,7 @@
  * 长期未活跃会话。孤儿文件的物理清理风险更高，保留为管理员手动入口。
  */
 
-import crypto from 'node:crypto';
-
-import { getRedis } from '../infrastructure/redis.js';
+import { acquireRedisWorkerLock } from '../infrastructure/redis.js';
 import { logger } from '../infrastructure/logger.js';
 import { cleanupPiSessionFilesForAdmin } from '../modules/admin/admin-service.js';
 import { getPiSessionHealthPolicy } from '../modules/system/system-config.js';
@@ -25,39 +23,6 @@ const PI_SESSION_HEALTH_LOCK_KEY = 'pi-session-health:worker-lock';
 let intervalTimer: NodeJS.Timeout | null = null;
 let initialTimer: NodeJS.Timeout | null = null;
 let running = false;
-
-async function acquireWorkerLock(): Promise<{
-  token: string;
-  release: () => Promise<void>;
-} | null> {
-  const token = crypto.randomUUID();
-  const acquired = await getRedis().set(
-    PI_SESSION_HEALTH_LOCK_KEY,
-    token,
-    'PX',
-    PI_SESSION_HEALTH_LOCK_TTL_MS,
-    'NX',
-  );
-  if (acquired !== 'OK') {
-    return null;
-  }
-
-  return {
-    token,
-    release: async () => {
-      // 只释放自己持有的锁，避免锁过期后误删其他实例新拿到的锁。
-      await getRedis().eval(
-        `if redis.call("get", KEYS[1]) == ARGV[1] then
-           return redis.call("del", KEYS[1])
-         end
-         return 0`,
-        1,
-        PI_SESSION_HEALTH_LOCK_KEY,
-        token,
-      );
-    },
-  };
-}
 
 /**
  * 执行一轮 Pi session 健康维护。
@@ -82,7 +47,10 @@ export async function runPiSessionHealthOnce(): Promise<void> {
       return;
     }
 
-    const lock = await acquireWorkerLock();
+    const lock = await acquireRedisWorkerLock(
+      PI_SESSION_HEALTH_LOCK_KEY,
+      PI_SESSION_HEALTH_LOCK_TTL_MS,
+    );
     if (!lock) {
       logger.debug('Pi session 健康维护锁已被其他实例持有，跳过本轮');
       return;

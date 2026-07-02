@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockCleanupPiSessionFilesForAdmin,
   mockGetPiSessionHealthPolicy,
-  mockRedisEval,
-  mockRedisSet,
+  mockAcquireRedisWorkerLock,
+  mockLockRelease,
 } = vi.hoisted(() => ({
   mockCleanupPiSessionFilesForAdmin: vi.fn(),
   mockGetPiSessionHealthPolicy: vi.fn(),
-  mockRedisEval: vi.fn(),
-  mockRedisSet: vi.fn(),
+  mockAcquireRedisWorkerLock: vi.fn(),
+  mockLockRelease: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../src/modules/admin/admin-service.js', () => ({
@@ -21,10 +21,9 @@ vi.mock('../../src/modules/system/system-config.js', () => ({
 }));
 
 vi.mock('../../src/infrastructure/redis.js', () => ({
-  getRedis: vi.fn(() => ({
-    eval: mockRedisEval,
-    set: mockRedisSet,
-  })),
+  // 锁逻辑已移入共享 helper acquireRedisWorkerLock；pi-worker 不再直接触碰 Redis，
+  // 仅 mock 该 helper 以控制「拿到锁 / 被其他实例占用」两种路径。
+  acquireRedisWorkerLock: mockAcquireRedisWorkerLock,
 }));
 
 vi.mock('../../src/infrastructure/logger.js', () => ({
@@ -62,8 +61,8 @@ function cleanupResult(mode: 'soft_deleted' | 'inactive') {
 describe('runPiSessionHealthOnce', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRedisSet.mockResolvedValue('OK');
-    mockRedisEval.mockResolvedValue(1);
+    mockLockRelease.mockResolvedValue(undefined);
+    mockAcquireRedisWorkerLock.mockResolvedValue({ release: mockLockRelease });
     mockCleanupPiSessionFilesForAdmin.mockImplementation(
       async (input: { mode: 'soft_deleted' | 'inactive' }) =>
         cleanupResult(input.mode),
@@ -79,7 +78,7 @@ describe('runPiSessionHealthOnce', () => {
 
     await runPiSessionHealthOnce();
 
-    expect(mockRedisSet).not.toHaveBeenCalled();
+    expect(mockAcquireRedisWorkerLock).not.toHaveBeenCalled();
     expect(mockCleanupPiSessionFilesForAdmin).not.toHaveBeenCalled();
   });
 
@@ -92,12 +91,9 @@ describe('runPiSessionHealthOnce', () => {
 
     await runPiSessionHealthOnce();
 
-    expect(mockRedisSet).toHaveBeenCalledWith(
+    expect(mockAcquireRedisWorkerLock).toHaveBeenCalledWith(
       'pi-session-health:worker-lock',
-      expect.any(String),
-      'PX',
       21_600_000,
-      'NX',
     );
     expect(mockCleanupPiSessionFilesForAdmin).toHaveBeenNthCalledWith(1, {
       mode: 'soft_deleted',
@@ -108,7 +104,7 @@ describe('runPiSessionHealthOnce', () => {
       inactiveDays: 45,
       limit: 500,
     });
-    expect(mockRedisEval).toHaveBeenCalled();
+    expect(mockLockRelease).toHaveBeenCalled();
   });
 
   it('skips cleanup when another instance holds the lock', async () => {
@@ -117,12 +113,12 @@ describe('runPiSessionHealthOnce', () => {
       inactiveCleanupDays: 30,
       orphanGraceDays: 30,
     });
-    mockRedisSet.mockResolvedValue(null);
+    mockAcquireRedisWorkerLock.mockResolvedValue(null);
 
     await runPiSessionHealthOnce();
 
     expect(mockCleanupPiSessionFilesForAdmin).not.toHaveBeenCalled();
-    expect(mockRedisEval).not.toHaveBeenCalled();
+    expect(mockLockRelease).not.toHaveBeenCalled();
   });
 
   it('skips overlapping runs in the same process', async () => {

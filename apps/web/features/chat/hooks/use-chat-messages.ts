@@ -1539,9 +1539,17 @@ export function useChatMessages(options: {
   }, [options.selectedSession, resetStreamingStateForInterrupt]);
 
   const sendMessageWithOptions = useCallback(
-    async (text: string, sendOptions?: ChatMessageSendOptions) => {
+    async (
+      text: string,
+      sendOptions?: ChatMessageSendOptions,
+      internalOptions?: { bypassPendingGuard?: boolean },
+    ) => {
       const content = text.trim();
-      if (!content || isPending) return false;
+      if (!content) return false;
+      // 常规发送时若已有请求在途则拒绝；但「一键重试」(retrySending) 会先取消在途
+      // 请求再同步重发，此刻它捕获的 isPending 闭包仍是旧的 true（React 尚未因
+      // reset 重渲染），必须显式放行，否则重试会被这道守卫静默拦下、什么都不发。
+      if (isPending && !internalOptions?.bypassPendingGuard) return false;
       if (activeContinuationBlocked) return false;
       if (!options.selectedSession && !options.chatAvailable) return false;
 
@@ -1736,7 +1744,12 @@ export function useChatMessages(options: {
     resetStreamingStateForInterrupt();
     setReplySlow(false);
 
-    return sendMessageWithOptions(content, lastSentMessageOptionsRef.current);
+    // bypassPendingGuard：此刻 sendMessageWithOptions 闭包捕获的 isPending 仍为
+    // true（上面 reset 的 setState 尚未触发重渲染），显式放行这次重发，否则会被
+    // 入口的在途守卫拦下——净效果就是「取消了在途请求却没重发」，比不点更糟。
+    return sendMessageWithOptions(content, lastSentMessageOptionsRef.current, {
+      bypassPendingGuard: true,
+    });
   }, [
     options.selectedSession,
     resetStreamingStateForInterrupt,
