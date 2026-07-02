@@ -9,6 +9,7 @@
 
 import {
   getUserById,
+  mergeMessageMetadata,
   storeConversationLog,
   storeMessage,
   touchChatSession,
@@ -383,6 +384,13 @@ async function releaseCompletedAiChatSessionLock(args: {
   ).catch(() => {});
 }
 
+/**
+ * 把最终响应落库为 assistant 消息。
+ *
+ * @returns 最终落库的那条消息 ID（error 消息或最后一条 reply）；
+ *          缺少会话上下文或没有可落库文本时返回 null。
+ *          调用方在计费结算完成后，用该 ID 把扣费金额回填进消息 metadata。
+ */
 async function storeAiChatFinalResponseMessages(args: {
   accountId: string;
   pending?: PendingInboxRequest;
@@ -390,7 +398,7 @@ async function storeAiChatFinalResponseMessages(args: {
   responseText: string;
   assistantMessages: string[];
   finalMetadata: Record<string, unknown>;
-}): Promise<void> {
+}): Promise<string | null> {
   const sessionId = resolveAiChatFinalSessionId(args.pending, args.payload);
   const userMessageId = resolveAiChatFinalUserMessageId(
     args.pending,
@@ -406,7 +414,7 @@ async function storeAiChatFinalResponseMessages(args: {
       },
       'AI Chat: 最终响应缺少会话上下文，跳过最终消息落库',
     );
-    return;
+    return null;
   }
 
   const ownerUserId = await resolveOwnerUserId({
@@ -420,8 +428,9 @@ async function storeAiChatFinalResponseMessages(args: {
       args.responseText.trim() ||
       args.payload.publicErrorText?.trim() ||
       mapInternalErrorToPublicError(args.payload.error, {}).publicMessage;
+    const errorMessageId = `${userMessageId}_error`;
     await storeMessage({
-      id: `${userMessageId}_error`,
+      id: errorMessageId,
       account_id: args.accountId,
       user_id: ownerUserId,
       sender: args.accountId,
@@ -439,7 +448,7 @@ async function storeAiChatFinalResponseMessages(args: {
       },
     });
     await touchChatSession(sessionId);
-    return;
+    return errorMessageId;
   }
 
   if (args.assistantMessages.length === 0) {
@@ -453,17 +462,22 @@ async function storeAiChatFinalResponseMessages(args: {
     );
     await touchChatSession(sessionId);
     await incrementAiChatDailyMessageCount(ownerUserId);
-    return;
+    return null;
   }
 
   const replyTimestampBase = Date.now();
+  let finalReplyMessageId: string | null = null;
   for (let index = 0; index < args.assistantMessages.length; index += 1) {
     const isFinalReply = index === args.assistantMessages.length - 1;
+    const messageId =
+      args.assistantMessages.length === 1
+        ? `${userMessageId}_reply`
+        : `${userMessageId}_reply_${index + 1}`;
+    if (isFinalReply) {
+      finalReplyMessageId = messageId;
+    }
     await storeMessage({
-      id:
-        args.assistantMessages.length === 1
-          ? `${userMessageId}_reply`
-          : `${userMessageId}_reply_${index + 1}`,
+      id: messageId,
       account_id: args.accountId,
       user_id: ownerUserId,
       sender: args.accountId,
@@ -490,6 +504,7 @@ async function storeAiChatFinalResponseMessages(args: {
 
   await touchChatSession(sessionId);
   await incrementAiChatDailyMessageCount(ownerUserId);
+  return finalReplyMessageId;
 }
 
 function buildProgressMessageId(payload: ProgressIpcPayload): string {
@@ -611,18 +626,16 @@ async function processAiChatResponse(
       pending,
       payload: payloadForUsage,
     });
-    const billing = await settleAiChatBilling({
-      accountId,
-      pending,
-      payload: payloadForUsage,
-    });
+
+    // 先落库交付、再结算扣费（顺序刻意如此）：
+    // - 落库失败 → 结算不会发生，预留保持 charge_state='pending'，由 billing-sweeper
+    //   按对话日志真实 usage 补收——杜绝「已扣费但用户收不到消息」；
+    // - 结算失败 → 消息已交付，不应向用户报错，仅记日志并同样交给 sweeper 补收。
     const finalMetadata = buildFinalMetadata({
       payload: payloadForUsage,
       durationMs,
-      billing,
     });
-
-    await storeAiChatFinalResponseMessages({
+    const finalMessageId = await storeAiChatFinalResponseMessages({
       accountId,
       pending,
       payload: payloadForUsage,
@@ -630,6 +643,41 @@ async function processAiChatResponse(
       assistantMessages,
       finalMetadata,
     });
+
+    let billing: BillingSettlementSummary | null = null;
+    try {
+      billing = await settleAiChatBilling({
+        accountId,
+        pending,
+        payload: payloadForUsage,
+      });
+    } catch (settleErr) {
+      logger.error(
+        { accountId, requestId: payload.requestId, err: settleErr },
+        'AI Chat: 消息已交付但计费结算失败，预留保持 pending 交由 billing-sweeper 补收',
+      );
+    }
+    if (billing) {
+      const billingMetadata = {
+        actual_charge_coins: billing.actualChargeCoins,
+        raw_charge_coins: billing.rawChargeCoins,
+      };
+      // 流事件与 resolve 结果直接携带扣费金额；已落库的最终消息则回填 metadata，
+      // 保证 web 端历史里的扣费展示不受「先落库后结算」的顺序调整影响。
+      Object.assign(finalMetadata, billingMetadata);
+      if (finalMessageId) {
+        await mergeMessageMetadata(
+          finalMessageId,
+          accountId,
+          billingMetadata,
+        ).catch((err) => {
+          logger.warn(
+            { accountId, requestId: payload.requestId, finalMessageId, err },
+            'AI Chat: 回填最终消息的扣费 metadata 失败（不影响计费与交付）',
+          );
+        });
+      }
+    }
     await releaseCompletedAiChatSessionLock({
       pending,
       payload: payloadForUsage,

@@ -59,6 +59,30 @@ export async function storeMessage(msg: NewMessage): Promise<void> {
   }
 }
 
+/**
+ * 向已存在消息的 metadata 合并补丁字段（jsonb 浅合并，已有键被补丁覆盖）。
+ *
+ * 用途：AI Chat 最终响应改为「先落库、再结算」后，结算产生的扣费金额
+ * （actual_charge_coins / raw_charge_coins）需要在结算完成后回填到最终消息的
+ * metadata，供 web 端历史展示。消息不存在时静默跳过（幂等）。
+ *
+ * @param id 消息 ID。
+ * @param accountId 消息所属账号 ID（联合主键的一部分）。
+ * @param patch 需要合并进 metadata 的键值。
+ */
+export async function mergeMessageMetadata(
+  id: string,
+  accountId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await getDbPool().query(
+    `UPDATE messages
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+      WHERE id = $1 AND account_id = $2`,
+    [id, accountId, JSON.stringify(patch)],
+  );
+}
+
 export async function getRecentMessages(
   accountId: string,
   limit: number = 50,

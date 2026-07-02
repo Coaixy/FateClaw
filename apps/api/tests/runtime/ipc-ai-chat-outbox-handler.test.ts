@@ -36,6 +36,8 @@ const {
 vi.mock('../../src/infrastructure/db.js', () => ({
   getAllAccounts: vi.fn(),
   getUserById: vi.fn(),
+  // 「先落库后结算」的扣费金额回填路径。
+  mergeMessageMetadata: vi.fn(async () => undefined),
   storeConversationLog: mockStoreConversationLog,
   storeMessage: mockStoreMessage,
   touchChatSession: mockTouchChatSession,
