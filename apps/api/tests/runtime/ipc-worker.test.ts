@@ -525,6 +525,10 @@ describe('local agent-runtime process exit notifies in-flight AI Chat requests',
     expect(payload.requestId).toBe('req-crash-1');
     expect(payload.status).toBe('error');
     expect(payload.publicReasonCode).toBe('agent_process_exited');
+    // text 是 validateResponsePayload 的必填字段，漏掉会导致真实校验直接判定
+    // payload 无效、这条兜底静默失效（此测试 mock 掉了校验，之前没能抓住这个问题）。
+    expect(payload.text).toBeTypeOf('string');
+    expect(payload.text).toBe(payload.publicErrorText);
     // 详细诊断信息（退出码/OOM 提示）应保留在内部 error 字段，不直接暴露给用户文案。
     expect(payload.error).toContain('137');
     expect(payload.error).toContain('OOM');

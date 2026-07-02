@@ -37,6 +37,10 @@ import {
   startPiSessionHealthWorker,
   stopPiSessionHealthWorker,
 } from '../runtime/pi-session-health-worker.js';
+import {
+  startInboxStallSweeper,
+  stopInboxStallSweeper,
+} from '../runtime/inbox-stall-sweeper.js';
 import { logger } from '../infrastructure/logger.js';
 import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
 import { getRuntimeEntitlementSnapshot } from '../modules/billing/entitlements.js';
@@ -94,6 +98,8 @@ export async function main(): Promise<void> {
   startBillingSweepWorker();
   // 启动 Pi session 健康维护任务（未启用时只定时检查后台配置）
   startPiSessionHealthWorker();
+  // 启动 inbox 堆积巡检任务（发现账号级 agent-runtime 消费停滞并自动清理告警）
+  startInboxStallSweeper();
 
   await startApiServer();
 
@@ -109,6 +115,7 @@ export async function main(): Promise<void> {
       stopRetentionWorker();
       stopBillingSweepWorker();
       stopPiSessionHealthWorker();
+      stopInboxStallSweeper();
       await disconnectRedis();
       await closeDatabase();
       logger.info('优雅退出完成');

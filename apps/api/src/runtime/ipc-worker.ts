@@ -945,6 +945,8 @@ async function failInFlightAiChatRequestsForAccount(
   );
 
   for (const [requestId, pending] of affected) {
+    const publicErrorText =
+      '处理这次请求的后台进程意外退出（可能是资源不足或内部错误），本轮回复未完成，请重新发送试试。';
     await processAiChatOutboxPayload(
       {
         type: 'response',
@@ -954,9 +956,12 @@ async function failInFlightAiChatRequestsForAccount(
         userMessageId: pending.userMessageId,
         ownerUserId: pending.ownerUserId,
         status: 'error',
+        // validateResponsePayload 要求 text 必须是 string，漏掉这个字段会导致
+        // 三个 type-guard 全部不匹配、payload 被当成无效格式抛出，这条兜底就会
+        // 静默失效（只留一条 catch 里的 error 日志，用户收不到任何错误提示）。
+        text: publicErrorText,
         error: `本地 agent-runtime 进程异常退出：${detail}`,
-        publicErrorText:
-          '处理这次请求的后台进程意外退出（可能是资源不足或内部错误），本轮回复未完成，请重新发送试试。',
+        publicErrorText,
         publicReasonCode: 'agent_process_exited',
         timestamp: new Date().toISOString(),
       },
