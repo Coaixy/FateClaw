@@ -664,6 +664,22 @@ export async function getMembershipEntitlements(
   });
 }
 
+/** 会员订阅 DB 层幂等去抖窗口：与 billing-service 的 Redis 去抖同量级，作为 Redis 失效时的兜底。 */
+const MEMBERSHIP_SUBSCRIBE_IDEMPOTENCY_WINDOW_MS = 10_000;
+
+/**
+ * 会员订阅在 DB 幂等去抖窗口内被判定为重复提交时抛出。
+ *
+ * @remarks 上层（billing-service）据此返回 409「请勿重复提交」，语义与 Redis 去抖一致；
+ *   且不应据此删除 Redis 去抖锁——这是正常的重复拦截，不是开通失败。
+ */
+export class MembershipSubscribeDebounceError extends Error {
+  constructor() {
+    super('订阅处理中，请勿重复提交');
+    this.name = 'MembershipSubscribeDebounceError';
+  }
+}
+
 /**
  * 使用积分余额开通或续费一个月指定 FateClaw 会员套餐。
  */
@@ -685,6 +701,25 @@ export async function subscribeMembershipWithWallet(
     const user = await getUserByIdUsing(client, userId, { forUpdate: true });
     if (!user) {
       throw new Error('用户不存在');
+    }
+
+    // DB 层幂等去抖：user 行 FOR UPDATE 锁已串行化同一用户的并发订阅，但串行后第二个事务
+    // 仍会重复扣费。这里在锁内检查「距上次同档订阅是否在去抖窗口内」，命中即判定为连点/重试/
+    // Redis 去抖失效导致的重复提交，抛错交上层拦截，杜绝 Redis 不可用时的重复扣费与周期叠加。
+    // 全程用数据库时钟：created_at 由 NOW() 写入，若改用应用侧 Date.now() 比较，应用机与 DB 机的
+    // 时钟偏移会让窗口失真（偏快则去抖永不命中、偏慢则误拦正常续费）。WHERE 直接带窗口条件，命中
+    // (kind, created_at DESC) 索引后在窗口边界即终止，不做「取最近一条再回表」的全量倒序扫描。
+    const { rows: dupRows } = await client.query<{ duplicate: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM wallet_transactions
+         WHERE user_id = $1 AND kind = 'membership_subscription'
+           AND metadata->>'planKey' = $2
+           AND created_at > NOW() - ($3::int * interval '1 millisecond')
+       ) AS duplicate`,
+      [userId, normalizedPlanKey, MEMBERSHIP_SUBSCRIBE_IDEMPOTENCY_WINDOW_MS],
+    );
+    if (dupRows[0]?.duplicate) {
+      throw new MembershipSubscribeDebounceError();
     }
 
     const priceCoins = roundCoinsToCents(config.monthly_price_coins);

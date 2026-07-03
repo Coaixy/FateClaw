@@ -97,6 +97,7 @@ import {
   settleRechargeOrderPaid,
   settleUserModelChargeCoins,
   setUserMembershipForAdmin,
+  MembershipSubscribeDebounceError,
   subscribeMembershipWithWallet,
   updateMembershipConfig,
   updateRechargePaymentConfig,
@@ -442,6 +443,7 @@ export {
   settleUserModelChargeCoins,
   setUserMembershipForAdmin,
   softDeleteClientProfile,
+  MembershipSubscribeDebounceError,
   subscribeMembershipWithWallet,
   subscribeToBundle,
   subscribeToSkill,
@@ -498,8 +500,6 @@ export type {
   RedeemSkillAccessInviteResult,
   SkillAccessInvitePreviewResult,
 };
-import { deleteUsersWithoutValidPhone } from './phone-only-user-migration.js';
-
 let pool: pg.Pool;
 
 export function getDbPool(): pg.Pool {
@@ -517,8 +517,9 @@ export async function initDatabase(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('SELECT 1');
+    // 无效手机号用户清理已改为一次性迁移（0071），由 runDatabaseMigrations 幂等执行，
+    // 不再每次启动无条件重跑破坏性硬删除。
     await runDatabaseMigrations(client);
-    await deleteUsersWithoutValidPhone(client);
   } finally {
     client.release();
   }

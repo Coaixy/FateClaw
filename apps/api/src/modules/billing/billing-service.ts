@@ -17,6 +17,7 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import {
+  MembershipSubscribeDebounceError,
   subscribeMembershipWithWallet,
   getAccountsByUserId,
   getMembershipEntitlements,
@@ -124,6 +125,11 @@ export async function subscribeCurrentUserMembership(
     const membership = await getMembershipBillingSummary(result.user.id);
     return ok(toMembershipSubscribeResultDto({ membership, wallet }));
   } catch (err) {
+    if (err instanceof MembershipSubscribeDebounceError) {
+      // DB 层去抖命中（Redis 去抖失效时的兜底）：正常的重复拦截而非开通失败，
+      // 保留 Redis 去抖锁，按与 Redis 去抖一致的语义返回 409。
+      return fail(409, err.message);
+    }
     await getRedis()
       .del(lockKey)
       .catch(() => {});

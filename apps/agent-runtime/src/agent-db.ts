@@ -174,7 +174,13 @@ export async function queryEffectiveUserSkillsByIds(
  *
  * @param skillBundleIds 管理后台 workflow 显式绑定的 Bundle ID 列表。
  * @returns Bundle 内已安装且启用的 Skill；不要求终端用户拥有或订阅这些 Bundle。
- * @remarks 只能用于后端已完成授权的请求级 workflow，不能暴露给普通用户自由传参调用。
+ * @remarks
+ * 安全契约（本次审计固化，勿破坏）：本查询刻意「不做 user_id 归属过滤」——这是 workflow 需要
+ * 加载平台/他人 Bundle 的特权能力，加归属会阉割其设计用途。因此安全性**完全依赖调用方保证
+ * `skillBundleIds` 不可被终端用户控制**：当前 API 侧没有任何 HTTP 路由把客户端输入转发到
+ * `authorizedSkillBundleIds`（仅内部 workflow / resident-agent 显式设置）。
+ * 若未来新增会转发用户可控 id 的路径，必须在 API 入口做授权校验，否则此处会退化为跨账号私有
+ * Skill 读取。完整封堵需为 IPC 请求引入来源认证（架构级，单独立项）。
  */
 export async function queryWorkflowBundleSkills(
   skillBundleIds: string[],

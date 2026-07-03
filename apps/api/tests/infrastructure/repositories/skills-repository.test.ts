@@ -548,17 +548,25 @@ describe('skills repository official skill settings', () => {
           },
         ],
       ],
-      clientRows: [[], [{ id: 'sub-1', is_insert: false }], [], [], []],
+      // BEGIN → FOR SHARE 存活重校验（关闭 TOCTOU）→ INSERT ON CONFLICT → INSERT sources → COMMIT
+      clientRows: [
+        [],
+        [{ id: 'bundle-1' }],
+        [{ id: 'sub-1', is_insert: false }],
+        [],
+        [],
+      ],
     });
 
     await subscribeToBundle('user-1', 'bundle-token');
 
-    expect(clientCalls[1]?.sql).toContain(
+    expect(clientCalls[1]?.sql).toContain('FOR SHARE');
+    expect(clientCalls[2]?.sql).toContain(
       'ON CONFLICT (subscriber_id, skill_id) DO UPDATE SET',
     );
-    expect(clientCalls[1]?.sql).toContain('enabled = true');
-    expect(clientCalls[1]?.sql).toContain("status = 'active'");
-    expect(clientCalls[2]?.sql).toContain(
+    expect(clientCalls[2]?.sql).toContain('enabled = true');
+    expect(clientCalls[2]?.sql).toContain("status = 'active'");
+    expect(clientCalls[3]?.sql).toContain(
       'INSERT INTO user_skill_subscription_bundle_sources',
     );
   });

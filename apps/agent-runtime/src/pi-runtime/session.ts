@@ -14,7 +14,10 @@ import type {
 import type { RequestRuntime } from '../runtime.js';
 import type { RequestScope } from '../request-scope.js';
 import { createPiResourceLoader } from './resource-loader.js';
-import { createPiProviderRuntime } from './provider.js';
+import {
+  assertCustomBaseUrlIsPublic,
+  createPiProviderRuntime,
+} from './provider.js';
 import { createPiCustomTools } from './tools.js';
 import {
   buildVisibleSessionBoardContexts,
@@ -111,6 +114,9 @@ export async function runPiSession(args: {
   const records: PiToolExecutionRecord[] = [];
   let lastAssistantText: string | null = null;
 
+  // 自配（BYOK）Base URL 的解析型 SSRF 校验：同步字面量校验挡不住「公网域名解析到内网」，
+  // 建 provider（发起真实 LLM 请求）之前先做一次 DNS 解析级校验。
+  await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
   const providerRuntime = createPiProviderRuntime(
     args.containerInput.llmRuntime,
   );

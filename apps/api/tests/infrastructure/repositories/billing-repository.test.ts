@@ -45,6 +45,7 @@ import {
   settleRechargeOrderPaid,
   setUserMembershipForAdmin,
   subscribeMembershipWithWallet,
+  MembershipSubscribeDebounceError,
   cancelUserMembershipsForAdmin,
 } from '../../../src/infrastructure/repositories/billing-repository.js';
 
@@ -66,6 +67,7 @@ function normalizeResult(result: MockQueryResult | undefined) {
 function createMockPool(
   poolResults: MockQueryResult[] = [],
   clientResults: MockQueryResult[] = [],
+  recentMembershipSubscription?: Record<string, unknown>,
 ) {
   const calls: QueryCall[] = [];
   const clientCalls: QueryCall[] = [];
@@ -74,6 +76,17 @@ function createMockPool(
   const client = {
     async query(sql: string, params?: unknown[]) {
       clientCalls.push({ sql, params });
+      // 会员订阅 DB 幂等去抖查询是横切新增：SELECT EXISTS(...) AS duplicate。默认返回「无重复」，
+      // 不占用按序结果队列，使既有订阅用例无需在数组中间插格。需要模拟窗口内重复提交的用例
+      // 通过第三参传真值（如 { duplicate: true }）覆盖。
+      if (
+        sql.includes('FROM wallet_transactions') &&
+        sql.includes("kind = 'membership_subscription'")
+      ) {
+        return normalizeResult([
+          { duplicate: Boolean(recentMembershipSubscription) },
+        ]);
+      }
       return normalizeResult(clientResults[clientIdx++]);
     },
     release: vi.fn(),
@@ -771,6 +784,30 @@ describe('billing repository', () => {
         call.sql.includes('INSERT INTO membership_allowances'),
       ),
     ).toBe(false);
+  });
+
+  it('debounces a duplicate membership subscription within the idempotency window', async () => {
+    // #7 回归防护：user 行 FOR UPDATE 锁串行化并发订阅后，若 DB 去抖查询（全程用数据库时钟）
+    // 判定窗口内已有同档订阅，应抛 MembershipSubscribeDebounceError，杜绝 Redis 去抖失效时的
+    // 重复扣费与周期叠加。去抖判定在 DB 侧，故用第三参直接模拟查询命中，不依赖应用时钟。
+    const user = {
+      id: 'user-1',
+      purchased_coins: 50,
+      bonus_coins: 0,
+      reserved_coins: 0,
+    };
+    mockGetUserByIdUsing.mockResolvedValueOnce(user);
+    createMockPool(
+      [],
+      [
+        [], // BEGIN
+        [{ id: 'fateclaw_clarity', enabled: true, monthly_price_coins: 30 }], // config
+      ],
+      { duplicate: true }, // DB 去抖查询命中窗口内已有同档订阅
+    );
+    await expect(subscribeMembershipWithWallet('user-1')).rejects.toThrow(
+      MembershipSubscribeDebounceError,
+    );
   });
 
   it('reopens an expired membership starting a fresh period from now', async () => {

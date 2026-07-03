@@ -1798,7 +1798,22 @@ export async function updateSkillBundle(
         userId,
         patch.skill_ids,
       );
+      // 计算被移出 bundle 的 skill：它们对本 bundle 的授权已失效，须回收「仅靠本 bundle 授权」的订阅，
+      // 否则订阅记录仍 active、继续在授权查询中授予已移除的 skill 权益（与删除/取消分享同源的孤儿授权）。
+      const { rows: oldItemRows } = await client.query<{ skill_id: string }>(
+        `SELECT skill_id FROM skill_bundle_items WHERE bundle_id = $1`,
+        [id],
+      );
+      const nextSkillIds = new Set(unique);
+      const removedSkillIds = oldItemRows
+        .map((row) => row.skill_id)
+        .filter((skillId) => !nextSkillIds.has(skillId));
       await replaceSkillBundleItemsUsing(client, id, unique);
+      if (removedSkillIds.length > 0) {
+        await purgeBundleSourceOrphanSubscriptionsUsing(client, id, {
+          skillIds: removedSkillIds,
+        });
+      }
       if (fields.length === 0) {
         await client.query(
           `UPDATE skill_bundles
@@ -1818,16 +1833,107 @@ export async function updateSkillBundle(
   return getSkillBundleById(id, userId);
 }
 
+/**
+ * 回收「因某 bundle 来源失效而失去最后一个有效授权来源」的孤儿订阅，并回退对应 skill 的订阅计数。
+ *
+ * @param db 可执行查询的 PG 连接（模块级 pool 或事务内 client）。
+ * @param bundleId 触发回收的 bundle id（被删除 / 取消分享 / 下架 / 移出 skill）。
+ * @param options.subscriberId 仅回收该订阅者的订阅（用户主动退订单个 bundle）；不传则对所有订阅者生效（owner 操作 bundle）。
+ * @param options.skillIds 仅回收这些 skill 的订阅来源（从 bundle 移出部分 skill）；不传则回收该 bundle 下全部 skill。
+ * @returns 实际删除的 bundle 来源行数。
+ * @remarks 统一「用户退订 / owner 删除 / 取消分享 / 下架 / 移出 skill」五条回收路径，避免多份重复 CTE 日后漂移。
+ *   流程：先删命中的订阅指向该 bundle 的来源行，再删除因此再无「有效 bundle 来源」且无 direct source 的孤儿订阅，
+ *   最后回退 skill 订阅计数。判定「是否还有有效来源」时正向 JOIN skill_bundles + skill_bundle_items，要求来源
+ *   bundle 存活（deleted_at IS NULL）、可分享（visibility IN link_shared/shared）且仍包含该 skill——任一不满足即
+ *   视为死来源，故历史软删 / 取消分享 / 移出 skill 遗留的来源行都不再误判为「仍有来源」而挡住回收。
+ *   用正向判定而非「排除本 bundle 后是否还有行」，可绕开「同一 WITH 内数据修改子句共享起始快照、看不到
+ *   deleted_sources 删除效果」的坑（死来源即便仍在快照里也不满足有效条件）。
+ */
+async function purgeBundleSourceOrphanSubscriptionsUsing(
+  db: SkillDbQueryable,
+  bundleId: string,
+  options: { subscriberId?: string; skillIds?: string[] } = {},
+): Promise<number> {
+  const { rows } = await db.query(
+    `WITH deleted_sources AS (
+       DELETE FROM user_skill_subscription_bundle_sources src
+       USING user_skill_subscriptions sub
+       WHERE src.subscription_id = sub.id
+         AND src.bundle_id = $1
+         AND ($2::text IS NULL OR sub.subscriber_id = $2)
+         AND ($3::text[] IS NULL OR sub.skill_id = ANY($3))
+       RETURNING src.subscription_id
+     ),
+     removable AS (
+       SELECT sub.id, sub.skill_id
+       FROM user_skill_subscriptions sub
+       JOIN deleted_sources ds ON ds.subscription_id = sub.id
+       WHERE sub.has_direct_source = false
+         AND NOT EXISTS (
+           SELECT 1
+           FROM user_skill_subscription_bundle_sources other
+           JOIN skill_bundles b ON b.id = other.bundle_id
+           JOIN skill_bundle_items sbi
+             ON sbi.bundle_id = b.id AND sbi.skill_id = sub.skill_id
+           WHERE other.subscription_id = sub.id
+             AND other.bundle_id <> $1
+             AND b.deleted_at IS NULL
+             AND b.visibility IN ('link_shared', 'shared')
+         )
+     ),
+     deleted_subscriptions AS (
+       DELETE FROM user_skill_subscriptions sub
+       USING removable r
+       WHERE sub.id = r.id
+       RETURNING sub.skill_id
+     ),
+     decrements AS (
+       SELECT skill_id, COUNT(*)::int AS count
+       FROM deleted_subscriptions
+       GROUP BY skill_id
+     ),
+     updated AS (
+       UPDATE user_custom_skills s
+       SET stat_subscriber_count = GREATEST(0, s.stat_subscriber_count - d.count),
+           updated_at = NOW()
+       FROM decrements d
+       WHERE s.id = d.skill_id
+       RETURNING s.id
+     )
+     SELECT (SELECT COUNT(*)::int FROM deleted_sources) AS deleted_source_count`,
+    [bundleId, options.subscriberId ?? null, options.skillIds ?? null],
+  );
+  return Number(
+    (rows[0] as { deleted_source_count: number }).deleted_source_count,
+  );
+}
+
 export async function deleteSkillBundle(
   id: string,
   userId: string,
 ): Promise<boolean> {
-  const { rowCount } = await pool.query(
-    `UPDATE skill_bundles SET deleted_at = NOW(), bundle_token = NULL, visibility = 'private'
-     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
-    [id, userId],
-  );
-  return (rowCount ?? 0) > 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(
+      `UPDATE skill_bundles SET deleted_at = NOW(), bundle_token = NULL, visibility = 'private'
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [id, userId],
+    );
+    const deleted = (rowCount ?? 0) > 0;
+    if (deleted) {
+      // 软删 bundle 不触发 FK 的 ON DELETE CASCADE，必须显式回收「仅靠该 bundle 授权」的订阅，
+      // 否则订阅记录仍 active、继续在授权查询中授予权益（本次审计的孤儿授权路径根因）。
+      await purgeBundleSourceOrphanSubscriptionsUsing(client, id);
+    }
+    await client.query('COMMIT');
+    return deleted;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function shareSkillBundle(
@@ -1852,16 +1958,34 @@ export async function unshareSkillBundle(
   id: string,
   userId: string,
 ): Promise<SkillBundle | undefined> {
-  const { rowCount } = await pool.query(
-    `UPDATE skill_bundles
-     SET visibility = CASE WHEN visibility = 'shared' THEN 'shared' ELSE 'private' END,
-         bundle_token = CASE WHEN visibility = 'shared' THEN bundle_token ELSE NULL END,
-         updated_at = NOW()
-     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-     RETURNING id`,
-    [id, userId],
-  );
-  if ((rowCount ?? 0) === 0) return undefined;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ visibility: string }>(
+      `UPDATE skill_bundles
+       SET visibility = CASE WHEN visibility = 'shared' THEN 'shared' ELSE 'private' END,
+           bundle_token = CASE WHEN visibility = 'shared' THEN bundle_token ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING visibility`,
+      [id, userId],
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return undefined;
+    }
+    // 取消分享后 bundle 转为 private（不可再通过链接订阅）时，回收「仅靠该 bundle 授权」的既有订阅，
+    // 与删除 bundle 同源——否则已订阅者会无限期保留对已转私有 skill 的访问。仍为 shared（已上架）则不动。
+    if (rows[0]?.visibility === 'private') {
+      await purgeBundleSourceOrphanSubscriptionsUsing(client, id);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
   return getSkillBundleById(id, userId);
 }
 
@@ -1887,15 +2011,33 @@ export async function unpublishSkillBundle(
   id: string,
   userId: string,
 ): Promise<SkillBundle | undefined> {
-  const { rowCount } = await pool.query(
-    `UPDATE skill_bundles
-     SET visibility = CASE WHEN bundle_token IS NULL THEN 'private' ELSE 'link_shared' END,
-         updated_at = NOW()
-     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-     RETURNING id`,
-    [id, userId],
-  );
-  if ((rowCount ?? 0) === 0) return undefined;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ visibility: string }>(
+      `UPDATE skill_bundles
+       SET visibility = CASE WHEN bundle_token IS NULL THEN 'private' ELSE 'link_shared' END,
+           updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING visibility`,
+      [id, userId],
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return undefined;
+    }
+    // 下架后若无分享 token 则 bundle 转为 private：回收既有订阅（与取消分享/删除同源）；
+    // 若仍保留 token 退级为 link_shared（仍可通过链接订阅），则不回收。
+    if (rows[0]?.visibility === 'private') {
+      await purgeBundleSourceOrphanSubscriptionsUsing(client, id);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
   return getSkillBundleById(id, userId);
 }
 
@@ -1981,6 +2123,20 @@ export async function subscribeToBundle(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // 关闭 TOCTOU：getBundleByToken 在事务外读，token 校验到写入之间 bundle 可能被并发
+    // 删除/取消分享/下架。这里在事务内对 bundle 行加 FOR SHARE 锁并重查「存活且仍可分享」，
+    // 与并发的 deleteSkillBundle/unshare/unpublish（FOR NO KEY UPDATE）串行化，杜绝
+    // 「读到存活 → 被失效并 purge → 再插入订阅」复活已被回收的孤儿授权。
+    const { rowCount: stillSubscribable } = await client.query(
+      `SELECT 1 FROM skill_bundles
+       WHERE id = $1 AND deleted_at IS NULL AND visibility IN ('link_shared', 'shared')
+       FOR SHARE`,
+      [info.bundle.id],
+    );
+    if (!stillSubscribable) {
+      await client.query('ROLLBACK');
+      return null;
+    }
     for (const skillId of skillIdsValid) {
       const subId = crypto.randomUUID();
       const { rows, rowCount } = await client.query(
@@ -2050,63 +2206,8 @@ export async function unsubscribeFromBundle(
   bundleId: string,
   subscriberId: string,
 ): Promise<number> {
-  const { rows } = await pool.query(
-    `WITH affected AS (
-       SELECT sub.id, sub.skill_id
-       FROM user_skill_subscriptions sub
-       JOIN user_skill_subscription_bundle_sources src
-         ON src.subscription_id = sub.id
-       WHERE sub.subscriber_id = $1 AND src.bundle_id = $2
-     ),
-     deleted_sources AS (
-       DELETE FROM user_skill_subscription_bundle_sources src
-       USING affected a
-       WHERE src.subscription_id = a.id AND src.bundle_id = $2
-       RETURNING src.subscription_id
-     ),
-     removable AS (
-       SELECT sub.id, sub.skill_id
-       FROM user_skill_subscriptions sub
-       JOIN affected a ON a.id = sub.id
-       WHERE sub.has_direct_source = false
-         AND NOT EXISTS (
-           -- 同一 WITH 内的多个数据修改子句共享同一份查询起始快照，互相看不到
-           -- 彼此的写入效果（PG 文档明确说明），所以这里不能通过重新查询
-           -- user_skill_subscription_bundle_sources 来判断 deleted_sources 是否
-           -- 已经删掉了本 bundle 的来源行——那样查到的永远是删除前的快照，
-           -- 这条订阅会被误判为"仍有来源"而永远不会被清理，变成孤儿记录。
-           -- 正确做法是直接排除本次要移除的 bundle_id，判断是否还有别的来源。
-           SELECT 1
-           FROM user_skill_subscription_bundle_sources src
-           WHERE src.subscription_id = sub.id
-             AND src.bundle_id <> $2
-         )
-     ),
-     deleted_subscriptions AS (
-       DELETE FROM user_skill_subscriptions sub
-       USING removable r
-       WHERE sub.id = r.id
-       RETURNING sub.skill_id
-     ),
-     decrements AS (
-       SELECT skill_id, COUNT(*)::int AS count
-       FROM deleted_subscriptions
-       GROUP BY skill_id
-     ),
-     updated AS (
-       UPDATE user_custom_skills s
-       SET stat_subscriber_count = GREATEST(0, s.stat_subscriber_count - d.count),
-           updated_at = NOW()
-       FROM decrements d
-       WHERE s.id = d.skill_id
-       RETURNING s.id
-     )
-     SELECT
-       (SELECT COUNT(*)::int FROM deleted_sources) AS deleted_source_count,
-       COALESCE((SELECT SUM(count)::int FROM decrements), 0) AS deleted_count`,
-    [subscriberId, bundleId],
-  );
-  return Number(
-    (rows[0] as { deleted_source_count: number | string }).deleted_source_count,
-  );
+  // 用户主动退订单个 bundle：复用统一回收逻辑，仅限本订阅者、限本 bundle 的来源。
+  return purgeBundleSourceOrphanSubscriptionsUsing(pool, bundleId, {
+    subscriberId,
+  });
 }

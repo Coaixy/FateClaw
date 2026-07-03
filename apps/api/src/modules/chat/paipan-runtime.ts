@@ -290,8 +290,18 @@ function validateDirectPaipanInput(
   }
 
   for (const [key, value] of Object.entries(data)) {
-    const prop = properties[key];
-    if (!prop) continue;
+    // 用 Object.hasOwn 判定而非依赖 properties[key] 真值：后者沿原型链取值，会把
+    // toString/constructor/__proto__ 等键误判为「已声明」而进入类型校验、抛出误导性 400，
+    // 而非走下面的剔除分支。（Object.entries 返回快照，迭代中 delete data[key] 安全。）
+    const prop = Object.hasOwn(properties, key) ? properties[key] : undefined;
+    if (!prop) {
+      // 剔除顶层白名单外的键：schema 未声明的顶层参数绝不透传给底层排盘库，杜绝「未声明数值参数
+      // （如 bazi 的 decadeCount）被透传后触发底层无界循环」这类 DoS。
+      // 注意：仅作用于顶层键，不递归剔除嵌套对象/数组内的键；已核对所有 runner 只解构各自 schema
+      // 声明的字段、不整体透传嵌套对象，故当前无未声明的嵌套字段进入底层库。
+      delete data[key];
+      continue;
+    }
     validateFieldType(key, value, prop);
     validateFieldValue(key, value, prop);
   }

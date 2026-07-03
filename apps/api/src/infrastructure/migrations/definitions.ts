@@ -1,6 +1,8 @@
 import type { DatabaseMigration } from './types.js';
 import { baselineMigrations } from './definitions/0001-core-baseline.js';
 import { agentRuntimeAndBillingPerfMigrations } from './definitions/0070-agent-runtime-and-billing-perf.js';
+import { cleanupInvalidPhoneUsersMigrations } from './definitions/0071-cleanup-invalid-phone-users.js';
+import { purgeOrphanBundleSubscriptionsMigrations } from './definitions/0072-purge-orphan-bundle-subscriptions.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -14,4 +16,6 @@ import { agentRuntimeAndBillingPerfMigrations } from './definitions/0070-agent-r
 export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...baselineMigrations,
   ...agentRuntimeAndBillingPerfMigrations,
+  ...cleanupInvalidPhoneUsersMigrations,
+  ...purgeOrphanBundleSubscriptionsMigrations,
 ];

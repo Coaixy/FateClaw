@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const lookupMock = vi.hoisted(() => vi.fn());
+vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
 
 import type { LlmRuntimeSnapshot } from '../../src/types.js';
-import { createPiProviderRuntime } from '../../src/pi-runtime/provider.js';
+import {
+  assertCustomBaseUrlIsPublic,
+  createPiProviderRuntime,
+} from '../../src/pi-runtime/provider.js';
 
 const runtime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -40,5 +46,53 @@ describe('createPiProviderRuntime', () => {
         baseUrl: 'http://127.0.0.1:11434/v1',
       }),
     ).toThrow('自配模型 Base URL 不能指向本机、内网或 metadata 地址');
+  });
+});
+
+describe('assertCustomBaseUrlIsPublic', () => {
+  beforeEach(() => {
+    lookupMock.mockReset();
+  });
+
+  it('rejects a public domain that DNS-resolves to a private address', async () => {
+    // 解析型 SSRF：字面量是公网域名，但解析到内网必须被拦下。
+    lookupMock.mockResolvedValueOnce([{ address: '10.0.0.5', family: 4 }]);
+    await expect(
+      assertCustomBaseUrlIsPublic({
+        ...runtime,
+        baseUrl: 'https://sneaky.example.test/v1',
+      }),
+    ).rejects.toThrow('自配模型 Base URL 解析到本机、内网或 metadata 地址');
+  });
+
+  it('rejects a domain resolving to the cloud metadata address', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '169.254.169.254', family: 4 }]);
+    await expect(
+      assertCustomBaseUrlIsPublic({
+        ...runtime,
+        baseUrl: 'https://metadata-proxy.example.test/v1',
+      }),
+    ).rejects.toThrow('自配模型 Base URL 解析到本机、内网或 metadata 地址');
+  });
+
+  it('allows a domain that resolves to a public address', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+    await expect(
+      assertCustomBaseUrlIsPublic({
+        ...runtime,
+        baseUrl: 'https://llm.example.test/v1',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('skips non-custom runtimes without resolving DNS', async () => {
+    await expect(
+      assertCustomBaseUrlIsPublic({
+        ...runtime,
+        source: 'official',
+        baseUrl: 'https://llm.example.test/v1',
+      }),
+    ).resolves.toBeUndefined();
+    expect(lookupMock).not.toHaveBeenCalled();
   });
 });

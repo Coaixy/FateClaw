@@ -1,4 +1,5 @@
 import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
+import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type {
   Api,
@@ -83,10 +84,19 @@ function isBlockedIpv6(hostname: string): boolean {
   );
 }
 
+/**
+ * 主机名安全归一化：去 IPv6 方括号 + 转小写 + 去结尾点。
+ *
+ * @remarks 供字面量校验（{@link isBlockedHostname}）与 DNS 解析校验（{@link assertCustomBaseUrlIsPublic}）
+ *   共用。去结尾点决定 `example.com.` 能否绕过后缀匹配、去括号决定 `isIP` 能否正确判定 IPv6 字面量，
+ *   属安全判定的一部分，两条防线必须用同一口径，切勿各写一份以免日后补规则时产生「一拦一放」的绕过窗口。
+ */
+function normalizeHostname(hostname: string): string {
+  return stripIpv6Brackets(hostname).toLowerCase().replace(/\.$/, '');
+}
+
 function isBlockedHostname(hostname: string): boolean {
-  const normalized = stripIpv6Brackets(hostname)
-    .toLowerCase()
-    .replace(/\.$/, '');
+  const normalized = normalizeHostname(hostname);
   const ipVersion = isIP(normalized);
   if (ipVersion === 4) return isBlockedIpv4(normalized);
   if (ipVersion === 6) return isBlockedIpv6(normalized);
@@ -122,6 +132,52 @@ function requirePublicHttpBaseUrl(value: string): string {
     throw new Error('自配模型 Base URL 不能指向本机、内网或 metadata 地址');
   }
   return value;
+}
+
+/**
+ * 对自配（BYOK）模型 Base URL 做「解析后」SSRF 校验。
+ *
+ * @param runtime 请求级 LLM 运行时快照；仅 `source==='custom'` 且带 baseUrl 时才校验。
+ * @remarks
+ * 同步的 {@link requirePublicHttpBaseUrl} 只能拦截主机名「字面量」（IP / localhost / 内网后缀），
+ * 挡不住「攻击者用一个解析到内网或云 metadata（169.254.169.254）的公网域名」这类解析型 SSRF。
+ * 这里对域名做 DNS 解析，逐个解析出的 IP 复用私网/保留段判断，任一命中即拒绝。
+ * IP 字面量已由同步字面量校验覆盖，此处直接放行交给它处理。
+ *
+ * 已知残留：解析校验与实际连接之间仍存在 TOCTOU 重绑定窗口，彻底封堵需在连接层对已校验 IP
+ * 做 pinning（属更大改造）；本函数先堵住最常见的静态解析型 SSRF。
+ */
+export async function assertCustomBaseUrlIsPublic(
+  runtime: LlmRuntimeSnapshot,
+): Promise<void> {
+  if (runtime.source !== 'custom' || !runtime.baseUrl) return;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(runtime.baseUrl);
+  } catch {
+    return; // URL 格式错误交由同步的 requirePublicHttpBaseUrl 报错
+  }
+
+  const hostname = normalizeHostname(parsed.hostname);
+  // IP 字面量无需解析，其内网/保留段判断已由同步字面量校验覆盖。
+  if (!hostname || isIP(hostname)) return;
+
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await lookup(hostname, { all: true });
+  } catch (error) {
+    throw new Error('自配模型 Base URL 无法解析域名', { cause: error });
+  }
+
+  const hitsPrivateAddress = records.some((record) =>
+    record.family === 6
+      ? isBlockedIpv6(record.address)
+      : isBlockedIpv4(record.address),
+  );
+  if (hitsPrivateAddress) {
+    throw new Error('自配模型 Base URL 解析到本机、内网或 metadata 地址');
+  }
 }
 
 function resolveBaseUrl(runtime: LlmRuntimeSnapshot): string {

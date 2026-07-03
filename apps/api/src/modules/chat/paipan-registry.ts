@@ -142,6 +142,14 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
           enum: ['default', 'china95', 'lunar_sect1', 'lunar_sect2'],
           default: 'default',
         },
+        decadeCount: {
+          // 大运步数：直接决定底层库 buildDecadeList / getAnnualFortuneRange 的循环次数，
+          // 必须声明并封顶，否则未声明键被透传会触发无界循环导致事件循环阻塞（DoS）。
+          type: 'integer',
+          description: '可选：返回的大运步数，默认 11，范围 1-15',
+          minimum: 1,
+          maximum: 15,
+        },
         include: {
           type: 'array',
           description: '要返回的部分，默认全部',

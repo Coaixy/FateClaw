@@ -1,5 +1,7 @@
 import type pg from 'pg';
 
+import { logger } from './logger.js';
+
 const INVALID_PHONE_USER_DELETE_TEMP_TABLE = 'users_without_valid_phone';
 
 async function createInvalidPhoneUserDeleteSet(
@@ -301,10 +303,38 @@ async function deleteInvalidPhoneUserCoreData(
   `);
 }
 
+/**
+ * 记录本次将被硬删除的用户数量。
+ *
+ * @remarks 删除集为会话级临时表，可能在 users 表缺失时未创建；先探测存在性再计数，
+ *   避免对不存在的临时表做 SELECT 时在解析阶段直接报错。计数 > 0 时打 warn 级留痕，
+ *   让「破坏性删除究竟删了多少」始终可回溯。
+ */
+async function logInvalidPhoneUserDeleteCount(
+  client: pg.PoolClient,
+): Promise<void> {
+  const { rows: existsRows } = await client.query<{ present: boolean }>(
+    `SELECT to_regclass('pg_temp.${INVALID_PHONE_USER_DELETE_TEMP_TABLE}') IS NOT NULL AS present`,
+  );
+  if (!existsRows[0]?.present) return;
+
+  const { rows } = await client.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM ${INVALID_PHONE_USER_DELETE_TEMP_TABLE}`,
+  );
+  const doomedCount = rows[0]?.n ?? 0;
+  if (doomedCount > 0) {
+    logger.warn(
+      { doomedCount },
+      '一次性清理：即将硬删除无有效手机号用户及其关联数据',
+    );
+  }
+}
+
 export async function deleteUsersWithoutValidPhone(
   client: pg.PoolClient,
 ): Promise<void> {
   await createInvalidPhoneUserDeleteSet(client);
+  await logInvalidPhoneUserDeleteCount(client);
   await deleteInvalidPhoneUserCommerceData(client);
   await deleteInvalidPhoneUserBillingData(client);
   await deleteInvalidPhoneUserRuntimeData(client);
