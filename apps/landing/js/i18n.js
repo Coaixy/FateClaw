@@ -5,7 +5,7 @@
 const i18n = {
   'zh-CN': {
     pageTitle: '小奕想要三合木',
-    nav: { logoCn: '命枢', systems: '术数入门', architecture: '命与运', faq: 'FAQs' },
+    nav: { logoCn: '命枢', systems: '术数入门', architecture: '命与运', faq: 'FAQs', about: '关于' },
     hero: {
       headline: '东方玄学智能体',
       subEn: 'The Eastern Metaphysics Agent',
@@ -88,12 +88,15 @@ const i18n = {
       q6: '目前支持哪些术数？',
       a6: '当前页面展示的核心方向包括奇门遁甲、八字、紫微斗数、六爻和梅花易数，后续能力以实际产品开放为准。',
     },
-    footer: { logoCn: '命枢', copy: '© 2026 FateClaw。东方玄学智能体。', icp: '浙ICP备2024132053号' },
+    about: {
+      intro: '这里是小奕的个人主页。FateClaw（命枢）是我目前主打的作品：一个东方玄学智能体。',
+    },
+    footer: { logoCn: '命枢', copy: '© 2026 小奕 · Coaixy', icp: '浙ICP备2024132053号' },
   },
 
   'zh-TW': {
     pageTitle: '小奕想要三合木',
-    nav: { logoCn: '命樞', systems: '術數入門', architecture: '命與運', faq: 'FAQs' },
+    nav: { logoCn: '命樞', systems: '術數入門', architecture: '命與運', faq: 'FAQs', about: '關於' },
     hero: {
       headline: '東方玄學智能體',
       subEn: 'The Eastern Metaphysics Agent',
@@ -176,12 +179,15 @@ const i18n = {
       q6: '目前支援哪些術數？',
       a6: '當前頁面展示的核心方向包括奇門遁甲、八字、紫微斗數、六爻和梅花易數，後續能力以實際產品開放為準。',
     },
-    footer: { logoCn: '命樞', copy: '© 2026 FateClaw。東方玄學智能體。', icp: '浙ICP备2024132053号' },
+    about: {
+      intro: '這裡是小奕的個人主頁。FateClaw（命樞）是我目前主打的作品：一個東方玄學智能體。',
+    },
+    footer: { logoCn: '命樞', copy: '© 2026 小奕 · Coaixy', icp: '浙ICP备2024132053号' },
   },
 
   'en': {
     pageTitle: 'FateClaw | Eastern Divination AI',
-    nav: { logoCn: '', systems: 'Methods', architecture: 'Fate & Timing', faq: 'FAQs' },
+    nav: { logoCn: '', systems: 'Methods', architecture: 'Fate & Timing', faq: 'FAQs', about: 'About' },
     hero: {
       headline: 'Eastern Divination, Made Interactive',
       subEn: 'Ask a real question. Get a chart-backed reading.',
@@ -264,7 +270,10 @@ const i18n = {
       q6: 'Which systems are supported?',
       a6: 'The site introduces Qi Men, BaZi, Zi Wei, Liu Yao, and Mei Hua. Actual product availability follows the live release.',
     },
-    footer: { logoCn: '', copy: '© 2026 FateClaw. Eastern divination, made interactive.', icp: '' },
+    about: {
+      intro: "This is the personal homepage of Coaixy (Xiao Yi). FateClaw is my current main project: an Eastern metaphysics agent.",
+    },
+    footer: { logoCn: '', copy: '© 2026 Coaixy · 小奕', icp: '' },
   },
 };
 

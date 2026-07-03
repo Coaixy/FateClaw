@@ -1,12 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="paper">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小奕想要三合木</title>
 <meta name="description" content="FateClaw 是一个玄学 Agent 系统，核心能力是本地排盘 + 用户知识库检索 + AI 解读。">
+<meta name="theme-color" content="#f7f2e7">
 
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
+<!-- 思源宋体：@fontsource 按 unicode-range 分片，只下载标题实际用到的字形 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/600.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/700.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/learning.css">
@@ -30,6 +34,7 @@
     <li><a href="#systems" data-i18n="nav.systems">术数入门</a></li>
     <li><a href="#architecture" data-i18n="nav.architecture">命与运</a></li>
     <li><a href="#faq" data-i18n="nav.faq">FAQs</a></li>
+    <li><a href="#about" data-i18n="nav.about">关于</a></li>
     <li>
       <div class="lang-switcher">
         <button class="lang-btn active" type="button" data-lang="zh-CN" aria-pressed="true">简体</button>
@@ -48,26 +53,37 @@
      Hero
      ============================================================ -->
 <header class="hero">
-  <!-- 奇门九宫背景装饰 -->
-  <div class="hero-qimen" aria-hidden="true">
+  <div class="hero-inner">
+  <!-- 左侧文案 -->
+  <div class="hero-content">
+    <div class="sub-en reveal" data-i18n="hero.subEn">The Eastern Metaphysics Agent</div>
+    <h1 class="reveal reveal-delay-1" data-i18n="hero.headline">东方玄学智能体</h1>
+    <div class="sub-cn reveal reveal-delay-2" data-i18n="hero.subCn">排盘、解读与追问，一次说清楚</div>
+    <div class="hero-actions reveal reveal-delay-3">
+      <a href="https://ai.letfate.com" class="btn btn-primary" data-i18n="hero.cta1">探索核心能力</a>
+    </div>
+  </div>
+
+  <!-- 右侧奇门九宫罗盘：墨线 + 朱砂点睛 -->
+  <div class="hero-qimen reveal reveal-delay-2" aria-hidden="true">
     <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- 罗盘线条保持稳定，九宫本体便于识别；外侧二十八星宿环负责旋转动效 -->
       <g class="qimen-compass">
-        <circle cx="300" cy="300" r="286" stroke="rgba(240,185,41,0.42)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="270" stroke="rgba(240,185,41,0.18)" stroke-width="0.5" stroke-dasharray="4 8"/>
-        <circle cx="300" cy="300" r="236" stroke="rgba(94,234,212,0.16)" stroke-width="0.5" stroke-dasharray="2 9"/>
-        <line x1="300" y1="18" x2="300" y2="92" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
-        <line x1="300" y1="508" x2="300" y2="582" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
-        <line x1="18" y1="300" x2="92" y2="300" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
-        <line x1="508" y1="300" x2="582" y2="300" stroke="rgba(255,217,102,0.48)" stroke-width="0.7"/>
-        <line x1="100" y1="100" x2="152" y2="152" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
-        <line x1="500" y1="100" x2="448" y2="152" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
-        <line x1="500" y1="500" x2="448" y2="448" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
-        <line x1="100" y1="500" x2="152" y2="448" stroke="rgba(240,185,41,0.25)" stroke-width="0.6"/>
+        <circle cx="300" cy="300" r="286" stroke="rgba(38,34,28,0.35)" stroke-width="0.8"/>
+        <circle cx="300" cy="300" r="270" stroke="rgba(38,34,28,0.15)" stroke-width="0.5" stroke-dasharray="4 8"/>
+        <circle cx="300" cy="300" r="236" stroke="rgba(192,63,43,0.14)" stroke-width="0.5" stroke-dasharray="2 9"/>
+        <line x1="300" y1="18" x2="300" y2="92" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
+        <line x1="300" y1="508" x2="300" y2="582" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
+        <line x1="18" y1="300" x2="92" y2="300" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
+        <line x1="508" y1="300" x2="582" y2="300" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
+        <line x1="100" y1="100" x2="152" y2="152" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
+        <line x1="500" y1="100" x2="448" y2="152" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
+        <line x1="500" y1="500" x2="448" y2="448" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
+        <line x1="100" y1="500" x2="152" y2="448" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
       </g>
       <g class="qimen-ring">
-        <circle cx="300" cy="300" r="258" stroke="rgba(240,185,41,0.28)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="228" stroke="rgba(94,234,212,0.14)" stroke-width="0.6" stroke-dasharray="2 10"/>
+        <circle cx="300" cy="300" r="258" stroke="rgba(38,34,28,0.26)" stroke-width="0.8"/>
+        <circle cx="300" cy="300" r="228" stroke="rgba(192,63,43,0.12)" stroke-width="0.6" stroke-dasharray="2 10"/>
         <!-- 二十八星宿从角宿开始顺时针排布，作为九宫外层天象环 -->
         <g class="xiu-mark" transform="rotate(0 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">角</text></g>
         <g class="xiu-mark" transform="rotate(12.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">亢</text></g>
@@ -100,12 +116,12 @@
       </g>
       <!-- 洛书九宫：上南下北，左东右西，是奇门盘面常见的展示方向 -->
       <g class="qimen-grid">
-        <rect x="135" y="135" width="330" height="330" stroke="rgba(240,185,41,0.50)" stroke-width="1" fill="rgba(7,6,14,0.12)"/>
-        <rect x="245" y="245" width="110" height="110" fill="rgba(240,185,41,0.055)" stroke="rgba(255,217,102,0.32)" stroke-width="0.8"/>
-        <line x1="245" y1="135" x2="245" y2="465" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
-        <line x1="355" y1="135" x2="355" y2="465" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
-        <line x1="135" y1="245" x2="465" y2="245" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
-        <line x1="135" y1="355" x2="465" y2="355" stroke="rgba(240,185,41,0.34)" stroke-width="0.8"/>
+        <rect x="135" y="135" width="330" height="330" stroke="rgba(38,34,28,0.42)" stroke-width="1" fill="rgba(255,253,248,0.55)"/>
+        <rect x="245" y="245" width="110" height="110" fill="rgba(192,63,43,0.06)" stroke="rgba(192,63,43,0.32)" stroke-width="0.8"/>
+        <line x1="245" y1="135" x2="245" y2="465" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
+        <line x1="355" y1="135" x2="355" y2="465" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
+        <line x1="135" y1="245" x2="465" y2="245" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
+        <line x1="135" y1="355" x2="465" y2="355" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
 
         <text class="qimen-main" x="190" y="178">巽</text>
         <text class="qimen-sub" x="190" y="212">四 · 东南</text>
@@ -136,16 +152,6 @@
       </g>
     </svg>
   </div>
-  <div class="hero-content">
-    <h1 class="reveal" data-i18n="hero.headline">东方玄学智能体</h1>
-    <div class="sub-en reveal reveal-delay-1" data-i18n="hero.subEn">The Eastern Metaphysics Agent</div>
-    <div class="sub-cn reveal reveal-delay-1" data-i18n="hero.subCn">排盘、解读与追问，一次说清楚</div>
-    <p class="reveal reveal-delay-2" data-i18n="hero.description">
-      FateClaw 把传统术数变成可交互的智能解读体验：先排盘，再结合你的问题给出清晰建议。
-    </p>
-    <div class="hero-actions reveal reveal-delay-3">
-      <a href="https://ai.letfate.com" class="btn btn-primary" data-i18n="hero.cta1">探索核心能力</a>
-    </div>
   </div>
 </header>
 
@@ -160,6 +166,19 @@
 
   <div class="agent-overview-layout">
     <article class="agent-panel agent-panel-main reveal">
+      <!-- 先天八卦环（与产品端 BaguaRing 同款线描）：自正上方起顺时针为乾巽坎艮坤震离兑 -->
+      <svg class="agent-panel-ring" viewBox="0 0 360 360" aria-hidden="true">
+        <circle cx="180" cy="180" r="150" fill="none" stroke="currentColor" stroke-width="1"/>
+        <circle cx="180" cy="180" r="112" fill="none" stroke="currentColor" stroke-width="1"/>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(0 180 180)">☰</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(45 180 180)">☴</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(90 180 180)">☵</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(135 180 180)">☶</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(180 180 180)">☷</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(225 180 180)">☳</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(270 180 180)">☲</text>
+        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(315 180 180)">☱</text>
+      </svg>
       <span class="agent-panel-label" data-i18n="agent.chartLabel">排得准</span>
       <h3 data-i18n="agent.chartTitle">先把盘面算清楚</h3>
       <p data-i18n="agent.chartDesc">八字、紫微、奇门、六爻等先由确定规则排盘，基础信息更稳。</p>
@@ -336,6 +355,20 @@
 </section>
 
 <!-- ============================================================
+     关于我：古籍牌记式的个人签名块
+     ============================================================ -->
+<section id="about" class="colophon">
+  <div class="colophon-card reveal">
+    <span class="colophon-seal" aria-hidden="true">小奕</span>
+    <div class="colophon-body">
+      <div class="colophon-name">小奕 · Coaixy</div>
+      <p data-i18n="about.intro">这里是小奕的个人主页。FateClaw（命枢）是我目前主打的作品：一个东方玄学智能体。</p>
+      <a class="colophon-link" href="https://github.com/Coaixy" target="_blank" rel="noopener noreferrer">github.com/Coaixy</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
      Footer
      ============================================================ -->
 <footer>
@@ -344,7 +377,7 @@
       <img class="mark" src="assets/fateclaw-mark.png" alt="" width="24" height="24" aria-hidden="true">
       FateClaw <span class="cn" data-i18n="footer.logoCn">命枢</span>
     </div>
-    <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 FateClaw。东方玄学智能体。</div>
+    <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 小奕 · Coaixy</div>
     <a class="footer-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-i18n="footer.icp">浙ICP备2024132053号</a>
   </div>
 </footer>

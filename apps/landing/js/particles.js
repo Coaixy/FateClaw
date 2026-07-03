@@ -60,8 +60,8 @@
         : isTian
           ? 18 + Math.random() * 16 // 天干 18-34px，稍大
           : 14 + Math.random() * 14, // 地支 14-28px
-      // 基础透明度较低，营造虚实感
-      base: isBagua ? 0.035 + Math.random() * 0.11 : 0.06 + Math.random() * 0.18,
+      // 基础透明度较低，营造虚实感；浅色宣纸底上深色字更显眼，整体压得比暗色主题更低
+      base: isBagua ? 0.03 + Math.random() * 0.07 : 0.045 + Math.random() * 0.11,
       phase: Math.random() * Math.PI * 2,
       freq:  isBagua ? 0.08 + Math.random() * 0.18 : 0.12 + Math.random() * 0.28,
     };
@@ -107,15 +107,15 @@
       // 呼吸透明度
       const alpha = Math.max(0.02, c.base + Math.sin(t * c.freq + c.phase) * c.base * 0.8);
 
-      // 天干：暖金色  地支：金铜色  八卦：青绿色，区分术数层次但保持低调
+      // 宣纸配色：天干走浓墨、地支走淡墨、八卦走朱砂，像纸面上洇开的水印
       const color = c.kind === 'tiangan'
-        ? `hsla(44, 82%, 72%, ${alpha})`
+        ? `hsla(35, 15%, 26%, ${alpha})`
         : c.kind === 'bagua'
-          ? `hsla(172, 58%, 66%, ${alpha})`
-          : `hsla(36, 70%, 62%, ${alpha})`;
+          ? `hsla(9, 58%, 44%, ${alpha})`
+          : `hsla(35, 12%, 40%, ${alpha})`;
 
       ctx.globalAlpha = 1;
-      ctx.font = `${c.size}px 'Noto Serif SC', serif`;
+      ctx.font = `600 ${c.size}px 'Noto Serif SC', serif`;
       ctx.fillStyle = color;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

@@ -1,6 +1,18 @@
 /* ============================================================
    响应式
    ============================================================ */
+@media (max-width: 900px) {
+  /* Hero 分栏在窄屏收成单列：文案在上，罗盘缩小居中在下 */
+  .hero-inner {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .hero-qimen svg {
+    width: min(400px, 86vw);
+    height: min(400px, 86vw);
+  }
+}
+
 @media (max-width: 768px) {
   .nav-links {
     display: none;
@@ -8,20 +20,20 @@
     top: var(--nav-height);
     left: 0;
     right: 0;
-    background: rgba(7, 6, 14, 0.97);
+    background: rgba(247, 242, 231, 0.97);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     flex-direction: column;
     padding: 24px;
     gap: 20px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-hairline);
   }
   .nav-links.open { display: flex; }
   .menu-toggle { display: flex; }
 
   .hero {
-    padding-top: calc(var(--nav-height) + 16px);
+    padding-top: calc(var(--nav-height) + 24px);
   }
-  .hero p { max-width: 100%; }
 
   .compare-grid { grid-template-columns: 1fr; }
 
@@ -32,9 +44,8 @@
 
 @media (max-width: 480px) {
   :root { --nav-height: 60px; }
-  .nav-logo { font-size: 1.1rem; }
-  .nav-logo .cn { font-size: 0.92rem; }
-  .hero h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
-  .hero-actions { flex-direction: column; align-items: center; }
+  .nav-logo { font-size: 1.05rem; }
+  .hero h1 { font-size: clamp(2.1rem, 9vw, 2.7rem); }
+  .hero-actions { flex-direction: column; align-items: stretch; width: 100%; }
   .btn { width: 100%; justify-content: center; }
 }

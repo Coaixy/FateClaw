@@ -1,3 +1,6 @@
+/* ============================================================
+   导航栏：半透明宣纸 + 笺纹线
+   ============================================================ */
 nav {
   position: fixed;
   top: 0;
@@ -9,59 +12,65 @@ nav {
   align-items: center;
   justify-content: space-between;
   padding: 0 max(24px, calc((100% - 1200px) / 2));
-  background: rgba(7, 6, 14, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--color-border-light);
-  transition: background var(--transition);
+  background: rgba(247, 242, 231, 0.78);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-bottom: 1px solid transparent;
+  transition: background var(--transition), border-color var(--transition);
 }
 
 nav.scrolled {
-  background: rgba(7, 6, 14, 0.92);
-  border-bottom-color: var(--color-border);
+  background: rgba(247, 242, 231, 0.92);
+  border-bottom-color: var(--color-hairline);
 }
 
 .nav-logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--font-en-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-gold-light);
-  letter-spacing: 0.02em;
+  font-size: 1.18rem;
+  font-weight: 650;
+  color: var(--color-ink);
+  letter-spacing: 0.01em;
   text-decoration: none;
 }
 
 .nav-logo:hover {
-  color: var(--color-gold-light);
+  color: var(--color-ink);
 }
 
 .nav-logo .mark {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 0 18px rgba(240, 180, 41, 0.22);
+  box-shadow: 0 1px 4px rgba(20, 20, 19, 0.22);
 }
 
+/* 「命枢」二字做成小方印：印章红底 + 宋体白文 */
 .nav-logo .cn {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: var(--color-text);
+  color: #fdf7ec;
+  background: var(--color-seal);
+  padding: 3px 7px;
+  border-radius: 6px;
+  line-height: 1.3;
 }
+/* 英文界面下 logoCn 为空串，隐藏空印章底 */
+.nav-logo .cn:empty { display: none; }
 
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 24px;
   list-style: none;
 }
 
 .nav-links a {
-  color: var(--color-text-secondary);
+  color: var(--color-body-text);
   font-size: 0.88rem;
   font-weight: 500;
   transition: var(--transition);
@@ -73,18 +82,18 @@ nav.scrolled {
   bottom: -4px;
   left: 0;
   width: 0;
-  height: 1.5px;
-  background: var(--color-gold);
+  height: 2px;
+  background: var(--color-primary);
   transition: width 0.3s var(--ease-out-expo);
 }
-.nav-links a:hover { color: var(--color-gold-light); }
+.nav-links a:hover { color: var(--color-ink); }
 .nav-links a:hover::after { width: 100%; }
 
 .lang-switcher {
   display: flex;
   gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
+  background: rgba(38, 34, 28, 0.05);
+  border-radius: var(--radius-sm);
   padding: 3px;
   margin-left: 12px;
 }
@@ -93,7 +102,7 @@ nav.scrolled {
   padding: 5px 10px;
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
   font-size: 0.78rem;
   font-family: var(--font-body);
   cursor: pointer;
@@ -101,10 +110,11 @@ nav.scrolled {
   transition: var(--transition);
   font-weight: 500;
 }
-.lang-btn:hover { color: var(--color-text-secondary); }
+.lang-btn:hover { color: var(--color-body-strong); }
 .lang-btn.active {
-  background: var(--color-gold-subtle);
-  color: var(--color-gold-light);
+  background: var(--color-surface-raised);
+  color: var(--color-primary);
+  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.10);
 }
 
 .menu-toggle {
@@ -120,64 +130,61 @@ nav.scrolled {
   display: block;
   width: 22px;
   height: 2px;
-  background: var(--color-text);
+  background: var(--color-ink);
   border-radius: 2px;
   transition: var(--transition);
 }
 
 /* ============================================================
-   Hero - 左右分割
+   Hero - 不对称分栏：左文案 / 右九宫罗盘
    ============================================================ */
 .hero {
   position: relative;
   z-index: 1;
   min-height: 100dvh;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: calc(var(--nav-height) + 12px) max(24px, calc((100% - 1200px) / 2)) 40px;
+  padding: calc(var(--nav-height) + 24px) max(24px, calc((100% - 1200px) / 2)) 48px;
 }
 
-/* 删除右侧星盘后，文字内容居中全宽展示 */
+.hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 48px;
+  align-items: center;
+  width: 100%;
+}
+
 .hero-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  max-width: 760px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* 眉题：英文小字走朱砂，位于大标题上方 */
+.hero .sub-en {
+  font-size: 0.9rem;
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+  margin-bottom: 18px;
 }
 
 .hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 700;
-  line-height: 1.1;
-  margin-bottom: 6px;
-  letter-spacing: 0.02em;
-}
-
-.hero .sub-en {
-  font-family: var(--font-en-display);
-  font-size: clamp(1.05rem, 1.6vw, 1.28rem);
-  font-weight: 400;
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
+  line-height: 1.14;
+  color: var(--color-ink);
+  margin-bottom: 20px;
 }
 
 .hero .sub-cn {
-  font-family: var(--font-display);
-  font-size: clamp(0.9rem, 1.2vw, 1.05rem);
-  color: var(--color-text-muted);
-  margin-bottom: 22px;
+  font-size: clamp(1.02rem, 1.4vw, 1.18rem);
+  color: var(--color-muted);
+  margin-bottom: 34px;
   font-weight: 400;
-}
-
-.hero p {
-  max-width: 560px;
-  font-size: 0.95rem;
-  color: var(--color-text-muted);
-  margin-bottom: 26px;
   line-height: 1.7;
 }
 
@@ -185,16 +192,15 @@ nav.scrolled {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 13px 28px;
-  border-radius: 100px;
-  font-size: 0.92rem;
+  padding: 13px 30px;
+  border-radius: var(--radius-sm);
+  font-size: 0.94rem;
   font-weight: 600;
   font-family: var(--font-body);
   cursor: pointer;
@@ -205,29 +211,30 @@ nav.scrolled {
 }
 
 .btn:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-gold), var(--color-gold-dark));
-  color: #07060e;
-  box-shadow: 0 4px 24px rgba(240, 180, 41, 0.40), 0 0 60px rgba(240, 180, 41, 0.15);
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.08), 0 6px 20px rgba(192, 63, 43, 0.22);
 }
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 40px rgba(240, 180, 41, 0.55), 0 0 80px rgba(240, 180, 41, 0.25);
-  color: #07060e;
+  background: var(--color-primary-active);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(20, 20, 19, 0.10), 0 10px 28px rgba(192, 63, 43, 0.28);
+  color: #ffffff;
 }
 
 .btn-secondary {
-  background: transparent;
-  color: var(--color-gold-light);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-body-strong);
+  border: 1px solid var(--color-hairline);
 }
 .btn-secondary:hover {
-  background: var(--color-gold-subtle);
-  transform: translateY(-2px);
-  color: var(--color-gold-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-1px);
 }
 
 /* ============================================================
@@ -239,23 +246,31 @@ section {
   padding: 100px max(24px, calc((100% - 1100px) / 2));
 }
 
+/* 章节起首的朱批短线：全站统一的分节标记 */
+.section-title::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  margin-bottom: 20px;
+}
+
 .section-title {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3.5vw, 2.6rem);
   font-weight: 700;
   margin-bottom: 16px;
-  line-height: 1.2;
-  background: linear-gradient(135deg, var(--color-text) 0%, var(--color-gold-light) 50%, var(--color-text) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  line-height: 1.25;
+  color: var(--color-ink);
 }
 
 .section-subtitle {
   font-size: 1rem;
-  color: var(--color-text-secondary);
+  color: var(--color-muted);
   max-width: 600px;
-  line-height: 1.7;
+  line-height: 1.75;
   margin-bottom: 56px;
 }
 
@@ -273,17 +288,17 @@ section {
 }
 
 .compare-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-light);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  padding: 30px;
-  transition: all var(--transition);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  padding: 32px;
+  box-shadow: var(--shadow-raised);
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
   position: relative;
   overflow: hidden;
 }
 
+/* 卡片右上的大字水印：淡朱砂宋体，呼应古籍批注 */
 .compare-card::after {
   content: attr(data-symbol);
   position: absolute;
@@ -292,7 +307,7 @@ section {
   font-family: var(--font-display);
   font-size: 5.5rem;
   line-height: 1;
-  color: rgba(240, 180, 41, 0.07);
+  color: rgba(192, 63, 43, 0.07);
   pointer-events: none;
 }
 
@@ -302,34 +317,34 @@ section {
 }
 
 .compare-card:hover {
-  background: var(--color-bg-card-hover);
-  border-color: rgba(240, 180, 41, 0.45);
-  transform: translateY(-4px);
-  box-shadow: 0 0 24px rgba(240, 180, 41, 0.12), 0 12px 36px rgba(0,0,0,0.4);
+  border-color: rgba(192, 63, 43, 0.36);
+  transform: translateY(-3px);
+  box-shadow: 0 2px 4px rgba(20, 20, 19, 0.05), 0 14px 40px rgba(20, 20, 19, 0.13);
 }
 
 .compare-label {
   display: inline-block;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 6px;
   margin-bottom: 14px;
-  background: var(--color-gold-subtle);
-  color: var(--color-gold-light);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .compare-card h3 {
   font-family: var(--font-display);
   font-size: 1.28rem;
   font-weight: 600;
+  color: var(--color-ink);
   margin-bottom: 10px;
 }
 
 .compare-card > p {
   font-size: 0.92rem;
-  color: var(--color-text-secondary);
-  line-height: 1.7;
+  color: var(--color-body-text);
+  line-height: 1.75;
 }
 
 .compare-points {
@@ -339,77 +354,78 @@ section {
 }
 
 .compare-point {
-  border-left: 1px solid var(--color-border);
+  border-left: 2px solid rgba(192, 63, 43, 0.30);
   padding-left: 14px;
 }
 
 .compare-point strong {
   display: block;
-  color: var(--color-text);
+  color: var(--color-body-strong);
   font-size: 0.88rem;
   margin-bottom: 4px;
 }
 
 .compare-point p {
   font-size: 0.84rem;
-  color: var(--color-text-secondary);
-  line-height: 1.65;
+  color: var(--color-muted);
+  line-height: 1.7;
 }
 
+/* 收束段：朱批样式的结论框 */
 .compare-choice {
   margin-top: 20px;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  background: rgba(240, 180, 41, 0.06);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 24px 28px;
+  background: var(--color-primary-soft);
 }
 
 .compare-choice h3 {
   font-family: var(--font-display);
   font-size: 1.12rem;
+  color: var(--color-ink);
   margin-bottom: 8px;
 }
 
 .compare-choice p {
-  color: var(--color-text-secondary);
+  color: var(--color-body-text);
   font-size: 0.9rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 /* ============================================================
-   FAQ
+   FAQ：笺纹分隔列表（不做卡片堆）
    ============================================================ */
 #faq {
   padding-top: 60px;
 }
 
 .faq-list {
-  display: grid;
-  gap: 12px;
-  max-width: 900px;
+  max-width: 860px;
+  border-top: 1px solid var(--color-hairline);
 }
 
 .faq-item {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 .faq-item summary {
   list-style: none;
   cursor: pointer;
-  padding: 22px 24px;
+  padding: 22px 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  color: var(--color-text);
+  color: var(--color-ink);
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 1.02rem;
   font-weight: 600;
+  transition: color var(--transition);
+}
+
+.faq-item summary:hover {
+  color: var(--color-primary);
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -419,10 +435,11 @@ section {
 .faq-item summary::after {
   content: '+';
   flex-shrink: 0;
-  color: var(--color-gold-light);
+  color: var(--color-primary);
   font-family: var(--font-body);
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 500;
+  line-height: 1;
 }
 
 .faq-item[open] summary::after {
@@ -430,19 +447,82 @@ section {
 }
 
 .faq-item p {
-  padding: 0 24px 22px;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.75;
+  padding: 0 8px 24px;
+  max-width: 62ch;
+  color: var(--color-body-text);
+  font-size: 0.92rem;
+  line-height: 1.8;
 }
 
 /* ============================================================
-   Footer
+   关于我：古籍牌记（版权页）式的个人签名块
+   ============================================================ */
+.colophon {
+  padding-top: 20px;
+  padding-bottom: 90px;
+}
+
+.colophon-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+  max-width: 680px;
+  padding: 28px 30px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+/* 名印：印章红方印 + 竖排白文，呼应导航的「命枢」小印 */
+.colophon-seal {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  writing-mode: vertical-rl;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: #fdf7ec;
+  background: var(--color-seal);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.18);
+}
+
+.colophon-name {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 6px;
+}
+
+.colophon-body p {
+  color: var(--color-body-text);
+  font-size: 0.92rem;
+  line-height: 1.75;
+  margin-bottom: 10px;
+}
+
+.colophon-link {
+  color: var(--color-primary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+/* ============================================================
+   Footer：笺色底 + 笺纹线
    ============================================================ */
 footer {
   position: relative;
   z-index: 1;
-  border-top: 1px solid var(--color-border-light);
+  border-top: 1px solid var(--color-hairline);
+  background: var(--color-surface-soft);
   padding: 40px max(24px, calc((100% - 1100px) / 2));
   margin-top: 40px;
 }
@@ -459,10 +539,9 @@ footer {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-en-display);
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--color-gold-light);
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--color-ink);
 }
 
 .footer-logo .mark {
@@ -470,23 +549,29 @@ footer {
   height: 24px;
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 0 12px rgba(240, 180, 41, 0.18);
+  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.20);
 }
 
 .footer-logo .cn {
   font-family: var(--font-display);
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #fdf7ec;
+  background: var(--color-seal);
+  padding: 2px 6px;
+  border-radius: 5px;
+  line-height: 1.3;
 }
+.footer-logo .cn:empty { display: none; }
 
 .footer-copy,
 .footer-icp {
   font-size: 0.8rem;
-  color: var(--color-text-muted);
+  color: var(--color-muted);
 }
 
 .footer-icp:hover {
-  color: var(--color-gold-light);
+  color: var(--color-primary);
 }
 
 .footer-icp:empty {
@@ -498,7 +583,7 @@ footer {
    ============================================================ */
 .reveal {
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(22px);
   transition: opacity 0.7s var(--ease-out-expo), transform 0.7s var(--ease-out-expo);
 }
 .reveal.visible {
