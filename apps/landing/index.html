@@ -1,392 +1,296 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="paper">
+<html lang="zh-CN" data-theme="ink">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小奕想要三合木</title>
-<meta name="description" content="FateClaw 是一个玄学 Agent 系统，核心能力是本地排盘 + 用户知识库检索 + AI 解读。">
-<meta name="theme-color" content="#f7f2e7">
+<meta name="description" content="小奕的个人主页:热爱玄学与计算机科学。">
+<meta name="theme-color" content="#0f0e0c">
 
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<!-- 思源宋体：@fontsource 按 unicode-range 分片，只下载标题实际用到的字形 -->
+<!-- 思源宋体:@fontsource 按 unicode-range 分片,只下载标题实际用到的字形 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/600.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.5/700.css">
-<link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/components.css">
-<link rel="stylesheet" href="css/learning.css">
-<link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/home.css">
+<!-- 无 JS 兜底:跳过开场动画并显示全部内容 -->
+<noscript>
+  <style>
+    #intro { display: none; }
+    .reveal { opacity: 1 !important; transform: none !important; }
+    body.intro-hold .nav { transform: none !important; }
+    body.intro-hold .dots { opacity: 1 !important; }
+    body.intro-hold { overflow: auto !important; }
+  </style>
+</noscript>
 </head>
-<body data-page="home">
-
-<div id="starfield"></div>
-<canvas id="particles"></canvas>
+<body class="intro-hold">
 
 <!-- ============================================================
-     导航栏
+     开场动画:河图点阵亮起 → 化作洛书九宫 → 幕布拉开
+     点阵由 home.js 按传统方位数据生成;点击可跳过;
+     reduced-motion 下直接移除
      ============================================================ -->
-<nav id="navbar" role="navigation" aria-label="Main navigation">
-  <a class="nav-logo" href="index.html" aria-label="FateClaw home">
-    <img class="mark" src="assets/fateclaw-mark.png" alt="" width="34" height="34" aria-hidden="true">
-    FateClaw <span class="cn" data-i18n="nav.logoCn">命枢</span>
+<div id="intro">
+  <div class="intro-half intro-top"></div>
+  <div class="intro-half intro-bottom"></div>
+  <div class="intro-center" aria-hidden="true">
+    <div class="intro-ring"></div>
+    <svg id="introHetu" class="intro-chart" viewBox="0 0 320 320"></svg>
+    <svg id="introLuoshu" class="intro-chart chart-b" viewBox="0 0 320 320"></svg>
+    <span class="intro-caption" id="introCaption">河图</span>
+    <span class="intro-tag">小奕想要三合木</span>
+  </div>
+</div>
+
+<!-- 夜空星点画布,home.js 绘制 -->
+<canvas id="sky" aria-hidden="true"></canvas>
+
+<!-- 导航滚动哨兵:滚过这个元素后导航落下墨色底 -->
+<span id="nav-sentinel" aria-hidden="true"></span>
+
+<!-- ============================================================
+     导航
+     ============================================================ -->
+<nav class="nav" id="nav" role="navigation" aria-label="主导航">
+  <a class="brand" href="index.html">
+    <span class="seal" aria-hidden="true">奕</span>
+    小奕想要三合木
   </a>
 
   <ul class="nav-links" id="navLinks">
-    <li><a href="#systems" data-i18n="nav.systems">术数入门</a></li>
-    <li><a href="#architecture" data-i18n="nav.architecture">命与运</a></li>
-    <li><a href="#faq" data-i18n="nav.faq">FAQs</a></li>
-    <li><a href="#about" data-i18n="nav.about">关于</a></li>
-    <li>
-      <div class="lang-switcher">
-        <button class="lang-btn active" type="button" data-lang="zh-CN" aria-pressed="true">简体</button>
-        <button class="lang-btn" type="button" data-lang="zh-TW" aria-pressed="false">繁體</button>
-        <button class="lang-btn" type="button" data-lang="en" aria-pressed="false">EN</button>
-      </div>
-    </li>
+    <li><a href="#about">关于</a></li>
+    <li><a href="#consult">咨询</a></li>
   </ul>
 
-  <button class="menu-toggle" type="button" aria-label="Toggle menu" aria-controls="navLinks" aria-expanded="false">
+  <button class="menu-toggle" id="menuToggle" type="button" aria-label="展开菜单" aria-controls="navLinks" aria-expanded="false">
     <span></span><span></span><span></span>
   </button>
 </nav>
 
+<!-- 右侧圆点页码:当前屏由 home.js 标记 active -->
+<nav class="dots" aria-label="分屏导航">
+  <a href="#top" aria-label="首页"></a>
+  <a href="#about" aria-label="关于"></a>
+  <a href="#consult" aria-label="咨询"></a>
+</nav>
+
 <!-- ============================================================
-     Hero
+     第一屏 Hero:左侧文案 + 右侧奇门罗盘
      ============================================================ -->
-<header class="hero">
+<header id="top" class="hero snap-section">
   <div class="hero-inner">
-  <!-- 左侧文案 -->
-  <div class="hero-content">
-    <div class="sub-en reveal" data-i18n="hero.subEn">The Eastern Metaphysics Agent</div>
-    <h1 class="reveal reveal-delay-1" data-i18n="hero.headline">东方玄学智能体</h1>
-    <div class="sub-cn reveal reveal-delay-2" data-i18n="hero.subCn">排盘、解读与追问，一次说清楚</div>
-    <div class="hero-actions reveal reveal-delay-3">
-      <a href="https://ai.letfate.com" class="btn btn-primary" data-i18n="hero.cta1">探索核心能力</a>
+    <div class="hero-copy">
+      <!-- 站名出处:地支亥卯未三合成木局 -->
+      <div class="hero-seal reveal">
+        <span class="stamp" aria-hidden="true"><span>亥</span><span>卯</span><span>未</span></span>
+        <span class="note">SAN HE MU</span>
+      </div>
+
+      <h1 class="reveal reveal-1">小奕想要<span class="accent">三合木</span></h1>
+
+      <p class="hero-sub reveal reveal-2">热爱玄学,也热爱计算机科学。一边写代码,一边研究<span class="nowrap">奇门</span>、<span class="nowrap">八字</span>与<span class="nowrap">六爻</span>。</p>
+
+      <div class="hero-actions reveal reveal-3">
+        <a class="btn btn-primary" href="https://ai.letfate.com">进入 FateClaw</a>
+        <a class="btn btn-ghost" href="https://github.com/Coaixy" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
     </div>
-  </div>
 
-  <!-- 右侧奇门九宫罗盘：墨线 + 朱砂点睛 -->
-  <div class="hero-qimen reveal reveal-delay-2" aria-hidden="true">
-    <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- 罗盘线条保持稳定，九宫本体便于识别；外侧二十八星宿环负责旋转动效 -->
-      <g class="qimen-compass">
-        <circle cx="300" cy="300" r="286" stroke="rgba(38,34,28,0.35)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="270" stroke="rgba(38,34,28,0.15)" stroke-width="0.5" stroke-dasharray="4 8"/>
-        <circle cx="300" cy="300" r="236" stroke="rgba(192,63,43,0.14)" stroke-width="0.5" stroke-dasharray="2 9"/>
-        <line x1="300" y1="18" x2="300" y2="92" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
-        <line x1="300" y1="508" x2="300" y2="582" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
-        <line x1="18" y1="300" x2="92" y2="300" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
-        <line x1="508" y1="300" x2="582" y2="300" stroke="rgba(192,63,43,0.50)" stroke-width="0.7"/>
-        <line x1="100" y1="100" x2="152" y2="152" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
-        <line x1="500" y1="100" x2="448" y2="152" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
-        <line x1="500" y1="500" x2="448" y2="448" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
-        <line x1="100" y1="500" x2="152" y2="448" stroke="rgba(38,34,28,0.20)" stroke-width="0.6"/>
-      </g>
-      <g class="qimen-ring">
-        <circle cx="300" cy="300" r="258" stroke="rgba(38,34,28,0.26)" stroke-width="0.8"/>
-        <circle cx="300" cy="300" r="228" stroke="rgba(192,63,43,0.12)" stroke-width="0.6" stroke-dasharray="2 10"/>
-        <!-- 二十八星宿从角宿开始顺时针排布，作为九宫外层天象环 -->
-        <g class="xiu-mark" transform="rotate(0 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">角</text></g>
-        <g class="xiu-mark" transform="rotate(12.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">亢</text></g>
-        <g class="xiu-mark" transform="rotate(25.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">氐</text></g>
-        <g class="xiu-mark" transform="rotate(38.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">房</text></g>
-        <g class="xiu-mark" transform="rotate(51.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">心</text></g>
-        <g class="xiu-mark" transform="rotate(64.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">尾</text></g>
-        <g class="xiu-mark" transform="rotate(77.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">箕</text></g>
-        <g class="xiu-mark" transform="rotate(90 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">斗</text></g>
-        <g class="xiu-mark" transform="rotate(102.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">牛</text></g>
-        <g class="xiu-mark" transform="rotate(115.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">女</text></g>
-        <g class="xiu-mark" transform="rotate(128.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">虚</text></g>
-        <g class="xiu-mark" transform="rotate(141.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">危</text></g>
-        <g class="xiu-mark" transform="rotate(154.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">室</text></g>
-        <g class="xiu-mark" transform="rotate(167.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">壁</text></g>
-        <g class="xiu-mark" transform="rotate(180 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">奎</text></g>
-        <g class="xiu-mark" transform="rotate(192.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">娄</text></g>
-        <g class="xiu-mark" transform="rotate(205.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">胃</text></g>
-        <g class="xiu-mark" transform="rotate(218.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">昴</text></g>
-        <g class="xiu-mark" transform="rotate(231.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">毕</text></g>
-        <g class="xiu-mark" transform="rotate(244.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">觜</text></g>
-        <g class="xiu-mark" transform="rotate(257.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">参</text></g>
-        <g class="xiu-mark" transform="rotate(270 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">井</text></g>
-        <g class="xiu-mark" transform="rotate(282.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">鬼</text></g>
-        <g class="xiu-mark" transform="rotate(295.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">柳</text></g>
-        <g class="xiu-mark" transform="rotate(308.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">星</text></g>
-        <g class="xiu-mark" transform="rotate(321.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">张</text></g>
-        <g class="xiu-mark" transform="rotate(334.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">翼</text></g>
-        <g class="xiu-mark" transform="rotate(347.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">轸</text></g>
-      </g>
-      <!-- 洛书九宫：上南下北，左东右西，是奇门盘面常见的展示方向 -->
-      <g class="qimen-grid">
-        <rect x="135" y="135" width="330" height="330" stroke="rgba(38,34,28,0.42)" stroke-width="1" fill="rgba(255,253,248,0.55)"/>
-        <rect x="245" y="245" width="110" height="110" fill="rgba(192,63,43,0.06)" stroke="rgba(192,63,43,0.32)" stroke-width="0.8"/>
-        <line x1="245" y1="135" x2="245" y2="465" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
-        <line x1="355" y1="135" x2="355" y2="465" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
-        <line x1="135" y1="245" x2="465" y2="245" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
-        <line x1="135" y1="355" x2="465" y2="355" stroke="rgba(38,34,28,0.28)" stroke-width="0.8"/>
+    <!-- 奇门九宫罗盘:宣纸白线 + 朱砂点睛,外层二十八星宿环缓慢旋转 -->
+    <div class="hero-compass reveal reveal-2" aria-hidden="true">
+      <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g>
+          <circle cx="300" cy="300" r="286" stroke="rgba(237,230,216,0.28)" stroke-width="0.8"/>
+          <circle cx="300" cy="300" r="270" stroke="rgba(237,230,216,0.12)" stroke-width="0.5" stroke-dasharray="4 8"/>
+        </g>
+        <!-- 内侧朱砂虚线环:与星宿环反向旋转,形成双环相对运动 -->
+        <g class="ring-rev">
+          <circle cx="300" cy="300" r="236" stroke="rgba(224,89,63,0.30)" stroke-width="0.6" stroke-dasharray="2 9"/>
+        </g>
+        <g>
+          <line x1="300" y1="18" x2="300" y2="92" stroke="rgba(224,89,63,0.55)" stroke-width="0.7"/>
+          <line x1="300" y1="508" x2="300" y2="582" stroke="rgba(224,89,63,0.55)" stroke-width="0.7"/>
+          <line x1="18" y1="300" x2="92" y2="300" stroke="rgba(224,89,63,0.55)" stroke-width="0.7"/>
+          <line x1="508" y1="300" x2="582" y2="300" stroke="rgba(224,89,63,0.55)" stroke-width="0.7"/>
+          <line x1="100" y1="100" x2="152" y2="152" stroke="rgba(237,230,216,0.16)" stroke-width="0.6"/>
+          <line x1="500" y1="100" x2="448" y2="152" stroke="rgba(237,230,216,0.16)" stroke-width="0.6"/>
+          <line x1="500" y1="500" x2="448" y2="448" stroke="rgba(237,230,216,0.16)" stroke-width="0.6"/>
+          <line x1="100" y1="500" x2="152" y2="448" stroke="rgba(237,230,216,0.16)" stroke-width="0.6"/>
+        </g>
+        <g class="ring-spin">
+          <circle cx="300" cy="300" r="258" stroke="rgba(237,230,216,0.2)" stroke-width="0.8"/>
+          <circle cx="300" cy="300" r="228" stroke="rgba(224,89,63,0.18)" stroke-width="0.6" stroke-dasharray="2 10"/>
+          <!-- 二十八星宿从角宿开始顺时针排布,作为九宫外层天象环 -->
+          <g class="xiu-mark" transform="rotate(0 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">角</text></g>
+          <g class="xiu-mark" transform="rotate(12.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">亢</text></g>
+          <g class="xiu-mark" transform="rotate(25.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">氐</text></g>
+          <g class="xiu-mark" transform="rotate(38.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">房</text></g>
+          <g class="xiu-mark" transform="rotate(51.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">心</text></g>
+          <g class="xiu-mark" transform="rotate(64.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">尾</text></g>
+          <g class="xiu-mark" transform="rotate(77.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">箕</text></g>
+          <g class="xiu-mark" transform="rotate(90 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">斗</text></g>
+          <g class="xiu-mark" transform="rotate(102.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">牛</text></g>
+          <g class="xiu-mark" transform="rotate(115.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">女</text></g>
+          <g class="xiu-mark" transform="rotate(128.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">虚</text></g>
+          <g class="xiu-mark" transform="rotate(141.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">危</text></g>
+          <g class="xiu-mark" transform="rotate(154.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">室</text></g>
+          <g class="xiu-mark" transform="rotate(167.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">壁</text></g>
+          <g class="xiu-mark" transform="rotate(180 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">奎</text></g>
+          <g class="xiu-mark" transform="rotate(192.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">娄</text></g>
+          <g class="xiu-mark" transform="rotate(205.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">胃</text></g>
+          <g class="xiu-mark" transform="rotate(218.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">昴</text></g>
+          <g class="xiu-mark" transform="rotate(231.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">毕</text></g>
+          <g class="xiu-mark" transform="rotate(244.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">觜</text></g>
+          <g class="xiu-mark" transform="rotate(257.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">参</text></g>
+          <g class="xiu-mark" transform="rotate(270 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">井</text></g>
+          <g class="xiu-mark" transform="rotate(282.857 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">鬼</text></g>
+          <g class="xiu-mark" transform="rotate(295.714 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">柳</text></g>
+          <g class="xiu-mark" transform="rotate(308.571 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">星</text></g>
+          <g class="xiu-mark" transform="rotate(321.429 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">张</text></g>
+          <g class="xiu-mark" transform="rotate(334.286 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">翼</text></g>
+          <g class="xiu-mark" transform="rotate(347.143 300 300)"><line x1="300" y1="42" x2="300" y2="56"/><text class="xiu-label" x="300" y="72">轸</text></g>
+        </g>
+        <!-- 洛书九宫:上南下北,左东右西 -->
+        <g>
+          <rect x="135" y="135" width="330" height="330" stroke="rgba(237,230,216,0.32)" stroke-width="1" fill="rgba(22,19,15,0.55)"/>
+          <rect x="245" y="245" width="110" height="110" fill="rgba(224,89,63,0.08)" stroke="rgba(224,89,63,0.4)" stroke-width="0.8"/>
+          <line x1="245" y1="135" x2="245" y2="465" stroke="rgba(237,230,216,0.2)" stroke-width="0.8"/>
+          <line x1="355" y1="135" x2="355" y2="465" stroke="rgba(237,230,216,0.2)" stroke-width="0.8"/>
+          <line x1="135" y1="245" x2="465" y2="245" stroke="rgba(237,230,216,0.2)" stroke-width="0.8"/>
+          <line x1="135" y1="355" x2="465" y2="355" stroke="rgba(237,230,216,0.2)" stroke-width="0.8"/>
 
-        <text class="qimen-main" x="190" y="178">巽</text>
-        <text class="qimen-sub" x="190" y="212">四 · 东南</text>
-        <text class="qimen-main" x="300" y="178">离</text>
-        <text class="qimen-sub" x="300" y="212">九 · 南</text>
-        <text class="qimen-main" x="410" y="178">坤</text>
-        <text class="qimen-sub" x="410" y="212">二 · 西南</text>
+          <text class="qimen-main" x="190" y="178">巽</text>
+          <text class="qimen-sub" x="190" y="212">四 · 东南</text>
+          <text class="qimen-main" x="300" y="178">离</text>
+          <text class="qimen-sub" x="300" y="212">九 · 南</text>
+          <text class="qimen-main" x="410" y="178">坤</text>
+          <text class="qimen-sub" x="410" y="212">二 · 西南</text>
 
-        <text class="qimen-main" x="190" y="288">震</text>
-        <text class="qimen-sub" x="190" y="322">三 · 东</text>
-        <text class="qimen-main" x="300" y="288">中</text>
-        <text class="qimen-sub" x="300" y="322">五 · 奇门</text>
-        <text class="qimen-main" x="410" y="288">兑</text>
-        <text class="qimen-sub" x="410" y="322">七 · 西</text>
+          <text class="qimen-main" x="190" y="288">震</text>
+          <text class="qimen-sub" x="190" y="322">三 · 东</text>
+          <text class="qimen-main qimen-center" x="300" y="288">中</text>
+          <text class="qimen-sub" x="300" y="322">五 · 奇门</text>
+          <text class="qimen-main" x="410" y="288">兑</text>
+          <text class="qimen-sub" x="410" y="322">七 · 西</text>
 
-        <text class="qimen-main" x="190" y="398">艮</text>
-        <text class="qimen-sub" x="190" y="432">八 · 东北</text>
-        <text class="qimen-main" x="300" y="398">坎</text>
-        <text class="qimen-sub" x="300" y="432">一 · 北</text>
-        <text class="qimen-main" x="410" y="398">乾</text>
-        <text class="qimen-sub" x="410" y="432">六 · 西北</text>
-      </g>
-      <g>
-        <text class="qimen-direction" x="300" y="84">南</text>
-        <text class="qimen-direction" x="300" y="516">北</text>
-        <text class="qimen-direction" x="84" y="300">东</text>
-        <text class="qimen-direction" x="516" y="300">西</text>
-      </g>
-    </svg>
-  </div>
+          <text class="qimen-main" x="190" y="398">艮</text>
+          <text class="qimen-sub" x="190" y="432">八 · 东北</text>
+          <text class="qimen-main" x="300" y="398">坎</text>
+          <text class="qimen-sub" x="300" y="432">一 · 北</text>
+          <text class="qimen-main" x="410" y="398">乾</text>
+          <text class="qimen-sub" x="410" y="432">六 · 西北</text>
+        </g>
+        <!-- 方位字收进星宿环内侧,避免与旋转的宿名重叠 -->
+        <g>
+          <text class="qimen-direction" x="300" y="110">南</text>
+          <text class="qimen-direction" x="300" y="490">北</text>
+          <text class="qimen-direction" x="110" y="300">东</text>
+          <text class="qimen-direction" x="490" y="300">西</text>
+        </g>
+      </svg>
+    </div>
   </div>
 </header>
 
 <!-- ============================================================
-     Agent 能力概览
+     第二屏:一半玄学,一半代码
      ============================================================ -->
-<section id="agent-capabilities" class="agent-overview">
-  <div class="agent-overview-header">
-    <h2 class="section-title reveal" data-i18n="agent.title">把玄学解读做成真正能用的助手</h2>
-    <p class="section-subtitle reveal reveal-delay-1" data-i18n="agent.subtitle">FateClaw 先把盘排准，再结合你的问题与资料，把复杂术数转成清晰、可追问的答案。</p>
-  </div>
+<section id="about" class="about snap-section">
+  <div class="wrap">
+    <h2 class="sec-title reveal">一半玄学,一半代码</h2>
+    <p class="sec-sub reveal reveal-1">两套看起来不相干的系统,一套解释世界,一套改写世界。我两边都想要。</p>
 
-  <div class="agent-overview-layout">
-    <article class="agent-panel agent-panel-main reveal">
-      <!-- 先天八卦环（与产品端 BaguaRing 同款线描）：自正上方起顺时针为乾巽坎艮坤震离兑 -->
-      <svg class="agent-panel-ring" viewBox="0 0 360 360" aria-hidden="true">
-        <circle cx="180" cy="180" r="150" fill="none" stroke="currentColor" stroke-width="1"/>
-        <circle cx="180" cy="180" r="112" fill="none" stroke="currentColor" stroke-width="1"/>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(0 180 180)">☰</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(45 180 180)">☴</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(90 180 180)">☵</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(135 180 180)">☶</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(180 180 180)">☷</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(225 180 180)">☳</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(270 180 180)">☲</text>
-        <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(315 180 180)">☱</text>
-      </svg>
-      <span class="agent-panel-label" data-i18n="agent.chartLabel">排得准</span>
-      <h3 data-i18n="agent.chartTitle">先把盘面算清楚</h3>
-      <p data-i18n="agent.chartDesc">八字、紫微、奇门、六爻等先由确定规则排盘，基础信息更稳。</p>
-    </article>
-
-    <div class="agent-panel-stack">
-      <article class="agent-panel reveal reveal-delay-1">
-        <span class="agent-panel-label" data-i18n="agent.contextLabel">更懂你</span>
-        <h3 data-i18n="agent.contextTitle">不止给通用答案</h3>
-        <p data-i18n="agent.contextDesc">可以结合你的资料、偏好和历史问题，让解读更贴近真实处境。</p>
+    <div class="about-grid">
+      <!-- 玄学面板 -->
+      <article class="panel panel-mystic reveal">
+        <svg class="bagua-bg" viewBox="0 0 360 360" aria-hidden="true">
+          <circle cx="180" cy="180" r="150" fill="none" stroke="currentColor" stroke-width="1"/>
+          <circle cx="180" cy="180" r="112" fill="none" stroke="currentColor" stroke-width="1"/>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(0 180 180)">☰</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(45 180 180)">☴</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(90 180 180)">☵</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(135 180 180)">☶</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(180 180 180)">☷</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(225 180 180)">☳</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(270 180 180)">☲</text>
+          <text x="180" y="62" text-anchor="middle" dominant-baseline="central" font-size="30" fill="currentColor" transform="rotate(315 180 180)">☱</text>
+        </svg>
+        <h3>玄学</h3>
+        <p>从奇门的时空格局到八字的长期节律,我把术数当成一套观察世界的坐标系。盘面先算清楚,结论才谈得上边界。</p>
       </article>
 
-      <article class="agent-panel reveal reveal-delay-2">
-        <span class="agent-panel-label" data-i18n="agent.readingLabel">讲得清</span>
-        <h3 data-i18n="agent.readingTitle">复杂术数变成白话建议</h3>
-        <p data-i18n="agent.readingDesc">把关键依据、提醒和可选行动说清楚，看完还能继续追问。</p>
+      <!-- 代码面板 -->
+      <article class="panel panel-code reveal reveal-1">
+        <h3>计算机科学</h3>
+        <p>写后端,搭 Agent,折腾基础设施。最理想的状态是把玄学的规则塞进确定性的代码里。</p>
+        <div class="code-line" aria-hidden="true">
+          <span class="kw">const</span> life = <span class="str">mystic</span> ⊕ <span class="str">code</span>;
+        </div>
+      </article>
+
+      <!-- 现在面板:FateClaw 只作为低调入口存在 -->
+      <article class="panel panel-now reveal reveal-2">
+        <h3>现在</h3>
+        <p>业余在折腾 <a class="inline-link" href="https://ai.letfate.com">FateClaw</a>,一个东方玄学智能体,把排盘和 AI 解读连在一起。</p>
       </article>
     </div>
   </div>
-
-  <div class="agent-advantage-strip reveal reveal-delay-2">
-    <div>
-      <strong data-i18n="agent.advantage1Title">更省心</strong>
-      <p data-i18n="agent.advantage1Desc">不用自己切换术数、整理规则，直接从问题进入解读。</p>
-    </div>
-    <div>
-      <strong data-i18n="agent.advantage2Title">更可靠</strong>
-      <p data-i18n="agent.advantage2Desc">先有盘面，再谈解释，避免凭空给出玄而又玄的判断。</p>
-    </div>
-    <div>
-      <strong data-i18n="agent.advantage3Title">更能追问</strong>
-      <p data-i18n="agent.advantage3Desc">一次解读之后，还能继续聊选择、时机、风险和下一步。</p>
-    </div>
-  </div>
 </section>
 
 <!-- ============================================================
-     术数入门
+     第三屏:咨询(顶部卦象跑马灯,底部页脚)
      ============================================================ -->
-<section id="systems" class="systems-overview">
-  <div class="systems-header">
-    <h2 class="section-title reveal" data-i18n="systems.title">术数不是同一套工具</h2>
-    <p class="section-subtitle reveal reveal-delay-1" data-i18n="systems.subtitle">奇门、八字、紫微、六爻和梅花易数各自回答不同层级的问题。先分清方法，解读才有边界。</p>
+<section id="consult" class="consult snap-section">
+  <!-- 卦象跑马灯:装饰性流动带(内容重复两遍以实现无缝循环) -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span><b>☰</b>乾</span><span><b>☱</b>兑</span><span><b>☲</b>离</span><span><b>☳</b>震</span>
+      <span><b>☴</b>巽</span><span><b>☵</b>坎</span><span><b>☶</b>艮</span><span><b>☷</b>坤</span>
+      <span>奇门遁甲</span><span>八字</span><span>紫微斗数</span><span>六爻</span><span>梅花易数</span>
+      <span><b>☰</b>乾</span><span><b>☱</b>兑</span><span><b>☲</b>离</span><span><b>☳</b>震</span>
+      <span><b>☴</b>巽</span><span><b>☵</b>坎</span><span><b>☶</b>艮</span><span><b>☷</b>坤</span>
+      <span>奇门遁甲</span><span>八字</span><span>紫微斗数</span><span>六爻</span><span>梅花易数</span>
+    </div>
   </div>
 
-  <div class="system-card-grid" aria-label="Chinese metaphysics systems">
-    <a class="system-card reveal" href="pages/qimen.html">
-      <span class="system-card-symbol" aria-hidden="true">奇</span>
-      <span class="system-card-label" data-i18n="systems.qimenLabel">奇门遁甲</span>
-      <h3 data-i18n="systems.qimenTitle">时空格局与取用</h3>
-      <p data-i18n="systems.qimenDesc">以时间、方位、九宫和门星神组合成局，适合看情势、取势和行动窗口。</p>
-      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
-    </a>
+  <div class="wrap consult-main">
+    <h2 class="sec-title reveal">咨询</h2>
+    <p class="sec-sub reveal reveal-1">玄学也好,代码也好,一事一问。把问题描述清楚,我们约时间聊。</p>
 
-    <a class="system-card reveal reveal-delay-1" href="pages/bazi.html">
-      <span class="system-card-symbol" aria-hidden="true">八</span>
-      <span class="system-card-label" data-i18n="systems.baziLabel">八字</span>
-      <h3 data-i18n="systems.baziTitle">命局结构与阶段节律</h3>
-      <p data-i18n="systems.baziDesc">以出生年月日时组成四柱，看五行、十神和大运流年之间的长期结构。</p>
-      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
-    </a>
-
-    <a class="system-card reveal reveal-delay-2" href="pages/ziwei.html">
-      <span class="system-card-symbol" aria-hidden="true">紫</span>
-      <span class="system-card-label" data-i18n="systems.ziweiLabel">紫微斗数</span>
-      <h3 data-i18n="systems.ziweiTitle">宫位、星曜与人生议题</h3>
-      <p data-i18n="systems.ziweiDesc">以十二宫与星曜组合观察人生主题，擅长把命局拆成关系、事业、财帛等场景。</p>
-      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
-    </a>
-
-    <a class="system-card reveal" href="pages/liuyao.html">
-      <span class="system-card-symbol" aria-hidden="true">爻</span>
-      <span class="system-card-label" data-i18n="systems.liuyaoLabel">六爻</span>
-      <h3 data-i18n="systems.liuyaoTitle">一事一占的变化判断</h3>
-      <p data-i18n="systems.liuyaoDesc">从六个爻位、动变、世应和用神入手，围绕一个具体问题判断过程与结果。</p>
-      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
-    </a>
-
-    <a class="system-card system-card-wide reveal reveal-delay-1" href="pages/meihua.html">
-      <span class="system-card-symbol" aria-hidden="true">梅</span>
-      <span class="system-card-label" data-i18n="systems.meihuaLabel">梅花易数</span>
-      <h3 data-i18n="systems.meihuaTitle">象、数、时机的快速取象</h3>
-      <p data-i18n="systems.meihuaDesc">重视当下触发的象与数，用更轻量的方式把事件转成卦象和判断线索。</p>
-      <span class="system-card-link" data-i18n="systems.readMore">查看入门</span>
-    </a>
-  </div>
-</section>
-
-<!-- ============================================================
-     命与运
-     ============================================================ -->
-<section id="architecture">
-  <h2 class="section-title reveal" data-i18n="arch.title">命、运与选择怎么分工</h2>
-  <p class="section-subtitle reveal reveal-delay-1" data-i18n="arch.subtitle">命像车，运像路。FateClaw 先看车的结构，再看路况、时机和岔路，把占卜与选择放在可行动的位置。</p>
-
-  <div class="compare-grid">
-    <article class="compare-card reveal" data-symbol="车">
-      <span class="compare-label" data-i18n="arch.destinyLabel">命</span>
-      <h3 data-i18n="arch.destinyTitle">命是车：结构与承载</h3>
-      <p data-i18n="arch.destinyDesc">命更像车的底盘、发动机和载重上限，描述一个人先天结构、惯性、优势和容易消耗的地方。</p>
-      <div class="compare-points">
-        <div class="compare-point">
-          <strong data-i18n="arch.destinyProsTitle">看什么</strong>
-          <p data-i18n="arch.destinyPros">看底层配置、性格结构、长期倾向与阶段节律，适合回答“我这辆车适合怎么开”。</p>
+    <div class="consult-card reveal reveal-1">
+      <div class="consult-price">
+        <span class="amount">88.88</span>
+        <span class="unit">元 / 次</span>
+      </div>
+      <div class="consult-contact">
+        <div class="contact-row">
+          <span class="label">邮箱</span>
+          <a class="inline-link" href="mailto:coaixy@outlook.com">coaixy@outlook.com</a>
         </div>
-        <div class="compare-point">
-          <strong data-i18n="arch.destinyConsTitle">边界</strong>
-          <p data-i18n="arch.destinyCons">车的结构不是全部结果，同一辆车在不同路况、速度和选择下，会走出很不一样的体验。</p>
+        <div class="contact-row">
+          <span class="label">QQ</span>
+          <span class="value">3045831167</span>
         </div>
       </div>
-    </article>
+    </div>
+  </div>
 
-    <article class="compare-card reveal reveal-delay-1" data-symbol="路">
-      <span class="compare-label" data-i18n="arch.divinationLabel">运</span>
-      <h3 data-i18n="arch.divinationTitle">运是路：路况与岔口</h3>
-      <p data-i18n="arch.divinationDesc">运更像正在走的路，包含外部环境、阶段机会、阻力、时机和那些需要当下判断的岔口。</p>
-      <div class="compare-points">
-        <div class="compare-point">
-          <strong data-i18n="arch.divinationProsTitle">占卜看路</strong>
-          <p data-i18n="arch.divinationPros">占卜把问题收束到当前路口，帮助判断路况、时机、风险和不同路线的机会成本。</p>
-        </div>
-        <div class="compare-point">
-          <strong data-i18n="arch.divinationConsTitle">选择改路</strong>
-          <p data-i18n="arch.divinationCons">选择不会凭空换一辆车，但会影响何时出发、在哪变道、避开什么坑，以及把车开到哪条路上。</p>
-        </div>
+  <!-- 页脚:并入第三屏底部 -->
+  <footer>
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <span class="seal" aria-hidden="true">奕</span>
+        小奕 · Coaixy
       </div>
-    </article>
-  </div>
-
-  <div class="compare-choice reveal reveal-delay-2">
-    <h3 data-i18n="arch.choiceTitle">占卜不是改命，是帮助选路</h3>
-    <p data-i18n="arch.choiceDesc">命盘给出车的结构，占卜给出此刻路口的信号。真正改变“运”的，往往是看清路况之后做出的选择、节奏和行动。</p>
-  </div>
-</section>
-
-<!-- ============================================================
-     FAQ
-     ============================================================ -->
-<section id="faq">
-  <h2 class="section-title reveal" data-i18n="faq.title">FAQs</h2>
-  <p class="section-subtitle reveal reveal-delay-1" data-i18n="faq.subtitle">把常见边界讲清楚：FateClaw 做排盘和辅助解读，不把玄学包装成绝对结论。</p>
-
-  <div class="faq-list">
-    <details class="faq-item reveal">
-      <summary data-i18n="faq.q1">FateClaw 是算命工具还是 AI 聊天？</summary>
-      <p data-i18n="faq.a1">它先用确定性引擎完成排盘，再让 LLM 结合 Tool、Skill 和用户问题进行解读。AI 不是凭空编盘，而是围绕结构化材料工作。</p>
-    </details>
-
-    <details class="faq-item reveal reveal-delay-1">
-      <summary data-i18n="faq.q2">占卜和命理可以一起用吗？</summary>
-      <p data-i18n="faq.a2">可以。命理提供长期背景，占卜处理当下问题。组合使用时需要明确各自回答什么，避免把短期卦象当成长期命盘。</p>
-    </details>
-
-    <details class="faq-item reveal reveal-delay-2">
-      <summary data-i18n="faq.q3">LLM 会不会胡编结论？</summary>
-      <p data-i18n="faq.a3">FateClaw 的方向是让排盘、工具调用和 Skill 来源可追溯，降低模型自由发挥的空间。但解读仍是辅助参考，不是绝对事实。</p>
-    </details>
-
-    <details class="faq-item reveal">
-      <summary data-i18n="faq.q4">Skill 在这里是什么？</summary>
-      <p data-i18n="faq.a4">Skill 是创作者沉淀的流派规则、案例经验和解释边界。LLM 在需要时读取授权 Skill，让解读更接近特定体系。</p>
-    </details>
-
-    <details class="faq-item reveal reveal-delay-1">
-      <summary data-i18n="faq.q5">结果能直接用于现实决策吗？</summary>
-      <p data-i18n="faq.a5">不建议。结果适合作为自我观察、问题拆解和备选视角，不能替代法律、医疗、财务、投资等专业建议。</p>
-    </details>
-
-    <details class="faq-item reveal reveal-delay-2">
-      <summary data-i18n="faq.q6">目前支持哪些术数？</summary>
-      <p data-i18n="faq.a6">当前页面展示的核心方向包括奇门遁甲、八字、紫微斗数、六爻和梅花易数，后续能力以实际产品开放为准。</p>
-    </details>
-  </div>
-</section>
-
-<!-- ============================================================
-     关于我：古籍牌记式的个人签名块
-     ============================================================ -->
-<section id="about" class="colophon">
-  <div class="colophon-card reveal">
-    <span class="colophon-seal" aria-hidden="true">小奕</span>
-    <div class="colophon-body">
-      <div class="colophon-name">小奕 · Coaixy</div>
-      <p data-i18n="about.intro">这里是小奕的个人主页。FateClaw（命枢）是我目前主打的作品：一个东方玄学智能体。</p>
-      <a class="colophon-link" href="https://github.com/Coaixy" target="_blank" rel="noopener noreferrer">github.com/Coaixy</a>
+      <div class="footer-meta">
+        <a href="https://github.com/Coaixy" target="_blank" rel="noopener noreferrer">github.com/Coaixy</a>
+        <span>&copy; 2026 小奕</span>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">浙ICP备2024132053号</a>
+      </div>
     </div>
-  </div>
+  </footer>
 </section>
 
-<!-- ============================================================
-     Footer
-     ============================================================ -->
-<footer>
-  <div class="footer-content">
-    <div class="footer-logo">
-      <img class="mark" src="assets/fateclaw-mark.png" alt="" width="24" height="24" aria-hidden="true">
-      FateClaw <span class="cn" data-i18n="footer.logoCn">命枢</span>
-    </div>
-    <div class="footer-copy" data-i18n="footer.copy">&copy; 2026 小奕 · Coaixy</div>
-    <a class="footer-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-i18n="footer.icp">浙ICP备2024132053号</a>
-  </div>
-</footer>
-
-<!-- ============================================================
-     JavaScript
-     ============================================================ -->
-<script src="js/i18n.js" defer></script>
-<script src="js/particles.js" defer></script>
-<script src="js/main.js" defer></script>
+<script src="js/home.js" defer></script>
 </body>
 </html>

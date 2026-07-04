@@ -1,0 +1,964 @@
+/* ============================================================
+   小奕想要三合木 · 个人主页「玄夜 · 黑金朱砂」主题
+   只被 index.html 引用。
+   设计基调:墨黑夜色 + 宣纸白文字 + 朱砂/鎏金双彩,辉光点亮画面。
+   动效原则:只动 transform 与 opacity,全部受 prefers-reduced-motion 约束。
+   ============================================================ */
+
+:root {
+  /* 玄夜色阶:带暖调的墨黑,避免纯黑 #000 */
+  --ink-950: #0f0e0c;            /* 页面底色 */
+  --ink-900: #171410;            /* 面板底色 */
+  --ink-850: #1e1a14;            /* 面板悬浮 / 高一级底色 */
+  --line: rgba(237, 230, 216, 0.16);   /* 常规描边 */
+  --line-faint: rgba(237, 230, 216, 0.08);
+
+  /* 宣纸白文字色阶 */
+  --paper: #f0e9db;              /* 主文字 */
+  --paper-dim: rgba(240, 233, 219, 0.74);  /* 次级文字 */
+  --paper-faint: rgba(240, 233, 219, 0.46); /* 弱化文字(仅用于大号或装饰) */
+
+  /* 朱砂 + 鎏金:双彩 */
+  --cinnabar: #e0593f;
+  --cinnabar-bright: #ef7a52;
+  --cinnabar-glow: rgba(224, 89, 63, 0.22);
+  --gold: #e9b96f;
+  --gold-bright: #f3cf8d;
+  --gold-dim: rgba(233, 185, 111, 0.55);
+  --gold-faint: rgba(233, 185, 111, 0.16);
+
+  --serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+
+  --radius: 14px;                /* 全页统一圆角制度:面板 14px,按钮胶囊 */
+  --nav-h: 68px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* 全屏翻页:根滚动容器按屏吸附,滚一下就翻一屏 */
+html {
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+
+body {
+  background: var(--ink-950);
+  color: var(--paper);
+  font-family: var(--sans);
+  line-height: 1.8;
+  overflow-x: hidden;
+}
+
+/* 星云氛围层:朱砂与鎏金两团光晕缓慢漂移,负责"点亮"黑夜 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -22%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(640px 460px at 74% 12%, rgba(224, 89, 63, 0.16), transparent 62%),
+    radial-gradient(720px 540px at 12% 78%, rgba(233, 185, 111, 0.10), transparent 64%),
+    radial-gradient(500px 380px at 42% 44%, rgba(224, 89, 63, 0.06), transparent 60%);
+  animation: nebula-drift 26s ease-in-out infinite alternate;
+}
+@keyframes nebula-drift {
+  to { transform: translate3d(3%, -2.5%, 0) scale(1.07); }
+}
+
+::selection { background: var(--cinnabar); color: #17110d; }
+
+/* 夜空画布:固定在最底层,由 home.js 绘制星点与流星 */
+#sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ============================================================
+   通用版式
+   ============================================================ */
+.wrap {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+.sec-title {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+/* 标题下的鎏金短线,给章节一个发光的落款 */
+.sec-title::after {
+  content: "";
+  display: block;
+  width: 56px;
+  height: 2px;
+  margin-top: 18px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--cinnabar));
+  box-shadow: 0 0 14px rgba(233, 185, 111, 0.55);
+}
+
+.sec-sub {
+  margin-top: 16px;
+  max-width: 34em;
+  color: var(--paper-dim);
+  font-size: 1rem;
+}
+
+/* ============================================================
+   开场动画:八卦轮转 → 朱砂印章 → 幕布拉开
+   时间轴由 home.js 驱动:.stamp 进入印章阶段,.open 拉开幕布。
+   ============================================================ */
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  cursor: pointer;               /* 点击任意处跳过 */
+}
+/* 上下两片幕布,高度略过半避免中缝露光 */
+.intro-half {
+  position: absolute;
+  left: 0; right: 0;
+  height: 50.5%;
+  background: var(--ink-950);
+  transition: transform 0.9s cubic-bezier(0.7, 0, 0.2, 1);
+}
+.intro-top { top: 0; }
+.intro-bottom { bottom: 0; }
+#intro.open .intro-top { transform: translateY(-101%); }
+#intro.open .intro-bottom { transform: translateY(101%); }
+
+.intro-center {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  transition: opacity 0.4s ease;
+}
+#intro.open .intro-center { opacity: 0; }
+
+/* 旋转细环:金环 + 朱砂缺口,罩在图阵外围 */
+.intro-ring {
+  position: absolute;
+  width: 340px; height: 340px;
+  border-radius: 50%;
+  border: 1px solid rgba(233, 185, 111, 0.28);
+  border-top-color: var(--cinnabar);
+  animation: intro-ring-spin 1.4s linear infinite;
+}
+@keyframes intro-ring-spin {
+  to { transform: rotate(360deg); }
+}
+/* 洛书成形时金环爆开 */
+#intro.phase2 .intro-ring {
+  animation: intro-ring-burst 0.7s var(--ease-out) forwards;
+}
+@keyframes intro-ring-burst {
+  to { transform: scale(1.7); opacity: 0; border-color: var(--cinnabar); }
+}
+
+/* 河图 / 洛书 图阵:两张 SVG 叠在同一格,阶段切换时交接 */
+.intro-chart {
+  grid-area: 1 / 1;
+  width: min(300px, 62vw);
+  height: auto;
+}
+/* 点阵:阳数鎏金实点,阴数朱砂空心点;逐点弹出 */
+.intro-chart .dot {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.intro-chart .yang { fill: var(--gold); }
+.intro-chart .yin { fill: none; stroke: var(--cinnabar); stroke-width: 1.6; }
+.intro-chart .link {
+  stroke: rgba(240, 233, 219, 0.16);
+  stroke-width: 1;
+  opacity: 0;
+}
+.intro-chart .grid-line {
+  stroke: rgba(240, 233, 219, 0.12);
+  stroke-width: 1;
+  fill: none;
+}
+@keyframes dot-pop {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes link-fade {
+  to { opacity: 1; }
+}
+/* 河图阶段:页面一载入点阵就按 JS 写好的 animation-delay 依次亮起 */
+#introHetu .dot { animation: dot-pop 0.4s var(--ease-out) forwards; }
+#introHetu .link { animation: link-fade 0.5s ease forwards; }
+/* 洛书藏在底下,等 .phase2 才登场 */
+.chart-b { opacity: 0; transform: scale(1.12); }
+#intro.phase2 #introHetu {
+  opacity: 0;
+  transform: scale(0.8) rotate(-10deg);
+  transition: opacity 0.45s ease, transform 0.45s var(--ease-out);
+}
+#intro.phase2 .chart-b {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.5s ease 0.08s, transform 0.5s var(--ease-out) 0.08s;
+}
+/* 洛书点阵的弹出动画在 .phase2 时刻才挂上,时间轴从此刻起算 */
+#intro.phase2 #introLuoshu .dot { animation: dot-pop 0.4s var(--ease-out) forwards; }
+
+/* 图名落款:河图 → 洛书(JS 切字) */
+.intro-caption {
+  position: absolute;
+  top: calc(50% + 178px);
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;            /* 抵消末字后的字距,视觉居中 */
+  color: var(--gold-dim);
+  white-space: nowrap;
+  transition: opacity 0.25s ease;
+}
+
+/* 洛书成形时站名浮现 */
+.intro-tag {
+  position: absolute;
+  top: calc(50% + 212px);
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;            /* 抵消末字后的字距,视觉居中 */
+  color: var(--paper-dim);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease 0.22s, transform 0.5s var(--ease-out) 0.22s;
+}
+#intro.phase2 .intro-tag { opacity: 1; transform: none; }
+
+/* 开场期间:锁滚动,导航与页码藏起,首屏内容按住不放 */
+body.intro-hold { overflow: hidden; }
+body.intro-hold .nav { transform: translateY(-110%); }
+body.intro-hold .dots { opacity: 0; }
+body.intro-hold .reveal {
+  opacity: 0 !important;
+  transform: translateY(46px) scale(0.985) !important;
+}
+
+/* ============================================================
+   分屏与切换动效
+   home.js 观察 .snap-section,进入视口加 .in、离开移除,
+   子元素的 .reveal 因此获得"翻到才登场,翻走就退场"的双向动画。
+   ============================================================ */
+.snap-section {
+  min-height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;      /* 大力滚动也一次只翻一屏 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(46px) scale(0.985);
+  transition: opacity 0.85s var(--ease-out), transform 0.85s var(--ease-out);
+}
+.snap-section.in .reveal { opacity: 1; transform: none; }
+.reveal-1 { transition-delay: 0.1s; }
+.reveal-2 { transition-delay: 0.2s; }
+.reveal-3 { transition-delay: 0.3s; }
+/* 退场时不留延迟,整屏干脆地让位 */
+.snap-section:not(.in) .reveal { transition-delay: 0s; transition-duration: 0.4s; }
+
+/* 右侧圆点页码 */
+.dots {
+  position: fixed;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: opacity 0.7s ease;
+}
+.dots a {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--paper-faint);
+  transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s var(--ease-out), box-shadow 0.3s ease;
+}
+.dots a:hover { border-color: var(--gold); transform: scale(1.3); }
+.dots a.active {
+  background: var(--cinnabar);
+  border-color: var(--cinnabar);
+  transform: scale(1.35);
+  box-shadow: 0 0 12px var(--cinnabar-glow), 0 0 26px var(--cinnabar-glow);
+}
+
+/* scroll-driven 视差:支持 view() 时间线的浏览器上,
+   每屏内容随滚动位置平移缩放,翻页带纵深感;不支持则优雅降级 */
+@supports (animation-timeline: view()) {
+  .hero-inner {
+    animation: slide-exit linear both;
+    animation-timeline: view();
+    animation-range: exit 0% exit 90%;
+  }
+  .about .wrap,
+  .consult-main {
+    animation: slide-enter linear both;
+    animation-timeline: view();
+    animation-range: entry 10% entry 90%;
+  }
+  @keyframes slide-exit {
+    to { transform: translateY(-90px) scale(0.94); opacity: 0.15; }
+  }
+  @keyframes slide-enter {
+    from { transform: translateY(90px) scale(0.96); opacity: 0.2; }
+  }
+}
+
+/* ============================================================
+   导航
+   ============================================================ */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 50;
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  transition: background 0.35s ease, border-color 0.35s ease, transform 0.7s var(--ease-out);
+  border-bottom: 1px solid transparent;
+}
+/* 滚过哨兵元素后落下墨色底 */
+.nav.scrolled {
+  background: rgba(15, 14, 12, 0.86);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom-color: var(--line-faint);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 1.06rem;
+  letter-spacing: 0.08em;
+}
+/* 朱砂印:一个字的方章,带微光 */
+.brand .seal {
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--cinnabar-bright), #b53a26);
+  color: var(--paper);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 16px var(--cinnabar-glow);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  list-style: none;
+}
+.nav-links a:not(.btn) {
+  position: relative;
+  font-size: 0.94rem;
+  color: var(--paper-dim);
+  letter-spacing: 0.06em;
+  transition: color 0.25s ease;
+}
+/* 鎏金下划线从左划入 */
+.nav-links a:not(.btn)::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -6px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--cinnabar));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease-out);
+}
+.nav-links a:not(.btn):hover { color: var(--paper); }
+.nav-links a:not(.btn):hover::after { transform: scaleX(1); }
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 40px; height: 40px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+}
+.menu-toggle span {
+  display: block;
+  width: 20px; height: 1.5px;
+  background: var(--paper);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.menu-toggle.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+.menu-toggle.open span:nth-child(2) { opacity: 0; }
+.menu-toggle.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+/* ============================================================
+   按钮:主按钮朱砂鎏金渐变实底,次按钮描边;统一胶囊形
+   ============================================================ */
+.btn {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 28px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  transition: transform 0.2s var(--ease-out), box-shadow 0.25s ease,
+              border-color 0.25s ease, color 0.25s ease;
+}
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: linear-gradient(115deg, var(--cinnabar) 20%, #e8834e 75%, var(--gold) 130%);
+  color: #17110d;                /* 深墨文字,对朱砂底对比度约 5:1 */
+  box-shadow: 0 8px 34px var(--cinnabar-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 44px rgba(224, 89, 63, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+/* 悬停时一道高光横扫而过 */
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -80%;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.55s var(--ease-out);
+}
+.btn-primary:hover::after { left: 130%; }
+
+.btn-ghost {
+  border: 1px solid var(--line);
+  color: var(--paper);
+}
+.btn-ghost:hover {
+  border-color: var(--gold-dim);
+  color: var(--gold-bright);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(233, 185, 111, 0.12);
+}
+
+/* ============================================================
+   Hero:左侧文案 + 右侧奇门罗盘
+   ============================================================ */
+.hero {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  padding-top: var(--nav-h);
+}
+
+.hero-inner {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: 40px;
+}
+
+/* 「三合木」印章:亥卯未三合成木局,是站名的出处 */
+.hero-seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+.hero-seal .stamp {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid rgba(233, 185, 111, 0.55);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 18px rgba(233, 185, 111, 0.18);
+}
+.hero-seal .stamp span {
+  display: grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  font-family: var(--serif);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gold);
+}
+.hero-seal .stamp span + span { border-left: 1px solid rgba(233, 185, 111, 0.35); }
+.hero-seal .note {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  color: var(--paper-faint);
+}
+
+.hero h1 {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(2.5rem, 5.6vw, 4.1rem);
+  line-height: 1.28;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 60px rgba(240, 233, 219, 0.12);
+}
+/* 「三合木」:鎏金→朱砂流光渐变字 */
+.hero h1 .accent {
+  background: linear-gradient(100deg, var(--gold-bright), var(--cinnabar) 42%, var(--gold) 72%, var(--cinnabar-bright));
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 5.5s linear infinite;
+  filter: drop-shadow(0 0 26px rgba(224, 89, 63, 0.35));
+}
+@keyframes shimmer {
+  to { background-position: -220% 0; }
+}
+
+.hero-sub {
+  margin-top: 22px;
+  max-width: 30em;
+  font-size: 1.05rem;
+  color: var(--paper-dim);
+}
+/* 防止术数名词被断行拆开 */
+.nowrap { white-space: nowrap; }
+
+.hero-actions {
+  margin-top: 38px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* 右侧奇门罗盘:宣纸白线 + 朱砂点睛,双层辉光,home.js 附加视差倾斜 */
+.hero-compass {
+  display: grid;
+  place-items: center;
+  perspective: 900px;            /* 给视差倾斜提供景深 */
+}
+/* 每次翻回首屏,罗盘都旋转着飞入 */
+.snap-section.in .hero-compass {
+  animation: compass-arrive 1.3s var(--ease-out) both;
+}
+@keyframes compass-arrive {
+  from { transform: rotate(-42deg) scale(0.86); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.hero-compass svg {
+  width: min(100%, 520px);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 0 26px rgba(224, 89, 63, 0.20)) drop-shadow(0 0 70px rgba(233, 185, 111, 0.10));
+  will-change: transform;
+}
+/* 外层星宿环顺时针,内侧朱砂虚线环逆时针,双环相对旋转 */
+.hero-compass .ring-spin {
+  transform-origin: 300px 300px;
+  animation: compass-spin 150s linear infinite;
+}
+.hero-compass .ring-rev {
+  transform-origin: 300px 300px;
+  animation: compass-spin 90s linear infinite reverse;
+}
+@keyframes compass-spin {
+  to { transform: rotate(360deg); }
+}
+.hero-compass .xiu-mark line { stroke: rgba(237, 230, 216, 0.35); stroke-width: 1; }
+.hero-compass .xiu-label {
+  fill: rgba(237, 230, 216, 0.5);
+  font-family: var(--serif);
+  font-size: 15px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.hero-compass .qimen-main {
+  fill: var(--paper);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+.hero-compass .qimen-sub {
+  fill: rgba(237, 230, 216, 0.45);
+  font-family: var(--serif);
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-anchor: middle;
+}
+/* 中宫「中」字:朱砂呼吸 */
+.hero-compass .qimen-center {
+  fill: var(--cinnabar-bright);
+  animation: center-pulse 3.2s ease-in-out infinite;
+}
+@keyframes center-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.hero-compass .qimen-direction {
+  fill: rgba(233, 185, 111, 0.85);
+  font-family: var(--serif);
+  font-size: 16px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* ============================================================
+   一半玄学,一半代码:1 高 + 2 叠的三格拼盘
+   ============================================================ */
+/* 第二屏:垂直居中,顶部给导航让位 */
+.about { padding: calc(var(--nav-h) + 20px) 0 40px; }
+.about .wrap { width: 100%; }
+
+.about-grid {
+  margin-top: 46px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+}
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius);
+  background: var(--ink-900);
+  padding: 34px 32px;
+  transition: border-color 0.3s ease, transform 0.3s var(--ease-out), box-shadow 0.3s ease;
+}
+/* 聚光灯:home.js 把指针坐标写进 --mx/--my,鎏金光斑跟随光标 */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(340px circle at var(--mx, 50%) var(--my, 50%), rgba(233, 185, 111, 0.10), transparent 62%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.panel:hover::before { opacity: 1; }
+.panel:hover {
+  border-color: var(--gold-faint);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4);
+}
+
+.panel h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.3rem;
+  letter-spacing: 0.05em;
+}
+.panel > p {
+  margin-top: 12px;
+  color: var(--paper-dim);
+  font-size: 0.96rem;
+  max-width: 30em;
+}
+
+/* 玄学面板:占满左列,带八卦环底纹 */
+.panel-mystic {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 400px;
+  background:
+    radial-gradient(560px 420px at 82% 6%, rgba(224, 89, 63, 0.12), transparent 65%),
+    var(--ink-900);
+}
+.panel-mystic .bagua-bg {
+  position: absolute;
+  top: -70px; right: -70px;
+  width: 340px; height: 340px;
+  color: rgba(233, 185, 111, 0.22);
+  pointer-events: none;
+}
+
+/* 代码面板:等宽字体点缀 */
+.panel-code .code-line {
+  margin-top: 22px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 2;
+  color: var(--paper-faint);
+}
+.panel-code .code-line .kw { color: var(--cinnabar-bright); }
+.panel-code .code-line .str { color: var(--gold); }
+
+/* 「现在」面板:朱砂淡染 */
+.panel-now {
+  background: linear-gradient(135deg, rgba(224, 89, 63, 0.14), rgba(233, 185, 111, 0.04) 62%), var(--ink-900);
+  border-color: rgba(224, 89, 63, 0.24);
+}
+
+/* 行内链接:朱砂下划线 */
+.inline-link {
+  color: var(--paper);
+  border-bottom: 1px solid rgba(224, 89, 63, 0.6);
+  transition: color 0.25s ease, border-color 0.25s ease;
+}
+.inline-link:hover { color: var(--cinnabar-bright); border-bottom-color: var(--cinnabar-bright); }
+
+/* ============================================================
+   卦象跑马灯:第三屏顶部的流动带(全页唯一 marquee)
+   ============================================================ */
+.marquee {
+  margin-top: calc(var(--nav-h) + 14px);
+  padding: 20px 0;
+  border-top: 1px solid var(--line-faint);
+  border-bottom: 1px solid var(--line-faint);
+  overflow: hidden;
+  /* 两端淡出,像从黑夜里流过 */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.marquee-track {
+  display: flex;
+  align-items: baseline;
+  gap: 64px;
+  width: max-content;
+  animation: marquee 36s linear infinite;
+}
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+.marquee-track span {
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  letter-spacing: 0.2em;
+  color: var(--paper-faint);
+  white-space: nowrap;
+}
+.marquee-track span b {
+  font-weight: 600;
+  color: var(--gold-dim);
+  margin-right: 10px;
+}
+
+/* ============================================================
+   咨询:价格 + 联系方式的横向卡片(鎏金流光描边)
+   ============================================================ */
+/* 第三屏:跑马灯在顶、内容居中、页脚贴底 */
+.consult { justify-content: flex-start; }
+.consult-main {
+  width: 100%;
+  margin: auto auto;             /* 上下 auto:在跑马灯与页脚之间垂直居中 */
+  padding-top: 34px;
+  padding-bottom: 34px;
+}
+
+.consult-card {
+  margin-top: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 56px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 46px 52px;
+  /* 双层背景:内层墨色填充,外层鎏金→朱砂渐变描边,流光缓慢游走 */
+  background:
+    linear-gradient(var(--ink-900), var(--ink-900)) padding-box,
+    linear-gradient(120deg, rgba(233, 185, 111, 0.55), rgba(224, 89, 63, 0.45), rgba(233, 185, 111, 0.2), rgba(224, 89, 63, 0.55)) border-box;
+  background-size: 100% 100%, 320% 100%;
+  animation: border-flow 9s linear infinite;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4), 0 0 44px rgba(224, 89, 63, 0.08);
+}
+@keyframes border-flow {
+  to { background-position: 0 0, -320% 0; }
+}
+
+/* 价格:鎏金→朱砂渐变大字 */
+.consult-price {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  white-space: nowrap;
+}
+.consult-price .amount {
+  font-family: var(--mono);
+  font-size: clamp(2.6rem, 5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  background: linear-gradient(115deg, var(--gold-bright), var(--cinnabar) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 22px rgba(233, 185, 111, 0.25));
+}
+.consult-price .unit {
+  font-size: 0.95rem;
+  color: var(--paper-dim);
+}
+
+/* 联系方式:左侧细线分隔 */
+.consult-contact {
+  border-left: 1px solid var(--line-faint);
+  padding-left: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.contact-row {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+.contact-row .label {
+  flex: 0 0 3em;
+  font-size: 0.84rem;
+  letter-spacing: 0.1em;
+  color: var(--paper-faint);
+}
+.contact-row .value,
+.contact-row .inline-link {
+  font-family: var(--mono);
+  font-size: 1rem;
+}
+
+/* ============================================================
+   页脚
+   ============================================================ */
+footer {
+  border-top: 1px solid var(--line-faint);
+  padding: 26px 0 30px;
+}
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.footer-brand .seal {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  background: linear-gradient(135deg, var(--cinnabar-bright), #b53a26);
+  color: var(--paper);
+  border-radius: 5px;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+.footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  font-size: 0.84rem;
+  color: var(--paper-faint);
+}
+.footer-meta a { transition: color 0.25s ease; }
+.footer-meta a:hover { color: var(--gold-bright); }
+
+/* ============================================================
+   Reduced Motion:一切动效退化为静态
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; scroll-snap-type: y proximity; }
+  .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+  body::before,
+  .hero h1 .accent,
+  .hero-compass .ring-spin,
+  .hero-compass .ring-rev,
+  .hero-compass .qimen-center,
+  .snap-section.in .hero-compass,
+  .marquee-track,
+  .hero-inner,
+  .about .wrap,
+  .consult-main,
+  .consult-card { animation: none !important; }
+  .btn-primary::after { display: none; }
+  #intro { display: none; }      /* 开场动画整体免除,home.js 会同步解除 intro-hold */
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 960px) {
+  /* 移动端内容可能超过一屏,吸附放宽为 proximity,避免内容被锁住 */
+  html { scroll-snap-type: y proximity; }
+  .snap-section { min-height: 100dvh; }
+  .dots { right: 12px; }
+
+  .hero-inner { grid-template-columns: 1fr; gap: 30px; }
+  .hero { padding-top: calc(var(--nav-h) + 40px); align-items: flex-start; }
+  .hero-compass svg { width: min(100%, 400px); margin: 0 auto; }
+  .about-grid { grid-template-columns: 1fr; }
+  .panel-mystic { min-height: 0; grid-row: auto; }
+  .consult-card { grid-template-columns: 1fr; gap: 30px; padding: 38px 32px; }
+  .consult-contact { border-left: none; padding-left: 0; border-top: 1px solid var(--line-faint); padding-top: 30px; }
+}
+
+@media (max-width: 760px) {
+  .menu-toggle { display: flex; }
+  .nav-links {
+    position: fixed;
+    top: var(--nav-h); left: 0; right: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding: 10px 28px 24px;
+    background: rgba(15, 14, 12, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line-faint);
+    display: none;
+  }
+  .nav-links.open { display: flex; }
+  .nav-links li { width: 100%; }
+  .nav-links a:not(.btn) { display: block; padding: 14px 0; font-size: 1rem; }
+
+  .hero-actions .btn { width: 100%; justify-content: center; }
+  .marquee { margin-top: 60px; }
+}
