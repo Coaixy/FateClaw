@@ -23,7 +23,7 @@ docker compose up -d
 pnpm run dev
 ```
 
-本地基础设施至少需要 PostgreSQL 和 Redis；推荐直接用仓库内的 `docker-compose.yml` 启动。API 首次启动会自动创建和补齐所需表结构，无需手动执行 `scripts/init-pg.sql`。
+本地基础设施至少需要 PostgreSQL 和 Redis；推荐直接用仓库内的 `docker-compose.yml` 启动。API 启动时由 `initDatabase()` 自动执行迁移建表和补列，无需手动初始化 schema。
 
 ## 分支和提交
 

@@ -65,6 +65,7 @@ describe('runDatabaseMigrations', () => {
       '0070_agent_runtime_and_billing_perf',
       '0071_cleanup_invalid_phone_users',
       '0072_purge_orphan_bundle_subscriptions',
+      '0073_drop_dead_feature_tables',
     ]);
 
     await runDatabaseMigrations(client as never);
@@ -99,6 +100,39 @@ describe('runDatabaseMigrations', () => {
       params: [
         '0071_cleanup_invalid_phone_users',
         '一次性清理无有效手机号的历史脏用户及其关联数据',
+      ],
+    });
+  });
+
+  it('drops dead feature tables once as migration 0073 when unrecorded', async () => {
+    // 回归防护：simpleWorkflow 预置表与 ai_chat 免费/专业额度三表已无任何代码接线，
+    // 由一次性迁移 0073 在存量库上 DROP（全新库基线已不再建出这些表，届时为 no-op）。
+    const { client, calls } = createMockClient([
+      '0001_core_schema_baseline',
+      '0070_agent_runtime_and_billing_perf',
+      '0071_cleanup_invalid_phone_users',
+      '0072_purge_orphan_bundle_subscriptions',
+    ]);
+
+    await runDatabaseMigrations(client as never);
+
+    for (const table of [
+      'simple_workflow_presets',
+      'ai_chat_free_daily_usage',
+      'ai_chat_free_quota_config',
+      'ai_chat_professional_daily_usage',
+    ]) {
+      expect(
+        calls.some(
+          (call) => call.sql === `DROP TABLE IF EXISTS public.${table}`,
+        ),
+      ).toBe(true);
+    }
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0073_drop_dead_feature_tables',
+        '删除死功能表：simple_workflow_presets 与 ai_chat 免费/专业额度三表',
       ],
     });
   });

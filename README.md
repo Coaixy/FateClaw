@@ -229,7 +229,7 @@ ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3002
 - `MANAGER_KEY` 是全权限后台密钥；`USER_MANAGER_KEY` 仅能访问用户管理和消息查看模块。
 - 注册和找回密码依赖阿里云短信验证码；本地开发如不接短信服务，可先通过数据库插入测试用户或临时接入自己的短信配置。
 - 模型 Provider 主要通过管理后台写入数据库配置。
-- `DATABASE_URL` 需要指向一个已存在且可连接的 PostgreSQL 库；API 首次启动会自动创建和补齐所需表结构，无需手动执行 `scripts/init-pg.sql`。
+- `DATABASE_URL` 需要指向一个已存在且可连接的 PostgreSQL 库；API 启动时由 `initDatabase()` 自动执行迁移建表和补列，无需手动初始化 schema。
 
 ### 4. 启动开发环境
 

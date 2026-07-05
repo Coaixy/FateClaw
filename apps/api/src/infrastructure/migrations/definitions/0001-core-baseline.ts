@@ -15,6 +15,11 @@ import type { DatabaseMigration } from "../types.js";
  *   只有从未记录该 id 的全新空库才会执行本基线一次性建全。
  * - 因此本基线只会在空库上运行，使用裸 \`CREATE TABLE\` 即可，无需幂等。
  * - 新增迁移一律在 definitions.ts 的 MIGRATIONS 数组末尾追加，切勿改写本基线或复用已发布 id。
+ *
+ * 修订记录（与 DROP 迁移双写，保持新旧库 schema 收敛）：
+ * - 2026-07-05：移除 4 张死功能表定义（simple_workflow_presets、ai_chat_free_daily_usage、
+ *   ai_chat_free_quota_config、ai_chat_professional_daily_usage）。存量库由 0073 迁移 DROP 同名表，
+ *   全新库直接不建，两条路径最终 schema 一致（背景见 0073 文件注释）。
  */
 const BASELINE_SQL = `
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
@@ -30,31 +35,6 @@ CREATE TABLE public.accounts (
     enabled boolean DEFAULT true,
     created_at timestamp with time zone NOT NULL,
     owner_id text
-);
-
-CREATE TABLE public.ai_chat_free_daily_usage (
-    user_id text NOT NULL,
-    usage_date text NOT NULL,
-    professional_turn_count integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_ai_chat_free_daily_usage_turn_count_nonnegative CHECK ((professional_turn_count >= 0))
-);
-
-CREATE TABLE public.ai_chat_free_quota_config (
-    id text DEFAULT 'default'::text NOT NULL,
-    daily_professional_turn_limit integer DEFAULT 5 CONSTRAINT ai_chat_free_quota_config_daily_professional_turn_limi_not_null NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_ai_chat_free_quota_limit_range CHECK (((daily_professional_turn_limit >= 0) AND (daily_professional_turn_limit <= 1000000)))
-);
-
-CREATE TABLE public.ai_chat_professional_daily_usage (
-    user_id text NOT NULL,
-    usage_date text NOT NULL,
-    professional_turn_count integer DEFAULT 0 CONSTRAINT ai_chat_professional_daily_usa_professional_turn_count_not_null NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_ai_chat_professional_daily_usage_turn_count_nonnegative CHECK ((professional_turn_count >= 0))
 );
 
 CREATE TABLE public.announcements (
@@ -474,30 +454,6 @@ CREATE TABLE public.runtime_config (
     CONSTRAINT chk_runtime_config_user_skill_max_count_range CHECK (((user_skill_max_count >= 1) AND (user_skill_max_count <= 500)))
 );
 
-CREATE TABLE public.simple_workflow_presets (
-    id text NOT NULL,
-    kind text NOT NULL,
-    name text NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    is_default boolean DEFAULT false NOT NULL,
-    entry_title text NOT NULL,
-    entry_description text DEFAULT ''::text NOT NULL,
-    paipan_skill text NOT NULL,
-    paipan_input_defaults jsonb DEFAULT '{}'::jsonb NOT NULL,
-    model_policy jsonb DEFAULT '{"mode": "system-default"}'::jsonb NOT NULL,
-    skill_bundle_ids text[] DEFAULT ARRAY[]::text[] NOT NULL,
-    skill_ids text[] DEFAULT ARRAY[]::text[] NOT NULL,
-    skill_snapshot_ids text[] DEFAULT ARRAY[]::text[] NOT NULL,
-    prompt_template text DEFAULT ''::text NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_simple_workflow_presets_kind_skill_match CHECK ((((kind = 'divination'::text) AND (paipan_skill = 'iching-paipan'::text)) OR ((kind = 'natal'::text) AND (paipan_skill = 'bazi-paipan'::text)))),
-    CONSTRAINT chk_simple_workflow_presets_kind_valid CHECK ((kind = ANY (ARRAY['divination'::text, 'natal'::text]))),
-    CONSTRAINT chk_simple_workflow_presets_model_policy_object CHECK (((jsonb_typeof(model_policy) = 'object'::text) AND (model_policy ? 'mode'::text) AND ((model_policy ->> 'mode'::text) = ANY (ARRAY['system-default'::text, 'user-current'::text, 'fixed'::text])))),
-    CONSTRAINT chk_simple_workflow_presets_paipan_skill_valid CHECK ((paipan_skill = ANY (ARRAY['iching-paipan'::text, 'bazi-paipan'::text])))
-);
-
 CREATE TABLE public.skill_access_invites (
     id text NOT NULL,
     creator_id text NOT NULL,
@@ -758,8 +714,6 @@ CREATE TABLE public.wechat_chat_session_links (
     last_used_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-INSERT INTO public.ai_chat_free_quota_config (id, daily_professional_turn_limit, updated_at) VALUES ('default', 5, '2026-06-30 12:57:53.492685+00');
-
 INSERT INTO public.daily_sign_in_config (id, enabled, updated_at, reward_coins) VALUES ('default', false, '2026-06-30 12:57:53.352858+00', 0.00);
 
 INSERT INTO public.membership_config (id, enabled, monthly_price_coins, updated_at, name, display_price_coins) VALUES ('fateclaw_clarity', true, 66.00, '2026-06-30 12:57:53.548368+00', '卦师使用权', 66.00);
@@ -776,20 +730,8 @@ INSERT INTO public.referral_config (id, enabled, inviter_reward_days, monthly_re
 
 INSERT INTO public.runtime_config (id, agent_concurrency_limit, updated_at, local_agent_max_processes, local_agent_idle_ttl_ms, pi_session_health_enabled, pi_session_inactive_cleanup_days, pi_session_orphan_grace_days, skill_bundle_max_files, skill_bundle_max_file_chars, skill_bundle_max_total_chars, skill_bundle_max_zip_bytes, default_official_model_id, default_thinking_level, user_skill_max_count) VALUES ('default', 10, '2026-06-30 12:57:53.422822+00', 4, 600000, false, 30, 30, 50, 100000, 500000, 8388608, NULL, 'medium', 30);
 
-INSERT INTO public.simple_workflow_presets (id, kind, name, enabled, is_default, entry_title, entry_description, paipan_skill, paipan_input_defaults, model_policy, skill_bundle_ids, skill_ids, skill_snapshot_ids, prompt_template, sort_order, created_at, updated_at) VALUES ('simple-divination-default', 'divination', '默认占卜问事', true, true, '占卜问事', '适合近期选择、关系走向、工作决策和单件事情。', 'iching-paipan', '{"method": "dayan"}', '{"mode": "user-current", "thinkingLevel": "medium"}', '{}', '{}', '{}', '结合用户问题、背景补充和六爻盘面，用新手能理解的方式给出判断。', 10, '2026-06-30 12:57:53.450494+00', '2026-06-30 12:57:53.450494+00');
-INSERT INTO public.simple_workflow_presets (id, kind, name, enabled, is_default, entry_title, entry_description, paipan_skill, paipan_input_defaults, model_policy, skill_bundle_ids, skill_ids, skill_snapshot_ids, prompt_template, sort_order, created_at, updated_at) VALUES ('simple-natal-default', 'natal', '默认命理分析', true, true, '命理分析', '适合长期性格、事业方向、关系模式和人生阶段。', 'bazi-paipan', '{"include": ["bazi", "fortune", "pattern"]}', '{"mode": "system-default", "thinkingLevel": "medium"}', '{}', '{}', '{}', '结合用户问题方向和八字盘面，给出结构化命理分析。', 20, '2026-06-30 12:57:53.450494+00', '2026-06-30 12:57:53.450494+00');
-
 ALTER TABLE ONLY public.accounts
     ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.ai_chat_free_daily_usage
-    ADD CONSTRAINT ai_chat_free_daily_usage_pkey PRIMARY KEY (user_id, usage_date);
-
-ALTER TABLE ONLY public.ai_chat_free_quota_config
-    ADD CONSTRAINT ai_chat_free_quota_config_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.ai_chat_professional_daily_usage
-    ADD CONSTRAINT ai_chat_professional_daily_usage_pkey PRIMARY KEY (user_id, usage_date);
 
 ALTER TABLE ONLY public.announcements
     ADD CONSTRAINT announcements_pkey PRIMARY KEY (id);
@@ -895,9 +837,6 @@ ALTER TABLE ONLY public.referral_reward_events
 
 ALTER TABLE ONLY public.runtime_config
     ADD CONSTRAINT runtime_config_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.simple_workflow_presets
-    ADD CONSTRAINT simple_workflow_presets_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.skill_access_invites
     ADD CONSTRAINT skill_access_invites_pkey PRIMARY KEY (id);
@@ -1074,10 +1013,6 @@ CREATE INDEX idx_referral_reward_events_inviter_created ON public.referral_rewar
 
 CREATE UNIQUE INDEX idx_referral_reward_events_referral_reason_granted ON public.referral_reward_events USING btree (referral_id, reason) WHERE (status = 'granted'::text);
 
-CREATE UNIQUE INDEX idx_simple_workflow_presets_kind_default ON public.simple_workflow_presets USING btree (kind) WHERE ((enabled = true) AND (is_default = true));
-
-CREATE INDEX idx_simple_workflow_presets_kind_sort ON public.simple_workflow_presets USING btree (kind, sort_order, id);
-
 CREATE INDEX idx_skill_access_invites_creator_target ON public.skill_access_invites USING btree (creator_id, target_type, target_id, created_at DESC);
 
 CREATE INDEX idx_skill_access_invites_token ON public.skill_access_invites USING btree (token);
@@ -1160,12 +1095,6 @@ CREATE UNIQUE INDEX uq_client_profiles_user_name ON public.client_profiles USING
 
 ALTER TABLE ONLY public.accounts
     ADD CONSTRAINT accounts_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.ai_chat_free_daily_usage
-    ADD CONSTRAINT ai_chat_free_daily_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.ai_chat_professional_daily_usage
-    ADD CONSTRAINT ai_chat_professional_daily_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.balance_grants
     ADD CONSTRAINT balance_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);

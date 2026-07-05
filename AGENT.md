@@ -184,7 +184,6 @@ Admin 是独立管理后台静态站点，负责：
 - `apps/agent-runtime/src/text-skill-bundle.ts`: 用户 Text Skill Bundle 文件读取边界
 - `apps/web/`: www 用户前端静态站点
 - `apps/admin/`: admin 管理后台静态站点
-- `scripts/init-pg.sql`: 数据库 schema 参考/兼容脚本；常规启动由 `initDatabase()` 自动建表和补列
 
 ## 常见误区
 
