@@ -41,6 +41,7 @@ groups/global/*
 
 # Archives
 *.tar.gz
+*.zip
 
 # OS
 .DS_Store

@@ -1,6 +1,6 @@
 # FateClaw 文档索引
 
-最近核对：2026-06-29。
+最近核对：2026-07-05。
 
 > 本目录只保留**当前有效的常驻文档**。已完成使命的一次性产物（迁移方案、code review、
 > 改进计划、安全报告、历史设计草案）统一移到 [`archive/`](./archive/)，仅作历史留痕，
@@ -26,6 +26,7 @@
 | api-membership-billing-cleanup.md | 计费清理方案；档位部分作废，钱包/计费命名规范仍可参考（顶部有横幅） |
 | admin-improvement-modification-plan-2026-06-17.md | admin 改进计划，P0/P1 已落地 |
 | code-review-2026-06-16.md / -fix-plan.md | 一次性深度扫描报告与修复方案 |
+| architecture-review-2026-07-02.md | 一次性架构审查报告，升级项已落地 |
 | apps-web-security-fix-report-2026-05-31.md | 一次性安全修复报告 |
 | spark/onboarding-guide-design.md | 启动向导设计，已实现（历史记录） |
 | spark/announcements-design.md | 公告系统设计，已实现（历史记录） |
