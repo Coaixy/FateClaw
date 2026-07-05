@@ -36,17 +36,6 @@ export async function closeAgentDb(): Promise<void> {
 
 // ── Skills ──
 
-/**
- * 查询用户可用的系统排盘名称列表。
- * 用户侧不再单独覆盖，始终跟随后台全局开关。
- */
-export async function queryEnabledSkillNames(_userId?: string): Promise<string[]> {
-  const { rows } = await getPool().query(
-    'SELECT skill_name FROM skill_global_config WHERE globally_enabled = true ORDER BY skill_name',
-  );
-  return (rows as { skill_name: string }[]).map((r) => r.skill_name);
-}
-
 export interface EffectiveUserSkill {
   id: string;
   dir: string;

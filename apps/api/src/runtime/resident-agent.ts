@@ -2,7 +2,6 @@ import {
   addAccountListener,
   InboxRequestResult,
   submitAiChatInboxRequest,
-  submitInboxRequest,
 } from './ipc-worker.js';
 import { ensureLocalAgentRunning } from './local-runner.js';
 import {
@@ -70,35 +69,5 @@ export async function dispatchAiChatPrompt(input: {
     llmRuntime: input.llmRuntime,
     entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: input.waitForResponse,
-  });
-}
-
-export async function dispatchResidentPrompt(input: {
-  accountId: string;
-  type: 'chat' | 'task';
-  userMessage: string;
-  history: HistoryMessage[];
-  toUserId?: string;
-  contextToken?: string;
-  autoDeliver?: boolean;
-  sessionId?: string;
-  userName?: string;
-  assistantName?: string;
-  llmRuntime?: EffectiveLlmRuntimeConfig;
-}): Promise<InboxRequestResult> {
-  await ensureLocalAgentRunning(input.accountId);
-
-  return submitInboxRequest({
-    accountId: input.accountId,
-    type: input.type,
-    userMessage: input.userMessage,
-    history: input.history,
-    toUserId: input.toUserId,
-    contextToken: input.contextToken,
-    autoDeliver: input.autoDeliver,
-    sessionId: input.sessionId,
-    userName: input.userName,
-    assistantName: input.assistantName,
-    llmRuntime: input.llmRuntime,
   });
 }

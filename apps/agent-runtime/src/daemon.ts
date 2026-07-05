@@ -198,10 +198,6 @@ export function __cleanupPendingCancelRequestsForTests(
   cleanupExpiredPendingCancelRequests(pendingCancelRequests, now);
 }
 
-export function __getAgentRuntimeAccountConcurrencyForTests(): number {
-  return AGENT_RUNTIME_ACCOUNT_CONCURRENCY;
-}
-
 export const __processInboxMessageForTests = processInboxMessage;
 
 export const __buildFatalOutboxResponseForTests = buildFatalOutboxResponse;

@@ -46,10 +46,6 @@ function assertNotPiGlobalDir(dir: string): void {
   }
 }
 
-function yamlScalar(value: string): string {
-  return JSON.stringify(value);
-}
-
 const ALLOWED_TEXT_FILE_EXTENSIONS = new Set([
   '.md',
   '.mdx',
@@ -85,16 +81,6 @@ const BLOCKED_BUNDLE_DIRECTORIES = new Set([
 ]);
 export interface TextSkillBundleFile {
   path: string;
-  content: string;
-}
-
-export interface TextSkillBundleWriteInput {
-  skillId: string;
-  ownerId: string;
-  dirName: string;
-  skillName: string;
-  description: string;
-  triggerHint: string;
   content: string;
 }
 
@@ -212,44 +198,6 @@ export function normalizeTextSkillBundlePath(rawPath: string): string {
   }
 
   return canonicalizeRootBundlePath(normalized);
-}
-
-function createDefaultSkillMarkdown(
-  skillName: string,
-  description = '',
-): string {
-  return [
-    '---',
-    `name: ${yamlScalar(skillName)}`,
-    `description: ${yamlScalar(description || `${skillName} Skill`)}`,
-    '---',
-    '',
-    `# ${skillName}`,
-    '',
-    description,
-    '',
-    '## 入口说明',
-    '',
-    '按 `index.md` 的文件索引读取相关 Markdown 内容。',
-    '',
-    '## 推荐读取顺序',
-    '',
-    '- `index.md`',
-    '- `docs/knowledge.md`',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-function createDefaultIndexMarkdown(skillName: string): string {
-  return [
-    `# ${skillName} 文件索引`,
-    '',
-    '- `SKILL.md`：Skill 入口说明与读取边界',
-    '- `docs/knowledge.md`：主要知识正文',
-    '- `examples/`：案例示例',
-    '- `notes/`：补充笔记',
-  ].join('\n');
 }
 
 function normalizeTextSkillBundleFiles(
@@ -372,39 +320,6 @@ export function writeTextSkillBundleFiles(
   };
 }
 
-export function writeTextSkillBundle(
-  input: TextSkillBundleWriteInput,
-): TextSkillBundleWriteResult {
-  const skillMd = createDefaultSkillMarkdown(
-    input.skillName,
-    input.description || input.triggerHint || input.skillName,
-  );
-  const legacySkillMd = input.triggerHint
-    ? `${skillMd}\n\n## 旧入口说明\n\n${input.triggerHint.trim()}\n`
-    : skillMd;
-
-  return writeTextSkillBundleFiles({
-    skillId: input.skillId,
-    ownerId: input.ownerId,
-    dirName: input.dirName,
-    fallbackSkillName: input.skillName,
-    files: [
-      {
-        path: 'SKILL.md',
-        content: legacySkillMd,
-      },
-      {
-        path: 'index.md',
-        content: createDefaultIndexMarkdown(input.skillName),
-      },
-      {
-        path: 'docs/knowledge.md',
-        content: input.content,
-      },
-    ],
-  });
-}
-
 function readAllowedTextFilesFromDir(bundleDir: string): TextSkillBundleFile[] {
   const files: TextSkillBundleFile[] = [];
 
@@ -458,14 +373,6 @@ export function readTextSkillBundleFiles(
   return [];
 }
 
-export function readTextSkillBundleContent(
-  bundleUri: string | null | undefined,
-): string {
-  const files = readTextSkillBundleFiles(bundleUri);
-  const knowledge = files.find((file) => file.path === 'docs/knowledge.md');
-  return knowledge?.content ?? '';
-}
-
 export function getTextSkillBundleContentLength(
   bundleUri: string | null | undefined,
 ): number {
@@ -473,35 +380,4 @@ export function getTextSkillBundleContentLength(
     (sum, file) => sum + file.content.length,
     0,
   );
-}
-
-export function appendLegacyTriggerHintToSkillBundle(
-  bundleUri: string | null | undefined,
-  triggerHint: string | null | undefined,
-): string | null {
-  const hint = triggerHint?.trim();
-  if (!hint) return null;
-  const [bundleDir] = resolveBundleUri(bundleUri);
-  if (!bundleDir) return null;
-
-  const files = readTextSkillBundleFiles(bundleDir);
-  const skillFile = files.find((file) => file.path === 'SKILL.md');
-  if (!skillFile) return null;
-  if (skillFile.content.includes(hint)) {
-    return calculateTextSkillBundleChecksum(files);
-  }
-
-  const updatedFiles = files.map((file) =>
-    file.path === 'SKILL.md'
-      ? {
-          ...file,
-          content: `${file.content.trimEnd()}\n\n## 旧入口说明\n\n${hint}\n`,
-        }
-      : file,
-  );
-  try {
-    return writeFilesToBundleDir(bundleDir, updatedFiles);
-  } catch {
-    return '';
-  }
 }

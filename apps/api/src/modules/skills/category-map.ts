@@ -66,16 +66,3 @@ export function deriveSkillCategory(name: string, description: string): string {
     ? DIVINATION_SKILL_CATEGORY
     : DEFAULT_SKILL_CATEGORY;
 }
-
-/**
- * 从文本中提取所有命中的标准类别关键词。
- */
-export function extractCategoryKeywords(text: string): string[] {
-  const matched: string[] = [];
-  for (const keyword of Object.keys(KEYWORD_TO_CATEGORY)) {
-    if (text.includes(keyword)) {
-      matched.push(keyword);
-    }
-  }
-  return matched;
-}

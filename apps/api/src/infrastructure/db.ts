@@ -525,12 +525,6 @@ export async function initDatabase(): Promise<void> {
   }
 }
 
-/** @internal - for tests only. */
-export async function _initTestDatabase(): Promise<void> {
-  // Tests should use a real PG database or a mock
-  await initDatabase();
-}
-
 export async function closeDatabase(): Promise<void> {
   await closeDbPool();
 }

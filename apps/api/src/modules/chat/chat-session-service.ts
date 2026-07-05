@@ -529,20 +529,6 @@ export async function archiveOwnedChatSession(
 }
 
 /**
- * 兼容旧路由命名的归档入口。
- *
- * @param userId 会话归属用户 ID。
- * @param sessionId chat_sessions.id。
- * @returns 成功响应；无权限或会话不存在时返回错误。
- */
-export async function deleteOwnedChatSession(
-  userId: string,
-  sessionId: string,
-): Promise<ServiceResult<SuccessResponse>> {
-  return archiveOwnedChatSession(userId, sessionId);
-}
-
-/**
  * 恢复当前用户拥有的已归档 AI Chat 会话。
  *
  * @param userId 会话归属用户 ID。

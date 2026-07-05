@@ -71,12 +71,6 @@ export function parseStoredSkillContext(
   }
 }
 
-export function extractDirectBoardEntries(
-  rawToolContext?: string | null,
-): SkillContextEntryDto[] {
-  return parseStoredSkillContext(rawToolContext).filter(isBoardEntry);
-}
-
 function isUserPastedBoardSkill(skill: string): boolean {
   return skill.startsWith(USER_PASTED_BOARD_SKILL_PREFIX);
 }

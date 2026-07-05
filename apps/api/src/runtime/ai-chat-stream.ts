@@ -155,15 +155,6 @@ function aiChatStreamTicketKey(ticket: string): string {
 }
 
 /**
- * 获取 AI Chat WebSocket 连接票据的有效秒数。
- *
- * @returns 当前服务端签发 stream ticket 时使用的 TTL 秒数。
- */
-export function getAiChatStreamTicketTtlSeconds(): number {
-  return STREAM_TICKET_TTL_SECONDS;
-}
-
-/**
  * 为指定用户和会话签发短期单用途 WebSocket 连接票据。
  *
  * @param args.userId 当前登录用户 ID。

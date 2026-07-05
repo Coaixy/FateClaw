@@ -62,12 +62,6 @@ export function joinList(values: Array<string | undefined>): string {
   return joinText(values, '、');
 }
 
-/** 格式化“标签：值”行；值为空时返回 undefined。 */
-export function labelValue(label: string, value: unknown): string | undefined {
-  const text = scalarText(value);
-  return text ? `${label}：${text}` : undefined;
-}
-
 /** 向输出追加一个中文小节；空小节会被跳过。 */
 export function pushSection(
   lines: string[],

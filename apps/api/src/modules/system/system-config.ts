@@ -96,8 +96,6 @@ export interface EffectiveLlmRuntimeConfig {
   outputTokenPricePerMillionCoins: number;
 }
 
-export type EffectiveAgentRuntimeConfig = EffectiveLlmRuntimeConfig;
-
 export interface AdminOfficialModelView extends OfficialModelConfig {
   has_secret: boolean;
   secret_source: RuntimeSecretSource;
@@ -678,10 +676,6 @@ async function resolveCustomRuntime(
   };
 }
 
-export function invalidateSystemConfigCache(): void {
-  // 保留导出兼容测试和调用点。用户级模型选择不做全局 runtime 缓存。
-}
-
 export async function resolveUserLlmRuntime(
   userId: string,
 ): Promise<EffectiveLlmRuntimeConfig> {
@@ -724,16 +718,6 @@ export async function resolveUserLlmRuntime(
     }
     throw error;
   }
-}
-
-export async function getEffectiveAgentRuntimeConfig(
-  userId: string,
-): Promise<EffectiveAgentRuntimeConfig> {
-  return resolveUserLlmRuntime(userId);
-}
-
-export async function getEffectiveAgentModel(userId: string): Promise<string> {
-  return (await resolveUserLlmRuntime(userId)).model;
 }
 
 export async function listOfficialModelViews(options?: {

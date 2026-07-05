@@ -17,8 +17,6 @@ export interface User {
   created_at: string;
 }
 
-export type BalanceSource = 'purchased' | 'bonus' | 'mixed';
-
 export type BalanceGrantSource =
   | 'new_user_gift'
   | 'sign_in'
@@ -61,13 +59,6 @@ export interface BalanceGrant {
   status: BalanceGrantStatus;
   created_at: string;
   updated_at: string;
-}
-
-export interface UserSkill {
-  user_id: string;
-  skill_name: string;
-  enabled: boolean;
-  enabled_at: string;
 }
 
 export interface TextSkillBundleFile {
@@ -414,17 +405,3 @@ export interface Channel {
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
 }
-
-// Callback type that channels use to deliver inbound messages
-export type OnInboundMessage = (chatJid: string, message: NewMessage) => void;
-
-// Callback for chat metadata discovery.
-// name is optional — channels that deliver names inline (Telegram) pass it here;
-// channels that sync names separately (via syncGroups) omit it.
-export type OnChatMetadata = (
-  chatJid: string,
-  timestamp: string,
-  name?: string,
-  channel?: string,
-  isGroup?: boolean,
-) => void;

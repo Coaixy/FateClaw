@@ -20,19 +20,6 @@ export function isUserPastedBoardSkill(skill: string | undefined): boolean {
   );
 }
 
-export function inferCategoryFromUserPastedBoardSkill(
-  skill: string | undefined,
-): string | null {
-  if (
-    typeof skill !== 'string' ||
-    !skill.startsWith(USER_PASTED_BOARD_SKILL_PREFIX)
-  ) {
-    return null;
-  }
-  const category = skill.slice(USER_PASTED_BOARD_SKILL_PREFIX.length).trim();
-  return category || null;
-}
-
 export function buildUserPastedBoardSkillContext(
   pastedBoard: UserPastedBoardInput,
 ): SkillContextEntry {

@@ -2,10 +2,7 @@
  * 微信消息处理：解析消息、构建 prompt、分发给 Agent、处理失败兜底。
  */
 
-import crypto from 'crypto';
-
 import {
-  getRecentMessages,
   getUserByAccountId,
   storeMessage,
 } from '../../infrastructure/db.js';
@@ -16,20 +13,11 @@ import {
 } from '../../infrastructure/ilink.js';
 import { logger } from '../../infrastructure/logger.js';
 import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
-import { getSoulContent } from '../../infrastructure/db.js';
 import {
   FREE_WECHAT_UNSUPPORTED_MESSAGE,
 } from '../account/account-service.js';
 import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
-import {
-  computeTokenBudget,
-  estimateTokens,
-  fillHistoryStructured,
-  HistoryMessage,
-  truncateToTokenBudget,
-} from '../../shared/token-budget.js';
 import { Account, NewMessage } from '../../shared/types.js';
-import type { StructuredInput } from './structured-input.js';
 import {
   handleWechatChatCommand,
   runWechatChatSessionTurn,
@@ -37,26 +25,6 @@ import {
 } from './wechat-chat-session-service.js';
 
 export { buildStructuredInputForSession } from './structured-input.js';
-
-/**
- * 构建旧版微信独立聊天在 Pi Runtime 中使用的稳定会话 ID。
- *
- * @param accountId 微信 Claw 账号 ID。
- * @param sender 微信侧发送方 ID。
- * @returns 去标识化后的 Pi Runtime 会话 ID。
- * @remarks 普通微信消息已接入网页 AI Chat session；此 helper 保留给兼容旧独立会话场景。
- */
-export function buildWeixinRuntimeSessionId(
-  accountId: string,
-  sender: string,
-): string {
-  const digest = crypto
-    .createHash('sha256')
-    .update(`${accountId}:${sender}`)
-    .digest('hex')
-    .slice(0, 32);
-  return `wx-${digest}`;
-}
 
 export async function processWeixinMessage(
   account: Account,
@@ -182,90 +150,6 @@ export async function processWeixinMessage(
       publicError.publicMessage,
     );
   }
-}
-
-function buildHistoryViews(args: {
-  recentMsgs: Awaited<ReturnType<typeof getRecentMessages>>;
-  historyBudget: number;
-  skillContextBudget: number;
-}): {
-  history: HistoryMessage[];
-  routingHistory: HistoryMessage[];
-} {
-  return {
-    history: fillHistoryStructured(
-      args.recentMsgs,
-      args.historyBudget,
-      args.skillContextBudget,
-    ),
-    routingHistory: fillHistoryStructured(
-      args.recentMsgs,
-      args.historyBudget,
-      Number.MAX_SAFE_INTEGER,
-    ),
-  };
-}
-
-export async function buildStructuredInput(
-  account: Account,
-  userMessage: string,
-  model: string,
-  contextWindowTokens?: number,
-): Promise<StructuredInput> {
-  const budget = computeTokenBudget(model, userMessage, {
-    contextWindowTokens,
-  });
-
-  // Soul 不再塞进 prompt（agent-runtime system prompt 已自动注入摘要）
-  // 但仍计算 soul 实际占用，把未用预算让给对话历史
-  let soulActual = 0;
-  const soulRaw = await getSoulContent(account.id);
-  if (soulRaw) {
-    const truncated = truncateToTokenBudget(soulRaw, budget.soulBudget);
-    soulActual = estimateTokens(truncated);
-  }
-  const historyBudget = budget.historyBudget + (budget.soulBudget - soulActual);
-
-  // 按 history 预算估算能装多少条消息（平均每条 ~200 tokens），
-  // 加 20% 冗余多拉一些，fillHistoryStructured 会按预算精确截断。
-  const estimatedMsgCount = Math.max(
-    10,
-    Math.ceil((historyBudget / 200) * 1.2),
-  );
-  const recentMsgs = await getRecentMessages(
-    account.id,
-    estimatedMsgCount,
-    undefined,
-  );
-  const { history } = buildHistoryViews({
-    recentMsgs,
-    historyBudget,
-    skillContextBudget: budget.skillContextBudget,
-  });
-
-  logger.debug(
-    {
-      accountId: account.id,
-      model,
-      contextWindow: budget.contextWindow,
-      outputReserve: budget.outputReserve,
-      toolLoopReserve: budget.toolLoopReserve,
-      contentBudget: budget.contentBudget,
-      soulBudget: budget.soulBudget,
-      soulActual,
-      historyBudget,
-      historyMessages: history.length,
-      totalMessages: recentMsgs.length,
-    },
-    'Token 预算分配',
-  );
-
-  return {
-    userMessage,
-    history,
-    userName: account.name,
-    assistantName: account.name,
-  };
 }
 
 async function sendFallbackReply(

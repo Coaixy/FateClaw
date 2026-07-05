@@ -36,11 +36,6 @@
       "import": "./dist/billing/index.js",
       "default": "./dist/billing/index.js"
     },
-    "./referrals": {
-      "types": "./dist/referrals/index.d.ts",
-      "import": "./dist/referrals/index.js",
-      "default": "./dist/referrals/index.js"
-    },
     "./model-settings": {
       "types": "./dist/model-settings/index.d.ts",
       "import": "./dist/model-settings/index.js",

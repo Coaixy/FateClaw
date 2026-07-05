@@ -85,8 +85,3 @@ export async function sendOpsAlert(input: OpsAlertInput): Promise<void> {
     logger.warn({ err, kind: input.kind }, '运维告警 webhook 投递失败');
   }
 }
-
-/** 测试用：清空节流状态。 */
-export function __resetOpsAlertsForTests(): void {
-  lastSentAtByKind.clear();
-}

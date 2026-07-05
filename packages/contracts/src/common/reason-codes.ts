@@ -46,16 +46,3 @@ export const PUBLIC_REASON_CODES = [
 
 /** 失败原因码联合类型。 */
 export type PublicReasonCode = (typeof PUBLIC_REASON_CODES)[number];
-
-/**
- * 判断任意字符串是否为合法原因码（跨进程边界收窄 unknown 时使用）。
- *
- * @param value 待检查的值。
- * @returns 属于 {@link PUBLIC_REASON_CODES} 时返回 true。
- */
-export function isPublicReasonCode(value: unknown): value is PublicReasonCode {
-  return (
-    typeof value === 'string' &&
-    (PUBLIC_REASON_CODES as readonly string[]).includes(value)
-  );
-}

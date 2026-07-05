@@ -36,21 +36,6 @@ export interface BaziCaseDto {
   job_info: string | null;
 }
 
-/** 命例列表查询的筛选 + 分页参数（全部可选）。 */
-export interface BaziCaseListQueryDto {
-  gender?: string;
-  marriage?: string;
-  /** 按「当前」财富层级筛选。 */
-  wealth?: string;
-  education?: string;
-  job_type?: string;
-  /** 关键词：在 job / job_info 内做子串匹配。 */
-  q?: string;
-  /** 分页每页条数；服务端有上限保护。 */
-  limit?: number;
-  offset?: number;
-}
-
 /** 命例列表响应（含分页元信息）。 */
 export interface BaziCaseListResponseDto {
   entries: BaziCaseDto[];

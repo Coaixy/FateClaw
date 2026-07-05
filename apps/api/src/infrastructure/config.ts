@@ -1,5 +1,3 @@
-import path from 'path';
-
 import { readEnvFile } from './env.js';
 
 const envConfig = readEnvFile([
@@ -264,18 +262,6 @@ export const MAX_OVERDRAFT_COINS =
   Number.isFinite(RAW_MAX_OVERDRAFT_COINS) && RAW_MAX_OVERDRAFT_COINS >= 0
     ? RAW_MAX_OVERDRAFT_COINS
     : 50;
-
-const PROJECT_ROOT = process.cwd();
-export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export const TRIGGER_PATTERN = new RegExp(
-  `^@${escapeRegex(ASSISTANT_NAME)}\\b`,
-  'i',
-);
 
 // 后台任务与 agent-runtime 使用的默认时区
 export const TIMEZONE =

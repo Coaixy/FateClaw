@@ -25,7 +25,6 @@ import {
   __shouldCloseForPongTimeoutForTests,
   aiChatStreamChannel,
   consumeAiChatStreamTicket,
-  getAiChatStreamTicketTtlSeconds,
   issueAiChatStreamTicket,
   streamEventFromMessagePayload,
   streamEventFromProgressPayload,
@@ -183,7 +182,7 @@ describe('AI Chat stream tickets', () => {
       expect.stringMatching(/^aichat:stream-ticket:[a-f0-9]{64}$/),
       expect.stringContaining('"sessionId":"session-1"'),
       'EX',
-      getAiChatStreamTicketTtlSeconds(),
+      60, // 与源码 STREAM_TICKET_TTL_SECONDS 保持一致
     );
     expect(mockRedis.set.mock.calls[0][0]).not.toContain(result.ticket);
   });

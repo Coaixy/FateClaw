@@ -136,17 +136,6 @@ async function getPublicStatusTokenUsageSeries(
   });
 }
 
-export async function getDailyMessageCount(
-  userId: string,
-  date: string,
-): Promise<number> {
-  const { rows } = await getDbPool().query(
-    'SELECT msg_count FROM daily_usage WHERE user_id = $1 AND date = $2',
-    [userId, date],
-  );
-  return (rows[0] as { msg_count: number } | undefined)?.msg_count ?? 0;
-}
-
 export async function incrementDailyMessageCount(
   userId: string,
   date: string,

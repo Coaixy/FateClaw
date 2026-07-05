@@ -62,10 +62,6 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../../src/runtime/resident-agent.js', () => ({
-  dispatchResidentPrompt: vi.fn(),
-}));
-
 vi.mock('../../../src/modules/system/system-config.js', () => ({
   resolveUserLlmRuntime: vi.fn(),
 }));
@@ -77,10 +73,7 @@ vi.mock('../../../src/modules/chat/wechat-chat-session-service.js', () => ({
     '收到，正在思考。完成后会直接回复；期间新消息不会进入本轮。',
 }));
 
-import {
-  buildWeixinRuntimeSessionId,
-  processWeixinMessage,
-} from '../../../src/modules/chat/message-handler.js';
+import { processWeixinMessage } from '../../../src/modules/chat/message-handler.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../../../src/modules/account/account-service.js';
 import type { Account } from '../../../src/shared/types.js';
 import type { WeixinMessage } from '../../../src/infrastructure/ilink.js';
@@ -98,21 +91,6 @@ function createAccount(): Account {
     owner_id: 'user-1',
   };
 }
-
-describe('buildWeixinRuntimeSessionId', () => {
-  it('builds a stable de-identified Pi session id', () => {
-    const accountId = 'bot-1@im.bot';
-    const sender = 'sender-1@im.weixin';
-
-    const first = buildWeixinRuntimeSessionId(accountId, sender);
-    const second = buildWeixinRuntimeSessionId(accountId, sender);
-
-    expect(first).toBe(second);
-    expect(first).toMatch(/^wx-[a-f0-9]{32}$/);
-    expect(first).not.toContain(accountId);
-    expect(first).not.toContain(sender);
-  });
-});
 
 describe('processWeixinMessage', () => {
   beforeEach(() => {

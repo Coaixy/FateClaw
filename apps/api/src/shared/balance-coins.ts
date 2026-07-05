@@ -50,18 +50,6 @@ export function calculateAvailableSpendableCoins(
 }
 
 /**
- * 计算未扣冻结余额的钱包总额。
- *
- * @param state 钱包余额字段。
- * @returns 充值余额与赠送余额之和，供需要展示总额的后台视图使用。
- */
-export function calculateTotalBalanceCoins(
-  state: SpendableBalanceState,
-): number {
-  return state.purchased_coins + state.bonus_coins;
-}
-
-/**
  * 判断钱包是否处于欠费状态。
  *
  * @param state 钱包余额字段。

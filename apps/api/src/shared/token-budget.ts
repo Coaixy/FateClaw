@@ -190,37 +190,6 @@ export function truncateToTokenBudget(text: string, budget: number): string {
   return text.slice(0, cutPoint) + marker;
 }
 
-/**
- * 从最近消息向前填充，直到用完 token 预算。
- *
- * @param messages - 按时间 **倒序** 排列的消息（最新在前，与 DB 查询一致）
- * @param budget - 可用 token 预算
- * @returns 按时间 **正序** 排列的对话行
- */
-export function fillHistoryWithBudget(
-  messages: Array<{ is_from_me?: boolean | number; content: string }>,
-  budget: number,
-): string[] {
-  if (budget <= 0) return [];
-
-  const lines: string[] = [];
-  let used = 0;
-
-  // messages 已按时间倒序（最新在前），从最新往最旧填充
-  for (const m of messages) {
-    const prefix = m.is_from_me ? 'Assistant' : 'User';
-    const line = `${prefix}: ${m.content}`;
-    const cost = estimateTokens(line);
-
-    if (used + cost > budget) break;
-
-    lines.unshift(line); // 头部插入，恢复时间正序
-    used += cost;
-  }
-
-  return lines;
-}
-
 /** 结构化历史消息（与 agent-runtime HistoryMessage 对齐）。 */
 export interface SkillContextEntry {
   skill: string;
