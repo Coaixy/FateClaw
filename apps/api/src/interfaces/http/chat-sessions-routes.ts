@@ -11,7 +11,6 @@ import {
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
   getSharedChatSessionByShareToken,
-  listArchivedChatSessionsForOwnedUser,
   listChatSessionsByClientForOwnedUser,
   listChatSessionsForOwnedUser,
   renameOwnedChatSession,
@@ -98,18 +97,6 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     const result = await listChatSessionsForOwnedUser(
       request.user.userId,
       clientId,
-    );
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // GET /api/chat-sessions/archived — 列出当前用户已归档的 AI Chat 会话
-  app.get('/archived', async (request, reply) => {
-    await request.requireAuth();
-    const result = await listArchivedChatSessionsForOwnedUser(
-      request.user.userId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

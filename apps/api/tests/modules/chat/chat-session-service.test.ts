@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockArchiveChatSession,
-  mockGetArchivedChatSessionsByUserId,
   mockGetChatSession,
   mockGetChatSessionPiSessionArchive,
   mockGetConversationLogByRequestId,
@@ -37,7 +36,6 @@ const {
   mockRedisSet,
 } = vi.hoisted(() => ({
   mockArchiveChatSession: vi.fn(),
-  mockGetArchivedChatSessionsByUserId: vi.fn(),
   mockGetChatSession: vi.fn(),
   mockGetChatSessionPiSessionArchive: vi.fn(),
   mockGetConversationLogByRequestId: vi.fn(),
@@ -78,7 +76,6 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
     expired: 0,
     totalCoinsExpired: 0,
   })),
-  getArchivedChatSessionsByUserId: mockGetArchivedChatSessionsByUserId,
   getChatSession: mockGetChatSession,
   getChatSessionPiSessionArchive: mockGetChatSessionPiSessionArchive,
   getRecentMessages: mockGetRecentMessages,
@@ -185,7 +182,6 @@ import {
   archiveOwnedChatSession,
   cancelOwnedChatSessionMessage,
   getSharedChatSessionByShareToken,
-  listArchivedChatSessionsForOwnedUser,
   restoreOwnedArchivedChatSession,
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
@@ -329,39 +325,6 @@ describe('chat-session-service selected board context', () => {
       metadata: null,
     });
     mockCancelAiChatSessionRequest.mockResolvedValue(true);
-  });
-
-  it('lists archived chat sessions for the owned user', async () => {
-    mockGetArchivedChatSessionsByUserId.mockResolvedValueOnce([
-      {
-        id: 'session-archived',
-        account_id: 'web:user-1',
-        user_id: 'user-1',
-        title: '旧会话',
-        created_at: '2026-04-20T09:00:00.000Z',
-        updated_at: '2026-04-21T09:00:00.000Z',
-        deleted_at: '2026-04-26T09:00:00.000Z',
-      },
-    ]);
-
-    const result = await listArchivedChatSessionsForOwnedUser('user-1');
-
-    expect(result).toEqual({
-      ok: true,
-      data: [
-        {
-          id: 'session-archived',
-          account_id: 'web:user-1',
-          title: '旧会话',
-          created_at: '2026-04-20T09:00:00.000Z',
-          updated_at: '2026-04-21T09:00:00.000Z',
-          share_token: null,
-          deleted_at: '2026-04-26T09:00:00.000Z',
-          client_id: null,
-        },
-      ],
-    });
-    expect(mockGetArchivedChatSessionsByUserId).toHaveBeenCalledWith('user-1');
   });
 
   it('archives the Pi session payload and deletes local files when archiving a chat session', async () => {

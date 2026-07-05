@@ -21,7 +21,6 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
-  getArchivedChatSessionsByUserId,
   getChatSessionPiSessionArchive,
   getRecentMessages,
   resetUserMessages,
@@ -158,16 +157,6 @@ describe('chat repository', () => {
       '2026-05-27T01:00:00.000Z',
       '2026-05-27T00:00:00.000Z',
     ]);
-  });
-
-  it('lists archived chat sessions for a user', async () => {
-    const { calls } = createMockPool([]);
-
-    await getArchivedChatSessionsByUserId('user-1', 20);
-
-    expect(calls[0]?.sql).toContain('deleted_at IS NOT NULL');
-    expect(calls[0]?.sql).toContain('ORDER BY deleted_at DESC');
-    expect(calls[0]?.params).toEqual(['user-1', 20]);
   });
 
   it('restores an archived chat session owned by a user', async () => {

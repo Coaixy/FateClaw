@@ -6,7 +6,6 @@ import {
   getBillingOverview,
   getBillingTransactions,
   getBillingUsage,
-  getPublicStatusOverview,
   resetBillingScope,
   subscribeCurrentUserMembership,
 } from '../../modules/billing/billing-service.js';
@@ -73,15 +72,6 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
   app.get('/usage/daily', async (request, reply) => {
     await request.requireAuth();
     const result = await getBillingDailyUsage(request.user.userId);
-    if (!result.ok) {
-      return reply.code(result.statusCode).send({ error: result.error });
-    }
-    return result.data;
-  });
-
-  // GET /api/billing/status — 全站状态页统计
-  app.get('/status', async (_request, reply) => {
-    const result = await getPublicStatusOverview();
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });
     }

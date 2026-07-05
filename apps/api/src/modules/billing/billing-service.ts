@@ -9,8 +9,6 @@ import type {
   BillingStatusDto,
   DailyUsageRowDto,
   MembershipSubscribeResultDto,
-  PublicStatusOverviewDto,
-  PublicStatusServiceKeyDto,
   UsageStatsDto,
   WalletTransactionDto,
 } from '@fateclaw/contracts/billing';
@@ -47,14 +45,6 @@ import {
   toWalletTransactionsDto,
   toUsageStatsDto,
 } from '../../contracts-adapter/billing-contract.js';
-
-// 微信 Claw 已可逆停用：状态页不再展示"微信绑定"服务卡。
-// PublicStatusServiceKeyDto 联合仍保留 'wechat_binding'（待恢复），此处仅运行时不输出。
-const PUBLIC_STATUS_SERVICE_KEYS: PublicStatusServiceKeyDto[] = [
-  'ai_chat',
-  'wallet',
-  'membership',
-];
 
 export async function getBillingOverview(
   userId: string,
@@ -155,24 +145,6 @@ export async function getBillingDailyUsage(
     return fail(404, '用户不存在');
   }
   return ok(toDailyUsageRowsDto(await getDailyUsageRows(user.id)));
-}
-
-/**
- * 读取公开系统状态页的轻量服务可用性信息。
- *
- * @returns 不含用户规模、队列和 Token 消耗的公开状态概览。
- */
-export async function getPublicStatusOverview(): Promise<
-  ServiceResult<PublicStatusOverviewDto>
-> {
-  return ok({
-    updated_at: new Date().toISOString(),
-    overall_status: 'operational',
-    services: PUBLIC_STATUS_SERVICE_KEYS.map((key) => ({
-      key,
-      status: 'operational',
-    })),
-  });
 }
 
 export async function getBillingTransactions(

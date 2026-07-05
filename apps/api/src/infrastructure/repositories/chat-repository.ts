@@ -267,29 +267,6 @@ export async function getChatSessionsByUserId(
 }
 
 /**
- * 读取当前用户已归档的 AI Chat 会话。
- *
- * @param userId 会话归属用户 ID。
- * @param limit 返回数量上限。
- * @returns 按归档时间倒序排列的会话列表。
- */
-export async function getArchivedChatSessionsByUserId(
-  userId: string,
-  limit = 100,
-): Promise<ChatSession[]> {
-  // 同 getChatSessionsByUserId：排除对外 API 的兜底会话（openapi:<uuid>），不进站内归档列表。
-  const { rows } = await getDbPool().query(
-    `SELECT * FROM chat_sessions
-     WHERE user_id = $1 AND deleted_at IS NOT NULL
-       AND id NOT LIKE 'openapi:%'
-     ORDER BY deleted_at DESC, updated_at DESC
-     LIMIT $2`,
-    [userId, Math.min(Math.max(limit, 1), 500)],
-  );
-  return rows as ChatSession[];
-}
-
-/**
  * 读取某客户名下的全部会话（含活跃与已归档），用于客户档案历史视图。
  *
  * @param userId 会话归属用户 ID（owner 隔离）。

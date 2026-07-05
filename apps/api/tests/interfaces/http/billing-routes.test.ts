@@ -10,7 +10,6 @@ vi.mock('../../../src/modules/billing/billing-service.js', () => ({
   getBillingOverview: vi.fn(),
   getBillingTransactions: vi.fn(),
   getBillingUsage: vi.fn(),
-  getPublicStatusOverview: vi.fn(),
   resetBillingScope: vi.fn(),
   subscribeCurrentUserMembership: mockSubscribeCurrentUserMembership,
 }));

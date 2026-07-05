@@ -20,7 +20,6 @@ import type { SuccessResponse } from '@fateclaw/contracts/common';
 import {
   archiveChatSession,
   createChatSession,
-  getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
   getChatSessionsByClientId,
@@ -420,19 +419,6 @@ export async function listChatSessionsForOwnedUser(
   clientId?: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
   const sessions = await getChatSessionsByUserId(userId, undefined, clientId);
-  return ok(sessions.map(toChatSessionDto));
-}
-
-/**
- * 列出当前用户已归档的 AI Chat 会话。
- *
- * @param userId 会话归属用户 ID。
- * @returns 已归档会话 DTO 列表。
- */
-export async function listArchivedChatSessionsForOwnedUser(
-  userId: string,
-): Promise<ServiceResult<ChatSessionDto[]>> {
-  const sessions = await getArchivedChatSessionsByUserId(userId);
   return ok(sessions.map(toChatSessionDto));
 }
 
