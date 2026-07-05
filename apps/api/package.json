@@ -43,7 +43,6 @@
     "kinqimen": "^0.3.1",
     "liuren-ts-lib": "^3.0.0",
     "meihua-ts-lib": "^0.1.0",
-    "openai": "^6.32.0",
     "pg": "^8.20.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
