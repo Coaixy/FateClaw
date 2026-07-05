@@ -90,42 +90,6 @@ export const zhCNMessages = {
       countOrders: '{count} 笔',
       countOrderItems: '{count} 笔订单',
     },
-    status: {
-      title: 'FateClaw 系统状态',
-      description:
-        '展示核心用户服务的当前可用性。内部流量、成本和队列遥测已移至管理后台。',
-      waitingSync: '等待同步',
-      loadFailed: '状态数据加载失败',
-      stateDegraded: '服务降级',
-      stateConnecting: '正在连接',
-      stateOnline: '运行正常',
-      stateMaintenance: '维护中',
-      lastChecked: '最后检查 {time}',
-      refresh: '刷新状态',
-      refreshing: '同步中',
-      noServices: '暂无可展示的服务状态',
-      noticeTitle: '需要帮助？',
-      noticeDescription:
-        '如果这里显示正常，但你的账号仍受影响，可以从侧栏联系站长。',
-      services: {
-        ai_chat: {
-          label: 'AI Chat',
-          description: '对话创建、回复生成与工具执行。',
-        },
-        wallet: {
-          label: '积分与账单',
-          description: '积分余额、补充积分订单和用量扣费。',
-        },
-        membership: {
-          label: '会员服务',
-          description: '会员状态、额度优先抵扣和续费流程。',
-        },
-        wechat_binding: {
-          label: '微信绑定',
-          description: '扫码绑定和已连接微信对话访问。',
-        },
-      },
-    },
     discover: {
       title: '技能库',
       description: '浏览并订阅可复用的断卦技能,装进你的工作台',

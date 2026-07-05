@@ -4,7 +4,6 @@ import {
   getActiveAnnouncement,
   getPublicAnnouncementBySlug,
   listPublicAnnouncements,
-  listPublicFinancialLedgerEntries,
 } from '../../infrastructure/db.js';
 
 /**
@@ -13,11 +12,6 @@ import {
  * 公开页面不依赖登录态，所有接口都必须只返回可公开展示的数据。
  */
 export async function publicRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/public/financial-ledger — 关于页面公开收支流水
-  app.get('/financial-ledger', async () => {
-    return { entries: await listPublicFinancialLedgerEntries() };
-  });
-
   // GET /api/public/announcements/active — 当前顶部横幅公告
   app.get('/announcements/active', async () => {
     return { announcement: await getActiveAnnouncement() };

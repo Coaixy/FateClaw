@@ -186,7 +186,6 @@ export const chatSessionsApi = {
     chatSessionListRequestCache.get(() =>
       requestJson<ChatSession[]>('/api/chat-sessions'),
     ),
-  archived: () => requestJson<ChatSession[]>('/api/chat-sessions/archived'),
   /** 某客户名下的全部会话（活跃 + 已归档），客户档案历史视图用。 */
   byClient: (clientId: string) =>
     requestJson<ChatSession[]>(

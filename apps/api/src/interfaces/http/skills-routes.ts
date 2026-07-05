@@ -733,11 +733,4 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     );
   });
 
-  // GET /api/skills/subscriptions/mine — 查我的 Skill 订阅
-  app.get('/subscriptions/mine', async (request) => {
-    await request.requireAuth();
-    return toSubscribedSkillDtos(
-      await getSubscribedSkills(request.user.userId),
-    );
-  });
 }

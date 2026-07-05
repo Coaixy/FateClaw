@@ -2,7 +2,6 @@ import { readEnvFile } from './env.js';
 
 const envConfig = readEnvFile([
   'ASSISTANT_NAME',
-  'ASSISTANT_HAS_OWN_NUMBER',
   'aliyun.sms.access-key-id',
   'aliyun.sms.access-key-secret',
   'aliyun.sms.endpoint',
@@ -30,9 +29,6 @@ const envConfig = readEnvFile([
 
 export const ASSISTANT_NAME =
   process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
-export const ASSISTANT_HAS_OWN_NUMBER =
-  (process.env.ASSISTANT_HAS_OWN_NUMBER ||
-    envConfig.ASSISTANT_HAS_OWN_NUMBER) === 'true';
 
 // 数据库 & Redis 连接地址
 export const DATABASE_URL =

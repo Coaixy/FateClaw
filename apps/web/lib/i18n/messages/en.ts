@@ -91,44 +91,6 @@ export const enMessages = {
       countOrders: '{count} orders',
       countOrderItems: '{count} orders',
     },
-    status: {
-      title: 'FateClaw System Status',
-      description:
-        'Current availability for core user-facing services. Internal traffic and cost telemetry are managed in the admin console.',
-      waitingSync: 'Waiting for sync',
-      loadFailed: 'Failed to load status data',
-      stateDegraded: 'Degraded',
-      stateConnecting: 'Connecting',
-      stateOnline: 'Operational',
-      stateMaintenance: 'Maintenance',
-      lastChecked: 'Last checked {time}',
-      refresh: 'Refresh status',
-      refreshing: 'Syncing',
-      noServices: 'No service status is available yet',
-      noticeTitle: 'Need help?',
-      noticeDescription:
-        'If a listed service looks normal but your account is still affected, contact support from the sidebar.',
-      services: {
-        ai_chat: {
-          label: 'AI Chat',
-          description: 'Conversation creation, replies, and tool execution.',
-        },
-        wallet: {
-          label: 'Credits and billing',
-          description:
-            'Credit balance, add-credit orders, and usage deduction.',
-        },
-        membership: {
-          label: 'Membership',
-          description:
-            'Membership state, allowance priority, and renewal flow.',
-        },
-        wechat_binding: {
-          label: 'WeChat binding',
-          description: 'QR binding and connected WeChat conversation access.',
-        },
-      },
-    },
     discover: {
       title: 'Skill library',
       description:

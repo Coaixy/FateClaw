@@ -25,7 +25,6 @@ interface ChatSessionsContextValue {
   createSession: () => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
-  restoreSession: (sessionId: string) => Promise<ChatSession>;
   shareSession: (sessionId: string) => Promise<string>;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
   loading: boolean;
@@ -298,14 +297,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [selectedSession, setSelectedSession],
   );
 
-  const restoreSession = useCallback(async (sessionId: string) => {
-    const session = await chatSessionsApi.restore(sessionId);
-    setSessions((previous) =>
-      mergeSessionPatch(previous, session.id, session),
-    );
-    return session;
-  }, []);
-
   const shareSession = useCallback(async (sessionId: string) => {
     const result = await chatSessionsApi.share(sessionId);
     setSessions((previous) =>
@@ -334,7 +325,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       archiveSession,
-      restoreSession,
       shareSession,
       touchSession,
       loading,
@@ -349,7 +339,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       archiveSession,
-      restoreSession,
       shareSession,
       touchSession,
       loading,

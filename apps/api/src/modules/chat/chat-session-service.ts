@@ -70,10 +70,7 @@ import {
   type SessionBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './structured-input.js';
-import {
-  resolveUserLlmRuntime,
-  type EffectiveLlmRuntimeConfig,
-} from '../system/system-config.js';
+import { resolveUserLlmRuntime } from '../system/system-config.js';
 import {
   getWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -117,10 +114,6 @@ export interface ChatSessionTurnSourceMetadata {
 export interface OwnedChatSessionTurnOptions {
   userMessageId?: string;
   sourceMetadata?: ChatSessionTurnSourceMetadata;
-  /** 内部调用方可传入本轮指定模型运行时。 */
-  llmRuntimeOverride?: EffectiveLlmRuntimeConfig;
-  /** 内部调用方可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
-  runtimeUserMessageOverride?: string;
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -813,8 +806,7 @@ async function prepareOwnedChatSessionTurn(
   }
 
   try {
-    const llmRuntime =
-      options.llmRuntimeOverride ?? (await resolveUserLlmRuntime(userId));
+    const llmRuntime = await resolveUserLlmRuntime(userId);
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -856,14 +848,12 @@ async function prepareOwnedChatSessionTurn(
             }
           : undefined,
     });
-    const defaultRuntimeUserMessage =
+    const runtimeUserMessage =
       buildRuntimeUserMessageForBoardFirstQuestion({
         input,
         previousMessages,
         sessionBoardContexts,
       });
-    const runtimeUserMessage =
-      options.runtimeUserMessageOverride?.trim() || defaultRuntimeUserMessage;
 
     const structured = await buildStructuredInputForSession(
       {

@@ -90,42 +90,6 @@ export const zhTWMessages = {
       countOrders: '{count} 筆',
       countOrderItems: '{count} 筆訂單',
     },
-    status: {
-      title: 'FateClaw 系統狀態',
-      description:
-        '展示核心使用者服務的目前可用性。內部流量、成本和佇列遙測已移至管理後台。',
-      waitingSync: '等待同步',
-      loadFailed: '狀態資料載入失敗',
-      stateDegraded: '服務降級',
-      stateConnecting: '正在連線',
-      stateOnline: '運行正常',
-      stateMaintenance: '維護中',
-      lastChecked: '最後檢查 {time}',
-      refresh: '重新整理狀態',
-      refreshing: '同步中',
-      noServices: '暫無可展示的服務狀態',
-      noticeTitle: '需要協助？',
-      noticeDescription:
-        '如果這裡顯示正常，但你的帳號仍受影響，可以從側欄聯絡站長。',
-      services: {
-        ai_chat: {
-          label: 'AI Chat',
-          description: '對話建立、回覆生成與工具執行。',
-        },
-        wallet: {
-          label: '積分與帳單',
-          description: '積分餘額、補充積分訂單和用量扣費。',
-        },
-        membership: {
-          label: '會員服務',
-          description: '會員狀態、額度優先抵扣和續費流程。',
-        },
-        wechat_binding: {
-          label: '微信綁定',
-          description: '掃碼綁定和已連接微信對話存取。',
-        },
-      },
-    },
     discover: {
       title: '技能庫',
       description: '瀏覽並訂閱可複用的斷卦技能,裝進你的工作台',
