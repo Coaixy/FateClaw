@@ -66,6 +66,7 @@ describe('runDatabaseMigrations', () => {
       '0071_cleanup_invalid_phone_users',
       '0072_purge_orphan_bundle_subscriptions',
       '0073_drop_dead_feature_tables',
+      '0074_drop_removed_feature_tables',
     ]);
 
     await runDatabaseMigrations(client as never);
@@ -133,6 +134,49 @@ describe('runDatabaseMigrations', () => {
       params: [
         '0073_drop_dead_feature_tables',
         '删除死功能表：simple_workflow_presets 与 ai_chat 免费/专业额度三表',
+      ],
+    });
+  });
+
+  it('drops removed feature tables once as migration 0074 when unrecorded', async () => {
+    // 回归防护：礼品码/邀请返利/每日签到/技能点赞四组功能已删除，其残留的 9 张表
+    // 由一次性迁移 0074 在存量库上按外键依赖顺序 DROP（全新库基线已不再建出这些表）。
+    const { client, calls } = createMockClient([
+      '0001_core_schema_baseline',
+      '0070_agent_runtime_and_billing_perf',
+      '0071_cleanup_invalid_phone_users',
+      '0072_purge_orphan_bundle_subscriptions',
+      '0073_drop_dead_feature_tables',
+    ]);
+
+    await runDatabaseMigrations(client as never);
+
+    const dropOrder = [
+      'gift_code_redemptions',
+      'gift_codes',
+      'referral_reward_events',
+      'user_referrals',
+      'user_invite_codes',
+      'referral_config',
+      'daily_sign_in_records',
+      'daily_sign_in_config',
+      'skill_reactions',
+    ];
+    // 逐表确认 DROP 语句存在，且子表先于其父表执行（外键依赖顺序）
+    const dropIndexes = dropOrder.map((table) =>
+      calls.findIndex(
+        (call) => call.sql === `DROP TABLE IF EXISTS public.${table}`,
+      ),
+    );
+    for (const index of dropIndexes) {
+      expect(index).toBeGreaterThanOrEqual(0);
+    }
+    expect(dropIndexes).toEqual([...dropIndexes].sort((a, b) => a - b));
+    expect(calls).toContainEqual({
+      sql: expect.stringContaining('INSERT INTO schema_migrations'),
+      params: [
+        '0074_drop_removed_feature_tables',
+        '删除已删功能残留表：礼品码/邀请返利/每日签到/技能点赞 共 9 张',
       ],
     });
   });

@@ -20,6 +20,10 @@ import type { DatabaseMigration } from "../types.js";
  * - 2026-07-05：移除 4 张死功能表定义（simple_workflow_presets、ai_chat_free_daily_usage、
  *   ai_chat_free_quota_config、ai_chat_professional_daily_usage）。存量库由 0073 迁移 DROP 同名表，
  *   全新库直接不建，两条路径最终 schema 一致（背景见 0073 文件注释）。
+ * - 2026-07-05（补充轮）：移除 9 张已删功能残留表定义（礼品码 gift_codes/gift_code_redemptions、
+ *   邀请返利 referral_config/referral_reward_events/user_referrals/user_invite_codes、
+ *   每日签到 daily_sign_in_config/daily_sign_in_records、技能点赞 skill_reactions）。
+ *   存量库由 0074 迁移 DROP 同名表（背景见 0074 文件注释）。
  */
 const BASELINE_SQL = `
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
@@ -197,24 +201,6 @@ CREATE TABLE public.conversation_logs (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.daily_sign_in_config (
-    id text DEFAULT 'default'::text NOT NULL,
-    enabled boolean DEFAULT false NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    reward_coins numeric(14,2) DEFAULT 0 NOT NULL,
-    CONSTRAINT chk_daily_sign_in_config_reward_coins_nonnegative CHECK ((reward_coins >= (0)::numeric))
-);
-
-CREATE TABLE public.daily_sign_in_records (
-    id text NOT NULL,
-    user_id text NOT NULL,
-    sign_in_date text NOT NULL,
-    balance_grant_id text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    reward_coins numeric(14,2) DEFAULT 0 NOT NULL,
-    CONSTRAINT chk_daily_sign_in_records_reward_coins_nonnegative CHECK ((reward_coins >= (0)::numeric))
-);
-
 CREATE TABLE public.daily_usage (
     user_id text NOT NULL,
     date text NOT NULL,
@@ -223,40 +209,6 @@ CREATE TABLE public.daily_usage (
     output_tokens integer DEFAULT 0,
     total_tokens integer DEFAULT 0,
     CONSTRAINT chk_daily_usage_total_tokens_nonnegative CHECK ((total_tokens >= 0))
-);
-
-CREATE TABLE public.gift_code_redemptions (
-    id text NOT NULL,
-    gift_code_id text NOT NULL,
-    user_id text NOT NULL,
-    wallet_transaction_id text,
-    balance_grant_id text,
-    balance_type text NOT NULL,
-    amount_coins numeric(14,2) NOT NULL,
-    redeemed_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_gift_code_redemptions_amount_positive CHECK ((amount_coins > (0)::numeric)),
-    CONSTRAINT chk_gift_code_redemptions_balance_type_valid CHECK ((balance_type = ANY (ARRAY['purchased'::text, 'bonus'::text])))
-);
-
-CREATE TABLE public.gift_codes (
-    id text NOT NULL,
-    code text NOT NULL,
-    name text DEFAULT ''::text NOT NULL,
-    balance_type text NOT NULL,
-    usage_type text NOT NULL,
-    amount_coins numeric(14,2) NOT NULL,
-    max_redemptions integer DEFAULT 1 NOT NULL,
-    redeemed_count integer DEFAULT 0 NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    expires_at timestamp with time zone,
-    created_by text,
-    note text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_gift_codes_amount_positive CHECK ((amount_coins > (0)::numeric)),
-    CONSTRAINT chk_gift_codes_balance_type_valid CHECK ((balance_type = ANY (ARRAY['purchased'::text, 'bonus'::text]))),
-    CONSTRAINT chk_gift_codes_redemptions_valid CHECK (((max_redemptions > 0) AND (redeemed_count >= 0) AND (redeemed_count <= max_redemptions))),
-    CONSTRAINT chk_gift_codes_usage_type_valid CHECK ((usage_type = ANY (ARRAY['single'::text, 'multi'::text])))
 );
 
 CREATE TABLE public.membership_config (
@@ -395,35 +347,6 @@ CREATE TABLE public.recharge_payment_config (
     CONSTRAINT chk_recharge_payment_config_platform_id_positive CHECK (((epay_platform_id IS NULL) OR (epay_platform_id > 0)))
 );
 
-CREATE TABLE public.referral_config (
-    id text DEFAULT 'default'::text NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    inviter_reward_days integer DEFAULT 7 NOT NULL,
-    monthly_reward_cap_days integer DEFAULT 30 NOT NULL,
-    reward_first_membership_only boolean DEFAULT true NOT NULL,
-    invite_count_reward_threshold integer DEFAULT 10 NOT NULL,
-    invite_count_reward_days integer DEFAULT 7 NOT NULL,
-    invite_count_reward_max_invites integer DEFAULT 50 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    reward_membership_plan_key text DEFAULT 'fateclaw_clarity'::text NOT NULL,
-    CONSTRAINT chk_referral_config_invite_count_reward_valid CHECK (((invite_count_reward_threshold >= 0) AND (invite_count_reward_threshold <= 1000000) AND (invite_count_reward_days >= 0) AND (invite_count_reward_days <= 366) AND (invite_count_reward_max_invites >= 0) AND (invite_count_reward_max_invites <= 1000000))),
-    CONSTRAINT chk_referral_config_reward_days_valid CHECK (((inviter_reward_days >= 0) AND (inviter_reward_days <= 366) AND (monthly_reward_cap_days >= 0) AND (monthly_reward_cap_days <= 3660))),
-    CONSTRAINT chk_referral_config_reward_membership_plan_valid CHECK ((reward_membership_plan_key = 'fateclaw_clarity'::text))
-);
-
-CREATE TABLE public.referral_reward_events (
-    id text NOT NULL,
-    referral_id text NOT NULL,
-    inviter_id text NOT NULL,
-    invitee_id text NOT NULL,
-    reward_days integer DEFAULT 0 NOT NULL,
-    trigger_wallet_transaction_id text,
-    status text NOT NULL,
-    reason text DEFAULT ''::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_referral_reward_events_status_valid CHECK ((status = ANY (ARRAY['granted'::text, 'skipped'::text, 'ineligible'::text])))
-);
-
 CREATE TABLE public.runtime_config (
     id text DEFAULT 'default'::text NOT NULL,
     agent_concurrency_limit integer DEFAULT 10 NOT NULL,
@@ -513,15 +436,6 @@ CREATE TABLE public.skill_global_config (
     updated_by text
 );
 
-CREATE TABLE public.skill_reactions (
-    skill_id text NOT NULL,
-    user_id text NOT NULL,
-    kind text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_skill_reactions_kind_valid CHECK ((kind = ANY (ARRAY['like'::text, 'dislike'::text])))
-);
-
 CREATE TABLE public.system_secrets (
     key text NOT NULL,
     secret_value text NOT NULL,
@@ -567,19 +481,6 @@ CREATE TABLE public.user_custom_skills (
     stat_view_count integer DEFAULT 0 NOT NULL,
     category text DEFAULT '通用'::text NOT NULL,
     CONSTRAINT chk_user_custom_skills_visibility_valid CHECK ((visibility = ANY (ARRAY['private'::text, 'link_shared'::text, 'shared'::text])))
-);
-
-CREATE TABLE public.user_invite_codes (
-    id text NOT NULL,
-    inviter_id text NOT NULL,
-    code text NOT NULL,
-    max_redemptions integer DEFAULT 1000000 NOT NULL,
-    redeemed_count integer DEFAULT 0 NOT NULL,
-    expires_at timestamp with time zone,
-    revoked_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_user_invite_codes_redemptions_valid CHECK (((max_redemptions > 0) AND (redeemed_count >= 0) AND (redeemed_count <= max_redemptions)))
 );
 
 CREATE TABLE public.user_memberships (
@@ -630,24 +531,6 @@ CREATE TABLE public.user_oauth_identities (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT chk_user_oauth_identities_provider_valid CHECK ((provider = 'google'::text))
-);
-
-CREATE TABLE public.user_referrals (
-    id text NOT NULL,
-    invite_code_id text NOT NULL,
-    inviter_id text NOT NULL,
-    invitee_id text NOT NULL,
-    bind_source text DEFAULT 'redeem'::text NOT NULL,
-    reward_status text DEFAULT 'pending'::text NOT NULL,
-    reward_days integer DEFAULT 0 NOT NULL,
-    reward_event_id text,
-    rewarded_at timestamp with time zone,
-    skip_reason text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_user_referrals_bind_source_valid CHECK ((bind_source = ANY (ARRAY['register'::text, 'redeem'::text]))),
-    CONSTRAINT chk_user_referrals_no_self CHECK ((inviter_id <> invitee_id)),
-    CONSTRAINT chk_user_referrals_reward_status_valid CHECK ((reward_status = ANY (ARRAY['pending'::text, 'granted'::text, 'skipped'::text, 'ineligible'::text])))
 );
 
 CREATE TABLE public.user_skill_subscription_bundle_sources (
@@ -714,8 +597,6 @@ CREATE TABLE public.wechat_chat_session_links (
     last_used_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-INSERT INTO public.daily_sign_in_config (id, enabled, updated_at, reward_coins) VALUES ('default', false, '2026-06-30 12:57:53.352858+00', 0.00);
-
 INSERT INTO public.membership_config (id, enabled, monthly_price_coins, updated_at, name, display_price_coins) VALUES ('fateclaw_clarity', true, 66.00, '2026-06-30 12:57:53.548368+00', '卦师使用权', 66.00);
 
 INSERT INTO public.model_billing_config (id, custom_model_platform_price_per_million_coins, updated_at) VALUES ('default', 2, '2026-06-30 12:57:53.381139+00');
@@ -725,8 +606,6 @@ INSERT INTO public.public_financial_ledger_entries (id, entry_type, occurred_at,
 INSERT INTO public.public_financial_ledger_entries (id, entry_type, occurred_at, content, amount_yuan, created_at, updated_at) VALUES ('public-ledger-seed-development-cost', 'expense', '2026-06-30', '开发成本', 300.00, '2026-06-30 12:57:53.401681+00', '2026-06-30 12:57:53.401681+00');
 
 INSERT INTO public.recharge_payment_config (id, enabled, epay_url_prefix, epay_platform_id, epay_merchant_private_key, epay_platform_public_key, epay_merchant_key, notify_url, return_url, updated_at, min_coins, max_coins) VALUES ('default', false, '', NULL, '', '', '', '', '', '2026-06-30 12:57:53.126536+00', 1.00, 1000.00);
-
-INSERT INTO public.referral_config (id, enabled, inviter_reward_days, monthly_reward_cap_days, reward_first_membership_only, invite_count_reward_threshold, invite_count_reward_days, invite_count_reward_max_invites, updated_at, reward_membership_plan_key) VALUES ('default', true, 7, 30, true, 10, 7, 50, '2026-06-30 12:57:53.455895+00', 'fateclaw_clarity');
 
 INSERT INTO public.runtime_config (id, agent_concurrency_limit, updated_at, local_agent_max_processes, local_agent_idle_ttl_ms, pi_session_health_enabled, pi_session_inactive_cleanup_days, pi_session_orphan_grace_days, skill_bundle_max_files, skill_bundle_max_file_chars, skill_bundle_max_total_chars, skill_bundle_max_zip_bytes, default_official_model_id, default_thinking_level, user_skill_max_count) VALUES ('default', 10, '2026-06-30 12:57:53.422822+00', 4, 600000, false, 30, 30, 50, 100000, 500000, 8388608, NULL, 'medium', 30);
 
@@ -766,29 +645,8 @@ ALTER TABLE ONLY public.conversation_log_payloads
 ALTER TABLE ONLY public.conversation_logs
     ADD CONSTRAINT conversation_logs_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.daily_sign_in_config
-    ADD CONSTRAINT daily_sign_in_config_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.daily_sign_in_records
-    ADD CONSTRAINT daily_sign_in_records_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.daily_sign_in_records
-    ADD CONSTRAINT daily_sign_in_records_user_id_sign_in_date_key UNIQUE (user_id, sign_in_date);
-
 ALTER TABLE ONLY public.daily_usage
     ADD CONSTRAINT daily_usage_pkey PRIMARY KEY (user_id, date);
-
-ALTER TABLE ONLY public.gift_code_redemptions
-    ADD CONSTRAINT gift_code_redemptions_gift_code_id_user_id_key UNIQUE (gift_code_id, user_id);
-
-ALTER TABLE ONLY public.gift_code_redemptions
-    ADD CONSTRAINT gift_code_redemptions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.gift_codes
-    ADD CONSTRAINT gift_codes_code_key UNIQUE (code);
-
-ALTER TABLE ONLY public.gift_codes
-    ADD CONSTRAINT gift_codes_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.membership_config
     ADD CONSTRAINT membership_config_pkey PRIMARY KEY (id);
@@ -829,12 +687,6 @@ ALTER TABLE ONLY public.recharge_orders
 ALTER TABLE ONLY public.recharge_payment_config
     ADD CONSTRAINT recharge_payment_config_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.referral_config
-    ADD CONSTRAINT referral_config_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.referral_reward_events
-    ADD CONSTRAINT referral_reward_events_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.runtime_config
     ADD CONSTRAINT runtime_config_pkey PRIMARY KEY (id);
 
@@ -859,9 +711,6 @@ ALTER TABLE ONLY public.skill_comments
 ALTER TABLE ONLY public.skill_global_config
     ADD CONSTRAINT skill_global_config_pkey PRIMARY KEY (skill_name);
 
-ALTER TABLE ONLY public.skill_reactions
-    ADD CONSTRAINT skill_reactions_pkey PRIMARY KEY (skill_id, user_id);
-
 ALTER TABLE ONLY public.system_secrets
     ADD CONSTRAINT system_secrets_pkey PRIMARY KEY (key);
 
@@ -877,12 +726,6 @@ ALTER TABLE ONLY public.user_custom_skills
 ALTER TABLE ONLY public.user_custom_skills
     ADD CONSTRAINT user_custom_skills_share_token_key UNIQUE (share_token);
 
-ALTER TABLE ONLY public.user_invite_codes
-    ADD CONSTRAINT user_invite_codes_code_key UNIQUE (code);
-
-ALTER TABLE ONLY public.user_invite_codes
-    ADD CONSTRAINT user_invite_codes_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.user_memberships
     ADD CONSTRAINT user_memberships_pkey PRIMARY KEY (user_id, plan_key);
 
@@ -894,12 +737,6 @@ ALTER TABLE ONLY public.user_model_selections
 
 ALTER TABLE ONLY public.user_oauth_identities
     ADD CONSTRAINT user_oauth_identities_pkey PRIMARY KEY (provider, provider_user_id);
-
-ALTER TABLE ONLY public.user_referrals
-    ADD CONSTRAINT user_referrals_invitee_id_key UNIQUE (invitee_id);
-
-ALTER TABLE ONLY public.user_referrals
-    ADD CONSTRAINT user_referrals_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.user_skill_subscription_bundle_sources
     ADD CONSTRAINT user_skill_subscription_bundle_sources_pkey PRIMARY KEY (subscription_id, bundle_id);
@@ -971,14 +808,6 @@ CREATE INDEX idx_conv_logs_created ON public.conversation_logs USING btree (crea
 
 CREATE INDEX idx_conversation_logs_request_id ON public.conversation_logs USING btree (request_id);
 
-CREATE INDEX idx_daily_sign_in_records_user_created_at ON public.daily_sign_in_records USING btree (user_id, created_at DESC);
-
-CREATE INDEX idx_gift_codes_created_at ON public.gift_codes USING btree (created_at DESC);
-
-CREATE INDEX idx_gift_codes_status_lookup ON public.gift_codes USING btree (enabled, expires_at, redeemed_count, max_redemptions);
-
-CREATE INDEX idx_gift_redemptions_user_time ON public.gift_code_redemptions USING btree (user_id, redeemed_at DESC);
-
 CREATE INDEX idx_messages_account ON public.messages USING btree (account_id);
 
 CREATE INDEX idx_messages_account_deleted_timestamp ON public.messages USING btree (account_id, ((deleted_at IS NOT NULL)), "timestamp" DESC);
@@ -1009,10 +838,6 @@ CREATE INDEX idx_recharge_orders_status_paid_at ON public.recharge_orders USING 
 
 CREATE INDEX idx_recharge_orders_user_created_at ON public.recharge_orders USING btree (user_id, created_at DESC);
 
-CREATE INDEX idx_referral_reward_events_inviter_created ON public.referral_reward_events USING btree (inviter_id, created_at DESC);
-
-CREATE UNIQUE INDEX idx_referral_reward_events_referral_reason_granted ON public.referral_reward_events USING btree (referral_id, reason) WHERE (status = 'granted'::text);
-
 CREATE INDEX idx_skill_access_invites_creator_target ON public.skill_access_invites USING btree (creator_id, target_type, target_id, created_at DESC);
 
 CREATE INDEX idx_skill_access_invites_token ON public.skill_access_invites USING btree (token);
@@ -1033,8 +858,6 @@ CREATE INDEX idx_skill_comments_admin_status ON public.skill_comments USING btre
 
 CREATE INDEX idx_skill_comments_public ON public.skill_comments USING btree (skill_id, pinned DESC, reviewed_at DESC, created_at DESC) WHERE (status = 'approved'::text);
 
-CREATE INDEX idx_skill_reactions_skill_kind ON public.skill_reactions USING btree (skill_id, kind);
-
 CREATE INDEX idx_ucs_market_category_listing ON public.user_custom_skills USING btree (category, stat_subscriber_count DESC, created_at DESC) WHERE ((deleted_at IS NULL) AND (visibility = 'shared'::text));
 
 CREATE INDEX idx_ucs_market_listing ON public.user_custom_skills USING btree (stat_subscriber_count DESC, created_at DESC) WHERE ((deleted_at IS NULL) AND (visibility = 'shared'::text));
@@ -1047,10 +870,6 @@ CREATE UNIQUE INDEX idx_ucs_user_dir_active ON public.user_custom_skills USING b
 
 CREATE INDEX idx_user_api_keys_user_active ON public.user_api_keys USING btree (user_id) WHERE (status = 'active'::text);
 
-CREATE INDEX idx_user_invite_codes_code ON public.user_invite_codes USING btree (code);
-
-CREATE UNIQUE INDEX idx_user_invite_codes_inviter ON public.user_invite_codes USING btree (inviter_id);
-
 CREATE INDEX idx_user_memberships_active_period ON public.user_memberships USING btree (status, current_period_end);
 
 CREATE INDEX idx_user_memberships_user_effective ON public.user_memberships USING btree (user_id, status, current_period_end DESC);
@@ -1060,10 +879,6 @@ CREATE INDEX idx_user_model_selections_official_model ON public.user_model_selec
 CREATE INDEX idx_user_oauth_identities_email ON public.user_oauth_identities USING btree (lower(email)) WHERE (email IS NOT NULL);
 
 CREATE UNIQUE INDEX idx_user_oauth_identities_user_provider ON public.user_oauth_identities USING btree (user_id, provider);
-
-CREATE INDEX idx_user_referrals_inviter_created ON public.user_referrals USING btree (inviter_id, created_at DESC);
-
-CREATE INDEX idx_user_referrals_reward_status ON public.user_referrals USING btree (reward_status, created_at DESC);
 
 CREATE INDEX idx_users_created_at ON public.users USING btree (created_at DESC);
 
@@ -1120,9 +935,6 @@ ALTER TABLE ONLY public.client_profiles
 ALTER TABLE ONLY public.conversation_log_payloads
     ADD CONSTRAINT conversation_log_payloads_log_id_fkey FOREIGN KEY (log_id) REFERENCES public.conversation_logs(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.daily_sign_in_records
-    ADD CONSTRAINT daily_sign_in_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.daily_usage
     ADD CONSTRAINT daily_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
@@ -1141,12 +953,6 @@ ALTER TABLE ONLY public.user_skill_subscriptions
 ALTER TABLE ONLY public.user_skill_subscriptions
     ADD CONSTRAINT fk_user_skill_subscriptions_subscriber_id FOREIGN KEY (subscriber_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.gift_code_redemptions
-    ADD CONSTRAINT gift_code_redemptions_gift_code_id_fkey FOREIGN KEY (gift_code_id) REFERENCES public.gift_codes(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.gift_code_redemptions
-    ADD CONSTRAINT gift_code_redemptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
@@ -1161,15 +967,6 @@ ALTER TABLE ONLY public.open_sessions
 
 ALTER TABLE ONLY public.recharge_orders
     ADD CONSTRAINT recharge_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.referral_reward_events
-    ADD CONSTRAINT referral_reward_events_invitee_id_fkey FOREIGN KEY (invitee_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.referral_reward_events
-    ADD CONSTRAINT referral_reward_events_inviter_id_fkey FOREIGN KEY (inviter_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.referral_reward_events
-    ADD CONSTRAINT referral_reward_events_referral_id_fkey FOREIGN KEY (referral_id) REFERENCES public.user_referrals(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.skill_access_invites
     ADD CONSTRAINT skill_access_invites_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id);
@@ -1189,17 +986,8 @@ ALTER TABLE ONLY public.skill_comments
 ALTER TABLE ONLY public.skill_comments
     ADD CONSTRAINT skill_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.skill_reactions
-    ADD CONSTRAINT skill_reactions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES public.user_custom_skills(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.skill_reactions
-    ADD CONSTRAINT skill_reactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.user_api_keys
     ADD CONSTRAINT user_api_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.user_invite_codes
-    ADD CONSTRAINT user_invite_codes_inviter_id_fkey FOREIGN KEY (inviter_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.user_memberships
     ADD CONSTRAINT user_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
@@ -1215,15 +1003,6 @@ ALTER TABLE ONLY public.user_model_selections
 
 ALTER TABLE ONLY public.user_oauth_identities
     ADD CONSTRAINT user_oauth_identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.user_referrals
-    ADD CONSTRAINT user_referrals_invite_code_id_fkey FOREIGN KEY (invite_code_id) REFERENCES public.user_invite_codes(id);
-
-ALTER TABLE ONLY public.user_referrals
-    ADD CONSTRAINT user_referrals_invitee_id_fkey FOREIGN KEY (invitee_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.user_referrals
-    ADD CONSTRAINT user_referrals_inviter_id_fkey FOREIGN KEY (inviter_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.user_skill_subscription_bundle_sources
     ADD CONSTRAINT user_skill_subscription_bundle_sources_bundle_id_fkey FOREIGN KEY (bundle_id) REFERENCES public.skill_bundles(id) ON DELETE CASCADE;
