@@ -415,8 +415,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       history: [],
       sessionId: 'session-1',
       llmRuntime: effectiveRuntime,
-      authorizedSkillBundleIds: ['bundle-bazi'],
-      authorizedWorkflowSkillIds: ['snapshot-bazi'],
+      authorizedSkillIds: ['skill-bazi'],
       waitForResponse: false,
     });
 
@@ -445,16 +444,12 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       expect(mockRetainLocalAgent).toHaveBeenCalledWith('web:user-1');
       expect(mockLpush).toHaveBeenCalledWith(
         expect.stringMatching(/^ipc:web:user-1:inbox:member$/),
-        expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
+        expect.stringContaining('"authorizedSkillIds":["skill-bazi"]'),
       );
     });
     expect(mockLpush).toHaveBeenCalledWith(
       expect.any(String),
-      expect.stringContaining('"authorizedSkillBundleIds":["bundle-bazi"]'),
-    );
-    expect(mockLpush).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining('"authorizedWorkflowSkillIds":["snapshot-bazi"]'),
+      expect.stringContaining('"authorizedSkillIds":["skill-bazi"]'),
     );
     expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
       expect.objectContaining({

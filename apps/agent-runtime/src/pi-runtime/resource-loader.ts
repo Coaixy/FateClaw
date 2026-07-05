@@ -48,26 +48,6 @@ interface RequestKnowledgeEntry {
   description: string;
 }
 
-function normalizeAuthorizedSkillBundleIds(input: ContainerInput): string[] {
-  return Array.from(
-    new Set(
-      (input.authorizedSkillBundleIds ?? [])
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0),
-    ),
-  );
-}
-
-function normalizeAuthorizedWorkflowSkillIds(input: ContainerInput): string[] {
-  return Array.from(
-    new Set(
-      (input.authorizedWorkflowSkillIds ?? [])
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0),
-    ),
-  );
-}
-
 function normalizeAuthorizedSkillIds(input: ContainerInput): string[] {
   return Array.from(
     new Set(
@@ -78,13 +58,9 @@ function normalizeAuthorizedSkillIds(input: ContainerInput): string[] {
   );
 }
 
-function hasExplicitSkillBundleScope(input: ContainerInput): boolean {
-  // 内部 workflow / 对外开放 API 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
-  return (
-    input.authorizedWorkflowSkillIds !== undefined ||
-    input.authorizedSkillBundleIds !== undefined ||
-    input.authorizedSkillIds !== undefined
-  );
+function hasExplicitSkillScope(input: ContainerInput): boolean {
+  // 对外开放 API 会显式传字段；空数组代表本轮不加载任何用户级 Skill。
+  return input.authorizedSkillIds !== undefined;
 }
 
 async function loadRequestScopedSkills(
@@ -94,47 +70,22 @@ async function loadRequestScopedSkills(
   diagnostics: ResourceDiagnostic[];
   privateKnowledgeEntries: RequestKnowledgeEntry[];
 }> {
-  const authorizedSkillBundleIds = normalizeAuthorizedSkillBundleIds(
-    options.containerInput,
-  );
-  const authorizedWorkflowSkillIds = normalizeAuthorizedWorkflowSkillIds(
-    options.containerInput,
-  );
   const authorizedSkillIds = normalizeAuthorizedSkillIds(
     options.containerInput,
   );
-  const explicitSkillBundleScope = hasExplicitSkillBundleScope(
-    options.containerInput,
-  );
-  const effectivePrivateKnowledge =
-    explicitSkillBundleScope
-      ? authorizedWorkflowSkillIds.length > 0 &&
-        options.deps.skillCatalog.listWorkflowSnapshotSkills
-        ? await options.deps.skillCatalog.listWorkflowSnapshotSkills(
-            authorizedWorkflowSkillIds,
-          )
-        : authorizedSkillIds.length > 0 &&
-            options.userId &&
-            options.deps.skillCatalog.listEffectiveUserSkillsByIds
-        ? await options.deps.skillCatalog.listEffectiveUserSkillsByIds(
-            options.userId,
-            authorizedSkillIds,
-          )
-        : authorizedSkillBundleIds.length > 0
-        ? options.deps.skillCatalog.listWorkflowBundleSkills
-          ? await options.deps.skillCatalog.listWorkflowBundleSkills(
-              authorizedSkillBundleIds,
-            )
-          : options.userId
-            ? await options.deps.skillCatalog.listEffectiveUserSkills(
-                options.userId,
-                { skillBundleIds: authorizedSkillBundleIds },
-              )
-            : []
-        : []
-      : options.userId
-        ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
-        : [];
+  const explicitSkillScope = hasExplicitSkillScope(options.containerInput);
+  const effectivePrivateKnowledge = explicitSkillScope
+    ? authorizedSkillIds.length > 0 &&
+        options.userId &&
+        options.deps.skillCatalog.listEffectiveUserSkillsByIds
+      ? await options.deps.skillCatalog.listEffectiveUserSkillsByIds(
+          options.userId,
+          authorizedSkillIds,
+        )
+      : []
+    : options.userId
+      ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
+      : [];
   const privateKnowledgeEntries = effectivePrivateKnowledge
     .filter((skill) => getTextSkillBundleSkillFile(skill.bundle_uri))
     .map((skill) => ({
@@ -162,8 +113,6 @@ async function loadRequestScopedSkills(
     {
       type: 'pi_resource_loader_prepared',
       privateKnowledgeSkillCount: privateKnowledgeSkills.length,
-      authorizedSkillBundleCount: authorizedSkillBundleIds.length,
-      authorizedWorkflowSkillCount: authorizedWorkflowSkillIds.length,
       authorizedSkillIdCount: authorizedSkillIds.length,
       isolation: 'request_scoped',
     },
@@ -198,7 +147,7 @@ export async function createPiResourceLoader(
   const appendSystemPrompt = buildAppendSystemPrompt(
     privateKnowledgeEntries,
     options.piContextPrompt,
-    hasExplicitSkillBundleScope(options.containerInput),
+    hasExplicitSkillScope(options.containerInput),
   );
 
   return {

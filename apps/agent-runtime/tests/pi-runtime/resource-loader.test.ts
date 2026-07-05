@@ -143,129 +143,7 @@ describe('createPiResourceLoader', () => {
     );
   });
 
-  it('passes authorized skill bundle ids into request-scoped private knowledge loading', async () => {
-    const baziSkill: EffectiveUserSkill = {
-      id: 'private-bazi-id',
-      dir: 'private-bazi',
-      name: '私有八字知识',
-      description: '私有八字入口',
-      bundle_uri: createTextSkillBundleFixture('private-bazi'),
-      checksum: null,
-      install_status: 'installed',
-      visibility: 'private',
-      source: 'self',
-      source_bundle_ids: ['bundle-bazi'],
-    };
-    const liuyaoSkill: EffectiveUserSkill = {
-      id: 'private-liuyao-id',
-      dir: 'private-liuyao',
-      name: '私有六爻知识',
-      description: '私有六爻入口',
-      bundle_uri: createTextSkillBundleFixture('private-liuyao'),
-      checksum: null,
-      install_status: 'installed',
-      visibility: 'private',
-      source: 'self',
-      source_bundle_ids: ['bundle-liuyao'],
-    };
-    const listEffectiveUserSkills = vi.fn(async () => [baziSkill, liuyaoSkill]);
-    const listWorkflowBundleSkills = vi.fn(async (bundleIds: string[]) =>
-      [baziSkill, liuyaoSkill].filter((skill) =>
-        skill.source_bundle_ids?.some((bundleId) =>
-          bundleIds.includes(bundleId),
-        ),
-      ),
-    );
-    const deps: AgentRuntimeDeps = {
-      soulStore: {
-        read: vi.fn(),
-        canEdit: vi.fn(async () => true),
-        update: vi.fn(),
-      },
-      skillCatalog: {
-        listEffectiveUserSkills,
-        listWorkflowBundleSkills,
-      },
-    };
-
-    const loader = await createPiResourceLoader({
-      deps,
-      userId: 'user-1',
-      requestScope: createRequestScope(),
-      containerInput: {
-        ...containerInput,
-        authorizedSkillBundleIds: ['bundle-bazi'],
-      },
-    });
-
-    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
-      'private-bazi',
-    ]);
-    expect(listWorkflowBundleSkills).toHaveBeenCalledWith(['bundle-bazi']);
-    expect(listEffectiveUserSkills).not.toHaveBeenCalled();
-    expect(loader.getAppendSystemPrompt().join('\n')).toContain(
-      '本轮 workflow 已绑定的 Markdown Skill 知识库入口如下。',
-    );
-    expect(loader.getAppendSystemPrompt().join('\n')).toContain('不是可选装饰');
-    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
-      '# private-bazi 知识',
-    );
-    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
-      '# private-liuyao 知识',
-    );
-  });
-
-  it('loads workflow skill snapshots before falling back to bundle scopes', async () => {
-    const snapshotSkill: EffectiveUserSkill = {
-      id: 'snapshot-bazi-id',
-      dir: 'workflow-bazi',
-      name: 'Workflow 八字快照',
-      description: '固定快照入口',
-      bundle_uri: createTextSkillBundleFixture('workflow-bazi'),
-      checksum: null,
-      install_status: 'installed',
-      visibility: 'private',
-      source: 'workflow',
-      source_bundle_ids: [],
-    };
-    const listEffectiveUserSkills = vi.fn(async () => []);
-    const listWorkflowBundleSkills = vi.fn(async () => []);
-    const listWorkflowSnapshotSkills = vi.fn(async () => [snapshotSkill]);
-    const deps: AgentRuntimeDeps = {
-      soulStore: {
-        read: vi.fn(),
-        canEdit: vi.fn(async () => true),
-        update: vi.fn(),
-      },
-      skillCatalog: {
-        listEffectiveUserSkills,
-        listWorkflowBundleSkills,
-        listWorkflowSnapshotSkills,
-      },
-    };
-
-    const loader = await createPiResourceLoader({
-      deps,
-      userId: 'user-1',
-      requestScope: createRequestScope(),
-      containerInput: {
-        ...containerInput,
-        authorizedSkillBundleIds: ['bundle-bazi'],
-        authorizedWorkflowSkillIds: ['snapshot-bazi-id'],
-      },
-    });
-
-    expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
-      'workflow-bazi',
-    ]);
-    expect(listWorkflowSnapshotSkills).toHaveBeenCalledWith([
-      'snapshot-bazi-id',
-    ]);
-    expect(listWorkflowBundleSkills).not.toHaveBeenCalled();
-    expect(listEffectiveUserSkills).not.toHaveBeenCalled();
-  });
-
-  it('loads no effective user skills when workflow bundle scope is empty', async () => {
+  it('loads no effective user skills when explicit skill scope is empty', async () => {
     const deps = createDeps();
     const loader = await createPiResourceLoader({
       deps,
@@ -273,7 +151,7 @@ describe('createPiResourceLoader', () => {
       requestScope: createRequestScope(),
       containerInput: {
         ...containerInput,
-        authorizedSkillBundleIds: [],
+        authorizedSkillIds: [],
       },
     });
 

@@ -392,8 +392,6 @@ export const zhTWMessages = {
       monthlyMessages: '本月訊息',
       monthlyToken: '本月 Token',
       freeAccount: '目前為免費帳戶',
-      freeDescription:
-        '可使用簡易模式與手動排盤；專家模式和追問需開通卦師使用權。',
       freeBadgeWallet: '積分餘額計費',
       freeBadgeUpgrade: '可隨時升級',
       freeBadgeInactive: '未開通會員',

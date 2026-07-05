@@ -307,12 +307,11 @@ function isHiddenDisplayMessage(message: Message): boolean {
     return false;
   }
 
-  // 直接排盘和简易模式都会写入一条只用于记录操作的用户消息；聊天流里保留盘面结果即可。
+  // 直接排盘会写入一条只用于记录操作的用户消息；聊天流里保留盘面结果即可。
   return (
     !message.is_bot_message &&
     metadata.kind === 'board_request' &&
-    (metadata.workflow === 'direct_paipan' ||
-      metadata.workflow === 'simple_workflow')
+    metadata.workflow === 'direct_paipan'
   );
 }
 

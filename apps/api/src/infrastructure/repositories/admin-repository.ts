@@ -444,8 +444,7 @@ function hydrateAdminCustomSkillRow(
 export async function getCustomSkillsForAdmin(opts: {
   userId?: string;
 }): Promise<AdminCustomSkillRow[]> {
-  let whereClause =
-    "WHERE s.deleted_at IS NULL AND COALESCE(s.audit_metadata->>'source', '') <> 'simple_workflow_snapshot'";
+  let whereClause = 'WHERE s.deleted_at IS NULL';
   const params: unknown[] = [];
   let paramIdx = 1;
 
@@ -479,8 +478,7 @@ export async function getCustomSkillForAdmin(
             s.created_at, s.updated_at
      FROM user_custom_skills s
      JOIN users u ON u.id = s.user_id
-     WHERE s.id = $1 AND s.deleted_at IS NULL
-       AND COALESCE(s.audit_metadata->>'source', '') <> 'simple_workflow_snapshot'`,
+     WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
   return rows[0]

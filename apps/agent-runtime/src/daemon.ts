@@ -287,8 +287,6 @@ async function processInboxMessage(
           assistantName: request.assistantName,
           personaPrompt: request.personaPrompt,
           guashiScriptTemplate: request.guashiScriptTemplate,
-          authorizedSkillBundleIds: request.authorizedSkillBundleIds,
-          authorizedWorkflowSkillIds: request.authorizedWorkflowSkillIds,
           authorizedSkillIds: request.authorizedSkillIds,
           outboxQueue: request.outboxQueue,
         },

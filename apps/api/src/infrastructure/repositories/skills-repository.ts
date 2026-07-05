@@ -29,10 +29,6 @@ const pool = {
   },
 };
 
-const WORKFLOW_SNAPSHOT_AUDIT_SOURCE = 'simple_workflow_snapshot';
-const EXCLUDE_WORKFLOW_SNAPSHOT_SQL =
-  "COALESCE(s.audit_metadata->>'source', '') <> 'simple_workflow_snapshot'";
-
 interface SkillDbQueryable {
   query(
     sql: string,
@@ -186,11 +182,7 @@ export async function listMarketSkills(opts: {
   limit?: number;
   offset?: number;
 }): Promise<MarketSkillListRow[]> {
-  const conditions = [
-    's.deleted_at IS NULL',
-    "s.visibility = 'shared'",
-    EXCLUDE_WORKFLOW_SNAPSHOT_SQL,
-  ];
+  const conditions = ['s.deleted_at IS NULL', "s.visibility = 'shared'"];
   const params: unknown[] = [];
   // 路由层已经拒绝异常分页值；仓库层再兜底，避免内部调用绕过校验导致慢查询。
   const pagination = clampMarketPagination({
@@ -423,7 +415,6 @@ export async function getUserCustomSkills(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
      WHERE s.user_id = $1 AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
      ORDER BY s.created_at DESC`,
     [userId],
   );
@@ -437,8 +428,7 @@ export async function getUserCustomSkill(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL`,
     [id, userId],
   );
   return rows[0]
@@ -452,8 +442,7 @@ export async function getUserCustomSkillById(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     WHERE s.id = $1 AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
   return rows[0]
@@ -492,7 +481,6 @@ export async function updateUserCustomSkill(
       `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
        FROM user_custom_skills s
        WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL
-         AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
        FOR UPDATE`,
       [id, userId],
     );
@@ -505,12 +493,10 @@ export async function updateUserCustomSkill(
     if (skillFields.length > 0) {
       skillFields.push(`updated_at = NOW()`);
       values.push(id, userId);
-      const updateParams = [...values, WORKFLOW_SNAPSHOT_AUDIT_SOURCE];
       await client.query(
         `UPDATE user_custom_skills SET ${skillFields.join(', ')}
-         WHERE id = $${paramIdx++} AND user_id = $${paramIdx++} AND deleted_at IS NULL
-           AND COALESCE(audit_metadata->>'source', '') <> $${paramIdx}`,
-        updateParams,
+         WHERE id = $${paramIdx++} AND user_id = $${paramIdx++} AND deleted_at IS NULL`,
+        values,
       );
     }
     if (fileValue !== undefined) {
@@ -544,8 +530,7 @@ export async function updateUserCustomSkill(
              install_status = 'installed',
              audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $5::jsonb,
              updated_at = NOW()
-         WHERE id = $6 AND user_id = $7 AND deleted_at IS NULL
-           AND COALESCE(audit_metadata->>'source', '') <> $8`,
+         WHERE id = $6 AND user_id = $7 AND deleted_at IS NULL`,
         [
           displayName,
           metadata.description,
@@ -554,7 +539,6 @@ export async function updateUserCustomSkill(
           JSON.stringify({ updated_bundle_at: new Date().toISOString() }),
           id,
           userId,
-          WORKFLOW_SNAPSHOT_AUDIT_SOURCE,
         ],
       );
     }
@@ -578,9 +562,8 @@ export async function deleteUserCustomSkill(
     const { rowCount } = await client.query(
       `UPDATE user_custom_skills
        SET deleted_at = NOW()
-       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-         AND COALESCE(audit_metadata->>'source', '') <> $3`,
-      [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [id, userId],
     );
     if ((rowCount ?? 0) > 0) {
       // 技能删除后同步清理它在各 bundle 里的关联行，并重算受影响 bundle 的
@@ -617,9 +600,8 @@ export async function toggleUserCustomSkill(
   const { rowCount } = await pool.query(
     `UPDATE user_custom_skills SET enabled = NOT enabled, updated_at = NOW()
      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $3
      RETURNING id`,
-    [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [id, userId],
   );
   if ((rowCount ?? 0) === 0) return undefined;
   return getUserCustomSkill(id, userId);
@@ -667,9 +649,8 @@ export async function setUserCustomSkillAdminState(
     `UPDATE user_custom_skills
      SET ${fields.join(', ')}
      WHERE id = $${paramIdx} AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $${paramIdx + 1}
      RETURNING id`,
-    [...values, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    values,
   );
   if (rows.length === 0) return undefined;
   return getUserCustomSkillById(id);
@@ -679,8 +660,7 @@ export async function getUserCustomSkillCount(userId: string): Promise<number> {
   const { rows } = await pool.query(
     `SELECT COUNT(*) as cnt
      FROM user_custom_skills s
-     WHERE user_id = $1 AND deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE user_id = $1 AND deleted_at IS NULL`,
     [userId],
   );
   return Number((rows[0] as { cnt: string }).cnt);
@@ -699,9 +679,8 @@ export async function shareUserCustomSkill(
          share_token = COALESCE(share_token, $3),
          updated_at = NOW()
      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $4
      RETURNING id`,
-    [id, userId, shareToken, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [id, userId, shareToken],
   );
   if ((rowCount ?? 0) === 0) return undefined;
   return getUserCustomSkill(id, userId);
@@ -717,9 +696,8 @@ export async function unshareUserCustomSkill(
          share_token = CASE WHEN visibility = 'shared' THEN share_token ELSE NULL END,
          updated_at = NOW()
      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $3
      RETURNING id`,
-    [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [id, userId],
   );
   if ((rowCount ?? 0) === 0) return undefined;
   return getUserCustomSkill(id, userId);
@@ -736,9 +714,8 @@ export async function publishUserCustomSkill(
          share_token = COALESCE(share_token, $3),
          updated_at = NOW()
      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $4
      RETURNING id`,
-    [id, userId, shareToken, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [id, userId, shareToken],
   );
   if ((rowCount ?? 0) === 0) return undefined;
   return getUserCustomSkill(id, userId);
@@ -753,9 +730,8 @@ export async function unpublishUserCustomSkill(
      SET visibility = CASE WHEN share_token IS NULL THEN 'private' ELSE 'link_shared' END,
          updated_at = NOW()
      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-       AND COALESCE(audit_metadata->>'source', '') <> $3
      RETURNING id`,
-    [id, userId, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+    [id, userId],
   );
   if ((rowCount ?? 0) === 0) return undefined;
   return getUserCustomSkill(id, userId);
@@ -767,8 +743,7 @@ export async function getSkillByShareToken(
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-      WHERE s.share_token = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')
-        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+      WHERE s.share_token = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')`,
     [token],
   );
   return rows[0]
@@ -939,8 +914,7 @@ async function getUserCustomSkillByIdUsing(
   const { rows } = await queryable.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
      FROM user_custom_skills s
-     WHERE s.id = $1 AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
   return rows[0]
@@ -967,8 +941,7 @@ async function getSkillBundleWithSkillsByIdUsing(
   const { rows: skillRows } = await queryable.query(
     `SELECT s.id, s.skill_name, s.description, s.bundle_uri
      FROM user_custom_skills s
-     WHERE s.id = ANY($1) AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE s.id = ANY($1) AND s.deleted_at IS NULL`,
     [bundle.skill_ids],
   );
   const byId = new Map(
@@ -1480,8 +1453,7 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
        AND (
          s.visibility IN ('link_shared', 'shared')
          OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
-       )
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+       )`,
     [subscriberId],
   );
   return hydrateUserCustomSkillRows(
@@ -1527,7 +1499,6 @@ export async function listEffectiveUserSkillsForOpenApi(
         AND s.enabled = true
         AND s.deleted_at IS NULL
         AND s.install_status = 'installed'
-        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
      UNION ALL
      SELECT s.id, s.skill_name AS name, s.description, 'subscribed' AS source
        FROM user_skill_subscriptions sub
@@ -1542,7 +1513,6 @@ export async function listEffectiveUserSkillsForOpenApi(
           OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
         )
         AND s.install_status = 'installed'
-        AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}
       ORDER BY name ASC`,
     [userId],
   );
@@ -1598,9 +1568,8 @@ async function validateBundleSkillOwnershipUsing(
     id: string;
     user_id: string;
     deleted_at: Date | null;
-    source: string | null;
   }>(
-    `SELECT id, user_id, deleted_at, audit_metadata->>'source' AS source
+    `SELECT id, user_id, deleted_at
        FROM user_custom_skills
       WHERE id = ANY($1)`,
     [unique],
@@ -1609,16 +1578,14 @@ async function validateBundleSkillOwnershipUsing(
   const invalid: string[] = [];
   for (const id of unique) {
     const row = byId.get(id);
-    // 原因判定优先级：不存在 > 非本人拥有 > 已删除 > 工作流快照（不可打包）。
+    // 原因判定优先级：不存在 > 非本人拥有 > 已删除。
     const reason = !row
       ? '不存在'
       : row.user_id !== userId
         ? '非本人拥有'
         : row.deleted_at !== null
           ? '已删除'
-          : row.source === WORKFLOW_SNAPSHOT_AUDIT_SOURCE
-            ? '工作流快照不可打包'
-            : null;
+          : null;
     if (reason) invalid.push(`${id}(${reason})`);
   }
   if (invalid.length > 0) {
@@ -1692,60 +1659,6 @@ export async function listUserBundles(userId: string): Promise<SkillBundle[]> {
   return (rows as Record<string, unknown>[]).map(rowToSkillBundle);
 }
 
-export interface AdminSkillBundleSummary {
-  id: string;
-  user_id: string;
-  owner_phone: string | null;
-  name: string;
-  description: string;
-  skill_ids: string[];
-  skill_names: string[];
-  visibility: SkillBundle['visibility'];
-  created_at: string;
-  updated_at: string;
-}
-
-/** 查询管理后台 workflow 配置可绑定的 Skill Bundle 摘要。 */
-export async function listAdminSkillBundleSummaries(): Promise<
-  AdminSkillBundleSummary[]
-> {
-  const { rows } = await pool.query(
-    `SELECT
-       b.id,
-       b.user_id,
-       u.phone AS owner_phone,
-       b.name,
-       b.description,
-       COALESCE(
-         array_agg(sbi.skill_id ORDER BY sbi.sort_order)
-           FILTER (WHERE sbi.skill_id IS NOT NULL),
-         ARRAY[]::text[]
-       ) AS skill_ids,
-       COALESCE(
-         array_agg(COALESCE(s.skill_name, s.dir_name) ORDER BY sbi.sort_order)
-           FILTER (WHERE s.id IS NOT NULL),
-         ARRAY[]::text[]
-       ) AS skill_names,
-       b.visibility,
-       b.created_at,
-       b.updated_at
-     FROM skill_bundles b
-     LEFT JOIN users u ON u.id = b.user_id
-     LEFT JOIN skill_bundle_items sbi ON sbi.bundle_id = b.id
-     LEFT JOIN user_custom_skills s ON s.id = sbi.skill_id AND s.deleted_at IS NULL
-     WHERE b.deleted_at IS NULL
-       AND NOT EXISTS (
-         SELECT 1
-         FROM skill_bundle_items inner_sbi
-         JOIN user_custom_skills inner_s ON inner_s.id = inner_sbi.skill_id
-         WHERE inner_sbi.bundle_id = b.id
-           AND inner_s.audit_metadata->>'source' = 'simple_workflow_snapshot'
-       )
-     GROUP BY b.id, b.user_id, u.phone, b.name, b.description, b.visibility, b.created_at, b.updated_at
-     ORDER BY b.updated_at DESC, b.created_at DESC`,
-  );
-  return rows as AdminSkillBundleSummary[];
-}
 
 export async function updateSkillBundle(
   id: string,
@@ -2072,8 +1985,7 @@ export async function getBundleByToken(
   const { rows: skillRows } = await pool.query(
     `SELECT s.id, s.skill_name, s.description, s.bundle_uri
      FROM user_custom_skills s
-     WHERE s.id = ANY($1) AND s.deleted_at IS NULL
-       AND ${EXCLUDE_WORKFLOW_SNAPSHOT_SQL}`,
+     WHERE s.id = ANY($1) AND s.deleted_at IS NULL`,
     [bundle.skill_ids],
   );
   // 保留 bundle.skill_ids 原始顺序

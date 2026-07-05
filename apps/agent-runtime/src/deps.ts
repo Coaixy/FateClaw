@@ -3,8 +3,6 @@ import {
   queryEffectiveUserSkillsByIds,
   querySoulEditEnabled,
   querySoulContent,
-  queryWorkflowBundleSkills,
-  queryWorkflowSnapshotSkills,
   updateSoulContentDb,
   type EffectiveUserSkill,
 } from './agent-db.js';
@@ -34,21 +32,10 @@ export interface SoulStore {
  * 注意：这里只暴露请求级授权资源，不代表全局本地 Skill 可见。
  */
 export interface SkillCatalog {
-  listEffectiveUserSkills(
-    userId: string,
-    options?: { skillBundleIds?: string[] },
-  ): Promise<EffectiveUserSkill[]>;
+  listEffectiveUserSkills(userId: string): Promise<EffectiveUserSkill[]>;
   /** 按单个 Skill id 读取用户有效 Skill（归属+启用校验在内部完成）；对外开放 API 用。 */
   listEffectiveUserSkillsByIds?(
     userId: string,
-    skillIds: string[],
-  ): Promise<EffectiveUserSkill[]>;
-  /** 读取后端 workflow 已授权的 Bundle Skill，不再按终端用户订阅关系过滤。 */
-  listWorkflowBundleSkills?(
-    skillBundleIds: string[],
-  ): Promise<EffectiveUserSkill[]>;
-  /** 读取后端 workflow 保存时生成的 Skill 快照，不再跟随原 Bundle 变化。 */
-  listWorkflowSnapshotSkills?(
     skillIds: string[],
   ): Promise<EffectiveUserSkill[]>;
 }
@@ -77,17 +64,11 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   },
 
   skillCatalog: {
-    listEffectiveUserSkills(userId, options) {
-      return queryEffectiveUserSkills(userId, options);
+    listEffectiveUserSkills(userId) {
+      return queryEffectiveUserSkills(userId);
     },
     listEffectiveUserSkillsByIds(userId, skillIds) {
       return queryEffectiveUserSkillsByIds(userId, skillIds);
-    },
-    listWorkflowBundleSkills(skillBundleIds) {
-      return queryWorkflowBundleSkills(skillBundleIds);
-    },
-    listWorkflowSnapshotSkills(skillIds) {
-      return queryWorkflowSnapshotSkills(skillIds);
     },
   },
 };

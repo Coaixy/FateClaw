@@ -1278,8 +1278,6 @@ export function submitAiChatInboxRequest(input: {
   assistantName?: string;
   personaPrompt?: string;
   guashiScriptTemplate?: string;
-  authorizedSkillBundleIds?: string[];
-  authorizedWorkflowSkillIds?: string[];
   authorizedSkillIds?: string[];
   llmRuntime?: EffectiveLlmRuntimeConfig;
   entitlementSnapshot?: RuntimeEntitlementSnapshot;
@@ -1470,8 +1468,6 @@ export function submitAiChatInboxRequest(input: {
           assistantName: input.assistantName,
           personaPrompt: input.personaPrompt,
           guashiScriptTemplate: input.guashiScriptTemplate,
-          authorizedSkillBundleIds: input.authorizedSkillBundleIds,
-          authorizedWorkflowSkillIds: input.authorizedWorkflowSkillIds,
           authorizedSkillIds: input.authorizedSkillIds,
           llmRuntime,
           timestamp: new Date().toISOString(),

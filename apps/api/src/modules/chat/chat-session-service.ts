@@ -117,14 +117,10 @@ export interface ChatSessionTurnSourceMetadata {
 export interface OwnedChatSessionTurnOptions {
   userMessageId?: string;
   sourceMetadata?: ChatSessionTurnSourceMetadata;
-  /** 简易模式等内部 workflow 可传入本轮指定模型运行时。 */
+  /** 内部调用方可传入本轮指定模型运行时。 */
   llmRuntimeOverride?: EffectiveLlmRuntimeConfig;
-  /** 内部 workflow 可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
+  /** 内部调用方可覆盖送入 runtime 的提示词，同时保留用户端展示内容。 */
   runtimeUserMessageOverride?: string;
-  /** 本轮 AI 请求明确授权可读取的 Skill Bundle；不传时保持用户全部有效 Skill 可见，传空数组时不加载用户级 Skill。 */
-  authorizedSkillBundleIds?: string[];
-  /** 本轮 AI 请求明确授权可读取的 workflow Skill 快照；优先于 Bundle 白名单。 */
-  authorizedWorkflowSkillIds?: string[];
   /** 会话忙碌锁抢占成功后执行；微信入口用它发送非会话 ACK。 */
   onProcessingClaimed?: () => Promise<void>;
 }
@@ -148,8 +144,6 @@ interface PreparedOwnedChatSessionTurn {
   llmRuntime: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
   structured: StructuredInput;
   sessionBoardContexts: SessionBoardContextDto[];
-  authorizedSkillBundleIds?: string[];
-  authorizedWorkflowSkillIds?: string[];
   sessionTitle: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
@@ -165,12 +159,6 @@ function isPaymentRequiredError(errorMessage: string): boolean {
 
 function createAiChatRequestId(): string {
   return `aichat-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
-}
-
-function normalizeAuthorizedIds(ids?: string[]): string[] {
-  return Array.from(
-    new Set((ids ?? []).map((id) => id.trim()).filter((id) => id.length > 0)),
-  );
 }
 
 function generateChatSessionShareToken(): string {
@@ -827,14 +815,6 @@ async function prepareOwnedChatSessionTurn(
   try {
     const llmRuntime =
       options.llmRuntimeOverride ?? (await resolveUserLlmRuntime(userId));
-    const authorizedSkillBundleIds =
-      options.authorizedSkillBundleIds === undefined
-        ? undefined
-        : normalizeAuthorizedIds(options.authorizedSkillBundleIds);
-    const authorizedWorkflowSkillIds =
-      options.authorizedWorkflowSkillIds === undefined
-        ? undefined
-        : normalizeAuthorizedIds(options.authorizedWorkflowSkillIds);
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -907,8 +887,6 @@ async function prepareOwnedChatSessionTurn(
       llmRuntime,
       structured,
       sessionBoardContexts,
-      authorizedSkillBundleIds,
-      authorizedWorkflowSkillIds,
       sessionTitle:
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
@@ -951,8 +929,6 @@ async function enqueuePreparedOwnedChatSessionTurn(
       userMessageId: msgId,
       requestId,
       llmRuntime,
-      authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
-      authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
       entitlementSnapshot: prepared.entitlementSnapshot,
       waitForResponse: false,
     });
@@ -1010,8 +986,6 @@ async function completeOwnedChatSessionTurn(
       userMessageId: msgId,
       requestId,
       llmRuntime,
-      authorizedSkillBundleIds: prepared.authorizedSkillBundleIds,
-      authorizedWorkflowSkillIds: prepared.authorizedWorkflowSkillIds,
       entitlementSnapshot: prepared.entitlementSnapshot,
     });
 

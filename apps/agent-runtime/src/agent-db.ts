@@ -7,7 +7,6 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const WEB_CHAT_RUNTIME_PREFIX = 'web:';
-const WORKFLOW_SNAPSHOT_AUDIT_SOURCE = 'simple_workflow_snapshot';
 
 let pool: pg.Pool | null = null;
 
@@ -45,7 +44,7 @@ export interface EffectiveUserSkill {
   checksum: string | null;
   install_status: 'installed' | 'missing' | 'error';
   visibility: 'private' | 'link_shared' | 'shared';
-  source: 'self' | 'subscribed' | 'workflow';
+  source: 'self' | 'subscribed';
   source_bundle_ids?: string[];
 }
 
@@ -53,22 +52,12 @@ export interface EffectiveUserSkill {
  * 查询用户的有效自定义 Skill（自有 + 订阅且启用的）。
  *
  * @param userId 平台用户 ID。
- * @param options.skillBundleIds 可选的请求级 Skill Bundle 白名单；为空时返回全部有效 Skill。
  * @returns 当前用户在本轮请求中可见的自定义 Skill。
  */
 export async function queryEffectiveUserSkills(
   userId: string,
-  options: { skillBundleIds?: string[] } = {},
 ): Promise<EffectiveUserSkill[]> {
   if (!userId) return [];
-  const skillBundleIds = Array.from(
-    new Set(
-      (options.skillBundleIds ?? [])
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0),
-    ),
-  );
-  const skillBundleFilter = skillBundleIds.length > 0 ? skillBundleIds : null;
   const { rows } = await getPool().query(
     `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
@@ -80,23 +69,10 @@ export async function queryEffectiveUserSkills(
               WHERE sbi.skill_id = s.id
                 AND b.user_id = $1
                 AND b.deleted_at IS NULL
-                AND ($2::text[] IS NULL OR sbi.bundle_id = ANY($2::text[]))
               ORDER BY sbi.bundle_id
             ) as source_bundle_ids
      FROM user_custom_skills s
      WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
-       AND COALESCE(s.audit_metadata->>'source', '') <> $3
-       AND (
-         $2::text[] IS NULL OR EXISTS (
-           SELECT 1
-           FROM skill_bundle_items sbi
-           JOIN skill_bundles b ON b.id = sbi.bundle_id
-           WHERE sbi.skill_id = s.id
-             AND b.user_id = $1
-             AND b.deleted_at IS NULL
-             AND sbi.bundle_id = ANY($2::text[])
-         )
-       )
      UNION ALL
     SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
@@ -107,7 +83,6 @@ export async function queryEffectiveUserSkills(
               JOIN skill_bundles b ON b.id = src.bundle_id
               WHERE src.subscription_id = sub.id
                 AND b.deleted_at IS NULL
-                AND ($2::text[] IS NULL OR src.bundle_id = ANY($2::text[]))
               ORDER BY src.bundle_id
             ) as source_bundle_ids
      FROM user_skill_subscriptions sub
@@ -115,23 +90,12 @@ export async function queryEffectiveUserSkills(
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
        AND s.deleted_at IS NULL
-       AND COALESCE(s.audit_metadata->>'source', '') <> $3
        AND (
          s.visibility IN ('link_shared', 'shared')
          OR sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')
        )
-       AND s.install_status = 'installed'
-       AND (
-         $2::text[] IS NULL OR EXISTS (
-           SELECT 1
-           FROM user_skill_subscription_bundle_sources src
-           JOIN skill_bundles b ON b.id = src.bundle_id
-           WHERE src.subscription_id = sub.id
-             AND b.deleted_at IS NULL
-             AND src.bundle_id = ANY($2::text[])
-         )
-       )`,
-    [userId, skillBundleFilter, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
+       AND s.install_status = 'installed'`,
+    [userId],
   );
   return rows as EffectiveUserSkill[];
 }
@@ -142,7 +106,7 @@ export async function queryEffectiveUserSkills(
  * @param userId 平台用户 ID。
  * @param skillIds 请求级 Skill id 白名单。
  * @returns 交集结果——只返回用户实际拥有/订阅且启用的 Skill；无权或未启用的 id 自动丢弃。
- * @remarks 复用 queryEffectiveUserSkills 的归属/启用/安装/订阅有效期校验（不加 Bundle 过滤=全量有效），
+ * @remarks 复用 queryEffectiveUserSkills 的归属/启用/安装/订阅有效期校验，
  *   再按 id 取交集；对外开放 API 用其按「单个 skill id」授权。
  */
 export async function queryEffectiveUserSkillsByIds(
@@ -156,94 +120,6 @@ export async function queryEffectiveUserSkillsByIds(
   if (wanted.size === 0) return [];
   const all = await queryEffectiveUserSkills(userId);
   return all.filter((skill) => wanted.has(skill.id));
-}
-
-/**
- * 按 workflow 已授权的 Bundle ID 读取 Skill。
- *
- * @param skillBundleIds 管理后台 workflow 显式绑定的 Bundle ID 列表。
- * @returns Bundle 内已安装且启用的 Skill；不要求终端用户拥有或订阅这些 Bundle。
- * @remarks
- * 安全契约（本次审计固化，勿破坏）：本查询刻意「不做 user_id 归属过滤」——这是 workflow 需要
- * 加载平台/他人 Bundle 的特权能力，加归属会阉割其设计用途。因此安全性**完全依赖调用方保证
- * `skillBundleIds` 不可被终端用户控制**：当前 API 侧没有任何 HTTP 路由把客户端输入转发到
- * `authorizedSkillBundleIds`（仅内部 workflow / resident-agent 显式设置）。
- * 若未来新增会转发用户可控 id 的路径，必须在 API 入口做授权校验，否则此处会退化为跨账号私有
- * Skill 读取。完整封堵需为 IPC 请求引入来源认证（架构级，单独立项）。
- */
-export async function queryWorkflowBundleSkills(
-  skillBundleIds: string[],
-): Promise<EffectiveUserSkill[]> {
-  const normalized = Array.from(
-    new Set(skillBundleIds.map((id) => id.trim()).filter(Boolean)),
-  );
-  if (normalized.length === 0) return [];
-
-  const { rows } = await getPool().query(
-    `SELECT
-       s.id,
-       s.dir_name as dir,
-       s.skill_name as name,
-       s.description,
-       s.bundle_uri,
-       s.checksum,
-       s.install_status,
-       s.visibility,
-       'workflow' as source,
-       array_agg(DISTINCT sbi.bundle_id ORDER BY sbi.bundle_id) as source_bundle_ids
-     FROM skill_bundle_items sbi
-     JOIN skill_bundles b ON b.id = sbi.bundle_id
-     JOIN user_custom_skills s ON s.id = sbi.skill_id
-     WHERE sbi.bundle_id = ANY($1::text[])
-       AND b.deleted_at IS NULL
-       AND s.enabled = true
-       AND s.deleted_at IS NULL
-       AND s.install_status = 'installed'
-       AND COALESCE(s.audit_metadata->>'source', '') <> $2
-     GROUP BY s.id, s.dir_name, s.skill_name, s.description, s.bundle_uri,
-              s.checksum, s.install_status, s.visibility
-     ORDER BY MIN(array_position($1::text[], sbi.bundle_id)), MIN(sbi.sort_order), s.dir_name`,
-    [normalized, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
-  );
-  return rows as EffectiveUserSkill[];
-}
-
-/**
- * 按 workflow 保存时生成的 Skill 快照 ID 读取 Skill。
- *
- * @param skillIds 管理后台 workflow 保存时固定下来的快照 Skill ID。
- * @returns 对应快照 Skill；不再依赖原始 Bundle 分享状态或成员列表。
- */
-export async function queryWorkflowSnapshotSkills(
-  skillIds: string[],
-): Promise<EffectiveUserSkill[]> {
-  const normalized = Array.from(
-    new Set(skillIds.map((id) => id.trim()).filter(Boolean)),
-  );
-  if (normalized.length === 0) return [];
-
-  const { rows } = await getPool().query(
-    `SELECT
-       s.id,
-       s.dir_name as dir,
-       s.skill_name as name,
-       s.description,
-       s.bundle_uri,
-       s.checksum,
-       s.install_status,
-       s.visibility,
-       'workflow' as source,
-       ARRAY[]::text[] as source_bundle_ids
-     FROM user_custom_skills s
-     WHERE s.id = ANY($1::text[])
-       AND s.audit_metadata->>'source' = $2
-       AND s.deleted_at IS NULL
-       AND s.enabled = true
-       AND s.install_status = 'installed'
-     ORDER BY array_position($1::text[], s.id), s.dir_name`,
-    [normalized, WORKFLOW_SNAPSHOT_AUDIT_SOURCE],
-  );
-  return rows as EffectiveUserSkill[];
 }
 
 // ── Soul ──

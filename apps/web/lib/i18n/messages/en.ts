@@ -410,8 +410,6 @@ export const enMessages = {
       monthlyMessages: 'Monthly messages',
       monthlyToken: 'Monthly tokens',
       freeAccount: 'Free account',
-      freeDescription:
-        'Simple mode and manual charting remain available. Expert mode and follow-up questions require Clarity.',
       freeBadgeWallet: 'Credit balance billing',
       freeBadgeUpgrade: 'Upgrade anytime',
       freeBadgeInactive: 'No active membership',
