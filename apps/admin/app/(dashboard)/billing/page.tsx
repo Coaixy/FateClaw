@@ -27,6 +27,10 @@ import {
 } from '@/components/ui/admin-states';
 import { AdminCopyButton } from '@/components/ui/admin-controls';
 import { AdminSearchInput } from '@/components/ui/admin-search';
+import {
+  AdminActiveFilters,
+  type AdminFilterChipData,
+} from '@/components/ui/admin-filter-chips';
 import { ReconcileSection } from '@/components/billing/ReconcileSection';
 import {
   Banknote,
@@ -615,6 +619,94 @@ export default function AdminBillingPage() {
     setReservationPage(0);
   }, []);
 
+  // 生效筛选 chip 列：把当前 6 个筛选 state 派生成可单删的标签集合。
+  // userId 用原始即时回显值展示（而非防抖值），保证用户刚输入就点 × 也能清掉。
+  // 注意 holdState/chargeState 作用域在预留记录表，walletKind 在流水表，
+  // 文案上用「维度名：值」显式区分，避免用户误以为某状态下拉影响全部三张表。
+  const activeFilterChips: AdminFilterChipData[] = useMemo(() => {
+    const chips: AdminFilterChipData[] = [];
+    if (userId.trim()) {
+      chips.push({
+        key: 'user_id',
+        label: `用户 ${userId.trim()}`,
+        onClear: () => {
+          setUserId('');
+          resetPages();
+        },
+      });
+    }
+    if (orderStatus !== 'all') {
+      chips.push({
+        key: 'order_status',
+        label: `订单：${rechargeStatusLabel(orderStatus)}`,
+        onClear: () => {
+          setOrderStatus('all');
+          resetPages();
+        },
+      });
+    }
+    if (payType !== 'all') {
+      chips.push({
+        key: 'pay_type',
+        label: `支付：${payTypeLabel(payType)}`,
+        onClear: () => {
+          setPayType('all');
+          resetPages();
+        },
+      });
+    }
+    if (walletKind !== 'all') {
+      chips.push({
+        key: 'wallet_kind',
+        label: `流水：${walletKindLabel(walletKind)}`,
+        onClear: () => {
+          setWalletKind('all');
+          resetPages();
+        },
+      });
+    }
+    if (holdState !== 'all') {
+      chips.push({
+        key: 'hold_state',
+        label: `预留：${holdStateLabel(holdState)}`,
+        onClear: () => {
+          setHoldState('all');
+          resetPages();
+        },
+      });
+    }
+    if (chargeState !== 'all') {
+      chips.push({
+        key: 'charge_state',
+        label: `结算：${chargeStateLabel(chargeState)}`,
+        onClear: () => {
+          setChargeState('all');
+          resetPages();
+        },
+      });
+    }
+    return chips;
+  }, [
+    chargeState,
+    holdState,
+    orderStatus,
+    payType,
+    resetPages,
+    userId,
+    walletKind,
+  ]);
+
+  // 清空全部：把所有筛选重置为默认并重置分页。与单个 chip 的 onClean 行为一致。
+  const clearAllFilters = useCallback(() => {
+    setUserId('');
+    setOrderStatus('all');
+    setPayType('all');
+    setWalletKind('all');
+    setHoldState('all');
+    setChargeState('all');
+    resetPages();
+  }, [resetPages]);
+
   const load = useCallback(async () => {
     setRefreshing(true);
     setError('');
@@ -820,6 +912,25 @@ export default function AdminBillingPage() {
         }
       />
 
+      {/* 卡密管理快捷入口 */}
+      <div className="rounded-lg border border-hairline bg-surface-card p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium">卡密充值管理</h3>
+            <p className="mt-0.5 text-[12px] text-muted">
+              生成、管理和查看卡密充值记录
+            </p>
+          </div>
+          <a
+            href="/billing/redemption-codes/"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent/90"
+          >
+            <Coins size={16} />
+            管理卡密
+          </a>
+        </div>
+      </div>
+
       {error ? (
         <AdminAlert tone="error">{error}</AdminAlert>
       ) : null}
@@ -936,6 +1047,7 @@ export default function AdminBillingPage() {
             </select>
           </label>
         </div>
+        <AdminActiveFilters chips={activeFilterChips} onClear={clearAllFilters} />
       </AdminFilterSection>
 
       <ReconcileSection

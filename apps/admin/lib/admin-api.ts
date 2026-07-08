@@ -617,6 +617,46 @@ export interface AdminRechargePaymentConfig {
   updated_at: string;
 }
 
+/** 卡密状态。 */
+export type AdminRedemptionCodeStatus =
+  | 'pending'
+  | 'redeemed'
+  | 'expired'
+  | 'revoked';
+
+/** 卡密记录。 */
+export interface AdminRedemptionCode {
+  id: string;
+  code: string;
+  amount_coins: number;
+  status: AdminRedemptionCodeStatus;
+  batch_id: string | null;
+  note: string | null;
+  expires_at: string | null;
+  redeemed_by: string | null;
+  redeemed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 卡密列表响应。 */
+export interface AdminRedemptionCodesResponse {
+  codes: AdminRedemptionCode[];
+  total: number;
+}
+
+/** 卡密统计信息。 */
+export interface AdminRedemptionCodeStats {
+  totalCount: number;
+  pendingCount: number;
+  redeemedCount: number;
+  expiredCount: number;
+  revokedCount: number;
+  totalAmountCoins: number;
+  redeemedAmountCoins: number;
+}
+
 /** 关于页面公开收支流水类型。 */
 export type AdminAboutLedgerEntryType = 'income' | 'expense';
 
@@ -1201,6 +1241,56 @@ export const admin = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  // 卡密充值管理
+  generateRedemptionCodes: (data: {
+    count: number;
+    amountCoins: number;
+    note?: string;
+    expiresAt?: string | null;
+  }) =>
+    adminRequest<{ codes: AdminRedemptionCode[] }>(
+      '/api/admin/redemption-codes/generate',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+  listRedemptionCodes: (opts?: {
+    status?: AdminRedemptionCodeStatus;
+    batchId?: string;
+    // 面额（积分），精确匹配预设值 5/10/30/50/100
+    amountCoins?: number;
+    // 卡密码片段，服务端 UPPER(code) LIKE %X% 匹配
+    code?: string;
+    // 创建时间区间，ISO 字符串；createdAfter 闭区间起，createdBefore 开区间止
+    createdAfter?: string;
+    createdBefore?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.batchId) params.set('batchId', opts.batchId);
+    if (opts?.amountCoins != null) {
+      params.set('amountCoins', String(opts.amountCoins));
+    }
+    if (opts?.code) params.set('code', opts.code);
+    if (opts?.createdAfter) params.set('createdAfter', opts.createdAfter);
+    if (opts?.createdBefore) params.set('createdBefore', opts.createdBefore);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    const qs = params.toString();
+    return adminRequest<AdminRedemptionCodesResponse>(
+      `/api/admin/redemption-codes${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getRedemptionCodeStats: () =>
+    adminRequest<AdminRedemptionCodeStats>('/api/admin/redemption-codes/stats'),
+  revokeRedemptionCode: (id: string) =>
+    adminRequest<{ success: boolean }>(
+      `/api/admin/redemption-codes/${encodeURIComponent(id)}/revoke`,
+      { method: 'POST' },
+    ),
 };
 
 // Conversation Logs (re-use types from user API)
