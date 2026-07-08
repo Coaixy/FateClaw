@@ -360,6 +360,16 @@ export const enMessages = {
       badgeCharge: 'Charge',
       badgeDeduct: 'Deduct',
       badgeExpense: 'Expense',
+      // Redemption code: alternative top-up tab — code redeemed directly into credits, no payment gateway.
+      redeemTabOnline: 'Online payment',
+      redeemTabCode: 'Redeem code',
+      redeemHint: 'Enter a redemption code to add credits',
+      redeemPlaceholder: 'Enter redemption code',
+      redeemAction: 'Redeem now',
+      redeemEmpty: 'Please enter a redemption code',
+      redeemFailed: 'Redemption failed, please try again later',
+      redeemSuccess: 'Redeemed — {amount} added',
+      redeemSafety: 'Codes are issued by admin, single-use, void after redemption',
     },
     membership: {
       title: 'Subscription & Billing',

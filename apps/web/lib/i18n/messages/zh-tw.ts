@@ -344,6 +344,16 @@ export const zhTWMessages = {
       badgeCharge: '扣費',
       badgeDeduct: '扣減',
       badgeExpense: '支出',
+      // 卡密兌換：儲值中心的另一 Tab，憑卡密碼直接入帳，不走第三方支付。
+      redeemTabOnline: '線上支付',
+      redeemTabCode: '卡密兌換',
+      redeemHint: '輸入卡密碼兌換積分',
+      redeemPlaceholder: '輸入卡密碼',
+      redeemAction: '立即兌換',
+      redeemEmpty: '請輸入卡密碼',
+      redeemFailed: '兌換失敗，請稍後重試',
+      redeemSuccess: '兌換成功，已到帳 {amount}',
+      redeemSafety: '卡密碼由管理員簽發，一次性使用，兌換後作廢',
     },
     membership: {
       title: '訂閱與計費',
