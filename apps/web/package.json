@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@fateclaw/contracts": "workspace:*",
-    "@fontsource/noto-serif-sc": "^5.2.8",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "lucide-react": "^1.7.0",

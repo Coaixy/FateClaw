@@ -772,6 +772,7 @@ export const zhTWMessages = {
         '手動排盤可繼續使用；開通 Clarity 後即可繼續發送 AI 解讀。',
       thinkingFallback: '正在思考...',
       thinking: '思考',
+      thought: '思考完成',
       resultsCount: '{count} 條結果',
       toolCallCount: '{count} 個工具',
       toolLabels: {

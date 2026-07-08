@@ -795,6 +795,7 @@ export const enMessages = {
         'Manual charting remains available. Open Clarity to keep sending AI interpretation.',
       thinkingFallback: 'Thinking...',
       thinking: 'Thinking',
+      thought: 'Thought',
       resultsCount: '{count} results',
       toolCallCount: '{count} tools',
       toolLabels: {

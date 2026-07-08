@@ -1,15 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Brain,
+  CheckCircle2,
   ChevronDown,
   Crown,
   Globe,
   Loader2,
   Search,
+  Sparkles,
 } from 'lucide-react';
 
 import { BaguaRing } from '@/components/brand/brand-marks';
@@ -581,25 +583,26 @@ function TrajectoryTimeline({
   const groups = groupTrajectoryNodes(blocks.map(readTrajectoryNode));
 
   return (
-    <div className="w-full max-w-full">
-      <div className="relative flex flex-col gap-2.5 border-l border-hairline pl-4">
-        {groups.map((group, index) =>
-          group.thinking ? (
-            <ThinkingGroup
-              key={group.thinking.id}
-              thinking={group.thinking}
-              childNodes={group.children}
-              completed={completed}
-            />
-          ) : (
-            <Fragment key={`orphan-${index}`}>
-              {group.children.map((child) =>
-                renderTrajectoryChild(child, completed),
-              )}
-            </Fragment>
-          ),
-        )}
-      </div>
+    <div className="w-full max-w-full flex flex-col gap-2.5">
+      {groups.map((group, index) =>
+        group.thinking ? (
+          <ThinkingGroup
+            key={group.thinking.id}
+            thinking={group.thinking}
+            childNodes={group.children}
+            completed={completed}
+          />
+        ) : (
+          <div
+            key={`orphan-${index}`}
+            className="relative flex flex-col gap-2.5 border-l border-hairline pl-4"
+          >
+            {group.children.map((child) =>
+              renderTrajectoryChild(child, completed),
+            )}
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -629,9 +632,11 @@ function TimelineBullet({
 }
 
 /**
- * 思考组：灰色正文 + 其下嵌套的工具/检索子内容（思考 > 工具）。
+ * 思考组：模仿 Claude web 的折叠思考块。
  *
- * 流式中默认展开，回答完成（completed）后默认折叠；用户手动切换后不再被默认值覆盖。
+ * - 折叠态是一条圆角横条，带图标与"思考中..."/"思考完成"标签，明确可点击；
+ * - 展开态露出浅灰等宽内容区，工具/检索作为子时间线嵌套在下方；
+ * - 流式中默认展开，回答完成（completed）后默认折叠；用户手动切换后不再被默认值覆盖。
  */
 function ThinkingGroup({
   thinking,
@@ -653,47 +658,74 @@ function ThinkingGroup({
   }, [completed]);
   const text =
     thinking.content.trim() || t('aiChat.messageList.thinkingFallback');
+  const hasChildren = childNodes.length > 0;
 
-  return (
-    <div className="relative">
-      <TimelineBullet>
-        <Brain size={11} strokeWidth={1.8} />
-      </TimelineBullet>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => {
-          userToggledRef.current = true;
-          setExpanded((value) => !value);
-        }}
-        className="group inline-flex items-center gap-1 text-[11px] font-medium text-muted-soft transition-colors hover:text-ink focus-visible:outline-none"
-      >
-        <span>{t('aiChat.messageList.thinking')}</span>
-        {!expanded && childNodes.length > 0 && (
-          <span className="text-muted-soft/70">
+  const toggle = () => {
+    userToggledRef.current = true;
+    setExpanded((value) => !value);
+  };
+
+  const header = (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={toggle}
+      className="group flex w-full items-center justify-between gap-2 rounded-lg border border-hairline/70 bg-surface-soft px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-card hover:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        {completed ? (
+          <CheckCircle2
+            size={14}
+            strokeWidth={1.8}
+            className="shrink-0 text-primary"
+            aria-hidden="true"
+          />
+        ) : (
+          <Sparkles
+            size={14}
+            strokeWidth={1.8}
+            className="shrink-0 text-primary animate-pulse"
+            aria-hidden="true"
+          />
+        )}
+        <span className="truncate text-[12px] font-medium text-muted transition-colors group-hover:text-ink">
+          {completed
+            ? t('aiChat.messageList.thought')
+            : t('aiChat.messageList.thinking')}
+        </span>
+        {!expanded && hasChildren && (
+          <span className="shrink-0 text-[11px] text-muted-soft/70">
             · {t('aiChat.messageList.toolCallCount', { count: childNodes.length })}
           </span>
         )}
-        <ChevronDown
-          size={12}
-          strokeWidth={1.8}
-          className={`transition-transform duration-150 ${
-            expanded ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
-      {expanded && (
-        <>
-          <div className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-6 text-muted">
-            {text}
+      </span>
+      <ChevronDown
+        size={14}
+        strokeWidth={1.8}
+        className={`shrink-0 text-muted-soft transition-transform duration-200 group-hover:text-ink ${
+          expanded ? 'rotate-180' : ''
+        }`}
+      />
+    </button>
+  );
+
+  if (!expanded) {
+    return <div className="relative w-full">{header}</div>;
+  }
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-lg border border-hairline/70 bg-surface-soft">
+      {header}
+      <div className="px-3 pb-3 pt-1">
+        <div className="rounded-md bg-canvas/80 p-3 font-mono text-[12px] leading-relaxed text-muted whitespace-pre-wrap break-words">
+          {text}
+        </div>
+        {hasChildren && (
+          <div className="relative mt-3 flex flex-col gap-2 border-l border-hairline/60 pl-4">
+            {childNodes.map((child) => renderTrajectoryChild(child, completed))}
           </div>
-          {childNodes.length > 0 && (
-            <div className="mt-2 flex flex-col gap-2 border-l border-hairline/60 pl-4">
-              {childNodes.map((child) => renderTrajectoryChild(child, completed))}
-            </div>
-          )}
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -903,4 +935,3 @@ function ReplySlowNotice({ onRetry }: { onRetry: () => void }) {
     </div>
   );
 }
-

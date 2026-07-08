@@ -772,6 +772,7 @@ export const zhCNMessages = {
         '手动排盘可继续使用；开通 Clarity 后即可继续发送 AI 解读。',
       thinkingFallback: '正在思考...',
       thinking: '思考',
+      thought: '思考完成',
       resultsCount: '{count} 条结果',
       toolCallCount: '{count} 个工具',
       toolLabels: {

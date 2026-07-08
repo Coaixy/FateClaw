@@ -613,7 +613,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 </p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {sidebarPreviewSessions.map((session) => {
                   const active = session.id === selectedSession && isAiChatPath(pathname);
                   const isEditing = session.id === editingSessionId;
@@ -710,14 +710,22 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                           openSession();
                         }
                       }}
-                      className={`group w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors duration-200 cursor-pointer ${
+                      className={`group w-full flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl text-left border transition-all duration-200 cursor-pointer ${
                         active
-                          ? 'bg-primary/10 text-ink'
-                          : 'text-muted hover:text-ink hover:bg-canvas/70'
+                          ? 'bg-primary/10 border-primary/25 shadow-sm text-ink'
+                          : 'bg-canvas/80 border-transparent text-body-strong hover:bg-surface-raised hover:border-hairline hover:shadow-sm hover:text-ink'
                       }`}
                     >
+                      <div className="mt-0.5 shrink-0">
+                        <MessageCircle
+                          size={14}
+                          strokeWidth={1.8}
+                          className={active ? 'text-primary' : 'text-muted/40'}
+                          aria-hidden="true"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-[13px] font-medium leading-tight">
+                        <p className="truncate text-[13px] font-medium leading-snug text-ink">
                           {session.title}
                         </p>
                         {session.client_id &&
@@ -727,7 +735,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                               {clientNameById.get(session.client_id)}
                             </p>
                           )}
-                        <p className="text-[10px] text-muted/50 leading-tight mt-0.5">
+                        <p className="text-[10px] text-muted/70 leading-tight mt-1">
                           {formatSessionTime(
                             session.updated_at,
                             t,
@@ -742,7 +750,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                             void copySessionShareLink(session.id);
                           }}
                           disabled={Boolean(sharingSessionId)}
-                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-40"
+                          className="w-5 h-5 rounded flex items-center justify-center opacity-40 group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-40"
                           aria-label={t('sidebar.copyShareLink')}
                         >
                           {isSharing ? (
@@ -756,7 +764,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                             event.stopPropagation();
                             startEditingSession(session.id, session.title);
                           }}
-                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
+                          className="w-5 h-5 rounded flex items-center justify-center opacity-40 group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
                           aria-label={t('sidebar.modifyTitle')}
                         >
                           <Pencil size={11} />
@@ -777,7 +785,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                                 );
                               });
                           }}
-                          className="w-5 h-5 rounded flex items-center justify-center opacity-60 lg:opacity-0 lg:group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
+                          className="w-5 h-5 rounded flex items-center justify-center opacity-40 group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
                           aria-label={t('sidebar.archiveChat')}
                           title={t('sidebar.archiveChat')}
                         >
