@@ -215,4 +215,37 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
 
     return result.data;
   });
+
+  // POST /api/billing/redeem — 兑换卡密
+  app.post('/redeem', async (request, reply) => {
+    await request.requireAuth();
+
+    const schema = z.object({
+      code: z.string().min(1).max(50),
+    });
+
+    const body = schema.parse(request.body);
+    const { redeemCode } = await import(
+      '../../infrastructure/repositories/billing-repository.js'
+    );
+
+    try {
+      const { user, redemptionCode } = await redeemCode({
+        code: body.code,
+        userId: request.user.userId,
+      });
+
+      return reply.code(200).send({
+        success: true,
+        amountCoins: redemptionCode.amount_coins,
+        user: {
+          bonus_coins: user.bonus_coins,
+          purchased_coins: user.purchased_coins,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '兑换失败';
+      return reply.code(400).send({ error: message });
+    }
+  });
 }
