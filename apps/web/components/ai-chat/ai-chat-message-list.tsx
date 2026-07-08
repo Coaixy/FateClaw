@@ -371,6 +371,11 @@ function AiChatMessageRow({
     isBot && trajectory.length > 0 ? (
       <TrajectoryTimeline blocks={trajectory} completed={isFinalMessage} />
     ) : null;
+  const messageColumnClass = guashiScript
+    ? 'w-full max-w-full items-stretch sm:max-w-[92%]'
+    : isBot
+      ? 'max-w-[88%] items-start sm:max-w-[78%]'
+      : 'max-w-[88%] items-end sm:max-w-[74%]';
 
   if (hasChart && !isFinalMessage) {
     return (
@@ -398,13 +403,15 @@ function AiChatMessageRow({
       style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
     >
       <div
-        className={`flex min-w-0 max-w-[88%] flex-col ${
-          isBot ? 'items-start sm:max-w-[78%]' : 'items-end sm:max-w-[74%]'
-        }`}
+        className={`flex min-w-0 flex-col ${messageColumnClass}`}
       >
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
-        <div className="group relative max-w-full">
+        <div
+          className={`group relative max-w-full ${
+            guashiScript ? 'w-full' : ''
+          }`}
+        >
           <div
             role={isErrorMessage ? 'alert' : undefined}
             className={`rounded-xl px-3.5 py-2.5 text-[14px] leading-7 transition-shadow duration-200 ${

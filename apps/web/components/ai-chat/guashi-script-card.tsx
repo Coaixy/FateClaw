@@ -26,7 +26,7 @@ function SectionCard({ section }: { section: GuashiScriptSection }) {
 
   return (
     <div
-      className={`overflow-hidden rounded-lg border ${
+      className={`min-w-0 overflow-hidden rounded-lg border ${
         section.guashiOnly
           ? 'border-dashed border-hairline bg-canvas/30'
           : 'border-hairline bg-canvas/40'
@@ -35,24 +35,24 @@ function SectionCard({ section }: { section: GuashiScriptSection }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 px-3 py-2.5 text-left sm:flex sm:items-center sm:gap-2 sm:py-2"
       >
         <ChevronDown
           size={14}
-          className={`shrink-0 text-muted transition-transform ${open ? '' : '-rotate-90'}`}
+          className={`mt-0.5 shrink-0 text-muted transition-transform sm:mt-0 ${open ? '' : '-rotate-90'}`}
         />
-        <span className="flex-1 text-[13px] font-semibold leading-snug">
+        <span className="min-w-0 break-words text-[13px] font-semibold leading-snug sm:flex-1">
           {section.title}
         </span>
         {section.guashiOnly ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-canvas/60 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+          <span className="col-start-2 inline-flex w-fit max-w-full items-center gap-1 rounded bg-canvas/60 px-1.5 py-0.5 text-[10px] font-medium text-muted sm:ml-auto sm:shrink-0">
             <EyeOff size={10} />
             {t('aiChat.messageList.guashiScript.guashiOnlyBadge')}
           </span>
         ) : null}
       </button>
       {open && section.body ? (
-        <div className="px-3 pb-2.5 text-[13px] leading-7">
+        <div className="min-w-0 break-words px-3 pb-3 text-[13px] leading-7">
           <Suspense
             fallback={
               <p className="whitespace-pre-wrap break-words">{section.body}</p>
@@ -90,15 +90,15 @@ export function GuashiScriptCard({ script }: { script: GuashiScript }) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
+    <div className="min-w-0 flex flex-col gap-2">
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-[11px] font-medium text-muted">
           {t('aiChat.messageList.guashiScript.label')}
         </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
+          className="inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 sm:h-7 sm:w-auto"
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
           {copied
@@ -107,7 +107,7 @@ export function GuashiScriptCard({ script }: { script: GuashiScript }) {
         </button>
       </div>
       {script.preamble ? (
-        <div className="text-[13px] leading-7">
+        <div className="min-w-0 break-words text-[13px] leading-7">
           <Suspense
             fallback={
               <p className="whitespace-pre-wrap break-words">
