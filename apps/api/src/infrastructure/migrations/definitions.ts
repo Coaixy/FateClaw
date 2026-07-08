@@ -5,6 +5,7 @@ import { cleanupInvalidPhoneUsersMigrations } from './definitions/0071-cleanup-i
 import { purgeOrphanBundleSubscriptionsMigrations } from './definitions/0072-purge-orphan-bundle-subscriptions.js';
 import { dropDeadFeatureTablesMigrations } from './definitions/0073-drop-dead-feature-tables.js';
 import { dropRemovedFeatureTablesMigrations } from './definitions/0074-drop-removed-feature-tables.js';
+import addRedemptionCodesMigration from './definitions/0075-add-redemption-codes.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -22,4 +23,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...purgeOrphanBundleSubscriptionsMigrations,
   ...dropDeadFeatureTablesMigrations,
   ...dropRemovedFeatureTablesMigrations,
+  addRedemptionCodesMigration,
 ];
