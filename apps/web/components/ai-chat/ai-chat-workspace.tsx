@@ -1098,7 +1098,9 @@ function AiChatWorkspaceContent() {
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
       <div
         ref={chatMessages.scrollRef}
-        className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 scroll-smooth"
+        className={`relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 ${
+          chatMessages.sending ? '' : 'scroll-smooth'
+        }`}
       >
         {showAnnouncementBanner ? <AnnouncementBanner embedded wide /> : null}
         <AiChatMessageList

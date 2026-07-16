@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Brain,
@@ -331,15 +331,31 @@ function shouldShowWalletRecovery(content: string) {
   );
 }
 
-function AiChatMessageRow({
-  message,
-  trajectory,
-  animationIndex,
-}: {
+interface AiChatMessageRowProps {
   message: Message;
   trajectory: Message[];
   animationIndex: number;
-}) {
+}
+
+function areMessageRowsEqual(
+  previous: AiChatMessageRowProps,
+  next: AiChatMessageRowProps,
+): boolean {
+  return (
+    previous.message === next.message &&
+    previous.animationIndex === next.animationIndex &&
+    previous.trajectory.length === next.trajectory.length &&
+    previous.trajectory.every(
+      (message, index) => message === next.trajectory[index],
+    )
+  );
+}
+
+const AiChatMessageRow = memo(function AiChatMessageRow({
+  message,
+  trajectory,
+  animationIndex,
+}: AiChatMessageRowProps) {
   const { locale, t } = useI18n();
   const isBot = !!message.is_bot_message;
   const messageMetadata =
@@ -458,7 +474,7 @@ function AiChatMessageRow({
       </div>
     </div>
   );
-}
+}, areMessageRowsEqual);
 
 type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
 

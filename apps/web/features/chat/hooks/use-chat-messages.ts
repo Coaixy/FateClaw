@@ -34,6 +34,8 @@ const OLDER_LOAD_THRESHOLD_PX = 120;
 const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
 const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
 const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
+// 流式文本按 50ms 合并提交，既保持连续观感，也避免 token 频率直接驱动 React 重渲染。
+const STREAMING_UPDATE_INTERVAL_MS = 50;
 const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
 const GENERIC_REQUEST_FAILED_MESSAGE = '请求失败，请检查后重试';
 const AI_CHAT_RECONNECTING_MESSAGE = '请求断开，正在重连';
@@ -237,6 +239,37 @@ export async function sendChatSessionMessageWithOptions(
 }
 
 /**
+ * 将一次批量提交内累积的流式消息更新合并进当前消息列表。
+ *
+ * @param previous 当前消息列表。
+ * @param updates 本次需要提交的最新消息快照，同一消息在入参中至多出现一次。
+ * @returns 保持未变化消息引用稳定的新列表，便于消息行通过 memo 跳过历史重渲染。
+ */
+export function mergeStreamingMessageUpdates(
+  previous: Message[],
+  updates: Message[],
+): Message[] {
+  if (updates.length === 0) return previous;
+
+  const next = [...previous];
+  const indexById = new Map(
+    previous.map((message, index) => [message.id, index] as const),
+  );
+
+  for (const update of updates) {
+    const existingIndex = indexById.get(update.id);
+    if (existingIndex === undefined) {
+      indexById.set(update.id, next.length);
+      next.push(update);
+      continue;
+    }
+    next[existingIndex] = update;
+  }
+
+  return next;
+}
+
+/**
  * 已加载会话的元信息：当前已加载哪个会话、是否被续聊门禁拦截、拦截文案。
  * 三者在 loadMessages 成功时一起写入、切换/清空会话时一起重置，属同一份快照，
  * 用 reducer 一次 dispatch 翻转，避免在同一 effect 内三连 setState 级联重渲染。
@@ -371,6 +404,8 @@ export function useChatMessages(options: {
   const awaitingRefreshRef = useRef(false);
   const databaseProcessingRef = useRef(false);
   const activeSessionRef = useRef('');
+  // 流式回调通过 ref 读取最新会话元数据，避免标题/更新时间变化时重建 WebSocket 连接。
+  const sessionsRef = useRef(options.sessions);
   const previousSelectedSessionRef = useRef('');
   const shouldAutoScrollRef = useRef(true);
   // 当前已展开的消息窗口大小;后台刷新用它做 limit,确保不把已加载的历史截断回最近一页。
@@ -384,6 +419,9 @@ export function useChatMessages(options: {
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const creatingRef = useRef(false);
   const streamSocketRef = useRef<WebSocket | null>(null);
+  const streamingUpdateTimerRef = useRef<number | null>(null);
+  const pendingStreamingUpdatesRef = useRef<Map<string, Message>>(new Map());
+  const autoScrollFrameRef = useRef<number | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const interruptedStreamSessionRef = useRef<string | null>(null);
   const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
@@ -423,7 +461,44 @@ export function useChatMessages(options: {
     [],
   );
 
+  const commitPendingStreamingMessageUpdates = useCallback(() => {
+    const updates = Array.from(pendingStreamingUpdatesRef.current.values());
+    pendingStreamingUpdatesRef.current.clear();
+    if (updates.length === 0) return;
+
+    setMessages((previous) =>
+      mergeStreamingMessageUpdates(previous, updates),
+    );
+  }, []);
+
+  const flushStreamingMessageUpdates = useCallback(() => {
+    if (streamingUpdateTimerRef.current !== null) {
+      window.clearTimeout(streamingUpdateTimerRef.current);
+      streamingUpdateTimerRef.current = null;
+    }
+    commitPendingStreamingMessageUpdates();
+  }, [commitPendingStreamingMessageUpdates]);
+
+  const queueStreamingMessageUpdate = useCallback(
+    (message: Message) => {
+      // 一个提交窗口内只保留每条流式消息的最后快照，避免模型 token 频率直接变成 React 提交频率。
+      pendingStreamingUpdatesRef.current.set(message.id, message);
+      if (streamingUpdateTimerRef.current !== null) return;
+
+      streamingUpdateTimerRef.current = window.setTimeout(() => {
+        streamingUpdateTimerRef.current = null;
+        commitPendingStreamingMessageUpdates();
+      }, STREAMING_UPDATE_INTERVAL_MS);
+    },
+    [commitPendingStreamingMessageUpdates],
+  );
+
   const resetStreamingMessageRefs = useCallback(() => {
+    if (streamingUpdateTimerRef.current !== null) {
+      window.clearTimeout(streamingUpdateTimerRef.current);
+      streamingUpdateTimerRef.current = null;
+    }
+    pendingStreamingUpdatesRef.current.clear();
     streamingMessageEntriesRef.current = [];
     latestStreamingMessageKeyRef.current = null;
     latestThinkingMessageKeyRef.current = null;
@@ -465,6 +540,10 @@ export function useChatMessages(options: {
   useEffect(() => {
     activeSessionRef.current = options.selectedSession || '';
   }, [options.selectedSession]);
+
+  useEffect(() => {
+    sessionsRef.current = options.sessions;
+  }, [options.sessions]);
 
   // 把最新的 messages / hasMoreOlder 同步到 ref,供 scroll 事件与翻页回调无闭包读取。
   useEffect(() => {
@@ -820,45 +899,24 @@ export function useChatMessages(options: {
         latestStreamingMessageKeyRef.current = key;
       }
       const accountId =
-        options.sessions.find((session) => session.id === sessionId)
+        sessionsRef.current.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
 
-      setMessages((previous) => {
-        const existingIndex = previous.findIndex(
-          (message) => message.id === entry.id,
-        );
-        if (existingIndex >= 0) {
-          const next = [...previous];
-          next[existingIndex] = {
-            ...next[existingIndex],
-            content,
-            metadata: metadata ?? {
-              kind: 'streaming',
-            },
-            timestamp: new Date().toISOString(),
-          };
-          return next;
-        }
-
-        return [
-          ...previous,
-          {
-            id: entry.id,
-            account_id: accountId,
-            sender: '',
-            sender_name: '',
-            content,
-            timestamp: new Date().toISOString(),
-            is_from_me: true,
-            is_bot_message: true,
-            metadata: metadata ?? {
-              kind: 'streaming',
-            },
-          },
-        ];
+      queueStreamingMessageUpdate({
+        id: entry.id,
+        account_id: accountId,
+        sender: '',
+        sender_name: '',
+        content,
+        timestamp: new Date().toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+        metadata: metadata ?? {
+          kind: 'streaming',
+        },
       });
     },
-    [options.sessions],
+    [queueStreamingMessageUpdate],
   );
 
   const upsertLatestStreamingAssistantMessage = useCallback(
@@ -934,7 +992,7 @@ export function useChatMessages(options: {
       }
 
       const accountId =
-        options.sessions.find((session) => session.id === sessionId)
+        sessionsRef.current.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
 
       setMessages((previous) => {
@@ -971,7 +1029,7 @@ export function useChatMessages(options: {
         return [...previous, nextMessage];
       });
     },
-    [options.sessions],
+    [],
   );
 
   const finalizeRunningToolTraceMessages = useCallback(
@@ -1034,7 +1092,7 @@ export function useChatMessages(options: {
       appendOptions?: { removeMessageIds?: string[] },
     ) => {
       const accountId =
-        options.sessions.find((session) => session.id === sessionId)
+        sessionsRef.current.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
       const messageId = `opt-error-${Date.now()}-${localMessageSequenceRef.current}`;
       localMessageSequenceRef.current += 1;
@@ -1076,13 +1134,13 @@ export function useChatMessages(options: {
         ];
       });
     },
-    [options.sessions],
+    [],
   );
 
   const appendReconnectNoticeMessage = useCallback(
     (sessionId: string) => {
       const accountId =
-        options.sessions.find((session) => session.id === sessionId)
+        sessionsRef.current.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
       const messageId = `opt-reconnect-${Date.now()}-${localMessageSequenceRef.current}`;
       localMessageSequenceRef.current += 1;
@@ -1107,7 +1165,7 @@ export function useChatMessages(options: {
         ];
       });
     },
-    [options.sessions],
+    [],
   );
 
   useEffect(() => {
@@ -1346,6 +1404,8 @@ export function useChatMessages(options: {
             },
           );
         }
+        // 最终事件必须把本帧最后快照立即提交，不能等下一帧后再与数据库刷新竞争。
+        flushStreamingMessageUpdates();
         updateProcessing(false);
         updateAwaitingRefresh(true);
         void loadMessages(sessionId, { background: true });
@@ -1447,6 +1507,7 @@ export function useChatMessages(options: {
     appendAssistantErrorMessage,
     appendReconnectNoticeMessage,
     finalizeRunningToolTraceMessages,
+    flushStreamingMessageUpdates,
     getActiveStreamingMessageIds,
     isStreamInterrupted,
     loadMessages,
@@ -1496,16 +1557,36 @@ export function useChatMessages(options: {
     element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
   }, [messages]);
 
+  const scheduleAutoScroll = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) return;
+
+    autoScrollFrameRef.current = window.requestAnimationFrame(() => {
+      autoScrollFrameRef.current = null;
+      const element = scrollRef.current;
+      if (!element || !shouldAutoScrollRef.current) return;
+      element.scrollTop = element.scrollHeight;
+    });
+  }, []);
+
   useLayoutEffect(() => {
     if (!scrollRef.current || !shouldAutoScrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+    scheduleAutoScroll();
+  }, [messages, scheduleAutoScroll]);
 
   useEffect(() => {
     if (!isPending || !scrollRef.current || !shouldAutoScrollRef.current)
       return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [isPending]);
+    scheduleAutoScroll();
+  }, [isPending, scheduleAutoScroll]);
+
+  useEffect(
+    () => () => {
+      if (autoScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(autoScrollFrameRef.current);
+      }
+    },
+    [],
+  );
 
   /**
    * 取消当前请求后重置本地流式状态；不含"是否等待取消接口真正返回"这个决定，
