@@ -809,6 +809,8 @@ export const enMessages = {
         get_session_board: 'Board',
       },
       toolTrace: 'Tool trace',
+      processTrace: 'Reasoning and actions',
+      processStepCount: '{count} steps',
       toolStatusRunning: 'Running',
       toolStatusCompleted: 'Done',
       toolStatusFailed: 'Failed',

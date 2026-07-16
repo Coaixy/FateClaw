@@ -786,6 +786,8 @@ export const zhCNMessages = {
         get_session_board: '盘面',
       },
       toolTrace: '工具轨迹',
+      processTrace: '思考与执行过程',
+      processStepCount: '{count} 项',
       toolStatusRunning: '运行中',
       toolStatusCompleted: '完成',
       toolStatusFailed: '失败',

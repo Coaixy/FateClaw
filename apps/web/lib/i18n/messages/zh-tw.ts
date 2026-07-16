@@ -786,6 +786,8 @@ export const zhTWMessages = {
         get_session_board: '盤面',
       },
       toolTrace: '工具軌跡',
+      processTrace: '思考與執行過程',
+      processStepCount: '{count} 項',
       toolStatusRunning: '運行中',
       toolStatusCompleted: '完成',
       toolStatusFailed: '失敗',

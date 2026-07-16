@@ -534,7 +534,7 @@ function readTrajectoryNode(message: Message): TrajectoryNode {
  * assistant 回合的过程时间线：左侧竖线 + 图标节点，思考/工具/检索按时序穿插。
  *
  * @param blocks 过程消息（思考 / 工具调用 / 知识检索），保持原始顺序。
- * @param forceComplete 回答已是最终态时，把仍标记「运行中」的工具按完成展示。
+ * @param completed 回答已是最终态时，把仍标记「运行中」的工具按完成展示。
  */
 type ThinkingNode = Extract<TrajectoryNode, { type: 'thinking' }>;
 type TrajectoryChildNode = Exclude<TrajectoryNode, { type: 'thinking' }>;
@@ -580,30 +580,11 @@ function TrajectoryTimeline({
   blocks: Message[];
   completed?: boolean;
 }) {
-  const groups = groupTrajectoryNodes(blocks.map(readTrajectoryNode));
-
   return (
-    <div className="w-full max-w-full flex flex-col gap-2.5">
-      {groups.map((group, index) =>
-        group.thinking ? (
-          <ThinkingGroup
-            key={group.thinking.id}
-            thinking={group.thinking}
-            childNodes={group.children}
-            completed={completed}
-          />
-        ) : (
-          <div
-            key={`orphan-${index}`}
-            className="relative flex flex-col gap-2.5 border-l border-hairline pl-4"
-          >
-            {group.children.map((child) =>
-              renderTrajectoryChild(child, completed),
-            )}
-          </div>
-        ),
-      )}
-    </div>
+    <TrajectoryProcessGroup
+      nodes={blocks.map(readTrajectoryNode)}
+      completed={completed}
+    />
   );
 }
 
@@ -632,100 +613,101 @@ function TimelineBullet({
 }
 
 /**
- * 思考组：模仿 Claude web 的折叠思考块。
+ * 将一轮回复中的思考、工具调用和知识检索合并进同一个折叠框。
  *
- * - 折叠态是一条圆角横条，带图标与"思考中..."/"思考完成"标签，明确可点击；
- * - 展开态露出浅灰等宽内容区，工具/检索作为子时间线嵌套在下方；
- * - 流式中默认展开，回答完成（completed）后默认折叠；用户手动切换后不再被默认值覆盖。
+ * @param props.nodes 按消息顺序排列的全部过程节点。
+ * @param props.completed 回答是否已结束；结束后把残留的运行中状态按完成展示。
+ * @returns 默认收起、可整体展开的思考与执行过程框。
  */
-function ThinkingGroup({
-  thinking,
-  childNodes,
+function TrajectoryProcessGroup({
+  nodes,
   completed,
 }: {
-  thinking: ThinkingNode;
-  childNodes: TrajectoryChildNode[];
+  nodes: TrajectoryNode[];
   completed: boolean;
 }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(!completed);
-  const userToggledRef = useRef(false);
-  // 完成态翻转时同步默认折叠/展开，但尊重用户的手动选择。
-  useEffect(() => {
-    if (!userToggledRef.current) {
-      setExpanded(!completed);
-    }
-  }, [completed]);
-  const text =
-    thinking.content.trim() || t('aiChat.messageList.thinkingFallback');
-  const hasChildren = childNodes.length > 0;
-
-  const toggle = () => {
-    userToggledRef.current = true;
-    setExpanded((value) => !value);
-  };
-
-  const header = (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      onClick={toggle}
-      className="group flex w-full items-center justify-between gap-2 rounded-lg border border-hairline/70 bg-surface-soft px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-card hover:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
-    >
-      <span className="flex items-center gap-2 min-w-0">
-        {completed ? (
-          <CheckCircle2
-            size={14}
-            strokeWidth={1.8}
-            className="shrink-0 text-primary"
-            aria-hidden="true"
-          />
-        ) : (
-          <Sparkles
-            size={14}
-            strokeWidth={1.8}
-            className="shrink-0 text-primary animate-pulse"
-            aria-hidden="true"
-          />
-        )}
-        <span className="truncate text-[12px] font-medium text-muted transition-colors group-hover:text-ink">
-          {completed
-            ? t('aiChat.messageList.thought')
-            : t('aiChat.messageList.thinking')}
-        </span>
-        {!expanded && hasChildren && (
-          <span className="shrink-0 text-[11px] text-muted-soft/70">
-            · {t('aiChat.messageList.toolCallCount', { count: childNodes.length })}
-          </span>
-        )}
-      </span>
-      <ChevronDown
-        size={14}
-        strokeWidth={1.8}
-        className={`shrink-0 text-muted-soft transition-transform duration-200 group-hover:text-ink ${
-          expanded ? 'rotate-180' : ''
-        }`}
-      />
-    </button>
+  const [expanded, setExpanded] = useState(false);
+  const groups = groupTrajectoryNodes(nodes);
+  const toolNodes = nodes.filter(
+    (node): node is Extract<TrajectoryNode, { type: 'tool' }> =>
+      node.type === 'tool',
   );
-
-  if (!expanded) {
-    return <div className="relative w-full">{header}</div>;
-  }
+  const hasFailed = toolNodes.some((node) => node.status === 'failed');
 
   return (
     <div className="relative w-full overflow-hidden rounded-lg border border-hairline/70 bg-surface-soft">
-      {header}
-      <div className="px-3 pb-3 pt-1">
-        <div className="rounded-md bg-canvas/80 p-3 font-mono text-[12px] leading-relaxed text-muted whitespace-pre-wrap break-words">
-          {text}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-card hover:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {!completed ? (
+            <Sparkles
+              size={14}
+              strokeWidth={1.8}
+              className="shrink-0 animate-pulse text-primary"
+              aria-hidden="true"
+            />
+          ) : hasFailed ? (
+            <AlertCircle
+              size={14}
+              strokeWidth={1.8}
+              className="shrink-0 text-error"
+              aria-hidden="true"
+            />
+          ) : (
+            <CheckCircle2
+              size={14}
+              strokeWidth={1.8}
+              className="shrink-0 text-primary"
+              aria-hidden="true"
+            />
+          )}
+          <span className="truncate text-[12px] font-medium text-muted transition-colors group-hover:text-ink">
+            {t('aiChat.messageList.processTrace')}
+          </span>
+          <span className="shrink-0 text-[11px] text-muted-soft/70">
+            · {t('aiChat.messageList.processStepCount', {
+              count: nodes.length,
+            })}
+          </span>
+        </span>
+        <ChevronDown
+          size={14}
+          strokeWidth={1.8}
+          className={`shrink-0 text-muted-soft transition-transform duration-200 group-hover:text-ink ${
+            expanded ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="flex flex-col gap-3 px-3 pb-3 pt-1">
+          {groups.map((group, index) => (
+            <div
+              key={group.thinking?.id ?? group.children[0]?.id ?? index}
+              className="flex flex-col gap-3"
+            >
+              {group.thinking && (
+                <div className="whitespace-pre-wrap break-words rounded-md bg-canvas/80 p-3 font-mono text-[12px] leading-relaxed text-muted">
+                  {group.thinking.content.trim() ||
+                    t('aiChat.messageList.thinkingFallback')}
+                </div>
+              )}
+              {group.children.length > 0 && (
+                <div className="relative flex flex-col gap-2.5 border-l border-hairline/60 pl-4">
+                  {group.children.map((child) =>
+                    renderTrajectoryChild(child, completed),
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-        {hasChildren && (
-          <div className="relative mt-3 flex flex-col gap-2 border-l border-hairline/60 pl-4">
-            {childNodes.map((child) => renderTrajectoryChild(child, completed))}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
