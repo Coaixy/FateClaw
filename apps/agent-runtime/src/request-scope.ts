@@ -2,6 +2,8 @@ import type { Artifact, TraceEventEntry, TranscriptEvent } from './types.js';
 
 export interface RequestScope {
   requestId?: string;
+  /** 最近一次收到 Pi 流式事件、回合事件或工具事件的时间，用于判定请求是否真正停滞。 */
+  lastActivityAtMs: number;
   traceEvents: TraceEventEntry[];
   traceEventsTotalBytes: number;
   traceOverflowReported: boolean;
@@ -17,6 +19,7 @@ const TRACE_MAX_TOTAL_BYTES = 200 * 1024;
 export function createRequestScope(): RequestScope {
   return {
     requestId: undefined,
+    lastActivityAtMs: Date.now(),
     traceEvents: [],
     traceEventsTotalBytes: 0,
     traceOverflowReported: false,
@@ -119,6 +122,17 @@ export function appendScopedTraceEvent(
 
 export function listScopedTraceEvents(scope: RequestScope): TraceEventEntry[] {
   return [...scope.traceEvents];
+}
+
+export function markRequestActivity(
+  scope: RequestScope,
+  now = Date.now(),
+): void {
+  scope.lastActivityAtMs = now;
+}
+
+export function getLastRequestActivityAt(scope: RequestScope): number {
+  return scope.lastActivityAtMs;
 }
 
 export function setRequestId(scope: RequestScope, requestId?: string): void {

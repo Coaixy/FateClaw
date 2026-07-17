@@ -2,7 +2,10 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
-import type { RequestScope } from '../request-scope.js';
+import {
+  markRequestActivity,
+  type RequestScope,
+} from '../request-scope.js';
 import type {
   AiChatProgressOutboxMessage,
   AiChatStreamEvent,
@@ -442,6 +445,9 @@ export function createPiEventCollector(args: {
   }
 
   return (event) => {
+    // message_update 的文本 delta 不写 trace，但同样证明 Provider 仍在流式推进；
+    // 因此所有 Pi 事件都刷新活动时间，避免长思考或长回答被停滞 watchdog 误杀。
+    markRequestActivity(args.requestScope);
     switch (event.type) {
       case 'agent_start':
         traceEvent({ type: 'pi_agent_start' }, args.requestScope);

@@ -37,4 +37,13 @@ describe('buildAgentEnv', () => {
     expect(env).not.toHaveProperty('XUAN_MODEL');
     expect(env).not.toHaveProperty('XUAN_BASE_URL');
   });
+
+  it('injects both daemon timeout thresholds from the shared timeout chain', async () => {
+    const env = agentEnvToRecord(await buildAgentEnv('account-1'));
+
+    expect(env.AGENT_RUNTIME_REQUEST_TIMEOUT_MS).toBe(String(8 * 60 * 1000));
+    expect(env.AGENT_RUNTIME_REQUEST_MAX_DURATION_MS).toBe(
+      String(25 * 60 * 1000),
+    );
+  });
 });

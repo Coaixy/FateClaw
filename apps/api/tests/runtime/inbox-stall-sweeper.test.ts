@@ -63,6 +63,7 @@ vi.mock('../../src/runtime/ipc-worker.js', () => ({
 }));
 
 import { runInboxStallSweepOnce } from '../../src/runtime/inbox-stall-sweeper.js';
+import { INBOX_STALL_FAIL_MS } from '../../src/shared/timeout-chain.js';
 
 function buildPayload(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -72,7 +73,9 @@ function buildPayload(overrides: Record<string, unknown> = {}): string {
     sessionId: 'session-1',
     userMessageId: 'msg-1',
     ownerUserId: 'user-1',
-    timestamp: new Date(Date.now() - 11 * 60_000).toISOString(),
+    timestamp: new Date(
+      Date.now() - INBOX_STALL_FAIL_MS - 60_000,
+    ).toISOString(),
     ...overrides,
   });
 }

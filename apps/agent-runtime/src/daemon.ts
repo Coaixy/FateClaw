@@ -6,8 +6,10 @@ import { executeContainerInput } from './request-boundary.js';
 import { log } from './io.js';
 import {
   createRequestScope,
+  getLastRequestActivityAt,
   listScopedTraceEvents,
   setRequestId,
+  type RequestScope,
 } from './request-scope.js';
 import { connectRedis, disconnectRedis, getRedis } from './redis.js';
 import {
@@ -26,14 +28,25 @@ const AGENT_RUNTIME_ACCOUNT_CONCURRENCY = Math.max(
   1,
   Math.trunc(Number(process.env.AGENT_RUNTIME_ACCOUNT_CONCURRENCY ?? '1')) || 1,
 );
-// 单次请求处理的硬超时兜底：executeContainerInput 内部（SDK 工具调用循环）一旦卡在
-// 某个既不 resolve 也不 reject 的 await 上，没有这层超时会导致请求永久静默、前端和
-// outbox 都收不到任何事件。超时后放弃等待并按错误结束这次请求，尝试 abort 当前
-// session，但无法强制打断仍在同步运行的代码（例如灾难性正则回溯）。
-const AGENT_REQUEST_TIMEOUT_MS = Math.max(
+// 无进展 watchdog：Pi 每次流式 delta、回合切换、工具事件都会刷新活动时间。
+// 连续超过该时长没有任何事件，才判定 Provider/工具 await 真正卡住；不再把正常推进的
+// 多技能长任务按「请求总时长」误杀。
+const AGENT_REQUEST_STALL_TIMEOUT_MS = Math.max(
   60_000,
   Math.trunc(Number(process.env.AGENT_RUNTIME_REQUEST_TIMEOUT_MS ?? '')) ||
     8 * 60 * 1000,
+);
+// 活跃但失控的无限循环仍需绝对上限。默认 25 分钟，小于宿主 API 的 30 分钟兜底，
+// 为 abort、写 outbox、落库和释放锁预留 5 分钟。宿主通过 agent-env.ts 注入同一事实源。
+const AGENT_REQUEST_MAX_DURATION_MS = Math.max(
+  AGENT_REQUEST_STALL_TIMEOUT_MS + 60_000,
+  Math.trunc(
+    Number(process.env.AGENT_RUNTIME_REQUEST_MAX_DURATION_MS ?? ''),
+  ) || 25 * 60 * 1000,
+);
+const WATCHDOG_CHECK_INTERVAL_MS = Math.min(
+  1_000,
+  Math.max(100, Math.floor(AGENT_REQUEST_STALL_TIMEOUT_MS / 4)),
 );
 // 存活心跳：周期性写 `agent:heartbeat:{accountId}`（带 TTL）。宿主侧巡检任务
 // （inbox-stall-sweeper）用它把「runtime 掉线」的发现时间从 inbox 堆积的分钟级
@@ -41,6 +54,58 @@ const AGENT_REQUEST_TIMEOUT_MS = Math.max(
 // 也能被同一机制发现。优雅退出时主动删除 key，避免误报。
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const HEARTBEAT_TTL_MS = 30_000;
+
+type RequestWatchdogResult = 'stall_timeout' | 'max_duration';
+
+class AgentRequestTimeoutError extends Error {
+  readonly publicErrorText = '这次处理超时了，请稍后再试。';
+  readonly publicReasonCode = 'agent_timeout' as const;
+}
+
+/**
+ * 创建请求 watchdog：区分「连续无进展」和「活跃但总时长失控」。
+ *
+ * @param scope 请求级活动时间与 trace 缓冲。
+ * @param startedAtMs 请求开始时间。
+ * @returns 可参与 Promise.race 的结果，以及结束后必须调用的 stop 清理函数。
+ */
+function createRequestWatchdog(
+  scope: RequestScope,
+  startedAtMs = Date.now(),
+): { promise: Promise<RequestWatchdogResult>; stop: () => void } {
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+
+  const promise = new Promise<RequestWatchdogResult>((resolve) => {
+    const check = () => {
+      if (stopped) return;
+      const now = Date.now();
+      if (now - startedAtMs >= AGENT_REQUEST_MAX_DURATION_MS) {
+        stopped = true;
+        resolve('max_duration');
+        return;
+      }
+      if (
+        now - getLastRequestActivityAt(scope) >=
+        AGENT_REQUEST_STALL_TIMEOUT_MS
+      ) {
+        stopped = true;
+        resolve('stall_timeout');
+        return;
+      }
+      timer = setTimeout(check, WATCHDOG_CHECK_INTERVAL_MS);
+    };
+    timer = setTimeout(check, WATCHDOG_CHECK_INTERVAL_MS);
+  });
+
+  return {
+    promise,
+    stop() {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -267,51 +332,55 @@ async function processInboxMessage(
       `正在处理收件箱请求 requestId=${request.requestId} type=${request.type} accountId=${request.accountId}${request.outboxQueue ? ` outboxQueue=${request.outboxQueue}` : ''}`,
     );
 
-    let timeoutTimer: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<'timeout'>((resolve) => {
-      timeoutTimer = setTimeout(() => resolve('timeout'), AGENT_REQUEST_TIMEOUT_MS);
-    });
-
-    const raced = await Promise.race([
-      executeContainerInput(
-        {
-          accountId,
-          sessionId: request.sessionId,
-          llmRuntime: request.llmRuntime,
-          userMessage: request.userMessage,
-          inputKind: request.inputKind,
-          pastedBoard: request.pastedBoard,
-          sessionBoardContexts: request.sessionBoardContexts,
-          history: request.history ?? [],
-          userName: request.userName,
-          assistantName: request.assistantName,
-          personaPrompt: request.personaPrompt,
-          guashiScriptTemplate: request.guashiScriptTemplate,
-          authorizedSkillIds: request.authorizedSkillIds,
-          outboxQueue: request.outboxQueue,
-        },
-        requestScope,
-        undefined,
-        {
-          onSessionReady(sessionControls) {
-            activeSessions.set(request!.requestId, sessionControls);
-            if (pendingCancelRequests.delete(request!.requestId)) {
-              void sessionControls.abort();
-            }
+    let raced:
+      | Awaited<ReturnType<typeof executeContainerInput>>
+      | RequestWatchdogResult;
+    const watchdog = createRequestWatchdog(requestScope);
+    try {
+      raced = await Promise.race([
+        executeContainerInput(
+          {
+            accountId,
+            sessionId: request.sessionId,
+            llmRuntime: request.llmRuntime,
+            userMessage: request.userMessage,
+            inputKind: request.inputKind,
+            pastedBoard: request.pastedBoard,
+            sessionBoardContexts: request.sessionBoardContexts,
+            history: request.history ?? [],
+            userName: request.userName,
+            assistantName: request.assistantName,
+            personaPrompt: request.personaPrompt,
+            guashiScriptTemplate: request.guashiScriptTemplate,
+            authorizedSkillIds: request.authorizedSkillIds,
+            outboxQueue: request.outboxQueue,
           },
-        },
-      ),
-      timeoutPromise,
-    ]);
-    clearTimeout(timeoutTimer);
+          requestScope,
+          undefined,
+          {
+            onSessionReady(sessionControls) {
+              activeSessions.set(request!.requestId, sessionControls);
+              if (pendingCancelRequests.delete(request!.requestId)) {
+                void sessionControls.abort();
+              }
+            },
+          },
+        ),
+        watchdog.promise,
+      ]);
+    } finally {
+      watchdog.stop();
+    }
 
-    if (raced === 'timeout') {
+    if (raced === 'stall_timeout' || raced === 'max_duration') {
       // 放弃等待并尝试 abort 当前 session；若卡死原因是同步阻塞（如灾难性正则回溯），
       // abort 无法真正打断执行，但至少能让本次请求以明确错误结束，不再无限静默。
       void activeSessions.get(request.requestId)?.abort().catch(() => {});
-      throw new Error(
-        `请求处理超时（超过 ${Math.round(AGENT_REQUEST_TIMEOUT_MS / 1000)}s）`,
-      );
+      const detail =
+        raced === 'stall_timeout'
+          ? `请求连续 ${Math.round(AGENT_REQUEST_STALL_TIMEOUT_MS / 1000)}s 无进展，判定处理停滞`
+          : `请求总时长超过 ${Math.round(AGENT_REQUEST_MAX_DURATION_MS / 1000)}s`;
+      throw new AgentRequestTimeoutError(detail);
     }
     const output = raced;
 
@@ -359,10 +428,14 @@ async function processInboxMessage(
     // 若已解析出 requestId，推送错误响应，避免宿主机无限等待
     if (request?.requestId) {
       try {
-        // 兜底取 trace 缓冲：request boundary 之外的异常（例如 parseInboxRequest 后紧跟
-        // 的其他错误）可能已有部分 trace 产生；此时 request-state 还没被下一个
-        // 请求 reset，数据是安全的。取不到也无妨（undefined 会被宿主端跳过）。
+        // 兜底取 trace 缓冲：request boundary 之外的异常（例如 watchdog 超时）可能已有
+        // 多轮 trace；此时 request-state 还没被下一个请求 reset，数据是安全的。
         const traceEvents = listScopedTraceEvents(requestScope);
+        const timeoutError =
+          error instanceof AgentRequestTimeoutError ? error : undefined;
+        const publicErrorText =
+          timeoutError?.publicErrorText ??
+          '这次没有完成，原因：处理收件箱请求失败。';
         const errorResponse: OutboxResponse = {
           type: 'response',
           requestId: request.requestId,
@@ -370,12 +443,15 @@ async function processInboxMessage(
           sessionId: request.sessionId,
           userMessageId: request.userMessageId,
           ownerUserId: request.ownerUserId,
-          text: '这次没有完成，原因：处理收件箱请求失败。',
+          text: publicErrorText,
           status: 'error',
           error: errorMessage,
-          publicErrorText: '这次没有完成，原因：处理收件箱请求失败。',
-          publicReasonCode: 'daemon_error',
+          publicErrorText,
+          publicReasonCode:
+            timeoutError?.publicReasonCode ?? 'daemon_error',
           timestamp: new Date().toISOString(),
+          model: request.llmRuntime.model,
+          provider: request.llmRuntime.piApi,
           traceEvents: traceEvents.length > 0 ? traceEvents : undefined,
           metadata: {
             kind: 'final',

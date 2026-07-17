@@ -10,7 +10,10 @@ import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import { resolveProjectRoot } from '../infrastructure/project-root.js';
-import { AGENT_RUNTIME_REQUEST_TIMEOUT_MS } from '../shared/timeout-chain.js';
+import {
+  AGENT_RUNTIME_REQUEST_MAX_DURATION_MS,
+  AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+} from '../shared/timeout-chain.js';
 
 // ---------------------------------------------------------------------------
 // 契约接口
@@ -36,12 +39,11 @@ export interface AgentEnv {
   /** 当前部署根目录，避免误清理同机其他 FateClaw 实例。 */
   FATECLAW_PROJECT_ROOT: string;
   /**
-   * daemon 单请求硬超时（毫秒）。由宿主侧超时链（shared/timeout-chain.ts）统一
-   * 解析后注入：子进程 env 只有本契约的字段，操作系统层面设置的同名变量不会
-   * 透传给子进程——不经这里注入的话，daemon 永远只会用自己的默认值，
-   * 与宿主派生的堆积清理阈值产生分歧。
+   * daemon 连续无进展 watchdog（毫秒）。由宿主侧超时链统一解析后注入。
    */
   AGENT_RUNTIME_REQUEST_TIMEOUT_MS: string;
+  /** daemon 请求绝对总时长上限（毫秒），必须小于 API 侧请求超时。 */
+  AGENT_RUNTIME_REQUEST_MAX_DURATION_MS: string;
 
   // --- 连接 ---
   REDIS_URL?: string;
@@ -88,6 +90,9 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     FATECLAW_AGENT_PARENT_PID: String(process.pid),
     FATECLAW_PROJECT_ROOT: resolveProjectRoot(),
     AGENT_RUNTIME_REQUEST_TIMEOUT_MS: String(AGENT_RUNTIME_REQUEST_TIMEOUT_MS),
+    AGENT_RUNTIME_REQUEST_MAX_DURATION_MS: String(
+      AGENT_RUNTIME_REQUEST_MAX_DURATION_MS,
+    ),
 
     // 连接
     REDIS_URL: REDIS_URL || process.env.REDIS_URL || undefined,

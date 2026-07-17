@@ -27,6 +27,7 @@ vi.mock('../src/request-boundary.js', () => ({
   executeContainerInput: vi.fn(),
 }));
 
+import { markRequestActivity } from '../src/request-scope.js';
 import { executeContainerInput } from '../src/request-boundary.js';
 import { getRedis } from '../src/redis.js';
 import {
@@ -158,7 +159,65 @@ describe('daemon request timeout', () => {
       const [, payload] = lpush.mock.calls[0];
       const parsed = JSON.parse(payload as string);
       expect(parsed.status).toBe('error');
-      expect(parsed.error).toMatch(/超时/);
+      expect(parsed.error).toMatch(/无进展/);
+      expect(parsed.publicErrorText).toBe('这次处理超时了，请稍后再试。');
+      expect(parsed.publicReasonCode).toBe('agent_timeout');
+      expect(parsed.model).toBe('test-model');
+      expect(parsed.provider).toBe('anthropic-messages');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not time out while Pi events keep making progress', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(executeContainerInput).mockImplementation(
+        async (_input, requestScope) => {
+          const heartbeat = setInterval(
+            () => markRequestActivity(requestScope),
+            60_000,
+          );
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 9 * 60 * 1000));
+          } finally {
+            clearInterval(heartbeat);
+          }
+          return {
+            status: 'success',
+            result: 'done',
+            model: 'test-model',
+            provider: 'anthropic-messages',
+          };
+        },
+      );
+      const lpush = vi.fn().mockResolvedValue(1);
+      vi.mocked(getRedis).mockReturnValue({ lpush } as never);
+
+      const raw = JSON.stringify({
+        type: 'chat',
+        requestId: 'req-active-long-run',
+        accountId: 'web:user-1',
+        userMessage: 'hi',
+        llmRuntime: VALID_LLM_RUNTIME,
+      });
+
+      const runPromise = __processInboxMessageForTests(
+        'web:user-1',
+        raw,
+        new Map(),
+        new Map(),
+        new Map(),
+      );
+
+      await vi.advanceTimersByTimeAsync(9 * 60 * 1000 + 1_000);
+      await runPromise;
+
+      expect(lpush).toHaveBeenCalledTimes(1);
+      const [, payload] = lpush.mock.calls[0];
+      const parsed = JSON.parse(payload as string);
+      expect(parsed.status).toBe('success');
+      expect(parsed.text).toBe('done');
     } finally {
       vi.useRealTimers();
     }

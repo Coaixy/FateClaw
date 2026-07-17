@@ -48,7 +48,7 @@ const SWEEP_INTERVAL_MS = 60 * 1000;
 /** 告警阈值：堆积超过此时长只记日志，不动数据（从超时链导出）。 */
 const WARN_THRESHOLD_MS = INBOX_STALL_WARN_MS;
 /**
- * 自动清理阈值：从超时链派生（daemon 单请求硬超时 + 余量），避免误杀
+ * 自动清理阈值：从超时链派生（daemon 请求绝对上限 + 余量），避免误杀
  * "排在一条慢请求后面、暂时还没轮到"的正常消息。
  */
 const FAIL_THRESHOLD_MS = INBOX_STALL_FAIL_MS;

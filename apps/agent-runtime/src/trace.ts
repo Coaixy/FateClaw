@@ -1,6 +1,10 @@
 import { getContext } from './context.js';
 import type { RequestScope } from './request-scope.js';
-import { appendScopedTraceEvent, getRequestId } from './request-scope.js';
+import {
+  appendScopedTraceEvent,
+  getRequestId,
+  markRequestActivity,
+} from './request-scope.js';
 import type { TraceEventEntry } from './types.js';
 
 /**
@@ -38,6 +42,7 @@ export function traceEvent(
   // 2. 请求缓冲通道（DB 排障）
   if (scope) {
     try {
+      markRequestActivity(scope);
       appendScopedTraceEvent(scope, entry);
     } catch {
       // 缓冲失败不影响 stderr 通道（防御性：极端情况下不让可观测性拖垮主流程）
