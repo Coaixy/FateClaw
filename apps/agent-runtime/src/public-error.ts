@@ -13,23 +13,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function maskSecret(value: string | undefined): string {
+function formatSensitiveConfiguredValue(value: string | undefined): string {
   const normalized = value?.trim();
   if (!normalized) return '未配置';
-  return normalized.length <= 4
-    ? '已配置'
-    : `已配置（...${normalized.slice(-4)}）`;
-}
-
-function maskBaseUrl(value: string | undefined): string {
-  const normalized = value?.trim();
-  if (!normalized) return '未配置';
-  try {
-    const url = new URL(normalized);
-    return `${url.protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return '已配置（格式异常）';
-  }
+  return '已配置';
 }
 
 function redactExactValue(text: string, value: string | undefined): string {
@@ -45,13 +32,22 @@ function redactLikelyApiKeys(text: string): string {
     .replace(/(authorization\s*[:=]\s*bearer\s+)\S+/gi, '$1[已脱敏]');
 }
 
+function redactLikelyUrls(text: string): string {
+  // Provider 可能回显实际请求端点而不只是配置的 Base URL，因此统一隐藏完整 HTTP(S) URL。
+  return text.replace(/https?:\/\/[^\s"'<>]+/gi, '[已脱敏]');
+}
+
 function redactRuntimeSensitiveValues(
   text: string,
   runtime?: LlmRuntimeSnapshot,
 ): string {
+  const withoutUrls = redactLikelyUrls(text);
   const withoutRuntimeSecrets = runtime
-    ? redactExactValue(redactExactValue(text, runtime.apiKey), runtime.baseUrl)
-    : text;
+    ? redactExactValue(
+        redactExactValue(withoutUrls, runtime.apiKey),
+        runtime.baseUrl,
+      )
+    : withoutUrls;
   return redactLikelyApiKeys(withoutRuntimeSecrets);
 }
 
@@ -63,7 +59,11 @@ function inferCustomModelFailureCause(error: string): string {
   ) {
     return '优先检查 API Key 是否正确、是否过期，以及认证方式是否选对。';
   }
-  if (/403|forbidden|permission|billing|quota|insufficient/i.test(error)) {
+  if (
+    /402|403|payment required|forbidden|permission|billing|quota|insufficient|balance|credit|余额|欠费/i.test(
+      error,
+    )
+  ) {
     return '优先检查 API Key 权限、账户额度、项目权限或供应商控制台限制。';
   }
   if (
@@ -104,9 +104,9 @@ function formatCustomModelError(
     '自配模型调用失败，当前使用的配置如下：',
     `协议类型：${runtime.piApi}`,
     `模型名：${formatConfiguredValue(runtime.model)}`,
-    `Base URL：${maskBaseUrl(runtime.baseUrl)}`,
+    `Base URL：${formatSensitiveConfiguredValue(runtime.baseUrl)}`,
     `认证方式：${runtime.authMode}`,
-    `API Key：${maskSecret(runtime.apiKey)}`,
+    `API Key：${formatSensitiveConfiguredValue(runtime.apiKey)}`,
     `供应商原始错误：${providerError || '无错误详情'}`,
     `排查方向：${inferCustomModelFailureCause(providerError)}`,
   ].join('\n');

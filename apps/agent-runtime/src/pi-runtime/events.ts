@@ -666,12 +666,31 @@ export function createPiEventCollector(args: {
   };
 }
 
-export function extractAssistantTextFromMessages(messages: unknown[]): string | null {
+/**
+ * 读取 Pi 会话最后一条 assistant 消息的正文与失败信息。
+ *
+ * Pi SDK 的 Provider 请求失败不会保证 `session.prompt()` 抛异常，而是可能返回一条
+ * `stopReason: "error"`、正文为空、错误写在 `errorMessage` 的 assistant 消息。
+ * 这里只读取最后一条 assistant，避免当前轮失败时误拿历史回复当成本轮结果。
+ *
+ * @param messages Pi session 当前保存的完整消息列表。
+ * @returns 最后一条 assistant 的正文和错误；没有 assistant 时返回 null。
+ */
+export function extractLatestAssistantResult(messages: unknown[]): {
+  text: string | null;
+  error: string | null;
+} | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (!isAssistantMessage(message)) continue;
     const text = textFromContent(message.content).trim();
-    if (text) return text;
+    const errorMessage = message.errorMessage?.trim();
+    const error =
+      message.stopReason === 'error' ||
+      (message.stopReason !== 'aborted' && Boolean(errorMessage))
+        ? errorMessage || '模型服务返回错误，但没有提供错误详情'
+        : null;
+    return { text: text || null, error };
   }
   return null;
 }

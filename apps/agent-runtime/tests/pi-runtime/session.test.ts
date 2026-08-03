@@ -299,6 +299,54 @@ describe('runPiSession', () => {
     );
   });
 
+  it('把 Pi assistant 的 Provider 错误转成异常而不是成功空回复', async () => {
+    const messages: unknown[] = [
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '上一轮正常回复' }],
+        stopReason: 'stop',
+      },
+    ];
+    const unsubscribe = vi.fn();
+    const dispose = vi.fn();
+
+    mockCreateAgentSession.mockResolvedValue({
+      session: {
+        state: { messages },
+        subscribe() {
+          return unsubscribe;
+        },
+        async prompt() {
+          // Pi SDK 对欠费、鉴权等 Provider 错误可能只写终止状态，不会 reject prompt。
+          messages.push({
+            role: 'assistant',
+            content: [],
+            stopReason: 'error',
+            errorMessage: 'HTTP 402: insufficient balance',
+            usage: {
+              input: 12,
+              output: 0,
+              totalTokens: 12,
+            },
+          });
+        },
+        abort: vi.fn(),
+        dispose,
+      },
+    });
+
+    await expect(
+      runPiSession({
+        containerInput: createInput(),
+        runtime: { deps: createDeps() },
+        requestScope: createRequestScope(),
+      }),
+    ).rejects.toThrow('HTTP 402: insufficient balance');
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('injects the no-board policy for normal chat without authorized board context', async () => {
     const userMessage = '我是 1990-01-01 早上八点出生，帮我排盘看事业';
     let capturedPrompt = '';

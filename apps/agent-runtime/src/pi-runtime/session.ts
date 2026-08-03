@@ -25,7 +25,7 @@ import {
 } from './context-layer.js';
 import {
   createPiEventCollector,
-  extractAssistantTextFromMessages,
+  extractLatestAssistantResult,
 } from './events.js';
 import {
   enrichAiChatStreamEvent,
@@ -242,10 +242,16 @@ export async function runPiSession(args: {
     await session.prompt(args.containerInput.userMessage, {
       source: 'extension',
     });
+    const latestAssistant = extractLatestAssistantResult(
+      session.state.messages,
+    );
+    if (latestAssistant?.error) {
+      // Pi 把 Provider 欠费、鉴权和协议错误写在 assistant.errorMessage，prompt 本身可能正常 resolve。
+      // 转成异常后复用 request-boundary 的脱敏与 publicErrorText 映射，避免成功空回复。
+      throw new Error(latestAssistant.error);
+    }
     return {
-      text:
-        extractAssistantTextFromMessages(session.state.messages) ??
-        lastAssistantText,
+      text: latestAssistant?.text ?? lastAssistantText,
       usage,
       records,
       persistedSkillContext: sessionContext.persistedSkillContext,
