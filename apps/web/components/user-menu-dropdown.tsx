@@ -7,9 +7,9 @@ import {
   Compass,
   Crown,
   KeyRound,
+  Library,
   LogOut,
   ServerCog,
-  Sparkle,
   Sparkles,
   User as UserIcon,
 } from 'lucide-react';
@@ -81,16 +81,19 @@ export function UserMenuDropdown({
             label="API Key"
             onNavigate={onNavigate}
           />
-          <MenuItem
-            href="/studio"
-            icon={Sparkle}
-            label={t('userMenu.studio')}
-            onNavigate={onNavigate}
-          />
+        </MenuSection>
+        {/* 资源：低频查阅入口集中在这里，不占用对话侧栏。 */}
+        <MenuSection label={t('userMenu.sections.resources')}>
           <MenuItem
             href="/discover"
             icon={Compass}
             label={t('userMenu.skillMarket')}
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/bazi-cases"
+            icon={Library}
+            label={t('userMenu.baziCases')}
             onNavigate={onNavigate}
           />
         </MenuSection>

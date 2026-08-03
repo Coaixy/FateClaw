@@ -82,7 +82,10 @@ function readSelectedSessionFromUrl() {
 }
 
 /**
- * 判断给定 pathname 是否指向 AI Chat 页。
+ * 判断给定 pathname 是否指向 AI Chat 工作区。
+ *
+ * 根路径与 `/ai-chat` 现在渲染同一套新建对话流程，因此两者都必须走原地会话切换，
+ * 避免发送首条消息时触发跨页面软导航并重挂聊天组件。
  *
  * 生产构建启用 trailingSlash:true，usePathname() 在聊天页返回的是带尾斜杠的 '/ai-chat/'。
  * 若直接用 `pathname === '/ai-chat'` 比较，生产环境恒为 false——会导致：
@@ -93,12 +96,13 @@ function readSelectedSessionFromUrl() {
  */
 export function isAiChatPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
-  return pathname.replace(/\/+$/, '') === '/ai-chat';
+  const normalizedPathname = pathname.replace(/\/+$/, '');
+  return normalizedPathname === '' || normalizedPathname === '/ai-chat';
 }
 
 /**
  * 跨页传递聊天草稿的 sessionStorage key：
- * 登录回跳与主页工作台输入框共用同一通道，ai-chat workspace 挂载后读取并回填 composer。
+ * 登录回跳等跨页场景用它把未发送内容带回 AI Chat composer。
  */
 export const PENDING_CHAT_INPUT_KEY = 'fateclaw:ai-chat:pending-input';
 

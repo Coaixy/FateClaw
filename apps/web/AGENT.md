@@ -74,7 +74,7 @@ apps/web/
 
 ### 路由页面
 
-- `app/page.tsx`: 根路径入口，当前直接重定向到 `/ai-chat`
+- `app/page.tsx`: 根路径入口，直接渲染 AI Chat 新建对话状态
 - `app/login/page.tsx`: 登录注册
 - `app/dashboard/page.tsx`: 账号总览、绑定、Soul、计划和主要入口
 - `app/chat/page.tsx`: 聊天记录页

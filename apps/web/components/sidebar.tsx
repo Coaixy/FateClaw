@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Archive,
-  LayoutGrid,
   Loader2,
   LogIn,
   MessageCircle,
@@ -20,6 +19,7 @@ import {
   Sun,
   ExternalLink,
   Send,
+  Sparkles,
   Users,
 } from 'lucide-react';
 import { useReducer, useState, useEffect, useMemo } from 'react';
@@ -535,9 +535,19 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
         className={`fixed top-0 left-0 h-full w-[260px] bg-sidebar border-r border-hairline flex flex-col z-50 transition-transform duration-300 ease-out lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
 
-        {/* Logo 区域 */}
+        {/* Logo 区域：点击后统一回到新建对话首屏。 */}
         <div className="relative flex items-center justify-between px-5 h-16 shrink-0">
-          <Logo />
+          <button
+            type="button"
+            onClick={() => {
+              closeSidebar();
+              setSelectedSession('');
+            }}
+            className="cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+            aria-label={t('hub.newChat')}
+          >
+            <Logo />
+          </button>
           <button
             onClick={closeSidebar}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-canvas/70 transition-all duration-200 cursor-pointer lg:hidden"
@@ -547,7 +557,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        {/* 主操作:新建对话(对齐 Claude 侧栏结构,任何页面一步发起);工作台降为普通导航行。 */}
+        {/* 主操作：新建对话独占一行，高频业务入口复用原工作台行并排展示。 */}
         <div className="relative space-y-1 px-3 shrink-0">
           <button
             type="button"
@@ -562,15 +572,34 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <SquarePen size={15} strokeWidth={2} className="shrink-0" />
             <span className="truncate">{t('hub.newChat')}</span>
           </button>
-          <Link
-            href="/"
-            onClick={closeSidebar}
-            className="flex h-10 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium text-muted transition-colors duration-200 hover:bg-canvas/70 hover:text-ink"
-            aria-label={t('sidebar.workspace')}
-          >
-            <LayoutGrid size={15} strokeWidth={1.8} className="shrink-0" />
-            <span className="truncate">{t('sidebar.workspace')}</span>
-          </Link>
+          <div className="grid grid-cols-2 gap-1">
+            <Link
+              href="/studio"
+              onClick={closeSidebar}
+              className={`flex h-10 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors duration-200 ${
+                pathname?.startsWith('/studio')
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted hover:bg-canvas/70 hover:text-ink'
+              }`}
+              aria-label={t('hub.studio')}
+            >
+              <Sparkles size={14} strokeWidth={1.8} className="shrink-0" />
+              <span className="truncate">{t('hub.studio')}</span>
+            </Link>
+            <Link
+              href="/clients"
+              onClick={closeSidebar}
+              className={`flex h-10 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors duration-200 ${
+                pathname?.startsWith('/clients')
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted hover:bg-canvas/70 hover:text-ink'
+              }`}
+              aria-label={t('hub.clients')}
+            >
+              <Users size={14} strokeWidth={1.8} className="shrink-0" />
+              <span className="truncate">{t('hub.clients')}</span>
+            </Link>
+          </div>
         </div>
 
         {/* 对话历史列表:节标签让列表区有明确的分组起点(对齐 Claude 侧栏的 Recents)。 */}

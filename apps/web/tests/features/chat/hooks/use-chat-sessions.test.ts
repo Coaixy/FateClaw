@@ -72,8 +72,11 @@ describe('isAiChatPath', () => {
     expect(isAiChatPath('/ai-chat/')).toBe(true);
   });
 
+  it('matches the root route because it renders the same chat workspace', () => {
+    expect(isAiChatPath('/')).toBe(true);
+  });
+
   it('does not match other routes or sub-paths', () => {
-    expect(isAiChatPath('/')).toBe(false);
     expect(isAiChatPath('/ai-chat/share')).toBe(false);
     expect(isAiChatPath('/ai-chat/archive')).toBe(false);
     expect(isAiChatPath(null)).toBe(false);

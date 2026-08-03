@@ -13,13 +13,16 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
+  ArrowLeft,
   Bot,
   Brain,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleStop,
+  Compass,
   Loader2,
+  MessageCircle,
   Sparkles,
 } from 'lucide-react';
 
@@ -64,6 +67,7 @@ import { buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
+type NewChatStartMode = 'choice' | 'paipan' | 'plain';
 type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
@@ -201,7 +205,7 @@ function modelSettingsReducer(
 }
 
 // ===== 术数目录状态 =====
-// 目录列表与加载态由工作台统一拉取、成组变化。
+// 目录列表与加载态由 AI Chat 统一拉取、成组变化。
 type PaipanCatalogState = {
   items: PaipanCatalogItem[];
   loading: boolean;
@@ -398,6 +402,10 @@ function AiChatWorkspaceContent() {
     touchSession,
   } = useChatSessions();
   const [input, setInput] = useState('');
+  // 空会话只控制“选择开始方式 / 先排盘 / 直接提问”三种首屏状态；
+  // 真正的会话仍在确认盘面或发送首条消息时才创建。
+  const [newChatStartMode, setNewChatStartMode] =
+    useState<NewChatStartMode>('choice');
   // 排盘弹层开合配置（模式 / 预选术数 / 锁定 / 预选客户 id）合并为单一 reducer。
   const [paipanSheetConfig, dispatchPaipanSheetConfig] = useReducer(
     paipanSheetConfigReducer,
@@ -456,6 +464,13 @@ function AiChatWorkspaceContent() {
   );
 
   useEffect(() => {
+    if (!selectedSession) {
+      // revision 能区分连续点击“新建对话”的情况，即使会话 id 一直为空也要回到首屏。
+      setNewChatStartMode('choice');
+    }
+  }, [selectedSession, selectedSessionRevision]);
+
+  useEffect(() => {
     if (!chatAvailable || typeof window === 'undefined') {
       return;
     }
@@ -467,6 +482,7 @@ function AiChatWorkspaceContent() {
 
     window.sessionStorage.removeItem(PENDING_CHAT_INPUT_KEY);
     setInput((current) => current || pendingText);
+    setNewChatStartMode('plain');
   }, [chatAvailable]);
 
   const loadModelSettings = useCallback(async () => {
@@ -513,7 +529,7 @@ function AiChatWorkspaceContent() {
     const cancelIdleTask = scheduleIdleTask(() => {
       if (cancelled) return;
 
-      // 术数目录由工作台统一加载，避免空态入口和排盘弹层各自重复请求。
+      // 术数目录由 AI Chat 统一加载，避免空态入口和排盘弹层各自重复请求。
       void paipanApi
         .catalog()
         .then((items) => {
@@ -769,6 +785,7 @@ function AiChatWorkspaceContent() {
         return;
       }
 
+      setNewChatStartMode('paipan');
       dispatchPaipanSheetConfig({ type: 'openPreChat', skill });
     },
     [authLoading],
@@ -924,8 +941,11 @@ function AiChatWorkspaceContent() {
   );
 
   const handleClosePaipanSheet = useCallback(() => {
+    if (paipanSheetConfig.mode === 'pre-chat' && !selectedSession) {
+      setNewChatStartMode('choice');
+    }
     dispatchPaipanSheetConfig({ type: 'close' });
-  }, []);
+  }, [paipanSheetConfig.mode, selectedSession]);
 
   // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
   const clientParamHandledRef = useRef(false);
@@ -938,6 +958,7 @@ function AiChatWorkspaceContent() {
       return;
     }
     clientParamHandledRef.current = true;
+    setNewChatStartMode('paipan');
     dispatchPaipanSheetConfig({ type: 'openForClient', clientId });
     // 清掉 URL 上的 client 参数，避免刷新或重渲染重复触发。
     if (typeof window !== 'undefined') {
@@ -1036,40 +1057,49 @@ function AiChatWorkspaceContent() {
     />
   );
 
-  const expertCenteredComposer = (
+  const selectedSessionCenteredComposer = (
     <div className="space-y-2.5">
       {composer}
       {onboardingGuide.shouldShowContinueEntry && (
         <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
       )}
-      {selectedSession ? (
-        <ChatToolStrip
-          modelLabel={modelSwitchLabel}
-          modelLoading={modelSettings.loading}
-          modelBusy={modelSettings.toolbarBusy === 'model'}
-          modelDisabled={
-            modelControlsDisabled ||
-            modelSettings.loading ||
-            Boolean(modelSettings.toolbarBusy) ||
-            !canSelectOfficialModel
-          }
-          modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
-          selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
-          officialModels={availableOfficialModels}
-          onSelectModel={selectOfficialModel}
-          thinkingLabel={thinkingSwitchLabel}
-          thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
-          thinkingDisabled={
-            modelControlsDisabled ||
-            modelSettings.loading ||
-            Boolean(modelSettings.toolbarBusy) ||
-            !canSelectThinkingLevel
-          }
-          thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
-          thinkingLevel={thinkingLevel}
-          onSelectThinking={selectThinkingLevel}
-        />
-      ) : (
+      <ChatToolStrip
+        modelLabel={modelSwitchLabel}
+        modelLoading={modelSettings.loading}
+        modelBusy={modelSettings.toolbarBusy === 'model'}
+        modelDisabled={
+          modelControlsDisabled ||
+          modelSettings.loading ||
+          Boolean(modelSettings.toolbarBusy) ||
+          !canSelectOfficialModel
+        }
+        modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
+        selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
+        officialModels={availableOfficialModels}
+        onSelectModel={selectOfficialModel}
+        thinkingLabel={thinkingSwitchLabel}
+        thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
+        thinkingDisabled={
+          modelControlsDisabled ||
+          modelSettings.loading ||
+          Boolean(modelSettings.toolbarBusy) ||
+          !canSelectThinkingLevel
+        }
+        thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
+        thinkingLevel={thinkingLevel}
+        onSelectThinking={selectThinkingLevel}
+      />
+    </div>
+  );
+  const newChatCenteredContent =
+    newChatStartMode === 'choice' ? (
+      <NewChatStartChoice
+        onChoosePaipan={() => setNewChatStartMode('paipan')}
+        onChoosePlain={() => setNewChatStartMode('plain')}
+      />
+    ) : newChatStartMode === 'paipan' ? (
+      <div className="space-y-2.5">
+        <NewChatBackButton onBack={() => setNewChatStartMode('choice')} />
         <PaipanSkillRail
           catalog={paipanCatalogState.items}
           loading={paipanCatalogState.loading}
@@ -1079,19 +1109,40 @@ function AiChatWorkspaceContent() {
           onOpenSkillMarket={openSkillMarket}
           onOpenPastedBoard={handleOpenComposerPastedBoard}
         />
-      )}
-    </div>
-  );
-  // 纯专业排盘入口:进入即排盘工作台。
-  const centeredContent = (
-    <div className="space-y-2.5">{expertCenteredComposer}</div>
-  );
+      </div>
+    ) : (
+      <div className="space-y-2.5">
+        <NewChatBackButton onBack={() => setNewChatStartMode('choice')} />
+        {composer}
+        {onboardingGuide.shouldShowContinueEntry && (
+          <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
+        )}
+      </div>
+    );
+  const centeredContent = selectedSession
+    ? selectedSessionCenteredComposer
+    : newChatCenteredContent;
   const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
-  const emptyStateTitle = t('aiChat.empty.expertTitle');
-  const emptyStateDescription = t('aiChat.empty.expertDescription');
-  const emptyStateHint = undefined;
+  const emptyStateTitle = selectedSession
+    ? t('aiChat.empty.defaultTitle')
+    : newChatStartMode === 'choice'
+      ? t('aiChat.start.title')
+      : newChatStartMode === 'paipan'
+        ? t('aiChat.start.paipanStepTitle')
+        : t('aiChat.start.plainStepTitle');
+  const emptyStateDescription = selectedSession
+    ? t('aiChat.empty.defaultDescription')
+    : newChatStartMode === 'choice'
+      ? t('aiChat.start.description')
+      : newChatStartMode === 'paipan'
+        ? t('aiChat.start.paipanStepDescription')
+        : t('aiChat.start.plainStepDescription');
+  // 新建对话首屏已有明确的分支说明，不再叠加旧版“可直接问或手动排盘”提示。
+  const emptyStateHint = selectedSession ? undefined : '';
   const emptyStateFrameClassName = !selectedSession
-    ? 'justify-start pb-8 pt-8 lg:pt-10'
+    ? newChatStartMode === 'choice'
+      ? 'justify-center pb-12'
+      : 'justify-start pb-8 pt-6 lg:pt-8'
     : undefined;
 
   return (
@@ -1218,6 +1269,92 @@ function AiChatWorkspaceContent() {
         onComplete={onboardingGuide.completeGuide}
       />
     </div>
+  );
+}
+
+/**
+ * 新建对话的首步选择，只决定是否先排盘，不提前创建会话。
+ *
+ * @param props.onChoosePaipan 进入术数选择步骤。
+ * @param props.onChoosePlain 进入普通问题输入步骤。
+ * @returns 两个互斥开始方式的操作区。
+ */
+function NewChatStartChoice({
+  onChoosePaipan,
+  onChoosePlain,
+}: {
+  onChoosePaipan: () => void;
+  onChoosePlain: () => void;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="grid w-full gap-2.5">
+      <button
+        type="button"
+        onClick={onChoosePaipan}
+        className="btn-tactile group flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-primary/25 bg-primary/6 px-4 py-3 text-left text-ink transition-all hover:border-primary/40 hover:bg-primary/9 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+          <Compass size={19} strokeWidth={1.9} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-semibold">
+            {t('aiChat.start.paipan')}
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+            {t('aiChat.start.paipanDescription')}
+          </span>
+        </span>
+        <ChevronRight
+          size={16}
+          className="shrink-0 text-primary/60 transition-transform group-hover:translate-x-0.5"
+        />
+      </button>
+
+      <button
+        type="button"
+        onClick={onChoosePlain}
+        className="btn-tactile group flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-4 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <MessageCircle size={18} strokeWidth={1.9} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-semibold">
+            {t('aiChat.start.plain')}
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+            {t('aiChat.start.plainDescription')}
+          </span>
+        </span>
+        <ChevronRight
+          size={16}
+          className="shrink-0 text-primary/60 transition-transform group-hover:translate-x-0.5"
+        />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 空会话子步骤的返回操作，回到“是否排盘”的首步选择。
+ *
+ * @param props.onBack 返回回调。
+ * @returns 紧凑返回按钮。
+ */
+function NewChatBackButton({ onBack }: { onBack: () => void }) {
+  const { t } = useI18n();
+
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-muted transition-colors hover:bg-surface-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+    >
+      <ArrowLeft size={14} strokeWidth={1.9} />
+      <span>{t('aiChat.start.back')}</span>
+    </button>
   );
 }
 

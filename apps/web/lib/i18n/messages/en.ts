@@ -6,11 +6,6 @@ export const enMessages = {
     copyFailed: 'Copy failed, please try again',
   },
   hub: {
-    greetingMorning: 'Good morning',
-    greetingAfternoon: 'Good afternoon',
-    greetingEvening: 'Good evening',
-    askPlaceholder: 'Describe a hexagram, chart, or question…',
-    composerHint: 'Enter to send · Shift+Enter for newline',
     newChat: 'New chat',
     studio: 'Skill studio',
     clients: 'Clients',
@@ -66,10 +61,11 @@ export const enMessages = {
   userMenu: {
     sections: {
       workspace: 'Workspace',
+      resources: 'Resources',
       account: 'Account',
     },
     skillMarket: 'Skill library',
-    studio: 'Skill Studio',
+    baziCases: 'Bazi Case Library',
     wallet: 'Subscription & Billing',
     persona: 'Persona',
     modelSettings: 'Model settings',
@@ -641,7 +637,6 @@ export const enMessages = {
     clearSearch: 'Clear search',
     searchActive: 'Searching',
     newChat: 'New chat',
-    workspace: 'Workspace',
     loginToViewSessions: 'Log in to view conversations',
     previousPage: 'Previous page',
     nextPage: 'Next page',
@@ -751,9 +746,19 @@ export const enMessages = {
         'Type a question to chat, or start manual charting below',
       selectedHint: 'Send a message to start · / for commands',
       newHint: 'Send to start · manual charting available · / for commands',
-      expertTitle: 'Expert mode',
-      expertDescription:
-        'Ask directly, use manual charting, paste a chart, or use Skills',
+    },
+    start: {
+      title: 'New conversation',
+      description: 'Choose whether to create a chart before you begin',
+      paipan: 'Choose a system and create a chart',
+      paipanDescription: 'Generate and confirm the chart before asking a question',
+      plain: 'Ask without a chart',
+      plainDescription: 'Type your question and create the conversation when you send',
+      paipanStepTitle: 'Choose a system',
+      paipanStepDescription: 'Finish the chart, then ask your question with it',
+      plainStepTitle: 'Ask directly',
+      plainStepDescription: 'Type a question to start a new conversation',
+      back: 'Back to start options',
     },
     composer: {
       disabledPlaceholder: 'This conversation cannot be continued',
@@ -834,7 +839,7 @@ export const enMessages = {
     paipanRail: {
       title: 'Choose a system to create a chart',
       description:
-        'Create the chart first, then decide whether to send it for AI interpretation',
+        'Complete and confirm the chart, then enter your question',
       pasteBoard: 'Paste chart',
       moreSkills: 'More systems',
       noSystems: 'No system charting tools are currently available.',
