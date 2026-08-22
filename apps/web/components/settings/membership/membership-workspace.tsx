@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Crown, Loader2, Sparkles } from 'lucide-react';
+import {
+  CheckCircle2,
+  Crown,
+  Info,
+  Loader2,
+  Sparkles,
+} from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
@@ -61,11 +67,14 @@ function resolvePlanDisplayName(
 }
 
 function resolvePlanBenefitLabels(t: TranslationFn) {
-  // 塌缩为单层"卦师使用权"：统一展示卦师工具的核心卖点，不再按档位区分。
+  // 塌缩为单层"卦师使用权"：对比表逐行对应代码里的真实付费差异
+  // （会员原价 vs 非会员 ×1.5、member/normal 双队列、BYOK 门禁、开放 API 门禁），
+  // 不再宣传"人人都能用的功能"，把"为什么开会员"讲清楚。
   return [
-    t('pages.membership.planBenefitGuashiModel'),
-    t('pages.membership.planBenefitGuashiReading'),
-    t('pages.membership.planBenefitGuashiKnowledge'),
+    t('pages.membership.compareRowModelPrice'),
+    t('pages.membership.compareRowQueue'),
+    t('pages.membership.compareRowCustomModel'),
+    t('pages.membership.compareRowOpenApi'),
   ];
 }
 
@@ -85,6 +94,102 @@ function SubscriptionMetric({
       <div className="mt-1 text-[15px] font-bold tabular-nums text-ink">
         {value}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 会员 vs 非会员权益对比表。
+ *
+ * 行 = 权益维度；列 = 非会员 / 卦师使用权。非会员列如实展示现状
+ * （×1.5 计费、排队靠后、两项不可用），让"开了会员到底差在哪"一眼可读。
+ */
+function MembershipCompareTable({
+  rows,
+  planName,
+  t,
+}: {
+  rows: string[];
+  planName: string;
+  t: TranslationFn;
+}) {
+  // 列取值与 resolvePlanBenefitLabels 的行序一一对应。文案刻意保持短语，
+  // 让三列在窄容器内也能放下而不出现横向滚动（细节差异由脚注补充说明）。
+  const nonMemberValues = [
+    t('pages.membership.compareNonMemberModelPrice'),
+    t('pages.membership.compareNonMemberQueue'),
+    t('pages.membership.compareNonMemberUnavailable'),
+    t('pages.membership.compareNonMemberUnavailable'),
+  ];
+  const memberValues = [
+    t('pages.membership.compareMemberModelPrice'),
+    t('pages.membership.compareMemberQueue'),
+    t('pages.membership.compareMemberAvailable'),
+    t('pages.membership.compareMemberAvailable'),
+  ];
+
+  return (
+    <div>
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              className="w-[38%] pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted"
+            >
+              {t('pages.membership.compareColumnFeature')}
+            </th>
+            <th
+              scope="col"
+              className="pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted"
+            >
+              {t('pages.membership.compareColumnNonMember')}
+            </th>
+            <th
+              scope="col"
+              className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-primary"
+            >
+              {planName}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((feature, index) => (
+            <tr key={feature} className="border-t border-hairline/50">
+              <th
+                scope="row"
+                className="py-2.5 pr-3 align-top text-[12px] font-medium leading-5 text-ink"
+              >
+                {feature}
+              </th>
+              <td className="py-2.5 pr-3 align-top text-[12px] leading-5 text-muted">
+                {nonMemberValues[index]}
+              </td>
+              {/* 第三列（会员）用 primary 底色整列强调，色块完全贴合单元格内缘，
+                  不外扩，避免把表格撑出横向溢出。 */}
+              <td className="relative py-2.5 align-top text-[12px] font-medium leading-5 text-ink">
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-0 inset-x-0 rounded-md bg-primary/6"
+                />
+                <span className="relative flex items-start gap-1.5">
+                  <CheckCircle2
+                    size={13}
+                    aria-hidden="true"
+                    className="mt-0.5 shrink-0 text-primary"
+                  />
+                  {memberValues[index]}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {/* 表格下方补一行说明：功能本身人人可用，会员差异在价格与优先级——避免误读为"功能被锁"。 */}
+      <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted/80">
+        <Info size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-muted/50" />
+        {t('pages.membership.compareFootnote')}
+      </p>
     </div>
   );
 }
@@ -128,7 +233,6 @@ function SubscriptionCard({
 }) {
   const isActive = Boolean(membership?.active);
   const planDisplayName = resolvePlanDisplayName(plan);
-  const benefitLabels = resolvePlanBenefitLabels(t);
   // 续费/开通文案：会员仍有效即视为续费（存量旧档 plan_key 不参与判断）。
   const actionLabel = isActive
     ? t('pages.membership.renewPlan', { plan: planDisplayName })
@@ -176,21 +280,11 @@ function SubscriptionCard({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-1.5">
-          {benefitLabels.map((benefit) => (
-            <div
-              key={benefit}
-              className="flex min-h-5 items-center gap-2 text-[12px] leading-5 text-muted"
-            >
-              <CheckCircle2
-                size={13}
-                aria-hidden="true"
-                className="shrink-0 text-primary"
-              />
-              <span>{benefit}</span>
-            </div>
-          ))}
-        </div>
+        <MembershipCompareTable
+          rows={resolvePlanBenefitLabels(t)}
+          planName={planDisplayName}
+          t={t}
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-2 p-5">
