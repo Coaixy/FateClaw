@@ -238,7 +238,7 @@ export async function createChatSession(session: {
 
 export async function getChatSessionsByUserId(
   userId: string,
-  limit = 100,
+  limit = 500,
   clientId?: string,
 ): Promise<ChatSession[]> {
   // 排除对外开放 API 自建的兜底会话（id 形如 openapi:<uuid>，仅为兜住 messages 表外键）：

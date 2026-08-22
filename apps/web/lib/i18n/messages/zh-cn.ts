@@ -10,6 +10,13 @@ export const zhCNMessages = {
     studio: '技能开发',
     clients: '客户档案',
     recentChats: '最近对话',
+    viewAllChats: '查看全部',
+    studioDescription: '编写与安装术数 Skill',
+    clientsDescription: '管理咨询记录与历史会话',
+  },
+  history: {
+    title: '对话历史',
+    description: '查看全部对话记录，支持搜索、按时间筛选和归档管理',
   },
   common: {
     appName: '守义AI',

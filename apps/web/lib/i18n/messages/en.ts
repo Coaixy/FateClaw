@@ -10,6 +10,13 @@ export const enMessages = {
     studio: 'Skill studio',
     clients: 'Clients',
     recentChats: 'Recent chats',
+    viewAllChats: 'View all',
+    studioDescription: 'Build and install divination skills',
+    clientsDescription: 'Manage readings and session history',
+  },
+  history: {
+    title: 'Conversation history',
+    description: 'Browse all conversations with search, time filters, and archive management',
   },
   common: {
     appName: 'Shouyi AI',

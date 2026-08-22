@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   ArrowLeft,
@@ -24,6 +25,7 @@ import {
   Loader2,
   MessageCircle,
   Sparkles,
+  Users,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -1275,6 +1277,9 @@ function AiChatWorkspaceContent() {
 /**
  * 新建对话的首步选择，只决定是否先排盘，不提前创建会话。
  *
+ * 卡片下方附技能开发 / 客户档案入口：这两个低频管理页从侧栏移入此处，
+ * 让侧栏保持「新建对话 + 最近对话」的单一焦点。
+ *
  * @param props.onChoosePaipan 进入术数选择步骤。
  * @param props.onChoosePlain 进入普通问题输入步骤。
  * @returns 两个互斥开始方式的操作区。
@@ -1333,6 +1338,45 @@ function NewChatStartChoice({
           className="shrink-0 text-primary/60 transition-transform group-hover:translate-x-0.5"
         />
       </button>
+
+      {/* 次级入口：与主卡片同结构（图标色块+标题+副标题）的双列卡片，
+          高度略矮（64px vs 72px）保留层级差。低频管理页从侧栏移入此处。 */}
+      <div className="mt-1 grid grid-cols-2 gap-2.5">
+        <Link
+          href="/studio"
+          className="btn-tactile group flex min-h-[64px] items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-3.5 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+          aria-label={t('hub.studio')}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Sparkles size={16} strokeWidth={1.9} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold">
+              {t('hub.studio')}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] leading-snug text-muted">
+              {t('hub.studioDescription')}
+            </span>
+          </span>
+        </Link>
+        <Link
+          href="/clients"
+          className="btn-tactile group flex min-h-[64px] items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-3.5 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+          aria-label={t('hub.clients')}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Users size={16} strokeWidth={1.9} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold">
+              {t('hub.clients')}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] leading-snug text-muted">
+              {t('hub.clientsDescription')}
+            </span>
+          </span>
+        </Link>
+      </div>
     </div>
   );
 }

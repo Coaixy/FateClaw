@@ -10,6 +10,13 @@ export const zhTWMessages = {
     studio: '技能開發',
     clients: '客戶檔案',
     recentChats: '最近對話',
+    viewAllChats: '查看全部',
+    studioDescription: '編寫與安裝術數 Skill',
+    clientsDescription: '管理諮詢記錄與歷史會話',
+  },
+  history: {
+    title: '對話歷史',
+    description: '查看全部對話記錄，支援搜尋、按時間篩選和封存管理',
   },
   common: {
     appName: '守義AI',

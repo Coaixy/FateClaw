@@ -19,7 +19,6 @@ import {
   Sun,
   ExternalLink,
   Send,
-  Sparkles,
   Users,
 } from 'lucide-react';
 import { useReducer, useState, useEffect, useMemo } from 'react';
@@ -557,8 +556,8 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        {/* 主操作：新建对话独占一行，高频业务入口复用原工作台行并排展示。 */}
-        <div className="relative space-y-1 px-3 shrink-0">
+        {/* 主操作：新建对话独占一行。技能开发/客户档案已移至新建对话选择页与 /history 页脚注。 */}
+        <div className="relative px-3 shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -572,42 +571,24 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
             <SquarePen size={15} strokeWidth={2} className="shrink-0" />
             <span className="truncate">{t('hub.newChat')}</span>
           </button>
-          <div className="grid grid-cols-2 gap-1">
-            <Link
-              href="/studio"
-              onClick={closeSidebar}
-              className={`flex h-10 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors duration-200 ${
-                pathname?.startsWith('/studio')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted hover:bg-canvas/70 hover:text-ink'
-              }`}
-              aria-label={t('hub.studio')}
-            >
-              <Sparkles size={14} strokeWidth={1.8} className="shrink-0" />
-              <span className="truncate">{t('hub.studio')}</span>
-            </Link>
-            <Link
-              href="/clients"
-              onClick={closeSidebar}
-              className={`flex h-10 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-medium transition-colors duration-200 ${
-                pathname?.startsWith('/clients')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted hover:bg-canvas/70 hover:text-ink'
-              }`}
-              aria-label={t('hub.clients')}
-            >
-              <Users size={14} strokeWidth={1.8} className="shrink-0" />
-              <span className="truncate">{t('hub.clients')}</span>
-            </Link>
-          </div>
         </div>
 
         {/* 对话历史列表:节标签让列表区有明确的分组起点(对齐 Claude 侧栏的 Recents)。 */}
         <div className="relative flex-1 min-h-0 flex flex-col mt-5">
-          <p className="flex shrink-0 items-center gap-1.5 px-5 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted/60">
-            <span className="h-3 w-[2.5px] rounded-full bg-primary/70" aria-hidden="true" />
-            {t('hub.recentChats')}
-          </p>
+          <div className="flex shrink-0 items-center justify-between gap-2 pl-5 pr-3 pb-1.5">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted/60">
+              <span className="h-3 w-[2.5px] rounded-full bg-primary/70" aria-hidden="true" />
+              {t('hub.recentChats')}
+            </p>
+            <Link
+              href="/history"
+              onClick={closeSidebar}
+              className="inline-flex h-6 items-center rounded-md px-1.5 text-[11px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-primary"
+              aria-label={t('hub.viewAllChats')}
+            >
+              {t('hub.viewAllChats')}
+            </Link>
+          </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 scrollbar-hide">
             {showSessionSkeleton ? (
               <SidebarSessionSkeleton />
