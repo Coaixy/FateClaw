@@ -156,6 +156,10 @@ export async function createPiResourceLoader(
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
+    // 0.84 起 ResourceLoader 需暴露系统提示词来源；本 loader 的提示词由平台
+    // 运行时生成，没有磁盘来源文件。
+    getSystemPromptSource: () => undefined,
+    getAppendSystemPromptSources: () => [],
     getSystemPrompt: () => systemPrompt,
     getAppendSystemPrompt: () => appendSystemPrompt,
     extendResources: () => {

@@ -1,4 +1,5 @@
-import { AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
+import { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type {
@@ -9,9 +10,15 @@ import type {
 
 import type { LlmRuntimeSnapshot } from '../types.js';
 
+/**
+ * 请求级模型/凭据运行时。
+ *
+ * pi 0.80.8 起 SDK 移除了 AuthStorage + ModelRegistry.inMemory 的组装方式，
+ * 统一为异步 ModelRuntime 门面；凭据用 pi-ai 的内存 CredentialStore，
+ * 请求结束时随 runtime 一起丢弃，绝不落盘、不跨请求共享。
+ */
 export interface PiProviderRuntime {
-  authStorage: AuthStorage;
-  modelRegistry: ModelRegistry;
+  modelRuntime: ModelRuntime;
   model: Model<Api>;
 }
 
@@ -207,16 +214,22 @@ function resolveOpenAiCompat(
   };
 }
 
-export function createPiProviderRuntime(
+export async function createPiProviderRuntime(
   runtime: LlmRuntimeSnapshot,
-): PiProviderRuntime {
-  const authStorage = AuthStorage.inMemory();
-  const modelRegistry = ModelRegistry.inMemory(authStorage);
+): Promise<PiProviderRuntime> {
   const provider = resolvePiProvider(runtime);
   const api = resolvePiApi(runtime);
 
-  authStorage.setRuntimeApiKey(provider, runtime.apiKey);
-  modelRegistry.registerProvider(provider, {
+  // 内存凭据存储 + 关闭目录刷新/网络模型目录：本 provider 完全由请求参数静态构造。
+  const modelRuntime = await ModelRuntime.create({
+    credentials: new InMemoryCredentialStore(),
+    // null 表示不读 ~/.pi/agent/models.json，避免读到宿主机用户配置。
+    modelsPath: null,
+    refreshOnCreate: false,
+  });
+
+  modelRuntime.setRuntimeApiKey(provider, runtime.apiKey);
+  modelRuntime.registerProvider(provider, {
     name: runtime.providerKey || provider,
     api,
     baseUrl: resolveBaseUrl(runtime),
@@ -241,7 +254,7 @@ export function createPiProviderRuntime(
     ],
   });
 
-  const model = modelRegistry.find(provider, runtime.model);
+  const model = modelRuntime.getModel(provider, runtime.model);
   if (!model) {
     throw new Error(
       `Pi model registration failed: ${provider}/${runtime.model}`,
@@ -249,8 +262,7 @@ export function createPiProviderRuntime(
   }
 
   return {
-    authStorage,
-    modelRegistry,
+    modelRuntime,
     model,
   };
 }

@@ -14,7 +14,7 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v4
         with:
-          # Node 版本统一读取 .nvmrc(当前 22),需 ≥22.13 以满足 pnpm@11.5.0 的 engines 要求
+          # Node 版本统一读取 .nvmrc(当前 24),满足 pnpm@11.5.0 与 pi@0.84 的 engines 要求
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile

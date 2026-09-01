@@ -117,7 +117,7 @@ export async function runPiSession(args: {
   // 自配（BYOK）Base URL 的解析型 SSRF 校验：同步字面量校验挡不住「公网域名解析到内网」，
   // 建 provider（发起真实 LLM 请求）之前先做一次 DNS 解析级校验。
   await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
-  const providerRuntime = createPiProviderRuntime(
+  const providerRuntime = await createPiProviderRuntime(
     args.containerInput.llmRuntime,
   );
   const userId = resolveUserId(args.containerInput);
@@ -174,8 +174,7 @@ export async function runPiSession(args: {
     thinkingLevel: resolveThinkingLevel(
       args.containerInput.llmRuntime.thinkingLevel,
     ),
-    authStorage: providerRuntime.authStorage,
-    modelRegistry: providerRuntime.modelRegistry,
+    modelRuntime: providerRuntime.modelRuntime,
     resourceLoader,
     sessionManager: piSession.manager,
     settingsManager,

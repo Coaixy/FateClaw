@@ -25,7 +25,7 @@ const runtime: LlmRuntimeSnapshot = {
 
 describe('createPiProviderRuntime', () => {
   it('registers request runtime auth as an in-memory Pi provider', async () => {
-    const pi = createPiProviderRuntime(runtime);
+    const pi = await createPiProviderRuntime(runtime);
     const provider = 'fateclaw-openai-completions-main-openai';
 
     expect(pi.model.provider).toBe(provider);
@@ -33,19 +33,18 @@ describe('createPiProviderRuntime', () => {
     expect(pi.model.baseUrl).toBe('https://llm.example.test/v1');
     expect(pi.model.contextWindow).toBe(8192);
     expect(pi.model.maxTokens).toBe(1024);
-    await expect(pi.authStorage.getApiKey(provider)).resolves.toBe(
-      'request-scoped-key',
-    );
-    expect(pi.authStorage.getAuthStatus(provider).source).toBe('runtime');
+    // 0.84 起 SDK 用 ModelRuntime 门面 + 内存凭据存储，不再有 AuthStorage。
+    const auth = await pi.modelRuntime.getAuth(pi.model);
+    expect(auth?.auth).toMatchObject({ apiKey: 'request-scoped-key' });
   });
 
-  it('rejects custom model private base URLs as a runtime guard', () => {
-    expect(() =>
+  it('rejects custom model private base URLs as a runtime guard', async () => {
+    await expect(
       createPiProviderRuntime({
         ...runtime,
         baseUrl: 'http://127.0.0.1:11434/v1',
       }),
-    ).toThrow('自配模型 Base URL 不能指向本机、内网或 metadata 地址');
+    ).rejects.toThrow('自配模型 Base URL 不能指向本机、内网或 metadata 地址');
   });
 });
 
