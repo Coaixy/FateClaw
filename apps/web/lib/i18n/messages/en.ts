@@ -47,7 +47,7 @@ export const enMessages = {
   metadata: {
     title: 'FateClaw | Shouyi AI',
     description:
-      'An AI divination copilot for diviners — auto charting, reading assistance, and client-ready scripts.',
+      'An AI divination copilot for diviners — auto charting and reading assistance.',
   },
   shell: {
     redirectingLogin: 'No active session detected. Redirecting to login...',
@@ -287,13 +287,6 @@ export const enMessages = {
       soulTitle: 'Custom Soul',
       soulDescription:
         'Injected into AI Chat and WeChat conversations through Pi Runtime.',
-      scriptTitle: 'Talking-points template',
-      scriptDescription:
-        'Customize the section skeleton (Markdown ## headings) for AI readings; leave empty to use the platform default. Sections whose heading contains ⚠ or [仅卦师] are diviner-only and stripped when copying for clients.',
-      scriptPlaceholder:
-        'One ## section per line, e.g. "## Key verdict — one-line conclusion". Leave empty to use the platform default.',
-      scriptFillDefault: 'Insert default skeleton',
-      scriptHint: 'Leave empty to use the platform default skeleton',
       loadFailed: 'Failed to load custom persona',
       saved: 'Custom persona saved and injected into runtime',
       saveFailed: 'Failed to save custom persona',
@@ -398,7 +391,7 @@ export const enMessages = {
       compareMemberQueue: 'Priority queue',
       compareMemberAvailable: 'Available',
       compareFootnote:
-        'Charting, AI interpretation, reading scripts, and the knowledge base are open to everyone; membership changes pricing and peak-hour priority.',
+        'Charting, AI interpretation, and the knowledge base are open to everyone; membership changes pricing and peak-hour priority.',
       expiresAt: 'Expires at',
       monthlyUsage: 'Monthly usage',
       membershipPrice: 'Membership price',
@@ -793,7 +786,7 @@ export const enMessages = {
       aiDisclaimer: 'AI-generated content, for reference only',
     },
     home: {
-      subtitle: 'Charting · Reading · Client Scripts',
+      subtitle: 'Charting · Reading',
       loginTitle: 'Log in to start',
       loginDescription:
         'Log in to use expert mode, save conversations, and view your credit balance and usage.',
@@ -846,13 +839,6 @@ export const enMessages = {
       progressSuffix: '{label}...',
       replySlowNotice: 'The reply is taking longer than usual.',
       resend: 'Resend',
-      guashiScript: {
-        label: 'Talking points · sections',
-        copyForClient: 'Copy for client',
-        copied: 'Copied',
-        copyFailed: 'Copy failed',
-        guashiOnlyBadge: 'Diviner-only · excluded from export',
-      },
     },
     paipanRail: {
       title: 'Choose a system to create a chart',

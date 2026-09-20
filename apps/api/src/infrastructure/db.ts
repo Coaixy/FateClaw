@@ -210,11 +210,9 @@ import {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
-  getUserGuashiScriptTemplate,
   updateUserSoulEditEnabled,
   updateUserPasswordHash,
   updateUserSoulContent,
-  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
 } from './repositories/users-repository.js';
 import {
@@ -382,7 +380,6 @@ export {
   getUserByPhone,
   getUserSoulEditEnabled,
   getUserSoulContent,
-  getUserGuashiScriptTemplate,
   getUserCustomSkill,
   getUserCustomSkillById,
   getUserCustomSkillCount,
@@ -466,7 +463,6 @@ export {
   updateUserPasswordHash,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
-  updateUserGuashiScriptTemplate,
   upsertOAuthIdentityUsing,
   unpublishSkillBundle,
   unpublishUserCustomSkill,

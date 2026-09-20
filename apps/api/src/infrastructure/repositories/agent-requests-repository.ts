@@ -39,7 +39,6 @@ export function durableSubmissionInput(
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,
-    guashiScriptTemplate: input.guashiScriptTemplate,
     authorizedSkillIds: input.authorizedSkillIds,
     entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: false,

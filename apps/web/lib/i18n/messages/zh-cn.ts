@@ -47,7 +47,7 @@ export const zhCNMessages = {
   metadata: {
     title: '小奕想要三合木｜守义AI',
     description:
-      '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读、生成话术，助你服务客户。',
+      '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读，助你服务客户。',
   },
   shell: {
     redirectingLogin: '未检测到登录状态，正在跳转到登录页...',
@@ -273,13 +273,6 @@ export const zhCNMessages = {
       description: '维护统一注入站内 AI Chat 和微信对话的 Soul。',
       soulTitle: '自定义人格 Soul',
       soulDescription: '统一注入站内 AI Chat 和微信对话的 Pi Runtime。',
-      scriptTitle: '话术稿模板',
-      scriptDescription:
-        '自定义 AI 解读的分节骨架(Markdown ## 章节);留空则用平台默认骨架。标题带「⚠」或「[仅卦师]」的章节仅卦师可见,导出给客户时自动剔除。',
-      scriptPlaceholder:
-        '每行一个 ## 章节,如「## 核心论断 —— 一句话结论」;留空使用平台默认骨架。',
-      scriptFillDefault: '填入默认骨架',
-      scriptHint: '留空将使用平台默认骨架',
       loadFailed: '加载自定义人格失败',
       saved: '自定义人格已保存并注入运行时',
       saveFailed: '保存自定义人格失败',
@@ -382,7 +375,7 @@ export const zhCNMessages = {
       compareMemberQueue: '优先接入',
       compareMemberAvailable: '可用',
       compareFootnote:
-        '排盘、AI 解读、话术稿、知识库等功能对所有用户开放；会员差异在于计费价格与高峰期优先级。',
+        '排盘、AI 解读、知识库等功能对所有用户开放；会员差异在于计费价格与高峰期优先级。',
       expiresAt: '到期时间',
       monthlyUsage: '本月用量',
       membershipPrice: '会员价格',
@@ -771,7 +764,7 @@ export const zhCNMessages = {
       aiDisclaimer: 'AI 生成内容，仅供参考',
     },
     home: {
-      subtitle: '排盘 · 断卦 · 出话术',
+      subtitle: '排盘 · 断卦',
       loginTitle: '登录后开始体验',
       loginDescription:
         '登录后可进入专业模式、保存对话记录，并查看积分余额和用量。',
@@ -824,13 +817,6 @@ export const zhCNMessages = {
       progressSuffix: '{label}中...',
       replySlowNotice: 'AI 回复较慢，可能遇到问题。',
       resend: '重新发送',
-      guashiScript: {
-        label: '话术稿 · 分节',
-        copyForClient: '复制给客户',
-        copied: '已复制',
-        copyFailed: '复制失败',
-        guashiOnlyBadge: '仅卦师可见 · 导出不含',
-      },
     },
     paipanRail: {
       title: '选择术数开始排盘',

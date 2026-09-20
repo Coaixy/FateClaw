@@ -2,7 +2,6 @@
 
 import { AppShell } from '@/components/app-shell';
 import { UserSoulCard } from '@/components/workspace/user-soul-card';
-import { GuashiScriptTemplateCard } from '@/components/workspace/guashi-script-template-card';
 import { useI18n } from '@/lib/i18n';
 
 /**
@@ -27,10 +26,6 @@ export default function PersonaPage() {
 
         <section className="rounded-2xl border border-hairline bg-surface-raised p-4 lg:p-5">
           <UserSoulCard />
-        </section>
-
-        <section className="rounded-2xl border border-hairline bg-surface-raised p-4 lg:p-5">
-          <GuashiScriptTemplateCard />
         </section>
       </div>
     </AppShell>

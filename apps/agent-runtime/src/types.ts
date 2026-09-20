@@ -100,8 +100,6 @@ export interface ContainerInput {
   assistantName?: string;
   /** 请求级 Persona 覆盖层；不是 Dashboard 维护的用户 Soul。 */
   personaPrompt?: string;
-  /** 卦师自定义的话术稿分节模板；为空/缺省时回退平台默认骨架。 */
-  guashiScriptTemplate?: string;
   /** 本轮按单个 Skill id 授权（对外开放 API 用）；空数组=本轮不加载任何用户 Skill。 */
   authorizedSkillIds?: string[];
   /** 指定响应写入的 outbox 队列，AI Chat 用于持久化工具进度。 */
@@ -141,7 +139,6 @@ export interface ChatTaskInboxRequest {
   userName?: string;
   assistantName?: string;
   personaPrompt?: string;
-  guashiScriptTemplate?: string;
   /** 本轮按单个 Skill id 授权（对外开放 API 用）；空数组=本轮不加载任何用户 Skill。 */
   authorizedSkillIds?: string[];
   /** 指定响应写入的 outbox 队列（不指定则用默认队列） */

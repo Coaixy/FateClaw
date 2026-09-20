@@ -19,7 +19,6 @@ import { ArtifactDebug } from '@/components/chat/artifact-debug';
 import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
 import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
-import { GuashiScriptCard } from '@/components/ai-chat/guashi-script-card';
 import { MessageFooter } from '@/components/chat/message-footer';
 import { Message } from '@/features/chat/api';
 import type { ToolResultPreviewDto } from '@fateclaw/contracts/chat';
@@ -38,7 +37,6 @@ import {
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
-import { parseGuashiScript } from '@/features/chat/utils/guashi-script';
 
 type AiChatBillingNotice = 'arrears' | 'plus-required';
 
@@ -369,12 +367,6 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
   const { body: displayContent } = isBot
     ? splitFinalTurnMarker(message.content)
     : { body: message.content };
-  // 话术稿分节卡片:仅对「最终解读」消息尝试解析;命中才渲染卡片,否则回退普通 Markdown
-  // (普通追问/澄清类回复不套卡片)。
-  const guashiScript =
-    isBot && isFinalMessage && !isErrorMessage
-      ? parseGuashiScript(displayContent)
-      : null;
   const durationLabel = isBot
     ? formatChatDuration(messageMetadata?.duration_ms, t)
     : null;
@@ -389,11 +381,9 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
     isBot && trajectory.length > 0 ? (
       <TrajectoryTimeline blocks={trajectory} completed={isFinalMessage} />
     ) : null;
-  const messageColumnClass = guashiScript
-    ? 'w-full max-w-full items-stretch sm:max-w-[92%]'
-    : isBot
-      ? 'max-w-[88%] items-start sm:max-w-[78%]'
-      : 'max-w-[88%] items-end sm:max-w-[74%]';
+  const messageColumnClass = isBot
+    ? 'max-w-[88%] items-start sm:max-w-[78%]'
+    : 'max-w-[88%] items-end sm:max-w-[74%]';
 
   if (hasChart && !isFinalMessage) {
     return (
@@ -425,11 +415,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       >
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
-        <div
-          className={`group relative max-w-full ${
-            guashiScript ? 'w-full' : ''
-          }`}
-        >
+        <div className="group relative max-w-full">
           <div
             role={isErrorMessage ? 'alert' : undefined}
             className={`rounded-xl px-3.5 py-2.5 text-[14px] leading-7 transition-shadow duration-200 ${
@@ -440,11 +426,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
                 : 'bg-surface-dark text-on-dark shadow-sm'
             }`}
           >
-            {guashiScript ? (
-              <GuashiScriptCard script={guashiScript} />
-            ) : (
-              <CollapsibleMessage content={displayContent} isBot={isBot} />
-            )}
+            <CollapsibleMessage content={displayContent} isBot={isBot} />
           </div>
           {showWalletRecovery ? (
             <div className="mt-2 flex flex-wrap gap-2">

@@ -9,7 +9,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: '小奕想要三合木｜守义AI',
-  description: '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读、生成话术，助你服务客户。',
+  description: '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读，助你服务客户。',
 };
 
 export const viewport: Viewport = {

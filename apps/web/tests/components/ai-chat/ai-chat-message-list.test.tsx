@@ -6,6 +6,22 @@ import type { Message } from '@/features/chat/api';
 import { I18nProvider } from '@/lib/i18n';
 
 describe('AiChatMessageList trajectory collapse', () => {
+  it('renders final replies with multiple headings without delivery cards', () => {
+    const html = renderMessages([
+      createMessage({
+        id: 'final',
+        content: '## Analysis\nReading details\n\n## ⚠ Notes\nAdditional context',
+        metadata: { kind: 'final' },
+      }),
+    ]);
+
+    expect(html).toContain('Reading details');
+    expect(html).toContain('Additional context');
+    expect(html).not.toContain('复制给客户');
+    expect(html).not.toContain('仅卦师可见');
+    expect(html).not.toContain('aria-expanded=');
+  });
+
   it('keeps a streaming thinking block collapsed initially', () => {
     const html = renderMessages(
       [

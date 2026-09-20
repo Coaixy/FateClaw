@@ -78,6 +78,23 @@ function createDeps(): AgentRuntimeDeps {
 }
 
 describe('createPiResourceLoader', () => {
+  it.each([undefined, '## Legacy delivery template'])('does not impose a delivery outline, including for legacy requests (%s)', async (legacyTemplate) => {
+    const input = { ...containerInput, guashiScriptTemplate: legacyTemplate };
+    const loader = await createPiResourceLoader({
+      deps: createDeps(),
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput: input,
+    });
+
+    const prompt = loader.getSystemPrompt();
+    expect(prompt).toContain('完成用户请求后，直接用 assistant 回复最终答复。');
+    expect(prompt).not.toContain('固定章节');
+    expect(prompt).not.toContain('## 核心论断');
+    expect(prompt).not.toContain('Legacy delivery template');
+    expect(prompt).not.toContain('[仅卦师]');
+  });
+
   it('exposes only request-scoped skill metadata and keeps private content out of Pi skill files', async () => {
     const deps = createDeps();
     const loader = await createPiResourceLoader({
