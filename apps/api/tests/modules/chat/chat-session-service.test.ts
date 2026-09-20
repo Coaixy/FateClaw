@@ -384,7 +384,7 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('rejects users without an active membership at the access gate', async () => {
+  it('allows non-members with an available balance to request expert mode', async () => {
     mockGetMembershipOverview.mockResolvedValueOnce({ active: false });
 
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
@@ -393,14 +393,8 @@ describe('chat-session-service selected board context', () => {
       pastedBoard: undefined,
     });
 
-    expect(result).toEqual({
-      ok: false,
-      statusCode: 403,
-      error: '需要有效的卦师使用权才能发起解读，请先开通或续费',
-    });
-    // 使用权门禁在占用会话处理锁之前拦截，后续步骤都不应被触达。
-    expect(mockStoreMessage).not.toHaveBeenCalled();
-    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalled();
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {
@@ -502,9 +496,9 @@ describe('chat-session-service selected board context', () => {
       'gpt-4.1',
       128_000,
     );
-    expect(mockStoreMessage.mock.calls[0]?.[0]).toMatchObject({
-      content: '看看事业',
-      is_bot_message: false,
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt.mock.calls[0]?.[0]).toMatchObject({
+      messageToPersist: { content: '看看事业', is_bot_message: false },
     });
     expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
       expect.objectContaining({

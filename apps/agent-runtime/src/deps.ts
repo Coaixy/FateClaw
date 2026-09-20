@@ -13,13 +13,17 @@ import {
  * 参数：
  * - accountId：当前 agent-runtime 账号 ID。
  *
- * 返回：read 返回 Dashboard 维护的唯一 Soul 内容；update 无返回值。
+ * Returns the canonical Soul; update returns false on a stale hash or missing target.
  * 注意：实现层负责处理 web:{userId} 和微信账号的归属映射。
  */
 export interface SoulStore {
   read(accountId: string): Promise<string>;
   canEdit(accountId: string): Promise<boolean>;
-  update(accountId: string, content: string): Promise<void>;
+  update(
+    accountId: string,
+    content: string,
+    expectedHash: string,
+  ): Promise<boolean>;
 }
 
 /**
@@ -58,8 +62,8 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
     canEdit(accountId) {
       return querySoulEditEnabled(accountId);
     },
-    update(accountId, content) {
-      return updateSoulContentDb(accountId, content);
+    update(accountId, content, expectedHash) {
+      return updateSoulContentDb(accountId, content, expectedHash);
     },
   },
 

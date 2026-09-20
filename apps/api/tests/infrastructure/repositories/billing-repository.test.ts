@@ -8,6 +8,10 @@ const { mockGetDbPool, mockGetUserByIdUsing, mockLoggerWarn } = vi.hoisted(
   }),
 );
 
+vi.mock('../../../src/infrastructure/config.js', () => ({
+  MAX_OVERDRAFT_COINS: 50,
+}));
+
 vi.mock('../../../src/infrastructure/db-pool.js', () => ({
   getDbPool: mockGetDbPool,
 }));
@@ -28,6 +32,7 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
 }));
 
 import {
+  listStalePendingReservations,
   deductBalanceCoins,
   deductModelChargeCoinsAllowDebt,
   getMembershipOverview,
@@ -111,6 +116,15 @@ describe('billing repository', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('filters unresolved durable requests before limiting the stale billing batch', async () => {
+    const { calls } = createMockPool([[]]);
+    await listStalePendingReservations('2026-01-01T00:00:00Z', 100);
+    const sql = calls[0].sql;
+    expect(sql).toContain('NOT EXISTS (SELECT 1 FROM agent_requests');
+    expect(sql).toContain('OR EXISTS (SELECT 1 FROM conversation_logs');
+    expect(sql.indexOf('OR EXISTS')).toBeLessThan(sql.indexOf('LIMIT $2'));
   });
 
   it('inserts recharge orders and serializes metadata', async () => {

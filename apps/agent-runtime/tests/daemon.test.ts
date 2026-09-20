@@ -1,3 +1,8 @@
+vi.mock('../src/result-spool.js', () => ({
+  spoolResult: vi.fn(async () => '/synthetic/result'),
+  removeSpooledResult: vi.fn(async () => {}),
+  readSpooledResults: vi.fn(async () => []),
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockLog } = vi.hoisted(() => ({
@@ -130,9 +135,14 @@ describe('daemon request timeout', () => {
   it('pushes a timeout error response when executeContainerInput never settles', async () => {
     vi.useFakeTimers();
     try {
-      vi.mocked(executeContainerInput).mockImplementation(
-        () => new Promise(() => {}),
-      );
+      vi.mocked(executeContainerInput).mockImplementation((_input, scope) => {
+        scope.partialUsage = {
+          promptTokens: 5,
+          completionTokens: 2,
+          totalTokens: 7,
+        };
+        return new Promise(() => {});
+      });
       const lpush = vi.fn().mockResolvedValue(1);
       vi.mocked(getRedis).mockReturnValue({ lpush } as never);
 
@@ -162,6 +172,11 @@ describe('daemon request timeout', () => {
       expect(parsed.error).toMatch(/无进展/);
       expect(parsed.publicErrorText).toBe('这次处理超时了，请稍后再试。');
       expect(parsed.publicReasonCode).toBe('agent_timeout');
+      expect(parsed.usage).toEqual({
+        promptTokens: 5,
+        completionTokens: 2,
+        totalTokens: 7,
+      });
       expect(parsed.model).toBe('test-model');
       expect(parsed.provider).toBe('anthropic-messages');
     } finally {
@@ -225,6 +240,32 @@ describe('daemon request timeout', () => {
 });
 
 describe('daemon fatal error response', () => {
+  it('preserves completed-turn usage in fatal responses', () => {
+    const request = {
+      accountId: 'a',
+      requestId: 'r',
+    } as import('../src/types.js').InboxRequest;
+    const scope = {
+      partialUsage: { promptTokens: 5, completionTokens: 2, totalTokens: 7 },
+    } as import('../src/request-scope.js').RequestScope;
+    const result = __buildFatalOutboxResponseForTests(
+      'uncaughtException',
+      'synthetic crash',
+      'r',
+      request,
+      scope,
+    );
+    expect(result.usage).toEqual(scope.partialUsage);
+    expect(result.metadata).not.toHaveProperty('synthetic_terminal');
+    expect(
+      __buildFatalOutboxResponseForTests(
+        'uncaughtException',
+        'synthetic crash',
+        'r',
+        request,
+      ).metadata,
+    ).toHaveProperty('synthetic_terminal', true);
+  });
   it('carries the exception stack in the internal error field and a friendly public message', () => {
     const error = new Error('boom: something exploded');
     const request = {

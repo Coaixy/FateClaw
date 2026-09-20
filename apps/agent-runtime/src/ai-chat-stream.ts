@@ -1,6 +1,58 @@
 import type { AiChatStreamEvent } from './types.js';
 import { getRedis } from './redis.js';
 
+type TextStreamEvent = Extract<
+  AiChatStreamEvent,
+  { type: 'assistant_delta' | 'thinking_delta' }
+>;
+
+export function createAiChatStreamPublisher(
+  publish: (event: AiChatStreamEvent) => void,
+): { publish: (event: AiChatStreamEvent) => void; close: () => void } {
+  let pending: TextStreamEvent | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+
+  function flush(): void {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    const event = pending;
+    pending = undefined;
+    if (event) publish(event);
+  }
+
+  return {
+    publish(event) {
+      if (closed) return;
+      if (event.type !== 'assistant_delta' && event.type !== 'thinking_delta') {
+        // Boundaries must follow the last text snapshot, even within a batch window.
+        flush();
+        publish(event);
+        return;
+      }
+      if (
+        pending &&
+        (pending.type !== event.type ||
+          pending.turnIndex !== event.turnIndex ||
+          !event.snapshot.startsWith(pending.snapshot))
+      ) {
+        flush();
+      }
+      pending = pending
+        ? { ...event, delta: pending.delta + event.delta }
+        : event;
+      if (timer === undefined) {
+        timer = setTimeout(flush, 50);
+        timer.unref();
+      }
+    },
+    close() {
+      closed = true;
+      flush();
+    },
+  };
+}
+
 export function aiChatStreamChannel(sessionId: string): string {
   return `ipc:ai-chat:stream:${sessionId}`;
 }

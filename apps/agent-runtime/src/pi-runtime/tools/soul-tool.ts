@@ -235,15 +235,28 @@ export function createPiSoulEditTool(
           error: `拒绝编辑 Soul：内容长度 ${normalizedNewContent.length} 超过上限 ${MAX_SOUL_CONTENT_CHARS}。`,
         };
       } else {
-        await options.soulStore.update(options.accountId, normalizedNewContent);
-        details = {
-          output: '',
-          isError: false,
-          reason: params.reason,
-          previousHash: currentHash,
-          newHash: hashSoul(normalizedNewContent),
-          charCount: normalizedNewContent.length,
-        };
+        const updated = await options.soulStore.update(
+          options.accountId,
+          normalizedNewContent,
+          params.baseHash,
+        );
+        details = updated
+          ? {
+              output: '',
+              isError: false,
+              reason: params.reason,
+              previousHash: currentHash,
+              newHash: hashSoul(normalizedNewContent),
+              charCount: normalizedNewContent.length,
+            }
+          : {
+              output: '',
+              isError: true,
+              reason: params.reason,
+              previousHash: currentHash,
+              error:
+                'Soul changed before it could be saved. Call read_soul again before editing.',
+            };
       }
 
       details.output = buildOutput({

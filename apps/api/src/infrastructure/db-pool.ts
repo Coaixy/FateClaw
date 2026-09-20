@@ -1,5 +1,7 @@
 import pg from 'pg';
 
+import { logger } from './logger.js';
+
 const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
@@ -10,7 +12,19 @@ export function initDbPool(connectionString: string): pg.Pool {
   if (pool) {
     return pool;
   }
-  pool = new Pool({ connectionString });
+  pool = new Pool({
+    connectionString,
+    max: 10,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
+    statement_timeout: 30_000,
+    query_timeout: 125_000,
+    idle_in_transaction_session_timeout: 15_000,
+  });
+  pool.on('error', () => {
+    // Do not log connection details; pg removes this idle client automatically.
+    logger.error('Database idle connection failed; client removed from pool');
+  });
   return pool;
 }
 

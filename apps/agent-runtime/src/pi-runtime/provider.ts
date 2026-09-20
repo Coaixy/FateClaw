@@ -127,6 +127,7 @@ function requirePublicHttpBaseUrl(value: string): string {
   try {
     parsed = new URL(value);
   } catch {
+    // eslint-disable-next-line preserve-caught-error -- URL parse errors can contain embedded credentials.
     throw new Error('自配模型 Base URL 格式不正确');
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -228,7 +229,7 @@ export async function createPiProviderRuntime(
     refreshOnCreate: false,
   });
 
-  modelRuntime.setRuntimeApiKey(provider, runtime.apiKey);
+  await modelRuntime.setRuntimeApiKey(provider, runtime.apiKey);
   modelRuntime.registerProvider(provider, {
     name: runtime.providerKey || provider,
     api,

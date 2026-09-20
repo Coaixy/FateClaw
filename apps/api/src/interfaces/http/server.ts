@@ -50,6 +50,13 @@ const FONT_ASSET_URL_PATTERN =
 const FONT_ASSET_FILE_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
 
+function requestLogUrl(request: FastifyRequest): string {
+  // Stream tickets are credentials; upgrades now pass through HTTP error logging.
+  return /^\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)/.test(request.url)
+    ? request.url.split('?')[0]
+    : request.url;
+}
+
 function unauthorizedError(): Error & { statusCode: number } {
   const err = new Error('未登录或 token 已过期') as Error & {
     statusCode: number;
@@ -231,7 +238,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(fastifyJwt, {
     secret: JWT_SECRET,
   });
-  registerAiChatStreamWebSocket(app);
+  await registerAiChatStreamWebSocket(app);
 
   // Auth decorator — routes call request.requireAuth() to enforce JWT
   app.decorateRequest('requireAuth', async () => {
@@ -272,11 +279,11 @@ export async function createApiServer(): Promise<FastifyInstance> {
       logger.warn(
         {
           method: request.method,
-          url: request.url,
+          url: requestLogUrl(request),
           status: reply.statusCode,
           ms: Math.round(reply.elapsedTime),
         },
-        `${request.method} ${request.url} ${reply.statusCode}`,
+        `${request.method} ${requestLogUrl(request)} ${reply.statusCode}`,
       );
     }
     done();
@@ -291,9 +298,9 @@ export async function createApiServer(): Promise<FastifyInstance> {
         {
           code: (error as FastifyError & { code?: unknown }).code,
           method: request.method,
-          url: request.url,
+          url: requestLogUrl(request),
         },
-        `客户端提前断开连接: ${request.method} ${request.url}`,
+        `客户端提前断开连接: ${request.method} ${requestLogUrl(request)}`,
       );
       return reply.status(499).send({ error: '客户端已断开连接' });
     }
@@ -302,8 +309,8 @@ export async function createApiServer(): Promise<FastifyInstance> {
     const status = normalizedError.statusCode;
     if (status >= 500) {
       logger.error(
-        { err: error, method: request.method, url: request.url },
-        `API 错误: ${request.method} ${request.url}`,
+        { err: error, method: request.method, url: requestLogUrl(request) },
+        `API 错误: ${request.method} ${requestLogUrl(request)}`,
       );
     } else {
       logger.warn(
@@ -311,9 +318,9 @@ export async function createApiServer(): Promise<FastifyInstance> {
           status,
           message: error.message,
           method: request.method,
-          url: request.url,
+          url: requestLogUrl(request),
         },
-        `API ${status}: ${request.method} ${request.url}`,
+        `API ${status}: ${request.method} ${requestLogUrl(request)}`,
       );
     }
     reply.status(status).send({ error: normalizedError.publicMessage });

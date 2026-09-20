@@ -1,3 +1,4 @@
+import { getDbPool } from '../infrastructure/db-pool.js';
 /**
  * 计费兜底扫描任务（billing sweeper）。
  *
@@ -8,7 +9,9 @@
  *
  * 本任务按 charge_state 维度兜底：
  * - 预留已有对话日志（请求确已结束并上报 usage）→ 按日志里的真实 usage 结算（取消/丢 pending 都靠它补收）。
- * - 预留无对话日志且创建超过"丢失阈值"（远大于请求超时）→ 视为彻底丢失，按 0 关账收尾，避免悬挂行堆积。
+ * Durable results with actual usage can settle before user-message delivery.
+ * Durable requests without known usage remain pending for late results.
+ * Legacy reservations without a durable request still use the historical lost threshold.
  * - 其余（年龄不足或无日志但未超丢失阈值）→ 跳过，可能仍在途。
  *
  * settleUserModelChargeCoins 以 charge_state 幂等，本任务与正常结算并发安全：谁先结算谁生效，
@@ -116,6 +119,49 @@ export async function runBillingSweepOnce(): Promise<void> {
         continue;
       }
 
+      // A durable execution without final usage may still report late. Zero-closing
+      // its reservation would make actual consumption impossible to settle later.
+      const durable = await getDbPool().query(
+        'SELECT state,result FROM agent_requests WHERE request_id=$1 LIMIT 1',
+        [reservation.request_id],
+      );
+      if (durable.rowCount) {
+        const row = durable.rows[0];
+        const result = row?.result as
+          | {
+              metadata?: { synthetic_terminal?: unknown };
+              usage?: RuntimeTokenUsageInput;
+            }
+          | null
+          | undefined;
+        const actualUsage = result?.usage;
+        const hasKnownUsage =
+          actualUsage &&
+          ['promptTokens', 'completionTokens', 'totalTokens'].some((key) => {
+            const value = actualUsage[key as keyof RuntimeTokenUsageInput];
+            return (
+              typeof value === 'number' && Number.isFinite(value) && value >= 0
+            );
+          });
+        if (
+          ['result_ready', 'completed'].includes(row?.state) &&
+          result?.metadata?.synthetic_terminal !== true &&
+          hasKnownUsage
+        ) {
+          // Model consumption is chargeable even if the user-message transaction failed.
+          const usage = extractUsageFromLog(actualUsage);
+          const settled = await recoverStalePendingReservation({
+            requestId: reservation.request_id,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+          });
+          if (settled) settledWithUsage++;
+          continue;
+        }
+        skipped++;
+        continue;
+      }
+
       const createdAtMs = new Date(reservation.created_at).getTime();
       if (Number.isFinite(createdAtMs) && createdAtMs < lostBeforeMs) {
         // 无对话日志且超过丢失阈值 → usage 不可恢复，按 0 关账收尾。
@@ -162,7 +208,11 @@ export async function runBillingSweepOnce(): Promise<void> {
         kind: 'billing_reservation_lost',
         title: '计费兜底扫描发现无法恢复的预留，已按 0 关账',
         detail: `本轮按 0 关账 ${closedAsLost} 条（无对话日志且超过丢失阈值），存在漏收`,
-        context: { closedAsLost, settledWithUsage, scanned: reservations.length },
+        context: {
+          closedAsLost,
+          settledWithUsage,
+          scanned: reservations.length,
+        },
       });
     }
   } else {

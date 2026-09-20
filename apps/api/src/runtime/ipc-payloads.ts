@@ -340,6 +340,7 @@ export function buildAiChatErrorResponsePayload(params: {
   /** 机器可读的失败原因码，编译期收窄到 contracts 约定的取值集合。 */
   reasonCode: PublicReasonCode;
   usage?: ResponseIpcPayload['usage'];
+  syntheticTerminal?: boolean;
 }): ResponseIpcPayload {
   return {
     type: 'response',
@@ -357,6 +358,9 @@ export function buildAiChatErrorResponsePayload(params: {
     publicReasonCode: params.reasonCode,
     timestamp: new Date().toISOString(),
     usage: params.usage,
+    ...(params.syntheticTerminal
+      ? { metadata: { synthetic_terminal: true } }
+      : {}),
   };
 }
 
@@ -374,3 +378,5 @@ export async function resolveAccountId(
 
   return getSingleAccountIdIfOnlyOne();
 }
+
+export class InvalidAiChatPayloadError extends Error {}

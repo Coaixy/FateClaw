@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Duplex } from 'node:stream';
+import { EventEmitter } from 'node:events';
+import Fastify from 'fastify';
 
 const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
   mockGetChatSession: vi.fn(),
@@ -7,6 +8,7 @@ const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
   mockRedis: {
     eval: vi.fn(),
     set: vi.fn(),
+    duplicate: vi.fn(),
   },
 }));
 
@@ -20,9 +22,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
 }));
 
 import {
-  __getAiChatStreamWebSocketLimitsForTests,
-  __parseClientFramesForTests,
-  __shouldCloseForPongTimeoutForTests,
+  registerAiChatStreamWebSocket,
   aiChatStreamChannel,
   consumeAiChatStreamTicket,
   issueAiChatStreamTicket,
@@ -30,35 +30,6 @@ import {
   streamEventFromProgressPayload,
   streamEventFromResponsePayload,
 } from '../../src/runtime/ai-chat-stream.js';
-
-function createMaskedFrame(opcode: number, payload = Buffer.alloc(0)): Buffer {
-  const mask = Buffer.from([1, 2, 3, 4]);
-  const header = Buffer.alloc(2);
-  header[0] = 0x80 | opcode;
-  header[1] = 0x80 | payload.length;
-  const masked = Buffer.from(payload);
-  for (let index = 0; index < masked.length; index += 1) {
-    masked[index] ^= mask[index % 4];
-  }
-  return Buffer.concat([header, mask, masked]);
-}
-
-function createHugeDeclaredFrame(): Buffer {
-  const { maxClientFrameBufferBytes } =
-    __getAiChatStreamWebSocketLimitsForTests();
-  const frame = Buffer.alloc(14);
-  frame[0] = 0x82;
-  frame[1] = 0x80 | 127;
-  frame.writeBigUInt64BE(BigInt(maxClientFrameBufferBytes + 1), 2);
-  frame.set([1, 2, 3, 4], 10);
-  return frame;
-}
-
-function createSocketStub() {
-  return {
-    write: vi.fn(),
-  } as unknown as Duplex & { write: ReturnType<typeof vi.fn> };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -254,55 +225,75 @@ describe('AI Chat stream tickets', () => {
   });
 });
 
-describe('AI Chat WebSocket client frames', () => {
-  it('responds to client ping frames with pong frames', () => {
-    const socket = createSocketStub();
-    const result = __parseClientFramesForTests(
-      createMaskedFrame(0x9, Buffer.from('hi')),
-      socket,
-    );
+describe('AI Chat WebSocket routes', () => {
+  it('rejects invalid tickets before upgrading', async () => {
+    const app = Fastify();
+    await registerAiChatStreamWebSocket(app);
+    await app.ready();
+    await expect(
+      app.injectWS('/api/chat-sessions/s/session-1/stream'),
+    ).rejects.toThrow('401');
+    expect(mockRedis.duplicate).not.toHaveBeenCalled();
+    await app.close();
+  });
 
-    expect(result.closeRequested).toBe(false);
-    expect(result.consumed).toBeGreaterThan(0);
-    expect(socket.write).toHaveBeenCalledWith(
-      expect.objectContaining({
-        0: 0x8a,
+  it('shares subscriptions and preserves the stream contract and ping/pong', async () => {
+    const subscriber = Object.assign(new EventEmitter(), {
+      connect: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue(1),
+      unsubscribe: vi.fn().mockResolvedValue(0),
+      disconnect: vi.fn(),
+    });
+    mockRedis.duplicate.mockReturnValue(subscriber);
+    mockRedis.eval.mockImplementation(async () =>
+      JSON.stringify({
+        userId: 'user-1',
+        sessionId: 'session-1',
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
       }),
     );
-  });
-
-  it('marks pong frames so heartbeat state can be refreshed', () => {
-    const socket = createSocketStub();
-    const result = __parseClientFramesForTests(createMaskedFrame(0xa), socket);
-
-    expect(result).toMatchObject({
-      closeRequested: false,
-      pongReceived: true,
-    });
-  });
-
-  it('closes immediately when the declared payload is too large', () => {
-    const socket = createSocketStub();
-    const result = __parseClientFramesForTests(
-      createHugeDeclaredFrame(),
-      socket,
+    const app = Fastify();
+    await registerAiChatStreamWebSocket(app);
+    await app.ready();
+    const first = await app.injectWS(
+      '/api/chat-sessions/s/session-1/stream?ticket=one',
     );
-
-    expect(result).toMatchObject({
-      closeRequested: true,
-      closeCode: 1009,
-      closeReason: 'frame too large',
+    const second = await app.injectWS(
+      '/api/chat-sessions/s/session-1/stream?ticket=two',
+    );
+    await vi.waitFor(() =>
+      expect(subscriber.subscribe).toHaveBeenCalledTimes(1),
+    );
+    expect(mockRedis.duplicate).toHaveBeenCalledTimes(1);
+    const received = new Promise<string>((resolve) =>
+      second.on('message', (data) => {
+        if (data.toString().includes('assistant_delta'))
+          resolve(data.toString());
+      }),
+    );
+    const event = JSON.stringify({
+      type: 'assistant_delta',
+      delta: 'hello',
+      snapshot: 'hello',
     });
-  });
-
-  it('detects pong timeout at the configured threshold', () => {
-    const { pongTimeoutMs } = __getAiChatStreamWebSocketLimitsForTests();
-
-    expect(
-      __shouldCloseForPongTimeoutForTests(1_000, 1_000 + pongTimeoutMs),
-    ).toBe(true);
-    expect(
-      __shouldCloseForPongTimeoutForTests(1_000, 1_000 + pongTimeoutMs - 1),
-    ).toBe(false);
+    subscriber.emit('message', aiChatStreamChannel('session-1'), event);
+    await expect(received).resolves.toBe(event);
+    const pong = new Promise<void>((resolve) =>
+      second.once('pong', () => resolve()),
+    );
+    second.ping('probe');
+    await pong;
+    const serverSockets = [...app.websocketServer.clients];
+    serverSockets[0].terminate();
+    await new Promise<void>((resolve) => first.once('close', () => resolve()));
+    expect(subscriber.unsubscribe).not.toHaveBeenCalled();
+    serverSockets[1].terminate();
+    await vi.waitFor(() =>
+      expect(subscriber.unsubscribe).toHaveBeenCalledWith(
+        aiChatStreamChannel('session-1'),
+      ),
+    );
+    await app.close();
+    expect(subscriber.disconnect).toHaveBeenCalled();
   });
 });

@@ -1,28 +1,14 @@
+import {
+  claimAiChatResult,
+  acknowledgeAiChatResult,
+  quarantineAiChatResult,
+  processingOutboxKey,
+} from './reliable-ai-chat-outbox.js';
 /**
- * AI Chat IPC 队列堆积巡检 + 自愈任务（inbox/outbox stall sweeper）。
- *
- * 巡检两个方向的队列：
- *
- * 1. inbox（`ipc:{accountId}:inbox` / `:inbox:member`）：账号级本地 agent-runtime
- *    子进程一旦停止消费，消息会永远堆在队列里没人处理——Redis List 没有 TTL，
- *    只能靠消费者 RPOP，消费者掉线就无限堆积（实测过一次堆积近 8 小时才被用户
- *    投诉发现）。堆积超过告警阈值先告警，超过清理阈值则判定处理超时、主动把
- *    消息标记为失败——复用 `processAiChatOutboxPayload` 走和正常错误响应完全
- *    一致的落库/推流/释放锁流程。
- *
- * 2. ai-chat outbox（`ipc:{accountId}:ai-chat:outbox`）：站内 AI Chat 的监听器是
- *    发消息时懒创建的、且随进程重启丢失——API 非优雅重启后，孤儿 agent 子进程
- *    仍可能把最终响应推进 outbox，但新进程没有该账号的监听器，响应会永久滞留，
- *    用户永远看不到已经生成好的回复。监听器空闲回收（见 ipc-worker.ts）后迟到的
- *    消息同理。outbox 消息在有监听器时毫秒级被消费，队尾消息超过无主阈值即断定
- *    没有消费者，由本任务代为消费：最终响应正常落库 + 推流（响应落库有
- *    payload.sessionId 兜底，不依赖本机 pending），计费由 billing-sweeper 按
- *    conversation_logs 补结算。微信 `ipc:*:outbox` 不代消费（有发微信副作用），
- *    只告警。
- *
- * 另有心跳升级：daemon 会周期性写 `agent:heartbeat:{accountId}`（见 daemon.ts）。
- * inbox 有堆积但心跳缺失时，不必等到清理阈值就提前发运维告警——把「runtime 掉线」
- * 的发现时间从分钟级压到心跳 TTL 级。
+ * Recover abandoned AI Chat transport work. Durable admissions own execution
+ * recovery; legacy expired inbox requests atomically enqueue a failure before
+ * removal. Results remain in a processing list until database delivery succeeds.
+ * WeChat outboxes are excluded because external sends are not safely replayable.
  */
 
 import { sendOpsAlert } from '../infrastructure/alerts.js';
@@ -39,6 +25,7 @@ import {
   INBOX_STALL_WARN_MS,
 } from '../shared/timeout-chain.js';
 import {
+  InvalidAiChatPayloadError,
   buildAiChatErrorResponsePayload,
   type PendingInboxRequest,
 } from './ipc-payloads.js';
@@ -72,6 +59,7 @@ let timer: NodeJS.Timeout | null = null;
 let running = false;
 
 interface StaleInboxPayload {
+  executionId?: string;
   type?: unknown;
   requestId?: unknown;
   accountId?: unknown;
@@ -245,13 +233,12 @@ async function sweepInboxQueue(queueKey: string): Promise<void> {
       return; // 不能安全清理的消息挡在队尾，不能越过它去动后面的，本队列到此为止
     }
 
-    const popped = await popIfStillTail(queueKey, raw);
-    if (!popped) {
-      // 弹出时队尾已经变化（被真正复活的消费者取走，或有更新的消息顶上来），
-      // 本轮不处理，避免和消费者踩踏。
-      return;
+    if (typeof payload.executionId === 'string') {
+      // Durable admission owns recovery; this expired Redis copy must not finalize usage.
+      if (!(await popIfStillTail(queueKey, raw))) return;
+      cleaned += 1;
+      continue;
     }
-
     const requestId = payload.requestId as string;
     const accountId = payload.accountId as string;
     const sessionId = payload.sessionId as string;
@@ -263,17 +250,33 @@ async function sweepInboxQueue(queueKey: string): Promise<void> {
       typeof payload.ownerUserId === 'string' ? payload.ownerUserId : undefined;
     const text = '这条消息处理超时（后台长时间未响应），请重新发送试试。';
 
+    const failure = buildAiChatErrorResponsePayload({
+      accountId,
+      requestId,
+      sessionId,
+      userMessageId,
+      ownerUserId,
+      publicErrorText: text,
+      error: `inbox 消息堆积超过 ${Math.round(FAIL_THRESHOLD_MS / 60_000)} 分钟未被消费，判定为处理超时`,
+      reasonCode: 'inbox_stall_timeout',
+    });
+    // Persist the failure envelope before removing the legacy inbox copy.
+    const moved = await getRedis().eval(
+      `
+      if redis.call('LINDEX', KEYS[1], -1) ~= ARGV[1] then return 0 end
+      redis.call('LPUSH', KEYS[2], ARGV[2])
+      redis.call('rpop', KEYS[1])
+      return 1
+    `,
+      2,
+      queueKey,
+      `ipc:${accountId}:ai-chat:outbox`,
+      raw,
+      JSON.stringify(failure),
+    );
+    if (moved !== 1) return;
     await processAiChatOutboxPayload(
-      buildAiChatErrorResponsePayload({
-        accountId,
-        requestId,
-        sessionId,
-        userMessageId,
-        ownerUserId,
-        publicErrorText: text,
-        error: `inbox 消息堆积超过 ${Math.round(FAIL_THRESHOLD_MS / 60_000)} 分钟未被消费，判定为处理超时`,
-        reasonCode: 'inbox_stall_timeout',
-      }),
+      failure,
       accountId,
       new Map<string, PendingInboxRequest>(),
     ).catch((err) => {
@@ -303,103 +306,66 @@ async function sweepInboxQueue(queueKey: string): Promise<void> {
   );
 }
 
-/**
- * 巡检单个 ai-chat outbox 队列，代为消费无主（没有监听器）的滞留消息。
- *
- * 判定依据：outbox 消息在有监听器时毫秒级被消费；队尾消息年龄超过
- * `AI_CHAT_OUTBOX_ORPHAN_MS` 即断定当前没有消费者。逐条 popIfStillTail 原子
- * 弹出后走 `processAiChatOutboxPayload`（空 pending map）：
- * - 最终响应（type=response）：正常落库 + 推流（sessionId 从 payload 兜底），
- *   并释放该 requestId 占用的全局并发槽 / per-user metered 名额；
- *   计费预留因无本机 pending 不在此结算，由 billing-sweeper 按对话日志补收。
- * - 中间消息/进度（type=message/progress）：handler 内因无 pending 丢弃（transient
- *   内容，会话已无人观看，丢弃无害）。
- * - 解析不了的脏数据：直接弹出丢弃并记死信日志——真实监听器的行为也是
- *   解析失败即消费掉，这里保持一致，避免脏数据永久堵死队列。
- */
+/** Retry orphaned deliveries without removing their transport copy before commit. */
 async function sweepAiChatOutboxQueue(queueKey: string): Promise<void> {
   const accountId = accountIdFromAiChatOutboxKey(queueKey);
   if (!accountId) return;
-
-  let recovered = 0;
-  while (recovered < MAX_CLEANUP_PER_QUEUE_PER_SWEEP) {
-    const tail = await getRedis().lrange(queueKey, -1, -1);
-    if (tail.length === 0) return;
-    const raw = tail[0];
-
-    let payload: unknown;
-    let timestampMs = NaN;
+  for (
+    let recovered = 0;
+    recovered < MAX_CLEANUP_PER_QUEUE_PER_SWEEP;
+    recovered += 1
+  ) {
+    const processing = await getRedis().lrange(
+      processingOutboxKey(queueKey),
+      -1,
+      -1,
+    );
+    const tail = processing.length
+      ? processing
+      : await getRedis().lrange(queueKey, -1, -1);
+    if (!tail.length) return;
     try {
-      payload = JSON.parse(raw) as unknown;
-      const ts = (payload as { timestamp?: unknown }).timestamp;
-      timestampMs = typeof ts === 'string' ? Date.parse(ts) : NaN;
+      const timestamp = Date.parse(JSON.parse(tail[0]).timestamp);
+      if (
+        !processing.length &&
+        Number.isFinite(timestamp) &&
+        Date.now() - timestamp < AI_CHAT_OUTBOX_ORPHAN_MS
+      )
+        return;
     } catch {
-      payload = null;
+      /* Invalid envelopes move to quarantine below. */
     }
-
-    if (payload !== null && Number.isFinite(timestampMs)) {
-      const ageMs = Date.now() - timestampMs;
-      if (ageMs < AI_CHAT_OUTBOX_ORPHAN_MS) {
-        return; // 队尾最老的一条还很新 → 大概率有活跃消费者，本队列不动
-      }
-    }
-    // 走到这里：消息已超无主阈值，或根本解析不出时间戳（脏数据按无主处理）。
-
-    const popped = await popIfStillTail(queueKey, raw);
-    if (!popped) {
-      return; // 队尾变化说明有消费者恰好复活，让位
-    }
-
-    if (payload === null) {
-      // 死信：保留原文前缀便于排障，避免静默丢失。
-      logger.error(
-        { queueKey, rawPreview: raw.slice(0, 200) },
-        'AI Chat: outbox 无主消息无法解析，已作为死信丢弃',
-      );
-      recovered += 1;
+    const raw = await claimAiChatResult(queueKey);
+    if (raw === null) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      await quarantineAiChatResult(queueKey, raw);
+      logger.error({ queueKey }, 'Invalid AI Chat result quarantined');
       continue;
     }
-
-    const requestId = (payload as { requestId?: unknown }).requestId;
-    await processAiChatOutboxPayload(
-      payload,
-      accountId,
-      new Map<string, PendingInboxRequest>(),
-    )
-      .then(async () => {
-        // 该请求可能仍占着全局并发槽 / per-user 名额（提交方进程已死，没人释放），
-        // 代消费成功后一并释放，不用等 30 分钟惰性回收。
-        if (typeof requestId === 'string') {
-          await releaseGlobalAgentSlot(requestId).catch(() => {});
-          await releasePerUserMeteredSlotByRequestId(requestId).catch(() => {});
-        }
-        logger.warn(
-          { queueKey, accountId, requestId },
-          'AI Chat: 已代消费无主 outbox 消息（监听器缺失，可能因进程重启）',
-        );
-      })
-      .catch((err) => {
-        // 消息已弹出但处理失败：记死信日志保留上下文。与真实监听器的失败路径
-        // 一致（消息同样已被 BRPOP 消费），不回塞队列避免死循环。
-        logger.error(
-          { queueKey, accountId, requestId, err, rawPreview: raw.slice(0, 200) },
-          'AI Chat: 代消费无主 outbox 消息失败，已作为死信丢弃',
-        );
-      });
-
-    void sendOpsAlert({
-      kind: 'ai_chat_outbox_orphan',
-      title: 'ai-chat outbox 存在无主滞留消息，已代为消费',
-      detail: `队列 ${queueKey}（常见于 API 非优雅重启后遗留的响应）`,
-      context: { queueKey, accountId, requestId },
-    });
-    recovered += 1;
+    try {
+      await processAiChatOutboxPayload(
+        payload,
+        accountId,
+        new Map<string, PendingInboxRequest>(),
+      );
+      await acknowledgeAiChatResult(queueKey, raw);
+      const requestId = (payload as { requestId?: unknown }).requestId;
+      if (typeof requestId === 'string') {
+        await releaseGlobalAgentSlot(requestId);
+        await releasePerUserMeteredSlotByRequestId(requestId);
+      }
+    } catch (err) {
+      if (err instanceof InvalidAiChatPayloadError) {
+        await quarantineAiChatResult(queueKey, raw);
+        continue;
+      }
+      logger.error({ queueKey, err }, 'AI Chat result retained for retry');
+      return;
+    }
   }
-
-  logger.warn(
-    { queueKey, recovered },
-    'AI Chat: outbox 单队列单轮代消费达到上限，剩余留待下一轮继续',
-  );
 }
 
 /**
@@ -413,7 +379,10 @@ export async function runInboxStallSweepOnce(): Promise<void> {
 
   running = true;
   try {
-    const lock = await acquireRedisWorkerLock(SWEEP_LOCK_KEY, SWEEP_LOCK_TTL_MS);
+    const lock = await acquireRedisWorkerLock(
+      SWEEP_LOCK_KEY,
+      SWEEP_LOCK_TTL_MS,
+    );
     if (!lock) {
       logger.debug('inbox 堆积巡检锁已被其他实例持有，跳过本轮');
       return;
@@ -428,7 +397,12 @@ export async function runInboxStallSweepOnce(): Promise<void> {
           logger.warn({ key, err }, 'inbox 堆积巡检：单个队列处理失败');
         }
       }
-      const outboxKeys = await scanKeys(AI_CHAT_OUTBOX_SCAN_MATCH);
+      const outboxKeys = new Set([
+        ...(await scanKeys(AI_CHAT_OUTBOX_SCAN_MATCH)),
+        ...(await scanKeys(`${AI_CHAT_OUTBOX_SCAN_MATCH}:processing`)).map(
+          (key) => key.slice(0, -':processing'.length),
+        ),
+      ]);
       for (const key of outboxKeys) {
         try {
           await sweepAiChatOutboxQueue(key);

@@ -23,6 +23,7 @@ import {
   hasFinalAssistantAfterLatestUser,
   isNearBottom,
 } from '../utils/display';
+import { shouldPollChatMessages } from '../utils/polling';
 import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
@@ -399,6 +400,9 @@ export function useChatMessages(options: {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollInFlightRef = useRef(false);
+  const lastPollAtRef = useRef<number | null>(null);
+  const lastStreamProgressAtRef = useRef<number | null>(null);
+  const streamConnectedRef = useRef(false);
   const sendingRef = useRef(false);
   const processingRef = useRef(false);
   const awaitingRefreshRef = useRef(false);
@@ -447,8 +451,8 @@ export function useChatMessages(options: {
   const isPending = sending || processing || awaitingRefresh;
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
-      loadedSessionId === options.selectedSession &&
-      continuationBlocked,
+    loadedSessionId === options.selectedSession &&
+    continuationBlocked,
   );
 
   const isStreamInterrupted = useCallback(
@@ -466,9 +470,7 @@ export function useChatMessages(options: {
     pendingStreamingUpdatesRef.current.clear();
     if (updates.length === 0) return;
 
-    setMessages((previous) =>
-      mergeStreamingMessageUpdates(previous, updates),
-    );
+    setMessages((previous) => mergeStreamingMessageUpdates(previous, updates));
   }, []);
 
   const flushStreamingMessageUpdates = useCallback(() => {
@@ -634,9 +636,7 @@ export function useChatMessages(options: {
               : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
         });
         updateProcessing(data.processing);
-        updateAwaitingRefresh(
-          isBackground && data.processing,
-        );
+        updateAwaitingRefresh(isBackground && data.processing);
         return {
           ok: true,
           active: true,
@@ -760,6 +760,7 @@ export function useChatMessages(options: {
 
     // 切换会话:重置分页窗口与状态,避免沿用上一会话的窗口大小/游标标记。
     loadedWindowSizeRef.current = MESSAGE_PAGE_SIZE;
+    lastPollAtRef.current = null;
     loadingOlderRef.current = false;
     prependAnchorRef.current = null;
     dispatchPagination({ type: 'reset' });
@@ -802,6 +803,18 @@ export function useChatMessages(options: {
       return;
     }
 
+    const now = Date.now();
+    if (
+      !shouldPollChatMessages({
+        now,
+        lastPollAt: lastPollAtRef.current,
+        lastProgressAt: lastStreamProgressAtRef.current,
+        streamConnected: streamConnectedRef.current,
+      })
+    )
+      return;
+
+    lastPollAtRef.current = now;
     pollInFlightRef.current = true;
     try {
       await loadMessages(sessionId, { background: true });
@@ -815,6 +828,7 @@ export function useChatMessages(options: {
 
     void pollMessages();
 
+    // Keep the recovery tick short; healthy streams only query on reconciliation.
     const intervalId = window.setInterval(() => {
       void pollMessages();
     }, CHAT_POLL_INTERVAL_MS);
@@ -938,12 +952,12 @@ export function useChatMessages(options: {
       const baseKey =
         typeof turnIndex === 'number'
           ? `turn-${turnIndex}`
-          : latestStreamingMessageKeyRef.current ??
-            `turn-${streamingSequenceRef.current}`;
+          : (latestStreamingMessageKeyRef.current ??
+            `turn-${streamingSequenceRef.current}`);
       const key =
         typeof turnIndex === 'number'
           ? `thinking-${baseKey}`
-          : latestThinkingMessageKeyRef.current ?? `thinking-${baseKey}`;
+          : (latestThinkingMessageKeyRef.current ?? `thinking-${baseKey}`);
       latestThinkingMessageKeyRef.current = key;
 
       upsertStreamingAssistantMessage(
@@ -1137,38 +1151,37 @@ export function useChatMessages(options: {
     [],
   );
 
-  const appendReconnectNoticeMessage = useCallback(
-    (sessionId: string) => {
-      const accountId =
-        sessionsRef.current.find((session) => session.id === sessionId)
-          ?.account_id ?? 'web';
-      const messageId = `opt-reconnect-${Date.now()}-${localMessageSequenceRef.current}`;
-      localMessageSequenceRef.current += 1;
+  const appendReconnectNoticeMessage = useCallback((sessionId: string) => {
+    const accountId =
+      sessionsRef.current.find((session) => session.id === sessionId)
+        ?.account_id ?? 'web';
+    const messageId = `opt-reconnect-${Date.now()}-${localMessageSequenceRef.current}`;
+    localMessageSequenceRef.current += 1;
 
-      setMessages((previous) => {
-        const visibleMessages = withoutReconnectNoticeMessages(previous);
-        return [
-          ...visibleMessages,
-          {
-            id: messageId,
-            account_id: accountId,
-            sender: '',
-            sender_name: '',
-            content: AI_CHAT_RECONNECTING_MESSAGE,
-            timestamp: new Date().toISOString(),
-            is_from_me: true,
-            is_bot_message: true,
-            metadata: {
-              kind: 'reconnecting',
-            },
+    setMessages((previous) => {
+      const visibleMessages = withoutReconnectNoticeMessages(previous);
+      return [
+        ...visibleMessages,
+        {
+          id: messageId,
+          account_id: accountId,
+          sender: '',
+          sender_name: '',
+          content: AI_CHAT_RECONNECTING_MESSAGE,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+          metadata: {
+            kind: 'reconnecting',
           },
-        ];
-      });
-    },
-    [],
-  );
+        },
+      ];
+    });
+  }, []);
 
   useEffect(() => {
+    streamConnectedRef.current = false;
+    lastStreamProgressAtRef.current = null;
     streamSocketRef.current?.close();
     streamSocketRef.current = null;
     resetStreamingMessageRefs();
@@ -1228,6 +1241,7 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'connected') {
+        streamConnectedRef.current = true;
         reconnectAttempt = 0;
         setMessages((previous) => withoutReconnectNoticeMessages(previous));
         return;
@@ -1237,6 +1251,7 @@ export function useChatMessages(options: {
       // 否则断线重连本身就会不断掩盖"AI 其实一直没真正开始处理"这件事。
       // 走到这里说明是下面这批真正表示业务进展的事件类型之一。
       lastStreamEventAtRef.current = Date.now();
+      lastStreamProgressAtRef.current = lastStreamEventAtRef.current;
 
       if (payload.type === 'turn_start') {
         beginStreamingAssistantTurn(payload.turnIndex);
@@ -1468,6 +1483,10 @@ export function useChatMessages(options: {
       currentSocket.onmessage = handleStreamMessage;
 
       currentSocket.onerror = () => {
+        if (streamSocketRef.current === currentSocket) {
+          streamConnectedRef.current = false;
+          lastStreamProgressAtRef.current = null;
+        }
         if (
           activeSessionRef.current === sessionId &&
           hasRecoverableStreamActivity()
@@ -1479,6 +1498,8 @@ export function useChatMessages(options: {
 
       currentSocket.onclose = () => {
         if (streamSocketRef.current === currentSocket) {
+          streamConnectedRef.current = false;
+          lastStreamProgressAtRef.current = null;
           streamSocketRef.current = null;
         }
         if (!closedByEffect && activeSessionRef.current === sessionId) {
@@ -1498,6 +1519,7 @@ export function useChatMessages(options: {
       clearReconnectTimeout();
       socket?.close();
       if (streamSocketRef.current === socket) {
+        streamConnectedRef.current = false;
         streamSocketRef.current = null;
       }
       resetStreamingMessageRefs();
@@ -1596,6 +1618,8 @@ export function useChatMessages(options: {
   const resetStreamingStateForInterrupt = useCallback(() => {
     sendAbortControllerRef.current?.abort();
     const socket = streamSocketRef.current;
+    streamConnectedRef.current = false;
+    lastStreamProgressAtRef.current = null;
     if (socket) {
       streamSocketRef.current = null;
       socket.close();
@@ -1647,6 +1671,7 @@ export function useChatMessages(options: {
       lastSentMessageContentRef.current = content;
       lastSentMessageOptionsRef.current = sendOptions;
       lastStreamEventAtRef.current = Date.now();
+      lastStreamProgressAtRef.current = null;
       setReplySlow(false);
 
       try {
@@ -1760,7 +1785,9 @@ export function useChatMessages(options: {
         }
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : DEFAULT_AI_CHAT_ERROR_MESSAGE;
+          error instanceof Error
+            ? error.message
+            : DEFAULT_AI_CHAT_ERROR_MESSAGE;
         const messageId = `opt-send-error-${Date.now()}-${localMessageSequenceRef.current}`;
         localMessageSequenceRef.current += 1;
         setMessages((previous) => [

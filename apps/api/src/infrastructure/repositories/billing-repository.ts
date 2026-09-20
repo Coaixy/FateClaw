@@ -1500,9 +1500,19 @@ export async function listStalePendingReservations(
 ): Promise<BillingRequestReservationRow[]> {
   const { rows } = await pool.query(
     `SELECT *
-     FROM billing_request_reservations
+     FROM billing_request_reservations r
      WHERE charge_state = 'pending'
        AND created_at < $1
+       AND (NOT EXISTS (SELECT 1 FROM agent_requests a WHERE a.request_id=r.request_id)
+         OR EXISTS (SELECT 1 FROM conversation_logs l WHERE l.request_id=r.request_id)
+         OR EXISTS (
+           SELECT 1 FROM agent_requests a WHERE a.request_id=r.request_id
+             AND a.state IN ('result_ready','completed')
+             AND (a.result #> '{metadata,synthetic_terminal}') IS DISTINCT FROM 'true'::jsonb
+             AND (jsonb_typeof(a.result #> '{usage,promptTokens}') = 'number'
+               OR jsonb_typeof(a.result #> '{usage,completionTokens}') = 'number'
+               OR jsonb_typeof(a.result #> '{usage,totalTokens}') = 'number')
+         ))
      ORDER BY created_at ASC
      LIMIT $2`,
     [staleBeforeIso, Math.min(Math.max(limit, 1), 500)],
@@ -2433,7 +2443,11 @@ export async function getMonthlyModelChargeCoinsByUserIds(
 /**
  * 卡密状态。
  */
-export type RedemptionCodeStatus = 'pending' | 'redeemed' | 'expired' | 'revoked';
+export type RedemptionCodeStatus =
+  | 'pending'
+  | 'redeemed'
+  | 'expired'
+  | 'revoked';
 
 /**
  * 卡密记录。

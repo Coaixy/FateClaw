@@ -32,6 +32,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/static": "^9.1.1",
+    "@fastify/websocket": "11.2.0",
     "@fateclaw/contracts": "workspace:*",
     "@types/qrcode-terminal": "^0.12.2",
     "bazi-ts-lib": "^1.0.2",
@@ -56,6 +57,7 @@
     "@types/node": "^22.10.0",
     "@types/pg": "^8.20.0",
     "@types/qrcode": "^1.5.6",
+    "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "^4.1.4",
     "eslint": "^9.35.0",
     "eslint-plugin-no-catch-all": "^1.1.0",
@@ -67,6 +69,6 @@
     "vitest": "^4.1.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24 <25"
   }
 }

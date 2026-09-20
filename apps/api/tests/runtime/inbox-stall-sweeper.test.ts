@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockLindex,
+  mockRpoplpush,
+  mockLrem,
   mockScan,
   mockLrange,
   mockEval,
@@ -14,6 +17,9 @@ const {
   mockReleaseGlobalAgentSlot,
   mockReleasePerUserMeteredSlotByRequestId,
 } = vi.hoisted(() => ({
+  mockLindex: vi.fn(),
+  mockRpoplpush: vi.fn(),
+  mockLrem: vi.fn(),
   mockScan: vi.fn(),
   mockLrange: vi.fn(),
   mockEval: vi.fn(),
@@ -32,6 +38,9 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
   // 锁逻辑已移入共享 helper acquireRedisWorkerLock，这里 mock 它以控制「拿到锁 /
   // 被其他实例占用」；getRedis 仅用于队列读写（scan/lrange）与 pop 脚本（eval）。
   getRedis: vi.fn(() => ({
+    lindex: mockLindex,
+    rpoplpush: mockRpoplpush,
+    lrem: mockLrem,
     scan: mockScan,
     lrange: mockLrange,
     eval: mockEval,
@@ -59,7 +68,8 @@ vi.mock('../../src/infrastructure/alerts.js', () => ({
 
 vi.mock('../../src/runtime/ipc-worker.js', () => ({
   releaseGlobalAgentSlot: mockReleaseGlobalAgentSlot,
-  releasePerUserMeteredSlotByRequestId: mockReleasePerUserMeteredSlotByRequestId,
+  releasePerUserMeteredSlotByRequestId:
+    mockReleasePerUserMeteredSlotByRequestId,
 }));
 
 import { runInboxStallSweepOnce } from '../../src/runtime/inbox-stall-sweeper.js';
@@ -118,9 +128,7 @@ describe('runInboxStallSweepOnce', () => {
     mockScan.mockImplementation(
       async (_cursor: string, _m: string, match: string) => [
         '0',
-        match.includes('ai-chat:outbox')
-          ? []
-          : ['ipc:web:acct-1:inbox:member'],
+        match.includes('ai-chat:outbox') ? [] : ['ipc:web:acct-1:inbox:member'],
       ],
     );
     mockGet.mockResolvedValue(null);
@@ -277,7 +285,9 @@ describe('runInboxStallSweepOnce', () => {
 describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () => {
   const OUTBOX_KEY = 'ipc:web:acct-1:ai-chat:outbox';
 
-  function buildOutboxResponse(overrides: Record<string, unknown> = {}): string {
+  function buildOutboxResponse(
+    overrides: Record<string, unknown> = {},
+  ): string {
     return JSON.stringify({
       type: 'response',
       requestId: 'aichat-9-zzz',
@@ -300,23 +310,52 @@ describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () =>
     mockScan.mockImplementation(
       async (_cursor: string, _m: string, match: string) => [
         '0',
-        match.includes('ai-chat:outbox') ? [OUTBOX_KEY] : [],
+        match === 'ipc:*:ai-chat:outbox' ? [OUTBOX_KEY] : [],
       ],
     );
   });
 
-  function useStatefulOutboxQueue(rawItems: string[]): void {
+  function useStatefulOutboxQueue(
+    rawItems: string[],
+    pendingItems: string[] = [],
+  ) {
     const queue = [...rawItems];
-    mockLrange.mockImplementation(async () =>
-      queue.length > 0 ? [queue[queue.length - 1]] : [],
-    );
-    mockEval.mockImplementation(async (script: unknown) => {
-      if (typeof script === 'string' && script.includes('rpop')) {
-        queue.pop();
-        return 1;
-      }
-      return 1;
+    const processing = [...pendingItems];
+    const invalid: string[] = [];
+    mockLrange.mockImplementation(async (key: string) => {
+      const list = key.endsWith(':processing') ? processing : queue;
+      return list.length ? [list[list.length - 1]] : [];
     });
+    mockLindex.mockImplementation(async () => processing.at(-1) ?? null);
+    mockRpoplpush.mockImplementation(async () => {
+      const raw = queue.pop();
+      if (raw !== undefined) processing.unshift(raw);
+      return raw ?? null;
+    });
+    mockLrem.mockImplementation(
+      async (_key: string, _count: number, raw: string) => {
+        const index = processing.indexOf(raw);
+        if (index < 0) return 0;
+        processing.splice(index, 1);
+        return 1;
+      },
+    );
+    mockEval.mockImplementation(
+      async (
+        _script: string,
+        _count: number,
+        _source: string,
+        _target: string,
+        raw: string,
+      ) => {
+        const index = processing.indexOf(raw);
+        if (index < 0) return 0;
+        invalid.unshift(raw);
+        processing.splice(index, 1);
+        return 1;
+      },
+    );
+    return { queue, processing, invalid };
   }
 
   it('超过无主阈值的最终响应被代消费落库，并释放并发槽位', async () => {
@@ -335,9 +374,7 @@ describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () =>
     expect(mockReleasePerUserMeteredSlotByRequestId).toHaveBeenCalledWith(
       'aichat-9-zzz',
     );
-    expect(mockSendOpsAlert).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'ai_chat_outbox_orphan' }),
-    );
+    expect(mockLrem).toHaveBeenCalledTimes(1);
   });
 
   it('未到无主阈值的新消息不代消费（可能有活跃消费者）', async () => {
@@ -350,16 +387,50 @@ describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () =>
     expect(mockProcessAiChatOutboxPayload).not.toHaveBeenCalled();
   });
 
-  it('解析不了的脏数据按死信弹出丢弃，不堵死队列', async () => {
-    useStatefulOutboxQueue(['{oops not json', buildOutboxResponse()]);
+  it('quarantines malformed data and continues delivering valid results', async () => {
+    const state = useStatefulOutboxQueue([
+      '{oops not json',
+      buildOutboxResponse(),
+    ]);
 
     await runInboxStallSweepOnce();
 
-    // 脏数据被丢弃后，其后的正常响应也在同一轮被代消费。
+    expect(state.invalid).toEqual(['{oops not json']);
     expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(1);
     expect(mockLoggerError).toHaveBeenCalledWith(
-      expect.objectContaining({ rawPreview: expect.stringContaining('oops') }),
-      expect.stringContaining('死信'),
+      { queueKey: OUTBOX_KEY },
+      'Invalid AI Chat result quarantined',
     );
+  });
+  it('retains a failed delivery for a later sweep and only acknowledges after success', async () => {
+    const raw = buildOutboxResponse();
+    const state = useStatefulOutboxQueue([raw]);
+    mockProcessAiChatOutboxPayload.mockRejectedValueOnce(
+      new Error('synthetic database outage'),
+    );
+    await runInboxStallSweepOnce();
+    expect(state.processing).toEqual([raw]);
+    expect(mockLrem).not.toHaveBeenCalled();
+    expect(mockReleaseGlobalAgentSlot).not.toHaveBeenCalled();
+    await runInboxStallSweepOnce();
+    expect(state.processing).toEqual([]);
+    expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(2);
+    expect(mockLrem).toHaveBeenCalledTimes(1);
+  });
+
+  it('discovers a processing-only queue after the original queue disappears', async () => {
+    const state = useStatefulOutboxQueue(
+      [],
+      [buildOutboxResponse({ timestamp: new Date().toISOString() })],
+    );
+    mockScan.mockImplementation(
+      async (_cursor: string, _m: string, match: string) => [
+        '0',
+        match.endsWith(':processing') ? [`${OUTBOX_KEY}:processing`] : [],
+      ],
+    );
+    await runInboxStallSweepOnce();
+    expect(mockProcessAiChatOutboxPayload).toHaveBeenCalledTimes(1);
+    expect(state.processing).toEqual([]);
   });
 });

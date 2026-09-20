@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 import { closeAgentDb } from './agent-db.js';
-import { getContext, initContext } from './context.js';
+import {
+  claimDurableExecution,
+  startDurableExecutionHeartbeat,
+  deliverDurableResult,
+  replayDurableResults,
+} from './durable-execution.js';
+import { initContext } from './context.js';
 import { executeContainerInput } from './request-boundary.js';
 import { log } from './io.js';
 import {
@@ -11,7 +17,12 @@ import {
   setRequestId,
   type RequestScope,
 } from './request-scope.js';
-import { connectRedis, disconnectRedis, getRedis } from './redis.js';
+import {
+  connectRedis,
+  disconnectRedis,
+  getBlockingRedis,
+  getRedis,
+} from './redis.js';
 import {
   CancelInboxRequest,
   InboxRequest,
@@ -40,9 +51,8 @@ const AGENT_REQUEST_STALL_TIMEOUT_MS = Math.max(
 // 为 abort、写 outbox、落库和释放锁预留 5 分钟。宿主通过 agent-env.ts 注入同一事实源。
 const AGENT_REQUEST_MAX_DURATION_MS = Math.max(
   AGENT_REQUEST_STALL_TIMEOUT_MS + 60_000,
-  Math.trunc(
-    Number(process.env.AGENT_RUNTIME_REQUEST_MAX_DURATION_MS ?? ''),
-  ) || 25 * 60 * 1000,
+  Math.trunc(Number(process.env.AGENT_RUNTIME_REQUEST_MAX_DURATION_MS ?? '')) ||
+    25 * 60 * 1000,
 );
 const WATCHDOG_CHECK_INTERVAL_MS = Math.min(
   1_000,
@@ -54,6 +64,8 @@ const WATCHDOG_CHECK_INTERVAL_MS = Math.min(
 // 也能被同一机制发现。优雅退出时主动删除 key，避免误报。
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const HEARTBEAT_TTL_MS = 30_000;
+
+const activeRequestScopes = new WeakMap<InboxRequest, RequestScope>();
 
 type RequestWatchdogResult = 'stall_timeout' | 'max_duration';
 
@@ -284,6 +296,7 @@ function buildFatalOutboxResponse(
   detail: string,
   requestId: string,
   request: InboxRequest,
+  scope = activeRequestScopes.get(request),
 ): OutboxResponse {
   return {
     type: 'response',
@@ -299,7 +312,12 @@ function buildFatalOutboxResponse(
       '这次没有完成，处理进程发生了未预期的错误，请重新发送试试。',
     publicReasonCode: 'daemon_fatal_error',
     timestamp: new Date().toISOString(),
-    metadata: { kind: 'final', turn_complete: true },
+    usage: scope?.partialUsage,
+    metadata: {
+      kind: 'final',
+      turn_complete: true,
+      ...(!scope?.partialUsage ? { synthetic_terminal: true } : {}),
+    },
   };
 }
 
@@ -312,6 +330,9 @@ async function processInboxMessage(
 ): Promise<void> {
   let request: InboxRequest | undefined;
   const requestScope = createRequestScope();
+  let stopLease = () => {};
+  let ownsExecution = false;
+  let generatedResult = false;
 
   try {
     request = parseInboxRequest(raw);
@@ -322,10 +343,19 @@ async function processInboxMessage(
       );
     }
 
+    if (!(await claimDurableExecution(request))) return;
+    ownsExecution = true;
+    stopLease = startDurableExecutionHeartbeat(request, () => {
+      const controls = activeSessions.get(request!.requestId);
+      if (controls) void controls.abort().catch(() => {});
+      else pendingCancelRequests.set(request!.requestId, Date.now());
+    });
+
     // 供 uncaughtException/unhandledRejection 兜底使用：进程崩溃前需要靠这份
     // 上下文（accountId/sessionId/outboxQueue 等）拼出一条错误响应推给宿主，
     // 仅存 activeSessions 的 abort 句柄不够——那里没有这些字段。
     activeRequestContexts.set(request.requestId, request);
+    activeRequestScopes.set(request, requestScope);
 
     setRequestId(requestScope, request.requestId);
     log(
@@ -375,7 +405,10 @@ async function processInboxMessage(
     if (raced === 'stall_timeout' || raced === 'max_duration') {
       // 放弃等待并尝试 abort 当前 session；若卡死原因是同步阻塞（如灾难性正则回溯），
       // abort 无法真正打断执行，但至少能让本次请求以明确错误结束，不再无限静默。
-      void activeSessions.get(request.requestId)?.abort().catch(() => {});
+      void activeSessions
+        .get(request.requestId)
+        ?.abort()
+        .catch(() => {});
       const detail =
         raced === 'stall_timeout'
           ? `请求连续 ${Math.round(AGENT_REQUEST_STALL_TIMEOUT_MS / 1000)}s 无进展，判定处理停滞`
@@ -416,7 +449,10 @@ async function processInboxMessage(
 
     // 写入指定的 outbox 队列（或默认队列）
     const outboxQueue = request.outboxQueue ?? `ipc:${accountId}:outbox`;
-    await getRedis().lpush(outboxQueue, JSON.stringify(response));
+    generatedResult = true;
+    await deliverDurableResult(request, response, (queue, payload) =>
+      getRedis().lpush(queue, payload),
+    );
 
     log(
       `已完成收件箱请求 requestId=${request.requestId} status=${output.status} outbox=${outboxQueue}`,
@@ -426,7 +462,11 @@ async function processInboxMessage(
     log(`处理收件箱消息失败: ${errorMessage}`);
 
     // 若已解析出 requestId，推送错误响应，避免宿主机无限等待
-    if (request?.requestId) {
+    if (
+      !generatedResult &&
+      request?.requestId &&
+      (!request.executionId || ownsExecution)
+    ) {
       try {
         // 兜底取 trace 缓冲：request boundary 之外的异常（例如 watchdog 超时）可能已有
         // 多轮 trace；此时 request-state 还没被下一个请求 reset，数据是安全的。
@@ -447,21 +487,21 @@ async function processInboxMessage(
           status: 'error',
           error: errorMessage,
           publicErrorText,
-          publicReasonCode:
-            timeoutError?.publicReasonCode ?? 'daemon_error',
+          publicReasonCode: timeoutError?.publicReasonCode ?? 'daemon_error',
           timestamp: new Date().toISOString(),
           model: request.llmRuntime.model,
           provider: request.llmRuntime.piApi,
           traceEvents: traceEvents.length > 0 ? traceEvents : undefined,
+          usage: requestScope.partialUsage,
           metadata: {
             kind: 'final',
             turn_complete: true,
           },
         };
         // 写入指定的 outbox 队列（或默认队列）
-        const errorOutboxQueue =
-          request.outboxQueue ?? `ipc:${accountId}:outbox`;
-        await getRedis().lpush(errorOutboxQueue, JSON.stringify(errorResponse));
+        await deliverDurableResult(request, errorResponse, (queue, payload) =>
+          getRedis().lpush(queue, payload),
+        );
       } catch (pushError) {
         log(
           `推送错误响应失败: ${pushError instanceof Error ? pushError.message : String(pushError)}`,
@@ -469,10 +509,12 @@ async function processInboxMessage(
       }
     }
   } finally {
-    if (request?.requestId) {
+    stopLease();
+    if (request?.requestId && ownsExecution) {
       activeSessions.delete(request.requestId);
       pendingCancelRequests.delete(request.requestId);
       activeRequestContexts.delete(request.requestId);
+      activeRequestScopes.delete(request);
     }
     setRequestId(requestScope, undefined);
   }
@@ -505,6 +547,26 @@ async function loop(): Promise<void> {
   // 这里要的是干净、无歧义的控制信号。
   process.stdout.write('__FATECLAW_AGENT_READY__\n');
   const redis = getRedis();
+  const inboxRedis = getBlockingRedis();
+  let replayInFlight = false;
+  const replay = async () => {
+    if (replayInFlight) return;
+    replayInFlight = true;
+    try {
+      await replayDurableResults(ctx.accountId, (queue, payload) =>
+        redis.lpush(queue, payload),
+      );
+    } catch {
+      log('Result spool replay failed; retained for next attempt');
+    } finally {
+      replayInFlight = false;
+    }
+  };
+  void replay();
+  const replayTimer = setInterval(() => {
+    void replay();
+  }, 10_000);
+  replayTimer.unref();
 
   // 存活心跳：立即写一次，此后周期续写。SET 带 PX 过期，进程死亡/事件循环
   // 卡死后 key 自动消失，宿主侧即可判定掉线。
@@ -560,9 +622,9 @@ async function loop(): Promise<void> {
             requestId,
             request,
           );
-          const outboxQueue =
-            request.outboxQueue ?? `ipc:${request.accountId}:outbox`;
-          await getRedis().lpush(outboxQueue, JSON.stringify(errorResponse));
+          await deliverDurableResult(request, errorResponse, (queue, payload) =>
+            getRedis().lpush(queue, payload),
+          );
         } catch (pushError) {
           log(
             `崩溃兜底推送失败 requestId=${requestId}: ${pushError instanceof Error ? pushError.message : String(pushError)}`,
@@ -598,6 +660,7 @@ async function loop(): Promise<void> {
     }
     // 优雅退出：停跳并主动删除心跳 key，避免宿主侧把正常回收误报为掉线。
     clearInterval(heartbeatTimer);
+    clearInterval(replayTimer);
     await redis.del(heartbeatKey).catch(() => {});
     try {
       await cleanup();
@@ -646,7 +709,7 @@ async function loop(): Promise<void> {
       }
       if (shuttingDown) break;
       // 30s timeout 让退出信号能在合理时间内被察觉，并允许 ioredis 自动重连
-      const result = await redis.brpop(
+      const result = await inboxRedis.brpop(
         `ipc:${ctx.accountId}:inbox:member`,
         `ipc:${ctx.accountId}:inbox`,
         30,

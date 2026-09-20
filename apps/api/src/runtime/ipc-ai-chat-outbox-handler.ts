@@ -1,3 +1,9 @@
+import { createHash } from 'node:crypto';
+import type pg from 'pg';
+import {
+  withAgentInterruptionDelivery,
+  withAgentResultDelivery,
+} from '../infrastructure/repositories/agent-requests-repository.js';
 /**
  * AI Chat 专属 outbox 队列处理。
  *
@@ -19,6 +25,7 @@ import {
   incrementDailyTokens,
 } from '../infrastructure/daily-usage.js';
 import {
+  InvalidAiChatPayloadError,
   PendingInboxRequest,
   ProgressIpcPayload,
   ResponseIpcPayload,
@@ -45,6 +52,7 @@ import {
 import { mapInternalErrorToPublicError } from '../shared/public-error.js';
 import {
   settleBillingReservationDetailed,
+  recoverStalePendingReservation,
   type BillingSettlementSummary,
 } from '../modules/billing/plans.js';
 import {
@@ -188,40 +196,43 @@ function buildFinalMetadata(args: {
   };
 }
 
-function storeAiChatConversationLog(args: {
+async function storeAiChatConversationLog(args: {
   accountId: string;
   payload: ResponseIpcPayload;
-}): void {
-  const hasTranscript = (args.payload.transcript?.length ?? 0) > 0;
-  const hasTraceEvents = (args.payload.traceEvents?.length ?? 0) > 0;
-  if (!args.payload.requestId || (!hasTranscript && !hasTraceEvents)) return;
-
-  const logId = `clog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  storeConversationLog({
-    id: logId,
-    accountId: args.accountId,
-    requestId: args.payload.requestId,
-    transcript: args.payload.transcript ?? [],
-    usage: args.payload.usage,
-    model: args.payload.model,
-    provider: args.payload.provider,
-    traceEvents: args.payload.traceEvents,
-    piSession: args.payload.piSession,
-    agentGraph: args.payload.agentGraph,
-  }).then(
-    () => recordConversationLogSuccess(),
-    (err) =>
-      recordConversationLogFailure(
-        { accountId: args.accountId, requestId: args.payload.requestId },
-        err,
-      ),
-  );
+  db: pg.PoolClient;
+}): Promise<void> {
+  if (!args.payload.requestId) throw new Error('Missing result requestId');
+  const logId = `clog-${createHash('sha256').update(args.accountId).update('\0').update(args.payload.requestId).digest('hex')}`;
+  try {
+    await storeConversationLog(
+      {
+        id: logId,
+        accountId: args.accountId,
+        requestId: args.payload.requestId,
+        transcript: args.payload.transcript ?? [],
+        usage: args.payload.usage,
+        model: args.payload.model,
+        provider: args.payload.provider,
+        traceEvents: args.payload.traceEvents,
+        piSession: args.payload.piSession,
+        agentGraph: args.payload.agentGraph,
+      },
+      args.db,
+    );
+  } catch (error) {
+    recordConversationLogFailure(
+      { accountId: args.accountId, requestId: args.payload.requestId },
+      error,
+    );
+    throw error;
+  }
 }
 
 async function recordAiChatTokenUsage(args: {
   accountId: string;
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
+  db: pg.PoolClient;
 }): Promise<void> {
   const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
   if (normalizedUsage.totalTokens <= 0) return;
@@ -230,6 +241,7 @@ async function recordAiChatTokenUsage(args: {
     accountId: args.accountId,
     pending: args.pending,
     payloadOwnerUserId: args.payload.ownerUserId,
+    db: args.db,
   });
   if (!ownerUserId) return;
 
@@ -240,6 +252,7 @@ async function recordAiChatTokenUsage(args: {
     normalizedUsage.promptTokens,
     normalizedUsage.completionTokens,
     normalizedUsage.totalTokens,
+    args.db,
   );
   logger.info(
     {
@@ -259,8 +272,15 @@ async function settleAiChatBilling(args: {
   payload: ResponseIpcPayload;
 }): Promise<BillingSettlementSummary | null> {
   if (!args.payload.requestId) return null;
-  if (args.pending?.llmRuntime?.billingMode !== 'metered') return null;
   const normalizedUsage = normalizeRuntimeTokenUsage(args.payload.usage);
+  if (!args.pending?.llmRuntime) {
+    return recoverStalePendingReservation({
+      requestId: args.payload.requestId,
+      promptTokens: normalizedUsage.promptTokens,
+      completionTokens: normalizedUsage.completionTokens,
+    });
+  }
+  if (args.pending.llmRuntime.billingMode !== 'metered') return null;
 
   const billing = await settleBillingReservationDetailed({
     requestId: args.payload.requestId,
@@ -331,6 +351,7 @@ async function resolveOwnerUserId(args: {
   accountId: string;
   pending?: PendingInboxRequest;
   payloadOwnerUserId?: string;
+  db?: pg.PoolClient;
 }): Promise<string | null> {
   if (args.pending?.ownerUserId) {
     return args.pending.ownerUserId;
@@ -341,6 +362,13 @@ async function resolveOwnerUserId(args: {
   const webUserId = getUserIdFromWebChatRuntimeId(args.accountId);
   if (!webUserId) {
     return null;
+  }
+  if (args.db) {
+    const { rows } = await args.db.query<{ id: string }>(
+      'SELECT id FROM users WHERE id=$1',
+      [webUserId],
+    );
+    return rows[0]?.id ?? null;
   }
   const user = await getUserById(webUserId);
   return user?.id ?? null;
@@ -366,10 +394,11 @@ function resolveAiChatFinalUserMessageId(
 
 async function incrementAiChatDailyMessageCount(
   ownerUserId: string | null,
+  db?: pg.PoolClient,
 ): Promise<void> {
   if (!ownerUserId) return;
   const today = new Date().toISOString().slice(0, 10);
-  await incrementDailyMessageCount(ownerUserId, today);
+  await incrementDailyMessageCount(ownerUserId, today, db);
 }
 
 async function releaseCompletedAiChatSessionLock(args: {
@@ -392,6 +421,7 @@ async function releaseCompletedAiChatSessionLock(args: {
  *          调用方在计费结算完成后，用该 ID 把扣费金额回填进消息 metadata。
  */
 async function storeAiChatFinalResponseMessages(args: {
+  db?: pg.PoolClient;
   accountId: string;
   pending?: PendingInboxRequest;
   payload: ResponseIpcPayload;
@@ -421,6 +451,7 @@ async function storeAiChatFinalResponseMessages(args: {
     accountId: args.accountId,
     pending: args.pending,
     payloadOwnerUserId: args.payload.ownerUserId,
+    db: args.db,
   });
 
   if (args.payload.status === 'error') {
@@ -429,25 +460,28 @@ async function storeAiChatFinalResponseMessages(args: {
       args.payload.publicErrorText?.trim() ||
       mapInternalErrorToPublicError(args.payload.error, {}).publicMessage;
     const errorMessageId = `${userMessageId}_error`;
-    await storeMessage({
-      id: errorMessageId,
-      account_id: args.accountId,
-      user_id: ownerUserId,
-      sender: args.accountId,
-      sender_name: WEB_CHAT_ASSISTANT_NAME,
-      content,
-      timestamp: args.payload.timestamp || new Date().toISOString(),
-      is_from_me: true,
-      is_bot_message: true,
-      session_id: sessionId,
-      metadata: {
-        ...args.finalMetadata,
-        kind: 'error',
-        turn_complete: true,
-        request_id: args.payload.requestId,
+    await storeMessage(
+      {
+        id: errorMessageId,
+        account_id: args.accountId,
+        user_id: ownerUserId,
+        sender: args.accountId,
+        sender_name: WEB_CHAT_ASSISTANT_NAME,
+        content,
+        timestamp: args.payload.timestamp || new Date().toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: sessionId,
+        metadata: {
+          ...args.finalMetadata,
+          kind: 'error',
+          turn_complete: true,
+          request_id: args.payload.requestId,
+        },
       },
-    });
-    await touchChatSession(sessionId);
+      args.db,
+    );
+    await touchChatSession(sessionId, args.db);
     return errorMessageId;
   }
 
@@ -460,8 +494,8 @@ async function storeAiChatFinalResponseMessages(args: {
       },
       'AI Chat: 最终响应没有 assistant 文本，仅更新会话完成状态',
     );
-    await touchChatSession(sessionId);
-    await incrementAiChatDailyMessageCount(ownerUserId);
+    await touchChatSession(sessionId, args.db);
+    await incrementAiChatDailyMessageCount(ownerUserId, args.db);
     return null;
   }
 
@@ -476,34 +510,37 @@ async function storeAiChatFinalResponseMessages(args: {
     if (isFinalReply) {
       finalReplyMessageId = messageId;
     }
-    await storeMessage({
-      id: messageId,
-      account_id: args.accountId,
-      user_id: ownerUserId,
-      sender: args.accountId,
-      sender_name: WEB_CHAT_ASSISTANT_NAME,
-      content: args.assistantMessages[index],
-      timestamp: new Date(replyTimestampBase + index).toISOString(),
-      is_from_me: true,
-      is_bot_message: true,
-      session_id: sessionId,
-      tool_context:
-        isFinalReply &&
-        args.payload.skillContext &&
-        args.payload.skillContext.length > 0
-          ? JSON.stringify(args.payload.skillContext)
-          : null,
-      metadata: isFinalReply
-        ? args.finalMetadata
-        : {
-            kind: 'assistant',
-            request_id: args.payload.requestId,
-          },
-    });
+    await storeMessage(
+      {
+        id: messageId,
+        account_id: args.accountId,
+        user_id: ownerUserId,
+        sender: args.accountId,
+        sender_name: WEB_CHAT_ASSISTANT_NAME,
+        content: args.assistantMessages[index],
+        timestamp: new Date(replyTimestampBase + index).toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+        session_id: sessionId,
+        tool_context:
+          isFinalReply &&
+          args.payload.skillContext &&
+          args.payload.skillContext.length > 0
+            ? JSON.stringify(args.payload.skillContext)
+            : null,
+        metadata: isFinalReply
+          ? args.finalMetadata
+          : {
+              kind: 'assistant',
+              request_id: args.payload.requestId,
+            },
+      },
+      args.db,
+    );
   }
 
-  await touchChatSession(sessionId);
-  await incrementAiChatDailyMessageCount(ownerUserId);
+  await touchChatSession(sessionId, args.db);
+  await incrementAiChatDailyMessageCount(ownerUserId, args.db);
   return finalReplyMessageId;
 }
 
@@ -561,7 +598,7 @@ export async function processAiChatOutboxPayload(
     await processAiChatProgress(payload, fallbackAccountId, pendingRequests);
     return;
   }
-  throw new Error('无效的 AI Chat outbox IPC 消息格式');
+  throw new InvalidAiChatPayloadError('Invalid AI Chat outbox envelope');
 }
 
 /**
@@ -620,37 +657,69 @@ async function processAiChatResponse(
       'AI Chat: 处理最终响应（不发微信）',
     );
 
-    storeAiChatConversationLog({ accountId, payload: payloadForUsage });
-    await recordAiChatTokenUsage({
-      accountId,
-      pending,
-      payload: payloadForUsage,
-    });
-
-    // 先落库交付、再结算扣费（顺序刻意如此）：
-    // - 落库失败 → 结算不会发生，预留保持 charge_state='pending'，由 billing-sweeper
-    //   按对话日志真实 usage 补收——杜绝「已扣费但用户收不到消息」；
-    // - 结算失败 → 消息已交付，不应向用户报错，仅记日志并同样交给 sweeper 补收。
+    if (!payload.requestId) throw new Error('Missing result requestId');
     const finalMetadata = buildFinalMetadata({
       payload: payloadForUsage,
       durationMs,
     });
-    const finalMessageId = await storeAiChatFinalResponseMessages({
-      accountId,
-      pending,
-      payload: payloadForUsage,
-      responseText: text,
-      assistantMessages,
-      finalMetadata,
-    });
+    // The delivery receipt, actual usage, and messages commit together. Retries
+    // skip these effects; billing remains recoverable from the durable usage log.
+    const synthetic =
+      (payloadForUsage.metadata as Record<string, unknown> | undefined)
+        ?.synthetic_terminal === true;
+    const finalMessageId = synthetic
+      ? await withAgentInterruptionDelivery(
+          payload.requestId,
+          accountId,
+          (db) =>
+            storeAiChatFinalResponseMessages({
+              accountId,
+              pending,
+              payload: payloadForUsage,
+              responseText: text,
+              assistantMessages,
+              finalMetadata,
+              db,
+            }),
+        )
+      : await withAgentResultDelivery(
+          payload.requestId,
+          accountId,
+          async (db) => {
+            await storeAiChatConversationLog({
+              accountId,
+              payload: payloadForUsage,
+              db,
+            });
+            await recordAiChatTokenUsage({
+              accountId,
+              pending,
+              payload: payloadForUsage,
+              db,
+            });
+            return storeAiChatFinalResponseMessages({
+              accountId,
+              pending,
+              payload: payloadForUsage,
+              responseText: text,
+              assistantMessages,
+              finalMetadata,
+              db,
+            });
+          },
+        );
+    if (synthetic && !finalMessageId) return;
+    if (!synthetic) recordConversationLogSuccess();
 
     let billing: BillingSettlementSummary | null = null;
     try {
-      billing = await settleAiChatBilling({
-        accountId,
-        pending,
-        payload: payloadForUsage,
-      });
+      billing = synthetic
+        ? null
+        : await settleAiChatBilling({
+            accountId,
+            pending,
+            payload: payloadForUsage,
+          });
     } catch (settleErr) {
       logger.error(
         { accountId, requestId: payload.requestId, err: settleErr },
@@ -693,6 +762,11 @@ async function processAiChatResponse(
         text: finalText || text,
         metadata: finalMetadata,
       }),
+    }).catch((err) => {
+      logger.warn(
+        { err, requestId: payload.requestId },
+        'Result committed; stream notification failed',
+      );
     });
     await resolvePendingAiChatResponse({
       accountId,
@@ -704,47 +778,12 @@ async function processAiChatResponse(
       finalMetadata,
     });
   } catch (error) {
-    await releaseCompletedAiChatSessionLock({
-      pending,
-      payload,
-      sessionId: resolveAiChatFinalSessionId(pending, payload),
-    });
-    // 即使处理失败也必须 resolve pending
-    if (pending) {
-      clearTimeout(pending.timeout);
-      pendingRequests.delete(payload.requestId!);
-      if (pending.sessionId) {
-        await releaseSessionProcessingLock(
-          pending.sessionId,
-          pending.sessionProcessingRequestId ?? payload.requestId,
-        ).catch(() => {});
-      }
-      await releaseLocalAgentLeaseForPending(pending, {
-        accountId: pending.accountId,
-        requestId: payload.requestId,
-        reason: 'ai_chat_response_error',
-      });
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error(
-        { requestId: payload.requestId, err: error },
-        'AI Chat: 处理 response 失败，resolve pending 为 error',
-      );
-      const publicError = mapInternalErrorToPublicError(errorMsg);
-      pending.resolve({
-        requestId: payload.requestId!,
-        status: 'error',
-        text: publicError.publicMessage,
-        error: errorMsg,
-        publicErrorText: publicError.publicMessage,
-        publicReasonCode: publicError.publicReasonCode,
-        metadata: {
-          ...buildFinalMetadata({
-            payload,
-            durationMs: resolvePendingDurationMs(pending),
-          }),
-        },
-      });
-    }
+    // The reliable outbox retains this result for retry. Keep the request and
+    // session ownership until the durable delivery transaction commits.
+    logger.error(
+      { requestId: payload.requestId, err: error },
+      'AI Chat result delivery failed; retaining pending request for retry',
+    );
     throw error;
   }
 }

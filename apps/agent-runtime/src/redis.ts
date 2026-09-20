@@ -7,6 +7,7 @@ import { Redis } from 'ioredis';
 import { log } from './io.js';
 
 let redis: Redis | null = null;
+let blockingRedis: Redis | null = null;
 
 export async function connectRedis(): Promise<void> {
   const url = process.env.REDIS_URL;
@@ -14,13 +15,31 @@ export async function connectRedis(): Promise<void> {
     throw new Error('缺少 REDIS_URL 环境变量');
   }
 
-  redis = new Redis(url, {
-    maxRetriesPerRequest: null,
+  const commands = new Redis(url, {
+    maxRetriesPerRequest: 1,
+    commandTimeout: 5_000,
+    connectTimeout: 5_000,
+    enableOfflineQueue: false,
     enableReadyCheck: true,
     lazyConnect: true,
   });
 
-  await redis.connect();
+  // Redis queues all later commands behind BRPOP on the same connection.
+  // In ioredis, zero is an immediate timeout; undefined disables the inherited deadline.
+  const consumer = commands.duplicate({
+    commandTimeout: undefined,
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: true,
+  });
+  try {
+    await Promise.all([commands.connect(), consumer.connect()]);
+  } catch (error) {
+    commands.disconnect();
+    consumer.disconnect();
+    throw error;
+  }
+  redis = commands;
+  blockingRedis = consumer;
   log('Redis 已连接');
 }
 
@@ -31,10 +50,31 @@ export function getRedis(): Redis {
   return redis;
 }
 
-export async function disconnectRedis(): Promise<void> {
-  if (redis) {
-    await redis.quit();
-    redis = null;
-    log('Redis 已断开');
+export function getBlockingRedis(): Redis {
+  if (!blockingRedis) {
+    throw new Error('Blocking Redis connection is not initialized');
   }
+  return blockingRedis;
+}
+
+export async function disconnectRedis(): Promise<void> {
+  // QUIT on the consumer would itself wait behind an outstanding BRPOP.
+  blockingRedis?.disconnect();
+  blockingRedis = null;
+  const commands = redis;
+  redis = null;
+  if (!commands) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      commands.quit(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 5_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    commands.disconnect();
+  }
+  log('Redis 已断开');
 }

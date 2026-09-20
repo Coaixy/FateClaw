@@ -40,6 +40,11 @@ export async function runDatabaseMigrations(
 
       await client.query('BEGIN');
       try {
+        // Startup schema changes need a larger finite budget than request queries.
+        await client.query("SET LOCAL statement_timeout = '120s'");
+        await client.query(
+          "SET LOCAL idle_in_transaction_session_timeout = '120s'",
+        );
         await migration.up(client);
         await client.query(
           `INSERT INTO schema_migrations (id, description)

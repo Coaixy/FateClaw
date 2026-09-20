@@ -53,6 +53,7 @@ describe('chatSessionsApi.send', () => {
           pasted_board: pastedBoard,
         }),
         exposeServerErrorMessage: true,
+        timeoutMs: 90_000,
         headers: {
           'x-no-compression': '1',
         },
@@ -74,6 +75,7 @@ describe('chatSessionsApi.send', () => {
           selected_board_message_id: 'board-1',
         }),
         exposeServerErrorMessage: true,
+        timeoutMs: 90_000,
         headers: {
           'x-no-compression': '1',
         },
@@ -93,6 +95,7 @@ describe('chatSessionsApi.send', () => {
           input_kind: 'normal',
         }),
         exposeServerErrorMessage: true,
+        timeoutMs: 90_000,
         headers: {
           'x-no-compression': '1',
         },
@@ -115,6 +118,7 @@ describe('chatSessionsApi.send', () => {
           content: '普通问题',
         }),
         exposeServerErrorMessage: true,
+        timeoutMs: 90_000,
         headers: {
           'x-no-compression': '1',
         },
@@ -137,6 +141,7 @@ describe('chatSessionsApi.cancel', () => {
       '/api/chat-sessions/s/s%201/messages/cancel',
       {
         method: 'POST',
+        timeoutMs: 15_000,
       },
     );
   });

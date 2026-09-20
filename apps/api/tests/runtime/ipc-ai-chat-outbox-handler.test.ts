@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockInterruption,
+  mockTransaction,
+  mockDeliver,
+  mockRecover,
   mockDel,
   mockEval,
   mockIncrementDailyTokens,
@@ -15,6 +19,10 @@ const {
   mockTouchChatSession,
   mockIncrementDailyMessageCount,
 } = vi.hoisted(() => ({
+  mockInterruption: vi.fn(),
+  mockTransaction: { query: vi.fn(async () => ({ rows: [{ id: 'user-1' }] })) },
+  mockDeliver: vi.fn(),
+  mockRecover: vi.fn(async () => null),
   mockDel: vi.fn(async () => 1),
   mockEval: vi.fn(async () => 1),
   mockIncrementDailyTokens: vi.fn(),
@@ -32,6 +40,14 @@ const {
   mockTouchChatSession: vi.fn(async () => undefined),
   mockIncrementDailyMessageCount: vi.fn(async () => undefined),
 }));
+
+vi.mock(
+  '../../src/infrastructure/repositories/agent-requests-repository.js',
+  () => ({
+    withAgentResultDelivery: mockDeliver,
+    withAgentInterruptionDelivery: mockInterruption,
+  }),
+);
 
 vi.mock('../../src/infrastructure/db.js', () => ({
   getAllAccounts: vi.fn(),
@@ -66,6 +82,7 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
 
 vi.mock('../../src/modules/billing/plans.js', () => ({
   settleBillingReservationDetailed: mockSettleBillingReservationDetailed,
+  recoverStalePendingReservation: mockRecover,
   settleBillingReservation: mockSettleBillingReservation,
 }));
 
@@ -79,11 +96,216 @@ vi.mock('../../src/runtime/local-runner.js', () => ({
 }));
 
 import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
+import { getUserById } from '../../src/infrastructure/db.js';
 import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
 
 describe('processAiChatOutboxPayload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInterruption.mockImplementation(async (_request, _account, callback) =>
+      callback(mockTransaction),
+    );
+    mockDeliver.mockImplementation(async (_request, _account, callback) =>
+      callback(mockTransaction),
+    );
+  });
+
+  it('skips a stale synthetic notice after an actual result wins the row lock', async () => {
+    mockInterruption.mockResolvedValueOnce(null);
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        requestId: 'late-notice',
+        status: 'error',
+        text: 'interrupted',
+        sessionId: 'session-1',
+        metadata: { synthetic_terminal: true },
+      },
+      'web:user-1',
+      new Map(),
+    );
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockPublish).not.toHaveBeenCalled();
+    expect(mockEval).not.toHaveBeenCalled();
+    expect(mockResolve).not.toHaveBeenCalled();
+  });
+
+  it('resolves legacy result ownership inside the delivery transaction without another pool checkout', async () => {
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        requestId: 'legacy-owner',
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        status: 'success',
+        text: 'reply',
+        usage: { promptTokens: 2, completionTokens: 3, totalTokens: 5 },
+      },
+      'web:user-1',
+      new Map(),
+    );
+    expect(mockTransaction.query).toHaveBeenCalledWith(
+      'SELECT id FROM users WHERE id=$1',
+      ['user-1'],
+    );
+    expect(getUserById).not.toHaveBeenCalled();
+    expect(mockIncrementDailyTokens).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      2,
+      3,
+      5,
+      mockTransaction,
+    );
+  });
+
+  it('retains pending request and session ownership when delivery rolls back', async () => {
+    mockDeliver.mockRejectedValueOnce(new Error('transaction rolled back'));
+    const timeout = setTimeout(() => undefined, 10_000);
+    const pendingRequests = new Map<string, PendingInboxRequest>([
+      [
+        'rollback',
+        {
+          accountId: 'web:user-1',
+          ownerUserId: 'user-1',
+          sessionId: 'session-1',
+          userMessageId: 'u',
+          autoDeliver: false,
+          resolve: mockResolve,
+          reject: mockReject,
+          timeout,
+        },
+      ],
+    ]);
+    await expect(
+      processAiChatOutboxPayload(
+        {
+          type: 'response',
+          requestId: 'rollback',
+          status: 'success',
+          text: 'done',
+        },
+        'web:user-1',
+        pendingRequests,
+      ),
+    ).rejects.toThrow('transaction rolled back');
+    expect(pendingRequests.has('rollback')).toBe(true);
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockEval).not.toHaveBeenCalled();
+    expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
+    clearTimeout(timeout);
+  });
+
+  it('does not consume result or billing receipts for a synthetic timeout', async () => {
+    await processAiChatOutboxPayload(
+      {
+        type: 'response',
+        requestId: 'synthetic',
+        status: 'error',
+        text: 'interrupted',
+        sessionId: 'session-1',
+        ownerUserId: 'user-1',
+        metadata: { synthetic_terminal: true },
+      },
+      'web:user-1',
+      new Map(),
+    );
+    expect(mockStoreMessage).toHaveBeenCalledTimes(1);
+    expect(mockDeliver).not.toHaveBeenCalled();
+    expect(mockStoreConversationLog).not.toHaveBeenCalled();
+    expect(mockIncrementDailyTokens).not.toHaveBeenCalled();
+    expect(mockRecover).not.toHaveBeenCalled();
+  });
+
+  it('does not repeat committed usage or messages on result redelivery', async () => {
+    const delivered = new Map<string, string | null>();
+    mockDeliver.mockImplementation(async (id, _account, callback) => {
+      if (delivered.has(id)) return delivered.get(id);
+      const result = await callback(mockTransaction);
+      delivered.set(id, result);
+      return result;
+    });
+    const payload = {
+      type: 'response',
+      requestId: 'dedup',
+      accountId: 'web:user-1',
+      ownerUserId: 'user-1',
+      sessionId: 'session-1',
+      userMessageId: 'user-1',
+      status: 'success',
+      text: 'done',
+      usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+    };
+    await processAiChatOutboxPayload(payload, undefined, new Map());
+    await processAiChatOutboxPayload(payload, undefined, new Map());
+    expect(mockIncrementDailyTokens).toHaveBeenCalledTimes(1);
+    expect(mockIncrementDailyMessageCount).toHaveBeenCalledTimes(1);
+    expect(mockStoreMessage).toHaveBeenCalledTimes(1);
+    expect(mockStoreConversationLog).toHaveBeenCalledTimes(1);
+    expect(mockRecover).toHaveBeenCalledWith({
+      requestId: 'dedup',
+      promptTokens: 2,
+      completionTokens: 1,
+    });
+  });
+
+  it('keeps committed success when stream publication fails', async () => {
+    mockPublish.mockRejectedValueOnce(new Error('Redis unavailable'));
+    const timeout = setTimeout(() => undefined, 10_000);
+    const pendingRequests = new Map<string, PendingInboxRequest>([
+      [
+        'notify',
+        {
+          accountId: 'web:user-1',
+          ownerUserId: 'user-1',
+          sessionId: 'session-1',
+          userMessageId: 'u',
+          autoDeliver: false,
+          resolve: mockResolve,
+          reject: mockReject,
+          timeout,
+        },
+      ],
+    ]);
+    await expect(
+      processAiChatOutboxPayload(
+        {
+          type: 'response',
+          requestId: 'notify',
+          status: 'success',
+          text: 'done',
+        },
+        'web:user-1',
+        pendingRequests,
+      ),
+    ).resolves.toBeUndefined();
+    expect(mockResolve).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'success' }),
+    );
+    expect(mockStoreMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails delivery before billing when the required usage log cannot be stored', async () => {
+    mockStoreConversationLog.mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
+    await expect(
+      processAiChatOutboxPayload(
+        {
+          type: 'response',
+          requestId: 'failed-log',
+          status: 'success',
+          text: 'done',
+          sessionId: 'session-1',
+          ownerUserId: 'user-1',
+          usage: { totalTokens: 5 },
+        },
+        'web:user-1',
+        new Map(),
+      ),
+    ).rejects.toThrow('database unavailable');
+    expect(mockStoreMessage).not.toHaveBeenCalled();
+    expect(mockRecover).not.toHaveBeenCalled();
   });
 
   it('resolves AI Chat responses with every assistant transcript message', async () => {
@@ -154,6 +376,7 @@ describe('processAiChatOutboxPayload', () => {
         },
         tool_context: null,
       }),
+      mockTransaction,
     );
     expect(mockStoreMessage).toHaveBeenNthCalledWith(
       2,
@@ -166,11 +389,16 @@ describe('processAiChatOutboxPayload', () => {
           request_id: 'req-1',
         }),
       }),
+      mockTransaction,
     );
-    expect(mockTouchChatSession).toHaveBeenCalledWith('session-1');
+    expect(mockTouchChatSession).toHaveBeenCalledWith(
+      'session-1',
+      mockTransaction,
+    );
     expect(mockIncrementDailyMessageCount).toHaveBeenCalledWith(
       'user-1',
       expect.any(String),
+      mockTransaction,
     );
     expect(pendingRequests.has('req-1')).toBe(false);
     expect(mockEval).toHaveBeenCalledWith(
@@ -241,6 +469,7 @@ describe('processAiChatOutboxPayload', () => {
       15,
       5,
       20,
+      mockTransaction,
     );
     expect(mockSettleBillingReservationDetailed).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -253,6 +482,7 @@ describe('processAiChatOutboxPayload', () => {
       expect.objectContaining({
         usage: { promptTokens: 15, completionTokens: 5, totalTokens: 20 },
       }),
+      mockTransaction,
     );
     expect(mockPublish).toHaveBeenCalledWith(
       'ipc:ai-chat:stream:session-2',
@@ -305,6 +535,7 @@ describe('processAiChatOutboxPayload', () => {
       20,
       0,
       20,
+      mockTransaction,
     );
   });
 
@@ -340,11 +571,16 @@ describe('processAiChatOutboxPayload', () => {
           request_id: 'req-payload',
         }),
       }),
+      mockTransaction,
     );
-    expect(mockTouchChatSession).toHaveBeenCalledWith('session-payload');
+    expect(mockTouchChatSession).toHaveBeenCalledWith(
+      'session-payload',
+      mockTransaction,
+    );
     expect(mockIncrementDailyMessageCount).toHaveBeenCalledWith(
       'user-payload',
       expect.any(String),
+      mockTransaction,
     );
     expect(mockEval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('DEL', KEYS[1])"),
@@ -397,6 +633,7 @@ describe('processAiChatOutboxPayload', () => {
           request_id: 'req-error',
         }),
       }),
+      mockTransaction,
     );
     expect(mockIncrementDailyMessageCount).not.toHaveBeenCalled();
     expect(mockResolve).toHaveBeenCalledWith(

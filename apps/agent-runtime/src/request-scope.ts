@@ -1,6 +1,13 @@
-import type { Artifact, TraceEventEntry, TranscriptEvent } from './types.js';
+import type {
+  Artifact,
+  TokenUsage,
+  TraceEventEntry,
+  TranscriptEvent,
+} from './types.js';
 
 export interface RequestScope {
+  /** Completed provider-turn usage remains available if the outer watchdog fires. */
+  partialUsage?: TokenUsage;
   requestId?: string;
   /** 最近一次收到 Pi 流式事件、回合事件或工具事件的时间，用于判定请求是否真正停滞。 */
   lastActivityAtMs: number;

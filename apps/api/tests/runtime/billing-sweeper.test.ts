@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockDurableQuery,
   mockListStalePendingReservations,
   mockGetConversationLogByRequestId,
   mockRecoverStalePendingReservation,
 } = vi.hoisted(() => ({
+  mockDurableQuery: vi.fn(async () => ({ rowCount: 0, rows: [] })),
   mockListStalePendingReservations: vi.fn(),
   mockGetConversationLogByRequestId: vi.fn(),
   mockRecoverStalePendingReservation: vi.fn(),
 }));
 
+vi.mock('../../src/infrastructure/db-pool.js', () => ({
+  getDbPool: () => ({ query: mockDurableQuery }),
+}));
 vi.mock('../../src/infrastructure/db.js', () => ({
   listStalePendingReservations: mockListStalePendingReservations,
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
@@ -40,6 +45,79 @@ describe('billing sweeper', () => {
       actualChargeCoins: 0,
       rawChargeCoins: 0,
     });
+  });
+
+  it('preserves unresolved durable execution reservations for late actual usage', async () => {
+    mockListStalePendingReservations.mockResolvedValueOnce([
+      {
+        request_id: 'unknown',
+        user_id: 'user',
+        created_at: '2020-01-01T00:00:00Z',
+      },
+    ]);
+    mockDurableQuery.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+    await runBillingSweepOnce();
+    expect(mockRecoverStalePendingReservation).not.toHaveBeenCalled();
+  });
+
+  it('settles known durable usage even when message delivery rolled back its conversation log', async () => {
+    mockListStalePendingReservations.mockResolvedValueOnce([
+      {
+        request_id: 'delivery-failed',
+        user_id: 'user',
+        created_at: isoMinutesAgo(10),
+      },
+    ]);
+    mockDurableQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [
+        {
+          state: 'result_ready',
+          result: {
+            usage: {
+              promptTokens: 120,
+              completionTokens: 30,
+              totalTokens: 200,
+            },
+          },
+        },
+      ],
+    } as never);
+    await runBillingSweepOnce();
+    expect(mockRecoverStalePendingReservation).toHaveBeenCalledWith({
+      requestId: 'delivery-failed',
+      promptTokens: 170,
+      completionTokens: 30,
+    });
+  });
+
+  it.each([
+    {
+      state: 'interrupted',
+      result: { usage: { promptTokens: 0, completionTokens: 0 } },
+    },
+    {
+      state: 'result_ready',
+      result: {
+        metadata: { synthetic_terminal: true },
+        usage: { promptTokens: 0 },
+      },
+    },
+    { state: 'result_ready', result: {} },
+  ])('keeps unknown or synthetic durable usage pending: %j', async (row) => {
+    mockListStalePendingReservations.mockResolvedValueOnce([
+      {
+        request_id: 'unknown',
+        user_id: 'user',
+        created_at: isoMinutesAgo(180),
+      },
+    ]);
+    mockDurableQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [row],
+    } as never);
+    await runBillingSweepOnce();
+    expect(mockRecoverStalePendingReservation).not.toHaveBeenCalled();
   });
 
   it('按对话日志真实用量补结算有日志的预留', async () => {

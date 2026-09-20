@@ -85,6 +85,7 @@ function createTools(
     canEdit: vi.fn(async () => true),
     update: vi.fn(async (_accountId: string, content: string) => {
       soulContent = content;
+      return true;
     }),
   };
   return createPiCustomTools({
@@ -307,6 +308,7 @@ describe('createPiCustomTools', () => {
       canEdit: vi.fn(async () => true),
       update: vi.fn(async (_accountId: string, content: string) => {
         soulContent = content;
+        return true;
       }),
     };
     const tools = createTools({
@@ -348,7 +350,39 @@ describe('createPiCustomTools', () => {
       previousHash: baseHash,
       charCount: newSoul.length,
     });
-    expect(soulStore.update).toHaveBeenCalledWith('web:user-1', newSoul);
+    expect(soulStore.update).toHaveBeenCalledWith(
+      'web:user-1',
+      newSoul,
+      baseHash,
+    );
+  });
+
+  it('reports a conflict when Soul changes after the tool preflight read', async () => {
+    const soulStore = {
+      read: vi.fn(async () => 'original'),
+      canEdit: vi.fn(async () => true),
+      update: vi.fn(async () => false),
+    };
+    const tools = createTools({ soulStore });
+    const read = await tools
+      .find((tool) => tool.name === 'read_soul')!
+      .execute('read', {}, undefined, undefined, undefined as never);
+    const baseHash = (read.details as { sha256: string }).sha256;
+    const result = await tools
+      .find((tool) => tool.name === 'edit_soul')!
+      .execute(
+        'edit',
+        {
+          baseHash,
+          newContent: 'replacement',
+          reason: 'User requested update',
+        },
+        undefined,
+        undefined,
+        undefined as never,
+      );
+    expect(result.details).toMatchObject({ isError: true });
+    expect(result.details).not.toHaveProperty('newHash');
   });
 
   it('rejects Soul edits without baseHash or with a stale hash', async () => {
@@ -358,6 +392,7 @@ describe('createPiCustomTools', () => {
       canEdit: vi.fn(async () => true),
       update: vi.fn(async (_accountId: string, content: string) => {
         soulContent = content;
+        return true;
       }),
     };
     const missingHashTools = createTools({
@@ -679,7 +714,9 @@ describe('createPiCustomTools', () => {
     fs.mkdirSync(docsDir);
     fs.writeFileSync(
       path.join(docsDir, 'knowledge.md'),
-      ['甲木生于寅月', '乙木见流年庚金', '丙火无关行', '括号示例 (甲)'].join('\n'),
+      ['甲木生于寅月', '乙木见流年庚金', '丙火无关行', '括号示例 (甲)'].join(
+        '\n',
+      ),
     );
     const tools = createTools({
       readableSkills: [readableSkill],

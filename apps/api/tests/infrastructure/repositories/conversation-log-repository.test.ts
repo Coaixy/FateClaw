@@ -1,3 +1,4 @@
+import type pg from 'pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGetDbPool } = vi.hoisted(() => ({
@@ -53,6 +54,21 @@ function createMockPool(options?: { rows?: unknown[]; rowCounts?: number[] }) {
 describe('conversation log repository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('joins the result transaction without committing or releasing its client', async () => {
+    const { clientCalls, client } = createMockPool();
+    mockGetDbPool.mockClear();
+    await storeConversationLog(
+      { id: 'log', accountId: 'account', requestId: 'request', transcript: [] },
+      client as unknown as pg.PoolClient,
+    );
+    expect(clientCalls).toHaveLength(2);
+    expect(clientCalls.every((call) => call.sql.includes('INSERT INTO'))).toBe(
+      true,
+    );
+    expect(client.release).not.toHaveBeenCalled();
+    expect(mockGetDbPool).not.toHaveBeenCalled();
   });
 
   it('stores summary metadata and payload rows in one transaction', async () => {

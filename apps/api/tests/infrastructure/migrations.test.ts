@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MIGRATIONS } from '../../src/infrastructure/migrations/definitions.js';
 import { runDatabaseMigrations } from '../../src/infrastructure/migrations.js';
 
 interface QueryCall {
@@ -60,14 +61,9 @@ describe('runDatabaseMigrations', () => {
   });
 
   it('skips migrations already recorded in the ledger', async () => {
-    const { client, calls } = createMockClient([
-      '0001_core_schema_baseline',
-      '0070_agent_runtime_and_billing_perf',
-      '0071_cleanup_invalid_phone_users',
-      '0072_purge_orphan_bundle_subscriptions',
-      '0073_drop_dead_feature_tables',
-      '0074_drop_removed_feature_tables',
-    ]);
+    const { client, calls } = createMockClient(
+      MIGRATIONS.map((migration) => migration.id),
+    );
 
     await runDatabaseMigrations(client as never);
 

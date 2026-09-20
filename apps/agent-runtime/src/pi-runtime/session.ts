@@ -28,6 +28,7 @@ import {
   extractLatestAssistantResult,
 } from './events.js';
 import {
+  createAiChatStreamPublisher,
   enrichAiChatStreamEvent,
   publishAiChatStreamEvent,
   pushAiChatOutboxMessage,
@@ -158,6 +159,8 @@ export async function runPiSession(args: {
   const allowedToolNames = customTools.map((tool) => tool.name);
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: true },
+    // Warming issues extra billable calls outside the user-requested turn.
+    cacheWarming: 'off',
     retry: { enabled: true, maxRetries: 2 },
     images: { blockImages: true },
     enableInstallTelemetry: false,
@@ -187,6 +190,21 @@ export async function runPiSession(args: {
     abort: () => session.abort(),
   });
 
+  const stream = createAiChatStreamPublisher((event) => {
+    void publishAiChatStreamEvent({
+      sessionId: args.containerInput.sessionId,
+      event: enrichAiChatStreamEvent({
+        event,
+        requestId: getRequestId(args.requestScope),
+        accountId: args.containerInput.accountId,
+        sessionId: args.containerInput.sessionId,
+      }),
+    }).catch((err) => {
+      log(
+        `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  });
   const unsubscribe = session.subscribe(
     createPiEventCollector({
       requestScope: args.requestScope,
@@ -196,21 +214,7 @@ export async function runPiSession(args: {
       setLastAssistantText(text) {
         lastAssistantText = text;
       },
-      publishStreamEvent(event) {
-        void publishAiChatStreamEvent({
-          sessionId: args.containerInput.sessionId,
-          event: enrichAiChatStreamEvent({
-            event,
-            requestId: getRequestId(args.requestScope),
-            accountId: args.containerInput.accountId,
-            sessionId: args.containerInput.sessionId,
-          }),
-        }).catch((err) => {
-          log(
-            `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      },
+      publishStreamEvent: stream.publish,
       pushOutboxProgress(message) {
         void pushAiChatOutboxMessage({
           outboxQueue: args.containerInput.outboxQueue,
@@ -280,6 +284,7 @@ export async function runPiSession(args: {
     throw err;
   } finally {
     unsubscribe();
+    stream.close();
     session.dispose();
   }
 }

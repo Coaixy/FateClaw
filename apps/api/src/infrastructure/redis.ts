@@ -17,13 +17,22 @@ export async function connectRedis(): Promise<void> {
     throw new Error('缺少 REDIS_URL 配置');
   }
 
-  redis = new Redis(url, {
-    maxRetriesPerRequest: null, // BRPOP 需要
+  const commands = new Redis(url, {
+    maxRetriesPerRequest: 1,
+    commandTimeout: 5_000,
+    connectTimeout: 5_000,
+    enableOfflineQueue: false,
     enableReadyCheck: true,
     lazyConnect: true,
   });
 
-  await redis.connect();
+  try {
+    await commands.connect();
+  } catch (error) {
+    commands.disconnect();
+    throw error;
+  }
+  redis = commands;
   logger.info('Redis 已连接');
 }
 
@@ -35,11 +44,22 @@ export function getRedis(): Redis {
 }
 
 export async function disconnectRedis(): Promise<void> {
-  if (redis) {
-    await redis.quit();
-    redis = null;
-    logger.info('Redis 已断开');
+  const commands = redis;
+  redis = null;
+  if (!commands) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      commands.quit(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 5_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    commands.disconnect();
   }
+  logger.info('Redis 已断开');
 }
 
 /**

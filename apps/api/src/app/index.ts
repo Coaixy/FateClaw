@@ -1,3 +1,7 @@
+import {
+  startAgentRequestRecovery,
+  stopAgentRequestRecovery,
+} from '../runtime/agent-request-recovery.js';
 /**
  * FateClaw Runtime — 启动入口
  *
@@ -101,6 +105,7 @@ export async function main(): Promise<void> {
   startPiSessionHealthWorker();
   // 启动 inbox 堆积巡检任务（发现账号级 agent-runtime 消费停滞并自动清理告警）
   startInboxStallSweeper();
+  startAgentRequestRecovery();
 
   await startApiServer();
 
@@ -114,6 +119,7 @@ export async function main(): Promise<void> {
     try {
       // 等待所有子进程真正退出（给足 daemon 的 30s drain 窗口，内部有等待上限），
       // 再断开 Redis/DB——否则子进程排空中的响应会因连接先被关闭而丢失。
+      await stopAgentRequestRecovery();
       await stopAllLocalAgents();
       stopRetentionWorker();
       stopBillingSweepWorker();

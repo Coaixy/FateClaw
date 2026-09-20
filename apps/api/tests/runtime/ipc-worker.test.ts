@@ -46,6 +46,16 @@ const {
   mockPexpire: vi.fn(async () => 1),
 }));
 
+vi.mock(
+  '../../src/infrastructure/repositories/agent-requests-repository.js',
+  () => ({
+    admitAgentRequest: vi.fn(async () => 'execution-1'),
+    markAgentRequestDispatched: vi.fn(async () => true),
+    requestAgentCancellation: vi.fn(async () => undefined),
+    persistAgentFailure: vi.fn(async (_id, payload) => payload),
+  }),
+);
+
 vi.mock('../../src/infrastructure/db.js', () => ({
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,
@@ -431,7 +441,13 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       result.requestId,
     );
     expect(getUserByAccountId).not.toHaveBeenCalled();
-    expect(mockEnsureLocalAgentRunning).toHaveBeenCalledWith('web:user-1');
+    expect(mockEnsureLocalAgentRunning).toHaveBeenCalledWith(
+      'web:user-1',
+      expect.objectContaining({
+        deadlineAtMs: expect.any(Number),
+        isCancelled: expect.any(Function),
+      }),
+    );
     expect(mockRetainLocalAgent).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {

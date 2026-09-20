@@ -168,6 +168,22 @@ Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 cu
 
 宿主在 outbox handler 中把 usage、模型、事件计数和摘要写入 `conversation_logs`，把 transcript、traceEvents 和 agentGraph 正文写入 `conversation_log_payloads`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
 
+## Runtime transport and stream batching
+
+- Each agent daemon owns two Redis connections. The inbox connection is used only
+  for blocking reads; heartbeat, cancellation, stream publication and outbox writes
+  use the command connection. The ready signal is emitted only after both connect.
+- Shutdown disconnects the blocking connection directly, since `QUIT` would wait
+  behind `BRPOP`. Command connection shutdown waits at most five seconds before
+  disconnecting. This bounds Redis cleanup, not the entire daemon drain sequence.
+- Each Pi request coalesces consecutive assistant or thinking text updates within
+  a 50 ms window. Full snapshots remain available to reconnecting clients, and
+  merged deltas contain all text added within the window. A stream type change,
+  turn change, replacement snapshot, or non-text event flushes pending text first.
+- Request completion, cancellation and errors flush pending text and clear the
+  batching timer through the Pi session cleanup path. Publication remains
+  best-effort; persisted final messages remain the delivery source of truth.
+
 ## 容易误判的点
 
 - 当前不是每条消息临时起一个 agent，而是每个 runtimeId 复用一个常驻 agent-runtime。
@@ -178,3 +194,9 @@ Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 cu
 - 系统排盘不再使用旧版说明文件或独立脚本目录；参数 schema 和 runner 绑定在 `apps/api/src/modules/chat/paipan-registry.ts` 中维护。
 - 用户知识正文不存 DB；DB 只存控制平面 metadata、权限、版本、安装状态和 bundle 地址。
 - 不要在 agent-runtime 里找 one-shot stdin/stdout 入口；当前唯一入口是 `daemon.ts`。
+
+## Reliability contract
+
+See [performance and reliability](performance-and-reliability.md) for the durable
+admission state machine, result acknowledgement, recovery, bounded queues and
+Pi 0.86.0 deployment contract.

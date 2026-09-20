@@ -1,9 +1,5 @@
-import {
-  addAccountListener,
-  InboxRequestResult,
-  submitAiChatInboxRequest,
-} from './ipc-worker.js';
-import { ensureLocalAgentRunning } from './local-runner.js';
+import { InboxRequestResult, submitAiChatInboxRequest } from './ipc-worker.js';
+import type { NewMessage } from '../shared/types.js';
 import {
   type HistoryMessage,
   type SessionBoardContext,
@@ -41,12 +37,8 @@ export async function dispatchAiChatPrompt(input: {
   llmRuntime?: EffectiveLlmRuntimeConfig;
   entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
+  messageToPersist?: NewMessage;
 }): Promise<InboxRequestResult> {
-  if (input.waitForResponse !== false) {
-    await ensureLocalAgentRunning(input.accountId);
-    addAccountListener(input.accountId);
-  }
-
   return submitAiChatInboxRequest({
     accountId: input.accountId,
     userMessage: input.userMessage,
@@ -65,5 +57,6 @@ export async function dispatchAiChatPrompt(input: {
     llmRuntime: input.llmRuntime,
     entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: input.waitForResponse,
+    messageToPersist: input.messageToPersist,
   });
 }

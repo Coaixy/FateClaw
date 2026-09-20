@@ -35,7 +35,6 @@ import {
   markChatSessionPiSessionArchiveRestored,
   restoreArchivedChatSession,
   shareOwnedChatSession,
-  storeMessage,
   updateChatSessionTitle,
 } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
@@ -128,6 +127,7 @@ export interface OwnedChatSessionTurnResult {
 }
 
 interface PreparedOwnedChatSessionTurn {
+  userMessage: NewMessage;
   userId: string;
   session: ChatSession;
   input: NormalizedChatSessionMessageInput;
@@ -818,7 +818,6 @@ async function prepareOwnedChatSessionTurn(
       is_bot_message: false,
       session_id: session.id,
     };
-    await storeMessage(userMessage);
     const boardMessages = await getSessionMessagesWithToolContext(
       session.account_id,
       session.id,
@@ -834,12 +833,11 @@ async function prepareOwnedChatSessionTurn(
             }
           : undefined,
     });
-    const runtimeUserMessage =
-      buildRuntimeUserMessageForBoardFirstQuestion({
-        input,
-        previousMessages,
-        sessionBoardContexts,
-      });
+    const runtimeUserMessage = buildRuntimeUserMessageForBoardFirstQuestion({
+      input,
+      previousMessages,
+      sessionBoardContexts,
+    });
 
     const structured = await buildStructuredInputForSession(
       {
@@ -856,6 +854,7 @@ async function prepareOwnedChatSessionTurn(
 
     return ok({
       userId,
+      userMessage,
       session,
       input,
       msgId,
@@ -903,6 +902,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       guashiScriptTemplate: structured.guashiScriptTemplate,
       sessionId: session.id,
       userMessageId: msgId,
+      messageToPersist: prepared.userMessage,
       requestId,
       llmRuntime,
       entitlementSnapshot: prepared.entitlementSnapshot,
@@ -960,6 +960,7 @@ async function completeOwnedChatSessionTurn(
       guashiScriptTemplate: structured.guashiScriptTemplate,
       sessionId: session.id,
       userMessageId: msgId,
+      messageToPersist: prepared.userMessage,
       requestId,
       llmRuntime,
       entitlementSnapshot: prepared.entitlementSnapshot,

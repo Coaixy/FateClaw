@@ -1,3 +1,4 @@
+import type { DbQueryable } from './db-pool.js';
 import { getDbPool } from './db.js';
 import { getRedis } from './redis.js';
 
@@ -139,8 +140,9 @@ async function getPublicStatusTokenUsageSeries(
 export async function incrementDailyMessageCount(
   userId: string,
   date: string,
+  db: DbQueryable = getDbPool(),
 ): Promise<void> {
-  await getDbPool().query(
+  await db.query(
     `INSERT INTO daily_usage (user_id, date, msg_count)
      VALUES ($1, $2, 1)
      ON CONFLICT (user_id, date) DO UPDATE SET msg_count = daily_usage.msg_count + 1`,
@@ -154,8 +156,9 @@ export async function incrementDailyTokens(
   inputTokens: number,
   outputTokens: number,
   totalTokens = inputTokens + outputTokens,
+  db: DbQueryable = getDbPool(),
 ): Promise<void> {
-  await getDbPool().query(
+  await db.query(
     `INSERT INTO daily_usage (user_id, date, msg_count, input_tokens, output_tokens, total_tokens)
      VALUES ($1, $2, 0, $3, $4, $5)
      ON CONFLICT (user_id, date) DO UPDATE SET

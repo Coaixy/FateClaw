@@ -227,7 +227,13 @@ describe('local-runner', () => {
     vi.setSystemTime(new Date('2026-06-05T00:00:01.000Z'));
     await ensureLocalAgentRunning('account-newer');
     vi.setSystemTime(new Date('2026-06-05T00:00:02.000Z'));
-    await ensureLocalAgentRunning('account-third');
+    const third = ensureLocalAgentRunning('account-third');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+    spawnedChildren[0].child.exitCode = 0;
+    spawnedChildren[0].child.emit('exit', 0, null);
+    await vi.advanceTimersByTimeAsync(100);
+    await third;
 
     expect(mockSpawn).toHaveBeenCalledTimes(3);
     expect(spawnedChildren[0].child.kill).toHaveBeenCalledWith('SIGTERM');
@@ -244,14 +250,96 @@ describe('local-runner', () => {
     await ensureLocalAgentRunning('account-1');
     retainLocalAgent('account-1');
 
-    await expect(ensureLocalAgentRunning('account-2')).rejects.toThrow(
-      '本地 agent-runtime 常驻进程已达到上限 1',
+    const pending = ensureLocalAgentRunning('account-2', {
+      deadlineAtMs: Date.now() + 500,
+    });
+    const rejected = expect(pending).rejects.toThrow(
+      '等待本地 agent-runtime 容量超时',
     );
+    await vi.advanceTimersByTimeAsync(500);
+    await rejected;
 
     expect(mockSpawn).toHaveBeenCalledTimes(1);
     expect(
       __getLocalAgentStateForTests().map((item) => item.accountId),
     ).toEqual(['account-1']);
+  });
+
+  it('waits for busy capacity to release and for the reclaimed process to exit', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 1,
+      idleTtlMs: 86_400_000,
+    });
+    await ensureLocalAgentRunning('busy');
+    const lease = retainLocalAgent('busy');
+    const next = ensureLocalAgentRunning('waiting');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    await releaseLocalAgent(lease);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(spawnedChildren[0].child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    spawnedChildren[0].child.exitCode = 0;
+    spawnedChildren[0].child.emit('exit', 0, null);
+    await vi.advanceTimersByTimeAsync(100);
+    await next;
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a capacity waiter without reserving or starting a process', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 1,
+      idleTtlMs: 86_400_000,
+    });
+    await ensureLocalAgentRunning('busy');
+    retainLocalAgent('busy');
+    let cancelled = false;
+    const next = ensureLocalAgentRunning('cancelled', {
+      isCancelled: () => cancelled,
+    });
+    const rejection = expect(next).rejects.toThrow('请求已取消或超时');
+    await vi.advanceTimersByTimeAsync(100);
+    cancelled = true;
+    await vi.advanceTimersByTimeAsync(100);
+    await rejection;
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('admits simultaneous distinct accounts without counting waiters as starts', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 2,
+      idleTtlMs: 86_400_000,
+    });
+    await Promise.all([
+      ensureLocalAgentRunning('one'),
+      ensureLocalAgentRunning('two'),
+    ]);
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+    expect(__getLocalAgentStateForTests()).toHaveLength(2);
+  });
+
+  it('shares an in-flight start while cancelling only the requesting waiter', async () => {
+    mockSpawn.mockImplementationOnce(
+      (command: string, args: string[], options: unknown) => {
+        const child = createChild();
+        spawnedChildren.push({ child, command, args, options });
+        return child;
+      },
+    );
+    let cancelled = false;
+    const one = ensureLocalAgentRunning('shared', {
+      isCancelled: () => cancelled,
+    });
+    const rejection = expect(one).rejects.toThrow('请求已取消或超时');
+    const two = ensureLocalAgentRunning('shared');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    cancelled = true;
+    await vi.advanceTimersByTimeAsync(100);
+    await rejection;
+    spawnedChildren[0].child.stdout.write(`${READY_SENTINEL}\n`);
+    await two;
+    expect(__getLocalAgentStateForTests()).toHaveLength(1);
   });
 
   it('removes records and timers when child exits', async () => {

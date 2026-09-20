@@ -120,6 +120,7 @@ export interface SessionBoardContext {
 }
 
 export interface ChatTaskInboxRequest {
+  executionId?: string;
   type: 'chat' | 'task';
   requestId: string;
   accountId: string;

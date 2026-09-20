@@ -3,18 +3,33 @@
  * 替代原先通过 IPC 文件同步的方式，所有数据实时从 DB 查询。
  */
 
+import { createHash } from 'node:crypto';
 import pg from 'pg';
+
+import { log } from './io.js';
 
 const { Pool } = pg;
 const WEB_CHAT_RUNTIME_PREFIX = 'web:';
 
 let pool: pg.Pool | null = null;
 
-function getPool(): pg.Pool {
+export function getAgentDbPool(): pg.Pool {
   if (!pool) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error('缺少 DATABASE_URL 环境变量');
-    pool = new Pool({ connectionString: url });
+    pool = new Pool({
+      connectionString: url,
+      max: 2,
+      connectionTimeoutMillis: 5_000,
+      idleTimeoutMillis: 30_000,
+      statement_timeout: 30_000,
+      query_timeout: 35_000,
+      idle_in_transaction_session_timeout: 15_000,
+    });
+    pool.on('error', () => {
+      // pg removes failed idle clients; subsequent operations acquire a new client.
+      log('Database idle connection failed; client removed from pool');
+    });
   }
   return pool;
 }
@@ -58,7 +73,7 @@ export async function queryEffectiveUserSkills(
   userId: string,
 ): Promise<EffectiveUserSkill[]> {
   if (!userId) return [];
-  const { rows } = await getPool().query(
+  const { rows } = await getAgentDbPool().query(
     `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
             s.bundle_uri, s.checksum, s.install_status, s.visibility,
             'self' as source,
@@ -132,10 +147,18 @@ export async function queryEffectiveUserSkillsByIds(
  * @remarks 用户级 Soul 优先于账号级历史 Soul，确保 Dashboard 维护的是唯一长期记忆来源。
  */
 export async function querySoulContent(accountId: string): Promise<string> {
+  return readSoulContent(getAgentDbPool(), accountId);
+}
+
+async function readSoulContent(
+  db: pg.Pool | pg.PoolClient,
+  accountId: string,
+  lock = false,
+): Promise<string> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
   if (webUserId) {
-    const userSoul = await getPool().query(
-      'SELECT soul_content FROM users WHERE id = $1',
+    const userSoul = await db.query(
+      `SELECT soul_content FROM users WHERE id = $1${lock ? ' FOR UPDATE' : ''}`,
       [webUserId],
     );
     const userContent =
@@ -143,19 +166,28 @@ export async function querySoulContent(accountId: string): Promise<string> {
         ?.soul_content || '';
     if (userContent.trim()) return userContent;
 
-    const { rows } = await getPool().query(
+    const { rows } = await db.query(
       `SELECT soul_content
        FROM accounts
        WHERE owner_id = $1
        ORDER BY enabled DESC, created_at ASC
-       LIMIT 1`,
+       LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
       [webUserId],
     );
     if (rows.length === 0) return '';
     return (rows[0] as { soul_content: string }).soul_content || '';
   }
 
-  const { rows } = await getPool().query(
+  if (lock) {
+    await db.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [
+      accountId,
+    ]);
+    await db.query(
+      'SELECT id FROM users WHERE id = (SELECT owner_id FROM accounts WHERE id = $1) FOR UPDATE',
+      [accountId],
+    );
+  }
+  const { rows } = await db.query(
     `SELECT
        a.soul_content AS account_soul_content,
        u.soul_content AS user_soul_content
@@ -186,7 +218,7 @@ export async function querySoulEditEnabled(
 ): Promise<boolean> {
   const webUserId = getUserIdFromWebChatRuntimeId(accountId);
   if (webUserId) {
-    const { rows } = await getPool().query(
+    const { rows } = await getAgentDbPool().query(
       'SELECT soul_edit_enabled FROM users WHERE id = $1',
       [webUserId],
     );
@@ -196,7 +228,7 @@ export async function querySoulEditEnabled(
     );
   }
 
-  const { rows } = await getPool().query(
+  const { rows } = await getAgentDbPool().query(
     `SELECT COALESCE(u.soul_edit_enabled, true) AS soul_edit_enabled
      FROM accounts a
      LEFT JOIN users u ON u.id = a.owner_id
@@ -210,40 +242,59 @@ export async function querySoulEditEnabled(
 }
 
 /**
- * 更新账号可见的用户级 Soul。
- *
- * @param accountId 当前 agent-runtime 账号 ID；站内 AI Chat 使用 web:{userId}。
- * @param content 新的完整 Soul 内容。
- * @returns 无返回值。
- * @remarks 优先写入账号所属用户的 users.soul_content；只有无 owner 的历史账号才回退写 accounts.soul_content。
+ * Compare the effective Soul and replace its canonical source in one transaction.
+ * Locks include legacy fallback rows because they contribute to the baseHash.
+ * Serialization or deadlock conflicts require a fresh read, never a blind retry.
  */
 export async function updateSoulContentDb(
   accountId: string,
   content: string,
-): Promise<void> {
-  const webUserId = getUserIdFromWebChatRuntimeId(accountId);
-  if (webUserId) {
-    await getPool().query(
-      'UPDATE users SET soul_content = $2 WHERE id = $1',
-      [webUserId, content],
-    );
-    return;
+  expectedHash: string,
+): Promise<boolean> {
+  const client = await getAgentDbPool().connect();
+  let discardClient = false;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    const current = await readSoulContent(client, accountId, true);
+    if (
+      createHash('sha256').update(current, 'utf8').digest('hex') !==
+      expectedHash
+    ) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    const webUserId = getUserIdFromWebChatRuntimeId(accountId);
+    let updated: pg.QueryResult;
+    if (webUserId) {
+      updated = await client.query(
+        'UPDATE users SET soul_content = $2 WHERE id = $1',
+        [webUserId, content],
+      );
+    } else {
+      updated = await client.query(
+        `UPDATE users SET soul_content = $2
+         WHERE id = (SELECT owner_id FROM accounts WHERE id = $1 AND owner_id IS NOT NULL)`,
+        [accountId, content],
+      );
+      if ((updated.rowCount ?? 0) === 0) {
+        updated = await client.query(
+          'UPDATE accounts SET soul_content = $2 WHERE id = $1',
+          [accountId, content],
+        );
+      }
+    }
+    await client.query('COMMIT');
+    return (updated.rowCount ?? 0) > 0;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      discardClient = true;
+    }
+    const code = (error as { code?: string }).code;
+    if (code === '40001' || code === '40P01') return false;
+    throw error;
+  } finally {
+    client.release(discardClient);
   }
-
-  const userUpdate = await getPool().query(
-    `UPDATE users
-     SET soul_content = $2
-     WHERE id = (
-       SELECT owner_id
-       FROM accounts
-       WHERE id = $1 AND owner_id IS NOT NULL
-     )`,
-    [accountId, content],
-  );
-  if ((userUpdate.rowCount ?? 0) > 0) return;
-
-  await getPool().query(
-    'UPDATE accounts SET soul_content = $2 WHERE id = $1',
-    [accountId, content],
-  );
 }

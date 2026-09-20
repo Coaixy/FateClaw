@@ -1,5 +1,5 @@
-import type { IncomingMessage, Server } from 'node:http';
-import type { Duplex } from 'node:stream';
+import websocket from '@fastify/websocket';
+import { StreamSubscriptions, attachStreamSocket } from './stream-sockets.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 
@@ -131,11 +131,7 @@ export type AiChatStreamEvent =
       };
     };
 
-const WEBSOCKET_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const MAX_CONTROL_PAYLOAD_BYTES = 125;
 const MAX_CLIENT_FRAME_BUFFER_BYTES = 1024 * 1024;
-const WS_PING_INTERVAL_MS = 30_000;
-const WS_PONG_TIMEOUT_MS = 60_000;
 const STREAM_TICKET_BYTES = 32;
 const STREAM_TICKET_TTL_SECONDS = 60;
 
@@ -289,202 +285,6 @@ export function streamEventFromResponsePayload(args: {
   });
 }
 
-function computeAcceptKey(key: string): string {
-  return createHash('sha1').update(`${key}${WEBSOCKET_GUID}`).digest('base64');
-}
-
-function writeFrame(socket: Duplex, opcode: number, payload: Buffer): void {
-  const length = payload.length;
-  const header =
-    length < 126
-      ? Buffer.allocUnsafe(2)
-      : length <= 0xffff
-        ? Buffer.allocUnsafe(4)
-        : Buffer.allocUnsafe(10);
-  header[0] = 0x80 | opcode;
-
-  if (length < 126) {
-    header[1] = length;
-  } else if (length <= 0xffff) {
-    header[1] = 126;
-    header.writeUInt16BE(length, 2);
-  } else {
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(length), 2);
-  }
-
-  socket.write(Buffer.concat([header, payload]));
-}
-
-function writeTextFrame(socket: Duplex, data: string): void {
-  writeFrame(socket, 0x1, Buffer.from(data, 'utf8'));
-}
-
-function writeCloseFrame(socket: Duplex, code = 1000, reason = ''): void {
-  const reasonBuffer = Buffer.from(reason, 'utf8').subarray(0, 123);
-  const payload = Buffer.allocUnsafe(2 + reasonBuffer.length);
-  payload.writeUInt16BE(code, 0);
-  reasonBuffer.copy(payload, 2);
-  writeFrame(socket, 0x8, payload);
-}
-
-function shouldCloseForPongTimeout(
-  lastPongAt: number,
-  now = Date.now(),
-): boolean {
-  return now - lastPongAt >= WS_PONG_TIMEOUT_MS;
-}
-
-interface ClientFrameParseResult {
-  consumed: number;
-  closeRequested: boolean;
-  closeCode?: number;
-  closeReason?: string;
-  pongReceived: boolean;
-}
-
-function parseClientFrames(
-  buffer: Buffer,
-  socket: Duplex,
-): ClientFrameParseResult {
-  let offset = 0;
-  let pongReceived = false;
-  while (offset + 2 <= buffer.length) {
-    const first = buffer[offset];
-    const second = buffer[offset + 1];
-    const opcode = first & 0x0f;
-    const masked = (second & 0x80) !== 0;
-    let length = second & 0x7f;
-    let headerLength = 2;
-
-    if (length === 126) {
-      if (offset + 4 > buffer.length) break;
-      length = buffer.readUInt16BE(offset + 2);
-      headerLength = 4;
-    } else if (length === 127) {
-      if (offset + 10 > buffer.length) break;
-      const longLength = buffer.readBigUInt64BE(offset + 2);
-      if (
-        longLength > BigInt(Number.MAX_SAFE_INTEGER) ||
-        longLength > BigInt(MAX_CLIENT_FRAME_BUFFER_BYTES)
-      ) {
-        return {
-          consumed: buffer.length,
-          closeRequested: true,
-          closeCode: 1009,
-          closeReason: 'frame too large',
-          pongReceived,
-        };
-      }
-      length = Number(longLength);
-      headerLength = 10;
-    }
-
-    if (!masked) {
-      return {
-        consumed: buffer.length,
-        closeRequested: true,
-        closeCode: 1002,
-        closeReason: 'client frame must be masked',
-        pongReceived,
-      };
-    }
-    if (length > MAX_CLIENT_FRAME_BUFFER_BYTES) {
-      return {
-        consumed: buffer.length,
-        closeRequested: true,
-        closeCode: 1009,
-        closeReason: 'frame too large',
-        pongReceived,
-      };
-    }
-    if (
-      (opcode === 0x8 || opcode === 0x9 || opcode === 0xa) &&
-      length > MAX_CONTROL_PAYLOAD_BYTES
-    ) {
-      return {
-        consumed: buffer.length,
-        closeRequested: true,
-        closeCode: 1002,
-        closeReason: 'invalid control frame',
-        pongReceived,
-      };
-    }
-
-    const maskLength = masked ? 4 : 0;
-    const frameLength = headerLength + maskLength + length;
-    if (offset + frameLength > buffer.length) break;
-
-    const payloadStart = offset + headerLength + maskLength;
-    const payload = Buffer.from(
-      buffer.subarray(payloadStart, payloadStart + length),
-    );
-    if (masked) {
-      const mask = buffer.subarray(offset + headerLength, payloadStart);
-      for (let i = 0; i < payload.length; i += 1) {
-        payload[i] ^= mask[i % 4];
-      }
-    }
-
-    if (opcode === 0x8) {
-      return {
-        consumed: offset + frameLength,
-        closeRequested: true,
-        closeCode: 1000,
-        pongReceived,
-      };
-    }
-    if (opcode === 0x9 && payload.length <= MAX_CONTROL_PAYLOAD_BYTES) {
-      writeFrame(socket, 0xa, payload);
-    }
-    if (opcode === 0xa) {
-      pongReceived = true;
-    }
-
-    offset += frameLength;
-  }
-
-  return { consumed: offset, closeRequested: false, pongReceived };
-}
-
-export const __parseClientFramesForTests = parseClientFrames;
-export const __getAiChatStreamWebSocketLimitsForTests = () => ({
-  maxClientFrameBufferBytes: MAX_CLIENT_FRAME_BUFFER_BYTES,
-  pingIntervalMs: WS_PING_INTERVAL_MS,
-  pongTimeoutMs: WS_PONG_TIMEOUT_MS,
-});
-export const __shouldCloseForPongTimeoutForTests = shouldCloseForPongTimeout;
-
-function isAiChatStreamPath(pathname: string): boolean {
-  return /^\/api\/chat-sessions\/s\/[^/]+\/stream$/.test(pathname);
-}
-
-function extractSessionId(pathname: string): string | null {
-  const match = /^\/api\/chat-sessions\/s\/([^/]+)\/stream$/.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function rejectUpgrade(socket: Duplex, status: number, message: string): void {
-  socket.write(
-    `HTTP/1.1 ${status} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
-  );
-  socket.destroy();
-}
-
-async function authenticateUpgrade(
-  _app: FastifyInstance,
-  _request: IncomingMessage,
-  url: URL,
-  sessionId: string,
-): Promise<string> {
-  const ticket = url.searchParams.get('ticket') || '';
-  if (!ticket) {
-    throw new Error('missing_ticket');
-  }
-  const payload = await consumeAiChatStreamTicket(ticket, sessionId);
-  return payload.userId;
-}
-
 /**
  * 消费 AI Chat WebSocket 连接票据，并校验其绑定的会话。
  *
@@ -550,7 +350,24 @@ async function verifySessionOwner(
   }
 }
 
-export function registerAiChatStreamWebSocket(app: FastifyInstance): void {
+export async function registerAiChatStreamWebSocket(
+  app: FastifyInstance,
+): Promise<void> {
+  await app.register(websocket, {
+    options: {
+      maxPayload: MAX_CLIENT_FRAME_BUFFER_BYTES,
+      perMessageDeflate: false,
+    },
+  });
+  const subscriptions = new StreamSubscriptions(() =>
+    getRedis().duplicate({
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      commandTimeout: 5_000,
+      connectTimeout: 5_000,
+    }),
+  );
+  app.addHook('onClose', async () => subscriptions.close());
   app.post<{
     Params: { sessionId: string };
   }>(
@@ -586,125 +403,40 @@ export function registerAiChatStreamWebSocket(app: FastifyInstance): void {
     },
   );
 
-  app.addHook('onReady', (done) => {
-    const server = app.server as Server;
-    server.on('upgrade', (request, socket, head) => {
-      void handleUpgrade(app, request, socket, head);
-    });
-    done();
-  });
-}
-
-async function handleUpgrade(
-  app: FastifyInstance,
-  request: IncomingMessage,
-  socket: Duplex,
-  head: Buffer,
-): Promise<void> {
-  const host = request.headers.host || 'localhost';
-  const url = new URL(request.url || '/', `http://${host}`);
-  if (!isAiChatStreamPath(url.pathname)) {
-    rejectUpgrade(socket, 404, 'Not Found');
-    return;
-  }
-
-  const sessionId = extractSessionId(url.pathname);
-  const websocketKey = request.headers['sec-websocket-key'];
-  if (!sessionId || typeof websocketKey !== 'string') {
-    rejectUpgrade(socket, 400, 'Bad Request');
-    return;
-  }
-
-  try {
-    await authenticateUpgrade(app, request, url, sessionId);
-  } catch (err) {
-    logger.warn({ err, sessionId }, 'AI Chat WebSocket 鉴权失败');
-    rejectUpgrade(socket, 401, 'Unauthorized');
-    return;
-  }
-
-  socket.write(
-    [
-      'HTTP/1.1 101 Switching Protocols',
-      'Upgrade: websocket',
-      'Connection: Upgrade',
-      `Sec-WebSocket-Accept: ${computeAcceptKey(websocketKey)}`,
-      '',
-      '',
-    ].join('\r\n'),
+  app.get<{ Params: { sessionId: string }; Querystring: { ticket?: string } }>(
+    '/api/chat-sessions/s/:sessionId/stream',
+    {
+      websocket: true,
+      preValidation: async (request, reply) => {
+        try {
+          if (!request.query.ticket) throw new Error('missing_ticket');
+          await consumeAiChatStreamTicket(
+            request.query.ticket,
+            request.params.sessionId,
+          );
+        } catch (err) {
+          logger.warn(
+            { err, sessionId: request.params.sessionId },
+            'AI Chat WebSocket authentication failed',
+          );
+          return reply.code(401).send({ error: 'Unauthorized' });
+        }
+      },
+    },
+    (socket, request) => {
+      const sessionId = request.params.sessionId;
+      attachStreamSocket(
+        socket,
+        subscriptions,
+        aiChatStreamChannel(sessionId),
+        JSON.stringify(
+          buildAiChatStreamEvent({
+            event: { type: 'connected' },
+            accountId: '',
+            sessionId,
+          }),
+        ),
+      );
+    },
   );
-
-  const subscriber = getRedis().duplicate();
-  let frameBuffer = Buffer.from(head);
-  let closed = false;
-  let lastPongAt = Date.now();
-  const closeWithFrame = (code = 1000, reason = '') => {
-    if (!closed) {
-      writeCloseFrame(socket, code, reason);
-    }
-    void close();
-  };
-  const close = async () => {
-    if (closed) return;
-    closed = true;
-    clearInterval(pingTimer);
-    socket.removeAllListeners('data');
-    await subscriber.quit().catch(() => {});
-    socket.destroy();
-  };
-  const pingTimer = setInterval(() => {
-    if (closed) return;
-    if (shouldCloseForPongTimeout(lastPongAt)) {
-      closeWithFrame(1001, 'pong timeout');
-      return;
-    }
-    writeFrame(socket, 0x9, Buffer.alloc(0));
-  }, WS_PING_INTERVAL_MS);
-  pingTimer.unref();
-
-  socket.on('data', (chunk) => {
-    if (frameBuffer.length + chunk.length > MAX_CLIENT_FRAME_BUFFER_BYTES) {
-      closeWithFrame(1009, 'frame too large');
-      return;
-    }
-    frameBuffer = Buffer.concat([frameBuffer, chunk]);
-    const result = parseClientFrames(frameBuffer, socket);
-    frameBuffer = frameBuffer.subarray(result.consumed);
-    if (result.pongReceived) {
-      lastPongAt = Date.now();
-    }
-    if (result.closeRequested) {
-      closeWithFrame(result.closeCode, result.closeReason);
-    }
-  });
-  socket.on('error', () => {
-    void close();
-  });
-  socket.on('close', () => {
-    void close();
-  });
-
-  try {
-    await subscriber.connect();
-    await subscriber.subscribe(aiChatStreamChannel(sessionId));
-    subscriber.on('message', (_channel, message) => {
-      if (!closed) {
-        writeTextFrame(socket, message);
-      }
-    });
-    writeTextFrame(
-      socket,
-      JSON.stringify(
-        buildAiChatStreamEvent({
-          event: { type: 'connected' },
-          accountId: '',
-          sessionId,
-        }),
-      ),
-    );
-  } catch (err) {
-    logger.error({ err, sessionId }, 'AI Chat WebSocket 订阅失败');
-    writeCloseFrame(socket, 1011, 'stream subscription failed');
-    await close();
-  }
 }

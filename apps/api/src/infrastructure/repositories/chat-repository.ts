@@ -1,5 +1,5 @@
 import { ChatSession, NewMessage } from '../../shared/types.js';
-import { getDbPool } from '../db-pool.js';
+import { getDbPool, type DbQueryable } from '../db-pool.js';
 import { logger } from '../logger.js';
 import { getRedis } from '../redis.js';
 import { getAccountsByUserId } from './accounts-repository.js';
@@ -7,8 +7,11 @@ import { getAccountsByUserId } from './accounts-repository.js';
 /** Redis 中每个账号保留的最大历史消息条数。 */
 const HISTORY_REDIS_MAX = 500;
 
-export async function storeMessage(msg: NewMessage): Promise<void> {
-  await getDbPool().query(
+export async function storeMessage(
+  msg: NewMessage,
+  db: DbQueryable = getDbPool(),
+): Promise<void> {
+  await db.query(
     `INSERT INTO messages (id, account_id, user_id, sender, sender_name, content, timestamp, is_from_me, is_bot_message, tool_context, session_id, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (id, account_id) DO UPDATE SET
@@ -326,11 +329,13 @@ export async function updateChatSessionTitle(
   );
 }
 
-export async function touchChatSession(id: string): Promise<void> {
-  await getDbPool().query(
-    `UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1`,
-    [id],
-  );
+export async function touchChatSession(
+  id: string,
+  db: DbQueryable = getDbPool(),
+): Promise<void> {
+  await db.query(`UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1`, [
+    id,
+  ]);
 }
 
 /**

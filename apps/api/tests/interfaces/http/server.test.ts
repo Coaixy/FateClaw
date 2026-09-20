@@ -89,6 +89,17 @@ describe('createApiServer auth guard', () => {
     await app.close();
   });
 
+  it('does not log stream ticket query credentials on failed upgrades', async () => {
+    await app.inject({
+      method: 'GET',
+      url: '/api/chat-sessions/s/session-1/stream?ticket=synthetic-test-ticket',
+    });
+    expect(mockLoggerWarn).toHaveBeenCalled();
+    expect(JSON.stringify(mockLoggerWarn.mock.calls)).not.toContain(
+      'synthetic-test-ticket',
+    );
+  });
+
   it('accepts a token whose auth version matches the current user', async () => {
     const token = app.jwt.sign({
       userId: 'user-1',

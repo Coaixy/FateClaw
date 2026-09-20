@@ -36,3 +36,9 @@ minimumReleaseAgeExclude:
   - iching-shifa@1.7.0
   - iching-shifa@1.7.1
   - iching-shifa@1.8.0
+  - '@earendil-works/chord@0.86.0'
+  - '@earendil-works/pi-agent-core@0.86.0'
+  - '@earendil-works/pi-ai@0.86.0'
+  - '@earendil-works/pi-coding-agent@0.86.0'
+  - '@earendil-works/pi-telemetry@0.86.0'
+  - '@earendil-works/pi-tui@0.86.0'

@@ -1,3 +1,4 @@
+import type pg from 'pg';
 import { getDbPool } from '../db-pool.js';
 
 export interface ConversationLogRow {
@@ -68,18 +69,21 @@ function countToolUseEvents(transcript: unknown[]): number {
   }, 0);
 }
 
-export async function storeConversationLog(log: {
-  id: string;
-  accountId: string;
-  requestId: string;
-  transcript: unknown[];
-  usage?: unknown;
-  model?: string | null;
-  provider?: string | null;
-  traceEvents?: unknown[];
-  piSession?: unknown;
-  agentGraph?: unknown;
-}): Promise<void> {
+export async function storeConversationLog(
+  log: {
+    id: string;
+    accountId: string;
+    requestId: string;
+    transcript: unknown[];
+    usage?: unknown;
+    model?: string | null;
+    provider?: string | null;
+    traceEvents?: unknown[];
+    piSession?: unknown;
+    agentGraph?: unknown;
+  },
+  transaction?: pg.PoolClient,
+): Promise<void> {
   const usesPiSession = Boolean(log.piSession);
   const agentGraph = usesPiSession ? undefined : log.agentGraph;
   const graphSummary =
@@ -90,9 +94,9 @@ export async function storeConversationLog(log: {
       : null;
   const transcript = usesPiSession ? [] : (log.transcript ?? []);
   const traceEvents = buildTraceEventsForStorage(log);
-  const client = await getDbPool().connect();
+  const client = transaction ?? (await getDbPool().connect());
   try {
-    await client.query('BEGIN');
+    if (!transaction) await client.query('BEGIN');
     await client.query(
       `INSERT INTO conversation_logs (
          id, account_id, request_id, usage, model, provider,
@@ -126,12 +130,12 @@ export async function storeConversationLog(log: {
         agentGraph ? JSON.stringify(agentGraph) : null,
       ],
     );
-    await client.query('COMMIT');
+    if (!transaction) await client.query('COMMIT');
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!transaction) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (!transaction) client.release();
   }
 }
 

@@ -61,6 +61,9 @@ interface LocalAgentRecord {
 }
 
 const localAgentProcesses = new Map<string, LocalAgentRecord>();
+const initializingAgents = new Map<string, LocalAgentRecord>();
+const retiringAgents = new Set<LocalAgentRecord>();
+let shuttingDown = false;
 let cachedLocalAgentPolicy: {
   value: LocalAgentRuntimePolicy;
   expiresAtMs: number;
@@ -226,14 +229,20 @@ function stopLocalAgentRecord(
 ): void {
   const current = localAgentProcesses.get(record.accountId);
   if (current === record) {
-    // 立即从容量账本删除，避免正在优雅退出的进程继续阻塞新 runtime。
+    // Remove from reuse while retaining its capacity until the child exits.
     localAgentProcesses.delete(record.accountId);
   }
   clearIdleTimer(record);
   record.stopping = true;
+  retiringAgents.add(record);
 
-  if (record.child.exitCode !== null || record.child.signalCode !== null) {
+  if (
+    record.child.pid === undefined ||
+    record.child.exitCode !== null ||
+    record.child.signalCode !== null
+  ) {
     clearForceKillTimer(record);
+    retiringAgents.delete(record);
     return;
   }
 
@@ -298,65 +307,91 @@ function findOldestIdleLocalAgent(): LocalAgentRecord | undefined {
     .sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
 }
 
-async function ensureLocalAgentCapacityForNewStart(
-  accountId: string,
-): Promise<LocalAgentRuntimePolicy> {
-  const policy = await resolveLocalAgentPolicy();
-  const countOtherStartingAgents = () =>
-    [...startingAgents.keys()].filter((id) => id !== accountId).length;
-  let projectedCount =
-    localAgentProcesses.size + countOtherStartingAgents() + 1;
+export interface LocalAgentAdmissionOptions {
+  deadlineAtMs?: number;
+  isCancelled?: () => boolean;
+}
 
-  while (projectedCount > policy.maxProcesses) {
-    const candidate = findOldestIdleLocalAgent();
-    if (!candidate) {
-      throw new Error(
-        `本地 agent-runtime 常驻进程已达到上限 ${policy.maxProcesses}，且现有 runtime 都在忙，请稍后重试`,
-      );
-    }
-    logger.warn(
-      {
-        accountId,
-        reclaimedAccountId: candidate.accountId,
-        maxProcesses: policy.maxProcesses,
-        projectedCount,
-      },
-      '本地 agent 进程达到上限，回收最久未使用的空闲 runtime',
-    );
-    stopLocalAgentRecord(candidate, 'capacity_limit');
-    projectedCount = localAgentProcesses.size + countOtherStartingAgents() + 1;
+function checkAdmission(
+  options: LocalAgentAdmissionOptions,
+  deadlineAtMs: number,
+): void {
+  if (shuttingDown) throw new Error('Local agent runtime is shutting down');
+  if (options.isCancelled?.()) throw new Error('请求已取消或超时');
+  if (Date.now() >= deadlineAtMs)
+    throw new Error('等待本地 agent-runtime 容量超时，请稍后重试');
+}
+
+async function waitForStartup(
+  start: Promise<void>,
+  options: LocalAgentAdmissionOptions,
+): Promise<void> {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  try {
+    await Promise.race([
+      start,
+      new Promise<never>((_resolve, reject) => {
+        timer = setInterval(() => {
+          try {
+            checkAdmission(options, options.deadlineAtMs ?? Infinity);
+          } catch (err) {
+            reject(err);
+          }
+        }, 100);
+      }),
+    ]);
+    checkAdmission(options, options.deadlineAtMs ?? Infinity);
+  } finally {
+    clearInterval(timer);
   }
-
-  return policy;
 }
 
 export async function ensureLocalAgentRunning(
   accountId: string,
+  options: LocalAgentAdmissionOptions = {},
 ): Promise<void> {
-  const existing = localAgentProcesses.get(accountId);
-  if (existing && isChildAlive(existing.child) && !existing.stopping) {
-    existing.lastUsedAt = Date.now();
-    logger.debug({ accountId }, '本地 agent 已在运行');
-    return;
+  const capacityDeadline = Math.min(
+    options.deadlineAtMs ?? Infinity,
+    Date.now() + 30_000,
+  );
+  while (true) {
+    checkAdmission(options, capacityDeadline);
+    const policy = await resolveLocalAgentPolicy();
+    checkAdmission(options, capacityDeadline);
+    // No awaits between the capacity check and registering the new startup.
+    // Waiters consume no reservation, so simultaneous arrivals cannot deadlock.
+    const existing = localAgentProcesses.get(accountId);
+    if (existing && isChildAlive(existing.child) && !existing.stopping) {
+      existing.lastUsedAt = Date.now();
+      return;
+    }
+    if (existing) {
+      clearRecordTimers(existing);
+      localAgentProcesses.delete(accountId);
+    }
+    const inFlight = startingAgents.get(accountId);
+    if (inFlight) return waitForStartup(inFlight, options);
+    const accounts = new Set([
+      ...localAgentProcesses.keys(),
+      ...startingAgents.keys(),
+    ]);
+    if (accounts.size + retiringAgents.size < policy.maxProcesses) {
+      const start = doSpawnLocalAgent(accountId).finally(() =>
+        startingAgents.delete(accountId),
+      );
+      startingAgents.set(accountId, start);
+      return waitForStartup(start, options);
+    }
+    const idle = findOldestIdleLocalAgent();
+    if (idle && retiringAgents.size === 0)
+      stopLocalAgentRecord(idle, 'capacity_limit');
+    await new Promise<void>((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(100, Math.max(1, capacityDeadline - Date.now())),
+      ),
+    );
   }
-  if (existing) {
-    clearRecordTimers(existing);
-    localAgentProcesses.delete(accountId);
-  }
-
-  const inFlight = startingAgents.get(accountId);
-  if (inFlight) {
-    return inFlight;
-  }
-
-  const startPromise = (async () => {
-    await ensureLocalAgentCapacityForNewStart(accountId);
-    await doSpawnLocalAgent(accountId);
-  })().finally(() => {
-    startingAgents.delete(accountId);
-  });
-  startingAgents.set(accountId, startPromise);
-  return startPromise;
 }
 
 /**
@@ -443,6 +478,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     ];
   })();
 
+  if (shuttingDown) throw new Error('Local agent runtime is shutting down');
   const child = spawn(command, commandArgs, {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -544,7 +580,10 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     stopping: false,
   };
 
+  initializingAgents.set(accountId, record);
   child.on('exit', (code, signal) => {
+    initializingAgents.delete(accountId);
+    retiringAgents.delete(record);
     clearTimeout(readyTimeoutTimer);
     settleReady?.(new Error('本地 agent 进程在就绪前已退出'));
     settleReady = null;
@@ -568,6 +607,8 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   });
 
   child.on('error', (err) => {
+    initializingAgents.delete(accountId);
+    retiringAgents.delete(record);
     clearTimeout(readyTimeoutTimer);
     settleReady?.(new Error('本地 agent 进程 error 事件'));
     settleReady = null;
@@ -587,10 +628,16 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   try {
     await readyPromise;
   } catch (err) {
-    child.kill();
+    initializingAgents.delete(accountId);
+    stopLocalAgentRecord(record, 'manual');
     throw err;
   }
 
+  initializingAgents.delete(accountId);
+  if (shuttingDown) {
+    stopLocalAgentRecord(record, 'shutdown');
+    throw new Error('Local agent runtime is shutting down');
+  }
   localAgentProcesses.set(accountId, record);
   scheduleIdleStop(record, policy.idleTtlMs);
   logger.info({ accountId, pid: child.pid }, '本地 agent 进程已就绪');
@@ -647,7 +694,14 @@ export function stopLocalAgent(accountId: string): void {
  * @returns 所有子进程退出或等待超时后 resolve；超时的进程已由强杀定时器接管。
  */
 export async function stopAllLocalAgents(): Promise<void> {
-  const records = [...localAgentProcesses.values()];
+  shuttingDown = true;
+  const records = [
+    ...new Set([
+      ...localAgentProcesses.values(),
+      ...initializingAgents.values(),
+      ...retiringAgents,
+    ]),
+  ];
   const exitPromises = records
     .filter((record) => isChildAlive(record.child))
     .map(
@@ -839,6 +893,11 @@ export function __resetLocalRunnerForTests(): void {
     clearRecordTimers(record);
   }
   localAgentProcesses.clear();
+  for (const record of retiringAgents) clearRecordTimers(record);
+  retiringAgents.clear();
+  for (const record of initializingAgents.values()) clearRecordTimers(record);
+  initializingAgents.clear();
+  shuttingDown = false;
   startingAgents.clear();
   cachedLocalAgentPolicy = null;
 }

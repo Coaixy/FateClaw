@@ -1,3 +1,8 @@
+import {
+  claimAiChatResult,
+  acknowledgeAiChatResult,
+  quarantineAiChatResult,
+} from './reliable-ai-chat-outbox.js';
 /**
  * IPC 工作线程：Redis BRPOP 监听 + 收件箱请求管理。
  * 具体的 outbox 消息处理逻辑拆分到各自的 handler 模块。
@@ -52,6 +57,7 @@ const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
 const IPC_LISTENER_RESTART_MAX_MS = 30_000;
 const IPC_LISTENER_STABLE_MS = 60_000;
 import {
+  InvalidAiChatPayloadError,
   buildAiChatErrorResponsePayload,
   type CancelInboxRequestPayload,
   claimOrRefreshSessionProcessingLock,
@@ -82,7 +88,13 @@ import {
 } from './local-runner.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
-import type { User } from '../shared/types.js';
+import type { User, NewMessage } from '../shared/types.js';
+import {
+  admitAgentRequest,
+  markAgentRequestDispatched,
+  requestAgentCancellation,
+  persistAgentFailure,
+} from '../infrastructure/repositories/agent-requests-repository.js';
 import type {
   HistoryMessage,
   SessionBoardContext,
@@ -216,10 +228,7 @@ async function enqueueGlobalAgentWaiter(
   const redis = getRedis();
   await redis.zadd(queueKey, now, requestId);
   await redis.hset(GLOBAL_AGENT_WAIT_HEARTBEAT_KEY, requestId, now);
-  await redis.pexpire(
-    GLOBAL_AGENT_WAIT_HEARTBEAT_KEY,
-    MAX_REQUEST_TIMEOUT_MS,
-  );
+  await redis.pexpire(GLOBAL_AGENT_WAIT_HEARTBEAT_KEY, MAX_REQUEST_TIMEOUT_MS);
 }
 
 /**
@@ -598,6 +607,7 @@ export async function cancelAiChatSessionRequest(
     return false;
   }
 
+  await requestAgentCancellation(requestId);
   if (pending) {
     clearTimeout(pending.timeout);
     pendingAiChatRequests.delete(requestId);
@@ -677,11 +687,12 @@ async function listenForAccount(accountId: string): Promise<void> {
 
   try {
     while (listener.running) {
-      const result = await redis.brpop(
-        `ipc:${accountId}:outbox`,
-        `ipc:${accountId}:ai-chat:outbox`, // AI Chat 专属队列
-        1, // 1s 超时，允许优雅退出
-      );
+      const aiQueue = `ipc:${accountId}:ai-chat:outbox`;
+      const aiRaw = await claimAiChatResult(aiQueue);
+      const result =
+        aiRaw !== null
+          ? [aiQueue, aiRaw]
+          : await redis.brpop(`ipc:${accountId}:outbox`, 1);
 
       if (!result) {
         // 空闲回收：非 pinned 监听器长时间没有任何消息、且账号名下无在途请求时
@@ -715,6 +726,7 @@ async function listenForAccount(accountId: string): Promise<void> {
               accountId,
               pendingAiChatRequests,
             );
+            await acknowledgeAiChatResult(queue, raw);
           } else if (queue.endsWith(':outbox')) {
             await processOutboxPayload(
               payload,
@@ -730,14 +742,24 @@ async function listenForAccount(accountId: string): Promise<void> {
           );
         }
       } catch (error) {
-        // 死信日志：payload 校验失败/处理抛错的消息已被 BRPOP 消费、不会重投，
-        // 保留原文前缀，避免"消息静默消失"后无从排障。
+        // AI Chat keeps its processing copy for retry; external-message delivery
+        // retains its existing non-replay policy.
         logger.error(
-          { accountId, queue, err: error, rawPreview: raw.slice(0, 300) },
+          { accountId, queue, err: error },
           '处理 Redis IPC 消息失败',
         );
 
         // 兜底：如果 outbox response 处理失败且 pending 仍未被 resolve，在此清理
+        if (queue.endsWith(':ai-chat:outbox')) {
+          if (
+            error instanceof SyntaxError ||
+            error instanceof InvalidAiChatPayloadError
+          )
+            await quarantineAiChatResult(queue, raw);
+          // Storage failures retain the transport copy and pending waiter for retry.
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
         if (queue.endsWith(':outbox')) {
           try {
             const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -1101,6 +1123,7 @@ async function failInFlightAiChatRequestsForAccount(
         publicErrorText,
         error: `本地 agent-runtime 进程异常退出：${detail}`,
         reasonCode: 'agent_process_exited',
+        syntheticTerminal: true,
       }),
       accountId,
       pendingAiChatRequests,
@@ -1233,10 +1256,7 @@ export function _resetIpcWorkerForTests(): void {
  *
  * @returns 当前进程内的 AI Chat pending request Map。
  */
-export function __getPendingAiChatRequestsForTests(): Map<
-  string,
-  PendingInboxRequest
-> {
+export function getPendingAiChatRequests(): Map<string, PendingInboxRequest> {
   return pendingAiChatRequests;
 }
 
@@ -1282,6 +1302,9 @@ export function submitAiChatInboxRequest(input: {
   llmRuntime?: EffectiveLlmRuntimeConfig;
   entitlementSnapshot?: RuntimeEntitlementSnapshot;
   waitForResponse?: boolean;
+  messageToPersist?: NewMessage;
+  recoveryExecutionId?: string;
+  recoveryDeadlineAt?: string;
 }): Promise<InboxRequestResult> {
   const requestId =
     input.requestId ??
@@ -1290,6 +1313,10 @@ export function submitAiChatInboxRequest(input: {
   const aiChatOutboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
   let acceptedEarly = false;
   let payloadQueued = false;
+  let executionId = input.recoveryExecutionId;
+  const deadlineAtMs = input.recoveryDeadlineAt
+    ? Date.parse(input.recoveryDeadlineAt)
+    : startedAtMs + AI_CHAT_REQUEST_TIMEOUT;
 
   return new Promise<InboxRequestResult>((resolve, reject) => {
     void (async () => {
@@ -1359,33 +1386,49 @@ export function submitAiChatInboxRequest(input: {
           entitlementSnapshot: entitlementMetadata(entitlement),
         });
         const priority = resolveInboxPriority(entitlement);
+        executionId ??= await admitAgentRequest({
+          input: { ...input, entitlementSnapshot: entitlement },
+          requestId,
+          ownerUserId,
+          runtime: baseRuntime,
+          deadlineAt: deadlineAtMs,
+        });
 
-        timeout = setTimeout(async () => {
-          const pending = pendingAiChatRequests.get(requestId);
-          pendingAiChatRequests.delete(requestId);
-          // 清除当前请求持有的会话忙碌标记，避免误删后续请求的锁。
-          void releaseSessionProcessingLock(input.sessionId, requestId).catch(
-            () => {},
-          );
-          void releaseGlobalAgentSlot(
-            pending?.concurrencySlotId ?? concurrencySlotId,
-          );
-          void releasePerUserMeteredSlotByRequestId(requestId);
-          void releaseLocalAgentLeaseForPending(pending, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'timeout',
-          });
-          logger.error(
-            {
+        timeout = setTimeout(
+          async () => {
+            void requestAgentCancellation(requestId).catch((err) => {
+              logger.error(
+                { requestId, err },
+                'Failed to persist request timeout cancellation',
+              );
+            });
+            const pending = pendingAiChatRequests.get(requestId);
+            pendingAiChatRequests.delete(requestId);
+            // 清除当前请求持有的会话忙碌标记，避免误删后续请求的锁。
+            void releaseSessionProcessingLock(input.sessionId, requestId).catch(
+              () => {},
+            );
+            void releaseGlobalAgentSlot(
+              pending?.concurrencySlotId ?? concurrencySlotId,
+            );
+            void releasePerUserMeteredSlotByRequestId(requestId);
+            void releaseLocalAgentLeaseForPending(pending, {
               accountId: input.accountId,
               requestId,
-              sessionId: input.sessionId,
-            },
-            'AI Chat 请求超时',
-          );
-          reject(new Error(`AI Chat 请求超时: ${requestId}`));
-        }, AI_CHAT_REQUEST_TIMEOUT);
+              reason: 'timeout',
+            });
+            logger.error(
+              {
+                accountId: input.accountId,
+                requestId,
+                sessionId: input.sessionId,
+              },
+              'AI Chat 请求超时',
+            );
+            reject(new Error(`AI Chat 请求超时: ${requestId}`));
+          },
+          Math.max(1, deadlineAtMs - Date.now()),
+        );
 
         pendingAiChatRequests.set(requestId, {
           accountId: input.accountId,
@@ -1405,8 +1448,15 @@ export function submitAiChatInboxRequest(input: {
           reject,
           timeout,
         });
+        if (input.waitForResponse === false) {
+          acceptedEarly = true;
+          resolve({ requestId, status: 'success', text: '' });
+        }
         runtimeReadyPromise = (async () => {
-          await ensureLocalAgentRunning(input.accountId);
+          await ensureLocalAgentRunning(input.accountId, {
+            deadlineAtMs,
+            isCancelled: () => !pendingAiChatRequests.has(requestId),
+          });
           addAccountListener(input.accountId);
           localAgentLeaseAccountId = retainLocalAgent(input.accountId);
           if (!localAgentLeaseAccountId) {
@@ -1455,6 +1505,7 @@ export function submitAiChatInboxRequest(input: {
         const payload = JSON.stringify({
           type: 'chat',
           requestId,
+          executionId,
           accountId: input.accountId,
           userMessage: input.userMessage,
           inputKind: input.inputKind,
@@ -1488,6 +1539,9 @@ export function submitAiChatInboxRequest(input: {
         if (!pending) {
           throw new Error('请求已取消或超时');
         }
+        if (!(await markAgentRequestDispatched(requestId))) {
+          throw new Error('Request cancelled, expired, or claimed by recovery');
+        }
         await enqueueInboxPayload(
           input.accountId,
           pending.priority ?? 'normal',
@@ -1507,30 +1561,37 @@ export function submitAiChatInboxRequest(input: {
           'AI Chat 请求已提交到 Redis',
         );
       } catch (err) {
+        let submissionFailure: unknown = null;
+        if (executionId && !payloadQueued) {
+          submissionFailure = await persistAgentFailure(
+            requestId,
+            buildAiChatErrorResponsePayload({
+              accountId: input.accountId,
+              requestId,
+              sessionId: input.sessionId,
+              userMessageId: input.userMessageId,
+              ownerUserId: input.entitlementSnapshot?.userId,
+              publicErrorText: '抱歉，AI 服务暂时不可用',
+              error: 'Request submission interrupted',
+              reasonCode: 'submit_error',
+              usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            }),
+          ).catch((failure) =>
+            logger.error(
+              { requestId, err: failure },
+              'Failed to persist submission failure',
+            ),
+          );
+        }
         // 占用的 per-user metered 名额在任何失败分支都要释放,否则低余额用户会被永久卡住。
         await releasePerUserMeteredSlotByRequestId(requestId).catch(() => {});
         if (acceptedEarly && !payloadQueued) {
+          if (!submissionFailure) return;
           await releaseGlobalAgentSlot(concurrencySlotId);
           const pending = pendingAiChatRequests.get(requestId);
           if (pending) {
             await processAiChatOutboxPayload(
-              // 统一构造，务必带上 validateResponsePayload 必填的 `text`——
-              // 漏掉会让这条兜底被判无效格式抛出、静默失效，用户永久卡在「正在回复」。
-              buildAiChatErrorResponsePayload({
-                accountId: input.accountId,
-                requestId,
-                sessionId: input.sessionId,
-                userMessageId: input.userMessageId,
-                ownerUserId: pending.ownerUserId,
-                publicErrorText: '抱歉，AI 服务暂时不可用',
-                error: err instanceof Error ? err.message : String(err),
-                reasonCode: 'submit_error',
-                usage: {
-                  promptTokens: 0,
-                  completionTokens: 0,
-                  totalTokens: 0,
-                },
-              }),
+              submissionFailure,
               input.accountId,
               pendingAiChatRequests,
             ).catch((handlerErr) => {
@@ -1581,6 +1642,10 @@ export function submitAiChatInboxRequest(input: {
             : new Error(`写入 Redis 收件箱失败: ${String(err)}`),
         );
       }
-    })();
+    })().catch(reject);
   });
 }
+
+export type AiChatSubmission = Parameters<typeof submitAiChatInboxRequest>[0];
+
+export const __getPendingAiChatRequestsForTests = getPendingAiChatRequests;

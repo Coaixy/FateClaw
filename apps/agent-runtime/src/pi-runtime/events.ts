@@ -2,10 +2,7 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
-import {
-  markRequestActivity,
-  type RequestScope,
-} from '../request-scope.js';
+import { markRequestActivity, type RequestScope } from '../request-scope.js';
 import type {
   AiChatProgressOutboxMessage,
   AiChatStreamEvent,
@@ -47,9 +44,7 @@ function thinkingFromContent(content: unknown): string {
     .join('');
 }
 
-function isAssistantMessage(
-  value: unknown,
-): value is {
+function isAssistantMessage(value: unknown): value is {
   role: 'assistant';
   content: unknown;
   usage?: {
@@ -311,7 +306,10 @@ function mapResultItems(
  * 用 details 里的结果数组/total 产出结构化 items，否则仅在输出是人类可读文本（非 JSON）
  * 时降级为截断文本——绝不把原始 JSON 包装塞进卡片。
  */
-function normalizeToolResult(result: unknown, args: unknown): ToolResultPreview {
+function normalizeToolResult(
+  result: unknown,
+  args: unknown,
+): ToolResultPreview {
   const query = readToolQuery(args);
   if (result === undefined || result === null) {
     return query ? { query } : undefined;
@@ -503,6 +501,7 @@ export function createPiEventCollector(args: {
       case 'turn_end':
         if (isAssistantMessage(event.message)) {
           mergeAssistantUsage(args.usage, event.message);
+          args.requestScope.partialUsage = { ...args.usage };
           const thinking = thinkingFromContent(event.message.content);
           if (thinking.trim() && thinking !== lastThinkingSnapshot) {
             publish({

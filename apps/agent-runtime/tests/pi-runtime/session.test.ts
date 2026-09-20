@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockCreateAgentSession, mockSessionManager, mockSettingsManager } =
   vi.hoisted(() => ({
@@ -37,6 +37,7 @@ import type { AgentRuntimeDeps } from '../../src/deps.js';
 import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
 import type { RequestRuntime } from '../../src/runtime.js';
 import { runPiSession } from '../../src/pi-runtime/session.js';
+import * as streamApi from '../../src/ai-chat-stream.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -107,12 +108,71 @@ function createInput(): ContainerInput {
 }
 
 describe('runPiSession', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     mockCreateAgentSession.mockReset();
     mockSessionManager.create.mockClear();
     mockSessionManager.open.mockClear();
     mockSettingsManager.inMemory.mockClear();
   });
+
+  it.each([false, true])(
+    'flushes pending text and disposes on session exit (failure=%s)',
+    async (fails) => {
+      vi.useFakeTimers();
+      const publish = vi
+        .spyOn(streamApi, 'publishAiChatStreamEvent')
+        .mockResolvedValue();
+      let emit: (event: unknown) => void = () => {};
+      const unsubscribe = vi.fn();
+      const dispose = vi.fn();
+      mockCreateAgentSession.mockResolvedValue({
+        session: {
+          state: { messages: [] },
+          subscribe(listener: typeof emit) {
+            emit = listener;
+            return unsubscribe;
+          },
+          async prompt() {
+            emit({
+              type: 'message_update',
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'partial' }],
+              },
+            });
+            expect(publish).not.toHaveBeenCalled();
+            if (fails) throw new Error('synthetic provider failure');
+          },
+          dispose,
+        },
+      });
+      const run = runPiSession({
+        containerInput: createInput(),
+        runtime: { deps: createDeps() },
+        requestScope: createRequestScope(),
+      });
+      if (fails)
+        await expect(run).rejects.toThrow('synthetic provider failure');
+      else await run;
+      expect(publish).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          event: expect.objectContaining({
+            type: 'assistant_delta',
+            snapshot: 'partial',
+          }),
+        }),
+      );
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+      expect(dispose).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('creates a Pi AgentSession with request-scoped resources and custom tools', async () => {
     let subscribed:
@@ -234,6 +294,9 @@ describe('runPiSession', () => {
     );
     expect(result.piSession?.appendSystemPrompt.join('\n')).toContain(
       '当前选中八字盘面',
+    );
+    expect(mockSettingsManager.inMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ cacheWarming: 'off' }),
     );
     expect(mockCreateAgentSession).toHaveBeenCalledTimes(1);
     expect(mockSessionManager.create).toHaveBeenCalledTimes(1);
