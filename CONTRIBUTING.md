@@ -6,7 +6,9 @@
 
 请先阅读：
 
-- [README.md](README.md)：项目定位、快速开始和运行边界。
+- [README.md](README.md): Project introduction.
+- [docs/development.md](docs/development.md): Local setup and validation.
+- [docs/README.md](docs/README.md): Documentation by task.
 - [docs/agent-architecture.md](docs/agent-architecture.md)：Agent、Redis IPC、Pi Runtime 和 request-scoped Skill 资源。
 - [docs/api-reference.md](docs/api-reference.md)：HTTP API 参考。
 - [docs/openclaw-integration.md](docs/openclaw-integration.md)：微信 OpenClaw/iLink 对接现状。
@@ -14,16 +16,9 @@
 
 如果你要修改前端，也请读 [apps/web/AGENT.md](apps/web/AGENT.md)。如果你要改 API 路由，也请读 [apps/api/src/interfaces/http/AGENT.md](apps/api/src/interfaces/http/AGENT.md)。
 
-## 本地开发
+## Local development
 
-```bash
-pnpm install
-cp .env.example .env
-docker compose up -d
-pnpm run dev
-```
-
-本地基础设施至少需要 PostgreSQL 和 Redis；推荐直接用仓库内的 `docker-compose.yml` 启动。API 启动时由 `initDatabase()` 自动执行迁移建表和补列，无需手动初始化 schema。
+Follow [Local development](docs/development.md) for prerequisites, configuration, startup, and validation commands.
 
 ## 分支和提交
 
