@@ -18,7 +18,7 @@ All paths below are relative to the repository root.
 | User interface | `apps/web/app/`, `apps/web/features/` | [Web guide](apps/web/AGENT.md) |
 | Admin interface | `apps/admin/` | [Admin guide](apps/admin/AGENT.md) |
 | Shared API types | `packages/contracts/` | [API reference](docs/api-reference.md) |
-| Database and migrations | `apps/api/src/infrastructure/db.ts`, `apps/api/src/infrastructure/repositories/`, `apps/api/src/infrastructure/migrations/` | Follow the caller and its tests |
+| Database and migrations | `apps/api/src/infrastructure/db.ts`, `apps/api/src/infrastructure/repositories/`, `apps/api/src/infrastructure/migrations/` | [Database migrations](docs/database-migrations.md) |
 | Deployment | `scripts/pack.sh`, `ecosystem.config.cjs` | [Deployment](docs/deployment-split.md) |
 | External API or WeChat | Relevant routes in `apps/api/src/interfaces/http/` | [Documentation index](docs/README.md) |
 

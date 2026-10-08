@@ -20,26 +20,18 @@ import type { DatabaseMigration } from '../types.js';
  *
  * 编号说明：接 0072（孤儿 bundle 订阅回收）续号。
  */
-export const dropDeadFeatureTablesMigrations: DatabaseMigration[] = [
-  {
-    id: '0073_drop_dead_feature_tables',
-    description:
-      '删除死功能表：simple_workflow_presets 与 ai_chat 免费/专业额度三表',
-    up: async (client: pg.PoolClient): Promise<void> => {
-      // 简易模式 workflow 预置表（功能已整链路拔除）
-      await client.query(
-        'DROP TABLE IF EXISTS public.simple_workflow_presets',
-      );
-      // 非会员免费/专业额度限次表（2026-06-29 改 1.5 倍加价后废弃）
-      await client.query(
-        'DROP TABLE IF EXISTS public.ai_chat_free_daily_usage',
-      );
-      await client.query(
-        'DROP TABLE IF EXISTS public.ai_chat_free_quota_config',
-      );
-      await client.query(
-        'DROP TABLE IF EXISTS public.ai_chat_professional_daily_usage',
-      );
-    },
+export const dropDeadFeatureTablesMigration: DatabaseMigration = {
+  id: '0073_drop_dead_feature_tables',
+  description:
+    '删除死功能表：simple_workflow_presets 与 ai_chat 免费/专业额度三表',
+  up: async (client: pg.PoolClient): Promise<void> => {
+    // 简易模式 workflow 预置表（功能已整链路拔除）
+    await client.query('DROP TABLE IF EXISTS public.simple_workflow_presets');
+    // 非会员免费/专业额度限次表（2026-06-29 改 1.5 倍加价后废弃）
+    await client.query('DROP TABLE IF EXISTS public.ai_chat_free_daily_usage');
+    await client.query('DROP TABLE IF EXISTS public.ai_chat_free_quota_config');
+    await client.query(
+      'DROP TABLE IF EXISTS public.ai_chat_professional_daily_usage',
+    );
   },
-];
+};

@@ -6,7 +6,7 @@ import {
   getDbPool as getSharedDbPool,
   initDbPool,
 } from './db-pool.js';
-import { runDatabaseMigrations } from './migrations.js';
+import { runDatabaseMigrations } from './migrations/runner.js';
 import {
   bindAccountToUser,
   createAccount,

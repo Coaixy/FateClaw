@@ -1,10 +1,12 @@
 import type pg from 'pg';
 
-/**
- * 单个数据库迁移定义。
- */
 export interface DatabaseMigration {
-  id: string;
-  description: string;
+  readonly id: string;
+  readonly description: string;
+  up(client: pg.PoolClient): Promise<void>;
+}
+
+export interface DatabaseBaseline {
+  readonly throughMigrationId: string;
   up(client: pg.PoolClient): Promise<void>;
 }

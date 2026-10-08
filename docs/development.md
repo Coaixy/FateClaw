@@ -4,7 +4,7 @@ Run commands from the repository root. Script names and package-manager requirem
 
 ## Prerequisites
 
-- Node.js satisfying both the repository's `>=20` engine declaration and the selected pnpm release's requirements.
+- Node.js 24, matching `.nvmrc` and the repository's `>=24 <25` engine declaration.
 - The package-manager version pinned in `package.json` (currently pnpm 11.5.0).
 - PostgreSQL and Redis, either provided locally or through Docker Compose.
 - A model provider account for AI interpretation. Deterministic chart calculation does not require one.
@@ -45,7 +45,7 @@ pnpm run dev
 | User site | http://localhost:3001 |
 | Admin site | http://localhost:3002 |
 
-API startup runs database migrations through `initDatabase()` in [db.ts](../apps/api/src/infrastructure/db.ts). Use a development database: startup can change its schema and data.
+API startup runs database migrations through `initDatabase()` in [db.ts](../apps/api/src/infrastructure/db.ts). Verified empty databases use the latest baseline; existing databases apply only missing migration IDs. See [Database migrations](database-migrations.md) for the initialization and upgrade contract. Use a development database: startup can change its schema and data.
 
 ## First AI request
 

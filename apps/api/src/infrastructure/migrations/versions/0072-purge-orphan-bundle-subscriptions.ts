@@ -19,17 +19,16 @@ import { logger } from '../../logger.js';
  *
  * 编号说明：接 0071（无效手机号用户清理）续号。
  */
-export const purgeOrphanBundleSubscriptionsMigrations: DatabaseMigration[] = [
-  {
-    id: '0072_purge_orphan_bundle_subscriptions',
-    description:
-      '一次性回收历史失效 bundle（删除/取消分享/下架/移出 skill）遗留的孤儿订阅',
-    up: async (client: pg.PoolClient): Promise<void> => {
-      const { rows } = await client.query<{
-        dead_source_count: number;
-        purged_subscription_count: number;
-      }>(
-        `WITH dead_sources AS (
+export const purgeOrphanBundleSubscriptionsMigration: DatabaseMigration = {
+  id: '0072_purge_orphan_bundle_subscriptions',
+  description:
+    '一次性回收历史失效 bundle（删除/取消分享/下架/移出 skill）遗留的孤儿订阅',
+  up: async (client: pg.PoolClient): Promise<void> => {
+    const { rows } = await client.query<{
+      dead_source_count: number;
+      purged_subscription_count: number;
+    }>(
+      `WITH dead_sources AS (
            DELETE FROM user_skill_subscription_bundle_sources src
            USING user_skill_subscriptions sub
            WHERE src.subscription_id = sub.id
@@ -83,15 +82,14 @@ export const purgeOrphanBundleSubscriptionsMigrations: DatabaseMigration[] = [
          SELECT
            (SELECT COUNT(*)::int FROM dead_sources) AS dead_source_count,
            (SELECT COUNT(*)::int FROM deleted_subscriptions) AS purged_subscription_count`,
+    );
+    const deadSourceCount = rows[0]?.dead_source_count ?? 0;
+    const purgedSubscriptionCount = rows[0]?.purged_subscription_count ?? 0;
+    if (deadSourceCount > 0 || purgedSubscriptionCount > 0) {
+      logger.warn(
+        { deadSourceCount, purgedSubscriptionCount },
+        '一次性回收：清理历史失效 bundle 遗留的孤儿订阅与死来源行',
       );
-      const deadSourceCount = rows[0]?.dead_source_count ?? 0;
-      const purgedSubscriptionCount = rows[0]?.purged_subscription_count ?? 0;
-      if (deadSourceCount > 0 || purgedSubscriptionCount > 0) {
-        logger.warn(
-          { deadSourceCount, purgedSubscriptionCount },
-          '一次性回收：清理历史失效 bundle 遗留的孤儿订阅与死来源行',
-        );
-      }
-    },
+    }
   },
-];
+};

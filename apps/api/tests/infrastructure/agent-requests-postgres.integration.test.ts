@@ -16,7 +16,7 @@ vi.mock('../../src/infrastructure/config.js', () => ({
   MAX_OVERDRAFT_COINS: 50,
 }));
 import { listStalePendingReservations } from '../../src/infrastructure/repositories/billing-repository.js';
-import { durableAgentRequestsMigration } from '../../src/infrastructure/migrations/definitions/0076-durable-agent-requests.js';
+import { durableAgentRequestsMigration } from '../../src/infrastructure/migrations/versions/0076-durable-agent-requests.js';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,

@@ -1,0 +1,305 @@
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
+import { runDatabaseMigrations } from '../../src/infrastructure/migrations/runner.js';
+
+// This opt-in connection must point to a disposable server with CREATE DATABASE permission.
+const connectionString = process.env.FATECLAW_TEST_MIGRATIONS_DATABASE_URL;
+
+describe.skipIf(!connectionString)(
+  'database migrations PostgreSQL integration',
+  () => {
+    let admin: pg.Pool;
+
+    beforeAll(() => {
+      admin = new pg.Pool({ connectionString, connectionTimeoutMillis: 5000 });
+    });
+
+    afterAll(async () => {
+      await admin.end();
+    });
+
+    async function withDatabase(
+      work: (client: pg.PoolClient, pool: pg.Pool) => Promise<void>,
+    ) {
+      const name = `fateclaw_migrations_test_${randomUUID().replaceAll('-', '')}`;
+      await admin.query(`CREATE DATABASE "${name}"`);
+      const url = new URL(connectionString!);
+      url.pathname = `/${name}`;
+      const pool = new pg.Pool({
+        connectionString: url.toString(),
+        connectionTimeoutMillis: 5000,
+        query_timeout: 125000,
+        statement_timeout: 30000,
+      });
+      let client: pg.PoolClient | undefined;
+      try {
+        client = await pool.connect();
+        await work(client, pool);
+      } finally {
+        client?.release();
+        await pool.end();
+        await admin.query(`DROP DATABASE "${name}"`);
+      }
+    }
+
+    async function replayHistory(client: pg.PoolClient, throughId?: string) {
+      await client.query(`CREATE TABLE schema_migrations (
+      id TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+      for (const migration of MIGRATIONS) {
+        if (throughId && migration.id > throughId) break;
+        await client.query('BEGIN');
+        try {
+          await migration.up(client);
+          await client.query(
+            'INSERT INTO schema_migrations (id, description) VALUES ($1, $2)',
+            [migration.id, migration.description],
+          );
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        }
+      }
+    }
+
+    async function readSchema(client: pg.PoolClient) {
+      const columns = await client.query(`
+      SELECT c.relname, c.relkind, a.attnum, a.attname,
+        format_type(a.atttypid, a.atttypmod) AS type,
+        a.attnotnull, pg_get_expr(d.adbin, d.adrelid) AS default_value,
+        col_description(c.oid, a.attnum) AS comment
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid
+      LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+        AND c.relname <> 'schema_migrations' AND a.attnum > 0 AND NOT a.attisdropped
+      ORDER BY c.relname, a.attnum
+    `);
+      const constraints = await client.query(`
+      SELECT c.relname, t.conname, t.contype,
+        pg_get_constraintdef(t.oid, true) AS definition
+      FROM pg_constraint t
+      JOIN pg_class c ON c.oid = t.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname <> 'schema_migrations'
+      ORDER BY c.relname, t.conname
+    `);
+      const indexes = await client.query(`
+      SELECT tablename, indexname, indexdef FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename <> 'schema_migrations'
+      ORDER BY tablename, indexname
+    `);
+      const comments = await client.query(`
+      SELECT c.relname, obj_description(c.oid, 'pg_class') AS comment
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+        AND c.relname <> 'schema_migrations' ORDER BY c.relname
+    `);
+      const extensions = await client.query(
+        'SELECT extname, extversion FROM pg_extension ORDER BY extname',
+      );
+      return {
+        columns: columns.rows,
+        constraints: constraints.rows,
+        indexes: indexes.rows,
+        comments: comments.rows,
+        extensions: extensions.rows,
+      };
+    }
+
+    async function readSeedFingerprints(client: pg.PoolClient) {
+      const { rows } = await client.query<{ tablename: string }>(`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public' AND tablename <> 'schema_migrations'
+      ORDER BY tablename
+    `);
+      const fingerprints: Record<string, string> = {};
+      for (const { tablename } of rows) {
+        const table = `public."${tablename.replaceAll('"', '""')}"`;
+        const result = await client.query<{ fingerprint: string }>(`
+        SELECT md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text, '[]')) AS fingerprint
+        FROM ${table} t
+      `);
+        fingerprints[tablename] = result.rows[0].fingerprint;
+      }
+      return fingerprints;
+    }
+
+    it('converges a fresh baseline and the historical chain to the same schema and default seeds', async () => {
+      await withDatabase(async (legacy) => {
+        await replayHistory(legacy);
+        const expectedSchema = await readSchema(legacy);
+        const expectedSeeds = await readSeedFingerprints(legacy);
+        await withDatabase(async (fresh) => {
+          await runDatabaseMigrations(fresh);
+          expect(await readSchema(fresh)).toEqual(expectedSchema);
+          expect(await readSeedFingerprints(fresh)).toEqual(expectedSeeds);
+          const { rows } = await fresh.query(
+            'SELECT id FROM schema_migrations ORDER BY id',
+          );
+          expect(rows.map((row) => row.id)).toEqual(
+            MIGRATIONS.map((migration) => migration.id),
+          );
+        });
+      });
+    }, 30000);
+
+    it('upgrades through 0075 without replaying cleanup or changing existing user data', async () => {
+      await withDatabase(async (client) => {
+        await replayHistory(client, '0075_add_redemption_codes');
+        await client.query(`INSERT INTO users (id, created_at, purchased_coins)
+        VALUES ('synthetic-preserved-user', NOW(), 123.45)`);
+        await client.query(`INSERT INTO bazi_cases (id, bazi, gender)
+        VALUES (1, 'synthetic fixture', 'synthetic')`);
+        await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              "SELECT to_regclass('public.bazi_cases') AS name",
+            )
+          ).rows[0].name,
+        ).toBeNull();
+        expect(
+          (
+            await client.query(
+              "SELECT to_regclass('public.agent_requests') AS name",
+            )
+          ).rows[0].name,
+        ).toBe('agent_requests');
+        expect(
+          (
+            await client.query(
+              "SELECT purchased_coins FROM users WHERE id = 'synthetic-preserved-user'",
+            )
+          ).rows[0].purchased_coins,
+        ).toBe('123.45');
+        const { rows } = await client.query(
+          'SELECT id, applied_at FROM schema_migrations ORDER BY id',
+        );
+        await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              'SELECT id, applied_at FROM schema_migrations ORDER BY id',
+            )
+          ).rows,
+        ).toEqual(rows);
+      });
+    }, 30000);
+
+    it('allows preinstalled extension objects in an otherwise empty schema', async () => {
+      await withDatabase(async (client) => {
+        await client.query('CREATE EXTENSION pg_trgm WITH SCHEMA public');
+        await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              'SELECT count(*)::int AS count FROM schema_migrations',
+            )
+          ).rows[0].count,
+        ).toBe(MIGRATIONS.length);
+      });
+    });
+
+    it.each([
+      ['table', 'CREATE TABLE synthetic_marker (id INTEGER)'],
+      ['view', 'CREATE VIEW synthetic_marker AS SELECT 1 AS id'],
+      ['sequence', 'CREATE SEQUENCE synthetic_marker'],
+      [
+        'function',
+        "CREATE FUNCTION synthetic_marker() RETURNS INTEGER LANGUAGE SQL AS 'SELECT 1'",
+      ],
+      ['domain', 'CREATE DOMAIN synthetic_marker AS TEXT'],
+      ['composite type', 'CREATE TYPE synthetic_marker AS (id INTEGER)'],
+      ['collation', "CREATE COLLATION synthetic_marker (locale = 'C')"],
+    ])('rejects an untracked schema containing a %s', async (_kind, sql) => {
+      await withDatabase(async (client) => {
+        await client.query(sql);
+        await expect(runDatabaseMigrations(client)).rejects.toThrow(
+          'no migration history',
+        );
+        expect(
+          (await client.query("SELECT to_regclass('public.users') AS name"))
+            .rows[0].name,
+        ).toBeNull();
+        expect(
+          (
+            await client.query(
+              'SELECT count(*)::int AS count FROM schema_migrations',
+            )
+          ).rows[0].count,
+        ).toBe(0);
+      });
+    });
+
+    it('rolls back schema and covered IDs together, releases the lock and permits retry', async () => {
+      await withDatabase(async (client) => {
+        const failingClient = {
+          query: async (sql: string, params?: unknown[]) => {
+            if (params?.[0] === '0071_cleanup_invalid_phone_users') {
+              return client.query('SELECT 1 / 0');
+            }
+            return client.query(sql, params);
+          },
+        } as pg.PoolClient;
+        await expect(
+          runDatabaseMigrations(failingClient),
+        ).rejects.toMatchObject({ code: '22012' });
+        expect(
+          (await client.query("SELECT to_regclass('public.users') AS name"))
+            .rows[0].name,
+        ).toBeNull();
+        expect(
+          (
+            await client.query(
+              'SELECT count(*)::int AS count FROM schema_migrations',
+            )
+          ).rows[0].count,
+        ).toBe(0);
+        expect(
+          (
+            await client.query(
+              "SELECT count(*)::int AS count FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()",
+            )
+          ).rows[0].count,
+        ).toBe(0);
+        await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              'SELECT count(*)::int AS count FROM schema_migrations',
+            )
+          ).rows[0].count,
+        ).toBe(MIGRATIONS.length);
+      });
+    });
+
+    it('serializes concurrent first startups', async () => {
+      await withDatabase(async (first, pool) => {
+        const peer = await pool.connect();
+        try {
+          await Promise.all([
+            runDatabaseMigrations(first),
+            runDatabaseMigrations(peer),
+          ]);
+          expect(
+            (
+              await first.query(
+                'SELECT count(*)::int AS count FROM schema_migrations',
+              )
+            ).rows[0].count,
+          ).toBe(MIGRATIONS.length);
+        } finally {
+          peer.release();
+        }
+      });
+    });
+  },
+);

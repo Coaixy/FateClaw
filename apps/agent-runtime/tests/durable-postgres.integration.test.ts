@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest';
 import pg from 'pg';
-import { durableAgentRequestsMigration } from '../../api/src/infrastructure/migrations/definitions/0076-durable-agent-requests.js';
+import { durableAgentRequestsMigration } from '../../api/src/infrastructure/migrations/versions/0076-durable-agent-requests.js';
 import { closeAgentDb } from '../src/agent-db.js';
 import {
   claimDurableExecution,

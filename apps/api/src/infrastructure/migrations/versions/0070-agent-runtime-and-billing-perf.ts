@@ -16,28 +16,26 @@ import type { DatabaseMigration } from '../types.js';
  * 编号说明：基线 {@link '0001-core-baseline.ts'} 已压平历史 0001-0067，远程 ledger 另有
  * 历史 0068/0069 记录，故新迁移从 0070 续号以避免与任何已发布编号冲突。
  */
-export const agentRuntimeAndBillingPerfMigrations: DatabaseMigration[] = [
-  {
-    id: '0070_agent_runtime_and_billing_perf',
-    description: '补登 agent 运行时超时/并发配置列与账单、用量性能索引',
-    up: async (client: pg.PoolClient): Promise<void> => {
-      // runtime_config：agent 常驻运行时的单次请求超时（默认 30 分钟）与单账号并发上限
-      await client.query(`
+export const agentRuntimeAndBillingPerfMigration: DatabaseMigration = {
+  id: '0070_agent_runtime_and_billing_perf',
+  description: '补登 agent 运行时超时/并发配置列与账单、用量性能索引',
+  up: async (client: pg.PoolClient): Promise<void> => {
+    // runtime_config：agent 常驻运行时的单次请求超时（默认 30 分钟）与单账号并发上限
+    await client.query(`
         ALTER TABLE runtime_config
           ADD COLUMN IF NOT EXISTS agent_request_timeout_ms integer NOT NULL DEFAULT 1800000,
           ADD COLUMN IF NOT EXISTS agent_account_concurrency integer NOT NULL DEFAULT 1
       `);
-      // 账单幂等：按 request_id 命中钱包流水的部分索引（仅索引非空 request_id）
-      await client.query(`
+    // 账单幂等：按 request_id 命中钱包流水的部分索引（仅索引非空 request_id）
+    await client.query(`
         CREATE INDEX IF NOT EXISTS idx_wallet_transactions_request_id
           ON wallet_transactions (request_id)
           WHERE request_id IS NOT NULL
       `);
-      // 每日用量按日期查询的索引
-      await client.query(`
+    // 每日用量按日期查询的索引
+    await client.query(`
         CREATE INDEX IF NOT EXISTS idx_daily_usage_date
           ON daily_usage (date)
       `);
-    },
   },
-];
+};

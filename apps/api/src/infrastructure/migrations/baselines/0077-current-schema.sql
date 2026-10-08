@@ -1,32 +1,6 @@
-import type pg from "pg";
-
-import type { DatabaseMigration } from "../types.js";
-
-/**
- * 全量基线 schema。
- *
- * @remarks
- * 本基线把历史 0001-0067 共 67 条迁移压平为单一基线，等价重建相同 schema 与默认配置种子。
- * 内容由「干净库跑完全部历史迁移后 pg_dump（--column-inserts，剔除 schema_migrations 与 psql 元命令）」生成，
- * 并经「重放后再次 pg_dump 与原迁移产出逐行比对」验证 schema 完全等价。
- *
- * 关键约束（务必遵守）：
- * - id 复用历史首条 \`0001_core_schema_baseline\`：已存在的库都已记录该 id 会自动跳过本基线、保留现有 schema；
- *   只有从未记录该 id 的全新空库才会执行本基线一次性建全。
- * - 因此本基线只会在空库上运行，使用裸 \`CREATE TABLE\` 即可，无需幂等。
- * - 新增迁移一律在 definitions.ts 的 MIGRATIONS 数组末尾追加，切勿改写本基线或复用已发布 id。
- *
- * 修订记录（与 DROP 迁移双写，保持新旧库 schema 收敛）：
- * - 2026-07-05：移除 4 张死功能表定义（simple_workflow_presets、ai_chat_free_daily_usage、
- *   ai_chat_free_quota_config、ai_chat_professional_daily_usage）。存量库由 0073 迁移 DROP 同名表，
- *   全新库直接不建，两条路径最终 schema 一致（背景见 0073 文件注释）。
- * - 2026-07-05（补充轮）：移除 9 张已删功能残留表定义（礼品码 gift_codes/gift_code_redemptions、
- *   邀请返利 referral_config/referral_reward_events/user_referrals/user_invite_codes、
- *   每日签到 daily_sign_in_config/daily_sign_in_records、技能点赞 skill_reactions）。
- *   存量库由 0074 迁移 DROP 同名表（背景见 0074 文件注释）。
- */
-const BASELINE_SQL = `
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
 
 CREATE TABLE public.accounts (
     id text NOT NULL,
@@ -39,6 +13,36 @@ CREATE TABLE public.accounts (
     enabled boolean DEFAULT true,
     created_at timestamp with time zone NOT NULL,
     owner_id text
+);
+
+CREATE TABLE public.agent_requests (
+    request_id text NOT NULL,
+    execution_id text NOT NULL,
+    account_id text NOT NULL,
+    session_id text NOT NULL,
+    user_message_id text,
+    owner_user_id text NOT NULL,
+    state text NOT NULL,
+    input jsonb NOT NULL,
+    runtime jsonb NOT NULL,
+    lease_owner text,
+    lease_until timestamp with time zone,
+    deadline_at timestamp with time zone NOT NULL,
+    cancel_requested_at timestamp with time zone,
+    result jsonb,
+    interrupted_notified_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_requests_runtime_check CHECK (((NOT (runtime ? 'apiKey'::text)) AND (NOT (runtime ? 'secret'::text)))),
+    CONSTRAINT agent_requests_state_check CHECK ((state = ANY (ARRAY['queued'::text, 'dispatched'::text, 'running'::text, 'result_ready'::text, 'interrupted'::text, 'completed'::text])))
+);
+
+CREATE TABLE public.agent_result_deliveries (
+    request_id text NOT NULL,
+    account_id text NOT NULL,
+    delivered boolean DEFAULT false NOT NULL,
+    final_message_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE public.announcements (
@@ -56,10 +60,10 @@ CREATE TABLE public.announcements (
     published_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_announcements_content_lengths CHECK ((((char_length(title) >= 1) AND (char_length(title) <= 120)) AND (char_length(summary) <= 280) AND ((char_length(body_markdown) >= 1) AND (char_length(body_markdown) <= 20000)) AND ((cta_label IS NULL) OR ((char_length(cta_label) >= 1) AND (char_length(cta_label) <= 40))))),
+    CONSTRAINT chk_announcements_content_lengths CHECK (((char_length(title) >= 1) AND (char_length(title) <= 120) AND (char_length(summary) <= 280) AND ((char_length(body_markdown) >= 1) AND (char_length(body_markdown) <= 20000)) AND ((cta_label IS NULL) OR ((char_length(cta_label) >= 1) AND (char_length(cta_label) <= 40))))),
     CONSTRAINT chk_announcements_cta_href_safe CHECK (((cta_href IS NULL) OR ((cta_href ~~ '/%'::text) AND (cta_href !~~ '//%'::text)) OR (cta_href ~~ 'https://%'::text))),
     CONSTRAINT chk_announcements_cta_pair CHECK ((((cta_label IS NULL) AND (cta_href IS NULL)) OR ((cta_label IS NOT NULL) AND (cta_href IS NOT NULL)))),
-    CONSTRAINT chk_announcements_slug_format CHECK ((((char_length(slug) >= 1) AND (char_length(slug) <= 80)) AND (slug ~ '^[a-z0-9][a-z0-9-]*$'::text))),
+    CONSTRAINT chk_announcements_slug_format CHECK (((char_length(slug) >= 1) AND (char_length(slug) <= 80) AND (slug ~ '^[a-z0-9][a-z0-9-]*$'::text))),
     CONSTRAINT chk_announcements_status_valid CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
     CONSTRAINT chk_announcements_time_window CHECK (((ends_at IS NULL) OR (starts_at IS NULL) OR (ends_at > starts_at)))
 );
@@ -78,25 +82,6 @@ CREATE TABLE public.balance_grants (
     remaining_coins numeric(14,2) DEFAULT 0 NOT NULL,
     CONSTRAINT chk_balance_grants_remaining_coins_range CHECK (((amount_coins > (0)::numeric) AND (remaining_coins >= (0)::numeric) AND (remaining_coins <= amount_coins))),
     CONSTRAINT chk_balance_grants_status_valid CHECK ((status = ANY (ARRAY['active'::text, 'exhausted'::text, 'expired'::text, 'revoked'::text])))
-);
-
-CREATE TABLE public.bazi_cases (
-    id integer NOT NULL,
-    bazi text NOT NULL,
-    gender text NOT NULL,
-    marriage text,
-    children_desc text,
-    abortions_size integer,
-    child_deaths_size integer,
-    current_education text,
-    current_parent text,
-    init_wealth text,
-    current_wealth text,
-    job text,
-    job_type text,
-    job_info text,
-    solar_date date,
-    solar_hour integer
 );
 
 CREATE TABLE public.billing_request_reservations (
@@ -347,6 +332,36 @@ CREATE TABLE public.recharge_payment_config (
     CONSTRAINT chk_recharge_payment_config_platform_id_positive CHECK (((epay_platform_id IS NULL) OR (epay_platform_id > 0)))
 );
 
+CREATE TABLE public.redemption_codes (
+    id text NOT NULL,
+    code text NOT NULL,
+    amount_coins numeric(14,2) NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    batch_id text,
+    note text,
+    expires_at timestamp with time zone,
+    redeemed_by text,
+    redeemed_at timestamp with time zone,
+    created_by text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chk_redemption_codes_redeemed_consistency CHECK ((((status = 'redeemed'::text) AND (redeemed_by IS NOT NULL) AND (redeemed_at IS NOT NULL)) OR ((status <> 'redeemed'::text) AND (redeemed_by IS NULL) AND (redeemed_at IS NULL)))),
+    CONSTRAINT redemption_codes_amount_coins_check CHECK ((amount_coins > (0)::numeric)),
+    CONSTRAINT redemption_codes_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'redeemed'::text, 'expired'::text, 'revoked'::text])))
+);
+
+COMMENT ON TABLE public.redemption_codes IS '卡密充值码';
+
+COMMENT ON COLUMN public.redemption_codes.code IS '卡密码（唯一，格式如 FATE-XXXX-XXXX）';
+
+COMMENT ON COLUMN public.redemption_codes.amount_coins IS '面额（积分）';
+
+COMMENT ON COLUMN public.redemption_codes.status IS '状态：pending 未使用 / redeemed 已兑换 / expired 已过期 / revoked 已撤销';
+
+COMMENT ON COLUMN public.redemption_codes.batch_id IS '批次标识';
+
+COMMENT ON COLUMN public.redemption_codes.expires_at IS '过期时间（NULL 表示永久有效）';
+
 CREATE TABLE public.runtime_config (
     id text DEFAULT 'default'::text NOT NULL,
     agent_concurrency_limit integer DEFAULT 10 NOT NULL,
@@ -363,6 +378,8 @@ CREATE TABLE public.runtime_config (
     default_official_model_id text,
     default_thinking_level text DEFAULT 'medium'::text NOT NULL,
     user_skill_max_count integer DEFAULT 30 NOT NULL,
+    agent_request_timeout_ms integer DEFAULT 1800000 NOT NULL,
+    agent_account_concurrency integer DEFAULT 1 NOT NULL,
     CONSTRAINT chk_runtime_config_agent_concurrency_limit_positive CHECK ((agent_concurrency_limit > 0)),
     CONSTRAINT chk_runtime_config_default_thinking_level_valid CHECK ((default_thinking_level = ANY (ARRAY['off'::text, 'minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text]))),
     CONSTRAINT chk_runtime_config_local_agent_idle_ttl_ms_range CHECK (((local_agent_idle_ttl_ms >= 30000) AND (local_agent_idle_ttl_ms <= 86400000))),
@@ -607,10 +624,16 @@ INSERT INTO public.public_financial_ledger_entries (id, entry_type, occurred_at,
 
 INSERT INTO public.recharge_payment_config (id, enabled, epay_url_prefix, epay_platform_id, epay_merchant_private_key, epay_platform_public_key, epay_merchant_key, notify_url, return_url, updated_at, min_coins, max_coins) VALUES ('default', false, '', NULL, '', '', '', '', '', '2026-06-30 12:57:53.126536+00', 1.00, 1000.00);
 
-INSERT INTO public.runtime_config (id, agent_concurrency_limit, updated_at, local_agent_max_processes, local_agent_idle_ttl_ms, pi_session_health_enabled, pi_session_inactive_cleanup_days, pi_session_orphan_grace_days, skill_bundle_max_files, skill_bundle_max_file_chars, skill_bundle_max_total_chars, skill_bundle_max_zip_bytes, default_official_model_id, default_thinking_level, user_skill_max_count) VALUES ('default', 10, '2026-06-30 12:57:53.422822+00', 4, 600000, false, 30, 30, 50, 100000, 500000, 8388608, NULL, 'medium', 30);
+INSERT INTO public.runtime_config (id, agent_concurrency_limit, updated_at, local_agent_max_processes, local_agent_idle_ttl_ms, pi_session_health_enabled, pi_session_inactive_cleanup_days, pi_session_orphan_grace_days, skill_bundle_max_files, skill_bundle_max_file_chars, skill_bundle_max_total_chars, skill_bundle_max_zip_bytes, default_official_model_id, default_thinking_level, user_skill_max_count, agent_request_timeout_ms, agent_account_concurrency) VALUES ('default', 10, '2026-06-30 12:57:53.422822+00', 4, 600000, false, 30, 30, 50, 100000, 500000, 8388608, NULL, 'medium', 30, 1800000, 1);
 
 ALTER TABLE ONLY public.accounts
     ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_requests
+    ADD CONSTRAINT agent_requests_pkey PRIMARY KEY (request_id);
+
+ALTER TABLE ONLY public.agent_result_deliveries
+    ADD CONSTRAINT agent_result_deliveries_pkey PRIMARY KEY (request_id);
 
 ALTER TABLE ONLY public.announcements
     ADD CONSTRAINT announcements_pkey PRIMARY KEY (id);
@@ -620,9 +643,6 @@ ALTER TABLE ONLY public.announcements
 
 ALTER TABLE ONLY public.balance_grants
     ADD CONSTRAINT balance_grants_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.bazi_cases
-    ADD CONSTRAINT bazi_cases_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.billing_request_reservations
     ADD CONSTRAINT billing_request_reservations_pkey PRIMARY KEY (request_id);
@@ -686,6 +706,12 @@ ALTER TABLE ONLY public.recharge_orders
 
 ALTER TABLE ONLY public.recharge_payment_config
     ADD CONSTRAINT recharge_payment_config_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_code_key UNIQUE (code);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.runtime_config
     ADD CONSTRAINT runtime_config_pkey PRIMARY KEY (id);
@@ -756,6 +782,10 @@ ALTER TABLE ONLY public.wallet_transactions
 ALTER TABLE ONLY public.wechat_chat_session_links
     ADD CONSTRAINT wechat_chat_session_links_pkey PRIMARY KEY (account_id, sender_hash);
 
+CREATE INDEX agent_requests_recovery ON public.agent_requests USING btree (lease_until, created_at) WHERE (state <> 'completed'::text);
+
+CREATE UNIQUE INDEX agent_requests_session_writer ON public.agent_requests USING btree (session_id) WHERE (state = 'running'::text);
+
 CREATE INDEX idx_announcements_published_at ON public.announcements USING btree (published_at DESC, updated_at DESC);
 
 CREATE INDEX idx_announcements_status_window_priority ON public.announcements USING btree (status, priority DESC, published_at DESC, updated_at DESC);
@@ -767,16 +797,6 @@ CREATE INDEX idx_balance_grants_expiry_scan ON public.balance_grants USING btree
 CREATE INDEX idx_balance_grants_user_active ON public.balance_grants USING btree (user_id, expires_at, remaining_coins) WHERE (status = 'active'::text);
 
 CREATE INDEX idx_balance_grants_user_active_expiry_created ON public.balance_grants USING btree (user_id, expires_at, created_at) WHERE ((status = 'active'::text) AND (remaining_coins > (0)::numeric));
-
-CREATE INDEX idx_bazi_cases_current_education ON public.bazi_cases USING btree (current_education);
-
-CREATE INDEX idx_bazi_cases_current_wealth ON public.bazi_cases USING btree (current_wealth);
-
-CREATE INDEX idx_bazi_cases_gender ON public.bazi_cases USING btree (gender);
-
-CREATE INDEX idx_bazi_cases_job_type ON public.bazi_cases USING btree (job_type);
-
-CREATE INDEX idx_bazi_cases_marriage ON public.bazi_cases USING btree (marriage);
 
 CREATE INDEX idx_billing_request_reservations_hold_state ON public.billing_request_reservations USING btree (hold_state, charge_state, updated_at);
 
@@ -808,6 +828,8 @@ CREATE INDEX idx_conv_logs_created ON public.conversation_logs USING btree (crea
 
 CREATE INDEX idx_conversation_logs_request_id ON public.conversation_logs USING btree (request_id);
 
+CREATE INDEX idx_daily_usage_date ON public.daily_usage USING btree (date);
+
 CREATE INDEX idx_messages_account ON public.messages USING btree (account_id);
 
 CREATE INDEX idx_messages_account_deleted_timestamp ON public.messages USING btree (account_id, ((deleted_at IS NOT NULL)), "timestamp" DESC);
@@ -837,6 +859,14 @@ CREATE INDEX idx_recharge_orders_status_created_at ON public.recharge_orders USI
 CREATE INDEX idx_recharge_orders_status_paid_at ON public.recharge_orders USING btree (status, paid_at DESC) WHERE (paid_at IS NOT NULL);
 
 CREATE INDEX idx_recharge_orders_user_created_at ON public.recharge_orders USING btree (user_id, created_at DESC);
+
+CREATE INDEX idx_redemption_codes_batch_id ON public.redemption_codes USING btree (batch_id);
+
+CREATE INDEX idx_redemption_codes_created_at ON public.redemption_codes USING btree (created_at DESC);
+
+CREATE INDEX idx_redemption_codes_redeemed_by ON public.redemption_codes USING btree (redeemed_by);
+
+CREATE INDEX idx_redemption_codes_status ON public.redemption_codes USING btree (status);
 
 CREATE INDEX idx_skill_access_invites_creator_target ON public.skill_access_invites USING btree (creator_id, target_type, target_id, created_at DESC);
 
@@ -899,6 +929,8 @@ CREATE INDEX idx_uss_subscriber_enabled_active_expiry ON public.user_skill_subsc
 CREATE INDEX idx_wallet_transactions_created_at ON public.wallet_transactions USING btree (created_at DESC);
 
 CREATE INDEX idx_wallet_transactions_kind_created_at ON public.wallet_transactions USING btree (kind, created_at DESC);
+
+CREATE INDEX idx_wallet_transactions_request_id ON public.wallet_transactions USING btree (request_id) WHERE (request_id IS NOT NULL);
 
 CREATE INDEX idx_wallet_transactions_user_created_at ON public.wallet_transactions USING btree (user_id, created_at DESC);
 
@@ -968,6 +1000,9 @@ ALTER TABLE ONLY public.open_sessions
 ALTER TABLE ONLY public.recharge_orders
     ADD CONSTRAINT recharge_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_redeemed_by_fkey FOREIGN KEY (redeemed_by) REFERENCES public.users(id);
+
 ALTER TABLE ONLY public.skill_access_invites
     ADD CONSTRAINT skill_access_invites_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id);
 
@@ -1021,14 +1056,3 @@ ALTER TABLE ONLY public.wechat_chat_session_links
 
 ALTER TABLE ONLY public.wechat_chat_session_links
     ADD CONSTRAINT wechat_chat_session_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-`;
-
-export const baselineMigrations: DatabaseMigration[] = [
-  {
-    id: "0001_core_schema_baseline",
-    description: "全量基线 schema（压平历史 0001-0067 迁移）",
-    up: async (client: pg.PoolClient): Promise<void> => {
-      await client.query(BASELINE_SQL);
-    },
-  },
-];

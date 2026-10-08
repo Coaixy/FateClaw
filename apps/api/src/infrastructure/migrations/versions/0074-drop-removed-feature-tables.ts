@@ -23,27 +23,22 @@ import type { DatabaseMigration } from '../types.js';
  *
  * 编号说明：接 0073（死功能表清理首批）续号。
  */
-export const dropRemovedFeatureTablesMigrations: DatabaseMigration[] = [
-  {
-    id: '0074_drop_removed_feature_tables',
-    description:
-      '删除已删功能残留表：礼品码/邀请返利/每日签到/技能点赞 共 9 张',
-    up: async (client: pg.PoolClient): Promise<void> => {
-      // 礼品码（redemptions 有指向 gift_codes 的外键，先删子表）
-      await client.query('DROP TABLE IF EXISTS public.gift_code_redemptions');
-      await client.query('DROP TABLE IF EXISTS public.gift_codes');
-      // 邀请返利（reward_events → user_referrals → user_invite_codes 链式外键）
-      await client.query(
-        'DROP TABLE IF EXISTS public.referral_reward_events',
-      );
-      await client.query('DROP TABLE IF EXISTS public.user_referrals');
-      await client.query('DROP TABLE IF EXISTS public.user_invite_codes');
-      await client.query('DROP TABLE IF EXISTS public.referral_config');
-      // 每日签到
-      await client.query('DROP TABLE IF EXISTS public.daily_sign_in_records');
-      await client.query('DROP TABLE IF EXISTS public.daily_sign_in_config');
-      // 技能点赞/点踩
-      await client.query('DROP TABLE IF EXISTS public.skill_reactions');
-    },
+export const dropRemovedFeatureTablesMigration: DatabaseMigration = {
+  id: '0074_drop_removed_feature_tables',
+  description: '删除已删功能残留表：礼品码/邀请返利/每日签到/技能点赞 共 9 张',
+  up: async (client: pg.PoolClient): Promise<void> => {
+    // 礼品码（redemptions 有指向 gift_codes 的外键，先删子表）
+    await client.query('DROP TABLE IF EXISTS public.gift_code_redemptions');
+    await client.query('DROP TABLE IF EXISTS public.gift_codes');
+    // 邀请返利（reward_events → user_referrals → user_invite_codes 链式外键）
+    await client.query('DROP TABLE IF EXISTS public.referral_reward_events');
+    await client.query('DROP TABLE IF EXISTS public.user_referrals');
+    await client.query('DROP TABLE IF EXISTS public.user_invite_codes');
+    await client.query('DROP TABLE IF EXISTS public.referral_config');
+    // 每日签到
+    await client.query('DROP TABLE IF EXISTS public.daily_sign_in_records');
+    await client.query('DROP TABLE IF EXISTS public.daily_sign_in_config');
+    // 技能点赞/点踩
+    await client.query('DROP TABLE IF EXISTS public.skill_reactions');
   },
-];
+};

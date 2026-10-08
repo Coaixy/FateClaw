@@ -11,6 +11,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Understand agent execution | [Runtime architecture](agent-architecture.md) | Host, Redis IPC, resident processes, Pi Runtime, and knowledge resources |
 | Change or consume internal HTTP APIs | [API reference](api-reference.md) | Routes, authentication, request and response contracts |
 | Change access or charging behavior | [Entitlements and billing](membership-entitlement-current.md) | Membership gates and reservation/settlement behavior |
+| Change schema or generate a database baseline | [Database migrations](database-migrations.md) | Empty database bootstrap, existing database upgrades, and snapshot validation |
 | Integrate an external client | [Open API](open-api-design.md) | API keys, chart endpoints, and agent sessions |
 | Deploy the three apps | [Deployment](deployment-split.md) | API, user site, and admin site deployment |
 | Work on the retained WeChat integration | [OpenClaw/iLink](openclaw-integration.md) | Integration status and restoration boundaries |

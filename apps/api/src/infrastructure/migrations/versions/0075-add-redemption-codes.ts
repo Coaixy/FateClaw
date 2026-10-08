@@ -23,7 +23,7 @@ import type { DatabaseMigration } from '../types.js';
  * - redeemed 状态必须有 redeemed_by 和 redeemed_at
  * - 已兑换的卡密不可再次使用（应用层保证）
  */
-const migration: DatabaseMigration = {
+export const addRedemptionCodesMigration: DatabaseMigration = {
   id: '0075_add_redemption_codes',
   description: '新增卡密充值系统',
 
@@ -63,5 +63,3 @@ const migration: DatabaseMigration = {
     `);
   },
 };
-
-export default migration;

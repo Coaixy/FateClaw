@@ -1,20 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
-import { MIGRATIONS } from '../../src/infrastructure/migrations/definitions.js';
-import { runDatabaseMigrations } from '../../src/infrastructure/migrations.js';
+import {
+  BASELINES,
+  MIGRATIONS,
+  validateMigrationManifest,
+} from '../../src/infrastructure/migrations/manifest.js';
+import { runDatabaseMigrations } from '../../src/infrastructure/migrations/runner.js';
+import type { DatabaseMigration } from '../../src/infrastructure/migrations/types.js';
 
 interface QueryCall {
   sql: string;
   params?: unknown[];
 }
 
-function createMockClient(appliedIds: string[] = []) {
+function createMockClient(appliedIds: string[] = [], hasSchemaObjects = false) {
   const calls: QueryCall[] = [];
   const client = {
     async query(sql: string, params?: unknown[]) {
       calls.push({ sql, params });
       if (sql === 'SELECT id FROM schema_migrations') {
         return { rows: appliedIds.map((id) => ({ id })) };
+      }
+      if (sql.includes('AS has_schema_objects')) {
+        return { rows: [{ has_schema_objects: hasSchemaObjects }] };
       }
       return { rows: [] };
     },
@@ -24,31 +32,47 @@ function createMockClient(appliedIds: string[] = []) {
 }
 
 describe('runDatabaseMigrations', () => {
-  it('creates the migration ledger and applies the squashed baseline', async () => {
+  it('initializes an empty database in one transaction without replaying retired structures', async () => {
     const { client, calls } = createMockClient();
 
     await runDatabaseMigrations(client as never);
 
-    // 加锁 → 建账本 → 查已应用
+    // Startup remains serialized before inspecting or changing the schema.
     expect(calls[0]?.sql).toBe('SELECT pg_advisory_lock($1, $2)');
     expect(calls[1]?.sql).toContain(
       'CREATE TABLE IF NOT EXISTS schema_migrations',
     );
 
-    // 基线在单条事务内执行，整段 schema 通过一次 query 落库
+    // The snapshot and all covered migration IDs share one transaction.
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(true);
     expect(calls.some((call) => call.sql === 'COMMIT')).toBe(true);
     const baselineSql = calls.find((call) =>
       call.sql.includes('CREATE TABLE public.users'),
     )?.sql;
     expect(baselineSql).toBeDefined();
-    // 抽样核对基线覆盖到关键表与默认配置种子
-    expect(baselineSql).toContain('CREATE TABLE public.runtime_config');
-    expect(baselineSql).toContain('CREATE TABLE public.membership_config');
-    expect(baselineSql).toContain('CREATE TABLE public.announcements');
-    expect(baselineSql).toContain('INSERT INTO public.runtime_config');
+    expect(baselineSql?.includes('CREATE TABLE public.runtime_config')).toBe(
+      true,
+    );
+    expect(baselineSql?.includes('CREATE TABLE public.membership_config')).toBe(
+      true,
+    );
+    expect(baselineSql?.includes('CREATE TABLE public.announcements')).toBe(
+      true,
+    );
+    expect(baselineSql?.includes('INSERT INTO public.runtime_config')).toBe(
+      true,
+    );
+    expect(baselineSql?.includes('CREATE TABLE public.bazi_cases')).toBe(false);
+    expect(baselineSql?.includes('CREATE TABLE public.agent_requests')).toBe(
+      true,
+    );
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(1);
+    expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(1);
+    expect(calls.some((call) => call.sql.includes('CREATE TEMP TABLE'))).toBe(
+      false,
+    );
 
-    // 基线以历史首条 id 记账，确保已存在的库会跳过
+    // Existing IDs keep new databases compatible with the same upgrade ledger.
     expect(calls).toContainEqual({
       sql: expect.stringContaining('INSERT INTO schema_migrations'),
       params: [
@@ -56,8 +80,59 @@ describe('runDatabaseMigrations', () => {
         '全量基线 schema（压平历史 0001-0067 迁移）',
       ],
     });
+    expect(
+      calls
+        .filter((call) => call.sql.includes('INSERT INTO schema_migrations'))
+        .map((call) => call.params?.[0]),
+    ).toEqual(MIGRATIONS.map((migration) => migration.id));
 
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
+  });
+
+  it('rejects a nonempty schema with no migration history before applying SQL', async () => {
+    const { client, calls } = createMockClient([], true);
+
+    await expect(runDatabaseMigrations(client as never)).rejects.toThrow(
+      'no migration history',
+    );
+
+    expect(calls.some((call) => call.sql === 'BEGIN')).toBe(false);
+    expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
+  });
+
+  it('rolls back the whole bootstrap when recording a covered migration fails', async () => {
+    const { client, calls } = createMockClient();
+    const query = client.query.bind(client);
+    const error = new Error('synthetic ledger failure');
+    client.query = async (sql, params) => {
+      const result = await query(sql, params);
+      if (params?.[0] === '0071_cleanup_invalid_phone_users') throw error;
+      return result;
+    };
+
+    await expect(runDatabaseMigrations(client as never)).rejects.toBe(error);
+
+    expect(calls.some((call) => call.sql === 'COMMIT')).toBe(false);
+    expect(calls.some((call) => call.sql === 'ROLLBACK')).toBe(true);
+    expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
+  });
+
+  it('upgrades a database recorded through 0075 using only the missing migrations', async () => {
+    const { client, calls } = createMockClient(
+      MIGRATIONS.slice(0, -2).map((migration) => migration.id),
+    );
+
+    await runDatabaseMigrations(client as never);
+
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(2);
+    expect(
+      calls.some((call) => call.sql.includes('CREATE TABLE public.users')),
+    ).toBe(false);
+    expect(
+      calls
+        .filter((call) => call.sql.includes('INSERT INTO schema_migrations'))
+        .map((call) => call.params?.[0]),
+    ).toEqual(['0076_durable_agent_requests', '0077_drop_bazi_cases']);
   });
 
   it('skips migrations already recorded in the ledger', async () => {
@@ -75,6 +150,36 @@ describe('runDatabaseMigrations', () => {
     ).toBe(false);
     expect(calls.some((call) => call.sql === 'BEGIN')).toBe(false);
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
+  });
+
+  it('applies migrations appended after the newest baseline as separate upgrades', async () => {
+    const migrations = MIGRATIONS as DatabaseMigration[];
+    migrations.push({
+      id: '0078_synthetic_upgrade',
+      description: 'Synthetic upgrade after the snapshot',
+      async up(client) {
+        await client.query('CREATE TABLE synthetic_upgrade (id INTEGER)');
+      },
+    });
+    try {
+      const { client, calls } = createMockClient();
+      await runDatabaseMigrations(client as never);
+
+      expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(2);
+      expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(2);
+      const firstCommit = calls.findIndex((call) => call.sql === 'COMMIT');
+      const upgrade = calls.findIndex(
+        (call) => call.sql === 'CREATE TABLE synthetic_upgrade (id INTEGER)',
+      );
+      expect(upgrade).toBeGreaterThan(firstCommit);
+      expect(
+        calls
+          .filter((call) => call.sql.includes('INSERT INTO schema_migrations'))
+          .map((call) => call.params?.[0]),
+      ).toEqual(migrations.map((migration) => migration.id));
+    } finally {
+      migrations.pop();
+    }
   });
 
   it('drops the retired case dataset in a recorded transaction on existing databases', async () => {
@@ -224,5 +329,45 @@ describe('runDatabaseMigrations', () => {
         '一次性回收历史失效 bundle（删除/取消分享/下架/移出 skill）遗留的孤儿订阅',
       ],
     });
+  });
+});
+
+describe('migration manifest', () => {
+  it('validates the registered upgrade and baseline boundaries', () => {
+    expect(() =>
+      validateMigrationManifest(MIGRATIONS, BASELINES),
+    ).not.toThrow();
+  });
+
+  it('rejects duplicate IDs rather than allowing different operations to share a ledger entry', () => {
+    expect(() =>
+      validateMigrationManifest([...MIGRATIONS, MIGRATIONS[0]], BASELINES),
+    ).toThrow('Duplicate database migration ID');
+  });
+
+  it('rejects reordered migration IDs', () => {
+    expect(() =>
+      validateMigrationManifest([...MIGRATIONS].reverse(), BASELINES),
+    ).toThrow('increasing ID order');
+  });
+
+  it('rejects a baseline that claims an unknown upgrade boundary', () => {
+    expect(() =>
+      validateMigrationManifest(MIGRATIONS, [
+        { ...BASELINES[0], throughMigrationId: '9999_unknown' },
+      ]),
+    ).toThrow('Unknown baseline migration boundary');
+  });
+
+  it('requires a registered baseline', () => {
+    expect(() => validateMigrationManifest(MIGRATIONS, [])).toThrow(
+      'No database baseline registered',
+    );
+  });
+
+  it('rejects duplicate or reordered baseline boundaries', () => {
+    expect(() =>
+      validateMigrationManifest(MIGRATIONS, [...BASELINES, BASELINES[0]]),
+    ).toThrow('increasing migration boundaries');
   });
 });

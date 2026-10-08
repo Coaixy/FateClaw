@@ -4,6 +4,8 @@ The API keeps a maximum of 10 PostgreSQL connections. Each account runtime keeps
 
 Connection acquisition waits at most 5 seconds. Ordinary SQL statements have a server-side 30-second timeout; an idle transaction is terminated after 15 seconds. Client-side query timeouts also bound waits when the database cannot communicate: 35 seconds in the agent runtime and 125 seconds in the API. API startup migrations temporarily use a 120-second statement and idle-transaction budget inside each migration transaction. Commit or rollback restores the ordinary session limits.
 
+Schema initialization and upgrades share one migration runner. Empty databases use a versioned baseline; existing databases replay only missing IDs. The [migration contract](database-migrations.md) describes ledger atomicity, baseline generation, and disposable PostgreSQL validation.
+
 Idle connection failures are handled without logging connection strings or raw error details. PostgreSQL's pool removes the failed idle client; the next operation can acquire a replacement. An active query failure still propagates to its caller.
 
 ## Soul writes

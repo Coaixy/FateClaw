@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
   ON user_api_keys (user_id) WHERE status = 'active';
 ```
 
-- 迁移遵循现有约定：`definitions/` 下的 `0066-user-api-keys.ts` 导出 `readonly DatabaseMigration[]`，已在 `definitions.ts` 末尾**追加**（只追加不重排）；用 `CREATE TABLE IF NOT EXISTS` 等幂等写法。
+- Historical migration 0066 is included in `versions/0001-core-baseline.ts`; new databases use the latest snapshot under `baselines/`. Future upgrades export one named `DatabaseMigration` and append it to `manifest.ts`. See [Database migrations](database-migrations.md).
 - 每用户 key 数量上限：建议 **10**（在路由层 `MAX_API_KEYS_PER_USER` 常量校验，不加 DB 约束，便于调）。
 
 ### 4.3 Key 管理路由（站内，JWT 鉴权）
@@ -412,13 +412,13 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 
 | # | 文件 | 内容 |
 |---|---|---|
-| 1 | `apps/api/src/infrastructure/migrations/definitions/0066-user-api-keys.ts` | `user_api_keys` 表迁移（幂等），并在 `definitions.ts` 追加 |
+| 1 | `apps/api/src/infrastructure/migrations/versions/0001-core-baseline.ts` | Frozen legacy schema, including historical migration 0066 for `user_api_keys` |
 | 2 | `apps/api/src/infrastructure/repositories/api-keys-repository.ts` | `create / listByUser / findByHash / revoke / touchLastUsed` |
 | 3 | `packages/contracts/src/api-keys/index.ts` | 对外/管理 DTO（snake_case） |
 | 4 | `apps/api/src/interfaces/http/api-key-auth.ts` | `requireApiKey()` 中间件（仿 admin 范式） |
 | 5 | `apps/api/src/interfaces/http/api-keys-routes.ts` | `/api/api-keys` 管理路由（站内 JWT） |
 | 6 | `apps/api/src/interfaces/http/open-paipan-routes.ts` | `/api/v1/paipan/catalog` + `/api/v1/paipan/{type}` |
-| 7 | `apps/api/src/infrastructure/migrations/definitions/0067-open-sessions.ts` | `open_sessions` 表迁移（幂等），并在 `definitions.ts` 追加 |
+| 7 | `apps/api/src/infrastructure/migrations/baselines/0077-current-schema.sql` | Current empty-database schema, including `open_sessions` from historical migration 0067 |
 | 8 | `apps/api/src/infrastructure/repositories/open-sessions-repository.ts` | `createOpenSession / findOpenSessionByIdForUser / touchOpenSessionActivity / softDeleteOpenSession / toOpenSessionDto`，经 `db.ts` 再导出 |
 | 9 | `apps/api/src/interfaces/http/open-session-routes.ts` | `/api/v1/sessions` 四端点（建会话 / 发消息(非流式) / GET / DELETE）；IPC 桥接：usage 回填 / 单 skill 授权 / board 会话级注入 / 会话忙碌锁 |
 | 10 | `apps/api/src/interfaces/http/open-api-routes.ts` | `/api/v1` 域父插件：统一注入鉴权钩子 + OpenAI 错误体；挂 `GET /models`、`GET /skills`；注册 `paipan`、`sessions` 子插件 |
