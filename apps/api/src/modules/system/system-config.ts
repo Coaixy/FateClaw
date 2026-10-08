@@ -201,7 +201,7 @@ export async function resolveUserLlmRuntime(
   _userId: string,
 ): Promise<EffectiveLlmRuntimeConfig> {
   const runtime = await resolveOfficialLlmRuntime();
-  if (!runtime) throw new Error('The official model is unavailable. Please contact the administrator.');
+  if (!runtime) throw new Error('官方模型暂不可用，请联系管理员。');
   return runtime;
 }
 
@@ -232,7 +232,7 @@ function normalizeOfficialBaseUrl(value: string | null): string | null {
   const raw = value?.trim();
   if (!raw) return null;
   if (!URL.canParse(raw))
-    throw new ModelConfigurationError('Enter a valid base URL');
+    throw new ModelConfigurationError('请输入有效的接口地址');
   const url = new URL(raw);
   if (
     !['http:', 'https:'].includes(url.protocol) ||
@@ -242,7 +242,7 @@ function normalizeOfficialBaseUrl(value: string | null): string | null {
     url.hash
   ) {
     throw new ModelConfigurationError(
-      'Use an HTTP or HTTPS base URL without credentials, query parameters, or fragments',
+      '接口地址仅支持 HTTP 或 HTTPS，不能包含用户名、密码、查询参数或片段',
     );
   }
   return raw;
@@ -259,7 +259,7 @@ export async function saveOfficialModelSettings(
     authMode: input.auth_mode,
     contextWindowTokens: normalizeConfiguredContextWindowTokens(
       input.context_window_tokens,
-      'Official model',
+      '官方模型',
     ),
     thinkingLevel: input.thinking_level,
     inputTokenPricePerMillionCoins: input.input_token_price_per_million_coins,

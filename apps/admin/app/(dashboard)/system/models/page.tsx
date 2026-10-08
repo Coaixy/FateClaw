@@ -61,7 +61,7 @@ export default function AdminModelConfigPage() {
       setDraft(configFromOverview(data));
       setSecret('');
     } catch (err) {
-      setError(formatAdminErrorMessage(err, 'Could not load model configuration'));
+      setError(formatAdminErrorMessage(err, '加载模型配置失败'));
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export default function AdminModelConfigPage() {
       setSecret('');
       setSaved(true);
     } catch (err) {
-      setError(formatAdminErrorMessage(err, 'Could not save model configuration'));
+      setError(formatAdminErrorMessage(err, '保存模型配置失败'));
     } finally {
       setSaving(false);
     }
@@ -105,10 +105,10 @@ export default function AdminModelConfigPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Bot size={18} /> Model configuration
+            <Bot size={18} /> 模型配置
           </h2>
           <p className="mt-1 text-[13px] leading-6 text-muted">
-            One official model and thinking level for all users.
+            所有用户统一使用此模型和思考等级。
           </p>
         </div>
         <button
@@ -117,7 +117,7 @@ export default function AdminModelConfigPage() {
           disabled={loading || saving}
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-hairline px-3 text-[13px] text-muted hover:text-ink disabled:opacity-50"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 刷新
         </button>
       </div>
       {error && (
@@ -139,15 +139,15 @@ export default function AdminModelConfigPage() {
             className="rounded-xl border border-hairline bg-surface-card"
           >
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-              <h3 className="text-sm font-semibold">Official model</h3>
+              <h3 className="text-sm font-semibold">官方模型</h3>
               <span className="rounded-full bg-canvas px-2.5 py-1 text-[11px] text-muted">
-                {overview.model?.has_secret ? 'Configured' : 'Not configured'}
+                {overview.model?.has_secret ? '已配置' : '未配置'}
               </span>
             </div>
             <fieldset disabled={saving} className="space-y-5 p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-1.5 text-[12px] text-muted">
-                  <span className="block">Protocol</span>
+                  <span className="block">接口协议</span>
                   <select
                     className={FIELD_CLASS}
                     value={draft.pi_api}
@@ -165,24 +165,24 @@ export default function AdminModelConfigPage() {
                       });
                     }}
                   >
-                    <option value="openai-completions">OpenAI Chat Completions</option>
+                    <option value="openai-completions">OpenAI 对话接口</option>
                     <option value="openai-responses">
-                      OpenAI Responses
+                      OpenAI Responses 接口
                     </option>
                     <option value="anthropic-messages">
-                      Anthropic Messages
+                      Anthropic 消息接口
                     </option>
                     <option value="google-generative-ai">Google Gemini</option>
                   </select>
                 </label>
                 <label className="space-y-1.5 text-[12px] text-muted">
-                  <span className="block">Model</span>
+                  <span className="block">模型名称</span>
                   <input
                     className={FIELD_CLASS}
                     required
                     maxLength={120}
                     value={draft.model_name}
-                    placeholder="Model ID"
+                    placeholder="请输入模型 ID"
                     onChange={(event) =>
                       patchDraft({ model_name: event.target.value })
                     }
@@ -190,20 +190,20 @@ export default function AdminModelConfigPage() {
                 </label>
               </div>
               <label className="block space-y-1.5 text-[12px] text-muted">
-                <span className="block">Base URL</span>
+                <span className="block">接口地址</span>
                 <input
                   className={FIELD_CLASS}
                   type="url"
                   maxLength={500}
                   value={draft.base_url ?? ''}
-                  placeholder="Leave blank to use the provider default"
+                  placeholder="留空使用默认接口地址"
                   onChange={(event) =>
                     patchDraft({ base_url: event.target.value || null })
                   }
                 />
               </label>
               <label className="block space-y-1.5 text-[12px] text-muted">
-                <span className="block">API key</span>
+                <span className="block">API 密钥</span>
                 <input
                   className={FIELD_CLASS}
                   type="password"
@@ -213,8 +213,8 @@ export default function AdminModelConfigPage() {
                   value={secret}
                   placeholder={
                     overview.model?.has_secret
-                      ? 'Leave blank to keep the saved key'
-                      : 'Enter an API key'
+                      ? '留空保留已保存的密钥'
+                      : '请输入 API 密钥'
                   }
                   onChange={(event) => {
                     setSecret(event.target.value);
@@ -224,7 +224,7 @@ export default function AdminModelConfigPage() {
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-1.5 text-[12px] text-muted">
-                  <span className="block">Thinking level</span>
+                  <span className="block">思考等级</span>
                   <select
                     className={FIELD_CLASS}
                     value={draft.thinking_level}
@@ -235,17 +235,17 @@ export default function AdminModelConfigPage() {
                       })
                     }
                   >
-                    <option value="off">Off</option>
-                    <option value="minimal">Minimal</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="xhigh">Extra high</option>
+                    <option value="off">关闭</option>
+                    <option value="minimal">最低</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                    <option value="xhigh">最高</option>
                   </select>
                 </label>
                 {draft.pi_api === 'anthropic-messages' && (
                   <label className="space-y-1.5 text-[12px] text-muted">
-                    <span className="block">Authentication</span>
+                    <span className="block">认证方式</span>
                     <select
                       className={FIELD_CLASS}
                       value={draft.auth_mode ?? 'anthropic_api_key'}
@@ -256,9 +256,9 @@ export default function AdminModelConfigPage() {
                         })
                       }
                     >
-                      <option value="anthropic_api_key">API key</option>
+                      <option value="anthropic_api_key">API 密钥</option>
                       <option value="claude_code_oauth_token">
-                        Claude Code OAuth token
+                        Claude Code OAuth 令牌
                       </option>
                     </select>
                   </label>
@@ -266,11 +266,11 @@ export default function AdminModelConfigPage() {
               </div>
               <details className="rounded-lg border border-hairline px-4 py-3">
                 <summary className="cursor-pointer text-[12px] text-muted">
-                  Token pricing and context window
+                  Token 价格与上下文窗口
                 </summary>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="space-y-1.5 text-[12px] text-muted">
-                    <span className="block">Input coins / million tokens</span>
+                    <span className="block">输入价格（积分 / 百万 Token）</span>
                     <input
                       className={FIELD_CLASS}
                       type="number"
@@ -289,7 +289,7 @@ export default function AdminModelConfigPage() {
                     />
                   </label>
                   <label className="space-y-1.5 text-[12px] text-muted">
-                    <span className="block">Output coins / million tokens</span>
+                    <span className="block">输出价格（积分 / 百万 Token）</span>
                     <input
                       className={FIELD_CLASS}
                       type="number"
@@ -308,7 +308,7 @@ export default function AdminModelConfigPage() {
                     />
                   </label>
                   <label className="space-y-1.5 text-[12px] text-muted sm:col-span-2">
-                    <span className="block">Context window (tokens)</span>
+                    <span className="block">上下文窗口（Token）</span>
                     <input
                       className={FIELD_CLASS}
                       type="number"
@@ -323,7 +323,7 @@ export default function AdminModelConfigPage() {
                         })
                       }
                     />
-                    <span className="block">Use 0 for automatic detection.</span>
+                    <span className="block">填写 0 时自动识别。</span>
                   </label>
                 </div>
               </details>
@@ -331,7 +331,7 @@ export default function AdminModelConfigPage() {
             <div className="flex items-center justify-end gap-3 border-t border-hairline px-5 py-4">
               {saved && (
                 <span role="status" className="text-[12px] text-success">
-                  Configuration saved
+                  配置已保存
                 </span>
               )}
               <button
@@ -339,7 +339,7 @@ export default function AdminModelConfigPage() {
                 disabled={saving || !draft.model_name.trim()}
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-medium text-on-primary hover:bg-primary-active disabled:opacity-50"
               >
-                <Save size={14} /> {saving ? 'Saving…' : 'Save configuration'}
+                <Save size={14} /> {saving ? '保存中…' : '保存配置'}
               </button>
             </div>
           </form>

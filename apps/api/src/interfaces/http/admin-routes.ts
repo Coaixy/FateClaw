@@ -383,7 +383,7 @@ const OfficialModelSettingsSchema = z
       .max(MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS)
       .refine(
         (value) => value === 0 || value >= MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
-        `Context window must be 0 or at least ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
+        `上下文窗口需为 0，或不小于 ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
       )
       .nullable(),
     input_token_price_per_million_coins: z.number().int().min(0).max(1_000_000),
@@ -405,7 +405,7 @@ const OfficialModelSettingsSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['auth_mode'],
-        message: 'Authentication mode does not match the protocol',
+        message: '认证方式与接口协议不匹配',
       });
     }
   });
@@ -693,10 +693,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/system-config', async () => getSystemConfigOverview());
 
   app.put('/system-config/model', async (request, reply) => {
-    const parsed = OfficialModelSettingsSchema.safeParse(request.body);
+    const parsed = OfficialModelSettingsSchema.safeParse(request.body, {
+      error: () => '模型配置参数不正确',
+    });
     if (!parsed.success) {
       return reply.code(400).send({
-        error: parsed.error.issues[0]?.message || 'Invalid model configuration',
+        error: parsed.error.issues[0]?.message || '模型配置参数不正确',
       });
     }
     return saveOfficialModelSettings({ ...parsed.data, actor: 'manager' });

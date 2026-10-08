@@ -122,7 +122,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       return sendOpenAiError(
         reply,
         400,
-        'The official model is unavailable or the model alias is invalid',
+        '官方模型暂不可用，或模型标识不正确',
         'invalid_request_error',
         'model_not_found',
       );
@@ -188,7 +188,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       return sendOpenAiError(
         reply,
         400,
-        'The official model is unavailable',
+        '官方模型暂不可用',
         'invalid_request_error',
         'model_not_found',
       );

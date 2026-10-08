@@ -132,7 +132,7 @@ describe('official model runtime', () => {
       ...overrides,
     });
     await expect(resolveUserLlmRuntime('user')).rejects.toThrow(
-      'official model is unavailable',
+      '官方模型暂不可用',
     );
     expect(await listPublicOfficialModels()).toEqual([]);
     expect(db.getSystemSecret).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('official model runtime', () => {
       secretValue: null,
     });
     await expect(resolveUserLlmRuntime('user')).rejects.toThrow(
-      'official model is unavailable',
+      '官方模型暂不可用',
     );
   });
 });

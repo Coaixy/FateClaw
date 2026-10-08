@@ -102,10 +102,10 @@ export async function savePlatformModelConfig(
     const previous = current.model;
     const secretValue = input.secretValue?.trim();
     if (!secretValue && !current.hasSecret) {
-      throw new ModelConfigurationError('An API key is required for the official model');
+      throw new ModelConfigurationError('请先配置官方模型的 API 密钥');
     }
     if (!secretValue && previous && previous.pi_api !== input.piApi) {
-      throw new ModelConfigurationError('Provide an API key when changing the protocol');
+      throw new ModelConfigurationError('更换接口协议时，请填写新的 API 密钥');
     }
     const id = previous?.id ?? 'platform-model';
     const secretKey =
