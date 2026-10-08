@@ -73,7 +73,6 @@ export const enMessages = {
       account: 'Account',
     },
     skillMarket: 'Skill library',
-    baziCases: 'Bazi Case Library',
     wallet: 'Subscription & Billing',
     persona: 'Persona',
     modelSettings: 'Model settings',

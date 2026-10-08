@@ -26,7 +26,6 @@ apps/web/
 │   ├── login/page.tsx
 │   ├── ai-chat/page.tsx
 │   ├── discover/page.tsx
-│   ├── bazi-cases/page.tsx
 │   ├── clients/page.tsx
 │   ├── announcements/page.tsx
 │   ├── membership/page.tsx

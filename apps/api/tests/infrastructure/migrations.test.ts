@@ -77,6 +77,30 @@ describe('runDatabaseMigrations', () => {
     expect(calls.at(-1)?.sql).toBe('SELECT pg_advisory_unlock($1, $2)');
   });
 
+  it('drops the retired case dataset in a recorded transaction on existing databases', async () => {
+    const { client, calls } = createMockClient(
+      MIGRATIONS.filter(
+        (migration) => migration.id !== '0077_drop_bazi_cases',
+      ).map((migration) => migration.id),
+    );
+
+    await runDatabaseMigrations(client as never);
+
+    const beginIndex = calls.findIndex((call) => call.sql === 'BEGIN');
+    const dropIndex = calls.findIndex(
+      (call) => call.sql === 'DROP TABLE IF EXISTS public.bazi_cases',
+    );
+    const ledgerIndex = calls.findIndex(
+      (call) => call.params?.[0] === '0077_drop_bazi_cases',
+    );
+    const commitIndex = calls.findIndex((call) => call.sql === 'COMMIT');
+
+    expect(dropIndex).toBeGreaterThanOrEqual(0);
+    expect(beginIndex).toBeLessThan(dropIndex);
+    expect(dropIndex).toBeLessThan(ledgerIndex);
+    expect(ledgerIndex).toBeLessThan(commitIndex);
+  });
+
   it('runs the invalid-phone cleanup once as migration 0071 when unrecorded', async () => {
     // 回归防护：无效手机号用户清理已从「每次启动无条件跑」改为受账本管理的一次性迁移。
     // 未记录 0071 时应执行清理（建删除集临时表）并以 0071 记账；已记录则被上一个用例覆盖。

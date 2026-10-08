@@ -70,7 +70,6 @@ export const zhCNMessages = {
       account: '账户',
     },
     skillMarket: '技能库',
-    baziCases: '八字命例库',
     wallet: '订阅与计费',
     persona: '人格设置',
     modelSettings: '模型设置',

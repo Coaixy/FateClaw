@@ -7,6 +7,7 @@ import { dropDeadFeatureTablesMigrations } from './definitions/0073-drop-dead-fe
 import { dropRemovedFeatureTablesMigrations } from './definitions/0074-drop-removed-feature-tables.js';
 import addRedemptionCodesMigration from './definitions/0075-add-redemption-codes.js';
 import { durableAgentRequestsMigration } from './definitions/0076-durable-agent-requests.js';
+import { dropBaziCasesMigration } from './definitions/0077-drop-bazi-cases.js';
 
 /**
  * FateClaw 数据库迁移清单。
@@ -26,4 +27,5 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   ...dropRemovedFeatureTablesMigrations,
   addRedemptionCodesMigration,
   durableAgentRequestsMigration,
+  dropBaziCasesMigration,
 ];

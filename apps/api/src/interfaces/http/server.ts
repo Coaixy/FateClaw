@@ -24,7 +24,6 @@ import { accountRoutes } from './account-routes.js';
 import { adminRoutes } from './admin-routes.js';
 import { apiKeysRoutes } from './api-keys-routes.js';
 import { authRoutes } from './auth-routes.js';
-import { baziCasesRoutes } from './bazi-cases-routes.js';
 import { billingRoutes } from './billing-routes.js';
 import { chatSessionsRoutes } from './chat-sessions-routes.js';
 import { clientProfilesRoutes } from './client-profiles-routes.js';
@@ -336,7 +335,6 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });
   await app.register(publicRoutes, { prefix: '/api/public' });
-  await app.register(baziCasesRoutes, { prefix: '/api/bazi-cases' });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 
   await app.register(billingRoutes, { prefix: '/api/billing' });

@@ -149,18 +149,6 @@ import {
   softDeleteClientFollowUp,
 } from './repositories/client-follow-ups-repository.js';
 import {
-  getBaziCaseById,
-  getBaziCasesOverview,
-  listBaziCasesPage,
-} from './repositories/bazi-cases-repository.js';
-import type {
-  BaziCaseRow,
-  BaziCaseFullRow,
-  BaziCasesOverview,
-  BaziCasesPage,
-  BaziCaseDistributionRow,
-} from './repositories/bazi-cases-repository.js';
-import {
   deleteWechatChatSessionLink,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
@@ -287,9 +275,6 @@ export {
   createClientFollowUp,
   getClientFollowUpsByClientId,
   softDeleteClientFollowUp,
-  getBaziCaseById,
-  getBaziCasesOverview,
-  listBaziCasesPage,
   deleteAccount,
   deleteDraftAnnouncement,
   deleteConversationLogsByAccountIds,
@@ -450,11 +435,6 @@ export {
 };
 export type {
   AdminSkillCommentRow,
-  BaziCaseRow,
-  BaziCaseFullRow,
-  BaziCasesOverview,
-  BaziCasesPage,
-  BaziCaseDistributionRow,
   ClientProfileWithStats,
   MembershipEntitlementRow,
   RechargeOrderRow,

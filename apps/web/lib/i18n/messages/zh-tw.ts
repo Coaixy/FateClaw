@@ -70,7 +70,6 @@ export const zhTWMessages = {
       account: '帳戶',
     },
     skillMarket: '技能庫',
-    baziCases: '八字命例庫',
     wallet: '訂閱與計費',
     persona: '人格設定',
     modelSettings: '模型設定',

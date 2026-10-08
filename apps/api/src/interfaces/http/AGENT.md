@@ -57,7 +57,6 @@ apps/api/src/interfaces/http/
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/public`
-- `/api/bazi-cases`
 - `/api/skills`
 - `/api/billing`
 - `/api/api-keys`

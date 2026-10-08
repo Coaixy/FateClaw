@@ -7,7 +7,6 @@ import {
   Compass,
   Crown,
   KeyRound,
-  Library,
   LogOut,
   ServerCog,
   Sparkles,
@@ -88,12 +87,6 @@ export function UserMenuDropdown({
             href="/discover"
             icon={Compass}
             label={t('userMenu.skillMarket')}
-            onNavigate={onNavigate}
-          />
-          <MenuItem
-            href="/bazi-cases"
-            icon={Library}
-            label={t('userMenu.baziCases')}
             onNavigate={onNavigate}
           />
         </MenuSection>

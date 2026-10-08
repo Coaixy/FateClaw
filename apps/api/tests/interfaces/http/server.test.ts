@@ -89,6 +89,23 @@ describe('createApiServer auth guard', () => {
     await app.close();
   });
 
+  it('returns JSON 404 for retired case dataset endpoints', async () => {
+    expect(app.hasRoute({ method: 'GET', url: '/api/bazi-cases' })).toBe(false);
+
+    for (const url of [
+      '/api/bazi-cases',
+      '/api/bazi-cases/',
+      '/api/bazi-cases/overview',
+      '/api/bazi-cases/1',
+    ]) {
+      const response = await app.inject({ method: 'GET', url });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.json()).toMatchObject({ error: 'Not Found' });
+    }
+  });
+
   it('does not log stream ticket query credentials on failed upgrades', async () => {
     await app.inject({
       method: 'GET',
