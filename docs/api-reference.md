@@ -901,15 +901,6 @@ Returns `{ "model": { ... } | null, "thinking_level": "medium" }` for the sole o
 
 更新每日签到和会员奖励配置。
 
-### 关于页面公开收支流水
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/admin/about-ledger` | 读取公开收支流水 |
-| POST | `/api/admin/about-ledger` | 新增公开收支流水 |
-| PATCH | `/api/admin/about-ledger/:id` | 更新公开收支流水 |
-| DELETE | `/api/admin/about-ledger/:id` | 删除公开收支流水 |
-
 ### PUT /api/admin/system-config/model
 
 Saves the single official model and platform thinking level atomically. Repeated or concurrent saves update the same slot. There are no add, delete, priority, or default-model controls.
@@ -960,14 +951,6 @@ The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-co
 | POST | `/api/admin/chat-sessions/pi-sessions/cleanup` | 清理 Pi session 文件 |
 | GET | `/api/admin/skills/custom` | 管理端自定义 Skill 检索 |
 | GET | `/api/admin/skills/global` | 系统排盘全局开关列表 |
-
----
-
-## Public 公开接口
-
-### GET /api/public/financial-ledger
-
-无需认证。返回关于页面公开收支流水。
 
 ---
 

@@ -580,8 +580,6 @@ export const zhCNMessages = {
     modifyTitle: '修改标题',
     archiveChat: '归档对话',
     status: '状态',
-    about: '关于',
-    aboutUs: '关于我们',
     contactShort: '联系',
     contactStationmaster: '联系名誉站长',
     shortcutsAndTheme: '侧栏快捷入口和主题切换',

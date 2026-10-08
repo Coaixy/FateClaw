@@ -26,10 +26,8 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
   createAnnouncement: vi.fn(),
-  createPublicFinancialLedgerEntry: vi.fn(),
   deleteConversationLogsForAdminUser: vi.fn(),
   deleteDraftAnnouncement: vi.fn(),
-  deletePublicFinancialLedgerEntry: vi.fn(),
   deleteUser: vi.fn(),
   getAdminGlobalStats: vi.fn(),
   getAdminAnnouncementById: vi.fn(),
@@ -58,7 +56,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listBillingRequestReservations: vi.fn(),
   listBillingRequestReservationsPageForAdmin: vi.fn(),
   listRechargeOrdersForAdmin: vi.fn(),
-  listPublicFinancialLedgerEntries: vi.fn(),
   listWalletTransactionsForAdmin: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
   reviewSkillCommentForAdmin: vi.fn(),
@@ -70,7 +67,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),
   updateAnnouncement: vi.fn(),
-  updatePublicFinancialLedgerEntry: vi.fn(),
 }));
 
 vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
@@ -196,6 +192,25 @@ describe('adminRoutes authentication throttling', () => {
   afterEach(async () => {
     await app.close();
   });
+
+  it.each([
+    { method: 'GET' as const, url: '/about-ledger' },
+    { method: 'POST' as const, url: '/about-ledger' },
+    { method: 'PATCH' as const, url: '/about-ledger/:id' },
+    { method: 'DELETE' as const, url: '/about-ledger/:id' },
+  ])(
+    'returns 404 for the retired $method $url endpoint',
+    async ({ method, url }) => {
+      const response = await app.inject({
+        method,
+        url: url.replace(':id', 'retired-entry'),
+        headers: { 'x-admin-key': 'test-manager-key' },
+      });
+
+      expect(app.hasRoute({ method, url })).toBe(false);
+      expect(response.statusCode).toBe(404);
+    },
+  );
 
   it('records failed admin key attempts on non-verify endpoints', async () => {
     const response = await app.inject({

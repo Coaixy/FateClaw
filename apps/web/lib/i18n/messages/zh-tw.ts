@@ -580,8 +580,6 @@ export const zhTWMessages = {
     modifyTitle: '修改標題',
     archiveChat: '歸檔對話',
     status: '狀態',
-    about: '關於',
-    aboutUs: '關於我們',
     contactShort: '聯絡',
     contactStationmaster: '聯絡名譽站長',
     shortcutsAndTheme: '側欄快捷入口和主題切換',

@@ -9,6 +9,7 @@ import { dropRemovedFeatureTablesMigration } from './versions/0074-drop-removed-
 import { addRedemptionCodesMigration } from './versions/0075-add-redemption-codes.js';
 import { durableAgentRequestsMigration } from './versions/0076-durable-agent-requests.js';
 import { dropBaziCasesMigration } from './versions/0077-drop-bazi-cases.js';
+import { dropPublicFinancialLedgerMigration } from './versions/0078-drop-public-financial-ledger.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -21,6 +22,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   addRedemptionCodesMigration,
   durableAgentRequestsMigration,
   dropBaziCasesMigration,
+  dropPublicFinancialLedgerMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

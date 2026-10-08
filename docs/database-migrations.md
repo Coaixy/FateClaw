@@ -6,7 +6,9 @@ The API calls `runDatabaseMigrations()` from `initDatabase()`. The migration own
 
 An empty migration ledger is insufficient to identify an empty database. Before bootstrapping, the runner checks PostgreSQL's namespace dependencies for objects in the `public` schema, including tables, views, sequences, functions, composite types, and collations. The ledger, extension members, and their automatically or internally owned implementation objects are allowed. An untracked nonempty schema fails startup without running migration SQL; reconcile its history explicitly rather than treating it as a new installation.
 
-A verified empty schema uses the newest registered baseline. The current [0077 snapshot](../apps/api/src/infrastructure/migrations/baselines/0077-current-schema.sql) contains the schema and default configuration after all migrations through `0077_drop_bazi_cases`. It does not create retired tables or replay historical user-data cleanup.
+A verified empty schema uses the newest registered baseline. The current [0077 snapshot](../apps/api/src/infrastructure/migrations/baselines/0077-current-schema.sql) contains the schema and default configuration after all migrations through `0077_drop_bazi_cases`. It skips historical user-data cleanup and tables retired through that boundary.
+
+The subsequent `0078_drop_public_financial_ledger` migration removes `public_financial_ledger_entries` and its records on both fresh installations and existing databases. The published 0077 snapshot and older upgrade SQL remain frozen; the retired table is removed before database initialization completes.
 
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 

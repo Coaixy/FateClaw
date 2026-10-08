@@ -5,19 +5,16 @@ const {
   mockGetActiveAnnouncement,
   mockGetPublicAnnouncementBySlug,
   mockListPublicAnnouncements,
-  mockListPublicFinancialLedgerEntries,
 } = vi.hoisted(() => ({
   mockGetActiveAnnouncement: vi.fn(),
   mockGetPublicAnnouncementBySlug: vi.fn(),
   mockListPublicAnnouncements: vi.fn(),
-  mockListPublicFinancialLedgerEntries: vi.fn(),
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
   getActiveAnnouncement: mockGetActiveAnnouncement,
   getPublicAnnouncementBySlug: mockGetPublicAnnouncementBySlug,
   listPublicAnnouncements: mockListPublicAnnouncements,
-  listPublicFinancialLedgerEntries: mockListPublicFinancialLedgerEntries,
 }));
 
 import { publicRoutes } from '../../../src/interfaces/http/public-routes.js';
@@ -47,7 +44,6 @@ describe('publicRoutes announcements', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockListPublicFinancialLedgerEntries.mockResolvedValue([]);
     mockGetActiveAnnouncement.mockResolvedValue(null);
     mockListPublicAnnouncements.mockResolvedValue([]);
     mockGetPublicAnnouncementBySlug.mockResolvedValue(null);

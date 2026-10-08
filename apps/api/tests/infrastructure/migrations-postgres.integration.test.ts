@@ -137,6 +137,9 @@ describe.skipIf(!connectionString)(
         await replayHistory(legacy);
         const expectedSchema = await readSchema(legacy);
         const expectedSeeds = await readSeedFingerprints(legacy);
+        expect(expectedSeeds).not.toHaveProperty(
+          'public_financial_ledger_entries',
+        );
         await withDatabase(async (fresh) => {
           await runDatabaseMigrations(fresh);
           expect(await readSchema(fresh)).toEqual(expectedSchema);
@@ -158,7 +161,17 @@ describe.skipIf(!connectionString)(
         VALUES ('synthetic-preserved-user', NOW(), 123.45)`);
         await client.query(`INSERT INTO bazi_cases (id, bazi, gender)
         VALUES (1, 'synthetic fixture', 'synthetic')`);
+        await client.query(`INSERT INTO public_financial_ledger_entries
+        (id, entry_type, occurred_at, content, amount_yuan)
+        VALUES ('synthetic-retired-entry', 'expense', '2026-10-08', 'Synthetic fixture', 1)`);
         await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              "SELECT to_regclass('public.public_financial_ledger_entries') AS name",
+            )
+          ).rows[0].name,
+        ).toBeNull();
         expect(
           (
             await client.query(

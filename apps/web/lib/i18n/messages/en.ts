@@ -603,8 +603,6 @@ export const enMessages = {
     modifyTitle: 'Edit title',
     archiveChat: 'Archive conversation',
     status: 'Status',
-    about: 'About',
-    aboutUs: 'About us',
     contactShort: 'Contact',
     contactStationmaster: 'Contact stationmaster',
     shortcutsAndTheme: 'Sidebar shortcuts and theme toggle',

@@ -32,7 +32,7 @@ function createMockClient(appliedIds: string[] = [], hasSchemaObjects = false) {
 }
 
 describe('runDatabaseMigrations', () => {
-  it('initializes an empty database in one transaction without replaying retired structures', async () => {
+  it('initializes an empty database from the snapshot and applies subsequent migrations', async () => {
     const { client, calls } = createMockClient();
 
     await runDatabaseMigrations(client as never);
@@ -66,8 +66,17 @@ describe('runDatabaseMigrations', () => {
     expect(baselineSql?.includes('CREATE TABLE public.agent_requests')).toBe(
       true,
     );
-    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(1);
-    expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(1);
+    const baselineMigrationCount =
+      MIGRATIONS.findIndex(
+        (migration) => migration.id === BASELINES.at(-1)?.throughMigrationId,
+      ) + 1;
+    const expectedTransactions = 1 + MIGRATIONS.length - baselineMigrationCount;
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(
+      expectedTransactions,
+    );
+    expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(
+      expectedTransactions,
+    );
     expect(calls.some((call) => call.sql.includes('CREATE TEMP TABLE'))).toBe(
       false,
     );
@@ -119,12 +128,14 @@ describe('runDatabaseMigrations', () => {
 
   it('upgrades a database recorded through 0075 using only the missing migrations', async () => {
     const { client, calls } = createMockClient(
-      MIGRATIONS.slice(0, -2).map((migration) => migration.id),
+      MIGRATIONS.filter(
+        (migration) => migration.id <= '0075_add_redemption_codes',
+      ).map((migration) => migration.id),
     );
 
     await runDatabaseMigrations(client as never);
 
-    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(2);
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(3);
     expect(
       calls.some((call) => call.sql.includes('CREATE TABLE public.users')),
     ).toBe(false);
@@ -132,7 +143,11 @@ describe('runDatabaseMigrations', () => {
       calls
         .filter((call) => call.sql.includes('INSERT INTO schema_migrations'))
         .map((call) => call.params?.[0]),
-    ).toEqual(['0076_durable_agent_requests', '0077_drop_bazi_cases']);
+    ).toEqual([
+      '0076_durable_agent_requests',
+      '0077_drop_bazi_cases',
+      '0078_drop_public_financial_ledger',
+    ]);
   });
 
   it('skips migrations already recorded in the ledger', async () => {
@@ -155,7 +170,7 @@ describe('runDatabaseMigrations', () => {
   it('applies migrations appended after the newest baseline as separate upgrades', async () => {
     const migrations = MIGRATIONS as DatabaseMigration[];
     migrations.push({
-      id: '0078_synthetic_upgrade',
+      id: '0079_synthetic_upgrade',
       description: 'Synthetic upgrade after the snapshot',
       async up(client) {
         await client.query('CREATE TABLE synthetic_upgrade (id INTEGER)');
@@ -165,8 +180,18 @@ describe('runDatabaseMigrations', () => {
       const { client, calls } = createMockClient();
       await runDatabaseMigrations(client as never);
 
-      expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(2);
-      expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(2);
+      const baselineMigrationCount =
+        migrations.findIndex(
+          (migration) => migration.id === BASELINES.at(-1)?.throughMigrationId,
+        ) + 1;
+      const expectedTransactions =
+        1 + migrations.length - baselineMigrationCount;
+      expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(
+        expectedTransactions,
+      );
+      expect(calls.filter((call) => call.sql === 'COMMIT')).toHaveLength(
+        expectedTransactions,
+      );
       const firstCommit = calls.findIndex((call) => call.sql === 'COMMIT');
       const upgrade = calls.findIndex(
         (call) => call.sql === 'CREATE TABLE synthetic_upgrade (id INTEGER)',
@@ -197,6 +222,32 @@ describe('runDatabaseMigrations', () => {
     );
     const ledgerIndex = calls.findIndex(
       (call) => call.params?.[0] === '0077_drop_bazi_cases',
+    );
+    const commitIndex = calls.findIndex((call) => call.sql === 'COMMIT');
+
+    expect(dropIndex).toBeGreaterThanOrEqual(0);
+    expect(beginIndex).toBeLessThan(dropIndex);
+    expect(dropIndex).toBeLessThan(ledgerIndex);
+    expect(ledgerIndex).toBeLessThan(commitIndex);
+  });
+
+  it('drops the retired public financial ledger in a recorded transaction on existing databases', async () => {
+    const { client, calls } = createMockClient(
+      MIGRATIONS.filter(
+        (migration) => migration.id !== '0078_drop_public_financial_ledger',
+      ).map((migration) => migration.id),
+    );
+
+    await runDatabaseMigrations(client as never);
+
+    const beginIndex = calls.findIndex((call) => call.sql === 'BEGIN');
+    const dropIndex = calls.findIndex(
+      (call) =>
+        call.sql ===
+        'DROP TABLE IF EXISTS public.public_financial_ledger_entries',
+    );
+    const ledgerIndex = calls.findIndex(
+      (call) => call.params?.[0] === '0078_drop_public_financial_ledger',
     );
     const commitIndex = calls.findIndex((call) => call.sql === 'COMMIT');
 

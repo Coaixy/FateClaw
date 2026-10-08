@@ -18,7 +18,6 @@ import {
   ScrollText,
   Bot,
   Crown,
-  Landmark,
   ReceiptText,
   WalletCards,
   Megaphone,
@@ -73,11 +72,10 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
-  { href: '/logs', label: '日志', icon: ScrollText, requiredScopes: ['admin:*'] },
   {
-    href: '/about',
-    label: '关于收支',
-    icon: Landmark,
+    href: '/logs',
+    label: '日志',
+    icon: ScrollText,
     requiredScopes: ['admin:*'],
   },
   {

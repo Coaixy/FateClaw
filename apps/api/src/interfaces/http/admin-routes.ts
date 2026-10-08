@@ -52,13 +52,9 @@ import {
   reviewSkillCommentForAdmin,
   updateAdminRechargePaymentConfig,
   getAdminUserDetail,
-  createPublicFinancialLedgerEntry,
-  deletePublicFinancialLedgerEntry,
   listAdminAnnouncements,
-  listPublicFinancialLedgerEntries,
   getAdminStatusOverview,
   updateAnnouncement,
-  updatePublicFinancialLedgerEntry,
   getMembershipPlanConfigsForAdmin,
   updateMembershipPlanConfig,
   getAdminChatSessionDetail,
@@ -452,16 +448,6 @@ const RechargePaymentConfigSchema = z
       }
     }
   });
-
-const PublicFinancialLedgerEntrySchema = z.object({
-  entry_type: z.enum(['income', 'expense']),
-  occurred_at: DateOnlySchema,
-  content: z.string().trim().min(1, '内容不能为空').max(200, '内容最多 200 字'),
-  amount_yuan: SoftCurrencyNumberSchema.refine(
-    (value) => value > 0,
-    '数额必须大于 0',
-  ),
-});
 
 function nullableDateTimeSchema(label: string) {
   return z
@@ -903,62 +889,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     if (!result.deleted) {
       return reply.code(404).send({ error: '公告不存在' });
-    }
-    return { success: true };
-  });
-
-  // GET /api/admin/about-ledger — 关于页面公开收支流水
-  app.get('/about-ledger', async () => {
-    return { entries: await listPublicFinancialLedgerEntries() };
-  });
-
-  // POST /api/admin/about-ledger — 新增关于页面公开收支流水
-  app.post('/about-ledger', async (request, reply) => {
-    const parsed = PublicFinancialLedgerEntrySchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    const entry = await createPublicFinancialLedgerEntry({
-      entryType: parsed.data.entry_type,
-      occurredAt: parsed.data.occurred_at,
-      content: parsed.data.content,
-      amountYuan: parsed.data.amount_yuan,
-    });
-    return reply.code(201).send(entry);
-  });
-
-  // PATCH /api/admin/about-ledger/:id — 更新关于页面公开收支流水
-  app.patch('/about-ledger/:id', async (request, reply) => {
-    const parsed = PublicFinancialLedgerEntrySchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    const entry = await updatePublicFinancialLedgerEntry(
-      (request.params as { id: string }).id,
-      {
-        entryType: parsed.data.entry_type,
-        occurredAt: parsed.data.occurred_at,
-        content: parsed.data.content,
-        amountYuan: parsed.data.amount_yuan,
-      },
-    );
-    if (!entry) {
-      return reply.code(404).send({ error: '收支记录不存在' });
-    }
-    return entry;
-  });
-
-  // DELETE /api/admin/about-ledger/:id — 删除关于页面公开收支流水
-  app.delete('/about-ledger/:id', async (request, reply) => {
-    const deleted = await deletePublicFinancialLedgerEntry(
-      (request.params as { id: string }).id,
-    );
-    if (!deleted) {
-      return reply.code(404).send({ error: '收支记录不存在' });
     }
     return { success: true };
   });

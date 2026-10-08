@@ -169,12 +169,6 @@ import {
   storeConversationLog,
 } from './repositories/conversation-log-repository.js';
 import {
-  createPublicFinancialLedgerEntry,
-  deletePublicFinancialLedgerEntry,
-  listPublicFinancialLedgerEntries,
-  updatePublicFinancialLedgerEntry,
-} from './repositories/public-financial-ledger-repository.js';
-import {
   createUser,
   createUserUsing,
   listUsersPageForAdmin,
@@ -265,7 +259,6 @@ export {
   createAnnouncement,
   createChatSession,
   createConfigAuditLog,
-  createPublicFinancialLedgerEntry,
   createSkillBundle,
   createSkillAccessInvite,
   createUser,
@@ -278,7 +271,6 @@ export {
   deleteAccount,
   deleteDraftAnnouncement,
   deleteConversationLogsByAccountIds,
-  deletePublicFinancialLedgerEntry,
   deleteSkillBundle,
   deleteUserCustomSkill,
   deleteWechatChatSessionLink,
@@ -363,7 +355,6 @@ export {
   listMarketSkills,
   listSkillCommentsForAdmin,
   listPublicAnnouncements,
-  listPublicFinancialLedgerEntries,
   listRechargeOrdersForAdmin,
   listRechargeOrdersByUserId,
   listWalletTransactionsForAdmin,
@@ -415,7 +406,6 @@ export {
   updateChatSessionTitle,
   updateClientProfile,
   updateMembershipConfig,
-  updatePublicFinancialLedgerEntry,
   updateSoulContent,
   updateRechargePaymentConfig,
   updateSkillBundle,
