@@ -4,14 +4,14 @@ import { resolveStaticExportRequest } from '../../../src/interfaces/http/static-
 
 describe('resolveStaticExportRequest', () => {
   it('keeps API misses out of the static export fallback', () => {
-    expect(resolveStaticExportRequest('/api/public/announcements')).toEqual({
+    expect(resolveStaticExportRequest('/api/missing')).toEqual({
       kind: 'api-404',
       candidateFiles: [],
       fallbackToIndexHtml: false,
     });
   });
 
-  it('maps announcement detail pages to the exported placeholder page', () => {
+  it('does not map retired announcement pages to a placeholder', () => {
     expect(
       resolveStaticExportRequest('/announcements/summer-maintenance'),
     ).toEqual({
@@ -19,31 +19,12 @@ describe('resolveStaticExportRequest', () => {
       candidateFiles: [
         'announcements/summer-maintenance/index.html',
         'announcements/summer-maintenance.html',
-        'announcements/detail/index.html',
-        'announcements/detail.html',
       ],
       fallbackToIndexHtml: false,
     });
   });
 
-  it('maps generated announcement slugs to the exported placeholder page', () => {
-    expect(
-      resolveStaticExportRequest(
-        '/announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646',
-      ),
-    ).toEqual({
-      kind: 'page',
-      candidateFiles: [
-        'announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646/index.html',
-        'announcements/announcement-e88d20ff-4bf6-4224-be6a-104fa6763646.html',
-        'announcements/detail/index.html',
-        'announcements/detail.html',
-      ],
-      fallbackToIndexHtml: false,
-    });
-  });
-
-  it('maps announcement route data shortcuts to the exported placeholder data', () => {
+  it('does not map retired announcement route data to a placeholder', () => {
     expect(
       resolveStaticExportRequest('/announcements/summer-maintenance.txt'),
     ).toEqual({
@@ -51,17 +32,23 @@ describe('resolveStaticExportRequest', () => {
       candidateFiles: [
         'announcements/summer-maintenance.txt',
         'announcements/summer-maintenance/index.txt',
-        'announcements/detail/index.txt',
-        'announcements/detail.txt',
       ],
       fallbackToIndexHtml: false,
     });
   });
 
-  it('does not map the announcement list page to the detail placeholder', () => {
-    expect(resolveStaticExportRequest('/announcements')).toEqual({
+  it('resolves page exports without falling back to the home page', () => {
+    expect(resolveStaticExportRequest('/ai-chat/?sid=session-1')).toEqual({
       kind: 'page',
-      candidateFiles: ['announcements/index.html', 'announcements.html'],
+      candidateFiles: ['ai-chat/index.html', 'ai-chat.html'],
+      fallbackToIndexHtml: false,
+    });
+  });
+
+  it('resolves route data shortcuts to the exported data file', () => {
+    expect(resolveStaticExportRequest('/ai-chat.txt')).toEqual({
+      kind: 'asset',
+      candidateFiles: ['ai-chat.txt', 'ai-chat/index.txt'],
       fallbackToIndexHtml: false,
     });
   });

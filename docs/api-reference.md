@@ -12,7 +12,6 @@
 - `/api/messages`
 - `/api/model-settings`
 - `/api/paipan`
-- `/api/public`
 - `/api/referrals`
 - `/api/skills`
 - `/api/billing`
@@ -33,7 +32,7 @@
 
 ## 认证
 
-除明确标注为公开接口的路由外，业务接口需要在请求头中携带 JWT。公开接口包括图形验证码、登录注册/找回密码、分享预览、排盘 catalog/preview、公开市场、邀请预览、状态页、支付通知、健康检查和 `/api/public/*`。
+除明确标注为公开接口的路由外，业务接口需要在请求头中携带 JWT。公开接口包括图形验证码、登录注册/找回密码、分享预览、排盘 catalog/preview、公开市场、邀请预览、状态页、支付通知和健康检查。
 
 ```
 Authorization: Bearer <token>

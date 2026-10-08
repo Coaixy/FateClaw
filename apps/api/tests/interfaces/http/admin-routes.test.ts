@@ -25,12 +25,9 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   cancelAdminUserMembership: vi.fn(),
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
-  createAnnouncement: vi.fn(),
   deleteConversationLogsForAdminUser: vi.fn(),
-  deleteDraftAnnouncement: vi.fn(),
   deleteUser: vi.fn(),
   getAdminGlobalStats: vi.fn(),
-  getAdminAnnouncementById: vi.fn(),
   getAdminRechargePaymentConfig: vi.fn(),
   getAdminStatusOverview: vi.fn(),
   getAdminUserDetail: vi.fn(),
@@ -50,7 +47,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   grantBonusBalance: vi.fn(),
   hasOfficialSkill: vi.fn(),
   listAdminGlobalSkills: vi.fn(),
-  listAdminAnnouncements: vi.fn(),
   listSkillCommentsForAdmin: vi.fn(),
   listAdminUsersWithStats: vi.fn(),
   listBillingRequestReservations: vi.fn(),
@@ -66,7 +62,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   setSkillCommentPinnedForAdmin: vi.fn(),
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),
-  updateAnnouncement: vi.fn(),
 }));
 
 vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
@@ -82,16 +77,12 @@ import {
   cancelAdminUserMembership,
   cleanupPiSessionFilesForAdmin,
   createAdminUser,
-  createAnnouncement,
-  deleteDraftAnnouncement,
   deleteConversationLogsForAdminUser,
   deleteUser,
-  getAdminAnnouncementById,
   getAdminGlobalStats,
   getAdminStatusOverview,
   grantBonusBalance,
   getMessagesForAdmin,
-  listAdminAnnouncements,
   listBillingRequestReservationsPageForAdmin,
   listRechargeOrdersForAdmin,
   listAdminUsersWithStats,
@@ -102,29 +93,8 @@ import {
   scanPiSessionOrphanFilesForAdmin,
   setAdminUserMembership,
   setSkillCommentPinnedForAdmin,
-  updateAnnouncement,
   saveOfficialModelSettings,
 } from '../../../src/modules/admin/admin-service.js';
-
-function announcementFixture(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'announcement-1',
-    slug: 'maintenance',
-    title: '维护公告',
-    summary: '今晚维护',
-    body_markdown: '今晚 23:00 维护',
-    status: 'published',
-    priority: 10,
-    starts_at: null,
-    ends_at: null,
-    cta_label: null,
-    cta_href: null,
-    published_at: '2026-06-12T00:00:00.000Z',
-    created_at: '2026-06-12T00:00:00.000Z',
-    updated_at: '2026-06-12T00:00:00.000Z',
-    ...overrides,
-  };
-}
 
 function skillCommentFixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -166,7 +136,6 @@ describe('adminRoutes authentication throttling', () => {
       messages: [],
       total: 0,
     } as Awaited<ReturnType<typeof getMessagesForAdmin>>);
-    vi.mocked(listAdminAnnouncements).mockResolvedValue([]);
     vi.mocked(listAdminUsersWithStats).mockResolvedValue([]);
     vi.mocked(listSkillCommentsForAdmin).mockResolvedValue([]);
     vi.mocked(listBillingRequestReservationsPageForAdmin).mockResolvedValue({
@@ -285,172 +254,32 @@ describe('adminRoutes authentication throttling', () => {
     expect(getAdminStatusOverview).toHaveBeenCalledTimes(1);
   });
 
-  it('allows the owner key to manage announcements', async () => {
-    vi.mocked(createAnnouncement).mockResolvedValueOnce(
-      announcementFixture() as Awaited<ReturnType<typeof createAnnouncement>>,
-    );
+  it.each([
+    { method: 'GET', url: '/announcements' },
+    { method: 'POST', url: '/announcements' },
+    { method: 'PATCH', url: '/announcements/retired-announcement' },
+    { method: 'DELETE', url: '/announcements/retired-announcement' },
+  ] as const)(
+    'returns 404 for the retired $method $url endpoint',
+    async ({ method, url }) => {
+      expect(
+        app.hasRoute({
+          method,
+          url: url.includes('/retired-announcement')
+            ? '/announcements/:id'
+            : url,
+        }),
+      ).toBe(false);
 
-    const listResponse = await app.inject({
-      method: 'GET',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-    });
-    const createResponse = await app.inject({
-      method: 'POST',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        title: '维护公告',
-        summary: '今晚维护',
-        body_markdown: '今晚 23:00 维护',
-        status: 'published',
-        priority: 10,
-        cta_label: '查看详情',
-        cta_href: '/announcements/maintenance',
-      },
-    });
+      const response = await app.inject({
+        method,
+        url,
+        headers: { 'x-admin-key': 'test-manager-key' },
+      });
 
-    expect(listResponse.statusCode).toBe(200);
-    expect(createResponse.statusCode).toBe(201);
-    expect(listAdminAnnouncements).toHaveBeenCalledTimes(1);
-    expect(createAnnouncement).toHaveBeenCalledWith({
-      title: '维护公告',
-      summary: '今晚维护',
-      bodyMarkdown: '今晚 23:00 维护',
-      status: 'published',
-      priority: 10,
-      startsAt: null,
-      endsAt: null,
-      ctaLabel: '查看详情',
-      ctaHref: '/announcements/maintenance',
-    });
-  });
-
-  it('rejects user manager keys from managing announcements', async () => {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-user-manager-key',
-      },
-    });
-
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ error: '无权访问该管理功能' });
-    expect(listAdminAnnouncements).not.toHaveBeenCalled();
-  });
-
-  it('validates announcement CTA links before creating', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        title: '坏链接',
-        body_markdown: '正文',
-        cta_label: '点击',
-        cta_href: 'javascript:alert(1)',
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({
-      error: 'CTA 链接只允许站内路径或 https:// 外链',
-    });
-    expect(createAnnouncement).not.toHaveBeenCalled();
-  });
-
-  it('merges current announcement state before validating patch requests', async () => {
-    vi.mocked(getAdminAnnouncementById).mockResolvedValueOnce(
-      announcementFixture({
-        starts_at: '2026-06-12T00:00:00.000Z',
-        cta_label: '查看详情',
-        cta_href: '/announcements/maintenance',
-      }) as Awaited<ReturnType<typeof getAdminAnnouncementById>>,
-    );
-    vi.mocked(updateAnnouncement).mockResolvedValueOnce(
-      announcementFixture({
-        ends_at: '2026-06-13T00:00:00.000Z',
-      }) as Awaited<ReturnType<typeof updateAnnouncement>>,
-    );
-
-    const response = await app.inject({
-      method: 'PATCH',
-      url: '/announcements/announcement-1',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        ends_at: '2026-06-13T00:00:00.000Z',
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(updateAnnouncement).toHaveBeenCalledWith('announcement-1', {
-      title: undefined,
-      summary: undefined,
-      bodyMarkdown: undefined,
-      status: undefined,
-      priority: undefined,
-      startsAt: undefined,
-      endsAt: '2026-06-13T00:00:00.000Z',
-      ctaLabel: undefined,
-      ctaHref: undefined,
-    });
-  });
-
-  it('rejects hard deletion for published announcements', async () => {
-    vi.mocked(getAdminAnnouncementById).mockResolvedValueOnce(
-      announcementFixture({ status: 'published' }) as Awaited<
-        ReturnType<typeof getAdminAnnouncementById>
-      >,
-    );
-    vi.mocked(deleteDraftAnnouncement).mockResolvedValueOnce({
-      deleted: false,
-      blockedStatus: 'published',
-    });
-
-    const response = await app.inject({
-      method: 'DELETE',
-      url: '/announcements/announcement-1',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({
-      error: '已发布或已归档公告请使用归档，不允许硬删除',
-    });
-  });
-
-  it('maps announcement slug conflicts to a readable response', async () => {
-    vi.mocked(createAnnouncement).mockRejectedValueOnce({
-      code: '23505',
-      constraint: 'announcements_slug_key',
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        title: '维护公告',
-        body_markdown: '正文',
-      },
-    });
-
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({ error: '公告 slug 已存在' });
-  });
+      expect(response.statusCode).toBe(404);
+    },
+  );
 
   it('allows the owner key to query billing ledgers with filters', async () => {
     const ordersResponse = await app.inject({
@@ -775,13 +604,6 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
     });
-    const announcementsResponse = await app.inject({
-      method: 'GET',
-      url: '/announcements',
-      headers: {
-        'x-admin-key': 'test-user-manager-key',
-      },
-    });
     const statusResponse = await app.inject({
       method: 'GET',
       url: '/status',
@@ -793,12 +615,10 @@ describe('adminRoutes authentication throttling', () => {
     expect(statsResponse.statusCode).toBe(403);
     expect(logsResponse.statusCode).toBe(403);
     expect(billingResponse.statusCode).toBe(403);
-    expect(announcementsResponse.statusCode).toBe(403);
     expect(statusResponse.statusCode).toBe(403);
     expect(getAdminGlobalStats).not.toHaveBeenCalled();
     expect(getAdminStatusOverview).not.toHaveBeenCalled();
     expect(listRechargeOrdersForAdmin).not.toHaveBeenCalled();
-    expect(listAdminAnnouncements).not.toHaveBeenCalled();
   });
 
   it('blocks non-verify endpoints when admin auth is rate limited', async () => {

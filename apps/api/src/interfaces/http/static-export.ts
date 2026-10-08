@@ -35,29 +35,6 @@ function isRouteDataShortcut(routePath: string): boolean {
   return basename !== 'index.txt' && !basename.startsWith('__next.');
 }
 
-function isAnnouncementDetailRoute(routePath: string): boolean {
-  const segments = routePath.split('/');
-  return (
-    segments.length === 2 && segments[0] === 'announcements' && !!segments[1]
-  );
-}
-
-function pushAnnouncementDetailCandidates(
-  candidates: Set<string>,
-  extension: '.html' | '.txt',
-) {
-  // 用户站静态导出无法在构建时枚举数据库里的公告 slug，所以详情页只导出
-  // `/announcements/detail` 占位产物；生产服务再把真实 slug 映射到该产物。
-  pushCandidate(
-    candidates,
-    path.posix.join('announcements', 'detail', `index${extension}`),
-  );
-  pushCandidate(
-    candidates,
-    path.posix.join('announcements', `detail${extension}`),
-  );
-}
-
 /**
  * 解析静态导出文件请求。
  *
@@ -96,9 +73,6 @@ export function resolveStaticExportRequest(
   if (!extension) {
     pushCandidate(candidateFiles, path.posix.join(routePath, 'index.html'));
     pushCandidate(candidateFiles, `${routePath}.html`);
-    if (isAnnouncementDetailRoute(routePath)) {
-      pushAnnouncementDetailCandidates(candidateFiles, '.html');
-    }
     return {
       kind: 'page',
       candidateFiles: [...candidateFiles],
@@ -117,9 +91,6 @@ export function resolveStaticExportRequest(
       path.posix.join(routeWithoutExtension, 'index.txt'),
     );
     pushCandidate(candidateFiles, `${routeWithoutExtension}.txt`);
-    if (isAnnouncementDetailRoute(routeWithoutExtension)) {
-      pushAnnouncementDetailCandidates(candidateFiles, '.txt');
-    }
   }
 
   return {

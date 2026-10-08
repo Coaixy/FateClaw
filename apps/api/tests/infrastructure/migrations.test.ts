@@ -59,6 +59,11 @@ describe('runDatabaseMigrations', () => {
     expect(baselineSql?.includes('CREATE TABLE public.announcements')).toBe(
       true,
     );
+    expect(
+      calls.some(
+        (call) => call.sql === 'DROP TABLE IF EXISTS public.announcements',
+      ),
+    ).toBe(true);
     expect(baselineSql?.includes('INSERT INTO public.runtime_config')).toBe(
       true,
     );
@@ -135,7 +140,7 @@ describe('runDatabaseMigrations', () => {
 
     await runDatabaseMigrations(client as never);
 
-    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(3);
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(4);
     expect(
       calls.some((call) => call.sql.includes('CREATE TABLE public.users')),
     ).toBe(false);
@@ -147,6 +152,7 @@ describe('runDatabaseMigrations', () => {
       '0076_durable_agent_requests',
       '0077_drop_bazi_cases',
       '0078_drop_public_financial_ledger',
+      '0079_drop_announcements',
     ]);
   });
 
@@ -170,7 +176,7 @@ describe('runDatabaseMigrations', () => {
   it('applies migrations appended after the newest baseline as separate upgrades', async () => {
     const migrations = MIGRATIONS as DatabaseMigration[];
     migrations.push({
-      id: '0079_synthetic_upgrade',
+      id: '0080_synthetic_upgrade',
       description: 'Synthetic upgrade after the snapshot',
       async up(client) {
         await client.query('CREATE TABLE synthetic_upgrade (id INTEGER)');
@@ -248,6 +254,30 @@ describe('runDatabaseMigrations', () => {
     );
     const ledgerIndex = calls.findIndex(
       (call) => call.params?.[0] === '0078_drop_public_financial_ledger',
+    );
+    const commitIndex = calls.findIndex((call) => call.sql === 'COMMIT');
+
+    expect(dropIndex).toBeGreaterThanOrEqual(0);
+    expect(beginIndex).toBeLessThan(dropIndex);
+    expect(dropIndex).toBeLessThan(ledgerIndex);
+    expect(ledgerIndex).toBeLessThan(commitIndex);
+  });
+
+  it('drops retired announcements in a recorded transaction on existing databases', async () => {
+    const { client, calls } = createMockClient(
+      MIGRATIONS.filter(
+        (migration) => migration.id !== '0079_drop_announcements',
+      ).map((migration) => migration.id),
+    );
+
+    await runDatabaseMigrations(client as never);
+
+    const beginIndex = calls.findIndex((call) => call.sql === 'BEGIN');
+    const dropIndex = calls.findIndex(
+      (call) => call.sql === 'DROP TABLE IF EXISTS public.announcements',
+    );
+    const ledgerIndex = calls.findIndex(
+      (call) => call.params?.[0] === '0079_drop_announcements',
     );
     const commitIndex = calls.findIndex((call) => call.sql === 'COMMIT');
 

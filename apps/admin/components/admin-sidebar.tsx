@@ -20,7 +20,6 @@ import {
   Crown,
   ReceiptText,
   WalletCards,
-  Megaphone,
   Ticket,
   LogOut,
   Menu,
@@ -51,12 +50,6 @@ const navItems = [
     href: '/billing/redemption-codes',
     label: '卡密管理',
     icon: Ticket,
-    requiredScopes: ['admin:*'],
-  },
-  {
-    href: '/announcements',
-    label: '公告',
-    icon: Megaphone,
     requiredScopes: ['admin:*'],
   },
   {

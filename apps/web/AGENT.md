@@ -27,7 +27,6 @@ apps/web/
 │   ├── ai-chat/page.tsx
 │   ├── discover/page.tsx
 │   ├── clients/page.tsx
-│   ├── announcements/page.tsx
 │   ├── membership/page.tsx
 │   ├── profile/page.tsx
 │   ├── wallet/page.tsx

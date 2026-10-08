@@ -28,7 +28,6 @@ apps/api/src/interfaces/http/
 ├── model-settings-routes.ts
 ├── messages-routes.ts
 ├── paipan-routes.ts
-├── public-routes.ts
 └── skills-routes.ts
 ```
 
@@ -56,7 +55,6 @@ apps/api/src/interfaces/http/
 - `/api/messages`
 - `/api/model-settings`
 - `/api/paipan`
-- `/api/public`
 - `/api/skills`
 - `/api/billing`
 - `/api/api-keys`

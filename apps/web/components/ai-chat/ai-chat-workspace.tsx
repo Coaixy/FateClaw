@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { AnnouncementBanner } from '@/components/announcements/announcement-banner';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
@@ -806,7 +805,6 @@ function AiChatWorkspaceContent() {
   const centeredContent = selectedSession
     ? selectedSessionCenteredComposer
     : newChatCenteredContent;
-  const showAnnouncementBanner = !selectedSession && !searchParams.get('sid');
   const emptyStateTitle = selectedSession
     ? t('aiChat.empty.defaultTitle')
     : newChatStartMode === 'choice'
@@ -837,7 +835,6 @@ function AiChatWorkspaceContent() {
           chatMessages.sending ? '' : 'scroll-smooth'
         }`}
       >
-        {showAnnouncementBanner ? <AnnouncementBanner embedded wide /> : null}
         <AiChatMessageList
           messages={displayMessages}
           loading={chatMessages.loading}

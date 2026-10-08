@@ -55,9 +55,6 @@ vi.mock('../../../src/interfaces/http/model-settings-routes.js', () => ({
 vi.mock('../../../src/interfaces/http/paipan-routes.js', () => ({
   paipanRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/public-routes.js', () => ({
-  publicRoutes: vi.fn(async () => {}),
-}));
 vi.mock('../../../src/interfaces/http/skills-routes.js', () => ({
   skillsRoutes: vi.fn(async () => {}),
 }));
@@ -104,6 +101,22 @@ describe('createApiServer auth guard', () => {
       expect(response.headers['content-type']).toContain('application/json');
       expect(response.json()).toMatchObject({ error: 'Not Found' });
     }
+  });
+
+  it.each([
+    '/api/public/announcements',
+    '/api/public/announcements/active',
+    '/api/public/announcements/retired-announcement',
+  ])('returns JSON 404 for the retired public endpoint %s', async (url) => {
+    expect(
+      app.hasRoute({ method: 'GET', url: '/api/public/announcements/:slug' }),
+    ).toBe(false);
+
+    const response = await app.inject({ method: 'GET', url });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toMatchObject({ error: 'Not Found' });
   });
 
   it('does not log stream ticket query credentials on failed upgrades', async () => {

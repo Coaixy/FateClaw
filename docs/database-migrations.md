@@ -10,6 +10,8 @@ A verified empty schema uses the newest registered baseline. The current [0077 s
 
 The subsequent `0078_drop_public_financial_ledger` migration removes `public_financial_ledger_entries` and its records on both fresh installations and existing databases. The published 0077 snapshot and older upgrade SQL remain frozen; the retired table is removed before database initialization completes.
 
+The `0079_drop_announcements` migration removes `announcements` and its records on both fresh installations and existing databases after retirement of the user and admin announcement pages and APIs. It runs after the frozen 0077 snapshot, leaving no announcement table when database initialization completes.
+
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 
 Databases with recorded migration history always use [versions/](../apps/api/src/infrastructure/migrations/versions/). Each missing migration runs in its own transaction and records its original ID and description. The legacy `0001_core_schema_baseline` already represents historical migrations 0001–0067. Older ledgers may additionally contain historical 0002–0069 IDs; those records remain intact.

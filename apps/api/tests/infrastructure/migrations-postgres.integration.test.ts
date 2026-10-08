@@ -140,6 +140,7 @@ describe.skipIf(!connectionString)(
         expect(expectedSeeds).not.toHaveProperty(
           'public_financial_ledger_entries',
         );
+        expect(expectedSeeds).not.toHaveProperty('announcements');
         await withDatabase(async (fresh) => {
           await runDatabaseMigrations(fresh);
           expect(await readSchema(fresh)).toEqual(expectedSchema);
@@ -164,7 +165,18 @@ describe.skipIf(!connectionString)(
         await client.query(`INSERT INTO public_financial_ledger_entries
         (id, entry_type, occurred_at, content, amount_yuan)
         VALUES ('synthetic-retired-entry', 'expense', '2026-10-08', 'Synthetic fixture', 1)`);
+        await client.query(`INSERT INTO announcements
+        (id, slug, title, summary, body_markdown, status, priority)
+        VALUES ('synthetic-retired-announcement', 'synthetic-announcement',
+          'Synthetic title', '', 'Synthetic body', 'published', 0)`);
         await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              "SELECT to_regclass('public.announcements') AS name",
+            )
+          ).rows[0].name,
+        ).toBeNull();
         expect(
           (
             await client.query(
