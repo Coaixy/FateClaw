@@ -32,42 +32,21 @@ export function ProfileWorkspace() {
         <TabAppearance />
         <Link
           href="/settings/advanced"
-          className="group block overflow-hidden rounded-xl border border-hairline bg-surface-raised transition-colors"
+          className="group flex items-center gap-3 rounded-xl border border-hairline bg-surface-raised px-4 py-3.5 transition-colors hover:border-primary/35"
         >
-          <div className="border-b border-hairline px-4 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <ServerCog size={14} className="text-muted" />
-              <div>
-                <p className="text-[12px] font-medium">
-                  {t('pages.profile.modelTitle')}
-                </p>
-                <p className="text-[10px] text-muted">
-                  {t('pages.profile.modelDescription')}
-                </p>
-              </div>
-            </div>
+          <ServerCog size={16} className="shrink-0 text-muted" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-medium">
+              {t('pages.profile.modelTitle')}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              {t('pages.profile.modelDescription')}
+            </p>
           </div>
-
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between rounded-xl border border-hairline bg-canvas/36 px-3.5 py-3 transition-colors group-hover:bg-surface-cream-strong/70">
-              <div className="flex items-center gap-3">
-                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-lg bg-surface-card/90">
-                  <ServerCog size={13} className="text-muted" />
-                </div>
-                <div className="text-left">
-                  <p className="text-[11px] font-medium">
-                    {t('pages.profile.modelEntryTitle')}
-                  </p>
-                  <p className="text-[10px] text-muted">
-                    {t('pages.profile.modelEntryDescription')}
-                  </p>
-                </div>
-              </div>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full border border-hairline bg-surface-card/70 transition-colors group-hover:border-primary/35 group-hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)]">
-                <ChevronRight size={13} className="text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink" />
-              </div>
-            </div>
-          </div>
+          <ChevronRight
+            size={14}
+            className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink"
+          />
         </Link>
       </div>
     </AppShell>

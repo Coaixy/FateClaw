@@ -294,17 +294,8 @@ export const PI_THINKING_LEVELS = [
   'xhigh',
 ] as const;
 
-/** 用户模型选择中保存的 Pi 思考等级。 */
+/** Platform-configured Pi thinking level. */
 export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
-
-export type UserModelSelectionSource = 'custom' | 'official';
-
-export interface SystemSecretRow {
-  key: string;
-  secret_value: string;
-  updated_by: string | null;
-  updated_at: string;
-}
 
 export interface OfficialModelConfig {
   id: string;
@@ -321,75 +312,6 @@ export interface OfficialModelConfig {
   extra_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
-}
-
-/**
- * 自配模型平台服务费的全局配置。
- *
- * @remarks 价格单位是积分 / 百万 Token，输入和输出 Token 使用同一价格。
- */
-export interface ModelBillingConfig {
-  id: 'default' | string;
-  custom_model_platform_price_per_million_coins: number;
-  updated_at: string;
-}
-
-/**
- * Agent 运行时全局配置。
- *
- * @remarks 并发上限控制宿主侧进入 agent-runtime 的全站请求槽位。
- */
-export interface RuntimeConfig {
-  id: 'default' | string;
-  agent_concurrency_limit: number;
-  local_agent_max_processes: number;
-  local_agent_idle_ttl_ms: number;
-  /** 后台指定的系统默认官方模型；为空时按价格最低的可用官方模型兜底。 */
-  default_official_model_id: string | null;
-  /** 后台指定的新用户默认 Pi 思考等级。 */
-  default_thinking_level: PiThinkingLevel;
-  pi_session_health_enabled: boolean;
-  pi_session_inactive_cleanup_days: number;
-  pi_session_orphan_grace_days: number;
-  /** 用户可创建的自定义 Skill 数量上限。 */
-  user_skill_max_count: number;
-  skill_bundle_max_files: number;
-  skill_bundle_max_file_chars: number;
-  skill_bundle_max_total_chars: number;
-  skill_bundle_max_zip_bytes: number;
-  updated_at: string;
-}
-
-export interface UserModelConfig {
-  user_id: string;
-  pi_api: ModelProviderType;
-  base_url: string | null;
-  model_name: string;
-  api_key_secret_key: string | null;
-  extra_json: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UserModelSelection {
-  user_id: string;
-  source: UserModelSelectionSource;
-  official_model_id: string | null;
-  /** 本用户当前模型调用使用的 Pi 思考等级，历史记录缺失时按 medium 处理。 */
-  thinking_level?: PiThinkingLevel;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ConfigAuditLog {
-  id: string;
-  actor_user_id: string | null;
-  action: string;
-  target_type: string;
-  target_key: string;
-  before_json: unknown;
-  after_json: unknown;
-  created_at: string;
 }
 
 // --- Channel abstraction ---

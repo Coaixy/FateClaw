@@ -15,14 +15,10 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   ArrowLeft,
-  Bot,
-  Brain,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   CircleStop,
   Compass,
-  Loader2,
   MessageCircle,
   Sparkles,
   Users,
@@ -57,12 +53,6 @@ import {
   type PaipanCatalogItem,
   type PaipanCommitResponse,
 } from '@/features/paipan/api';
-import {
-  modelSettingsApi,
-  type ModelSettingsOverview,
-  type ModelThinkingLevel,
-  type OfficialModel,
-} from '@/features/model-settings/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { buildGuideReturnQuery } from '@/lib/return-to';
@@ -76,19 +66,6 @@ type PasteChoiceSelection = {
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'interrupted';
-type ModelToolbarBusy = '' | 'model' | 'thinking';
-const DEFAULT_THINKING_LEVEL: ModelThinkingLevel = 'medium';
-const THINKING_LEVEL_OPTIONS: Array<{
-  value: ModelThinkingLevel;
-  labelKey: string;
-}> = [
-  { value: 'off', labelKey: 'aiChat.thinkingLevels.off' },
-  { value: 'minimal', labelKey: 'aiChat.thinkingLevels.minimal' },
-  { value: 'low', labelKey: 'aiChat.thinkingLevels.low' },
-  { value: 'medium', labelKey: 'aiChat.thinkingLevels.medium' },
-  { value: 'high', labelKey: 'aiChat.thinkingLevels.high' },
-  { value: 'xhigh', labelKey: 'aiChat.thinkingLevels.xhigh' },
-];
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
@@ -126,84 +103,6 @@ function scheduleIdleTask(task: () => void) {
 
   const timeoutId = browserWindow.setTimeout(task, 250);
   return () => browserWindow.clearTimeout(timeoutId);
-}
-
-function getAvailableOfficialModels(
-  overview: ModelSettingsOverview | null,
-): OfficialModel[] {
-  return (
-    overview?.official_models.filter(
-      (model) => model.enabled && model.has_secret,
-    ) ?? []
-  );
-}
-
-function resolveToolbarThinkingLevel(
-  overview: ModelSettingsOverview | null,
-): ModelThinkingLevel {
-  return (
-    overview?.selection?.thinking_level ??
-    overview?.default_thinking_level ??
-    DEFAULT_THINKING_LEVEL
-  );
-}
-
-function findSelectedOfficialModel(
-  overview: ModelSettingsOverview | null,
-): OfficialModel | null {
-  if (overview?.selection?.source !== 'official') {
-    return null;
-  }
-  return (
-    getAvailableOfficialModels(overview).find(
-      (model) => model.id === overview.selection?.official_model_id,
-    ) ?? null
-  );
-}
-
-// ===== 模型设置工具条状态 =====
-// 模型总览、加载态、错误信息与工具条忙碌标记在加载/切换模型时总是成组变化，
-// 拆成多个 useState 会触发级联渲染、也让加载生命周期难以追踪，故合并为一个 reducer。
-type ModelSettingsState = {
-  overview: ModelSettingsOverview | null;
-  loading: boolean;
-  error: string;
-  toolbarBusy: ModelToolbarBusy;
-};
-
-type ModelSettingsAction =
-  | { type: 'loadStart' }
-  | { type: 'loadSuccess'; overview: ModelSettingsOverview }
-  | { type: 'loadError'; error: string }
-  | { type: 'setToolbarBusy'; value: ModelToolbarBusy }
-  | { type: 'reset' };
-
-const INITIAL_MODEL_SETTINGS_STATE: ModelSettingsState = {
-  overview: null,
-  loading: false,
-  error: '',
-  toolbarBusy: '',
-};
-
-function modelSettingsReducer(
-  state: ModelSettingsState,
-  action: ModelSettingsAction,
-): ModelSettingsState {
-  switch (action.type) {
-    case 'loadStart':
-      // 仅切到加载中并清空旧错误，工具条忙碌标记保持不变（与原始 setState 一致）。
-      return { ...state, loading: true, error: '' };
-    case 'loadSuccess':
-      return { ...state, overview: action.overview, loading: false };
-    case 'loadError':
-      return { ...state, overview: null, loading: false, error: action.error };
-    case 'setToolbarBusy':
-      return { ...state, toolbarBusy: action.value };
-    case 'reset':
-      return INITIAL_MODEL_SETTINGS_STATE;
-    default:
-      return state;
-  }
 }
 
 // ===== 术数目录状态 =====
@@ -429,14 +328,8 @@ function AiChatWorkspaceContent() {
     INITIAL_PASTE_CHOICE_STATE,
   );
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
-  // 模型设置工具条状态（总览 / 加载 / 错误 / 忙碌标记）。
-  const [modelSettings, dispatchModelSettings] = useReducer(
-    modelSettingsReducer,
-    INITIAL_MODEL_SETTINGS_STATE,
-  );
   const wasSendingRef = useRef(false);
   const stopRequestedRef = useRef(false);
-  const modelSettingsRequestIdRef = useRef(0);
 
   const chatMessages = useChatMessages({
     chatAvailable,
@@ -486,43 +379,6 @@ function AiChatWorkspaceContent() {
     setInput((current) => current || pendingText);
     setNewChatStartMode('plain');
   }, [chatAvailable]);
-
-  const loadModelSettings = useCallback(async () => {
-    if (!chatAvailable || authLoading) {
-      return;
-    }
-
-    const requestId = modelSettingsRequestIdRef.current + 1;
-    modelSettingsRequestIdRef.current = requestId;
-    dispatchModelSettings({ type: 'loadStart' });
-
-    try {
-      const data = await modelSettingsApi.overview();
-      if (modelSettingsRequestIdRef.current !== requestId) return;
-      // 加载完成时一并落定 loading=false（旧实现由 finally 的 requestId 守卫完成，
-      // 这里因前置 return 守卫等价：仅当请求未过期才 dispatch）。
-      dispatchModelSettings({ type: 'loadSuccess', overview: data });
-    } catch (error) {
-      if (modelSettingsRequestIdRef.current !== requestId) return;
-      dispatchModelSettings({
-        type: 'loadError',
-        error:
-          error instanceof Error
-            ? error.message
-            : t('aiChat.loadModelSettingsFailed'),
-      });
-    }
-  }, [authLoading, chatAvailable, t]);
-
-  useEffect(() => {
-    if (!chatAvailable || authLoading) {
-      modelSettingsRequestIdRef.current += 1;
-      dispatchModelSettings({ type: 'reset' });
-      return;
-    }
-
-    void loadModelSettings();
-  }, [authLoading, chatAvailable, loadModelSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -797,128 +653,6 @@ function AiChatWorkspaceContent() {
     router.push('/discover');
   }, [router]);
 
-  const selectOfficialModel = useCallback(
-    async (officialModelId: string) => {
-      if (!modelSettings.overview || modelSettings.toolbarBusy || !officialModelId) {
-        return;
-      }
-
-      const officialModels = getAvailableOfficialModels(modelSettings.overview);
-      const nextModel = officialModels.find(
-        (model) => model.id === officialModelId,
-      );
-      if (!nextModel) {
-        toast('error', t('aiChat.onlyAvailableOfficialModel'));
-        return;
-      }
-
-      if (
-        modelSettings.overview.selection?.source === 'official' &&
-        modelSettings.overview.selection.official_model_id === nextModel.id
-      ) {
-        return;
-      }
-
-      const thinkingLevel = resolveToolbarThinkingLevel(modelSettings.overview);
-
-      dispatchModelSettings({ type: 'setToolbarBusy', value: 'model' });
-      try {
-        await modelSettingsApi.select({
-          source: 'official',
-          official_model_id: nextModel.id,
-          thinking_level: thinkingLevel,
-        });
-        await loadModelSettings();
-        void onboardingGuide.refresh();
-      } catch (error) {
-        toast(
-          'error',
-          error instanceof Error
-            ? error.message
-            : t('aiChat.switchModelFailed'),
-        );
-      } finally {
-        dispatchModelSettings({ type: 'setToolbarBusy', value: '' });
-      }
-    },
-    [
-      loadModelSettings,
-      modelSettings.overview,
-      modelSettings.toolbarBusy,
-      onboardingGuide,
-      t,
-      toast,
-    ],
-  );
-
-  const selectThinkingLevel = useCallback(
-    async (nextThinkingLevel: ModelThinkingLevel) => {
-      if (
-        !modelSettings.overview ||
-        modelSettings.toolbarBusy ||
-        !modelSettings.overview.selection
-      ) {
-        return;
-      }
-
-      if (
-        nextThinkingLevel === resolveToolbarThinkingLevel(modelSettings.overview)
-      ) {
-        return;
-      }
-
-      const selectedOfficial = findSelectedOfficialModel(modelSettings.overview);
-      const fallbackOfficial = getAvailableOfficialModels(
-        modelSettings.overview,
-      )[0];
-      const officialModelId =
-        modelSettings.overview.selection.source === 'official'
-          ? (selectedOfficial?.id ?? fallbackOfficial?.id ?? null)
-          : null;
-
-      if (
-        modelSettings.overview.selection.source === 'official' &&
-        !officialModelId
-      ) {
-        toast('error', t('aiChat.noAvailableOfficialModel'));
-        return;
-      }
-
-      dispatchModelSettings({ type: 'setToolbarBusy', value: 'thinking' });
-      try {
-        await modelSettingsApi.select({
-          source: modelSettings.overview.selection.source,
-          official_model_id: officialModelId,
-          thinking_level: nextThinkingLevel,
-        });
-        await loadModelSettings();
-        void onboardingGuide.refresh();
-      } catch (error) {
-        toast(
-          'error',
-          error instanceof Error
-            ? error.message
-            : t('aiChat.switchThinkingFailed'),
-        );
-      } finally {
-        dispatchModelSettings({ type: 'setToolbarBusy', value: '' });
-      }
-    },
-    [
-      loadModelSettings,
-      modelSettings.overview,
-      modelSettings.toolbarBusy,
-      onboardingGuide,
-      t,
-      toast,
-    ],
-  );
-
-  const openModelSettingsFromGuide = useCallback(() => {
-    onboardingGuide.saveStep('model');
-    router.push(`/settings/advanced?${buildGuideReturnQuery('/ai-chat')}`);
-  }, [onboardingGuide, router]);
-
   const openSkillMarketFromGuide = useCallback(() => {
     onboardingGuide.saveStep('skill');
     router.push(`/discover?${buildGuideReturnQuery('/ai-chat')}`);
@@ -994,32 +728,6 @@ function AiChatWorkspaceContent() {
   ]);
   const pastedBoardDisabled =
     authLoading || chatMessages.sending || continuationBlocked;
-  const availableOfficialModels = getAvailableOfficialModels(
-    modelSettings.overview,
-  );
-  const selectedOfficialModel = findSelectedOfficialModel(
-    modelSettings.overview,
-  );
-  const modelControlsDisabled =
-    authLoading ||
-    !chatAvailable ||
-    chatMessages.sending ||
-    continuationBlocked;
-  const canSelectOfficialModel =
-    !modelSettings.error && availableOfficialModels.length > 0;
-  const canSelectThinkingLevel =
-    !modelSettings.error && Boolean(modelSettings.overview?.selection);
-  const aiControlTitle = modelSettings.error;
-  const modelSwitchLabel = modelSettings.loading
-    ? t('aiChat.toolbar.loading')
-    : modelSettings.error
-      ? t('aiChat.toolbar.unavailable')
-      : (selectedOfficialModel?.display_name ??
-        (availableOfficialModels.length > 0
-          ? t('aiChat.toolbar.officialModel')
-          : t('aiChat.toolbar.noOfficialModel')));
-  const thinkingLevel = resolveToolbarThinkingLevel(modelSettings.overview);
-  const thinkingSwitchLabel = t(`aiChat.thinkingLevels.${thinkingLevel}`);
   const paipanActionTitle = t('aiChat.toolbar.jointPaipan');
   const composer = (
     <AiChatComposer
@@ -1065,32 +773,6 @@ function AiChatWorkspaceContent() {
       {onboardingGuide.shouldShowContinueEntry && (
         <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
       )}
-      <ChatToolStrip
-        modelLabel={modelSwitchLabel}
-        modelLoading={modelSettings.loading}
-        modelBusy={modelSettings.toolbarBusy === 'model'}
-        modelDisabled={
-          modelControlsDisabled ||
-          modelSettings.loading ||
-          Boolean(modelSettings.toolbarBusy) ||
-          !canSelectOfficialModel
-        }
-        modelTitle={aiControlTitle || t('aiChat.toolbar.switchOfficialModel')}
-        selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
-        officialModels={availableOfficialModels}
-        onSelectModel={selectOfficialModel}
-        thinkingLabel={thinkingSwitchLabel}
-        thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
-        thinkingDisabled={
-          modelControlsDisabled ||
-          modelSettings.loading ||
-          Boolean(modelSettings.toolbarBusy) ||
-          !canSelectThinkingLevel
-        }
-        thinkingTitle={aiControlTitle || t('aiChat.toolbar.switchThinking')}
-        thinkingLevel={thinkingLevel}
-        onSelectThinking={selectThinkingLevel}
-      />
     </div>
   );
   const newChatCenteredContent =
@@ -1183,38 +865,6 @@ function AiChatWorkspaceContent() {
       {!showCenteredComposer && (
         <div className="shrink-0 pt-1.5 pb-1">
           <div className="max-w-2xl mx-auto px-2.5 sm:px-3">
-            <div className="mb-1.5">
-              <ChatToolStrip
-                modelLabel={modelSwitchLabel}
-                modelLoading={modelSettings.loading}
-                modelBusy={modelSettings.toolbarBusy === 'model'}
-                modelDisabled={
-                  modelControlsDisabled ||
-                  modelSettings.loading ||
-                  Boolean(modelSettings.toolbarBusy) ||
-                  !canSelectOfficialModel
-                }
-                modelTitle={
-                  aiControlTitle || t('aiChat.toolbar.switchOfficialModel')
-                }
-                selectedOfficialModelId={selectedOfficialModel?.id ?? ''}
-                officialModels={availableOfficialModels}
-                onSelectModel={selectOfficialModel}
-                thinkingLabel={thinkingSwitchLabel}
-                thinkingBusy={modelSettings.toolbarBusy === 'thinking'}
-                thinkingDisabled={
-                  modelControlsDisabled ||
-                  modelSettings.loading ||
-                  Boolean(modelSettings.toolbarBusy) ||
-                  !canSelectThinkingLevel
-                }
-                thinkingTitle={
-                  aiControlTitle || t('aiChat.toolbar.switchThinking')
-                }
-                thinkingLevel={thinkingLevel}
-                onSelectThinking={selectThinkingLevel}
-              />
-            </div>
             {composer}
             <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[10px] text-muted/50 select-none">
               <Sparkles size={10} strokeWidth={1.8} aria-hidden="true" />
@@ -1259,14 +909,10 @@ function AiChatWorkspaceContent() {
         skillLoading={onboardingGuide.skillLoading}
         modelError={onboardingGuide.modelError}
         skillError={onboardingGuide.skillError}
-        availableOfficialModelCount={
-          onboardingGuide.availableOfficialModelCount
-        }
         hasAnyInstalledSkill={onboardingGuide.hasAnyInstalledSkill}
         onClose={onboardingGuide.dismissGuide}
         onSaveStep={onboardingGuide.saveStep}
         onRetry={retryOnboardingGuide}
-        onOpenModelSettings={openModelSettingsFromGuide}
         onOpenSkillMarket={openSkillMarketFromGuide}
         onComplete={onboardingGuide.completeGuide}
       />
@@ -1402,7 +1048,6 @@ function NewChatBackButton({ onBack }: { onBack: () => void }) {
   );
 }
 
-
 function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
   const { t } = useI18n();
   const statusLabel =
@@ -1443,213 +1088,5 @@ function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
       </span>
       <ChevronRight size={14} className="shrink-0 text-primary" />
     </button>
-  );
-}
-
-function ChatToolStrip({
-  modelLabel,
-  modelLoading,
-  modelBusy,
-  modelDisabled,
-  modelTitle,
-  selectedOfficialModelId,
-  officialModels,
-  onSelectModel,
-  thinkingLabel,
-  thinkingBusy,
-  thinkingDisabled,
-  thinkingTitle,
-  thinkingLevel,
-  onSelectThinking,
-}: {
-  modelLabel: string;
-  modelLoading: boolean;
-  modelBusy: boolean;
-  modelDisabled?: boolean;
-  modelTitle: string;
-  selectedOfficialModelId: string;
-  officialModels: OfficialModel[];
-  onSelectModel: (modelId: string) => void;
-  thinkingLabel: string;
-  thinkingBusy: boolean;
-  thinkingDisabled?: boolean;
-  thinkingTitle: string;
-  thinkingLevel: ModelThinkingLevel;
-  onSelectThinking: (thinkingLevel: ModelThinkingLevel) => void;
-}) {
-  const { t } = useI18n();
-  const [openPicker, setOpenPicker] = useState<'model' | 'thinking' | null>(
-    null,
-  );
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const chipClass =
-    'group inline-flex h-8 min-w-0 max-w-full shrink items-center gap-1.5 rounded-lg border border-hairline bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] px-2.5 text-[12px] font-medium text-ink shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] transition-colors duration-150 hover:border-primary/30 hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:bg-surface-card/40 disabled:text-muted disabled:opacity-60';
-
-  useEffect(() => {
-    if (!openPicker) return;
-
-    const closeOnOutside = (event: PointerEvent) => {
-      if (!stripRef.current?.contains(event.target as Node)) {
-        setOpenPicker(null);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpenPicker(null);
-      }
-    };
-
-    document.addEventListener('pointerdown', closeOnOutside);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutside);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [openPicker]);
-
-  return (
-    <div
-      ref={stripRef}
-      className="flex min-h-8 min-w-0 flex-wrap items-center gap-1.5"
-    >
-      <div className="relative min-w-0 shrink">
-        <button
-          type="button"
-          title={modelTitle}
-          disabled={modelDisabled}
-          onClick={() =>
-            setOpenPicker((current) => (current === 'model' ? null : 'model'))
-          }
-          className={chipClass}
-          aria-haspopup="menu"
-          aria-expanded={openPicker === 'model'}
-          aria-label={t('aiChat.toolbar.selectOfficialModel', {
-            model: modelLabel,
-          })}
-        >
-          {modelLoading || modelBusy ? (
-            <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
-          ) : (
-            <Bot size={13} className="shrink-0 text-primary" />
-          )}
-          <span className="whitespace-nowrap">{t('aiChat.toolbar.model')}</span>
-          <span className="min-w-0 max-w-[min(24vw,96px)] truncate text-muted group-hover:text-primary">
-            {modelLabel}
-          </span>
-          <ChevronDown
-            size={12}
-            className={`shrink-0 text-muted transition-transform duration-150 ${
-              openPicker === 'model' ? 'rotate-180 text-primary' : ''
-            }`}
-          />
-        </button>
-        {openPicker === 'model' && (
-          <div
-            className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-[0_14px_36px_rgba(0,0,0,0.14)]"
-            role="menu"
-          >
-            <div className="border-b border-hairline/70 px-3 py-2 text-[10px] font-medium text-muted">
-              {t('aiChat.toolbar.officialModels')}
-            </div>
-            <div className="max-h-64 overflow-y-auto p-1.5">
-              {officialModels.map((model) => {
-                const selected = model.id === selectedOfficialModelId;
-                return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected}
-                    onClick={() => {
-                      setOpenPicker(null);
-                      if (!selected) onSelectModel(model.id);
-                    }}
-                    className={`flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
-                      selected
-                        ? 'bg-primary/12 text-primary'
-                        : 'text-ink hover:bg-surface-cream-strong'
-                    }`}
-                  >
-                    <span className="min-w-0 truncate">
-                      {model.display_name}
-                    </span>
-                    {selected && (
-                      <CheckCircle2 size={13} className="shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="relative min-w-0 shrink">
-        <button
-          type="button"
-          title={thinkingTitle}
-          disabled={thinkingDisabled}
-          onClick={() =>
-            setOpenPicker((current) =>
-              current === 'thinking' ? null : 'thinking',
-            )
-          }
-          className={chipClass}
-          aria-haspopup="menu"
-          aria-expanded={openPicker === 'thinking'}
-          aria-label={t('aiChat.toolbar.selectThinking', {
-            level: thinkingLabel,
-          })}
-        >
-          {thinkingBusy ? (
-            <Loader2 size={13} className="shrink-0 animate-spin text-primary" />
-          ) : (
-            <Brain size={13} className="shrink-0 text-primary" />
-          )}
-          <span className="whitespace-nowrap">
-            {t('aiChat.toolbar.thinking')}
-          </span>
-          <span className="text-muted group-hover:text-primary">
-            {thinkingLabel}
-          </span>
-          <ChevronDown
-            size={12}
-            className={`shrink-0 text-muted transition-transform duration-150 ${
-              openPicker === 'thinking' ? 'rotate-180 text-primary' : ''
-            }`}
-          />
-        </button>
-        {openPicker === 'thinking' && (
-          <div
-            className="absolute bottom-full right-0 z-40 mb-2 w-36 overflow-hidden rounded-xl border border-hairline bg-surface-card p-1.5 shadow-[0_14px_36px_rgba(0,0,0,0.14)]"
-            role="menu"
-          >
-            {THINKING_LEVEL_OPTIONS.map((option) => {
-              const selected = option.value === thinkingLevel;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={selected}
-                  onClick={() => {
-                    setOpenPicker(null);
-                    if (!selected) onSelectThinking(option.value);
-                  }}
-                  className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-[12px] transition-colors ${
-                    selected
-                      ? 'bg-primary/12 text-primary'
-                      : 'text-ink hover:bg-surface-cream-strong'
-                  }`}
-                >
-                  <span>{t(option.labelKey)}</span>
-                  {selected && <CheckCircle2 size={13} className="shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }

@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import type { SessionBoardContext } from '../../shared/token-budget.js';
 import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
 import {
@@ -25,17 +24,18 @@ import {
   WEB_CHAT_USER_NAME,
   getWebChatRuntimeId,
 } from '../../modules/chat/web-chat-runtime.js';
-import { resolveOfficialRuntimeByModelKey } from '../../modules/system/system-config.js';
+import {
+  resolveOfficialLlmRuntime,
+  resolveOfficialRuntimeByModelKey,
+} from '../../modules/system/system-config.js';
 import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
 
 /** FateClaw 扩展字段（建会话时一次性传入，服务端按会话存快照）。 */
 const FateclawSessionExtSchema = z
-  .object({
+  .strictObject({
     // 开启的 skill：调用方自有/订阅且启用的 skill id（UUID）；归属+启用校验在 runtime 完成。
     skills: z.array(z.string().uuid()).optional(),
-    // 思考等级；缺省 medium。
-    thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
     // 排盘结果（解读场景）：来自 /api/v1/paipan/:type 的输出，会话级注入、每轮无需重发。
     board: z
       .object({
@@ -49,7 +49,7 @@ const FateclawSessionExtSchema = z
 
 /** POST /api/v1/sessions 请求体：建会话，一次性传 model / system(persona) / fateclaw 扩展。 */
 const CreateSessionSchema = z.object({
-  model: z.string().min(1),
+  model: z.string().trim().min(1).optional(),
   // 人设（OpenAI 的 system 语义）：作为受约束的 persona 覆盖层，优先级低于平台核心 system。
   system: z.string().optional(),
   fateclaw: FateclawSessionExtSchema,
@@ -117,16 +117,12 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data;
 
-    // 强制官方 metered 运行时；未知/不可用模型直接 400（建会话期即校验，避免事后才发现模型不可用）。
-    const runtime = await resolveOfficialRuntimeByModelKey(
-      body.model,
-      body.fateclaw?.thinking_level,
-    );
+    const runtime = await resolveOfficialRuntimeByModelKey(body.model);
     if (!runtime) {
       return sendOpenAiError(
         reply,
         400,
-        `未知或不可用的模型: ${body.model}`,
+        'The official model is unavailable or the model alias is invalid',
         'invalid_request_error',
         'model_not_found',
       );
@@ -147,8 +143,8 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       userId: principal.userId,
       apiKeyId: principal.apiKeyId,
       runtimeSessionId,
-      modelKey: body.model,
-      thinkingLevel: body.fateclaw?.thinking_level ?? null,
+      modelKey: runtime.providerKey,
+      thinkingLevel: runtime.thinkingLevel,
       persona: body.system ?? null,
       skillIds: body.fateclaw?.skills ?? null,
       board: body.fateclaw?.board ?? null,
@@ -186,17 +182,13 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
-    // 用会话快照重新解析官方运行时；模型在建会话后被下线则 400。
-    const runtime = await resolveOfficialRuntimeByModelKey(
-      session.model_key,
-      (session.thinking_level as (typeof PI_THINKING_LEVELS)[number]) ??
-        undefined,
-    );
+    // Existing sessions follow the current platform configuration on every turn.
+    const runtime = await resolveOfficialLlmRuntime();
     if (!runtime) {
       return sendOpenAiError(
         reply,
         400,
-        `会话使用的模型已不可用: ${session.model_key}`,
+        'The official model is unavailable',
         'invalid_request_error',
         'model_not_found',
       );
@@ -291,7 +283,7 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
         id: `chatcmpl-${result.requestId}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: session.model_key,
+        model: runtime.providerKey,
         choices: [
           {
             index: 0,

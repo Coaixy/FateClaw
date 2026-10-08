@@ -46,8 +46,7 @@ export const zhCNMessages = {
   },
   metadata: {
     title: '小奕想要三合木｜守义AI',
-    description:
-      '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读，助你服务客户。',
+    description: '面向卦师的 AI 断卦副驾 — 自动排盘、辅助解读，助你服务客户。',
   },
   shell: {
     redirectingLogin: '未检测到登录状态，正在跳转到登录页...',
@@ -200,10 +199,8 @@ export const zhCNMessages = {
       badge: '个人设置',
       title: '个人资料',
       description: '集中管理账号资料、账号安全和界面偏好。',
-      modelTitle: '模型设置',
-      modelDescription: '模型 Provider、密钥和默认模型',
-      modelEntryTitle: '进入模型设置',
-      modelEntryDescription: '继续配置模型调用',
+      modelTitle: '官方模型',
+      modelDescription: '查看官方模型与 Token 价格',
       accountTitle: '账号信息',
       accountDescription: '查看当前登录账号的基础资料',
       phone: '手机号',
@@ -366,7 +363,6 @@ export const zhCNMessages = {
       compareColumnNonMember: '非会员',
       compareRowModelPrice: '平台模型计费',
       compareRowQueue: '高峰期排队',
-      compareRowCustomModel: '自定义模型（BYOK）',
       compareRowOpenApi: '开放 API 密钥',
       compareNonMemberModelPrice: '按 1.5 倍计费',
       compareNonMemberQueue: '排队靠后',
@@ -393,67 +389,15 @@ export const zhCNMessages = {
     },
     modelSettings: {
       backProfile: '返回个人资料',
-      title: '模型设置',
-      description:
-        '配置官方模型或会员专属自配模型，当前选择会用于 AI 对话回复。',
+      title: '官方模型',
+      description: '官方模型和思考等级由后台统一设定。',
       loading: '加载中…',
-      defaultOfficialMessage: '默认使用价格最低的官方模型：{model}',
-      loadFailed: '加载模型设置失败',
-      customSaved: '自配模型已保存',
-      saveFailed: '保存失败',
-      officialSelected: '已选择官方模型',
-      customSelected: '已选择自配模型',
-      selectFailed: '选择失败',
-      customSource: '自配供应商',
-      officialSource: '官方模型',
-      noSelection: '未选择',
-      customModel: '自配模型',
-      noModel: '未选择模型',
-      currentModel: '当前模型',
-      fallbackDescription:
-        '未选择或当前选择失效时，会默认使用价格最低的可用官方模型。',
+      loadFailed: '加载官方模型失败',
       refresh: '刷新',
-      summarySource: '模型来源',
-      summaryOfficialAvailable: '官方可用',
-      summaryProtocol: '自配协议',
-      summaryCustomAccess: '自配权益',
-      summaryThinking: '思考等级',
-      unconfigured: '未配置',
-      thinkingTitle: '思考等级',
-      thinkingDescription:
-        '当前会话默认使用中等思考，可按偏好调低响应成本或调高推理深度。',
-      thinkingAria: '思考等级',
-      customTitle: '自配模型',
-      current: '当前',
-      customDescription: '接入自有供应商账号，此能力为会员专属。',
-      customBillingDescription:
-        '模型商原始费用由你的供应商账号结算；网站不再对自配模型追加 Token 扣费。',
-      customMemberOnly: '会员专属',
-      customMemberActive: '会员可用',
-      customIncluded: '已开放',
-      openMembership: '开通会员',
-      apiKeyPlaceholder: '输入 API Key',
-      saveModel: '保存模型',
-      connectionStatus: '接入状态',
-      usingCustom: '当前使用自配模型',
-      customNotEnabled: '未启用自配模型',
-      currentModelName: '当前模型名',
-      notFilled: '未填写',
-      selectCustomCurrent: '当前选择自配模型',
-      selectCustom: '选择自配模型',
-      modelName: '模型名',
-      contextWindow: '上下文窗口 Token（0 为自动）',
-      optional: '可选',
-      protocolType: '协议类型',
-      protocolCurrent: '协议类型，当前 {protocol}',
-      chooseProtocol: '选择协议类型',
+      unconfigured: '尚未配置',
       officialTitle: '官方模型',
-      officialDescription:
-        '由平台统一维护密钥和扣费价格，适合不想自行配置供应商账号的用户。',
-      officialAvailableCount: '{available} 可用 / {total} 个',
-      noOfficialModels: '管理员尚未配置官方模型。',
-      defaultOfficialDescription:
-        '管理员尚未填写说明，可根据展示名称和价格选择。',
+      officialDescription: '所有 AI 对话统一使用此模型。',
+      noOfficialModel: '官方模型暂未就绪，请稍后再试。',
       unavailable: '暂不可用',
       inputToken: '输入',
       outputToken: '输出',
@@ -699,36 +643,12 @@ export const zhCNMessages = {
   aiChat: {
     plusRequired:
       '手动排盘可继续使用；发送 AI 解读需开通 FateClaw Clarity 或更高等级。',
-    thinkingLevels: {
-      off: '关闭',
-      minimal: '极简',
-      low: '低',
-      medium: '中',
-      high: '高',
-      xhigh: '极高',
-    },
-    loadModelSettingsFailed: '加载模型设置失败',
     loadPaipanFailed: '加载排盘术数失败',
     sendFailed: '发送失败，请稍后重试',
     previousMessageProcessing: '上一条消息仍在处理中，请稍后再试',
     boardSendFailed: '盘面发送失败，请稍后重试',
-    onlyAvailableOfficialModel: '只能选择可用官方模型',
-    switchModelFailed: '切换模型失败',
-    noAvailableOfficialModel: '当前没有可用官方模型',
-    switchThinkingFailed: '切换思考等级失败',
     toolbar: {
-      loading: '加载中',
-      unavailable: '不可用',
-      officialModel: '官方模型',
-      noOfficialModel: '无官方',
-      switchOfficialModel: '切换官方模型',
-      switchThinking: '切换思考等级',
-      jointPaipan: '合参术数',
-      model: '模型',
-      thinking: '思考',
-      officialModels: '官方模型',
-      selectOfficialModel: '选择官方模型，当前 {model}',
-      selectThinking: '选择思考等级，当前 {level}',
+      jointPaipan: '排盘工具',
     },
     empty: {
       defaultTitle: '可以直接问，也可以手动排盘',
@@ -775,7 +695,7 @@ export const zhCNMessages = {
     },
     guideEntry: {
       title: '继续完成启动向导',
-      description: '选择官方模型，并启用一个 Skill 后即可开始',
+      description: '检查官方模型，并启用一个 Skill 后即可开始',
     },
     messageList: {
       recharge: '补充积分',
@@ -868,7 +788,8 @@ export const zhCNMessages = {
       selectedSkill: '已选术数',
       quickEntry: '快捷入口',
       skillType: '排盘类型',
-      guidedFallback: '当前术数暂未配置引导式填写，请使用下方高级设置填写参数。',
+      guidedFallback:
+        '当前术数暂未配置引导式填写，请使用下方高级设置填写参数。',
       advancedTitle: '高级设置',
       advancedDescription: '一般不用填，只有你明确知道自己要改什么时再展开。',
       recommended: '推荐',
@@ -929,7 +850,8 @@ export const zhCNMessages = {
       fields: {
         zishiMode: {
           label: '子时换日规则',
-          description: '如果出生在 23:00 到 00:59，可在这里切换采用哪一种排法。',
+          description:
+            '如果出生在 23:00 到 00:59，可在这里切换采用哪一种排法。',
           options: {
             early: '子时按次日',
             late: '子时按当日',
@@ -1094,11 +1016,14 @@ export const zhCNMessages = {
         birthDateTitle: '出生日期（公历）',
         birthDateDescription: '先确认公历出生日期，这是排盘最基础的信息。',
         birthTimeTitle: '出生时间（公历）',
-        birthTimeDescription: '按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点。',
-        birthTimeFieldDescription: '按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点即可。',
+        birthTimeDescription:
+          '按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点。',
+        birthTimeFieldDescription:
+          '按公历出生日期对应的时间填写；只知道大概时段时，先选最接近的整点即可。',
         reverseTitle: '干支反推',
         reverseDescription: '输入四柱干支，选择反推出的公历候选。',
-        reverseFrameDescription: '输入年、月、日、时四柱后，从候选公历时间里选择一个。',
+        reverseFrameDescription:
+          '输入年、月、日、时四柱后，从候选公历时间里选择一个。',
         yearPillar: '年柱',
         monthPillar: '月柱',
         dayPillar: '日柱',
@@ -1118,7 +1043,8 @@ export const zhCNMessages = {
         timeDescription: '直接起卦选当前公历时间；复盘某个时刻再指定公历时间。',
         customTimeHint: '手动六爻和数字起卦也能指定时刻',
         customTimeField: '指定起卦时刻（公历）',
-        customTimeDescription: '无论是手动六爻、数字起卦还是按时间起卦，都可以指定这里的公历时刻。',
+        customTimeDescription:
+          '无论是手动六爻、数字起卦还是按时间起卦，都可以指定这里的公历时刻。',
         paramsTitle: '补充参数',
         paramsDescription: '只有数字起卦或手动 / 电子摇卦时需要填写。',
         threeNumbers: '三个数字',
@@ -1138,10 +1064,16 @@ export const zhCNMessages = {
         methods: {
           dayan: { label: '大衍筮法', hint: '以古法大衍流程起卦' },
           lueshifa: { label: '略筮法', hint: '以简化筮法快速起卦' },
-          time: { label: '时间起卦（公历）', hint: '用当前公历时间或指定公历时间' },
+          time: {
+            label: '时间起卦（公历）',
+            hint: '用当前公历时间或指定公历时间',
+          },
           three: { label: '三数起卦', hint: '输入 3 个数字' },
           array: { label: '数字起卦', hint: '输入 2 个以上数字' },
-          manual: { label: '手动 / 电子摇卦', hint: '点选六爻，或按三枚铜钱法逐爻摇出' },
+          manual: {
+            label: '手动 / 电子摇卦',
+            hint: '点选六爻，或按三枚铜钱法逐爻摇出',
+          },
         },
         yaoPositions: ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻'],
         yaoValues: {
@@ -1179,7 +1111,10 @@ export const zhCNMessages = {
         trigramRemarkPlaceholder: '例如 乾上兑下四爻动',
         methods: {
           time: { label: '时间起卦', hint: '按当前或指定公历时间起卦' },
-          counts: { label: '数值起卦', hint: '报数、字数、外应等统一换算为数字' },
+          counts: {
+            label: '数值起卦',
+            hint: '报数、字数、外应等统一换算为数字',
+          },
           trigrams: { label: '指定上下卦', hint: '已经知道上下卦和动爻时使用' },
         },
         countMethods: {
@@ -1211,7 +1146,8 @@ export const zhCNMessages = {
       },
       qimen: {
         timeTitle: '起盘时间（公历）',
-        timeDescription: '新手直接用当前公历时间即可；想随机取今日时辰或回看某个时刻时再切换。',
+        timeDescription:
+          '新手直接用当前公历时间即可；想随机取今日时辰或回看某个时刻时再切换。',
         nowHint: '最省事，适合直接起局',
         randomToday: '随机时辰（今日）',
         randomHint: '在今天 12 个时辰里随机抽一个',
@@ -1224,20 +1160,23 @@ export const zhCNMessages = {
       },
       liuren: {
         timeTitle: '起课时间（公历）',
-        timeDescription: '新手直接用当前公历时间；也可以随机抽今日时辰，或指定一个确切时刻。',
+        timeDescription:
+          '新手直接用当前公历时间；也可以随机抽今日时辰，或指定一个确切时刻。',
         nowHint: '适合直接起课',
         randomToday: '随机时辰（今日）',
         randomHint: '可填数字固定随机结果',
         customHint: '复盘某个时刻时使用',
         randomNumber: '随机数字',
-        randomNumberDescription: '可不填；填写后会稳定映射到今日 12 个时辰之一。',
+        randomNumberDescription:
+          '可不填；填写后会稳定映射到今日 12 个时辰之一。',
         randomNumberPlaceholder: '例如 8848',
         selectedShichen: '已抽取时辰',
         reroll: '重抽时辰',
         notDrawn: '未抽取',
         shichenFormat: '{branch}时 {hour}:00',
         customTitle: '指定时刻（公历）',
-        customRandomDescription: '已抽取今日时辰；需要时也可以在这里微调日期和时间。',
+        customRandomDescription:
+          '已抽取今日时辰；需要时也可以在这里微调日期和时间。',
         customDescription: '只有选择“指定时间（公历）”时需要填写。',
         dateTitle: '起课日期（公历）',
         timeFieldTitle: '起课时间（公历）',
@@ -1253,29 +1192,22 @@ export const zhCNMessages = {
       },
       titles: {
         welcome: '启动 AI Chat',
-        model: '选择官方模型',
+        model: '检查官方模型',
         skill: '启用一个 Skill',
         done: '可以开始提问了',
       },
       close: '关闭启动向导',
-      welcomeDescription:
-        '完成两个前置项后，就能在 AI Chat 里稳定开始对话：先选择官方模型，再启用一个可用于对话的 Skill。',
+      welcomeDescription: '对话统一使用官方模型，启用一个 Skill 后即可开始。',
       officialModel: '官方模型',
-      officialModelDescription:
-        '使用平台维护的官方模型，不需要填写自备 API Key。',
+      officialModelDescription: '模型和思考等级由后台统一设定。',
       skill: 'Skill',
       skillDescription: '从技能市场订阅并启用至少一个 Skill。',
       modelLoading: '正在读取官方模型状态...',
       modelErrorTitle: '暂时无法读取官方模型',
       modelReadyTitle: '模型已就绪',
-      modelReadyDescription:
-        '当前账号已经有可用于对话的模型，可以继续配置 Skill。',
+      modelReadyDescription: '官方模型已就绪，可以继续启用 Skill。',
       noOfficialModelTitle: '当前暂无可用官方模型',
-      noOfficialModelDescription:
-        '管理员还没有配置可用于对话的官方模型，请稍后再试或联系管理员。',
-      needOfficialModelTitle: '还需要选择官方模型',
-      needOfficialModelDescription:
-        '当前有 {count} 个官方模型可用，请去模型设置页选择一个。',
+      noOfficialModelDescription: '官方模型暂不可用，请稍后再试或联系管理员。',
       skillLoading: '正在检查已启用 Skill...',
       skillErrorTitle: 'Skill 市场暂时不可用',
       skillReadyTitle: 'Skill 已启用',
@@ -1285,13 +1217,12 @@ export const zhCNMessages = {
         '你已经安装了 Skill，但需要启用后才会进入对话链路。',
       skillNeedDescription:
         '去技能市场挑选并订阅一个 Skill，订阅成功后回到 AI Chat 继续。',
-      doneTitle: '启动配置已完成',
+      doneTitle: '已准备就绪',
       doneDescription:
         '官方模型和 Skill 都已准备好。关闭向导后，可以直接在输入框里开始第一次提问。',
       later: '稍后再说',
-      startConfig: '开始配置',
+      startConfig: '开始使用',
       checking: '检查中',
-      chooseOfficialModel: '去选择官方模型',
       goSkillMarket: '去 Skill 市场',
       startAsking: '开始提问',
     },

@@ -27,11 +27,10 @@
 | 手动排盘（本地确定性，不走 AI、不计费） | 可用 | 可用 |
 | **AI 解读 / 追问（站内 AI Chat、自贴盘面、简易模式）** | **不可用（403）** | 可用，按 token 扣积分 |
 | 开放 API `/api/v1/*` | 不可用（403） | 可用，按 token 扣积分 |
-| 自定义模型（BYOK） | 不可用 | 可用（`canUseCustomModel = membershipActive`） |
 | runtime 优先队列 | 否 | 是（`hasPriorityQueue = membershipActive`） |
 | 微信 Claw | 不可用 | 不可用（被总开关 `WECHAT_CLAW_FEATURE_ENABLED = false` 关停） |
 
-> 单层化后 `canUseCustomModel`、`hasPriorityQueue` 都直接等于 `membershipActive`，不再按档位推导。
+> All model calls use the platform-managed official model. `hasPriorityQueue` equals `membershipActive`.
 > 微信 Claw 由 `entitlements.ts:25` 的集中常量关停（数据层迁移 `0057` 已 `accounts.enabled=false` 双保险）。
 
 ## AI 解读门禁

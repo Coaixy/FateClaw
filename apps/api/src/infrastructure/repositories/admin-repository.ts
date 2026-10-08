@@ -19,8 +19,6 @@ let adminGlobalStatsCache:
 
 export interface AdminGlobalStats {
   total_users: number;
-  plan_distribution: { plan: string; count: number }[];
-  model_selection_distribution: { source: string; count: number }[];
   active_memberships: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
@@ -619,7 +617,6 @@ export async function getAdminGlobalStats(
 
   const [
     userCount,
-    modelSelectionDist,
     accountStats,
     totalUsage,
     todayUsage,
@@ -630,13 +627,6 @@ export async function getAdminGlobalStats(
     billingReservationStats,
   ] = await Promise.all([
     pool.query('SELECT COUNT(*) as cnt FROM users'),
-    pool.query(
-      `SELECT COALESCE(sel.source, 'unselected') as model_source, COUNT(*) as count
-       FROM users u
-       LEFT JOIN user_model_selections sel ON sel.user_id = u.id
-       GROUP BY COALESCE(sel.source, 'unselected')
-       ORDER BY count DESC`,
-    ),
     pool.query(
       `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE enabled = true) as enabled
        FROM accounts`,
@@ -746,20 +736,8 @@ export async function getAdminGlobalStats(
     pending: number;
   };
 
-  const modelSelectionDistribution = (
-    modelSelectionDist.rows as { model_source: string; count: string }[]
-  ).map((r) => ({
-    source: r.model_source,
-    count: Number(r.count),
-  }));
-
   const stats: AdminGlobalStats = {
     total_users: Number((userCount.rows[0] as { cnt: string }).cnt),
-    model_selection_distribution: modelSelectionDistribution,
-    plan_distribution: modelSelectionDistribution.map((r) => ({
-      plan: r.source,
-      count: r.count,
-    })),
     active_memberships: Number(ms.active),
     total_recharge_orders: Number(rs.total_orders),
     paid_recharge_orders: Number(rs.paid_orders),

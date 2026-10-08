@@ -1,6 +1,4 @@
-/**
- * 模型设置跨端契约。
- */
+/** The platform owns model configuration for every client. */
 
 export type ModelPiApiDto =
   | 'openai-completions'
@@ -14,8 +12,6 @@ export type ModelAuthModeDto =
   | 'claude_code_oauth_token'
   | 'gemini_api_key';
 
-export type UserModelSelectionSourceDto = 'custom' | 'official';
-
 export type ModelThinkingLevelDto =
   | 'off'
   | 'minimal'
@@ -27,53 +23,39 @@ export type ModelThinkingLevelDto =
 export interface OfficialModelDto {
   id: string;
   model_key: string;
-  pi_api: ModelPiApiDto;
   display_name: string;
   description: string;
-  enabled: boolean;
-  priority: number;
-  base_url: string | null;
   model_name: string;
   context_window_tokens: number | null;
   input_token_price_per_million_coins: number;
   output_token_price_per_million_coins: number;
   has_secret: boolean;
-  auth_mode: ModelAuthModeDto;
 }
 
-export interface UserCustomModelConfigDto {
-  user_id: string;
+export interface AdminOfficialModelDto extends OfficialModelDto {
   pi_api: ModelPiApiDto;
   base_url: string | null;
-  model_name: string;
-  context_window_tokens: number | null;
-  has_secret: boolean;
-  api_key_preview: string | null;
-  api_key_fingerprint: string | null;
-  api_key: string | null;
   auth_mode: ModelAuthModeDto;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UserModelSelectionDto {
-  user_id: string;
-  source: UserModelSelectionSourceDto;
-  official_model_id: string | null;
-  thinking_level?: ModelThinkingLevelDto;
-  created_at: string;
   updated_at: string;
 }
 
 export interface ModelSettingsOverviewDto {
-  custom: UserCustomModelConfigDto | null;
-  selection: UserModelSelectionDto | null;
-  official_models: OfficialModelDto[];
-  default_official_model_id: string | null;
-  default_thinking_level: ModelThinkingLevelDto;
-  /** 自配模型是否要求会员权益。 */
-  custom_model_membership_required: boolean;
-  /** 当前用户是否具备自配模型会员权益。 */
-  custom_model_membership_entitled: boolean;
-  custom_model_platform_price_per_million_coins: number;
+  model: OfficialModelDto | null;
+}
+
+export interface AdminModelSettingsOverviewDto {
+  model: AdminOfficialModelDto | null;
+  thinking_level: ModelThinkingLevelDto;
+}
+
+export interface AdminModelSettingsUpdateDto {
+  pi_api: ModelPiApiDto;
+  base_url: string | null;
+  model_name: string;
+  api_key?: string;
+  auth_mode?: ModelAuthModeDto;
+  context_window_tokens: number | null;
+  thinking_level: ModelThinkingLevelDto;
+  input_token_price_per_million_coins: number;
+  output_token_price_per_million_coins: number;
 }

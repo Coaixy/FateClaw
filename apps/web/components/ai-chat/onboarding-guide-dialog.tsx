@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
-  Settings2,
   Sparkles,
   Store,
   X,
@@ -25,12 +24,10 @@ interface OnboardingGuideDialogProps {
   skillLoading: boolean;
   modelError: string;
   skillError: string;
-  availableOfficialModelCount: number;
   hasAnyInstalledSkill: boolean;
   onClose: () => void;
   onSaveStep: (step: OnboardingGuideStep) => void;
   onRetry: () => void;
-  onOpenModelSettings: () => void;
   onOpenSkillMarket: () => void;
   onComplete: () => void;
 }
@@ -140,7 +137,6 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
                 ready={props.modelReady}
                 loading={props.modelLoading}
                 error={props.modelError}
-                availableOfficialModelCount={props.availableOfficialModelCount}
               />
             ) : props.step === 'skill' ? (
               <SkillStep
@@ -171,12 +167,9 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
               <ModelActions
                 ready={props.modelReady}
                 loading={props.modelLoading}
-                error={props.modelError}
-                availableOfficialModelCount={props.availableOfficialModelCount}
                 onRetry={props.onRetry}
                 onClose={props.onClose}
                 onNext={goNextFromModel}
-                onOpenModelSettings={props.onOpenModelSettings}
               />
             ) : props.step === 'skill' ? (
               <SkillActions
@@ -236,12 +229,10 @@ function ModelStep({
   ready,
   loading,
   error,
-  availableOfficialModelCount,
 }: {
   ready: boolean;
   loading: boolean;
   error: string;
-  availableOfficialModelCount: number;
 }) {
   const { t } = useI18n();
 
@@ -268,22 +259,10 @@ function ModelStep({
     );
   }
 
-  if (availableOfficialModelCount === 0) {
-    return (
-      <AlertState
-        title={t('aiChat.onboarding.noOfficialModelTitle')}
-        description={t('aiChat.onboarding.noOfficialModelDescription')}
-      />
-    );
-  }
-
   return (
-    <StatusCard
-      title={t('aiChat.onboarding.needOfficialModelTitle')}
-      description={t('aiChat.onboarding.needOfficialModelDescription', {
-        count: availableOfficialModelCount,
-      })}
-      ready={false}
+    <AlertState
+      title={t('aiChat.onboarding.noOfficialModelTitle')}
+      description={t('aiChat.onboarding.noOfficialModelDescription')}
     />
   );
 }
@@ -379,9 +358,7 @@ function StatusCard({
         />
         <div>
           <p className="text-sm font-semibold text-ink">{title}</p>
-          <p className="mt-1 text-[12px] leading-5 text-muted">
-            {description}
-          </p>
+          <p className="mt-1 text-[12px] leading-5 text-muted">{description}</p>
         </div>
       </div>
     </div>
@@ -410,9 +387,7 @@ function AlertState({
         <AlertCircle size={17} className="mt-0.5 shrink-0 text-error" />
         <div>
           <p className="text-sm font-semibold text-ink">{title}</p>
-          <p className="mt-1 text-[12px] leading-5 text-muted">
-            {description}
-          </p>
+          <p className="mt-1 text-[12px] leading-5 text-muted">{description}</p>
         </div>
       </div>
     </div>
@@ -422,21 +397,15 @@ function AlertState({
 function ModelActions({
   ready,
   loading,
-  error,
-  availableOfficialModelCount,
   onRetry,
   onClose,
   onNext,
-  onOpenModelSettings,
 }: {
   ready: boolean;
   loading: boolean;
-  error: string;
-  availableOfficialModelCount: number;
   onRetry: () => void;
   onClose: () => void;
   onNext: () => void;
-  onOpenModelSettings: () => void;
 }) {
   const { t } = useI18n();
 
@@ -452,22 +421,13 @@ function ModelActions({
       </div>
     );
   }
-  if (error || availableOfficialModelCount === 0) {
-    return (
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button variant="ghost" onClick={onClose}>
-          {t('common.skipNow')}
-        </Button>
-        <Button icon={<RefreshCw size={14} />} onClick={onRetry}>
-          {t('common.retryLater')}
-        </Button>
-      </div>
-    );
-  }
   return (
-    <div className="flex justify-end">
-      <Button icon={<Settings2 size={14} />} onClick={onOpenModelSettings}>
-        {t('aiChat.onboarding.chooseOfficialModel')}
+    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <Button variant="ghost" onClick={onClose}>
+        {t('common.skipNow')}
+      </Button>
+      <Button icon={<RefreshCw size={14} />} onClick={onRetry}>
+        {t('common.retryLater')}
       </Button>
     </div>
   );

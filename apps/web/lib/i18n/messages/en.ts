@@ -16,7 +16,8 @@ export const enMessages = {
   },
   history: {
     title: 'Conversation history',
-    description: 'Browse all conversations with search, time filters, and archive management',
+    description:
+      'Browse all conversations with search, time filters, and archive management',
   },
   common: {
     appName: 'Shouyi AI',
@@ -211,10 +212,8 @@ export const enMessages = {
       title: 'Profile',
       description:
         'Manage account information, security, and interface preferences.',
-      modelTitle: 'Model settings',
-      modelDescription: 'Model providers, keys, and default model',
-      modelEntryTitle: 'Open model settings',
-      modelEntryDescription: 'Continue configuring model calls',
+      modelTitle: 'Official model',
+      modelDescription: 'View the official model and token prices',
       accountTitle: 'Account information',
       accountDescription: 'View basic information for the signed-in account',
       phone: 'Phone',
@@ -365,7 +364,8 @@ export const enMessages = {
       redeemEmpty: 'Please enter a redemption code',
       redeemFailed: 'Redemption failed, please try again later',
       redeemSuccess: 'Redeemed — {amount} added',
-      redeemSafety: 'Codes are issued by admin, single-use, void after redemption',
+      redeemSafety:
+        'Codes are issued by admin, single-use, void after redemption',
     },
     membership: {
       title: 'Subscription & Billing',
@@ -382,7 +382,6 @@ export const enMessages = {
       compareColumnNonMember: 'Non-member',
       compareRowModelPrice: 'Platform model pricing',
       compareRowQueue: 'Peak-hour queueing',
-      compareRowCustomModel: 'Custom model (BYOK)',
       compareRowOpenApi: 'Open API keys',
       compareNonMemberModelPrice: 'Billed at 1.5×',
       compareNonMemberQueue: 'Standard queue',
@@ -409,70 +408,18 @@ export const enMessages = {
     },
     modelSettings: {
       backProfile: 'Back to profile',
-      title: 'Model settings',
+      title: 'Official model',
       description:
-        'Configure official models or member-only custom models. The current selection is used for AI replies.',
+        'The official model and thinking level are managed by the administrator.',
       loading: 'Loading…',
-      defaultOfficialMessage:
-        'Defaulting to the lowest-priced official model: {model}',
-      loadFailed: 'Failed to load model settings',
-      customSaved: 'Custom model saved',
-      saveFailed: 'Save failed',
-      officialSelected: 'Official model selected',
-      customSelected: 'Custom model selected',
-      selectFailed: 'Selection failed',
-      customSource: 'Custom provider',
-      officialSource: 'Official model',
-      noSelection: 'Not selected',
-      customModel: 'Custom model',
-      noModel: 'No model selected',
-      currentModel: 'Current model',
-      fallbackDescription:
-        'If no model is selected or the current selection is invalid, the lowest-priced available official model is used by default.',
+      loadFailed: 'Failed to load the official model',
       refresh: 'Refresh',
-      summarySource: 'Source',
-      summaryOfficialAvailable: 'Official available',
-      summaryProtocol: 'Custom protocol',
-      summaryCustomAccess: 'Custom access',
-      summaryThinking: 'Thinking level',
       unconfigured: 'Not configured',
-      thinkingTitle: 'Thinking level',
-      thinkingDescription:
-        'Conversations use medium thinking by default. Lower it to reduce cost or raise it for deeper reasoning.',
-      thinkingAria: 'Thinking level',
-      customTitle: 'Custom model',
-      current: 'Current',
-      customDescription:
-        'Connect your own provider account. This capability is member-only.',
-      customBillingDescription:
-        'Provider charges are billed by your provider account. The site does not add per-token charges for custom models.',
-      customMemberOnly: 'Member only',
-      customMemberActive: 'Member access',
-      customIncluded: 'Available',
-      openMembership: 'Open membership',
-      apiKeyPlaceholder: 'Enter API key',
-      saveModel: 'Save model',
-      connectionStatus: 'Connection status',
-      usingCustom: 'Using custom model',
-      customNotEnabled: 'Custom model not enabled',
-      currentModelName: 'Current model name',
-      notFilled: 'Not filled',
-      selectCustomCurrent: 'Custom model selected',
-      selectCustom: 'Select custom model',
-      modelName: 'Model name',
-      contextWindow: 'Context window tokens (0 for automatic)',
-      optional: 'Optional',
-      protocolType: 'Protocol type',
-      protocolCurrent: 'Protocol type, current {protocol}',
-      chooseProtocol: 'Choose protocol type',
-      officialTitle: 'Official models',
-      officialDescription:
-        'Platform-managed keys and prices, for users who do not want to configure provider accounts.',
-      officialAvailableCount: '{available} available / {total} total',
-      noOfficialModels: 'No official models configured by admin.',
-      defaultOfficialDescription:
-        'No admin description yet. Choose by display name and price.',
-      unavailable: 'Unavailable',
+      officialTitle: 'Official model',
+      officialDescription: 'Used for all AI conversations.',
+      noOfficialModel:
+        'The official model is not available yet. Please try again later.',
+      unavailable: 'Temporarily unavailable',
       inputToken: 'Input',
       outputToken: 'Output',
       perMillionToken: 'million tokens',
@@ -491,7 +438,8 @@ export const enMessages = {
     edit: 'Edit',
     delete: 'Delete',
     deleteTitle: 'Delete client profile?',
-    deleteMessage: 'This will delete the profile for "{name}". This cannot be undone.',
+    deleteMessage:
+      'This will delete the profile for "{name}". This cannot be undone.',
     deleteConfirm: 'Delete',
     previousPage: 'Previous',
     nextPage: 'Next',
@@ -718,38 +666,13 @@ export const enMessages = {
   aiChat: {
     plusRequired:
       'Manual charting remains available. FateClaw Clarity or higher is required for AI interpretation.',
-    thinkingLevels: {
-      off: 'Off',
-      minimal: 'Minimal',
-      low: 'Low',
-      medium: 'Medium',
-      high: 'High',
-      xhigh: 'Very high',
-    },
-    loadModelSettingsFailed: 'Failed to load model settings',
     loadPaipanFailed: 'Failed to load charting systems',
     sendFailed: 'Failed to send. Please try again later',
     previousMessageProcessing:
       'The previous message is still being processed. Please try again later',
     boardSendFailed: 'Failed to send chart data. Please try again later',
-    onlyAvailableOfficialModel:
-      'Only available official models can be selected',
-    switchModelFailed: 'Failed to switch model',
-    noAvailableOfficialModel: 'No official model is currently available',
-    switchThinkingFailed: 'Failed to switch thinking level',
     toolbar: {
-      loading: 'Loading',
-      unavailable: 'Unavailable',
-      officialModel: 'Official model',
-      noOfficialModel: 'No official',
-      switchOfficialModel: 'Switch official model',
-      switchThinking: 'Switch thinking level',
       jointPaipan: 'Chart tools',
-      model: 'Model',
-      thinking: 'Thinking',
-      officialModels: 'Official models',
-      selectOfficialModel: 'Select official model, current {model}',
-      selectThinking: 'Select thinking level, current {level}',
     },
     empty: {
       defaultTitle: 'Ask directly or create a chart manually',
@@ -762,9 +685,11 @@ export const enMessages = {
       title: 'New conversation',
       description: 'Choose whether to create a chart before you begin',
       paipan: 'Choose a system and create a chart',
-      paipanDescription: 'Generate and confirm the chart before asking a question',
+      paipanDescription:
+        'Generate and confirm the chart before asking a question',
       plain: 'Ask without a chart',
-      plainDescription: 'Type your question and create the conversation when you send',
+      plainDescription:
+        'Type your question and create the conversation when you send',
       paipanStepTitle: 'Choose a system',
       paipanStepDescription: 'Finish the chart, then ask your question with it',
       plainStepTitle: 'Ask directly',
@@ -797,7 +722,7 @@ export const enMessages = {
     },
     guideEntry: {
       title: 'Continue setup guide',
-      description: 'Choose an official model and enable a Skill to begin',
+      description: 'Check the official model and enable a Skill to get started',
     },
     messageList: {
       recharge: 'Add credits',
@@ -842,8 +767,7 @@ export const enMessages = {
     },
     paipanRail: {
       title: 'Choose a system to create a chart',
-      description:
-        'Complete and confirm the chart, then enter your question',
+      description: 'Complete and confirm the chart, then enter your question',
       pasteBoard: 'Paste chart',
       moreSkills: 'More systems',
       noSystems: 'No system charting tools are currently available.',
@@ -872,9 +796,11 @@ export const enMessages = {
     },
     paipanStepper: {
       confirmTitle: 'Confirm details',
-      confirmDescription: 'Generate a chart preview after confirming the details.',
+      confirmDescription:
+        'Generate a chart preview after confirming the details.',
       resultTitle: 'Review chart',
-      resultDescription: 'After confirming the preview, continue the chat with this chart.',
+      resultDescription:
+        'After confirming the preview, continue the chat with this chart.',
       progress: 'Step {current} / {total}',
       jumpToStep: 'Jump to step {step}: {title}',
       complete: 'Complete',
@@ -892,9 +818,11 @@ export const enMessages = {
       selectedSkill: 'Selected system',
       quickEntry: 'Quick entry',
       skillType: 'Chart type',
-      guidedFallback: 'This system does not have a guided flow yet. Fill parameters in advanced settings below.',
+      guidedFallback:
+        'This system does not have a guided flow yet. Fill parameters in advanced settings below.',
       advancedTitle: 'Advanced settings',
-      advancedDescription: 'Usually optional. Expand only when you know exactly what to change.',
+      advancedDescription:
+        'Usually optional. Expand only when you know exactly what to change.',
       recommended: 'Recommended',
       selectPlaceholder: 'Select',
       arrayPlaceholder: 'Separate multiple values with commas',
@@ -940,8 +868,10 @@ export const enMessages = {
         missingLiurenTime: 'Choose the Ke time first',
         missingQimenTime: 'Choose the chart time first',
         missingDivinationTime: 'Choose the divination time first',
-        invalidManualYao: 'Manual divination needs 6 yao values, for example 789678',
-        invalidThreeNumbers: 'Three-number divination needs 3 numbers, for example 3, 8, 5',
+        invalidManualYao:
+          'Manual divination needs 6 yao values, for example 789678',
+        invalidThreeNumbers:
+          'Three-number divination needs 3 numbers, for example 3, 8, 5',
         invalidNumberArray: 'Number-list divination needs at least 2 numbers',
         missingUpper: 'Enter the upper trigram number first',
         missingLower: 'Enter the lower trigram number first',
@@ -953,12 +883,17 @@ export const enMessages = {
       fields: {
         zishiMode: {
           label: 'Zi-hour day boundary',
-          description: 'If birth time is 23:00 to 00:59, switch the boundary rule here.',
-          options: { early: 'Zi hour as next day', late: 'Zi hour as current day' },
+          description:
+            'If birth time is 23:00 to 00:59, switch the boundary rule here.',
+          options: {
+            early: 'Zi hour as next day',
+            late: 'Zi hour as current day',
+          },
         },
         childLimitMode: {
           label: 'Fortune-start method',
-          description: 'Keep the default unless you know the lineage-specific rule.',
+          description:
+            'Keep the default unless you know the lineage-specific rule.',
           options: {
             default: 'Common default',
             china95: 'Chinese calendar 95',
@@ -969,7 +904,11 @@ export const enMessages = {
         include: {
           label: 'Chart sections',
           description: 'Full output is returned by default.',
-          options: { bazi: 'BaZi pillars', fortune: 'Luck cycles', pattern: 'Pattern' },
+          options: {
+            bazi: 'BaZi pillars',
+            fortune: 'Luck cycles',
+            pattern: 'Pattern',
+          },
         },
         fixLeap: {
           label: 'Leap-month correction',
@@ -978,28 +917,38 @@ export const enMessages = {
         dayDivide: {
           label: 'Late Zi-hour day boundary',
           description: 'Zi Wei handling for 23:00 to 23:59.',
-          options: { forward: 'Late Zi as next day', current: 'Late Zi as current day' },
+          options: {
+            forward: 'Late Zi as next day',
+            current: 'Late Zi as current day',
+          },
         },
         yearDivide: {
           label: 'Year pillar boundary',
-          description: 'Affects year pillar, zodiac, and some year-based stars.',
+          description:
+            'Affects year pillar, zodiac, and some year-based stars.',
           options: { normal: 'Lunar new year', exact: 'Li Chun' },
         },
         horoscopeDivide: {
           label: 'Fortune boundary',
-          description: 'Affects major limits, annual fortune, and related charts.',
+          description:
+            'Affects major limits, annual fortune, and related charts.',
           options: { normal: 'Lunar new year', exact: 'Li Chun' },
         },
         ageDivide: {
           label: 'Minor-limit boundary',
-          description: 'Whether minor limits change by calendar year or birthday.',
+          description:
+            'Whether minor limits change by calendar year or birthday.',
           options: { normal: 'Calendar year', birthday: 'Birthday' },
         },
         horoscope: {
           label: 'Overlay fortune chart',
-          description: 'Expand when you want limits, annual, monthly, daily, or hourly overlays.',
+          description:
+            'Expand when you want limits, annual, monthly, daily, or hourly overlays.',
         },
-        horoscopeDate: { label: 'Fortune target date (Gregorian)', placeholder: 'YYYY-MM-DD' },
+        horoscopeDate: {
+          label: 'Fortune target date (Gregorian)',
+          placeholder: 'YYYY-MM-DD',
+        },
         horoscopeScopes: {
           label: 'Fortune scopes',
           options: {
@@ -1037,23 +986,31 @@ export const enMessages = {
         },
         upper: { label: 'Upper trigram number' },
         lower: { label: 'Lower trigram number' },
-        moving: { label: 'Moving-line number', description: 'Leave empty to use upper plus lower.' },
+        moving: {
+          label: 'Moving-line number',
+          description: 'Leave empty to use upper plus lower.',
+        },
         upperTrigram: { label: 'Upper trigram' },
         lowerTrigram: { label: 'Lower trigram' },
         movingLine: { label: 'Moving line' },
         label: { label: 'Note' },
-        datetime: { label: 'Divination time (Gregorian)', placeholder: 'YYYY-MM-DD HH:mm' },
+        datetime: {
+          label: 'Divination time (Gregorian)',
+          placeholder: 'YYYY-MM-DD HH:mm',
+        },
         solarDate: { label: 'Date (Gregorian)', placeholder: 'YYYY-MM-DD' },
         hour: { label: 'Hour (Gregorian time)' },
         minute: { label: 'Minute (Gregorian time)' },
         randomNumber: {
           label: 'Random number',
-          description: 'Used for random shichen. The same number maps to the same shichen.',
+          description:
+            'Used for random shichen. The same number maps to the same shichen.',
           placeholder: 'Example: 8848',
         },
         yao: {
           label: 'Six yao lines',
-          description: 'Enter 6 digits from bottom to top. Each digit must be 6, 7, 8, or 9.',
+          description:
+            'Enter 6 digits from bottom to top. Each digit must be 6, 7, 8, or 9.',
           placeholder: 'Example: 789678',
         },
         numbers: {
@@ -1083,15 +1040,20 @@ export const enMessages = {
         noMatches: 'No matching Gregorian time found',
         reverseFailed: 'GanZhi reverse lookup failed',
         genderTitle: 'Gender',
-        genderDescription: 'Used for fortune-start calculation and some chart rules.',
+        genderDescription:
+          'Used for fortune-start calculation and some chart rules.',
         birthDateTitle: 'Birth date (Gregorian)',
         birthDateDescription: 'Confirm the Gregorian birth date first.',
         birthTimeTitle: 'Birth time (Gregorian)',
-        birthTimeDescription: 'Fill the time for the Gregorian birth date. If unsure, choose the nearest whole hour.',
-        birthTimeFieldDescription: 'Fill the time for the Gregorian birth date. If unsure, choose the nearest whole hour.',
+        birthTimeDescription:
+          'Fill the time for the Gregorian birth date. If unsure, choose the nearest whole hour.',
+        birthTimeFieldDescription:
+          'Fill the time for the Gregorian birth date. If unsure, choose the nearest whole hour.',
         reverseTitle: 'GanZhi reverse lookup',
-        reverseDescription: 'Enter four pillars and choose a matching Gregorian candidate.',
-        reverseFrameDescription: 'Enter year, month, day, and hour pillars, then select a Gregorian candidate.',
+        reverseDescription:
+          'Enter four pillars and choose a matching Gregorian candidate.',
+        reverseFrameDescription:
+          'Enter year, month, day, and hour pillars, then select a Gregorian candidate.',
         yearPillar: 'Year pillar',
         monthPillar: 'Month pillar',
         dayPillar: 'Day pillar',
@@ -1108,12 +1070,16 @@ export const enMessages = {
         methodTitle: 'Divination method',
         methodDescription: 'Use the recommended Da Yan method if unsure.',
         timeTitle: 'Divination time (Gregorian)',
-        timeDescription: 'Use current Gregorian time for direct divination, or set a past moment for review.',
-        customTimeHint: 'Manual six yao and number methods can also use a custom moment',
+        timeDescription:
+          'Use current Gregorian time for direct divination, or set a past moment for review.',
+        customTimeHint:
+          'Manual six yao and number methods can also use a custom moment',
         customTimeField: 'Custom divination moment (Gregorian)',
-        customTimeDescription: 'This Gregorian moment can be used for manual six yao, number methods, and time methods.',
+        customTimeDescription:
+          'This Gregorian moment can be used for manual six yao, number methods, and time methods.',
         paramsTitle: 'Extra parameters',
-        paramsDescription: 'Only needed for number methods or manual / virtual coin toss.',
+        paramsDescription:
+          'Only needed for number methods or manual / virtual coin toss.',
         threeNumbers: 'Three numbers',
         numberList: 'Number list',
         threeNumbersDescription: 'Enter 3 numbers separated by commas.',
@@ -1121,7 +1087,8 @@ export const enMessages = {
         threeNumbersPlaceholder: 'Example: 3, 8, 5',
         numberListPlaceholder: 'Example: 7, 2, 9, 4',
         manualYaoTitle: 'Six yao lines',
-        manualYaoDescription: 'Set lines from bottom to top. Click a line to cycle its type.',
+        manualYaoDescription:
+          'Set lines from bottom to top. Click a line to cycle its type.',
         rollOne: 'Roll one line',
         clear: 'Clear',
         setYaoAria: 'Set {position}, currently {value}',
@@ -1129,14 +1096,33 @@ export const enMessages = {
         selectedCount: '{count}/6 set',
         movingMarked: 'Moving lines are marked with dots',
         methods: {
-          dayan: { label: 'Da Yan yarrow method', hint: 'Classical Da Yan process' },
-          lueshifa: { label: 'Simplified yarrow method', hint: 'Fast simplified yarrow process' },
-          time: { label: 'Time method (Gregorian)', hint: 'Use current or custom Gregorian time' },
+          dayan: {
+            label: 'Da Yan yarrow method',
+            hint: 'Classical Da Yan process',
+          },
+          lueshifa: {
+            label: 'Simplified yarrow method',
+            hint: 'Fast simplified yarrow process',
+          },
+          time: {
+            label: 'Time method (Gregorian)',
+            hint: 'Use current or custom Gregorian time',
+          },
           three: { label: 'Three numbers', hint: 'Enter 3 numbers' },
           array: { label: 'Number list', hint: 'Enter 2 or more numbers' },
-          manual: { label: 'Manual / virtual coin toss', hint: 'Click six yao lines or roll each line with three coins' },
+          manual: {
+            label: 'Manual / virtual coin toss',
+            hint: 'Click six yao lines or roll each line with three coins',
+          },
         },
-        yaoPositions: ['First line', 'Second line', 'Third line', 'Fourth line', 'Fifth line', 'Top line'],
+        yaoPositions: [
+          'First line',
+          'Second line',
+          'Third line',
+          'Fourth line',
+          'Fifth line',
+          'Top line',
+        ],
         yaoValues: {
           '6': { label: 'Old Yin · moving', helper: 'Old Yin moving line' },
           '7': { label: 'Young Yang', helper: 'Young Yang static line' },
@@ -1148,15 +1134,18 @@ export const enMessages = {
         methodTitle: 'Divination method',
         methodDescription: 'Use current time if unsure.',
         timeTitle: 'Divination time (Gregorian)',
-        timeDescription: 'Current time works for live divination. Set a Gregorian moment when reviewing an old matter.',
+        timeDescription:
+          'Current time works for live divination. Set a Gregorian moment when reviewing an old matter.',
         nowHint: 'Use submission time',
         customHint: 'Choose date and time manually',
         customTimeField: 'Custom divination moment (Gregorian)',
         countsTitle: 'Number parameters',
-        countsDescription: 'Upper, lower, and moving-line numbers are normalized by Mei Hua rules.',
+        countsDescription:
+          'Upper, lower, and moving-line numbers are normalized by Mei Hua rules.',
         countsFrameTitle: 'Count method',
         trigramsTitle: 'Trigrams and moving line',
-        trigramsDescription: 'Use when the trigrams and moving line are already known.',
+        trigramsDescription:
+          'Use when the trigrams and moving line are already known.',
         trigramsFrameTitle: 'Set trigrams',
         countSource: 'Count source',
         upper: 'Upper trigram number',
@@ -1171,9 +1160,18 @@ export const enMessages = {
         countRemarkPlaceholder: 'Example: original numbers 9, 10, 10',
         trigramRemarkPlaceholder: 'Example: Qian over Dui, fourth line moving',
         methods: {
-          time: { label: 'Time method', hint: 'Use current or custom Gregorian time' },
-          counts: { label: 'Count method', hint: 'Convert numbers, words, omens, etc. into counts' },
-          trigrams: { label: 'Set trigrams', hint: 'Use when upper/lower trigrams and moving line are known' },
+          time: {
+            label: 'Time method',
+            hint: 'Use current or custom Gregorian time',
+          },
+          counts: {
+            label: 'Count method',
+            hint: 'Convert numbers, words, omens, etc. into counts',
+          },
+          trigrams: {
+            label: 'Set trigrams',
+            hint: 'Use when upper/lower trigrams and moving line are known',
+          },
         },
         countMethods: {
           number: { label: 'Reported number', hint: 'Enter numbers directly' },
@@ -1204,33 +1202,38 @@ export const enMessages = {
       },
       qimen: {
         timeTitle: 'Chart time (Gregorian)',
-        timeDescription: 'Beginners can use current Gregorian time. Switch for a random shichen today or a specific moment.',
+        timeDescription:
+          'Beginners can use current Gregorian time. Switch for a random shichen today or a specific moment.',
         nowHint: 'Fastest option for a direct chart',
         randomToday: 'Random shichen (today)',
         randomHint: 'Randomly pick one of today’s 12 shichen',
         customHint: 'Use this to review a specific moment',
         customTitle: 'Custom moment (Gregorian)',
-        customRandomDescription: 'A random shichen for today has been picked. You can adjust it here.',
+        customRandomDescription:
+          'A random shichen for today has been picked. You can adjust it here.',
         customDescription: 'Only required when using custom Gregorian time.',
         dateTitle: 'Chart date (Gregorian)',
         timeFieldTitle: 'Chart time (Gregorian)',
       },
       liuren: {
         timeTitle: 'Ke time (Gregorian)',
-        timeDescription: 'Beginners can use current Gregorian time, randomly pick today’s shichen, or set an exact moment.',
+        timeDescription:
+          'Beginners can use current Gregorian time, randomly pick today’s shichen, or set an exact moment.',
         nowHint: 'Best for direct Ke setup',
         randomToday: 'Random shichen (today)',
         randomHint: 'Enter a number to get a stable random result',
         customHint: 'Use for reviewing a specific moment',
         randomNumber: 'Random number',
-        randomNumberDescription: 'Optional. A number maps stably to one of today’s 12 shichen.',
+        randomNumberDescription:
+          'Optional. A number maps stably to one of today’s 12 shichen.',
         randomNumberPlaceholder: 'Example: 8848',
         selectedShichen: 'Selected shichen',
         reroll: 'Reroll shichen',
         notDrawn: 'Not drawn',
         shichenFormat: '{branch} hour {hour}:00',
         customTitle: 'Custom moment (Gregorian)',
-        customRandomDescription: 'A shichen for today has been picked. You can adjust date and time here.',
+        customRandomDescription:
+          'A shichen for today has been picked. You can adjust date and time here.',
         customDescription: 'Only required when using custom Gregorian time.',
         dateTitle: 'Ke date (Gregorian)',
         timeFieldTitle: 'Ke time (Gregorian)',
@@ -1246,30 +1249,27 @@ export const enMessages = {
       },
       titles: {
         welcome: 'Start AI Chat',
-        model: 'Choose an official model',
+        model: 'Check official model',
         skill: 'Enable a Skill',
         done: 'Ready to ask',
       },
       close: 'Close setup guide',
       welcomeDescription:
-        'Complete two setup items to start AI Chat reliably: choose an official model, then enable a Skill for conversations.',
+        'The official model is provided for all conversations. Enable a Skill to get started.',
       officialModel: 'Official model',
       officialModelDescription:
-        'Use a platform-managed official model without entering your own API key.',
+        'The administrator manages the model and thinking level.',
       skill: 'Skill',
       skillDescription:
         'Subscribe to and enable at least one Skill from the Skill Market.',
       modelLoading: 'Reading official model status...',
-      modelErrorTitle: 'Cannot read official models right now',
+      modelErrorTitle: 'Cannot read the official model right now',
       modelReadyTitle: 'Model is ready',
       modelReadyDescription:
-        'This account already has a model available for chat. Continue with Skill setup.',
+        'The official model is ready. Continue with Skill setup.',
       noOfficialModelTitle: 'No official model is available',
       noOfficialModelDescription:
-        'An administrator has not configured an official model for chat yet. Try again later or contact an administrator.',
-      needOfficialModelTitle: 'Choose an official model',
-      needOfficialModelDescription:
-        '{count} official models are available. Choose one in model settings.',
+        'The official model is temporarily unavailable. Try again later or contact an administrator.',
       skillLoading: 'Checking enabled Skills...',
       skillErrorTitle: 'Skill Market is temporarily unavailable',
       skillReadyTitle: 'Skill is enabled',
@@ -1280,13 +1280,12 @@ export const enMessages = {
         'You have installed Skills, but one must be enabled before it enters the chat flow.',
       skillNeedDescription:
         'Pick and subscribe to a Skill in the Skill Market, then return to AI Chat.',
-      doneTitle: 'Setup is complete',
+      doneTitle: 'Ready to start',
       doneDescription:
         'The official model and Skill are ready. Close this guide and ask your first question in the input box.',
       later: 'Later',
-      startConfig: 'Start setup',
+      startConfig: 'Get started',
       checking: 'Checking',
-      chooseOfficialModel: 'Choose official model',
       goSkillMarket: 'Go to Skill Market',
       startAsking: 'Start asking',
     },

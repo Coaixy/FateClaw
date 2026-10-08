@@ -151,7 +151,6 @@ describe('admin repository', () => {
   it('builds recharge stats SQL with decimal soft currency columns', async () => {
     const { calls } = createMockPool([
       [{ cnt: '3' }],
-      [{ model_source: 'official', count: '2' }],
       [{ total: '2', enabled: '1' }],
       [{ msgs: '10', inp: '100', outp: '200', total: '300' }],
       [{ msgs: '1', inp: '10', outp: '20', total: '30' }],
@@ -209,12 +208,12 @@ describe('admin repository', () => {
       },
     });
 
-    const rechargeStatsSql = calls[6]?.sql ?? '';
+    const rechargeStatsSql = calls[5]?.sql ?? '';
     expect(rechargeStatsSql).toContain('SUM(amount_coins)');
     expect(rechargeStatsSql).toContain('AS period_coins\n       FROM');
     expect(rechargeStatsSql).not.toContain('amount_cents');
-    expect(calls[7]?.sql).toContain('COUNT(DISTINCT user_id)');
-    expect(calls[6]?.params).toEqual([
+    expect(calls[6]?.sql).toContain('COUNT(DISTINCT user_id)');
+    expect(calls[5]?.params).toEqual([
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       '2026-05-01',
       '2026-05-31',

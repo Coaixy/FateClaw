@@ -114,7 +114,7 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
       contextWindowTokens:
         row.runtime.contextWindowTokens ?? current.contextWindowTokens,
       maxOutputTokens: row.runtime.maxOutputTokens ?? current.maxOutputTokens,
-      thinkingLevel: row.runtime.thinkingLevel ?? current.thinkingLevel,
+      thinkingLevel: current.thinkingLevel,
       inputTokenPricePerMillionCoins:
         row.runtime.inputTokenPricePerMillionCoins ?? 0,
       outputTokenPricePerMillionCoins:

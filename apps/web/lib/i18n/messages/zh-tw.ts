@@ -46,8 +46,7 @@ export const zhTWMessages = {
   },
   metadata: {
     title: '小奕想要三合木｜守義AI',
-    description:
-      '面向卦師的 AI 斷卦副駕 — 自動排盤、輔助解讀，助你服務客戶。',
+    description: '面向卦師的 AI 斷卦副駕 — 自動排盤、輔助解讀，助你服務客戶。',
   },
   shell: {
     redirectingLogin: '未偵測到登入狀態，正在跳轉到登入頁...',
@@ -200,10 +199,8 @@ export const zhTWMessages = {
       badge: '個人設定',
       title: '個人資料',
       description: '集中管理帳號資料、帳號安全和介面偏好。',
-      modelTitle: '模型設定',
-      modelDescription: '模型 Provider、密鑰和預設模型',
-      modelEntryTitle: '進入模型設定',
-      modelEntryDescription: '繼續配置模型呼叫',
+      modelTitle: '官方模型',
+      modelDescription: '查看官方模型與 Token 價格',
       accountTitle: '帳號資訊',
       accountDescription: '查看目前登入帳號的基礎資料',
       phone: '手機號',
@@ -366,7 +363,6 @@ export const zhTWMessages = {
       compareColumnNonMember: '非會員',
       compareRowModelPrice: '平台模型計費',
       compareRowQueue: '高峰期排隊',
-      compareRowCustomModel: '自訂模型（BYOK）',
       compareRowOpenApi: '開放 API 金鑰',
       compareNonMemberModelPrice: '按 1.5 倍計費',
       compareNonMemberQueue: '排隊靠後',
@@ -393,67 +389,15 @@ export const zhTWMessages = {
     },
     modelSettings: {
       backProfile: '返回個人資料',
-      title: '模型設定',
-      description:
-        '配置官方模型或會員專屬自配模型，目前選擇會用於 AI 對話回覆。',
+      title: '官方模型',
+      description: '官方模型和思考等級由後台統一設定。',
       loading: '載入中…',
-      defaultOfficialMessage: '預設使用價格最低的官方模型：{model}',
-      loadFailed: '載入模型設定失敗',
-      customSaved: '自配模型已儲存',
-      saveFailed: '儲存失敗',
-      officialSelected: '已選擇官方模型',
-      customSelected: '已選擇自配模型',
-      selectFailed: '選擇失敗',
-      customSource: '自配供應商',
-      officialSource: '官方模型',
-      noSelection: '未選擇',
-      customModel: '自配模型',
-      noModel: '未選擇模型',
-      currentModel: '目前模型',
-      fallbackDescription:
-        '未選擇或目前選擇失效時，會預設使用價格最低的可用官方模型。',
+      loadFailed: '載入官方模型失敗',
       refresh: '重新整理',
-      summarySource: '模型來源',
-      summaryOfficialAvailable: '官方可用',
-      summaryProtocol: '自配協議',
-      summaryCustomAccess: '自配權益',
-      summaryThinking: '思考等級',
-      unconfigured: '未配置',
-      thinkingTitle: '思考等級',
-      thinkingDescription:
-        '目前會話預設使用中等思考，可按偏好調低回應成本或調高推理深度。',
-      thinkingAria: '思考等級',
-      customTitle: '自配模型',
-      current: '目前',
-      customDescription: '接入自有供應商帳號，此能力為會員專屬。',
-      customBillingDescription:
-        '模型商原始費用由你的供應商帳號結算；網站不再對自配模型追加 Token 扣費。',
-      customMemberOnly: '會員專屬',
-      customMemberActive: '會員可用',
-      customIncluded: '已開放',
-      openMembership: '開通會員',
-      apiKeyPlaceholder: '輸入 API Key',
-      saveModel: '儲存模型',
-      connectionStatus: '接入狀態',
-      usingCustom: '目前使用自配模型',
-      customNotEnabled: '未啟用自配模型',
-      currentModelName: '目前模型名',
-      notFilled: '未填寫',
-      selectCustomCurrent: '目前選擇自配模型',
-      selectCustom: '選擇自配模型',
-      modelName: '模型名',
-      contextWindow: '上下文窗口 Token（0 為自動）',
-      optional: '可選',
-      protocolType: '協議類型',
-      protocolCurrent: '協議類型，目前 {protocol}',
-      chooseProtocol: '選擇協議類型',
+      unconfigured: '尚未配置',
       officialTitle: '官方模型',
-      officialDescription:
-        '由平台統一維護密鑰和扣費價格，適合不想自行配置供應商帳號的使用者。',
-      officialAvailableCount: '{available} 可用 / {total} 個',
-      noOfficialModels: '管理員尚未配置官方模型。',
-      defaultOfficialDescription:
-        '管理員尚未填寫說明，可根據展示名稱和價格選擇。',
+      officialDescription: '所有 AI 對話統一使用此模型。',
+      noOfficialModel: '官方模型尚未就緒，請稍後再試。',
       unavailable: '暫不可用',
       inputToken: '輸入',
       outputToken: '輸出',
@@ -699,36 +643,12 @@ export const zhTWMessages = {
   aiChat: {
     plusRequired:
       '手動排盤可繼續使用；發送 AI 解讀需開通 FateClaw Clarity 或更高等級。',
-    thinkingLevels: {
-      off: '關閉',
-      minimal: '極簡',
-      low: '低',
-      medium: '中',
-      high: '高',
-      xhigh: '極高',
-    },
-    loadModelSettingsFailed: '載入模型設定失敗',
     loadPaipanFailed: '載入排盤術數失敗',
     sendFailed: '發送失敗，請稍後重試',
     previousMessageProcessing: '上一條訊息仍在處理中，請稍後再試',
     boardSendFailed: '盤面發送失敗，請稍後重試',
-    onlyAvailableOfficialModel: '只能選擇可用官方模型',
-    switchModelFailed: '切換模型失敗',
-    noAvailableOfficialModel: '目前沒有可用官方模型',
-    switchThinkingFailed: '切換思考等級失敗',
     toolbar: {
-      loading: '載入中',
-      unavailable: '不可用',
-      officialModel: '官方模型',
-      noOfficialModel: '無官方',
-      switchOfficialModel: '切換官方模型',
-      switchThinking: '切換思考等級',
-      jointPaipan: '合參術數',
-      model: '模型',
-      thinking: '思考',
-      officialModels: '官方模型',
-      selectOfficialModel: '選擇官方模型，目前 {model}',
-      selectThinking: '選擇思考等級，目前 {level}',
+      jointPaipan: '排盤工具',
     },
     empty: {
       defaultTitle: '可以直接問，也可以手動排盤',
@@ -775,7 +695,7 @@ export const zhTWMessages = {
     },
     guideEntry: {
       title: '繼續完成啟動向導',
-      description: '選擇官方模型，並啟用一個 Skill 後即可開始',
+      description: '檢查官方模型，並啟用一個 Skill 後即可開始',
     },
     messageList: {
       recharge: '補充積分',
@@ -868,7 +788,8 @@ export const zhTWMessages = {
       selectedSkill: '已選術數',
       quickEntry: '快捷入口',
       skillType: '排盤類型',
-      guidedFallback: '目前術數暫未配置引導式填寫，請使用下方高級設定填寫參數。',
+      guidedFallback:
+        '目前術數暫未配置引導式填寫，請使用下方高級設定填寫參數。',
       advancedTitle: '高級設定',
       advancedDescription: '一般不用填，只有你明確知道自己要改什麼時再展開。',
       recommended: '推薦',
@@ -929,7 +850,8 @@ export const zhTWMessages = {
       fields: {
         zishiMode: {
           label: '子時換日規則',
-          description: '如果出生在 23:00 到 00:59，可在這裡切換採用哪一種排法。',
+          description:
+            '如果出生在 23:00 到 00:59，可在這裡切換採用哪一種排法。',
           options: { early: '子時按次日', late: '子時按當日' },
         },
         childLimitMode: {
@@ -975,7 +897,10 @@ export const zhTWMessages = {
           label: '疊加運盤',
           description: '想同時看大限、流年、流月等運盤時再展開填寫。',
         },
-        horoscopeDate: { label: '運盤目標日期（公曆）', placeholder: 'YYYY-MM-DD' },
+        horoscopeDate: {
+          label: '運盤目標日期（公曆）',
+          placeholder: 'YYYY-MM-DD',
+        },
         horoscopeScopes: {
           label: '運盤範圍',
           options: {
@@ -1013,12 +938,18 @@ export const zhTWMessages = {
         },
         upper: { label: '上卦取數' },
         lower: { label: '下卦取數' },
-        moving: { label: '動爻取數', description: '不填寫時使用上卦取數和下卦取數之和。' },
+        moving: {
+          label: '動爻取數',
+          description: '不填寫時使用上卦取數和下卦取數之和。',
+        },
         upperTrigram: { label: '上卦' },
         lowerTrigram: { label: '下卦' },
         movingLine: { label: '動爻' },
         label: { label: '備註' },
-        datetime: { label: '起卦時間（公曆）', placeholder: 'YYYY-MM-DD HH:mm' },
+        datetime: {
+          label: '起卦時間（公曆）',
+          placeholder: 'YYYY-MM-DD HH:mm',
+        },
         solarDate: { label: '日期（公曆）', placeholder: 'YYYY-MM-DD' },
         hour: { label: '小時（公曆時間）' },
         minute: { label: '分鐘（公曆時間）' },
@@ -1063,11 +994,14 @@ export const zhTWMessages = {
         birthDateTitle: '出生日期（公曆）',
         birthDateDescription: '先確認公曆出生日期，這是排盤最基礎的資訊。',
         birthTimeTitle: '出生時間（公曆）',
-        birthTimeDescription: '按公曆出生日期對應的時間填寫；只知道大概時段時，先選最接近的整點。',
-        birthTimeFieldDescription: '按公曆出生日期對應的時間填寫；只知道大概時段時，先選最接近的整點即可。',
+        birthTimeDescription:
+          '按公曆出生日期對應的時間填寫；只知道大概時段時，先選最接近的整點。',
+        birthTimeFieldDescription:
+          '按公曆出生日期對應的時間填寫；只知道大概時段時，先選最接近的整點即可。',
         reverseTitle: '干支反推',
         reverseDescription: '輸入四柱干支，選擇反推出的公曆候選。',
-        reverseFrameDescription: '輸入年、月、日、時四柱後，從候選公曆時間裡選擇一個。',
+        reverseFrameDescription:
+          '輸入年、月、日、時四柱後，從候選公曆時間裡選擇一個。',
         yearPillar: '年柱',
         monthPillar: '月柱',
         dayPillar: '日柱',
@@ -1087,7 +1021,8 @@ export const zhTWMessages = {
         timeDescription: '直接起卦選目前公曆時間；復盤某個時刻再指定公曆時間。',
         customTimeHint: '手動六爻和數字起卦也能指定時刻',
         customTimeField: '指定起卦時刻（公曆）',
-        customTimeDescription: '無論是手動六爻、數字起卦還是按時間起卦，都可以指定這裡的公曆時刻。',
+        customTimeDescription:
+          '無論是手動六爻、數字起卦還是按時間起卦，都可以指定這裡的公曆時刻。',
         paramsTitle: '補充參數',
         paramsDescription: '只有數字起卦或手動 / 電子搖卦時需要填寫。',
         threeNumbers: '三個數字',
@@ -1107,10 +1042,16 @@ export const zhTWMessages = {
         methods: {
           dayan: { label: '大衍筮法', hint: '以古法大衍流程起卦' },
           lueshifa: { label: '略筮法', hint: '以簡化筮法快速起卦' },
-          time: { label: '時間起卦（公曆）', hint: '用目前公曆時間或指定公曆時間' },
+          time: {
+            label: '時間起卦（公曆）',
+            hint: '用目前公曆時間或指定公曆時間',
+          },
           three: { label: '三數起卦', hint: '輸入 3 個數字' },
           array: { label: '數字起卦', hint: '輸入 2 個以上數字' },
-          manual: { label: '手動 / 電子搖卦', hint: '點選六爻，或按三枚銅錢法逐爻搖出' },
+          manual: {
+            label: '手動 / 電子搖卦',
+            hint: '點選六爻，或按三枚銅錢法逐爻搖出',
+          },
         },
         yaoPositions: ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻'],
         yaoValues: {
@@ -1148,7 +1089,10 @@ export const zhTWMessages = {
         trigramRemarkPlaceholder: '例如 乾上兌下四爻動',
         methods: {
           time: { label: '時間起卦', hint: '按目前或指定公曆時間起卦' },
-          counts: { label: '數值起卦', hint: '報數、字數、外應等統一換算為數字' },
+          counts: {
+            label: '數值起卦',
+            hint: '報數、字數、外應等統一換算為數字',
+          },
           trigrams: { label: '指定上下卦', hint: '已經知道上下卦和動爻時使用' },
         },
         countMethods: {
@@ -1180,7 +1124,8 @@ export const zhTWMessages = {
       },
       qimen: {
         timeTitle: '起盤時間（公曆）',
-        timeDescription: '新手直接用目前公曆時間即可；想隨機取今日時辰或回看某個時刻時再切換。',
+        timeDescription:
+          '新手直接用目前公曆時間即可；想隨機取今日時辰或回看某個時刻時再切換。',
         nowHint: '最省事，適合直接起局',
         randomToday: '隨機時辰（今日）',
         randomHint: '在今天 12 個時辰裡隨機抽一個',
@@ -1193,20 +1138,23 @@ export const zhTWMessages = {
       },
       liuren: {
         timeTitle: '起課時間（公曆）',
-        timeDescription: '新手直接用目前公曆時間；也可以隨機抽今日時辰，或指定一個確切時刻。',
+        timeDescription:
+          '新手直接用目前公曆時間；也可以隨機抽今日時辰，或指定一個確切時刻。',
         nowHint: '適合直接起課',
         randomToday: '隨機時辰（今日）',
         randomHint: '可填數字固定隨機結果',
         customHint: '復盤某個時刻時使用',
         randomNumber: '隨機數字',
-        randomNumberDescription: '可不填；填寫後會穩定映射到今日 12 個時辰之一。',
+        randomNumberDescription:
+          '可不填；填寫後會穩定映射到今日 12 個時辰之一。',
         randomNumberPlaceholder: '例如 8848',
         selectedShichen: '已抽取時辰',
         reroll: '重抽時辰',
         notDrawn: '未抽取',
         shichenFormat: '{branch}時 {hour}:00',
         customTitle: '指定時刻（公曆）',
-        customRandomDescription: '已抽取今日時辰；需要時也可以在這裡微調日期和時間。',
+        customRandomDescription:
+          '已抽取今日時辰；需要時也可以在這裡微調日期和時間。',
         customDescription: '只有選擇「指定時間（公曆）」時需要填寫。',
         dateTitle: '起課日期（公曆）',
         timeFieldTitle: '起課時間（公曆）',
@@ -1222,29 +1170,22 @@ export const zhTWMessages = {
       },
       titles: {
         welcome: '啟動 AI Chat',
-        model: '選擇官方模型',
+        model: '檢查官方模型',
         skill: '啟用一個 Skill',
         done: '可以開始提問了',
       },
       close: '關閉啟動向導',
-      welcomeDescription:
-        '完成兩個前置項後，就能在 AI Chat 裡穩定開始對話：先選擇官方模型，再啟用一個可用於對話的 Skill。',
+      welcomeDescription: '對話統一使用官方模型，啟用一個 Skill 後即可開始。',
       officialModel: '官方模型',
-      officialModelDescription:
-        '使用平台維護的官方模型，不需要填寫自備 API Key。',
+      officialModelDescription: '模型和思考等級由後台統一設定。',
       skill: 'Skill',
       skillDescription: '從技能市場訂閱並啟用至少一個 Skill。',
       modelLoading: '正在讀取官方模型狀態...',
       modelErrorTitle: '暫時無法讀取官方模型',
       modelReadyTitle: '模型已就緒',
-      modelReadyDescription:
-        '目前帳號已經有可用於對話的模型，可以繼續配置 Skill。',
+      modelReadyDescription: '官方模型已就緒，可以繼續啟用 Skill。',
       noOfficialModelTitle: '目前暫無可用官方模型',
-      noOfficialModelDescription:
-        '管理員還沒有配置可用於對話的官方模型，請稍後再試或聯絡管理員。',
-      needOfficialModelTitle: '還需要選擇官方模型',
-      needOfficialModelDescription:
-        '目前有 {count} 個官方模型可用，請去模型設定頁選擇一個。',
+      noOfficialModelDescription: '官方模型暫不可用，請稍後再試或聯絡管理員。',
       skillLoading: '正在檢查已啟用 Skill...',
       skillErrorTitle: 'Skill 市場暫時不可用',
       skillReadyTitle: 'Skill 已啟用',
@@ -1254,13 +1195,12 @@ export const zhTWMessages = {
         '你已經安裝了 Skill，但需要啟用後才會進入對話鏈路。',
       skillNeedDescription:
         '去技能市場挑選並訂閱一個 Skill，訂閱成功後回到 AI Chat 繼續。',
-      doneTitle: '啟動配置已完成',
+      doneTitle: '已準備就緒',
       doneDescription:
         '官方模型和 Skill 都已準備好。關閉向導後，可以直接在輸入框裡開始第一次提問。',
       later: '稍後再說',
-      startConfig: '開始配置',
+      startConfig: '開始使用',
       checking: '檢查中',
-      chooseOfficialModel: '去選擇官方模型',
       goSkillMarket: '去 Skill 市場',
       startAsking: '開始提問',
     },

@@ -31,7 +31,6 @@ const {
   mockScanPiSessionOrphanFiles,
   mockSetUserMembershipForAdmin,
   mockWritePiSessionSnapshotArchiveToFiles,
-  mockUpdateDailySignInConfig,
   mockUpdateAnnouncement,
   mockUpdatePublicFinancialLedgerEntry,
   mockUpdateUserPasswordHash,
@@ -67,7 +66,6 @@ const {
   mockScanPiSessionOrphanFiles: vi.fn(),
   mockSetUserMembershipForAdmin: vi.fn(),
   mockWritePiSessionSnapshotArchiveToFiles: vi.fn(),
-  mockUpdateDailySignInConfig: vi.fn(),
   mockUpdateAnnouncement: vi.fn(),
   mockUpdatePublicFinancialLedgerEntry: vi.fn(),
   mockUpdateUserPasswordHash: vi.fn(),
@@ -129,13 +127,9 @@ vi.mock('../../../src/modules/chat/pi-session-files.js', () => ({
 }));
 
 vi.mock('../../../src/modules/system/system-config.js', () => ({
-  createOfficialModel: vi.fn(),
   getPiSessionHealthPolicy: mockGetPiSessionHealthPolicy,
   getSystemConfigOverview: vi.fn(),
-  removeOfficialModel: vi.fn(),
-  updateModelBillingSettings: vi.fn(),
-  updateRuntimeSettings: vi.fn(),
-  updateOfficialModel: vi.fn(),
+  saveOfficialModelSettings: vi.fn(),
 }));
 
 import {

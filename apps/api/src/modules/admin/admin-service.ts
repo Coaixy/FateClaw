@@ -82,13 +82,9 @@ import {
   getUsageStatsByUserIds,
 } from '../../infrastructure/daily-usage.js';
 import {
-  createOfficialModel,
   getPiSessionHealthPolicy,
   getSystemConfigOverview,
-  removeOfficialModel,
-  updateModelBillingSettings,
-  updateRuntimeSettings,
-  updateOfficialModel,
+  saveOfficialModelSettings,
 } from '../system/system-config.js';
 import {
   getMembershipBillingSummary,
@@ -144,7 +140,6 @@ export {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
   createAnnouncement,
-  createOfficialModel,
   createPublicFinancialLedgerEntry,
   deleteConversationLogsByAccountIds,
   deleteDraftAnnouncement,
@@ -162,6 +157,7 @@ export {
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
   getSystemConfigOverview,
+  saveOfficialModelSettings,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
@@ -174,15 +170,11 @@ export {
   listRechargeOrdersForAdmin,
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
-  removeOfficialModel,
   setSkillGlobalEnabled,
   setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
   setUserMembershipForAdmin,
-  updateModelBillingSettings,
   updateAnnouncement,
-  updateRuntimeSettings,
-  updateOfficialModel,
   updateAdminRechargePaymentConfig,
   updatePublicFinancialLedgerEntry,
   reviewSkillCommentForAdmin,
@@ -1093,9 +1085,8 @@ export async function generateAdminRedemptionCodes(input: {
   expiresAt?: string | null;
   createdBy: string;
 }) {
-  const { generateRedemptionCodes } = await import(
-    '../../infrastructure/repositories/billing-repository.js'
-  );
+  const { generateRedemptionCodes } =
+    await import('../../infrastructure/repositories/billing-repository.js');
   return generateRedemptionCodes({
     count: input.count,
     amountCoins: input.amountCoins,
@@ -1118,9 +1109,8 @@ export async function listAdminRedemptionCodes(opts?: {
   limit?: number;
   offset?: number;
 }) {
-  const { listRedemptionCodes } = await import(
-    '../../infrastructure/repositories/billing-repository.js'
-  );
+  const { listRedemptionCodes } =
+    await import('../../infrastructure/repositories/billing-repository.js');
   return listRedemptionCodes(opts);
 }
 
@@ -1128,9 +1118,8 @@ export async function listAdminRedemptionCodes(opts?: {
  * 撤销卡密。
  */
 export async function revokeAdminRedemptionCode(codeId: string) {
-  const { revokeRedemptionCode } = await import(
-    '../../infrastructure/repositories/billing-repository.js'
-  );
+  const { revokeRedemptionCode } =
+    await import('../../infrastructure/repositories/billing-repository.js');
   return revokeRedemptionCode(codeId);
 }
 
@@ -1138,8 +1127,7 @@ export async function revokeAdminRedemptionCode(codeId: string) {
  * 获取卡密统计信息。
  */
 export async function getAdminRedemptionCodeStats() {
-  const { getRedemptionCodeStats } = await import(
-    '../../infrastructure/repositories/billing-repository.js'
-  );
+  const { getRedemptionCodeStats } =
+    await import('../../infrastructure/repositories/billing-repository.js');
   return getRedemptionCodeStats();
 }

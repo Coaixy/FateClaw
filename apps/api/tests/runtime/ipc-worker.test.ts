@@ -345,7 +345,6 @@ describe('per-user metered concurrency gate', () => {
     planRank: 1,
     hasPaidMembership: true,
     hasPriorityQueue: true,
-    canUseCustomModel: true,
     canUseWechatClaw: false,
     wallet: {
       purchasedCoins: 1,

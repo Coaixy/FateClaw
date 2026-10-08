@@ -26,7 +26,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   cleanupPiSessionFilesForAdmin: vi.fn(),
   createAdminUser: vi.fn(),
   createAnnouncement: vi.fn(),
-  createOfficialModel: vi.fn(),
   createPublicFinancialLedgerEntry: vi.fn(),
   deleteConversationLogsForAdminUser: vi.fn(),
   deleteDraftAnnouncement: vi.fn(),
@@ -46,6 +45,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   getCustomSkillsForAdmin: vi.fn(),
   getMessagesForAdmin: vi.fn(),
   getSystemConfigOverview: vi.fn(),
+  saveOfficialModelSettings: vi.fn(),
   getUserById: vi.fn(),
   getUserCustomSkillById: vi.fn(),
   getWalletTransactionsByUserId: vi.fn(),
@@ -61,7 +61,6 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   listPublicFinancialLedgerEntries: vi.fn(),
   listWalletTransactionsForAdmin: vi.fn(),
   reconcileStaleBillingReservations: vi.fn(),
-  removeOfficialModel: vi.fn(),
   reviewSkillCommentForAdmin: vi.fn(),
   resetAdminUserPassword: vi.fn(),
   setAdminUserMembership: vi.fn(),
@@ -71,10 +70,7 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   setUserCustomSkillAdminState: vi.fn(),
   updateAdminRechargePaymentConfig: vi.fn(),
   updateAnnouncement: vi.fn(),
-  updateModelBillingSettings: vi.fn(),
-  updateOfficialModel: vi.fn(),
   updatePublicFinancialLedgerEntry: vi.fn(),
-  updateRuntimeSettings: vi.fn(),
 }));
 
 vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
@@ -111,7 +107,7 @@ import {
   setAdminUserMembership,
   setSkillCommentPinnedForAdmin,
   updateAnnouncement,
-  updateRuntimeSettings,
+  saveOfficialModelSettings,
 } from '../../../src/modules/admin/admin-service.js';
 
 function announcementFixture(overrides: Record<string, unknown> = {}) {
@@ -810,166 +806,91 @@ describe('adminRoutes authentication throttling', () => {
     expect(mockRateLimitClear).not.toHaveBeenCalled();
   });
 
-  it('updates runtime config with local agent process policy fields', async () => {
-    vi.mocked(updateRuntimeSettings).mockResolvedValueOnce({
-      agent_concurrency_limit: 1,
-      local_agent_max_processes: 2,
-      local_agent_idle_ttl_ms: 120_000,
-      default_official_model_id: 'official-1',
-      default_thinking_level: 'high',
-      pi_session_health_enabled: true,
-      pi_session_inactive_cleanup_days: 45,
-      pi_session_orphan_grace_days: 60,
-      user_skill_max_count: 120,
-      skill_bundle_max_files: 80,
-      skill_bundle_max_file_chars: 200_000,
-      skill_bundle_max_total_chars: 800_000,
-      skill_bundle_max_zip_bytes: 16 * 1024 * 1024,
-      updated_at: '2026-06-05T00:00:00.000Z',
+  it('saves the sole official model and platform thinking level together', async () => {
+    const payload = {
+      pi_api: 'openai-responses',
+      base_url: null,
+      model_name: 'gpt-4.1',
+      api_key: 'synthetic-test-api-key',
+      context_window_tokens: null,
+      thinking_level: 'low',
+      input_token_price_per_million_coins: 2,
+      output_token_price_per_million_coins: 8,
+    };
+    vi.mocked(saveOfficialModelSettings).mockResolvedValueOnce({
+      model: null,
+      thinking_level: 'low',
     });
-
     const response = await app.inject({
       method: 'PUT',
-      url: '/system-config/runtime',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        agent_concurrency_limit: 1,
-        local_agent_max_processes: 2,
-        local_agent_idle_ttl_ms: 120_000,
-        default_official_model_id: 'official-1',
-        default_thinking_level: 'high',
-        pi_session_health_enabled: true,
-        pi_session_inactive_cleanup_days: 45,
-        pi_session_orphan_grace_days: 60,
-        user_skill_max_count: 120,
-        skill_bundle_max_files: 80,
-        skill_bundle_max_file_chars: 200_000,
-        skill_bundle_max_total_chars: 800_000,
-        skill_bundle_max_zip_bytes: 16 * 1024 * 1024,
-      },
+      url: '/system-config/model',
+      headers: { 'x-admin-key': 'test-manager-key' },
+      payload,
     });
-
     expect(response.statusCode).toBe(200);
-    expect(updateRuntimeSettings).toHaveBeenCalledWith({
-      agentConcurrencyLimit: 1,
-      localAgentMaxProcesses: 2,
-      localAgentIdleTtlMs: 120_000,
-      defaultOfficialModelId: 'official-1',
-      defaultThinkingLevel: 'high',
-      piSessionHealthEnabled: true,
-      piSessionInactiveCleanupDays: 45,
-      piSessionOrphanGraceDays: 60,
-      userSkillMaxCount: 120,
-      skillBundleMaxFiles: 80,
-      skillBundleMaxFileChars: 200_000,
-      skillBundleMaxTotalChars: 800_000,
-      skillBundleMaxZipBytes: 16 * 1024 * 1024,
+    expect(response.json()).toEqual({ model: null, thinking_level: 'low' });
+    expect(saveOfficialModelSettings).toHaveBeenCalledWith({
+      ...payload,
       actor: 'manager',
     });
   });
 
-  it('keeps runtime config update compatible with old clients', async () => {
-    vi.mocked(updateRuntimeSettings).mockResolvedValueOnce({
-      agent_concurrency_limit: 3,
-      local_agent_max_processes: 4,
-      local_agent_idle_ttl_ms: 600_000,
-      default_official_model_id: null,
-      default_thinking_level: 'medium',
-      pi_session_health_enabled: false,
-      pi_session_inactive_cleanup_days: 30,
-      pi_session_orphan_grace_days: 30,
-      user_skill_max_count: 30,
-      skill_bundle_max_files: 50,
-      skill_bundle_max_file_chars: 100_000,
-      skill_bundle_max_total_chars: 500_000,
-      skill_bundle_max_zip_bytes: 8 * 1024 * 1024,
-      updated_at: '2026-06-05T00:00:00.000Z',
-    });
-
+  it.each([
+    { thinking_level: 'unlimited' },
+    { pi_api: 'openai-responses', auth_mode: 'gemini_api_key' },
+    { context_window_tokens: 100 },
+    { model_key: 'another-model' },
+    { agent_concurrency_limit: 20 },
+  ])('rejects invalid or removed model settings', async (invalid) => {
     const response = await app.inject({
       method: 'PUT',
-      url: '/system-config/runtime',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
+      url: '/system-config/model',
+      headers: { 'x-admin-key': 'test-manager-key' },
       payload: {
-        agent_concurrency_limit: 3,
+        pi_api: 'openai-responses',
+        base_url: null,
+        model_name: 'gpt-4.1',
+        context_window_tokens: null,
+        thinking_level: 'low',
+        input_token_price_per_million_coins: 2,
+        output_token_price_per_million_coins: 8,
+        ...invalid,
       },
     });
-
-    expect(response.statusCode).toBe(200);
-    expect(updateRuntimeSettings).toHaveBeenCalledWith({
-      agentConcurrencyLimit: 3,
-      localAgentMaxProcesses: undefined,
-      localAgentIdleTtlMs: undefined,
-      defaultOfficialModelId: undefined,
-      defaultThinkingLevel: undefined,
-      piSessionHealthEnabled: undefined,
-      piSessionInactiveCleanupDays: undefined,
-      piSessionOrphanGraceDays: undefined,
-      userSkillMaxCount: undefined,
-      skillBundleMaxFiles: undefined,
-      skillBundleMaxFileChars: undefined,
-      skillBundleMaxTotalChars: undefined,
-      skillBundleMaxZipBytes: undefined,
-      actor: 'manager',
-    });
-  });
-
-  it('rejects Skill Bundle runtime limits when total chars is smaller than single file chars', async () => {
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/system-config/runtime',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        agent_concurrency_limit: 1,
-        skill_bundle_max_file_chars: 100,
-        skill_bundle_max_total_chars: 99,
-      },
-    });
-
     expect(response.statusCode).toBe(400);
-    expect(updateRuntimeSettings).not.toHaveBeenCalled();
+    expect(saveOfficialModelSettings).not.toHaveBeenCalled();
   });
 
-  it('rejects runtime config outside local agent policy ranges', async () => {
+  it('does not allow a user manager to change the platform model', async () => {
     const response = await app.inject({
       method: 'PUT',
-      url: '/system-config/runtime',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        agent_concurrency_limit: 1,
-        local_agent_max_processes: 2,
-        local_agent_idle_ttl_ms: 29_999,
-      },
+      url: '/system-config/model',
+      headers: { 'x-admin-key': 'test-user-manager-key' },
+      payload: {},
     });
-
-    expect(response.statusCode).toBe(400);
-    expect(updateRuntimeSettings).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(403);
+    expect(saveOfficialModelSettings).not.toHaveBeenCalled();
   });
 
-  it('rejects runtime config outside Pi session health policy ranges', async () => {
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/system-config/runtime',
-      headers: {
-        'x-admin-key': 'test-manager-key',
-      },
-      payload: {
-        agent_concurrency_limit: 1,
-        pi_session_inactive_cleanup_days: 0,
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(updateRuntimeSettings).not.toHaveBeenCalled();
-  });
+  it.each([
+    ['PUT', '/system-config/runtime'],
+    ['PUT', '/system-config/model-billing'],
+    ['POST', '/system-config/providers'],
+    ['PATCH', '/system-config/providers/legacy'],
+    ['DELETE', '/system-config/providers/legacy'],
+  ] as const)(
+    'removes the old %s %s configuration endpoint',
+    async (method, url) => {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { 'x-admin-key': 'test-manager-key' },
+        payload: {},
+      });
+      expect(response.statusCode).toBe(404);
+      expect(saveOfficialModelSettings).not.toHaveBeenCalled();
+    },
+  );
 
   it('scans Pi session orphan files with admin parameters', async () => {
     vi.mocked(scanPiSessionOrphanFilesForAdmin).mockResolvedValueOnce({

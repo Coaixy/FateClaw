@@ -43,12 +43,6 @@ function fmtCoins(value: number) {
   return formatCoins(Number.isFinite(amount) ? amount : 0);
 }
 
-function modelSelectionLabel(source: string | null) {
-  if (source === 'custom') return '自配模型';
-  if (source === 'official') return '官方模型';
-  return '未选择';
-}
-
 function dateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -320,7 +314,7 @@ export default function AdminOverviewPage() {
 
               <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
                 {/* 日期范围改动后自动重载（防抖），无需再点应用 */}
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2">
                   <label className="min-w-0">
                     <span className="mb-1 block text-[11px] text-muted">
                       开始日期
@@ -357,7 +351,9 @@ export default function AdminOverviewPage() {
               </div>
             </div>
             {dateRangeError ? (
-              <div className="mt-2 text-[12px] text-error">{dateRangeError}</div>
+              <div className="mt-2 text-[12px] text-error">
+                {dateRangeError}
+              </div>
             ) : dateRangePending ? (
               <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-muted">
                 <Loader2 size={12} className="animate-spin" />
@@ -416,7 +412,7 @@ export default function AdminOverviewPage() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2">
           <div className="rounded-xl border border-hairline bg-surface-card px-4 py-3">
             <div className="mb-2 text-[12px] text-muted">Token 明细</div>
             <div className="space-y-1.5">
@@ -444,47 +440,6 @@ export default function AdminOverviewPage() {
                   {fmt(stats.today_input_tokens)} /{' '}
                   {fmt(stats.today_output_tokens)}
                 </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-hairline bg-surface-card px-4 py-3">
-            <div className="mb-2 text-[12px] text-muted">模型选择分布</div>
-            <div className="space-y-1.5">
-              {stats.model_selection_distribution.map((p) => {
-                const pct =
-                  stats.total_users > 0
-                    ? Math.round((p.count / stats.total_users) * 100)
-                    : 0;
-                return (
-                  <div key={p.source}>
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[13px]">
-                        {modelSelectionLabel(p.source)}
-                      </span>
-                      <span className="text-[12px] text-muted">
-                        {p.count} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-canvas">
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{
-                          width: `${pct}%`,
-                          background:
-                            p.source === 'official'
-                              ? 'var(--color-primary)'
-                              : p.source === 'custom'
-                                ? 'var(--color-warning)'
-                                : 'var(--color-muted)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="pt-1 text-[12px] text-muted">
-                未选择模型的用户会默认使用价格最低的可用官方模型
               </div>
             </div>
           </div>

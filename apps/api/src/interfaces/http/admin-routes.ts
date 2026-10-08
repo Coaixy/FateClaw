@@ -12,7 +12,6 @@ import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
   createAnnouncement,
-  createOfficialModel,
   deleteConversationLogsForAdminUser,
   deleteDraftAnnouncement,
   deleteUser,
@@ -28,6 +27,7 @@ import {
   getMessagesForAdmin,
   getBalanceGrantsByUserId,
   getSystemConfigOverview,
+  saveOfficialModelSettings,
   getUserById,
   getUserCustomSkillById,
   getWalletTransactionsByUserId,
@@ -44,16 +44,12 @@ import {
   listRechargeOrdersForAdmin,
   listWalletTransactionsForAdmin,
   reconcileStaleBillingReservations,
-  removeOfficialModel,
   resetAdminUserPassword,
   setAdminUserMembership,
   setSkillGlobalEnabled,
   setSkillCommentPinnedForAdmin,
   setUserCustomSkillAdminState,
   reviewSkillCommentForAdmin,
-  updateModelBillingSettings,
-  updateOfficialModel,
-  updateRuntimeSettings,
   updateAdminRechargePaymentConfig,
   getAdminUserDetail,
   createPublicFinancialLedgerEntry,
@@ -367,156 +363,52 @@ const OfficialModelAuthModeSchema = z
   ])
   .optional();
 
-const OfficialModelSchema = z.object({
-  model_key: z
-    .string()
-    .trim()
-    .min(1)
-    .max(80)
-    .regex(/^[a-z0-9][a-z0-9-_]*$/i, 'model_key 格式不合法'),
-  pi_api: z.enum([
-    'openai-completions',
-    'openai-responses',
-    'anthropic-messages',
-    'google-generative-ai',
-  ]),
-  display_name: z.string().trim().min(1).max(80),
-  description: z.string().trim().max(240).optional(),
-  enabled: z.boolean().default(true),
-  priority: z.number().int().min(0).max(999).default(0),
-  base_url: z.string().trim().max(500).nullable().optional(),
-  model_name: z.string().trim().min(1).max(120),
-  api_key: z.string().trim().max(2000).optional(),
-  auth_mode: OfficialModelAuthModeSchema,
-  context_window_tokens: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS)
-    .refine(
-      (value) => value === 0 || value >= MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
-      `context_window_tokens 必须为 0，或不小于 ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
-    )
-    .nullable()
-    .optional(),
-  input_token_price_per_million_coins: z.number().int().min(0).default(0),
-  output_token_price_per_million_coins: z.number().int().min(0).default(0),
-});
-
-const OfficialModelCreateSchema = OfficialModelSchema.extend({
-  api_key: z.string().trim().min(1).max(2000),
-});
-
-const ModelBillingSchema = z.object({
-  custom_model_platform_price_per_million_coins: z
-    .number()
-    .int()
-    .min(0)
-    .max(1_000_000),
-});
-
-const RuntimeConfigSchema = z
-  .object({
-    agent_concurrency_limit: z
+const OfficialModelSettingsSchema = z
+  .strictObject({
+    pi_api: z.enum([
+      'openai-completions',
+      'openai-responses',
+      'anthropic-messages',
+      'google-generative-ai',
+    ]),
+    base_url: z.string().trim().max(500).nullable(),
+    model_name: z.string().trim().min(1).max(120),
+    api_key: z.string().trim().max(2000).optional(),
+    auth_mode: OfficialModelAuthModeSchema,
+    thinking_level: z.enum(PI_THINKING_LEVELS),
+    context_window_tokens: z
       .number()
-      .int('并发上限必须是整数')
-      .min(1, '并发上限必须至少为 1')
-      .max(1000, '并发上限不能超过 1000'),
-    local_agent_max_processes: z
+      .int()
+      .min(0)
+      .max(MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS)
+      .refine(
+        (value) => value === 0 || value >= MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
+        `Context window must be 0 or at least ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
+      )
+      .nullable(),
+    input_token_price_per_million_coins: z.number().int().min(0).max(1_000_000),
+    output_token_price_per_million_coins: z
       .number()
-      .int('常驻进程上限必须是整数')
-      .min(1, '常驻进程上限必须至少为 1')
-      .max(100, '常驻进程上限不能超过 100')
-      .optional(),
-    local_agent_idle_ttl_ms: z
-      .number()
-      .int('空闲回收时间必须是整数')
-      .min(30_000, '空闲回收时间不能少于 30 秒')
-      .max(86_400_000, '空闲回收时间不能超过 24 小时')
-      .optional(),
-    default_official_model_id: z
-      .string()
-      .trim()
-      .min(1, '默认官方模型不能为空')
-      .max(120, '默认官方模型 ID 过长')
-      .nullable()
-      .optional(),
-    default_thinking_level: z.enum(PI_THINKING_LEVELS).optional(),
-    pi_session_health_enabled: z.boolean().optional(),
-    pi_session_inactive_cleanup_days: z
-      .number()
-      .int('Pi session 未活跃清理天数必须是整数')
-      .min(1, 'Pi session 未活跃清理天数不能少于 1 天')
-      .max(3650, 'Pi session 未活跃清理天数不能超过 3650 天')
-      .optional(),
-    pi_session_orphan_grace_days: z
-      .number()
-      .int('Pi session 孤儿文件保护天数必须是整数')
-      .min(1, 'Pi session 孤儿文件保护天数不能少于 1 天')
-      .max(3650, 'Pi session 孤儿文件保护天数不能超过 3650 天')
-      .optional(),
-    user_skill_max_count: z
-      .number()
-      .int('用户 Skill 数量上限必须是整数')
-      .min(1, '用户 Skill 数量上限不能少于 1 个')
-      .max(500, '用户 Skill 数量上限不能超过 500 个')
-      .optional(),
-    skill_bundle_max_files: z
-      .number()
-      .int('Skill 文件数上限必须是整数')
-      .min(1, 'Skill 文件数上限不能少于 1 个')
-      .max(500, 'Skill 文件数上限不能超过 500 个')
-      .optional(),
-    skill_bundle_max_file_chars: z
-      .number()
-      .int('Skill 单文件字符上限必须是整数')
-      .min(1, 'Skill 单文件字符上限不能少于 1 字')
-      .max(2_000_000, 'Skill 单文件字符上限不能超过 2000000 字')
-      .optional(),
-    skill_bundle_max_total_chars: z
-      .number()
-      .int('Skill 总字符上限必须是整数')
-      .min(1, 'Skill 总字符上限不能少于 1 字')
-      .max(10_000_000, 'Skill 总字符上限不能超过 10000000 字')
-      .optional(),
-    skill_bundle_max_zip_bytes: z
-      .number()
-      .int('Skill ZIP 体积上限必须是整数')
-      .min(1024, 'Skill ZIP 体积上限不能少于 1KB')
-      .max(100 * 1024 * 1024, 'Skill ZIP 体积上限不能超过 100MB')
-      .optional(),
+      .int()
+      .min(0)
+      .max(1_000_000),
   })
   .superRefine((config, ctx) => {
-    if (
-      config.skill_bundle_max_file_chars !== undefined &&
-      config.skill_bundle_max_total_chars !== undefined &&
-      config.skill_bundle_max_total_chars < config.skill_bundle_max_file_chars
-    ) {
+    if (!config.auth_mode) return;
+    const allowed =
+      config.pi_api === 'anthropic-messages'
+        ? ['anthropic_api_key', 'claude_code_oauth_token']
+        : config.pi_api === 'google-generative-ai'
+          ? ['gemini_api_key']
+          : ['openai_api_key'];
+    if (!allowed.includes(config.auth_mode)) {
       ctx.addIssue({
         code: 'custom',
-        path: ['skill_bundle_max_total_chars'],
-        message: 'Skill 总字符上限不能小于单文件字符上限',
+        path: ['auth_mode'],
+        message: 'Authentication mode does not match the protocol',
       });
     }
   });
-
-function toConfiguredContextWindowTokens(
-  value: number | null | undefined,
-): number | null | undefined {
-  if (value === undefined) return undefined;
-  return value && value > 0 ? value : null;
-}
-
-function isOfficialModelKeyConflict(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const record = error as Record<string, unknown>;
-  // PostgreSQL 唯一约束冲突时返回 23505；这里转成前端可读的模型重复错误。
-  return (
-    record.code === '23505' &&
-    (record.constraint === 'official_model_configs_model_key_key' ||
-      String(record.detail ?? '').includes('model_key'))
-  );
-}
 
 const RechargeMoneySchema = z
   .string()
@@ -798,57 +690,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/admin/status — 管理后台完整运行状态统计
   app.get('/status', async () => getAdminStatusOverview());
 
-  // GET /api/admin/system-config — 官方模型池 / 审计
-  app.get('/system-config', async () => {
-    return getSystemConfigOverview();
-  });
+  app.get('/system-config', async () => getSystemConfigOverview());
 
-  // PUT /api/admin/system-config/model-billing — 更新自配模型平台服务费
-  app.put('/system-config/model-billing', async (request, reply) => {
-    const parsed = ModelBillingSchema.safeParse(request.body);
+  app.put('/system-config/model', async (request, reply) => {
+    const parsed = OfficialModelSettingsSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    return updateModelBillingSettings({
-      customModelPlatformPricePerMillionCoins:
-        parsed.data.custom_model_platform_price_per_million_coins,
-      actor: 'manager',
-    });
-  });
-
-  // PUT /api/admin/system-config/runtime — 更新 Agent 运行时配置
-  app.put('/system-config/runtime', async (request, reply) => {
-    const parsed = RuntimeConfigSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      return await updateRuntimeSettings({
-        agentConcurrencyLimit: parsed.data.agent_concurrency_limit,
-        localAgentMaxProcesses: parsed.data.local_agent_max_processes,
-        localAgentIdleTtlMs: parsed.data.local_agent_idle_ttl_ms,
-        defaultOfficialModelId: parsed.data.default_official_model_id,
-        defaultThinkingLevel: parsed.data.default_thinking_level,
-        piSessionHealthEnabled: parsed.data.pi_session_health_enabled,
-        piSessionInactiveCleanupDays:
-          parsed.data.pi_session_inactive_cleanup_days,
-        piSessionOrphanGraceDays: parsed.data.pi_session_orphan_grace_days,
-        userSkillMaxCount: parsed.data.user_skill_max_count,
-        skillBundleMaxFiles: parsed.data.skill_bundle_max_files,
-        skillBundleMaxFileChars: parsed.data.skill_bundle_max_file_chars,
-        skillBundleMaxTotalChars: parsed.data.skill_bundle_max_total_chars,
-        skillBundleMaxZipBytes: parsed.data.skill_bundle_max_zip_bytes,
-        actor: 'manager',
-      });
-    } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : '更新运行时配置失败',
+        error: parsed.error.issues[0]?.message || 'Invalid model configuration',
       });
     }
+    return saveOfficialModelSettings({ ...parsed.data, actor: 'manager' });
   });
 
   // GET /api/admin/membership-config — 读取全部会员套餐配置（含已停用，后台改价用）
@@ -1108,104 +959,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: '收支记录不存在' });
     }
     return { success: true };
-  });
-
-  // POST /api/admin/system-config/providers — 新建官方模型
-  app.post('/system-config/providers', async (request, reply) => {
-    const parsed = OfficialModelCreateSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      const provider = await createOfficialModel({
-        modelKey: parsed.data.model_key,
-        piApi: parsed.data.pi_api,
-        displayName: parsed.data.display_name,
-        description: parsed.data.description ?? '',
-        enabled: parsed.data.enabled,
-        priority: parsed.data.priority,
-        baseUrl: parsed.data.base_url?.trim() || null,
-        modelName: parsed.data.model_name,
-        contextWindowTokens: toConfiguredContextWindowTokens(
-          parsed.data.context_window_tokens,
-        ),
-        inputTokenPricePerMillionCoins:
-          parsed.data.input_token_price_per_million_coins,
-        outputTokenPricePerMillionCoins:
-          parsed.data.output_token_price_per_million_coins,
-        secretValue: parsed.data.api_key,
-        authMode: parsed.data.auth_mode,
-        actor: 'manager',
-      });
-      return provider;
-    } catch (error) {
-      if (isOfficialModelKeyConflict(error)) {
-        return reply
-          .code(409)
-          .send({ error: '同名模型已存在，请换一个显示名称或模型名' });
-      }
-      throw error;
-    }
-  });
-
-  // PATCH /api/admin/system-config/providers/:id — 更新官方模型
-  app.patch('/system-config/providers/:id', async (request, reply) => {
-    const parsed = OfficialModelSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .code(400)
-        .send({ error: parsed.error.issues[0]?.message || '参数错误' });
-    }
-    try {
-      const provider = await updateOfficialModel({
-        id: (request.params as { id: string }).id,
-        modelKey: parsed.data.model_key,
-        piApi: parsed.data.pi_api,
-        displayName: parsed.data.display_name,
-        description: parsed.data.description,
-        enabled: parsed.data.enabled,
-        priority: parsed.data.priority,
-        baseUrl: parsed.data.base_url?.trim() || null,
-        modelName: parsed.data.model_name,
-        secretValue: parsed.data.api_key?.trim() || null,
-        authMode: parsed.data.auth_mode,
-        contextWindowTokens: toConfiguredContextWindowTokens(
-          parsed.data.context_window_tokens,
-        ),
-        inputTokenPricePerMillionCoins:
-          parsed.data.input_token_price_per_million_coins,
-        outputTokenPricePerMillionCoins:
-          parsed.data.output_token_price_per_million_coins,
-        actor: 'manager',
-      });
-      return provider;
-    } catch (error) {
-      if (isOfficialModelKeyConflict(error)) {
-        return reply
-          .code(409)
-          .send({ error: '同名模型已存在，请换一个显示名称或模型名' });
-      }
-      return reply
-        .code(404)
-        .send({ error: error instanceof Error ? error.message : '更新失败' });
-    }
-  });
-
-  // DELETE /api/admin/system-config/providers/:id — 删除官方模型
-  app.delete('/system-config/providers/:id', async (request, reply) => {
-    try {
-      await removeOfficialModel(
-        (request.params as { id: string }).id,
-        'manager',
-      );
-      return { success: true };
-    } catch (error) {
-      return reply
-        .code(400)
-        .send({ error: error instanceof Error ? error.message : '删除失败' });
-    }
   });
 
   // GET /api/admin/users — 分页获取用户（附带用量和账号数）
@@ -1739,9 +1492,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
 
     const body = schema.parse(request.body);
-    const { generateAdminRedemptionCodes } = await import(
-      '../../modules/admin/admin-service.js'
-    );
+    const { generateAdminRedemptionCodes } =
+      await import('../../modules/admin/admin-service.js');
 
     const codes = await generateAdminRedemptionCodes({
       count: body.count,
@@ -1777,18 +1529,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
 
     const query = schema.parse(request.query);
-    const { listAdminRedemptionCodes } = await import(
-      '../../modules/admin/admin-service.js'
-    );
+    const { listAdminRedemptionCodes } =
+      await import('../../modules/admin/admin-service.js');
 
     return listAdminRedemptionCodes(query);
   });
 
   // GET /api/admin/redemption-codes/stats — 获取卡密统计
   app.get('/redemption-codes/stats', async () => {
-    const { getAdminRedemptionCodeStats } = await import(
-      '../../modules/admin/admin-service.js'
-    );
+    const { getAdminRedemptionCodeStats } =
+      await import('../../modules/admin/admin-service.js');
     return getAdminRedemptionCodeStats();
   });
 
@@ -1796,9 +1546,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>(
     '/redemption-codes/:id/revoke',
     async (request, reply) => {
-      const { revokeAdminRedemptionCode } = await import(
-        '../../modules/admin/admin-service.js'
-      );
+      const { revokeAdminRedemptionCode } =
+        await import('../../modules/admin/admin-service.js');
 
       await revokeAdminRedemptionCode(request.params.id);
       return reply.code(200).send({ success: true });

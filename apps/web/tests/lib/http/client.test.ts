@@ -20,7 +20,7 @@ describe('requestJson', () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse(502, { error: '自配模型 Base URL 无效' }),
+        jsonResponse(502, { error: 'Official model endpoint is unavailable' }),
       );
 
     await expect(requestJson('/api/test')).rejects.toMatchObject({
@@ -33,14 +33,14 @@ describe('requestJson', () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse(502, { error: '自配模型 Base URL 无效' }),
+        jsonResponse(502, { error: 'Official model endpoint is unavailable' }),
       );
 
     await expect(
       requestJson('/api/chat', { exposeServerErrorMessage: true }),
     ).rejects.toMatchObject({
       status: 502,
-      message: '自配模型 Base URL 无效',
+      message: 'Official model endpoint is unavailable',
     } satisfies Partial<ApiError>);
   });
 

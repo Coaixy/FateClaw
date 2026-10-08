@@ -78,47 +78,8 @@ function isPreUseNoticeOpen() {
   return Boolean(document.getElementById(PRE_USE_NOTICE_TITLE_ID));
 }
 
-function hasUsableOfficialSelection(data: ModelSettingsOverview | null) {
-  const selectedId = data?.selection?.official_model_id;
-  if (!selectedId || data?.selection?.source !== 'official') {
-    return false;
-  }
-  return Boolean(
-    data.official_models.some(
-      (model) => model.id === selectedId && model.enabled && model.has_secret,
-    ),
-  );
-}
-
-function hasUsableCustomSelection(data: ModelSettingsOverview | null) {
-  return Boolean(
-    data?.selection?.source === 'custom' &&
-      (!data.custom_model_membership_required ||
-        data.custom_model_membership_entitled) &&
-      data.custom?.model_name.trim() &&
-      data.custom.has_secret,
-  );
-}
-
-function getAvailableOfficialModelCount(data: ModelSettingsOverview | null) {
-  return (
-    data?.official_models.filter((model) => model.enabled && model.has_secret)
-      .length ?? 0
-  );
-}
-
-/**
- * 判断当前用户是否已经有可用于对话的模型。
- *
- * @param data 模型设置总览。
- * @returns 存在可用官方兜底、显式官方选择或可用自配模型时返回 true。
- */
 export function hasUsableModelForGuide(data: ModelSettingsOverview | null) {
-  return (
-    hasUsableOfficialSelection(data) ||
-    hasUsableCustomSelection(data) ||
-    getAvailableOfficialModelCount(data) > 0
-  );
+  return Boolean(data?.model?.has_secret);
 }
 
 /**
@@ -316,7 +277,14 @@ export function useOnboardingGuideStatus({
     { open: false, step: 'welcome' },
   );
   const [
-    { modelOverview, userSkills, modelLoading, skillLoading, modelError, skillError },
+    {
+      modelOverview,
+      userSkills,
+      modelLoading,
+      skillLoading,
+      modelError,
+      skillError,
+    },
     dispatchFetch,
   ] = useReducer(guideFetchReducer, INITIAL_GUIDE_FETCH_STATE);
   const [complianceReady, setComplianceReady] = useState(false);
@@ -374,8 +342,6 @@ export function useOnboardingGuideStatus({
     };
   }, [enabled]);
 
-  const availableOfficialModelCount =
-    getAvailableOfficialModelCount(modelOverview);
   const modelReady = hasUsableModelForGuide(modelOverview);
   const skillReady = getEnabledSkillSummaries(userSkills).length > 0;
   const hasAnyInstalledSkill = hasInstalledSkill(userSkills);
@@ -480,7 +446,6 @@ export function useOnboardingGuideStatus({
     skillLoading,
     modelError,
     skillError,
-    availableOfficialModelCount,
     hasAnyInstalledSkill,
     enabledSkills,
     enabledSkillsLoading: skillLoading,

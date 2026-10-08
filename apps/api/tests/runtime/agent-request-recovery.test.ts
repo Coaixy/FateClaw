@@ -36,7 +36,7 @@ vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
   processAiChatOutboxPayload: f.deliver,
 }));
 vi.mock('../../src/infrastructure/logger.js', () => ({
-  logger: { error: vi.fn() },
+  logger: { error: vi.fn(), debug: vi.fn() },
 }));
 import {
   recoverAgentRequest,
@@ -102,6 +102,25 @@ describe('durable request recovery', () => {
         recoveryDeadlineAt: new Date(row.deadline_at).toISOString(),
         llmRuntime: expect.objectContaining({
           secret: 'synthetic-test-credential',
+          inputTokenPricePerMillionCoins: 12,
+        }),
+      }),
+    );
+  });
+  it('uses the current backend thinking level for unstarted historical requests', async () => {
+    const row = request();
+    row.runtime.thinkingLevel = 'xhigh';
+    f.runtime.mockResolvedValue({
+      ...row.runtime,
+      secret: 'synthetic-test-credential',
+      baseUrl: null,
+      thinkingLevel: 'low',
+    });
+    await recoverAgentRequest(row);
+    expect(f.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmRuntime: expect.objectContaining({
+          thinkingLevel: 'low',
           inputTokenPricePerMillionCoins: 12,
         }),
       }),

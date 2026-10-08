@@ -1,13 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  CheckCircle2,
-  Crown,
-  Info,
-  Loader2,
-  Sparkles,
-} from 'lucide-react';
+import { CheckCircle2, Crown, Info, Loader2, Sparkles } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
@@ -67,13 +61,9 @@ function resolvePlanDisplayName(
 }
 
 function resolvePlanBenefitLabels(t: TranslationFn) {
-  // 塌缩为单层"卦师使用权"：对比表逐行对应代码里的真实付费差异
-  // （会员原价 vs 非会员 ×1.5、member/normal 双队列、BYOK 门禁、开放 API 门禁），
-  // 不再宣传"人人都能用的功能"，把"为什么开会员"讲清楚。
   return [
     t('pages.membership.compareRowModelPrice'),
     t('pages.membership.compareRowQueue'),
-    t('pages.membership.compareRowCustomModel'),
     t('pages.membership.compareRowOpenApi'),
   ];
 }
@@ -98,12 +88,6 @@ function SubscriptionMetric({
   );
 }
 
-/**
- * 会员 vs 非会员权益对比表。
- *
- * 行 = 权益维度；列 = 非会员 / 卦师使用权。非会员列如实展示现状
- * （×1.5 计费、排队靠后、两项不可用），让"开了会员到底差在哪"一眼可读。
- */
 function MembershipCompareTable({
   rows,
   planName,
@@ -119,12 +103,10 @@ function MembershipCompareTable({
     t('pages.membership.compareNonMemberModelPrice'),
     t('pages.membership.compareNonMemberQueue'),
     t('pages.membership.compareNonMemberUnavailable'),
-    t('pages.membership.compareNonMemberUnavailable'),
   ];
   const memberValues = [
     t('pages.membership.compareMemberModelPrice'),
     t('pages.membership.compareMemberQueue'),
-    t('pages.membership.compareMemberAvailable'),
     t('pages.membership.compareMemberAvailable'),
   ];
 
@@ -187,7 +169,11 @@ function MembershipCompareTable({
       </table>
       {/* 表格下方补一行说明：功能本身人人可用，会员差异在价格与优先级——避免误读为"功能被锁"。 */}
       <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted/80">
-        <Info size={12} aria-hidden="true" className="mt-0.5 shrink-0 text-muted/50" />
+        <Info
+          size={12}
+          aria-hidden="true"
+          className="mt-0.5 shrink-0 text-muted/50"
+        />
         {t('pages.membership.compareFootnote')}
       </p>
     </div>
@@ -289,7 +275,11 @@ function SubscriptionCard({
 
       <div className="grid grid-cols-3 gap-2 p-5">
         <SubscriptionMetric
-          label={isActive ? t('pages.membership.expiresAt') : t('pages.membership.membershipPrice')}
+          label={
+            isActive
+              ? t('pages.membership.expiresAt')
+              : t('pages.membership.membershipPrice')
+          }
           value={isActive ? dateValue : t('pages.membership.notSubscribed')}
         />
         <SubscriptionMetric

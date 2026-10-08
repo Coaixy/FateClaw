@@ -94,7 +94,7 @@ notes/
 
 1. 校验会话归属，并用 Redis `session:processing:{sessionId}` 做会话级并发锁。
 2. 写入用户消息。
-3. 调 `resolveUserLlmRuntime()` 解析用户当前模型 runtime。
+3. `resolveUserLlmRuntime()` resolves the single platform-managed official model and thinking level; legacy user selections are ignored.
 4. 用 `buildStructuredInputForSession()` 构建历史上下文。
 5. 如用户选中盘面，追加 `activeBoardContext`。
 6. 调 `dispatchAiChatPrompt()`。

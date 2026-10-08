@@ -1,4 +1,8 @@
 import type {
+  AdminModelSettingsOverviewDto,
+  AdminModelSettingsUpdateDto,
+} from '@fateclaw/contracts/model-settings';
+import type {
   ChatSessionDto,
   ClientProfileDto,
   MessageDto,
@@ -292,7 +296,6 @@ export type AdminMembershipState = Pick<
 
 export interface GlobalStats {
   total_users: number;
-  model_selection_distribution: { source: string; count: number }[];
   active_memberships: number;
   total_recharge_orders: number;
   paid_recharge_orders: number;
@@ -556,53 +559,6 @@ export type AdminSkillCommentStatus = AdminSkillCommentStatusDto;
 /** 管理后台 Skill 评论审核列表响应。 */
 export interface AdminSkillCommentsResponse extends AdminSkillCommentsResponseDto {}
 
-export type AdminModelPiApi =
-  | 'openai-completions'
-  | 'openai-responses'
-  | 'anthropic-messages'
-  | 'google-generative-ai';
-
-export interface AdminModelProvider {
-  id: string;
-  model_key: string;
-  pi_api: AdminModelPiApi;
-  display_name: string;
-  description: string;
-  enabled: boolean;
-  priority: number;
-  base_url: string | null;
-  model_name: string;
-  context_window_tokens: number | null;
-  api_key_secret_key: string | null;
-  input_token_price_per_million_coins: number;
-  output_token_price_per_million_coins: number;
-  extra_json: Record<string, unknown> | null;
-  has_secret: boolean;
-  // api_key 恒为 null（明文永不回显）；后端只下发后 4 位预览 + 指纹供识别。
-  api_key: string | null;
-  api_key_preview: string | null;
-  api_key_fingerprint: string | null;
-  secret_source: 'database' | 'missing';
-  auth_mode:
-    | 'openai_api_key'
-    | 'anthropic_api_key'
-    | 'claude_code_oauth_token'
-    | 'gemini_api_key';
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AdminConfigAuditLog {
-  id: string;
-  actor_user_id: string | null;
-  action: string;
-  target_type: string;
-  target_key: string;
-  before_json: unknown;
-  after_json: unknown;
-  created_at: string;
-}
-
 export interface AdminRechargePaymentConfig {
   enabled: boolean;
   min_coins: string;
@@ -725,35 +681,6 @@ export type AdminAnnouncementDraft = Pick<
 /** 管理后台公告更新数据。 */
 export type AdminAnnouncementUpdate = Partial<AdminAnnouncementDraft>;
 
-/** 后台模型计费配置视图，单位是软妹币 / 百万 Token。 */
-export interface AdminModelBillingConfig {
-  custom_model_platform_price_per_million_coins: number;
-  updated_at: string;
-}
-
-export interface AdminRuntimeConfig {
-  agent_concurrency_limit: number;
-  local_agent_max_processes: number;
-  local_agent_idle_ttl_ms: number;
-  default_official_model_id: string | null;
-  default_thinking_level:
-    | 'off'
-    | 'minimal'
-    | 'low'
-    | 'medium'
-    | 'high'
-    | 'xhigh';
-  pi_session_health_enabled: boolean;
-  pi_session_inactive_cleanup_days: number;
-  pi_session_orphan_grace_days: number;
-  user_skill_max_count: number;
-  skill_bundle_max_files: number;
-  skill_bundle_max_file_chars: number;
-  skill_bundle_max_total_chars: number;
-  skill_bundle_max_zip_bytes: number;
-  updated_at: string;
-}
-
 /**
  * 管理后台提交的充值配置；支付回调地址由后端生成。
  */
@@ -762,13 +689,8 @@ export type AdminRechargePaymentConfigUpdate = Omit<
   'notify_url' | 'return_url' | 'updated_at'
 >;
 
-export interface AdminSystemConfigOverview {
-  providers: AdminModelProvider[];
-  official_models: AdminModelProvider[];
-  model_billing: AdminModelBillingConfig;
-  runtime: AdminRuntimeConfig;
-  audit_logs: AdminConfigAuditLog[];
-}
+export type AdminSystemConfigOverview = AdminModelSettingsOverviewDto;
+export type AdminModelSettingsUpdate = AdminModelSettingsUpdateDto;
 
 /** 运行时基础设施状态快照（对应 GET /api/admin/runtime-status）。 */
 export interface AdminRuntimeStatus {
@@ -934,84 +856,11 @@ export const admin = {
       `/api/admin/announcements/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
     ),
-  updateModelBilling: (data: {
-    custom_model_platform_price_per_million_coins: number;
-  }) =>
-    adminRequest<AdminModelBillingConfig>(
-      '/api/admin/system-config/model-billing',
-      {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      },
-    ),
-  updateRuntimeConfig: (data: {
-    agent_concurrency_limit: number;
-    local_agent_max_processes?: number;
-    local_agent_idle_ttl_ms?: number;
-    default_official_model_id?: string | null;
-    default_thinking_level?: AdminRuntimeConfig['default_thinking_level'];
-    pi_session_health_enabled?: boolean;
-    pi_session_inactive_cleanup_days?: number;
-    pi_session_orphan_grace_days?: number;
-    user_skill_max_count?: number;
-    skill_bundle_max_files?: number;
-    skill_bundle_max_file_chars?: number;
-    skill_bundle_max_total_chars?: number;
-    skill_bundle_max_zip_bytes?: number;
-  }) =>
-    adminRequest<AdminRuntimeConfig>('/api/admin/system-config/runtime', {
+  updateModelSettings: (data: AdminModelSettingsUpdate) =>
+    adminRequest<AdminSystemConfigOverview>('/api/admin/system-config/model', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  createOfficialModel: (data: {
-    model_key: string;
-    pi_api: AdminModelPiApi;
-    display_name: string;
-    description?: string;
-    enabled: boolean;
-    priority: number;
-    base_url?: string | null;
-    model_name: string;
-    context_window_tokens?: number | null;
-    input_token_price_per_million_coins: number;
-    output_token_price_per_million_coins: number;
-    api_key: string;
-  }) =>
-    adminRequest<AdminModelProvider>('/api/admin/system-config/providers', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  updateOfficialModel: (
-    id: string,
-    data: {
-      model_key: string;
-      pi_api: AdminModelPiApi;
-      display_name: string;
-      description?: string;
-      enabled: boolean;
-      priority: number;
-      base_url?: string | null;
-      model_name: string;
-      context_window_tokens?: number | null;
-      input_token_price_per_million_coins: number;
-      output_token_price_per_million_coins: number;
-      api_key?: string;
-    },
-  ) =>
-    adminRequest<AdminModelProvider>(
-      `/api/admin/system-config/providers/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      },
-    ),
-  deleteOfficialModel: (id: string) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/system-config/providers/${encodeURIComponent(id)}`,
-      {
-        method: 'DELETE',
-      },
-    ),
   users: (params?: { page?: number; page_size?: number; q?: string }) => {
     const search = new URLSearchParams();
     if (params?.page != null) search.set('page', String(params.page));

@@ -238,10 +238,10 @@ describe('getAiChatStreamErrorMessage', () => {
   it('prefers public stream error text', () => {
     expect(
       getAiChatStreamErrorMessage({
-        publicErrorText: '自配模型调用失败',
+        publicErrorText: 'Official model request failed',
         error: 'provider failed',
       }),
-    ).toBe('自配模型调用失败');
+    ).toBe('Official model request failed');
   });
 
   it('falls back to raw stream errors', () => {
@@ -275,9 +275,9 @@ describe('getAiChatSendErrorMessage', () => {
   });
 
   it('keeps specific server error messages visible', () => {
-    expect(getAiChatSendErrorMessage(new Error('自配模型调用失败'))).toBe(
-      '自配模型调用失败',
-    );
+    expect(
+      getAiChatSendErrorMessage(new Error('Official model request failed')),
+    ).toBe('Official model request failed');
   });
 });
 

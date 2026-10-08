@@ -28,7 +28,7 @@ const WECHAT_CLAW_FEATURE_ENABLED = false;
  * runtime 和业务服务消费的统一会员权益快照。
  *
  * 字段按“可消费能力”组织，调用方应直接读取布尔能力，
- * 不要在各模块内重新根据 planKey 推导微信 Claw、优先队列或自配模型权限。
+ * 不要在各模块内重新根据 planKey 推导微信 Claw 或优先队列权限。
  */
 export interface RuntimeEntitlementSnapshot {
   userId: string;
@@ -37,7 +37,6 @@ export interface RuntimeEntitlementSnapshot {
   planRank: number;
   hasPaidMembership: boolean;
   hasPriorityQueue: boolean;
-  canUseCustomModel: boolean;
   canUseWechatClaw: boolean;
   wallet: {
     purchasedCoins: number;
@@ -79,9 +78,8 @@ export async function getRuntimeEntitlementSnapshot(
     planKey: activePlanKey,
     planRank: resolveMembershipPlanRank(activePlanKey),
     hasPaidMembership: hasPaidMembershipEntitlement(membership),
-    // 塌缩为单层"卦师使用权"：自定义模型（BYOK）与优先队列不再按档位区分，有效使用权即开放。
+    // Active membership provides access to the priority queue.
     hasPriorityQueue: membership.active,
-    canUseCustomModel: membership.active,
     // 微信 Claw 由集中总开关 WECHAT_CLAW_FEATURE_ENABLED 控制（当前 false → 恒不可用）。
     // 功能已在迁移 0057 数据层可逆停用（accounts.enabled=false → 启动不拉起 iLink 轮询、
     // 前端无绑定入口、状态页不展示微信卡）。恢复时把常量改回 true 即对所有有效卦师开放。

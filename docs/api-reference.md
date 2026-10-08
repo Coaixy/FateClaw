@@ -476,16 +476,15 @@ ws://localhost:3000/api/chat-sessions/s/:sessionId/stream?ticket=single-use-tick
 
 ---
 
-## Model Settings 用户模型设置
+## Model Settings
 
-以下接口均需认证，用于普通用户选择官方模型或保存自配模型。
+All users use the single official model and thinking level configured by the platform. Model settings are read-only for users.
 
-| 方法 | 路径 | 说明 |
+| Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/model-settings` | 获取当前用户模型设置概览、官方模型列表和自配模型配置 |
-| GET | `/api/model-settings/official-models` | 获取可选官方模型列表 |
-| PUT | `/api/model-settings/custom` | 保存自配模型，字段包括 `pi_api`、`base_url`、`model_name`、`context_window_tokens`、`auth_mode`、`api_key` |
-| PUT | `/api/model-settings/selection` | 选择模型来源，传 `{ "source": "custom" }` 或 `{ "source": "official", "official_model_id": "..." }` |
+| GET | `/api/model-settings` | Authenticated overview: `{ "model": { ... } }`, or `{ "model": null }` before configuration |
+
+The response contains the model name, availability, description, and input/output token prices. It does not expose provider connection details or credential metadata. User custom-model and selection endpoints are removed.
 
 ## Skills 商店与创作者
 
@@ -869,11 +868,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 ### GET /api/admin/system-config
 
-读取官方模型池、当前模型计费配置和最近审计日志。
-
-### PUT /api/admin/system-config/model-billing
-
-更新自配模型平台服务费。
+Returns `{ "model": { ... } | null, "thinking_level": "medium" }` for the sole official model slot. Credential values, previews, fingerprints, runtime policies, platform service fees, and configuration audit logs are not returned.
 
 ### GET /api/admin/recharge-config
 
@@ -915,40 +910,35 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 | PATCH | `/api/admin/about-ledger/:id` | 更新公开收支流水 |
 | DELETE | `/api/admin/about-ledger/:id` | 删除公开收支流水 |
 
-### POST /api/admin/system-config/providers
+### PUT /api/admin/system-config/model
 
-创建官方模型配置。
+Saves the single official model and platform thinking level atomically. Repeated or concurrent saves update the same slot. There are no add, delete, priority, or default-model controls.
 
 **Request Body**
 
 ```json
 {
-  "model_key": "openai-main",
   "pi_api": "openai-responses",
-  "display_name": "OpenAI Main",
-  "description": "默认主对话模型",
-  "enabled": true,
-  "priority": 0,
   "base_url": null,
-  "model_name": "gpt-4o",
-  "api_key": "sk-...",
-  "auth_mode": "openai_api_key",
+  "model_name": "gpt-4.1",
+  "api_key": "<provider-api-key>",
   "context_window_tokens": null,
+  "thinking_level": "medium",
   "input_token_price_per_million_coins": 0,
   "output_token_price_per_million_coins": 0
 }
 ```
 
-- `pi_api` 支持 `openai-completions`、`openai-responses`、`anthropic-messages`、`google-generative-ai`
-- `auth_mode` 支持 `openai_api_key`、`anthropic_api_key`、`claude_code_oauth_token`、`gemini_api_key`
+- `pi_api`: `openai-completions`, `openai-responses`, `anthropic-messages`, or `google-generative-ai`.
+- `thinking_level`: `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`. This applies to all users and Open API sessions on each new turn.
+- `api_key`: required for the first configuration; omit or leave blank to preserve the stored credential. Changing protocol requires a new credential.
+- `auth_mode`: optional; must match the protocol. Anthropic supports `anthropic_api_key` and `claude_code_oauth_token`.
+- `context_window_tokens`: `null` or `0` uses automatic detection; an explicit value must be 8192–2000000.
+- Official input/output token prices remain the billing rates. The separate custom-model platform service fee is removed.
 
-### PATCH /api/admin/system-config/providers/:id
+Existing installations reuse the configured default official model, or their first existing model if no default was set. The first save fixes that slot as the platform model. Legacy user choices and session thinking levels do not override it. If the configured model is unavailable, requests fail explicitly without switching providers.
 
-更新官方模型配置；如传 `api_key` 会同步更新密钥。
-
-### DELETE /api/admin/system-config/providers/:id
-
-删除一个官方模型配置；已有用户选择该模型时会同步清理相关选择。
+The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-config/model-billing` mutation endpoints are removed. Historical rows and credentials are not deleted during migration.
 
 ### 其他管理接口
 

@@ -25,35 +25,21 @@ import {
   resolveGuideStep,
 } from '../../../components/ai-chat/use-onboarding-guide-status';
 
-const baseModelOverview: ModelSettingsOverview = {
-  custom: null,
-  selection: null,
-  official_models: [],
-  default_official_model_id: null,
-  default_thinking_level: 'medium',
-  custom_model_membership_required: true,
-  custom_model_membership_entitled: true,
-  custom_model_platform_price_per_million_coins: 0,
-};
+const baseModelOverview: ModelSettingsOverview = { model: null };
 
 function officialModel(
-  patch: Partial<ModelSettingsOverview['official_models'][number]> = {},
-): ModelSettingsOverview['official_models'][number] {
+  patch: Partial<NonNullable<ModelSettingsOverview['model']>> = {},
+): NonNullable<ModelSettingsOverview['model']> {
   return {
     id: 'official-1',
     model_key: 'official-model',
-    pi_api: 'openai-responses',
-    display_name: '官方模型',
-    description: '测试官方模型',
-    enabled: true,
-    priority: 0,
-    base_url: null,
+    display_name: 'Official model',
+    description: 'Test official model',
     model_name: 'gpt-test',
     context_window_tokens: null,
     input_token_price_per_million_coins: 1,
     output_token_price_per_million_coins: 1,
     has_secret: true,
-    auth_mode: 'openai_api_key',
     ...patch,
   };
 }
@@ -105,73 +91,18 @@ function subscribedSkill(
 }
 
 describe('onboarding guide status helpers', () => {
-  it('treats available official fallback models as model-ready', () => {
-    expect(
-      hasUsableModelForGuide({
-        ...baseModelOverview,
-        official_models: [officialModel()],
-      }),
-    ).toBe(true);
+  it('treats the configured official model as ready without user selection', () => {
+    expect(hasUsableModelForGuide({ model: officialModel() })).toBe(true);
   });
 
-  it('treats a usable custom selection as model-ready', () => {
-    expect(
-      hasUsableModelForGuide({
-        ...baseModelOverview,
-        custom: {
-          user_id: 'user-1',
-          pi_api: 'openai-responses',
-          base_url: null,
-          model_name: 'custom-model',
-          context_window_tokens: null,
-          has_secret: true,
-          api_key_preview: null,
-          api_key_fingerprint: null,
-          api_key: null,
-          auth_mode: 'openai_api_key',
-          created_at: '2026-06-06T00:00:00.000Z',
-          updated_at: '2026-06-06T00:00:00.000Z',
-        },
-        selection: {
-          user_id: 'user-1',
-          source: 'custom',
-          official_model_id: null,
-          thinking_level: 'medium',
-          created_at: '2026-06-06T00:00:00.000Z',
-          updated_at: '2026-06-06T00:00:00.000Z',
-        },
-      }),
-    ).toBe(true);
+  it('keeps the guide unavailable when no official model is configured', () => {
+    expect(hasUsableModelForGuide(baseModelOverview)).toBe(false);
+    expect(hasUsableModelForGuide(null)).toBe(false);
   });
 
-  it('does not treat custom selections as ready without membership entitlement', () => {
+  it('keeps the guide unavailable when the official model lacks credentials', () => {
     expect(
-      hasUsableModelForGuide({
-        ...baseModelOverview,
-        custom_model_membership_entitled: false,
-        custom: {
-          user_id: 'user-1',
-          pi_api: 'openai-responses',
-          base_url: null,
-          model_name: 'custom-model',
-          context_window_tokens: null,
-          has_secret: true,
-          api_key_preview: null,
-          api_key_fingerprint: null,
-          api_key: null,
-          auth_mode: 'openai_api_key',
-          created_at: '2026-06-06T00:00:00.000Z',
-          updated_at: '2026-06-06T00:00:00.000Z',
-        },
-        selection: {
-          user_id: 'user-1',
-          source: 'custom',
-          official_model_id: null,
-          thinking_level: 'medium',
-          created_at: '2026-06-06T00:00:00.000Z',
-          updated_at: '2026-06-06T00:00:00.000Z',
-        },
-      }),
+      hasUsableModelForGuide({ model: officialModel({ has_secret: false }) }),
     ).toBe(false);
   });
 

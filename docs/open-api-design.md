@@ -237,11 +237,10 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 
 ```jsonc
 {
-  "model": "<official_models.model_key>", // 取 GET /api/v1/models 的 id；会话固定使用，建后不可改
+  "model": "<official-model-alias>", // Optional; if present, use the sole id from GET /api/v1/models
   "system": "你是一位严谨的命理解读师",     // 可选：人设（受约束的 persona 覆盖层，不覆盖平台核心 system）
   "fateclaw": {
     "skills": ["<skill-uuid>", "..."],     // 可选：开启的 skill，用 skill id(UUID)
-    "thinking_level": "high",              // 可选：off|minimal|low|medium|high|xhigh，默认 medium
     "board": {                             // 可选：排盘结果（解读场景），只在此传一次
       "type": "bazi",
       "text": "...",                       // 来自 /api/v1/paipan/bazi 的 text（优先）
@@ -267,8 +266,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 
 | 建会话字段 | → 存储列 | 发消息时如何用 |
 |---|---|---|
-| `model` | `model_key` | 每轮 `resolveOfficialRuntimeByModelKey(model_key, thinking_level)` 重建 official metered 运行时 |
-| `fateclaw.thinking_level` | `thinking_level` | 同上 |
+| `model` (optional) | `model_key` | Creation metadata only; each turn resolves the current platform model and thinking level |
 | `system` | `persona_prompt` | 每轮作为 `personaPrompt` 注入 |
 | `fateclaw.skills` | `authorized_skill_ids`(JSONB) | 每轮作为 `authorizedSkillIds` 注入（见 §7.6） |
 | `fateclaw.board` | `board`(JSONB) | 每轮重建单个 `SessionBoardContext` 注入（见 §7.5） |
@@ -293,7 +291,7 @@ agent-runtime 是按账号隔离的常驻进程，站内通过 Redis IPC 通信�
    - sessionBoardContexts ← 由 board 快照每轮重建（见 §7.5）
    - personaPrompt        ← persona_prompt
    - authorizedSkillIds   ← authorized_skill_ids
-   - llmRuntime           ← resolveOfficialRuntimeByModelKey(model_key, thinking_level)（强制 official metered）
+   - llmRuntime           ← resolveOfficialLlmRuntime() (current platform model and thinking level)
    - entitlementSnapshot  ← getRuntimeEntitlementSnapshot(userId)
 4. 调 dispatchAiChatPrompt(..., waitForResponse:true)：内部已完成
    ensureLocalAgentRunning（保活）+ addAccountListener + reserve/settle 计费 + 等 final。
@@ -328,11 +326,13 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 
 > token 影响：开启更多 skill 仅让 system prompt 多几行索引（小）；真正计费大头是模型用 read/grep 把 skill 正文读进对话后计入后续 `promptTokens`。属正常 token 计费，无需额外定价。
 
-### 7.7 模型映射
+### 7.7 Model configuration
 
-- 对外 `model` 字段**直接传内部 `official_models.model_key`**。`resolveOfficialRuntimeByModelKey(model_key, thinking_level)` 精确匹配并构造 `source='official'` + `billingMode='metered'` 的运行时。建会话期即校验，未知/不可用 → 400 model_not_found；模型在建会话后被下线，则发消息时同样 400。
-- `GET /api/v1/models`（OpenAI 兼容 list 结构）列出当前可用的官方 `model_key`。
-- 稳定别名（`public_alias`）待实现（见 §10）；当前请用 `GET /api/v1/models` 返回的 `model_key`。
+- `GET /api/v1/models` returns at most one available official model alias.
+- Session creation may omit `model`. When supplied, it must match that alias; an unknown or unavailable model returns `400 model_not_found`.
+- `fateclaw.thinking_level` is removed and rejected. The platform configures thinking level centrally.
+- Each message resolves `resolveOfficialLlmRuntime()` from the current backend configuration, including messages in sessions created before simplification. Stored model/thinking fields are historical metadata.
+- Completion responses identify the model actually used for that turn.
 
 ### 7.8 非流式响应
 
@@ -357,7 +357,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 
 计费**完全由 `dispatchAiChatPrompt` 内部链路完成**：reserve（入口校验欠费）→ 执行 → 按真实 usage `settleBillingReservationDetailed` 扣 coins（`promptTokens*inputPrice/1M + completionTokens*outputPrice/1M`，`roundCoinsToCents`）→ `incrementDailyTokens` → sweeper 兜底；口径与站内 AI Chat 完全一致。建会话本身不触发 runtime、零计费。
 
-> ⚠️ **对外路由绝不重复 reserve/settle**，否则双重计费。对外只需用 `resolveOfficialRuntimeByModelKey` 构造 `source='official'` + `billingMode='metered'` 的 `llmRuntime` 传入，计费即自然发生（BYOK/custom 会被短路为 0，故必须强制官方模型）。
+> ⚠️ **对外路由绝不重复 reserve/settle**，否则双重计费。对外只需用 `resolveOfficialLlmRuntime` 构造 `source='official'` + `billingMode='metered'` 的 `llmRuntime` 传入，计费即自然发生。
 
 **api_key 维度**：MVP 把 `apiKeyId` 塞进 `billing_request_reservations.metadata`（jsonb，现成透传）。若需 per-key 报表，再给计费表加 `api_key_id` 列（决策点 §10）。
 

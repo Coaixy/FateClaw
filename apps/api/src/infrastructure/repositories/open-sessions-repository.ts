@@ -44,7 +44,7 @@ export interface OpenSessionRow {
 export interface OpenSessionDto {
   id: string;
   object: 'session';
-  /** 会话固定使用的官方模型 model_key。 */
+  /** Official model alias recorded when the session was created. */
   model: string;
   status: 'active' | 'deleted';
   /** 创建时间（ISO 8601）。 */
