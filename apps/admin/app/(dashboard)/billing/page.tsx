@@ -912,25 +912,6 @@ export default function AdminBillingPage() {
         }
       />
 
-      {/* 卡密管理快捷入口 */}
-      <div className="rounded-lg border border-hairline bg-surface-card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium">卡密充值管理</h3>
-            <p className="mt-0.5 text-[12px] text-muted">
-              生成、管理和查看卡密充值记录
-            </p>
-          </div>
-          <a
-            href="/billing/redemption-codes/"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white hover:bg-accent/90"
-          >
-            <Coins size={16} />
-            管理卡密
-          </a>
-        </div>
-      </div>
-
       {error ? (
         <AdminAlert tone="error">{error}</AdminAlert>
       ) : null}

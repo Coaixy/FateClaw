@@ -97,23 +97,4 @@ export const billingApi = {
       method: 'POST',
       body: JSON.stringify({ scope: scope || 'all' }),
     }).finally(clearBillingCache),
-  /**
-   * 兑换卡密：把 redemption code 转成积分入账。
-   *
-   * 后端 POST /api/billing/redeem，成功返回入账面额与新余额拆解；
-   * 失败（已兑换/已过期/已撤销等）返回 400 + { error }，被 requestJson
-   * 归一化为 ApiError(message)，调用方可直接读 err.message 展示。
-   * 成功后清 billing 缓存，让余额卡片即时反映扣加减后的额度。
-   *
-   * @param data.code 卡密码，1-50 字符。
-   * @returns 入账面额 amountCoins 与最新 bonus/purchased 余额。
-   */
-  redeemCode: (data: { code: string }) =>
-    requestJson<{ success: true; amountCoins: number; user: { bonus_coins: number; purchased_coins: number } }>(
-      '/api/billing/redeem',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ).finally(clearBillingCache),
 };

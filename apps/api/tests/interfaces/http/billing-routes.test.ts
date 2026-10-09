@@ -32,7 +32,7 @@ vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
 import { billingRoutes } from '../../../src/interfaces/http/billing-routes.js';
 import { subscribeCurrentUserMembership } from '../../../src/modules/billing/billing-service.js';
 
-describe('billingRoutes membership plan boundary', () => {
+describe('billingRoutes', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -52,6 +52,18 @@ describe('billingRoutes membership plan boundary', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('returns 404 for the retired redemption endpoint', async () => {
+    expect(app.hasRoute({ method: 'POST', url: '/redeem' })).toBe(false);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/redeem',
+      payload: { code: 'SYNTHETIC-RETIRED-CODE' },
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it('rejects legacy membership plan keys at the billing HTTP boundary', async () => {

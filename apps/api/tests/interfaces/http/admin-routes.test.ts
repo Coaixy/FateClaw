@@ -167,16 +167,21 @@ describe('adminRoutes authentication throttling', () => {
     { method: 'POST' as const, url: '/about-ledger' },
     { method: 'PATCH' as const, url: '/about-ledger/:id' },
     { method: 'DELETE' as const, url: '/about-ledger/:id' },
+    { method: 'POST' as const, url: '/redemption-codes/generate' },
+    { method: 'GET' as const, url: '/redemption-codes' },
+    { method: 'GET' as const, url: '/redemption-codes/stats' },
+    { method: 'POST' as const, url: '/redemption-codes/:id/revoke' },
   ])(
     'returns 404 for the retired $method $url endpoint',
     async ({ method, url }) => {
+      expect(app.hasRoute({ method, url })).toBe(false);
+
       const response = await app.inject({
         method,
         url: url.replace(':id', 'retired-entry'),
         headers: { 'x-admin-key': 'test-manager-key' },
       });
 
-      expect(app.hasRoute({ method, url })).toBe(false);
       expect(response.statusCode).toBe(404);
     },
   );

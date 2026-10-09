@@ -141,6 +141,7 @@ describe.skipIf(!connectionString)(
           'public_financial_ledger_entries',
         );
         expect(expectedSeeds).not.toHaveProperty('announcements');
+        expect(expectedSeeds).not.toHaveProperty('redemption_codes');
         await withDatabase(async (fresh) => {
           await runDatabaseMigrations(fresh);
           expect(await readSchema(fresh)).toEqual(expectedSchema);
@@ -169,7 +170,36 @@ describe.skipIf(!connectionString)(
         (id, slug, title, summary, body_markdown, status, priority)
         VALUES ('synthetic-retired-announcement', 'synthetic-announcement',
           'Synthetic title', '', 'Synthetic body', 'published', 0)`);
+        await client.query(`INSERT INTO redemption_codes (id, code, amount_coins)
+        VALUES ('synthetic-retired-code', 'SYNTHETIC-RETIRED-CODE', 10)`);
+        await client.query(`INSERT INTO balance_grants
+        (id, user_id, source, amount_coins, remaining_coins)
+        VALUES ('synthetic-preserved-grant', 'synthetic-preserved-user',
+          'redemption_code', 20, 15)`);
+        await client.query(`UPDATE users SET bonus_coins = 15
+        WHERE id = 'synthetic-preserved-user'`);
+        await client.query(`INSERT INTO wallet_transactions
+        (id, user_id, kind, amount_coins, balance_source, balance_grant_id)
+        VALUES ('synthetic-preserved-transaction', 'synthetic-preserved-user',
+          'bonus_grant', 20, 'bonus', 'synthetic-preserved-grant')`);
+        const preservedTables = [
+          'users',
+          'balance_grants',
+          'wallet_transactions',
+        ];
+        const beforeUpgrade = await readSeedFingerprints(client);
         await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              "SELECT to_regclass('public.redemption_codes') AS name",
+            )
+          ).rows[0].name,
+        ).toBeNull();
+        const afterUpgrade = await readSeedFingerprints(client);
+        for (const table of preservedTables) {
+          expect(afterUpgrade[table]).toBe(beforeUpgrade[table]);
+        }
         expect(
           (
             await client.query(

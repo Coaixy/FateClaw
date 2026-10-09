@@ -20,7 +20,6 @@ import {
   type RechargePayType,
   type RechargeStats,
 } from '@/features/billing/api';
-import { WalletRedeemPanel } from '@/components/settings/wallet/wallet-redeem-panel';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 
@@ -198,9 +197,6 @@ export function WalletRechargePanel({
   // 历史订单展开（纯 UI 开关）与错误文案（表单校验与订单操作共享）各自保持轻量 useState。
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [error, setError] = useState('');
-  // 充值方式切换：在线支付（分步表单）或卡密兑换（凭码入账）。
-  // 切换不重置在线支付草稿——用户切到卡密再切回，金额/支付方式仍保留。
-  const [rechargeTab, setRechargeTab] = useState<'online' | 'code'>('online');
 
   const pendingOrder =
     activeOrder && isFreshPendingOrder(activeOrder)
@@ -296,44 +292,6 @@ export function WalletRechargePanel({
       </div>
 
       <div className="space-y-4 p-4 sm:p-5">
-        {/* 充值方式切换：在线支付 / 卡密兑换。两种支付流程各自独立的状态机。 */}
-        <div
-          className="grid grid-cols-2 gap-1 rounded-xl border border-hairline bg-canvas/55 p-1"
-          role="tablist"
-          aria-label={t('pages.wallet.rechargeTitle')}
-        >
-          <button
-            type="button"
-            onClick={() => setRechargeTab('online')}
-            className={`h-8 rounded-lg text-[12px] font-semibold transition-colors ${
-              rechargeTab === 'online'
-                ? 'bg-primary/12 text-primary shadow-sm'
-                : 'text-muted hover:bg-surface-card hover:text-ink'
-            }`}
-            aria-selected={rechargeTab === 'online'}
-            role="tab"
-          >
-            {t('pages.wallet.redeemTabOnline')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setRechargeTab('code')}
-            className={`h-8 rounded-lg text-[12px] font-semibold transition-colors ${
-              rechargeTab === 'code'
-                ? 'bg-primary/12 text-primary shadow-sm'
-                : 'text-muted hover:bg-surface-card hover:text-ink'
-            }`}
-            aria-selected={rechargeTab === 'code'}
-            role="tab"
-          >
-            {t('pages.wallet.redeemTabCode')}
-          </button>
-        </div>
-
-        {rechargeTab === 'code' ? (
-          <WalletRedeemPanel onChanged={onChanged} />
-        ) : (
-          <>
         <div
           className="grid grid-cols-3 gap-1 rounded-xl border border-hairline bg-canvas/55 p-1"
           role="tablist"
@@ -538,12 +496,8 @@ export function WalletRechargePanel({
             </button>
           </div>
         )}
-          </>
-        )}
       </div>
 
-      {rechargeTab === 'online' && (
-        <>
       {error && (
         <div className="mx-4 mb-4 rounded-xl border border-error/30 bg-error/8 px-3 py-2 text-[12px] text-error sm:mx-5">
           {error}
@@ -656,8 +610,6 @@ export function WalletRechargePanel({
             )}
           </div>
         </div>
-      )}
-        </>
       )}
     </section>
   );

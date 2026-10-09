@@ -64,6 +64,11 @@ describe('runDatabaseMigrations', () => {
         (call) => call.sql === 'DROP TABLE IF EXISTS public.announcements',
       ),
     ).toBe(true);
+    expect(
+      calls.some(
+        (call) => call.sql === 'DROP TABLE IF EXISTS public.redemption_codes',
+      ),
+    ).toBe(true);
     expect(baselineSql?.includes('INSERT INTO public.runtime_config')).toBe(
       true,
     );
@@ -140,7 +145,7 @@ describe('runDatabaseMigrations', () => {
 
     await runDatabaseMigrations(client as never);
 
-    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(4);
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(5);
     expect(
       calls.some((call) => call.sql.includes('CREATE TABLE public.users')),
     ).toBe(false);
@@ -153,6 +158,7 @@ describe('runDatabaseMigrations', () => {
       '0077_drop_bazi_cases',
       '0078_drop_public_financial_ledger',
       '0079_drop_announcements',
+      '0080_drop_redemption_codes',
     ]);
   });
 
@@ -176,7 +182,7 @@ describe('runDatabaseMigrations', () => {
   it('applies migrations appended after the newest baseline as separate upgrades', async () => {
     const migrations = MIGRATIONS as DatabaseMigration[];
     migrations.push({
-      id: '0080_synthetic_upgrade',
+      id: '0081_synthetic_upgrade',
       description: 'Synthetic upgrade after the snapshot',
       async up(client) {
         await client.query('CREATE TABLE synthetic_upgrade (id INTEGER)');

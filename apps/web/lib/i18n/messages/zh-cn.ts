@@ -336,16 +336,6 @@ export const zhCNMessages = {
       badgeCharge: '扣费',
       badgeDeduct: '扣减',
       badgeExpense: '支出',
-      // 卡密兑换：充值中心的另一 Tab，凭卡密码直接入账，不走第三方支付。
-      redeemTabOnline: '在线支付',
-      redeemTabCode: '卡密兑换',
-      redeemHint: '输入卡密码兑换积分',
-      redeemPlaceholder: '输入卡密码',
-      redeemAction: '立即兑换',
-      redeemEmpty: '请输入卡密码',
-      redeemFailed: '兑换失败，请稍后重试',
-      redeemSuccess: '兑换成功，已到账 {amount}',
-      redeemSafety: '卡密码由管理员签发，一次性使用，兑换后作废',
     },
     membership: {
       title: '订阅与计费',
