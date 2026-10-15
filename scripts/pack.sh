@@ -207,6 +207,7 @@ pack_backend_runtime() {
   rewrite_runtime_package_for_npm "$app_dir/apps/api/package.json"
   cp -R apps/api/dist "$app_dir/apps/api/dist"
   cp apps/agent-runtime/package.json "$app_dir/apps/agent-runtime/package.json"
+  rewrite_runtime_package_for_npm "$app_dir/apps/agent-runtime/package.json"
   cp -R apps/agent-runtime/dist "$app_dir/apps/agent-runtime/dist"
   cp packages/contracts/package.json "$app_dir/packages/contracts/package.json"
   # contracts 已改标准 tsc 构建包(P6):exports 指向 dist,运行时(apps/api/dist 编译产物)

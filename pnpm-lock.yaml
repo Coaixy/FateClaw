@@ -113,6 +113,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.86.0
         version: 0.86.0(ws@8.21.3)(zod@4.3.6)
+      '@fateclaw/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
@@ -334,6 +337,9 @@ importers:
 
   packages/contracts:
     devDependencies:
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

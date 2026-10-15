@@ -139,152 +139,156 @@ export async function runPiSession(args: {
     piContextPrompt: sessionContext.prompt,
     soulEditEnabled,
   });
-  const readableSkills = resourceLoader
-    .getSkills()
-    .skills.filter((skill) => !skill.disableModelInvocation);
-  const systemPrompt = resourceLoader.getSystemPrompt() ?? '';
-  const appendSystemPrompt = resourceLoader.getAppendSystemPrompt();
-  const customTools = createPiCustomTools({
-    requestScope: args.requestScope,
-    readableSkills,
-    sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
-    accountId: args.containerInput.accountId,
-    soulStore: args.runtime.deps.soulStore,
-    soulEditEnabled,
-    recordExecution(record) {
-      records.push(record);
-    },
-  });
-
-  const allowedToolNames = customTools.map((tool) => tool.name);
-  const settingsManager = SettingsManager.inMemory({
-    compaction: { enabled: true },
-    // Warming issues extra billable calls outside the user-requested turn.
-    cacheWarming: 'off',
-    retry: { enabled: true, maxRetries: 2 },
-    images: { blockImages: true },
-    enableInstallTelemetry: false,
-  });
-  const cwd = process.cwd();
-  const piSession = createFateClawPiSessionManager({
-    cwd,
-    sessionId: args.containerInput.sessionId,
-  });
-  const { session } = await createAgentSession({
-    cwd,
-    agentDir: cwd,
-    model: providerRuntime.model,
-    thinkingLevel: resolveThinkingLevel(
-      args.containerInput.llmRuntime.thinkingLevel,
-    ),
-    modelRuntime: providerRuntime.modelRuntime,
-    resourceLoader,
-    sessionManager: piSession.manager,
-    settingsManager,
-    noTools: 'all',
-    tools: allowedToolNames,
-    customTools,
-  });
-
-  args.onSessionReady?.({
-    abort: () => session.abort(),
-  });
-
-  const stream = createAiChatStreamPublisher((event) => {
-    void publishAiChatStreamEvent({
-      sessionId: args.containerInput.sessionId,
-      event: enrichAiChatStreamEvent({
-        event,
-        requestId: getRequestId(args.requestScope),
-        accountId: args.containerInput.accountId,
-        sessionId: args.containerInput.sessionId,
-      }),
-    }).catch((err) => {
-      log(
-        `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
-  });
-  const unsubscribe = session.subscribe(
-    createPiEventCollector({
-      requestScope: args.requestScope,
-      usage,
-      accountId: args.containerInput.accountId,
-      requestId: getRequestId(args.requestScope),
-      setLastAssistantText(text) {
-        lastAssistantText = text;
-      },
-      publishStreamEvent: stream.publish,
-      pushOutboxProgress(message) {
-        void pushAiChatOutboxMessage({
-          outboxQueue: args.containerInput.outboxQueue,
-          message,
-        }).catch((err) => {
-          log(
-            `AI Chat tool progress 入队失败: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      },
-    }),
-  );
-
   try {
-    traceEvent(
-      {
-        type: 'pi_session_started',
-        provider: args.containerInput.llmRuntime.piApi,
-        model: args.containerInput.llmRuntime.model,
-        customToolCount: customTools.length,
-        builtinToolsDisabled: true,
-        piSessionId: piSession.piSessionId,
-        piSessionFile: piSession.sessionFile,
-        piSessionPersisted: piSession.persisted,
+    const readableSkills = resourceLoader
+      .getSkills()
+      .skills.filter((skill) => !skill.disableModelInvocation);
+    const systemPrompt = resourceLoader.getSystemPrompt() ?? '';
+    const appendSystemPrompt = resourceLoader.getAppendSystemPrompt();
+    const customTools = createPiCustomTools({
+      requestScope: args.requestScope,
+      readableSkills,
+      sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
+      accountId: args.containerInput.accountId,
+      soulStore: args.runtime.deps.soulStore,
+      soulEditEnabled,
+      recordExecution(record) {
+        records.push(record);
       },
-      args.requestScope,
-    );
-    await session.prompt(args.containerInput.userMessage, {
-      source: 'extension',
     });
-    const latestAssistant = extractLatestAssistantResult(
-      session.state.messages,
-    );
-    if (latestAssistant?.error) {
-      // Pi 把 Provider 欠费、鉴权和协议错误写在 assistant.errorMessage，prompt 本身可能正常 resolve。
-      // 转成异常后复用 request-boundary 的脱敏与 publicErrorText 映射，避免成功空回复。
-      throw new Error(latestAssistant.error);
-    }
-    return {
-      text: latestAssistant?.text ?? lastAssistantText,
-      usage,
-      records,
-      persistedSkillContext: sessionContext.persistedSkillContext,
-      piSession: buildPiSessionSnapshot({
-        id: piSession.piSessionId,
-        file: piSession.sessionFile,
-        persisted: piSession.persisted,
-        provider: args.containerInput.llmRuntime.piApi,
-        model: args.containerInput.llmRuntime.model,
-        userPrompt: args.containerInput.userMessage,
-        systemPrompt,
-        appendSystemPrompt,
-        allowedTools: allowedToolNames,
-        readableSkills: readableSkills.map((skill) => ({
-          name: skill.name,
-          description: skill.description,
-        })),
-        messages: session.state.messages,
+
+    const allowedToolNames = customTools.map((tool) => tool.name);
+    const settingsManager = SettingsManager.inMemory({
+      compaction: { enabled: true },
+      // Warming issues extra billable calls outside the user-requested turn.
+      cacheWarming: 'off',
+      retry: { enabled: true, maxRetries: 2 },
+      images: { blockImages: true },
+      enableInstallTelemetry: false,
+    });
+    const cwd = process.cwd();
+    const piSession = createFateClawPiSessionManager({
+      cwd,
+      sessionId: args.containerInput.sessionId,
+    });
+    const { session } = await createAgentSession({
+      cwd,
+      agentDir: cwd,
+      model: providerRuntime.model,
+      thinkingLevel: resolveThinkingLevel(
+        args.containerInput.llmRuntime.thinkingLevel,
+      ),
+      modelRuntime: providerRuntime.modelRuntime,
+      resourceLoader,
+      sessionManager: piSession.manager,
+      settingsManager,
+      noTools: 'all',
+      tools: allowedToolNames,
+      customTools,
+    });
+
+    args.onSessionReady?.({
+      abort: () => session.abort(),
+    });
+
+    const stream = createAiChatStreamPublisher((event) => {
+      void publishAiChatStreamEvent({
+        sessionId: args.containerInput.sessionId,
+        event: enrichAiChatStreamEvent({
+          event,
+          requestId: getRequestId(args.requestScope),
+          accountId: args.containerInput.accountId,
+          sessionId: args.containerInput.sessionId,
+        }),
+      }).catch((err) => {
+        log(
+          `AI Chat stream event 发布失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    });
+    const unsubscribe = session.subscribe(
+      createPiEventCollector({
+        requestScope: args.requestScope,
+        usage,
+        accountId: args.containerInput.accountId,
+        requestId: getRequestId(args.requestScope),
+        setLastAssistantText(text) {
+          lastAssistantText = text;
+        },
+        publishStreamEvent: stream.publish,
+        pushOutboxProgress(message) {
+          void pushAiChatOutboxMessage({
+            outboxQueue: args.containerInput.outboxQueue,
+            message,
+          }).catch((err) => {
+            log(
+              `AI Chat tool progress 入队失败: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        },
       }),
-    };
-  } catch (err) {
-    // usage 已被事件采集器就地累加为"截至出错时的真实 partial 用量"。
-    // 挂到 error 上,供 request-boundary 的 catch 取出回传给宿主结算,
-    // 否则请求中途报错(provider 报错 / 工具异常 / compaction 失败 / 中断)时,
-    // 出错前已消耗的 token 会按 0 关账,全部免费(漏收)。
-    attachPartialUsage(err, usage);
-    throw err;
+    );
+
+    try {
+      traceEvent(
+        {
+          type: 'pi_session_started',
+          provider: args.containerInput.llmRuntime.piApi,
+          model: args.containerInput.llmRuntime.model,
+          customToolCount: customTools.length,
+          builtinToolsDisabled: true,
+          piSessionId: piSession.piSessionId,
+          piSessionFile: piSession.sessionFile,
+          piSessionPersisted: piSession.persisted,
+        },
+        args.requestScope,
+      );
+      await session.prompt(args.containerInput.userMessage, {
+        source: 'extension',
+      });
+      const latestAssistant = extractLatestAssistantResult(
+        session.state.messages,
+      );
+      if (latestAssistant?.error) {
+        // Pi 把 Provider 欠费、鉴权和协议错误写在 assistant.errorMessage，prompt 本身可能正常 resolve。
+        // 转成异常后复用 request-boundary 的脱敏与 publicErrorText 映射，避免成功空回复。
+        throw new Error(latestAssistant.error);
+      }
+      return {
+        text: latestAssistant?.text ?? lastAssistantText,
+        usage,
+        records,
+        persistedSkillContext: sessionContext.persistedSkillContext,
+        piSession: buildPiSessionSnapshot({
+          id: piSession.piSessionId,
+          file: piSession.sessionFile,
+          persisted: piSession.persisted,
+          provider: args.containerInput.llmRuntime.piApi,
+          model: args.containerInput.llmRuntime.model,
+          userPrompt: args.containerInput.userMessage,
+          systemPrompt,
+          appendSystemPrompt,
+          allowedTools: allowedToolNames,
+          readableSkills: readableSkills.map((skill) => ({
+            name: skill.name,
+            description: skill.description,
+          })),
+          messages: session.state.messages,
+        }),
+      };
+    } catch (err) {
+      // usage 已被事件采集器就地累加为"截至出错时的真实 partial 用量"。
+      // 挂到 error 上,供 request-boundary 的 catch 取出回传给宿主结算,
+      // 否则请求中途报错(provider 报错 / 工具异常 / compaction 失败 / 中断)时,
+      // 出错前已消耗的 token 会按 0 关账,全部免费(漏收)。
+      attachPartialUsage(err, usage);
+      throw err;
+    } finally {
+      unsubscribe();
+      stream.close();
+      session.dispose();
+    }
   } finally {
-    unsubscribe();
-    stream.close();
-    session.dispose();
+    resourceLoader.disposeSkillSnapshots();
   }
 }

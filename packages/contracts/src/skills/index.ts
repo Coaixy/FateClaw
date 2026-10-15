@@ -74,6 +74,8 @@ export interface UserCustomSkillDto {
   version: string;
   bundle_uri: string;
   checksum: string | null;
+  revision_id: string | null;
+  format_version: number | null;
   install_status: 'installed' | 'missing' | 'error';
   acl: Record<string, unknown>;
   billing_policy: Record<string, unknown>;
@@ -103,9 +105,12 @@ export interface BundleSubscriptionSourceDto {
 }
 
 export interface UserSkillsResponseDto {
-  own: UserCustomSkillDto[];
-  subscribed: SubscribedSkillDto[];
+  own: UserCustomSkillSummaryDto[];
+  subscribed: SubscribedSkillSummaryDto[];
 }
+
+export type UserCustomSkillSummaryDto = Omit<UserCustomSkillDto, 'files'>;
+export type SubscribedSkillSummaryDto = Omit<SubscribedSkillDto, 'files'>;
 
 export interface SharedSkillPreviewDto {
   id: string;

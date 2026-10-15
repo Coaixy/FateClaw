@@ -15,7 +15,7 @@ import {
   Unlink,
 } from 'lucide-react';
 
-import { UserCustomSkill } from '@/features/skills/api';
+import { UserCustomSkillSummary } from '@/features/skills/api';
 
 export function OwnSkillCard({
   sk,
@@ -33,7 +33,7 @@ export function OwnSkillCard({
   selected = false,
   onToggleSelect,
 }: {
-  sk: UserCustomSkill;
+  sk: UserCustomSkillSummary;
   copiedId: string | null;
   onToggle: (id: string) => void;
   onCopyLink: (id: string) => void;
@@ -41,8 +41,8 @@ export function OwnSkillCard({
   onUnshare: (id: string) => void;
   onPublish: (id: string) => void;
   onUnpublish: (id: string) => void;
-  onEdit: (sk: UserCustomSkill) => void;
-  onExport: (sk: UserCustomSkill) => void;
+  onEdit: (sk: UserCustomSkillSummary) => void;
+  onExport: (sk: UserCustomSkillSummary) => void;
   onDelete: (id: string) => void;
   /** 是否处于批量选择模式;为真时整卡可点选中、内部操作禁用 */
   selectionMode?: boolean;

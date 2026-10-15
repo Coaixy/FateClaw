@@ -22,6 +22,7 @@ const {
     mockListSkillAccessInvites,
     mockRedeemSkillAccessInvite,
     serviceMocks: {
+      SkillRevisionConflictError: class extends Error {},
       createSkillAccessInvite: mockCreateSkillAccessInvite,
       getSkillAccessInvitePreviewByToken:
         mockGetSkillAccessInvitePreviewByToken,
@@ -64,7 +65,7 @@ const {
       unshareSkillBundle: noop,
       unshareUserCustomSkill: noop,
       updateSkillBundle: noop,
-      updateUserCustomSkill: noop,
+      updateUserCustomSkill: vi.fn(),
     },
   };
 });
@@ -145,6 +146,67 @@ describe('skillsRoutes access invites', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('returns skill summaries without file contents and requests no full-content projections', async () => {
+    serviceMocks.getUserCustomSkills.mockResolvedValueOnce([
+      {
+        ...skillPreview,
+        files: [{ path: 'SKILL.md', content: 'private body' }],
+      },
+    ]);
+    serviceMocks.getSubscribedSkills.mockResolvedValueOnce([]);
+    const token = app.jwt.sign({ userId: 'creator-1', authTokenVersion: 1 });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/user',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().own[0]).not.toHaveProperty('files');
+    expect(serviceMocks.getUserCustomSkills).toHaveBeenCalledWith(
+      'creator-1',
+      false,
+    );
+    expect(serviceMocks.getSubscribedSkills).toHaveBeenCalledWith(
+      'creator-1',
+      false,
+    );
+  });
+
+  it('requires the editor base revision and returns a distinct conflict without accepting a stale save', async () => {
+    const token = app.jwt.sign({ userId: 'creator-1', authTokenVersion: 1 });
+    const headers = { authorization: `Bearer ${token}` };
+    const missing = await app.inject({
+      method: 'PUT',
+      url: '/user/skill-1',
+      headers,
+      payload: { files: [{ path: 'SKILL.md', content: '# Draft' }] },
+    });
+    expect(missing.statusCode).toBe(428);
+    expect(serviceMocks.updateUserCustomSkill).not.toHaveBeenCalled();
+    serviceMocks.updateUserCustomSkill.mockRejectedValueOnce(
+      new serviceMocks.SkillRevisionConflictError('保留草稿并重新加载'),
+    );
+    const conflict = await app.inject({
+      method: 'PUT',
+      url: '/user/skill-1',
+      headers,
+      payload: {
+        base_revision_id: 'old-revision',
+        files: [{ path: 'SKILL.md', content: '# Draft' }],
+      },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ code: 'skill_revision_conflict' });
+    expect(serviceMocks.updateUserCustomSkill).toHaveBeenCalledWith(
+      'skill-1',
+      'creator-1',
+      {
+        base_revision_id: 'old-revision',
+        files: [{ path: 'SKILL.md', content: '# Draft' }],
+      },
+    );
   });
 
   it('returns current Skill Bundle limits', async () => {

@@ -11,7 +11,10 @@ import type { AgentRuntimeDeps } from '../deps.js';
 import { traceEvent } from '../trace.js';
 import type { RequestScope } from '../request-scope.js';
 import type { ContainerInput } from '../types.js';
-import { getTextSkillBundleSkillFile } from '../text-skill-bundle.js';
+import {
+  getSkillContentCache,
+  type SkillSnapshot,
+} from '../skill-content-cache.js';
 
 export interface CreatePiResourceLoaderOptions {
   deps: AgentRuntimeDeps;
@@ -69,6 +72,7 @@ async function loadRequestScopedSkills(
   skills: Skill[];
   diagnostics: ResourceDiagnostic[];
   privateKnowledgeEntries: RequestKnowledgeEntry[];
+  snapshots: SkillSnapshot[];
 }> {
   const authorizedSkillIds = normalizeAuthorizedSkillIds(
     options.containerInput,
@@ -76,8 +80,8 @@ async function loadRequestScopedSkills(
   const explicitSkillScope = hasExplicitSkillScope(options.containerInput);
   const effectivePrivateKnowledge = explicitSkillScope
     ? authorizedSkillIds.length > 0 &&
-        options.userId &&
-        options.deps.skillCatalog.listEffectiveUserSkillsByIds
+      options.userId &&
+      options.deps.skillCatalog.listEffectiveUserSkillsByIds
       ? await options.deps.skillCatalog.listEffectiveUserSkillsByIds(
           options.userId,
           authorizedSkillIds,
@@ -86,44 +90,75 @@ async function loadRequestScopedSkills(
     : options.userId
       ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
       : [];
-  const privateKnowledgeEntries = effectivePrivateKnowledge
-    .filter((skill) => getTextSkillBundleSkillFile(skill.bundle_uri))
-    .map((skill) => ({
-      name: skill.dir,
-      description: skill.description || skill.name,
-    }));
-  const privateKnowledgeSkills = effectivePrivateKnowledge.flatMap((skill) => {
-    const bundle = getTextSkillBundleSkillFile(skill.bundle_uri);
-    if (!bundle) return [];
-    return [createSkill({
-      name: skill.dir,
-      description:
-        [
-          skill.description || skill.name,
-          'request-scoped Text Skill Bundle，可按需读取 SKILL.md/index.md/docs/examples/notes。',
-        ].join(' | '),
-      filePath: bundle.filePath,
-      baseDir: bundle.baseDir,
-      source: 'fateclaw-request-knowledge',
-      disableModelInvocation: false,
-    })];
-  });
+  const snapshots: SkillSnapshot[] = [];
+  const resolvedSkills = [];
+  try {
+    for (const skill of effectivePrivateKnowledge) {
+      if (
+        !skill.revision_id ||
+        !skill.checksum ||
+        skill.format_version === null
+      ) {
+        throw new Error('Skill 尚未完成内容导入，请在原部署完成迁移');
+      }
+      const revisionId = skill.revision_id;
+      const bundle = await getSkillContentCache().acquire(
+        {
+          skillId: skill.id,
+          revisionId,
+          checksum: skill.checksum,
+          formatVersion: skill.format_version,
+        },
+        () => options.deps.skillRevisions.readRevision(skill.id, revisionId),
+      );
+      snapshots.push(bundle);
+      resolvedSkills.push({ skill, bundle });
+    }
+    const privateKnowledgeEntries = resolvedSkills
+      .filter(({ bundle }) => bundle)
+      .map(({ skill }) => ({
+        name: skill.dir,
+        description: skill.description || skill.name,
+      }));
+    const privateKnowledgeSkills = resolvedSkills.flatMap(
+      ({ skill, bundle }) => {
+        if (!bundle) return [];
+        return [
+          createSkill({
+            name: skill.dir,
+            description: [
+              skill.description || skill.name,
+              'request-scoped Text Skill Bundle，可按需读取 SKILL.md/index.md/docs/examples/notes。',
+            ].join(' | '),
+            filePath: bundle.filePath,
+            baseDir: bundle.baseDir,
+            source: 'fateclaw-request-knowledge',
+            disableModelInvocation: false,
+          }),
+        ];
+      },
+    );
 
-  traceEvent(
-    {
-      type: 'pi_resource_loader_prepared',
-      privateKnowledgeSkillCount: privateKnowledgeSkills.length,
-      authorizedSkillIdCount: authorizedSkillIds.length,
-      isolation: 'request_scoped',
-    },
-    options.requestScope,
-  );
+    traceEvent(
+      {
+        type: 'pi_resource_loader_prepared',
+        privateKnowledgeSkillCount: privateKnowledgeSkills.length,
+        authorizedSkillIdCount: authorizedSkillIds.length,
+        isolation: 'request_scoped',
+      },
+      options.requestScope,
+    );
 
-  return {
-    skills: privateKnowledgeSkills,
-    diagnostics: [],
-    privateKnowledgeEntries,
-  };
+    return {
+      skills: privateKnowledgeSkills,
+      diagnostics: [],
+      privateKnowledgeEntries,
+      snapshots,
+    };
+  } catch (err) {
+    for (const snapshot of snapshots) snapshot.release();
+    throw err;
+  }
 }
 
 export function createEmptyExtensionsResult(): LoadExtensionsResult {
@@ -136,39 +171,47 @@ export function createEmptyExtensionsResult(): LoadExtensionsResult {
 
 export async function createPiResourceLoader(
   options: CreatePiResourceLoaderOptions,
-): Promise<ResourceLoader> {
-  const { skills, diagnostics, privateKnowledgeEntries } =
+): Promise<ResourceLoader & { disposeSkillSnapshots(): void }> {
+  const { skills, diagnostics, privateKnowledgeEntries, snapshots } =
     await loadRequestScopedSkills(options);
-  const extensions = createEmptyExtensionsResult();
-  const systemPrompt = buildPiSystemPrompt(
-    options.containerInput,
-    options.soulEditEnabled ?? true,
-  );
-  const appendSystemPrompt = buildAppendSystemPrompt(
-    privateKnowledgeEntries,
-    options.piContextPrompt,
-    hasExplicitSkillScope(options.containerInput),
-  );
+  try {
+    const extensions = createEmptyExtensionsResult();
+    const systemPrompt = buildPiSystemPrompt(
+      options.containerInput,
+      options.soulEditEnabled ?? true,
+    );
+    const appendSystemPrompt = buildAppendSystemPrompt(
+      privateKnowledgeEntries,
+      options.piContextPrompt,
+      hasExplicitSkillScope(options.containerInput),
+    );
 
-  return {
-    getExtensions: () => extensions,
-    getSkills: () => ({ skills, diagnostics }),
-    getPrompts: () => ({ prompts: [], diagnostics: [] }),
-    getThemes: () => ({ themes: [], diagnostics: [] }),
-    getAgentsFiles: () => ({ agentsFiles: [] }),
-    // 0.84 起 ResourceLoader 需暴露系统提示词来源；本 loader 的提示词由平台
-    // 运行时生成，没有磁盘来源文件。
-    getSystemPromptSource: () => undefined,
-    getAppendSystemPromptSources: () => [],
-    getSystemPrompt: () => systemPrompt,
-    getAppendSystemPrompt: () => appendSystemPrompt,
-    extendResources: () => {
-      // 私有知识库只允许 request-scoped loader 注入，忽略运行时额外发现路径。
-    },
-    reload: async () => {
-      // 当前 loader 是请求级不可变快照，避免跨用户热加载污染。
-    },
-  };
+    return {
+      disposeSkillSnapshots: () => {
+        for (const snapshot of snapshots) snapshot.release();
+      },
+      getExtensions: () => extensions,
+      getSkills: () => ({ skills, diagnostics }),
+      getPrompts: () => ({ prompts: [], diagnostics: [] }),
+      getThemes: () => ({ themes: [], diagnostics: [] }),
+      getAgentsFiles: () => ({ agentsFiles: [] }),
+      // 0.84 起 ResourceLoader 需暴露系统提示词来源；本 loader 的提示词由平台
+      // 运行时生成，没有磁盘来源文件。
+      getSystemPromptSource: () => undefined,
+      getAppendSystemPromptSources: () => [],
+      getSystemPrompt: () => systemPrompt,
+      getAppendSystemPrompt: () => appendSystemPrompt,
+      extendResources: () => {
+        // 私有知识库只允许 request-scoped loader 注入，忽略运行时额外发现路径。
+      },
+      reload: async () => {
+        // 当前 loader 是请求级不可变快照，避免跨用户热加载污染。
+      },
+    };
+  } catch (err) {
+    for (const snapshot of snapshots) snapshot.release();
+    throw err;
+  }
 }
 
 function buildAppendSystemPrompt(
@@ -233,7 +276,9 @@ function buildPiSystemPrompt(
   // <fateclaw_persona_override> 成对标签字面量（见 stripPersonaOverrideTags 说明），防止它提前
   // 闭合覆盖层、把后续文本顶成平台级指令而逃逸下方「覆盖层使用规则/边界」护栏（与 board 的
   // XML 转义同理的纵深防御）。
-  const persona = stripPersonaOverrideTags(containerInput.personaPrompt)?.trim();
+  const persona = stripPersonaOverrideTags(
+    containerInput.personaPrompt,
+  )?.trim();
   return [
     '你是 FateClaw 的 Pi-backed Agent Runtime。',
     '你的底层对话人格是 Pi：理性、温和、直接，能够客观讨论大多数话题。',
@@ -273,7 +318,7 @@ function buildPiSystemPrompt(
       '庚辰辛巳白蜡金，壬午癸未杨柳木。甲申乙酉泉中水，丙戌丁亥屋上土。戊子己丑霹雳火，庚寅辛卯松柏木。壬辰癸巳长流水，甲午乙未砂石金。',
       '丙申丁酉山下火，戊戌己亥平地木。庚子辛丑壁上土，壬寅癸卯金箔金。甲辰乙巳佛灯火，丙午丁未天河水。戊申己酉大驿土，庚戌辛亥钗钏金。',
       '甲辰乙巳佛灯火，丙午丁未天河水。戊申己酉大驿土，庚戌辛亥钗钏金。壬子癸丑桑柘木，甲寅乙卯大溪水。丙辰丁巳沙中土，戊午己未天上火。庚申辛酉石榴木，壬戌癸亥大海水。',
-      '/<fateclaw_knowledge>'
+      '/<fateclaw_knowledge>',
     ],
     '完成用户请求后，直接用 assistant 回复最终答复。',
     '如果缺少关键参数，直接说明需要补充哪些信息。',

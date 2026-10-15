@@ -2,7 +2,7 @@
 
 import { Check, Share2, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 
-import { SubscribedSkill } from '@/features/skills/api';
+import { SubscribedSkillSummary } from '@/features/skills/api';
 
 export function SubscribedSkillCard({
   sk,
@@ -12,7 +12,7 @@ export function SubscribedSkillCard({
   selected = false,
   onToggleSelect,
 }: {
-  sk: SubscribedSkill;
+  sk: SubscribedSkillSummary;
   onToggle: (id: string) => void;
   onUnsubscribe: (id: string) => void;
   /** 是否处于批量选择模式;为真时整卡可点选中、内部操作禁用 */

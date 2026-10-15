@@ -3,7 +3,7 @@
 import { useMemo, useReducer, useState } from 'react';
 import { BookOpen, Check, Loader2, Share2, XCircle } from 'lucide-react';
 
-import { SkillBundle, UserCustomSkill } from '@/features/skills/api';
+import { SkillBundle, UserCustomSkillSummary } from '@/features/skills/api';
 import { useConfirm } from '@/lib/use-confirm';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 
@@ -56,7 +56,7 @@ export function BundleForm({
   variant = 'sheet',
 }: {
   initial?: SkillBundle;
-  ownSkills: UserCustomSkill[];
+  ownSkills: UserCustomSkillSummary[];
   onSave: (data: BundleFormData) => Promise<void>;
   onCancel: () => void;
   variant?: 'sheet' | 'page';

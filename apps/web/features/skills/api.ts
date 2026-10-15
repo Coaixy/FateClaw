@@ -28,6 +28,8 @@ import type {
   SubscribedSkillDto,
   TextSkillBundleFileDto,
   UserCustomSkillDto,
+  UserCustomSkillSummaryDto,
+  SubscribedSkillSummaryDto,
   UserSkillsResponseDto,
 } from '@fateclaw/contracts/skills';
 
@@ -35,6 +37,8 @@ import { requestJson } from '@/lib/http/client';
 
 export type TextSkillBundleFile = TextSkillBundleFileDto;
 export type UserCustomSkill = UserCustomSkillDto;
+export type UserCustomSkillSummary = UserCustomSkillSummaryDto;
+export type SubscribedSkillSummary = SubscribedSkillSummaryDto;
 export type SubscribedSkill = SubscribedSkillDto;
 export type UserSkillsResponse = UserSkillsResponseDto;
 export type SharedSkillPreview = SharedSkillPreviewDto;
@@ -69,6 +73,7 @@ const pathSegment = (value: string) => encodeURIComponent(value);
 export const skillsApi = {
   limits: () => requestJson<SkillBundleLimits>('/api/skills/limits'),
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
+  userGet: (id: string) => requestJson<UserCustomSkill>(`/api/skills/user/${pathSegment(id)}`),
   userCreate: (data: {
     skill_name: string;
     dir_name?: string;
@@ -82,6 +87,7 @@ export const skillsApi = {
   userUpdate: (
     id: string,
     data: {
+      base_revision_id: string | null;
       skill_name?: string;
       files?: TextSkillBundleFile[];
       category?: string;

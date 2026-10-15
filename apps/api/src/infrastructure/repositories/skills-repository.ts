@@ -3,11 +3,11 @@ import pg from 'pg';
 
 import { getDbPool } from '../db-pool.js';
 import {
-  getSkillMarkdownMetadata,
-  getTextSkillBundleContentLength,
-  readTextSkillBundleFiles,
-  writeTextSkillBundleFiles,
-} from '../../modules/skills/text-skill-bundle-store.js';
+  prepareSkillContent,
+  readSkillMarkdownMetadata,
+} from '@fateclaw/contracts/skills/content';
+import { insertSkillContentRevision } from './skill-content-repository.js';
+import { SkillRevisionConflictError } from '../../modules/skills/skill-errors.js';
 import { deriveSkillCategory } from '../../modules/skills/category-map.js';
 import type {
   SkillAccessInvite,
@@ -257,7 +257,7 @@ export async function listMarketBundles(opts: {
   return rows as MarketBundleListRow[];
 }
 
-const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
+const USER_CUSTOM_SKILL_SUMMARY_COLUMNS = `
   s.id,
   s.user_id,
   s.skill_name,
@@ -265,8 +265,11 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.description,
   s.category,
   s.version,
-  s.bundle_uri,
-  s.checksum,
+  CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
+  r.id AS revision_id,
+  r.format_version,
+  COALESCE(r.checksum, s.checksum) AS checksum,
+  COALESCE(r.content_length, 0) AS content_length,
   s.install_status,
   s.acl,
   s.billing_policy,
@@ -281,14 +284,18 @@ const USER_CUSTOM_SKILL_SELECT_COLUMNS = `
   s.deleted_at
 `;
 
+const USER_CUSTOM_SKILL_SELECT_COLUMNS = `${USER_CUSTOM_SKILL_SUMMARY_COLUMNS}, COALESCE(r.files, '[]'::jsonb) AS files`;
+
 function hydrateUserCustomSkillContent<T extends Partial<UserCustomSkill>>(
   skill: T,
 ): T {
-  const files = readTextSkillBundleFiles(skill.bundle_uri);
+  const files = skill.files ?? [];
   return {
     ...skill,
     files,
-    content_length: files.reduce((sum, file) => sum + file.content.length, 0),
+    content_length:
+      skill.content_length ??
+      files.reduce((sum, file) => sum + file.content.length, 0),
   };
 }
 
@@ -297,6 +304,9 @@ function hydrateUserCustomSkillRows<T extends Partial<UserCustomSkill>>(
 ): T[] {
   return rows.map(hydrateUserCustomSkillContent);
 }
+
+const USER_CUSTOM_SKILL_FROM = `FROM user_custom_skills s
+  LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id`;
 
 const SKILL_BUNDLE_SELECT_COLUMNS = `
   b.id,
@@ -357,8 +367,9 @@ export interface CreateUserCustomSkillInput {
 export async function createUserCustomSkill(
   skill: CreateUserCustomSkillInput,
 ): Promise<UserCustomSkill> {
-  const skillFile = skill.files.find((file) => file.path === 'SKILL.md');
-  const metadata = getSkillMarkdownMetadata(
+  const bundle = prepareSkillContent(skill.files);
+  const skillFile = bundle.files.find((file) => file.path === 'SKILL.md');
+  const metadata = readSkillMarkdownMetadata(
     skillFile?.content ?? '',
     skill.skill_name,
   );
@@ -366,23 +377,15 @@ export async function createUserCustomSkill(
   // 混合分类：作者显式指定优先，否则按「名称+描述」自动归类（兜底 '通用'）。
   const category =
     skill.category ?? deriveSkillCategory(displayName, metadata.description);
-  const bundle = writeTextSkillBundleFiles({
-    skillId: skill.id,
-    ownerId: skill.user_id,
-    dirName: skill.dir_name,
-    fallbackSkillName: displayName,
-    files: skill.files,
-  });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO user_custom_skills
          (id, user_id, skill_name, dir_name, description, category,
-          version, bundle_uri, checksum, install_status, acl, billing_policy, audit_metadata,
-          visibility)
-       VALUES ($1, $2, $3, $4, $5, $6, '1.0.0', $7, $8, 'installed',
-               '{}'::jsonb, '{}'::jsonb, $9::jsonb, 'private')`,
+          version, install_status, acl, billing_policy, audit_metadata, visibility)
+       VALUES ($1, $2, $3, $4, $5, $6, '1.0.0', 'installed',
+               '{}'::jsonb, '{}'::jsonb, $7::jsonb, 'private')`,
       [
         skill.id,
         skill.user_id,
@@ -390,13 +393,16 @@ export async function createUserCustomSkill(
         skill.dir_name,
         metadata.description,
         category,
-        bundle.bundleUri,
-        bundle.checksum,
         JSON.stringify({
           source: 'api',
           created_at: new Date().toISOString(),
         }),
       ],
+    );
+    const revision = await insertSkillContentRevision(client, skill.id, bundle);
+    await client.query(
+      'UPDATE user_custom_skills SET current_revision_id = $1 WHERE id = $2',
+      [revision.revisionId, skill.id],
     );
     await client.query('COMMIT');
   } catch (err) {
@@ -410,10 +416,11 @@ export async function createUserCustomSkill(
 
 export async function getUserCustomSkills(
   userId: string,
+  includeContent = true,
 ): Promise<UserCustomSkill[]> {
   const { rows } = await pool.query(
-    `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-     FROM user_custom_skills s
+    `SELECT ${includeContent ? USER_CUSTOM_SKILL_SELECT_COLUMNS : USER_CUSTOM_SKILL_SUMMARY_COLUMNS}
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.user_id = $1 AND s.deleted_at IS NULL
      ORDER BY s.created_at DESC`,
     [userId],
@@ -427,7 +434,7 @@ export async function getUserCustomSkill(
 ): Promise<UserCustomSkill | undefined> {
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-     FROM user_custom_skills s
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL`,
     [id, userId],
   );
@@ -441,7 +448,7 @@ export async function getUserCustomSkillById(
 ): Promise<UserCustomSkill | undefined> {
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-     FROM user_custom_skills s
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
@@ -455,93 +462,61 @@ export async function updateUserCustomSkill(
   userId: string,
   updates: Partial<
     Pick<UserCustomSkill, 'skill_name' | 'dir_name' | 'files' | 'category'>
-  >,
+  > & { base_revision_id: string | null },
 ): Promise<UserCustomSkill | undefined> {
-  const skillFields: string[] = [];
-  const values: unknown[] = [];
-  let paramIdx = 1;
-
-  // category 列入允许更新列：作者可显式改门类（更新不自动重算，仅认显式传入）。
-  const allowed = ['skill_name', 'dir_name', 'category'] as const;
-  for (const key of allowed) {
-    if (updates[key] !== undefined) {
-      skillFields.push(`${key} = $${paramIdx++}`);
-      values.push(updates[key]);
-    }
-  }
-  const fileValue = updates.files;
-  if (skillFields.length === 0 && fileValue === undefined) {
-    return getUserCustomSkill(id, userId);
-  }
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows: currentRows } = await client.query<UserCustomSkill>(
+    const { rows } = await client.query<UserCustomSkill>(
       `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-       FROM user_custom_skills s
+       ${USER_CUSTOM_SKILL_FROM}
        WHERE s.id = $1 AND s.user_id = $2 AND s.deleted_at IS NULL
-       FOR UPDATE`,
+       FOR UPDATE OF s`,
       [id, userId],
     );
-    const current = currentRows[0];
+    const current = rows[0];
     if (!current) {
       await client.query('ROLLBACK');
       return undefined;
     }
-
-    if (skillFields.length > 0) {
-      skillFields.push(`updated_at = NOW()`);
-      values.push(id, userId);
-      await client.query(
-        `UPDATE user_custom_skills SET ${skillFields.join(', ')}
-         WHERE id = $${paramIdx++} AND user_id = $${paramIdx++} AND deleted_at IS NULL`,
-        values,
-      );
+    if (
+      updates.base_revision_id === undefined ||
+      (current.revision_id ?? null) !== updates.base_revision_id
+    ) {
+      throw new SkillRevisionConflictError();
     }
-    if (fileValue !== undefined) {
-      const updatedDir =
-        typeof updates.dir_name === 'string'
-          ? updates.dir_name
-          : current.dir_name;
-      const fallbackName =
-        typeof updates.skill_name === 'string'
-          ? updates.skill_name
-          : current.skill_name;
-      const skillFile = fileValue.find((file) => file.path === 'SKILL.md');
-      const metadata = getSkillMarkdownMetadata(
-        skillFile?.content ?? '',
-        fallbackName,
-      );
-      const displayName = metadata.name || fallbackName;
-      const bundle = writeTextSkillBundleFiles({
-        skillId: id,
-        ownerId: userId,
-        dirName: updatedDir,
-        fallbackSkillName: displayName,
-        files: fileValue,
-      });
-      await client.query(
-        `UPDATE user_custom_skills
-         SET skill_name = $1,
-             description = $2,
-             bundle_uri = $3,
-             checksum = $4,
-             install_status = 'installed',
-             audit_metadata = COALESCE(audit_metadata, '{}'::jsonb) || $5::jsonb,
-             updated_at = NOW()
-         WHERE id = $6 AND user_id = $7 AND deleted_at IS NULL`,
-        [
-          displayName,
-          metadata.description,
-          bundle.bundleUri,
-          bundle.checksum,
-          JSON.stringify({ updated_bundle_at: new Date().toISOString() }),
-          id,
-          userId,
-        ],
-      );
-    }
+    const files = updates.files ?? current.files;
+    if (!files?.length)
+      throw new Error('Skill 尚未完成内容导入，请先恢复完整文件');
+    const content = prepareSkillContent(files);
+    const fallbackName = updates.skill_name ?? current.skill_name;
+    const metadata = updates.files
+      ? readSkillMarkdownMetadata(
+          content.files.find((file) => file.path === 'SKILL.md')!.content,
+          fallbackName,
+        )
+      : { name: fallbackName, description: current.description };
+    const revision = await insertSkillContentRevision(client, id, content);
+    await client.query(
+      `UPDATE user_custom_skills
+       SET skill_name = $1, description = $2, category = $3, dir_name = $4,
+           current_revision_id = $5, install_status = 'installed', updated_at = NOW()
+       WHERE id = $6 AND user_id = $7 AND deleted_at IS NULL`,
+      [
+        metadata.name || fallbackName,
+        metadata.description,
+        updates.category ?? current.category,
+        updates.dir_name ?? current.dir_name,
+        revision.revisionId,
+        id,
+        userId,
+      ],
+    );
+    await client.query(
+      `UPDATE skill_content_imports
+      SET status = 'complete', error_code = NULL, checked_at = NOW() WHERE skill_id = $1`,
+      [id],
+    );
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -742,7 +717,7 @@ export async function getSkillByShareToken(
 ): Promise<UserCustomSkill | undefined> {
   const { rows } = await pool.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-     FROM user_custom_skills s
+     ${USER_CUSTOM_SKILL_FROM}
       WHERE s.share_token = $1 AND s.deleted_at IS NULL AND s.visibility IN ('link_shared', 'shared')`,
     [token],
   );
@@ -913,7 +888,7 @@ async function getUserCustomSkillByIdUsing(
 ): Promise<UserCustomSkill | undefined> {
   const { rows } = await queryable.query(
     `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS}
-     FROM user_custom_skills s
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
@@ -939,8 +914,8 @@ async function getSkillBundleWithSkillsByIdUsing(
   }
 
   const { rows: skillRows } = await queryable.query(
-    `SELECT s.id, s.skill_name, s.description, s.bundle_uri
-     FROM user_custom_skills s
+    `SELECT s.id, s.skill_name, s.description, COALESCE(r.content_length, 0) AS content_length
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.id = ANY($1) AND s.deleted_at IS NULL`,
     [bundle.skill_ids],
   );
@@ -957,7 +932,7 @@ async function getSkillBundleWithSkillsByIdUsing(
       id: row.id as string,
       skill_name: row.skill_name as string,
       description: row.description as string,
-      content_length: getTextSkillBundleContentLength(row.bundle_uri as string),
+      content_length: Number(row.content_length ?? 0),
     }));
 
   return { bundle, skills };
@@ -1419,7 +1394,10 @@ export async function toggleSubscription(
   return (rows[0] as { enabled: boolean }).enabled;
 }
 
-export async function getSubscribedSkills(subscriberId: string): Promise<
+export async function getSubscribedSkills(
+  subscriberId: string,
+  includeContent = true,
+): Promise<
   (UserCustomSkill & {
     subscription_id: string;
     subscription_enabled: boolean;
@@ -1428,7 +1406,7 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
   })[]
 > {
   const { rows } = await pool.query(
-    `SELECT ${USER_CUSTOM_SKILL_SELECT_COLUMNS},
+    `SELECT ${includeContent ? USER_CUSTOM_SKILL_SELECT_COLUMNS : USER_CUSTOM_SKILL_SUMMARY_COLUMNS},
             sub.id as subscription_id,
             sub.enabled as subscription_enabled,
             sub.has_direct_source,
@@ -1446,6 +1424,7 @@ export async function getSubscribedSkills(subscriberId: string): Promise<
             ) AS source_bundles
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
+     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
      WHERE sub.subscriber_id = $1
        AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
@@ -1658,7 +1637,6 @@ export async function listUserBundles(userId: string): Promise<SkillBundle[]> {
   );
   return (rows as Record<string, unknown>[]).map(rowToSkillBundle);
 }
-
 
 export async function updateSkillBundle(
   id: string,
@@ -1983,8 +1961,8 @@ export async function getBundleByToken(
     };
   }
   const { rows: skillRows } = await pool.query(
-    `SELECT s.id, s.skill_name, s.description, s.bundle_uri
-     FROM user_custom_skills s
+    `SELECT s.id, s.skill_name, s.description, COALESCE(r.content_length, 0) AS content_length
+     ${USER_CUSTOM_SKILL_FROM}
      WHERE s.id = ANY($1) AND s.deleted_at IS NULL`,
     [bundle.skill_ids],
   );
@@ -2002,7 +1980,7 @@ export async function getBundleByToken(
       id: r.id as string,
       skill_name: r.skill_name as string,
       description: r.description as string,
-      content_length: getTextSkillBundleContentLength(r.bundle_uri as string),
+      content_length: Number(r.content_length ?? 0),
     }));
   return {
     bundle,

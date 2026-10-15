@@ -1,28 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  mockGetDbPool,
-  mockGetSkillMarkdownMetadata,
-  mockGetTextSkillBundleContentLength,
-  mockReadTextSkillBundleFiles,
-  mockWriteTextSkillBundleFiles,
-} = vi.hoisted(() => ({
-  mockGetDbPool: vi.fn(),
-  mockGetSkillMarkdownMetadata: vi.fn(),
-  mockGetTextSkillBundleContentLength: vi.fn(),
-  mockReadTextSkillBundleFiles: vi.fn(),
-  mockWriteTextSkillBundleFiles: vi.fn(),
-}));
-
+const { mockGetDbPool } = vi.hoisted(() => ({ mockGetDbPool: vi.fn() }));
 vi.mock('../../../src/infrastructure/db-pool.js', () => ({
   getDbPool: mockGetDbPool,
-}));
-
-vi.mock('../../../src/modules/skills/text-skill-bundle-store.js', () => ({
-  getSkillMarkdownMetadata: mockGetSkillMarkdownMetadata,
-  getTextSkillBundleContentLength: mockGetTextSkillBundleContentLength,
-  readTextSkillBundleFiles: mockReadTextSkillBundleFiles,
-  writeTextSkillBundleFiles: mockWriteTextSkillBundleFiles,
 }));
 
 import {
@@ -30,6 +10,7 @@ import {
   createUserCustomSkill,
   deleteUserCustomSkill,
   getBundleByToken,
+  getUserCustomSkill,
   getSkillAccessInvitePreviewByToken,
   getSubscribedSkills,
   redeemSkillAccessInvite,
@@ -189,19 +170,6 @@ const inviteRow = {
 describe('skills repository official skill settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSkillMarkdownMetadata.mockReturnValue({
-      name: 'My Skill',
-      description: 'desc',
-    });
-    mockReadTextSkillBundleFiles.mockReturnValue([
-      { path: 'SKILL.md', content: 'skill md' },
-      { path: 'docs/knowledge.md', content: 'stored content' },
-    ]);
-    mockGetTextSkillBundleContentLength.mockReturnValue(14);
-    mockWriteTextSkillBundleFiles.mockReturnValue({
-      bundleUri: 'text-skill://skill-1',
-      checksum: 'checksum-1',
-    });
   });
 
   it('seeds official skills and removes stale global config rows transactionally', async () => {
@@ -313,11 +281,20 @@ describe('skills repository official skill settings', () => {
     expect(calls[1]?.params).toEqual([20, 10_000]);
   });
 
-  it('creates custom skills by writing bundle content inside a transaction', async () => {
+  it('commits complete custom skill files with their metadata without writing local files', async () => {
+    const files = [
+      {
+        path: 'SKILL.md',
+        content: '---\nname: My Skill\ndescription: desc\n---\n',
+      },
+      { path: 'docs/knowledge.md', content: 'content' },
+      { path: 'index.md', content: '# index' },
+    ];
     const { calls, clientCalls, client } = createMockPool([
       {
         id: 'skill-1',
-        bundle_uri: 'text-skill://skill-1',
+        bundle_uri: 'db://user-custom-skills/skill-1',
+        files,
       },
     ]);
 
@@ -327,57 +304,45 @@ describe('skills repository official skill settings', () => {
         user_id: 'user-1',
         skill_name: 'My Skill',
         dir_name: 'my-skill',
-        files: [
-          {
-            path: 'SKILL.md',
-            content: '---\nname: My Skill\ndescription: desc\n---\n',
-          },
-          { path: 'index.md', content: '# index' },
-          { path: 'docs/knowledge.md', content: 'content' },
-        ],
+        files,
       }),
     ).resolves.toEqual({
       id: 'skill-1',
-      bundle_uri: 'text-skill://skill-1',
-      files: [
-        { path: 'SKILL.md', content: 'skill md' },
-        { path: 'docs/knowledge.md', content: 'stored content' },
-      ],
-      content_length: 22,
+      bundle_uri: 'db://user-custom-skills/skill-1',
+      files,
+      content_length: files.reduce((sum, file) => sum + file.content.length, 0),
     });
 
-    expect(mockWriteTextSkillBundleFiles).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skillId: 'skill-1',
-        ownerId: 'user-1',
-        files: expect.arrayContaining([
-          { path: 'docs/knowledge.md', content: 'content' },
-        ]),
-      }),
-    );
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('INSERT INTO user_custom_skills');
-    expect(clientCalls[1]?.params).toEqual([
-      'skill-1',
-      'user-1',
-      'My Skill',
-      'my-skill',
-      'desc',
-      // 自动归类：名称/描述无术数关键词命中，落到兜底门类 '通用'。
-      '通用',
-      'text-skill://skill-1',
-      'checksum-1',
+    expect(clientCalls[2]?.sql).toContain(
+      'INSERT INTO skill_content_revisions',
+    );
+    expect(clientCalls[2]?.params).toEqual([
       expect.any(String),
+      'skill-1',
+      1,
+      expect.stringMatching(/^[a-f0-9]{64}$/),
+      JSON.stringify(files),
+      files.reduce((sum, file) => sum + file.content.length, 0),
     ]);
-    expect(clientCalls[2]?.sql).toBe('COMMIT');
+    expect(clientCalls[3]?.sql).toContain('current_revision_id');
+    expect(clientCalls[4]?.sql).toBe('COMMIT');
     expect(calls[0]?.sql).toContain('WHERE s.id = $1');
     expect(client.release).toHaveBeenCalledOnce();
   });
 
+  it('reads canonical database files even when this deployment has no local bundle', async () => {
+    const files = [{ path: 'SKILL.md', content: '# Database skill' }];
+    createMockPool([{ ...skillRow, files }]);
+
+    const skill = await getUserCustomSkill('skill-1', 'creator-1');
+
+    expect(skill?.files).toEqual(files);
+    expect(skill?.content_length).toBe(files[0].content.length);
+  });
+
   it('loads shared bundle skills in bundle order with content lengths', async () => {
-    mockGetTextSkillBundleContentLength.mockImplementation((uri: string) =>
-      uri === 'text-skill://skill-2' ? 5 : 2,
-    );
     const { calls } = createSequencedMockPool([
       [
         {
@@ -392,12 +357,14 @@ describe('skills repository official skill settings', () => {
           skill_name: 'One',
           description: 'first',
           bundle_uri: 'text-skill://skill-1',
+          content_length: 2,
         },
         {
           id: 'skill-2',
           skill_name: 'Two',
           description: 'second',
           bundle_uri: 'text-skill://skill-2',
+          content_length: 5,
         },
       ],
     ]);
@@ -505,6 +472,7 @@ describe('skills repository official skill settings', () => {
           skill_name: 'Invite Skill',
           description: 'desc',
           bundle_uri: 'text-skill://skill-1',
+          content_length: 2,
         },
       ],
       [{ id: 'sub-1', is_insert: true }],
@@ -720,18 +688,16 @@ describe('skills repository official skill settings', () => {
       [{ bundle_id: 'bundle-1' }], // WITH removed AS (DELETE ...) 清理关联行
     ]);
 
-    await expect(
-      deleteUserCustomSkill('skill-1', 'user-1'),
-    ).resolves.toBe(true);
+    await expect(deleteUserCustomSkill('skill-1', 'user-1')).resolves.toBe(
+      true,
+    );
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
     expect(clientCalls[1]?.sql).toContain('UPDATE user_custom_skills');
     expect(clientCalls[2]?.sql).toContain(
       'DELETE FROM skill_bundle_items WHERE skill_id = $1',
     );
-    expect(clientCalls[2]?.sql).toContain(
-      'SET stat_skill_count = (',
-    );
+    expect(clientCalls[2]?.sql).toContain('SET stat_skill_count = (');
     expect(clientCalls[2]?.params).toEqual(['skill-1']);
     expect(clientCalls[3]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
@@ -740,9 +706,9 @@ describe('skills repository official skill settings', () => {
   it('skips bundle cleanup when the skill delete matches no row', async () => {
     const { clientCalls } = createSequencedClientMockPool([[]]);
 
-    await expect(
-      deleteUserCustomSkill('skill-1', 'user-1'),
-    ).resolves.toBe(false);
+    await expect(deleteUserCustomSkill('skill-1', 'user-1')).resolves.toBe(
+      false,
+    );
 
     expect(clientCalls.map((c) => c.sql)).toEqual([
       'BEGIN',

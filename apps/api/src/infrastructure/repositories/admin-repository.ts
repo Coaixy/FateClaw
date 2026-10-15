@@ -1,4 +1,3 @@
-import { readTextSkillBundleFiles } from '../../modules/skills/text-skill-bundle-store.js';
 import { getDbPool } from '../db-pool.js';
 
 const pool = {
@@ -431,7 +430,7 @@ export interface AdminCustomSkillRow {
 function hydrateAdminCustomSkillRow(
   row: AdminCustomSkillRow,
 ): AdminCustomSkillRow {
-  const files = readTextSkillBundleFiles(row.bundle_uri);
+  const files = row.files ?? [];
   return {
     ...row,
     files,
@@ -453,11 +452,13 @@ export async function getCustomSkillsForAdmin(opts: {
 
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.bundle_uri, s.checksum, s.install_status,
+            CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
+            COALESCE(r.files, '[]'::jsonb) AS files, COALESCE(r.checksum, s.checksum) AS checksum, s.install_status,
             s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
      JOIN users u ON u.id = s.user_id
+     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
      ${whereClause}
      ORDER BY s.created_at DESC`,
     params,
@@ -471,11 +472,13 @@ export async function getCustomSkillForAdmin(
 ): Promise<AdminCustomSkillRow | undefined> {
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            s.bundle_uri, s.checksum, s.install_status,
+            CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
+            COALESCE(r.files, '[]'::jsonb) AS files, COALESCE(r.checksum, s.checksum) AS checksum, s.install_status,
             s.visibility, s.share_token, s.enabled,
             s.created_at, s.updated_at
      FROM user_custom_skills s
      JOIN users u ON u.id = s.user_id
+     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );

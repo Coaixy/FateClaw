@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 
 import { log } from './io.js';
+import type { SkillContentRevision } from '@fateclaw/contracts/skills/content';
 
 const { Pool } = pg;
 const WEB_CHAT_RUNTIME_PREFIX = 'web:';
@@ -57,6 +58,8 @@ export interface EffectiveUserSkill {
   description: string;
   bundle_uri: string;
   checksum: string | null;
+  revision_id: string | null;
+  format_version: number | null;
   install_status: 'installed' | 'missing' | 'error';
   visibility: 'private' | 'link_shared' | 'shared';
   source: 'self' | 'subscribed';
@@ -75,7 +78,9 @@ export async function queryEffectiveUserSkills(
   if (!userId) return [];
   const { rows } = await getAgentDbPool().query(
     `SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
+            s.bundle_uri, COALESCE(r.checksum, s.checksum) as checksum,
+            r.id as revision_id, r.format_version,
+            s.install_status, s.visibility,
             'self' as source,
             ARRAY(
               SELECT DISTINCT sbi.bundle_id
@@ -87,10 +92,13 @@ export async function queryEffectiveUserSkills(
               ORDER BY sbi.bundle_id
             ) as source_bundle_ids
      FROM user_custom_skills s
+     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
      WHERE s.user_id = $1 AND s.enabled = true AND s.deleted_at IS NULL AND s.install_status = 'installed'
      UNION ALL
     SELECT s.id, s.dir_name as dir, s.skill_name as name, s.description,
-            s.bundle_uri, s.checksum, s.install_status, s.visibility,
+            s.bundle_uri, COALESCE(r.checksum, s.checksum) as checksum,
+            r.id as revision_id, r.format_version,
+            s.install_status, s.visibility,
             'subscribed' as source,
             ARRAY(
               SELECT DISTINCT src.bundle_id
@@ -102,6 +110,7 @@ export async function queryEffectiveUserSkills(
             ) as source_bundle_ids
      FROM user_skill_subscriptions sub
      JOIN user_custom_skills s ON s.id = sub.skill_id
+     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
      WHERE sub.subscriber_id = $1 AND sub.enabled = true AND sub.status = 'active'
        AND (sub.expires_at IS NULL OR sub.expires_at > NOW())
        AND s.deleted_at IS NULL
@@ -113,6 +122,21 @@ export async function queryEffectiveUserSkills(
     [userId],
   );
   return rows as EffectiveUserSkill[];
+}
+
+/** Read a selected immutable revision, including after another revision becomes current. */
+export async function querySkillContentRevision(
+  skillId: string,
+  revisionId: string,
+): Promise<SkillContentRevision | null> {
+  const { rows } = await getAgentDbPool().query<SkillContentRevision>(
+    `SELECT r.id AS "revisionId", r.skill_id AS "skillId", r.format_version AS "formatVersion",
+            r.checksum, r.content_length AS "contentLength", r.files
+     FROM skill_content_revisions r JOIN user_custom_skills s ON s.id = r.skill_id
+     WHERE r.skill_id = $1 AND r.id = $2 AND s.deleted_at IS NULL`,
+    [skillId, revisionId],
+  );
+  return rows[0] ?? null;
 }
 
 /**

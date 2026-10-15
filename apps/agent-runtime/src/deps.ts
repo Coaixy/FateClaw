@@ -1,11 +1,13 @@
 import {
   queryEffectiveUserSkills,
   queryEffectiveUserSkillsByIds,
+  querySkillContentRevision,
   querySoulEditEnabled,
   querySoulContent,
   updateSoulContentDb,
   type EffectiveUserSkill,
 } from './agent-db.js';
+import type { SkillContentRevision } from '@fateclaw/contracts/skills/content';
 
 /**
  * 用户 Soul 读写存储。
@@ -44,6 +46,13 @@ export interface SkillCatalog {
   ): Promise<EffectiveUserSkill[]>;
 }
 
+export interface SkillRevisionReader {
+  readRevision(
+    skillId: string,
+    revisionId: string,
+  ): Promise<SkillContentRevision | null>;
+}
+
 /**
  * 单次 Agent Runtime 请求依赖集合。
  *
@@ -52,6 +61,7 @@ export interface SkillCatalog {
 export interface AgentRuntimeDeps {
   soulStore: SoulStore;
   skillCatalog: SkillCatalog;
+  skillRevisions: SkillRevisionReader;
 }
 
 const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
@@ -75,6 +85,7 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
       return queryEffectiveUserSkillsByIds(userId, skillIds);
     },
   },
+  skillRevisions: { readRevision: querySkillContentRevision },
 };
 
 /**

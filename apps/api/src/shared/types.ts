@@ -79,6 +79,8 @@ export interface UserCustomSkill {
   version: string;
   bundle_uri: string;
   checksum: string | null;
+  revision_id: string | null;
+  format_version: number | null;
   install_status: 'installed' | 'missing' | 'error';
   acl: Record<string, unknown>;
   billing_policy: Record<string, unknown>;

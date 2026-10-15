@@ -4,15 +4,15 @@ import { useCallback, useState } from 'react';
 
 import {
   skillsApi,
-  type SubscribedSkill,
-  type UserCustomSkill,
+  type SubscribedSkillSummary,
+  type UserCustomSkillSummary,
 } from '@/features/skills/api';
 
 export function useUserSkills(
   notify: (type: 'success' | 'error', message: string) => void,
 ) {
-  const [ownSkills, setOwnSkills] = useState<UserCustomSkill[]>([]);
-  const [subscribedSkills, setSubscribedSkills] = useState<SubscribedSkill[]>(
+  const [ownSkills, setOwnSkills] = useState<UserCustomSkillSummary[]>([]);
+  const [subscribedSkills, setSubscribedSkills] = useState<SubscribedSkillSummary[]>(
     [],
   );
 
@@ -29,7 +29,7 @@ export function useUserSkills(
   }, [notify]);
 
   const applyUserSkills = useCallback(
-    (next: { own?: UserCustomSkill[]; subscribed?: SubscribedSkill[] }) => {
+    (next: { own?: UserCustomSkillSummary[]; subscribed?: SubscribedSkillSummary[] }) => {
       setOwnSkills(next.own ?? []);
       setSubscribedSkills(next.subscribed ?? []);
     },

@@ -55,6 +55,8 @@ function customSkill(patch: Partial<UserCustomSkill> = {}): UserCustomSkill {
     version: '1.0.0',
     bundle_uri: 'file:///skill',
     checksum: null,
+    revision_id: null,
+    format_version: null,
     install_status: 'installed',
     acl: {},
     billing_policy: {},

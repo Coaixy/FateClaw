@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -18,7 +18,7 @@ function EditStudioSkillPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
-  const [skills, setSkills] = useState<UserCustomSkill[]>([]);
+  const [skill, setSkill] = useState<UserCustomSkill | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -26,12 +26,17 @@ function EditStudioSkillPageContent() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!skillId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     skillsApi
-      .userList()
+      .userGet(skillId)
       .then((res) => {
         if (cancelled) return;
-        setSkills(res.own ?? []);
+        setSkill(res);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -44,16 +49,11 @@ function EditStudioSkillPageContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const skill = useMemo(
-    () => skills.find((item) => item.id === skillId) ?? null,
-    [skills, skillId],
-  );
+  }, [skillId]);
 
   const handleUpdate = async (data: SkillBundleEditorData) => {
-    if (!skillId) return;
-    await skillsApi.userUpdate(skillId, data);
+    if (!skillId || !skill) return;
+    await skillsApi.userUpdate(skillId, { ...data, base_revision_id: skill.revision_id });
     toast('success', 'Skill Bundle 已更新');
     router.push('/studio');
   };

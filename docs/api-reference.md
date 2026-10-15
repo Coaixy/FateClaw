@@ -28,7 +28,7 @@
 - AI Chat 请求会由 API 写入用户消息、解析请求级 `llmRuntime`、抢占会话 busy 锁，再通过 Redis IPC 投递到 `web:{userId}` 对应的本地 agent-runtime。
 - `POST /api/chat-sessions/s/:sessionId/messages` 通常只表示请求已入队；最终 assistant 消息由 `ipc:{runtimeId}:ai-chat:outbox` handler 异步落库、结算并通过 WebSocket 推送。
 - 手动排盘不调用模型。API 侧直接执行 `paipan-runners/*.ts`，把结构化盘面作为 `tool_context/artifactData` 写入会话。
-- Text Skill Bundle 正文写在 `.fateclaw/text-skills` 文件系统目录，数据库只保存 metadata、权限、版本和 `bundle_uri`。agent-runtime 每轮只读取本次请求授权的 Bundle。
+- Complete Text Skill Bundles are stored in PostgreSQL alongside their metadata and permissions. `.fateclaw/text-skills` is a rebuildable local cache; agent-runtime restores only request-authorized bundles when needed.
 
 ## 认证
 
@@ -489,7 +489,15 @@ The response contains the model name, availability, description, and input/outpu
 
 `/api/skills` 当前只承载用户 Text Skill Bundle、Bundle 组合、市场和授权邀请。系统排盘目录不在这里维护：普通用户直接看 `/api/paipan/catalog`，管理端全局开关在 `/api/admin/skills/global`。
 
-Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-<id>/`，数据库只保存 metadata、权限、版本、安装状态、checksum 和 `bundle_uri`。agent-runtime 每轮只读取当前请求授权的 Bundle，不扫描 Pi 全局 Skill 目录。
+Complete Skill files are stored as immutable revisions in `skill_content_revisions`. `user_custom_skills.current_revision_id` selects the current revision; shares and subscriptions still reference the stable skill ID. Revision content includes `format_version`, checksum, files, and content length. The existing display `version` is independent of revision identity and format version. New `bundle_uri` values identify the revision without a deployment-specific filesystem path.
+
+Every author update requires `base_revision_id` (a revision ID, or `null` for a legacy record). Missing preconditions return HTTP 428; a stale base returns HTTP 409 with `code: skill_revision_conflict`. Metadata changes, a new immutable revision, and the current pointer commit in one transaction. Failed saves leave the previous revision and metadata intact. The editor retains unsaved text on conflict. `GET /api/skills/user` returns metadata summaries without `files`; the detail endpoint supplies full content for editing and export.
+
+Agent-runtime authorizes the catalog per request, fixes its selected revision, and retrieves that revision even after a newer one becomes current. The shared server-only `@fateclaw/contracts/skills/content` protocol owns normalization, format validation, and checksums. The Pi adapter accepts the currently supported Markdown text format; unknown formats fail explicitly. Cached files are never uploaded to the canonical database.
+
+Local snapshots are rebuilt under `.fateclaw/text-skills/cache-v1/` (or `FATECLAW_TEXT_SKILLS_DIR`). Each runtime owns a separate process namespace and pins snapshots for active requests. Cleanup evicts inactive snapshots above 64 MiB per runtime or after seven idle days, and reclaims namespaces of exited processes on subsequent cache activity. Active requests may temporarily exceed the cache budget. Cache maintenance failures are logged; required revision reads and checksum failures fail the request.
+
+API startup separately imports legacy records with no current revision. `skill_content_imports` records `pending`, `missing`, `mismatched`, `invalid`, or `complete` with a bounded error code. Missing or mismatched files remain retryable; completed records leave the import path. Complete original files must be available on the old deployment before it is retired. Completely empty databases require an explicit mapping for orphan file ownership and skill IDs. See [Skill content architecture](skill-content-architecture.md) and [deployment](deployment-split.md#user-skill-storage).
 
 ### 用户自定义 Skill
 
@@ -993,7 +1001,7 @@ The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-co
 | `AI_CHAT_REQUEST_TIMEOUT`   | `1800000`               | 站内 AI Chat 请求等待 agent 返回的超时时间，单位毫秒 |
 | `BILLING_RESERVATION_STALE_MS` | `2400000`            | 预留计费请求的陈旧判定时长         |
 | `TRACE_RETENTION_DAYS`      | `7`                     | `conversation_log_payloads.trace_events` 保留天数 |
-| `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | 用户 Text Skill Bundle 根目录      |
+| `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | Rebuildable user skill cache and legacy backfill root |
 | `FATECLAW_PI_SESSION_DIR`   | -                       | agent-runtime Pi session 文件目录  |
 | `LOG_LEVEL`                 | `info`                  | 服务端日志等级                     |
 | `LOG_PRETTY`                | 非生产默认开启          | `1` 强制开启 pino-pretty，`0` 强制关闭 |

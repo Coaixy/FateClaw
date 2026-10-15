@@ -24,6 +24,30 @@ admin 是静态站点，不能替代服务端鉴权；生产环境仍建议在�
 `https://api.example.com/api/billing/recharge/notify`，用户支付完成后的
 `return_url` 指向 `https://www.example.com/wallet`。
 
+## User skill storage
+
+User-created skill content is stored as immutable revisions in PostgreSQL. `user_custom_skills.current_revision_id` selects the latest content; local files under `FATECLAW_TEXT_SKILLS_DIR` (default `.fateclaw/text-skills`) are disposable caches and do not need to be included in deployment archives. API, agent-runtime, and web must all run the updated version because editor saves require `base_revision_id`.
+
+Before moving an existing installation, stop old writers and start the updated API where the complete original skill files are available. Startup applies migration `0081_skill_content_revisions` and imports legacy content separately. Keep the original files until this query returns zero:
+
+```sql
+SELECT COUNT(*) FROM user_custom_skills
+WHERE deleted_at IS NULL AND current_revision_id IS NULL;
+```
+
+Inspect unresolved imports without reading their content:
+
+```sql
+SELECT skill_id, status, error_code, checked_at
+FROM skill_content_imports WHERE status <> 'complete';
+```
+
+Restore missing or mismatched original files and restart the updated API to retry. Completed imports are skipped and concurrent importers cannot overwrite current content. Empty databases cannot infer ownership and skill IDs from orphan directories; they require an explicit import mapping. After import completes, deployments can restore skill content from PostgreSQL alone. Back up the database to preserve all revisions.
+
+Each runtime needs a writable cache directory. It owns a namespace under `cache-v1/`, retains active request snapshots, and evicts inactive snapshots above 64 MiB or after seven idle days. Exited process namespaces are reclaimed on subsequent cache use. Active requests may temporarily exceed the budget. Replacing a runtime causes a cold cache; PostgreSQL retains the content.
+
+Deployments using the same PostgreSQL database share revisions without file synchronization. Separate regional databases require operator-configured replication, with update visibility subject to replication consistency and lag. The feature does not perform bidirectional filesystem synchronization. See [Skill content architecture](skill-content-architecture.md).
+
 ## 打包
 
 ```bash

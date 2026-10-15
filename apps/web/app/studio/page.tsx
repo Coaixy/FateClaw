@@ -39,8 +39,8 @@ import { SubscribedSkillCard } from '@/components/skills/subscribed-skill-card';
 import {
   DEFAULT_SKILL_BUNDLE_LIMITS,
   type SkillBundle,
-  type SubscribedSkill,
-  type UserCustomSkill,
+  type SubscribedSkillSummary,
+  type UserCustomSkillSummary,
   skillsApi,
 } from '@/features/skills/api';
 import { useBundles } from '@/features/skills/hooks/use-bundles';
@@ -89,7 +89,7 @@ type SubscribedListItem =
   | {
       type: 'skill';
       key: string;
-      skill: SubscribedSkill;
+      skill: SubscribedSkillSummary;
     };
 
 function normalizeSearch(value: string) {
@@ -538,9 +538,10 @@ export default function StudioPage() {
     setImportingSkill(false);
   };
 
-  const handleExportSkillZip = (skill: UserCustomSkill) => {
+  const handleExportSkillZip = async (skill: UserCustomSkillSummary) => {
     try {
-      downloadSkillBundleZip(skill.skill_name, skill.files, skillLimitsRef.current);
+      const detail = await skillsApi.userGet(skill.id);
+      downloadSkillBundleZip(detail.skill_name, detail.files, skillLimitsRef.current);
     } catch (err) {
       toast(
         'error',

@@ -33,6 +33,7 @@ vi.mock('pg', () => ({
 import {
   closeAgentDb,
   queryEffectiveUserSkills,
+  querySkillContentRevision,
   updateSoulContentDb,
 } from '../src/agent-db.js';
 
@@ -53,6 +54,22 @@ describe('agent-db effective user skills', () => {
       "sub.source_kind IN ('bundle_share', 'invite', 'bundle_invite')",
     );
     expect(params).toEqual(['user-1']);
+  });
+
+  it('loads bundle contents only for the exact authorized revision and excludes deleted skills', async () => {
+    const files = [{ path: 'SKILL.md', content: '# Database skill' }];
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ files, revisionId: 'selected-revision' }],
+    });
+    expect(
+      await querySkillContentRevision('skill-1', 'selected-revision'),
+    ).toEqual({ files, revisionId: 'selected-revision' });
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('r.id = $2 AND s.deleted_at IS NULL');
+    expect(params).toEqual(['skill-1', 'selected-revision']);
+    expect(
+      await querySkillContentRevision('skill-1', 'stale-checksum'),
+    ).toBeNull();
   });
 });
 

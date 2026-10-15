@@ -11,6 +11,8 @@ import type {
   SkillAccessInviteRedeemResultDto,
   SubscribedSkillDto,
   UserCustomSkillDto,
+  UserCustomSkillSummaryDto,
+  SubscribedSkillSummaryDto,
 } from '@fateclaw/contracts/skills';
 
 import {
@@ -41,6 +43,8 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     version: skill.version,
     bundle_uri: skill.bundle_uri,
     checksum: skill.checksum,
+    revision_id: skill.revision_id,
+    format_version: skill.format_version,
     install_status: skill.install_status,
     acl: skill.acl,
     billing_policy: skill.billing_policy,
@@ -55,6 +59,20 @@ function toUserCustomSkillDto(skill: UserCustomSkill): UserCustomSkillDto {
     created_at: skill.created_at,
     updated_at: skill.updated_at,
   };
+}
+
+export function toUserCustomSkillSummaryDto(
+  skill: UserCustomSkill,
+): UserCustomSkillSummaryDto {
+  const { files: _files, ...summary } = toUserCustomSkillDto(skill);
+  return summary;
+}
+
+export function toSubscribedSkillSummaryDto(
+  skill: Parameters<typeof toSubscribedSkillDto>[0],
+): SubscribedSkillSummaryDto {
+  const { files: _files, ...summary } = toSubscribedSkillDto(skill);
+  return summary;
 }
 
 export function toSharedSkillPreviewDto(

@@ -122,6 +122,10 @@ function sanitizeToolPath(rawPath?: string): string | undefined {
   if (!rawPath) return undefined;
   const normalized = rawPath.trim().replace(/\\/g, '/');
   const parts = normalized.split('/').filter(Boolean);
+  const cacheIndex = parts.indexOf('cache-v1');
+  if (cacheIndex >= 0) {
+    return parts.slice(cacheIndex + 3).join('/') || undefined;
+  }
   const skillFileIndex = (() => {
     for (let index = parts.length - 1; index >= 0; index -= 1) {
       if (parts[index] === 'SKILL.md') return index;

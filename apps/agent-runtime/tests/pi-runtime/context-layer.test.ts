@@ -24,6 +24,7 @@ function createRuntime(): RequestRuntime {
       canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
+    skillRevisions: { readRevision: vi.fn() },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
     },
@@ -200,6 +201,7 @@ describe('createPiSessionContext', () => {
           canEdit: vi.fn(async () => true),
           update: vi.fn(),
         },
+        skillRevisions: { readRevision: vi.fn() },
         skillCatalog: {
           listEffectiveUserSkills: vi.fn(async () => []),
         },
@@ -248,6 +250,7 @@ describe('createPiSessionContext', () => {
             canEdit: vi.fn(async () => true),
             update: vi.fn(),
           },
+          skillRevisions: { readRevision: vi.fn() },
           skillCatalog: {
             listEffectiveUserSkills: vi.fn(async () => []),
           },

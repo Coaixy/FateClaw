@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -8,6 +8,19 @@ import type { AgentRuntimeDeps } from '../../src/deps.js';
 import type { EffectiveUserSkill } from '../../src/agent-db.js';
 import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
 import { createPiResourceLoader } from '../../src/pi-runtime/resource-loader.js';
+import { prepareSkillContent } from '@fateclaw/contracts/skills/content';
+import { SkillContentCache } from '../../src/skill-content-cache.js';
+
+const roots: string[] = [];
+const originalTextSkillsDir = process.env.FATECLAW_TEXT_SKILLS_DIR;
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const root of roots.splice(0))
+    fs.rmSync(root, { recursive: true, force: true });
+  if (originalTextSkillsDir === undefined)
+    delete process.env.FATECLAW_TEXT_SKILLS_DIR;
+  else process.env.FATECLAW_TEXT_SKILLS_DIR = originalTextSkillsDir;
+});
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -32,6 +45,7 @@ function createTextSkillBundleFixture(dirName = 'private-bazi'): string {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'fateclaw-private-skill-'),
   );
+  roots.push(root);
   const skillDir = path.join(root, dirName);
   fs.mkdirSync(path.join(skillDir, 'docs'), { recursive: true });
   fs.writeFileSync(
@@ -54,13 +68,26 @@ function createTextSkillBundleFixture(dirName = 'private-bazi'): string {
 
 function createDeps(): AgentRuntimeDeps {
   const bundleUri = createTextSkillBundleFixture();
+  process.env.FATECLAW_TEXT_SKILLS_DIR = path.join(path.dirname(bundleUri), 'cache');
+  const revision = {
+    skillId: 'private-bazi-id',
+    revisionId: 'private-bazi-revision',
+    ...prepareSkillContent(
+      ['SKILL.md', 'docs/格局.md'].map((file) => ({
+        path: file,
+        content: fs.readFileSync(path.join(bundleUri, file), 'utf8'),
+      })),
+    ),
+  };
   const privateSkill: EffectiveUserSkill = {
     id: 'private-bazi-id',
     dir: 'private-bazi',
     name: '私有八字知识',
     description: '私有八字入口',
     bundle_uri: bundleUri,
-    checksum: null,
+    checksum: revision.checksum,
+    revision_id: revision.revisionId,
+    format_version: revision.formatVersion,
     install_status: 'installed',
     visibility: 'private',
     source: 'self',
@@ -71,6 +98,7 @@ function createDeps(): AgentRuntimeDeps {
       canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
+    skillRevisions: { readRevision: vi.fn(async () => revision) },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => [privateSkill]),
     },
@@ -78,22 +106,48 @@ function createDeps(): AgentRuntimeDeps {
 }
 
 describe('createPiResourceLoader', () => {
-  it.each([undefined, '## Legacy delivery template'])('does not impose a delivery outline, including for legacy requests (%s)', async (legacyTemplate) => {
-    const input = { ...containerInput, guashiScriptTemplate: legacyTemplate };
-    const loader = await createPiResourceLoader({
-      deps: createDeps(),
-      userId: 'user-1',
-      requestScope: createRequestScope(),
-      containerInput: input,
+  it('releases acquired snapshots if a later loader initialization step fails', async () => {
+    const release = vi.fn();
+    const deps = createDeps();
+    vi.spyOn(SkillContentCache.prototype, 'acquire').mockResolvedValue({
+      baseDir: '/synthetic/skill',
+      filePath: '/synthetic/skill/SKILL.md',
+      release,
     });
-
-    const prompt = loader.getSystemPrompt();
-    expect(prompt).toContain('完成用户请求后，直接用 assistant 回复最终答复。');
-    expect(prompt).not.toContain('固定章节');
-    expect(prompt).not.toContain('## 核心论断');
-    expect(prompt).not.toContain('Legacy delivery template');
-    expect(prompt).not.toContain('[仅卦师]');
+    await expect(
+      createPiResourceLoader({
+        deps,
+        userId: 'user-1',
+        requestScope: createRequestScope(),
+        containerInput: {
+          ...containerInput,
+          personaPrompt: 1 as unknown as string,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(release).toHaveBeenCalledOnce();
   });
+  it.each([undefined, '## Legacy delivery template'])(
+    'does not impose a delivery outline, including for legacy requests (%s)',
+    async (legacyTemplate) => {
+      const input = { ...containerInput, guashiScriptTemplate: legacyTemplate };
+      const loader = await createPiResourceLoader({
+        deps: createDeps(),
+        userId: 'user-1',
+        requestScope: createRequestScope(),
+        containerInput: input,
+      });
+
+      const prompt = loader.getSystemPrompt();
+      expect(prompt).toContain(
+        '完成用户请求后，直接用 assistant 回复最终答复。',
+      );
+      expect(prompt).not.toContain('固定章节');
+      expect(prompt).not.toContain('## 核心论断');
+      expect(prompt).not.toContain('Legacy delivery template');
+      expect(prompt).not.toContain('[仅卦师]');
+    },
+  );
 
   it('exposes only request-scoped skill metadata and keeps private content out of Pi skill files', async () => {
     const deps = createDeps();
@@ -176,6 +230,66 @@ describe('createPiResourceLoader', () => {
     expect(deps.skillCatalog.listEffectiveUserSkills).not.toHaveBeenCalled();
     expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
       'private-bazi',
+    );
+  });
+
+  it('downloads only request-authorized database skills and injects their local snapshots', async () => {
+    const deps = createDeps();
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'fateclaw-db-skill-loader-'),
+    );
+    roots.push(root);
+    process.env.FATECLAW_TEXT_SKILLS_DIR = root;
+    const files = [
+      { path: 'SKILL.md', content: '# Authorized database skill' },
+      { path: 'docs/private.md', content: 'Authorized private content' },
+    ];
+    const bundle = {
+      skillId: 'database-skill',
+      revisionId: 'database-revision',
+      ...prepareSkillContent(files),
+    };
+    const skill: EffectiveUserSkill = {
+      id: 'database-skill',
+      dir: 'database-skill',
+      name: 'Database Skill',
+      description: 'Knowledge',
+      bundle_uri: 'db://skill-content-revisions/database-revision',
+      checksum: bundle.checksum,
+      revision_id: bundle.revisionId,
+      format_version: bundle.formatVersion,
+      install_status: 'installed',
+      visibility: 'private',
+      source: 'self',
+    };
+    deps.skillCatalog.listEffectiveUserSkillsByIds = vi.fn(async () => [skill]);
+    deps.skillRevisions.readRevision = vi.fn(async () => bundle);
+    const loader = await createPiResourceLoader({
+      deps,
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput: {
+        ...containerInput,
+        authorizedSkillIds: ['database-skill'],
+      },
+    });
+
+    expect(deps.skillCatalog.listEffectiveUserSkillsByIds).toHaveBeenCalledWith(
+      'user-1',
+      ['database-skill'],
+    );
+    expect(deps.skillCatalog.listEffectiveUserSkills).not.toHaveBeenCalled();
+    expect(deps.skillRevisions.readRevision).toHaveBeenCalledExactlyOnceWith(
+      'database-skill',
+      bundle.revisionId,
+    );
+    const loaded = loader.getSkills().skills;
+    expect(loaded.map((skill) => skill.name)).toEqual(['database-skill']);
+    expect(
+      fs.readFileSync(path.join(loaded[0].baseDir, 'docs/private.md'), 'utf8'),
+    ).toBe('Authorized private content');
+    expect(loader.getAppendSystemPrompt().join('\n')).not.toContain(
+      'Authorized private content',
     );
   });
 });

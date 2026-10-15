@@ -8,13 +8,13 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
 import { BundleForm, BundleFormData } from '@/components/skills/bundle-form';
 import { SkillSkeleton } from '@/components/skills/skill-skeleton';
-import { skillsApi, UserCustomSkill } from '@/features/skills/api';
+import { skillsApi, UserCustomSkillSummary } from '@/features/skills/api';
 import { useToast } from '@/lib/use-toast';
 
 export default function NewStudioBundlePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [ownSkills, setOwnSkills] = useState<UserCustomSkill[]>([]);
+  const [ownSkills, setOwnSkills] = useState<UserCustomSkillSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 

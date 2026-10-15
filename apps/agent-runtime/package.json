@@ -10,6 +10,7 @@
     "start": "node dist/daemon.js"
   },
   "dependencies": {
+    "@fateclaw/contracts": "workspace:*",
     "@earendil-works/pi-ai": "0.86.0",
     "@earendil-works/pi-coding-agent": "0.86.0",
     "ioredis": "^5.10.1",

@@ -1,16 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetDbPool, mockReadTextSkillBundleFiles } = vi.hoisted(() => ({
-  mockGetDbPool: vi.fn(),
-  mockReadTextSkillBundleFiles: vi.fn(),
-}));
+const { mockGetDbPool } = vi.hoisted(() => ({ mockGetDbPool: vi.fn() }));
 
 vi.mock('../../../src/infrastructure/db-pool.js', () => ({
   getDbPool: mockGetDbPool,
-}));
-
-vi.mock('../../../src/modules/skills/text-skill-bundle-store.js', () => ({
-  readTextSkillBundleFiles: mockReadTextSkillBundleFiles,
 }));
 
 import {
@@ -69,14 +62,14 @@ describe('admin repository', () => {
   });
 
   it('hydrates custom skill files from bundle storage for admin reads', async () => {
-    mockReadTextSkillBundleFiles.mockReturnValue([
-      { path: 'SKILL.md', content: 'skill md' },
-      { path: 'docs/knowledge.md', content: 'bundle content' },
-    ]);
     createMockPool([
       [
         {
           id: 'skill-1',
+          files: [
+            { path: 'SKILL.md', content: 'skill md' },
+            { path: 'docs/knowledge.md', content: 'bundle content' },
+          ],
           bundle_uri: 'text-skill://skill-1',
         },
       ],
@@ -95,10 +88,6 @@ describe('admin repository', () => {
         content_length: 22,
       },
     ]);
-
-    expect(mockReadTextSkillBundleFiles).toHaveBeenCalledWith(
-      'text-skill://skill-1',
-    );
   });
 
   it('selects Pi cleanup candidates with reusable archive payloads', async () => {

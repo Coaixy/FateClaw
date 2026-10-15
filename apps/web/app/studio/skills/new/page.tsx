@@ -44,6 +44,8 @@ export default function NewStudioSkillPage() {
             version: '1.0.0',
             bundle_uri: '',
             checksum: null,
+            revision_id: null,
+            format_version: null,
             install_status: 'missing',
             acl: {},
             billing_policy: {},

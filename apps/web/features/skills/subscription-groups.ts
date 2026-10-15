@@ -1,17 +1,17 @@
-import type { SubscribedSkill } from './api';
+import type { SubscribedSkillSummary } from './api';
 
 export type SkillSubscriptionGroup = {
   bundleId: string;
   bundleName: string;
-  skills: SubscribedSkill[];
+  skills: SubscribedSkillSummary[];
 };
 
-export function groupSubscribedSkills(skills: SubscribedSkill[]): {
+export function groupSubscribedSkills(skills: SubscribedSkillSummary[]): {
   bundles: SkillSubscriptionGroup[];
-  direct: SubscribedSkill[];
+  direct: SubscribedSkillSummary[];
 } {
   const bundleMap = new Map<string, SkillSubscriptionGroup>();
-  const direct: SubscribedSkill[] = [];
+  const direct: SubscribedSkillSummary[] = [];
 
   for (const skill of skills) {
     const sourceBundles = skill.source_bundles ?? [];

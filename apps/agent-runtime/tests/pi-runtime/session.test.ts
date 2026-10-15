@@ -38,6 +38,7 @@ import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
 import type { RequestRuntime } from '../../src/runtime.js';
 import { runPiSession } from '../../src/pi-runtime/session.js';
 import * as streamApi from '../../src/ai-chat-stream.js';
+import { SkillContentCache } from '../../src/skill-content-cache.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -57,6 +58,7 @@ function createDeps(): AgentRuntimeDeps {
       canEdit: vi.fn(async () => true),
       update: vi.fn(),
     },
+    skillRevisions: { readRevision: vi.fn() },
     skillCatalog: {
       listEffectiveUserSkills: vi.fn(async () => []),
     },
@@ -118,6 +120,24 @@ describe('runPiSession', () => {
     mockSessionManager.create.mockClear();
     mockSessionManager.open.mockClear();
     mockSettingsManager.inMemory.mockClear();
+  });
+
+  it('releases skill snapshots when session initialization fails before prompt cleanup is installed', async () => {
+    const release = vi.fn();
+    vi.spyOn(SkillContentCache.prototype, 'acquire').mockResolvedValue({
+      baseDir: '/synthetic/skill', filePath: '/synthetic/skill/SKILL.md', release,
+    });
+    const deps = createDeps();
+    deps.skillCatalog.listEffectiveUserSkills = vi.fn(async () => [{
+      id: 'skill-1', dir: 'skill-1', name: 'Skill', description: '', bundle_uri: '',
+      checksum: 'a'.repeat(64), revision_id: 'revision-1', format_version: 1,
+      install_status: 'installed', visibility: 'private', source: 'self',
+    }]);
+    mockCreateAgentSession.mockRejectedValueOnce(new Error('synthetic session initialization failure'));
+    await expect(runPiSession({
+      containerInput: createInput(), runtime: { deps }, requestScope: createRequestScope(),
+    })).rejects.toThrow('synthetic session initialization failure');
+    expect(release).toHaveBeenCalledOnce();
   });
 
   it.each([false, true])(

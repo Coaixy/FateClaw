@@ -16,6 +16,8 @@ The `0080_drop_redemption_codes` migration removes `redemption_codes` and its re
 
 The `0082_unify_membership_identity` migration renames the stored membership identifier to `membership`, updates the old built-in display name, and constrains configuration and user membership keys to that single value. It preserves configured prices and sale status, custom names, user membership periods and status, timestamps, balances and historical wallet records. Both bootstrap and incremental upgrades run it after the frozen snapshots.
 
+The `0081_skill_content_revisions` migration adds immutable `skill_content_revisions`, a same-skill current revision pointer, and `skill_content_imports` for durable legacy import outcomes. Updates to revision rows are rejected by a database trigger. Content insertion and pointer changes commit together. API startup imports legacy files separately from the schema ledger, preserves pending failures for retries, and skips records with a current revision. See [User skill storage](deployment-split.md#user-skill-storage) before moving an existing installation.
+
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 
 Databases with recorded migration history always use [versions/](../apps/api/src/infrastructure/migrations/versions/). Each missing migration runs in its own transaction and records its original ID and description. The legacy `0001_core_schema_baseline` already represents historical migrations 0001–0067. Older ledgers may additionally contain historical 0002–0069 IDs; those records remain intact.

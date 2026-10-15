@@ -7,6 +7,8 @@ import {
   initDbPool,
 } from './db-pool.js';
 import { runDatabaseMigrations } from './migrations/runner.js';
+import { logger } from './logger.js';
+import { importLegacySkillContent } from '../modules/skills/legacy-skill-import.js';
 import {
   bindAccountToUser,
   createAccount,
@@ -436,6 +438,23 @@ export async function initDatabase(): Promise<void> {
     // 无效手机号用户清理已改为一次性迁移（0071），由 runDatabaseMigrations 幂等执行，
     // 不再每次启动无条件重跑破坏性硬删除。
     await runDatabaseMigrations(client);
+    const skillBackfill = await importLegacySkillContent(pool);
+    if (skillBackfill.migrated > 0) {
+      logger.info(
+        skillBackfill,
+        'User skill bundle database backfill completed',
+      );
+    }
+    if (
+      skillBackfill.missing > 0 ||
+      skillBackfill.mismatched > 0 ||
+      skillBackfill.invalid > 0
+    ) {
+      logger.warn(
+        skillBackfill,
+        'User skill bundles still need backfill; restore complete original files and restart this version on their deployment',
+      );
+    }
   } finally {
     client.release();
   }

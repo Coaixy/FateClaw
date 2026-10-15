@@ -58,6 +58,7 @@ import {
   updateUserCustomSkill,
 } from '../../infrastructure/db.js';
 import { normalizeCategory } from './category-map.js';
+export { SkillRevisionConflictError } from './skill-errors.js';
 
 export {
   createSkillBundle,

@@ -12,7 +12,7 @@
 - `apps/agent-runtime/src/daemon.ts`
 - `apps/agent-runtime/src/request-boundary.ts`
 - `apps/agent-runtime/src/pi-runtime/`
-- `apps/agent-runtime/src/text-skill-bundle.ts`
+- `apps/agent-runtime/src/skill-content-cache.ts`
 
 ## 总体分层
 
@@ -73,7 +73,9 @@ Pi SDK 模型 loop / 授权 Skill 文件读取
 | 类型 | 文件来源 | 暴露方式 | DB 存储 |
 | --- | --- | --- | --- |
 | 系统排盘 runner | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts` | API `/api/paipan/*` 直接调用，结果作为盘面 artifact 进入会话 | `skill_global_config` 和用户启用状态（兼容旧命名） |
-| 用户 Text Skill Bundle | `.fateclaw/text-skills/<owner>/<dir>-<id>/` | 每次请求按权限注入 ResourceLoader | metadata、权限、版本、`bundle_uri`、checksum |
+| User Text Skill Bundle | Rebuildable process-owned snapshots in `.fateclaw/text-skills/cache-v1/` | Authorized per request through ResourceLoader | Immutable `skill_content_revisions`, a current revision pointer, metadata, and permissions |
+
+PostgreSQL owns user skill content. API saves atomically insert an immutable revision and update its skill pointer after checking the editor's base revision. Agent-runtime authorizes and fixes a revision for each request, then restores it with the shared content protocol and process-owned local cache. Active snapshot leases are released when session creation or execution finishes or fails. Cache retention never deletes active snapshots. Legacy filesystem reads are confined to the API's independent import module; ordinary skill reads use PostgreSQL. See [Skill content architecture](skill-content-architecture.md).
 
 用户 Text Skill Bundle 的典型结构：
 
@@ -86,7 +88,7 @@ examples/
 notes/
 ```
 
-私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`apps/agent-runtime/src/text-skill-bundle.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
+私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`apps/agent-runtime/src/skill-content-cache.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
 
 ## 宿主请求链路
 

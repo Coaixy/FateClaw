@@ -13,6 +13,8 @@ function customSkill(): UserCustomSkill {
     version: '1.0.0',
     bundle_uri: '/tmp/fateclaw-test-skill',
     checksum: null,
+    revision_id: null,
+    format_version: null,
     install_status: 'installed',
     acl: {},
     billing_policy: {},

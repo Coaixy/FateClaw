@@ -10,6 +10,7 @@ import type {
 import { SKILL_CATEGORIES } from '@fateclaw/contracts/skills';
 
 import {
+  SkillRevisionConflictError,
   createSkillAccessInvite,
   createSkillBundle,
   createUserCustomSkill,
@@ -57,7 +58,8 @@ import {
   toSkillAccessInviteRedeemResultDto,
   toSharedBundlePreviewDto,
   toSharedSkillDetailDto,
-  toSubscribedSkillDtos,
+  toUserCustomSkillSummaryDto,
+  toSubscribedSkillSummaryDto,
 } from '../../contracts-adapter/skills-contract.js';
 import type { TextSkillBundleFile } from '../../shared/types.js';
 
@@ -178,8 +180,12 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     await request.requireAuth();
     const userId = request.user.userId;
 
-    const own = await getUserCustomSkills(userId);
-    const subscribed = toSubscribedSkillDtos(await getSubscribedSkills(userId));
+    const own = (await getUserCustomSkills(userId, false)).map(
+      toUserCustomSkillSummaryDto,
+    );
+    const subscribed = (await getSubscribedSkills(userId, false)).map(
+      toSubscribedSkillSummaryDto,
+    );
 
     return { own, subscribed };
   });
@@ -264,7 +270,23 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       skill_name?: string;
       files?: unknown;
       category?: string;
+      base_revision_id?: unknown;
     };
+
+    if (!Object.hasOwn(body, 'base_revision_id')) {
+      return reply
+        .code(428)
+        .send({ error: '保存时必须提供打开技能时的修订版本' });
+    }
+    if (
+      body.base_revision_id !== null &&
+      (typeof body.base_revision_id !== 'string' ||
+        !body.base_revision_id.trim())
+    ) {
+      return reply
+        .code(400)
+        .send({ error: 'base_revision_id 必须是修订 ID 或 null' });
+    }
 
     if (body.skill_name !== undefined && body.skill_name.trim().length > 50) {
       return reply.code(400).send({ error: '技能名称不超过 50 字' });
@@ -295,7 +317,8 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       skill_name?: string;
       files?: TextSkillBundleFile[];
       category?: string;
-    } = {};
+      base_revision_id: string | null;
+    } = { base_revision_id: body.base_revision_id };
     if (body.skill_name !== undefined) {
       updates.skill_name = body.skill_name.trim();
     }
@@ -306,6 +329,11 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
     try {
       skill = await updateUserCustomSkill(id, userId, updates);
     } catch (err) {
+      if (err instanceof SkillRevisionConflictError) {
+        return reply
+          .code(409)
+          .send({ error: err.message, code: 'skill_revision_conflict' });
+      }
       return reply
         .code(400)
         .send({ error: err instanceof Error ? err.message : '更新失败' });
@@ -732,5 +760,4 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
       }),
     );
   });
-
 }
