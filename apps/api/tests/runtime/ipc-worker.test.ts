@@ -177,7 +177,7 @@ function createPending(
     ownerUserId: 'user-1',
     autoDeliver: false,
     sessionId: 'session-1',
-    localAgentLeaseAccountId: 'web:user-1',
+    localAgentLeaseId: 'web:user-1',
     resolve: vi.fn(),
     reject: vi.fn(),
     timeout: setTimeout(() => undefined, 10_000),
@@ -468,7 +468,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     );
     expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
       expect.objectContaining({
-        localAgentLeaseAccountId: 'web:user-1',
+        localAgentLeaseId: 'web:user-1',
       }),
     );
   });

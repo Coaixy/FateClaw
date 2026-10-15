@@ -27,8 +27,8 @@ export function isMarkdownPath(filePath: string): boolean {
 }
 
 /** 单个授权 Skill 下、位于其 baseDir 边界内的候选路径集合。 */
-export interface SkillPathCandidate {
-  skill: Skill;
+export interface SkillPathCandidate<TSkill = Skill> {
+  skill: TSkill;
   baseDir: string;
   /** 已去重、且确认在 baseDir 边界内的候选绝对路径，保持 [target, cwd] 顺序。 */
   candidates: string[];
@@ -49,10 +49,10 @@ export interface SkillPathCandidate {
  * 返回：每个 skill 对应的边界内候选；candidates 为空表示该 skill 下无合法候选。
  * 注意：本函数只做「边界内」过滤，不做 stat 与文件类型判断，交由 read/grep 各自按语义处理。
  */
-export function resolveSkillPathCandidates(
+export function resolveSkillPathCandidates<TSkill extends { baseDir: string }>(
   rawPath: string,
-  skills: Skill[],
-): SkillPathCandidate[] {
+  skills: TSkill[],
+): SkillPathCandidate<TSkill>[] {
   const trimmed = rawPath.trim();
   const cwdCandidate = path.resolve(trimmed);
   return skills.map((skill) => {

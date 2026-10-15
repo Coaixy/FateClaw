@@ -320,7 +320,7 @@ describe('processAiChatOutboxPayload', () => {
           sessionId: 'session-1',
           userMessageId: 'user-msg-1',
           startedAtMs: Date.now() - 1234,
-          localAgentLeaseAccountId: 'web:user-1',
+          localAgentLeaseId: 'web:user-1',
           resolve: mockResolve,
           reject: mockReject,
           timeout,

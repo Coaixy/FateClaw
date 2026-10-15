@@ -63,8 +63,8 @@ async function releaseLocalAgentLeaseForPending(
   pending: PendingInboxRequest | undefined,
   context: { accountId?: string; requestId?: string; reason: string },
 ): Promise<void> {
-  if (!pending?.localAgentLeaseAccountId) return;
-  await releaseLocalAgent(pending.localAgentLeaseAccountId).catch((err) => {
+  if (!pending?.localAgentLeaseId) return;
+  await releaseLocalAgent(pending.localAgentLeaseId).catch((err) => {
     logger.warn(
       {
         accountId: context.accountId ?? pending.accountId,

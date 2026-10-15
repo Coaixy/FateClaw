@@ -528,8 +528,8 @@ async function releaseLocalAgentLeaseForPending(
   pending: PendingInboxRequest | undefined,
   context: { accountId?: string; requestId?: string; reason: string },
 ): Promise<void> {
-  if (!pending?.localAgentLeaseAccountId) return;
-  await releaseLocalAgent(pending.localAgentLeaseAccountId).catch((err) => {
+  if (!pending?.localAgentLeaseId) return;
+  await releaseLocalAgent(pending.localAgentLeaseId).catch((err) => {
     logger.warn(
       {
         accountId: context.accountId ?? pending.accountId,
@@ -542,15 +542,16 @@ async function releaseLocalAgentLeaseForPending(
   });
 }
 
-async function releaseLocalAgentLeaseByAccountId(
-  leaseAccountId: string | undefined,
+async function releaseLocalAgentLeaseById(
+  leaseId: string | undefined,
   context: { accountId?: string; requestId?: string; reason: string },
 ): Promise<void> {
-  if (!leaseAccountId) return;
-  await releaseLocalAgent(leaseAccountId).catch((err) => {
+  if (!leaseId) return;
+  await releaseLocalAgent(leaseId).catch((err) => {
     logger.warn(
       {
-        accountId: context.accountId ?? leaseAccountId,
+        accountId: context.accountId,
+        leaseId,
         requestId: context.requestId,
         reason: context.reason,
         err,
@@ -881,7 +882,7 @@ export function submitInboxRequest(input: {
       let timeout: NodeJS.Timeout | null = null;
       let billingReservation: BillingReservation | null = null;
       let concurrencySlotId: string | undefined;
-      let localAgentLeaseAccountId: string | undefined;
+      let localAgentLeaseId: string | undefined;
 
       try {
         const owner = await getOwnerByRuntimeId(input.accountId);
@@ -941,8 +942,8 @@ export function submitInboxRequest(input: {
           reject(new Error(`收件箱请求超时: ${requestId}`));
         }, AGENT_REQUEST_TIMEOUT);
 
-        localAgentLeaseAccountId = retainLocalAgent(input.accountId);
-        if (!localAgentLeaseAccountId) {
+        localAgentLeaseId = retainLocalAgent(input.accountId);
+        if (!localAgentLeaseId) {
           throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
         }
         pendingInboxRequests.set(requestId, {
@@ -957,7 +958,7 @@ export function submitInboxRequest(input: {
           billingReservation,
           priority,
           concurrencySlotId,
-          localAgentLeaseAccountId,
+          localAgentLeaseId,
           resolve,
           reject,
           timeout,
@@ -1045,7 +1046,7 @@ export function submitInboxRequest(input: {
             reason: 'submit_error',
           });
         } else {
-          void releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+          void releaseLocalAgentLeaseById(localAgentLeaseId, {
             accountId: input.accountId,
             requestId,
             reason: 'submit_error',
@@ -1322,7 +1323,7 @@ export function submitAiChatInboxRequest(input: {
       let timeout: NodeJS.Timeout | null = null;
       let billingReservation: BillingReservation | null = null;
       let concurrencySlotId: string | undefined;
-      let localAgentLeaseAccountId: string | undefined;
+      let localAgentLeaseId: string | undefined;
       let runtimeReadyPromise: Promise<void> | undefined;
 
       try {
@@ -1457,20 +1458,20 @@ export function submitAiChatInboxRequest(input: {
             isCancelled: () => !pendingAiChatRequests.has(requestId),
           });
           addAccountListener(input.accountId);
-          localAgentLeaseAccountId = retainLocalAgent(input.accountId);
-          if (!localAgentLeaseAccountId) {
+          localAgentLeaseId = retainLocalAgent(input.accountId);
+          if (!localAgentLeaseId) {
             throw new Error('本地 agent-runtime 未启动或已退出，请稍后重试');
           }
           const leasedPending = pendingAiChatRequests.get(requestId);
           if (!leasedPending) {
-            await releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+            await releaseLocalAgentLeaseById(localAgentLeaseId, {
               accountId: input.accountId,
               requestId,
               reason: 'request_cancelled_after_runtime_start',
             });
             throw new Error('请求已取消或超时');
           }
-          leasedPending.localAgentLeaseAccountId = localAgentLeaseAccountId;
+          leasedPending.localAgentLeaseId = localAgentLeaseId;
         })();
         void runtimeReadyPromise.catch(() => {});
 
@@ -1628,7 +1629,7 @@ export function submitAiChatInboxRequest(input: {
             reason: 'submit_error',
           });
         } else {
-          void releaseLocalAgentLeaseByAccountId(localAgentLeaseAccountId, {
+          void releaseLocalAgentLeaseById(localAgentLeaseId, {
             accountId: input.accountId,
             requestId,
             reason: 'submit_error',

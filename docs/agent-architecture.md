@@ -148,6 +148,30 @@ notes/
 
 Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 custom tools，例如授权 Markdown 读取、Soul 读取/编辑和与当前会话盘面相关的上下文工具。模型不能假设存在全局本地 Skill 或排盘执行工具。
 
+## Bounded Skill search and runtime recovery
+
+- Each `grep` invocation runs scope resolution, Markdown discovery, regex compilation
+  and line matching in a disposable worker. The daemon enforces a two-second budget
+  for the entire invocation and terminates the worker on timeout or cancellation.
+- Workers receive only search parameters, authorized Skill names and directories,
+  and the request's cached Markdown file lists. They have an empty environment and
+  do not load the daemon, database clients or model credentials.
+- Search keeps JavaScript regex semantics, defaults to regex mode, and falls back
+  to literal matching for invalid patterns. Complete lines are matched; only result
+  previews are shortened. The eight-MiB file limit and result count limit remain.
+- Timeout, cancellation and worker failure return explicit tool errors with an
+  inexact result count. File discovery is committed to the request cache only after
+  successful worker exit. Source workers use Node 24 type stripping; TypeScript
+  rewrites relative `.ts` imports for the compiled `.js` workers.
+- The host checks each ready child's heartbeat after a 30-second startup grace,
+  then every ten seconds. Two consecutive successful Redis reads reporting a
+  missing key retire the child even if it is busy. A Redis error or a live heartbeat
+  resets that count. SIGTERM is followed by SIGKILL after ten seconds if necessary.
+- A replacement for the same account waits for the retired child to exit. Local
+  request leases belong to exact child records and release once, so delayed cleanup
+  cannot change a replacement's busy count. Existing exit handling and durable
+  recovery terminate interrupted requests without automatically replaying execution.
+
 ## 状态与可观测性
 
 主要真源：

@@ -5,6 +5,7 @@
  * 环境变量通过 agent-env.ts 统一构建，只传递契约内的字段。
  */
 import { type ChildProcess, spawn } from 'child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
@@ -13,6 +14,7 @@ import { createInterface } from 'readline';
 import { agentEnvToRecord, buildAgentEnv } from './agent-env.js';
 import { sendOpsAlert } from '../infrastructure/alerts.js';
 import { logger } from '../infrastructure/logger.js';
+import { getRedis } from '../infrastructure/redis.js';
 import { resolveProjectRoot } from '../infrastructure/project-root.js';
 import {
   DEFAULT_LOCAL_AGENT_IDLE_TTL_MS,
@@ -22,11 +24,13 @@ import {
 
 const LOCAL_AGENT_POLICY_CACHE_MS = 2_000;
 const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
+const LOCAL_AGENT_HEARTBEAT_STARTUP_GRACE_MS = 30_000;
+const LOCAL_AGENT_HEARTBEAT_CHECK_MS = 10_000;
+const LOCAL_AGENT_HEARTBEAT_MISS_LIMIT = 2;
 /**
  * 宿主整体停机（shutdown）场景的强杀延迟：必须大于 daemon 的优雅 drain 上限
  * （apps/agent-runtime/src/daemon.ts 的 SHUTDOWN_DRAIN_MS = 30s），否则子进程
- * 正在排空的 in-flight 请求会被提前 SIGKILL、响应丢失。空闲回收/容量回收场景
- * 沿用 10s（此时子进程无在途请求，SIGTERM 后应立即退出）。
+ * 正在排空的 in-flight 请求会被提前 SIGKILL、响应丢失。
  */
 const LOCAL_AGENT_SHUTDOWN_FORCE_KILL_DELAY_MS = 35_000;
 /** stopAllLocalAgents 等待全部子进程退出的上限（略大于 shutdown 强杀延迟）。 */
@@ -57,12 +61,15 @@ interface LocalAgentRecord {
   lastUsedAt: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
   forceKillTimer: ReturnType<typeof setTimeout> | null;
+  heartbeatTimer: ReturnType<typeof setTimeout> | null;
+  heartbeatMisses: number;
   stopping: boolean;
 }
 
 const localAgentProcesses = new Map<string, LocalAgentRecord>();
 const initializingAgents = new Map<string, LocalAgentRecord>();
 const retiringAgents = new Set<LocalAgentRecord>();
+const localAgentLeases = new Map<string, LocalAgentRecord>();
 let shuttingDown = false;
 let cachedLocalAgentPolicy: {
   value: LocalAgentRuntimePolicy;
@@ -217,6 +224,14 @@ function clearForceKillTimer(record: LocalAgentRecord): void {
 function clearRecordTimers(record: LocalAgentRecord): void {
   clearIdleTimer(record);
   clearForceKillTimer(record);
+  if (record.heartbeatTimer) clearTimeout(record.heartbeatTimer);
+  record.heartbeatTimer = null;
+}
+
+function discardRecordLeases(record: LocalAgentRecord): void {
+  for (const [leaseId, owner] of localAgentLeases) {
+    if (owner === record) localAgentLeases.delete(leaseId);
+  }
 }
 
 function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
@@ -225,7 +240,12 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
 
 function stopLocalAgentRecord(
   record: LocalAgentRecord,
-  reason: 'manual' | 'shutdown' | 'idle_ttl' | 'capacity_limit',
+  reason:
+    | 'manual'
+    | 'shutdown'
+    | 'idle_ttl'
+    | 'capacity_limit'
+    | 'heartbeat_missing',
 ): void {
   const current = localAgentProcesses.get(record.accountId);
   if (current === record) {
@@ -233,6 +253,9 @@ function stopLocalAgentRecord(
     localAgentProcesses.delete(record.accountId);
   }
   clearIdleTimer(record);
+  if (record.heartbeatTimer) clearTimeout(record.heartbeatTimer);
+  record.heartbeatTimer = null;
+  discardRecordLeases(record);
   record.stopping = true;
   retiringAgents.add(record);
 
@@ -250,7 +273,7 @@ function stopLocalAgentRecord(
     record.child.kill('SIGTERM');
   }
   clearForceKillTimer(record);
-  // shutdown 场景给足 daemon 的 30s drain 窗口；其余回收场景子进程必然空闲，10s 足够。
+  // Only host shutdown needs the full drain window; an unresponsive daemon cannot drain.
   const forceKillDelayMs =
     reason === 'shutdown'
       ? LOCAL_AGENT_SHUTDOWN_FORCE_KILL_DELAY_MS
@@ -281,7 +304,12 @@ function stopLocalAgentRecord(
 }
 
 function scheduleIdleStop(record: LocalAgentRecord, idleTtlMs: number): void {
-  if (record.busyCount > 0 || record.stopping) return;
+  if (
+    localAgentProcesses.get(record.accountId) !== record ||
+    record.busyCount > 0 ||
+    record.stopping
+  )
+    return;
   clearIdleTimer(record);
   record.idleTimer = setTimeout(() => {
     const current = localAgentProcesses.get(record.accountId);
@@ -305,6 +333,54 @@ function findOldestIdleLocalAgent(): LocalAgentRecord | undefined {
   return [...localAgentProcesses.values()]
     .filter((record) => record.busyCount === 0 && !record.stopping)
     .sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
+}
+
+function scheduleHeartbeatCheck(
+  record: LocalAgentRecord,
+  delayMs = LOCAL_AGENT_HEARTBEAT_CHECK_MS,
+): void {
+  record.heartbeatTimer = setTimeout(async () => {
+    record.heartbeatTimer = null;
+    if (localAgentProcesses.get(record.accountId) !== record || record.stopping)
+      return;
+    try {
+      const heartbeat = await getRedis().get(
+        `agent:heartbeat:${record.accountId}`,
+      );
+      // The child can exit or be replaced while Redis is responding.
+      if (
+        localAgentProcesses.get(record.accountId) !== record ||
+        record.stopping
+      )
+        return;
+      record.heartbeatMisses =
+        heartbeat === null ? record.heartbeatMisses + 1 : 0;
+      if (record.heartbeatMisses >= LOCAL_AGENT_HEARTBEAT_MISS_LIMIT) {
+        stopLocalAgentRecord(record, 'heartbeat_missing');
+        void sendOpsAlert({
+          kind: 'agent_heartbeat_missing',
+          title: 'agent-runtime 心跳持续缺失，正在回收进程',
+          detail: `accountId=${record.accountId}，pid=${record.child.pid}`,
+          context: { accountId: record.accountId, pid: record.child.pid },
+        });
+        return;
+      }
+    } catch (err) {
+      // Redis failure is unknown liveness, not evidence that the child is blocked.
+      record.heartbeatMisses = 0;
+      logger.warn(
+        { accountId: record.accountId, err },
+        '本地 agent 心跳检查失败',
+      );
+    }
+    if (
+      localAgentProcesses.get(record.accountId) === record &&
+      !record.stopping
+    ) {
+      scheduleHeartbeatCheck(record);
+    }
+  }, delayMs);
+  unrefTimer(record.heartbeatTimer);
 }
 
 export interface LocalAgentAdmissionOptions {
@@ -375,7 +451,14 @@ export async function ensureLocalAgentRunning(
       ...localAgentProcesses.keys(),
       ...startingAgents.keys(),
     ]);
-    if (accounts.size + retiringAgents.size < policy.maxProcesses) {
+    // A replacement must not consume the inbox until its predecessor has exited.
+    const retiringSameAccount = [...retiringAgents].some(
+      (record) => record.accountId === accountId,
+    );
+    if (
+      !retiringSameAccount &&
+      accounts.size + retiringAgents.size < policy.maxProcesses
+    ) {
       const start = doSpawnLocalAgent(accountId).finally(() =>
         startingAgents.delete(accountId),
       );
@@ -383,7 +466,7 @@ export async function ensureLocalAgentRunning(
       return waitForStartup(start, options);
     }
     const idle = findOldestIdleLocalAgent();
-    if (idle && retiringAgents.size === 0)
+    if (!retiringSameAccount && idle && retiringAgents.size === 0)
       stopLocalAgentRecord(idle, 'capacity_limit');
     await new Promise<void>((resolve) =>
       setTimeout(
@@ -577,6 +660,8 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     lastUsedAt: Date.now(),
     idleTimer: null,
     forceKillTimer: null,
+    heartbeatTimer: null,
+    heartbeatMisses: 0,
     stopping: false,
   };
 
@@ -588,6 +673,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     settleReady?.(new Error('本地 agent 进程在就绪前已退出'));
     settleReady = null;
     clearRecordTimers(record);
+    discardRecordLeases(record);
     if (localAgentProcesses.get(accountId) === record) {
       localAgentProcesses.delete(accountId);
     }
@@ -613,6 +699,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     settleReady?.(new Error('本地 agent 进程 error 事件'));
     settleReady = null;
     clearRecordTimers(record);
+    discardRecordLeases(record);
     if (localAgentProcesses.get(accountId) === record) {
       localAgentProcesses.delete(accountId);
     }
@@ -640,14 +727,13 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   }
   localAgentProcesses.set(accountId, record);
   scheduleIdleStop(record, policy.idleTtlMs);
+  scheduleHeartbeatCheck(record, LOCAL_AGENT_HEARTBEAT_STARTUP_GRACE_MS);
   logger.info({ accountId, pid: child.pid }, '本地 agent 进程已就绪');
 }
 
 /**
- * 持有指定本地 agent-runtime 的请求租约。
- *
- * @param accountId runtime 对应的账号或 web runtime ID。
- * @returns 成功持有时返回 accountId，runtime 不存在时返回 undefined。
+ * Retain a lease owned by this exact child process. The opaque token prevents
+ * late or duplicate cleanup from decrementing a replacement process's busy count.
  */
 export function retainLocalAgent(accountId: string): string | undefined {
   const record = localAgentProcesses.get(accountId);
@@ -657,18 +743,21 @@ export function retainLocalAgent(accountId: string): string | undefined {
   clearIdleTimer(record);
   record.busyCount += 1;
   record.lastUsedAt = Date.now();
-  return accountId;
+  const leaseId = randomUUID();
+  localAgentLeases.set(leaseId, record);
+  return leaseId;
 }
 
 /**
- * 释放指定本地 agent-runtime 的请求租约，并在空闲后安排回收。
- *
- * @param accountId retainLocalAgent 返回的租约 ID；为空时直接忽略。
+ * Release a retained lease once, then schedule idle reclamation for its owner.
  */
-export async function releaseLocalAgent(accountId?: string): Promise<void> {
-  if (!accountId) return;
-  const record = localAgentProcesses.get(accountId);
-  if (!record || record.stopping) return;
+export async function releaseLocalAgent(leaseId?: string): Promise<void> {
+  if (!leaseId) return;
+  const record = localAgentLeases.get(leaseId);
+  if (!record) return;
+  localAgentLeases.delete(leaseId);
+  if (localAgentProcesses.get(record.accountId) !== record || record.stopping)
+    return;
   record.busyCount = Math.max(0, record.busyCount - 1);
   record.lastUsedAt = Date.now();
   if (record.busyCount > 0) return;
@@ -703,7 +792,11 @@ export async function stopAllLocalAgents(): Promise<void> {
     ]),
   ];
   const exitPromises = records
-    .filter((record) => isChildAlive(record.child))
+    // A successful kill() only sends a signal; retiring children can still be running.
+    .filter(
+      (record) =>
+        record.child.exitCode === null && record.child.signalCode === null,
+    )
     .map(
       (record) =>
         new Promise<void>((resolve) => {
@@ -899,6 +992,7 @@ export function __resetLocalRunnerForTests(): void {
   initializingAgents.clear();
   shuttingDown = false;
   startingAgents.clear();
+  localAgentLeases.clear();
   cachedLocalAgentPolicy = null;
 }
 

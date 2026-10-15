@@ -101,7 +101,7 @@ describe('processOutboxPayload', () => {
             inputTokenPricePerMillionCoins: 1000,
             outputTokenPricePerMillionCoins: 5000,
           },
-          localAgentLeaseAccountId: 'account-1',
+          localAgentLeaseId: 'account-1',
           resolve,
           reject: vi.fn(),
           timeout,

@@ -9,6 +9,7 @@ const {
   mockExistsSync,
   mockGetLocalAgentRuntimePolicy,
   mockSpawn,
+  mockGetHeartbeat,
   spawnedChildren,
   createChild,
 } = vi.hoisted(() => {
@@ -97,6 +98,7 @@ const {
       idleTtlMs: 30_000,
     })),
     mockSpawn,
+    mockGetHeartbeat: vi.fn(async () => 'alive' as string | null),
     spawnedChildren: spawned,
     createChild,
   };
@@ -127,6 +129,10 @@ vi.mock('../../src/infrastructure/alerts.js', () => ({
   sendOpsAlert: vi.fn(async () => undefined),
 }));
 
+vi.mock('../../src/infrastructure/redis.js', () => ({
+  getRedis: () => ({ get: mockGetHeartbeat }),
+}));
+
 vi.mock('../../src/infrastructure/project-root.js', () => ({
   resolveProjectRoot: vi.fn(() => '/project'),
 }));
@@ -150,6 +156,7 @@ import {
   releaseLocalAgent,
   retainLocalAgent,
   stopAllLocalAgents,
+  stopLocalAgent,
 } from '../../src/runtime/local-runner.js';
 
 describe('local-runner', () => {
@@ -159,6 +166,8 @@ describe('local-runner', () => {
     __resetLocalRunnerForTests();
     spawnedChildren.length = 0;
     mockSpawn.mockClear();
+    mockGetHeartbeat.mockReset();
+    mockGetHeartbeat.mockResolvedValue('alive');
     mockBuildAgentEnv.mockClear();
     mockExistsSync.mockReturnValue(true);
     mockGetLocalAgentRuntimePolicy.mockReset();
@@ -197,7 +206,7 @@ describe('local-runner', () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
 
-    expect(lease).toBe('account-1');
+    expect(lease).toEqual(expect.any(String));
     expect(spawnedChildren[0].child.kill).not.toHaveBeenCalled();
     expect(__getLocalAgentStateForTests()[0]).toEqual(
       expect.objectContaining({ busyCount: 1 }),
@@ -215,6 +224,100 @@ describe('local-runner', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(spawnedChildren[0].child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(__getLocalAgentStateForTests()).toEqual([]);
+  });
+
+  it('reclaims an unresponsive busy child before allowing the same account to restart', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 4,
+      idleTtlMs: 86_400_000,
+    });
+    mockGetHeartbeat.mockResolvedValue(null);
+    await ensureLocalAgentRunning('blocked');
+    const staleLease = retainLocalAgent('blocked');
+    const child = spawnedChildren[0].child;
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(mockGetHeartbeat).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(child.kill).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(__getLocalAgentStateForTests()).toEqual([]);
+
+    const replacement = ensureLocalAgentRunning('blocked');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    child.emit('exit', null, 'SIGKILL');
+    await vi.advanceTimersByTimeAsync(100);
+    await replacement;
+    const currentLease = retainLocalAgent('blocked');
+    await releaseLocalAgent(staleLease);
+    expect(__getLocalAgentStateForTests()[0]).toMatchObject({ busyCount: 1 });
+    await releaseLocalAgent(currentLease);
+    expect(__getLocalAgentStateForTests()[0]).toMatchObject({ busyCount: 0 });
+  });
+
+  it('requires consecutive successful missing-heartbeat reads and resets after recovery or Redis failure', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 4,
+      idleTtlMs: 86_400_000,
+    });
+    mockGetHeartbeat
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce('alive')
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('Redis unavailable'))
+      .mockResolvedValue(null);
+    await ensureLocalAgentRunning('healthy');
+    retainLocalAgent('healthy');
+    const child = spawnedChildren[0].child;
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(child.kill).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('ignores a heartbeat response for a child that exited while Redis was responding', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 4,
+      idleTtlMs: 86_400_000,
+    });
+    let respond!: (value: string | null) => void;
+    mockGetHeartbeat.mockResolvedValueOnce(null).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          respond = resolve;
+        }),
+    );
+    await ensureLocalAgentRunning('replaced');
+    retainLocalAgent('replaced');
+    await vi.advanceTimersByTimeAsync(40_000);
+    stopLocalAgent('replaced');
+    spawnedChildren[0].child.exitCode = 0;
+    spawnedChildren[0].child.emit('exit', 0, null);
+    await ensureLocalAgentRunning('replaced');
+    retainLocalAgent('replaced');
+    respond(null);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spawnedChildren[1].child.kill).not.toHaveBeenCalled();
+    expect(__getLocalAgentStateForTests()[0]).toMatchObject({ busyCount: 1 });
+  });
+
+  it('releases each process lease only once', async () => {
+    await ensureLocalAgentRunning('account-1');
+    const first = retainLocalAgent('account-1');
+    const second = retainLocalAgent('account-1');
+    await releaseLocalAgent(first);
+    await releaseLocalAgent(first);
+    expect(__getLocalAgentStateForTests()[0]).toMatchObject({
+      busyCount: 1,
+      hasIdleTimer: false,
+    });
+    await releaseLocalAgent(second);
+    expect(__getLocalAgentStateForTests()[0]).toMatchObject({
+      busyCount: 0,
+      hasIdleTimer: true,
+    });
   });
 
   it('reclaims the oldest idle runtime before spawning over maxProcesses', async () => {
@@ -502,13 +605,18 @@ describe('stopAllLocalAgents（停机时序）', () => {
     expect(resolved).toBe(true);
   });
 
-  it('子进程拒不退出时到达等待上限也 resolve，且 shutdown 强杀延迟晚于 daemon 的 30s drain', async () => {
+  it('waits for an already retiring child and force-kills it after the shutdown drain window', async () => {
     await ensureLocalAgentRunning('account-a');
+    stopLocalAgent('account-a');
 
-    const stopPromise = stopAllLocalAgents();
+    let resolved = false;
+    const stopPromise = stopAllLocalAgents().then(() => {
+      resolved = true;
+    });
 
     // 30 秒内（daemon drain 窗口）绝不能 SIGKILL。
     await vi.advanceTimersByTimeAsync(30_000);
+    expect(resolved).toBe(false);
     expect(spawnedChildren[0].child.kill).not.toHaveBeenCalledWith('SIGKILL');
 
     // 到 36 秒：强杀定时器（35s）触发 + 等待上限（36s）到期。
