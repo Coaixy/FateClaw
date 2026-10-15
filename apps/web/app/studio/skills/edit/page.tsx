@@ -53,18 +53,21 @@ function EditStudioSkillPageContent() {
 
   const handleUpdate = async (data: SkillBundleEditorData) => {
     if (!skillId || !skill) return;
-    await skillsApi.userUpdate(skillId, { ...data, base_revision_id: skill.revision_id });
+    await skillsApi.userUpdate(skillId, {
+      ...data,
+      base_revision_id: skill.revision_id,
+    });
     toast('success', 'Skill Bundle 已更新');
     router.push('/studio');
   };
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-7xl space-y-6">
+    <AppShell wide>
+      <div className="space-y-4">
         <div className="space-y-3">
           <Link
             href="/studio"
-            className="inline-flex items-center gap-1.5 text-[12px] text-muted transition-colors hover:text-ink"
+            className="inline-flex min-h-10 items-center gap-1.5 text-[12px] text-muted transition-colors hover:text-ink"
           >
             <ArrowLeft size={13} />
             返回术数开发
@@ -92,10 +95,7 @@ function EditStudioSkillPageContent() {
             没找到这个技能，可能已被删除或你没有访问权限。
           </div>
         ) : (
-          <SkillBundleEditor
-            initial={skill}
-            onSave={handleUpdate}
-          />
+          <SkillBundleEditor initial={skill} onSave={handleUpdate} />
         )}
       </div>
     </AppShell>

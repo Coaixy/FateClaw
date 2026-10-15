@@ -14,6 +14,8 @@ Each runtime cache namespace belongs to one process on one deployment host. Acti
 
 Admin storage summaries distinguish persisted revisions from unresolved legacy imports. List queries return file and revision counts without transferring full content. Detail queries return current files and at most 20 recent revision summaries in the same database snapshot. The UI separates storage state from enablement and visibility, and reports migration reasons without claiming that every runtime cache or regional database replica is current.
 
+The authoring UI shares one file workspace between skill creation and editing. A collapsible file navigator selects the raw text editor, including the complete `SKILL.md` frontmatter; switching files and opening Markdown previews retain unsaved content. Save submits the complete file array and category through the existing revision contract. File creation and renaming validate relative paths and reject file/directory conflicts; the required `SKILL.md` cannot be renamed or deleted.
+
 ## Invariants and validation
 
 - Store complete immutable content revisions separately from `user_custom_skills`; enforce revision ownership at the database pointer.
