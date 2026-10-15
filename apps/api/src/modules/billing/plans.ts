@@ -25,10 +25,9 @@ import {
   type SpendableBalanceState,
 } from '../../shared/balance-coins.js';
 import {
-  normalizeMembershipPlanKey,
-  resolveMembershipConfigId,
-  resolveMembershipPlanKey,
-} from '../../shared/membership-plans.js';
+  MEMBERSHIP_PLAN_KEY,
+  type MembershipPlanKey,
+} from '@fateclaw/contracts/membership';
 import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
 
 export interface BillingReservation {
@@ -55,7 +54,7 @@ export interface MonthlyMeteredBillingSummary {
 export interface MembershipBillingSummary {
   enabled: boolean;
   active: boolean;
-  planKey: string | null;
+  planKey: MembershipPlanKey | null;
   monthlyPriceCoins: number;
   displayPriceCoins: number;
   currentPeriodStart: string | null;
@@ -63,7 +62,7 @@ export interface MembershipBillingSummary {
 }
 
 export interface MembershipPlanSummary {
-  planKey: string;
+  planKey: MembershipPlanKey;
   name: string;
   enabled: boolean;
   monthlyPriceCoins: number;
@@ -170,7 +169,6 @@ export async function reserveBillingForRequest(input: {
   requestId: string;
   runtime: LlmRuntimeSnapshot;
   entitlementSnapshot?: {
-    planKey: string | null;
     membershipActive: boolean;
     availableCoins: number;
     wallet?: SpendableBalanceState & { inArrears?: boolean };
@@ -420,9 +418,7 @@ export async function getMembershipBillingSummary(
   return {
     enabled: overview.config.enabled,
     active: overview.active,
-    planKey: overview.membership?.plan_key
-      ? normalizeMembershipPlanKey(overview.membership.plan_key)
-      : null,
+    planKey: overview.membership?.plan_key ?? null,
     monthlyPriceCoins: overview.config.monthly_price_coins,
     displayPriceCoins: overview.config.display_price_coins,
     currentPeriodStart: overview.active
@@ -440,9 +436,7 @@ function membershipOverviewToBillingSummary(
   return {
     enabled: overview.config.enabled,
     active: overview.active,
-    planKey: overview.membership?.plan_key
-      ? normalizeMembershipPlanKey(overview.membership.plan_key)
-      : null,
+    planKey: overview.membership?.plan_key ?? null,
     monthlyPriceCoins: overview.config.monthly_price_coins,
     displayPriceCoins: overview.config.display_price_coins,
     currentPeriodStart: overview.active
@@ -491,7 +485,7 @@ export async function getMembershipPlanSummaries(): Promise<
 > {
   const configs = await getMembershipPlanConfigs();
   return configs.map((config) => ({
-    planKey: resolveMembershipPlanKey(config.id),
+    planKey: config.id,
     name: config.name,
     enabled: config.enabled,
     monthlyPriceCoins: config.monthly_price_coins,
@@ -500,19 +494,14 @@ export async function getMembershipPlanSummaries(): Promise<
   }));
 }
 
-/**
- * 读取全部会员套餐配置（含已停用），仅供管理后台改价界面使用。
- *
- * @returns 套餐摘要列表（不过滤 enabled）。
- * @remarks 用户侧只看在售（enabled）套餐；后台需看到全部以便切换启用状态。单层化后仅 clarity 一档。
- */
+/** Returns the membership configuration, including when sales are disabled. */
 export async function getMembershipPlanConfigsForAdmin(): Promise<
   MembershipPlanSummary[]
 > {
   const config = await getMembershipConfig();
   return [
     {
-      planKey: resolveMembershipPlanKey(config.id),
+      planKey: config.id,
       name: config.name,
       enabled: config.enabled,
       monthlyPriceCoins: config.monthly_price_coins,
@@ -522,17 +511,7 @@ export async function getMembershipPlanConfigsForAdmin(): Promise<
   ];
 }
 
-/**
- * 管理后台更新会员套餐配置（价格 / 展示价 / 名称 / 启用状态）。
- *
- * 单层化后 planKey 实际只会是 clarity；其它值会被归一回 clarity。
- * 校验：价格非负、展示价不低于月费、名称非空。写入后无缓存层，
- * 用户侧下次 GET /api/billing 即读到新价。
- *
- * @param planKey 套餐 key（当前仅 clarity 有效）。
- * @param patch 可选更新字段。
- * @returns 成功返回更新后的套餐摘要；校验失败或套餐不存在返回 fail。
- */
+/** Updates the membership configuration without accepting unknown identities. */
 export async function updateMembershipPlanConfig(
   planKey: string,
   patch: {
@@ -542,8 +521,9 @@ export async function updateMembershipPlanConfig(
     enabled?: boolean;
   },
 ): Promise<ServiceResult<MembershipPlanSummary>> {
-  const normalizedPlanKey = normalizeMembershipPlanKey(planKey);
-  const configId = resolveMembershipConfigId(normalizedPlanKey);
+  if (planKey !== MEMBERSHIP_PLAN_KEY) {
+    return fail(404, '会员套餐配置不存在');
+  }
 
   if (
     patch.monthlyPriceCoins !== undefined &&
@@ -563,7 +543,7 @@ export async function updateMembershipPlanConfig(
     patch.monthlyPriceCoins !== undefined ||
     patch.displayPriceCoins !== undefined
   ) {
-    const current = await getMembershipConfig(normalizedPlanKey);
+    const current = await getMembershipConfig();
     const finalMonthly = patch.monthlyPriceCoins ?? current.monthly_price_coins;
     const finalDisplay = patch.displayPriceCoins ?? current.display_price_coins;
     if (finalDisplay < finalMonthly) {
@@ -576,7 +556,7 @@ export async function updateMembershipPlanConfig(
   }
 
   const updated = await updateMembershipConfig({
-    id: configId,
+    id: MEMBERSHIP_PLAN_KEY,
     monthlyPriceCoins: patch.monthlyPriceCoins,
     displayPriceCoins: patch.displayPriceCoins,
     name: patch.name?.trim(),
@@ -588,7 +568,7 @@ export async function updateMembershipPlanConfig(
   }
 
   return ok({
-    planKey: resolveMembershipPlanKey(updated.id),
+    planKey: updated.id,
     name: updated.name,
     enabled: updated.enabled,
     monthlyPriceCoins: updated.monthly_price_coins,

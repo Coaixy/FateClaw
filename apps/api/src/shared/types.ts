@@ -1,3 +1,5 @@
+import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
+
 // --- FateClaw Types ---
 
 export type UserRole = 'consumer' | 'creator' | 'both' | 'admin';
@@ -27,7 +29,7 @@ export type BalanceGrantSource =
 export type BalanceGrantStatus = 'active' | 'exhausted' | 'expired' | 'revoked';
 
 export interface MembershipConfig {
-  id: string;
+  id: MembershipPlanKey;
   enabled: boolean;
   name: string;
   monthly_price_coins: number;
@@ -39,7 +41,7 @@ export type UserMembershipStatus = 'active' | 'cancelled';
 
 export interface UserMembership {
   user_id: string;
-  plan_key: string;
+  plan_key: MembershipPlanKey;
   status: UserMembershipStatus;
   current_period_start: string;
   current_period_end: string;

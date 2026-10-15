@@ -1,3 +1,8 @@
+import {
+  MEMBERSHIP_PLAN_KEY,
+  type MembershipPlanKey,
+} from '@fateclaw/contracts/membership';
+
 /**
  * 计费 HTTP 场景服务层。
  *
@@ -74,12 +79,12 @@ export async function getBillingOverview(
   );
 }
 
-/** 订阅去抖窗口：同一用户同档位在此窗口内的重复提交会被拒，防连点/重试重复扣费。 */
+/** All membership purchases for a user share the same debounce window. */
 const SUBSCRIBE_DEBOUNCE_MS = 10_000;
 
 export async function subscribeCurrentUserMembership(
   userId: string,
-  planKey?: string,
+  planKey: MembershipPlanKey = MEMBERSHIP_PLAN_KEY,
 ): Promise<ServiceResult<MembershipSubscribeResultDto>> {
   const user = await getUserById(userId);
   if (!user) {
@@ -91,7 +96,7 @@ export async function subscribeCurrentUserMembership(
   // - 成功开通后锁保留到 TTL 自然过期，挡住窗口内的重复点击；
   // - 开通失败（未扣费）主动释放锁，允许用户（如充值后）立即重试；
   // - Redis 异常时 fail-open，绝不因去抖阻断正常开通。
-  const lockKey = `membership:subscribe:lock:${user.id}:${planKey ?? 'default'}`;
+  const lockKey = `membership:subscribe:lock:${user.id}:${planKey}`;
   let lockAcquired = false;
   try {
     lockAcquired =

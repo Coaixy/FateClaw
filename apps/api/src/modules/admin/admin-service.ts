@@ -1,3 +1,5 @@
+import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
+
 /**
  * 管理后台服务层。
  *
@@ -835,7 +837,7 @@ export async function resetAdminUserPassword(input: {
  */
 export async function setAdminUserMembership(input: {
   userId: string;
-  planKey: string;
+  planKey: MembershipPlanKey;
   currentPeriodEnd: string;
 }): Promise<AdminUserMembershipState> {
   await setUserMembershipForAdmin({

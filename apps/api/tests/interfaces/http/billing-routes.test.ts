@@ -66,32 +66,35 @@ describe('billingRoutes', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('rejects legacy membership plan keys at the billing HTTP boundary', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/membership/subscribe',
-      payload: {
-        plan_key: 'fateclaw_plus',
-      },
-    });
+  it.each(['fateclaw_clarity', 'unknown'])(
+    'rejects unsupported membership identity %s',
+    async (planKey) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/membership/subscribe',
+        payload: {
+          plan_key: planKey,
+        },
+      });
 
-    expect(response.statusCode).toBe(400);
-    expect(subscribeCurrentUserMembership).not.toHaveBeenCalled();
-  });
+      expect(response.statusCode).toBe(400);
+      expect(subscribeCurrentUserMembership).not.toHaveBeenCalled();
+    },
+  );
 
   it('accepts current membership plan keys', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/membership/subscribe',
       payload: {
-        plan_key: 'fateclaw_clarity',
+        plan_key: 'membership',
       },
     });
 
     expect(response.statusCode).toBe(200);
     expect(subscribeCurrentUserMembership).toHaveBeenCalledWith(
       'user-1',
-      'fateclaw_clarity',
+      'membership',
     );
   });
 });

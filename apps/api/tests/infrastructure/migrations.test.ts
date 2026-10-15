@@ -137,15 +137,21 @@ describe('runDatabaseMigrations', () => {
   });
 
   it('upgrades a database recorded through 0075 using only the missing migrations', async () => {
+    const boundary = '0075_add_redemption_codes';
     const { client, calls } = createMockClient(
-      MIGRATIONS.filter(
-        (migration) => migration.id <= '0075_add_redemption_codes',
-      ).map((migration) => migration.id),
+      MIGRATIONS.filter((migration) => migration.id <= boundary).map(
+        (migration) => migration.id,
+      ),
     );
+    const missingIds = MIGRATIONS.filter(
+      (migration) => migration.id > boundary,
+    ).map((migration) => migration.id);
 
     await runDatabaseMigrations(client as never);
 
-    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(5);
+    expect(calls.filter((call) => call.sql === 'BEGIN')).toHaveLength(
+      missingIds.length,
+    );
     expect(
       calls.some((call) => call.sql.includes('CREATE TABLE public.users')),
     ).toBe(false);
@@ -153,13 +159,7 @@ describe('runDatabaseMigrations', () => {
       calls
         .filter((call) => call.sql.includes('INSERT INTO schema_migrations'))
         .map((call) => call.params?.[0]),
-    ).toEqual([
-      '0076_durable_agent_requests',
-      '0077_drop_bazi_cases',
-      '0078_drop_public_financial_ledger',
-      '0079_drop_announcements',
-      '0080_drop_redemption_codes',
-    ]);
+    ).toEqual(missingIds);
   });
 
   it('skips migrations already recorded in the ledger', async () => {
@@ -182,7 +182,7 @@ describe('runDatabaseMigrations', () => {
   it('applies migrations appended after the newest baseline as separate upgrades', async () => {
     const migrations = MIGRATIONS as DatabaseMigration[];
     migrations.push({
-      id: '0081_synthetic_upgrade',
+      id: '9999_synthetic_upgrade',
       description: 'Synthetic upgrade after the snapshot',
       async up(client) {
         await client.query('CREATE TABLE synthetic_upgrade (id INTEGER)');

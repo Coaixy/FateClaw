@@ -1,3 +1,4 @@
+import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
 import type {
   BillingStatusDto,
   CreateRechargeOrderResponseDto,
@@ -37,7 +38,8 @@ export interface BalanceGrant {
   updated_at: string;
 }
 
-const billingStatusRequestCache = createAuthScopedInFlightCache<BillingStatus>();
+const billingStatusRequestCache =
+  createAuthScopedInFlightCache<BillingStatus>();
 const usageRequestCache = createAuthScopedInFlightCache<UsageStats>();
 export const BILLING_CHANGED_EVENT = 'fateclaw:billing-changed';
 
@@ -60,18 +62,18 @@ export const billingApi = {
       requestJson<BillingStatus>('/api/billing'),
     ),
   usage: () =>
-    usageRequestCache.get(() =>
-      requestJson<UsageStats>('/api/billing/usage'),
-    ),
-  dailyUsage: () =>
-    requestJson<DailyUsageRow[]>('/api/billing/usage/daily'),
+    usageRequestCache.get(() => requestJson<UsageStats>('/api/billing/usage')),
+  dailyUsage: () => requestJson<DailyUsageRow[]>('/api/billing/usage/daily'),
   transactions: () =>
     requestJson<WalletTransaction[]>('/api/billing/transactions'),
-  subscribeMembership: (data?: { plan_key?: string }) =>
-    requestJson<MembershipSubscribeResult>('/api/billing/membership/subscribe', {
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    }).finally(clearBillingCache),
+  subscribeMembership: (data?: { plan_key?: MembershipPlanKey }) =>
+    requestJson<MembershipSubscribeResult>(
+      '/api/billing/membership/subscribe',
+      {
+        method: 'POST',
+        body: data ? JSON.stringify(data) : undefined,
+      },
+    ).finally(clearBillingCache),
   rechargeOrders: () =>
     requestJson<RechargeOrder[]>('/api/billing/recharge/orders'),
   rechargeStats: () =>

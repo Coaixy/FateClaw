@@ -168,7 +168,6 @@ function resolveInboxPriority(
 
 function entitlementMetadata(snapshot: RuntimeEntitlementSnapshot) {
   return {
-    planKey: snapshot.planKey,
     membershipActive: snapshot.membershipActive,
     availableCoins: snapshot.wallet.availableCoins,
     wallet: {

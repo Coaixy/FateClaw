@@ -24,7 +24,6 @@ import {
 /**
  * 会员配置页：运营可视化调整卦师会员的月费 / 展示价 / 名称 / 上架状态。
  *
- * 单层化后实际只有 clarity 一档；用列表渲染保持对多档的前向兼容。
  * 改动经后端 PATCH 落库，无缓存层，用户端下次读取即生效。
  */
 export default function AdminMembershipConfigPage() {

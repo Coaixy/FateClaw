@@ -15,7 +15,6 @@ import {
   revokeUserApiKey,
   toApiKeyDto,
 } from '../../infrastructure/db.js';
-import { hasPaidMembershipEntitlement } from '../../shared/membership-plans.js';
 
 /** 生成 API Key 的请求体校验。 */
 const CreateApiKeySchema = z.object({
@@ -44,9 +43,9 @@ export async function apiKeysRoutes(app: FastifyInstance): Promise<void> {
   app.post('/', async (request, reply) => {
     const userId = request.user.userId;
 
-    // 会员门槛：仅 fateclaw_clarity 有效会员可生成 key。
+    // Creating a key requires an active membership; existing keys have separate authentication.
     const membership = await getMembershipOverview(userId);
-    if (!hasPaidMembershipEntitlement(membership)) {
+    if (!membership.active) {
       return reply
         .code(403)
         .send({ error: '仅会员可生成 API Key，请先开通会员' });

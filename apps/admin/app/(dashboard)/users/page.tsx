@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  DEFAULT_MEMBERSHIP_NAME,
+  MEMBERSHIP_PLAN_KEY,
+  type MembershipPlanKey,
+} from '@fateclaw/contracts/membership';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   admin,
@@ -154,20 +159,13 @@ function replaceUsersQuery(search: string, page: number) {
 }
 
 function membershipPlanLabel(
-  planKey: string | null,
+  planKey: MembershipPlanKey | null,
   plans: UserDetail['membership_plans'],
 ) {
   if (!planKey) return '—';
   const configuredName = plans.find((plan) => plan.plan_key === planKey)?.name;
   if (configuredName) return configuredName;
-  if (planKey === 'fateclaw_deep' || planKey === 'fateclaw_pro') {
-    return 'FateClaw Deep';
-  }
-  if (planKey === 'fateclaw_insight' || planKey === 'fateclaw_plus') {
-    return 'FateClaw Insight';
-  }
-  if (planKey === 'fateclaw_clarity') return 'FateClaw Clarity';
-  return planKey;
+  return DEFAULT_MEMBERSHIP_NAME;
 }
 
 // ─── 小组件 ───
@@ -395,7 +393,6 @@ function UserRow({
   const [bonusAmount, setBonusAmount] = useState('');
   const [bonusNote, setBonusNote] = useState('');
   const [bonusExpiresAt, setBonusExpiresAt] = useState('');
-  const [membershipPlan, setMembershipPlan] = useState('');
   const [membershipEndDate, setMembershipEndDate] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
@@ -451,19 +448,6 @@ function UserRow({
 
   useEffect(() => {
     if (!detail) return;
-    // 单层化后旧档（insight/deep）已停用：仅当用户当前档仍是在售档时才默认选中它，
-    // 否则回落到第一个在售档（卦师使用权）。避免给存量旧档会员默认选中停用档，
-    // 导致点"设置会员"提交时被后端以"会员套餐未启用"拒绝。
-    const currentPlanKey = detail.membership.plan_key;
-    const currentPlanEnabled = detail.membership_plans.some(
-      (plan) => plan.plan_key === currentPlanKey && plan.enabled,
-    );
-    setMembershipPlan(
-      (currentPlanEnabled ? currentPlanKey : null) ??
-        detail.membership_plans.find((plan) => plan.enabled)?.plan_key ??
-        detail.membership_plans[0]?.plan_key ??
-        'fateclaw_clarity',
-    );
     setMembershipEndDate(
       dateTimeInputValue(detail.membership.current_period_end) ||
         defaultMembershipEndDateTime(),
@@ -583,10 +567,6 @@ function UserRow({
   };
 
   const handleSetMembership = async () => {
-    if (!membershipPlan) {
-      setMsg('请选择会员套餐');
-      return;
-    }
     if (!membershipEndDate) {
       setMsg('请选择会员有效期');
       return;
@@ -607,7 +587,7 @@ function UserRow({
     setMsg('');
     try {
       const state = await admin.setUserMembership(user.id, {
-        plan_key: membershipPlan,
+        plan_key: MEMBERSHIP_PLAN_KEY,
         current_period_end: currentPeriodEnd,
       });
       applyMembershipState(state);
@@ -784,8 +764,7 @@ function UserRow({
                     <div className="grid gap-2 text-[12px] text-muted sm:grid-cols-2">
                       <span>本月 Token {fmt(user.monthly_tokens_used)}</span>
                       <span>
-                        官方模型扣费{' '}
-                        {formatCoins(user.monthly_charged_coins)}
+                        官方模型扣费 {formatCoins(user.monthly_charged_coins)}
                       </span>
                     </div>
                   </section>
@@ -1022,7 +1001,9 @@ function UserRow({
                       />
                       <DataCell
                         label="到期"
-                        value={formatDate(detail.membership.current_period_end)}
+                            value={formatDate(
+                              detail.membership.current_period_end,
+                            )}
                       />
                     </div>
 
@@ -1044,7 +1025,7 @@ function UserRow({
                       <button
                         type="button"
                         onClick={() => void handleSetMembership()}
-                        disabled={updatingMembership || !membershipPlan}
+                            disabled={updatingMembership}
                         className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-[13px] font-medium text-on-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {updatingMembership && (
@@ -1366,10 +1347,7 @@ export default function AdminUsersPage() {
       totalAvailableCoins,
       todayMessages,
       activeMembers: users.filter((u) => u.membership?.active).length,
-      chargedCoins: users.reduce(
-        (sum, u) => sum + u.monthly_charged_coins,
-        0,
-      ),
+      chargedCoins: users.reduce((sum, u) => sum + u.monthly_charged_coins, 0),
     };
   }, [users]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

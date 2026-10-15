@@ -1,3 +1,5 @@
+import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
+
 import type {
   AdminModelSettingsOverviewDto,
   AdminModelSettingsUpdateDto,
@@ -746,7 +748,7 @@ export const admin = {
     ),
   setUserMembership: (
     id: string,
-    data: { plan_key: string; current_period_end: string },
+    data: { plan_key: MembershipPlanKey; current_period_end: string },
   ) =>
     adminRequest<AdminMembershipState>(
       `/api/admin/users/${encodeURIComponent(id)}/membership`,
@@ -836,9 +838,9 @@ export const admin = {
   /** 读取全部会员套餐配置（含已停用，后台改价用）。 */
   membershipConfig: () =>
     adminRequest<AdminMembershipConfigResponse>('/api/admin/membership-config'),
-  /** 更新指定套餐配置（planKey 当前只有 fateclaw_clarity）。 */
+  /** Updates the membership configuration. */
   updateMembershipConfig: (
-    planKey: string,
+    planKey: MembershipPlanKey,
     data: AdminMembershipConfigUpdate,
   ) =>
     adminRequest<AdminMembershipPlanConfig>(

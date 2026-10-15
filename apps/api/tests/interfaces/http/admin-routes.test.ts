@@ -462,7 +462,7 @@ describe('adminRoutes authentication throttling', () => {
     }
   });
 
-  it('rejects legacy membership plan keys at the admin HTTP boundary', async () => {
+  it('rejects unsupported membership identities at the admin HTTP boundary', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/users/user-1/membership',
@@ -470,7 +470,7 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-manager-key',
       },
       payload: {
-        plan_key: 'fateclaw_plus',
+        plan_key: 'unknown',
         current_period_end: '2026-07-01T00:00:00.000+08:00',
       },
     });
@@ -517,7 +517,7 @@ describe('adminRoutes authentication throttling', () => {
         'x-admin-key': 'test-user-manager-key',
       },
       payload: {
-        plan_key: 'fateclaw_insight',
+        plan_key: 'membership',
         current_period_end: '2026-07-01T00:00:00.000+08:00',
       },
     });

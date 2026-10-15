@@ -1,3 +1,5 @@
+import type { MembershipPlanKey } from '../membership/index.js';
+
 /**
  * 计费域跨端契约。
  */
@@ -67,7 +69,7 @@ export interface BillingStatusDto {
 
 /** 会员权益时间轴片段，按实际生效顺序返回给前端展示。 */
 export interface MembershipEntitlementDto {
-  plan_key: string;
+  plan_key: MembershipPlanKey;
   name: string;
   effective_start: string;
   effective_end: string;
@@ -77,7 +79,7 @@ export interface MembershipEntitlementDto {
 export interface MembershipStatusDto {
   enabled: boolean;
   active: boolean;
-  plan_key: string | null;
+  plan_key: MembershipPlanKey | null;
   monthly_price_coins: number;
   display_price_coins: number;
   current_period_start: string | null;
@@ -85,7 +87,7 @@ export interface MembershipStatusDto {
 }
 
 export interface MembershipPlanDto {
-  plan_key: string;
+  plan_key: MembershipPlanKey;
   name: string;
   enabled: boolean;
   monthly_price_coins: number;

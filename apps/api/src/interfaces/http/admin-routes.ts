@@ -69,7 +69,7 @@ import {
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
 } from '../../shared/model-context-window.js';
 import { PI_THINKING_LEVELS } from '../../shared/types.js';
-import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { MEMBERSHIP_PLAN_KEY } from '@fateclaw/contracts/membership';
 import {
   calculateAvailableSpendableCoins,
   roundCoinsToCents,
@@ -211,7 +211,7 @@ const AdminResetUserPasswordSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(128),
 });
 
-const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
+const MembershipPlanKeySchema = z.literal(MEMBERSHIP_PLAN_KEY);
 
 const AdminSetUserMembershipSchema = z
   .object({

@@ -16,7 +16,7 @@ import {
   listRechargeOrdersForUser,
   syncRechargeOrderForUser,
 } from '../../modules/billing/recharge-service.js';
-import { ACTIVE_MEMBERSHIP_PLAN_KEYS } from '../../shared/membership-plans.js';
+import { MEMBERSHIP_PLAN_KEY } from '@fateclaw/contracts/membership';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
 import { getRedis } from '../../infrastructure/redis.js';
 
@@ -39,7 +39,7 @@ async function allowRechargeNotify(ip: string): Promise<boolean> {
   }
 }
 
-const MembershipPlanKeySchema = z.enum(ACTIVE_MEMBERSHIP_PLAN_KEYS);
+const MembershipPlanKeySchema = z.literal(MEMBERSHIP_PLAN_KEY);
 
 const MembershipSubscribeSchema = z
   .object({

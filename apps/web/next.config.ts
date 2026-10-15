@@ -45,10 +45,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
-  // @fateclaw/contracts 是 workspace 包（手写 .js + 同名 .d.ts，无 .ts 源）。
-  // 不列入 transpilePackages 时，turbopack 对 membership 这类"同目录 .js+.d.ts 共存"的子模块
-  // 会优先用 .d.ts（export declare 运行时擦除为空壳），致 normalizeMembershipPlanKey 运行时为 undefined。
-  // 列入后 Next 把该包当源码转译，正确加载 .js 运行时实现。
+  // Compile shared workspace contracts with the application.
   transpilePackages: ['@fateclaw/contracts'],
   // Production: static export served by Fastify / static host.
   // 使用 trailingSlash 让导出结果落成 route/index.html，

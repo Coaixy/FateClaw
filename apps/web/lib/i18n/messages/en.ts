@@ -650,8 +650,6 @@ export const enMessages = {
     submitLogin: 'Log in',
   },
   aiChat: {
-    plusRequired:
-      'Manual charting remains available. FateClaw Clarity or higher is required for AI interpretation.',
     loadPaipanFailed: 'Failed to load charting systems',
     sendFailed: 'Failed to send. Please try again later',
     previousMessageProcessing:
@@ -713,13 +711,9 @@ export const enMessages = {
     messageList: {
       recharge: 'Add credits',
       membershipCenter: 'Membership',
-      openPlus: 'Open Clarity',
       billingNoticeArrearsTitle: 'Your balance is overdue',
       billingNoticeArrearsDescription:
-        'Manual charting remains available. Add credits before sending AI interpretation, or manage Clarity in membership.',
-      billingNoticePlusTitle: 'AI interpretation requires FateClaw Clarity',
-      billingNoticePlusDescription:
-        'Manual charting remains available. Open Clarity to keep sending AI interpretation.',
+        'Manual charting remains available. Add credits to continue AI interpretation.',
       thinkingFallback: 'Thinking...',
       thinking: 'Thinking',
       thought: 'Thought',

@@ -727,7 +727,7 @@ describe('billing repository', () => {
     ).toBe(false);
   });
 
-  it('opens membership by deducting credit balance for the clarity plan', async () => {
+  it('opens membership by deducting credit balance for the membership plan', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-31T00:00:00.000Z'));
 
@@ -749,7 +749,7 @@ describe('billing repository', () => {
         [],
         [
           {
-            id: 'fateclaw_clarity',
+            id: 'membership',
             enabled: true,
             monthly_price_coins: 30,
           },
@@ -760,7 +760,7 @@ describe('billing repository', () => {
         [
           {
             user_id: 'user-1',
-            plan_key: 'fateclaw_clarity',
+            plan_key: 'membership',
             status: 'active',
             current_period_start: '2026-05-31T00:00:00.000Z',
             current_period_end: '2026-06-30T00:00:00.000Z',
@@ -783,7 +783,7 @@ describe('billing repository', () => {
     );
     expect(membershipInsert?.params?.slice(0, 2)).toEqual([
       'user-1',
-      'fateclaw_clarity',
+      'membership',
     ]);
     expect(
       clientCalls.some(
@@ -792,12 +792,6 @@ describe('billing repository', () => {
           call.params?.[2] === 'membership_subscription',
       ),
     ).toBe(true);
-    // 单层化后不再写 membership_allowances 表（迁移 0059 已 DROP）。
-    expect(
-      clientCalls.some((call) =>
-        call.sql.includes('INSERT INTO membership_allowances'),
-      ),
-    ).toBe(false);
   });
 
   it('debounces a duplicate membership subscription within the idempotency window', async () => {
@@ -815,7 +809,7 @@ describe('billing repository', () => {
       [],
       [
         [], // BEGIN
-        [{ id: 'fateclaw_clarity', enabled: true, monthly_price_coins: 30 }], // config
+        [{ id: 'membership', enabled: true, monthly_price_coins: 30 }], // config
       ],
       { duplicate: true }, // DB 去抖查询命中窗口内已有同档订阅
     );
@@ -844,7 +838,7 @@ describe('billing repository', () => {
         [],
         [
           {
-            id: 'fateclaw_clarity',
+            id: 'membership',
             enabled: true,
             monthly_price_coins: 30,
           },
@@ -855,7 +849,7 @@ describe('billing repository', () => {
         [
           {
             user_id: 'user-1',
-            plan_key: 'fateclaw_clarity',
+            plan_key: 'membership',
             status: 'active',
             current_period_start: '2026-07-10T03:00:00.000Z',
             current_period_end: '2026-08-10T03:00:00.000Z',
@@ -867,22 +861,16 @@ describe('billing repository', () => {
       ],
     );
 
-    // 任何旧档传入都归一为 clarity。
-    await subscribeMembershipWithWallet('user-1', 'fateclaw_insight');
+    await subscribeMembershipWithWallet('user-1', 'membership');
 
     const membershipInsert = clientCalls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
     );
-    expect(membershipInsert?.params?.[1]).toBe('fateclaw_clarity');
+    expect(membershipInsert?.params?.[1]).toBe('membership');
     expect(membershipInsert?.params?.slice(2, 4)).toEqual([
       '2026-07-10T03:00:00.000Z',
       '2026-08-10T03:00:00.000Z',
     ]);
-    expect(
-      clientCalls.some((call) =>
-        call.sql.includes('INSERT INTO membership_allowances'),
-      ),
-    ).toBe(false);
   });
 
   it('extends membership by clamping month-end renewal periods without moving the reset anchor', async () => {
@@ -897,7 +885,7 @@ describe('billing repository', () => {
     };
     const currentMembership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_insight',
+      plan_key: 'membership',
       status: 'active',
       current_period_start: '2026-07-31T08:00:00.000Z',
       current_period_end: '2026-08-31T08:00:00.000Z',
@@ -912,11 +900,9 @@ describe('billing repository', () => {
         [],
         [
           {
-            id: 'default',
+            id: 'membership',
             enabled: true,
             monthly_price_coins: 30,
-            monthly_allowance_units: 3000000,
-            standard_price_per_million_units_coins: 10,
           },
         ],
         [],
@@ -928,22 +914,12 @@ describe('billing repository', () => {
             current_period_end: '2026-09-30T08:00:00.000Z',
           },
         ],
-        [
-          {
-            id: 'allowance-1',
-            user_id: 'user-1',
-            plan_key: 'fateclaw_insight',
-            period_start: '2026-07-31T08:00:00.000Z',
-            period_end: '2026-08-31T08:00:00.000Z',
-            allowance_units: 3000000,
-            used_units: 0,
-          },
-        ],
+        [],
         [],
       ],
     );
 
-    await subscribeMembershipWithWallet('user-1', 'fateclaw_insight');
+    await subscribeMembershipWithWallet('user-1', 'membership');
 
     const membershipInsert = clientCalls.find((call) =>
       call.sql.includes('INSERT INTO user_memberships'),
@@ -966,7 +942,7 @@ describe('billing repository', () => {
     });
     const membership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_clarity',
+      plan_key: 'membership',
       status: 'active',
       current_period_start: '2026-06-15T00:00:00.000Z',
       current_period_end: '2026-07-31T15:59:59.999Z',
@@ -980,7 +956,7 @@ describe('billing repository', () => {
         [],
         [
           {
-            id: 'fateclaw_clarity',
+            id: 'membership',
             enabled: true,
             monthly_price_coins: 30,
           },
@@ -994,8 +970,7 @@ describe('billing repository', () => {
     await expect(
       setUserMembershipForAdmin({
         userId: 'user-1',
-        // 任何旧档传入都归一为 clarity。
-        planKey: 'fateclaw_insight',
+        planKey: 'membership',
         currentPeriodEnd: '2026-07-31T15:59:59.999Z',
       }),
     ).resolves.toEqual(membership);
@@ -1005,19 +980,13 @@ describe('billing repository', () => {
     );
     expect(membershipInsert?.params).toEqual([
       'user-1',
-      'fateclaw_clarity',
+      'membership',
       '2026-06-15T00:00:00.000Z',
       '2026-07-31T15:59:59.999Z',
     ]);
     expect(
       clientCalls.some((call) =>
         call.sql.includes('INSERT INTO wallet_transactions'),
-      ),
-    ).toBe(false);
-    // 单层化后不再写 membership_allowances。
-    expect(
-      clientCalls.some((call) =>
-        call.sql.includes('INSERT INTO membership_allowances'),
       ),
     ).toBe(false);
   });
@@ -1039,26 +1008,26 @@ describe('billing repository', () => {
     expect(clientCalls[1]?.params).toEqual(['user-1']);
   });
 
-  it('returns the single-tier entitlement timeline for an active clarity member', async () => {
+  it('returns the entitlement period for an active member', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
 
-    const clarityMembership = {
+    const membership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_clarity',
+      plan_key: 'membership',
       status: 'active',
       current_period_start: '2026-06-01T00:00:00.000Z',
       current_period_end: '2026-07-01T00:00:00.000Z',
       created_at: '2026-06-01T00:00:00.000Z',
     };
-    // getMembershipEntitlements 序列：SELECT user_memberships，再 ensure clarity config（仅一次）。
+    // getMembershipEntitlements 序列：SELECT user_memberships，再 ensure membership config（仅一次）。
     const { calls } = createMockPool([
-      [clarityMembership],
+      [membership],
       [
         {
-          id: 'fateclaw_clarity',
+          id: 'membership',
           enabled: true,
-          name: 'FateClaw Clarity',
+          name: '卦师使用权',
           monthly_price_coins: 10,
         },
       ],
@@ -1066,25 +1035,25 @@ describe('billing repository', () => {
 
     await expect(getMembershipEntitlements('user-1')).resolves.toEqual([
       {
-        plan_key: 'fateclaw_clarity',
-        name: 'FateClaw Clarity',
+        plan_key: 'membership',
+        name: '卦师使用权',
         effective_start: '2026-06-01T00:00:00.000Z',
         effective_end: '2026-07-01T00:00:00.000Z',
         is_current: true,
       },
     ]);
     expect(calls[0]?.sql).toContain('FROM user_memberships');
-    expect(calls[0]?.params).toEqual(['user-1', '2026-06-15T00:00:00.000Z']);
+    expect(calls[0]?.params).toEqual(['user-1']);
   });
 
-  it('reads the active membership overview without an allowance field', async () => {
+  it('reads the active membership with its configuration', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
 
-    // 旧档历史 plan_key 归一为 clarity；overview 序列：SELECT user_memberships，再 ensure clarity config。
+    // Read the active membership and its shared configuration.
     const membership = {
       user_id: 'user-1',
-      plan_key: 'fateclaw_clarity',
+      plan_key: 'membership',
       status: 'active',
       current_period_start: '2026-05-30T00:00:00.000Z',
       current_period_end: '2026-07-30T00:00:00.000Z',
@@ -1094,7 +1063,7 @@ describe('billing repository', () => {
       [membership],
       [
         {
-          id: 'fateclaw_clarity',
+          id: 'membership',
           enabled: true,
           monthly_price_coins: 30,
         },
@@ -1104,45 +1073,46 @@ describe('billing repository', () => {
     const overview = await getMembershipOverview('user-1');
     expect(overview).toMatchObject({
       active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
+      membership: { plan_key: 'membership' },
     });
     // 单层化后 overview 不再有 allowance 字段，且不再发起第三个（allowance）查询。
-    expect(overview).not.toHaveProperty('allowance');
     expect(calls).toHaveLength(2);
   });
 
-  it('reads batch membership overviews for a single clarity tier', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+  it.each([true, false])(
+    'reads active memberships when sales are enabled=%s',
+    async (enabled) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
 
-    const membership = {
-      user_id: 'user-1',
-      plan_key: 'fateclaw_clarity',
-      status: 'active',
-      current_period_start: '2026-05-30T00:00:00.000Z',
-      current_period_end: '2026-06-30T00:00:00.000Z',
-      created_at: '2026-05-30T00:00:00.000Z',
-      updated_at: '2026-05-30T00:00:00.000Z',
-    };
-    const config = {
-      id: 'fateclaw_clarity',
-      enabled: true,
-      monthly_price_coins: 30,
-    };
-    // 单层化后 getMembershipPlanConfigs 只 ensure 在售档（clarity）一次，
-    // 且不再有 allowance 查询：批量概览序列收敛为 config(1) + SELECT user_memberships(1)。
-    const { calls } = createMockPool([[config], [membership]]);
+      const membership = {
+        user_id: 'user-1',
+        plan_key: 'membership',
+        status: 'active',
+        current_period_start: '2026-05-30T00:00:00.000Z',
+        current_period_end: '2026-06-30T00:00:00.000Z',
+        created_at: '2026-05-30T00:00:00.000Z',
+        updated_at: '2026-05-30T00:00:00.000Z',
+      };
+      const config = {
+        id: 'membership',
+        enabled,
+        monthly_price_coins: 30,
+      };
+      // 单层化后 getMembershipPlanConfigs 只 ensure 在售档（membership）一次，
+      // 且不再有 allowance 查询：批量概览序列收敛为 config(1) + SELECT user_memberships(1)。
+      const { calls } = createMockPool([[config], [membership]]);
 
-    const overviews = await getMembershipOverviewsByUserIds(['user-1']);
+      const overviews = await getMembershipOverviewsByUserIds(['user-1']);
 
-    const overview = overviews.get('user-1');
-    expect(overview).toMatchObject({
-      active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
-    });
-    expect(overview).not.toHaveProperty('allowance');
-    expect(calls).toHaveLength(2);
-    expect(calls[1]?.sql).toContain('user_id = ANY($1::text[])');
-    expect(calls[1]?.params).toEqual([['user-1']]);
-  });
+      const overview = overviews.get('user-1');
+      expect(overview).toMatchObject({
+        active: true,
+        membership: { plan_key: 'membership' },
+      });
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.sql).toContain('user_id = ANY($1::text[])');
+      expect(calls[1]?.params).toEqual([['user-1']]);
+    },
+  );
 });

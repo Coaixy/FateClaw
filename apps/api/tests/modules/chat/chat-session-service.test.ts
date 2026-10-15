@@ -208,7 +208,7 @@ describe('chat-session-service selected board context', () => {
     });
     mockGetMembershipOverview.mockResolvedValue({
       active: true,
-      membership: { plan_key: 'fateclaw_deep' },
+      membership: { plan_key: 'membership' },
     });
     mockGetAccountsByUserId.mockResolvedValue([
       {

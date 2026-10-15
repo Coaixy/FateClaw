@@ -19,7 +19,7 @@
 | Agent 形态 | **sid 有状态会话** `/api/v1/sessions` | 建会话传一次 model/system/board/skills 拿 sid；之后每轮只发 content，历史/盘面由服务端记着、runtime 原生 resume 复原——贴合 runtime 天生的持久会话纹理，省带宽、board 不重发（原 OpenAI 无状态 `/chat/completions` 已弃用） |
 | 计费 / 模型 | **仅平台官方模型，按 token 扣 coins** | 不做 BYOK，直接复用现有 metered 结算链路，设计大幅简化 |
 | Key 权限 | **单一全权 key** | 一个 key 调排盘 + Agent，无 scope 分支；后续可平滑加 scope |
-| 生成 key 门槛 | **会员（`fateclaw_clarity`）才能生成** | 复用 `hasPaidMembershipEntitlement()` |
+| 生成 key 门槛 | **Active membership is required** | Uses `membership.active` |
 
 ## 2. 设计原则
 
@@ -41,7 +41,7 @@
 │  /api/v1/* 对外域   ──requireApiKey()──┐                          │
 │   ├─ GET  /api/v1/paipan/catalog       │ 解析 key → sha256 → 查表 │
 │   ├─ POST /api/v1/paipan/{type}        │ 校验 status/expires      │
-│   ├─ POST /api/v1/sessions             │ 校验会员有效 + 未欠费     │
+│   ├─ POST /api/v1/sessions             │ Validate key + wallet         │
 │   └─ POST /api/v1/sessions/{sid}/messages                       │
 │                                    │ request.user = {userId}  │
 │  /api/api-keys 管理域 ──requireAuth()(站内 JWT)               │
@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/api/api-keys` | **生成**。前置 `hasPaidMembershipEntitlement()` 会员校验；body `{ name, expires_at? }`；响应**仅此一次**返回明文 `key`，之后无法再取 |
+| `POST` | `/api/api-keys` | **生成**。Requires `membership.active`；body `{ name, expires_at? }`；响应**仅此一次**返回明文 `key`，之后无法再取 |
 | `GET` | `/api/api-keys` | **列出**自己的 key（脱敏：`id/name/key_prefix/last_four/status/last_used_at/created_at/expires_at`） |
 | `DELETE` | `/api/api-keys/:id` | **吊销**（`status='revoked'`, `revoked_at=NOW()`），校验 key 归属当前用户 |
 
@@ -122,19 +122,15 @@ CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_active
 对外 `/api/v1/*` 路由前置（仿 `admin-routes` 的 `onRequest` hook）：
 
 ```
-1. IP 失败退避检查（rateLimitCheck）：超限 → 429 + Retry-After
-2. 从 Authorization: Bearer fc_live_xxx 解析（缺失/格式错 → rateLimitRecordFail → 401）
-3. sha256(明文) → 查 user_api_keys WHERE key_hash = ? AND status='active'
-   未命中 → rateLimitRecordFail(防爆破) → 401
-4. 过期校验（expires_at 非空且已过）→ 401
-5. 按 key 维度限流 fixedWindowRateLimit(`openapi:{keyId}`)：超限 → 429
-   ⚠️ 上移到会员/欠费之前——持合法 key 但欠费/会员过期者同样被限流，
-   否则可零限流地反复触发下一步昂贵的权益快照写事务（已鉴权 DoS）
-6. getRuntimeEntitlementSnapshot(userId)：
-   !hasPaidMembership → 403（key 不物理失效，续费即恢复，见 §10 决策点）
-   wallet.inArrears   → 402
-7. 写 request.apiKeyPrincipal = { userId, apiKeyId, keyName }
-   rateLimitClear（清 IP 退避）+ 节流更新 last_used_at（Redis 标记，最多每 60s 写库）
+1. Parse Authorization: Bearer fc_live_xxx; missing or malformed keys return 401.
+2. Hash the key and locate an active user_api_keys row; unknown or revoked keys return 401.
+3. Validate expires_at; expired keys return 401.
+4. Apply fixedWindowRateLimit(`openapi:{keyId}`); excess requests return 429.
+   This happens before the more expensive entitlement snapshot.
+5. Read getRuntimeEntitlementSnapshot(userId); wallet.inArrears returns 402.
+   Membership expiry does not invalidate a previously issued key.
+6. Set request.apiKeyPrincipal = { userId, apiKeyId, keyName }.
+7. Throttle last_used_at updates to once per 60 seconds.
 ```
 
 > 设计要点：鉴权后只写 `request.apiKeyPrincipal`，**不**伪造 JWT 的 `request.user`；各 /api/v1 路由显式取 `principal.userId` 传给下游（`executeDirectPaipan` / `dispatchAiChatPrompt` / `getRuntimeEntitlementSnapshot`）。这样既复用了以 userId 为主体的现成逻辑，又不与 JWT 鉴权语义混淆。
@@ -364,7 +360,7 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 ## 8. 限流与配额
 
 - 按 api-key 维度：`fixedWindowRateLimit('openapi:{apiKeyId}', limit, 60)`（复用现成限流器，Redis 故障 fail-open）。
-- MVP 统一额度（如 60 次/分钟）；后续可按会员档/key 分级。
+- The same per-key rate limit applies to every caller.
 - `429` 返回 `Retry-After` 头。
 - Agent 调用受 token 余额自然约束（欠费即拒绝起请求）。
 
@@ -384,7 +380,6 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 | 状态码 | 场景 | type / code |
 |---|---|---|
 | 401 | key 缺失/无效/吊销/过期 | `invalid_request_error` / `invalid_api_key` |
-| 403 | 会员过期 | `insufficient_quota` / `membership_required` |
 | 402 | 钱包欠费 | `insufficient_quota` / `insufficient_quota` |
 | 400 | 参数错误（排盘 schema 不过、未知 model） | `invalid_request_error` |
 | 429 | 限流 | `rate_limit_exceeded` |
@@ -397,9 +392,9 @@ pi 会话只持久「对话历史」；盘面清单/persona/授权 skill 都是*
 ### 10.1 已定（已拍板，代码即此实现）
 
 - **排盘对外零计费**：仅按 key 维度限流，不走 reserve/settle（保留扩展点，未来如需可改按次计费）。
-- **会员过期后 key 续费恢复**：调用时校验会员有效，过期返 403 但 **key 不物理失效**，续费即恢复（`api-key-auth.ts`）。
+- **Membership expiry**: an existing valid key continues to work while the wallet is not overdrawn. AI usage then uses the non-member multiplier (`api-key-auth.ts`, `plans.ts`). Creating another key still requires active membership.
 - **model 用内部 `model_key` 直传**：不做 `fateclaw-pro` 别名层；调用方用 `GET /api/v1/models` 返回的 `model_key`。未来如需解耦再加 `public_alias`。
-- **限流统一 60 次/分钟/key**：单层会员（`fateclaw_clarity`）下不存在会员档分级；未来若引入多档会员或需 per-key 自定义额度再扩展。
+- **Rate limit**: 60 calls per minute per key. The single membership identity is `membership`; there are no tier-specific limits.
 
 ### 10.2 保持默认（未特别指定，沿用合理默认，后续可调）
 

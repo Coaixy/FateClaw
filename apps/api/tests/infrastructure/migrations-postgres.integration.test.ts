@@ -156,6 +156,93 @@ describe.skipIf(!connectionString)(
       });
     }, 30000);
 
+    it.each([
+      { name: 'FateClaw Clarity', expectedName: '卦师使用权' },
+      {
+        name: 'Synthetic custom membership',
+        expectedName: 'Synthetic custom membership',
+      },
+    ])(
+      'unifies membership identity while preserving configured values and user state: $name',
+      async ({ name, expectedName }) => {
+        await withDatabase(async (client) => {
+          await replayHistory(client, '0080_drop_redemption_codes');
+          const config = await client.query(
+            `
+          UPDATE membership_config SET name = $1, enabled = false,
+            monthly_price_coins = 37.25, display_price_coins = 66
+          RETURNING *
+        `,
+            [name],
+          );
+          await client.query(`INSERT INTO users (id, created_at, purchased_coins)
+          VALUES ('synthetic-member', NOW(), 123.45),
+                 ('synthetic-cancelled-member', NOW(), 0),
+                 ('synthetic-expired-member', NOW(), 0),
+                 ('synthetic-new-member', NOW(), 0)`);
+          const memberships = await client.query(`
+          INSERT INTO user_memberships
+            (user_id, plan_key, status, current_period_start, current_period_end)
+          VALUES
+            ('synthetic-member', 'fateclaw_clarity', 'active', NOW() - INTERVAL '1 day', NOW() + INTERVAL '1 month'),
+            ('synthetic-cancelled-member', 'fateclaw_plus', 'cancelled', NOW() - INTERVAL '1 month', NOW() - INTERVAL '1 day'),
+            ('synthetic-expired-member', 'fateclaw_clarity', 'active', NOW() - INTERVAL '2 months', NOW() - INTERVAL '1 month')
+          RETURNING *
+        `);
+          await client.query(`INSERT INTO wallet_transactions
+          (id, user_id, kind, amount_coins, note, metadata)
+          VALUES ('synthetic-membership-purchase', 'synthetic-member',
+            'membership_subscription', -37.25, 'Synthetic purchase',
+            '{"planKey":"fateclaw_clarity"}'::jsonb)`);
+          const before = await readSeedFingerprints(client);
+
+          await runDatabaseMigrations(client);
+
+          expect(
+            (await client.query('SELECT * FROM membership_config')).rows,
+          ).toEqual([
+            { ...config.rows[0], id: 'membership', name: expectedName },
+          ]);
+          expect(
+            (
+              await client.query(
+                'SELECT * FROM user_memberships ORDER BY user_id',
+              )
+            ).rows,
+          ).toEqual(
+            memberships.rows
+              .map((row) => ({ ...row, plan_key: 'membership' }))
+              .sort((a, b) => a.user_id.localeCompare(b.user_id)),
+          );
+          const after = await readSeedFingerprints(client);
+          expect(after.users).toBe(before.users);
+          expect(after.wallet_transactions).toBe(before.wallet_transactions);
+
+          const created = await client.query(`INSERT INTO user_memberships
+          (user_id, status, current_period_start, current_period_end)
+          VALUES ('synthetic-new-member', 'active', NOW(), NOW() + INTERVAL '1 month')
+          RETURNING plan_key`);
+          expect(created.rows).toEqual([{ plan_key: 'membership' }]);
+          await expect(
+            client.query(`UPDATE user_memberships SET plan_key = 'unknown'
+          WHERE user_id = 'synthetic-new-member'`),
+          ).rejects.toMatchObject({ code: '23514' });
+          await expect(
+            client.query("UPDATE membership_config SET id = 'unknown'"),
+          ).rejects.toMatchObject({ code: '23514' });
+
+          await runDatabaseMigrations(client);
+          expect(
+            (await client.query('SELECT * FROM membership_config')).rows[0],
+          ).toEqual({
+            ...config.rows[0],
+            id: 'membership',
+            name: expectedName,
+          });
+        });
+      },
+    );
+
     it('upgrades through 0075 without replaying cleanup or changing existing user data', async () => {
       await withDatabase(async (client) => {
         await replayHistory(client, '0075_add_redemption_codes');

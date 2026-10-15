@@ -341,9 +341,6 @@ describe('per-user metered concurrency gate', () => {
   const lowBalanceEntitlement = {
     userId: 'user-1',
     membershipActive: true,
-    planKey: 'clarity',
-    planRank: 1,
-    hasPaidMembership: true,
     hasPriorityQueue: true,
     canUseWechatClaw: false,
     wallet: {
@@ -398,7 +395,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     } as never);
     vi.mocked(getMembershipOverview).mockResolvedValue({
       active: true,
-      membership: { plan_key: 'fateclaw_insight' },
+      membership: { plan_key: 'membership' },
     } as never);
   });
 
@@ -476,7 +473,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
   it('releases normal inbox runtime lease when enqueue fails', async () => {
     vi.mocked(getMembershipOverview).mockResolvedValueOnce({
       active: true,
-      membership: { plan_key: 'fateclaw_clarity' },
+      membership: { plan_key: 'membership' },
     } as never);
     mockLpush.mockRejectedValueOnce(new Error('redis down'));
 
@@ -498,7 +495,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('account-1');
   });
 
-  it('does not allow Insight priority queue entitlement to auto-deliver WeChat requests', async () => {
+  it('does not auto-deliver WeChat requests for an active member', async () => {
     await expect(
       submitInboxRequest({
         accountId: 'account-1',

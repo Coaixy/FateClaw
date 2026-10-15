@@ -628,8 +628,6 @@ export const zhTWMessages = {
     submitLogin: '登入天機',
   },
   aiChat: {
-    plusRequired:
-      '手動排盤可繼續使用；發送 AI 解讀需開通 FateClaw Clarity 或更高等級。',
     loadPaipanFailed: '載入排盤術數失敗',
     sendFailed: '發送失敗，請稍後重試',
     previousMessageProcessing: '上一條訊息仍在處理中，請稍後再試',
@@ -687,13 +685,9 @@ export const zhTWMessages = {
     messageList: {
       recharge: '補充積分',
       membershipCenter: '會員中心',
-      openPlus: '開通 Clarity',
       billingNoticeArrearsTitle: '目前積分已欠費',
       billingNoticeArrearsDescription:
-        '手動排盤可繼續使用；發送 AI 解讀前請先補充積分，或進入會員中心處理 Clarity。',
-      billingNoticePlusTitle: 'AI 解讀需要 FateClaw Clarity',
-      billingNoticePlusDescription:
-        '手動排盤可繼續使用；開通 Clarity 後即可繼續發送 AI 解讀。',
+        '手動排盤可繼續使用；請補充積分後繼續發送 AI 解讀。',
       thinkingFallback: '正在思考...',
       thinking: '思考',
       thought: '思考完成',

@@ -610,8 +610,8 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
   },
   "membership_entitlements": [
     {
-      "plan_key": "fateclaw_clarity",
-      "name": "FateClaw Clarity",
+      "plan_key": "membership",
+      "name": "卦师使用权",
       "effective_start": "2026-06-10T00:00:00.000Z",
       "effective_end": "2026-07-10T00:00:00.000Z",
       "is_current": true
@@ -623,7 +623,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 **会员权益时间轴**
 
-`membership` 仍表示当前实际生效的会员；`membership_entitlements` 返回当前及未来会实际生效的权益片段。会员已单层化（迁移 0058 全量归一为 `fateclaw_clarity`），不再有多档叠加或覆盖回落逻辑，单层下至多只有一段当前生效的 Clarity 权益及其后续续费片段。
+`membership.active` is the effective membership state. `membership_entitlements` contains the single stored period when its status is active and its end is in the future; `is_current` identifies whether that period has started. Renewals extend the same membership row. All membership identifiers are `membership`, and configured names take precedence over the default display name 卦师使用权.
 
 ---
 
@@ -790,7 +790,7 @@ Text Skill Bundle 正文写在文件系统 `.fateclaw/text-skills/<owner>/<dir>-
 
 ### POST /api/billing/membership/subscribe
 
-使用钱包余额开通或续费 FateClaw 会员套餐。需认证。请求体可传 `plan_key`，当前仅支持 `fateclaw_clarity`（单层化，迁移 0058 已将旧档 insight/deep 全量归一）；省略时默认开通 Clarity。
+Requires authentication. Opens or renews the single membership using the wallet balance. Optional `plan_key` accepts only `membership`; omission selects the same membership. Unsupported identifiers return HTTP 400. Active memberships retain their period anchor and extend the end date by one month.
 
 ---
 

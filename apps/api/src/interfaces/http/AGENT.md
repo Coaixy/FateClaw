@@ -71,7 +71,7 @@ apps/api/src/interfaces/http/
 - `request.requireAuth()` 在 `onRequest` hook 里注入
 - 大部分登录态接口由路由内部主动调用 `request.requireAuth()`
 - 管理后台通常走 `MANAGER_KEY` 体系，和普通用户 JWT 不是一套认证入口
-- 开放 API `/api/v1` 走 `api-key-auth.ts`，经 `hasPaidMembership` 做会员门禁（非会员 403）
+- Open API `/api/v1` uses `api-key-auth.ts` for key validation, rate limits and the arrears gate. Active membership is required to create a key, not to keep using an existing valid key.
 
 ### 错误处理
 
@@ -101,7 +101,7 @@ apps/api/src/interfaces/http/
 ### 排盘与简易模式
 
 - `/api/paipan/*` 是 API 内部 TypeScript runner 的确定性排盘，不需要模型 runtime。
-- 简易模式不再有独立 `/api/simple-workflows` 路由，已收口到 AI Chat 会话回合 `prepareOwnedChatSessionTurn`，与普通对话共用统一会员门禁。
+- 简易模式不再有独立 `/api/simple-workflows` 路由，已收口到 AI Chat 会话回合 `prepareOwnedChatSessionTurn`，and shares the wallet arrears gate with ordinary chat.
 
 ### 健康探针
 

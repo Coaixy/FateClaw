@@ -38,8 +38,6 @@ import {
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
 
-type AiChatBillingNotice = 'arrears' | 'plus-required';
-
 export function AiChatMessageList({
   messages,
   loading,
@@ -69,7 +67,7 @@ export function AiChatMessageList({
   selectedSession: string;
   switchingSession: boolean;
   showCenteredComposer: boolean;
-  latestMessageNotice?: AiChatBillingNotice | null;
+  latestMessageNotice?: 'arrears' | null;
   loadingOlder?: boolean;
   composer: React.ReactNode;
   emptyStateTitle?: string;
@@ -187,10 +185,7 @@ export function AiChatMessageList({
       )}
 
       {rows.length > 0 && latestMessageNotice && (
-        <LatestMessageBillingNotice
-          notice={latestMessageNotice}
-          containerRef={latestMessageNoticeRef}
-        />
+        <LatestMessageBillingNotice containerRef={latestMessageNoticeRef} />
       )}
 
       {showStreamingTrajectory && (
@@ -200,9 +195,7 @@ export function AiChatMessageList({
         />
       )}
 
-      {sending && replySlow && onRetry && (
-        <ReplySlowNotice onRetry={onRetry} />
-      )}
+      {sending && replySlow && onRetry && <ReplySlowNotice onRetry={onRetry} />}
     </div>
   );
 }
@@ -258,20 +251,11 @@ function buildDisplayRows(messages: Message[]) {
 }
 
 function LatestMessageBillingNotice({
-  notice,
   containerRef,
 }: {
-  notice: AiChatBillingNotice;
   containerRef: React.Ref<HTMLDivElement>;
 }) {
   const { t } = useI18n();
-  const isArrears = notice === 'arrears';
-  const titleKey = isArrears
-    ? 'aiChat.messageList.billingNoticeArrearsTitle'
-    : 'aiChat.messageList.billingNoticePlusTitle';
-  const descriptionKey = isArrears
-    ? 'aiChat.messageList.billingNoticeArrearsDescription'
-    : 'aiChat.messageList.billingNoticePlusDescription';
 
   return (
     <div
@@ -282,11 +266,7 @@ function LatestMessageBillingNotice({
         <div
           role="status"
           aria-live="polite"
-          className={`max-w-full rounded-xl border px-3 py-2 shadow-sm ${
-            isArrears
-              ? 'border-error/25 bg-error/8 text-error'
-              : 'border-primary/25 bg-primary/8 text-primary'
-          }`}
+          className="max-w-full rounded-xl border border-error/25 bg-error/8 px-3 py-2 text-error shadow-sm"
         >
           <div className="flex items-start gap-2">
             <AlertCircle
@@ -297,10 +277,10 @@ function LatestMessageBillingNotice({
             />
             <div className="min-w-0">
               <p className="text-[12px] font-semibold leading-5">
-                {t(titleKey)}
+                {t('aiChat.messageList.billingNoticeArrearsTitle')}
               </p>
               <p className="mt-0.5 text-[12px] leading-5 text-ink/70">
-                {t(descriptionKey)}
+                {t('aiChat.messageList.billingNoticeArrearsDescription')}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link
@@ -308,11 +288,7 @@ function LatestMessageBillingNotice({
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-medium text-on-primary shadow-sm transition-colors hover:bg-primary-active"
                 >
                   <Crown size={12} aria-hidden="true" />
-                  {t(
-                    isArrears
-                      ? 'aiChat.messageList.membershipCenter'
-                      : 'aiChat.messageList.openPlus',
-                  )}
+                  {t('aiChat.messageList.membershipCenter')}
                 </Link>
               </div>
             </div>
@@ -668,7 +644,8 @@ function TrajectoryProcessGroup({
             {t('aiChat.messageList.processTrace')}
           </span>
           <span className="shrink-0 text-[11px] text-muted-soft/70">
-            · {t('aiChat.messageList.processStepCount', {
+            ·{' '}
+            {t('aiChat.messageList.processStepCount', {
               count: nodes.length,
             })}
           </span>

@@ -7,6 +7,7 @@ const {
   mockReserveUserBalanceCoins,
   mockSettleUserModelChargeCoins,
   mockExpireUserBonusBalanceBefore,
+  mockUpdateMembershipConfig,
 } = vi.hoisted(() => ({
   mockGetBillingRequestReservationByRequestId: vi.fn(),
   mockGetMembershipOverview: vi.fn(),
@@ -14,6 +15,7 @@ const {
   mockReserveUserBalanceCoins: vi.fn(),
   mockSettleUserModelChargeCoins: vi.fn(),
   mockExpireUserBonusBalanceBefore: vi.fn(),
+  mockUpdateMembershipConfig: vi.fn(),
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
@@ -26,6 +28,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   releaseUserBalanceReservation: vi.fn(),
   reserveUserBalanceCoins: mockReserveUserBalanceCoins,
   settleUserModelChargeCoins: mockSettleUserModelChargeCoins,
+  updateMembershipConfig: mockUpdateMembershipConfig,
 }));
 
 vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
@@ -47,8 +50,21 @@ import {
   reserveBillingForRequest,
   settleBillingReservation,
   settleBillingReservationDetailed,
+  updateMembershipPlanConfig,
 } from '../../../src/modules/billing/plans.js';
 import { logger } from '../../../src/infrastructure/logger.js';
+
+it('rejects an unknown membership configuration identity without editing the canonical configuration', async () => {
+  mockUpdateMembershipConfig.mockClear();
+  await expect(
+    updateMembershipPlanConfig('unknown', { name: 'Changed name' }),
+  ).resolves.toEqual({
+    ok: false,
+    statusCode: 404,
+    error: '会员套餐配置不存在',
+  });
+  expect(mockUpdateMembershipConfig).not.toHaveBeenCalled();
+});
 
 describe('applyNonMemberPricingMarkup（非会员专家模式加价）', () => {
   // 工厂：默认造一个 metered 官方模型快照，按 overrides 改字段；字段不全用 as never 绕类型。
@@ -80,13 +96,19 @@ describe('applyNonMemberPricingMarkup（非会员专家模式加价）', () => {
   });
 
   it('BYOK 豁免：source=custom 即便非会员也不加价（结算恒 0）', () => {
-    const result = applyNonMemberPricingMarkup(make({ source: 'custom' }), false);
+    const result = applyNonMemberPricingMarkup(
+      make({ source: 'custom' }),
+      false,
+    );
     expect(result.inputTokenPricePerMillionCoins).toBe(3);
     expect(result.outputTokenPricePerMillionCoins).toBe(8);
   });
 
   it('非计费豁免：billingMode=none 不加价', () => {
-    const result = applyNonMemberPricingMarkup(make({ billingMode: 'none' }), false);
+    const result = applyNonMemberPricingMarkup(
+      make({ billingMode: 'none' }),
+      false,
+    );
     expect(result.inputTokenPricePerMillionCoins).toBe(3);
     expect(result.outputTokenPricePerMillionCoins).toBe(8);
   });
@@ -115,10 +137,8 @@ describe('metered billing plans', () => {
       config: {
         enabled: true,
         monthly_price_coins: 30,
-        monthly_allowance_units: 3000000,
       },
       membership: null,
-      allowance: null,
       active: false,
     });
     mockSettleUserModelChargeCoins.mockResolvedValue({
@@ -177,7 +197,6 @@ describe('metered billing plans', () => {
           outputTokenPricePerMillionCoins: 8,
         } as never,
         entitlementSnapshot: {
-          planKey: null,
           membershipActive: false,
           availableCoins: 10,
           wallet: {

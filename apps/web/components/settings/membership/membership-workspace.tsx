@@ -10,11 +10,7 @@ import { WalletTransactionsPanel } from '@/components/settings/wallet/wallet-tra
 import { billingApi } from '@/features/billing/api';
 import { useMembershipOverview } from '@/features/billing/hooks/use-membership-overview';
 import { useWalletOverview } from '@/features/billing/hooks/use-wallet-overview';
-import {
-  MEMBERSHIP_CLARITY_PLAN_KEY,
-  normalizeMembershipPlanKey,
-  resolveMembershipPlanDisplayName,
-} from '@/features/billing/membership-plans';
+import { DEFAULT_MEMBERSHIP_NAME } from '@fateclaw/contracts/membership';
 import { useI18n } from '@/lib/i18n';
 import { formatCoins } from '@/lib/soft-currency';
 import { useConfirm } from '@/lib/use-confirm';
@@ -53,11 +49,8 @@ function formatMembershipDate(
   });
 }
 
-function resolvePlanDisplayName(
-  plan: Pick<MembershipPlan, 'name' | 'plan_key'>,
-) {
-  // 优先使用后端配置的套餐名（如"卦师使用权"）；为空时回退到按档位推导的旧展示名。
-  return plan.name?.trim() || resolveMembershipPlanDisplayName(plan);
+function resolvePlanDisplayName(plan: Pick<MembershipPlan, 'name'>) {
+  return plan.name?.trim() || DEFAULT_MEMBERSHIP_NAME;
 }
 
 function resolvePlanBenefitLabels(t: TranslationFn) {
@@ -219,7 +212,6 @@ function SubscriptionCard({
 }) {
   const isActive = Boolean(membership?.active);
   const planDisplayName = resolvePlanDisplayName(plan);
-  // 续费/开通文案：会员仍有效即视为续费（存量旧档 plan_key 不参与判断）。
   const actionLabel = isActive
     ? t('pages.membership.renewPlan', { plan: planDisplayName })
     : t('pages.membership.subscribePlan', { plan: planDisplayName });
@@ -341,19 +333,14 @@ export function MembershipWorkspace() {
     error: walletError,
     refresh: refreshWallet,
   } = useWalletOverview();
-  const [membershipBusyPlanKey, setMembershipBusyPlanKey] = useState<
-    string | null
-  >(null);
+  const [membershipBusy, setMembershipBusy] = useState(false);
 
   const handleSubscribeMembership = async (plan: MembershipPlan) => {
     const membership = billingInfo?.membership;
-    if (!membership || membershipBusyPlanKey || !plan.enabled) return;
+    if (!membership || membershipBusy || !plan.enabled) return;
 
     const priceText = formatCoins(plan.monthly_price_coins, locale);
-    // 弹窗里用套餐展示名（卦师使用权），与按钮一致，不再泄漏旧档英文名 Clarity。
     const planDisplayName = resolvePlanDisplayName(plan);
-    // 单层"卦师使用权"下只有一个在售套餐：存量会员的 plan_key 可能仍是旧档（insight/deep），
-    // 不能按 plan_key 相等判断续费，只要会员仍有效即视为续费。
     const isRenewal = Boolean(membership.active);
     const ok = await confirm({
       title: isRenewal
@@ -375,7 +362,7 @@ export function MembershipWorkspace() {
     });
     if (!ok) return;
 
-    setMembershipBusyPlanKey(plan.plan_key);
+    setMembershipBusy(true);
     try {
       await billingApi.subscribeMembership({ plan_key: plan.plan_key });
       // 订阅成功后会改变会员状态与额度，两个数据源都要刷新。
@@ -388,7 +375,7 @@ export function MembershipWorkspace() {
           : t('pages.membership.subscribeFailed'),
       );
     } finally {
-      setMembershipBusyPlanKey(null);
+      setMembershipBusy(false);
     }
   };
 
@@ -408,26 +395,7 @@ export function MembershipWorkspace() {
   const monthlyMessages = usage?.monthly_messages ?? 0;
   const membership = billingInfo?.membership;
   const membershipPlans = billingInfo?.membership_plans ?? [];
-  const normalizedActivePlanKey =
-    membership?.active && membership.plan_key
-      ? normalizeMembershipPlanKey(membership.plan_key)
-      : null;
-  const activePlan = normalizedActivePlanKey
-    ? (membershipPlans.find(
-        (plan) =>
-          normalizeMembershipPlanKey(plan.plan_key) === normalizedActivePlanKey,
-      ) ?? null)
-    : null;
-  // 渲染订阅卡时优先取生效中的套餐；否则回退到在售的 clarity（卦师使用权）。
-  const defaultPlan =
-    activePlan ??
-    membershipPlans.find(
-      (plan) =>
-        normalizeMembershipPlanKey(plan.plan_key) ===
-        MEMBERSHIP_CLARITY_PLAN_KEY,
-    ) ??
-    membershipPlans[0] ??
-    null;
+  const defaultPlan = membershipPlans[0] ?? null;
 
   // 钱包余额拆解：剩余额度 = 充值额度 + 赠送额度（内部仍以 coins 计量）。
   const availableCoins = walletBilling?.available_coins ?? 0;
@@ -452,7 +420,7 @@ export function MembershipWorkspace() {
             membership={membership}
             monthlyMessages={monthlyMessages}
             monthlyTokens={monthlyTokens}
-            busy={membershipBusyPlanKey === defaultPlan.plan_key}
+            busy={membershipBusy}
             formatDate={formatDate}
             formatNumber={formatNumber}
             locale={locale}

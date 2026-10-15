@@ -660,12 +660,6 @@ const ERROR_CODES: Array<{
   },
   {
     status: '403',
-    code: 'membership_required',
-    type: 'insufficient_quota',
-    when: '会员已过期（续费后自动恢复）',
-  },
-  {
-    status: '403',
     code: 'PAIPAN.SKILL_NOT_ENABLED',
     type: 'invalid_request_error',
     when: '该排盘类型未对你启用',
@@ -1134,8 +1128,8 @@ export function ApiDocsContent() {
               <Code lang="curl">{`curl ${baseUrl}/paipan/catalog \\
   -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
               <P>
-                Key 无效或过期返回 401；会员过期返回
-                403（续费后自动恢复）；积分欠费返回 402。 完整错误码见「参考」。
+                Key 无效或过期返回 401；积分欠费返回 402。会员到期后，已有有效
+                Key 仍可调用，解读按普通用户价格计费。完整错误码见「参考」。
               </P>
             </Section>
 
@@ -1237,7 +1231,7 @@ export function ApiDocsContent() {
               <P>
                 排盘是本地确定性计算，
                 <strong className="text-ink">不计费</strong>
-                （但仍需有效会员、账户不欠费）。 每个排盘都返回{' '}
+                （需要有效 API Key，且账户不欠费）。 每个排盘都返回{' '}
                 <C>{`{ type, text, data }`}</C>，参数统一 <C>snake_case</C>。
               </P>
               <Endpoint method="GET" path="/api/v1/paipan/catalog" />
@@ -1405,9 +1399,9 @@ print(r2["choices"][0]["message"]["content"])`}</Code>
             <Section id="ref-billing" title="计费">
               <Bullets
                 items={[
-                  '排盘免费：所有排盘接口不扣积分（但仍需有效会员、账户不欠费）。',
-                  '解读按 token 计费：按所用官方模型的输入 / 输出单价从积分扣，口径与站内 AI 对话一致。',
-                  '账户欠费会拦截所有请求（402）；会员过期会拦截（403），续费后自动恢复。',
+                  '排盘免费：所有排盘接口不扣积分（需要有效 API Key，且账户不欠费）。',
+                  '解读按 token 计费：按官方模型输入 / 输出单价扣积分，普通用户按会员价的 1.5 倍计费，与站内一致。',
+                  '账户欠费会拦截所有请求（402）；会员到期后已有有效 API Key 仍可调用。',
                   '所有解读统一使用后台配置的官方模型与思考等级。',
                 ]}
               />

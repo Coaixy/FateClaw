@@ -137,9 +137,6 @@ describe('openSessionRoutes platform model configuration', () => {
     mocks.getRuntimeEntitlementSnapshot.mockResolvedValue({
       userId: 'user-1',
       membershipActive: true,
-      planKey: 'fateclaw_clarity',
-      planRank: 1,
-      hasPaidMembership: true,
       hasPriorityQueue: true,
       canUseWechatClaw: false,
       wallet: {
