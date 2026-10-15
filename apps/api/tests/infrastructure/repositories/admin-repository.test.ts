@@ -61,33 +61,24 @@ describe('admin repository', () => {
     expect(calls[1]?.params).toEqual(['user-1', 'session-1', 200, 20]);
   });
 
-  it('hydrates custom skill files from bundle storage for admin reads', async () => {
-    createMockPool([
-      [
-        {
-          id: 'skill-1',
-          files: [
-            { path: 'SKILL.md', content: 'skill md' },
-            { path: 'docs/knowledge.md', content: 'bundle content' },
-          ],
-          bundle_uri: 'text-skill://skill-1',
-        },
-      ],
-    ]);
-
+  it('returns database storage summaries without loading all skill file bodies', async () => {
+    const row = {
+      id: 'skill-1',
+      content_length: 22,
+      storage: {
+        state: 'stored',
+        current_revision_id: 'revision-1',
+        revision_count: 3,
+        file_count: 2,
+      },
+    };
+    const { calls } = createMockPool([[row]]);
     await expect(
       getCustomSkillsForAdmin({ userId: 'user-1' }),
-    ).resolves.toEqual([
-      {
-        id: 'skill-1',
-        bundle_uri: 'text-skill://skill-1',
-        files: [
-          { path: 'SKILL.md', content: 'skill md' },
-          { path: 'docs/knowledge.md', content: 'bundle content' },
-        ],
-        content_length: 22,
-      },
-    ]);
+    ).resolves.toEqual([row]);
+    expect(calls[0].params).toEqual(['user-1']);
+    expect(calls[0].sql).not.toContain('AS files');
+    expect(calls[0].sql).toContain('s.deleted_at IS NULL');
   });
 
   it('selects Pi cleanup candidates with reusable archive payloads', async () => {

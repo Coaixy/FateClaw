@@ -12,7 +12,10 @@ import {
   getUserCustomSkill,
   updateUserCustomSkill,
 } from '../../src/infrastructure/repositories/skills-repository.js';
-import { getCustomSkillForAdmin } from '../../src/infrastructure/repositories/admin-repository.js';
+import {
+  getCustomSkillForAdmin,
+  getCustomSkillsForAdmin,
+} from '../../src/infrastructure/repositories/admin-repository.js';
 import { importLegacySkillContent } from '../../src/modules/skills/legacy-skill-import.js';
 import { SkillRevisionConflictError } from '../../src/modules/skills/skill-errors.js';
 import {
@@ -286,6 +289,50 @@ describe.skipIf(!connectionString)(
       expect(count.rows[0].count).toBe(1);
     });
 
+    it('reports current database metadata and bounded revision history without file bodies in the admin list', async () => {
+      const initial = await createSkill('admin-metadata');
+      let current = initial;
+      for (let index = 0; index < 21; index += 1) {
+        current = (await updateUserCustomSkill(initial.id, 'skill-owner', {
+          base_revision_id: current.revision_id,
+          files: [
+            { path: 'SKILL.md', content: `# Revision ${index}` },
+            { path: 'docs/detail.md', content: 'Private knowledge' },
+          ],
+        }))!;
+      }
+      const summary = (
+        await getCustomSkillsForAdmin({ userId: 'skill-owner' })
+      ).find((skill) => skill.id === initial.id)!;
+      expect(summary).not.toHaveProperty('files');
+      expect(summary).not.toHaveProperty('revisions');
+      expect(summary.storage).toMatchObject({
+        state: 'stored',
+        current_revision_id: current.revision_id,
+        revision_count: 22,
+        file_count: 2,
+        format_version: 1,
+        import_status: null,
+      });
+      const detail = (await getCustomSkillForAdmin(initial.id))!;
+      expect(detail.storage).toEqual(summary.storage);
+      expect(detail.files).toEqual(current.files);
+      expect(detail.content_length).toBe(current.content_length);
+      expect(detail.storage.revision_created_at).toBeTruthy();
+      expect(detail.revisions).toHaveLength(20);
+      expect(detail.revisions[0]).toMatchObject({
+        id: current.revision_id,
+        checksum: current.checksum,
+        file_count: 2,
+      });
+      expect(
+        detail.revisions.some(
+          (revision) => revision.id === initial.revision_id,
+        ),
+      ).toBe(false);
+      expect(await getCustomSkillForAdmin('absent-skill')).toBeUndefined();
+    });
+
     it('records legacy import outcomes durably, retries missing files, and never duplicates completed imports', async () => {
       const location = emptyDeployment();
       const legacy = path.join(location, 'legacy');
@@ -354,23 +401,57 @@ describe.skipIf(!connectionString)(
       const location = emptyDeployment();
       for (const name of ['mismatched', 'invalid']) {
         fs.mkdirSync(path.join(location, name));
-        fs.writeFileSync(path.join(location, name, 'SKILL.md'), name === 'invalid' ? 'invalid\0text' : '# Mismatched');
+        fs.writeFileSync(
+          path.join(location, name, 'SKILL.md'),
+          name === 'invalid' ? 'invalid\0text' : '# Mismatched',
+        );
       }
-      await db.query(`INSERT INTO user_custom_skills
+      await db.query(
+        `INSERT INTO user_custom_skills
         (id, user_id, skill_name, dir_name, bundle_uri, checksum)
         VALUES ('legacy-mismatched', 'skill-owner', 'Mismatched', 'legacy-mismatched', $1, $2),
           ('legacy-invalid', 'skill-owner', 'Invalid', 'legacy-invalid', $3, NULL)`,
-        [path.join(location, 'mismatched'), 'a'.repeat(64), path.join(location, 'invalid')]);
-      expect(await importLegacySkillContent(db)).toEqual({ migrated: 0, missing: 0, mismatched: 1, invalid: 1 });
-      const statuses = await db.query(`SELECT skill_id, status, error_code FROM skill_content_imports
+        [
+          path.join(location, 'mismatched'),
+          'a'.repeat(64),
+          path.join(location, 'invalid'),
+        ],
+      );
+      expect(await importLegacySkillContent(db)).toEqual({
+        migrated: 0,
+        missing: 0,
+        mismatched: 1,
+        invalid: 1,
+      });
+      const statuses =
+        await db.query(`SELECT skill_id, status, error_code FROM skill_content_imports
         WHERE skill_id IN ('legacy-mismatched', 'legacy-invalid') ORDER BY skill_id`);
       expect(statuses.rows).toEqual([
-        { skill_id: 'legacy-invalid', status: 'invalid', error_code: 'legacy_content_invalid' },
-        { skill_id: 'legacy-mismatched', status: 'mismatched', error_code: 'legacy_checksum_mismatch' },
+        {
+          skill_id: 'legacy-invalid',
+          status: 'invalid',
+          error_code: 'legacy_content_invalid',
+        },
+        {
+          skill_id: 'legacy-mismatched',
+          status: 'mismatched',
+          error_code: 'legacy_checksum_mismatch',
+        },
       ]);
-      const count = await db.query(`SELECT COUNT(*)::int AS count FROM skill_content_revisions
+      const count =
+        await db.query(`SELECT COUNT(*)::int AS count FROM skill_content_revisions
         WHERE skill_id IN ('legacy-mismatched', 'legacy-invalid')`);
       expect(count.rows[0].count).toBe(0);
+      const failed = (await getCustomSkillForAdmin('legacy-mismatched'))!;
+      expect(failed.storage).toMatchObject({
+        state: 'mismatched',
+        current_revision_id: null,
+        revision_count: 0,
+        file_count: 0,
+        import_error_code: 'legacy_checksum_mismatch',
+      });
+      expect(failed.files).toEqual([]);
+      expect(failed.revisions).toEqual([]);
     });
   },
 );

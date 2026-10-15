@@ -12,6 +12,8 @@ The runtime `SkillCatalog` selects authorized revision references, `SkillRevisio
 
 Each runtime cache namespace belongs to one process on one deployment host. Active request leases prevent eviction. Inactive snapshots expire after seven days or when the runtime exceeds 64 MiB; active snapshots may temporarily exceed that budget. Cache activity reclaims exited owners' namespaces. Use host-local cache directories, because process liveness checks do not coordinate different hosts.
 
+Admin storage summaries distinguish persisted revisions from unresolved legacy imports. List queries return file and revision counts without transferring full content. Detail queries return current files and at most 20 recent revision summaries in the same database snapshot. The UI separates storage state from enablement and visibility, and reports migration reasons without claiming that every runtime cache or regional database replica is current.
+
 ## Invariants and validation
 
 - Store complete immutable content revisions separately from `user_custom_skills`; enforce revision ownership at the database pointer.

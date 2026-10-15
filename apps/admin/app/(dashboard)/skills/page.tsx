@@ -5,11 +5,18 @@ import { useSearchParams } from 'next/navigation';
 import {
   admin,
   AdminUser,
-  AdminCustomSkill,
+  AdminCustomSkillSummary,
   AdminSkillGlobalConfig,
   AdminSkillComment,
 } from '@/lib/admin-api';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
+import { SkillStorageBadge } from '@/components/skills/skill-storage-badge';
+import {
+  matchesSkillStorage,
+  SKILL_STORAGE_META,
+  shortRevision,
+  type SkillStorageFilter,
+} from '@/lib/skill-storage';
 import {
   Loader2,
   Puzzle,
@@ -20,7 +27,7 @@ import {
   Share2,
   ToggleLeft,
   ToggleRight,
-  BookOpen,
+  Database,
   MessageSquare,
   Pin,
   ThumbsDown,
@@ -30,6 +37,7 @@ import {
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -37,11 +45,12 @@ function formatDate(iso: string | null) {
   });
 }
 
-const VISIBILITY_LABELS: Record<AdminCustomSkill['visibility'], string> = {
-  private: '私有',
-  link_shared: '私密分享',
-  shared: '公开上架',
-};
+const VISIBILITY_LABELS: Record<AdminCustomSkillSummary['visibility'], string> =
+  {
+    private: '私有',
+    link_shared: '私密分享',
+    shared: '公开上架',
+  };
 
 /** 评论审核状态的中文展示标签。 */
 const COMMENT_STATUS_LABELS: Record<AdminSkillComment['status'], string> = {
@@ -67,7 +76,9 @@ function MetaPill({
   }[tone];
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium leading-5 ${toneClass}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium leading-5 ${toneClass}`}
+    >
       {children}
     </span>
   );
@@ -78,13 +89,13 @@ function SkillRow({
   detailHref,
   onUpdateState,
 }: {
-  skill: AdminCustomSkill;
+  skill: AdminCustomSkillSummary;
   detailHref: string;
   onUpdateState: (
     id: string,
     data: {
       enabled?: boolean;
-      visibility?: AdminCustomSkill['visibility'];
+      visibility?: AdminCustomSkillSummary['visibility'];
     },
   ) => Promise<void>;
 }) {
@@ -101,7 +112,7 @@ function SkillRow({
   const handleStateChange = useCallback(
     async (data: {
       enabled?: boolean;
-      visibility?: AdminCustomSkill['visibility'];
+      visibility?: AdminCustomSkillSummary['visibility'];
     }) => {
       setBusy(true);
       setActionError('');
@@ -127,61 +138,115 @@ function SkillRow({
           onClick={() => setExpanded(!expanded)}
           className="flex-1 flex items-start gap-3 px-3 py-2.5 hover:bg-surface-cream-strong transition-colors cursor-pointer text-left rounded-md"
         >
-          {expanded ? <ChevronDown size={14} className="text-muted shrink-0 mt-0.5" /> : <ChevronRight size={14} className="text-muted shrink-0 mt-0.5" />}
+          {expanded ? (
+            <ChevronDown size={14} className="text-muted shrink-0 mt-0.5" />
+          ) : (
+            <ChevronRight size={14} className="text-muted shrink-0 mt-0.5" />
+          )}
           <div className="flex-1 min-w-0">
             <div className="md:hidden min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="block min-w-0 flex-1 text-[13px] font-medium truncate">{skill.skill_name}</span>
-                <span className="shrink-0 text-[11px] text-muted tabular-nums">{skill.content_length.toLocaleString()} 字</span>
+                <span className="block min-w-0 flex-1 text-[13px] font-medium truncate">
+                  {skill.skill_name}
+                </span>
+                <span className="shrink-0 text-[11px] text-muted tabular-nums">
+                  {skill.content_length.toLocaleString()} 字
+                </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
-                <span className="truncate max-w-[180px]">{skill.phone || '未绑定手机号'}</span>
+                <span className="truncate max-w-[180px]">
+                  {skill.phone || '未绑定手机号'}
+                </span>
                 <span className="text-hairline">•</span>
-                <span>{skill.files.length} 个文件</span>
+                <span>{skill.storage.file_count} 个文件</span>
               </div>
-              {skill.description ? <div className="mt-1 text-[11px] text-muted line-clamp-2 break-words leading-relaxed">{skill.description}</div> : null}
+              {skill.description ? (
+                <div className="mt-1 text-[11px] text-muted line-clamp-2 break-words leading-relaxed">
+                  {skill.description}
+                </div>
+              ) : null}
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <MetaPill tone={skill.enabled ? 'success' : 'danger'}>{skill.enabled ? '启用中' : '已关闭'}</MetaPill>
-                <MetaPill tone={visibilityTone}><Share2 size={10} />{VISIBILITY_LABELS[skill.visibility]}</MetaPill>
+                <SkillStorageBadge storage={skill.storage} />
+                <MetaPill tone={skill.enabled ? 'success' : 'danger'}>
+                  {skill.enabled ? '启用中' : '已关闭'}
+                </MetaPill>
+                <MetaPill tone={visibilityTone}>
+                  <Share2 size={10} />
+                  {VISIBILITY_LABELS[skill.visibility]}
+                </MetaPill>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted">
                 <span>更 {formatDate(skill.updated_at)}</span>
                 <span className="text-hairline">•</span>
                 <span>建 {formatDate(skill.created_at)}</span>
-                {skill.share_token ? <><span className="text-hairline">•</span><span>有分享令牌</span></> : null}
+                {skill.share_token ? (
+                  <>
+                    <span className="text-hairline">•</span>
+                    <span>有分享令牌</span>
+                  </>
+                ) : null}
               </div>
             </div>
             <div className="hidden md:grid gap-3 md:grid-cols-[minmax(0,2.2fr)_minmax(160px,1fr)_minmax(220px,1.4fr)_130px] md:items-center">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="block text-[13px] font-medium truncate">{skill.skill_name}</span>
+                  <span className="block text-[13px] font-medium truncate">
+                    {skill.skill_name}
+                  </span>
                 </div>
                 <div className="mt-1 text-[12px] text-muted leading-relaxed">
-                  {skill.description ? <span className="line-clamp-2 break-words">{skill.description}</span> : <span className="text-muted/80">无描述</span>}
+                  {skill.description ? (
+                    <span className="line-clamp-2 break-words">
+                      {skill.description}
+                    </span>
+                  ) : (
+                    <span className="text-muted/80">无描述</span>
+                  )}
                 </div>
               </div>
 
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-muted">归属</div>
-                <div className="mt-1 text-[12px] font-medium text-ink truncate">{skill.phone || '未绑定手机号'}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">
+                  归属
+                </div>
+                <div className="mt-1 text-[12px] font-medium text-ink truncate">
+                  {skill.phone || '未绑定手机号'}
+                </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-                  <span>{skill.files.length} 个文件</span>
+                  <span>{skill.storage.file_count} 个文件</span>
                 </div>
               </div>
 
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-muted">状态</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">
+                  状态
+                </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  <MetaPill tone={skill.enabled ? 'success' : 'danger'}>{skill.enabled ? '启用中' : '已关闭'}</MetaPill>
-                  <MetaPill tone={visibilityTone}><Share2 size={10} />{VISIBILITY_LABELS[skill.visibility]}</MetaPill>
-                  {skill.share_token ? <MetaPill tone="neutral">有分享令牌</MetaPill> : null}
+                  <SkillStorageBadge storage={skill.storage} />
+                  <MetaPill tone={skill.enabled ? 'success' : 'danger'}>
+                    {skill.enabled ? '启用中' : '已关闭'}
+                  </MetaPill>
+                  <MetaPill tone={visibilityTone}>
+                    <Share2 size={10} />
+                    {VISIBILITY_LABELS[skill.visibility]}
+                  </MetaPill>
+                  {skill.share_token ? (
+                    <MetaPill tone="neutral">有分享令牌</MetaPill>
+                  ) : null}
                 </div>
               </div>
 
               <div className="min-w-0 md:text-right">
-                <div className="text-[10px] uppercase tracking-wider text-muted">统计</div>
-                <div className="mt-1 text-[12px] font-medium text-ink tabular-nums">{skill.content_length.toLocaleString()} 字</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted">
+                  统计
+                </div>
+                <div className="mt-1 text-[12px] font-medium text-ink tabular-nums">
+                  {skill.content_length.toLocaleString()} 字
+                </div>
                 <div className="mt-1 text-[11px] text-muted leading-relaxed">
+                  <div className="font-mono">
+                    {shortRevision(skill.storage.current_revision_id)}
+                  </div>
                   <div>更 {formatDate(skill.updated_at)}</div>
                   <div>建 {formatDate(skill.created_at)}</div>
                 </div>
@@ -203,16 +268,24 @@ function SkillRow({
       {expanded && (
         <div className="border-t border-hairline px-4 py-4 space-y-3 bg-surface-card">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {([
-              ['用户标识', skill.phone || '未绑定手机号'],
-              ['状态', skill.enabled ? '已启用' : '未启用'],
-              ['可见性', VISIBILITY_LABELS[skill.visibility]],
-              ['内容长度', `${skill.content_length.toLocaleString()} 字`],
-              ['文件数', String(skill.files.length)],
-            ] as const).map(([label, value]) => (
-              <div key={label} className="px-2.5 py-2 rounded-md bg-canvas border border-hairline">
+            {(
+              [
+                ['用户标识', skill.phone || '未绑定手机号'],
+                ['状态', skill.enabled ? '已启用' : '未启用'],
+                ['可见性', VISIBILITY_LABELS[skill.visibility]],
+                ['内容长度', `${skill.content_length.toLocaleString()} 字`],
+                ['文件数', String(skill.storage.file_count)],
+                ['修订记录', `${skill.storage.revision_count} 次保存`],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                className="px-2.5 py-2 rounded-md bg-canvas border border-hairline"
+              >
                 <div className="text-[10px] text-muted">{label}</div>
-                <div className="text-[13px] font-medium mt-0.5 truncate">{value}</div>
+                <div className="text-[13px] font-medium mt-0.5 truncate">
+                  {value}
+                </div>
               </div>
             ))}
           </div>
@@ -220,8 +293,12 @@ function SkillRow({
           <div className="rounded-lg border border-hairline bg-canvas p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] text-muted uppercase tracking-wider">管理操作</div>
-                <div className="text-[12px] text-muted mt-0.5">管理员可直接关闭技能或修改分享状态</div>
+                <div className="text-[11px] text-muted uppercase tracking-wider">
+                  管理操作
+                </div>
+                <div className="text-[12px] text-muted mt-0.5">
+                  管理员可直接关闭技能或修改分享状态
+                </div>
               </div>
               <button
                 type="button"
@@ -234,7 +311,13 @@ function SkillRow({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {(['private', 'link_shared', 'shared'] as AdminCustomSkill['visibility'][]).map((visibility) => {
+              {(
+                [
+                  'private',
+                  'link_shared',
+                  'shared',
+                ] as AdminCustomSkillSummary['visibility'][]
+              ).map((visibility) => {
                 const active = skill.visibility === visibility;
                 return (
                   <button
@@ -251,22 +334,38 @@ function SkillRow({
             </div>
 
             {skill.share_token ? (
-              <div className="text-[11px] text-muted">分享令牌：<span className="font-mono break-all ml-1 text-ink">{skill.share_token}</span></div>
+              <div className="text-[11px] text-muted">
+                分享令牌：
+                <span className="font-mono break-all ml-1 text-ink">
+                  {skill.share_token}
+                </span>
+              </div>
             ) : null}
 
-            {actionError ? <div className="text-[12px] text-error">{actionError}</div> : null}
+            {actionError ? (
+              <div className="text-[12px] text-error">{actionError}</div>
+            ) : null}
           </div>
 
-          <div>
-            <div className="text-[11px] text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><BookOpen size={11} /> Bundle 文件</div>
-            <div className="space-y-2">
-              {skill.files.map((file) => (
-                <div key={file.path} className="rounded-md border border-hairline bg-canvas p-3">
-                  <div className="mb-2 text-[11px] font-medium text-muted">{file.path}</div>
-                  <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">{file.content || '(空)'}</pre>
-                </div>
-              ))}
+          <div className="rounded-lg border border-hairline bg-canvas p-3">
+            <div className="flex items-center gap-2 text-[12px] font-medium">
+              <Database size={13} />
+              数据库内容
             </div>
+            <p className="mt-2 text-[12px] leading-relaxed text-muted">
+              {SKILL_STORAGE_META[skill.storage.state].description}
+            </p>
+            {skill.storage.current_revision_id ? (
+              <p className="mt-2 break-all font-mono text-[11px] text-muted">
+                当前修订：{skill.storage.current_revision_id}
+              </p>
+            ) : null}
+            <a
+              href={toAdminDocumentHref(detailHref)}
+              className="mt-3 inline-flex text-[12px] font-medium text-primary hover:underline"
+            >
+              查看修订记录与文件内容 →
+            </a>
           </div>
         </div>
       )}
@@ -436,13 +535,28 @@ function GlobalSkillRow({
 function AdminSkillsContent() {
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [customSkills, setCustomSkills] = useState<AdminCustomSkill[]>([]);
-  const [globalConfigs, setGlobalConfigs] = useState<AdminSkillGlobalConfig[]>([]);
+  const [customSkills, setCustomSkills] = useState<AdminCustomSkillSummary[]>(
+    [],
+  );
+  const [globalConfigs, setGlobalConfigs] = useState<AdminSkillGlobalConfig[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [selectedUserId, setSelectedUserId] = useState(searchParams.get('user_id') || '');
-  const [selectedVisibility, setSelectedVisibility] = useState(searchParams.get('visibility') || '');
+  const [selectedUserId, setSelectedUserId] = useState(
+    searchParams.get('user_id') || '',
+  );
+  const [selectedVisibility, setSelectedVisibility] = useState(
+    searchParams.get('visibility') || '',
+  );
+  const [selectedStorage, setSelectedStorage] = useState<SkillStorageFilter>(
+    (['stored', 'pending', 'attention'].includes(
+      searchParams.get('storage') || '',
+    )
+      ? searchParams.get('storage')
+      : '') as SkillStorageFilter,
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -470,7 +584,11 @@ function AdminSkillsContent() {
   const handleToggleGlobal = async (name: string, enabled: boolean) => {
     try {
       await admin.setSkillGlobalEnabled(name, enabled);
-      setGlobalConfigs((prev) => prev.map((c) => (c.skill_name === name ? { ...c, globally_enabled: enabled } : c)));
+      setGlobalConfigs((prev) =>
+        prev.map((c) =>
+          c.skill_name === name ? { ...c, globally_enabled: enabled } : c,
+        ),
+      );
     } catch (err) {
       if (err instanceof Error) return;
       throw err;
@@ -482,11 +600,13 @@ function AdminSkillsContent() {
       id: string,
       data: {
         enabled?: boolean;
-        visibility?: AdminCustomSkill['visibility'];
+        visibility?: AdminCustomSkillSummary['visibility'];
       },
     ) => {
       const updated = await admin.updateCustomSkillState(id, data);
-      setCustomSkills((prev) => prev.map((skill) => (skill.id === id ? updated : skill)));
+      setCustomSkills((prev) =>
+        prev.map((skill) => (skill.id === id ? updated : skill)),
+      );
     },
     [],
   );
@@ -495,29 +615,44 @@ function AdminSkillsContent() {
     void loadData();
   }, [loadData]);
 
-  const filtered = useMemo(() => customSkills.filter((s) => {
-    if (selectedVisibility === 'shared' && s.visibility !== 'shared') return false;
-    if (selectedVisibility === 'link_shared' && s.visibility !== 'link_shared') return false;
-    if (selectedVisibility === 'private' && s.visibility !== 'private') return false;
-    return true;
-  }), [customSkills, selectedVisibility]);
+  const filtered = useMemo(
+    () =>
+      customSkills.filter((s) => {
+        if (selectedVisibility === 'shared' && s.visibility !== 'shared')
+          return false;
+        if (
+          selectedVisibility === 'link_shared' &&
+          s.visibility !== 'link_shared'
+        )
+          return false;
+        if (selectedVisibility === 'private' && s.visibility !== 'private')
+          return false;
+        return matchesSkillStorage(s.storage, selectedStorage);
+      }),
+    [customSkills, selectedVisibility, selectedStorage],
+  );
 
   const buildSkillDetailHref = useCallback(
     (skillId: string) => {
       const params = new URLSearchParams({ id: skillId });
       if (selectedUserId) params.set('user_id', selectedUserId);
       if (selectedVisibility) params.set('visibility', selectedVisibility);
+      if (selectedStorage) params.set('storage', selectedStorage);
       return `/skills/detail?${params.toString()}`;
     },
-    [selectedUserId, selectedVisibility],
+    [selectedUserId, selectedVisibility, selectedStorage],
   );
 
   return (
     <>
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 size={20} className="animate-spin text-muted" /></div>
+        <div className="flex justify-center py-20">
+          <Loader2 size={20} className="animate-spin text-muted" />
+        </div>
       ) : error ? (
-        <div className="text-center py-20"><p className="text-[13px] text-error">{error}</p></div>
+        <div className="text-center py-20">
+          <p className="text-[13px] text-error">{error}</p>
+        </div>
       ) : (
         <>
           {globalConfigs.length > 0 && (
@@ -525,35 +660,122 @@ function AdminSkillsContent() {
               <div className="flex items-center gap-2 mb-3">
                 <Shield size={16} className="text-muted shrink-0" />
                 <h2 className="text-lg font-semibold shrink-0">系统排盘配置</h2>
-                <span className="text-[12px] text-muted shrink-0">({globalConfigs.length})</span>
+                <span className="text-[12px] text-muted shrink-0">
+                  ({globalConfigs.length})
+                </span>
               </div>
-              <p className="text-[12px] text-muted mb-3">全局控制排盘是否可用，用户侧不再单独覆盖。</p>
+              <p className="text-[12px] text-muted mb-3">
+                全局控制排盘是否可用，用户侧不再单独覆盖。
+              </p>
               <div className="space-y-2">
                 {globalConfigs.map((config) => (
-                  <GlobalSkillRow key={config.skill_name} config={config} onToggleGlobal={handleToggleGlobal} />
+                  <GlobalSkillRow
+                    key={config.skill_name}
+                    config={config}
+                    onToggleGlobal={handleToggleGlobal}
+                  />
                 ))}
               </div>
             </div>
           )}
 
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              {
+                label: '技能总数',
+                value: customSkills.length,
+                filter: '' as SkillStorageFilter,
+              },
+              {
+                label: '已入库',
+                value: customSkills.filter(
+                  (skill) => skill.storage.state === 'stored',
+                ).length,
+                filter: 'stored' as SkillStorageFilter,
+              },
+              {
+                label: '待迁移',
+                value: customSkills.filter(
+                  (skill) => skill.storage.state === 'pending',
+                ).length,
+                filter: 'pending' as SkillStorageFilter,
+              },
+              {
+                label: '需处理',
+                value: customSkills.filter((skill) =>
+                  matchesSkillStorage(skill.storage, 'attention'),
+                ).length,
+                filter: 'attention' as SkillStorageFilter,
+              },
+            ].map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => setSelectedStorage(item.filter)}
+                aria-pressed={selectedStorage === item.filter}
+                className={`rounded-xl border bg-surface-card px-4 py-3 text-left transition-colors hover:bg-surface-cream-strong ${selectedStorage === item.filter ? 'border-primary/60' : 'border-hairline'}`}
+              >
+                <span className="text-[12px] text-muted">{item.label}</span>
+                <span className="mt-1 block text-2xl font-semibold tabular-nums">
+                  {item.value.toLocaleString()}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mb-4 text-[12px] leading-relaxed text-muted">
+            统计对应当前用户范围。已入库表示数据库持有完整正文，运行时会按需恢复本地缓存。
+          </p>
+
           <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Puzzle size={16} className="text-muted shrink-0" />
               <h2 className="text-lg font-semibold shrink-0">用户知识技能</h2>
-              <span className="text-[12px] text-muted shrink-0">({filtered.length})</span>
-              <button onClick={loadData} className="p-1.5 rounded-md text-muted hover:text-ink transition-colors cursor-pointer" title="刷新"><RefreshCw size={13} /></button>
+              <span className="text-[12px] text-muted shrink-0">
+                ({filtered.length})
+              </span>
+              <button
+                onClick={loadData}
+                className="p-1.5 rounded-md text-muted hover:text-ink transition-colors cursor-pointer"
+                title="刷新"
+              >
+                <RefreshCw size={13} />
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="h-8 px-2 rounded-md border border-hairline bg-canvas text-[13px] focus:outline-none cursor-pointer max-w-[180px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label="筛选存储状态"
+                value={selectedStorage}
+                onChange={(event) =>
+                  setSelectedStorage(event.target.value as SkillStorageFilter)
+                }
+                className="h-8 px-2 rounded-md border border-hairline bg-canvas text-[13px] focus:outline-none cursor-pointer"
+              >
+                <option value="">全部存储状态</option>
+                <option value="stored">已入库</option>
+                <option value="pending">待迁移</option>
+                <option value="attention">需处理</option>
+              </select>
+              <select
+                aria-label="筛选技能用户"
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="h-8 px-2 rounded-md border border-hairline bg-canvas text-[13px] focus:outline-none cursor-pointer max-w-[180px]"
+              >
                 <option value="">全部用户</option>
                 {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.phone}</option>
+                  <option key={u.id} value={u.id}>
+                    {u.phone}
+                  </option>
                 ))}
               </select>
 
-              <select value={selectedVisibility} onChange={(e) => setSelectedVisibility(e.target.value)} className="h-8 px-2 rounded-md border border-hairline bg-canvas text-[13px] focus:outline-none cursor-pointer">
-                <option value="">全部状态</option>
+              <select
+                value={selectedVisibility}
+                onChange={(e) => setSelectedVisibility(e.target.value)}
+                className="h-8 px-2 rounded-md border border-hairline bg-canvas text-[13px] focus:outline-none cursor-pointer"
+              >
+                <option value="">全部可见性</option>
                 <option value="link_shared">私密链接</option>
                 <option value="shared">公开上架</option>
                 <option value="private">私有</option>
@@ -564,12 +786,21 @@ function AdminSkillsContent() {
           {filtered.length === 0 ? (
             <div className="text-center py-16">
               <Puzzle size={24} className="mx-auto mb-2 text-muted" />
-              <p className="text-[13px] text-muted">暂无用户知识技能</p>
+              <p className="text-[13px] text-muted">
+                {customSkills.length
+                  ? '当前筛选下没有技能'
+                  : '暂无用户知识技能'}
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
               {filtered.map((skill) => (
-                <SkillRow key={skill.id} skill={skill} detailHref={buildSkillDetailHref(skill.id)} onUpdateState={handleUpdateCustomSkillState} />
+                <SkillRow
+                  key={skill.id}
+                  skill={skill}
+                  detailHref={buildSkillDetailHref(skill.id)}
+                  onUpdateState={handleUpdateCustomSkillState}
+                />
               ))}
             </div>
           )}

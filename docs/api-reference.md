@@ -957,7 +957,12 @@ The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-co
 | GET | `/api/admin/chat-sessions` | 管理端会话检索 |
 | POST | `/api/admin/chat-sessions/pi-sessions/cleanup` | 清理 Pi session 文件 |
 | GET | `/api/admin/skills/custom` | 管理端自定义 Skill 检索 |
+| GET | `/api/admin/skills/custom/:id` | Current skill content, database storage metadata, and recent revision history |
 | GET | `/api/admin/skills/global` | 系统排盘全局开关列表 |
+
+The custom skill list returns summary metadata without file bodies or revision arrays. Its `storage` object includes the persisted content state, current revision ID and save time, format version, revision and file counts, and legacy import status, diagnostic code, and last check time. A current database revision takes precedence over historical import outcomes when determining the displayed storage state. Enabled and visibility flags remain independent.
+
+The detail endpoint returns the same metadata, the current revision's `files`, and metadata for the latest 20 revisions in `revisions`. File counts, text length, timestamps, and revision identity are read in the same SQL snapshot. These endpoints report PostgreSQL state; they do not measure runtime cache readiness or database replication lag. The admin list supports storage-state filtering and preserves filters when opening a detail page.
 
 ---
 

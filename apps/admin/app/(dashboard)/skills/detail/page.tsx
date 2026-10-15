@@ -4,28 +4,24 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { admin, AdminApiError, AdminCustomSkill } from '@/lib/admin-api';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
+import { SkillStorageBadge } from '@/components/skills/skill-storage-badge';
+import {
+  formatSkillDate as formatDate,
+  shortRevision,
+  SKILL_STORAGE_META,
+} from '@/lib/skill-storage';
 import {
   ArrowLeft,
   BookOpen,
   Calendar,
   Clock3,
-  FileText,
+  Database,
+  History,
   Loader2,
   RefreshCw,
   Share2,
   User,
 } from 'lucide-react';
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const VISIBILITY_META: Record<
   AdminCustomSkill['visibility'],
@@ -60,15 +56,12 @@ function MetaPill({
   tone?: 'neutral' | 'accent' | 'blue' | 'amber' | 'danger' | 'success';
 }) {
   const toneClass = {
-    neutral:
-      'border-hairline bg-surface-card text-muted',
-    accent:
-      'border-primary/20 bg-primary/10 text-primary',
+    neutral: 'border-hairline bg-surface-card text-muted',
+    accent: 'border-primary/20 bg-primary/10 text-primary',
     blue: 'border-blue-500/25 bg-blue-500/10 text-blue-400',
     amber: 'border-amber-500/25 bg-amber-500/10 text-amber-400',
     danger: 'border-red-500/25 bg-red-500/10 text-red-400',
-    success:
-      'border-success/25 bg-success/10 text-success',
+    success: 'border-success/25 bg-success/10 text-success',
   }[tone];
 
   return (
@@ -92,18 +85,14 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-hairline bg-surface-card p-4 sm:p-5">
+    <section className="min-w-0 rounded-xl border border-hairline bg-surface-card p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {Icon ? (
-              <Icon size={14} className="text-muted shrink-0" />
-            ) : null}
+            {Icon ? <Icon size={14} className="text-muted shrink-0" /> : null}
             <h2 className="text-[14px] font-semibold">{title}</h2>
           </div>
-          {hint ? (
-            <p className="mt-1 text-[12px] text-muted">{hint}</p>
-          ) : null}
+          {hint ? <p className="mt-1 text-[12px] text-muted">{hint}</p> : null}
         </div>
       </div>
       <div className="mt-4">{children}</div>
@@ -117,9 +106,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-wider text-muted">
         {label}
       </div>
-      <div className="mt-1 text-[14px] font-medium text-ink">
-        {value}
-      </div>
+      <div className="mt-1 text-[14px] font-medium text-ink">{value}</div>
     </div>
   );
 }
@@ -141,7 +128,7 @@ function InfoRow({
         {label}
       </div>
       <div
-        className={`mt-1 text-[13px] font-medium break-words ${mono ? 'font-mono' : ''}`}
+        className={`mt-1 min-w-0 text-[13px] font-medium ${mono ? 'font-mono break-all' : 'break-words'}`}
       >
         {value}
       </div>
@@ -154,10 +141,11 @@ function InfoRow({
   );
 }
 
-function buildBackHref(userId: string, visibility: string) {
+function buildBackHref(userId: string, visibility: string, storage: string) {
   const params = new URLSearchParams();
   if (userId) params.set('user_id', userId);
   if (visibility) params.set('visibility', visibility);
+  if (storage) params.set('storage', storage);
   const qs = params.toString();
   return `/skills${qs ? `?${qs}` : ''}`;
 }
@@ -167,10 +155,11 @@ function AdminSkillDetailContent() {
   const skillId = searchParams.get('id') || '';
   const selectedUserId = searchParams.get('user_id') || '';
   const selectedVisibility = searchParams.get('visibility') || '';
+  const selectedStorage = searchParams.get('storage') || '';
 
   const backHref = useMemo(
-    () => buildBackHref(selectedUserId, selectedVisibility),
-    [selectedUserId, selectedVisibility],
+    () => buildBackHref(selectedUserId, selectedVisibility, selectedStorage),
+    [selectedUserId, selectedVisibility, selectedStorage],
   );
 
   const [skill, setSkill] = useState<AdminCustomSkill | null>(null);
@@ -300,6 +289,7 @@ function AdminSkillDetailContent() {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-1.5">
+              <SkillStorageBadge storage={skill.storage} />
               <MetaPill tone={skill.enabled ? 'success' : 'danger'}>
                 {skill.enabled ? '启用中' : '已关闭'}
               </MetaPill>
@@ -333,22 +323,22 @@ function AdminSkillDetailContent() {
             </div>
           </div>
 
-          <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-[320px]">
+          <div className="grid w-full grid-cols-3 gap-2 xl:w-[320px] xl:grid-cols-2">
             <StatTile
               label="内容长度"
               value={`${skill.content_length.toLocaleString()} 字`}
             />
-            <StatTile label="文件数" value={String(skill.files.length)} />
+            <StatTile label="文件数" value={String(skill.storage.file_count)} />
             <StatTile
-              label="分享令牌"
-              value={skill.share_token ? '已生成' : '未生成'}
+              label="修订记录"
+              value={`${skill.storage.revision_count} 次保存`}
             />
           </div>
         </div>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="order-2 min-w-0 space-y-4 xl:order-1">
           <SectionCard
             title="管理操作"
             hint="直接在详情页启停技能或调整分享可见性。"
@@ -413,9 +403,7 @@ function AdminSkillDetailContent() {
               </div>
 
               {actionError ? (
-                <p className="text-[12px] text-error">
-                  {actionError}
-                </p>
+                <p className="text-[12px] text-error">{actionError}</p>
               ) : null}
             </div>
           </SectionCard>
@@ -425,16 +413,6 @@ function AdminSkillDetailContent() {
               <InfoRow label="技能 ID" value={skill.id} mono />
               <InfoRow label="用户 ID" value={skill.user_id} mono />
               <InfoRow label="用户标识" value={skill.phone || '未绑定手机号'} />
-              <InfoRow
-                label="Bundle URI"
-                value={skill.bundle_uri || '未写入'}
-                mono
-              />
-              <InfoRow
-                label="Checksum"
-                value={skill.checksum || '未生成'}
-                mono
-              />
               <InfoRow
                 label="可见性"
                 value={visibility.label}
@@ -446,23 +424,159 @@ function AdminSkillDetailContent() {
           </SectionCard>
         </div>
 
-        <div className="space-y-4">
+        <div className="order-1 min-w-0 space-y-4 xl:order-2">
           <SectionCard
-            title="技能说明"
-            hint="用于快速理解这个技能解决什么问题、适合什么上下文。"
-            icon={FileText}
+            title="数据库内容"
+            hint="当前修订决定后续请求读取的内容，保存新修订不会覆盖正在使用的快照。"
+            icon={Database}
           >
-            <div className="rounded-lg border border-hairline bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink">
-              {skill.description || '暂无技能说明'}
+            <div
+              className={`rounded-lg border px-4 py-3 ${skill.storage.state === 'stored' ? 'border-success/25 bg-success/5' : 'border-warning/30 bg-warning/5'}`}
+            >
+              <SkillStorageBadge storage={skill.storage} />
+              <p className="mt-2 text-[13px] leading-relaxed text-muted">
+                {SKILL_STORAGE_META[skill.storage.state].description}
+              </p>
             </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <InfoRow
+                label="当前修订 ID"
+                value={skill.storage.current_revision_id || '尚无数据库修订'}
+                mono
+              />
+              <InfoRow
+                label="修订保存时间"
+                value={formatDate(skill.storage.revision_created_at)}
+              />
+              <InfoRow
+                label="内容格式"
+                value={
+                  skill.storage.format_version === 1
+                    ? '文本 Skill · 格式 1'
+                    : skill.storage.format_version
+                      ? `格式 ${skill.storage.format_version}`
+                      : '尚未入库'
+                }
+              />
+              <InfoRow
+                label="内容来源"
+                value={
+                  skill.storage.current_revision_id
+                    ? 'PostgreSQL'
+                    : '等待导入原文件'
+                }
+              />
+            </div>
+            <details className="mt-4 rounded-lg border border-hairline bg-canvas px-3 py-2.5">
+              <summary className="cursor-pointer text-[12px] font-medium text-muted">
+                迁移与技术信息
+              </summary>
+              <div className="mt-3 grid gap-2">
+                <InfoRow
+                  label="内容校验值（SHA-256）"
+                  value={skill.checksum || '尚未生成'}
+                  hint="用于确认文件内容是否一致，不表示版本先后。"
+                  mono
+                />
+                <InfoRow
+                  label={
+                    skill.storage.current_revision_id
+                      ? '数据库引用'
+                      : '原文件位置'
+                  }
+                  value={skill.bundle_uri || '未记录'}
+                  mono
+                />
+                <InfoRow
+                  label="旧文件迁移"
+                  value={
+                    skill.storage.import_status === 'complete'
+                      ? '迁移完成'
+                      : skill.storage.current_revision_id
+                        ? '无需迁移'
+                        : SKILL_STORAGE_META[skill.storage.state].label
+                  }
+                />
+                <InfoRow
+                  label="最近迁移检查"
+                  value={formatDate(skill.storage.import_checked_at)}
+                />
+                {skill.storage.import_error_code ? (
+                  <InfoRow
+                    label="迁移诊断代码"
+                    value={skill.storage.import_error_code}
+                    mono
+                  />
+                ) : null}
+              </div>
+            </details>
           </SectionCard>
 
           <SectionCard
-            title="Bundle 文件"
-            hint="展示该用户 Skill 的 Markdown Bundle 文件。"
+            title="修订记录"
+            hint={`共 ${skill.storage.revision_count} 次保存，展示最近 ${skill.revisions.length} 次。`}
+            icon={History}
+          >
+            {skill.revisions.length ? (
+              <div className="overflow-x-auto rounded-lg border border-hairline bg-canvas">
+                <table className="w-full min-w-[520px] text-left text-[12px]">
+                  <thead className="border-b border-hairline text-[11px] text-muted">
+                    <tr>
+                      <th className="px-3 py-2.5 font-medium">修订</th>
+                      <th className="px-3 py-2.5 font-medium">保存时间</th>
+                      <th className="px-3 py-2.5 font-medium">文件 / 字符</th>
+                      <th className="px-3 py-2.5 font-medium">内容校验值</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-hairline">
+                    {skill.revisions.map((revision) => (
+                      <tr key={revision.id}>
+                        <td className="px-3 py-3">
+                          <span className="font-mono" title={revision.id}>
+                            {shortRevision(revision.id)}
+                          </span>
+                          {revision.id === skill.storage.current_revision_id ? (
+                            <span className="ml-2 text-[10px] text-primary">
+                              当前修订
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-3 text-muted">
+                          {formatDate(revision.created_at)}
+                        </td>
+                        <td className="px-3 py-3 tabular-nums">
+                          {revision.file_count} 个 /{' '}
+                          {revision.content_length.toLocaleString()} 字
+                        </td>
+                        <td
+                          className="px-3 py-3 font-mono text-muted"
+                          title={revision.checksum}
+                        >
+                          {revision.checksum.slice(0, 12)}…
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-hairline px-4 py-6 text-center text-[13px] text-muted">
+                完成内容入库后，这里会保留每次保存的修订记录。
+              </p>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="当前修订文件"
+            hint="正文直接读取自数据库，与上方当前修订一致。"
             icon={BookOpen}
           >
             <div className="space-y-3">
+              {!skill.files.length ? (
+                <p className="text-[13px] leading-relaxed text-muted">
+                  正文尚未入库，暂无法预览文件。请先处理上方显示的迁移状态。
+                </p>
+              ) : null}
               {skill.files.map((file) => (
                 <section
                   key={file.path}

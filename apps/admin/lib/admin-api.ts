@@ -11,6 +11,8 @@ import type {
 } from '@fateclaw/contracts/chat';
 import type {
   AdminSkillCommentDto,
+  AdminCustomSkillDto,
+  AdminCustomSkillSummaryDto,
   AdminSkillCommentsResponseDto,
   AdminSkillCommentStatusDto,
 } from '@fateclaw/contracts/skills';
@@ -529,28 +531,8 @@ export interface AdminSkillGlobalConfig {
   dir?: string;
 }
 
-export interface AdminTextSkillBundleFile {
-  path: string;
-  content: string;
-}
-
-export interface AdminCustomSkill {
-  id: string;
-  user_id: string;
-  phone: string | null;
-  skill_name: string;
-  description: string;
-  bundle_uri: string;
-  checksum: string | null;
-  install_status: 'installed' | 'missing' | 'error';
-  files: AdminTextSkillBundleFile[];
-  content_length: number;
-  visibility: 'private' | 'link_shared' | 'shared';
-  share_token: string | null;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type AdminCustomSkill = AdminCustomSkillDto;
+export type AdminCustomSkillSummary = AdminCustomSkillSummaryDto;
 
 /** 管理后台 Skill 评论审核行。 */
 export type AdminSkillComment = AdminSkillCommentDto;
@@ -881,7 +863,7 @@ export const admin = {
     const params = new URLSearchParams();
     if (opts?.user_id) params.set('user_id', opts.user_id);
     const qs = params.toString();
-    return adminRequest<AdminCustomSkill[]>(
+    return adminRequest<AdminCustomSkillSummary[]>(
       `/api/admin/skills/custom${qs ? `?${qs}` : ''}`,
     );
   },

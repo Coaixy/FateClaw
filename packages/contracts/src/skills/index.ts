@@ -112,6 +112,57 @@ export interface UserSkillsResponseDto {
 export type UserCustomSkillSummaryDto = Omit<UserCustomSkillDto, 'files'>;
 export type SubscribedSkillSummaryDto = Omit<SubscribedSkillDto, 'files'>;
 
+export type SkillContentImportStatusDto =
+  | 'pending'
+  | 'missing'
+  | 'mismatched'
+  | 'invalid'
+  | 'complete';
+
+export interface AdminSkillStorageDto {
+  state: 'stored' | 'pending' | 'missing' | 'mismatched' | 'invalid';
+  current_revision_id: string | null;
+  revision_created_at: string | null;
+  format_version: number | null;
+  revision_count: number;
+  file_count: number;
+  import_status: SkillContentImportStatusDto | null;
+  import_error_code: string | null;
+  import_checked_at: string | null;
+}
+
+export interface AdminSkillRevisionDto {
+  id: string;
+  created_at: string;
+  format_version: number;
+  checksum: string;
+  file_count: number;
+  content_length: number;
+}
+
+export interface AdminCustomSkillSummaryDto {
+  id: string;
+  user_id: string;
+  phone: string | null;
+  skill_name: string;
+  description: string;
+  bundle_uri: string;
+  checksum: string | null;
+  install_status: UserCustomSkillDto['install_status'];
+  content_length: number;
+  visibility: UserCustomSkillDto['visibility'];
+  share_token: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  storage: AdminSkillStorageDto;
+}
+
+export interface AdminCustomSkillDto extends AdminCustomSkillSummaryDto {
+  files: TextSkillBundleFileDto[];
+  revisions: AdminSkillRevisionDto[];
+}
+
 export interface SharedSkillPreviewDto {
   id: string;
   skill_name: string;

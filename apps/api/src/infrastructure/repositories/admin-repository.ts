@@ -1,3 +1,7 @@
+import type {
+  AdminCustomSkillDto,
+  AdminCustomSkillSummaryDto,
+} from '@fateclaw/contracts/skills';
 import { getDbPool } from '../db-pool.js';
 
 const pool = {
@@ -409,82 +413,64 @@ export async function resetPiSessionCleanupCursor(
   );
 }
 
-export interface AdminCustomSkillRow {
-  id: string;
-  user_id: string;
-  phone: string | null;
-  skill_name: string;
-  description: string;
-  bundle_uri: string;
-  checksum: string | null;
-  install_status: 'installed' | 'missing' | 'error';
-  files: Array<{ path: string; content: string }>;
-  content_length: number;
-  visibility: 'private' | 'link_shared' | 'shared';
-  share_token: string | null;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
-}
+export type AdminCustomSkillRow = AdminCustomSkillDto;
 
-function hydrateAdminCustomSkillRow(
-  row: AdminCustomSkillRow,
-): AdminCustomSkillRow {
-  const files = row.files ?? [];
-  return {
-    ...row,
-    files,
-    content_length: files.reduce((sum, file) => sum + file.content.length, 0),
-  };
-}
+const ADMIN_SKILL_COLUMNS = `
+  s.id, s.user_id, u.phone, s.skill_name, s.description,
+  CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
+  COALESCE(r.checksum, s.checksum) AS checksum, s.install_status,
+  COALESCE(r.content_length, 0) AS content_length,
+  s.visibility, s.share_token, s.enabled, s.created_at, s.updated_at,
+  jsonb_build_object(
+    'state', CASE WHEN r.id IS NOT NULL THEN 'stored'
+      WHEN i.status IN ('missing', 'mismatched', 'invalid') THEN i.status ELSE 'pending' END,
+    'current_revision_id', r.id,
+    'revision_created_at', r.created_at,
+    'format_version', r.format_version,
+    'revision_count', (SELECT COUNT(*)::int FROM skill_content_revisions history WHERE history.skill_id = s.id),
+    'file_count', COALESCE(jsonb_array_length(r.files), 0),
+    'import_status', i.status,
+    'import_error_code', i.error_code,
+    'import_checked_at', i.checked_at
+  ) AS storage`;
+
+const ADMIN_SKILL_FROM = `FROM user_custom_skills s
+  JOIN users u ON u.id = s.user_id
+  LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
+  LEFT JOIN skill_content_imports i ON i.skill_id = s.id`;
 
 export async function getCustomSkillsForAdmin(opts: {
   userId?: string;
-}): Promise<AdminCustomSkillRow[]> {
-  let whereClause = 'WHERE s.deleted_at IS NULL';
-  const params: unknown[] = [];
-  let paramIdx = 1;
-
-  if (opts.userId) {
-    whereClause += ` AND s.user_id = $${paramIdx++}`;
-    params.push(opts.userId);
-  }
-
+}): Promise<AdminCustomSkillSummaryDto[]> {
   const { rows } = await pool.query(
-    `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
-            COALESCE(r.files, '[]'::jsonb) AS files, COALESCE(r.checksum, s.checksum) AS checksum, s.install_status,
-            s.visibility, s.share_token, s.enabled,
-            s.created_at, s.updated_at
-     FROM user_custom_skills s
-     JOIN users u ON u.id = s.user_id
-     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
-     ${whereClause}
-     ORDER BY s.created_at DESC`,
-    params,
+    `SELECT ${ADMIN_SKILL_COLUMNS}
+     ${ADMIN_SKILL_FROM}
+     WHERE s.deleted_at IS NULL ${opts.userId ? 'AND s.user_id = $1' : ''}
+     ORDER BY s.created_at DESC, s.id`,
+    opts.userId ? [opts.userId] : [],
   );
-
-  return (rows as AdminCustomSkillRow[]).map(hydrateAdminCustomSkillRow);
+  return rows as AdminCustomSkillSummaryDto[];
 }
 
 export async function getCustomSkillForAdmin(
   id: string,
 ): Promise<AdminCustomSkillRow | undefined> {
   const { rows } = await pool.query(
-    `SELECT s.id, s.user_id, u.phone, s.skill_name, s.description,
-            CASE WHEN r.id IS NULL THEN s.bundle_uri ELSE 'db://skill-content-revisions/' || r.id END AS bundle_uri,
-            COALESCE(r.files, '[]'::jsonb) AS files, COALESCE(r.checksum, s.checksum) AS checksum, s.install_status,
-            s.visibility, s.share_token, s.enabled,
-            s.created_at, s.updated_at
-     FROM user_custom_skills s
-     JOIN users u ON u.id = s.user_id
-     LEFT JOIN skill_content_revisions r ON r.skill_id = s.id AND r.id = s.current_revision_id
+    `SELECT ${ADMIN_SKILL_COLUMNS}, COALESCE(r.files, '[]'::jsonb) AS files,
+       COALESCE((
+         SELECT jsonb_agg(to_jsonb(revision) ORDER BY revision.created_at DESC, revision.id DESC)
+         FROM (
+           SELECT history.id, history.created_at, history.format_version, history.checksum,
+             jsonb_array_length(history.files) AS file_count, history.content_length
+           FROM skill_content_revisions history WHERE history.skill_id = s.id
+           ORDER BY history.created_at DESC, history.id DESC LIMIT 20
+         ) revision
+       ), '[]'::jsonb) AS revisions
+     ${ADMIN_SKILL_FROM}
      WHERE s.id = $1 AND s.deleted_at IS NULL`,
     [id],
   );
-  return rows[0]
-    ? hydrateAdminCustomSkillRow(rows[0] as AdminCustomSkillRow)
-    : undefined;
+  return rows[0] as AdminCustomSkillRow | undefined;
 }
 
 function dateOnlyFromOffset(baseDate: Date, offsetDays: number): string {
