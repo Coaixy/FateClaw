@@ -60,6 +60,11 @@
       "types": "./dist/api-keys/index.d.ts",
       "import": "./dist/api-keys/index.js",
       "default": "./dist/api-keys/index.js"
+    },
+    "./service-status": {
+      "types": "./dist/service-status/index.d.ts",
+      "import": "./dist/service-status/index.js",
+      "default": "./dist/service-status/index.js"
     }
   },
   "files": [

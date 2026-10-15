@@ -14,6 +14,9 @@ import { dropAnnouncementsMigration } from './versions/0079-drop-announcements.j
 import { dropRedemptionCodesMigration } from './versions/0080-drop-redemption-codes.js';
 import { skillContentRevisionsMigration } from './versions/0081-skill-content-revisions.js';
 import { unifyMembershipIdentityMigration } from './versions/0082-unify-membership-identity.js';
+import { officialModelPoolMigration } from './versions/0083-official-model-pool.js';
+import { officialModelPoolPrimaryMigration } from './versions/0084-official-model-pool-primary.js';
+import { aiServiceStatusMigration } from './versions/0085-ai-service-status.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -31,6 +34,9 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   dropRedemptionCodesMigration,
   skillContentRevisionsMigration,
   unifyMembershipIdentityMigration,
+  officialModelPoolMigration,
+  officialModelPoolPrimaryMigration,
+  aiServiceStatusMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

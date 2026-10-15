@@ -132,6 +132,48 @@ describe('durable request recovery', () => {
     expect(f.submit).not.toHaveBeenCalled();
     expect(f.failure).toHaveBeenCalledOnce();
   });
+  it('rehydrates pool credentials only for unchanged admitted node revisions', async () => {
+    const row = request();
+    const stored = {
+      modelConfigId: 'node-a',
+      revision: 2,
+      weight: 1,
+      piApi: 'openai-completions' as const,
+      model: 'model-a',
+      providerKey: 'provider-a',
+      authMode: 'openai_api_key' as const,
+    };
+    row.runtime.poolNodes = [stored];
+    f.runtime.mockResolvedValue({
+      ...row.runtime,
+      secret: 'synthetic-key',
+      baseUrl: null,
+      poolNodes: [{ ...stored, apiKey: 'synthetic-node-key' }],
+    });
+    await recoverAgentRequest(row);
+    expect(f.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmRuntime: expect.objectContaining({
+          poolNodes: [
+            expect.objectContaining({
+              apiKey: 'synthetic-node-key',
+              revision: 2,
+            }),
+          ],
+        }),
+      }),
+    );
+    f.submit.mockClear();
+    f.runtime.mockResolvedValue({
+      ...row.runtime,
+      secret: 'synthetic-key',
+      baseUrl: null,
+      poolNodes: [{ ...stored, revision: 3, apiKey: 'synthetic-revised-key' }],
+    });
+    await recoverAgentRequest(row);
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.failure).toHaveBeenCalledOnce();
+  });
   it('never reexecutes an expired running request or finalizes unknown usage', async () => {
     await recoverAgentRequest(request({ state: 'running' }));
     expect(f.submit).not.toHaveBeenCalled();

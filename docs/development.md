@@ -50,8 +50,8 @@ API startup runs database migrations through `initDatabase()` in [db.ts](../apps
 ## First AI request
 
 1. Open the admin site and authenticate with the configured `MANAGER_KEY`.
-2. Configure a model provider, protocol, base URL, model, and API key in system settings.
-3. Use the user site's model settings to select an official model or configure a personal provider.
+2. Configure the official model pool in admin system settings: common public prices and thinking level, then one retained primary node and optional child nodes with their own protocol, endpoint, key and routing weight.
+3. Check the user site's read-only official model status. Users share the configured pool and cannot enter personal providers.
 4. Confirm the user's [membership and billing requirements](membership-entitlement-current.md), then send a message in AI Chat.
 
 Registration and password recovery use SMS verification; configure that integration if those flows are needed. See the authentication endpoints in the [API reference](api-reference.md).
@@ -85,3 +85,5 @@ The lightweight entry initializes the database, Redis, and HTTP server but skips
 These instructions were checked against repository scripts and startup source. A live local startup and provider-backed request were not exercised for this documentation update (unverified).
 
 For production packaging and deployment, use the [deployment guide](deployment-split.md).
+
+The public `/status` page reads shared AI availability observations. Full API startup runs lightweight probes every six hours; API-only mode only serves existing results. See [Public service status](service-status.md) for the probe budget and stale-state behavior.

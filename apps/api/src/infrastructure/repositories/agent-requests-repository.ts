@@ -6,7 +6,11 @@ import type { AiChatSubmission } from '../../runtime/ipc-worker.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 
 export const REQUEST_OWNER = randomUUID();
-export type StoredRuntime = Omit<LlmRuntimeSnapshot, 'apiKey'>;
+export type StoredRuntime = Omit<LlmRuntimeSnapshot, 'apiKey' | 'poolNodes'> & {
+  poolNodes?: Array<
+    Omit<NonNullable<LlmRuntimeSnapshot['poolNodes']>[number], 'apiKey'>
+  >;
+};
 export interface DurableRequest {
   request_id: string;
   execution_id: string;
@@ -52,7 +56,13 @@ export async function admitAgentRequest(args: {
   runtime: LlmRuntimeSnapshot;
   deadlineAt: number;
 }): Promise<string> {
-  const { apiKey: _credential, ...runtime } = args.runtime;
+  const { apiKey: _credential, poolNodes, ...baseRuntime } = args.runtime;
+  const runtime: StoredRuntime = {
+    ...baseRuntime,
+    ...(poolNodes
+      ? { poolNodes: poolNodes.map(({ apiKey: _key, ...node }) => node) }
+      : {}),
+  };
   const client = await getDbPool().connect();
   let discardClient = false;
   try {

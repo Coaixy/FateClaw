@@ -91,7 +91,19 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
   ] as const;
   if (
     identity.some((key) => current[key] !== row.runtime[key]) ||
-    (current.baseUrl || undefined) !== row.runtime.baseUrl
+    (current.baseUrl || undefined) !== row.runtime.baseUrl ||
+    JSON.stringify(
+      current.poolNodes?.map(({ modelConfigId, revision }) => [
+        modelConfigId,
+        revision,
+      ]),
+    ) !==
+      JSON.stringify(
+        row.runtime.poolNodes?.map(({ modelConfigId, revision }) => [
+          modelConfigId,
+          revision,
+        ]),
+      )
   ) {
     const result = await persistAgentFailure(row.request_id, failure(row));
     if (result) await deliver(row, result);
@@ -110,6 +122,7 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
       ...current,
       ...row.runtime,
       secret: current.secret,
+      poolNodes: current.poolNodes,
       baseUrl: row.runtime.baseUrl ?? null,
       contextWindowTokens:
         row.runtime.contextWindowTokens ?? current.contextWindowTokens,

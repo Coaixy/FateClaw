@@ -18,6 +18,12 @@ The `0082_unify_membership_identity` migration renames the stored membership ide
 
 The `0081_skill_content_revisions` migration adds immutable `skill_content_revisions`, a same-skill current revision pointer, and `skill_content_imports` for durable legacy import outcomes. Updates to revision rows are rejected by a database trigger. Content insertion and pointer changes commit together. API startup imports legacy files separately from the schema ledger, preserves pending failures for retries, and skips records with a current revision. See [User skill storage](deployment-split.md#user-skill-storage) before moving an existing installation.
 
+The `0083_official_model_pool` migration creates the public pool settings and node membership/circuit tables. It enrolls only the previous platform model, preserving its public alias, prices and credential reference. It does not read or rewrite credential values. Pool membership and health behavior are owned by [Official model pool](official-model-pool.md).
+
+The `0084_official_model_pool_primary` migration designates the existing canonical pool member as primary, or the oldest remaining member when the canonical member is absent. Empty installations remain unconfigured until the first save. The primary pointer references pool membership with `ON DELETE RESTRICT`; child membership remains independently editable and removable. Credentials and public prices are preserved.
+
+The `0085_ai_service_status` migration creates a shared check schedule and aggregate availability observations. The schedule reserves six-hour probe intervals across processes and restarts. Observation rows contain only state, timestamp and latency; no provider configuration or credential values are copied.
+
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 
 Databases with recorded migration history always use [versions/](../apps/api/src/infrastructure/migrations/versions/). Each missing migration runs in its own transaction and records its original ID and description. The legacy `0001_core_schema_baseline` already represents historical migrations 0001–0067. Older ledgers may additionally contain historical 0002–0069 IDs; those records remain intact.

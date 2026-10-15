@@ -39,6 +39,7 @@ import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
 import { getRequestId } from '../request-scope.js';
+import { installModelPool } from './model-pool.js';
 
 const DEFAULT_THINKING_LEVEL: PiThinkingLevel = 'medium';
 
@@ -121,6 +122,9 @@ export async function runPiSession(args: {
   const providerRuntime = await createPiProviderRuntime(
     args.containerInput.llmRuntime,
   );
+  installModelPool(providerRuntime, args.containerInput.llmRuntime, {
+    trace: (event) => traceEvent(event, args.requestScope),
+  });
   const userId = resolveUserId(args.containerInput);
   const soulEditEnabled = await args.runtime.deps.soulStore.canEdit(
     args.containerInput.accountId,
@@ -162,7 +166,10 @@ export async function runPiSession(args: {
       compaction: { enabled: true },
       // Warming issues extra billable calls outside the user-requested turn.
       cacheWarming: 'off',
-      retry: { enabled: true, maxRetries: 2 },
+      retry: {
+        enabled: !args.containerInput.llmRuntime.poolNodes?.length,
+        maxRetries: 2,
+      },
       images: { blockImages: true },
       enableInstallTelemetry: false,
     });

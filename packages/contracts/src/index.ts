@@ -6,3 +6,4 @@ export * from './billing/index.js';
 export * from './skills/index.js';
 export * from './model-settings/index.js';
 export * from './api-keys/index.js';
+export * from './service-status/index.js';

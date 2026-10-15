@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -47,6 +48,7 @@ function getLocalDateKey(date = new Date()) {
  * @returns 首次进入或当天未勾选免提醒时展示的合规告知弹窗。
  */
 export function PreUseNoticeDialog() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [checkedToday, setCheckedToday] = useState(true);
 
@@ -74,7 +76,7 @@ export function PreUseNoticeDialog() {
     setOpen(false);
   };
 
-  if (!open) {
+  if (!open || pathname === '/status' || pathname === '/status/') {
     return null;
   }
 

@@ -54,6 +54,7 @@ export type PiThinkingLevel =
   | 'xhigh';
 
 export interface LlmRuntimeSnapshot {
+  poolNodes?: import('@fateclaw/contracts/model-settings').RuntimeModelPoolNode[];
   source: 'custom' | 'official';
   billingMode: 'none' | 'metered';
   modelConfigId: string;

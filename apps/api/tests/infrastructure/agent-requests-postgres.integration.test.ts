@@ -101,12 +101,30 @@ describe.skipIf(!connectionString)(
     });
 
     it('commits admission and user message together without persisting credentials', async () => {
-      await admitAgentRequest(admission());
+      const args = admission();
+      args.runtime.poolNodes = [
+        {
+          ...runtime,
+          modelConfigId: 'pool-node-a',
+          apiKey: 'synthetic-pool-credential',
+          revision: 1,
+          weight: 1,
+        },
+      ];
+      await admitAgentRequest(args);
       const { rows } = await getDbPool().query(
         'SELECT runtime,input,state FROM agent_requests',
       );
       expect(rows[0].state).toBe('queued');
       expect(rows[0].runtime).not.toHaveProperty('apiKey');
+      expect(rows[0].runtime.poolNodes[0]).not.toHaveProperty('apiKey');
+      expect(rows[0].runtime.poolNodes[0]).toMatchObject({
+        modelConfigId: 'pool-node-a',
+        revision: 1,
+      });
+      expect(JSON.stringify(rows[0])).not.toContain(
+        'synthetic-pool-credential',
+      );
       expect(rows[0].input).not.toHaveProperty('messageToPersist');
       expect(
         (await getDbPool().query('SELECT id FROM messages')).rowCount,

@@ -1,4 +1,38 @@
 export const zhCNMessages = {
+  serviceStatus: {
+    title: '服务状态',
+    subtitle: '了解 AI 服务的整体可用性与最近检测结果。',
+    home: '返回首页',
+    refresh: '刷新状态',
+    loading: '正在读取服务状态',
+    operational: 'AI 服务运行正常',
+    unavailable: 'AI 服务暂时不可用',
+    unknown: '服务状态待确认',
+    operationalShort: '正常',
+    unavailableShort: '不可用',
+    unknownShort: '待确认',
+    operationalDescription: '最近一次检测已有可用的 AI 节点响应。',
+    unavailableDescription: '最近一次检测未能获得可用响应，请稍后再试。',
+    unknownDescription: '暂时没有有效的近期检测结果，请稍后查看。',
+    readFailed:
+      '暂时无法读取最新状态；已有记录将保留显示，过期后标记为待确认。',
+    ai: 'AI 服务',
+    latency: '检测响应延迟',
+    checked: '最近检测',
+    frequency: '检测频率',
+    sixHours: '每 6 小时一次',
+    waiting: '等待首次检测',
+    history: '最近 7 天检测记录',
+    sampleRate: '检测可用率',
+    noSample: '暂无检测记录',
+    sevenDaysAgo: '7 天前',
+    now: '现在',
+    aggregateNote: '只要有一个 AI 节点可用，整体服务即显示正常。',
+    cadenceNote:
+      '后台每 6 小时轻量检测一次；刷新本页面只读取已有结果，不会触发额外检测。',
+    latencyNote:
+      '延迟为轻量检测的首响应时间，不代表完整回答耗时。超过 12 小时未更新的结果会标记为待确认。',
+  },
   artifact: {
     copyText: '复制盘面文本',
     copied: '盘面文本已复制到剪贴板',

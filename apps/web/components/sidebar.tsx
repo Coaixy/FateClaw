@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Archive,
+  Activity,
   Loader2,
   LogIn,
   MessageCircle,
@@ -820,10 +821,15 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
 
           {/* 无框 ghost 工具行:底部工具是最低层级,不用边框和常亮高亮抢会话列表的注意力。 */}
           <div
-            className="grid grid-cols-2 gap-1"
+            className="grid grid-cols-3 gap-1"
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
+            <Link href="/status" onClick={closeSidebar}
+              className="flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink"
+              aria-label={t('sidebar.viewStatus')} title={t('sidebar.viewStatus')}>
+              <Activity size={14} strokeWidth={1.8} /><span>{t('sidebar.status')}</span>
+            </Link>
             <button
               type="button"
               onClick={() => {

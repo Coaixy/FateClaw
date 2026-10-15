@@ -133,6 +133,7 @@ function llmRuntimeToSnapshot(
     baseUrl: runtime.baseUrl || undefined,
     authMode: runtime.authMode,
     providerKey: runtime.providerKey,
+    poolNodes: runtime.poolNodes,
     inputTokenPricePerMillionCoins: runtime.inputTokenPricePerMillionCoins,
     outputTokenPricePerMillionCoins: runtime.outputTokenPricePerMillionCoins,
   };

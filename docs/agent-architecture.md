@@ -96,7 +96,7 @@ notes/
 
 1. 校验会话归属，并用 Redis `session:processing:{sessionId}` 做会话级并发锁。
 2. 写入用户消息。
-3. `resolveUserLlmRuntime()` resolves the single platform-managed official model and thinking level; legacy user selections are ignored.
+3. `resolveUserLlmRuntime()` captures the official model pool, common prices and thinking level; legacy user selections are ignored. Model-call routing, failover and shared circuit state are described in [Official model pool](official-model-pool.md).
 4. 用 `buildStructuredInputForSession()` 构建历史上下文。
 5. 如用户选中盘面，追加 `activeBoardContext`。
 6. 调 `dispatchAiChatPrompt()`。

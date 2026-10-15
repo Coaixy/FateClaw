@@ -354,8 +354,10 @@ const OfficialModelAuthModeSchema = z
   ])
   .optional();
 
-const OfficialModelSettingsSchema = z
+const OfficialModelPoolNodeSchema = z
   .strictObject({
+    id: z.string().trim().min(1).max(120).optional(),
+    display_name: z.string().trim().min(1).max(120),
     pi_api: z.enum([
       'openai-completions',
       'openai-responses',
@@ -366,7 +368,8 @@ const OfficialModelSettingsSchema = z
     model_name: z.string().trim().min(1).max(120),
     api_key: z.string().trim().max(2000).optional(),
     auth_mode: OfficialModelAuthModeSchema,
-    thinking_level: z.enum(PI_THINKING_LEVELS),
+    enabled: z.boolean(),
+    weight: z.number().int().min(1).max(1000),
     context_window_tokens: z
       .number()
       .int()
@@ -377,12 +380,6 @@ const OfficialModelSettingsSchema = z
         `上下文窗口需为 0，或不小于 ${MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS}`,
       )
       .nullable(),
-    input_token_price_per_million_coins: z.number().int().min(0).max(1_000_000),
-    output_token_price_per_million_coins: z
-      .number()
-      .int()
-      .min(0)
-      .max(1_000_000),
   })
   .superRefine((config, ctx) => {
     if (!config.auth_mode) return;
@@ -397,6 +394,29 @@ const OfficialModelSettingsSchema = z
         code: 'custom',
         path: ['auth_mode'],
         message: '认证方式与接口协议不匹配',
+      });
+    }
+  });
+
+const OfficialModelSettingsSchema = z
+  .strictObject({
+    display_name: z.string().trim().min(1).max(120),
+    thinking_level: z.enum(PI_THINKING_LEVELS),
+    input_token_price_per_million_coins: z.number().int().min(0).max(1_000_000),
+    output_token_price_per_million_coins: z
+      .number()
+      .int()
+      .min(0)
+      .max(1_000_000),
+    nodes: z.array(OfficialModelPoolNodeSchema).min(1).max(20),
+  })
+  .superRefine((config, ctx) => {
+    const ids = config.nodes.flatMap((node) => (node.id ? [node.id] : []));
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['nodes'],
+        message: '模型节点不能重复',
       });
     }
   });

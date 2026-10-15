@@ -5,9 +5,10 @@ const db = vi.hoisted(() => ({
   getPlatformModelRuntimeSettings: vi.fn(),
   getSystemSecret: vi.fn(),
   savePlatformModelConfig: vi.fn(),
+  getUserModelSelection: vi.fn(),
+  getUserModelConfig: vi.fn(),
 }));
 vi.mock('../../../src/infrastructure/db.js', () => db);
-
 import {
   getAgentConcurrencyLimit,
   getLocalAgentRuntimePolicy,
@@ -21,225 +22,297 @@ import {
   resolveUserLlmRuntime,
   saveOfficialModelSettings,
 } from '../../../src/modules/system/system-config.js';
-import type { OfficialModelConfig } from '../../../src/shared/types.js';
+import type { PlatformModelSettings } from '../../../src/infrastructure/repositories/config-repository.js';
 
-const model: OfficialModelConfig = {
-  id: 'model-slot',
-  model_key: 'official',
-  pi_api: 'openai-responses',
-  display_name: 'Official model',
+const model = {
+  id: 'node-a',
+  model_key: 'provider-a',
+  pi_api: 'openai-responses' as const,
+  display_name: 'Provider A',
   enabled: true,
   priority: 0,
   base_url: null,
   model_name: 'gpt-4.1',
-  api_key_secret_key: 'test-key-ref',
-  input_token_price_per_million_coins: 2,
-  output_token_price_per_million_coins: 8,
+  api_key_secret_key: 'synthetic-key-ref',
+  input_token_price_per_million_coins: 99,
+  output_token_price_per_million_coins: 99,
   extra_json: { context_window_tokens: 256_000 },
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',
 };
-const settings = { model, thinkingLevel: 'high', hasSecret: true };
+const settings: PlatformModelSettings = {
+  pool: {
+    primary_node_id: model.id,
+    public_model_id: 'official-pool',
+    model_key: 'official',
+    display_name: 'Official pool',
+    thinking_level: 'high',
+    input_token_price_per_million_coins: 2,
+    output_token_price_per_million_coins: 8,
+  },
+  nodes: [
+    {
+      model,
+      weight: 2,
+      revision: 1,
+      hasSecret: true,
+      failureCount: 0,
+      cooldownUntil: null,
+    },
+  ],
+};
 const update = {
-  pi_api: 'openai-responses' as const,
-  base_url: null,
-  model_name: 'gpt-4.1',
-  context_window_tokens: null,
+  display_name: 'Official pool',
   thinking_level: 'low' as const,
   input_token_price_per_million_coins: 2,
   output_token_price_per_million_coins: 8,
+  nodes: [
+    {
+      id: model.id,
+      display_name: model.display_name,
+      pi_api: 'openai-responses' as const,
+      base_url: null,
+      model_name: model.model_name,
+      context_window_tokens: null,
+      enabled: true,
+      weight: 2,
+    },
+  ],
 };
-
 beforeEach(() => {
   vi.resetAllMocks();
-  db.getPlatformModelRuntimeSettings.mockImplementation(async () => ({
-    ...(await db.getPlatformModelSettings()),
-    secretValue: 'synthetic-model-key',
-  }));
-  db.getPlatformModelSettings.mockResolvedValue(settings);
-  db.getSystemSecret.mockResolvedValue({ secret_value: 'synthetic-model-key' });
+  db.getPlatformModelSettings.mockResolvedValue(structuredClone(settings));
+  db.getPlatformModelRuntimeSettings.mockImplementation(async () => {
+    const result = await db.getPlatformModelSettings();
+    return {
+      ...result,
+      nodes: result.nodes.map((node: object) => ({
+        ...node,
+        secretValue: 'synthetic-runtime-key',
+      })),
+    };
+  });
   db.savePlatformModelConfig.mockResolvedValue(settings);
 });
 
-describe('official model runtime', () => {
-  it('uses the configured context window and token pricing', async () => {
-    expect(await resolveUserLlmRuntime('user')).toMatchObject({
+describe('official model pool', () => {
+  it('captures different providers together with a common capacity, prices and thinking level', async () => {
+    db.getPlatformModelSettings.mockResolvedValue({
+      ...settings,
+      nodes: [
+        ...settings.nodes,
+        {
+          ...settings.nodes[0],
+          weight: 1,
+          revision: 3,
+          model: {
+            ...model,
+            id: 'node-b',
+            model_key: 'provider-b',
+            pi_api: 'anthropic-messages',
+            model_name: 'synthetic-claude',
+            extra_json: { context_window_tokens: 32_000 },
+          },
+        },
+      ],
+    });
+    const runtime = await resolveUserLlmRuntime('user');
+    expect(runtime).toMatchObject({
       source: 'official',
       billingMode: 'metered',
-      contextWindowTokens: 256_000,
+      modelConfigId: 'official-pool',
       thinkingLevel: 'high',
+      contextWindowTokens: 32_000,
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 8,
+      poolNodes: [
+        {
+          modelConfigId: 'node-a',
+          weight: 2,
+          revision: 1,
+          piApi: 'openai-responses',
+          apiKey: 'synthetic-runtime-key',
+        },
+        {
+          modelConfigId: 'node-b',
+          weight: 1,
+          revision: 3,
+          piApi: 'anthropic-messages',
+          apiKey: 'synthetic-runtime-key',
+        },
+      ],
     });
+    expect(runtime.maxOutputTokens).toBeLessThan(runtime.contextWindowTokens);
+    expect(db.getSystemSecret).not.toHaveBeenCalled();
+    expect(db.getUserModelSelection).not.toHaveBeenCalled();
+    expect(db.getUserModelConfig).not.toHaveBeenCalled();
   });
 
-  it('resolves connection settings and credentials from one database snapshot', async () => {
-    db.getPlatformModelRuntimeSettings.mockResolvedValue({
-      ...settings,
-      secretValue: 'synthetic-original-key',
+  it('publishes a single stable pool alias and hides node connections and credentials', async () => {
+    expect(await listPublicOfficialModels()).toEqual([
+      { model_key: 'official', display_name: 'Official pool' },
+    ]);
+    expect(await resolveOfficialRuntimeByModelKey('official')).not.toBeNull();
+    expect(await resolveOfficialRuntimeByModelKey()).not.toBeNull();
+    expect(await resolveOfficialRuntimeByModelKey('provider-a')).toBeNull();
+    const overview = await getUserModelSettingsOverview('user');
+    expect(overview.model).toMatchObject({
+      model_name: 'official',
+      input_token_price_per_million_coins: 2,
     });
-    db.getSystemSecret.mockResolvedValue({
-      secret_value: 'synthetic-rotated-key',
-    });
-    expect(await resolveUserLlmRuntime('user')).toMatchObject({
-      secret: 'synthetic-original-key',
-    });
+    for (const field of [
+      'nodes',
+      'pi_api',
+      'base_url',
+      'api_key',
+      'api_key_secret_key',
+      'thinking_level',
+    ]) {
+      expect(overview.model).not.toHaveProperty(field);
+    }
     expect(db.getSystemSecret).not.toHaveBeenCalled();
   });
 
-  it('accepts only the current model alias, or an omitted alias', async () => {
-    expect(await resolveOfficialRuntimeByModelKey('official')).toMatchObject({
-      modelConfigId: model.id,
-    });
-    expect(await resolveOfficialRuntimeByModelKey()).toMatchObject({
-      modelConfigId: model.id,
-    });
-    expect(await resolveOfficialRuntimeByModelKey('legacy')).toBeNull();
-  });
-
-  it('uses the platform default when a historical thinking value is invalid', async () => {
+  it('excludes disabled and unconfigured nodes from the runtime and capacity limit', async () => {
     db.getPlatformModelSettings.mockResolvedValue({
       ...settings,
-      thinkingLevel: 'unknown',
+      nodes: [
+        ...settings.nodes,
+        {
+          ...settings.nodes[0],
+          model: {
+            ...model,
+            id: 'disabled',
+            enabled: false,
+            extra_json: { context_window_tokens: 8192 },
+          },
+        },
+        {
+          ...settings.nodes[0],
+          hasSecret: false,
+          model: {
+            ...model,
+            id: 'unconfigured',
+            extra_json: { context_window_tokens: 8192 },
+          },
+        },
+      ],
     });
     expect(await resolveUserLlmRuntime('user')).toMatchObject({
-      thinkingLevel: 'medium',
+      contextWindowTokens: 256_000,
+      poolNodes: [{ modelConfigId: 'node-a' }],
     });
   });
 
-  it('preserves the configured Anthropic OAuth authentication', async () => {
-    db.getPlatformModelSettings.mockResolvedValue({
-      ...settings,
-      model: {
-        ...model,
-        pi_api: 'anthropic-messages',
-        extra_json: { auth_mode: 'claude_code_oauth_token' },
-      },
-    });
-    expect(await resolveUserLlmRuntime('user')).toMatchObject({
-      authMode: 'claude_code_oauth_token',
-    });
-  });
-
-  it.each([
-    { model: null, hasSecret: false },
-    { model: { ...model, enabled: false }, hasSecret: true },
-    { model: { ...model, model_name: ' ' }, hasSecret: true },
-    { model, hasSecret: false },
-  ])('fails explicitly when the single slot cannot run', async (overrides) => {
-    db.getPlatformModelSettings.mockResolvedValue({
-      ...settings,
-      ...overrides,
-    });
+  it('fails explicitly when no configured node can run', async () => {
+    db.getPlatformModelSettings.mockResolvedValue({ ...settings, nodes: [] });
     await expect(resolveUserLlmRuntime('user')).rejects.toThrow(
       '官方模型暂不可用',
     );
     expect(await listPublicOfficialModels()).toEqual([]);
-    expect(db.getSystemSecret).not.toHaveBeenCalled();
-  });
-
-  it('handles a missing credential without falling back to another model', async () => {
-    db.getPlatformModelRuntimeSettings.mockResolvedValue({
-      ...settings,
-      secretValue: null,
-    });
-    await expect(resolveUserLlmRuntime('user')).rejects.toThrow(
-      '官方模型暂不可用',
-    );
-  });
-});
-
-describe('configuration views', () => {
-  it('returns user-visible model information without connection or credential metadata', async () => {
-    const overview = await getUserModelSettingsOverview('user');
-    expect(overview).toMatchObject({
-      model: { id: model.id, has_secret: true },
-    });
-    expect(Object.keys(overview)).toEqual(['model']);
-    for (const field of [
-      'api_key',
-      'api_key_preview',
-      'api_key_fingerprint',
-      'api_key_secret_key',
-      'extra_json',
-      'base_url',
-      'auth_mode',
-      'pi_api',
-    ]) {
-      expect(overview.model).not.toHaveProperty(field);
-    }
-    expect(db.getSystemSecret).not.toHaveBeenCalled();
-  });
-
-  it('shows connection settings to admins without fetching or returning credential values', async () => {
-    const overview = await getSystemConfigOverview();
-    expect(overview).toMatchObject({
-      model: { pi_api: 'openai-responses', has_secret: true },
-      thinking_level: 'high',
-    });
-    for (const field of [
-      'api_key',
-      'api_key_preview',
-      'api_key_fingerprint',
-      'api_key_secret_key',
-      'extra_json',
-    ]) {
-      expect(overview.model).not.toHaveProperty(field);
-    }
-    expect(db.getSystemSecret).not.toHaveBeenCalled();
-  });
-
-  it('represents an unconfigured deployment with an empty slot', async () => {
-    db.getPlatformModelSettings.mockResolvedValue({
-      model: null,
-      thinkingLevel: 'medium',
-      hasSecret: false,
-    });
-    expect(await getSystemConfigOverview()).toEqual({
-      model: null,
-      thinking_level: 'medium',
-    });
     expect(await getUserModelSettingsOverview()).toEqual({ model: null });
+    expect(await getSystemConfigOverview()).toMatchObject({
+      model: { has_secret: false },
+      nodes: [],
+    });
+  });
+
+  it('shows node health to administrators without retrieving credential values', async () => {
+    db.getPlatformModelSettings.mockResolvedValue({
+      ...settings,
+      nodes: [
+        {
+          ...settings.nodes[0],
+          failureCount: 2,
+          cooldownUntil: '2026-10-15T12:00:00Z',
+        },
+      ],
+    });
+    expect(await getSystemConfigOverview()).toMatchObject({
+      thinking_level: 'high',
+      nodes: [
+        {
+          id: model.id,
+          is_primary: true,
+          failure_count: 2,
+          cooldown_until: '2026-10-15T12:00:00Z',
+          has_secret: true,
+        },
+      ],
+    });
+    expect(db.getPlatformModelRuntimeSettings).not.toHaveBeenCalled();
+  });
+
+  it('preserves per-node Anthropic OAuth authentication', async () => {
+    db.getPlatformModelSettings.mockResolvedValue({
+      ...settings,
+      nodes: [
+        {
+          ...settings.nodes[0],
+          model: {
+            ...model,
+            pi_api: 'anthropic-messages',
+            extra_json: { auth_mode: 'claude_code_oauth_token' },
+          },
+        },
+      ],
+    });
+    expect(await resolveUserLlmRuntime('user')).toMatchObject({
+      poolNodes: [{ authMode: 'claude_code_oauth_token' }],
+    });
   });
 });
 
-describe('single-slot updates', () => {
-  it('saves the model and thinking level together through the sole writer', async () => {
+describe('pool updates', () => {
+  it('normalizes node fields and sends all settings to the same atomic writer', async () => {
     await saveOfficialModelSettings({
       ...update,
-      model_name: ' gpt-4.1 ',
-      base_url: ' https://provider.example/v1 ',
+      nodes: [
+        {
+          ...update.nodes[0],
+          model_name: ' gpt-4.1 ',
+          base_url: ' https://provider.example/v1 ',
+        },
+      ],
       actor: 'manager',
     });
     expect(db.savePlatformModelConfig).toHaveBeenCalledWith({
-      piApi: 'openai-responses',
-      baseUrl: 'https://provider.example/v1',
-      modelName: 'gpt-4.1',
-      secretValue: undefined,
-      authMode: undefined,
-      contextWindowTokens: null,
+      displayName: 'Official pool',
       thinkingLevel: 'low',
       inputTokenPricePerMillionCoins: 2,
       outputTokenPricePerMillionCoins: 8,
       actor: 'manager',
+      nodes: [
+        {
+          id: model.id,
+          displayName: model.display_name,
+          piApi: 'openai-responses',
+          baseUrl: 'https://provider.example/v1',
+          modelName: 'gpt-4.1',
+          secretValue: undefined,
+          authMode: undefined,
+          contextWindowTokens: null,
+          enabled: true,
+          weight: 2,
+        },
+      ],
     });
   });
-
   it.each([
     'invalid',
     'file:///tmp/model',
     'https://name:pass@provider.example',
     'https://provider.example?key=synthetic',
     'https://provider.example#fragment',
-  ])(
-    'rejects invalid or credential-bearing provider URLs',
-    async (base_url) => {
-      await expect(
-        saveOfficialModelSettings({ ...update, base_url }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-      expect(db.savePlatformModelConfig).not.toHaveBeenCalled();
-    },
-  );
+  ])('rejects invalid or credential-bearing node URLs', async (base_url) => {
+    await expect(
+      saveOfficialModelSettings({
+        ...update,
+        nodes: [{ ...update.nodes[0], base_url }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(db.savePlatformModelConfig).not.toHaveBeenCalled();
+  });
 });
 
 describe('runtime defaults', () => {

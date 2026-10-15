@@ -46,6 +46,10 @@ import {
   stopInboxStallSweeper,
 } from '../runtime/inbox-stall-sweeper.js';
 import { logger } from '../infrastructure/logger.js';
+import {
+  startServiceStatusWorker,
+  stopServiceStatusWorker,
+} from '../runtime/service-status-worker.js';
 import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
 import { getRuntimeEntitlementSnapshot } from '../modules/billing/entitlements.js';
 
@@ -106,6 +110,7 @@ export async function main(): Promise<void> {
   // 启动 inbox 堆积巡检任务（发现账号级 agent-runtime 消费停滞并自动清理告警）
   startInboxStallSweeper();
   startAgentRequestRecovery();
+  startServiceStatusWorker();
 
   await startApiServer();
 
@@ -120,6 +125,7 @@ export async function main(): Promise<void> {
       // 等待所有子进程真正退出（给足 daemon 的 30s drain 窗口，内部有等待上限），
       // 再断开 Redis/DB——否则子进程排空中的响应会因连接先被关闭而丢失。
       await stopAgentRequestRecovery();
+      await stopServiceStatusWorker();
       await stopAllLocalAgents();
       stopRetentionWorker();
       stopBillingSweepWorker();

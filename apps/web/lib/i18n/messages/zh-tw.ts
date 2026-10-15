@@ -1,4 +1,38 @@
 export const zhTWMessages = {
+  serviceStatus: {
+    title: '服務狀態',
+    subtitle: '了解 AI 服務的整體可用性與最近檢測結果。',
+    home: '返回首頁',
+    refresh: '重新整理狀態',
+    loading: '正在讀取服務狀態',
+    operational: 'AI 服務運作正常',
+    unavailable: 'AI 服務暫時無法使用',
+    unknown: '服務狀態待確認',
+    operationalShort: '正常',
+    unavailableShort: '無法使用',
+    unknownShort: '待確認',
+    operationalDescription: '最近一次檢測已有可用的 AI 節點回應。',
+    unavailableDescription: '最近一次檢測未能取得可用回應，請稍後再試。',
+    unknownDescription: '暫時沒有有效的近期檢測結果，請稍後查看。',
+    readFailed:
+      '暫時無法讀取最新狀態；已有紀錄將保留顯示，過期後標記為待確認。',
+    ai: 'AI 服務',
+    latency: '檢測回應延遲',
+    checked: '最近檢測',
+    frequency: '檢測頻率',
+    sixHours: '每 6 小時一次',
+    waiting: '等待首次檢測',
+    history: '最近 7 天檢測紀錄',
+    sampleRate: '檢測可用率',
+    noSample: '暫無檢測紀錄',
+    sevenDaysAgo: '7 天前',
+    now: '現在',
+    aggregateNote: '只要有一個 AI 節點可用，整體服務即顯示正常。',
+    cadenceNote:
+      '背景每 6 小時輕量檢測一次；重新整理本頁面只讀取已有結果，不會觸發額外檢測。',
+    latencyNote:
+      '延遲為輕量檢測的首次回應時間，不代表完整回答耗時。超過 12 小時未更新的結果會標記為待確認。',
+  },
   artifact: {
     copyText: '複製盤面文字',
     copied: '盤面文字已複製到剪貼簿',

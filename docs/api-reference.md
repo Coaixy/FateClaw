@@ -475,9 +475,22 @@ ws://localhost:3000/api/chat-sessions/s/:sessionId/stream?ticket=single-use-tick
 
 ---
 
+## Public service status
+
+`GET /api/service-status` is public and reads saved AI availability observations.
+It never triggers an inference. The response contains `status` (`operational`,
+`unavailable` or `unknown`), `checked_at`, `latency_ms`, `check_interval_seconds`
+(21600), `stale_after_seconds` (43200), and up to 28 history samples with only
+`checked_at`, `status` and `latency_ms`. Node identities, counts, connection details
+and provider errors are not returned. Responses permit public caching for 60 seconds.
+
+The full API startup performs a shared lightweight check every six hours, stopping
+at the first available node. Results older than twelve hours become unknown. See
+[Public service status](service-status.md) for probe budgets and metric boundaries.
+
 ## Model Settings
 
-All users use the single official model and thinking level configured by the platform. Model settings are read-only for users.
+All users use one public official model alias backed by a platform-managed model pool. The pool may contain different models and providers. Model settings remain read-only for users.
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -875,7 +888,7 @@ Requires authentication. Opens or renews the single membership using the wallet 
 
 ### GET /api/admin/system-config
 
-Returns `{ "model": { ... } | null, "thinking_level": "medium" }` for the sole official model slot. Credential values, previews, fingerprints, runtime policies, platform service fees, and configuration audit logs are not returned.
+Returns `{ "model": { ... }, "thinking_level": "medium", "nodes": [ ... ] }`. The model describes the public pool alias and common prices. Nodes include the read-only `is_primary` role, connection metadata, enabled state, weight, `has_secret`, `failure_count` and `cooldown_until`. Credential values are never returned; an unconfigured pool has an empty nodes list.
 
 ### GET /api/admin/recharge-config
 
@@ -910,33 +923,44 @@ Returns `{ "model": { ... } | null, "thinking_level": "medium" }` for the sole o
 
 ### PUT /api/admin/system-config/model
 
-Saves the single official model and platform thinking level atomically. Repeated or concurrent saves update the same slot. There are no add, delete, priority, or default-model controls.
+Saves the pool name, common token prices, thinking level and complete node list in one transaction. Concurrent writers share a singleton lock.
 
 **Request Body**
 
 ```json
 {
-  "pi_api": "openai-responses",
-  "base_url": null,
-  "model_name": "gpt-4.1",
-  "api_key": "<provider-api-key>",
-  "context_window_tokens": null,
+  "display_name": "官方模型池",
   "thinking_level": "medium",
-  "input_token_price_per_million_coins": 0,
-  "output_token_price_per_million_coins": 0
+  "input_token_price_per_million_coins": 200,
+  "output_token_price_per_million_coins": 800,
+  "nodes": [
+    {
+      "id": "existing-node-id",
+      "display_name": "供应商 A",
+      "pi_api": "openai-responses",
+      "base_url": null,
+      "model_name": "provider-model-id",
+      "api_key": "<provider-api-key>",
+      "context_window_tokens": 128000,
+      "enabled": true,
+      "weight": 3
+    }
+  ]
 }
 ```
 
-- `pi_api`: `openai-completions`, `openai-responses`, `anthropic-messages`, or `google-generative-ai`.
-- `thinking_level`: `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`. This applies to all users and Open API sessions on each new turn.
-- `api_key`: required for the first configuration; omit or leave blank to preserve the stored credential. Changing protocol requires a new credential.
+- `nodes`: one retained primary node plus 0–19 child nodes. On first configuration the first submitted node becomes primary. Subsequent saves must include its existing `id`; omission is rejected with HTTP 400. Omit `id` to add a child, or omit an existing child from the list to remove it. Reordering does not replace the primary. Historical model rows and credential references remain intact.
+- `weight`: integer 1–1000. Each model call selects among eligible nodes by weight and tries each candidate at most once.
+- `pi_api`: `openai-completions`, `openai-responses`, `anthropic-messages`, or `google-generative-ai`. Different models and protocols may share a pool.
+- `api_key`: required to enable an unconfigured node; omit or leave blank to preserve its credential. Changing protocol, endpoint or authentication mode requires a new credential.
 - `auth_mode`: optional; must match the protocol. Anthropic supports `anthropic_api_key` and `claude_code_oauth_token`.
-- `context_window_tokens`: `null` or `0` uses automatic detection; an explicit value must be 8192–2000000.
-- Official input/output token prices remain the billing rates. The separate custom-model platform service fee is removed.
+- `context_window_tokens`: `null` or `0` uses automatic detection; an explicit value must be 8192–2000000. Requests use the smallest capacity among enabled, configured nodes.
+- `thinking_level`: `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`, applied to all users and Open API turns.
+- Public token prices are common to the pool and captured at admission. Failover does not change the admitted prices.
 
-Existing installations reuse the configured default official model, or their first existing model if no default was set. The first save fixes that slot as the platform model. Legacy user choices and session thinking levels do not override it. If the configured model is unavailable, requests fail explicitly without switching providers.
+Existing installations enroll only their previously configured official model and preserve the public alias and prices. User custom-model and selection endpoints remain removed. Provider failures trigger shared cooldown and failover before response content is published; cancellation and input errors do not trigger failover. See [Official model pool](official-model-pool.md) for timeout, recovery and billing boundaries.
 
-The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-config/model-billing` mutation endpoints are removed. Historical rows and credentials are not deleted during migration.
+The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-config/model-billing` mutation endpoints remain removed.
 
 ### 其他管理接口
 

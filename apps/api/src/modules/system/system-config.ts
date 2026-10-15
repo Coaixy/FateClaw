@@ -22,7 +22,7 @@ import { PI_THINKING_LEVELS } from '../../shared/types.js';
 import type {
   AdminModelSettingsOverviewDto,
   AdminModelSettingsUpdateDto,
-  AdminOfficialModelDto,
+  RuntimeModelPoolNode,
   ModelAuthModeDto,
   ModelSettingsOverviewDto,
   OfficialModelDto,
@@ -72,6 +72,7 @@ export interface EffectiveLlmRuntimeConfig {
   thinkingLevel: PiThinkingLevel;
   inputTokenPricePerMillionCoins: number;
   outputTokenPricePerMillionCoins: number;
+  poolNodes?: RuntimeModelPoolNode[];
 }
 
 export interface PiSessionHealthPolicy {
@@ -103,83 +104,120 @@ function modelContextWindow(model: OfficialModelConfig): number | null {
   );
 }
 
-function publicModel(settings: PlatformModelSettings): OfficialModelDto | null {
-  const model = settings.model;
-  if (!model) return null;
+function configuredNodes(settings: PlatformModelSettings) {
+  return settings.nodes.filter(
+    ({ model, hasSecret }) =>
+      model.enabled &&
+      model.model_name.trim() &&
+      hasSecret &&
+      model.api_key_secret_key,
+  );
+}
+
+function nodeContextWindow(model: OfficialModelConfig): number {
+  return resolveContextWindow({
+    model: model.model_name,
+    configured: modelContextWindow(model),
+  });
+}
+
+function publicPoolModel(settings: PlatformModelSettings): OfficialModelDto {
+  const nodes = configuredNodes(settings);
   return {
-    id: model.id,
-    model_key: model.model_key,
-    display_name: model.display_name,
-    description:
-      typeof model.extra_json?.description === 'string'
-        ? model.extra_json.description.trim()
-        : '',
-    model_name: model.model_name,
-    context_window_tokens: modelContextWindow(model),
+    id: settings.pool.public_model_id,
+    model_key: settings.pool.model_key,
+    display_name: settings.pool.display_name,
+    description: '由平台统一调度可用模型节点，按公开 Token 价格计费。',
+    model_name: settings.pool.model_key,
+    context_window_tokens: nodes.length
+      ? Math.min(...nodes.map(({ model }) => nodeContextWindow(model)))
+      : null,
     input_token_price_per_million_coins:
-      model.input_token_price_per_million_coins,
+      settings.pool.input_token_price_per_million_coins,
     output_token_price_per_million_coins:
-      model.output_token_price_per_million_coins,
-    has_secret: settings.hasSecret,
+      settings.pool.output_token_price_per_million_coins,
+    has_secret: nodes.length > 0,
   };
 }
 
 function adminOverview(
   settings: PlatformModelSettings,
 ): AdminModelSettingsOverviewDto {
-  const model = settings.model;
-  const view = publicModel(settings);
-  const adminModel: AdminOfficialModelDto | null =
-    model && view
-      ? {
-          ...view,
-          pi_api: model.pi_api,
-          base_url: model.base_url,
-          auth_mode: normalizeAuthMode(model),
-          updated_at: model.updated_at,
-        }
-      : null;
   return {
-    model: adminModel,
-    thinking_level: normalizeThinkingLevel(settings.thinkingLevel),
+    model: publicPoolModel(settings),
+    thinking_level: normalizeThinkingLevel(settings.pool.thinking_level),
+    nodes: settings.nodes.map(
+      ({ model, weight, hasSecret, failureCount, cooldownUntil }) => ({
+        id: model.id,
+        is_primary: model.id === settings.pool.primary_node_id,
+        display_name: model.display_name,
+        model_name: model.model_name,
+        pi_api: model.pi_api,
+        base_url: model.base_url,
+        auth_mode: normalizeAuthMode(model),
+        context_window_tokens: modelContextWindow(model),
+        enabled: model.enabled,
+        weight,
+        has_secret: hasSecret,
+        failure_count: failureCount,
+        cooldown_until: cooldownUntil,
+        updated_at: model.updated_at,
+      }),
+    ),
   };
 }
 
 function resolvePlatformRuntime(
   settings: PlatformModelRuntimeSettings,
 ): EffectiveLlmRuntimeConfig | null {
-  const model = settings.model;
-  if (
-    !model?.enabled ||
-    !model.model_name.trim() ||
-    !settings.hasSecret ||
-    !model.api_key_secret_key
-  ) {
-    return null;
-  }
-  if (!settings.secretValue) return null;
-  const modelName = model.model_name.trim();
-  const contextWindowTokens = resolveContextWindow({
-    model: modelName,
-    configured: modelContextWindow(model),
-  });
+  const nodes = settings.nodes.filter(
+    ({ model, hasSecret, secretValue }) =>
+      model.enabled &&
+      model.model_name.trim() &&
+      hasSecret &&
+      model.api_key_secret_key &&
+      secretValue,
+  );
+  if (!nodes.length) return null;
+  const first = nodes[0];
+  const model = first.model;
+  const contextWindowTokens = Math.min(
+    ...nodes.map(({ model }) => nodeContextWindow(model)),
+  );
   return {
     source: 'official',
     billingMode: 'metered',
-    modelConfigId: model.id,
-    providerKey: model.model_key,
+    modelConfigId: settings.pool.public_model_id,
+    providerKey: settings.pool.model_key,
     piApi: model.pi_api,
-    displayName: model.display_name,
+    displayName: settings.pool.display_name,
     authMode: normalizeAuthMode(model),
-    secret: settings.secretValue,
+    secret: first.secretValue!,
     secretSource: 'database',
     baseUrl: model.base_url,
-    model: modelName,
+    model: model.model_name.trim(),
     contextWindowTokens,
-    maxOutputTokens: getDefaultMaxOutputTokens(modelName, contextWindowTokens),
-    thinkingLevel: normalizeThinkingLevel(settings.thinkingLevel),
-    inputTokenPricePerMillionCoins: model.input_token_price_per_million_coins,
-    outputTokenPricePerMillionCoins: model.output_token_price_per_million_coins,
+    maxOutputTokens: Math.min(
+      ...nodes.map(({ model }) =>
+        getDefaultMaxOutputTokens(model.model_name, contextWindowTokens),
+      ),
+    ),
+    thinkingLevel: normalizeThinkingLevel(settings.pool.thinking_level),
+    inputTokenPricePerMillionCoins:
+      settings.pool.input_token_price_per_million_coins,
+    outputTokenPricePerMillionCoins:
+      settings.pool.output_token_price_per_million_coins,
+    poolNodes: nodes.map(({ model, weight, revision, secretValue }) => ({
+      modelConfigId: model.id,
+      revision,
+      weight,
+      piApi: model.pi_api,
+      model: model.model_name.trim(),
+      providerKey: model.model_key,
+      authMode: normalizeAuthMode(model),
+      apiKey: secretValue!,
+      baseUrl: model.base_url ?? undefined,
+    })),
   };
 }
 
@@ -187,12 +225,12 @@ export async function resolveOfficialLlmRuntime(): Promise<EffectiveLlmRuntimeCo
   return resolvePlatformRuntime(await getPlatformModelRuntimeSettings());
 }
 
-/** Only the platform slot is available; API clients may identify it by its existing alias. */
+/** API clients identify the pool by its stable public alias, never a node ID. */
 export async function resolveOfficialRuntimeByModelKey(
   modelKey?: string,
 ): Promise<EffectiveLlmRuntimeConfig | null> {
   const settings = await getPlatformModelRuntimeSettings();
-  if (modelKey !== undefined && settings.model?.model_key !== modelKey)
+  if (modelKey !== undefined && settings.pool.model_key !== modelKey)
     return null;
   return resolvePlatformRuntime(settings);
 }
@@ -209,9 +247,13 @@ export async function listPublicOfficialModels(): Promise<
   Array<{ model_key: string; display_name: string }>
 > {
   const settings = await getPlatformModelSettings();
-  const model = settings.model;
-  return model?.enabled && model.model_name.trim() && settings.hasSecret
-    ? [{ model_key: model.model_key, display_name: model.display_name }]
+  return configuredNodes(settings).length
+    ? [
+        {
+          model_key: settings.pool.model_key,
+          display_name: settings.pool.display_name,
+        },
+      ]
     : [];
 }
 
@@ -224,7 +266,7 @@ export async function getUserModelSettingsOverview(
 ): Promise<ModelSettingsOverviewDto> {
   const settings = await getPlatformModelSettings();
   return {
-    model: settings.model?.enabled ? publicModel(settings) : null,
+    model: configuredNodes(settings).length ? publicPoolModel(settings) : null,
   };
 }
 
@@ -252,18 +294,25 @@ export async function saveOfficialModelSettings(
   input: AdminModelSettingsUpdateDto & { actor?: string },
 ): Promise<AdminModelSettingsOverviewDto> {
   const updated = await savePlatformModelConfig({
-    piApi: input.pi_api,
-    baseUrl: normalizeOfficialBaseUrl(input.base_url),
-    modelName: input.model_name.trim(),
-    secretValue: input.api_key,
-    authMode: input.auth_mode,
-    contextWindowTokens: normalizeConfiguredContextWindowTokens(
-      input.context_window_tokens,
-      '官方模型',
-    ),
+    displayName: input.display_name.trim(),
     thinkingLevel: input.thinking_level,
     inputTokenPricePerMillionCoins: input.input_token_price_per_million_coins,
     outputTokenPricePerMillionCoins: input.output_token_price_per_million_coins,
+    nodes: input.nodes.map((node) => ({
+      id: node.id,
+      displayName: node.display_name.trim(),
+      piApi: node.pi_api,
+      baseUrl: normalizeOfficialBaseUrl(node.base_url),
+      modelName: node.model_name.trim(),
+      secretValue: node.api_key,
+      authMode: node.auth_mode,
+      contextWindowTokens: normalizeConfiguredContextWindowTokens(
+        node.context_window_tokens,
+        node.display_name,
+      ),
+      enabled: node.enabled,
+      weight: node.weight,
+    })),
     actor: input.actor,
   });
   return adminOverview(updated);

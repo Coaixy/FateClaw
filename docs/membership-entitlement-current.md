@@ -40,7 +40,7 @@ All on-site AI entry points converge on `prepareOwnedChatSessionTurn()` in [chat
 
 [API key creation](../apps/api/src/interfaces/http/api-keys-routes.ts) requires active membership. [API key authentication](../apps/api/src/interfaces/http/api-key-auth.ts) validates the key and its expiry, applies the per-key rate limit, and rejects an overdrawn wallet. Membership expiry alone does not revoke a previously issued key.
 
-[The IPC worker](../apps/api/src/runtime/ipc-worker.ts) applies non-member pricing to the request's platform model snapshot. That snapshot supplies token prices to reservation, settlement and recovery, so all three paths use the same request-time prices. Model usage is charged in full according to actual tokens. Historical custom-model snapshots are still understood by billing recovery; current requests use the platform's configured model.
+[The IPC worker](../apps/api/src/runtime/ipc-worker.ts) applies non-member pricing to the request's platform model snapshot. That snapshot supplies token prices to reservation, settlement and recovery, so all three paths use the same request-time prices. Model usage is charged in full according to actual tokens. Historical custom-model snapshots are still understood by billing recovery; current requests use the [official model pool](official-model-pool.md). Public prices stay fixed across provider switches, and reported usage from failed attempts is included.
 
 Arrears are calculated from the raw spendable balance (`purchased + bonus - reserved < 0`). The displayed available balance is clamped to zero and must not be used as a substitute for this check.
 

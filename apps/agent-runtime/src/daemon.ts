@@ -171,7 +171,24 @@ function isLlmRuntimeSnapshot(value: unknown): value is LlmRuntimeSnapshot {
       record.authMode === 'anthropic_api_key' ||
       record.authMode === 'claude_code_oauth_token' ||
       record.authMode === 'gemini_api_key') &&
-    (record.baseUrl === undefined || typeof record.baseUrl === 'string')
+    (record.baseUrl === undefined || typeof record.baseUrl === 'string') &&
+    (record.poolNodes === undefined ||
+      (record.source === 'official' &&
+        Array.isArray(record.poolNodes) &&
+        record.poolNodes.length > 0 &&
+        record.poolNodes.length <= 20 &&
+        new Set(record.poolNodes.map((node) => node?.modelConfigId)).size ===
+          record.poolNodes.length &&
+        record.poolNodes.every(
+          (node) =>
+            node &&
+            Number.isInteger(node.weight) &&
+            node.weight >= 1 &&
+            node.weight <= 1000 &&
+            Number.isInteger(node.revision) &&
+            node.revision > 0 &&
+            isLlmRuntimeSnapshot({ ...record, ...node, poolNodes: undefined }),
+        )))
   );
 }
 

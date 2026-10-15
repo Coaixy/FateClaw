@@ -646,21 +646,51 @@ describe('adminRoutes authentication throttling', () => {
     expect(mockRateLimitClear).not.toHaveBeenCalled();
   });
 
-  it('saves the sole official model and platform thinking level together', async () => {
+  it('saves mixed-model pool nodes and common pricing atomically', async () => {
     const payload = {
-      pi_api: 'openai-responses',
-      base_url: null,
-      model_name: 'gpt-4.1',
-      api_key: 'synthetic-test-api-key',
-      context_window_tokens: null,
+      display_name: '官方模型池',
       thinking_level: 'low',
       input_token_price_per_million_coins: 2,
       output_token_price_per_million_coins: 8,
+      nodes: [
+        {
+          display_name: '供应商 A',
+          pi_api: 'openai-responses',
+          base_url: null,
+          model_name: 'gpt-4.1',
+          api_key: 'synthetic-test-api-key',
+          context_window_tokens: null,
+          enabled: true,
+          weight: 2,
+        },
+        {
+          display_name: '供应商 B',
+          pi_api: 'anthropic-messages',
+          base_url: null,
+          model_name: 'synthetic-other-model',
+          api_key: 'synthetic-other-key',
+          context_window_tokens: 32_000,
+          enabled: true,
+          weight: 1,
+        },
+      ],
     };
-    vi.mocked(saveOfficialModelSettings).mockResolvedValueOnce({
-      model: null,
-      thinking_level: 'low',
-    });
+    const overview = {
+      model: {
+        id: 'official',
+        model_key: 'official',
+        model_name: 'official',
+        display_name: '官方模型池',
+        description: '',
+        context_window_tokens: 32_000,
+        input_token_price_per_million_coins: 2,
+        output_token_price_per_million_coins: 8,
+        has_secret: true,
+      },
+      thinking_level: 'low' as const,
+      nodes: [],
+    };
+    vi.mocked(saveOfficialModelSettings).mockResolvedValueOnce(overview);
     const response = await app.inject({
       method: 'PUT',
       url: '/system-config/model',
@@ -668,7 +698,7 @@ describe('adminRoutes authentication throttling', () => {
       payload,
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ model: null, thinking_level: 'low' });
+    expect(response.json()).toEqual(overview);
     expect(saveOfficialModelSettings).toHaveBeenCalledWith({
       ...payload,
       actor: 'manager',
@@ -677,23 +707,70 @@ describe('adminRoutes authentication throttling', () => {
 
   it.each([
     { thinking_level: 'unlimited' },
-    { pi_api: 'openai-responses', auth_mode: 'gemini_api_key' },
-    { context_window_tokens: 100 },
+    { nodes: [] },
+    {
+      nodes: [
+        {
+          display_name: 'A',
+          pi_api: 'openai-responses',
+          base_url: null,
+          model_name: 'a',
+          context_window_tokens: null,
+          enabled: true,
+          weight: 0,
+        },
+      ],
+    },
+    {
+      nodes: [
+        {
+          display_name: 'A',
+          pi_api: 'openai-responses',
+          auth_mode: 'gemini_api_key',
+          base_url: null,
+          model_name: 'a',
+          context_window_tokens: null,
+          enabled: true,
+          weight: 1,
+        },
+      ],
+    },
+    {
+      nodes: [
+        {
+          display_name: 'A',
+          pi_api: 'openai-responses',
+          base_url: null,
+          model_name: 'a',
+          context_window_tokens: 100,
+          enabled: true,
+          weight: 1,
+        },
+      ],
+    },
     { model_key: 'another-model' },
     { agent_concurrency_limit: 20 },
-  ])('rejects invalid or removed model settings', async (invalid) => {
+  ])('rejects invalid or removed pool settings', async (invalid) => {
     const response = await app.inject({
       method: 'PUT',
       url: '/system-config/model',
       headers: { 'x-admin-key': 'test-manager-key' },
       payload: {
-        pi_api: 'openai-responses',
-        base_url: null,
-        model_name: 'gpt-4.1',
-        context_window_tokens: null,
+        display_name: 'Pool',
         thinking_level: 'low',
         input_token_price_per_million_coins: 2,
         output_token_price_per_million_coins: 8,
+        nodes: [
+          {
+            display_name: 'A',
+            pi_api: 'openai-responses',
+            base_url: null,
+            model_name: 'a',
+            context_window_tokens: null,
+            enabled: true,
+            weight: 1,
+          },
+        ],
         ...invalid,
       },
     });

@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 const { getPool } = vi.hoisted(() => ({ getPool: vi.fn() }));
 vi.mock('../../../src/infrastructure/db-pool.js', () => ({
   getDbPool: getPool,
 }));
-
 import {
   getPlatformModelRuntimeSettings,
   getPlatformModelSettings,
@@ -12,162 +10,221 @@ import {
 } from '../../../src/infrastructure/repositories/config-repository.js';
 
 const model = {
-  id: 'existing-slot',
-  model_key: 'existing-alias',
+  id: 'node-a',
+  model_key: 'provider-a',
+  display_name: 'Provider A',
+  enabled: true,
   pi_api: 'openai-responses',
+  base_url: null,
   model_name: 'gpt-4.1',
-  api_key_secret_key: 'existing-key-ref',
-  extra_json: {},
+  api_key_secret_key: 'synthetic-key-ref',
+  extra_json: { context_window_tokens: null },
 };
-const snapshot = { model, default_thinking_level: 'medium', has_secret: true };
-const input = {
+const snapshot = {
+  pool: {
+    primary_node_id: model.id,
+    public_model_id: 'official',
+    model_key: 'official',
+    display_name: 'Pool',
+    thinking_level: 'medium',
+    input_token_price_per_million_coins: 2,
+    output_token_price_per_million_coins: 8,
+  },
+  nodes: [
+    {
+      model,
+      weight: 1,
+      revision: 1,
+      hasSecret: true,
+      failureCount: 0,
+      cooldownUntil: null,
+    },
+  ],
+};
+const nodeInput = {
+  id: model.id,
+  displayName: model.display_name,
   piApi: 'openai-responses' as const,
   baseUrl: null,
   modelName: 'gpt-4.1',
   contextWindowTokens: null,
+  enabled: true,
+  weight: 2,
+};
+const input = {
+  displayName: 'Pool',
   thinkingLevel: 'low' as const,
   inputTokenPricePerMillionCoins: 2,
   outputTokenPricePerMillionCoins: 8,
+  nodes: [nodeInput],
 };
-
-type SettingsRow = {
-  model: typeof model | null;
-  default_thinking_level: string;
-  has_secret: boolean;
-};
-function poolWithSnapshots(
-  current: SettingsRow = snapshot,
-  updated: SettingsRow = { ...snapshot, default_thinking_level: 'low' },
-) {
-  let reads = 0;
-  const query = vi.fn(async (sql: string, _params?: unknown[]) => ({
-    rows: sql.startsWith('WITH settings')
-      ? [reads++ === 0 ? current : updated]
-      : [],
+function poolWithSnapshots(current: unknown = snapshot) {
+  const query = vi.fn(async (_sql: string, _params?: unknown[]) => ({
+    rows: [current],
   }));
   const release = vi.fn();
   getPool.mockReturnValue({ query, connect: async () => ({ query, release }) });
   return { query, release };
 }
+beforeEach(() => vi.resetAllMocks());
 
-beforeEach(() => {
-  vi.resetAllMocks();
-});
-
-describe('platform model repository', () => {
-  it('keeps credential values out of metadata reads', async () => {
-    const query = vi.fn(async (_sql: string) => ({
-      rows: [{ ...snapshot, secret_value: 'synthetic-key' }],
-    }));
-    getPool.mockReturnValue({ query });
-    expect(await getPlatformModelSettings()).toEqual({
-      model,
-      thinkingLevel: 'medium',
-      hasSecret: true,
+describe('model pool repository', () => {
+  it('rejects deleting the primary node even when a child node remains', async () => {
+    const child = { ...snapshot.nodes[0], model: { ...model, id: 'node-b' } };
+    const { query } = poolWithSnapshots({
+      ...snapshot,
+      pool: { ...snapshot.pool, primary_node_id: model.id },
+      nodes: [...snapshot.nodes, child],
     });
-    expect(query).toHaveBeenCalledOnce();
-    expect(query.mock.calls[0]?.[0]).not.toContain('AS secret_value');
+    await expect(
+      savePlatformModelConfig({
+        ...input,
+        nodes: [{ ...nodeInput, id: child.model.id }],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: '主节点必须保留，可以编辑配置，不能删除',
+    });
+    expect(query).toHaveBeenLastCalledWith('ROLLBACK');
+    expect(query).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO system_secrets'),
+      expect.anything(),
+    );
   });
 
-  it('reads connection settings and credentials in one statement for runtime use', async () => {
-    const query = vi.fn(async (_sql: string) => ({
-      rows: [{ ...snapshot, secret_value: 'synthetic-key' }],
-    }));
-    getPool.mockReturnValue({ query });
-    expect(await getPlatformModelRuntimeSettings()).toEqual({
-      model,
-      thinkingLevel: 'medium',
-      hasSecret: true,
-      secretValue: 'synthetic-key',
-    });
-    expect(query).toHaveBeenCalledOnce();
+  it('uses metadata-only reads and one MVCC snapshot for all runtime connections and credentials', async () => {
+    const { query } = poolWithSnapshots();
+    expect(await getPlatformModelSettings()).toEqual(snapshot);
+    expect(query.mock.calls[0][0]).not.toContain("'secretValue'");
+    await getPlatformModelRuntimeSettings();
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1][0]).toContain("'secretValue'");
   });
-
-  it('updates the existing slot and preserves its credential when the key is omitted', async () => {
+  it('locks the pool, preserves omitted keys and commits all node and price updates together', async () => {
     const { query, release } = poolWithSnapshots();
-    expect(await savePlatformModelConfig(input)).toMatchObject({
-      model,
-      thinkingLevel: 'low',
-    });
+    await savePlatformModelConfig(input);
     expect(query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'));
     expect(query).not.toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO system_secrets'),
       expect.anything(),
     );
     expect(query).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO official_model_configs'),
-      expect.arrayContaining([
-        model.id,
-        model.model_key,
-        model.api_key_secret_key,
-      ]),
+      expect.stringContaining('INSERT INTO official_model_pool_nodes'),
+      [model.id, 2, false],
     );
     expect(query).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE runtime_config'),
-      [model.id, 'low'],
+      expect.stringContaining('UPDATE official_model_pool_settings'),
+      ['Pool', 'low', 2, 8, model.id],
     );
     expect(query).toHaveBeenLastCalledWith('COMMIT');
     expect(release).toHaveBeenCalledOnce();
   });
-
-  it('creates the only slot on first save and returns the committed configuration', async () => {
-    const current = {
-      model: null,
-      default_thinking_level: 'medium',
-      has_secret: false,
-    };
-    const updated = {
-      model: { ...model, id: 'platform-model', model_key: 'official' },
-      default_thinking_level: 'low',
-      has_secret: true,
-    };
-    const { query } = poolWithSnapshots(current, updated);
-    expect(
-      await savePlatformModelConfig({ ...input, secretValue: 'synthetic-key' }),
-    ).toMatchObject({ model: { id: 'platform-model' }, thinkingLevel: 'low' });
+  it('adds a node with its own credential reference and retains only submitted membership', async () => {
+    const { query } = poolWithSnapshots();
+    await savePlatformModelConfig({
+      ...input,
+      nodes: [
+        ...input.nodes,
+        {
+          ...nodeInput,
+          id: undefined,
+          displayName: 'Provider B',
+          modelName: 'other-model',
+          secretValue: 'synthetic-new-key',
+        },
+      ],
+    });
     expect(query).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE runtime_config'),
-      ['platform-model', 'low'],
+      expect.stringContaining('INSERT INTO system_secrets'),
+      [expect.stringMatching(/^official-model:/), 'synthetic-new-key', 'admin'],
     );
-    expect(query).toHaveBeenLastCalledWith('COMMIT');
-  });
-
-  it('rejects first configuration without a key and releases the transaction', async () => {
-    const { query, release } = poolWithSnapshots({
-      ...snapshot,
-      model: null,
-      has_secret: false,
-    });
-    await expect(savePlatformModelConfig(input)).rejects.toMatchObject({
-      statusCode: 400,
-    });
-    expect(query).not.toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO official_model_configs'),
-      expect.anything(),
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM official_model_pool_nodes'),
+      [[model.id, expect.any(String)]],
     );
-    expect(query).toHaveBeenLastCalledWith('ROLLBACK');
-    expect(release).toHaveBeenCalledOnce();
   });
-
-  it('requires a new key before changing provider protocol', async () => {
+  it.each([
+    { piApi: 'anthropic-messages' as const },
+    { baseUrl: 'https://other.example/v1' },
+    { authMode: 'claude_code_oauth_token' as const },
+  ])(
+    'requires a new key when a credential destination or authentication changes',
+    async (patch) => {
+      const { query } = poolWithSnapshots();
+      await expect(
+        savePlatformModelConfig({
+          ...input,
+          nodes: [{ ...nodeInput, ...patch }],
+        }),
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(query).toHaveBeenLastCalledWith('ROLLBACK');
+    },
+  );
+  it('rejects a node that was removed by another writer', async () => {
     const { query } = poolWithSnapshots();
     await expect(
-      savePlatformModelConfig({ ...input, piApi: 'anthropic-messages' }),
+      savePlatformModelConfig({
+        ...input,
+        nodes: [nodeInput, { ...nodeInput, id: 'removed' }],
+      }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(query).toHaveBeenLastCalledWith('ROLLBACK');
   });
 
-  it('rolls back and propagates a database failure after a credential update', async () => {
-    const { query, release } = poolWithSnapshots();
-    const normalQuery = query.getMockImplementation()!;
-    const failure = new Error('Synthetic database failure');
-    query.mockImplementation(async (sql, params) => {
-      if (sql.startsWith('UPDATE runtime_config')) throw failure;
-      return normalQuery(sql, params);
+  it('preserves a saved OAuth mode when an unchanged node omits the optional auth mode', async () => {
+    const { query } = poolWithSnapshots({
+      ...snapshot,
+      nodes: [
+        {
+          ...snapshot.nodes[0],
+          model: {
+            ...model,
+            pi_api: 'anthropic-messages',
+            extra_json: {
+              auth_mode: 'claude_code_oauth_token',
+              context_window_tokens: null,
+            },
+          },
+        },
+      ],
+    });
+    await savePlatformModelConfig({
+      ...input,
+      nodes: [{ ...nodeInput, piApi: 'anthropic-messages' }],
+    });
+    expect(query).not.toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO system_secrets'),
+      expect.anything(),
+    );
+    expect(query).toHaveBeenLastCalledWith('COMMIT');
+  });
+  it('rejects enabling an unconfigured node without a key', async () => {
+    poolWithSnapshots({
+      ...snapshot,
+      pool: { ...snapshot.pool, primary_node_id: null },
+      nodes: [],
     });
     await expect(
-      savePlatformModelConfig({ ...input, secretValue: 'synthetic-key' }),
-    ).rejects.toBe(failure);
+      savePlatformModelConfig({
+        ...input,
+        nodes: [{ ...nodeInput, id: undefined }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+  it('rolls back connection, credential and membership changes if saving common prices fails', async () => {
+    const { query, release } = poolWithSnapshots();
+    const original = query.getMockImplementation()!;
+    query.mockImplementation(async (sql, params) => {
+      if (sql.includes('UPDATE official_model_pool_settings'))
+        throw new Error('Synthetic failure');
+      return original(sql, params);
+    });
+    await expect(
+      savePlatformModelConfig({
+        ...input,
+        nodes: [{ ...nodeInput, secretValue: 'synthetic-key' }],
+      }),
+    ).rejects.toThrow('Synthetic failure');
     expect(query).not.toHaveBeenCalledWith('COMMIT');
     expect(query).toHaveBeenLastCalledWith('ROLLBACK');
     expect(release).toHaveBeenCalledOnce();
