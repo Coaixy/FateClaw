@@ -395,6 +395,12 @@ export const enMessages = {
     },
     membership: {
       title: 'Subscription & Billing',
+      tabs: {
+        subscription: 'Subscription',
+        recharge: 'Balance & top-up',
+        transactions: 'Transactions',
+      },
+      noPlans: 'No membership plans available',
       monthlyMessages: 'Monthly messages',
       monthlyToken: 'Monthly tokens',
       notSubscribed: 'Not subscribed',

@@ -1,9 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Crown, Info, Loader2, Sparkles } from 'lucide-react';
+import {
+  CheckCircle2,
+  Crown,
+  Info,
+  Loader2,
+  ReceiptText,
+  Sparkles,
+  Wallet,
+} from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
+import { WorkspaceTabs } from '@/components/ui/workspace-tabs';
 import { WalletBalanceCard } from '@/components/settings/wallet/wallet-balance-card';
 import { WalletRechargePanel } from '@/components/settings/wallet/wallet-recharge-panel';
 import { WalletTransactionsPanel } from '@/components/settings/wallet/wallet-transactions-panel';
@@ -304,14 +313,7 @@ function SubscriptionCard({
   );
 }
 
-/**
- * 渲染合并后的「订阅与计费」工作区。
- *
- * 自上而下：订阅卡（去游戏化）· 剩余额度 · 充值区 · 交易流水（可折叠）。
- * 会员数据来自 use-membership-overview，钱包余额/充值/流水来自 use-wallet-overview。
- *
- * @returns 订阅订阅与计费单页视图。
- */
+/** Keep subscription and wallet refreshes shared across all billing tabs. */
 export function MembershipWorkspace() {
   const { confirm } = useConfirm();
   const { toast } = useToast();
@@ -384,8 +386,6 @@ export function MembershipWorkspace() {
       <AppShell>
         <div className="space-y-4 pt-5 sm:pt-6 lg:pt-0">
           <div className="h-[220px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
-          <div className="h-[140px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
-          <div className="h-[200px] rounded-2xl border border-hairline bg-surface-card animate-pulse" />
         </div>
       </AppShell>
     );
@@ -413,39 +413,60 @@ export function MembershipWorkspace() {
           </h2>
         </div>
 
-        {/* 1. 订阅卡（去游戏化） */}
-        {defaultPlan && (
-          <SubscriptionCard
-            plan={defaultPlan}
-            membership={membership}
-            monthlyMessages={monthlyMessages}
-            monthlyTokens={monthlyTokens}
-            busy={membershipBusy}
-            formatDate={formatDate}
-            formatNumber={formatNumber}
-            locale={locale}
-            onSubscribe={(plan) => void handleSubscribeMembership(plan)}
-            t={t}
-          />
-        )}
-
-        {/* 2. 剩余额度 */}
-        <WalletBalanceCard
-          availableCoins={availableCoins}
-          purchasedCoins={purchasedCoins}
-          bonusCoins={bonusCoins}
+        <WorkspaceTabs
+          label={t('pages.membership.title')}
+          tabs={[
+            {
+              id: 'subscription',
+              label: t('pages.membership.tabs.subscription'),
+              icon: Crown,
+              content: defaultPlan ? (
+                <SubscriptionCard
+                  plan={defaultPlan}
+                  membership={membership}
+                  monthlyMessages={monthlyMessages}
+                  monthlyTokens={monthlyTokens}
+                  busy={membershipBusy}
+                  formatDate={formatDate}
+                  formatNumber={formatNumber}
+                  locale={locale}
+                  onSubscribe={(plan) => void handleSubscribeMembership(plan)}
+                  t={t}
+                />
+              ) : (
+                <div className="rounded-2xl border border-hairline bg-surface-raised px-4 py-12 text-center text-[13px] text-muted">
+                  {t('pages.membership.noPlans')}
+                </div>
+              ),
+            },
+            {
+              id: 'recharge',
+              label: t('pages.membership.tabs.recharge'),
+              icon: Wallet,
+              content: (
+                <>
+                  <WalletBalanceCard
+                    availableCoins={availableCoins}
+                    purchasedCoins={purchasedCoins}
+                    bonusCoins={bonusCoins}
+                  />
+                  <WalletRechargePanel
+                    orders={rechargeOrders}
+                    stats={rechargeStats}
+                    refreshing={walletRefreshing}
+                    onChanged={refreshWallet}
+                  />
+                </>
+              ),
+            },
+            {
+              id: 'transactions',
+              label: t('pages.membership.tabs.transactions'),
+              icon: ReceiptText,
+              content: <WalletTransactionsPanel transactions={transactions} />,
+            },
+          ]}
         />
-
-        {/* 3. 充值区 */}
-        <WalletRechargePanel
-          orders={rechargeOrders}
-          stats={rechargeStats}
-          refreshing={walletRefreshing}
-          onChanged={refreshWallet}
-        />
-
-        {/* 4. 交易流水（默认折叠） */}
-        <WalletTransactionsPanel transactions={transactions} />
 
         {combinedError && (
           <div className="rounded-xl border border-error/30 bg-error/8 px-4 py-3 text-[12px] text-error">

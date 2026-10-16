@@ -339,7 +339,7 @@ export function RechargeResultWorkspace() {
             <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
               {status === 'paid' ? (
                 <Link
-                  href="/membership"
+                  href="/membership#recharge"
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
                 >
                   <Wallet size={15} />
@@ -361,7 +361,7 @@ export function RechargeResultWorkspace() {
               )}
 
               <Link
-                href="/membership"
+                href="/membership#recharge"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-hairline bg-canvas/60 px-4 text-[13px] font-medium text-muted transition-colors hover:text-ink"
               >
                 <ArrowLeft size={15} />

@@ -373,6 +373,12 @@ export const zhCNMessages = {
     },
     membership: {
       title: '订阅与计费',
+      tabs: {
+        subscription: '会员订阅',
+        recharge: '余额与充值',
+        transactions: '交易流水',
+      },
+      noPlans: '暂无可用的会员套餐',
       monthlyMessages: '本月消息',
       monthlyToken: '本月 Token',
       notSubscribed: '待开通',

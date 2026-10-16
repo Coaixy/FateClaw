@@ -1,12 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, ServerCog } from 'lucide-react';
+import {
+  ChevronRight,
+  Palette,
+  ServerCog,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { TabAccount } from '@/components/settings/tab-account';
 import { TabAppearance } from '@/components/settings/tab-appearance';
 import { TabSecurity } from '@/components/settings/tab-security';
+import { WorkspaceTabs } from '@/components/ui/workspace-tabs';
 import { useI18n } from '@/lib/i18n';
 
 export function ProfileWorkspace() {
@@ -26,29 +33,48 @@ export function ProfileWorkspace() {
         </p>
       </div>
 
-      <div className="space-y-3.5 min-h-[70vh]">
-        <TabAccount />
-        <TabSecurity />
-        <TabAppearance />
-        <Link
-          href="/settings/advanced"
-          className="group flex items-center gap-3 rounded-xl border border-hairline bg-surface-raised px-4 py-3.5 transition-colors hover:border-primary/35"
-        >
-          <ServerCog size={16} className="shrink-0 text-muted" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-medium">
-              {t('pages.profile.modelTitle')}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted">
-              {t('pages.profile.modelDescription')}
-            </p>
-          </div>
-          <ChevronRight
-            size={14}
-            className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink"
-          />
-        </Link>
-      </div>
+      <WorkspaceTabs
+        label={t('pages.profile.title')}
+        tabs={[
+          {
+            id: 'account',
+            label: t('pages.profile.accountTitle'),
+            icon: UserRound,
+            content: <TabAccount />,
+          },
+          {
+            id: 'security',
+            label: t('pages.profile.securityTitle'),
+            icon: ShieldCheck,
+            content: <TabSecurity />,
+          },
+          {
+            id: 'appearance',
+            label: t('pages.profile.appearanceTitle'),
+            icon: Palette,
+            content: <TabAppearance />,
+          },
+        ]}
+      />
+
+      <Link
+        href="/settings/advanced"
+        className="group mt-4 flex items-center gap-3 rounded-xl border border-hairline bg-surface-raised px-4 py-3.5 transition-colors hover:border-primary/35"
+      >
+        <ServerCog size={16} className="shrink-0 text-muted" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium">
+            {t('pages.profile.modelTitle')}
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted">
+            {t('pages.profile.modelDescription')}
+          </p>
+        </div>
+        <ChevronRight
+          size={14}
+          className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink"
+        />
+      </Link>
     </AppShell>
   );
 }

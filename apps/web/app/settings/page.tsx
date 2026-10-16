@@ -4,10 +4,10 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const LEGACY_TAB_REDIRECT: Record<string, string> = {
-  personal: '/profile',
-  account: '/profile',
-  appearance: '/profile',
-  wallet: '/membership',
+  personal: '/profile#account',
+  account: '/profile#account',
+  appearance: '/profile#appearance',
+  wallet: '/membership#recharge',
 };
 
 function SettingsRedirectInner() {

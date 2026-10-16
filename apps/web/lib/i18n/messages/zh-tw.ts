@@ -373,6 +373,12 @@ export const zhTWMessages = {
     },
     membership: {
       title: '訂閱與計費',
+      tabs: {
+        subscription: '會員訂閱',
+        recharge: '餘額與儲值',
+        transactions: '交易明細',
+      },
+      noPlans: '暫無可用的會員方案',
       monthlyMessages: '本月訊息',
       monthlyToken: '本月 Token',
       notSubscribed: '待開通',
