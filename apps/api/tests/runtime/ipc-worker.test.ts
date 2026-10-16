@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockGet,
@@ -8,6 +8,9 @@ const {
   mockLlen,
   mockLpush,
   mockLrem,
+  mockDuplicate,
+  mockRpoplpush,
+  mockLoggerError,
   mockLoggerInfo,
   mockEnsureLocalAgentRunning,
   mockReleaseLocalAgent,
@@ -30,6 +33,9 @@ const {
   mockLlen: vi.fn(async () => 0),
   mockLpush: vi.fn(async () => 1),
   mockLrem: vi.fn(async () => 1),
+  mockDuplicate: vi.fn(),
+  mockRpoplpush: vi.fn(async () => null),
+  mockLoggerError: vi.fn(),
   mockLoggerInfo: vi.fn(),
   mockEnsureLocalAgentRunning: vi.fn(async () => undefined),
   mockReleaseLocalAgent: vi.fn(async () => undefined),
@@ -68,6 +74,7 @@ vi.mock('../../src/infrastructure/db.js', () => ({
 
 vi.mock('../../src/infrastructure/redis.js', () => ({
   getRedis: vi.fn(() => ({
+    duplicate: mockDuplicate,
     get: mockGet,
     del: mockDel,
     eval: mockEval,
@@ -77,6 +84,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
     lrem: mockLrem,
     rpop: mockRpop,
     rpush: mockRpush,
+    rpoplpush: mockRpoplpush,
     zadd: mockZadd,
     zrange: mockZrange,
     zrem: mockZrem,
@@ -86,10 +94,14 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
+vi.mock('../../src/infrastructure/config.js', () => ({
+  LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS: 5,
+}));
+
 vi.mock('../../src/infrastructure/logger.js', () => ({
   logger: {
     debug: vi.fn(),
-    error: vi.fn(),
+    error: mockLoggerError,
     info: mockLoggerInfo,
     warn: vi.fn(),
   },
@@ -137,13 +149,17 @@ vi.mock('../../src/modules/system/system-config.js', () => ({
 import {
   _resetIpcWorkerForTests,
   __getPendingAiChatRequestsForTests,
+  addAccountListener,
   cancelAiChatSessionRequest,
+  getIpcWorkerStatus,
+  removeAccountListener,
   startIpcWorker,
   submitAiChatInboxRequest,
   submitInboxRequest,
 } from '../../src/runtime/ipc-worker.js';
 import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
 import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
+import { processOutboxPayload } from '../../src/runtime/ipc-outbox-handler.js';
 import {
   getMembershipOverview,
   getUserByAccountId,
@@ -184,6 +200,116 @@ function createPending(
     ...overrides,
   };
 }
+
+describe('Redis IPC listener lifecycle', () => {
+  const accountId = 'web:listener-user';
+  const queue = `ipc:${accountId}:outbox`;
+  const payload = { type: 'progress', text: 'synthetic progress' };
+
+  function createConsumer() {
+    return {
+      connect: vi.fn<() => Promise<void>>(async () => undefined),
+      brpop: vi.fn(async (): Promise<[string, string] | null> => {
+        removeAccountListener(accountId);
+        return [queue, JSON.stringify(payload)];
+      }),
+      quit: vi.fn(async () => 'OK'),
+      disconnect: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    _resetIpcWorkerForTests();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mockDuplicate.mockReset();
+    mockLindex.mockReset();
+    mockLindex.mockResolvedValue(null);
+    mockRpoplpush.mockResolvedValue(null);
+  });
+
+  afterEach(async () => {
+    _resetIpcWorkerForTests();
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+  });
+
+  it('waits for the lazy connection before consuming and releases it on stop', async () => {
+    const consumer = createConsumer();
+    let ready!: () => void;
+    consumer.connect.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          ready = resolve;
+        }),
+    );
+    mockDuplicate.mockReturnValue(consumer);
+
+    addAccountListener(accountId);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(consumer.connect).toHaveBeenCalledOnce();
+    expect(consumer.brpop).not.toHaveBeenCalled();
+    expect(processOutboxPayload).not.toHaveBeenCalled();
+
+    ready();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(consumer.brpop).toHaveBeenCalledWith(queue, 1);
+    expect(processOutboxPayload).toHaveBeenCalledWith(
+      payload,
+      accountId,
+      expect.any(Map),
+    );
+    expect(consumer.disconnect).toHaveBeenCalledOnce();
+    expect(consumer.quit).not.toHaveBeenCalled();
+    expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
+    expect(mockLoggerError).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['connect', 'brpop'] as const)(
+    'preserves a %s failure, releases the connection and consumes after retry',
+    async (phase) => {
+      const failed = createConsumer();
+      const recovered = createConsumer();
+      const original = new Error(`synthetic ${phase} failure`);
+      failed.brpop.mockRejectedValue(new Error('synthetic read failure'));
+      failed[phase].mockRejectedValueOnce(original);
+      failed.quit.mockRejectedValueOnce(
+        new Error(
+          "Stream isn't writeable and enableOfflineQueue options is false",
+        ),
+      );
+      mockDuplicate.mockReturnValueOnce(failed).mockReturnValueOnce(recovered);
+
+      addAccountListener(accountId);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockLoggerError).toHaveBeenCalledWith(
+        { accountId, err: original, retry: 1 },
+        'Redis IPC 监听异常退出，准备重启',
+      );
+      expect(failed.disconnect).toHaveBeenCalledOnce();
+      expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
+      expect(mockDuplicate).toHaveBeenCalledTimes(1);
+      if (phase === 'connect') expect(failed.brpop).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(mockDuplicate).toHaveBeenCalledTimes(2);
+      expect(processOutboxPayload).toHaveBeenCalledWith(
+        payload,
+        accountId,
+        expect.any(Map),
+      );
+      expect(recovered.disconnect).toHaveBeenCalledOnce();
+      expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
+      expect(mockLoggerError).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+});
 
 describe('cancelAiChatSessionRequest', () => {
   beforeEach(() => {

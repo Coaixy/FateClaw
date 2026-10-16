@@ -696,6 +696,8 @@ async function listenForAccount(accountId: string): Promise<void> {
   logger.info({ accountId }, '启动 Redis IPC 监听');
 
   try {
+    // The lazy duplicate inherits disabled offline queuing, so BRPOP must wait for readiness.
+    await redis.connect();
     while (listener.running) {
       const aiQueue = `ipc:${accountId}:ai-chat:outbox`;
       const aiRaw = await claimAiChatResult(aiQueue);
@@ -817,7 +819,8 @@ async function listenForAccount(accountId: string): Promise<void> {
       }
     }
   } finally {
-    await redis.quit();
+    // QUIT on a broken read-only connection can mask the original listener failure.
+    redis.disconnect();
     accountListeners.delete(accountId);
     logger.info({ accountId }, 'Redis IPC 监听已停止');
   }
