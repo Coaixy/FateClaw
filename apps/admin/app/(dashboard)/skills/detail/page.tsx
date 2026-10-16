@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { admin, AdminApiError, AdminCustomSkill } from '@/lib/admin-api';
 import { toAdminDocumentHref } from '@/lib/admin-navigation';
 import { SkillStorageBadge } from '@/components/skills/skill-storage-badge';
+import { SkillFileBrowser } from '@/components/skills/skill-file-browser';
 import {
   formatSkillDate as formatDate,
   shortRevision,
@@ -12,7 +13,6 @@ import {
 } from '@/lib/skill-storage';
 import {
   ArrowLeft,
-  BookOpen,
   Calendar,
   Clock3,
   Database,
@@ -97,17 +97,6 @@ function SectionCard({
       </div>
       <div className="mt-4">{children}</div>
     </section>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-hairline bg-canvas px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-wider text-muted">
-        {label}
-      </div>
-      <div className="mt-1 text-[14px] font-medium text-ink">{value}</div>
-    </div>
   );
 }
 
@@ -285,57 +274,74 @@ function AdminSkillDetailContent() {
         </button>
       </div>
 
-      <section className="rounded-2xl border border-hairline bg-surface-card p-5 sm:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap gap-1.5">
-              <SkillStorageBadge storage={skill.storage} />
-              <MetaPill tone={skill.enabled ? 'success' : 'danger'}>
-                {skill.enabled ? '启用中' : '已关闭'}
-              </MetaPill>
-              <MetaPill tone={visibility.tone}>
-                <Share2 size={10} />
-                {visibility.label}
-              </MetaPill>
-            </div>
-
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight break-words">
-              {skill.skill_name}
-            </h1>
-
-            <p className="mt-2 text-[14px] leading-relaxed text-muted">
-              {skill.description || '暂无技能说明'}
-            </p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-muted">
-              <span className="inline-flex items-center gap-1.5">
-                <User size={12} />
-                {skill.phone || '未绑定手机号'}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Calendar size={12} />
-                创建于 {formatDate(skill.created_at)}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock3 size={12} />
-                更新于 {formatDate(skill.updated_at)}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid w-full grid-cols-3 gap-2 xl:w-[320px] xl:grid-cols-2">
-            <StatTile
-              label="内容长度"
-              value={`${skill.content_length.toLocaleString()} 字`}
-            />
-            <StatTile label="文件数" value={String(skill.storage.file_count)} />
-            <StatTile
-              label="修订记录"
-              value={`${skill.storage.revision_count} 次保存`}
-            />
+      <section className="rounded-xl border border-hairline bg-surface-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight">
+            {skill.skill_name}
+          </h1>
+          <div className="flex flex-wrap gap-1.5">
+            <SkillStorageBadge storage={skill.storage} />
+            <MetaPill tone={skill.enabled ? 'success' : 'danger'}>
+              {skill.enabled ? '启用中' : '已关闭'}
+            </MetaPill>
+            <MetaPill tone={visibility.tone}>
+              <Share2 size={10} />
+              {visibility.label}
+            </MetaPill>
           </div>
         </div>
+
+        <p className="mt-2 text-[13px] leading-relaxed text-muted">
+          {skill.description || '暂无技能说明'}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <User size={12} />
+              {skill.phone || '未绑定手机号'}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar size={12} />
+              创建于 {formatDate(skill.created_at)}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock3 size={12} />
+              更新于 {formatDate(skill.updated_at)}
+            </span>
+          </div>
+
+          <dl
+            aria-label="技能统计"
+            className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px]"
+          >
+            <div className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+              <dt className="text-muted">内容</dt>
+              <dd className="font-medium tabular-nums text-ink">
+                {skill.content_length.toLocaleString()} 字
+              </dd>
+            </div>
+            <div className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+              <dt className="text-muted">文件</dt>
+              <dd className="font-medium tabular-nums text-ink">
+                {skill.storage.file_count} 个
+              </dd>
+            </div>
+            <div className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+              <dt className="text-muted">修订</dt>
+              <dd className="font-medium tabular-nums text-ink">
+                {skill.storage.revision_count} 次保存
+              </dd>
+            </div>
+          </dl>
+        </div>
       </section>
+
+      <SkillFileBrowser
+        key={`${skill.id}:${skill.storage.current_revision_id ?? ''}`}
+        files={skill.files}
+        revisionId={skill.storage.current_revision_id}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <div className="order-2 min-w-0 space-y-4 xl:order-1">
@@ -564,33 +570,6 @@ function AdminSkillDetailContent() {
                 完成内容入库后，这里会保留每次保存的修订记录。
               </p>
             )}
-          </SectionCard>
-
-          <SectionCard
-            title="当前修订文件"
-            hint="正文直接读取自数据库，与上方当前修订一致。"
-            icon={BookOpen}
-          >
-            <div className="space-y-3">
-              {!skill.files.length ? (
-                <p className="text-[13px] leading-relaxed text-muted">
-                  正文尚未入库，暂无法预览文件。请先处理上方显示的迁移状态。
-                </p>
-              ) : null}
-              {skill.files.map((file) => (
-                <section
-                  key={file.path}
-                  className="rounded-lg border border-hairline bg-canvas"
-                >
-                  <div className="border-b border-hairline px-3 py-2 text-[12px] font-medium text-muted">
-                    {file.path}
-                  </div>
-                  <pre className="max-h-[50dvh] overflow-y-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[13px] leading-relaxed text-ink">
-                    {file.content || '(空)'}
-                  </pre>
-                </section>
-              ))}
-            </div>
           </SectionCard>
         </div>
       </div>
