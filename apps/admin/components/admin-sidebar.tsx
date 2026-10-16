@@ -59,7 +59,12 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
-  { href: '/issues', label: '问题与建议', icon: CircleDot, requiredScopes: ['admin:*'] },
+  {
+    href: '/issues',
+    label: '问题与建议',
+    icon: CircleDot,
+    requiredScopes: ['admin:*'],
+  },
   {
     href: '/logs',
     label: '日志',
@@ -68,7 +73,13 @@ const navItems = [
   },
   {
     href: '/system/models',
-    label: '模型配置',
+    label: '付费模型',
+    icon: Bot,
+    requiredScopes: ['admin:*'],
+  },
+  {
+    href: '/system/benefit-models',
+    label: '免费模型',
     icon: Bot,
     requiredScopes: ['admin:*'],
   },

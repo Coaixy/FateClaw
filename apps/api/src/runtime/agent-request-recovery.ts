@@ -80,7 +80,23 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
     if (result) await deliver(row, result);
     return;
   }
-  const current = await resolveUserLlmRuntime(row.owner_user_id);
+  let current: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
+  try {
+    current = await resolveUserLlmRuntime(
+      row.owner_user_id,
+      row.runtime.poolKey ?? 'official',
+    );
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      error.code !== 'MODEL_UNAVAILABLE'
+    )
+      throw error;
+    const result = await persistAgentFailure(row.request_id, failure(row));
+    if (result) await deliver(row, result);
+    return;
+  }
   const identity = [
     'source',
     'modelConfigId',
@@ -90,6 +106,7 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
     'authMode',
   ] as const;
   if (
+    (current.poolKey ?? 'official') !== (row.runtime.poolKey ?? 'official') ||
     identity.some((key) => current[key] !== row.runtime[key]) ||
     (current.baseUrl || undefined) !== row.runtime.baseUrl ||
     JSON.stringify(

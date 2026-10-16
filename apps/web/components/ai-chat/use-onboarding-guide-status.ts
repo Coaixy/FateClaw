@@ -79,7 +79,10 @@ function isPreUseNoticeOpen() {
 }
 
 export function hasUsableModelForGuide(data: ModelSettingsOverview | null) {
-  return Boolean(data?.model?.has_secret);
+  return Boolean(
+    data?.model?.has_secret ||
+    (data?.benefit?.enabled && data.benefit.model?.has_secret),
+  );
 }
 
 /**

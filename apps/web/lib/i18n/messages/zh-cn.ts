@@ -1,7 +1,44 @@
 export const zhCNMessages = {
+  modelChoice: {
+    paid_operational: '付费模型服务运行正常',
+    paid_unavailable: '付费模型服务暂时不可用',
+    paid_unknown: '付费模型服务状态待确认',
+    lastObserved: '最近确认',
+    paidUnavailable: '付费模型暂未配置；可使用已开放的免费服务。',
+    benefitStatusNote:
+      '免费供应独立于付费服务。共享额度用完与服务故障分别显示；个人次数请登录后查看。',
+    benefitHistoryNote:
+      '记录来自定期轻量检测；免费额度用完时会跳过检测，空白记录不代表故障。',
+    title: '模型选择',
+    switch: '当前{model}，切换模型',
+    benefit: '免费模型',
+    paid: '付费模型',
+    freeReply: '免费额度 · 未扣积分',
+    refunded: '免费次数已返还 · 未扣积分',
+    benefitDescription:
+      '基础体验，复杂推理与工具调用能力有限；复杂推演建议选择付费模型。',
+    paidDescription:
+      '更适合复杂推演、多轮追问与知识库分析，按当前账户单价计费。',
+    noAutoCharge: '免费额度用完会停止，不会自动切换付费或扣积分。',
+    remaining: '今日剩余 {count} 次',
+    shortBenefit: '剩余 {count} 次 · 基础体验，不扣积分',
+    metered: '按实际 Token 用量计费',
+    available: '正常供应',
+    busy: '免费服务繁忙，请稍后重试',
+    exhausted: '共享免费额度已用完',
+    disabled: '免费服务暂未开放',
+    unknown: '模型状态待确认',
+    personal: '今日免费额度已用完',
+    resets: '明日北京时间 {time} 恢复次数',
+    retry: '重试读取模型状态',
+    loading: '正在更新模型状态',
+    loadFailed: '暂时无法读取模型状态',
+    saveFailed: '切换模型失败，请重试',
+    blocked: '当前模型暂不可用，请检查额度或主动切换模型',
+  },
   serviceStatus: {
     title: '服务状态',
-    subtitle: '了解 AI 服务的整体可用性与最近检测结果。',
+    subtitle: '分别查看付费与免费服务的可用情况和最近检测记录。',
     home: '返回首页',
     refresh: '刷新状态',
     loading: '正在读取服务状态',
@@ -27,7 +64,7 @@ export const zhCNMessages = {
     noSample: '暂无检测记录',
     sevenDaysAgo: '7 天前',
     now: '现在',
-    aggregateNote: '只要有一个 AI 节点可用，整体服务即显示正常。',
+    aggregateNote: '付费与免费分别判断可用性；免费额度用完不会影响付费服务。',
     cadenceNote:
       '后台每 6 小时轻量检测一次；刷新本页面只读取已有结果，不会触发额外检测。',
     latencyNote:

@@ -4,6 +4,7 @@ const f = vi.hoisted(() => ({
   complete: vi.fn(),
   runtime: vi.fn(),
   probe: vi.fn(),
+  benefitProbe: vi.fn(),
   warn: vi.fn(),
 }));
 vi.mock(
@@ -18,6 +19,7 @@ vi.mock('../../src/modules/system/system-config.js', () => ({
 }));
 vi.mock('../../src/modules/system/model-availability-probe.js', () => ({
   probeModelAvailability: f.probe,
+  probeBenefitModelAvailability: f.benefitProbe,
 }));
 vi.mock('../../src/infrastructure/logger.js', () => ({
   logger: { warn: f.warn },
@@ -38,7 +40,9 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.resetModules();
   worker = await import('../../src/runtime/service-status-worker.js');
-  f.claim.mockResolvedValue('lease');
+  f.claim.mockImplementation(async (poolKey) =>
+    poolKey === 'benefit' ? null : 'lease',
+  );
   f.runtime.mockResolvedValue({ poolNodes: nodes });
   f.complete.mockResolvedValue(undefined);
 });
@@ -83,7 +87,8 @@ describe('shared service status worker', () => {
       worker.runServiceStatusCheckOnce(),
       worker.runServiceStatusCheckOnce(),
     ]);
-    expect(f.claim).toHaveBeenCalledOnce();
+    expect(f.claim).toHaveBeenCalledTimes(2);
+    expect(f.claim).toHaveBeenCalledWith('benefit');
     expect(f.probe).toHaveBeenCalledOnce();
     expect(f.complete).toHaveBeenCalledWith('lease', {
       status: 'operational',

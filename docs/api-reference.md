@@ -495,13 +495,14 @@ Public feedback uses `/api/issues`; authenticated users create and edit their ow
 
 ## Model Settings
 
-All users use one public official model alias backed by a platform-managed model pool. The pool may contain different models and providers. Model settings remain read-only for users.
+Users choose between the platform-managed paid and free pools. Supplier connections and credentials remain administrator-owned. Each pool may contain multiple models/providers; users select a service rather than a provider node.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/model-settings` | Authenticated overview: `{ "model": { ... } }`, or `{ "model": null }` before configuration |
+| GET | `/api/model-settings` | Authenticated paid `model`, `benefit` availability/allowance/reset time and `preferred_pool` |
+| PUT | `/api/model-settings/preference` | Save `{ "pool_key": "official" | "benefit", "session_id"?: "..." }`; optional session must belong to the caller and have no active turn |
 
-The response contains the model name, availability, description, and input/output token prices. It does not expose provider connection details or credential metadata. User custom-model and selection endpoints are removed.
+The paid `model` remains nullable and keeps its existing public alias. Displayed input/output prices include the current account's non-member multiplier when applicable. `benefit` includes `model`, `enabled`, `supply`, `daily_turns`, `remaining_turns`, and `resets_at`. Connection details and credential values are omitted. Preferences are server-owned; session choices apply to future turns, and exhaustion never changes a request into paid execution. Legacy custom-provider selection endpoints remain removed. See [Free model service](benefit-model-pool.md).
 
 ## Skills 商店与创作者
 
@@ -928,7 +929,7 @@ Returns `{ "model": { ... }, "thinking_level": "medium", "nodes": [ ... ] }`. Th
 
 ### PUT /api/admin/system-config/model
 
-Saves the pool name, common token prices, thinking level and complete node list in one transaction. Concurrent writers share a singleton lock.
+Saves the paid pool name, common token prices, thinking level and complete node list in one transaction. Concurrent writers share its pool lock. New clients supply `revision` from the overview to reject a stale draft.
 
 **Request Body**
 
@@ -963,7 +964,23 @@ Saves the pool name, common token prices, thinking level and complete node list 
 - `thinking_level`: `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`, applied to all users and Open API turns.
 - Public token prices are common to the pool and captured at admission. Failover does not change the admitted prices.
 
-Existing installations enroll only their previously configured official model and preserve the public alias and prices. User custom-model and selection endpoints remain removed. Provider failures trigger shared cooldown and failover before response content is published; cancellation and input errors do not trigger failover. See [Official model pool](official-model-pool.md) for timeout, recovery and billing boundaries.
+Existing installations enroll only their previously configured official model and preserve its public alias and prices. User custom-provider endpoints remain removed. Provider failures trigger shared cooldown and failover before response content is published; cancellation and input errors do not trigger failover. See [Official model pool](official-model-pool.md) for timeout, recovery and billing boundaries.
+
+### GET / PUT /api/admin/system-config/free
+
+The independent free overview/update uses `revision`, `enabled`, `display_name`,
+`thinking_level`, zero input/output prices, `benefit_policy`, `quota_groups` and
+`nodes`. Each free node requires `quota_group_id`. An empty node list is valid
+while disabled. Enabling requires at least one configured, approved and unexpired
+supplier. Stale revisions fail without overwriting the current settings.
+
+Quota groups contain `id`, `display_name`, `requests_per_minute`,
+`requests_per_day`, `tokens_per_minute`, `tokens_per_day`, `reset_timezone`,
+`expires_at` and `approved`. Approval confirms actual shared scope, permitted use
+and a hard boundary before paid overage. Usage/cooldown metadata is read-only;
+saving settings does not reset it. The paid and free updates cannot change
+each other's membership or policy. See the [operating contract](benefit-model-pool.md)
+for policy defaults, failure/refund rules and activation.
 
 The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-config/model-billing` mutation endpoints remain removed.
 

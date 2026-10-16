@@ -38,6 +38,9 @@ export function toMessageDto(message: NewMessage): MessageDto {
 
 export function toChatSessionDto(session: ChatSession): ChatSessionDto {
   return {
+    ...(session.model_pool_key
+      ? { model_pool_key: session.model_pool_key }
+      : {}),
     id: session.id,
     account_id: session.account_id,
     title: normalizeOwnedChatSessionTitle(session.title),

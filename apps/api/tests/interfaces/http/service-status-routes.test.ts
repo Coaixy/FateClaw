@@ -2,6 +2,13 @@ import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock(
+  '../../../src/infrastructure/repositories/benefit-repository.js',
+  () => ({
+    getBenefitSupply: async () => 'disabled',
+    getRecentBenefitSuccess: async () => null,
+  }),
+);
+vi.mock(
   '../../../src/infrastructure/repositories/service-status-repository.js',
   () => ({
     listServiceStatusChecks: f.list,
@@ -34,7 +41,7 @@ describe('public service status', () => {
         });
         expect(response.statusCode).toBe(200);
         expect(response.headers['cache-control']).toContain('public');
-        expect(response.json()).toEqual({
+        expect(response.json()).toMatchObject({
           status: 'operational',
           checked_at: expect.any(String),
           latency_ms: 120,
@@ -48,6 +55,11 @@ describe('public service status', () => {
             },
           ],
         });
+        expect(response.json().services).toHaveLength(2);
+        expect(JSON.stringify(response.json())).not.toContain(
+          'synthetic-private-value',
+        );
+        expect(JSON.stringify(response.json())).not.toContain('private-model');
       }
       expect(
         (await app.inject({ method: 'POST', url: '/api/service-status' }))

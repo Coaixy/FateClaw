@@ -18,6 +18,7 @@ import { officialModelPoolMigration } from './versions/0083-official-model-pool.
 import { officialModelPoolPrimaryMigration } from './versions/0084-official-model-pool-primary.js';
 import { aiServiceStatusMigration } from './versions/0085-ai-service-status.js';
 import { issuesMigration } from './versions/0086-issues.js';
+import { benefitModelPoolMigration } from './versions/0087-benefit-model-pool.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -39,6 +40,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   officialModelPoolPrimaryMigration,
   aiServiceStatusMigration,
   issuesMigration,
+  benefitModelPoolMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

@@ -685,6 +685,13 @@ export const admin = {
     }),
   systemConfig: () =>
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
+  benefitModelSettings: () =>
+    adminRequest<AdminSystemConfigOverview>('/api/admin/system-config/benefit'),
+  updateBenefitModelSettings: (data: AdminModelSettingsUpdate) =>
+    adminRequest<AdminSystemConfigOverview>(
+      '/api/admin/system-config/benefit',
+      { method: 'PUT', body: JSON.stringify(data) },
+    ),
   rechargeConfig: () =>
     adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config'),
   updateRechargeConfig: (data: AdminRechargePaymentConfigUpdate) =>

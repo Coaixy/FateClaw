@@ -75,6 +75,11 @@ import {
   WEB_CHAT_USER_NAME,
 } from './web-chat-runtime.js';
 import type { NormalizedChatSessionMessageInput } from './pasted-board-input.js';
+import {
+  getPreferredModelPool,
+  BenefitAdmissionError,
+  ModelSelectionError,
+} from '../../infrastructure/repositories/benefit-repository.js';
 import type { StructuredInput } from './structured-input.js';
 import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
 import {
@@ -444,6 +449,7 @@ export async function createChatSessionForOwnedUser(
   const id = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const normalizedTitle = normalizeOwnedChatSessionTitle(title);
   const session = await createChatSession({
+    modelPoolKey: await getPreferredModelPool(userId),
     id,
     accountId: getWebChatRuntimeId(userId),
     userId,
@@ -734,10 +740,8 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const entitlement = await getRuntimeEntitlementSnapshot(userId);
-  // 专家模式（AI 解读）已对非会员放开：非会员可发起，下游 worker 按非会员加价系数计费。
-  // 站内 AI Chat、自贴盘面、简易模式都经此处准备入队，统一在此放行——仅保留欠费硬门禁，
-  // 余额不足者（含非会员）不得发起，避免无上限赊账。
-  if (entitlement.wallet.inArrears) {
+  // Benefit admission uses its own allowance; wallet debt gates paid execution only.
+  if (session.model_pool_key !== 'benefit' && entitlement.wallet.inArrears) {
     return fail(402, BILLING_ARREARS_MESSAGE);
   }
   const msgId =
@@ -792,7 +796,16 @@ async function prepareOwnedChatSessionTurn(
   }
 
   try {
-    const llmRuntime = await resolveUserLlmRuntime(userId);
+    // A model switch uses the same session lock; re-read after acquiring it.
+    const currentSession = await getChatSession(session.id);
+    if (!currentSession || currentSession.user_id !== userId)
+      throw new Error('会话不存在或无权访问');
+    const llmRuntime = await resolveUserLlmRuntime(
+      userId,
+      currentSession.model_pool_key ?? 'official',
+    );
+    if (llmRuntime.billingMode === 'metered' && entitlement.wallet.inArrears)
+      throw new Error(BILLING_ARREARS_MESSAGE);
     const previousMessages =
       input.inputKind === 'normal'
         ? await getSessionMessages(session.account_id, session.id)
@@ -875,6 +888,8 @@ async function prepareOwnedChatSessionTurn(
       'AI 对话: 请求准备失败',
     );
 
+    if (err instanceof ModelSelectionError) return fail(409, errorMessage);
+    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }
@@ -932,6 +947,8 @@ async function enqueuePreparedOwnedChatSessionTurn(
       'AI 对话: 请求入队失败',
     );
 
+    if (err instanceof ModelSelectionError) return fail(409, errorMessage);
+    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }
@@ -1034,6 +1051,8 @@ async function completeOwnedChatSessionTurn(
       'AI 对话: agent 调用失败',
     );
 
+    if (err instanceof ModelSelectionError) return fail(409, errorMessage);
+    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }

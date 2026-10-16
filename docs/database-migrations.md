@@ -34,6 +34,14 @@ The `0086_issues` migration adds public issues, per-issue anonymous participants
 
 ## Adding an upgrade
 
+`0087_benefit_model_pool` adds pool-scoped membership, a disabled free model pool,
+server-side user/session selection, durable personal allowances and provider
+quota/attempt ownership. It preserves paid prices, aliases, primary identity,
+wallets and existing credential references. It does not read or copy credential
+values. Paid and free status schedules/histories become independently scoped.
+New default seeds use a fixed migration timestamp so historical replay and fresh
+bootstrap converge. Existing sessions retain the paid pool.
+
 1. Add a file under `versions/` exporting one named `DatabaseMigration` object.
 2. Use a new increasing ID and append it to `MIGRATIONS` in `manifest.ts`. Keep published SQL, IDs, descriptions, and ordering stable. Keep data-fix logic owned by its migration so later business-code changes cannot change historical replay.
 3. Add relevant behavior tests. Until the next baseline is generated, both new and existing databases run the appended migrations after their covered history.

@@ -4,22 +4,51 @@ import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
 export interface ModelPoolClaim {
   generation: number;
   token: string | null;
+  benefitAttemptId?: string;
+}
+
+export interface BenefitAttemptBudget {
+  requestId: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+export interface BenefitAttemptUsage {
+  inputTokens: number;
+  outputTokens: number;
+  known: boolean;
+  retryAfterSeconds?: number;
 }
 
 export interface ModelPoolHealthStore {
   claim(
     node: RuntimeModelPoolNode,
     token: string,
+    budget?: BenefitAttemptBudget,
   ): Promise<ModelPoolClaim | null>;
   finish(
     node: RuntimeModelPoolNode,
     claim: ModelPoolClaim,
     outcome: 'success' | 'failure' | 'release',
+    usage?: BenefitAttemptUsage,
   ): Promise<void>;
 }
 
 export const databaseModelPoolHealth: ModelPoolHealthStore = {
-  async claim(node, token) {
+  async claim(node, token, budget) {
+    if (node.poolKey === 'benefit') {
+      if (!budget) throw new Error('Benefit dispatch requires an allowance');
+      const { rows } = await getAgentDbPool().query<{
+        claim: ModelPoolClaim | null;
+      }>('SELECT claim_benefit_attempt($1,$2,$3,$4,$5,$6) AS claim', [
+        budget.requestId,
+        node.modelConfigId,
+        node.revision,
+        token,
+        budget.inputTokens,
+        budget.outputTokens,
+      ]);
+      return rows[0]?.claim ?? null;
+    }
     const { rows } = await getAgentDbPool().query<ModelPoolClaim>(
       `UPDATE official_model_pool_nodes node SET
          probe_token=CASE WHEN node.cooldown_until IS NOT NULL THEN $3 ELSE NULL END,
@@ -34,7 +63,22 @@ export const databaseModelPoolHealth: ModelPoolHealthStore = {
     );
     return rows[0] ?? null;
   },
-  async finish(node, claim, outcome) {
+  async finish(node, claim, outcome, usage) {
+    if (claim.benefitAttemptId) {
+      if (!usage) throw new Error('Benefit settlement is missing usage');
+      await getAgentDbPool().query(
+        'SELECT settle_benefit_attempt($1,$2,$3,$4,$5,$6)',
+        [
+          claim.benefitAttemptId,
+          usage.inputTokens,
+          usage.outputTokens,
+          usage.known,
+          outcome,
+          usage.retryAfterSeconds ?? null,
+        ],
+      );
+      return;
+    }
     await getAgentDbPool().query(
       `UPDATE official_model_pool_nodes SET
          health_generation=health_generation+CASE WHEN $5='failure' OR ($5='success' AND $4::text IS NOT NULL) THEN 1 ELSE 0 END,

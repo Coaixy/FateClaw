@@ -96,6 +96,23 @@ describe('onboarding guide status helpers', () => {
   it('treats the configured official model as ready without user selection', () => {
     expect(hasUsableModelForGuide({ model: officialModel() })).toBe(true);
   });
+  it('accepts an enabled benefit-only deployment without sending users to paid-model setup', () => {
+    const benefit = {
+      model: officialModel(),
+      enabled: true,
+      supply: 'available' as const,
+      daily_turns: 3,
+      remaining_turns: 3,
+      resets_at: '2026-10-17T00:00:00+08:00',
+    };
+    expect(hasUsableModelForGuide({ model: null, benefit })).toBe(true);
+    expect(
+      hasUsableModelForGuide({
+        model: null,
+        benefit: { ...benefit, enabled: false },
+      }),
+    ).toBe(false);
+  });
 
   it('keeps the guide unavailable when no official model is configured', () => {
     expect(hasUsableModelForGuide(baseModelOverview)).toBe(false);

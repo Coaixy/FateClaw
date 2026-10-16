@@ -9,6 +9,7 @@ import {
 } from '@/features/model-settings/api';
 import { useI18n } from '@/lib/i18n';
 import { OfficialModelPriceTags } from './official-model-price-tags';
+import { ModelSelector } from '@/components/ai-chat/model-selector';
 
 type ModelState = {
   overview: ModelSettingsOverview | null;
@@ -105,8 +106,44 @@ export function ModelSettingsPanel() {
         </div>
       ) : !loading ? (
         <p className="mt-4 text-[13px] leading-6 text-muted">
-          {t('pages.modelSettings.noOfficialModel')}
+          {t(
+            overview?.benefit?.model
+              ? 'modelChoice.paidUnavailable'
+              : 'pages.modelSettings.noOfficialModel',
+          )}
         </p>
+      ) : null}
+      {overview?.benefit ? (
+        <div className="mt-4 border-t border-hairline pt-4">
+          <p className="mb-2 text-[12px] leading-6 text-muted">
+            {t('modelChoice.benefitDescription')}
+          </p>
+          <ModelSelector
+            overview={overview}
+            poolKey={overview.preferred_pool ?? 'official'}
+            busy={loading}
+            error={error}
+            onRetry={() => void load()}
+            onChange={(key) => {
+              const id = ++requestIdRef.current;
+              setState((current) => ({ ...current, loading: true, error: '' }));
+              void modelSettingsApi
+                .setPreference(key)
+                .then((data) => {
+                  if (id === requestIdRef.current)
+                    setState({ overview: data, loading: false, error: '' });
+                })
+                .catch(() => {
+                  if (id === requestIdRef.current)
+                    setState((current) => ({
+                      ...current,
+                      loading: false,
+                      error: t('modelChoice.saveFailed'),
+                    }));
+                });
+            }}
+          />
+        </div>
       ) : null}
     </section>
   );

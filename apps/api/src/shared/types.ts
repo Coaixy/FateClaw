@@ -199,6 +199,7 @@ export interface NewMessage {
 }
 
 export interface ChatSession {
+  model_pool_key?: 'official' | 'benefit';
   id: string;
   /** 站内 AI Chat 会话归属用户。 */
   user_id: string | null;

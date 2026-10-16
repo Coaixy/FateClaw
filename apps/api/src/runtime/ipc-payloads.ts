@@ -34,6 +34,10 @@ export interface InboxRequestResult {
 }
 
 export interface LlmRuntimeSnapshot {
+  poolKey?: import('@fateclaw/contracts/model-settings').ModelPoolKey;
+  poolRevision?: number;
+  benefitPolicy?: import('@fateclaw/contracts/model-settings').BenefitPolicyDto;
+  benefitRequestId?: string;
   poolNodes?: import('@fateclaw/contracts/model-settings').RuntimeModelPoolNode[];
   source: 'custom' | 'official';
   billingMode: 'none' | 'metered';

@@ -35,6 +35,7 @@ import {
 } from '../ai-chat-stream.js';
 import { log } from '../io.js';
 import { attachPartialUsage } from '../partial-usage.js';
+import { claimBenefitTool } from '../benefit-budget.js';
 import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
@@ -159,11 +160,23 @@ export async function runPiSession(args: {
       recordExecution(record) {
         records.push(record);
       },
-    });
+    }).map((tool) =>
+      args.containerInput.llmRuntime.poolKey !== 'benefit'
+        ? tool
+        : {
+            ...tool,
+            async execute(...params: Parameters<typeof tool.execute>) {
+              await claimBenefitTool(args.containerInput.llmRuntime);
+              return tool.execute(...params);
+            },
+          },
+    );
 
     const allowedToolNames = customTools.map((tool) => tool.name);
     const settingsManager = SettingsManager.inMemory({
-      compaction: { enabled: true },
+      compaction: {
+        enabled: args.containerInput.llmRuntime.poolKey !== 'benefit',
+      },
       // Warming issues extra billable calls outside the user-requested turn.
       cacheWarming: 'off',
       retry: {
@@ -236,6 +249,15 @@ export async function runPiSession(args: {
       }),
     );
 
+    let benefitTimedOut = false;
+    const benefitTimer =
+      args.containerInput.llmRuntime.poolKey === 'benefit' &&
+      args.containerInput.llmRuntime.benefitPolicy
+        ? setTimeout(() => {
+            benefitTimedOut = true;
+            void session.abort().catch(() => {});
+          }, args.containerInput.llmRuntime.benefitPolicy.execution_timeout_seconds * 1000)
+        : undefined;
     try {
       traceEvent(
         {
@@ -253,6 +275,7 @@ export async function runPiSession(args: {
       await session.prompt(args.containerInput.userMessage, {
         source: 'extension',
       });
+      if (benefitTimedOut) throw new Error('免费请求超时');
       const latestAssistant = extractLatestAssistantResult(
         session.state.messages,
       );
@@ -261,6 +284,17 @@ export async function runPiSession(args: {
         // 转成异常后复用 request-boundary 的脱敏与 publicErrorText 映射，避免成功空回复。
         throw new Error(latestAssistant.error);
       }
+      if (
+        args.containerInput.llmRuntime.poolKey === 'benefit' &&
+        !latestAssistant?.text?.trim()
+      )
+        throw new Error('免费模型未能完成回答，请稍后重试');
+      if (
+        args.containerInput.llmRuntime.poolKey === 'benefit' &&
+        (session.state.messages.at(-1) as { stopReason?: string } | undefined)
+          ?.stopReason === 'length'
+      )
+        throw new Error('免费生成额度已达上限，本次回答未完成');
       return {
         text: latestAssistant?.text ?? lastAssistantText,
         usage,
@@ -291,6 +325,7 @@ export async function runPiSession(args: {
       attachPartialUsage(err, usage);
       throw err;
     } finally {
+      if (benefitTimer) clearTimeout(benefitTimer);
       unsubscribe();
       stream.close();
       session.dispose();

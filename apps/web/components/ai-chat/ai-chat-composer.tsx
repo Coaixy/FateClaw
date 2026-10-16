@@ -5,6 +5,7 @@ import type {
   ClipboardEvent,
   KeyboardEvent,
   RefObject,
+  ReactNode,
 } from 'react';
 import { useLayoutEffect } from 'react';
 import {
@@ -33,7 +34,10 @@ interface ComposerPaipanAction {
   onOpen: () => void;
 }
 
-function syncTextareaHeight(textarea: HTMLTextAreaElement | null, value: string) {
+function syncTextareaHeight(
+  textarea: HTMLTextAreaElement | null,
+  value: string,
+) {
   if (!textarea) {
     return;
   }
@@ -76,6 +80,8 @@ export function AiChatComposer({
   disabled,
   disabledMessage,
   selectedSession,
+  modelControl,
+  sendDisabled,
   paipanAction,
   pasteChoiceOpen,
   pasteChoicePreview,
@@ -94,6 +100,8 @@ export function AiChatComposer({
   disabled?: boolean;
   disabledMessage?: string;
   selectedSession: string;
+  modelControl?: ReactNode;
+  sendDisabled?: boolean;
   paipanAction?: ComposerPaipanAction;
   pasteChoiceOpen: boolean;
   pasteChoicePreview?: string;
@@ -108,7 +116,9 @@ export function AiChatComposer({
 }) {
   const { t } = useI18n();
   const composerDisabled = sending || Boolean(disabled);
-  const actionDisabled = sending ? false : !input.trim() || Boolean(disabled);
+  const actionDisabled = sending
+    ? false
+    : !input.trim() || Boolean(disabled) || Boolean(sendDisabled);
 
   useLayoutEffect(() => {
     syncTextareaHeight(inputRef.current, input);
@@ -132,7 +142,7 @@ export function AiChatComposer({
       )}
 
       <div
-        className={`flex items-end gap-0 rounded-xl border bg-surface-raised transition-all duration-200 touch-manipulation ${
+        className={`flex flex-wrap items-end gap-0 rounded-xl border bg-surface-raised transition-all duration-200 touch-manipulation ${
           sending
             ? 'border-primary/40 shadow-lg shadow-primary/5'
             : 'border-hairline shadow-raised focus-within:shadow-lg focus-within:shadow-primary/10'
@@ -174,7 +184,7 @@ export function AiChatComposer({
           }
           disabled={composerDisabled}
           rows={1}
-          className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
+          className="min-h-12 min-w-0 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
           onInput={(event) => {
             syncTextareaHeight(event.currentTarget, event.currentTarget.value);
           }}
@@ -196,6 +206,11 @@ export function AiChatComposer({
             <Send size={14} />
           )}
         </button>
+        {modelControl ? (
+          <div className="w-full border-t border-hairline/60 px-1.5 py-1">
+            {modelControl}
+          </div>
+        ) : null}
       </div>
     </div>
   );

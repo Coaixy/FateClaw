@@ -371,6 +371,7 @@ const OfficialModelPoolNodeSchema = z
     auth_mode: OfficialModelAuthModeSchema,
     enabled: z.boolean(),
     weight: z.number().int().min(1).max(1000),
+    quota_group_id: z.string().min(1).max(120).nullable().optional(),
     context_window_tokens: z
       .number()
       .int()
@@ -410,6 +411,7 @@ const OfficialModelSettingsSchema = z
       .min(0)
       .max(1_000_000),
     nodes: z.array(OfficialModelPoolNodeSchema).min(1).max(20),
+    revision: z.number().int().positive().optional(),
   })
   .superRefine((config, ctx) => {
     const ids = config.nodes.flatMap((node) => (node.id ? [node.id] : []));
@@ -420,6 +422,57 @@ const OfficialModelSettingsSchema = z
         message: '模型节点不能重复',
       });
     }
+  });
+
+const BenefitModelSettingsSchema = z
+  .strictObject({
+    display_name: z.string().trim().min(1).max(120),
+    thinking_level: z.enum(PI_THINKING_LEVELS),
+    input_token_price_per_million_coins: z.literal(0),
+    output_token_price_per_million_coins: z.literal(0),
+    revision: z.number().int().positive(),
+    enabled: z.boolean(),
+    nodes: z.array(OfficialModelPoolNodeSchema).max(20),
+    benefit_policy: z.strictObject({
+      daily_turns: z.number().int().min(1).max(100),
+      concurrency_limit: z.number().int().min(1).max(10),
+      queue_limit: z.number().int().min(1).max(100),
+      queue_timeout_seconds: z.number().int().min(1).max(60),
+      execution_timeout_seconds: z.number().int().min(10).max(300),
+      max_model_calls: z.number().int().min(1).max(20),
+      max_tool_calls: z.number().int().min(0).max(20),
+      max_input_tokens: z.number().int().min(512).max(256000),
+      max_total_input_tokens: z.number().int().min(512).max(1000000),
+      max_output_tokens: z.number().int().min(128).max(16384),
+      max_total_output_tokens: z.number().int().min(128).max(65536),
+    }),
+    quota_groups: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(120),
+          display_name: z.string().trim().min(1).max(120),
+          requests_per_minute: z.number().int().min(1).max(100000),
+          requests_per_day: z.number().int().min(1).max(10000000),
+          tokens_per_minute: z.number().int().min(128).max(1000000000),
+          tokens_per_day: z.number().int().min(128).max(2000000000),
+          reset_timezone: z.string().min(1).max(100),
+          expires_at: z.string().datetime({ offset: true }).nullable(),
+          approved: z.boolean(),
+        }),
+      )
+      .max(40),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.benefit_policy.max_total_input_tokens <
+        value.benefit_policy.max_input_tokens ||
+      value.benefit_policy.max_total_output_tokens <
+        value.benefit_policy.max_output_tokens
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: '单轮总额度不能小于单次调用额度',
+      });
   });
 
 const RechargeMoneySchema = z
@@ -553,6 +606,22 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/status', async () => getAdminStatusOverview());
 
   app.get('/system-config', async () => getSystemConfigOverview());
+  app.get('/system-config/benefit', async () =>
+    getSystemConfigOverview('benefit'),
+  );
+  app.put('/system-config/benefit', async (request, reply) => {
+    const parsed = BenefitModelSettingsSchema.safeParse(request.body, {
+      error: () => '免费模型配置参数不正确',
+    });
+    if (!parsed.success)
+      return reply.code(400).send({
+        error: parsed.error.issues[0]?.message || '免费模型配置参数不正确',
+      });
+    return saveOfficialModelSettings(
+      { ...parsed.data, actor: 'manager' },
+      'benefit',
+    );
+  });
 
   app.put('/system-config/model', async (request, reply) => {
     const parsed = OfficialModelSettingsSchema.safeParse(request.body, {

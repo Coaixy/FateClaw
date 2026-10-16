@@ -7,6 +7,10 @@ import {
   SERVICE_CHECK_INTERVAL_SECONDS,
   SERVICE_STATUS_STALE_SECONDS,
 } from '../../infrastructure/repositories/service-status-repository.js';
+import {
+  getBenefitSupply,
+  getRecentBenefitSuccess,
+} from '../../infrastructure/repositories/benefit-repository.js';
 
 export function publicServiceStatus(
   history: ServiceStatusSampleDto[],
@@ -33,5 +37,34 @@ export function publicServiceStatus(
 }
 
 export async function getPublicServiceStatus(): Promise<ServiceStatusOverviewDto> {
-  return publicServiceStatus(await listServiceStatusChecks());
+  const [paidHistory, benefitHistory, supply, success] = await Promise.all([
+    listServiceStatusChecks(),
+    listServiceStatusChecks('benefit'),
+    getBenefitSupply(),
+    getRecentBenefitSuccess(),
+  ]);
+  const official = publicServiceStatus(paidHistory);
+  const benefit = publicServiceStatus(benefitHistory);
+  if (
+    success &&
+    (!benefit.checked_at ||
+      Date.parse(success) > Date.parse(benefit.checked_at))
+  ) {
+    benefit.status = 'operational';
+    benefit.checked_at = success;
+    benefit.latency_ms = null;
+  }
+  return {
+    ...official,
+    services: [
+      { ...official, pool_key: 'official', display_name: '付费模型服务' },
+      {
+        ...benefit,
+        pool_key: 'benefit',
+        display_name: '免费模型服务',
+        supply,
+        supply_checked_at: new Date().toISOString(),
+      },
+    ],
+  };
 }

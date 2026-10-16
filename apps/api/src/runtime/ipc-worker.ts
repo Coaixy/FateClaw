@@ -72,6 +72,7 @@ import type { BillingReservation } from '../modules/billing/plans.js';
 import {
   applyNonMemberPricingMarkup,
   reserveBillingForRequest,
+  settleBillingReservationDetailed,
 } from '../modules/billing/plans.js';
 import { getRedis } from '../infrastructure/redis.js';
 import {
@@ -95,6 +96,10 @@ import {
   requestAgentCancellation,
   persistAgentFailure,
 } from '../infrastructure/repositories/agent-requests-repository.js';
+import {
+  tryAcquireBenefitExecutionSlot,
+  ModelSelectionError,
+} from '../infrastructure/repositories/benefit-repository.js';
 import type {
   HistoryMessage,
   SessionBoardContext,
@@ -121,6 +126,10 @@ function llmRuntimeToSnapshot(
   runtime: EffectiveLlmRuntimeConfig,
 ): LlmRuntimeSnapshot {
   return {
+    poolKey: runtime.poolKey,
+    poolRevision: runtime.poolRevision,
+    benefitPolicy: runtime.benefitPolicy,
+    benefitRequestId: runtime.benefitRequestId,
     source: runtime.source,
     billingMode: runtime.billingMode,
     modelConfigId: runtime.modelConfigId,
@@ -1314,9 +1323,24 @@ export function submitAiChatInboxRequest(input: {
   let acceptedEarly = false;
   let payloadQueued = false;
   let executionId = input.recoveryExecutionId;
+  let admissionRuntime: LlmRuntimeSnapshot | undefined;
+  const benefitPolicy =
+    input.llmRuntime?.poolKey === 'benefit'
+      ? input.llmRuntime.benefitPolicy
+      : undefined;
+  const queueDeadlineAtMs =
+    benefitPolicy && input.recoveryDeadlineAt
+      ? Date.parse(input.recoveryDeadlineAt) -
+        benefitPolicy.execution_timeout_seconds * 1000
+      : startedAtMs + (benefitPolicy?.queue_timeout_seconds ?? 1800) * 1000;
   const deadlineAtMs = input.recoveryDeadlineAt
     ? Date.parse(input.recoveryDeadlineAt)
-    : startedAtMs + AI_CHAT_REQUEST_TIMEOUT;
+    : startedAtMs +
+      (benefitPolicy
+        ? (benefitPolicy.execution_timeout_seconds +
+            benefitPolicy.queue_timeout_seconds) *
+          1000
+        : AI_CHAT_REQUEST_TIMEOUT);
 
   return new Promise<InboxRequestResult>((resolve, reject) => {
     void (async () => {
@@ -1342,6 +1366,8 @@ export function submitAiChatInboxRequest(input: {
         const baseRuntime = input.llmRuntime
           ? llmRuntimeToSnapshot(input.llmRuntime)
           : await resolveLlmRuntimeSnapshot(ownerUserId);
+        if (baseRuntime.poolKey === 'benefit')
+          baseRuntime.benefitRequestId = requestId;
         const entitlement =
           input.entitlementSnapshot ??
           (await getRuntimeEntitlementSnapshot(ownerUserId));
@@ -1351,6 +1377,7 @@ export function submitAiChatInboxRequest(input: {
           entitlement.membershipActive,
         );
 
+        admissionRuntime = llmRuntime;
         // per-user 余额感知并发门：低余额用户同一时刻只允许 1 个 metered 请求在跑，
         // 封住「多 session 并发把余额刷成大额欠费」的白嫖。健康余额用户不进入此门。
         // 置于一切资源分配（预留/定时器/pending/槽位）之前——被拒时无需任何清理。
@@ -1475,10 +1502,24 @@ export function submitAiChatInboxRequest(input: {
         })();
         void runtimeReadyPromise.catch(() => {});
 
+        if (llmRuntime.poolKey === 'benefit') {
+          while (!(await tryAcquireBenefitExecutionSlot(requestId))) {
+            if (
+              !pendingAiChatRequests.has(requestId) ||
+              Date.now() >= queueDeadlineAtMs
+            )
+              throw new Error('免费服务繁忙，请稍后重试。本次未扣免费次数。');
+            await new Promise<void>((done) =>
+              setTimeout(done, GLOBAL_AGENT_GATE_POLL_MS),
+            );
+          }
+        }
         concurrencySlotId = await acquireGlobalAgentSlot({
           requestId,
           priority,
-          shouldContinue: () => pendingAiChatRequests.has(requestId),
+          shouldContinue: () =>
+            pendingAiChatRequests.has(requestId) &&
+            (!benefitPolicy || Date.now() < queueDeadlineAtMs),
           onQueued: () => {
             if (input.waitForResponse !== false || acceptedEarly) return;
             acceptedEarly = true;
@@ -1561,6 +1602,27 @@ export function submitAiChatInboxRequest(input: {
         );
       } catch (err) {
         let submissionFailure: unknown = null;
+        if (
+          err instanceof ModelSelectionError &&
+          !executionId &&
+          billingReservation &&
+          admissionRuntime
+        ) {
+          // A selection conflict occurs before admission or dispatch; its zero-usage reservation can close immediately.
+          try {
+            await settleBillingReservationDetailed({
+              requestId,
+              runtime: admissionRuntime,
+              promptTokens: 0,
+              completionTokens: 0,
+            });
+          } catch (error) {
+            logger.error(
+              { requestId, err: error },
+              'Failed to close undispatched billing reservation',
+            );
+          }
+        }
         if (executionId && !payloadQueued) {
           submissionFailure = await persistAgentFailure(
             requestId,

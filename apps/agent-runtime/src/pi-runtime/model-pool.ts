@@ -13,7 +13,12 @@ import {
   databaseModelPoolHealth,
   type ModelPoolHealthStore,
   type ModelPoolClaim,
+  type BenefitAttemptUsage,
 } from '../model-pool-health.js';
+import {
+  benefitCallBudget,
+  markBenefitAnswerVisible,
+} from '../benefit-budget.js';
 import { createPiProviderRuntime, type PiProviderRuntime } from './provider.js';
 
 const FIRST_CONTENT_TIMEOUT_MS = 45_000;
@@ -98,14 +103,20 @@ function hasContent(event: AssistantMessageEvent): boolean {
   );
 }
 
-function publicFailureMessage(error: unknown, aborted: boolean): string {
+function publicFailureMessage(
+  error: unknown,
+  aborted: boolean,
+  benefit = false,
+): string {
   if (aborted) return '请求已取消';
   const message = error instanceof Error ? error.message : String(error);
   if (/context.*(length|window)|maximum context|too many tokens/i.test(message))
     return '消息内容过长，请精简对话后重试。';
   if (/timeout|timed out/i.test(message)) return '模型调用超时，请稍后重试。';
   if (/429|rate.?limit/i.test(message)) return '当前请求量较大，请稍后重试。';
-  return '官方模型调用失败，请稍后重试。';
+  return benefit
+    ? '免费模型暂不可用，请稍后重试。'
+    : '官方模型调用失败，请稍后重试。';
 }
 
 async function nextEvent(
@@ -147,6 +158,14 @@ export function installModelPool(
     idleTimeoutMs?: number;
   } = {},
 ): void {
+  if (
+    runtime.poolKey === 'benefit' &&
+    (runtime.source !== 'official' ||
+      runtime.billingMode !== 'none' ||
+      !runtime.poolNodes?.length ||
+      !runtime.benefitRequestId)
+  )
+    throw new Error('Benefit execution requires an admitted benefit pool');
   if (runtime.source !== 'official' || !runtime.poolNodes?.length) return;
   const nodes = runtime.poolNodes;
   const health = options.health ?? databaseModelPoolHealth;
@@ -154,10 +173,15 @@ export function installModelPool(
     node: RuntimeModelPoolNode,
     claim: ModelPoolClaim,
     outcome: 'success' | 'failure' | 'release',
+    usage?: BenefitAttemptUsage,
   ) => {
     try {
-      await health.finish(node, claim, outcome);
+      if (claim.benefitAttemptId)
+        await health.finish(node, claim, outcome, usage);
+      else await health.finish(node, claim, outcome);
     } catch {
+      if (claim.benefitAttemptId)
+        throw new Error('免费用量登记失败，请稍后重试');
       options.trace?.({
         type: 'model_pool_health_update_failed',
         nodeId: node.modelConfigId,
@@ -185,10 +209,18 @@ export function installModelPool(
       usage,
       stopReason: aborted ? 'aborted' : 'error',
       timestamp: Date.now(),
-      errorMessage: aborted ? '请求已取消' : '官方模型池暂不可用，请稍后重试。',
+      errorMessage: aborted
+        ? '请求已取消'
+        : runtime.poolKey === 'benefit'
+          ? '免费额度或供应暂不可用，请稍后重试。'
+          : '官方模型池暂不可用，请稍后重试。',
     });
     const run = async () => {
+      const budget = await benefitCallBudget(runtime, context, options.trace);
+      let answerVisible = false;
       for (const node of weightedNodeOrder(nodes, options.random)) {
+        if (runtime.poolKey === 'benefit' && node.poolKey !== 'benefit')
+          continue;
         if (requestOptions?.signal?.aborted) {
           output.push({
             type: 'error',
@@ -197,7 +229,9 @@ export function installModelPool(
           });
           return;
         }
-        const claim = await health.claim(node, randomUUID());
+        const claim = budget
+          ? await health.claim(node, randomUUID(), budget)
+          : await health.claim(node, randomUUID());
         if (!claim) continue;
         options.trace?.({
           type: 'model_pool_attempt_started',
@@ -212,6 +246,7 @@ export function installModelPool(
         let published = false;
         let latest: AssistantMessage | undefined;
         let status: number | undefined;
+        let retryAfterSeconds: number | undefined;
         let terminal: AssistantMessageEvent | undefined;
         const startedAt = Date.now();
         let activityAt = startedAt;
@@ -237,9 +272,24 @@ export function installModelPool(
               env: undefined,
               signal,
               maxRetries: 0,
+              ...(budget ? { maxTokens: budget.outputTokens } : {}),
               timeoutMs: options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS,
               async onResponse(response, model) {
                 status = response.status;
+                if (budget && status === 429) {
+                  const retry = response.headers['retry-after'];
+                  const seconds = retry ? Number(retry) : NaN;
+                  retryAfterSeconds = Number.isFinite(seconds)
+                    ? Math.max(1, Math.ceil(seconds))
+                    : retry
+                      ? Math.max(
+                          1,
+                          Math.ceil((Date.parse(retry) - Date.now()) / 1000),
+                        )
+                      : 60;
+                  if (!Number.isFinite(retryAfterSeconds))
+                    retryAfterSeconds = 60;
+                }
                 await requestOptions?.onResponse?.(response, model);
               },
             },
@@ -247,10 +297,13 @@ export function installModelPool(
           const iterator = stream[Symbol.asyncIterator]();
           while (true) {
             const idle = published
-              ? (options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS)
-              : (options.firstContentTimeoutMs ?? FIRST_CONTENT_TIMEOUT_MS);
+              ? (options.idleTimeoutMs ??
+                (budget ? 30_000 : STREAM_IDLE_TIMEOUT_MS))
+              : (options.firstContentTimeoutMs ??
+                (budget ? 20_000 : FIRST_CONTENT_TIMEOUT_MS));
             const deadline = Math.min(
-              startedAt + ATTEMPT_TIMEOUT_MS,
+              startedAt + (budget ? 60_000 : ATTEMPT_TIMEOUT_MS),
+              budget?.deadlineAt ?? Infinity,
               activityAt + idle,
             );
             const item = await nextEvent(
@@ -275,7 +328,31 @@ export function installModelPool(
                 );
               if (!event.message.content.length)
                 throw new Error('Provider returned an empty response');
-              await finishHealth(node, claim, 'success');
+              if (
+                budget &&
+                !answerVisible &&
+                event.message.content.some(
+                  (block) => block.type === 'text' && block.text.length > 0,
+                )
+              ) {
+                await markBenefitAnswerVisible(budget.requestId);
+                answerVisible = true;
+              }
+              await finishHealth(
+                node,
+                claim,
+                'success',
+                budget
+                  ? {
+                      inputTokens:
+                        event.message.usage.input +
+                        event.message.usage.cacheRead +
+                        event.message.usage.cacheWrite,
+                      outputTokens: event.message.usage.output,
+                      known: event.message.usage.totalTokens > 0,
+                    }
+                  : undefined,
+              );
               for (const pending of buffered) output.push(pending);
               output.push({
                 ...event,
@@ -298,11 +375,28 @@ export function installModelPool(
               buffered.length = 0;
             }
             if (published) {
+              if (
+                budget &&
+                !answerVisible &&
+                event.type === 'text_delta' &&
+                event.delta.length
+              ) {
+                await markBenefitAnswerVisible(budget.requestId);
+                answerVisible = true;
+              }
               output.push(event);
               activityAt = Date.now();
             } else buffered.push(event);
           }
         } catch (error) {
+          if (
+            budget &&
+            status === 429 &&
+            /daily|per.day|\brpd\b|\btpd\b/i.test(
+              error instanceof Error ? error.message : String(error),
+            )
+          )
+            retryAfterSeconds = -1;
           controller.abort();
           const aborted = Boolean(requestOptions?.signal?.aborted);
           const retryable =
@@ -312,7 +406,24 @@ export function installModelPool(
               error instanceof Error ? error.message : String(error),
             );
           accumulated = addUsage(accumulated, latest?.usage ?? emptyUsage());
-          await finishHealth(node, claim, retryable ? 'failure' : 'release');
+          const attemptUsage = latest?.usage;
+          await finishHealth(
+            node,
+            claim,
+            retryable ? 'failure' : 'release',
+            budget
+              ? {
+                  inputTokens: attemptUsage
+                    ? attemptUsage.input +
+                      attemptUsage.cacheRead +
+                      attemptUsage.cacheWrite
+                    : 0,
+                  outputTokens: attemptUsage?.output ?? 0,
+                  known: Boolean(attemptUsage?.totalTokens),
+                  retryAfterSeconds,
+                }
+              : undefined,
+          );
           options.trace?.({
             type: 'model_pool_attempt_completed',
             nodeId: node.modelConfigId,
@@ -333,7 +444,11 @@ export function installModelPool(
                 ...(final ?? fallbackError(aborted)),
                 usage: accumulated,
                 stopReason: aborted ? 'aborted' : 'error',
-                errorMessage: publicFailureMessage(error, aborted),
+                errorMessage: publicFailureMessage(
+                  error,
+                  aborted,
+                  runtime.poolKey === 'benefit',
+                ),
               },
             });
             return;
@@ -348,12 +463,19 @@ export function installModelPool(
         error: fallbackError(false, accumulated),
       });
     };
-    void run().catch(() => {
+    void run().catch((error) => {
       // Infrastructure failures terminate the stream; no raw provider or database values cross the boundary.
       output.push({
         type: 'error',
         reason: 'error',
-        error: fallbackError(false),
+        error: {
+          ...fallbackError(false),
+          errorMessage: publicFailureMessage(
+            error,
+            false,
+            runtime.poolKey === 'benefit',
+          ),
+        },
       });
     });
     return output;

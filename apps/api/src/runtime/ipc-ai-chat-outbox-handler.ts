@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
+import { settleBenefitTurn } from '../infrastructure/repositories/benefit-repository.js';
 import {
   withAgentInterruptionDelivery,
   withAgentResultDelivery,
@@ -429,6 +430,25 @@ async function storeAiChatFinalResponseMessages(args: {
   assistantMessages: string[];
   finalMetadata: Record<string, unknown>;
 }): Promise<string | null> {
+  if (
+    args.db &&
+    args.payload.requestId &&
+    (args.pending?.llmRuntime?.poolKey === 'benefit' || !args.pending)
+  ) {
+    const benefit = await settleBenefitTurn(
+      args.db,
+      args.payload.requestId,
+      args.payload.status === 'success',
+      args.payload.publicReasonCode === 'user_stop',
+    );
+    if (benefit)
+      Object.assign(args.finalMetadata, {
+        pool_key: 'benefit',
+        benefit_status: benefit,
+        actual_charge_coins: 0,
+        raw_charge_coins: 0,
+      });
+  }
   const sessionId = resolveAiChatFinalSessionId(args.pending, args.payload);
   const userMessageId = resolveAiChatFinalUserMessageId(
     args.pending,

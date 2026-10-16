@@ -90,6 +90,12 @@ describe.skipIf(!connectionString)('model pool PostgreSQL integration', () => {
       );
       await officialModelPoolMigration.up(client);
       await officialModelPoolPrimaryMigration.up(client);
+      for (const migration of MIGRATIONS.slice(
+        MIGRATIONS.findIndex(
+          (item) => item.id === officialModelPoolPrimaryMigration.id,
+        ) + 1,
+      ))
+        await migration.up(client);
       migrated = await getPlatformModelSettings();
     } finally {
       client.release();
@@ -104,7 +110,7 @@ describe.skipIf(!connectionString)('model pool PostgreSQL integration', () => {
       "INSERT INTO official_model_pool_nodes (model_config_id) VALUES ('legacy-active')",
     );
     await state.pool!.query(
-      "UPDATE official_model_pool_settings SET primary_node_id='legacy-active'",
+      "UPDATE official_model_pool_settings SET primary_node_id='legacy-active' WHERE id='default'",
     );
     await state.pool!.query(
       "UPDATE official_model_configs SET enabled=true,model_name='synthetic-model',base_url=NULL,extra_json='{}'::jsonb WHERE id='legacy-active'",

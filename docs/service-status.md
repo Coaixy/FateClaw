@@ -1,9 +1,9 @@
 # Public service status
 
 The user site exposes `/status` without requiring login or accepting the AI-use
-notice. The sidebar links to this page on desktop and mobile. It displays one
-aggregate AI service state, the last check time, measured response latency and
-seven days of sampled history. It never lists node identities, node counts,
+notice. The sidebar links to this page on desktop and mobile. It displays separate
+paid and free service states, observation times and independently sampled
+seven-day histories. Paid service retains probe latency. It never lists node identities, node counts,
 models, providers, endpoints, credentials or provider error messages.
 
 ## Probe budget and scheduling
@@ -14,7 +14,7 @@ processes, restarts and failed checks cannot create immediate retries. A five-mi
 local timer only checks the shared due time. The API-only development entry does
 not start background probes.
 
-A check uses the canonical official model runtime snapshot. It tries enabled,
+A check uses the canonical runtime snapshot for its pool. It tries enabled,
 configured nodes sequentially and stops after the first valid response. The request
 contains only `Reply OK.`, no conversation history or tools, and a maximum of 16
 output tokens. It stops reading after the first text/thinking delta or a valid
@@ -23,6 +23,11 @@ the whole check has a three-minute budget and a five-minute fenced result lease.
 A healthy first candidate therefore needs four tiny requests per day. Failed
 candidates can require additional attempts in that check. These are platform
 monitoring calls and do not use user wallets or agent-session execution.
+
+Free probes reserve the same provider quota as real calls, with at most four
+attempts per quota group per provider day. Disabled, exhausted and unapproved
+supply is skipped. Insufficient monitoring capacity produces an unknown check,
+not evidence of a supplier outage. Personal allowances and wallets are not used.
 
 The monitor does not update model-pool routing/circuit state. Its small probe has
 a different purpose and token allowance from a real chat turn.
@@ -33,7 +38,9 @@ a different purpose and token allowance from a real chat turn.
 and the page's five-minute visible-tab refresh never trigger inference. The endpoint
 allows public HTTP caching for 60 seconds. Results contain only `status`,
 `checked_at`, `latency_ms`, `check_interval_seconds`, `stale_after_seconds` and up to
-28 public history samples. Seven-day retention is pruned with successful result
+28 public history samples. These legacy top-level fields continue to describe paid
+service. The additional `services` collection contains the independently scoped
+paid and free sections. Seven-day retention is pruned with successful result
 persistence.
 
 - `operational`: at least one candidate returned a valid generated response.
@@ -46,6 +53,14 @@ connection setup. It does not represent a full answer, a browser-to-server ping 
 agent/tool availability. The history shows one sampled result per six-hour window;
 missing windows remain unknown. The displayed pass percentage uses observed checks,
 not continuous uptime or an SLA.
+
+Free `supply` is separate from health: `available`, `busy`, `exhausted`,
+`disabled`, or `unknown`. Fresh real free successes can update the current
+health observation without adding synthetic history or claiming measured latency.
+`supply_checked_at` dates the capacity read. The client expires capacity evidence
+after ten minutes and health after twelve hours. Personal exhaustion never changes
+anonymous pool status. A free quota shortage is not a paid-service outage.
+See [Free model service](benefit-model-pool.md) for admission and quota ownership.
 
 A failed status read leaves previously fetched records visible with a notice;
 the client independently expires their current state. Late results from a lost

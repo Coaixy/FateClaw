@@ -4,6 +4,10 @@ import { getDbPool } from '../db-pool.js';
 import { storeMessage } from './chat-repository.js';
 import type { AiChatSubmission } from '../../runtime/ipc-worker.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
+import {
+  reserveBenefitTurn,
+  ModelSelectionError,
+} from './benefit-repository.js';
 
 export const REQUEST_OWNER = randomUUID();
 export type StoredRuntime = Omit<LlmRuntimeSnapshot, 'apiKey' | 'poolNodes'> & {
@@ -67,6 +71,21 @@ export async function admitAgentRequest(args: {
   let discardClient = false;
   try {
     await client.query('BEGIN');
+    if (runtime.poolKey) {
+      const session = await client.query<{ model_pool_key: string }>(
+        `SELECT model_pool_key FROM chat_sessions
+        WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL FOR UPDATE`,
+        [args.input.sessionId, args.ownerUserId],
+      );
+      if (session.rows[0]?.model_pool_key !== runtime.poolKey)
+        throw new ModelSelectionError('会话模型选择已变化，请确认后重新发送');
+      const active = await client.query(
+        "SELECT 1 FROM agent_requests WHERE session_id=$1 AND request_id<>$2 AND state IN ('queued','dispatched','running') LIMIT 1",
+        [args.input.sessionId, args.requestId],
+      );
+      if (active.rowCount)
+        throw new ModelSelectionError('会话正在处理其他请求');
+    }
     const executionId = randomUUID();
     const inserted = await client.query<{ execution_id: string }>(
       `INSERT INTO agent_requests
@@ -88,6 +107,22 @@ export async function admitAgentRequest(args: {
     );
     if (!inserted.rowCount)
       throw new Error('Request has already been admitted');
+    if (runtime.poolKey === 'benefit') {
+      if (
+        runtime.billingMode !== 'none' ||
+        !runtime.benefitPolicy ||
+        !runtime.poolNodes?.length ||
+        runtime.poolNodes.some((node) => node.poolKey !== 'benefit')
+      )
+        throw new Error('Invalid benefit runtime admission');
+      await reserveBenefitTurn(
+        client,
+        args.ownerUserId,
+        args.requestId,
+        runtime.benefitPolicy,
+        runtime.poolRevision,
+      );
+    }
     if (args.input.messageToPersist)
       await storeMessage(args.input.messageToPersist, client);
     await client.query('COMMIT');

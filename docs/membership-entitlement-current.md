@@ -33,10 +33,13 @@ Deploy the API and both web clients together: old identifiers are rejected by cu
 | WeChat Claw | Disabled | Disabled |
 
 Membership includes no free AI usage. Subscription fees and model usage are charged separately. Disabling membership sales does not revoke an existing user's membership.
+The separate [daily free service](benefit-model-pool.md) is available to all
+users when enabled. Its allowance is independent of membership and wallet credit;
+using it does not consume purchased or bonus coins.
 
 ## Request gates and billing
 
-All on-site AI entry points converge on `prepareOwnedChatSessionTurn()` in [chat-session-service.ts](../apps/api/src/modules/chat/chat-session-service.ts). Its billing gate rejects an overdrawn wallet with HTTP 402; membership is not required to send a request.
+All on-site AI entry points converge on `prepareOwnedChatSessionTurn()` in [chat-session-service.ts](../apps/api/src/modules/chat/chat-session-service.ts). The selected session pool determines admission: paid requests reject an overdrawn wallet with HTTP 402, while free requests require a separate durable allowance and bypass wallet debt. Membership is not required for either on-site service.
 
 [API key creation](../apps/api/src/interfaces/http/api-keys-routes.ts) requires active membership. [API key authentication](../apps/api/src/interfaces/http/api-key-auth.ts) validates the key and its expiry, applies the per-key rate limit, and rejects an overdrawn wallet. Membership expiry alone does not revoke a previously issued key.
 
@@ -49,5 +52,7 @@ Arrears are calculated from the raw spendable balance (`purchased + bonus - rese
 Requests enter one of two Redis sorted sets, ordered by admission time. A Lua script atomically checks the active slot count, selects the member queue head before the standard queue head, and assigns the slot. Waiters retry every 500 ms; a queue head with no heartbeat for 15 seconds is eligible for removal.
 
 The current global concurrency policy returns 10 slots. Membership priority applies when assigning an available slot and does not preempt an executing request. Strict member priority provides no reserved share for standard requests. Queue waiting and execution share the request's overall timeout, which defaults to 30 minutes for web chat.
+Free requests additionally use their own bounded FIFO admission, a default two-slot
+share and shorter queue/execution deadlines. They still need a global slot.
 
 Source and automated tests establish these contracts. Production deployment and provider-backed execution require separate verification.

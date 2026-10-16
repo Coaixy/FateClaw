@@ -346,7 +346,17 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
   const durationLabel = isBot
     ? formatChatDuration(messageMetadata?.duration_ms, t)
     : null;
-  const costLabels = isBot ? formatChatCostLabels(messageMetadata, locale, t) : [];
+  const costLabels = isBot
+    ? messageMetadata?.pool_key === 'benefit'
+      ? [
+          t(
+            messageMetadata.benefit_status === 'released'
+              ? 'modelChoice.refunded'
+              : 'modelChoice.freeReply',
+          ),
+        ]
+      : formatChatCostLabels(messageMetadata, locale, t)
+    : [];
   const toolContext = isBot ? parseToolContext(message.tool_context) : [];
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
@@ -386,9 +396,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       }`}
       style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
     >
-      <div
-        className={`flex min-w-0 flex-col ${messageColumnClass}`}
-      >
+      <div className={`flex min-w-0 flex-col ${messageColumnClass}`}>
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
         <div className="group relative max-w-full">
@@ -476,7 +484,9 @@ function readTrajectoryNode(message: Message): TrajectoryNode {
 
   const rawStatus = metadata?.tool_status;
   const status: ToolTraceStatus =
-    rawStatus === 'running' || rawStatus === 'completed' || rawStatus === 'failed'
+    rawStatus === 'running' ||
+    rawStatus === 'completed' ||
+    rawStatus === 'failed'
       ? rawStatus
       : undefined;
   const result =
@@ -494,7 +504,9 @@ function readTrajectoryNode(message: Message): TrajectoryNode {
       (typeof metadata?.tool_label === 'string' && metadata.tool_label) ||
       'tool',
     query:
-      typeof metadata?.query_text === 'string' ? metadata.query_text : undefined,
+      typeof metadata?.query_text === 'string'
+        ? metadata.query_text
+        : undefined,
     path:
       typeof metadata?.tool_path === 'string'
         ? sanitizeToolPath(metadata.tool_path)
@@ -747,7 +759,8 @@ function ToolNode({
         ? items.length
         : undefined;
 
-  const tone = status === 'failed' ? 'error' : status === 'running' ? 'primary' : 'muted';
+  const tone =
+    status === 'failed' ? 'error' : status === 'running' ? 'primary' : 'muted';
 
   return (
     <div className="relative">

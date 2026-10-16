@@ -44,6 +44,7 @@ describe('modelSettingsRoutes readonly official model', () => {
           statusCode: 401,
         });
       }
+      Object.assign(this, { user: { userId: 'synthetic-user' } });
     });
 
     app = Fastify({ logger: false });
@@ -78,7 +79,9 @@ describe('modelSettingsRoutes readonly official model', () => {
     expect(response.json()).toEqual(overview);
     expect(Object.keys(response.json())).toEqual(['model']);
     expect(mockRequireAuth).toHaveBeenCalledOnce();
-    expect(mockGetUserModelSettingsOverview).toHaveBeenCalledWith();
+    expect(mockGetUserModelSettingsOverview).toHaveBeenCalledWith(
+      'synthetic-user',
+    );
   });
 
   it('reports an empty official slot without any user selection or fallback', async () => {

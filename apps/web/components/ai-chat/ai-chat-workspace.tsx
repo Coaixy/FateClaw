@@ -26,6 +26,8 @@ import {
 
 import { AppShell } from '@/components/app-shell';
 import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
+import { ModelSelector } from '@/components/ai-chat/model-selector';
+import { useModelSelection } from '@/features/model-settings/use-model-selection';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
 import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
@@ -338,6 +340,23 @@ function AiChatWorkspaceContent() {
     createSession,
     touchSession,
   });
+  const modelSelection = useModelSelection({
+    userId: user?.id,
+    sessionId: selectedSession || undefined,
+    session: sessions.find((entry) => entry.id === selectedSession),
+    sending: chatMessages.sending,
+    onSessionChange: touchSession,
+  });
+  const modelControl = chatAvailable ? (
+    <ModelSelector
+      overview={modelSelection.overview}
+      poolKey={modelSelection.poolKey}
+      busy={modelSelection.busy || chatMessages.sending}
+      error={modelSelection.error}
+      onChange={(key) => void modelSelection.change(key)}
+      onRetry={() => void modelSelection.refresh()}
+    />
+  ) : undefined;
   const selectedSessionMessagesLoaded =
     !selectedSession || chatMessages.loadedSessionId === selectedSession;
   const continuationBlocked =
@@ -422,6 +441,10 @@ function AiChatWorkspaceContent() {
         requestLogin(text);
         return;
       }
+      if (modelSelection.blocked) {
+        toast('error', modelSelection.error || t('modelChoice.blocked'));
+        return;
+      }
       if (!overrideText) {
         setInput('');
       }
@@ -438,6 +461,7 @@ function AiChatWorkspaceContent() {
     [
       chatAvailable,
       chatMessages,
+      modelSelection,
       continuationBlocked,
       authLoading,
       input,
@@ -576,7 +600,10 @@ function AiChatWorkspaceContent() {
     billingStatusReady && billingStatus && billingStatus.available_coins < 0,
   );
   const latestMessageNotice =
-    selectedSession && displayMessages.length > 0 && billingStatusReady
+    selectedSession &&
+    modelSelection.poolKey !== 'benefit' &&
+    displayMessages.length > 0 &&
+    billingStatusReady
       ? billingArrears
         ? 'arrears'
         : null
@@ -736,6 +763,8 @@ function AiChatWorkspaceContent() {
       disabled={continuationBlocked}
       disabledMessage=""
       selectedSession={selectedSession}
+      modelControl={modelControl}
+      sendDisabled={modelSelection.blocked}
       paipanAction={
         selectedSession
           ? {
@@ -895,6 +924,12 @@ function AiChatWorkspaceContent() {
         catalog={paipanCatalogState.items}
         onClose={closePastedBoardSheet}
         onSubmit={handlePastedBoardSubmit}
+        modelControl={modelControl}
+        submitBlockedMessage={
+          modelSelection.blocked
+            ? modelSelection.error || t('modelChoice.blocked')
+            : ''
+        }
       />
 
       <OnboardingGuideDialog

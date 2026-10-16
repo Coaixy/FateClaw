@@ -14,6 +14,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Check public AI availability | [Public service status](service-status.md) | Six-hour shared probes, public results and resource bounds |
 | Manage public feedback | [Issues](issues.md) | Anonymous discussion, private attribution, moderation and abuse limits |
 | Configure model supply and failover | [Official model pool](official-model-pool.md) | Mixed-model nodes, weighted routing, circuit recovery and billing |
+| Configure daily free AI usage | [Free model service](benefit-model-pool.md) | Separate pools, user allowance, shared upstream budgets, activation and status |
 | Change schema or generate a database baseline | [Database migrations](database-migrations.md) | Empty database bootstrap, existing database upgrades, and snapshot validation |
 | Integrate an external client | [Open API](open-api-design.md) | API keys, chart endpoints, and agent sessions |
 | Deploy the three apps | [Deployment](deployment-split.md) | API, user site, and admin site deployment |

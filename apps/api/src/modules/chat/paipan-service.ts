@@ -9,6 +9,7 @@ import type {
   SkillContextEntryDto,
 } from '@fateclaw/contracts/chat';
 
+import { getPreferredModelPool } from '../../infrastructure/repositories/benefit-repository.js';
 import {
   createChatSession,
   getChatSession,
@@ -194,6 +195,7 @@ async function createSessionWithBoardMessages(args: {
   resultMessage: MessageDto;
 }> {
   const session = await createChatSession({
+    modelPoolKey: await getPreferredModelPool(args.userId),
     id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     accountId: args.runtimeId,
     userId: args.userId,
@@ -413,7 +415,8 @@ export async function commitDirectPaipanForOwnedUser(
 
   try {
     // 当前会话提交：优先用本次携带的 clientId，否则沿用会话已绑定的客户做生辰预填。
-    const prefillClientId = clientId ?? sessionResult.data.client_id ?? undefined;
+    const prefillClientId =
+      clientId ?? sessionResult.data.client_id ?? undefined;
     const effectiveInput = prefillClientId
       ? await applyClientProfilePrefill(userId, prefillClientId, request.input)
       : request.input;

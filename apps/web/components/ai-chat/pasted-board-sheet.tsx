@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { ClipboardPaste } from 'lucide-react';
 
 import { BottomSheet } from '@/components/ui/bottom-sheet';
@@ -17,6 +24,7 @@ interface PastedBoardSheetProps {
   submitBlockedMessage?: string;
   onClose: () => void;
   onSubmit: (input: UserPastedBoardInput) => Promise<void> | void;
+  modelControl?: ReactNode;
 }
 
 /**
@@ -57,6 +65,7 @@ export function PastedBoardSheet({
   initialContent,
   catalog,
   submitBlockedMessage = '',
+  modelControl,
   onClose,
   onSubmit,
 }: PastedBoardSheetProps) {
@@ -127,7 +136,8 @@ export function PastedBoardSheet({
   };
 
   const footer = (
-    <div className="flex gap-2 px-3 py-2.5 sm:justify-end sm:px-6">
+    <div className="flex flex-wrap gap-2 px-3 py-2.5 sm:justify-end sm:px-6">
+      {modelControl ? <div className="w-full">{modelControl}</div> : null}
       <Button
         type="button"
         variant="secondary"

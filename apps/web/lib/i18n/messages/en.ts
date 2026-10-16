@@ -1,7 +1,47 @@
 export const enMessages = {
+  modelChoice: {
+    paid_operational: 'Paid model service is operational',
+    paid_unavailable: 'Paid model service is unavailable',
+    paid_unknown: 'Paid model service status is unconfirmed',
+    lastObserved: 'Last observation',
+    paidUnavailable:
+      'Paid models are not configured. The free service remains available when enabled.',
+    benefitStatusNote:
+      'Free and paid services have separate supply. Shared exhaustion and outages are shown separately; sign in for your personal allowance.',
+    benefitHistoryNote:
+      'History contains scheduled lightweight checks. Free service checks pause when its allowance is exhausted; missing samples do not imply an outage.',
+    title: 'Model selection',
+    switch: 'Current model: {model}; change model',
+    benefit: 'Free model',
+    paid: 'Paid model',
+    freeReply: 'Free allowance · No balance charge',
+    refunded: 'Free turn refunded · No balance charge',
+    benefitDescription:
+      'For basic use, with limited complex reasoning and tool use. Use the paid service for complex analysis.',
+    paidDescription:
+      'Suitable for complex analysis, follow-up questions and knowledge retrieval. Your account rates apply.',
+    noAutoCharge:
+      'The free service stops when its allowance is exhausted. It never automatically switches to paid use or charges your balance.',
+    remaining: '{count} turns left today',
+    shortBenefit: '{count} left · Basic use, no balance charge',
+    metered: 'Billed by actual token usage',
+    available: 'Available',
+    busy: 'Free service is busy; try later',
+    exhausted: 'Shared free allowance exhausted',
+    disabled: 'Free service is not available yet',
+    unknown: 'Availability unconfirmed',
+    personal: 'Your daily free allowance is exhausted',
+    resets: 'Turns reset tomorrow at {time} Beijing time',
+    retry: 'Reload model status',
+    loading: 'Updating model status',
+    loadFailed: 'Model status could not be loaded',
+    saveFailed: 'Could not switch model; retry',
+    blocked:
+      'This service is unavailable. Check your allowance or explicitly select another service.',
+  },
   serviceStatus: {
     title: 'Service status',
-    subtitle: 'Overall AI availability and the latest check results.',
+    subtitle: 'Availability and recent checks for paid and free services.',
     home: 'Back to home',
     refresh: 'Refresh status',
     loading: 'Loading service status',
@@ -31,7 +71,7 @@ export const enMessages = {
     sevenDaysAgo: '7 days ago',
     now: 'Now',
     aggregateNote:
-      'The service is operational when at least one AI endpoint is available.',
+      'Paid and free services have independent availability. An exhausted free allowance does not affect paid service.',
     cadenceNote:
       'A small background check runs every 6 hours. Refreshing this page only reads saved results and never starts a check.',
     latencyNote:

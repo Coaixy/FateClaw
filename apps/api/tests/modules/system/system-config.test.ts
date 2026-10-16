@@ -1,4 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
+const entitlement = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+  getRuntimeEntitlementSnapshot: entitlement,
+}));
+vi.mock(
+  '../../../src/infrastructure/repositories/benefit-repository.js',
+  () => ({
+    getBenefitAllowance: vi.fn(async () => ({
+      remaining_turns: 3,
+      resets_at: '2026-10-17T00:00:00+08:00',
+    })),
+    getBenefitSupply: vi.fn(async () => 'disabled'),
+    getPreferredModelPool: vi.fn(async () => 'official'),
+  }),
+);
 
 const db = vi.hoisted(() => ({
   getPlatformModelSettings: vi.fn(),
@@ -42,6 +58,9 @@ const model = {
 };
 const settings: PlatformModelSettings = {
   pool: {
+    enabled: true,
+    revision: 1,
+    benefit_policy: null,
     primary_node_id: model.id,
     public_model_id: 'official-pool',
     model_key: 'official',
@@ -79,11 +98,24 @@ const update = {
     },
   ],
 };
+const benefitSettings: PlatformModelSettings = {
+  ...settings,
+  pool: {
+    ...settings.pool,
+    enabled: false,
+    benefit_policy: DEFAULT_BENEFIT_POLICY,
+  },
+  nodes: [],
+  quotaGroups: [],
+};
 beforeEach(() => {
   vi.resetAllMocks();
-  db.getPlatformModelSettings.mockResolvedValue(structuredClone(settings));
-  db.getPlatformModelRuntimeSettings.mockImplementation(async () => {
-    const result = await db.getPlatformModelSettings();
+  entitlement.mockResolvedValue({ membershipActive: true });
+  db.getPlatformModelSettings.mockImplementation(async (poolKey) =>
+    structuredClone(poolKey === 'benefit' ? benefitSettings : settings),
+  );
+  db.getPlatformModelRuntimeSettings.mockImplementation(async (poolKey) => {
+    const result = await db.getPlatformModelSettings(poolKey);
     return {
       ...result,
       nodes: result.nodes.map((node: object) => ({
@@ -96,6 +128,15 @@ beforeEach(() => {
 });
 
 describe('official model pool', () => {
+  it('shows the current non-member prices without mutating canonical pool prices', async () => {
+    entitlement.mockResolvedValue({ membershipActive: false });
+    const overview = await getUserModelSettingsOverview('user');
+    expect(overview.model).toMatchObject({
+      input_token_price_per_million_coins: 3,
+      output_token_price_per_million_coins: 12,
+    });
+    expect(settings.pool.input_token_price_per_million_coins).toBe(2);
+  });
   it('captures different providers together with a common capacity, prices and thinking level', async () => {
     db.getPlatformModelSettings.mockResolvedValue({
       ...settings,
@@ -205,12 +246,14 @@ describe('official model pool', () => {
   });
 
   it('fails explicitly when no configured node can run', async () => {
-    db.getPlatformModelSettings.mockResolvedValue({ ...settings, nodes: [] });
+    db.getPlatformModelSettings.mockImplementation(async (poolKey) =>
+      poolKey === 'benefit' ? benefitSettings : { ...settings, nodes: [] },
+    );
     await expect(resolveUserLlmRuntime('user')).rejects.toThrow(
       '官方模型暂不可用',
     );
     expect(await listPublicOfficialModels()).toEqual([]);
-    expect(await getUserModelSettingsOverview()).toEqual({ model: null });
+    expect(await getUserModelSettingsOverview()).toMatchObject({ model: null });
     expect(await getSystemConfigOverview()).toMatchObject({
       model: { has_secret: false },
       nodes: [],
@@ -277,6 +320,11 @@ describe('pool updates', () => {
       actor: 'manager',
     });
     expect(db.savePlatformModelConfig).toHaveBeenCalledWith({
+      poolKey: 'official',
+      revision: undefined,
+      enabled: undefined,
+      benefitPolicy: undefined,
+      quotaGroups: undefined,
       displayName: 'Official pool',
       thinkingLevel: 'low',
       inputTokenPricePerMillionCoins: 2,
@@ -294,6 +342,7 @@ describe('pool updates', () => {
           contextWindowTokens: null,
           enabled: true,
           weight: 2,
+          quotaGroupId: null,
         },
       ],
     });

@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
 vi.mock('../../src/infrastructure/db-pool.js', () => ({
   getDbPool: () => state.pool,
 }));
-import { aiServiceStatusMigration } from '../../src/infrastructure/migrations/versions/0085-ai-service-status.js';
+import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
 import {
   claimServiceStatusCheck,
   completeServiceStatusCheck,
@@ -36,7 +36,7 @@ describe.skipIf(!connectionString)(
       state.pool = new pg.Pool({ connectionString: url.toString(), max: 8 });
       const client = await state.pool.connect();
       try {
-        await aiServiceStatusMigration.up(client);
+        for (const migration of MIGRATIONS) await migration.up(client);
       } finally {
         client.release();
       }

@@ -218,6 +218,7 @@ export async function hasFinalAiChatSessionReply(
 }
 
 export async function createChatSession(session: {
+  modelPoolKey?: 'official' | 'benefit';
   id: string;
   accountId: string;
   userId: string;
@@ -226,14 +227,15 @@ export async function createChatSession(session: {
   clientId?: string;
 }): Promise<ChatSession> {
   const { rows } = await getDbPool().query(
-    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id,model_pool_key)
+     VALUES ($1, $2, $3, $4, $5,$6) RETURNING *`,
     [
       session.id,
       session.accountId,
       session.userId,
       session.title,
       session.clientId ?? null,
+      session.modelPoolKey ?? 'official',
     ],
   );
   return rows[0] as ChatSession;

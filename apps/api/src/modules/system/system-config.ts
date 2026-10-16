@@ -26,7 +26,16 @@ import type {
   ModelAuthModeDto,
   ModelSettingsOverviewDto,
   OfficialModelDto,
+  ModelPoolKey,
+  BenefitPolicyDto,
 } from '@fateclaw/contracts/model-settings';
+import {
+  getBenefitAllowance,
+  getBenefitSupply,
+  getPreferredModelPool,
+} from '../../infrastructure/repositories/benefit-repository.js';
+import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
+import { NON_MEMBER_PRICE_MULTIPLIER } from '../billing/plans.js';
 import {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,
@@ -37,6 +46,9 @@ import {
 } from '@fateclaw/contracts/skills';
 
 type RuntimeSecretSource = 'database' | 'missing';
+export class ModelUnavailableError extends Error {
+  readonly code = 'MODEL_UNAVAILABLE';
+}
 export type ProviderAuthMode = ModelAuthModeDto;
 // Historical billing snapshots can still contain custom model requests.
 export type LlmRuntimeSource = 'custom' | 'official';
@@ -56,6 +68,10 @@ export const DEFAULT_USER_SKILL_MAX_COUNT = MAX_USER_SKILLS;
 export type SkillBundleLimitsPolicy = SkillBundleLimitsDto;
 
 export interface EffectiveLlmRuntimeConfig {
+  poolKey?: ModelPoolKey;
+  poolRevision?: number;
+  benefitPolicy?: BenefitPolicyDto;
+  benefitRequestId?: string;
   source: LlmRuntimeSource;
   billingMode: LlmBillingMode;
   modelConfigId: string;
@@ -105,12 +121,22 @@ function modelContextWindow(model: OfficialModelConfig): number | null {
 }
 
 function configuredNodes(settings: PlatformModelSettings) {
+  if (settings.pool.enabled === false) return [];
   return settings.nodes.filter(
     ({ model, hasSecret }) =>
       model.enabled &&
       model.model_name.trim() &&
       hasSecret &&
-      model.api_key_secret_key,
+      model.api_key_secret_key &&
+      (!settings.pool.benefit_policy ||
+        settings.quotaGroups?.some(
+          (group) =>
+            group.id ===
+              settings.nodes.find((entry) => entry.model.id === model.id)
+                ?.quotaGroupId &&
+            group.approved &&
+            (!group.expires_at || Date.parse(group.expires_at) > Date.now()),
+        )),
   );
 }
 
@@ -127,10 +153,15 @@ function publicPoolModel(settings: PlatformModelSettings): OfficialModelDto {
     id: settings.pool.public_model_id,
     model_key: settings.pool.model_key,
     display_name: settings.pool.display_name,
-    description: '由平台统一调度可用模型节点，按公开 Token 价格计费。',
+    description: settings.pool.benefit_policy
+      ? '基础体验模型，复杂推理与工具调用能力有限；使用免费额度，不扣积分。'
+      : '由平台统一调度可用模型节点，按公开 Token 价格计费。',
     model_name: settings.pool.model_key,
     context_window_tokens: nodes.length
-      ? Math.min(...nodes.map(({ model }) => nodeContextWindow(model)))
+      ? Math.min(
+          ...nodes.map(({ model }) => nodeContextWindow(model)),
+          settings.pool.benefit_policy?.max_input_tokens ?? Infinity,
+        )
       : null,
     input_token_price_per_million_coins:
       settings.pool.input_token_price_per_million_coins,
@@ -144,10 +175,25 @@ function adminOverview(
   settings: PlatformModelSettings,
 ): AdminModelSettingsOverviewDto {
   return {
+    revision: settings.pool.revision,
+    enabled: settings.pool.enabled,
+    ...(settings.pool.benefit_policy
+      ? {
+          benefit_policy: settings.pool.benefit_policy,
+          quota_groups: settings.quotaGroups ?? [],
+        }
+      : {}),
     model: publicPoolModel(settings),
     thinking_level: normalizeThinkingLevel(settings.pool.thinking_level),
     nodes: settings.nodes.map(
-      ({ model, weight, hasSecret, failureCount, cooldownUntil }) => ({
+      ({
+        model,
+        weight,
+        hasSecret,
+        failureCount,
+        cooldownUntil,
+        quotaGroupId,
+      }) => ({
         id: model.id,
         is_primary: model.id === settings.pool.primary_node_id,
         display_name: model.display_name,
@@ -162,6 +208,7 @@ function adminOverview(
         failure_count: failureCount,
         cooldown_until: cooldownUntil,
         updated_at: model.updated_at,
+        quota_group_id: quotaGroupId,
       }),
     ),
   };
@@ -169,24 +216,35 @@ function adminOverview(
 
 function resolvePlatformRuntime(
   settings: PlatformModelRuntimeSettings,
+  poolKey: ModelPoolKey = 'official',
 ): EffectiveLlmRuntimeConfig | null {
+  const eligible = new Set(
+    configuredNodes(settings).map((entry) => entry.model.id),
+  );
   const nodes = settings.nodes.filter(
     ({ model, hasSecret, secretValue }) =>
       model.enabled &&
       model.model_name.trim() &&
       hasSecret &&
       model.api_key_secret_key &&
-      secretValue,
+      secretValue &&
+      eligible.has(model.id),
   );
   if (!nodes.length) return null;
   const first = nodes[0];
   const model = first.model;
   const contextWindowTokens = Math.min(
     ...nodes.map(({ model }) => nodeContextWindow(model)),
+    settings.pool.benefit_policy?.max_input_tokens ?? Infinity,
   );
   return {
     source: 'official',
-    billingMode: 'metered',
+    poolKey,
+    poolRevision: settings.pool.revision,
+    ...(settings.pool.benefit_policy
+      ? { benefitPolicy: settings.pool.benefit_policy }
+      : {}),
+    billingMode: poolKey === 'benefit' ? 'none' : 'metered',
     modelConfigId: settings.pool.public_model_id,
     providerKey: settings.pool.model_key,
     piApi: model.pi_api,
@@ -198,6 +256,7 @@ function resolvePlatformRuntime(
     model: model.model_name.trim(),
     contextWindowTokens,
     maxOutputTokens: Math.min(
+      settings.pool.benefit_policy?.max_output_tokens ?? Infinity,
       ...nodes.map(({ model }) =>
         getDefaultMaxOutputTokens(model.model_name, contextWindowTokens),
       ),
@@ -207,22 +266,33 @@ function resolvePlatformRuntime(
       settings.pool.input_token_price_per_million_coins,
     outputTokenPricePerMillionCoins:
       settings.pool.output_token_price_per_million_coins,
-    poolNodes: nodes.map(({ model, weight, revision, secretValue }) => ({
-      modelConfigId: model.id,
-      revision,
-      weight,
-      piApi: model.pi_api,
-      model: model.model_name.trim(),
-      providerKey: model.model_key,
-      authMode: normalizeAuthMode(model),
-      apiKey: secretValue!,
-      baseUrl: model.base_url ?? undefined,
-    })),
+    poolNodes: nodes.map(
+      ({ model, weight, revision, secretValue, quotaGroupId }) => ({
+        modelConfigId: model.id,
+        revision,
+        weight,
+        piApi: model.pi_api,
+        model: model.model_name.trim(),
+        providerKey: model.model_key,
+        authMode: normalizeAuthMode(model),
+        apiKey: secretValue!,
+        baseUrl: model.base_url ?? undefined,
+        poolKey,
+        ...(quotaGroupId ? { quotaGroupId } : {}),
+      }),
+    ),
   };
 }
 
-export async function resolveOfficialLlmRuntime(): Promise<EffectiveLlmRuntimeConfig | null> {
-  return resolvePlatformRuntime(await getPlatformModelRuntimeSettings());
+export async function resolveOfficialLlmRuntime(
+  poolKey: ModelPoolKey = 'official',
+): Promise<EffectiveLlmRuntimeConfig | null> {
+  return resolvePlatformRuntime(
+    await (poolKey === 'official'
+      ? getPlatformModelRuntimeSettings()
+      : getPlatformModelRuntimeSettings(poolKey)),
+    poolKey,
+  );
 }
 
 /** API clients identify the pool by its stable public alias, never a node ID. */
@@ -237,9 +307,15 @@ export async function resolveOfficialRuntimeByModelKey(
 
 export async function resolveUserLlmRuntime(
   _userId: string,
+  poolKey: ModelPoolKey = 'official',
 ): Promise<EffectiveLlmRuntimeConfig> {
-  const runtime = await resolveOfficialLlmRuntime();
-  if (!runtime) throw new Error('官方模型暂不可用，请联系管理员。');
+  const runtime = await resolveOfficialLlmRuntime(poolKey);
+  if (!runtime)
+    throw new ModelUnavailableError(
+      poolKey === 'benefit'
+        ? '免费模型暂不可用，请稍后重试或主动选择付费模型。'
+        : '官方模型暂不可用，请联系管理员。',
+    );
   return runtime;
 }
 
@@ -257,16 +333,43 @@ export async function listPublicOfficialModels(): Promise<
     : [];
 }
 
-export async function getSystemConfigOverview(): Promise<AdminModelSettingsOverviewDto> {
-  return adminOverview(await getPlatformModelSettings());
+export async function getSystemConfigOverview(
+  poolKey: ModelPoolKey = 'official',
+): Promise<AdminModelSettingsOverviewDto> {
+  return adminOverview(
+    await (poolKey === 'official'
+      ? getPlatformModelSettings()
+      : getPlatformModelSettings(poolKey)),
+  );
 }
 
 export async function getUserModelSettingsOverview(
-  _userId?: string,
+  userId?: string,
 ): Promise<ModelSettingsOverviewDto> {
   const settings = await getPlatformModelSettings();
+  const benefit = await getPlatformModelSettings('benefit');
+  const policy = benefit.pool.benefit_policy!;
+  const model = configuredNodes(settings).length
+    ? publicPoolModel(settings)
+    : null;
+  if (
+    model &&
+    userId &&
+    !(await getRuntimeEntitlementSnapshot(userId)).membershipActive
+  ) {
+    model.input_token_price_per_million_coins *= NON_MEMBER_PRICE_MULTIPLIER;
+    model.output_token_price_per_million_coins *= NON_MEMBER_PRICE_MULTIPLIER;
+  }
   return {
-    model: configuredNodes(settings).length ? publicPoolModel(settings) : null,
+    model,
+    preferred_pool: userId ? await getPreferredModelPool(userId) : 'official',
+    benefit: {
+      model: configuredNodes(benefit).length ? publicPoolModel(benefit) : null,
+      enabled: benefit.pool.enabled,
+      supply: await getBenefitSupply(),
+      daily_turns: policy.daily_turns,
+      ...(await getBenefitAllowance(userId, policy.daily_turns, policy)),
+    },
   };
 }
 
@@ -292,12 +395,56 @@ function normalizeOfficialBaseUrl(value: string | null): string | null {
 
 export async function saveOfficialModelSettings(
   input: AdminModelSettingsUpdateDto & { actor?: string },
+  poolKey: ModelPoolKey = 'official',
 ): Promise<AdminModelSettingsOverviewDto> {
+  if (poolKey === 'benefit') {
+    if (!input.benefit_policy)
+      throw new ModelConfigurationError('请配置免费额度与执行上限');
+    if (
+      new Set((input.quota_groups ?? []).map((group) => group.id)).size !==
+      (input.quota_groups ?? []).length
+    )
+      throw new ModelConfigurationError('共享额度组不能重复');
+    for (const group of input.quota_groups ?? []) {
+      try {
+        new Intl.DateTimeFormat('en', {
+          timeZone: group.reset_timezone,
+        }).format();
+      } catch {
+        throw new ModelConfigurationError('额度重置时区不正确');
+      }
+      if (group.expires_at && !Number.isFinite(Date.parse(group.expires_at)))
+        throw new ModelConfigurationError('额度有效期不正确');
+    }
+    if (
+      input.enabled &&
+      !input.nodes.some(
+        (node) =>
+          node.enabled &&
+          input.quota_groups?.some(
+            (group) =>
+              group.id === node.quota_group_id &&
+              group.approved &&
+              (!group.expires_at || Date.parse(group.expires_at) > Date.now()),
+          ),
+      )
+    )
+      throw new ModelConfigurationError(
+        '开放免费服务前，请配置已确认授权和免费边界的有效节点',
+      );
+  }
   const updated = await savePlatformModelConfig({
+    poolKey,
+    revision: input.revision,
+    enabled: input.enabled,
+    benefitPolicy: input.benefit_policy,
+    quotaGroups: input.quota_groups,
     displayName: input.display_name.trim(),
     thinkingLevel: input.thinking_level,
-    inputTokenPricePerMillionCoins: input.input_token_price_per_million_coins,
-    outputTokenPricePerMillionCoins: input.output_token_price_per_million_coins,
+    inputTokenPricePerMillionCoins:
+      poolKey === 'benefit' ? 0 : input.input_token_price_per_million_coins,
+    outputTokenPricePerMillionCoins:
+      poolKey === 'benefit' ? 0 : input.output_token_price_per_million_coins,
     nodes: input.nodes.map((node) => ({
       id: node.id,
       displayName: node.display_name.trim(),
@@ -312,6 +459,7 @@ export async function saveOfficialModelSettings(
       ),
       enabled: node.enabled,
       weight: node.weight,
+      quotaGroupId: poolKey === 'benefit' ? node.quota_group_id : null,
     })),
     actor: input.actor,
   });

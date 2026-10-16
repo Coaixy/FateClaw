@@ -34,6 +34,8 @@ export interface ToolResultPreviewDto {
 }
 
 export interface MessageMetadataDto {
+  pool_key?: 'official' | 'benefit';
+  benefit_status?: 'consumed' | 'released';
   kind?: string;
   stage?: string;
   workflow?: string;
@@ -83,6 +85,7 @@ export interface SessionMessageListResponseDto {
 }
 
 export interface ChatSessionDto {
+  model_pool_key?: 'official' | 'benefit';
   id: string;
   account_id: string;
   title: string;

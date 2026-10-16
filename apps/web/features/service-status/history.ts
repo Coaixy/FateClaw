@@ -1,7 +1,24 @@
 import type {
   ServiceStatusSampleDto,
   ServiceStatusOverviewDto,
+  ServiceStatusServiceDto,
 } from '@fateclaw/contracts/service-status';
+
+export function visibleBenefitSupply(
+  service: ServiceStatusServiceDto,
+  now = Date.now(),
+): 'available' | 'busy' | 'exhausted' | 'disabled' | 'unknown' | 'unavailable' {
+  const checked = Date.parse(service.supply_checked_at ?? '');
+  if (!Number.isFinite(checked) || now - checked > 600_000) return 'unknown';
+  if (service.supply === 'disabled' || service.supply === 'exhausted')
+    return service.supply;
+  const health = visibleServiceStatus(service, now);
+  if (health === 'unavailable') return 'unavailable';
+  if (service.supply === 'busy') return 'busy';
+  return health === 'operational' && service.supply === 'available'
+    ? 'available'
+    : 'unknown';
+}
 
 export function visibleServiceStatus(
   data: ServiceStatusOverviewDto,

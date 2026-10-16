@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock(
+  '../../../src/infrastructure/repositories/benefit-repository.js',
+  () => ({ getPreferredModelPool: async () => 'official' }),
+);
 
 const {
   mockCreateChatSession,

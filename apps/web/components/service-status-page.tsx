@@ -13,12 +13,14 @@ import {
 import type {
   ServiceAvailabilityDto,
   ServiceStatusOverviewDto,
+  ServiceStatusServiceDto,
 } from '@fateclaw/contracts/service-status';
 import { useI18n } from '@/lib/i18n';
 import { serviceStatusApi } from '@/features/service-status/api';
 import {
   serviceStatusHistory,
   visibleServiceStatus,
+  visibleBenefitSupply,
 } from '@/features/service-status/history';
 import { BrandSeal } from './brand/brand-marks';
 import { LanguageSwitcher } from './language-switcher';
@@ -194,9 +196,12 @@ export function ServiceStatusPage() {
             <h2 className={`text-xl font-semibold sm:text-2xl ${style.text}`}>
               {loading && !data
                 ? t('serviceStatus.loading')
-                : t(`serviceStatus.${status}`)}
+                : t(`modelChoice.paid_${status}`)}
             </h2>
           </div>
+          <p className="mt-2 pl-6 text-[12px] text-muted">
+            {t('modelChoice.paid')}
+          </p>
           <p className="mt-3 pl-6 text-[13px] leading-6 text-body">
             {t(`serviceStatus.${status}Description`)}
           </p>
@@ -210,7 +215,7 @@ export function ServiceStatusPage() {
           <div className="flex items-center justify-between gap-4 border-b border-hairline px-5 py-5 sm:px-7">
             <h2 className="flex items-center gap-2.5 text-[15px] font-semibold">
               <Activity size={17} className="text-muted" />
-              {t('serviceStatus.ai')}
+              {t('modelChoice.paid')}
             </h2>
             <span className={`text-[12px] ${style.text}`}>
               {t(`serviceStatus.${status}Short`)}
@@ -301,6 +306,15 @@ export function ServiceStatusPage() {
             <span>{t('serviceStatus.now')}</span>
           </div>
         </section>
+        {data?.services
+          ?.filter((service) => service.pool_key === 'benefit')
+          .map((service) => (
+            <BenefitServiceStatus
+              key={service.pool_key}
+              service={service}
+              now={now ?? Date.now()}
+            />
+          ))}
         <section className="mt-9 space-y-2 border-t border-hairline pt-5 text-[12px] leading-6 text-muted">
           <p className="flex items-start gap-2">
             <Check size={14} className="mt-1 shrink-0" />
@@ -326,5 +340,82 @@ export function ServiceStatusPage() {
         </footer>
       </main>
     </div>
+  );
+}
+
+function BenefitServiceStatus({
+  service,
+  now,
+}: {
+  service: ServiceStatusServiceDto;
+  now: number;
+}) {
+  const { t, formatDate } = useI18n();
+  const supply = visibleBenefitSupply(service, now);
+  const tone =
+    supply === 'available'
+      ? 'text-success'
+      : supply === 'unavailable'
+        ? 'text-error'
+        : supply === 'exhausted' || supply === 'busy'
+          ? 'text-warning'
+          : 'text-muted';
+  const label =
+    supply === 'unavailable'
+      ? t('serviceStatus.unavailableShort')
+      : t(`modelChoice.${supply}`);
+  const samples = serviceStatusHistory(service.history, now);
+  return (
+    <section
+      className="mt-9 rounded-2xl border border-hairline bg-surface-raised p-5 sm:p-7"
+      aria-label={t('modelChoice.benefit')}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+          <Activity size={17} className="text-muted" />
+          {t('modelChoice.benefit')}
+        </h2>
+        <span className={`text-[12px] ${tone}`}>{label}</span>
+      </div>
+      <p className="mt-3 text-[12px] leading-6 text-muted">
+        {t('modelChoice.benefitStatusNote')}
+      </p>
+      <div className="mt-4 flex flex-wrap justify-between gap-3 text-[11px] text-muted">
+        <span>
+          {t('modelChoice.lastObserved')}：
+          {service.checked_at
+            ? formatDate(service.checked_at, {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : t('serviceStatus.waiting')}
+        </span>
+        <span>{t('serviceStatus.sixHours')}</span>
+      </div>
+      <div
+        className="mt-4 grid grid-cols-[repeat(28,minmax(0,1fr))] gap-1 sm:gap-1.5"
+        aria-label={t('serviceStatus.history')}
+      >
+        {samples.map((sample, index) => {
+          const name = sample
+            ? `${formatDate(sample.checked_at)} · ${t(`serviceStatus.${sample.status}Short`)}`
+            : t('serviceStatus.noSample');
+          return (
+            <div
+              key={index}
+              role="img"
+              aria-label={name}
+              title={name}
+              className={`h-8 rounded-sm ${sample ? STATUS_STYLES[sample.status].dot : 'bg-hairline/55'}`}
+            />
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[11px] leading-5 text-muted">
+        {t('modelChoice.benefitHistoryNote')}
+      </p>
+    </section>
   );
 }

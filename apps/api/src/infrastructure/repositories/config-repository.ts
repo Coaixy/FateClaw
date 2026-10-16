@@ -5,13 +5,21 @@ import type {
   PiThinkingLevel,
 } from '../../shared/types.js';
 import { getDbPool, type DbQueryable } from '../db-pool.js';
-import type { ModelAuthModeDto } from '@fateclaw/contracts/model-settings';
+import type {
+  BenefitPolicyDto,
+  BenefitQuotaGroupDto,
+  ModelPoolKey,
+  ModelAuthModeDto,
+} from '@fateclaw/contracts/model-settings';
 
 export class ModelConfigurationError extends Error {
   readonly statusCode = 400;
 }
 
 export interface PlatformModelPool {
+  enabled: boolean;
+  revision: number;
+  benefit_policy: BenefitPolicyDto | null;
   primary_node_id: string | null;
   public_model_id: string;
   model_key: string;
@@ -28,11 +36,13 @@ export interface PlatformModelNode {
   hasSecret: boolean;
   failureCount: number;
   cooldownUntil: string | null;
+  quotaGroupId?: string | null;
 }
 
 export interface PlatformModelSettings {
   pool: PlatformModelPool;
   nodes: PlatformModelNode[];
+  quotaGroups?: BenefitQuotaGroupDto[];
 }
 
 export interface PlatformModelRuntimeSettings extends PlatformModelSettings {
@@ -42,35 +52,57 @@ export interface PlatformModelRuntimeSettings extends PlatformModelSettings {
 async function readPlatformModelSettings(
   db: DbQueryable,
   includeCredential = false,
+  poolKey: ModelPoolKey = 'official',
 ): Promise<PlatformModelRuntimeSettings> {
-  const { rows } = await db.query<{
-    pool: PlatformModelPool;
-    nodes: PlatformModelRuntimeSettings['nodes'];
-  }>(
+  const { rows } = await db.query<PlatformModelRuntimeSettings>(
     `SELECT to_jsonb(pool) AS pool, COALESCE((
        SELECT jsonb_agg(jsonb_build_object(
          'model', to_jsonb(model), 'weight', node.weight, 'revision', node.revision,
          'failureCount', node.failure_count, 'cooldownUntil', node.cooldown_until,
+         'quotaGroupId', node.quota_group_id,
          ${includeCredential ? "'secretValue', (SELECT secret_value FROM system_secrets WHERE key = model.api_key_secret_key)," : ''}
          'hasSecret', EXISTS (SELECT 1 FROM system_secrets
            WHERE key = model.api_key_secret_key AND secret_value <> '')
        ) ORDER BY (model.id = pool.primary_node_id) DESC, model.created_at, model.id)
        FROM official_model_pool_nodes node
        JOIN official_model_configs model ON model.id = node.model_config_id
+       WHERE node.pool_id=pool.id
      ), '[]'::jsonb) AS nodes
-     FROM official_model_pool_settings pool WHERE pool.id = 'default'`,
+     FROM official_model_pool_settings pool WHERE pool.id = $1`,
+    [poolKey === 'benefit' ? 'benefit' : 'default'],
   );
   if (!rows[0]) throw new Error('Official model pool migration is missing');
+  if (poolKey === 'benefit') {
+    const groups =
+      await db.query<BenefitQuotaGroupDto>(`SELECT id,display_name,requests_per_minute,requests_per_day,
+      tokens_per_minute,tokens_per_day,reset_timezone,expires_at,approved,cooldown_until,
+      CASE WHEN day_start=date_trunc('day',now() AT TIME ZONE reset_timezone) AT TIME ZONE reset_timezone THEN day_requests ELSE 0 END AS used_requests_today,
+      CASE WHEN day_start=date_trunc('day',now() AT TIME ZONE reset_timezone) AT TIME ZONE reset_timezone THEN day_tokens::float8 ELSE 0 END AS reserved_tokens_today
+      FROM benefit_quota_groups WHERE NOT archived ORDER BY display_name,id`);
+    rows[0].quotaGroups = groups.rows.map((group) => ({
+      ...group,
+      expires_at: group.expires_at
+        ? new Date(group.expires_at).toISOString()
+        : null,
+      cooldown_until: group.cooldown_until
+        ? new Date(group.cooldown_until).toISOString()
+        : null,
+    }));
+  }
   return rows[0];
 }
 
-export async function getPlatformModelSettings(): Promise<PlatformModelSettings> {
-  return readPlatformModelSettings(getDbPool());
+export async function getPlatformModelSettings(
+  poolKey: ModelPoolKey = 'official',
+): Promise<PlatformModelSettings> {
+  return readPlatformModelSettings(getDbPool(), false, poolKey);
 }
 
-export async function getPlatformModelRuntimeSettings(): Promise<PlatformModelRuntimeSettings> {
+export async function getPlatformModelRuntimeSettings(
+  poolKey: ModelPoolKey = 'official',
+): Promise<PlatformModelRuntimeSettings> {
   // Connection settings and every credential come from one MVCC snapshot.
-  return readPlatformModelSettings(getDbPool(), true);
+  return readPlatformModelSettings(getDbPool(), true, poolKey);
 }
 
 export interface PlatformModelNodeInput {
@@ -84,6 +116,7 @@ export interface PlatformModelNodeInput {
   contextWindowTokens: number | null;
   enabled: boolean;
   weight: number;
+  quotaGroupId?: string | null;
 }
 
 export interface PlatformModelConfigInput {
@@ -93,6 +126,11 @@ export interface PlatformModelConfigInput {
   outputTokenPricePerMillionCoins: number;
   nodes: PlatformModelNodeInput[];
   actor?: string;
+  poolKey?: ModelPoolKey;
+  revision?: number;
+  enabled?: boolean;
+  benefitPolicy?: BenefitPolicyDto;
+  quotaGroups?: BenefitQuotaGroupDto[];
 }
 
 function defaultAuthMode(piApi: ModelProviderType): ModelAuthModeDto {
@@ -107,15 +145,29 @@ export async function savePlatformModelConfig(
   input: PlatformModelConfigInput,
 ): Promise<PlatformModelSettings> {
   const client = await getDbPool().connect();
+  const benefit = input.poolKey === 'benefit';
+  const poolId = benefit ? 'benefit' : 'default';
   try {
     await client.query('BEGIN');
     // All pool membership, connection and price changes have one writer boundary.
     await client.query(
-      "SELECT id FROM official_model_pool_settings WHERE id = 'default' FOR UPDATE",
+      'SELECT id FROM official_model_pool_settings WHERE id = $1 FOR UPDATE',
+      [poolId],
     );
-    const current = await readPlatformModelSettings(client);
-    if (!input.nodes.length) throw new ModelConfigurationError('请配置主节点');
+    const current = await readPlatformModelSettings(
+      client,
+      false,
+      input.poolKey,
+    );
     if (
+      input.revision !== undefined &&
+      input.revision !== current.pool.revision
+    )
+      throw new ModelConfigurationError('配置已更新，请刷新后重新编辑');
+    if (!benefit && !input.nodes.length)
+      throw new ModelConfigurationError('请配置主节点');
+    if (
+      !benefit &&
       current.pool.primary_node_id &&
       !input.nodes.some((node) => node.id === current.pool.primary_node_id)
     ) {
@@ -123,7 +175,41 @@ export async function savePlatformModelConfig(
         '主节点必须保留，可以编辑配置，不能删除',
       );
     }
-    let primaryNodeId = current.pool.primary_node_id;
+    let primaryNodeId = benefit
+      ? (input.nodes.find((node) => node.id === current.pool.primary_node_id)
+          ?.id ?? null)
+      : current.pool.primary_node_id;
+    if (benefit) {
+      for (const group of input.quotaGroups ?? []) {
+        await client.query(
+          `INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,reset_timezone,expires_at,approved)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name,
+          requests_per_minute=EXCLUDED.requests_per_minute,requests_per_day=EXCLUDED.requests_per_day,
+          tokens_per_minute=EXCLUDED.tokens_per_minute,tokens_per_day=EXCLUDED.tokens_per_day,
+          reset_timezone=EXCLUDED.reset_timezone,expires_at=EXCLUDED.expires_at,approved=EXCLUDED.approved,archived=false,updated_at=now()`,
+          [
+            group.id,
+            group.display_name,
+            group.requests_per_minute,
+            group.requests_per_day,
+            group.tokens_per_minute,
+            group.tokens_per_day,
+            group.reset_timezone,
+            group.expires_at,
+            group.approved,
+          ],
+        );
+      }
+      for (const group of current.quotaGroups ?? []) {
+        if (!(input.quotaGroups ?? []).some((entry) => entry.id === group.id)) {
+          // Retain accounting references for dispatched attempts; revoked groups cannot supply more calls.
+          await client.query(
+            'UPDATE benefit_quota_groups SET approved=false,archived=true WHERE id=$1',
+            [group.id],
+          );
+        }
+      }
+    }
     const retainedIds: string[] = [];
     for (const node of input.nodes) {
       const previous = current.nodes.find(
@@ -132,6 +218,13 @@ export async function savePlatformModelConfig(
       if (node.id && !previous)
         throw new ModelConfigurationError('模型节点不存在，请刷新后重试');
       const id = previous?.model.id ?? randomUUID();
+      if (
+        benefit &&
+        !(input.quotaGroups ?? []).some(
+          (group) => group.id === node.quotaGroupId,
+        )
+      )
+        throw new ModelConfigurationError('请为免费节点选择共享额度组');
       if (retainedIds.includes(id))
         throw new ModelConfigurationError('模型节点不能重复');
       retainedIds.push(id);
@@ -202,39 +295,58 @@ export async function savePlatformModelConfig(
           (previous.model.model_name !== node.modelName ||
             previous.model.enabled !== node.enabled ||
             previous.model.extra_json?.context_window_tokens !==
-              node.contextWindowTokens)),
+              node.contextWindowTokens ||
+            (previous.quotaGroupId ?? null) !== (node.quotaGroupId ?? null))),
       );
       await client.query(
-        `INSERT INTO official_model_pool_nodes (model_config_id, weight) VALUES ($1,$2)
+        `INSERT INTO official_model_pool_nodes (model_config_id, weight,pool_id,quota_group_id) VALUES ($1,$2,$4,$5)
          ON CONFLICT (model_config_id) DO UPDATE SET weight=EXCLUDED.weight,
+           quota_group_id=EXCLUDED.quota_group_id,
            revision=official_model_pool_nodes.revision + CASE WHEN $3 THEN 1 ELSE 0 END,
            health_generation=official_model_pool_nodes.health_generation + CASE WHEN $3 THEN 1 ELSE 0 END,
            failure_count=CASE WHEN $3 THEN 0 ELSE official_model_pool_nodes.failure_count END,
            cooldown_until=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.cooldown_until END,
            probe_until=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.probe_until END,
            probe_token=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.probe_token END`,
-        [id, node.weight, resetHealth],
+        [
+          id,
+          node.weight,
+          resetHealth,
+          poolId,
+          benefit ? node.quotaGroupId : null,
+        ],
       );
     }
+    await client.query(
+      'UPDATE official_model_pool_settings SET primary_node_id=$2 WHERE id=$1',
+      [poolId, primaryNodeId],
+    );
     // Historical model rows and their credential references remain available to billing records.
     await client.query(
-      'DELETE FROM official_model_pool_nodes WHERE NOT (model_config_id = ANY($1::text[]))',
-      [retainedIds],
+      'DELETE FROM official_model_pool_nodes WHERE pool_id=$2 AND NOT (model_config_id = ANY($1::text[]))',
+      [retainedIds, poolId],
     );
     await client.query(
       `UPDATE official_model_pool_settings SET display_name=$1, thinking_level=$2,
          input_token_price_per_million_coins=$3, output_token_price_per_million_coins=$4,
-         primary_node_id=$5, updated_at=NOW()
-       WHERE id='default'`,
+         primary_node_id=$5, updated_at=NOW(),revision=revision+1,enabled=$7,benefit_policy=$8
+       WHERE id=$6`,
       [
         input.displayName,
         input.thinkingLevel,
         input.inputTokenPricePerMillionCoins,
         input.outputTokenPricePerMillionCoins,
         primaryNodeId,
+        poolId,
+        benefit ? Boolean(input.enabled) : true,
+        benefit ? JSON.stringify(input.benefitPolicy) : null,
       ],
     );
-    const updated = await readPlatformModelSettings(client);
+    const updated = await readPlatformModelSettings(
+      client,
+      false,
+      input.poolKey,
+    );
     await client.query('COMMIT');
     return updated;
   } catch (error) {

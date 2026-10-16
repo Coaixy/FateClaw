@@ -5,6 +5,8 @@ import {
   type StreamFunction,
 } from '@earendil-works/pi-ai';
 import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
+import { randomUUID } from 'node:crypto';
+import { getDbPool } from '../../infrastructure/db-pool.js';
 
 const DEFAULT_BASE_URLS = {
   'openai-completions': 'https://api.openai.com/v1',
@@ -12,6 +14,24 @@ const DEFAULT_BASE_URLS = {
   'anthropic-messages': 'https://api.anthropic.com',
   'google-generative-ai': 'https://generativelanguage.googleapis.com',
 };
+
+export async function probeBenefitModelAvailability(
+  node: RuntimeModelPoolNode,
+  signal: AbortSignal,
+): Promise<{ latency: number | null; attempted: boolean }> {
+  const id = randomUUID();
+  const { rows } = await getDbPool().query<{ claim: unknown }>(
+    'SELECT claim_benefit_attempt(NULL,$1,$2,$3,64,16,true) AS claim',
+    [node.modelConfigId, node.revision, id],
+  );
+  if (!rows[0]?.claim) return { latency: null, attempted: false };
+  const latency = await probeModelAvailability(node, signal);
+  await getDbPool().query(
+    'SELECT settle_benefit_attempt($1,0,0,false,$2,NULL)',
+    [id, latency === null ? 'failure' : 'success'],
+  );
+  return { latency, attempted: true };
+}
 export const STATUS_PROBE_MAX_TOKENS = 16;
 export const STATUS_PROBE_TIMEOUT_MS = 8_000;
 

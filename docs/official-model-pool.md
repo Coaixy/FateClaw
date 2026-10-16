@@ -3,6 +3,8 @@
 The platform exposes one official model alias and one pair of input/output token
 prices. Administrators can supply that alias with multiple provider/model nodes,
 including different underlying models. Users cannot configure providers or keys.
+Users can also select the independently configured [free service](benefit-model-pool.md).
+This document describes the paid pool; free limits and accounting are separate.
 
 ## Configuration and admission
 
@@ -14,7 +16,7 @@ The primary configuration remains editable, but removing it is rejected by the
 writer and a database foreign key. Every child can be removed, leaving the primary
 on its own. The admin response identifies this role with read-only `is_primary`.
 
-Pool settings and node changes commit together under a singleton database lock.
+Pool settings and node changes commit together under a pool-scoped database lock.
 Each node has its own protocol, model ID, endpoint, credential reference, enabled
 state, context window and positive weight. Credentials remain in `system_secrets`;
 metadata responses never include their values. Existing installations initially

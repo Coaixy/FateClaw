@@ -103,18 +103,20 @@ describe('model pool repository', () => {
   it('locks the pool, preserves omitted keys and commits all node and price updates together', async () => {
     const { query, release } = poolWithSnapshots();
     await savePlatformModelConfig(input);
-    expect(query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'));
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'), [
+      'default',
+    ]);
     expect(query).not.toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO system_secrets'),
       expect.anything(),
     );
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO official_model_pool_nodes'),
-      [model.id, 2, false],
+      [model.id, 2, false, 'default', null],
     );
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE official_model_pool_settings'),
-      ['Pool', 'low', 2, 8, model.id],
+      ['Pool', 'low', 2, 8, model.id, 'default', true, null],
     );
     expect(query).toHaveBeenLastCalledWith('COMMIT');
     expect(release).toHaveBeenCalledOnce();
@@ -140,7 +142,7 @@ describe('model pool repository', () => {
     );
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM official_model_pool_nodes'),
-      [[model.id, expect.any(String)]],
+      [[model.id, expect.any(String)], 'default'],
     );
   });
   it.each([
