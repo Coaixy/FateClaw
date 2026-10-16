@@ -22,14 +22,20 @@ async function paipanPublicRateLimit(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const { allowed, retryAfterSec } = await fixedWindowRateLimit(
+  const { allowed, retryAfterSec, unavailable } = await fixedWindowRateLimit(
     `paipan:${request.ip}`,
     PAIPAN_PUBLIC_RATE_LIMIT_PER_MIN,
     60,
   );
   if (!allowed) {
     reply.header('Retry-After', String(retryAfterSec));
-    await reply.code(429).send({ error: '请求过于频繁，请稍后再试' });
+    await reply
+      .code(unavailable ? 503 : 429)
+      .send({
+        error: unavailable
+          ? '限流服务暂时不可用，请稍后重试'
+          : '请求过于频繁，请稍后再试',
+      });
   }
 }
 

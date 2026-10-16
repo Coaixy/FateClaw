@@ -17,6 +17,7 @@ import { unifyMembershipIdentityMigration } from './versions/0082-unify-membersh
 import { officialModelPoolMigration } from './versions/0083-official-model-pool.js';
 import { officialModelPoolPrimaryMigration } from './versions/0084-official-model-pool-primary.js';
 import { aiServiceStatusMigration } from './versions/0085-ai-service-status.js';
+import { issuesMigration } from './versions/0086-issues.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -37,6 +38,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   officialModelPoolMigration,
   officialModelPoolPrimaryMigration,
   aiServiceStatusMigration,
+  issuesMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

@@ -8,12 +8,18 @@ const {
   mockListDirectPaipanCatalogForOwnedUser,
   mockPreviewDirectPaipanForOwnedUser,
   mockReverseGanzhiForPaipan,
+  mockFixedWindowRateLimit,
 } = vi.hoisted(() => ({
   mockCommitDirectPaipanForOwnedUser: vi.fn(),
   mockGetUserById: vi.fn(),
   mockListDirectPaipanCatalogForOwnedUser: vi.fn(),
   mockPreviewDirectPaipanForOwnedUser: vi.fn(),
   mockReverseGanzhiForPaipan: vi.fn(),
+  mockFixedWindowRateLimit: vi.fn(),
+}));
+
+vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+  fixedWindowRateLimit: mockFixedWindowRateLimit,
 }));
 
 vi.mock('../../../src/infrastructure/db.js', () => ({
@@ -37,6 +43,10 @@ describe('paipanRoutes', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockFixedWindowRateLimit.mockResolvedValue({
+      allowed: true,
+      retryAfterSec: 0,
+    });
     mockListDirectPaipanCatalogForOwnedUser.mockResolvedValue({
       ok: true,
       data: [],
@@ -102,6 +112,22 @@ describe('paipanRoutes', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('stops public computation when the limiter is unavailable', async () => {
+    mockFixedWindowRateLimit.mockResolvedValue({
+      allowed: false,
+      unavailable: true,
+      retryAfterSec: 5,
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/preview',
+      payload: { skill: 'iching', input: {} },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.headers['retry-after']).toBe('5');
+    expect(mockPreviewDirectPaipanForOwnedUser).not.toHaveBeenCalled();
   });
 
   it('passes authenticated user id to preview service', async () => {

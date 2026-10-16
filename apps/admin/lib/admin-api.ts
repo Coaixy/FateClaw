@@ -137,7 +137,7 @@ export interface AdminSession {
 /** 管理后台完整运行状态统计。 */
 export type AdminStatusStats = AdminStatusStatsDto;
 
-async function adminRequest<T>(
+export async function adminRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {

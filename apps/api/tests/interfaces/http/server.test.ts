@@ -86,6 +86,13 @@ describe('createApiServer auth guard', () => {
     await app.close();
   });
 
+  it('excludes issue search text from request error logs', async () => {
+    await app.inject({ url: '/api/issues?q=synthetic-private-search' });
+    const logs = JSON.stringify(mockLoggerWarn.mock.calls);
+    expect(logs).toContain('/api/issues');
+    expect(logs).not.toContain('synthetic-private-search');
+  });
+
   it('returns JSON 404 for retired case dataset endpoints', async () => {
     expect(app.hasRoute({ method: 'GET', url: '/api/bazi-cases' })).toBe(false);
 

@@ -63,7 +63,7 @@ export async function rateLimitClear(key: string): Promise<void> {
 }
 
 /**
- * 固定窗口按 key 计数限流（Redis INCR + EXPIRE）。
+ * Fixed-window limits use one atomic Redis operation, including expiry.
  *
  * 与上面的「失败退避器」互补：用于公开 / 游客可用端点的防刷（每个窗口最多 limit 次）。
  * 调用方应以可信的 request.ip 作为 key 维度（依赖 Fastify trustProxy 正确配置）。
@@ -72,22 +72,32 @@ export async function rateLimitClear(key: string): Promise<void> {
  * @param limit 每个窗口允许的请求数。
  * @param windowSec 窗口长度（秒）。
  * @returns allowed=false 时附带本窗口剩余的 retryAfterSec。
- * @remarks Redis 不可用时 fail-open（放行）——防刷不是鉴权，可用性优先。
+ * @remarks An unavailable limiter refuses the request; callers return 503 rather than 429.
  */
 export async function fixedWindowRateLimit(
   key: string,
   limit: number,
   windowSec: number,
-): Promise<{ allowed: boolean; retryAfterSec: number }> {
+): Promise<{ allowed: boolean; retryAfterSec: number; unavailable?: boolean }> {
   try {
     const nowSec = Math.floor(Date.now() / 1000);
     const bucket = Math.floor(nowSec / windowSec);
     const redisKey = `fwrl:${key}:${bucket}`;
     const redis = getRedis();
-    const count = await redis.incr(redisKey);
-    if (count === 1) {
-      // 新桶设过期，避免 key 无限增长
-      await redis.expire(redisKey, windowSec);
+    const count = Number(
+      await redis.eval(
+        `local count = redis.call('INCR', KEYS[1])
+       if count == 1 or redis.call('TTL', KEYS[1]) < 0 then
+         redis.call('EXPIRE', KEYS[1], ARGV[1])
+       end
+       return count`,
+        1,
+        redisKey,
+        windowSec,
+      ),
+    );
+    if (!Number.isSafeInteger(count) || count < 1) {
+      return { allowed: false, retryAfterSec: 5, unavailable: true };
     }
     if (count > limit) {
       return {
@@ -97,6 +107,6 @@ export async function fixedWindowRateLimit(
     }
     return { allowed: true, retryAfterSec: 0 };
   } catch {
-    return { allowed: true, retryAfterSec: 0 };
+    return { allowed: false, retryAfterSec: 5, unavailable: true };
   }
 }

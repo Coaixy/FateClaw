@@ -56,6 +56,7 @@ apps/api/src/interfaces/http/
 - `/api/model-settings`
 - `/api/paipan`
 - `/api/skills`
+- `/api/issues` (see [Issues](../../../../../docs/issues.md))
 - `/api/billing`
 - `/api/api-keys`
 - `/api/open-sessions`

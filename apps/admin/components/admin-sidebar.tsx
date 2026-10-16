@@ -11,6 +11,7 @@ import {
 } from '@/lib/admin-navigation';
 import {
   Activity,
+  CircleDot,
   LayoutDashboard,
   Users,
   MessageSquare,
@@ -58,6 +59,7 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
+  { href: '/issues', label: '问题与建议', icon: CircleDot, requiredScopes: ['admin:*'] },
   {
     href: '/logs',
     label: '日志',

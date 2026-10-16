@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { adminIssueRoutes } from './issues-routes.js';
 
 import {
   BILLING_RESERVATION_STALE_MS,
@@ -515,6 +516,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: '无权访问该管理功能' });
     }
   });
+
+  await app.register(adminIssueRoutes, { prefix: '/issues' });
 
   // POST /api/admin/verify — 验证密钥是否正确
   app.post('/verify', async (request) => {

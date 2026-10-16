@@ -1,12 +1,19 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockRateLimitCheck, mockRateLimitClear, mockRateLimitRecordFail } =
-  vi.hoisted(() => ({
-    mockRateLimitCheck: vi.fn(),
-    mockRateLimitClear: vi.fn(),
-    mockRateLimitRecordFail: vi.fn(),
-  }));
+const {
+  mockRateLimitCheck,
+  mockRateLimitClear,
+  mockRateLimitRecordFail,
+  mockFixedWindowRateLimit,
+  mockListAdminIssues,
+} = vi.hoisted(() => ({
+  mockRateLimitCheck: vi.fn(),
+  mockRateLimitClear: vi.fn(),
+  mockRateLimitRecordFail: vi.fn(),
+  mockFixedWindowRateLimit: vi.fn(),
+  mockListAdminIssues: vi.fn(),
+}));
 
 vi.mock('../../../src/infrastructure/config.js', () => ({
   BILLING_RESERVATION_STALE_MS: 2_400_000,
@@ -18,6 +25,14 @@ vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
   rateLimitCheck: mockRateLimitCheck,
   rateLimitClear: mockRateLimitClear,
   rateLimitRecordFail: mockRateLimitRecordFail,
+  fixedWindowRateLimit: mockFixedWindowRateLimit,
+}));
+
+vi.mock('../../../src/modules/issues/issue-service.js', () => ({
+  listAdminIssues: mockListAdminIssues,
+  getAdminIssue: vi.fn(),
+  getPublicIssue: vi.fn(),
+  listPublicIssues: vi.fn(),
 }));
 
 vi.mock('../../../src/modules/admin/admin-service.js', () => ({
@@ -122,6 +137,17 @@ describe('adminRoutes authentication throttling', () => {
     mockRateLimitCheck.mockResolvedValue({ allowed: true });
     mockRateLimitRecordFail.mockResolvedValue(undefined);
     mockRateLimitClear.mockResolvedValue(undefined);
+    mockFixedWindowRateLimit.mockResolvedValue({
+      allowed: true,
+      retryAfterSec: 0,
+    });
+    mockListAdminIssues.mockResolvedValue({
+      items: [],
+      hidden_ids: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+    });
     vi.mocked(getAdminGlobalStats).mockResolvedValue(
       {} as Awaited<ReturnType<typeof getAdminGlobalStats>>,
     );
@@ -160,6 +186,25 @@ describe('adminRoutes authentication throttling', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('protects issue attribution with the existing owner key boundary', async () => {
+    expect((await app.inject({ url: '/issues' })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          url: '/issues',
+          headers: { 'x-admin-key': 'test-user-manager-key' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(mockListAdminIssues).not.toHaveBeenCalled();
+    const response = await app.inject({
+      url: '/issues',
+      headers: { 'x-admin-key': 'test-manager-key' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockListAdminIssues).toHaveBeenCalledOnce();
   });
 
   it.each([

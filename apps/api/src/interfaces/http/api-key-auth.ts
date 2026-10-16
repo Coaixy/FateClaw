@@ -142,10 +142,12 @@ export async function apiKeyAuthOnRequest(
     reply.header('Retry-After', callRate.retryAfterSec);
     return sendOpenAiError(
       reply,
-      429,
-      '调用过于频繁，请稍后再试',
-      'rate_limit_exceeded',
-      'rate_limit_exceeded',
+      callRate.unavailable ? 503 : 429,
+      callRate.unavailable
+        ? '限流服务暂时不可用，请稍后重试'
+        : '调用过于频繁，请稍后再试',
+      callRate.unavailable ? 'api_error' : 'rate_limit_exceeded',
+      callRate.unavailable ? 'service_unavailable' : 'rate_limit_exceeded',
     );
   }
 

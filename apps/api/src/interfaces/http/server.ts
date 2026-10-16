@@ -30,6 +30,7 @@ import { clientProfilesRoutes } from './client-profiles-routes.js';
 import { messagesRoutes } from './messages-routes.js';
 import { modelSettingsRoutes } from './model-settings-routes.js';
 import { serviceStatusRoutes } from './service-status-routes.js';
+import { issuesRoutes } from './issues-routes.js';
 import { openApiRoutes } from './open-api-routes.js';
 import { openSessionsAdminRoutes } from './open-sessions-admin-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
@@ -50,8 +51,10 @@ const FONT_ASSET_FILE_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
 
 function requestLogUrl(request: FastifyRequest): string {
-  // Stream tickets are credentials; upgrades now pass through HTTP error logging.
-  return /^\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)/.test(request.url)
+  // Stream credentials and issue search text must stay out of request logs.
+  return /^(?:\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)|\/api\/(?:admin\/)?issues(?:[/?]|$))/.test(
+    request.url,
+  )
     ? request.url.split('?')[0]
     : request.url;
 }
@@ -334,6 +337,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(messagesRoutes, { prefix: '/api/messages' });
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(serviceStatusRoutes, { prefix: '/api/service-status' });
+  await app.register(issuesRoutes, { prefix: '/api/issues' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 

@@ -12,6 +12,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Change or consume internal HTTP APIs | [API reference](api-reference.md) | Routes, authentication, request and response contracts |
 | Change access or charging behavior | [Entitlements and billing](membership-entitlement-current.md) | Membership gates and reservation/settlement behavior |
 | Check public AI availability | [Public service status](service-status.md) | Six-hour shared probes, public results and resource bounds |
+| Manage public feedback | [Issues](issues.md) | Anonymous discussion, private attribution, moderation and abuse limits |
 | Configure model supply and failover | [Official model pool](official-model-pool.md) | Mixed-model nodes, weighted routing, circuit recovery and billing |
 | Change schema or generate a database baseline | [Database migrations](database-migrations.md) | Empty database bootstrap, existing database upgrades, and snapshot validation |
 | Integrate an external client | [Open API](open-api-design.md) | API keys, chart endpoints, and agent sessions |

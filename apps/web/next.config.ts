@@ -71,8 +71,6 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   env: {
-    NEXT_PUBLIC_TELEGRAM_CHANNEL_URL:
-      readRepoRootEnvValue('NEXT_PUBLIC_TELEGRAM_CHANNEL_URL') ?? '',
     // 开发者 API 文档展示用的 API 公网基址：直接复用后端那份 PUBLIC_API_BASE_URL
     // （即对外 /api/v1、/api 实际挂载的公网地址），未配置时回退到通用 PUBLIC_BASE_URL。
     // 取配置而非浏览器 origin，避免在「web 与 API 不同源」时把 web 地址当成 API 地址。

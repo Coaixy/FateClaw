@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Archive,
   Activity,
+  CircleDot,
   Loader2,
   LogIn,
   MessageCircle,
@@ -18,8 +19,6 @@ import {
   Check,
   SquarePen,
   Sun,
-  ExternalLink,
-  Send,
   Users,
 } from 'lucide-react';
 import { useReducer, useState, useEffect, useMemo } from 'react';
@@ -75,10 +74,6 @@ const SIDEBAR_THEME_OPTIONS: readonly {
   { mode: 'light', labelKey: 'sidebar.themes.light', icon: Sun },
   { mode: 'dark', labelKey: 'sidebar.themes.dark', icon: Moon },
 ];
-const TELEGRAM_CHANNEL_URL =
-  process.env.NEXT_PUBLIC_TELEGRAM_CHANNEL_URL?.trim() ?? '';
-
-type ContactQrType = 'wechat' | 'qq' | 'telegram';
 
 function matchSessionDateFilter(
   updatedAt: string,
@@ -233,7 +228,7 @@ function sessionListReducer(
 }
 
 export function Sidebar({ onLogout }: { onLogout: () => void }) {
-  const { formatDate, formatNumber, locale, t } = useI18n();
+  const { formatDate, formatNumber, t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -252,9 +247,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
     sharingSessionId,
     sessionsPanelOpen,
   } = sessionList;
-  const [contactOpen, setContactOpen] = useState(false);
-  const [contactQrType, setContactQrType] =
-    useState<ContactQrType>('wechat');
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const activeThemeOption =
     SIDEBAR_THEME_OPTIONS.find((item) => item.mode === themeMode) ??
@@ -312,23 +304,19 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (!contactOpen && !sessionsPanelOpen) {
+    if (!sessionsPanelOpen) {
       return;
     }
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (contactOpen) {
-          setContactOpen(false);
-          return;
-        }
         dispatchSessionList({ type: 'closePanel' });
       }
     };
 
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [contactOpen, sessionsPanelOpen]);
+  }, [sessionsPanelOpen]);
 
   useEffect(() => {
     // 登录态变化后复位筛选和编辑态，避免用户误以为列表丢失。
@@ -387,37 +375,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       : t('sidebar.noSessionsInFilter', { filter: activeDateFilterLabel });
   const showSessionSkeleton =
     sessions.length === 0 && (authLoading || sessionsLoading);
-  const contactQrOptions: ContactQrType[] =
-    locale === 'zh-CN' ? ['wechat', 'qq'] : ['telegram'];
-  const activeContactQrType = contactQrOptions.includes(contactQrType)
-    ? contactQrType
-    : contactQrOptions[0];
-  const contactQr =
-    activeContactQrType === 'telegram'
-      ? {
-          kind: 'telegram' as const,
-          title: t('sidebar.contact.telegramTitle'),
-          subtitle: t('sidebar.contact.telegramSubtitle'),
-          helper: t('sidebar.contact.telegramHelper'),
-          url: TELEGRAM_CHANNEL_URL,
-        }
-      : activeContactQrType === 'wechat'
-      ? {
-          kind: 'qr' as const,
-          title: t('sidebar.contact.stationmasterTitle'),
-          subtitle: t('sidebar.contact.stationmasterSubtitle'),
-          src: '/contact/honorary-stationmaster-wechat.jpg',
-          alt: t('sidebar.contact.stationmasterAlt'),
-          helper: t('sidebar.contact.stationmasterHelper'),
-        }
-      : {
-          kind: 'qr' as const,
-          title: t('sidebar.contact.groupTitle'),
-          subtitle: t('sidebar.contact.groupSubtitle'),
-          src: '/contact/shouyi-ai-qq-group.jpg',
-          alt: t('sidebar.contact.groupAlt'),
-          helper: t('sidebar.contact.groupHelper'),
-        };
 
   const openChatSession = (sessionId: string) => {
     // 弹层里选会话后要同步收起，避免跳转到 AI Chat 后仍遮住主内容。
@@ -830,26 +787,11 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               aria-label={t('sidebar.viewStatus')} title={t('sidebar.viewStatus')}>
               <Activity size={14} strokeWidth={1.8} /><span>{t('sidebar.status')}</span>
             </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setContactQrType(locale === 'zh-CN' ? 'wechat' : 'telegram');
-                setContactOpen(true);
-              }}
-              className="group flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
-              aria-label={t('sidebar.contactStationmaster')}
-              title={t('sidebar.contactStationmaster')}
-            >
-              <MessageCircle
-                size={14}
-                strokeWidth={1.8}
-                className="group-hover:text-primary"
-              />
-              <span className="max-w-full truncate leading-tight">
-                {t('sidebar.contactShort')}
-              </span>
-            </button>
-
+            <Link href="/issues" onClick={closeSidebar}
+              className="flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink"
+              aria-label={t('sidebar.issues')} title={t('sidebar.issues')}>
+              <CircleDot size={14} strokeWidth={1.8}/><span>{t('sidebar.issues')}</span>
+            </Link>
             <button
               type="button"
               onClick={cycleThemeMode}
@@ -867,109 +809,6 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </aside>
-
-      {contactOpen && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-sm animate-fade-in"
-          onClick={() => setContactOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="contact-stationmaster-title"
-            className="w-full max-w-[320px] rounded-2xl border border-hairline bg-surface-raised p-4 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  id="contact-stationmaster-title"
-                  className="truncate text-[15px] font-semibold text-ink"
-                >
-                  {contactQr.title}
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted">
-                  {contactQr.subtitle}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setContactOpen(false)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
-                aria-label={t('sidebar.contact.close')}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {contactQrOptions.length > 1 && (
-              <div
-                className="mt-4 grid grid-cols-2 gap-1 rounded-xl border border-hairline/60 bg-surface-card/60 p-1"
-                role="group"
-                aria-label={t('sidebar.contact.choose')}
-              >
-                {contactQrOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setContactQrType(option)}
-                    className={`h-8 rounded-lg text-[12px] font-medium transition-all duration-200 ${
-                      activeContactQrType === option
-                        ? 'bg-primary/12 text-primary shadow-sm'
-                        : 'text-muted hover:bg-canvas hover:text-ink'
-                    }`}
-                    aria-pressed={activeContactQrType === option}
-                  >
-                    {option === 'wechat'
-                      ? t('sidebar.contact.stationmasterTab')
-                      : option === 'qq'
-                        ? t('sidebar.contact.qqGroupTab')
-                        : t('sidebar.contact.telegramTab')}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {contactQr.kind === 'telegram' ? (
-              <div className="mt-4 rounded-xl border border-hairline bg-surface-card p-4 text-center">
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-                  <Send size={19} strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <p className="mt-3 text-[13px] font-semibold text-ink">
-                  {t('sidebar.contact.telegramChannelLabel')}
-                </p>
-                {contactQr.url ? (
-                  <a
-                    href={contactQr.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-on-primary transition-colors hover:bg-primary-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                  >
-                    {t('sidebar.contact.telegramOpen')}
-                    <ExternalLink size={13} aria-hidden="true" />
-                  </a>
-                ) : (
-                  <p className="mt-3 rounded-lg border border-hairline bg-canvas px-3 py-2 text-[11px] leading-5 text-muted">
-                    {t('sidebar.contact.telegramMissing')}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-xl border border-hairline bg-white p-3">
-                <img
-                  src={contactQr.src}
-                  alt={contactQr.alt}
-                  className="max-h-[58dvh] w-full rounded-lg object-contain"
-                />
-              </div>
-            )}
-
-            <p className="mt-3 text-center text-[12px] text-muted">
-              {contactQr.helper}
-            </p>
-          </div>
-        </div>
-      )}
     </>
   );
 }

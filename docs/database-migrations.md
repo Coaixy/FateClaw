@@ -30,6 +30,8 @@ Databases with recorded migration history always use [versions/](../apps/api/src
 
 Both paths share the existing PostgreSQL advisory lock and 120-second transaction statement and idle budgets. Baseline SQL excludes dump-level session settings so it cannot disable those budgets. The normal API connection and query limits are documented in [Database reliability](database-reliability.md).
 
+The `0086_issues` migration adds public issues, per-issue anonymous participants, timeline entries and account moderation. Private attribution remains linked to existing users; account deletion cascades the account's content. See [Issues](issues.md) for permissions and transaction boundaries.
+
 ## Adding an upgrade
 
 1. Add a file under `versions/` exporting one named `DatabaseMigration` object.

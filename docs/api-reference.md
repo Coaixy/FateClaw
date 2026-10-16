@@ -14,6 +14,7 @@
 - `/api/paipan`
 - `/api/referrals`
 - `/api/skills`
+- `/api/issues`
 - `/api/billing`
 - `/api/api-keys`
 - `/api/v1`
@@ -487,6 +488,10 @@ and provider errors are not returned. Responses permit public caching for 60 sec
 The full API startup performs a shared lightweight check every six hours, stopping
 at the first available node. Results older than twelve hours become unknown. See
 [Public service status](service-status.md) for probe budgets and metric boundaries.
+
+## Issues
+
+Public feedback uses `/api/issues`; authenticated users create and edit their own content. Owner administrators manage `/api/admin/issues`. See [Issues](issues.md) for endpoints, anonymous identity boundaries, moderation and rate limits.
 
 ## Model Settings
 

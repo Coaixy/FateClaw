@@ -24,6 +24,7 @@ admin 站点以域名根路径作为登录页：
 - `/users`: 用户
 - `/messages`: 消息
 - `/skills`: 技能
+- `/issues`: issue management and private account attribution
 - `/workflows`: Workflow
 - `/logs`: 日志
 - `/system/models`: 模型配置
