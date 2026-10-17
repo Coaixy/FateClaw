@@ -1,17 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
-  Brain,
   CheckCircle2,
-  ChevronDown,
+  ChevronRight,
   Crown,
   Globe,
   Loader2,
   Search,
-  Sparkles,
 } from 'lucide-react';
 
 import { BaguaRing } from '@/components/brand/brand-marks';
@@ -206,12 +204,7 @@ type DisplayRow = {
   trajectoryOnly?: boolean;
 };
 
-/**
- * 把扁平消息列表按 assistant 回合归并：思考 / 工具调用 / 知识检索这些「过程块」
- * 收束到紧随其后的真实回答上方，渲染为左侧穿插时间线（Claude web 风格）。
- *
- * @returns rows 为可渲染行；pendingTrajectory 为尾部尚未等到回答的过程块（流式态用）。
- */
+/** Keep process messages with the next reply so streaming updates share one disclosure. */
 function buildDisplayRows(messages: Message[]) {
   const rows: DisplayRow[] = [];
   let pending: Message[] = [];
@@ -362,7 +355,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
   const showWalletRecovery =
     isErrorMessage && shouldShowWalletRecovery(displayContent);
-  // 过程时间线展示在回答上方（Claude web 风格）；回答为最终态时把仍在「运行中」的工具收尾。
+  // Final replies settle any tool status still marked as running.
   const trajectoryNode =
     isBot && trajectory.length > 0 ? (
       <TrajectoryTimeline blocks={trajectory} completed={isFinalMessage} />
@@ -574,7 +567,7 @@ function TrajectoryTimeline({
   );
 }
 
-/** 时间线左侧的图标圆点，覆盖在竖线上。 */
+/** The canvas masks the timeline behind each step icon. */
 function TimelineBullet({
   children,
   tone = 'muted',
@@ -591,20 +584,13 @@ function TimelineBullet({
   return (
     <span
       aria-hidden="true"
-      className={`absolute -left-[23px] top-0 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-hairline bg-surface-card ${toneClass}`}
+      className={`absolute -left-[24px] top-1 flex h-4 w-4 items-center justify-center bg-canvas ${toneClass}`}
     >
       {children}
     </span>
   );
 }
 
-/**
- * 将一轮回复中的思考、工具调用和知识检索合并进同一个折叠框。
- *
- * @param props.nodes 按消息顺序排列的全部过程节点。
- * @param props.completed 回答是否已结束；结束后把残留的运行中状态按完成展示。
- * @returns 默认收起、可整体展开的思考与执行过程框。
- */
 function TrajectoryProcessGroup({
   nodes,
   completed,
@@ -614,6 +600,7 @@ function TrajectoryProcessGroup({
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
   const groups = groupTrajectoryNodes(nodes);
   const toolNodes = nodes.filter(
     (node): node is Extract<TrajectoryNode, { type: 'tool' }> =>
@@ -622,79 +609,67 @@ function TrajectoryProcessGroup({
   const hasFailed = toolNodes.some((node) => node.status === 'failed');
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-hairline/70 bg-surface-soft">
+    <div className="min-w-0 w-full">
       <button
         type="button"
         aria-expanded={expanded}
+        aria-controls={detailsId}
         onClick={() => setExpanded((value) => !value)}
-        className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-card hover:shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+        className="inline-flex min-h-8 max-w-full cursor-pointer items-center gap-1.5 rounded-sm py-1 text-left text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
       >
-        <span className="flex min-w-0 items-center gap-2">
-          {!completed ? (
-            <Sparkles
-              size={14}
-              strokeWidth={1.8}
-              className="shrink-0 animate-pulse text-primary"
-              aria-hidden="true"
-            />
-          ) : hasFailed ? (
-            <AlertCircle
-              size={14}
-              strokeWidth={1.8}
-              className="shrink-0 text-error"
-              aria-hidden="true"
-            />
-          ) : (
-            <CheckCircle2
-              size={14}
-              strokeWidth={1.8}
-              className="shrink-0 text-primary"
-              aria-hidden="true"
-            />
-          )}
-          <span className="truncate text-[12px] font-medium text-muted transition-colors group-hover:text-ink">
-            {t('aiChat.messageList.processTrace')}
-          </span>
-          <span className="shrink-0 text-[11px] text-muted-soft/70">
-            ·{' '}
-            {t('aiChat.messageList.processStepCount', {
-              count: nodes.length,
-            })}
-          </span>
+        {hasFailed && (
+          <AlertCircle
+            size={13}
+            strokeWidth={1.8}
+            className="shrink-0 text-error"
+            aria-label={t('aiChat.messageList.toolStatusFailed')}
+          />
+        )}
+        <span className="truncate text-[12px] font-medium">
+          {t('aiChat.messageList.processTrace')}
         </span>
-        <ChevronDown
-          size={14}
+        <span className="shrink-0 text-[11px] text-muted-soft">
+          ·{' '}
+          {t('aiChat.messageList.processStepCount', {
+            count: nodes.length,
+          })}
+        </span>
+        <ChevronRight
+          size={13}
           strokeWidth={1.8}
-          className={`shrink-0 text-muted-soft transition-transform duration-200 group-hover:text-ink ${
-            expanded ? 'rotate-180' : ''
+          aria-hidden="true"
+          className={`shrink-0 text-muted-soft transition-transform duration-200 motion-reduce:transition-none ${
+            expanded ? 'rotate-90' : ''
           }`}
         />
       </button>
 
-      {expanded && (
-        <div className="flex flex-col gap-3 px-3 pb-3 pt-1">
-          {groups.map((group, index) => (
-            <div
-              key={group.thinking?.id ?? group.children[0]?.id ?? index}
-              className="flex flex-col gap-3"
-            >
-              {group.thinking && (
-                <div className="whitespace-pre-wrap break-words rounded-md bg-canvas/80 p-3 font-mono text-[12px] leading-relaxed text-muted">
-                  {group.thinking.content.trim() ||
-                    t('aiChat.messageList.thinkingFallback')}
-                </div>
-              )}
-              {group.children.length > 0 && (
-                <div className="relative flex flex-col gap-2.5 border-l border-hairline/60 pl-4">
-                  {group.children.map((child) =>
-                    renderTrajectoryChild(child, completed),
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div id={detailsId} hidden={!expanded}>
+        {expanded && (
+          <div className="mb-1 ml-1.5 mt-1 flex flex-col gap-3 border-l border-hairline/70 pl-4">
+            {groups.map((group, index) => (
+              <div
+                key={group.thinking?.id ?? group.children[0]?.id ?? index}
+                className="flex min-w-0 flex-col gap-2"
+              >
+                {group.thinking && (
+                  <p className="whitespace-pre-wrap break-words text-[12px] leading-6 text-muted">
+                    {group.thinking.content.trim() ||
+                      t('aiChat.messageList.thinkingFallback')}
+                  </p>
+                )}
+                {group.children.length > 0 && (
+                  <div className="flex min-w-0 flex-col gap-2.5">
+                    {group.children.map((child) =>
+                      renderTrajectoryChild(child, completed),
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -769,6 +744,8 @@ function ToolNode({
           <Loader2 size={11} className="animate-spin" />
         ) : status === 'failed' ? (
           <AlertCircle size={11} strokeWidth={1.8} />
+        ) : status === 'completed' ? (
+          <CheckCircle2 size={11} strokeWidth={1.8} />
         ) : (
           <Globe size={11} strokeWidth={1.8} />
         )}
@@ -841,20 +818,20 @@ function StreamingTrajectory({
 
   return (
     <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
-      <div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2 sm:max-w-[78%]">
+      <div className="flex min-w-0 max-w-[88%] flex-col items-start gap-1 sm:max-w-[78%]">
         {pendingTrajectory.length > 0 && (
           <TrajectoryTimeline blocks={pendingTrajectory} />
         )}
-        <div className="flex items-center gap-2 text-[12px] leading-6 text-muted">
-          <div className="flex items-center gap-1" aria-hidden="true">
-            {[0, 1, 2].map((index) => (
-              <div
-                key={index}
-                className="w-1 h-1 rounded-full bg-primary animate-thinking-dot"
-                style={{ animationDelay: `${index * 0.2}s` }}
-              />
-            ))}
-          </div>
+        <div
+          role="status"
+          className="flex min-h-6 items-center gap-2 text-[12px] leading-6 text-muted"
+        >
+          <Loader2
+            size={12}
+            strokeWidth={1.8}
+            className="shrink-0 animate-spin text-primary motion-reduce:animate-none"
+            aria-hidden="true"
+          />
           <span>{statusLabel}</span>
         </div>
       </div>
