@@ -821,6 +821,8 @@ export const enMessages = {
       description: 'Check the official model and enable a Skill to get started',
     },
     messageList: {
+      copyAnswer: 'Copy answer',
+      answerCopied: 'Answer copied',
       recharge: 'Add credits',
       membershipCenter: 'Membership',
       billingNoticeArrearsTitle: 'Your balance is overdue',

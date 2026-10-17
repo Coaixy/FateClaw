@@ -790,6 +790,8 @@ export const zhTWMessages = {
       description: '檢查官方模型，並啟用一個 Skill 後即可開始',
     },
     messageList: {
+      copyAnswer: '複製回答',
+      answerCopied: '回答已複製',
       recharge: '補充積分',
       membershipCenter: '會員中心',
       billingNoticeArrearsTitle: '目前積分已欠費',

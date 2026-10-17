@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useEffect, useId, useRef, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Copy,
   Crown,
   Globe,
   Loader2,
@@ -19,7 +20,10 @@ import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { CollapsibleMessage } from '@/components/chat/collapsible-message';
 import { MessageFooter } from '@/components/chat/message-footer';
 import { Message } from '@/features/chat/api';
-import type { ToolResultPreviewDto } from '@fateclaw/contracts/chat';
+import type {
+  ToolResultItemDto,
+  ToolResultPreviewDto,
+} from '@fateclaw/contracts/chat';
 import { useI18n } from '@/lib/i18n';
 import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
 import {
@@ -36,7 +40,7 @@ import {
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
 
-export function AiChatMessageList({
+export const AiChatMessageList = memo(function AiChatMessageList({
   messages,
   loading,
   sending,
@@ -76,6 +80,21 @@ export function AiChatMessageList({
 }) {
   const { t } = useI18n();
   const latestMessageNoticeRef = useRef<HTMLDivElement | null>(null);
+  const {
+    rows,
+    pendingTrajectory,
+    hasStreamingAssistantMessage,
+    hasThinkingMessage,
+    hasCompletedAssistantTurn,
+  } = useMemo(
+    () => ({
+      ...buildDisplayRows(messages),
+      hasStreamingAssistantMessage: messages.some(isStreamingAssistantMessage),
+      hasThinkingMessage: messages.some(isThinkingMessage),
+      hasCompletedAssistantTurn: hasFinalAssistantAfterLatestUser(messages),
+    }),
+    [messages],
+  );
 
   useEffect(() => {
     if (!latestMessageNotice) return;
@@ -141,12 +160,6 @@ export function AiChatMessageList({
     return <ChatLoadingState count={4} />;
   }
 
-  const { rows, pendingTrajectory } = buildDisplayRows(messages);
-  const hasStreamingAssistantMessage = messages.some(
-    isStreamingAssistantMessage,
-  );
-  const hasThinkingMessage = messages.some(isThinkingMessage);
-  const hasCompletedAssistantTurn = hasFinalAssistantAfterLatestUser(messages);
   // 回答正文还没开始流式输出时，把"挂起的过程时间线 + 思考中"作为流式态展示；
   // 一旦回答开始流式（streaming 消息成为 host），过程块会上移挂到回答上方，此处不再显示。
   const showStreamingTrajectory =
@@ -177,7 +190,7 @@ export function AiChatMessageList({
             key={row.message.id}
             message={row.message}
             trajectory={row.trajectory}
-            animationIndex={index}
+            animationIndex={Math.min(index, 4)}
           />
         ),
       )}
@@ -196,7 +209,7 @@ export function AiChatMessageList({
       {sending && replySlow && onRetry && <ReplySlowNotice onRetry={onRetry} />}
     </div>
   );
-}
+});
 
 type DisplayRow = {
   message: Message;
@@ -222,7 +235,7 @@ function buildDisplayRows(messages: Message[]) {
 
   for (const message of messages) {
     if (message.is_bot_message && isTrajectoryBlockMessage(message)) {
-      pending = [...pending, message];
+      pending.push(message);
       continue;
     }
 
@@ -325,6 +338,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
 }: AiChatMessageRowProps) {
   const { locale, t } = useI18n();
   const isBot = !!message.is_bot_message;
+  const isStreaming = isStreamingAssistantMessage(message);
   const messageMetadata =
     !!message.metadata &&
     typeof message.metadata === 'object' &&
@@ -403,7 +417,11 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
                 : 'bg-surface-dark text-on-dark shadow-sm'
             }`}
           >
-            <CollapsibleMessage content={displayContent} isBot={isBot} />
+            <CollapsibleMessage
+              content={displayContent}
+              isBot={isBot}
+              isStreaming={isStreaming}
+            />
           </div>
           {showWalletRecovery ? (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -430,10 +448,63 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
           durationLabel={durationLabel}
           costLabels={costLabels}
         />
+        {isBot && !isErrorMessage && !isStreaming && displayContent.trim() && (
+          <CopyAnswerButton content={displayContent} />
+        )}
       </div>
     </div>
   );
 }, areMessageRowsEqual);
+
+function CopyAnswerButton({ content }: { content: string }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<'idle' | 'copying' | 'copied' | 'failed'>(
+    'idle',
+  );
+
+  useEffect(() => setState('idle'), [content]);
+
+  const copyAnswer = async () => {
+    setState('copying');
+    try {
+      await navigator.clipboard.writeText(content);
+      setState('copied');
+    } catch {
+      setState('failed');
+    }
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={copyAnswer}
+        disabled={state === 'copying'}
+        aria-label={t('aiChat.messageList.copyAnswer')}
+        className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1.5 text-[11px] text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+      >
+        {state === 'copied' ? (
+          <CheckCircle2 size={12} aria-hidden="true" />
+        ) : (
+          <Copy size={12} aria-hidden="true" />
+        )}
+        {t(
+          state === 'copied'
+            ? 'aiChat.messageList.answerCopied'
+            : 'aiChat.messageList.copyAnswer',
+        )}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {state === 'copied' ? t('aiChat.messageList.answerCopied') : ''}
+      </span>
+      {state === 'failed' && (
+        <p role="alert" className="text-[11px] text-error">
+          {t('artifact.copyFailed')}
+        </p>
+      )}
+    </div>
+  );
+}
 
 type ToolTraceStatus = 'running' | 'completed' | 'failed' | undefined;
 
@@ -552,20 +623,26 @@ function renderTrajectoryChild(node: TrajectoryChildNode, completed: boolean) {
   return <ToolNode key={node.id} node={node} completed={completed} />;
 }
 
-function TrajectoryTimeline({
-  blocks,
-  completed = false,
-}: {
-  blocks: Message[];
-  completed?: boolean;
-}) {
-  return (
-    <TrajectoryProcessGroup
-      nodes={blocks.map(readTrajectoryNode)}
-      completed={completed}
-    />
-  );
-}
+const TrajectoryTimeline = memo(
+  function TrajectoryTimeline({
+    blocks,
+    completed = false,
+  }: {
+    blocks: Message[];
+    completed?: boolean;
+  }) {
+    return (
+      <TrajectoryProcessGroup
+        nodes={blocks.map(readTrajectoryNode)}
+        completed={completed}
+      />
+    );
+  },
+  (previous, next) =>
+    previous.completed === next.completed &&
+    previous.blocks.length === next.blocks.length &&
+    previous.blocks.every((block, index) => block === next.blocks[index]),
+);
 
 /** The canvas masks the timeline behind each step icon. */
 function TimelineBullet({
@@ -769,31 +846,7 @@ function ToolNode({
       )}
 
       {items.length > 0 ? (
-        <div className="mt-1.5 max-h-44 overflow-y-auto rounded-lg border border-hairline bg-surface-card/60">
-          {items.map((item, index) => (
-            <div
-              key={`${node.id}-${index}`}
-              className="flex items-center justify-between gap-3 border-b border-hairline/60 px-2.5 py-1.5 last:border-b-0"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <Globe
-                  size={12}
-                  strokeWidth={1.8}
-                  className="shrink-0 text-muted-soft"
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 truncate text-[12px] text-ink">
-                  {item.title}
-                </span>
-              </span>
-              {item.domain && (
-                <span className="shrink-0 truncate text-[11px] text-muted-soft">
-                  {item.domain}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+        <ToolResultSources items={items} />
       ) : result?.text && !looksLikeRawJson(result.text) ? (
         <div className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[11px] leading-5 text-muted">
           {result.text}
@@ -802,6 +855,66 @@ function ToolNode({
     </div>
   );
 }
+
+export const ToolResultSources = memo(function ToolResultSources({
+  items,
+}: {
+  items: ToolResultItemDto[];
+}) {
+  return (
+    <div className="mt-1.5 max-h-44 overflow-y-auto rounded-lg border border-hairline bg-surface-card/60">
+      {items.map((item, index) => {
+        let url: URL | null = null;
+        try {
+          const parsed = new URL(item.url ?? '');
+          if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+            url = parsed;
+          }
+        } catch {
+          // A source without an absolute web URL remains readable as plain text.
+        }
+        const content = (
+          <>
+            <span className="flex min-w-0 items-center gap-2">
+              <Globe
+                size={12}
+                strokeWidth={1.8}
+                className="shrink-0 text-muted-soft"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate text-[12px] text-ink">
+                {item.title}
+              </span>
+            </span>
+            {(url?.hostname || item.domain) && (
+              <span className="shrink-0 truncate text-[11px] text-muted-soft">
+                {url?.hostname || item.domain}
+              </span>
+            )}
+          </>
+        );
+        const rowClassName =
+          'flex items-center justify-between gap-3 border-b border-hairline/60 px-2.5 py-1.5 last:border-b-0';
+
+        return url ? (
+          <a
+            key={index}
+            href={url.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${rowClassName} hover:bg-surface-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30`}
+          >
+            {content}
+          </a>
+        ) : (
+          <div key={index} className={rowClassName}>
+            {content}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
 
 /** 流式态：回答还没开始输出时，展示已累积的过程时间线 + "正在回复"提示。 */
 function StreamingTrajectory({

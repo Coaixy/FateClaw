@@ -790,6 +790,8 @@ export const zhCNMessages = {
       description: '检查官方模型，并启用一个 Skill 后即可开始',
     },
     messageList: {
+      copyAnswer: '复制回答',
+      answerCopied: '回答已复制',
       recharge: '补充积分',
       membershipCenter: '会员中心',
       billingNoticeArrearsTitle: '当前积分已欠费',

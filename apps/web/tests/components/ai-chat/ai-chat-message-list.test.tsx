@@ -1,11 +1,43 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
+import { AiChatMessageList, ToolResultSources } from '@/components/ai-chat/ai-chat-message-list';
 import type { Message } from '@/features/chat/api';
 import { I18nProvider } from '@/lib/i18n';
 
 describe('AiChatMessageList trajectory collapse', () => {
+  it('offers an accessible copy action only after the answer settles', () => {
+    const finalHtml = renderMessages([
+      createMessage({ id: 'final', content: '可复用的回答', metadata: { kind: 'final' } }),
+    ]);
+    const streamingHtml = renderMessages([
+      createMessage({ id: 'streaming', content: '尚未完成的回答', metadata: { kind: 'streaming' } }),
+    ], true);
+
+    expect(finalHtml).toContain('aria-label="复制回答"');
+    expect(streamingHtml).not.toContain('aria-label="复制回答"');
+  });
+
+  it('links only absolute web sources and shows the actual destination domain', () => {
+    const html = renderToStaticMarkup(
+      <ToolResultSources items={[
+        { title: 'Article', url: 'https://example.test/article', domain: 'unrelated.test' },
+        { title: 'Local document', url: 'file:///private/document' },
+        { title: 'Script', url: 'javascript:alert(1)' },
+        { title: 'Relative', url: '/internal/document' },
+      ]} />,
+    );
+
+    expect(html).toContain('href="https://example.test/article"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('example.test');
+    expect(html).not.toContain('unrelated.test');
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).toContain('Local document');
+    expect(html).toContain('Script');
+    expect(html).toContain('Relative');
+  });
+
   it('renders final replies with multiple headings without delivery cards', () => {
     const html = renderMessages([
       createMessage({
