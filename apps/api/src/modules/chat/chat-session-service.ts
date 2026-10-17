@@ -889,7 +889,8 @@ async function prepareOwnedChatSessionTurn(
     );
 
     if (err instanceof ModelSelectionError) return fail(409, errorMessage);
-    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
+    if (err instanceof BenefitAdmissionError)
+      return fail(err.statusCode, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }
@@ -948,7 +949,8 @@ async function enqueuePreparedOwnedChatSessionTurn(
     );
 
     if (err instanceof ModelSelectionError) return fail(409, errorMessage);
-    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
+    if (err instanceof BenefitAdmissionError)
+      return fail(err.statusCode, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }
@@ -1052,7 +1054,8 @@ async function completeOwnedChatSessionTurn(
     );
 
     if (err instanceof ModelSelectionError) return fail(409, errorMessage);
-    if (err instanceof BenefitAdmissionError) return fail(429, errorMessage);
+    if (err instanceof BenefitAdmissionError)
+      return fail(err.statusCode, errorMessage);
     if (isPaymentRequiredError(errorMessage)) {
       return fail(402, errorMessage);
     }

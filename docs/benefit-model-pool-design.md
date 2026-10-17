@@ -256,7 +256,7 @@ They are configuration defaults, not promises of provider capacity.
 | Limit | Initial value |
 | --- | --- |
 | Feature state on migration | Disabled, with no prepopulated suppliers |
-| Personal turns | 3 per day, all memberships, no carryover, Asia/Shanghai midnight |
+| Personal turns | Configurable; source default 3 per active member per day, no carryover, Asia/Shanghai midnight |
 | Personal daily input/output budget | 196,608 input and 12,288 generated tokens, including attributable failed/cancelled work |
 | Active free requests per user | 1, including queueing |
 | Pool concurrency | 2, also subject to the existing global concurrency ceiling |

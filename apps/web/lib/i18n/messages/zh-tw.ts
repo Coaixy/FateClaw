@@ -4,7 +4,7 @@ export const zhTWMessages = {
     paid_unavailable: '付費模型服務暫時無法使用',
     paid_unknown: '付費模型服務狀態待確認',
     lastObserved: '最近確認',
-    paidUnavailable: '付費模型尚未設定；可使用已開放的免費服務。',
+    paidUnavailable: '付費模型尚未設定；有效會員可使用已開放的免費服務。',
     benefitStatusNote:
       '免費供應獨立於付費服務。共享額度用完與服務故障分別顯示；個人次數請登入後查看。',
     benefitHistoryNote:
@@ -15,7 +15,9 @@ export const zhTWMessages = {
     paid: '付費模型',
     freeReply: '免費額度 · 未扣點數',
     refunded: '免費次數已返還 · 未扣點數',
-    benefitDescription: '免費使用，不扣點數，僅限制每日次數與並行請求數。',
+    benefitDescription: '有效會員專享，享有每日免費額度，不扣點數，受每日次數與並行請求數限制。',
+    membershipRequired: '免費模型僅限有效會員使用',
+    unlock: '開通或續費會員',
     paidDescription: '按實際 Token 用量和目前帳戶單價計費。',
     noAutoCharge: '免費額度用完會停止，不會自動切換付費或扣點數。',
     remaining: '今日剩餘 {count} 次',
@@ -32,7 +34,7 @@ export const zhTWMessages = {
     loading: '正在更新模型狀態',
     loadFailed: '暫時無法讀取模型狀態',
     saveFailed: '切換模型失敗，請重試',
-    blocked: '目前模型暫不可用，請檢查額度或主動切換模型',
+    blocked: '目前模型暫不可用，請檢查會員資格、額度或主動切換模型',
   },
   serviceStatus: {
     title: '服務狀態',
@@ -425,7 +427,9 @@ export const zhTWMessages = {
       perMonth: '/ 月',
       compareColumnFeature: '權益',
       compareColumnNonMember: '非會員',
-      compareRowModelPrice: '平台模型計費',
+      compareRowModelPrice: '付費模型計費',
+      compareRowBenefitModel: '免費模型',
+      compareMemberBenefitModel: '每日免費額度',
       compareRowQueue: '高峰期排隊',
       compareRowOpenApi: '開放 API 金鑰',
       compareNonMemberModelPrice: '按 1.5 倍計費',
@@ -435,7 +439,7 @@ export const zhTWMessages = {
       compareMemberQueue: '優先接入',
       compareMemberAvailable: '可用',
       compareFootnote:
-        '排盤、AI 解讀、知識庫等功能對所有用戶開放；會員差異在於計費價格與高峰期優先級。',
+        '免費模型為有效會員專享，享有每日免費額度；付費模型另按 Token 用量計費。',
       expiresAt: '到期時間',
       monthlyUsage: '本月用量',
       membershipPrice: '會員價格',

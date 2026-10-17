@@ -7,8 +7,8 @@ vi.mock('../../../src/modules/billing/entitlements.js', () => ({
 vi.mock(
   '../../../src/infrastructure/repositories/benefit-repository.js',
   () => ({
-    getBenefitAllowance: vi.fn(async () => ({
-      remaining_turns: 3,
+    getBenefitAllowance: vi.fn(async (userId?: string) => ({
+      remaining_turns: userId ? 3 : null,
       resets_at: '2026-10-17T00:00:00+08:00',
     })),
     getBenefitSupply: vi.fn(async () => 'disabled'),
@@ -127,6 +127,30 @@ beforeEach(() => {
 });
 
 describe('official model pool', () => {
+  it.each([true, false])(
+    'reports free-model eligibility for membershipActive=%s without changing configured limits',
+    async (membershipActive) => {
+      entitlement.mockResolvedValue({ membershipActive });
+      db.getPlatformModelSettings.mockImplementation(async (poolKey) =>
+        poolKey === 'benefit'
+          ? {
+              ...benefitSettings,
+              pool: {
+                ...benefitSettings.pool,
+                benefit_policy: { daily_turns: 7, concurrency_limit: 4 },
+              },
+            }
+          : settings,
+      );
+      expect(
+        (await getUserModelSettingsOverview('user')).benefit,
+      ).toMatchObject({
+        eligible: membershipActive,
+        daily_turns: 7,
+        remaining_turns: membershipActive ? 3 : null,
+      });
+    },
+  );
   it('shows the current non-member prices without mutating canonical pool prices', async () => {
     entitlement.mockResolvedValue({ membershipActive: false });
     const overview = await getUserModelSettingsOverview('user');

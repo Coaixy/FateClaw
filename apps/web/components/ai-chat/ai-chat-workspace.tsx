@@ -936,6 +936,7 @@ function AiChatWorkspaceContent() {
         open={onboardingGuide.open}
         step={onboardingGuide.step}
         modelReady={onboardingGuide.modelReady}
+        modelMembershipRequired={onboardingGuide.modelMembershipRequired}
         skillReady={onboardingGuide.skillReady}
         modelLoading={onboardingGuide.modelLoading}
         skillLoading={onboardingGuide.skillLoading}

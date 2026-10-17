@@ -87,6 +87,9 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     await state.pool!.query(
       "UPDATE chat_sessions SET model_pool_key='benefit'",
     );
+    await state.pool!.query(`DELETE FROM user_memberships;
+      INSERT INTO user_memberships(user_id,plan_key,status,current_period_start,current_period_end)
+      SELECT id,'membership','active',now()-interval '1 day',now()+interval '1 day' FROM users`);
     await savePlatformModelConfig({
       poolKey: 'benefit',
       displayName: 'Benefits',
@@ -206,6 +209,47 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     expect((await getPlatformModelSettings()).nodes).toHaveLength(1);
     expect(JSON.stringify(before)).not.toContain('synthetic-provider-value');
     expect(before.pool.input_token_price_per_million_coins).toBe(0);
+  });
+  it.each(['missing', 'expired', 'cancelled'])(
+    'rejects a free request with %s membership without reserving a turn or admitting a request',
+    async (membership) => {
+      if (membership === 'missing') {
+        await state.pool!.query(
+          "DELETE FROM user_memberships WHERE user_id='a'",
+        );
+      } else {
+        await state.pool!.query(
+          membership === 'expired'
+            ? "UPDATE user_memberships SET current_period_end=now()-interval '1 second' WHERE user_id='a'"
+            : "UPDATE user_memberships SET status='cancelled' WHERE user_id='a'",
+        );
+      }
+      await expect(admit()).rejects.toMatchObject({ statusCode: 403 });
+      expect(
+        (await state.pool!.query('SELECT 1 FROM agent_requests')).rowCount,
+      ).toBe(0);
+      expect(
+        (await state.pool!.query('SELECT 1 FROM benefit_requests')).rowCount,
+      ).toBe(0);
+      expect(
+        (await state.pool!.query('SELECT 1 FROM benefit_daily_usage')).rowCount,
+      ).toBe(0);
+    },
+  );
+  it('finishes an admitted free request after membership expires while rejecting new requests', async () => {
+    const id = await admit();
+    await state.pool!.query(
+      "UPDATE user_memberships SET current_period_end=now()-interval '1 second' WHERE user_id='a'",
+    );
+    expect(await tryAcquireBenefitExecutionSlot(id)).toBe(true);
+    await withAgentResultDelivery(id, 'web:a', async (db) => {
+      expect(await settleBenefitTurn(db, id, true)).toBe('consumed');
+      return null;
+    });
+    expect(
+      (await getBenefitAllowance('a', policy.daily_turns)).remaining_turns,
+    ).toBe(policy.daily_turns - 1);
+    await expect(admit()).rejects.toMatchObject({ statusCode: 403 });
   });
   it('admits only one concurrent claimant for the last personal turn, atomically with its durable request', async () => {
     const outcomes = await Promise.allSettled([admit('a', 1), admit('a', 1)]);

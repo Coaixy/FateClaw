@@ -394,7 +394,7 @@ export async function updateMembershipConfig(input: {
   return row ? normalizeMembershipConfigRow(row) : undefined;
 }
 
-async function getActiveMembershipForUserUsing(
+export async function getActiveMembershipForUserUsing(
   client: { query(sql: string, params?: unknown[]): Promise<pg.QueryResult> },
   userId: string,
   opts?: { forUpdate?: boolean },

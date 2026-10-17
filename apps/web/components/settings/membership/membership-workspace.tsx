@@ -65,6 +65,7 @@ function resolvePlanDisplayName(plan: Pick<MembershipPlan, 'name'>) {
 function resolvePlanBenefitLabels(t: TranslationFn) {
   return [
     t('pages.membership.compareRowModelPrice'),
+    t('pages.membership.compareRowBenefitModel'),
     t('pages.membership.compareRowQueue'),
     t('pages.membership.compareRowOpenApi'),
   ];
@@ -103,11 +104,13 @@ function MembershipCompareTable({
   // 让三列在窄容器内也能放下而不出现横向滚动（细节差异由脚注补充说明）。
   const nonMemberValues = [
     t('pages.membership.compareNonMemberModelPrice'),
+    t('pages.membership.compareNonMemberUnavailable'),
     t('pages.membership.compareNonMemberQueue'),
     t('pages.membership.compareNonMemberUnavailable'),
   ];
   const memberValues = [
     t('pages.membership.compareMemberModelPrice'),
+    t('pages.membership.compareMemberBenefitModel'),
     t('pages.membership.compareMemberQueue'),
     t('pages.membership.compareMemberAvailable'),
   ];
@@ -169,7 +172,6 @@ function MembershipCompareTable({
           ))}
         </tbody>
       </table>
-      {/* 表格下方补一行说明：功能本身人人可用，会员差异在价格与优先级——避免误读为"功能被锁"。 */}
       <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted/80">
         <Info
           size={12}

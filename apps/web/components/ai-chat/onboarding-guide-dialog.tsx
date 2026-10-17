@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   AlertCircle,
   ArrowRight,
@@ -19,6 +20,7 @@ interface OnboardingGuideDialogProps {
   open: boolean;
   step: OnboardingGuideStep;
   modelReady: boolean;
+  modelMembershipRequired: boolean;
   skillReady: boolean;
   modelLoading: boolean;
   skillLoading: boolean;
@@ -135,6 +137,7 @@ export function OnboardingGuideDialog(props: OnboardingGuideDialogProps) {
             ) : props.step === 'model' ? (
               <ModelStep
                 ready={props.modelReady}
+                membershipRequired={props.modelMembershipRequired}
                 loading={props.modelLoading}
                 error={props.modelError}
               />
@@ -227,10 +230,12 @@ function WelcomeStep({
 
 function ModelStep({
   ready,
+  membershipRequired,
   loading,
   error,
 }: {
   ready: boolean;
+  membershipRequired: boolean;
   loading: boolean;
   error: string;
 }) {
@@ -256,6 +261,24 @@ function ModelStep({
         description={t('aiChat.onboarding.modelReadyDescription')}
         ready={ready}
       />
+    );
+  }
+
+  if (membershipRequired) {
+    return (
+      <div className="space-y-3">
+        <StatusCard
+          title={t('modelChoice.membershipRequired')}
+          description={t('modelChoice.benefitDescription')}
+          ready={false}
+        />
+        <Link
+          href="/membership"
+          className="inline-flex min-h-9 items-center text-[13px] text-primary hover:underline"
+        >
+          {t('modelChoice.unlock')}
+        </Link>
+      </div>
     );
   }
 

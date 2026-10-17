@@ -4,9 +4,15 @@ import type {
   ModelPoolKey,
 } from '@fateclaw/contracts/model-settings';
 import { getDbPool, type DbQueryable } from '../db-pool.js';
+import { getActiveMembershipForUserUsing } from './billing-repository.js';
 
 export class BenefitAdmissionError extends Error {
-  readonly statusCode = 429;
+  constructor(
+    message: string,
+    readonly statusCode: 403 | 429 = 429,
+  ) {
+    super(message);
+  }
 }
 export class ModelSelectionError extends Error {
   readonly statusCode = 409;
@@ -137,6 +143,12 @@ export async function reserveBenefitTurn(
     throw new BenefitAdmissionError('免费服务暂未开放');
   if (revision !== undefined && revision !== settings.rows[0].revision)
     throw new ModelSelectionError('免费模型配置已更新，请刷新模型状态后重试');
+  // Gate admission only: an accepted request keeps its allowance after membership expires.
+  if (!(await getActiveMembershipForUserUsing(db, userId)))
+    throw new BenefitAdmissionError(
+      '免费模型仅限有效会员使用，请开通或续费会员',
+      403,
+    );
   await db.query(
     `INSERT INTO benefit_daily_usage(user_id,allowance_date) VALUES($1,(now() AT TIME ZONE 'Asia/Shanghai')::date)
     ON CONFLICT DO NOTHING`,

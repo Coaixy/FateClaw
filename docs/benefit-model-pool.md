@@ -1,7 +1,9 @@
 # Free model service
 
-FateClaw offers separate paid and free model pools. Both use the existing
-platform-owned provider adapters, request-level `llmRuntime` snapshot, resident
+FateClaw offers separate paid and free model pools. The free service requires
+active membership; paid on-site service remains available without membership.
+Both use the existing platform-owned provider adapters, request-level
+`llmRuntime` snapshot, resident
 agent, durable request recovery and model-call failover. Users choose a service;
 they cannot supply providers or credentials. A free request never selects a
 paid node or creates a wallet charge.
@@ -48,6 +50,11 @@ including after loss of a transient Redis lock. Request snapshots preserve the
 chosen pool and limits through queueing/recovery. A conflicting selection fails
 before dispatch; a previously registered paid reservation can settle at zero usage.
 
+The selector identifies free models as an active-member benefit, offers a
+membership link to ineligible users when the service is enabled, and preserves an existing free selection
+after expiry so that switching to paid remains an explicit user action.
+The user overview reports membership eligibility independently of pool supply;
+ineligible users have `eligible: false` and `remaining_turns: null`.
 The selector explains that free models have daily turn and concurrency limits and
 do not charge credits. It shows remaining turns without a large permanent banner
 and labels final replies as free replies. Model capability depends on the configured
@@ -59,8 +66,13 @@ page and once a minute while visible.
 ## Durable admission and limits
 
 The API creates the free reservation, durable request intent and user message
-in one transaction. Personal allowance rows serialize the final available turn
-across processes. One user can hold one queued/running free request. The pool
+in one transaction. That transaction checks current membership using the same
+status and period-end rule as the membership service. Missing, expired or cancelled
+membership rejects a new request with HTTP 403 without reserving allowance or
+persisting a request/message. Membership expiry does not interrupt accepted
+requests, including queued requests and durable recovery. Membership sales being
+disabled does not revoke an existing active membership. Personal allowance rows
+serialize the final available turn across processes. One user can hold one queued/running free request. The pool
 has its own execution concurrency cap, also subject to global agent capacity.
 Queued free requests use the same finite request lifetime as other model requests.
 
@@ -68,11 +80,12 @@ The administrator can configure only these free-service limits:
 
 | Limit | Default |
 | --- | --- |
-| Daily personal turns | 3, all memberships, no carryover; Asia/Shanghai midnight |
+| Daily personal turns | 3 per active member, no carryover; Asia/Shanghai midnight |
 | Free execution slots | 2 |
 
 These are source defaults, not the policy of every deployment. Upgrades preserve
 the configured daily turns and concurrency while removing obsolete policy fields.
+Membership gating does not change these configured values or grant a trial allowance.
 The per-user active-request cap remains one, including queueing.
 
 Deploy the API, agent runtime and admin together. Migration
@@ -148,6 +161,7 @@ Refreshing a page never runs inference. Cooling nodes skip checks. Stale health
 and stale cached supply become unknown.
 
 PostgreSQL integration checks cover pool isolation, final-turn contention,
+membership admission and completion after expiry,
 provider cooldowns, single recovery leases, uncertain usage,
 transactional/idempotent finalization, active session selection fencing,
 cancellation and monitoring cooldowns. Synthetic provider checks exercise free

@@ -145,7 +145,7 @@ function publicPoolModel(settings: PlatformModelSettings): OfficialModelDto {
     model_key: settings.pool.model_key,
     display_name: settings.pool.display_name,
     description: settings.pool.benefit_policy
-      ? '使用免费额度，不扣积分；限制每日对话次数与并发，其余执行规则与付费模型相同。'
+      ? '有效会员专享，使用每日免费额度，不扣积分；限制每日对话次数与并发。'
       : '由平台统一调度可用模型节点，按公开 Token 价格计费。',
     model_name: settings.pool.model_key,
     context_window_tokens: nodes.length
@@ -326,11 +326,10 @@ export async function getUserModelSettingsOverview(
   const model = configuredNodes(settings).length
     ? publicPoolModel(settings)
     : null;
-  if (
-    model &&
-    userId &&
-    !(await getRuntimeEntitlementSnapshot(userId)).membershipActive
-  ) {
+  const membershipActive = userId
+    ? (await getRuntimeEntitlementSnapshot(userId)).membershipActive
+    : false;
+  if (model && userId && !membershipActive) {
     model.input_token_price_per_million_coins *= NON_MEMBER_PRICE_MULTIPLIER;
     model.output_token_price_per_million_coins *= NON_MEMBER_PRICE_MULTIPLIER;
   }
@@ -340,9 +339,13 @@ export async function getUserModelSettingsOverview(
     benefit: {
       model: configuredNodes(benefit).length ? publicPoolModel(benefit) : null,
       enabled: benefit.pool.enabled,
+      eligible: membershipActive,
       supply: await getBenefitSupply(),
       daily_turns: policy.daily_turns,
-      ...(await getBenefitAllowance(userId, policy.daily_turns)),
+      ...(await getBenefitAllowance(
+        membershipActive ? userId : undefined,
+        policy.daily_turns,
+      )),
     },
   };
 }

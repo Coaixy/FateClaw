@@ -90,6 +90,7 @@ export function useModelSelection(args: {
       mutationUser.current === args.userId
     )
       return;
+    if (key === 'benefit' && !overview?.benefit?.eligible) return;
     const userId = args.userId;
     mutationUser.current = userId;
     const current = ++version.current;
@@ -114,7 +115,8 @@ export function useModelSelection(args: {
   };
   const unavailable =
     poolKey === 'benefit' &&
-    (!overview?.benefit?.model ||
+    (!overview?.benefit?.eligible ||
+      !overview.benefit.model ||
       overview.benefit.supply !== 'available' ||
       (overview.benefit.remaining_turns ?? 0) <= 0);
   return {

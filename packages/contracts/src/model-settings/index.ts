@@ -30,6 +30,7 @@ export const DEFAULT_BENEFIT_POLICY: BenefitPolicyDto = {
 export interface BenefitModelOverviewDto {
   model: OfficialModelDto | null;
   enabled: boolean;
+  eligible: boolean;
   supply: BenefitSupplyState;
   daily_turns: number;
   remaining_turns: number | null;

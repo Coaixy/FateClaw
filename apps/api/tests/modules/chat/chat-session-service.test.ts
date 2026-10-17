@@ -186,6 +186,7 @@ import {
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
 } from '../../../src/modules/chat/chat-session-service.js';
+import { BenefitAdmissionError } from '../../../src/infrastructure/repositories/benefit-repository.js';
 
 describe('chat-session-service selected board context', () => {
   beforeEach(() => {
@@ -395,6 +396,31 @@ describe('chat-session-service selected board context', () => {
 
     expect(result.ok).toBe(true);
     expect(mockDispatchAiChatPrompt).toHaveBeenCalled();
+  });
+
+  it('returns a membership rejection as HTTP 403 and releases the session processing lock', async () => {
+    mockDispatchAiChatPrompt.mockRejectedValueOnce(
+      new BenefitAdmissionError(
+        '免费模型仅限有效会员使用，请开通或续费会员',
+        403,
+      ),
+    );
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: 'Synthetic question',
+      inputKind: 'normal',
+      pastedBoard: undefined,
+    });
+    expect(result).toEqual({
+      ok: false,
+      statusCode: 403,
+      error: '免费模型仅限有效会员使用，请开通或续费会员',
+    });
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      'session:processing:session-1',
+      expect.any(String),
+    );
   });
 
   it('passes all session boards and only uses selected id for current marking', async () => {

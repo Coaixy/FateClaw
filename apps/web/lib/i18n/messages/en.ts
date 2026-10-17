@@ -5,7 +5,7 @@ export const enMessages = {
     paid_unknown: 'Paid model service status is unconfirmed',
     lastObserved: 'Last observation',
     paidUnavailable:
-      'Paid models are not configured. The free service remains available when enabled.',
+      'Paid models are not configured. Active members can use the free service when enabled.',
     benefitStatusNote:
       'Free and paid services have separate supply. Shared exhaustion and outages are shown separately; sign in for your personal allowance.',
     benefitHistoryNote:
@@ -17,7 +17,9 @@ export const enMessages = {
     freeReply: 'Free allowance · No balance charge',
     refunded: 'Free turn refunded · No balance charge',
     benefitDescription:
-      'Free to use, with daily turn and concurrency limits. No balance charge.',
+      'Active members receive a daily free allowance, subject to turn and concurrency limits. No balance charge.',
+    membershipRequired: 'Free models require active membership',
+    unlock: 'Subscribe or renew membership',
     paidDescription: 'Billed by actual token usage at your account rates.',
     noAutoCharge:
       'The free service stops when its allowance is exhausted. It never automatically switches to paid use or charges your balance.',
@@ -36,7 +38,7 @@ export const enMessages = {
     loadFailed: 'Model status could not be loaded',
     saveFailed: 'Could not switch model; retry',
     blocked:
-      'This service is unavailable. Check your allowance or explicitly select another service.',
+      'This service is unavailable. Check your membership and allowance or explicitly select another service.',
   },
   serviceStatus: {
     title: 'Service status',
@@ -451,7 +453,9 @@ export const enMessages = {
       perMonth: '/ month',
       compareColumnFeature: 'Benefit',
       compareColumnNonMember: 'Non-member',
-      compareRowModelPrice: 'Platform model pricing',
+      compareRowModelPrice: 'Paid model pricing',
+      compareRowBenefitModel: 'Free models',
+      compareMemberBenefitModel: 'Daily free allowance',
       compareRowQueue: 'Peak-hour queueing',
       compareRowOpenApi: 'Open API keys',
       compareNonMemberModelPrice: 'Billed at 1.5×',
@@ -461,7 +465,7 @@ export const enMessages = {
       compareMemberQueue: 'Priority queue',
       compareMemberAvailable: 'Available',
       compareFootnote:
-        'Charting, AI interpretation, and the knowledge base are open to everyone; membership changes pricing and peak-hour priority.',
+        'Active members receive a daily free model allowance. Paid models are billed separately by token usage.',
       expiresAt: 'Expires at',
       monthlyUsage: 'Monthly usage',
       membershipPrice: 'Membership price',

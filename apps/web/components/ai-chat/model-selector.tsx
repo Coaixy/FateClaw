@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import Link from 'next/link';
 import { ChevronDown, Check, Loader2, RefreshCw } from 'lucide-react';
 import type {
   ModelPoolKey,
@@ -27,11 +28,16 @@ export function ModelSelector({
   const { t, formatDate } = useI18n();
   const details = useRef<HTMLDetailsElement>(null);
   const benefit = overview?.benefit;
-  const available = benefit?.supply === 'available' && Boolean(benefit.model);
+  const membershipRequired = Boolean(benefit?.enabled && !benefit.eligible);
+  const available =
+    !membershipRequired &&
+    benefit?.supply === 'available' &&
+    Boolean(benefit.model);
   const label =
     poolKey === 'benefit' ? t('modelChoice.benefit') : t('modelChoice.paid');
-  const state =
-    benefit?.supply === 'available' && benefit?.remaining_turns === 0
+  const state = membershipRequired
+    ? 'membershipRequired'
+    : benefit?.supply === 'available' && benefit?.remaining_turns === 0
       ? 'personal'
       : (benefit?.supply ?? 'unknown');
   const choose = (key: ModelPoolKey) => {
@@ -68,7 +74,9 @@ export function ModelSelector({
               <button
                 key={key}
                 type="button"
-                disabled={busy || (!free && !overview?.model)}
+                disabled={
+                  busy || (free ? !benefit?.eligible : !overview?.model)
+                }
                 aria-pressed={poolKey === key}
                 aria-label={
                   t(free ? 'modelChoice.benefit' : 'modelChoice.paid') +
@@ -108,6 +116,14 @@ export function ModelSelector({
               </button>
             );
           })}
+          {membershipRequired ? (
+            <Link
+              href="/membership"
+              className="block rounded-lg px-3 py-2 text-[12px] text-primary hover:underline"
+            >
+              {t('modelChoice.unlock')}
+            </Link>
+          ) : null}
           <p className="px-3 py-2 text-[11px] leading-5 text-muted">
             {t('modelChoice.noAutoCharge')}
           </p>
@@ -138,6 +154,14 @@ export function ModelSelector({
                 : `modelChoice.${state}`,
               { count: benefit?.remaining_turns ?? 0 },
             )}
+            {membershipRequired ? (
+              <Link
+                href="/membership"
+                className="ml-2 text-primary hover:underline"
+              >
+                {t('modelChoice.unlock')}
+              </Link>
+            ) : null}
           </span>
         ) : overview?.model ? (
           <OfficialModelPriceTags model={overview.model} compact />

@@ -100,6 +100,7 @@ describe('onboarding guide status helpers', () => {
     const benefit = {
       model: officialModel(),
       enabled: true,
+      eligible: true,
       supply: 'available' as const,
       daily_turns: 3,
       remaining_turns: 3,
@@ -110,6 +111,12 @@ describe('onboarding guide status helpers', () => {
       hasUsableModelForGuide({
         model: null,
         benefit: { ...benefit, enabled: false },
+      }),
+    ).toBe(false);
+    expect(
+      hasUsableModelForGuide({
+        model: null,
+        benefit: { ...benefit, eligible: false },
       }),
     ).toBe(false);
   });

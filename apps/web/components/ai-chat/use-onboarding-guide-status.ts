@@ -81,7 +81,9 @@ function isPreUseNoticeOpen() {
 export function hasUsableModelForGuide(data: ModelSettingsOverview | null) {
   return Boolean(
     data?.model?.has_secret ||
-    (data?.benefit?.enabled && data.benefit.model?.has_secret),
+    (data?.benefit?.eligible &&
+      data.benefit.enabled &&
+      data.benefit.model?.has_secret),
   );
 }
 
@@ -346,6 +348,12 @@ export function useOnboardingGuideStatus({
   }, [enabled]);
 
   const modelReady = hasUsableModelForGuide(modelOverview);
+  const modelMembershipRequired = Boolean(
+    !modelReady &&
+    modelOverview?.benefit?.enabled &&
+    modelOverview.benefit.model?.has_secret &&
+    !modelOverview.benefit.eligible,
+  );
   const skillReady = getEnabledSkillSummaries(userSkills).length > 0;
   const hasAnyInstalledSkill = hasInstalledSkill(userSkills);
   const enabledSkills = useMemo(
@@ -444,6 +452,7 @@ export function useOnboardingGuideStatus({
     open,
     step,
     modelReady,
+    modelMembershipRequired,
     skillReady,
     modelLoading,
     skillLoading,
