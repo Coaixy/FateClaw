@@ -10,6 +10,8 @@ import { getRedis } from '../../infrastructure/redis.js';
 import { getUserByPhone } from '../../infrastructure/db.js';
 import { logger } from '../../infrastructure/logger.js';
 import { normalizePhoneNumber, isValidMainlandChinaPhone } from './phone.js';
+import { assertRegistrationInviteValid } from '../../infrastructure/repositories/registration-invites-repository.js';
+import { RegistrationInviteError } from './registration-invite-errors.js';
 
 const SMS_CAPTCHA_TTL_MINUTES = 3;
 const SMS_CAPTCHA_TTL_SECONDS = SMS_CAPTCHA_TTL_MINUTES * 60;
@@ -81,6 +83,7 @@ function internalSMSCaptchaError(
 }
 
 export function getSMSCaptchaPublicMessage(error: unknown): string {
+  if (error instanceof RegistrationInviteError) return error.message;
   if (error instanceof SMSCaptchaError) {
     return error.publicMessage;
   }
@@ -496,10 +499,15 @@ export async function sendSMSCaptcha(input: {
   type: SMSCaptchaType;
   phoneNumber: string;
   clientIp: string;
+  inviteCode?: string;
 }): Promise<void> {
   const phoneNumber = normalizePhoneNumber(input.phoneNumber);
   if (!isValidMainlandChinaPhone(phoneNumber)) {
     throw userVisibleSMSCaptchaError('手机号格式不正确');
+  }
+
+  if (input.type === 1) {
+    await assertRegistrationInviteValid(input.inviteCode ?? '');
   }
 
   await assertSMSCaptchaSendAllowed(input.clientIp);

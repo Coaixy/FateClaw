@@ -4,8 +4,6 @@ import bcrypt from 'bcryptjs';
 import type { UserDto } from '@fateclaw/contracts/auth';
 
 import {
-  createUserUsing,
-  getDbPool,
   getUserByPhone,
   getUserById,
   updateUserPasswordHash,
@@ -14,6 +12,11 @@ import { User } from '../../shared/types.js';
 import { toUserDto } from '../../contracts-adapter/auth-contract.js';
 import { isValidMainlandChinaPhone, normalizePhoneNumber } from './phone.js';
 import { verifySMSCaptcha } from './sms-captcha-service.js';
+import {
+  assertRegistrationInviteValid,
+  createInvitedUser,
+} from '../../infrastructure/repositories/registration-invites-repository.js';
+import { RegistrationInviteError } from './registration-invite-errors.js';
 
 const SALT_ROUNDS = 10;
 const PASSWORD_MIN_LENGTH = 8;
@@ -23,15 +26,19 @@ export async function registerUser(
   password: string,
   smsCaptchaCode: string,
   clientIp: string,
+  inviteCode: string,
 ): Promise<User> {
   const normalizedPhone = normalizePhoneNumber(phone);
   if (!isValidMainlandChinaPhone(normalizedPhone)) {
-    throw new Error('手机号格式不正确');
+    throw new RegistrationInviteError(400, '手机号格式不正确');
   }
+  if (password.length < PASSWORD_MIN_LENGTH)
+    throw new RegistrationInviteError(400, '密码至少 8 位');
+  await assertRegistrationInviteValid(inviteCode);
 
   const existing = await getUserByPhone(normalizedPhone);
   if (existing) {
-    throw new Error('该手机号已被注册');
+    throw new RegistrationInviteError(400, '该手机号已被注册');
   }
 
   await verifySMSCaptcha(normalizedPhone, smsCaptchaCode, clientIp);
@@ -52,7 +59,7 @@ export async function registerUser(
     created_at: now,
   };
 
-  await createUserUsing(getDbPool(), user);
+  await createInvitedUser(user, inviteCode);
   return user;
 }
 

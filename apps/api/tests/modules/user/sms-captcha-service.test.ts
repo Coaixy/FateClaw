@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  mockAssertRegistrationInviteValid,
   mockGetUserByPhone,
   mockLoggerError,
   mockLoggerWarn,
@@ -11,6 +12,7 @@ const {
   mockRedisTtl,
   mockSendSmsVerifyCode,
 } = vi.hoisted(() => ({
+  mockAssertRegistrationInviteValid: vi.fn(),
   mockGetUserByPhone: vi.fn(),
   mockLoggerError: vi.fn(),
   mockLoggerWarn: vi.fn(),
@@ -74,6 +76,13 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   getUserByPhone: mockGetUserByPhone,
 }));
 
+vi.mock(
+  '../../../src/infrastructure/repositories/registration-invites-repository.js',
+  () => ({
+    assertRegistrationInviteValid: mockAssertRegistrationInviteValid,
+  }),
+);
+
 vi.mock('../../../src/infrastructure/logger.js', () => ({
   logger: {
     error: mockLoggerError,
@@ -95,6 +104,7 @@ import { sendSMSCaptcha } from '../../../src/modules/user/sms-captcha-service.js
 
 const PHONE_NUMBER = '13800138000';
 const CLIENT_IP = '203.0.113.7';
+const INVITE_CODE = '0123456789ABCDEF01234567';
 
 function successfulProviderResponse() {
   return {
@@ -107,6 +117,7 @@ function successfulProviderResponse() {
 
 describe('sendSMSCaptcha', () => {
   beforeEach(() => {
+    mockAssertRegistrationInviteValid.mockReset();
     mockGetUserByPhone.mockReset();
     mockLoggerError.mockReset();
     mockLoggerWarn.mockReset();
@@ -117,6 +128,10 @@ describe('sendSMSCaptcha', () => {
     mockRedisTtl.mockReset();
     mockSendSmsVerifyCode.mockReset();
 
+    mockAssertRegistrationInviteValid.mockResolvedValue({
+      valid: true,
+      expires_at: '2026-10-24T00:00:00Z',
+    });
     mockGetUserByPhone.mockResolvedValue(null);
     mockRedisEval.mockResolvedValue(1);
     mockRedisExpire.mockResolvedValue(1);
@@ -131,8 +146,10 @@ describe('sendSMSCaptcha', () => {
       clientIp: CLIENT_IP,
       phoneNumber: PHONE_NUMBER,
       type: 1,
+      inviteCode: INVITE_CODE,
     });
 
+    expect(mockAssertRegistrationInviteValid).toHaveBeenCalledWith(INVITE_CODE);
     expect(mockRedisSet).toHaveBeenCalledWith(
       expect.stringMatching(/^sms:captcha:send-lock:/),
       expect.any(String),
@@ -159,11 +176,13 @@ describe('sendSMSCaptcha', () => {
         clientIp: CLIENT_IP,
         phoneNumber: PHONE_NUMBER,
         type: 1,
+        inviteCode: INVITE_CODE,
       }),
       sendSMSCaptcha({
         clientIp: CLIENT_IP,
         phoneNumber: PHONE_NUMBER,
         type: 1,
+        inviteCode: INVITE_CODE,
       }),
     ]);
 
@@ -183,6 +202,7 @@ describe('sendSMSCaptcha', () => {
         clientIp: CLIENT_IP,
         phoneNumber: PHONE_NUMBER,
         type: 1,
+        inviteCode: INVITE_CODE,
       }),
     ).rejects.toMatchObject({
       publicMessage: '3分钟内只能发送一次短信验证码',
@@ -206,6 +226,7 @@ describe('sendSMSCaptcha', () => {
         clientIp: CLIENT_IP,
         phoneNumber: PHONE_NUMBER,
         type: 1,
+        inviteCode: INVITE_CODE,
       }),
     ).rejects.toMatchObject({
       publicMessage: '短信服务暂时不可用，请稍后再试',
@@ -219,5 +240,47 @@ describe('sendSMSCaptcha', () => {
       token,
       10,
     ]);
+  });
+
+  it('rejects an invalid registration invite before Redis or SMS provider usage', async () => {
+    const invalidInvite = new Error('邀请码无效、已使用、已过期或暂不可用');
+    mockAssertRegistrationInviteValid.mockRejectedValueOnce(invalidInvite);
+
+    await expect(
+      sendSMSCaptcha({
+        clientIp: CLIENT_IP,
+        phoneNumber: PHONE_NUMBER,
+        type: 1,
+        inviteCode: 'invalid-invite',
+      }),
+    ).rejects.toBe(invalidInvite);
+
+    expect(mockAssertRegistrationInviteValid).toHaveBeenCalledWith(
+      'invalid-invite',
+    );
+    for (const redisOperation of [
+      mockRedisEval,
+      mockRedisExpire,
+      mockRedisIncr,
+      mockRedisSet,
+      mockRedisTtl,
+    ]) {
+      expect(redisOperation).not.toHaveBeenCalled();
+    }
+    expect(mockGetUserByPhone).not.toHaveBeenCalled();
+    expect(mockSendSmsVerifyCode).not.toHaveBeenCalled();
+  });
+
+  it('allows password recovery SMS without an invitation', async () => {
+    mockGetUserByPhone.mockResolvedValueOnce({ id: 'synthetic-existing-user' });
+
+    await sendSMSCaptcha({
+      clientIp: CLIENT_IP,
+      phoneNumber: PHONE_NUMBER,
+      type: 0,
+    });
+
+    expect(mockAssertRegistrationInviteValid).not.toHaveBeenCalled();
+    expect(mockSendSmsVerifyCode).toHaveBeenCalledOnce();
   });
 });

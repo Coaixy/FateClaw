@@ -24,6 +24,7 @@ import { accountRoutes } from './account-routes.js';
 import { adminRoutes } from './admin-routes.js';
 import { apiKeysRoutes } from './api-keys-routes.js';
 import { authRoutes } from './auth-routes.js';
+import { registrationInviteRoutes } from './registration-invite-routes.js';
 import { billingRoutes } from './billing-routes.js';
 import { chatSessionsRoutes } from './chat-sessions-routes.js';
 import { clientProfilesRoutes } from './client-profiles-routes.js';
@@ -52,8 +53,8 @@ const FONT_ASSET_FILE_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
 
 function requestLogUrl(request: FastifyRequest): string {
-  // Stream credentials and issue search text must stay out of request logs.
-  return /^(?:\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)|\/api\/(?:admin\/)?issues(?:[/?]|$))/.test(
+  // Stream credentials, invitation codes and issue search text must stay out of request logs.
+  return /^(?:\/login(?:[/?]|$)|\/api\/auth\/invites(?:[/?]|$)|\/api\/admin\/registration-invites(?:[/?]|$)|\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)|\/api\/(?:admin\/)?issues(?:[/?]|$))/.test(
     request.url,
   )
     ? request.url.split('?')[0]
@@ -181,7 +182,18 @@ export async function createApiServer(): Promise<FastifyInstance> {
         const str = (body as string) || '';
         done(null, str ? JSON.parse(str) : {});
       } catch (err) {
-        done(err as Error, undefined);
+        // JSON.parse errors may quote credentials from the request body.
+        if (err instanceof SyntaxError) {
+          done(
+            Object.assign(new Error('请求体不是合法的 JSON'), {
+              statusCode: 400,
+              code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+            }),
+            undefined,
+          );
+        } else {
+          done(err as Error, undefined);
+        }
       }
     },
   );
@@ -332,6 +344,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   // Register routes
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(registrationInviteRoutes, { prefix: '/api/auth/invites' });
   await app.register(accountRoutes, { prefix: '/api/account' });
   await app.register(chatSessionsRoutes, { prefix: '/api/chat-sessions' });
   await app.register(clientProfilesRoutes, { prefix: '/api/client-profiles' });

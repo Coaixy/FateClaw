@@ -16,9 +16,13 @@ describe('authApi', () => {
     requestJsonMock.mockResolvedValue({});
   });
 
-  it('registers without invite code in payload', async () => {
-    // 邀请体系已从前端下线,注册请求不再携带 invite_code 字段。
-    await authApi.register('13800138000', 'password123', '123456');
+  it('includes the invitation when registering a phone account', async () => {
+    await authApi.register(
+      '13800138000',
+      'password123',
+      '123456',
+      'test-invitation',
+    );
 
     expect(requestJsonMock).toHaveBeenCalledWith('/api/auth/register', {
       method: 'POST',
@@ -26,6 +30,42 @@ describe('authApi', () => {
         phoneNumber: '13800138000',
         password: 'password123',
         smsCaptchaCode: '123456',
+        inviteCode: 'test-invitation',
+      }),
+    });
+  });
+
+  it('sends the invitation with registration SMS requests', async () => {
+    await authApi.sendSMSCaptcha(
+      1,
+      '13800138000',
+      'image-token',
+      'abcd',
+      'test-invitation',
+    );
+
+    expect(requestJsonMock).toHaveBeenCalledWith('/api/auth/send-sms-captcha', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 1,
+        phoneNumber: '13800138000',
+        captcha_token: 'image-token',
+        captcha_answer: 'abcd',
+        inviteCode: 'test-invitation',
+      }),
+    });
+  });
+
+  it('keeps password-recovery SMS requests independent from invitations', async () => {
+    await authApi.sendSMSCaptcha(0, '13800138000', 'image-token', 'abcd');
+
+    expect(requestJsonMock).toHaveBeenCalledWith('/api/auth/send-sms-captcha', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 0,
+        phoneNumber: '13800138000',
+        captcha_token: 'image-token',
+        captcha_answer: 'abcd',
       }),
     });
   });

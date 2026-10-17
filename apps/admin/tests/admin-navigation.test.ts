@@ -19,9 +19,9 @@ describe('hasAdminScope', () => {
   });
 
   test('多个 scope 的任意匹配', () => {
-    expect(hasAdminScope(['users:read', 'messages:read'], 'messages:read')).toBe(
-      true,
-    );
+    expect(
+      hasAdminScope(['users:read', 'messages:read'], 'messages:read'),
+    ).toBe(true);
     expect(hasAdminScope(['users:read', 'messages:read'], 'admin:*')).toBe(
       false,
     );
@@ -45,7 +45,12 @@ describe('canAdminSessionAccessPath', () => {
   test('owner 可以访问所有管理路径', () => {
     expect(canAdminSessionAccessPath(ownerSession, '/users')).toBe(true);
     expect(canAdminSessionAccessPath(ownerSession, '/billing')).toBe(true);
-    expect(canAdminSessionAccessPath(ownerSession, '/system/models')).toBe(true);
+    expect(canAdminSessionAccessPath(ownerSession, '/system/models')).toBe(
+      true,
+    );
+    expect(
+      canAdminSessionAccessPath(ownerSession, '/system/registration-invites'),
+    ).toBe(true);
   });
 
   test('user_manager 只能访问用户和消息路径', () => {
@@ -56,8 +61,14 @@ describe('canAdminSessionAccessPath', () => {
     expect(canAdminSessionAccessPath(userManagerSession, '/billing')).toBe(
       false,
     );
-    expect(canAdminSessionAccessPath(userManagerSession, '/system/models')).toBe(
-      false,
-    );
+    expect(
+      canAdminSessionAccessPath(userManagerSession, '/system/models'),
+    ).toBe(false);
+    expect(
+      canAdminSessionAccessPath(
+        userManagerSession,
+        '/system/registration-invites',
+      ),
+    ).toBe(false);
   });
 });

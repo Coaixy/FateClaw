@@ -10,6 +10,7 @@ import {
   LogOut,
   ServerCog,
   Sparkles,
+  Ticket,
   User as UserIcon,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -102,6 +103,12 @@ export function UserMenuDropdown({
             href="/profile"
             icon={UserIcon}
             label={t('userMenu.profile')}
+            onNavigate={onNavigate}
+          />
+          <MenuItem
+            href="/invitations"
+            icon={Ticket}
+            label={t('userMenu.invitations')}
             onNavigate={onNavigate}
           />
         </MenuSection>

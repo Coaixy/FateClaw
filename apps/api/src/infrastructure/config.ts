@@ -19,9 +19,6 @@ const envConfig = readEnvFile([
   'PUBLIC_WEB_BASE_URL',
   'API_BASE_URL',
   'WEB_BASE_URL',
-  'GOOGLE_OAUTH_CLIENT_ID',
-  'GOOGLE_OAUTH_CLIENT_SECRET',
-  'GOOGLE_OAUTH_REDIRECT_URI',
   'PAYMENT_CALLBACK_ALLOWED_HOSTS',
   'TRUST_PROXY',
   'ALERT_WEBHOOK_URL',
@@ -63,7 +60,6 @@ const FORBIDDEN_SECRETS = new Set([
 // 测试环境下绕过强密钥校验，避免 vitest 必须配 .env 才能跑
 const IS_TEST_ENV =
   process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
-const IS_PROD_ENV = process.env.NODE_ENV === 'production';
 
 function assertStrongSecret(name: string, value: string, minLen = 32): void {
   if (IS_TEST_ENV) return;
@@ -99,14 +95,6 @@ function normalizePublicBaseUrl(raw: string): string {
   const url = new URL(trimmed);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
   return `${url.protocol}//${url.host}`;
-}
-
-function normalizeHttpUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed || !URL.canParse(trimmed)) return '';
-  const url = new URL(trimmed);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
-  return url.toString();
 }
 
 function normalizeAllowedOrigins(raw: string): string[] {
@@ -166,33 +154,6 @@ export const PUBLIC_WEB_BASE_URL =
       envConfig.WEB_BASE_URL ||
       '',
   ) || PUBLIC_BASE_URL;
-
-export const GOOGLE_OAUTH_CLIENT_ID =
-  process.env.GOOGLE_OAUTH_CLIENT_ID || envConfig.GOOGLE_OAUTH_CLIENT_ID || '';
-export const GOOGLE_OAUTH_CLIENT_SECRET =
-  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
-  envConfig.GOOGLE_OAUTH_CLIENT_SECRET ||
-  '';
-
-const DEFAULT_LOCAL_API_BASE_URL =
-  IS_TEST_ENV || IS_PROD_ENV ? '' : 'http://localhost:3000';
-const DEFAULT_LOCAL_WEB_BASE_URL =
-  IS_TEST_ENV || IS_PROD_ENV ? '' : 'http://localhost:3001';
-
-// Google 控制台必须登记完整 callback URL；显式配置优先，开发态提供 localhost 兜底。
-export const GOOGLE_OAUTH_REDIRECT_URI =
-  normalizeHttpUrl(
-    process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-      envConfig.GOOGLE_OAUTH_REDIRECT_URI ||
-      '',
-  ) ||
-  (PUBLIC_API_BASE_URL || DEFAULT_LOCAL_API_BASE_URL
-    ? `${PUBLIC_API_BASE_URL || DEFAULT_LOCAL_API_BASE_URL}/api/auth/google/callback`
-    : '');
-
-// OAuth callback 最终需要回到静态 www；生产环境应显式配置 PUBLIC_WEB_BASE_URL/WEB_BASE_URL。
-export const OAUTH_WEB_BASE_URL =
-  PUBLIC_WEB_BASE_URL || DEFAULT_LOCAL_WEB_BASE_URL;
 
 // 浏览器跨域来源白名单，API CORS 使用；这里只保留 origin，避免路径误配置影响匹配。
 export const ALLOWED_ORIGINS = normalizeAllowedOrigins(

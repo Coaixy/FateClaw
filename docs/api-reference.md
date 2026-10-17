@@ -12,7 +12,6 @@
 - `/api/messages`
 - `/api/model-settings`
 - `/api/paipan`
-- `/api/referrals`
 - `/api/skills`
 - `/api/issues`
 - `/api/announcements` — public popup notices; owner management under `/api/admin/announcements` ([contract](announcements.md))
@@ -44,6 +43,18 @@ Authorization: Bearer <token>
 
 ## Auth 认证
 
+Google sign-in is disabled. All interface languages use mainland China phone
+authentication. The former `GET /api/auth/google/start`,
+`GET /api/auth/google/callback`, and `POST /api/auth/oauth/exchange` endpoints are
+no longer registered and return 404. The Web OAuth callback page has also been
+removed. Existing users, OAuth identity records, and issued sessions are preserved;
+accounts that only used Google cannot start a new session through Google.
+
+Public signup now requires a single-use `inviteCode`. Registration SMS requests
+also require it; login and password recovery do not. See
+[Registration invitations](registration-invites.md) for allowance, expiry, refund
+accounting and owner administration.
+
 当前认证路由还包含：
 
 | 方法 | 路径 | 说明 |
@@ -63,8 +74,9 @@ Authorization: Bearer <token>
 ```json
 {
   "phoneNumber": "13800138000",
-  "password": "123456",
-  "smsCaptchaCode": "123456"
+  "password": "test-password123",
+  "smsCaptchaCode": "123456",
+  "inviteCode": "0123456789ABCDEF01234567"
 }
 ```
 
@@ -73,6 +85,7 @@ Authorization: Bearer <token>
 | phoneNumber    | string | 是   | 中国大陆手机号     |
 | password       | string | 是   | 至少 8 位          |
 | smsCaptchaCode | string | 是   | 短信验证码         |
+| inviteCode     | string | 是   | Valid single-use registration invitation |
 
 **Response 201**
 
@@ -183,7 +196,8 @@ Authorization: Bearer <token>
   "type": 1,
   "phoneNumber": "13800138000",
   "captcha_token": "captcha-token",
-  "captcha_answer": "A7KD2"
+  "captcha_answer": "A7KD2",
+  "inviteCode": "0123456789ABCDEF01234567"
 }
 ```
 
@@ -193,6 +207,7 @@ Authorization: Bearer <token>
 | phoneNumber    | string | 是   | 中国大陆手机号                        |
 | captcha_token  | string | 是   | 图形验证码 token                      |
 | captcha_answer | string | 是   | 图形验证码答案                        |
+| inviteCode     | string | `type=1` | Required for registration; omitted for password recovery |
 
 **Response 200**
 
@@ -599,15 +614,22 @@ API startup separately imports legacy records with no current revision. `skill_c
 
 ---
 
-## Referrals 邀请
+## Registration invitations
 
-用户侧邀请接口。邀请预览无需认证，其他接口需认证。
+These routes replace the retired referral documentation. They gate new account
+creation and do not issue referral commissions. Anonymous preview uses a POST body
+so invitation codes do not enter API URLs. All responses use `Cache-Control: no-store`.
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/referrals/me` | 当前用户邀请概览、邀请码和奖励状态 |
-| GET | `/api/referrals/invites/:code/preview` | 公开预览邀请码 |
-| POST | `/api/referrals/invites/:code/redeem` | 登录后绑定邀请码 |
+| POST | `/api/auth/invites/preview` | Validate `{ inviteCode }` without consuming the code |
+| GET | `/api/auth/invites/me` | Authenticated user's qualification, allowance and recent codes |
+| POST | `/api/auth/invites` | Reserve a slot using `{ request_key }`; return the code once |
+| POST | `/api/auth/invites/:id/revoke` | Revoke an owned unused code and release its reservation |
+
+Owner-only policy, allowance, operational code and completed-refund administration
+is under `/api/admin/registration-invites`. See the complete
+[invitation contract](registration-invites.md#http-contract).
 
 ---
 

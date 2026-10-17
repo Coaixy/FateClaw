@@ -188,6 +188,42 @@ describe('createApiServer auth guard', () => {
     );
   });
 
+  it.each([
+    '/login',
+    '/login/',
+    '/login/index.html',
+    '/api/auth/invites/preview',
+    '/api/admin/registration-invites',
+  ])(
+    'excludes invitation query credentials from error logs for %s',
+    async (pathname) => {
+      await app.inject({
+        url: `${pathname}?invite=synthetic-registration-invite`,
+      });
+      const logs = JSON.stringify([
+        ...mockLoggerWarn.mock.calls,
+        ...mockLoggerError.mock.calls,
+      ]);
+      expect(logs).toContain(pathname);
+      expect(logs).not.toContain('synthetic-registration-invite');
+    },
+  );
+
+  it('does not log invitation fragments from malformed JSON parser errors', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/invites/preview',
+      headers: { 'content-type': 'application/json' },
+      payload: '{ "inviteCode":!"0123456789ABCDEF01234567" }',
+    });
+    expect(response.statusCode).toBe(400);
+    const logs = JSON.stringify([
+      ...mockLoggerWarn.mock.calls,
+      ...mockLoggerError.mock.calls,
+    ]);
+    expect(logs).not.toContain('01234567');
+  });
+
   it('accepts a token whose auth version matches the current user', async () => {
     const token = app.jwt.sign({
       userId: 'user-1',

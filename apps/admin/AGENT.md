@@ -29,6 +29,7 @@ admin 站点以域名根路径作为登录页：
 - `/logs`: 日志
 - `/system/models`: 模型配置
 - `/system/rewards`: 软妹币配置
+- `/system/registration-invites`: owner-only invitation policy, allowances, operational codes and completed-refund records
 
 后端 `/api/admin/verify` 仍可能返回历史路径 `/admin/overview` 或 `/admin/users`。
 `apps/admin/lib/admin-navigation.ts` 会把旧路径转换为本站根路径，不要在页面里手写兼容逻辑。

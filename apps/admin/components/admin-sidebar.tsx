@@ -22,6 +22,7 @@ import {
   Crown,
   ReceiptText,
   WalletCards,
+  Ticket,
   LogOut,
   Menu,
   X,
@@ -60,7 +61,12 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
-  { href: '/announcements', label: '公告管理', icon: Megaphone, requiredScopes: ['admin:*'] },
+  {
+    href: '/announcements',
+    label: '公告管理',
+    icon: Megaphone,
+    requiredScopes: ['admin:*'],
+  },
   {
     href: '/issues',
     label: '问题与建议',
@@ -89,6 +95,12 @@ const navItems = [
     href: '/system/rewards',
     label: '充值配置',
     icon: WalletCards,
+    requiredScopes: ['admin:*'],
+  },
+  {
+    href: '/system/registration-invites',
+    label: '注册邀请',
+    icon: Ticket,
     requiredScopes: ['admin:*'],
   },
   {

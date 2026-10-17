@@ -23,6 +23,8 @@ import { benefitUserDeletionMigration } from './versions/0088-benefit-user-delet
 import { benefitNodeCooldownMigration } from './versions/0089-benefit-node-cooldown.js';
 import { benefitTurnsAndConcurrencyMigration } from './versions/0090-benefit-turns-and-concurrency.js';
 import { popupAnnouncementsMigration } from './versions/0091-popup-announcements.js';
+import { registrationInvitesMigration } from './versions/0092-registration-invites.js';
+import { registrationInviteTiersMigration } from './versions/0093-registration-invite-tiers.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -49,6 +51,8 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   benefitNodeCooldownMigration,
   benefitTurnsAndConcurrencyMigration,
   popupAnnouncementsMigration,
+  registrationInvitesMigration,
+  registrationInviteTiersMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

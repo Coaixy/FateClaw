@@ -1,11 +1,13 @@
 'use client';
 
-import { Suspense, useEffect, useReducer, useCallback } from 'react';
+import { Suspense, useEffect, useReducer, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BrandSeal } from '@/components/brand/brand-marks';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { authApi, CaptchaChallenge } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { registrationInvitesApi } from '@/features/invitations/api';
+import { readRegistrationInviteFragment } from '@/features/invitations/links';
 import { useI18n } from '@/lib/i18n';
 import { readLoginRedirect } from '@/lib/auth-redirect';
 import { isValidMainlandChinaPhone, normalizePhoneNumber } from '@/lib/phone';
@@ -32,6 +34,7 @@ interface LoginFormState {
   error: string;
   smsCaptchaCode: string;
   captchaInput: string;
+  inviteCode: string;
 }
 
 const initialLoginForm: LoginFormState = {
@@ -43,6 +46,7 @@ const initialLoginForm: LoginFormState = {
   error: '',
   smsCaptchaCode: '',
   captchaInput: '',
+  inviteCode: '',
 };
 
 // setText 仅覆盖类型为 string 的字段，保证计算属性写入的类型安全。
@@ -55,7 +59,8 @@ type LoginFormAction =
         | 'phoneError'
         | 'error'
         | 'smsCaptchaCode'
-        | 'captchaInput';
+        | 'captchaInput'
+        | 'inviteCode';
       value: string;
     }
   | { type: 'setShowPassword'; value: boolean }
@@ -93,7 +98,6 @@ function loginFormReducer(
  */
 interface LoginStatusState {
   submitting: boolean;
-  oauthStarting: boolean;
   smsSending: boolean;
   smsCooldown: number;
   captcha: CaptchaChallenge | null;
@@ -102,7 +106,6 @@ interface LoginStatusState {
 
 const initialLoginStatus: LoginStatusState = {
   submitting: false,
-  oauthStarting: false,
   smsSending: false,
   smsCooldown: 0,
   captcha: null,
@@ -113,7 +116,7 @@ const initialLoginStatus: LoginStatusState = {
 type LoginStatusAction =
   | {
       type: 'setFlag';
-      field: 'submitting' | 'oauthStarting' | 'smsSending' | 'captchaLoading';
+      field: 'submitting' | 'smsSending' | 'captchaLoading';
       value: boolean;
     }
   | { type: 'setCaptcha'; value: CaptchaChallenge | null }
@@ -155,10 +158,16 @@ export default function LoginPage() {
 }
 
 function LoginContent() {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
+  const [linkedInvite, setLinkedInvite] = useState('');
   const { user, loading, login, register } = useAuth();
   const [form, formDispatch] = useReducer(loginFormReducer, initialLoginForm);
+  const [inviteValidation, setInviteValidation] = useState<{
+    code: string;
+    expiresAt?: string;
+    error?: string;
+  } | null>(null);
   const [status, statusDispatch] = useReducer(
     loginStatusReducer,
     initialLoginStatus,
@@ -172,17 +181,54 @@ function LoginContent() {
     error,
     smsCaptchaCode,
     captchaInput,
+    inviteCode,
   } = form;
-  const {
-    submitting,
-    oauthStarting,
-    smsSending,
-    smsCooldown,
-    captcha,
-    captchaLoading,
-  } = status;
-  const phoneAuthEnabled = locale === 'zh-CN';
+  const { submitting, smsSending, smsCooldown, captcha, captchaLoading } =
+    status;
   const requiresSMSCaptcha = mode === 'register';
+
+  useEffect(() => {
+    // Fragments are absent from static HTML, so read them after hydration.
+    const syncInvite = () =>
+      setLinkedInvite(readRegistrationInviteFragment(window.location.hash));
+    syncInvite();
+    window.addEventListener('hashchange', syncInvite);
+    return () => window.removeEventListener('hashchange', syncInvite);
+  }, []);
+
+  useEffect(() => {
+    if (!linkedInvite) return;
+    formDispatch({ type: 'setText', field: 'inviteCode', value: linkedInvite });
+    formDispatch({ type: 'switchMode', mode: 'register' });
+  }, [linkedInvite]);
+
+  useEffect(() => {
+    const code = inviteCode.trim();
+    if (mode !== 'register' || !code) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const preview = await registrationInvitesApi.preview(code);
+        if (!cancelled) {
+          setInviteValidation({ code, expiresAt: preview.expires_at });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setInviteValidation({
+            code,
+            error:
+              err instanceof Error ? err.message : t('login.inviteInvalid'),
+          });
+        }
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [inviteCode, mode, t]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -212,13 +258,8 @@ function LoginContent() {
   }, [t]);
 
   useEffect(() => {
-    if (!phoneAuthEnabled) {
-      statusDispatch({ type: 'setCaptcha', value: null });
-      formDispatch({ type: 'setText', field: 'captchaInput', value: '' });
-      return;
-    }
     void refreshCaptcha();
-  }, [phoneAuthEnabled, refreshCaptcha]);
+  }, [refreshCaptcha]);
 
   const switchMode = (nextMode: AuthMode) => {
     formDispatch({ type: 'switchMode', mode: nextMode });
@@ -250,8 +291,17 @@ function LoginContent() {
   };
 
   const handleSendSMSCaptcha = async () => {
+    if (smsSending || submitting) return;
     formDispatch({ type: 'clearErrors' });
 
+    if (!inviteCode.trim()) {
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.enterInviteCode'),
+      });
+      return;
+    }
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
       return;
@@ -274,12 +324,16 @@ function LoginContent() {
     }
 
     statusDispatch({ type: 'setFlag', field: 'smsSending', value: true });
+    let smsAttempted = false;
     try {
+      await registrationInvitesApi.preview(inviteCode.trim());
+      smsAttempted = true;
       await authApi.sendSMSCaptcha(
         1,
         normalizedPhone,
         captcha.token,
         captchaInput,
+        inviteCode.trim(),
       );
       statusDispatch({ type: 'setCooldown', value: 180 });
       formDispatch({ type: 'setText', field: 'error', value: '' });
@@ -291,8 +345,8 @@ function LoginContent() {
       });
     } finally {
       statusDispatch({ type: 'setFlag', field: 'smsSending', value: false });
-      // 图形验证码 token 可能已被服务端标记为已使用，发完后统一刷新。
-      await refreshCaptcha();
+      // SMS submission may consume the CAPTCHA, but invite preview does not.
+      if (smsAttempted) await refreshCaptcha();
     }
   };
 
@@ -302,6 +356,14 @@ function LoginContent() {
 
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
+      return;
+    }
+    if (requiresSMSCaptcha && !inviteCode.trim()) {
+      formDispatch({
+        type: 'setText',
+        field: 'error',
+        value: t('login.enterInviteCode'),
+      });
       return;
     }
     if (!requiresSMSCaptcha && !captcha) {
@@ -324,7 +386,12 @@ function LoginContent() {
     statusDispatch({ type: 'setFlag', field: 'submitting', value: true });
     try {
       if (mode === 'register') {
-        await register(normalizedPhone, password, smsCaptchaCode.trim());
+        await register(
+          normalizedPhone,
+          password,
+          smsCaptchaCode.trim(),
+          inviteCode.trim(),
+        );
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
       }
@@ -344,14 +411,6 @@ function LoginContent() {
     }
   };
 
-  const handleGoogleOAuthStart = () => {
-    formDispatch({ type: 'setText', field: 'error', value: '' });
-    statusDispatch({ type: 'setFlag', field: 'oauthStarting', value: true });
-    window.location.assign(
-      authApi.googleOAuthStartUrl(readLoginRedirect('/clients')),
-    );
-  };
-
   // 将 SVG 字符串包装成 data URL 供 <img> 使用：浏览器沙箱渲染，避免 XSS
   const captchaSrc = captcha
     ? `data:image/svg+xml;utf8,${encodeURIComponent(captcha.svg)}`
@@ -366,15 +425,31 @@ function LoginContent() {
 
       <div className="flex min-h-dvh items-center justify-center p-4">
         <div className="w-full max-w-[400px]">
-          <LoginHeader mode={mode} phoneAuthEnabled={phoneAuthEnabled} />
+          <LoginHeader mode={mode} />
 
           {/* 表单装进浮起白卡:登录页有了明确的视觉主体,不再裸浮在画布上。 */}
           <div className="rounded-2xl border border-hairline bg-surface-raised p-6 shadow-raised sm:p-7">
-        {phoneAuthEnabled ? (
-          <>
             <ModeTabs mode={mode} onSwitch={switchMode} />
 
             <form onSubmit={handleSubmit} className="space-y-3">
+              {requiresSMSCaptcha ? (
+                <InviteCodeField
+                  value={inviteCode}
+                  disabled={smsSending || submitting}
+                  validation={
+                    inviteValidation?.code === inviteCode.trim()
+                      ? inviteValidation
+                      : null
+                  }
+                  onChange={(value) =>
+                    formDispatch({
+                      type: 'setText',
+                      field: 'inviteCode',
+                      value,
+                    })
+                  }
+                />
+              ) : null}
               <PhoneField
                 value={phone}
                 error={phoneError}
@@ -401,7 +476,11 @@ function LoginContent() {
                 loading={captchaLoading}
                 requiresSMSCaptcha={requiresSMSCaptcha}
                 onChange={(value) =>
-                  formDispatch({ type: 'setText', field: 'captchaInput', value })
+                  formDispatch({
+                    type: 'setText',
+                    field: 'captchaInput',
+                    value,
+                  })
                 }
                 onRefresh={refreshCaptcha}
               />
@@ -423,7 +502,11 @@ function LoginContent() {
                 />
               ) : null}
 
-              {error && <p className="text-[13px] text-error">{error}</p>}
+              {error && (
+                <p role="alert" className="text-[13px] text-error">
+                  {error}
+                </p>
+              )}
 
               <SubmitButton
                 mode={mode}
@@ -431,19 +514,9 @@ function LoginContent() {
                 captchaReady={Boolean(captcha)}
                 requiresSMSCaptcha={requiresSMSCaptcha}
                 smsCaptchaCode={smsCaptchaCode}
+                inviteCode={inviteCode}
               />
             </form>
-          </>
-        ) : (
-          <div className="space-y-3">
-            <GoogleOAuthButton
-              starting={oauthStarting}
-              onStart={handleGoogleOAuthStart}
-            />
-            {error && <p className="text-[13px] text-error">{error}</p>}
-          </div>
-        )}
-
             <div className="mt-6 pt-4 border-t border-hairline">
               <p className="text-[12px] text-muted text-center leading-6">
                 {t('login.newUserHint')}
@@ -456,41 +529,7 @@ function LoginContent() {
   );
 }
 
-function GoogleOAuthButton({
-  starting,
-  onStart,
-}: {
-  starting: boolean;
-  onStart: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <button
-      type="button"
-      onClick={onStart}
-      disabled={starting}
-      className="btn-tactile flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-raised text-sm font-semibold text-ink transition-all duration-150 hover:border-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55 cursor-pointer"
-    >
-      {starting ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline bg-white text-[12px] font-bold text-[#4285f4]">
-          G
-        </span>
-      )}
-      {starting ? t('login.googleStarting') : t('login.googleContinue')}
-    </button>
-  );
-}
-
-function LoginHeader({
-  mode,
-  phoneAuthEnabled,
-}: {
-  mode: AuthMode;
-  phoneAuthEnabled: boolean;
-}) {
+function LoginHeader({ mode }: { mode: AuthMode }) {
   const { t } = useI18n();
 
   const brandName = t('common.brandName');
@@ -509,11 +548,9 @@ function LoginHeader({
         )}
       </h1>
       <p className="mt-2 text-[13px] text-muted">
-        {phoneAuthEnabled
-          ? mode === 'register'
-            ? t('login.registerSubtitle')
-            : t('login.loginSubtitle')
-          : t('login.googleSubtitle')}
+        {mode === 'register'
+          ? t('login.registerSubtitle')
+          : t('login.loginSubtitle')}
       </p>
     </div>
   );
@@ -544,6 +581,64 @@ function ModeTabs({
           {t(labelKey)}
         </button>
       ))}
+    </div>
+  );
+}
+
+function InviteCodeField({
+  value,
+  disabled,
+  validation,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  validation: { expiresAt?: string; error?: string } | null;
+  onChange: (value: string) => void;
+}) {
+  const { t, formatDate } = useI18n();
+
+  return (
+    <div>
+      <label
+        htmlFor="registration-invite"
+        className="mb-1.5 block text-[13px] text-muted"
+      >
+        {t('login.inviteCode')}
+      </label>
+      <input
+        id="registration-invite"
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required
+        disabled={disabled}
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-describedby="registration-invite-hint"
+        aria-invalid={Boolean(validation?.error)}
+        placeholder={t('login.invitePlaceholder')}
+        className="h-10 w-full rounded-lg border border-hairline bg-canvas px-3 font-mono text-sm placeholder:font-sans placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+      />
+      <p
+        id="registration-invite-hint"
+        aria-live="polite"
+        className={`mt-1 text-[11px] leading-5 ${validation?.error ? 'text-error' : 'text-muted'}`}
+      >
+        {validation?.error ??
+          (validation?.expiresAt
+            ? t('login.inviteValid', {
+                expiresAt: formatDate(validation.expiresAt, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              })
+            : t('login.inviteHint'))}
+      </p>
     </div>
   );
 }
@@ -678,7 +773,7 @@ function CaptchaField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          required
+          required={!requiresSMSCaptcha}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -764,24 +859,26 @@ function SubmitButton({
   captchaReady,
   requiresSMSCaptcha,
   smsCaptchaCode,
+  inviteCode,
 }: {
   mode: AuthMode;
   submitting: boolean;
   captchaReady: boolean;
   requiresSMSCaptcha: boolean;
   smsCaptchaCode: string;
+  inviteCode: string;
 }) {
   const { t } = useI18n();
   const disabled =
     submitting ||
     (!requiresSMSCaptcha && !captchaReady) ||
-    (requiresSMSCaptcha && !smsCaptchaCode.trim());
+    (requiresSMSCaptcha && (!smsCaptchaCode.trim() || !inviteCode.trim()));
 
   return (
     <button
       type="submit"
       disabled={disabled}
-      className="btn-tactile-primary w-full h-10 rounded-lg text-on-primary text-sm font-semibold disabled:opacity-40 transition-all duration-150 cursor-pointer active:scale-[0.99] flex items-center justify-center gap-1.5 mt-2"
+      className="btn-tactile-primary w-full h-10 rounded-lg text-on-primary text-sm font-semibold disabled:bg-surface-card disabled:text-muted disabled:opacity-70 transition-all duration-150 cursor-pointer active:scale-[0.99] flex items-center justify-center gap-1.5 mt-2"
     >
       {submitting && <Loader2 size={14} className="animate-spin" />}
       {mode === 'register' ? t('login.submitRegister') : t('login.submitLogin')}

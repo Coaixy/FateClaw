@@ -37,6 +37,25 @@ table for versioned operational notice dialogs. The retired banner table and
 its frozen removal migration remain unchanged. See [Popup announcements](announcements.md)
 for publication, browser dismissal and concurrent editing behavior.
 
+The `0092_registration_invites` migration adds invitation policy, lifetime user
+allowances, hashed single-use codes and completed-refund records. Historical paid
+orders qualify for the initial CNY 100 / three-slot allowance. Subsequent recharge
+qualification runs within the order transaction using a user-row
+`FOR NO KEY UPDATE` lock, compatible with the order's foreign-key `KEY SHARE` lock.
+It leaves wallet balances, payment configuration and stored credentials untouched.
+See [Registration invitations](registration-invites.md) for redemption atomicity,
+refund accounting and deployment behavior. Both fresh and incremental startup
+apply this migration after the frozen snapshots.
+
+The `0093_registration_invite_tiers` migration replaces the single invitation
+threshold with CNY 30/100/300 cumulative totals of 3/5/10 registrations. It
+preserves used invitations and manual allowance adjustments while reconciling
+existing paid users. Refunds and policy changes recalculate unused capacity;
+excess newer codes are revoked without removing invited accounts. A shared
+policy-row lock keeps an account transaction on one version of the rules.
+The published 0092 migration remains unchanged. Deploy the API and both clients
+together for the new `tiers` policy contract.
+
 ## Adding an upgrade
 
 `0087_benefit_model_pool` adds pool-scoped membership, a disabled free model pool,

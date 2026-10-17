@@ -10,7 +10,7 @@ import type {
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 import { createAuthScopedInFlightCache } from '@/lib/auth-scoped-cache';
-import { getApiBase, requestJson } from '@/lib/http/client';
+import { requestJson } from '@/lib/http/client';
 
 export type AuthResponse = AuthResponseDto;
 export type User = UserDto;
@@ -19,16 +19,15 @@ export type SendSMSCaptchaResponse = SendSMSCaptchaResponseDto;
 
 const meRequestCache = createAuthScopedInFlightCache<User>();
 
-/**
- * 构造 Google OAuth 发起地址。
- *
- * @param next 登录完成后的站内回跳路径。
- * @returns 可用于浏览器整页跳转的 API 地址。
- */
-export function buildGoogleOAuthStartUrl(next: string): string {
-  const params = new URLSearchParams({ next });
-  return `${getApiBase()}/api/auth/google/start?${params.toString()}`;
-}
+type SendSMSCaptchaArgs =
+  | [type: 0, phoneNumber: string, captchaToken: string, captchaAnswer: string]
+  | [
+      type: 1,
+      phoneNumber: string,
+      captchaToken: string,
+      captchaAnswer: string,
+      inviteCode: string,
+    ];
 
 /**
  * 清理当前用户信息的 in-flight 请求缓存。
@@ -40,13 +39,15 @@ export function clearAuthCache() {
 }
 
 export const authApi = {
-  googleOAuthStartUrl: buildGoogleOAuthStartUrl,
   captcha: () => requestJson<CaptchaChallenge>('/api/auth/captcha'),
   sendSMSCaptcha: (
-    type: 0 | 1,
-    phoneNumber: string,
-    captchaToken: string,
-    captchaAnswer: string,
+    ...[
+      type,
+      phoneNumber,
+      captchaToken,
+      captchaAnswer,
+      inviteCode,
+    ]: SendSMSCaptchaArgs
   ) =>
     requestJson<SendSMSCaptchaResponse>('/api/auth/send-sms-captcha', {
       method: 'POST',
@@ -55,15 +56,22 @@ export const authApi = {
         phoneNumber,
         captcha_token: captchaToken,
         captcha_answer: captchaAnswer,
+        ...(type === 1 ? { inviteCode } : {}),
       }),
     }),
-  register: (phone: string, password: string, smsCaptchaCode: string) =>
+  register: (
+    phone: string,
+    password: string,
+    smsCaptchaCode: string,
+    inviteCode: string,
+  ) =>
     requestJson<AuthResponse>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         phoneNumber: phone,
         password,
         smsCaptchaCode,
+        inviteCode,
       } satisfies RegisterRequestDto),
     }),
   login: (
