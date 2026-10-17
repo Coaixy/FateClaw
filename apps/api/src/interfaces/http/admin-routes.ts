@@ -423,41 +423,19 @@ const OfficialModelSettingsSchema = z
     }
   });
 
-const BenefitModelSettingsSchema = z
-  .strictObject({
-    display_name: z.string().trim().min(1).max(120),
-    thinking_level: z.enum(PI_THINKING_LEVELS),
-    input_token_price_per_million_coins: z.literal(0),
-    output_token_price_per_million_coins: z.literal(0),
-    revision: z.number().int().positive(),
-    enabled: z.boolean(),
-    nodes: z.array(OfficialModelPoolNodeSchema).max(20),
-    benefit_policy: z.strictObject({
-      daily_turns: z.number().int().min(1).max(100),
-      concurrency_limit: z.number().int().min(1).max(10),
-      queue_limit: z.number().int().min(1).max(100),
-      queue_timeout_seconds: z.number().int().min(1).max(60),
-      execution_timeout_seconds: z.number().int().min(10).max(300),
-      max_model_calls: z.number().int().min(1).max(20),
-      max_tool_calls: z.number().int().min(0).max(20),
-      max_input_tokens: z.number().int().min(512).max(256000),
-      max_total_input_tokens: z.number().int().min(512).max(1000000),
-      max_output_tokens: z.number().int().min(128).max(16384),
-      max_total_output_tokens: z.number().int().min(128).max(65536),
-    }),
-  })
-  .superRefine((value, ctx) => {
-    if (
-      value.benefit_policy.max_total_input_tokens <
-        value.benefit_policy.max_input_tokens ||
-      value.benefit_policy.max_total_output_tokens <
-        value.benefit_policy.max_output_tokens
-    )
-      ctx.addIssue({
-        code: 'custom',
-        message: '单轮总额度不能小于单次调用额度',
-      });
-  });
+const BenefitModelSettingsSchema = z.strictObject({
+  display_name: z.string().trim().min(1).max(120),
+  thinking_level: z.enum(PI_THINKING_LEVELS),
+  input_token_price_per_million_coins: z.literal(0),
+  output_token_price_per_million_coins: z.literal(0),
+  revision: z.number().int().positive(),
+  enabled: z.boolean(),
+  nodes: z.array(OfficialModelPoolNodeSchema).max(20),
+  benefit_policy: z.strictObject({
+    daily_turns: z.number().int().min(1).max(100),
+    concurrency_limit: z.number().int().min(1).max(10),
+  }),
+});
 
 const RechargeMoneySchema = z
   .string()

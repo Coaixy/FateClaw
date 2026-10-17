@@ -3,7 +3,6 @@ import type {
   BenefitSupplyState,
   ModelPoolKey,
 } from '@fateclaw/contracts/model-settings';
-import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
 import { getDbPool, type DbQueryable } from '../db-pool.js';
 
 export class BenefitAdmissionError extends Error {
@@ -68,22 +67,15 @@ export async function saveModelPoolPreference(
 export async function getBenefitAllowance(
   userId: string | undefined,
   dailyTurns: number,
-  policy: BenefitPolicyDto = DEFAULT_BENEFIT_POLICY,
 ) {
   const { rows } = await getDbPool().query<{
     remaining: number;
     resets_at: Date;
   }>(
-    `SELECT COALESCE((SELECT CASE WHEN input_tokens>=$3 OR output_tokens>=$4 THEN 0
-       ELSE GREATEST(0,$2-consumed_turns-reserved_turns) END FROM benefit_daily_usage
+    `SELECT COALESCE((SELECT GREATEST(0,$2-consumed_turns-reserved_turns) FROM benefit_daily_usage
        WHERE user_id=$1 AND allowance_date=(now() AT TIME ZONE 'Asia/Shanghai')::date),$2) AS remaining,
        ((now() AT TIME ZONE 'Asia/Shanghai')::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' AS resets_at`,
-    [
-      userId ?? null,
-      dailyTurns,
-      dailyTurns * policy.max_total_input_tokens,
-      dailyTurns * policy.max_total_output_tokens,
-    ],
+    [userId ?? null, dailyTurns],
   );
   return {
     remaining_turns: userId ? rows[0].remaining : null,
@@ -135,6 +127,7 @@ export async function reserveBenefitTurn(
   userId: string,
   requestId: string,
   policy: BenefitPolicyDto,
+  deadlineAt: number,
   revision?: number,
 ): Promise<void> {
   const settings = await db.query(
@@ -153,41 +146,31 @@ export async function reserveBenefitTurn(
     allowance_date: string;
     consumed_turns: number;
     reserved_turns: number;
-    input_tokens: string;
-    output_tokens: string;
   }>(
     `SELECT * FROM benefit_daily_usage WHERE user_id=$1 AND allowance_date=(now() AT TIME ZONE 'Asia/Shanghai')::date FOR UPDATE`,
     [userId],
   );
   const day = rows[0];
-  if (
-    day.consumed_turns + day.reserved_turns >= policy.daily_turns ||
-    Number(day.input_tokens) >=
-      policy.daily_turns * policy.max_total_input_tokens ||
-    Number(day.output_tokens) >=
-      policy.daily_turns * policy.max_total_output_tokens
-  )
+  if (day.consumed_turns + day.reserved_turns >= policy.daily_turns)
     throw new BenefitAdmissionError('今日免费额度已用完，明日 00:00 恢复');
   const active = await db.query(
     `SELECT user_id FROM benefit_requests WHERE state IN ('reserved','running')`,
   );
   if (active.rows.some((row) => row.user_id === userId))
     throw new BenefitAdmissionError('已有免费请求正在处理，请等待完成');
-  if (active.rowCount! >= policy.queue_limit + policy.concurrency_limit)
-    throw new BenefitAdmissionError('免费服务繁忙，请稍后重试');
   await db.query(
     `UPDATE benefit_daily_usage SET reserved_turns=reserved_turns+1 WHERE user_id=$1 AND allowance_date=$2`,
     [userId, day.allowance_date],
   );
   await db.query(
     `INSERT INTO benefit_requests(request_id,user_id,allowance_date,policy,queue_deadline_at)
-    VALUES($1,$2,$3,$4,now()+make_interval(secs=>$5))`,
+    VALUES($1,$2,$3,$4,$5)`,
     [
       requestId,
       userId,
       day.allowance_date,
       JSON.stringify(policy),
-      policy.queue_timeout_seconds,
+      new Date(deadlineAt),
     ],
   );
 }

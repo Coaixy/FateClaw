@@ -15,13 +15,11 @@ export const zhCNMessages = {
     paid: '付费模型',
     freeReply: '免费额度 · 未扣积分',
     refunded: '免费次数已返还 · 未扣积分',
-    benefitDescription:
-      '基础体验，复杂推理与工具调用能力有限；复杂推演建议选择付费模型。',
-    paidDescription:
-      '更适合复杂推演、多轮追问与知识库分析，按当前账户单价计费。',
+    benefitDescription: '免费使用，不扣积分，仅限制每日次数与并发。',
+    paidDescription: '按实际 Token 用量和当前账户单价计费。',
     noAutoCharge: '免费额度用完会停止，不会自动切换付费或扣积分。',
     remaining: '今日剩余 {count} 次',
-    shortBenefit: '剩余 {count} 次 · 基础体验，不扣积分',
+    shortBenefit: '剩余 {count} 次 · 不扣积分',
     metered: '按实际 Token 用量计费',
     available: '正常供应',
     busy: '免费服务繁忙，请稍后重试',

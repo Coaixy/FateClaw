@@ -120,6 +120,7 @@ export async function admitAgentRequest(args: {
         args.ownerUserId,
         args.requestId,
         runtime.benefitPolicy,
+        args.deadlineAt,
         runtime.poolRevision,
       );
     }

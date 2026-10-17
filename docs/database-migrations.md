@@ -49,6 +49,12 @@ Indexes support request lookup by user and detaching attempts by request.
 The migration applies to both fresh installations and databases already on 0087;
 published 0087 SQL remains unchanged.
 
+`0090_benefit_turns_and_concurrency` removes free-only token/call budgets and
+shorter deadlines. It preserves each installation's configured daily turns and
+concurrency, retains usage and node cooldown records, and makes attempt claims
+depend on active request ownership instead of token reservations. Free requests
+use the common request deadline. The migration changes no credential values.
+
 1. Add a file under `versions/` exporting one named `DatabaseMigration` object.
 2. Use a new increasing ID and append it to `MIGRATIONS` in `manifest.ts`. Keep published SQL, IDs, descriptions, and ordering stable. Keep data-fix logic owned by its migration so later business-code changes cannot change historical replay.
 3. Add relevant behavior tests. Until the next baseline is generated, both new and existing databases run the appended migrations after their covered history.

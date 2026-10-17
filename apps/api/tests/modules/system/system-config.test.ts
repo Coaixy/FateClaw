@@ -323,6 +323,8 @@ describe('pool updates', () => {
     expect(await resolveUserLlmRuntime('user', 'benefit')).toMatchObject({
       poolKey: 'benefit',
       billingMode: 'none',
+      contextWindowTokens: 256_000,
+      maxOutputTokens: 20_480,
       poolNodes: [{ modelConfigId: model.id }],
     });
   });

@@ -27,9 +27,9 @@ import { createPiProviderRuntime } from '../../../agent-runtime/src/pi-runtime/p
 import { installModelPool } from '../../../agent-runtime/src/pi-runtime/model-pool.js';
 import { probeBenefitModelAvailability } from '../../src/modules/system/model-availability-probe.js';
 import {
-  claimBenefitTool,
+  recordBenefitToolCall,
   markBenefitAnswerVisible,
-} from '../../../agent-runtime/src/benefit-budget.js';
+} from '../../../agent-runtime/src/benefit-execution.js';
 import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
 import {
   savePlatformModelConfig,
@@ -159,7 +159,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
   async function claim(id: string, node = nodes[0], probe = false) {
     const attempt = randomUUID();
     const { rows } = await state.pool!.query(
-      'SELECT claim_benefit_attempt($1,$2,$3,$4,500,300,$5) AS claim',
+      'SELECT claim_benefit_attempt($1,$2,$3,$4,$5) AS claim',
       [probe ? null : id, node.modelConfigId, node.revision, attempt, probe],
     );
     return rows[0].claim as { benefitAttemptId: string } | null;
@@ -221,6 +221,31 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     ).toBe(1);
     expect((await getBenefitAllowance('a', 1)).remaining_turns).toBe(0);
   });
+  it('admits a remaining daily turn regardless of accumulated token usage', async () => {
+    await state.pool!
+      .query(`INSERT INTO benefit_daily_usage(user_id,allowance_date,input_tokens,output_tokens)
+      VALUES('a',(now() AT TIME ZONE 'Asia/Shanghai')::date,1000000,1000000)`);
+    expect((await getBenefitAllowance('a', 3)).remaining_turns).toBe(3);
+    await admit();
+    expect((await getBenefitAllowance('a', 3)).remaining_turns).toBe(2);
+  });
+  it('keeps the free execution concurrency boundary and releases a slot after settlement', async () => {
+    const first = await admit('a');
+    const second = await admit('b');
+    await state.pool!.query(
+      `UPDATE benefit_requests SET policy=jsonb_set(policy,'{concurrency_limit}','1')`,
+    );
+    const acquired = await Promise.all([
+      tryAcquireBenefitExecutionSlot(first),
+      tryAcquireBenefitExecutionSlot(second),
+    ]);
+    expect(acquired).toEqual([true, false]);
+    await withAgentResultDelivery(first, 'web:a', async (db) => {
+      await settleBenefitTurn(db, first, false);
+      return null;
+    });
+    expect(await tryAcquireBenefitExecutionSlot(second)).toBe(true);
+  });
   it('uses provider cooldowns independently across nodes and leases one recovery attempt', async () => {
     const id = await admit();
     await start(id);
@@ -277,7 +302,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         [id],
       )
     ).rows[0];
-    expect(usage).toEqual({ input_tokens: '500', output_tokens: '300' });
+    expect(usage).toEqual({ input_tokens: '0', output_tokens: '0' });
     expect(
       (await state.pool!.query('SELECT state FROM benefit_model_attempts'))
         .rows[0].state,
@@ -332,23 +357,15 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       ).rows[0].n,
     ).toBe(0);
   });
-  it('grants the final tool execution atomically across concurrent tool calls', async () => {
+  it('records tool executions beyond the former cap and rejects executions after cancellation', async () => {
     const id = await admit();
     await start(id);
-    await state.pool!.query(
-      `UPDATE benefit_requests SET policy=jsonb_set(policy,'{max_tool_calls}','1') WHERE request_id=$1`,
-      [id],
-    );
     const runtime = {
       poolKey: 'benefit',
       benefitRequestId: id,
     } as LlmRuntimeSnapshot;
-    const results = await Promise.allSettled([
-      claimBenefitTool(runtime),
-      claimBenefitTool(runtime),
-    ]);
-    expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(
-      1,
+    await Promise.all(
+      Array.from({ length: 5 }, () => recordBenefitToolCall(runtime)),
     );
     expect(
       (
@@ -357,7 +374,14 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
           [id],
         )
       ).rows[0].tool_calls,
-    ).toBe(1);
+    ).toBe(5);
+    await state.pool!.query(
+      'UPDATE agent_requests SET cancel_requested_at=now() WHERE request_id=$1',
+      [id],
+    );
+    await expect(recordBenefitToolCall(runtime)).rejects.toThrow(
+      '免费请求已取消或结束',
+    );
   });
   it('consumes a cancelled turn only after answer text was published', async () => {
     const visible = await admit('a');
@@ -533,7 +557,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     }
   });
 
-  it('enforces the durable model-call budget on a real local stream and never dispatches a paid fallback', async () => {
+  it('uses ordinary input and output capacity across repeated free calls without dispatching a paid fallback', async () => {
     const received: Array<{
       model: string;
       max_tokens?: number;
@@ -586,10 +610,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     try {
       const id = await admit();
       await start(id);
-      await state.pool!.query(
-        `UPDATE benefit_requests SET policy=jsonb_set(policy,'{max_model_calls}','1') WHERE request_id=$1`,
-        [id],
-      );
       const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
       const runtime: LlmRuntimeSnapshot = {
         source: 'official',
@@ -605,7 +625,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         model: 'synthetic-model',
         baseUrl,
         contextWindowTokens: 32000,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
         poolNodes: [
           ...nodes.map((node) => ({ ...node, baseUrl })),
           {
@@ -617,8 +637,11 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         ],
       };
       const provider = await createPiProviderRuntime(runtime);
-      installModelPool(provider, runtime);
+      installModelPool(provider, runtime, {
+        answerSessionId: 'synthetic-answer-session',
+      });
       const context = {
+        systemPrompt: 'Synthetic context '.repeat(1500),
         messages: [
           {
             role: 'user' as const,
@@ -627,30 +650,54 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
           },
         ],
       };
-      const first = [];
-      for await (const event of provider.modelRuntime.streamSimple(
+      const summary = await provider.modelRuntime.completeSimple(
         provider.model,
         context,
-      ))
-        first.push(event);
-      expect(first.at(-1)?.type).toBe('done');
-      const second = [];
-      for await (const event of provider.modelRuntime.streamSimple(
-        provider.model,
-        context,
-      ))
-        second.push(event);
-      expect(second.at(-1)?.type).toBe('error');
-      expect(received).toHaveLength(1);
-      expect(received[0].model).toBe('synthetic-model');
-      expect(
-        received[0].max_completion_tokens ?? received[0].max_tokens,
-      ).toBeLessThanOrEqual(2048);
+        { sessionId: 'synthetic-compaction-session' },
+      );
+      expect(summary.stopReason).toBe('stop');
       expect(
         (
           await state.pool!.query(
             'SELECT answer_visible FROM benefit_requests WHERE request_id=$1',
             [id],
+          )
+        ).rows[0].answer_visible,
+      ).toBe(false);
+      await state.pool!.query(
+        'UPDATE agent_requests SET cancel_requested_at=now() WHERE request_id=$1',
+        [id],
+      );
+      await withAgentResultDelivery(id, 'web:a', async (db) => {
+        expect(await settleBenefitTurn(db, id, false, true)).toBe('released');
+        return null;
+      });
+      expect((await getBenefitAllowance('a', 3)).remaining_turns).toBe(3);
+      const answerRequestId = await admit('b');
+      await start(answerRequestId);
+      installModelPool(
+        provider,
+        { ...runtime, benefitRequestId: answerRequestId },
+        { answerSessionId: 'synthetic-answer-session' },
+      );
+      for (let call = 0; call < 5; call += 1) {
+        const result = await provider.modelRuntime.completeSimple(
+          provider.model,
+          context,
+          { sessionId: 'synthetic-answer-session' },
+        );
+        expect(result.stopReason).toBe('stop');
+      }
+      expect(received).toHaveLength(6);
+      for (const request of received) {
+        expect(request.model).toBe('synthetic-model');
+        expect(request.max_completion_tokens ?? request.max_tokens).toBe(8192);
+      }
+      expect(
+        (
+          await state.pool!.query(
+            'SELECT answer_visible FROM benefit_requests WHERE request_id=$1',
+            [answerRequestId],
           )
         ).rows[0].answer_visible,
       ).toBe(true);
@@ -662,7 +709,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
             )
           ).rows[0].tokens,
         ),
-      ).toBe(25);
+      ).toBe(150);
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -713,8 +760,8 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     ).rows[0];
     expect(usage).toEqual({
       model_calls: 1,
-      input_tokens: '500',
-      output_tokens: '300',
+      input_tokens: '0',
+      output_tokens: '0',
     });
   });
 });

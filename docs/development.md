@@ -51,7 +51,7 @@ API startup runs database migrations through `initDatabase()` in [db.ts](../apps
 
 1. Open the admin site and authenticate with the configured `MANAGER_KEY`.
 2. Configure the official model pool in admin system settings: common public prices and thinking level, then one retained primary node and optional child nodes with their own protocol, endpoint, key and routing weight.
-3. Optionally configure `/system/benefit-models` independently: verified free nodes, shared provider quota groups and a finite free policy. It starts disabled. See [Free model service](benefit-model-pool.md).
+3. Optionally configure `/system/benefit-models` independently: free nodes, daily personal turns and execution concurrency. It starts disabled. Other execution rules are shared with paid models. See [Free model service](benefit-model-pool.md).
 4. Check the user site's model status. Users can select paid or free service in the existing composer; they cannot enter personal providers.
 5. Confirm the user's [membership and billing requirements](membership-entitlement-current.md), then send a message in AI Chat.
 

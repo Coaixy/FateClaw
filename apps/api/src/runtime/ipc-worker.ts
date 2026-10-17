@@ -1327,23 +1327,9 @@ export function submitAiChatInboxRequest(input: {
   let payloadQueued = false;
   let executionId = input.recoveryExecutionId;
   let admissionRuntime: LlmRuntimeSnapshot | undefined;
-  const benefitPolicy =
-    input.llmRuntime?.poolKey === 'benefit'
-      ? input.llmRuntime.benefitPolicy
-      : undefined;
-  const queueDeadlineAtMs =
-    benefitPolicy && input.recoveryDeadlineAt
-      ? Date.parse(input.recoveryDeadlineAt) -
-        benefitPolicy.execution_timeout_seconds * 1000
-      : startedAtMs + (benefitPolicy?.queue_timeout_seconds ?? 1800) * 1000;
   const deadlineAtMs = input.recoveryDeadlineAt
     ? Date.parse(input.recoveryDeadlineAt)
-    : startedAtMs +
-      (benefitPolicy
-        ? (benefitPolicy.execution_timeout_seconds +
-            benefitPolicy.queue_timeout_seconds) *
-          1000
-        : AI_CHAT_REQUEST_TIMEOUT);
+    : startedAtMs + AI_CHAT_REQUEST_TIMEOUT;
 
   return new Promise<InboxRequestResult>((resolve, reject) => {
     void (async () => {
@@ -1509,7 +1495,7 @@ export function submitAiChatInboxRequest(input: {
           while (!(await tryAcquireBenefitExecutionSlot(requestId))) {
             if (
               !pendingAiChatRequests.has(requestId) ||
-              Date.now() >= queueDeadlineAtMs
+              Date.now() >= deadlineAtMs
             )
               throw new Error('免费服务繁忙，请稍后重试。本次未扣免费次数。');
             await new Promise<void>((done) =>
@@ -1521,8 +1507,7 @@ export function submitAiChatInboxRequest(input: {
           requestId,
           priority,
           shouldContinue: () =>
-            pendingAiChatRequests.has(requestId) &&
-            (!benefitPolicy || Date.now() < queueDeadlineAtMs),
+            pendingAiChatRequests.has(requestId) && Date.now() < deadlineAtMs,
           onQueued: () => {
             if (input.waitForResponse !== false || acceptedEarly) return;
             acceptedEarly = true;

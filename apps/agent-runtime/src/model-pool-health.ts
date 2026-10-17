@@ -7,11 +7,6 @@ export interface ModelPoolClaim {
   benefitAttemptId?: string;
 }
 
-export interface BenefitAttemptBudget {
-  requestId: string;
-  inputTokens: number;
-  outputTokens: number;
-}
 export interface BenefitAttemptUsage {
   inputTokens: number;
   outputTokens: number;
@@ -24,7 +19,7 @@ export interface ModelPoolHealthStore {
   claim(
     node: RuntimeModelPoolNode,
     token: string,
-    budget?: BenefitAttemptBudget,
+    benefitRequestId?: string,
   ): Promise<ModelPoolClaim | null>;
   finish(
     node: RuntimeModelPoolNode,
@@ -35,18 +30,17 @@ export interface ModelPoolHealthStore {
 }
 
 export const databaseModelPoolHealth: ModelPoolHealthStore = {
-  async claim(node, token, budget) {
+  async claim(node, token, benefitRequestId) {
     if (node.poolKey === 'benefit') {
-      if (!budget) throw new Error('Benefit dispatch requires an allowance');
+      if (!benefitRequestId)
+        throw new Error('Benefit dispatch requires an allowance');
       const { rows } = await getAgentDbPool().query<{
         claim: ModelPoolClaim | null;
-      }>('SELECT claim_benefit_attempt($1,$2,$3,$4,$5,$6) AS claim', [
-        budget.requestId,
+      }>('SELECT claim_benefit_attempt($1,$2,$3,$4) AS claim', [
+        benefitRequestId,
         node.modelConfigId,
         node.revision,
         token,
-        budget.inputTokens,
-        budget.outputTokens,
       ]);
       return rows[0]?.claim ?? null;
     }

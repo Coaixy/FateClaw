@@ -37,16 +37,7 @@ const LABEL_CLASS = 'block space-y-1.5 text-[12px] text-muted';
 
 const POLICY_FIELDS: Array<[keyof BenefitPolicyDto, string, number, number]> = [
   ['daily_turns', '每人每日次数', 1, 100],
-  ['concurrency_limit', '免费并发上限', 1, 10],
-  ['queue_limit', '最多等待请求数', 1, 100],
-  ['queue_timeout_seconds', '排队期限（秒）', 1, 60],
-  ['execution_timeout_seconds', '执行期限（秒）', 10, 300],
-  ['max_model_calls', '每轮模型调用上限（含重试）', 1, 20],
-  ['max_tool_calls', '每轮工具执行上限', 0, 20],
-  ['max_input_tokens', '单次输入预算（Token）', 512, 256000],
-  ['max_total_input_tokens', '单轮总输入预算（Token）', 512, 1000000],
-  ['max_output_tokens', '单次生成上限（Token）', 128, 16384],
-  ['max_total_output_tokens', '单轮总生成上限（Token）', 128, 65536],
+  ['concurrency_limit', '全站免费并发上限', 1, 10],
 ];
 
 function BenefitConfiguration({
@@ -96,23 +87,12 @@ function BenefitConfiguration({
         </label>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {POLICY_FIELDS.slice(0, 2).map(field)}
+        {POLICY_FIELDS.map(field)}
       </div>
       <p className="mt-3 text-[12px] leading-6 text-muted">
         每日北京时间 00:00
-        重置，不累计。失败返还次数，已消耗的用量仍计入个人执行额度。
+        重置，不累计。失败返还次数；每人同时仅可有一个免费请求，执行并发还受全站总上限约束。
       </p>
-      <details className="mt-4">
-        <summary className="cursor-pointer text-[12px] text-primary">
-          执行与排队上限
-        </summary>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {POLICY_FIELDS.slice(2).map(field)}
-        </div>
-        <p className="mt-3 text-[12px] leading-6 text-muted">
-          输入预算包含提示词、知识库与工具定义，调用前按完整上下文的字节数保守预留，收到供应商用量后再结算；实际问题很短也会占用基础上下文预算。
-        </p>
-      </details>
     </fieldset>
   );
 }
@@ -466,7 +446,7 @@ export function ModelPoolConfigPanel({
             </div>
             <p className="mt-3 text-[12px] leading-6 text-muted">
               {benefit
-                ? '面向用户定位为基础体验。回答深度、复杂推理和工具调用稳定性可能不及付费模型。'
+                ? '免费使用，不扣积分，仅限制每日次数与并发。上下文容量按启用节点的最小值计算；模型能力由实际配置的节点决定。'
                 : '用户统一按以上价格计费。上下文容量按启用节点的最小值计算；混用模型时，回答能力可能有所不同。'}
             </p>
           </fieldset>

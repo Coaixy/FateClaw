@@ -970,6 +970,10 @@ Existing installations enroll only their previously configured official model an
 
 The independent free overview/update uses `revision`, `enabled`, `display_name`,
 `thinking_level`, zero input/output prices, `benefit_policy` and `nodes`.
+`benefit_policy` contains only `daily_turns` (1–100) and `concurrency_limit`
+(1–10). Free requests use the same context/output policy, history compaction
+and finite timeouts as paid requests; no separate token or tool/model-call budget
+is accepted.
 Free nodes use the same connection and weight fields as paid nodes; no upstream
 quota group or manual request/token limit is required. An empty node list is valid
 while disabled. Enabling requires at least one configured enabled node. Stale

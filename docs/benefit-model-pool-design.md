@@ -4,12 +4,17 @@ Status: Historical design, implemented October 16, 2026. The current operating
 contract is [Free model service](benefit-model-pool.md). Manual upstream quota groups,
 provider limits, approvals and reset settings described below were removed on
 October 17, 2026. Node cooldowns now follow provider errors and retry hints; the
-historical quota-ledger design is superseded.
+historical quota-ledger design is superseded. Free-only input/output budgets,
+model/tool-call limits, queue bounds and shorter deadlines were also removed on
+October 17. The current free policy contains only `daily_turns` and
+`concurrency_limit`; one active request per user and shared runtime rules still
+apply. Capability-tier descriptions below have been updated to the current UI
+copy. Other historical policy and quota proposals are not current requirements.
 
 ## Outcome and acceptance
 
 FateClaw will offer a daily free AI service supplied by approved free API capacity.
-Users choose between **免费模型 · 基础体验** and **付费模型 · 深度解读**.
+Users choose between **免费模型** and **付费模型**.
 Administrators configure these services on separate pages. The public status page
 reports their availability separately.
 
@@ -58,17 +63,17 @@ there are no invented intelligence scores or guarantees of correctness.
 | Location | Proposed Chinese copy and behavior |
 | --- | --- |
 | Free choice | A compact **免费模型 ▾** control beside the composer actions; 今日剩余 3 次 alongside it. |
-| Free explanation | 适合基础问题和日常体验，回答深度、复杂推理和工具调用稳定性可能不及付费模型。复杂推演、长对话或知识库分析建议选择付费模型。 |
+| Free explanation | 免费使用，不扣积分，仅限制每日次数与并发。 |
 | Free cost notice | 本次使用免费额度，不扣积分。额度用完或服务不可用时会停止，不会自动切换为付费。 |
-| Paid choice | **付费模型** / **深度解读 · 按量计费** / 更适合复杂推演、多轮追问与知识库分析。 |
+| Paid choice | **付费模型** / 按实际 Token 用量和当前账户单价计费。 |
 | Paid submit | Keep the existing **发送** action; show the admitted input/output prices and applicable member pricing beside the model control before submission. |
 | Free submit | Keep the existing **发送** action; the control shows the remaining turns, with reset time in its expanded menu. |
 | Personal allowance exhausted | 今日免费次数已用完，明日 00:00 恢复。 / 查看付费模型 |
 | Shared upstream allowance exhausted | 本轮免费额度已用完，供应恢复后可继续使用。 / 查看服务状态 |
-| Queue full or wait expired | 免费服务繁忙，请稍后重试。本次未扣免费次数。 |
+| Pool busy or request expired | 免费服务繁忙，请稍后重试。本次未扣免费次数。 |
 | Provider failure | 免费服务暂不可用，请稍后重试。本次免费次数已返还。 |
 | Partial answer interrupted | 本次回答中断，免费次数已返还。已生成内容可保留查看。 |
-| Context does not fit | 当前对话超出免费模型的上下文范围，可新建免费对话，或选择付费模型继续。 |
+| Context does not fit | 当前对话超出所选模型的上下文范围，请精简内容或新建对话。 |
 
 Use one compact shared model selector in the composer toolbar. It is available
 before typing and after typing; submitting uses the current selection immediately.
@@ -77,8 +82,8 @@ is no separate model-selection page, choice-card section, post-input dialog or
 required selection step for each message.
 
 The expanded selector contains the free and paid options, each with a short
-capability/cost description and its relevant allowance or prices. Its collapsed
-state shows the chosen service and a brief persistent line: `基础体验，复杂推演建议付费；免费，不扣积分。`
+cost/limit description and its relevant allowance or prices. Its collapsed
+state shows the chosen service and a brief persistent line: `剩余 3 次 · 不扣积分`.
 Full explanations belong in the menu and settings. Show a larger inline notice
 only for actionable exhaustion, failure, context mismatch or a changed service
 policy; do not keep a promotional/educational banner above every message input.
@@ -127,7 +132,7 @@ Saving either page cannot submit or overwrite the other page's settings.
 The paid page retains the public alias, member prices, thinking level and retained
 primary-node rules. The free page contains:
 
-1. An enable switch, display name, persistent capability explanation and daily
+1. An enable switch, display name, persistent cost/limit explanation and daily
    allowance policy. Free price is a read-only `免费 / 不扣积分` label.
 2. Per-user active-request limit, queue limit/deadline, pool concurrency, context,
    generated-token, model-call and tool-execution bounds.

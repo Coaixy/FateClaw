@@ -13,29 +13,11 @@ export type BenefitSupplyState =
 export interface BenefitPolicyDto {
   daily_turns: number;
   concurrency_limit: number;
-  queue_limit: number;
-  queue_timeout_seconds: number;
-  execution_timeout_seconds: number;
-  max_model_calls: number;
-  max_tool_calls: number;
-  max_input_tokens: number;
-  max_total_input_tokens: number;
-  max_output_tokens: number;
-  max_total_output_tokens: number;
 }
 
 export const DEFAULT_BENEFIT_POLICY: BenefitPolicyDto = {
   daily_turns: 3,
   concurrency_limit: 2,
-  queue_limit: 20,
-  queue_timeout_seconds: 30,
-  execution_timeout_seconds: 180,
-  max_model_calls: 4,
-  max_tool_calls: 4,
-  max_input_tokens: 16_384,
-  max_total_input_tokens: 65_536,
-  max_output_tokens: 2_048,
-  max_total_output_tokens: 4_096,
 };
 
 export interface BenefitModelOverviewDto {

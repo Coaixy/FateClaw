@@ -6,12 +6,14 @@ const { mockCreateAgentSession, mockSessionManager, mockSettingsManager } =
     mockSessionManager: {
       create: vi.fn(() => ({
         kind: 'session-manager',
+        getSessionId: () => 'synthetic-pi-session',
         newSession: vi.fn(),
         setSessionFile: vi.fn(),
         isPersisted: vi.fn(() => true),
       })),
       open: vi.fn(() => ({
         kind: 'opened-session-manager',
+        getSessionId: () => 'synthetic-pi-session',
         isPersisted: vi.fn(() => true),
       })),
     },
@@ -39,6 +41,7 @@ import type { RequestRuntime } from '../../src/runtime.js';
 import { runPiSession } from '../../src/pi-runtime/session.js';
 import * as streamApi from '../../src/ai-chat-stream.js';
 import { SkillContentCache } from '../../src/skill-content-cache.js';
+import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -122,21 +125,78 @@ describe('runPiSession', () => {
     mockSettingsManager.inMemory.mockClear();
   });
 
+  it.each(['official', 'benefit'] as const)(
+    'returns provider length-stop text consistently for the %s pool',
+    async (poolKey) => {
+      mockCreateAgentSession.mockResolvedValueOnce({
+        session: {
+          state: {
+            messages: [
+              {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Synthetic partial answer' }],
+                stopReason: 'length',
+              },
+            ],
+          },
+          subscribe: () => vi.fn(),
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      });
+      const input = createInput();
+      input.llmRuntime = {
+        ...llmRuntime,
+        source: 'official',
+        poolKey,
+        benefitRequestId:
+          poolKey === 'benefit' ? 'synthetic-request' : undefined,
+        benefitPolicy:
+          poolKey === 'benefit' ? DEFAULT_BENEFIT_POLICY : undefined,
+        poolNodes: [{ ...llmRuntime, poolKey, revision: 1, weight: 1 }],
+      };
+      const result = await runPiSession({
+        containerInput: input,
+        runtime: { deps: createDeps() },
+        requestScope: createRequestScope(),
+      });
+      expect(result.text).toBe('Synthetic partial answer');
+    },
+  );
+
   it('releases skill snapshots when session initialization fails before prompt cleanup is installed', async () => {
     const release = vi.fn();
     vi.spyOn(SkillContentCache.prototype, 'acquire').mockResolvedValue({
-      baseDir: '/synthetic/skill', filePath: '/synthetic/skill/SKILL.md', release,
+      baseDir: '/synthetic/skill',
+      filePath: '/synthetic/skill/SKILL.md',
+      release,
     });
     const deps = createDeps();
-    deps.skillCatalog.listEffectiveUserSkills = vi.fn(async () => [{
-      id: 'skill-1', dir: 'skill-1', name: 'Skill', description: '', bundle_uri: '',
-      checksum: 'a'.repeat(64), revision_id: 'revision-1', format_version: 1,
-      install_status: 'installed', visibility: 'private', source: 'self',
-    }]);
-    mockCreateAgentSession.mockRejectedValueOnce(new Error('synthetic session initialization failure'));
-    await expect(runPiSession({
-      containerInput: createInput(), runtime: { deps }, requestScope: createRequestScope(),
-    })).rejects.toThrow('synthetic session initialization failure');
+    deps.skillCatalog.listEffectiveUserSkills = vi.fn(async () => [
+      {
+        id: 'skill-1',
+        dir: 'skill-1',
+        name: 'Skill',
+        description: '',
+        bundle_uri: '',
+        checksum: 'a'.repeat(64),
+        revision_id: 'revision-1',
+        format_version: 1,
+        install_status: 'installed',
+        visibility: 'private',
+        source: 'self',
+      },
+    ]);
+    mockCreateAgentSession.mockRejectedValueOnce(
+      new Error('synthetic session initialization failure'),
+    );
+    await expect(
+      runPiSession({
+        containerInput: createInput(),
+        runtime: { deps },
+        requestScope: createRequestScope(),
+      }),
+    ).rejects.toThrow('synthetic session initialization failure');
     expect(release).toHaveBeenCalledOnce();
   });
 

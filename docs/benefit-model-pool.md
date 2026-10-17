@@ -25,8 +25,8 @@ source. Metadata, request persistence and usage records never include their valu
 
 Nodes do not require quota groups, provider reset timezones, expiry dates or manually
 entered RPM/RPD/TPM/daily token limits. The provider determines available supply.
-Local usage records enforce personal and per-turn limits; they do not predict or
-cap a node's remaining upstream capacity.
+Local admission enforces daily personal turns and concurrency. Usage records do not
+predict or cap a node's remaining upstream capacity.
 
 ## Selection and user experience
 
@@ -48,63 +48,58 @@ including after loss of a transient Redis lock. Request snapshots preserve the
 chosen pool and limits through queueing/recovery. A conflicting selection fails
 before dispatch; a previously registered paid reservation can settle at zero usage.
 
-The UI identifies free models as **基础体验**, explains limited reasoning/tool capability
-in the selector, shows remaining turns without a large permanent banner, and
-labels final replies as free replies. Paid choices show the current account's
-applicable input/output prices, including the non-member multiplier. Model status
-refreshes after a turn, on return to the page and once a minute while visible.
+The selector explains that free models have daily turn and concurrency limits and
+do not charge credits. It shows remaining turns without a large permanent banner
+and labels final replies as free replies. Model capability depends on the configured
+nodes; the service does not impose a separate free reasoning or tool-use tier.
+Paid choices show the current account's applicable input/output prices, including
+the non-member multiplier. Model status refreshes after a turn, on return to the
+page and once a minute while visible.
 
 ## Durable admission and limits
 
 The API creates the free reservation, durable request intent and user message
 in one transaction. Personal allowance rows serialize the final available turn
 across processes. One user can hold one queued/running free request. The pool
-has a bounded FIFO wait and execution share, also subject to global agent capacity.
+has its own execution concurrency cap, also subject to global agent capacity.
+Queued free requests use the same finite request lifetime as other model requests.
 
-Initial policy:
+The administrator can configure only these free-service limits:
 
 | Limit | Default |
 | --- | --- |
 | Daily personal turns | 3, all memberships, no carryover; Asia/Shanghai midnight |
-| Free execution slots / waiters | 2 / 20 |
-| Queue / execution deadline | 30 / 180 seconds |
-| Model attempts / tool executions per turn | 4 / 4 |
-| Input budget per call / turn | 16,384 / 65,536 |
-| Generated tokens per call / turn | 2,048 / 4,096 |
+| Free execution slots | 2 |
 
-Daily input/output budgets are the admitted daily turns multiplied by the admitted
-per-turn bounds. Failed and cancelled attempts still consume applicable token
-budgets. The authenticated overview reports no remaining free allowance when either the
-turn allowance or the daily token budget is exhausted.
+These are source defaults, not the policy of every deployment. Upgrades preserve
+the configured daily turns and concurrency while removing obsolete policy fields.
+The per-user active-request cap remains one, including queueing.
 
-Input reservations use the UTF-8 size of the complete model context plus a protocol
-margin as a conservative upper estimate for unknown provider tokenizers. This
-includes system instructions, tool schemas and history, not just the question.
-Actual reported usage reconciles the reservation. Providers must still enforce
-their free/overage boundary; this estimate cannot establish their billing
-terms. The initial 12,000 input bound was rejected by an actual synthetic end-to-end
-turn whose full context required 13,979 budget units; the verified initial bound is
-16,384. Large contexts are rejected rather than silently truncated.
+Deploy the API, agent runtime and admin together. Migration
+`0090_benefit_turns_and_concurrency` changes the model-attempt claim signature;
+restart resident agents with the new runtime before serving turns. Completed
+request snapshots and recorded usage remain intact.
+
+Free requests use the same model execution rules as paid requests: configured node
+context windows, the shared output-token policy, automatic history compaction,
+and finite model/request/tool timeouts. They have no additional input/output token
+budget, model-call or tool-call count limit, queue-size limit, or shorter free-only
+deadline. Provider context, rate and quota limits still apply.
 
 ## Per-call enforcement and finalization
 
-PostgreSQL owns personal allowance, model/tool-call, execution and node health
-state. The shared `claim_benefit_attempt` function reserves personal execution
-budgets and leases node recovery before contacting a provider. Calls and monitoring
-share the same cooldown state across resident processes. Redis retains its existing
-transport and global scheduling roles.
+PostgreSQL owns personal allowance, request execution and node health state.
+Atomic attempt claims verify an active request and lease node recovery before
+contacting a provider. Calls and monitoring share the same cooldown state across
+resident processes. Redis retains its existing transport and global scheduling
+roles. Tool execution uses the ordinary agent path without a free-only grant.
+Tools and agent sessions are never replayed as failover. Switching after content
+publication remains prohibited.
 
-The runtime applies these guards to every model call, including failover. SDK
-retries and background warming are disabled; free compaction is disabled.
-Every tool execution needs its own durable grant. Model attempts have bounded
-first-content, idle and total deadlines (20, 30 and 60 seconds), further limited
-by the turn deadline. Output allowance shrinks to remaining generation/context
-capacity. Exhausted budgets terminate the turn; tools and agent sessions are never
-replayed. Switching after content publication remains prohibited.
-
-Reported usage settles exactly once. Unknown usage retains its conservative
-personal reservation. Upstream rate limits and exhausted quota cool only the
-responding node, and failover tries the other enabled nodes in the same pool.
+Reported usage settles exactly once for diagnostics; missing usage remains
+explicitly unknown and does not create a personal token limit. Upstream rate
+limits and exhausted quota cool only the responding node, and failover tries
+the other enabled nodes in the same pool.
 A valid `Retry-After` interval or HTTP date sets the cooldown, bounded to one second
 through 24 hours. Without one, rate limits default to 60 seconds; daily quota,
 insufficient balance and exhausted quota default to one hour. Other supplier
@@ -122,10 +117,10 @@ classification and default cooldown when no retry header is available.
 
 Final reply persistence and personal allowance settlement share the durable result
 delivery transaction. A complete answer consumes one turn. A provider/platform
-failure refunds the personal turn, including interrupted partial answers, without
-refunding spent personal token budgets. User cancellation consumes a turn after
-answer text has been published, and otherwise releases it. Duplicate results and recovery
-cannot settle twice. Running/ambiguous requests are not resubmitted after a crash.
+failure refunds the personal turn, including interrupted partial answers.
+User cancellation consumes a turn after answer text has been published, and
+otherwise releases it. Duplicate results and recovery cannot settle twice.
+Running/ambiguous requests are not resubmitted after a crash.
 Free requests bypass paid wallet admission; wallet debt does not block them.
 
 Account deletion removes personal preferences, daily allowances and free requests.
@@ -149,10 +144,18 @@ and stale cached supply become unknown.
 PostgreSQL integration checks cover pool isolation, final-turn contention,
 provider cooldowns, single recovery leases, uncertain usage,
 transactional/idempotent finalization, active session selection fencing,
-cancellation, tool limits and monitoring cooldowns. A
-real local synthetic stream verifies output/model-call guards and excludes paid
-fallback. Historical upgrade and fresh-baseline paths converge on the same schema
-and deterministic seeds.
+cancellation and monitoring cooldowns. Synthetic provider checks exercise free
+routing without paid fallback. Historical upgrade and fresh-baseline paths
+converge on the same schema and deterministic seeds.
+
+The October 17, 2026 check of the simplified policy passed 842 tests; 25 opt-in
+checks without their external fixtures were skipped. Synthetic streams accepted
+a system prompt larger than the former input bound, retained the ordinary output
+ceiling across five answer calls, and did not dispatch a paid fallback. Tool
+execution beyond the former cap, cancellation after a hidden summary, and
+preservation of configured limits and completed snapshots during upgrade were
+also checked. API, runtime, web and admin type checks passed. Real supplier
+execution and production deployment remain **unverified**.
 
 The October 16, 2026 browser validation used the application's built pages, a
 disposable PostgreSQL/Redis environment and a local synthetic provider. Three successful
@@ -163,14 +166,16 @@ remain **unverified**; operator credentials have not been configured by this wor
 
 The detailed [design decisions](benefit-model-pool-design.md) are background.
 
-The October 16, 2026 check, before removal of manual upstream quota limits, passed
-792 automated tests; 40 opt-in integration checks without their external fixtures
-were skipped. API/runtime compilation and
+The October 16, 2026 check, before removal of manual upstream quotas and extra
+free execution limits, passed 792 automated tests; 40 opt-in integration checks
+without their external fixtures were skipped. API/runtime compilation and
 both Next.js production exports passed. API lint reported zero errors and 103
 existing-style warnings. The actual 360px conversation layout had no horizontal
 overflow, and the final built application completed a fresh synthetic free turn.
-That historical check used the previous local quota counters; automatic node
+That historical check used the previous local quota counters and execution budgets;
+it does not validate the current simplified policy. Automatic node
 cooldown and retry hints are covered by the current PostgreSQL/local-provider tests.
-The simplified admin form was checked on the current production export with a
-synthetic metadata endpoint: adding and saving a node submits neither quota groups
-nor quota-group references.
+The earlier admin simplification was checked on a production export with a
+synthetic metadata endpoint: adding and saving a node submitted neither quota
+groups nor quota-group references. That browser check preceded removal of the
+extra free execution policy fields.

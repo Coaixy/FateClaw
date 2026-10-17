@@ -15,13 +15,11 @@ export const zhTWMessages = {
     paid: '付費模型',
     freeReply: '免費額度 · 未扣點數',
     refunded: '免費次數已返還 · 未扣點數',
-    benefitDescription:
-      '基礎體驗，複雜推理與工具呼叫能力有限；複雜推演建議選擇付費模型。',
-    paidDescription:
-      '更適合複雜推演、多輪追問與知識庫分析，按目前帳戶單價計費。',
+    benefitDescription: '免費使用，不扣點數，僅限制每日次數與並行請求數。',
+    paidDescription: '按實際 Token 用量和目前帳戶單價計費。',
     noAutoCharge: '免費額度用完會停止，不會自動切換付費或扣點數。',
     remaining: '今日剩餘 {count} 次',
-    shortBenefit: '剩餘 {count} 次 · 基礎體驗，不扣點數',
+    shortBenefit: '剩餘 {count} 次 · 不扣點數',
     metered: '按實際 Token 用量計費',
     available: '正常供應',
     busy: '免費服務繁忙，請稍後重試',

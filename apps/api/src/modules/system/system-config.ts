@@ -145,14 +145,11 @@ function publicPoolModel(settings: PlatformModelSettings): OfficialModelDto {
     model_key: settings.pool.model_key,
     display_name: settings.pool.display_name,
     description: settings.pool.benefit_policy
-      ? '基础体验模型，复杂推理与工具调用能力有限；使用免费额度，不扣积分。'
+      ? '使用免费额度，不扣积分；限制每日对话次数与并发，其余执行规则与付费模型相同。'
       : '由平台统一调度可用模型节点，按公开 Token 价格计费。',
     model_name: settings.pool.model_key,
     context_window_tokens: nodes.length
-      ? Math.min(
-          ...nodes.map(({ model }) => nodeContextWindow(model)),
-          settings.pool.benefit_policy?.max_input_tokens ?? Infinity,
-        )
+      ? Math.min(...nodes.map(({ model }) => nodeContextWindow(model)))
       : null,
     input_token_price_per_million_coins:
       settings.pool.input_token_price_per_million_coins,
@@ -217,7 +214,6 @@ function resolvePlatformRuntime(
   const model = first.model;
   const contextWindowTokens = Math.min(
     ...nodes.map(({ model }) => nodeContextWindow(model)),
-    settings.pool.benefit_policy?.max_input_tokens ?? Infinity,
   );
   return {
     source: 'official',
@@ -238,7 +234,6 @@ function resolvePlatformRuntime(
     model: model.model_name.trim(),
     contextWindowTokens,
     maxOutputTokens: Math.min(
-      settings.pool.benefit_policy?.max_output_tokens ?? Infinity,
       ...nodes.map(({ model }) =>
         getDefaultMaxOutputTokens(model.model_name, contextWindowTokens),
       ),
@@ -347,7 +342,7 @@ export async function getUserModelSettingsOverview(
       enabled: benefit.pool.enabled,
       supply: await getBenefitSupply(),
       daily_turns: policy.daily_turns,
-      ...(await getBenefitAllowance(userId, policy.daily_turns, policy)),
+      ...(await getBenefitAllowance(userId, policy.daily_turns)),
     },
   };
 }

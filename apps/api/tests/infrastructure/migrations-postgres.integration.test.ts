@@ -160,13 +160,15 @@ describe.skipIf(!connectionString)(
       await withDatabase(async (client) => {
         await replayHistory(client, '0087_benefit_model_pool');
         await client.query(`
+          UPDATE official_model_pool_settings SET benefit_policy=jsonb_set(benefit_policy,'{daily_turns}','10') WHERE id='benefit';
           INSERT INTO users(id,phone,created_at) VALUES ('upgrade-user','13000000001',now());
           INSERT INTO user_model_preferences(user_id,pool_key) VALUES ('upgrade-user','official');
           INSERT INTO benefit_daily_usage(user_id,allowance_date) VALUES ('upgrade-user',CURRENT_DATE);
           INSERT INTO agent_requests(request_id,execution_id,account_id,session_id,owner_user_id,state,input,runtime,deadline_at)
             VALUES ('upgrade-request','upgrade-execution','web:upgrade-user','upgrade-session','upgrade-user','completed','{}','{}',now());
           INSERT INTO benefit_requests(request_id,user_id,allowance_date,policy,state,queue_deadline_at)
-            VALUES ('upgrade-request','upgrade-user',CURRENT_DATE,'{}','consumed',now());
+            SELECT 'upgrade-request','upgrade-user',CURRENT_DATE,benefit_policy,'consumed',now()
+              FROM official_model_pool_settings WHERE id='benefit';
           INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,day_requests,day_tokens)
             VALUES ('upgrade-group','Synthetic group',10,100,10000,100000,7,100);
           UPDATE benefit_quota_groups SET cooldown_until=now()+interval '2 hours',cooldown_reason='daily_quota';
@@ -176,8 +178,46 @@ describe.skipIf(!connectionString)(
             VALUES ('upgrade-node','benefit','upgrade-group');
           INSERT INTO benefit_model_attempts(id,request_id,node_id,quota_group_id,day_start,minute_start,input_tokens,output_tokens,health_generation,state)
             VALUES ('upgrade-attempt','upgrade-request','synthetic-node','upgrade-group',now(),now(),1,1,0,'settled');
+          INSERT INTO agent_requests(request_id,execution_id,account_id,session_id,owner_user_id,state,input,runtime,deadline_at)
+            VALUES ('queued-request','queued-execution','web:upgrade-user','queued-session','upgrade-user','queued','{}','{"poolKey":"benefit"}',now()+interval '30 minutes');
+          INSERT INTO benefit_requests(request_id,user_id,allowance_date,policy,queue_deadline_at)
+            SELECT 'queued-request','upgrade-user',CURRENT_DATE,benefit_policy,now()+interval '30 seconds'
+              FROM official_model_pool_settings WHERE id='benefit';
         `);
+        const historicalPolicy = (
+          await client.query(
+            "SELECT policy FROM benefit_requests WHERE request_id='upgrade-request'",
+          )
+        ).rows[0].policy;
         await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              "SELECT benefit_policy FROM official_model_pool_settings WHERE id='benefit'",
+            )
+          ).rows[0].benefit_policy,
+        ).toEqual({ daily_turns: 10, concurrency_limit: 2 });
+        expect(
+          (
+            await client.query(
+              "SELECT policy FROM benefit_requests WHERE request_id='queued-request'",
+            )
+          ).rows[0].policy,
+        ).toEqual({ daily_turns: 10, concurrency_limit: 2 });
+        expect(
+          (
+            await client.query(
+              "SELECT policy FROM benefit_requests WHERE request_id='upgrade-request'",
+            )
+          ).rows[0].policy,
+        ).toEqual(historicalPolicy);
+        expect(
+          (
+            await client.query(
+              "SELECT b.queue_deadline_at=a.deadline_at AS common_deadline FROM benefit_requests b JOIN agent_requests a USING(request_id) WHERE request_id='queued-request'",
+            )
+          ).rows[0].common_deadline,
+        ).toBe(true);
         const upgraded = await readSeedFingerprints(client);
         await runDatabaseMigrations(client);
         expect(await readSeedFingerprints(client)).toEqual(upgraded);

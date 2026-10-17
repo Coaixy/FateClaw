@@ -17,13 +17,12 @@ export const enMessages = {
     freeReply: 'Free allowance · No balance charge',
     refunded: 'Free turn refunded · No balance charge',
     benefitDescription:
-      'For basic use, with limited complex reasoning and tool use. Use the paid service for complex analysis.',
-    paidDescription:
-      'Suitable for complex analysis, follow-up questions and knowledge retrieval. Your account rates apply.',
+      'Free to use, with daily turn and concurrency limits. No balance charge.',
+    paidDescription: 'Billed by actual token usage at your account rates.',
     noAutoCharge:
       'The free service stops when its allowance is exhausted. It never automatically switches to paid use or charges your balance.',
     remaining: '{count} turns left today',
-    shortBenefit: '{count} left · Basic use, no balance charge',
+    shortBenefit: '{count} left · No balance charge',
     metered: 'Billed by actual token usage',
     available: 'Available',
     busy: 'Free service is busy; try later',

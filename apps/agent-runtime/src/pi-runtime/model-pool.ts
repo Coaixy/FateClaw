@@ -18,10 +18,7 @@ import {
   type ModelPoolClaim,
   type BenefitAttemptUsage,
 } from '../model-pool-health.js';
-import {
-  benefitCallBudget,
-  markBenefitAnswerVisible,
-} from '../benefit-budget.js';
+import { markBenefitAnswerVisible } from '../benefit-execution.js';
 import { createPiProviderRuntime, type PiProviderRuntime } from './provider.js';
 
 const FIRST_CONTENT_TIMEOUT_MS = 45_000;
@@ -159,6 +156,7 @@ export function installModelPool(
     trace?: (event: Record<string, unknown>) => void;
     firstContentTimeoutMs?: number;
     idleTimeoutMs?: number;
+    answerSessionId?: string;
   } = {},
 ): void {
   if (
@@ -216,11 +214,16 @@ export function installModelPool(
       errorMessage: aborted
         ? '请求已取消'
         : runtime.poolKey === 'benefit'
-          ? '免费额度或供应暂不可用，请稍后重试。'
+          ? '免费模型暂不可用，请稍后重试。'
           : '官方模型池暂不可用，请稍后重试。',
     });
     const run = async () => {
-      const budget = await benefitCallBudget(runtime, context, options.trace);
+      const benefitRequestId =
+        runtime.poolKey === 'benefit' ? runtime.benefitRequestId : undefined;
+      // SDK compaction has its own routing ID and does not publish an answer.
+      const answerCall =
+        options.answerSessionId !== undefined &&
+        requestOptions?.sessionId === options.answerSessionId;
       let answerVisible = false;
       for (const node of weightedNodeOrder(nodes, options.random)) {
         if (runtime.poolKey === 'benefit' && node.poolKey !== 'benefit')
@@ -233,9 +236,7 @@ export function installModelPool(
           });
           return;
         }
-        const claim = budget
-          ? await health.claim(node, randomUUID(), budget)
-          : await health.claim(node, randomUUID());
+        const claim = await health.claim(node, randomUUID(), benefitRequestId);
         if (!claim) continue;
         options.trace?.({
           type: 'model_pool_attempt_started',
@@ -276,8 +277,7 @@ export function installModelPool(
               env: undefined,
               signal,
               maxRetries: 0,
-              ...(budget ? { maxTokens: budget.outputTokens } : {}),
-              ...(budget && node.piApi !== 'google-generative-ai'
+              ...(benefitRequestId && node.piApi !== 'google-generative-ai'
                 ? {
                     // pi-ai 0.86 invokes onResponse only after SDK success; capture error headers before normalization.
                     fetch: async (
@@ -305,13 +305,10 @@ export function installModelPool(
           const iterator = stream[Symbol.asyncIterator]();
           while (true) {
             const idle = published
-              ? (options.idleTimeoutMs ??
-                (budget ? 30_000 : STREAM_IDLE_TIMEOUT_MS))
-              : (options.firstContentTimeoutMs ??
-                (budget ? 20_000 : FIRST_CONTENT_TIMEOUT_MS));
+              ? (options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS)
+              : (options.firstContentTimeoutMs ?? FIRST_CONTENT_TIMEOUT_MS);
             const deadline = Math.min(
-              startedAt + (budget ? 60_000 : ATTEMPT_TIMEOUT_MS),
-              budget?.deadlineAt ?? Infinity,
+              startedAt + ATTEMPT_TIMEOUT_MS,
               activityAt + idle,
             );
             const item = await nextEvent(
@@ -337,20 +334,21 @@ export function installModelPool(
               if (!event.message.content.length)
                 throw new Error('Provider returned an empty response');
               if (
-                budget &&
+                benefitRequestId &&
+                answerCall &&
                 !answerVisible &&
                 event.message.content.some(
                   (block) => block.type === 'text' && block.text.length > 0,
                 )
               ) {
-                await markBenefitAnswerVisible(budget.requestId);
+                await markBenefitAnswerVisible(benefitRequestId);
                 answerVisible = true;
               }
               await finishHealth(
                 node,
                 claim,
                 'success',
-                budget
+                benefitRequestId
                   ? {
                       inputTokens:
                         event.message.usage.input +
@@ -384,12 +382,13 @@ export function installModelPool(
             }
             if (published) {
               if (
-                budget &&
+                benefitRequestId &&
+                answerCall &&
                 !answerVisible &&
                 event.type === 'text_delta' &&
                 event.delta.length
               ) {
-                await markBenefitAnswerVisible(budget.requestId);
+                await markBenefitAnswerVisible(benefitRequestId);
                 answerVisible = true;
               }
               output.push(event);
@@ -408,7 +407,7 @@ export function installModelPool(
           accumulated = addUsage(accumulated, latest?.usage ?? emptyUsage());
           const attemptUsage = latest?.usage;
           const cooldown =
-            budget && retryable
+            benefitRequestId && retryable
               ? modelPoolCooldown(
                   status,
                   error instanceof Error ? error.message : String(error),
@@ -419,7 +418,7 @@ export function installModelPool(
             node,
             claim,
             retryable ? 'failure' : 'release',
-            budget
+            benefitRequestId
               ? {
                   inputTokens: attemptUsage
                     ? attemptUsage.input +

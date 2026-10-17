@@ -26,7 +26,7 @@ export async function probeBenefitModelAvailability(
   if (signal.aborted) return { latency: null, attempted: false };
   const id = randomUUID();
   const { rows } = await getDbPool().query<{ claim: unknown }>(
-    'SELECT claim_benefit_attempt(NULL,$1,$2,$3,64,16,true) AS claim',
+    'SELECT claim_benefit_attempt(NULL,$1,$2,$3,true) AS claim',
     [node.modelConfigId, node.revision, id],
   );
   if (!rows[0]?.claim) return { latency: null, attempted: false };
