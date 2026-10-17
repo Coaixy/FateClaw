@@ -41,6 +41,7 @@ import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
 import { getRequestId } from '../request-scope.js';
 import { installModelPool } from './model-pool.js';
+import { ModelCallError } from '../public-error.js';
 
 const DEFAULT_THINKING_LEVEL: PiThinkingLevel = 'medium';
 
@@ -271,7 +272,12 @@ export async function runPiSession(args: {
       if (latestAssistant?.error) {
         // Pi 把 Provider 欠费、鉴权和协议错误写在 assistant.errorMessage，prompt 本身可能正常 resolve。
         // 转成异常后复用 request-boundary 的脱敏与 publicErrorText 映射，避免成功空回复。
-        throw new Error(latestAssistant.error);
+        throw latestAssistant.modelFailure
+          ? new ModelCallError(
+              latestAssistant.modelFailure,
+              args.containerInput.llmRuntime.poolKey ?? 'official',
+            )
+          : new Error(latestAssistant.error);
       }
       if (
         args.containerInput.llmRuntime.poolKey === 'benefit' &&

@@ -14,12 +14,26 @@
 
 /** 全部合法的失败原因码取值。 */
 export const PUBLIC_REASON_CODES = [
-  /** 请求处理超时（daemon 硬超时 / API 兜底超时）。 */
+  /** Model response or request processing timeout. */
   'agent_timeout',
   /** 上游模型限流（429 等）。 */
   'rate_limited',
   /** 上下文/消息过长被中断。 */
   'context_too_long',
+  /** Provider failures distinguish user actions from administrator repairs. */
+  'model_auth_error',
+  'model_permission_denied',
+  'model_quota_exhausted',
+  'model_not_found',
+  'model_overloaded',
+  'model_unavailable',
+  'model_network_error',
+  'model_content_filtered',
+  'model_request_invalid',
+  'model_empty_response',
+  'model_response_interrupted',
+  'model_pool_unavailable',
+  'model_error',
   /** 排盘等场景缺少必要输入（出生时间等）。 */
   'missing_input',
   /** Pi/工具协议错误。 */

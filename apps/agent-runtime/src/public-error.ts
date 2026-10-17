@@ -1,4 +1,22 @@
 import type { LlmRuntimeSnapshot, PublicReasonCode } from './types.js';
+import {
+  classifyModelFailure,
+  formatModelFailure,
+  type ModelFailure,
+  type ModelPoolKey,
+} from '@fateclaw/contracts/model-settings';
+
+export class ModelCallError extends Error {
+  readonly modelFailure: ModelFailure;
+  readonly poolKey: ModelPoolKey;
+
+  constructor(modelFailure: ModelFailure, poolKey: ModelPoolKey) {
+    super(formatModelFailure(modelFailure, poolKey).publicErrorText);
+    this.name = 'ModelCallError';
+    this.modelFailure = modelFailure;
+    this.poolKey = poolKey;
+  }
+}
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
@@ -113,13 +131,14 @@ function formatCustomModelError(
 }
 
 export function mapContainerErrorToPublicError(
-  error: string,
+  failure: unknown,
   options?: { llmRuntime?: LlmRuntimeSnapshot },
 ): {
   publicErrorText: string;
   /** 机器可读的失败原因码，取值集合与 contracts 的 PUBLIC_REASON_CODES 一致。 */
   publicReasonCode: PublicReasonCode;
 } {
+  const error = failure instanceof Error ? failure.message : String(failure);
   if (options?.llmRuntime?.source === 'custom') {
     return {
       publicErrorText: formatCustomModelError(error, options.llmRuntime),
@@ -127,23 +146,23 @@ export function mapContainerErrorToPublicError(
     };
   }
 
-  if (/timeout|timed out|超时/i.test(error)) {
+  if (failure instanceof ModelCallError) {
+    return formatModelFailure(failure.modelFailure, failure.poolKey);
+  }
+
+  const modelFailureKind = classifyModelFailure(error);
+  // Untyped timeouts can also originate from the enclosing request deadline.
+  if (modelFailureKind === 'timeout') {
     return {
       publicErrorText: '这次处理超时了，请稍后再试。',
       publicReasonCode: 'agent_timeout',
     };
   }
-  if (/429|rate limit|请求量较大/i.test(error)) {
-    return {
-      publicErrorText: '当前请求量较大，请稍后再试。',
-      publicReasonCode: 'rate_limited',
-    };
-  }
-  if (/消息内容过长|context|token|too.long|maximum/i.test(error)) {
-    return {
-      publicErrorText: '这次消息内容太长，处理被中断。请精简后重试。',
-      publicReasonCode: 'context_too_long',
-    };
+  if (modelFailureKind) {
+    return formatModelFailure(
+      { kinds: [modelFailureKind] },
+      options?.llmRuntime?.poolKey,
+    );
   }
   if (
     /还缺少这些信息|缺少必要输入|出生时间|出生日期|性别|三个数字|六爻/.test(
@@ -162,10 +181,10 @@ export function mapContainerErrorToPublicError(
     };
   }
   return {
-    publicErrorText: `这次没有完成，原因：${redactRuntimeSensitiveValues(
-      error,
-      options?.llmRuntime,
-    )}`,
+    publicErrorText:
+      options?.llmRuntime?.source === 'official'
+        ? '本次请求未能完成，暂时无法确定具体原因。请稍后重试；如持续出现，请反馈给管理员。'
+        : `这次没有完成，原因：${redactRuntimeSensitiveValues(error, options?.llmRuntime)}`,
     publicReasonCode: 'internal_error',
   };
 }

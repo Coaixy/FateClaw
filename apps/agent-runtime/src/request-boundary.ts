@@ -102,7 +102,7 @@ export async function executeContainerInput(
       result: null,
       newSessionId: sessionId,
       error: errorMessage,
-      ...mapContainerErrorToPublicError(errorMessage, { llmRuntime }),
+      ...mapContainerErrorToPublicError(error, { llmRuntime }),
       usage: partialUsage,
       transcript: transcript.length > 0 ? transcript : undefined,
       model,

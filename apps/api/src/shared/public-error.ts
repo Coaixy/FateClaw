@@ -1,4 +1,8 @@
 import type { PublicReasonCode } from '@fateclaw/contracts';
+import {
+  classifyModelFailure,
+  formatModelFailure,
+} from '@fateclaw/contracts/model-settings';
 
 export interface PublicErrorInfo {
   publicMessage: string;
@@ -28,7 +32,8 @@ export function mapInternalErrorToPublicError(
   const raw = (error || '').trim();
   const fallbackMessage = options.fallbackMessage || '抱歉，AI 服务暂时不可用';
 
-  if (raw.includes('收件箱请求超时') || /timeout|timed out/i.test(raw)) {
+  const modelFailureKind = classifyModelFailure(raw);
+  if (raw.includes('收件箱请求超时') || modelFailureKind === 'timeout') {
     return {
       publicMessage: '这次处理超时了，请稍后再试。',
       publicReasonCode: 'agent_timeout',
@@ -36,18 +41,11 @@ export function mapInternalErrorToPublicError(
     };
   }
 
-  if (/rate limit|429|请求量较大/i.test(raw)) {
+  if (modelFailureKind) {
+    const publicError = formatModelFailure({ kinds: [modelFailureKind] });
     return {
-      publicMessage: '当前请求量较大，请稍后再试。',
-      publicReasonCode: 'rate_limited',
-      debugReason: sanitizeDetail(raw),
-    };
-  }
-
-  if (/消息内容过长|context|token|too.long|maximum/i.test(raw)) {
-    return {
-      publicMessage: '这次消息内容太长，处理被中断。请精简后重试。',
-      publicReasonCode: 'context_too_long',
+      publicMessage: publicError.publicErrorText,
+      publicReasonCode: publicError.publicReasonCode,
       debugReason: sanitizeDetail(raw),
     };
   }

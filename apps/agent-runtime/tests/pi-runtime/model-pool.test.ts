@@ -204,6 +204,10 @@ describe('model pool transport', () => {
         );
         const result = await complete();
         expect(result.stopReason).toBe('error');
+        expect(result.errorMessage).toContain('上游服务认证失败');
+        expect(result).toMatchObject({
+          modelFailure: { kinds: ['authentication'] },
+        });
         expect(result.errorMessage).not.toContain('invalid api key');
         expect(scope.traceEvents).toContainEqual(
           expect.objectContaining({
@@ -287,6 +291,64 @@ describe('model pool transport', () => {
         }),
       }),
     );
+  });
+
+  it.each(['official', 'benefit'] as const)(
+    'preserves a shared-provider rate limit after exhausting the %s pool',
+    async (poolKey) => {
+      const failed = await serve((_request, response) => {
+        response.writeHead(429, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              code: 429,
+              message: 'Provider returned error',
+              metadata: {
+                limit_source: 'upstream_provider_shared_pool',
+                raw: 'Synthetic model is temporarily rate-limited upstream',
+              },
+            },
+          }),
+        );
+      });
+      const nodes = [node('a', failed), node('b', failed)].map((entry) => ({
+        ...entry,
+        poolKey,
+      }));
+      const { complete } = await pool(
+        nodes,
+        health(),
+        {},
+        {
+          poolKey,
+          ...(poolKey === 'benefit'
+            ? { billingMode: 'none', benefitRequestId: 'synthetic-request' }
+            : {}),
+        },
+      );
+      const result = await complete();
+      expect(result.errorMessage).toContain('共享');
+      expect(result.errorMessage).toContain('限流');
+      expect(result).toMatchObject({
+        modelFailure: { kinds: ['shared_pool_rate_limit'] },
+      });
+    },
+  );
+
+  it('summarizes different failed channels instead of reporting only the last error', async () => {
+    const failed = await serve((request, response) => {
+      const status =
+        request.headers.authorization === 'Bearer synthetic-key-a' ? 401 : 503;
+      response.writeHead(status, { 'content-type': 'application/json' });
+      response.end('{"error":{"message":"Synthetic provider error"}}');
+    });
+    const { complete } = await pool([node('a', failed), node('b', failed)]);
+    const result = await complete();
+    expect(result.errorMessage).toContain('认证失败');
+    expect(result.errorMessage).toContain('服务故障');
+    expect(result).toMatchObject({
+      modelFailure: { kinds: ['authentication', 'unavailable'] },
+    });
   });
 
   it.each(['claim', 'health_update'] as const)(
@@ -503,7 +565,10 @@ describe('model pool transport', () => {
       health(['a']),
       { trace },
     );
-    expect((await complete()).stopReason).toBe('error');
+    const result = await complete();
+    expect(result.stopReason).toBe('error');
+    expect(result.errorMessage).toContain('没有可用的模型通道');
+    expect(result.errorMessage).not.toContain('限流');
     expect(store.finish).not.toHaveBeenCalled();
     expect(trace).toHaveBeenCalledWith(
       expect.objectContaining({

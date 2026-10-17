@@ -9,6 +9,10 @@ import {
 } from '@earendil-works/pi-ai';
 import {
   modelPoolCooldown,
+  classifyModelFailure,
+  formatModelFailure,
+  type ModelFailure,
+  type ModelFailureKind,
   type RuntimeModelPoolNode,
 } from '@fateclaw/contracts/model-settings';
 import type { LlmRuntimeSnapshot } from '../types.js';
@@ -146,22 +150,6 @@ function hasContent(event: AssistantMessageEvent): boolean {
   );
 }
 
-function publicFailureMessage(
-  error: unknown,
-  aborted: boolean,
-  benefit = false,
-): string {
-  if (aborted) return '请求已取消';
-  const message = error instanceof Error ? error.message : String(error);
-  if (/context.*(length|window)|maximum context|too many tokens/i.test(message))
-    return '消息内容过长，请精简对话后重试。';
-  if (/timeout|timed out/i.test(message)) return '模型调用超时，请稍后重试。';
-  if (/429|rate.?limit/i.test(message)) return '当前请求量较大，请稍后重试。';
-  return benefit
-    ? '免费模型暂不可用，请稍后重试。'
-    : '官方模型调用失败，请稍后重试。';
-}
-
 async function nextEvent(
   iterator: AsyncIterator<AssistantMessageEvent>,
   signal: AbortSignal,
@@ -259,7 +247,8 @@ export function installModelPool(
     const fallbackError = (
       aborted: boolean,
       usage: Usage = accumulated,
-    ): AssistantMessage => ({
+      modelFailure: ModelFailure = { kinds: ['pool_unavailable'] },
+    ): AssistantMessage & { modelFailure?: ModelFailure } => ({
       role: 'assistant',
       content: [],
       api: primary.model.api,
@@ -270,9 +259,8 @@ export function installModelPool(
       timestamp: Date.now(),
       errorMessage: aborted
         ? '请求已取消'
-        : runtime.poolKey === 'benefit'
-          ? '免费模型暂不可用，请稍后重试。'
-          : '官方模型池暂不可用，请稍后重试。',
+        : formatModelFailure(modelFailure, runtime.poolKey).publicErrorText,
+      ...(!aborted ? { modelFailure } : {}),
     });
     const run = async () => {
       const benefitRequestId =
@@ -284,6 +272,7 @@ export function installModelPool(
       let answerVisible = false;
       const attemptedNodeIds: string[] = [];
       const skippedNodeIds: string[] = [];
+      const failureKinds = new Set<ModelFailureKind>();
       for (const node of weightedNodeOrder(nodes, options.random)) {
         if (runtime.poolKey === 'benefit' && node.poolKey !== 'benefit')
           continue;
@@ -484,6 +473,14 @@ export function installModelPool(
           const failureMessage =
             failure instanceof Error ? failure.message : String(failure);
           const aborted = Boolean(requestOptions?.signal?.aborted);
+          const modelFailure: ModelFailure = {
+            kinds: [
+              phase === 'provider'
+                ? (classifyModelFailure(failureMessage, status) ?? 'unknown')
+                : 'internal',
+            ],
+          };
+          if (!aborted) failureKinds.add(modelFailure.kinds[0]);
           const retryable =
             !aborted &&
             phase === 'provider' &&
@@ -531,18 +528,20 @@ export function installModelPool(
           );
           if (aborted || published || !retryable) {
             const final = terminal?.type === 'error' ? terminal.error : latest;
+            const publicFailure = fallbackError(
+              aborted,
+              accumulated,
+              modelFailure,
+            );
             output.push({
               type: 'error',
               reason: aborted ? 'aborted' : 'error',
               error: {
-                ...(final ?? fallbackError(aborted)),
+                ...(final ?? publicFailure),
                 usage: accumulated,
                 stopReason: aborted ? 'aborted' : 'error',
-                errorMessage: publicFailureMessage(
-                  failure,
-                  aborted,
-                  runtime.poolKey === 'benefit',
-                ),
+                errorMessage: publicFailure.errorMessage,
+                ...(!aborted ? { modelFailure } : {}),
               },
             });
             return;
@@ -567,7 +566,9 @@ export function installModelPool(
       output.push({
         type: 'error',
         reason: 'error',
-        error: fallbackError(false, accumulated),
+        error: fallbackError(false, accumulated, {
+          kinds: failureKinds.size ? [...failureKinds] : ['pool_unavailable'],
+        }),
       });
     };
     void run().catch((error) => {
@@ -584,14 +585,7 @@ export function installModelPool(
       output.push({
         type: 'error',
         reason: 'error',
-        error: {
-          ...fallbackError(false),
-          errorMessage: publicFailureMessage(
-            error,
-            false,
-            runtime.poolKey === 'benefit',
-          ),
-        },
+        error: fallbackError(false, accumulated, { kinds: ['internal'] }),
       });
     });
     return output;

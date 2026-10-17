@@ -42,6 +42,10 @@ import { runPiSession } from '../../src/pi-runtime/session.js';
 import * as streamApi from '../../src/ai-chat-stream.js';
 import { SkillContentCache } from '../../src/skill-content-cache.js';
 import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
+import {
+  mapContainerErrorToPublicError,
+  ModelCallError,
+} from '../../src/public-error.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',
@@ -488,6 +492,45 @@ describe('runPiSession', () => {
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves model failure categories through the session instead of reclassifying the public text', async () => {
+    const input = createInput();
+    input.llmRuntime = {
+      ...input.llmRuntime,
+      source: 'official',
+      poolKey: 'official',
+    };
+    const messages: unknown[] = [];
+    mockCreateAgentSession.mockResolvedValue({
+      session: {
+        state: { messages },
+        subscribe: () => vi.fn(),
+        async prompt() {
+          messages.push({
+            role: 'assistant',
+            content: [],
+            stopReason: 'error',
+            errorMessage: '已经净化的用户提示，没有可重新识别的 HTTP 状态码',
+            modelFailure: { kinds: ['quota'] },
+          });
+        },
+        abort: vi.fn(),
+        dispose: vi.fn(),
+      },
+    });
+    const failure = await runPiSession({
+      containerInput: input,
+      runtime: { deps: createDeps() },
+      requestScope: createRequestScope(),
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ModelCallError);
+    expect(
+      mapContainerErrorToPublicError(failure, { llmRuntime: input.llmRuntime }),
+    ).toMatchObject({
+      publicReasonCode: 'model_quota_exhausted',
+      publicErrorText: expect.stringContaining('官方模型'),
+    });
   });
 
   it('injects the no-board policy for normal chat without authorized board context', async () => {

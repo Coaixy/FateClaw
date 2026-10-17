@@ -1,4 +1,8 @@
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
+import {
+  readModelFailure,
+  type ModelFailure,
+} from '@fateclaw/contracts/model-settings';
 
 import { appendTranscriptEvent } from '../transcript-store.js';
 import { traceEvent } from '../trace.js';
@@ -56,6 +60,7 @@ function isAssistantMessage(value: unknown): value is {
   };
   stopReason?: string;
   errorMessage?: string;
+  modelFailure?: unknown;
 } {
   return (
     Boolean(value) &&
@@ -682,6 +687,7 @@ export function createPiEventCollector(args: {
 export function extractLatestAssistantResult(messages: unknown[]): {
   text: string | null;
   error: string | null;
+  modelFailure?: ModelFailure;
 } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -693,7 +699,14 @@ export function extractLatestAssistantResult(messages: unknown[]): {
       (message.stopReason !== 'aborted' && Boolean(errorMessage))
         ? errorMessage || '模型服务返回错误，但没有提供错误详情'
         : null;
-    return { text: text || null, error };
+    const modelFailure = error
+      ? readModelFailure(message.modelFailure)
+      : undefined;
+    return {
+      text: text || null,
+      error,
+      ...(modelFailure ? { modelFailure } : {}),
+    };
   }
   return null;
 }

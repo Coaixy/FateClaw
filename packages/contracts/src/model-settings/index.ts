@@ -1,6 +1,13 @@
 /** The platform owns model configuration for every client. */
 
 export { modelPoolCooldown, type ModelPoolCooldown } from './cooldown.js';
+export {
+  classifyModelFailure,
+  formatModelFailure,
+  readModelFailure,
+  type ModelFailure,
+  type ModelFailureKind,
+} from './failure.js';
 
 export type ModelPoolKey = 'official' | 'benefit';
 export type BenefitSupplyState =

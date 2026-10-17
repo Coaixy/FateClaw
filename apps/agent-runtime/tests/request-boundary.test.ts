@@ -37,6 +37,7 @@ vi.mock('../src/request-scope.js', async () => {
 import { createRequestScope } from '../src/request-scope.js';
 import { executeContainerInput } from '../src/request-boundary.js';
 import { attachPartialUsage } from '../src/partial-usage.js';
+import { ModelCallError } from '../src/public-error.js';
 import type { LlmRuntimeSnapshot } from '../src/types.js';
 
 const llmRuntime: LlmRuntimeSnapshot = {
@@ -164,5 +165,32 @@ describe('executeContainerInput user pasted board persistence', () => {
 
     expect(result.status).toBe('error');
     expect(result.usage).toBeUndefined();
+  });
+
+  it('delivers the structured model cause and partial usage to the public response', async () => {
+    const failure = new ModelCallError(
+      { kinds: ['shared_pool_rate_limit'] },
+      'benefit',
+    );
+    const usage = { promptTokens: 12, completionTokens: 0, totalTokens: 12 };
+    attachPartialUsage(failure, usage);
+    mockExecutePiRuntime.mockRejectedValueOnce(failure);
+    const result = await executeContainerInput(
+      {
+        accountId: 'web:user-1',
+        sessionId: 'session-1',
+        llmRuntime: { ...llmRuntime, source: 'official', poolKey: 'benefit' },
+        userMessage: 'Synthetic question',
+        history: [],
+      },
+      createRequestScope(),
+    );
+    expect(result).toMatchObject({
+      status: 'error',
+      publicReasonCode: 'rate_limited',
+      publicErrorText: expect.stringContaining('上游共享调用额度'),
+      usage,
+    });
+    expect(result.publicErrorText).not.toContain('这次没有完成，原因：');
   });
 });

@@ -70,6 +70,37 @@ failures identify the execution phase and safe error codes without database
 messages or row values. Public failure messages remain independent of these
 operator diagnostics.
 
+## Public failure reporting
+
+Model-call failures carry an allowlisted `modelFailure.kinds` value alongside
+Pi's readable `errorMessage`. The session preserves these categories in a typed
+error, and the request boundary emits `publicErrorText` and `publicReasonCode`.
+The web client displays that public text directly; it must not infer a cause
+again from translated copy. Categories and copy are shared by the runtime and
+API in `packages/contracts/src/model-settings/failure.ts`.
+
+Public messages distinguish upstream authentication, permissions, quota,
+shared-pool rate limits, model/endpoint availability, overload, timeouts,
+network failures, context size, content filtering, incompatible requests,
+empty responses and interrupted responses. Specific provider error types and
+details take precedence over HTTP status: a 429 can report insufficient quota,
+and a 403 can explicitly report content filtering. A bare 403 does not establish
+that content was filtered. A reference to `token` alone does not establish that
+the context is too long. Error shapes follow the supplier references for
+[OpenRouter](https://openrouter.ai/docs/api-reference/errors-and-debugging),
+[Claude](https://platform.claude.com/docs/en/api/errors) and
+[Gemini](https://ai.google.dev/gemini-api/docs/troubleshooting).
+
+When routing exhausts its candidates, the pool retains every distinct category
+and reports mixed causes together. When no node can be claimed, it reports only
+that no channel is available, without guessing whether cooldown or another
+claim condition caused it. Unknown upstream failures and infrastructure
+failures remain distinct. Public messages contain fixed explanations and next
+steps, never provider payloads, credentials or connection URLs. Free-service
+messages may offer switching to the official model; upstream account or
+configuration problems direct users to an administrator. They do not ask users
+to recharge their FateClaw balance or supply provider credentials.
+
 ## Validation
 
 Regression checks cover retained primary membership, editable children,
