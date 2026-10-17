@@ -35,8 +35,24 @@ a different purpose and token allowance from a real chat turn.
 ## Public results
 
 `GET /api/service-status` only reads saved observations. Page visits, manual refresh
-and the page's five-minute visible-tab refresh never trigger inference. The endpoint
-allows public HTTP caching for 60 seconds. Results contain only `status`,
+and the page's five-minute visible-tab refresh never trigger inference. Each API
+instance shares one successful response for 60 seconds and coalesces concurrent
+cache misses into one batch of four database queries. Query parameters and
+authorization headers do not create separate snapshots. Failed reads are not
+cached, and an expired snapshot is not served as a new observation.
+
+GET and HEAD requests share a Redis-backed limit of 60 requests per client IP per
+minute, applied before reading even a cached response. A refused request returns
+429 with `Retry-After`; an unavailable limiter returns 503. Failed and refused
+responses use `no-store`.
+
+Successful responses allow public HTTP caching for the snapshot's remaining
+60-second lifetime, followed by a 60-second stale-while-revalidate window. Cache
+hits preserve observation times and do not renew that lifetime. The route removes
+the global API's conflicting private cache headers and user-specific `Vary`
+dimensions while retaining origin and representation negotiation.
+
+Results contain only `status`,
 `checked_at`, `latency_ms`, `check_interval_seconds`, `stale_after_seconds` and up to
 28 public history samples. These legacy top-level fields continue to describe paid
 service. The additional `services` collection contains the independently scoped

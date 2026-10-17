@@ -120,6 +120,11 @@ text has been published, and otherwise releases it. Duplicate results and recove
 cannot settle twice. Running/ambiguous requests are not resubmitted after a crash.
 Free requests bypass paid wallet admission; wallet debt does not block them.
 
+Account deletion removes personal preferences, daily allowances and free requests.
+Provider attempts detach from those requests and retain shared quota accounting,
+including idempotent settlement of usage reported after deletion. Deleting an
+account does not refund provider requests or discard monitoring attempts.
+
 ## Status and validation
 
 The public status endpoint returns separate paid/free sections without exposing

@@ -42,6 +42,13 @@ values. Paid and free status schedules/histories become independently scoped.
 New default seeds use a fixed migration timestamp so historical replay and fresh
 bootstrap converge. Existing sessions retain the paid pool.
 
+`0088_benefit_user_deletion` makes personal model preferences, free daily usage
+and free requests cascade on account deletion. Shared model attempts retain their
+quota accounting and detach from deleted requests so late usage can still settle.
+Indexes support request lookup by user and detaching attempts by request.
+The migration applies to both fresh installations and databases already on 0087;
+published 0087 SQL remains unchanged.
+
 1. Add a file under `versions/` exporting one named `DatabaseMigration` object.
 2. Use a new increasing ID and append it to `MIGRATIONS` in `manifest.ts`. Keep published SQL, IDs, descriptions, and ordering stable. Keep data-fix logic owned by its migration so later business-code changes cannot change historical replay.
 3. Add relevant behavior tests. Until the next baseline is generated, both new and existing databases run the appended migrations after their covered history.

@@ -156,6 +156,67 @@ describe.skipIf(!connectionString)(
       });
     }, 30000);
 
+    it('upgrades populated benefit records without losing shared accounting and remains safe on repeated startup', async () => {
+      await withDatabase(async (client) => {
+        await replayHistory(client, '0087_benefit_model_pool');
+        await client.query(`
+          INSERT INTO users(id,phone,created_at) VALUES ('upgrade-user','13000000001',now());
+          INSERT INTO user_model_preferences(user_id,pool_key) VALUES ('upgrade-user','official');
+          INSERT INTO benefit_daily_usage(user_id,allowance_date) VALUES ('upgrade-user',CURRENT_DATE);
+          INSERT INTO agent_requests(request_id,execution_id,account_id,session_id,owner_user_id,state,input,runtime,deadline_at)
+            VALUES ('upgrade-request','upgrade-execution','web:upgrade-user','upgrade-session','upgrade-user','completed','{}','{}',now());
+          INSERT INTO benefit_requests(request_id,user_id,allowance_date,policy,state,queue_deadline_at)
+            VALUES ('upgrade-request','upgrade-user',CURRENT_DATE,'{}','consumed',now());
+          INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,day_requests,day_tokens)
+            VALUES ('upgrade-group','Synthetic group',10,100,10000,100000,7,100);
+          INSERT INTO benefit_model_attempts(id,request_id,node_id,quota_group_id,day_start,minute_start,input_tokens,output_tokens,health_generation,state)
+            VALUES ('upgrade-attempt','upgrade-request','synthetic-node','upgrade-group',now(),now(),1,1,0,'settled');
+        `);
+        const before = await readSeedFingerprints(client);
+
+        await runDatabaseMigrations(client);
+        await runDatabaseMigrations(client);
+        expect(await readSeedFingerprints(client)).toEqual(before);
+
+        await client.query("DELETE FROM users WHERE id='upgrade-user'");
+        expect(
+          (
+            await client.query(
+              "SELECT request_id FROM benefit_model_attempts WHERE id='upgrade-attempt'",
+            )
+          ).rows,
+        ).toEqual([{ request_id: null }]);
+        expect(
+          (
+            await client.query(
+              "SELECT day_requests,day_tokens FROM benefit_quota_groups WHERE id='upgrade-group'",
+            )
+          ).rows,
+        ).toEqual([{ day_requests: 7, day_tokens: '100' }]);
+        expect(
+          (
+            await client.query(
+              "SELECT 1 FROM benefit_requests WHERE user_id='upgrade-user'",
+            )
+          ).rowCount,
+        ).toBe(0);
+        expect(
+          (
+            await client.query(
+              "SELECT 1 FROM benefit_daily_usage WHERE user_id='upgrade-user'",
+            )
+          ).rowCount,
+        ).toBe(0);
+        expect(
+          (
+            await client.query(
+              "SELECT 1 FROM user_model_preferences WHERE user_id='upgrade-user'",
+            )
+          ).rowCount,
+        ).toBe(0);
+      });
+    }, 30000);
+
     it.each([
       { name: 'FateClaw Clarity', expectedName: '卦师使用权' },
       {

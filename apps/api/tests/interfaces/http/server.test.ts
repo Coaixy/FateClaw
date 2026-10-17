@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
-const { mockGetUserById, mockLoggerError, mockLoggerWarn } = vi.hoisted(() => ({
+const {
+  mockGetUserById,
+  mockLoggerError,
+  mockLoggerWarn,
+  mockPublicStatus,
+  mockStatusLimit,
+} = vi.hoisted(() => ({
   mockGetUserById: vi.fn(),
   mockLoggerError: vi.fn(),
   mockLoggerWarn: vi.fn(),
+  mockPublicStatus: vi.fn(),
+  mockStatusLimit: vi.fn(),
+}));
+
+vi.mock('../../../src/modules/system/service-status.js', () => ({
+  getPublicServiceStatus: mockPublicStatus,
+}));
+vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+  fixedWindowRateLimit: mockStatusLimit,
 }));
 
 vi.mock('../../../src/infrastructure/config.js', () => ({
@@ -79,11 +94,47 @@ describe('createApiServer auth guard', () => {
       id: 'user-1',
       auth_token_version: 2,
     });
+    mockPublicStatus.mockResolvedValue({ status: 'unknown', history: [] });
+    mockStatusLimit.mockResolvedValue({ allowed: true, retryAfterSec: 0 });
     app = await createApiServer();
   });
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('serves public status with coherent cache headers while protected APIs remain private', async () => {
+    const response = await app.inject('/api/service-status');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toContain('public, max-age=');
+    for (const header of [
+      'cdn-cache-control',
+      'surrogate-control',
+      'pragma',
+      'expires',
+    ]) {
+      expect(response.headers[header]).toBeUndefined();
+    }
+    const vary = String(response.headers.vary).toLowerCase();
+    expect(vary).toContain('origin');
+    expect(vary).not.toContain('authorization');
+    expect(vary).not.toContain('cookie');
+
+    const protectedResponse = await app.inject('/api/auth/protected-test');
+    expect(protectedResponse.statusCode).toBe(401);
+    expect(protectedResponse.headers['cache-control']).toContain('no-store');
+    expect(protectedResponse.headers['cdn-cache-control']).toBe('no-store');
+  });
+
+  it('keeps failed public status reads uncacheable through the global error handler', async () => {
+    mockPublicStatus.mockRejectedValueOnce(
+      new Error('Synthetic database failure'),
+    );
+    const response = await app.inject('/api/service-status');
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['cdn-cache-control']).toBe('no-store');
+    expect(response.headers['surrogate-control']).toBe('no-store');
   });
 
   it('excludes issue search text from request error logs', async () => {
