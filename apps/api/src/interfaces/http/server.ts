@@ -31,6 +31,7 @@ import { messagesRoutes } from './messages-routes.js';
 import { modelSettingsRoutes } from './model-settings-routes.js';
 import { serviceStatusRoutes } from './service-status-routes.js';
 import { issuesRoutes } from './issues-routes.js';
+import { announcementRoutes } from './announcements-routes.js';
 import { openApiRoutes } from './open-api-routes.js';
 import { openSessionsAdminRoutes } from './open-sessions-admin-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
@@ -338,6 +339,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(modelSettingsRoutes, { prefix: '/api/model-settings' });
   await app.register(serviceStatusRoutes, { prefix: '/api/service-status' });
   await app.register(issuesRoutes, { prefix: '/api/issues' });
+  await app.register(announcementRoutes, { prefix: '/api/announcements' });
   await app.register(paipanRoutes, { prefix: '/api/paipan' });
   await app.register(skillsRoutes, { prefix: '/api/skills' });
 

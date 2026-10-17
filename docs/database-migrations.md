@@ -32,6 +32,11 @@ Both paths share the existing PostgreSQL advisory lock and 120-second transactio
 
 The `0086_issues` migration adds public issues, per-issue anonymous participants, timeline entries and account moderation. Private attribution remains linked to existing users; account deletion cascades the account's content. See [Issues](issues.md) for permissions and transaction boundaries.
 
+The `0091_popup_announcements` migration creates a new `popup_announcements`
+table for versioned operational notice dialogs. The retired banner table and
+its frozen removal migration remain unchanged. See [Popup announcements](announcements.md)
+for publication, browser dismissal and concurrent editing behavior.
+
 ## Adding an upgrade
 
 `0087_benefit_model_pool` adds pool-scoped membership, a disabled free model pool,

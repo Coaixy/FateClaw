@@ -36,6 +36,17 @@ vi.mock('../../../src/modules/issues/issue-service.js', () => ({
   listPublicIssues: vi.fn(),
 }));
 
+vi.mock('../../../src/modules/announcements/announcement-service.js', () => ({
+  getAdminAnnouncements: vi.fn(async () => ({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 20,
+  })),
+  getPublicAnnouncements: vi.fn(),
+  saveAnnouncement: vi.fn(),
+}));
+
 vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   adjustUserPurchasedBalance: vi.fn(),
   cancelAdminUserMembership: vi.fn(),
@@ -208,6 +219,37 @@ describe('adminRoutes authentication throttling', () => {
     expect(mockListAdminIssues).toHaveBeenCalledOnce();
   });
 
+  it('restricts announcement reads and writes to site owners', async () => {
+    const url = '/announcements';
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          url,
+          headers: { 'x-admin-key': 'test-user-manager-key' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `${url}/fbd24536-1376-4a5e-a5e3-d4c735f0123a`,
+          headers: { 'x-admin-key': 'test-user-manager-key' },
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          url,
+          headers: { 'x-admin-key': 'test-manager-key' },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it.each([
     { method: 'GET' as const, url: '/about-ledger' },
     { method: 'POST' as const, url: '/about-ledger' },
@@ -306,7 +348,6 @@ describe('adminRoutes authentication throttling', () => {
   });
 
   it.each([
-    { method: 'GET', url: '/announcements' },
     { method: 'POST', url: '/announcements' },
     { method: 'PATCH', url: '/announcements/retired-announcement' },
     { method: 'DELETE', url: '/announcements/retired-announcement' },

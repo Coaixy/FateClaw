@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Users,
   MessageSquare,
+  Megaphone,
   Puzzle,
   ScrollText,
   Bot,
@@ -59,6 +60,7 @@ const navItems = [
     requiredScopes: ['messages:read'],
   },
   { href: '/skills', label: '技能', icon: Puzzle, requiredScopes: ['admin:*'] },
+  { href: '/announcements', label: '公告管理', icon: Megaphone, requiredScopes: ['admin:*'] },
   {
     href: '/issues',
     label: '问题与建议',

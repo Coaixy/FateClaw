@@ -47,7 +47,7 @@ function getLocalDateKey(date = new Date()) {
  *
  * @returns 首次进入或当天未勾选免提醒时展示的合规告知弹窗。
  */
-export function PreUseNoticeDialog() {
+export function PreUseNoticeDialog({ onReady }: { onReady?: () => void }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [checkedToday, setCheckedToday] = useState(true);
@@ -55,6 +55,7 @@ export function PreUseNoticeDialog() {
   useEffect(() => {
     try {
       if (window.localStorage.getItem(NOTICE_SNOOZE_KEY) === getLocalDateKey()) {
+        onReady?.();
         return;
       }
     } catch {
@@ -62,7 +63,7 @@ export function PreUseNoticeDialog() {
     }
 
     setOpen(true);
-  }, []);
+  }, [onReady]);
 
   const handleAccept = () => {
     if (checkedToday) {
@@ -74,6 +75,7 @@ export function PreUseNoticeDialog() {
     }
 
     setOpen(false);
+    onReady?.();
   };
 
   if (!open || pathname === '/status' || pathname === '/status/') {

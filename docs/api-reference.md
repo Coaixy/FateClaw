@@ -15,6 +15,7 @@
 - `/api/referrals`
 - `/api/skills`
 - `/api/issues`
+- `/api/announcements` — public popup notices; owner management under `/api/admin/announcements` ([contract](announcements.md))
 - `/api/billing`
 - `/api/api-keys`
 - `/api/v1`

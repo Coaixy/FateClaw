@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { adminIssueRoutes } from './issues-routes.js';
+import { adminAnnouncementRoutes } from './announcements-routes.js';
 
 import {
   BILLING_RESERVATION_STALE_MS,
@@ -533,6 +534,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   await app.register(adminIssueRoutes, { prefix: '/issues' });
+  await app.register(adminAnnouncementRoutes, { prefix: '/announcements' });
 
   // POST /api/admin/verify — 验证密钥是否正确
   app.post('/verify', async (request) => {

@@ -8,3 +8,4 @@ export * from './model-settings/index.js';
 export * from './api-keys/index.js';
 export * from './service-status/index.js';
 export * from './issues/index.js';
+export * from './announcements/index.js';

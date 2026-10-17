@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { ToastProvider } from '@/components/ui/toast';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
-import { PreUseNoticeDialog } from '@/components/compliance/pre-use-notice-dialog';
+import { SiteNotices } from '@/components/site-notices';
 import { I18nProvider } from '@/lib/i18n';
 // 标题与正文均走系统楷体（Kaiti SC / STKaiti / KaiTi / BiauKai），不再额外加载网络字体。
 import './globals.css';
@@ -39,7 +39,7 @@ export default function RootLayout({
             <ToastProvider>
               <ConfirmProvider>
                 {children}
-                <PreUseNoticeDialog />
+                <SiteNotices />
               </ConfirmProvider>
             </ToastProvider>
           </AuthProvider>
