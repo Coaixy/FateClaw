@@ -18,6 +18,7 @@ import {
   claimServiceStatusCheck,
   completeServiceStatusCheck,
   listServiceStatusChecks,
+  getServiceTokenUsage,
 } from '../../src/infrastructure/repositories/service-status-repository.js';
 
 // This must be an explicitly supplied disposable server, never the application's DATABASE_URL.
@@ -116,6 +117,47 @@ describe.skipIf(!connectionString)(
         "SELECT count(*) AS count FROM ai_service_status_checks WHERE checked_at<now()-interval '7 days'",
       );
       expect(Number(expired.rows[0].count)).toBe(0);
+    });
+
+    it('sums recorded totals across accounts and fills seven UTC days without exposing account details', async () => {
+      const empty = await getServiceTokenUsage();
+      expect(empty.total_tokens).toBe(0);
+      expect(empty.today_tokens).toBe(0);
+      expect(empty.daily).toHaveLength(7);
+      expect(empty.daily.every((point) => point.tokens === 0)).toBe(true);
+      const first = randomUUID();
+      const second = randomUUID();
+      await state.pool!.query(
+        `INSERT INTO users (id,phone,phone_verified,created_at)
+         VALUES ($1,'19900000001',true,now()),($2,'19900000002',true,now())`,
+        [first, second],
+      );
+      await state.pool!.query(
+        `INSERT INTO daily_usage (user_id,date,input_tokens,output_tokens,total_tokens)
+         VALUES
+           ($1,((now() AT TIME ZONE 'UTC')::date)::text,3,4,400000000),
+           ($2,((now() AT TIME ZONE 'UTC')::date)::text,3,4,500000000),
+           ($1,((now() AT TIME ZONE 'UTC')::date-1)::text,3,4,350000),
+           ($1,((now() AT TIME ZONE 'UTC')::date-40)::text,3,4,2000000000)`,
+        [first, second],
+      );
+      const usage = await getServiceTokenUsage();
+      expect(usage.total_tokens).toBe(2_900_350_000);
+      expect(usage.today_tokens).toBe(900_000_000);
+      expect(usage.daily).toHaveLength(7);
+      expect(
+        usage.daily.slice(0, -2).every((point) => point.tokens === 0),
+      ).toBe(true);
+      expect(usage.daily.at(-2)?.tokens).toBe(350_000);
+      expect(usage.daily.at(-1)).toEqual({
+        date: usage.updated_at.slice(0, 10),
+        tokens: 900_000_000,
+      });
+      expect(usage.daily.map((point) => point.date)).toEqual(
+        usage.daily.map((point) => point.date).sort(),
+      );
+      expect(JSON.stringify(usage)).not.toContain(first);
+      expect(JSON.stringify(usage)).not.toContain(second);
     });
   },
 );

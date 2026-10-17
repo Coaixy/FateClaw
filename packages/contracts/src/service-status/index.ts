@@ -24,4 +24,13 @@ export interface ServiceStatusServiceDto extends ServiceStatusDetailsDto {
 
 export interface ServiceStatusOverviewDto extends ServiceStatusDetailsDto {
   services?: ServiceStatusServiceDto[];
+  token_usage?: ServiceTokenUsageDto;
+}
+
+export interface ServiceTokenUsageDto {
+  total_tokens: number;
+  today_tokens: number;
+  updated_at: string;
+  /** Seven daily recorded totals in ascending UTC order, including zero days. */
+  daily: { date: string; tokens: number }[];
 }

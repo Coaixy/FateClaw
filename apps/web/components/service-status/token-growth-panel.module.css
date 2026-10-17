@@ -1,0 +1,98 @@
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-on-dark) 14%, transparent);
+  border-radius: 24px;
+  padding: 24px 28px 20px;
+  background: var(--color-surface-dark);
+  color: var(--color-on-dark);
+  isolation: isolate;
+}
+
+.hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    radial-gradient(
+      ellipse at 78% 32%,
+      color-mix(in srgb, var(--color-primary) 14%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      color-mix(in srgb, var(--color-on-dark) 9%, transparent) 0.6px,
+      transparent 0.6px
+    );
+  background-size:
+    auto,
+    22px 22px;
+  content: '';
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.orbit {
+  position: absolute;
+  z-index: -1;
+  top: -180px;
+  right: -160px;
+  width: 620px;
+  height: 620px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.orbit::before,
+.orbit::after {
+  position: absolute;
+  inset: 54px;
+  border: inherit;
+  border-radius: inherit;
+  content: '';
+}
+
+.orbit::after {
+  inset: 108px;
+}
+
+.counter {
+  display: flex;
+  min-height: 1.2em;
+  align-items: center;
+  margin-left: -0.045em;
+  margin-top: 10px;
+  font-family: ui-monospace, 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.07em;
+  line-height: 1.2;
+}
+
+.counterAccent {
+  color: var(--color-primary);
+  text-shadow: 0 0 50px
+    color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.separator {
+  color: color-mix(in srgb, var(--color-on-dark) 30%, transparent);
+}
+
+.syncDot {
+  background: var(--color-accent-teal);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--color-accent-teal) 12%, transparent);
+}
+
+@media (min-width: 640px) {
+  .hero {
+    padding: 28px 40px 22px;
+  }
+}
+
+@media (max-width: 380px) {
+  .hero {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}

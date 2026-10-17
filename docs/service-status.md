@@ -2,8 +2,8 @@
 
 The user site exposes `/status` without requiring login or accepting the AI-use
 notice. The sidebar links to this page on desktop and mobile. It displays separate
-paid and free service states, observation times and independently sampled
-seven-day histories. Paid service retains probe latency. It never lists node identities, node counts,
+paid and free service states with independently sampled seven-day histories,
+alongside platform Token growth. Probe latency remains available in the API. It never lists node identities, node counts,
 models, providers, endpoints, credentials or provider error messages.
 
 ## Probe budget and scheduling
@@ -35,9 +35,9 @@ a different purpose and token allowance from a real chat turn.
 ## Public results
 
 `GET /api/service-status` only reads saved observations. Page visits, manual refresh
-and the page's five-minute visible-tab refresh never trigger inference. Each API
+and the page's one-minute visible-tab refresh never trigger inference. Each API
 instance shares one successful response for 60 seconds and coalesces concurrent
-cache misses into one batch of four database queries. Query parameters and
+cache misses into one batch of five database queries. Query parameters and
 authorization headers do not create separate snapshots. Failed reads are not
 cached, and an expired snapshot is not served as a new observation.
 
@@ -52,12 +52,36 @@ hits preserve observation times and do not renew that lifetime. The route remove
 the global API's conflicting private cache headers and user-specific `Vary`
 dimensions while retaining origin and representation negotiation.
 
-Results contain only `status`,
+Availability results contain `status`,
 `checked_at`, `latency_ms`, `check_interval_seconds`, `stale_after_seconds` and up to
 28 public history samples. These legacy top-level fields continue to describe paid
 service. The additional `services` collection contains the independently scoped
 paid and free sections. Seven-day retention is pruned with successful result
 persistence.
+
+The additional `token_usage` contains `total_tokens`, `today_tokens`, `updated_at`
+and seven ascending `daily` points shaped as `{ date, tokens }`. It sums the
+canonical recorded `daily_usage.total_tokens` across all accounts in one database
+statement, includes zero-usage days and uses UTC dates, matching the existing
+usage recorder. Stored totals remain authoritative even when they differ from the
+input/output split. All-time totals include records older than the weekly window;
+they reflect retained usage and can decrease when usage records are removed.
+The public projection contains no account identifiers, message counts, balances
+or per-user usage. It shares the existing status cache, rate limit and read-failure
+handling.
+
+The page presents an animated cumulative counter, today's increase, seven-day
+growth and a seven-day daily average. Paid and free service cards precede the
+counter, each showing current state and seven days of check records. Individual
+records expose their observation time and result on hover. Counter animation
+spreads recorded increments across ninety seconds and continues from its current
+value when the next minute's snapshot arrives. On first load it starts at the
+recorded beginning-of-day total. The exact recorded total is available on hover
+and to assistive technology; the moving display can lag it and never extrapolates
+beyond it. Reduced-motion
+preferences and hidden tabs finish the animation immediately. A failed refresh
+preserves the previous totals with an awaiting-sync indicator and a notice; an
+initial failure shows an unavailable value rather than zero usage.
 
 - `operational`: at least one candidate returned a valid generated response.
 - `unavailable`: no configured candidate is available, or every candidate failed.
@@ -67,8 +91,7 @@ persistence.
 Latency measures the successful lightweight probe's first response, including
 connection setup. It does not represent a full answer, a browser-to-server ping or
 agent/tool availability. The history shows one sampled result per six-hour window;
-missing windows remain unknown. The displayed pass percentage uses observed checks,
-not continuous uptime or an SLA.
+missing windows remain unknown. Samples do not establish continuous uptime or an SLA.
 
 Free `supply` is separate from health: `available`, `busy`, `exhausted`,
 `disabled`, or `unknown`. Fresh real free successes can update the current
@@ -92,3 +115,5 @@ all four configured protocols, the output bound and timeout/retry limits. Dispos
 PostgreSQL checks concurrent ownership, the persisted six-hour interval, result
 fencing and bounded history. Real-provider connectivity and production deployment
 require separate operational verification.
+PostgreSQL coverage also checks cross-account Token sums beyond 32-bit integers,
+the UTC chart window, zero-filled days and empty usage.

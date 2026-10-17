@@ -500,6 +500,9 @@ It never triggers an inference. The response contains `status` (`operational`,
 (21600), `stale_after_seconds` (43200), and up to 28 history samples with only
 `checked_at`, `status` and `latency_ms`. Node identities, counts, connection details
 and provider errors are not returned. Responses permit public caching for 60 seconds.
+`token_usage` adds the platform's recorded `total_tokens`, UTC `today_tokens`,
+snapshot `updated_at` and seven ascending `daily` points (`date`, `tokens`),
+including days with no usage. These are aggregate counts without account details.
 
 The full API startup performs a shared lightweight check every six hours, stopping
 at the first available node. Results older than twelve hours become unknown. See

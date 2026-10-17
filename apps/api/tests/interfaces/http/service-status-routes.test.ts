@@ -4,6 +4,7 @@ const f = vi.hoisted(() => ({
   list: vi.fn(),
   supply: vi.fn(),
   success: vi.fn(),
+  usage: vi.fn(),
   limit: vi.fn(),
 }));
 vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
@@ -20,6 +21,7 @@ vi.mock(
   '../../../src/infrastructure/repositories/service-status-repository.js',
   () => ({
     listServiceStatusChecks: f.list,
+    getServiceTokenUsage: f.usage,
     SERVICE_CHECK_INTERVAL_SECONDS: 21600,
     SERVICE_STATUS_STALE_SECONDS: 43200,
   }),
@@ -36,6 +38,12 @@ describe('public service status', () => {
     f.list.mockResolvedValue([]);
     f.supply.mockResolvedValue('disabled');
     f.success.mockResolvedValue(null);
+    f.usage.mockResolvedValue({
+      total_tokens: 1234567,
+      today_tokens: 4567,
+      updated_at: '2026-10-16T00:00:00.000Z',
+      daily: [{ date: '2026-10-16', tokens: 4567 }],
+    });
     f.limit.mockResolvedValue({ allowed: true, retryAfterSec: 0 });
   });
   afterEach(async () => {
@@ -83,6 +91,12 @@ describe('public service status', () => {
             latency_ms: 120,
           },
         ],
+        token_usage: {
+          total_tokens: 1234567,
+          today_tokens: 4567,
+          updated_at: '2026-10-16T00:00:00.000Z',
+          daily: [{ date: '2026-10-16', tokens: 4567 }],
+        },
       });
       expect(response.json().services).toHaveLength(2);
       expect(JSON.stringify(response.json())).not.toContain(
@@ -93,6 +107,7 @@ describe('public service status', () => {
     expect(f.list).toHaveBeenCalledTimes(2);
     expect(f.supply).toHaveBeenCalledOnce();
     expect(f.success).toHaveBeenCalledOnce();
+    expect(f.usage).toHaveBeenCalledOnce();
     const head = await app.inject({
       method: 'HEAD',
       url: '/api/service-status',
@@ -146,6 +161,7 @@ describe('public service status', () => {
     );
     expect(f.list).toHaveBeenCalledTimes(4);
     expect(f.supply).toHaveBeenCalledTimes(2);
+    expect(f.usage).toHaveBeenCalledTimes(2);
     const refreshed = await app.inject('/api/service-status');
     expect(refreshed.json().services[1].supply_checked_at).toBe(
       '2026-10-16T00:01:00.000Z',
@@ -179,6 +195,7 @@ describe('public service status', () => {
       f.list.mockClear();
       f.supply.mockClear();
       f.success.mockClear();
+      f.usage.mockClear();
       f.limit.mockResolvedValue({
         allowed: false,
         retryAfterSec: 17,
@@ -199,6 +216,7 @@ describe('public service status', () => {
       expect(f.list).not.toHaveBeenCalled();
       expect(f.supply).not.toHaveBeenCalled();
       expect(f.success).not.toHaveBeenCalled();
+      expect(f.usage).not.toHaveBeenCalled();
     },
   );
   it('marks results older than twelve hours as unknown and hides their latency', () => {

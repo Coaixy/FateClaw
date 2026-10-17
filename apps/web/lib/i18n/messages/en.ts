@@ -42,41 +42,27 @@ export const enMessages = {
   },
   serviceStatus: {
     title: 'Service status',
-    subtitle: 'Availability and recent checks for paid and free services.',
     home: 'Back to home',
     refresh: 'Refresh status',
-    loading: 'Loading service status',
-    operational: 'AI service is operational',
-    unavailable: 'AI service is unavailable',
-    unknown: 'Service status unconfirmed',
     operationalShort: 'Operational',
     unavailableShort: 'Unavailable',
     unknownShort: 'Unconfirmed',
-    operationalDescription:
-      'At least one AI endpoint responded to the latest check.',
-    unavailableDescription:
-      'The latest check received no available response. Please try again later.',
-    unknownDescription:
-      'A recent check result is not available yet. Please check back later.',
-    readFailed:
-      'The latest status could not be loaded. Previous records remain visible and will be marked unconfirmed when stale.',
-    ai: 'AI service',
-    latency: 'Check response time',
-    checked: 'Last checked',
-    frequency: 'Check frequency',
-    sixHours: 'Every 6 hours',
-    waiting: 'Awaiting first check',
+    readFailed: 'Update failed. Please retry.',
     history: 'Checks over the last 7 days',
-    sampleRate: 'Checks passed',
     noSample: 'No check recorded',
     sevenDaysAgo: '7 days ago',
     now: 'Now',
-    aggregateNote:
-      'Paid and free services have independent availability. An exhausted free allowance does not affect paid service.',
-    cadenceNote:
-      'A small background check runs every 6 hours. Refreshing this page only reads saved results and never starts a check.',
-    latencyNote:
-      'Response time measures the first response to a small check, rather than a full answer. Results older than 12 hours are marked unconfirmed.',
+    tokens: {
+      observatory: 'Token observatory',
+      total: 'Total platform Tokens',
+      awaiting: 'Loading usage',
+      cached: 'Awaiting sync',
+      noDataShort: 'No data yet',
+      syncing: 'Syncs every minute',
+      today: 'Added today',
+      week: 'Added in 7 days',
+      dailyAverage: '7-day daily average',
+    },
   },
   artifact: {
     copyText: 'Copy board text',

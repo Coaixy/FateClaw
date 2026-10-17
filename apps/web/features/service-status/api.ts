@@ -5,6 +5,7 @@ export const serviceStatusApi = {
   overview: (signal?: AbortSignal) =>
     requestJson<ServiceStatusOverviewDto>('/api/service-status', {
       signal,
+      cache: 'no-cache',
       timeoutMs: 10_000,
     }),
 };

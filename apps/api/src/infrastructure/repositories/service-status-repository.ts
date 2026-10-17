@@ -1,9 +1,45 @@
 import { randomUUID } from 'node:crypto';
-import type { ServiceStatusSampleDto } from '@fateclaw/contracts/service-status';
+import type {
+  ServiceStatusSampleDto,
+  ServiceTokenUsageDto,
+} from '@fateclaw/contracts/service-status';
 import { getDbPool } from '../db-pool.js';
 
 export const SERVICE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60;
 export const SERVICE_STATUS_STALE_SECONDS = 12 * 60 * 60;
+
+export async function getServiceTokenUsage(): Promise<ServiceTokenUsageDto> {
+  const { rows } = await getDbPool().query<{
+    total_tokens: string;
+    today_tokens: string;
+    updated_at: Date;
+    daily: { date: string; tokens: number }[];
+  }>(
+    `WITH daily AS MATERIALIZED (
+       SELECT date, SUM(total_tokens) AS tokens FROM daily_usage GROUP BY date
+     ), clock AS (
+       SELECT (statement_timestamp() AT TIME ZONE 'UTC')::date AS today
+     )
+     SELECT COALESCE((SELECT SUM(tokens) FROM daily), 0) AS total_tokens,
+       COALESCE((SELECT tokens FROM daily, clock WHERE date = clock.today::text), 0) AS today_tokens,
+       statement_timestamp() AS updated_at,
+       (SELECT json_agg(json_build_object(
+           'date', to_char(day, 'YYYY-MM-DD'), 'tokens', COALESCE(daily.tokens, 0)
+         ) ORDER BY day)
+        FROM clock, generate_series(clock.today - 6, clock.today, interval '1 day') AS day
+        LEFT JOIN daily ON daily.date = to_char(day, 'YYYY-MM-DD')) AS daily`,
+  );
+  const row = rows[0];
+  return {
+    total_tokens: Number(row.total_tokens),
+    today_tokens: Number(row.today_tokens),
+    updated_at: row.updated_at.toISOString(),
+    daily: row.daily.map((point) => ({
+      date: point.date,
+      tokens: Number(point.tokens),
+    })),
+  };
+}
 
 export async function claimServiceStatusCheck(
   poolKey: 'official' | 'benefit' = 'official',

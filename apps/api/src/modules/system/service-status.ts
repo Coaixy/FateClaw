@@ -4,6 +4,7 @@ import type {
 } from '@fateclaw/contracts/service-status';
 import {
   listServiceStatusChecks,
+  getServiceTokenUsage,
   SERVICE_CHECK_INTERVAL_SECONDS,
   SERVICE_STATUS_STALE_SECONDS,
 } from '../../infrastructure/repositories/service-status-repository.js';
@@ -37,12 +38,14 @@ export function publicServiceStatus(
 }
 
 export async function getPublicServiceStatus(): Promise<ServiceStatusOverviewDto> {
-  const [paidHistory, benefitHistory, supply, success] = await Promise.all([
-    listServiceStatusChecks(),
-    listServiceStatusChecks('benefit'),
-    getBenefitSupply(),
-    getRecentBenefitSuccess(),
-  ]);
+  const [paidHistory, benefitHistory, supply, success, tokenUsage] =
+    await Promise.all([
+      listServiceStatusChecks(),
+      listServiceStatusChecks('benefit'),
+      getBenefitSupply(),
+      getRecentBenefitSuccess(),
+      getServiceTokenUsage(),
+    ]);
   const official = publicServiceStatus(paidHistory);
   const benefit = publicServiceStatus(benefitHistory);
   if (
@@ -56,6 +59,7 @@ export async function getPublicServiceStatus(): Promise<ServiceStatusOverviewDto
   }
   return {
     ...official,
+    token_usage: tokenUsage,
     services: [
       { ...official, pool_key: 'official', display_name: '付费模型服务' },
       {
