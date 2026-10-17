@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -14,6 +15,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
+  AlertCircle,
+  ArrowDown,
   ArrowLeft,
   CheckCircle2,
   ChevronRight,
@@ -25,7 +28,10 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
-import { AiChatComposer } from '@/components/ai-chat/ai-chat-composer';
+import {
+  AiChatComposer,
+  shouldSendOnEnter,
+} from '@/components/ai-chat/ai-chat-composer';
 import { ModelSelector } from '@/components/ai-chat/model-selector';
 import { useModelSelection } from '@/features/model-settings/use-model-selection';
 import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
@@ -41,8 +47,14 @@ import {
   filterProgressMessages,
   getLatestProgressLabel,
 } from '@/features/chat/utils/display';
-import { chatSessionsApi } from '@/features/chat/api';
+import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
 import { useChatMessages } from '@/features/chat/hooks/use-chat-messages';
+import {
+  useChatDraft,
+  type ChatDraftSubmission,
+} from '@/features/chat/hooks/use-chat-draft';
+import { useSessionBoards } from '@/features/chat/hooks/use-session-boards';
+import { SessionContextBar } from '@/components/ai-chat/session-context-bar';
 import {
   PENDING_CHAT_INPUT_KEY,
   useChatSessions,
@@ -66,20 +78,20 @@ type PasteChoiceSelection = {
   readonly end: number;
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
-type ReplyStatus = 'completed' | 'interrupted';
+type ReplyStatus = 'completed' | 'stopped' | 'failed';
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
       (module) => module.PaipanSheet,
     ),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => <ChatSheetLoading /> },
 );
 const PastedBoardSheet = dynamic(
   () =>
     import('@/components/ai-chat/pasted-board-sheet').then(
       (module) => module.PastedBoardSheet,
     ),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => <ChatSheetLoading /> },
 );
 
 function scheduleIdleTask(task: () => void) {
@@ -303,7 +315,19 @@ function AiChatWorkspaceContent() {
     createSession,
     touchSession,
   } = useChatSessions();
-  const [input, setInput] = useState('');
+  const { input, setInput, takeDraft, restoreDraft, adoptDraft } = useChatDraft(
+    { userId: user?.id, sessionId: selectedSession },
+  );
+  const activeSubmissionRef = useRef<ChatDraftSubmission | null>(null);
+  const createSessionWithDraft = useCallback(
+    async (onCreated?: (session: ChatSession) => void) => {
+      return createSession((session) => {
+        onCreated?.(session);
+        adoptDraft(session.id, activeSubmissionRef.current ?? undefined);
+      });
+    },
+    [createSession, adoptDraft],
+  );
   // 空会话只控制“选择开始方式 / 先排盘 / 直接提问”三种首屏状态；
   // 真正的会话仍在确认盘面或发送首条消息时才创建。
   const [newChatStartMode, setNewChatStartMode] =
@@ -329,21 +353,36 @@ function AiChatWorkspaceContent() {
     INITIAL_PASTE_CHOICE_STATE,
   );
   const [replyStatus, setReplyStatus] = useState<ReplyStatus | null>(null);
-  const wasSendingRef = useRef(false);
-  const stopRequestedRef = useRef(false);
+  const previousRunPhaseRef = useRef('idle');
 
   const chatMessages = useChatMessages({
     chatAvailable,
     selectedSession,
     selectedSessionRevision,
     sessions,
-    createSession,
+    createSession: createSessionWithDraft,
     touchSession,
+  });
+  const selectedSessionInfo = sessions.find(
+    (entry) => entry.id === selectedSession,
+  );
+  const boardRevision = useMemo(
+    () =>
+      chatMessages.messages
+        .filter((message) => message.tool_context)
+        .map((message) => message.id)
+        .join('|'),
+    [chatMessages.messages],
+  );
+  const sessionBoards = useSessionBoards({
+    userId: user?.id,
+    sessionId: selectedSession,
+    revision: boardRevision,
   });
   const modelSelection = useModelSelection({
     userId: user?.id,
     sessionId: selectedSession || undefined,
-    session: sessions.find((entry) => entry.id === selectedSession),
+    session: selectedSessionInfo,
     sending: chatMessages.sending,
     onSessionChange: touchSession,
   });
@@ -441,21 +480,28 @@ function AiChatWorkspaceContent() {
         requestLogin(text);
         return;
       }
+      if (sessionBoards.loading || sessionBoards.error) return;
       if (modelSelection.blocked) {
         toast('error', modelSelection.error || t('modelChoice.blocked'));
         return;
       }
-      if (!overrideText) {
-        setInput('');
-      }
+      const submission = overrideText ? null : takeDraft();
+      activeSubmissionRef.current = submission;
 
       try {
-        await chatMessages.sendMessageWithOptions(text);
+        const sent = await chatMessages.sendMessageWithOptions(text, {
+          selectedBoardMessageId: sessionBoards.selectedBoardId || undefined,
+        });
+        if (!sent && submission) restoreDraft(submission);
       } catch (error) {
+        if (submission) restoreDraft(submission);
         toast(
           'error',
           error instanceof Error ? error.message : t('aiChat.sendFailed'),
         );
+      } finally {
+        if (activeSubmissionRef.current === submission)
+          activeSubmissionRef.current = null;
       }
     },
     [
@@ -466,14 +512,20 @@ function AiChatWorkspaceContent() {
       authLoading,
       input,
       requestLogin,
+      sessionBoards,
+      takeDraft,
+      restoreDraft,
       t,
       toast,
     ],
   );
 
+  const handleRetrySending = useCallback(() => {
+    void chatMessages.retrySending();
+  }, [chatMessages.retrySending]);
+
   const handleStopGenerating = useCallback(() => {
-    stopRequestedRef.current = true;
-    chatMessages.stopGenerating();
+    void chatMessages.stopGenerating();
   }, [chatMessages]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -481,7 +533,7 @@ function AiChatWorkspaceContent() {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (!chatMessages.sending && shouldSendOnEnter(event)) {
       event.preventDefault();
       void handleSend();
     }
@@ -565,14 +617,29 @@ function AiChatWorkspaceContent() {
         toast('error', t('aiChat.previousMessageProcessing'));
         return;
       }
+      const submission =
+        pastedBoardSheet.draftSource === 'composer' ? takeDraft() : null;
+      activeSubmissionRef.current = submission;
       startUserPastedBoardSubmission({
         pastedBoard,
-        sendMessage: chatMessages.sendMessageWithOptions,
+        sendMessage: async (content, options) => {
+          try {
+            const sent = await chatMessages.sendMessageWithOptions(
+              content,
+              options,
+            );
+            if (sent) sessionBoards.selectBoard('');
+            else if (submission) restoreDraft(submission);
+            return sent;
+          } catch (error) {
+            if (submission) restoreDraft(submission);
+            throw error;
+          } finally {
+            if (activeSubmissionRef.current === submission)
+              activeSubmissionRef.current = null;
+          }
+        },
         closeSheet: () => dispatchPastedBoard({ type: 'close' }),
-        clearComposerInput:
-          pastedBoardSheet.draftSource === 'composer'
-            ? () => setInput('')
-            : undefined,
         onSendFailure: () => {
           toast('error', t('aiChat.boardSendFailed'));
         },
@@ -585,13 +652,19 @@ function AiChatWorkspaceContent() {
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
       pastedBoardSheet.draftSource,
+      sessionBoards,
+      takeDraft,
+      restoreDraft,
       requestLogin,
       t,
       toast,
     ],
   );
 
-  const displayMessages = filterProgressMessages(chatMessages.messages);
+  const displayMessages = useMemo(
+    () => filterProgressMessages(chatMessages.messages),
+    [chatMessages.messages],
+  );
   const progressLabel = chatMessages.sending
     ? getLatestProgressLabel(chatMessages.messages, t)
     : null;
@@ -620,22 +693,24 @@ function AiChatWorkspaceContent() {
       displayMessages.length === 0);
 
   useEffect(() => {
-    if (chatMessages.sending) {
-      wasSendingRef.current = true;
+    const phase = chatMessages.run.phase;
+    const previous = previousRunPhaseRef.current;
+    previousRunPhaseRef.current = phase;
+    if (
+      phase === 'idle' ||
+      phase === 'queued' ||
+      phase === 'running' ||
+      phase === 'syncing' ||
+      phase === 'stopping'
+    ) {
       setReplyStatus(null);
-      return;
+    } else if (previous !== 'idle' && previous !== phase) {
+      setReplyStatus(phase);
     }
-
-    if (wasSendingRef.current) {
-      wasSendingRef.current = false;
-      setReplyStatus(stopRequestedRef.current ? 'interrupted' : 'completed');
-      stopRequestedRef.current = false;
-    }
-  }, [chatMessages.sending]);
+  }, [chatMessages.run.phase]);
 
   useEffect(() => {
-    wasSendingRef.current = false;
-    stopRequestedRef.current = false;
+    previousRunPhaseRef.current = 'idle';
     setReplyStatus(null);
   }, [selectedSession]);
 
@@ -655,12 +730,19 @@ function AiChatWorkspaceContent() {
     async (result: PaipanCommitResponse) => {
       touchSession(result.session.id, result.session);
       if (result.session.id === selectedSession) {
+        sessionBoards.selectBoard('');
         await chatMessages.refreshMessages();
         return;
       }
       setSelectedSession(result.session.id);
     },
-    [chatMessages, selectedSession, setSelectedSession, touchSession],
+    [
+      chatMessages,
+      selectedSession,
+      setSelectedSession,
+      touchSession,
+      sessionBoards,
+    ],
   );
 
   const openPreChatPaipan = useCallback(
@@ -760,11 +842,14 @@ function AiChatWorkspaceContent() {
       inputRef={chatMessages.inputRef}
       input={input}
       sending={chatMessages.sending}
+      stopping={chatMessages.stopping}
       disabled={continuationBlocked}
       disabledMessage=""
       selectedSession={selectedSession}
       modelControl={modelControl}
-      sendDisabled={modelSelection.blocked}
+      sendDisabled={
+        modelSelection.blocked || sessionBoards.loading || sessionBoards.error
+      }
       paipanAction={
         selectedSession
           ? {
@@ -858,6 +943,33 @@ function AiChatWorkspaceContent() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
+      {selectedSession && (
+        <SessionContextBar
+          boards={sessionBoards.boards}
+          selectedBoardId={sessionBoards.selectedBoardId}
+          clientId={selectedSessionInfo?.client_id}
+          loading={sessionBoards.loading}
+          error={sessionBoards.error}
+          disabled={chatMessages.sending}
+          onSelect={sessionBoards.selectBoard}
+          onRetry={sessionBoards.refresh}
+        />
+      )}
+      {chatMessages.historyError && (
+        <div
+          role="alert"
+          className="mx-auto mb-2 flex w-full max-w-2xl items-center justify-between gap-2 rounded-lg border border-error/25 bg-error/5 px-3 py-2 text-[12px] text-error"
+        >
+          <span>{chatMessages.historyError}</span>
+          <button
+            type="button"
+            onClick={() => void chatMessages.refreshMessages()}
+            className="min-h-9 shrink-0 rounded-md px-2 hover:bg-error/10"
+          >
+            {t('aiChat.reading.retryHistory')}
+          </button>
+        </div>
+      )}
       <div
         ref={chatMessages.scrollRef}
         className={`relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 ${
@@ -870,13 +982,13 @@ function AiChatWorkspaceContent() {
           sending={chatMessages.sending}
           progressLabel={progressLabel}
           replySlow={chatMessages.replySlow}
-          onRetry={() => void chatMessages.retrySending()}
+          onRetry={handleRetrySending}
           selectedSession={selectedSession}
           switchingSession={switchingSession}
           loadingOlder={chatMessages.loadingOlder}
           showCenteredComposer={showCenteredComposer}
           latestMessageNotice={latestMessageNotice}
-          composer={showCenteredComposer ? centeredContent : composer}
+          composer={showCenteredComposer ? centeredContent : null}
           emptyStateTitle={emptyStateTitle}
           emptyStateDescription={emptyStateDescription}
           emptyStateHint={emptyStateHint}
@@ -888,9 +1000,35 @@ function AiChatWorkspaceContent() {
         )}
       </div>
 
+      {!showCenteredComposer && !chatMessages.followingLatest && (
+        <div className="flex shrink-0 justify-center py-1">
+          <button
+            type="button"
+            onClick={chatMessages.scrollToLatest}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-hairline bg-surface-card px-3 text-[12px] text-ink shadow-sm hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <ArrowDown size={13} />
+            {t(
+              chatMessages.sending
+                ? 'aiChat.reading.newContent'
+                : 'aiChat.reading.latest',
+            )}
+          </button>
+        </div>
+      )}
+
       {!showCenteredComposer && (
-        <div className="shrink-0 pt-1.5 pb-1">
+        <div className="shrink-0 pt-1.5 pb-1 safe-bottom">
           <div className="max-w-2xl mx-auto px-2.5 sm:px-3">
+            {(chatMessages.sending || chatMessages.run.error) && (
+              <p
+                role="status"
+                className={`mb-1.5 text-center text-[12px] ${chatMessages.run.error ? 'text-error' : 'text-muted'}`}
+              >
+                {chatMessages.run.error ||
+                  t(`aiChat.run.${chatMessages.run.phase}`)}
+              </p>
+            )}
             {composer}
             <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[10px] text-muted/50 select-none">
               <Sparkles size={10} strokeWidth={1.8} aria-hidden="true" />
@@ -900,37 +1038,42 @@ function AiChatWorkspaceContent() {
         </div>
       )}
 
-      <PaipanSheet
-        open={paipanSheetConfig.mode !== null}
-        mode={paipanSheetConfig.mode ?? 'pre-chat'}
-        catalog={paipanCatalogState.items}
-        catalogLoading={paipanCatalogState.loading}
-        sessionId={selectedSession || undefined}
-        initialSkill={paipanSheetConfig.skill}
-        initialClientId={paipanSheetConfig.clientId}
-        lockSkill={paipanSheetConfig.lockSkill}
-        canCommit={
-          chatAvailable &&
-          (paipanSheetConfig.mode !== 'current-session' || !continuationBlocked)
-        }
-        onClose={handleClosePaipanSheet}
-        onAuthRequired={() => requestLogin(input)}
-        onCommitted={handlePaipanCommitted}
-      />
+      {paipanSheetConfig.mode !== null && (
+        <PaipanSheet
+          open={paipanSheetConfig.mode !== null}
+          mode={paipanSheetConfig.mode ?? 'pre-chat'}
+          catalog={paipanCatalogState.items}
+          catalogLoading={paipanCatalogState.loading}
+          sessionId={selectedSession || undefined}
+          initialSkill={paipanSheetConfig.skill}
+          initialClientId={paipanSheetConfig.clientId}
+          lockSkill={paipanSheetConfig.lockSkill}
+          canCommit={
+            chatAvailable &&
+            (paipanSheetConfig.mode !== 'current-session' ||
+              !continuationBlocked)
+          }
+          onClose={handleClosePaipanSheet}
+          onAuthRequired={() => requestLogin(input)}
+          onCommitted={handlePaipanCommitted}
+        />
+      )}
 
-      <PastedBoardSheet
-        open={pastedBoardSheet.sheetOpen}
-        initialContent={pastedBoardSheet.draft}
-        catalog={paipanCatalogState.items}
-        onClose={closePastedBoardSheet}
-        onSubmit={handlePastedBoardSubmit}
-        modelControl={modelControl}
-        submitBlockedMessage={
-          modelSelection.blocked
-            ? modelSelection.error || t('modelChoice.blocked')
-            : ''
-        }
-      />
+      {pastedBoardSheet.sheetOpen && (
+        <PastedBoardSheet
+          open={pastedBoardSheet.sheetOpen}
+          initialContent={pastedBoardSheet.draft}
+          catalog={paipanCatalogState.items}
+          onClose={closePastedBoardSheet}
+          onSubmit={handlePastedBoardSubmit}
+          modelControl={modelControl}
+          submitBlockedMessage={
+            modelSelection.blocked
+              ? modelSelection.error || t('modelChoice.blocked')
+              : ''
+          }
+        />
+      )}
 
       <OnboardingGuideDialog
         open={onboardingGuide.open}
@@ -1086,8 +1229,15 @@ function AiChatFloatingStatus({ status }: { status: ReplyStatus }) {
   const statusLabel =
     status === 'completed'
       ? t('aiChat.home.answerCompleted')
-      : t('aiChat.home.outputStopped');
-  const StatusIcon = status === 'completed' ? CheckCircle2 : CircleStop;
+      : status === 'failed'
+        ? t('aiChat.run.failed')
+        : t('aiChat.home.outputStopped');
+  const StatusIcon =
+    status === 'completed'
+      ? CheckCircle2
+      : status === 'failed'
+        ? AlertCircle
+        : CircleStop;
 
   return (
     <div className="pointer-events-none sticky bottom-2 z-10 mt-2 flex justify-center px-3">
@@ -1121,5 +1271,19 @@ function OnboardingGuideEntry({ onOpen }: { onOpen: () => void }) {
       </span>
       <ChevronRight size={14} className="shrink-0 text-primary" />
     </button>
+  );
+}
+
+function ChatSheetLoading() {
+  const { t } = useI18n();
+  return (
+    <div
+      role="status"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/15 backdrop-blur-sm"
+    >
+      <div className="rounded-xl border border-hairline bg-surface-raised px-5 py-4 text-sm text-muted shadow-lg">
+        {t('common.loading')}
+      </div>
+    </div>
   );
 }

@@ -762,6 +762,8 @@ export const zhCNMessages = {
       back: '返回开始方式',
     },
     composer: {
+      stopping: '正在停止',
+      nextDraftLabel: '可编辑下一条消息',
       disabledPlaceholder: '此对话无法继续追问',
       messagePlaceholder: '输入消息...',
       initialPlaceholder: '有什么想问的？',
@@ -774,6 +776,25 @@ export const zhCNMessages = {
       useAsBoard: '作为盘面',
       shortcutHint: 'Enter 发送 · Shift+Enter 换行',
       aiDisclaimer: 'AI 生成内容，仅供参考',
+    },
+    context: {
+      currentBoard: '当前盘面',
+      latestBoard: '使用最新盘面',
+      retryBoards: '重试加载盘面',
+    },
+    reading: {
+      retryHistory: '重试同步',
+      newContent: '有新内容 · 回到最新',
+      latest: '回到最新',
+    },
+    run: {
+      queued: '已提交，等待执行',
+      running: '正在执行',
+      syncing: '正在同步最终结果',
+      stopping: '正在停止',
+      stopped: '已停止输出',
+      completed: '回答完成',
+      failed: '回答失败',
     },
     home: {
       subtitle: '排盘 · 断卦',

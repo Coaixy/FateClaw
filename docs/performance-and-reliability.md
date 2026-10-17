@@ -104,6 +104,52 @@ without an execution ID remain accepted during rollout, but cannot acquire the
 new admission/restart guarantee retroactively. Do not downgrade while durable
 requests or local result files remain unresolved.
 
+## Web chat interaction and rendering
+
+The web client loads message pages of 50 and reconciles the latest page into the
+existing history rather than increasing a refresh limit past the API's 200-message
+cap. Pagination uses `before` and `before_id` with stable timestamp/ID ordering, so
+messages sharing a timestamp remain reachable. A disconnected stream backfills
+until it overlaps known messages. Each reconciliation is bounded to 20 pages;
+exceeding that budget reports a retryable synchronization error and keeps the
+existing history. Unchanged messages retain their object identity. Older-page
+requests and scroll anchors belong to one visit to a session, including when a
+user leaves and returns to the same session before a response arrives.
+
+Execution state distinguishes admission, running, result synchronization,
+cancellation, success, failure and stopped output. The active request ID comes
+from HTTP acceptance, the stream, or the existing processing lock returned as
+`processing_request_id`. An older answer cannot prove a new submission completed.
+Cancellation waits for admission and server acknowledgement; a failed cancellation
+keeps the stream and synchronization active. A result persisted while cancellation
+is pending remains a result rather than becoming stopped output. Late responses
+cannot change a newer request or another session visit. Network uncertainty stays
+in synchronization instead of claiming failure or success and automatically
+resubmitting the question.
+
+Drafts use sessionStorage scoped by user and session, with an in-memory path when
+storage is unavailable. They survive navigation and reload within the browser
+session. Creating a session transfers its remaining draft before publishing the
+selection. Failed submissions restore their text to the original scope without
+overwriting the next draft. Generation permits editing the next question while
+submission remains serial. Enter respects IME composition and Shift+Enter; each
+input change measures textarea height once.
+
+The chart selector reads an owner-scoped summary endpoint independently of the
+visible history window. Automatic selection uses the newest chart; explicit
+selection sends the existing `selected_board_message_id` contract. Accepted pasted
+charts and committed charts return the selector to automatic newest-chart mode.
+Associated clients link to their profile. Returning to the newest message is an
+explicit action when the reader has scrolled away from ongoing output.
+
+Markdown rendering retains stable renderer identities and memoizes completed
+blocks in a growing reply. Unfinished code does not run syntax highlighting;
+completed answers use one document parse. Reference definitions and other syntax
+that cannot safely be split retain document-wide parsing. Message grouping is
+linear and memoized. Chart-entry sheets mount only when opened and expose a
+loading state. Answers can be copied directly; tool result sources link only to
+absolute HTTP(S) destinations and display their actual host.
+
 ## Validation and remaining evidence
 
 Automated checks cover admission rollback, competing claims, execution fencing,

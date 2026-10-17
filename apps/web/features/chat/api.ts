@@ -1,6 +1,7 @@
 import type {
   ChatInputKindDto,
   ChatSessionDto,
+  SessionBoardListResponseDto,
   ChatSessionShareResponseDto,
   ChatSessionSendRequestDto,
   ChatSessionSendResponseDto,
@@ -47,7 +48,7 @@ export type ChatSessionStreamTicket = {
   expiresAt: string;
 };
 
-export type ChatSessionStreamEvent =
+export type ChatSessionStreamEvent = (
   | { type: 'connected'; timestamp?: string; sessionId?: string }
   | {
       type: 'agent_start' | 'agent_end' | 'turn_start';
@@ -114,7 +115,8 @@ export type ChatSessionStreamEvent =
       sessionId?: string;
       error: string;
       publicErrorText?: string;
-    };
+    }
+) & { requestId?: string };
 
 /**
  * Skill artifact context（来自 agent-runtime 的 tool_context）。
@@ -220,7 +222,7 @@ export const chatSessionsApi = {
   createStreamTicket: (sessionId: string) =>
     requestJson<ChatSessionStreamTicket>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream-ticket`,
-      { method: 'POST' },
+      { method: 'POST', timeoutMs: 15_000 },
     ),
   cancel: (sessionId: string) =>
     requestJson<SuccessResponse>(
@@ -230,9 +232,20 @@ export const chatSessionsApi = {
       // requestJson 归一化为 ApiError，调用方 catch 后照常继续。
       { method: 'POST', timeoutMs: 15_000 },
     ),
-  messages: (sessionId: string, limit = 50, before?: string) =>
+  boards: (sessionId: string) =>
+    requestJson<SessionBoardListResponseDto>(
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/boards`,
+      { timeoutMs: 15_000 },
+    ),
+  messages: (
+    sessionId: string,
+    limit = 50,
+    before?: string,
+    beforeId?: string,
+  ) =>
     requestJson<SessionMessageListResponseDto>(
-      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+      `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}${before && beforeId ? `&before_id=${encodeURIComponent(beforeId)}` : ''}`,
+      { timeoutMs: 15_000 },
     ),
   send: (
     sessionId: string,

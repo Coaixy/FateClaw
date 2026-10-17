@@ -149,7 +149,9 @@ export function formatChatCost(
     return null;
   }
   if (t) {
-    return t('format.consumed', { coins: formatCoins(value as number, locale) });
+    return t('format.consumed', {
+      coins: formatCoins(value as number, locale),
+    });
   }
   return labels[0]?.replace('积分实扣', '消耗') ?? null;
 }
@@ -213,14 +215,15 @@ export function isStreamingAssistantMessage(message: Message) {
 }
 
 export function isThinkingMessage(message: Message) {
-  return Boolean(message.is_bot_message) && getMessageKind(message) === 'thinking';
+  return (
+    Boolean(message.is_bot_message) && getMessageKind(message) === 'thinking'
+  );
 }
 
 export function isFinalAssistantMessage(message: Message) {
   const kind = getMessageKind(message);
   return (
-    Boolean(message.is_bot_message) &&
-    (kind === 'final' || kind === 'error')
+    Boolean(message.is_bot_message) && (kind === 'final' || kind === 'error')
   );
 }
 
@@ -262,7 +265,8 @@ export function getProgressStageLabel(
   if (stage.startsWith('interpret_')) {
     return t?.('format.progressInterpret') ?? '解读';
   }
-  if (stage.startsWith('general_')) return t?.('format.progressHandle') ?? '处理';
+  if (stage.startsWith('general_'))
+    return t?.('format.progressHandle') ?? '处理';
   return t?.('format.progressProcessing') ?? '处理中';
 }
 
@@ -363,15 +367,26 @@ export function areMessagesEqual(previous: Message[], next: Message[]) {
   if (previous.length !== next.length) return false;
 
   for (let index = 0; index < previous.length; index += 1) {
-    if (
-      previous[index].id !== next[index].id ||
-      previous[index].content !== next[index].content ||
-      previous[index].timestamp !== next[index].timestamp ||
-      previous[index].tool_context !== next[index].tool_context
-    ) {
+    if (!areMessageValuesEqual(previous[index], next[index])) {
       return false;
     }
   }
 
   return true;
+}
+
+export function areMessageValuesEqual(previous: Message, next: Message) {
+  return (
+    previous === next ||
+    (previous.id === next.id &&
+      previous.content === next.content &&
+      previous.timestamp === next.timestamp &&
+      previous.tool_context === next.tool_context &&
+      previous.account_id === next.account_id &&
+      previous.sender === next.sender &&
+      previous.sender_name === next.sender_name &&
+      previous.is_from_me === next.is_from_me &&
+      previous.is_bot_message === next.is_bot_message &&
+      JSON.stringify(previous.metadata) === JSON.stringify(next.metadata))
+  );
 }

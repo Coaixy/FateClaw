@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '@/features/chat/api';
 
 import {
+  areMessagesEqual,
   canHostToolTraceFooter,
   filterProgressMessages,
   formatChatCost,
@@ -15,6 +16,20 @@ import {
 import { sanitizeToolPath } from '../../../../features/chat/utils/tool-path';
 
 describe('chat display message state helpers', () => {
+  it('refreshes a reply when only settled billing metadata changes', () => {
+    const previous = createMessage({
+      id: 'reply',
+      isBot: true,
+      metadata: { kind: 'final', actual_charge_coins: 1 },
+    });
+    const next = {
+      ...previous,
+      metadata: { ...previous.metadata, actual_charge_coins: 2 },
+    };
+
+    expect(areMessagesEqual([previous], [next])).toBe(false);
+  });
+
   it('detects streaming assistant messages', () => {
     expect(
       isStreamingAssistantMessage(

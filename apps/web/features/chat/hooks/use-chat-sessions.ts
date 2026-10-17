@@ -22,7 +22,9 @@ interface ChatSessionsContextValue {
   selectedSession: string;
   selectedSessionRevision: number;
   setSelectedSession: (id: string) => void;
-  createSession: () => Promise<ChatSession | null>;
+  createSession: (
+    onCreated?: (session: ChatSession) => void,
+  ) => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   shareSession: (sessionId: string) => Promise<string>;
@@ -126,7 +128,9 @@ function buildNewChatTarget() {
 }
 
 function hasStoredAuthToken() {
-  return typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
+  return (
+    typeof window !== 'undefined' && Boolean(localStorage.getItem('token'))
+  );
 }
 
 /**
@@ -166,9 +170,11 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   const latestSessionsRequestRef = useRef(0);
+  const selectionRevisionRef = useRef(0);
 
   // 切换/同步选中会话：替换 id 并自增 revision，保持「每次选择都触发一次显示切换」语义。
   const applySelectedSession = useCallback((id: string) => {
+    selectionRevisionRef.current += 1;
     setSelection((previous) => ({ id, revision: previous.revision + 1 }));
   }, []);
 
@@ -247,7 +253,9 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         // 已在聊天页：原地替换 URL 即可，靠 selectedSession state + revision 切换显示，
         // 避免触发整页软导航/重挂 Provider。
         // 保留 Next App Router 写入的 history state，避免后续导航恢复到错误页面。
-        const target = id ? `/ai-chat?sid=${encodeURIComponent(id)}` : '/ai-chat';
+        const target = id
+          ? `/ai-chat?sid=${encodeURIComponent(id)}`
+          : '/ai-chat';
         window.history.replaceState(window.history.state, '', target);
       } else {
         // 从其它页（如主页工作台）进入聊天页：用 router.push 软导航。新建（id 为空）时带
@@ -262,31 +270,41 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [applySelectedSession, pathname, router],
   );
 
-  const createSession = useCallback(async () => {
-    if (authLoading || (!user && !hasStoredAuthToken())) {
-      return null;
-    }
+  const createSession = useCallback(
+    async (onCreated?: (session: ChatSession) => void) => {
+      if (authLoading || (!user && !hasStoredAuthToken())) {
+        return null;
+      }
 
-    const session = await chatSessionsApi.create();
-    setSessions((previous) => [
-      session,
-      ...previous.filter((item) => item.id !== session.id),
-    ]);
-    setSelectedSession(session.id);
-    return session;
-  }, [authLoading, setSelectedSession, user]);
+      const revisionAtStart = selectionRevisionRef.current;
+      const session = await chatSessionsApi.create();
+      setSessions((previous) => [
+        session,
+        ...previous.filter((item) => item.id !== session.id),
+      ]);
+      if (selectionRevisionRef.current === revisionAtStart) {
+        onCreated?.(session);
+        setSelectedSession(session.id);
+      }
+      return session;
+    },
+    [authLoading, setSelectedSession, user],
+  );
 
-  const renameSession = useCallback(async (sessionId: string, title: string) => {
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) {
-      throw new Error('标题不能为空');
-    }
+  const renameSession = useCallback(
+    async (sessionId: string, title: string) => {
+      const normalizedTitle = title.trim();
+      if (!normalizedTitle) {
+        throw new Error('标题不能为空');
+      }
 
-    await chatSessionsApi.update(sessionId, normalizedTitle);
-    setSessions((previous) =>
-      updateSessionTitle(previous, sessionId, normalizedTitle),
-    );
-  }, []);
+      await chatSessionsApi.update(sessionId, normalizedTitle);
+      setSessions((previous) =>
+        updateSessionTitle(previous, sessionId, normalizedTitle),
+      );
+    },
+    [],
+  );
 
   const archiveSession = useCallback(
     async (sessionId: string) => {

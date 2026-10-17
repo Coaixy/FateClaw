@@ -793,6 +793,8 @@ export const enMessages = {
       back: 'Back to start options',
     },
     composer: {
+      stopping: 'Stopping',
+      nextDraftLabel: 'Prepare your next message',
       disabledPlaceholder: 'This conversation cannot be continued',
       messagePlaceholder: 'Type a message...',
       initialPlaceholder: 'What would you like to ask?',
@@ -805,6 +807,25 @@ export const enMessages = {
       useAsBoard: 'Use as chart',
       shortcutHint: 'Enter to send · Shift+Enter for new line',
       aiDisclaimer: 'AI-generated content, for reference only',
+    },
+    context: {
+      currentBoard: 'Current chart',
+      latestBoard: 'Use latest chart',
+      retryBoards: 'Reload charts',
+    },
+    reading: {
+      retryHistory: 'Retry sync',
+      newContent: 'New content · Jump to latest',
+      latest: 'Jump to latest',
+    },
+    run: {
+      queued: 'Submitted, waiting to run',
+      running: 'Working',
+      syncing: 'Syncing final result',
+      stopping: 'Stopping',
+      stopped: 'Output stopped',
+      completed: 'Answer complete',
+      failed: 'Answer failed',
     },
     home: {
       subtitle: 'Charting · Reading',

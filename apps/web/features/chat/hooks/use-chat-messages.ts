@@ -24,12 +24,23 @@ import {
   isNearBottom,
 } from '../utils/display';
 import { shouldPollChatMessages } from '../utils/polling';
+import {
+  CHAT_MESSAGE_PAGE_SIZE,
+  fetchRecentMessageWindow,
+  reconcileMessagePage,
+} from '../utils/message-history';
+import {
+  acceptsChatStreamRequest,
+  getChatTurnOutcome,
+  type ChatRunPhase,
+  type ChatRunState,
+} from '../utils/run-state';
 import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
 const CHAT_POLL_INTERVAL_MS = 1200;
 // 单页消息加载条数;上滑到顶时按此步长向更早翻页。
-const MESSAGE_PAGE_SIZE = 50;
+const MESSAGE_PAGE_SIZE = CHAT_MESSAGE_PAGE_SIZE;
 // 滚动到距顶部多少像素内触发「加载更早消息」。
 const OLDER_LOAD_THRESHOLD_PX = 120;
 const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
@@ -373,10 +384,36 @@ export function useChatMessages(options: {
   selectedSession: string;
   selectedSessionRevision: number;
   sessions: ChatSession[];
-  createSession: () => Promise<ChatSession | null>;
+  createSession: (
+    onCreated?: (session: ChatSession) => void,
+  ) => Promise<ChatSession | null>;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [run, setRun] = useState<ChatRunState>({
+    sessionId: '',
+    requestId: null,
+    phase: 'idle',
+    error: null,
+  });
+  const runRef = useRef(run);
+  const [stopping, setStopping] = useState(false);
+  const stoppingRef = useRef(false);
+  const admissionRef = useRef<Promise<void> | null>(null);
+  const activeSendOperationRef = useRef<{
+    sessionId: string;
+    admission: Promise<void>;
+  } | null>(null);
+  const historySessionRef = useRef('');
+  const submissionBoundaryRef = useRef<{
+    sessionId: string;
+    knownIds: Set<string>;
+  } | null>(null);
+  const latestMessagesRequestRef = useRef(0);
+  const foregroundLoadRequestRef = useRef<number | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const ignoredRequestIdsRef = useRef(new Set<string>());
+  const [followingLatest, setFollowingLatest] = useState(true);
   // 请求在途状态(loading/sending)合并到 reducer,切换会话时一次 dispatch 重置。
   const [{ loading, sending }, dispatchRequestStatus] = useReducer(
     requestStatusReducer,
@@ -411,9 +448,8 @@ export function useChatMessages(options: {
   // 流式回调通过 ref 读取最新会话元数据，避免标题/更新时间变化时重建 WebSocket 连接。
   const sessionsRef = useRef(options.sessions);
   const previousSelectedSessionRef = useRef('');
+  const sessionVisitRef = useRef(0);
   const shouldAutoScrollRef = useRef(true);
-  // 当前已展开的消息窗口大小;后台刷新用它做 limit,确保不把已加载的历史截断回最近一页。
-  const loadedWindowSizeRef = useRef(MESSAGE_PAGE_SIZE);
   // 持有最新 messages 引用,供 loadOlderMessages 在闭包外读取最早一条做游标。
   const messagesRef = useRef<Message[]>([]);
   // 加载更早消息的重入/可用状态镜像,供 scroll 事件同步读取。
@@ -448,7 +484,46 @@ export function useChatMessages(options: {
   const lastSentMessageOptionsRef = useRef<ChatMessageSendOptions | undefined>(
     undefined,
   );
-  const isPending = sending || processing || awaitingRefresh;
+  const isPending = sending || processing || awaitingRefresh || stopping;
+
+  const transitionRun = useCallback(
+    (
+      sessionId: string,
+      phase: ChatRunPhase,
+      requestId?: string | null,
+      error: string | null = null,
+    ) => {
+      if (activeSessionRef.current !== sessionId) return;
+      const previous = runRef.current;
+      const next = {
+        sessionId,
+        phase,
+        requestId: requestId === undefined ? previous.requestId : requestId,
+        error,
+      };
+      if (
+        previous.sessionId === next.sessionId &&
+        previous.phase === next.phase &&
+        previous.requestId === next.requestId &&
+        previous.error === next.error
+      )
+        return;
+      runRef.current = next;
+      if (
+        next.requestId &&
+        ['completed', 'failed', 'stopped'].includes(phase)
+      ) {
+        ignoredRequestIdsRef.current.add(next.requestId);
+        if (ignoredRequestIdsRef.current.size > 128) {
+          ignoredRequestIdsRef.current.delete(
+            ignoredRequestIdsRef.current.values().next().value!,
+          );
+        }
+      }
+      setRun(next);
+    },
+    [],
+  );
   const activeContinuationBlocked = Boolean(
     options.selectedSession &&
     loadedSessionId === options.selectedSession &&
@@ -568,46 +643,73 @@ export function useChatMessages(options: {
         dispatchRequestStatus({ type: 'set-loading', value: true });
       }
 
+      const requestVersion = ++latestMessagesRequestRef.current;
+      if (!isBackground) foregroundLoadRequestRef.current = requestVersion;
       try {
-        // 用当前已展开窗口大小作为 limit:首次加载为一页;用户上滑撑大窗口后,
-        // 后台刷新仍能覆盖整窗,避免把已加载历史重新截断回最近一页。
-        const requestLimit = loadedWindowSizeRef.current;
-        const data = await chatSessionsApi.messages(sessionId, requestLimit);
-        if (activeSessionRef.current !== sessionId) {
+        const previousWindow =
+          historySessionRef.current === sessionId ? messagesRef.current : [];
+        const data = await fetchRecentMessageWindow(
+          (before, beforeId) =>
+            chatSessionsApi.messages(
+              sessionId,
+              MESSAGE_PAGE_SIZE,
+              before,
+              beforeId,
+            ),
+          previousWindow,
+        );
+        if (
+          activeSessionRef.current !== sessionId ||
+          requestVersion !== latestMessagesRequestRef.current
+        ) {
           return { ok: true, active: false };
         }
 
+        setHistoryError(null);
         dispatchLoadedSessionMeta({
           type: 'loaded',
           sessionId,
           blocked: Boolean(data.continuation_blocked),
           message: data.continuation_block_message || '',
         });
-        databaseProcessingRef.current = data.processing;
+        const stillProcessing =
+          data.processing && !isStreamInterrupted(sessionId);
+        databaseProcessingRef.current = stillProcessing;
         // 仅在前台(切换/刷新)时据返回条数判断是否还有更早消息;
         // 后台轮询不改动该标记,避免大窗口刷新时误判。
         if (!isBackground) {
           dispatchPagination({
             type: 'set-has-more',
-            value: data.messages.length >= requestLimit,
+            value: data.messages.length >= MESSAGE_PAGE_SIZE,
           });
         }
 
-        const nextMessages = data.messages.reverse();
-        if (isBackground && isStreamInterrupted(sessionId)) {
-          databaseProcessingRef.current = false;
-          return {
-            ok: true,
-            active: true,
-            messages: nextMessages,
-            processing: false,
-          };
-        }
+        const nextMessages = [...data.messages].reverse();
+        const boundary =
+          submissionBoundaryRef.current?.sessionId === sessionId
+            ? submissionBoundaryRef.current
+            : null;
+        const outcome = getChatTurnOutcome(
+          nextMessages,
+          data.processing_request_id ?? runRef.current.requestId,
+          boundary?.knownIds,
+        );
+        const preserveUnconfirmedSubmission = Boolean(
+          boundary &&
+          !outcome &&
+          ['queued', 'running', 'syncing', 'stopping'].includes(
+            runRef.current.phase,
+          ) &&
+          !nextMessages.some(
+            (message) =>
+              !message.is_bot_message && !boundary.knownIds.has(message.id),
+          ),
+        );
         const activeStreamingMessageIds = getActiveStreamingMessageIds();
         const streamingResolved =
           isBackground &&
           activeStreamingMessageIds.length > 0 &&
-          hasFinalAssistantAfterLatestUser(nextMessages);
+          outcome !== null;
         if (streamingResolved) {
           resetStreamingMessageRefs();
         }
@@ -618,14 +720,21 @@ export function useChatMessages(options: {
           isNearBottom(scrollRef.current);
 
         setMessages((previous) => {
-          const visibleMessages =
-            isBackground && !streamingResolved
+          const refreshed =
+            previousWindow.length > 0
+              ? reconcileMessagePage(previous, nextMessages)
+              : nextMessages;
+          const visibleMessages = preserveUnconfirmedSubmission
+            ? previous
+            : isBackground && !streamingResolved && stillProcessing
               ? mergeStreamingTurnMessages(
-                  nextMessages,
+                  refreshed,
                   previous,
                   activeStreamingMessageIds,
                 )
-              : nextMessages;
+              : refreshed;
+          historySessionRef.current = sessionId;
+          messagesRef.current = visibleMessages;
 
           return isBackground &&
             visibleMessages.length === 0 &&
@@ -635,42 +744,66 @@ export function useChatMessages(options: {
               ? previous
               : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
         });
-        updateProcessing(data.processing);
-        updateAwaitingRefresh(isBackground && data.processing);
+        updateProcessing(stillProcessing);
+        const pendingOutcome = outcome;
+        const needsReconciliation =
+          !isStreamInterrupted(sessionId) &&
+          !pendingOutcome &&
+          ['queued', 'running', 'syncing'].includes(runRef.current.phase);
+        updateAwaitingRefresh(
+          (isBackground && stillProcessing) || needsReconciliation,
+        );
+        if (!isStreamInterrupted(sessionId) && !stoppingRef.current) {
+          const requestId =
+            data.processing_request_id ??
+            runRef.current.requestId ??
+            (!boundary
+              ? [...nextMessages]
+                  .reverse()
+                  .find(
+                    (message) =>
+                      message.metadata?.kind === 'final' ||
+                      message.metadata?.kind === 'error',
+                  )?.metadata?.request_id
+              : null);
+          if (stillProcessing)
+            transitionRun(
+              sessionId,
+              runRef.current.phase === 'running' ? 'running' : 'queued',
+              requestId,
+              runRef.current.error,
+            );
+          else if (outcome) transitionRun(sessionId, outcome, requestId);
+          else if (
+            runRef.current.phase === 'queued' ||
+            runRef.current.phase === 'running' ||
+            runRef.current.phase === 'syncing'
+          ) {
+            transitionRun(sessionId, 'syncing', requestId);
+          }
+        }
         return {
           ok: true,
           active: true,
           messages: nextMessages,
-          processing: data.processing,
+          processing: stillProcessing,
         };
       } catch (error) {
-        if (activeSessionRef.current === sessionId && !isBackground) {
-          const content =
-            error instanceof Error
-              ? `加载历史消息失败：${error.message}`
-              : '加载历史消息失败，请稍后重试';
-          const messageId = `opt-load-error-${Date.now()}-${localMessageSequenceRef.current}`;
-          localMessageSequenceRef.current += 1;
-          setMessages([
-            {
-              id: messageId,
-              account_id: 'web',
-              sender: '',
-              sender_name: '',
-              content,
-              timestamp: new Date().toISOString(),
-              is_from_me: true,
-              is_bot_message: true,
-              metadata: {
-                kind: 'error',
-                turn_complete: true,
-              },
-            },
-          ]);
+        if (
+          activeSessionRef.current === sessionId &&
+          requestVersion === latestMessagesRequestRef.current
+        ) {
+          setHistoryError(
+            error instanceof Error ? error.message : '加载历史消息失败，请重试',
+          );
         }
         return { ok: false };
       } finally {
-        if (activeSessionRef.current === sessionId && !isBackground) {
+        if (
+          activeSessionRef.current === sessionId &&
+          foregroundLoadRequestRef.current === requestVersion
+        ) {
+          foregroundLoadRequestRef.current = null;
           dispatchRequestStatus({ type: 'set-loading', value: false });
         }
       }
@@ -681,6 +814,7 @@ export function useChatMessages(options: {
       resetStreamingMessageRefs,
       updateAwaitingRefresh,
       updateProcessing,
+      transitionRun,
     ],
   );
 
@@ -691,6 +825,7 @@ export function useChatMessages(options: {
    */
   const loadOlderMessages = useCallback(async () => {
     const sessionId = activeSessionRef.current;
+    const visit = sessionVisitRef.current;
     if (!sessionId || loadingOlderRef.current || !hasMoreOlderRef.current) {
       return;
     }
@@ -700,66 +835,100 @@ export function useChatMessages(options: {
 
     loadingOlderRef.current = true;
     dispatchPagination({ type: 'older-start' });
-    // 记录加载前滚动几何,插入后据此把视口锚回原位(见下方 useLayoutEffect)。
-    const scrollElement = scrollRef.current;
-    prependAnchorRef.current = scrollElement
-      ? { height: scrollElement.scrollHeight, top: scrollElement.scrollTop }
-      : null;
 
     try {
       const data = await chatSessionsApi.messages(
         sessionId,
         MESSAGE_PAGE_SIZE,
         oldest.timestamp,
+        oldest.id,
       );
-      if (activeSessionRef.current !== sessionId) {
-        prependAnchorRef.current = null;
+      if (
+        activeSessionRef.current !== sessionId ||
+        sessionVisitRef.current !== visit
+      )
         return;
-      }
-      const olderMessages = data.messages.reverse();
+      const olderMessages = [...data.messages].reverse();
       if (olderMessages.length === 0) {
         dispatchPagination({ type: 'set-has-more', value: false });
         prependAnchorRef.current = null;
         return;
       }
-      let appendedCount = 0;
+      const scrollElement = scrollRef.current;
+      prependAnchorRef.current = scrollElement
+        ? { height: scrollElement.scrollHeight, top: scrollElement.scrollTop }
+        : null;
       setMessages((previous) => {
-        // 按 id 去重,防止游标边界处同 timestamp 消息重复插入;updater 幂等可安全重跑。
+        if (
+          activeSessionRef.current !== sessionId ||
+          sessionVisitRef.current !== visit
+        )
+          return previous;
+        // Keep overlapping pages idempotent without replacing the current live tail.
         const existingIds = new Set(previous.map((message) => message.id));
         const merged = olderMessages.filter(
           (message) => !existingIds.has(message.id),
         );
-        appendedCount = merged.length;
-        if (merged.length === 0) return previous;
-        return [...merged, ...previous];
+        if (merged.length === 0) {
+          prependAnchorRef.current = null;
+          return previous;
+        }
+        const next = [...merged, ...previous];
+        messagesRef.current = next;
+        return next;
       });
-      if (appendedCount > 0) {
-        // 扩大已展开窗口,使后台刷新覆盖到新加载的历史。
-        loadedWindowSizeRef.current += appendedCount;
-      } else {
-        // 全部被去重(messagesRef 尚未追上)时不锚定,避免无新增却偏移视口。
-        prependAnchorRef.current = null;
-      }
       // 后端返回满一页即认为仍有更早消息。
       dispatchPagination({
         type: 'set-has-more',
         value: olderMessages.length >= MESSAGE_PAGE_SIZE,
       });
     } catch {
-      // 加载失败静默放行,保留 hasMore 允许用户再次上滑重试。
-      prependAnchorRef.current = null;
+      if (
+        activeSessionRef.current === sessionId &&
+        sessionVisitRef.current === visit
+      ) {
+        prependAnchorRef.current = null;
+      }
     } finally {
-      loadingOlderRef.current = false;
-      dispatchPagination({ type: 'older-end' });
+      if (
+        activeSessionRef.current === sessionId &&
+        sessionVisitRef.current === visit
+      ) {
+        loadingOlderRef.current = false;
+        dispatchPagination({ type: 'older-end' });
+      }
     }
   }, []);
 
   useEffect(() => {
     const previousSelectedSession = previousSelectedSessionRef.current;
     previousSelectedSessionRef.current = options.selectedSession;
+    sessionVisitRef.current += 1;
 
     // 切换会话:重置分页窗口与状态,避免沿用上一会话的窗口大小/游标标记。
-    loadedWindowSizeRef.current = MESSAGE_PAGE_SIZE;
+    historySessionRef.current = '';
+    foregroundLoadRequestRef.current = null;
+    setHistoryError(null);
+    const isCreatedSession =
+      previousSelectedSession === '' &&
+      activeSendOperationRef.current?.sessionId === options.selectedSession;
+    if (
+      !isCreatedSession &&
+      previousSelectedSession !== options.selectedSession
+    ) {
+      activeSendOperationRef.current = null;
+      dispatchRequestStatus({ type: 'reset' });
+      sendingRef.current = false;
+      stoppingRef.current = false;
+      setStopping(false);
+      lastSentMessageContentRef.current = null;
+      lastSentMessageOptionsRef.current = undefined;
+      interruptedStreamSessionRef.current = null;
+      submissionBoundaryRef.current = null;
+      transitionRun(options.selectedSession, 'idle', null);
+      shouldAutoScrollRef.current = true;
+      setFollowingLatest(true);
+    }
     lastPollAtRef.current = null;
     loadingOlderRef.current = false;
     prependAnchorRef.current = null;
@@ -773,7 +942,8 @@ export function useChatMessages(options: {
       void loadMessages(options.selectedSession, {
         background:
           sendingRef.current &&
-          previousSelectedSession === options.selectedSession,
+          (previousSelectedSession === options.selectedSession ||
+            isCreatedSession),
       });
       return;
     }
@@ -788,6 +958,7 @@ export function useChatMessages(options: {
     loadMessages,
     options.selectedSession,
     options.selectedSessionRevision,
+    transitionRun,
     updateAwaitingRefresh,
     updateProcessing,
   ]);
@@ -1108,6 +1279,7 @@ export function useChatMessages(options: {
       const accountId =
         sessionsRef.current.find((session) => session.id === sessionId)
           ?.account_id ?? 'web';
+      if (activeSessionRef.current !== sessionId) return;
       const messageId = `opt-error-${Date.now()}-${localMessageSequenceRef.current}`;
       localMessageSequenceRef.current += 1;
       const removeMessageIdSet = new Set(appendOptions?.removeMessageIds ?? []);
@@ -1152,6 +1324,7 @@ export function useChatMessages(options: {
   );
 
   const appendReconnectNoticeMessage = useCallback((sessionId: string) => {
+    if (activeSessionRef.current !== sessionId) return;
     const accountId =
       sessionsRef.current.find((session) => session.id === sessionId)
         ?.account_id ?? 'web';
@@ -1240,6 +1413,32 @@ export function useChatMessages(options: {
         return;
       }
 
+      if (payload.type !== 'connected') {
+        if (
+          payload.requestId &&
+          ignoredRequestIdsRef.current.has(payload.requestId)
+        )
+          return;
+        if (
+          !acceptsChatStreamRequest(runRef.current.requestId, payload.requestId)
+        ) {
+          if (
+            ['idle', 'completed', 'failed', 'stopped'].includes(
+              runRef.current.phase,
+            ) &&
+            (payload.type === 'agent_start' || payload.type === 'turn_start')
+          ) {
+            submissionBoundaryRef.current = null;
+            transitionRun(sessionId, 'running', payload.requestId);
+            void loadMessages(sessionId, { background: true });
+          } else {
+            return;
+          }
+        }
+        if (payload.requestId && !runRef.current.requestId)
+          transitionRun(sessionId, 'running', payload.requestId);
+      }
+
       if (payload.type === 'connected') {
         streamConnectedRef.current = true;
         reconnectAttempt = 0;
@@ -1252,6 +1451,12 @@ export function useChatMessages(options: {
       // 走到这里说明是下面这批真正表示业务进展的事件类型之一。
       lastStreamEventAtRef.current = Date.now();
       lastStreamProgressAtRef.current = lastStreamEventAtRef.current;
+      if (
+        !stoppingRef.current &&
+        payload.type !== 'final' &&
+        payload.type !== 'error'
+      )
+        transitionRun(sessionId, 'running', undefined, runRef.current.error);
 
       if (payload.type === 'turn_start') {
         beginStreamingAssistantTurn(payload.turnIndex);
@@ -1406,6 +1611,11 @@ export function useChatMessages(options: {
       }
 
       if (payload.type === 'final') {
+        transitionRun(
+          sessionId,
+          stoppingRef.current ? 'stopping' : 'syncing',
+          payload.requestId,
+        );
         finalizeRunningToolTraceMessages(
           payload.status === 'error' ? 'failed' : 'completed',
         );
@@ -1434,6 +1644,12 @@ export function useChatMessages(options: {
           sessionId,
           getAiChatStreamErrorMessage(payload),
           { removeMessageIds: activeStreamingMessageIds },
+        );
+        transitionRun(
+          sessionId,
+          'failed',
+          payload.requestId,
+          getAiChatStreamErrorMessage(payload),
         );
         updateProcessing(false);
         updateAwaitingRefresh(false);
@@ -1536,6 +1752,7 @@ export function useChatMessages(options: {
     options.selectedSession,
     resetStreamingMessageRefs,
     streamReconnectNonce,
+    transitionRun,
     updateAwaitingRefresh,
     updateProcessing,
     upsertLatestStreamingAssistantMessage,
@@ -1549,7 +1766,11 @@ export function useChatMessages(options: {
     if (!element) return;
 
     const handleScroll = () => {
-      shouldAutoScrollRef.current = isNearBottom(element);
+      const nearBottom = isNearBottom(element);
+      shouldAutoScrollRef.current = nearBottom;
+      setFollowingLatest((previous) =>
+        previous === nearBottom ? previous : nearBottom,
+      );
       // 接近顶部且仍有更早消息时,自动加载上一页历史。
       if (
         element.scrollTop <= OLDER_LOAD_THRESHOLD_PX &&
@@ -1610,11 +1831,7 @@ export function useChatMessages(options: {
     [],
   );
 
-  /**
-   * 取消当前请求后重置本地流式状态；不含"是否等待取消接口真正返回"这个决定，
-   * 交由调用方处理——stopGenerating 要立即响应用户点击，retrySending 要等
-   * 取消真正生效、会话锁已释放，再发新请求，避免和新请求抢锁产生竞态。
-   */
+  /** Local interruption follows a successful cancellation acknowledgement. */
   const resetStreamingStateForInterrupt = useCallback(() => {
     sendAbortControllerRef.current?.abort();
     const socket = streamSocketRef.current;
@@ -1627,21 +1844,98 @@ export function useChatMessages(options: {
 
     databaseProcessingRef.current = false;
     resetStreamingMessageRefs();
+    sendingRef.current = false;
     dispatchRequestStatus({ type: 'set-sending', value: false });
     updateProcessing(false);
     updateAwaitingRefresh(false);
   }, [resetStreamingMessageRefs, updateAwaitingRefresh, updateProcessing]);
 
-  const stopGenerating = useCallback(() => {
+  const stopGenerating = useCallback(async () => {
+    if (stoppingRef.current) return false;
     const sessionId = activeSessionRef.current || options.selectedSession;
-    if (sessionId) {
-      interruptedStreamSessionRef.current = sessionId;
-      void chatSessionsApi.cancel(sessionId).catch(() => undefined);
+    if (!sessionId && !admissionRef.current) return false;
+    const operation = activeSendOperationRef.current;
+    let targetSessionId = sessionId;
+    let targetVisit: number | null = null;
+    let targetRequestId: string | null | undefined;
+    stoppingRef.current = true;
+    setStopping(true);
+    transitionRun(sessionId, 'stopping');
+    try {
+      // Admission must finish before cancel can target the accepted request.
+      await (operation?.admission ?? admissionRef.current);
+      const admittedSessionId = operation?.sessionId || sessionId;
+      targetSessionId = admittedSessionId;
+      if (
+        !admittedSessionId ||
+        activeSessionRef.current !== admittedSessionId ||
+        (operation && activeSendOperationRef.current !== operation)
+      )
+        return false;
+      targetVisit = sessionVisitRef.current;
+      targetRequestId = runRef.current.requestId;
+      await chatSessionsApi.cancel(admittedSessionId);
+      if (
+        activeSessionRef.current !== admittedSessionId ||
+        sessionVisitRef.current !== targetVisit ||
+        runRef.current.requestId !== targetRequestId
+      )
+        return false;
+      const requestId = targetRequestId;
+      const outcome = getChatTurnOutcome(
+        messagesRef.current,
+        requestId,
+        submissionBoundaryRef.current?.knownIds,
+      );
+      if (requestId && !outcome) ignoredRequestIdsRef.current.add(requestId);
+      interruptedStreamSessionRef.current = outcome ? null : admittedSessionId;
+      flushStreamingMessageUpdates();
+      resetStreamingStateForInterrupt();
+      activeSendOperationRef.current = null;
+      transitionRun(admittedSessionId, outcome ?? 'stopped', requestId);
+      inputRef.current?.focus();
+      return true;
+    } catch (error) {
+      if (
+        activeSessionRef.current === targetSessionId &&
+        (targetVisit === null || sessionVisitRef.current === targetVisit) &&
+        (targetRequestId === undefined ||
+          runRef.current.requestId === targetRequestId)
+      ) {
+        const outcome = getChatTurnOutcome(
+          messagesRef.current,
+          runRef.current.requestId,
+          submissionBoundaryRef.current?.knownIds,
+        );
+        if (outcome) {
+          transitionRun(targetSessionId, outcome);
+          return true;
+        }
+        transitionRun(
+          targetSessionId,
+          'running',
+          undefined,
+          error instanceof Error ? error.message : '停止失败，请重试',
+        );
+        updateAwaitingRefresh(true);
+      }
+      return false;
+    } finally {
+      if (
+        activeSessionRef.current === targetSessionId &&
+        (targetVisit === null || sessionVisitRef.current === targetVisit)
+      ) {
+        stoppingRef.current = false;
+        setStopping(false);
+      }
     }
-
-    resetStreamingStateForInterrupt();
-    inputRef.current?.focus();
-  }, [options.selectedSession, resetStreamingStateForInterrupt]);
+  }, [
+    options.selectedSession,
+    transitionRun,
+    flushStreamingMessageUpdates,
+    resetStreamingStateForInterrupt,
+    updateAwaitingRefresh,
+  ]);
 
   const sendMessageWithOptions = useCallback(
     async (
@@ -1654,7 +1948,11 @@ export function useChatMessages(options: {
       // 常规发送时若已有请求在途则拒绝；但「一键重试」(retrySending) 会先取消在途
       // 请求再同步重发，此刻它捕获的 isPending 闭包仍是旧的 true（React 尚未因
       // reset 重渲染），必须显式放行，否则重试会被这道守卫静默拦下、什么都不发。
-      if (isPending && !internalOptions?.bypassPendingGuard) return false;
+      if (
+        (isPending || sendingRef.current || stoppingRef.current) &&
+        !internalOptions?.bypassPendingGuard
+      )
+        return false;
       if (activeContinuationBlocked) return false;
       if (!options.selectedSession && !options.chatAvailable) return false;
 
@@ -1665,6 +1963,23 @@ export function useChatMessages(options: {
       }
       const abortController = new AbortController();
       sendAbortControllerRef.current = abortController;
+      let finishAdmission!: () => void;
+      const admission = new Promise<void>((resolve) => {
+        finishAdmission = resolve;
+      });
+      admissionRef.current = admission;
+      const operation = { sessionId: options.selectedSession, admission };
+      activeSendOperationRef.current = operation;
+      submissionBoundaryRef.current = {
+        sessionId: options.selectedSession,
+        knownIds: new Set(messagesRef.current.map((message) => message.id)),
+      };
+      const isCurrentOperation = () =>
+        activeSendOperationRef.current === operation &&
+        activeSessionRef.current === operation.sessionId;
+      sendingRef.current = true;
+      let sendingSessionId = options.selectedSession;
+      transitionRun(sendingSessionId, 'queued', null);
       dispatchRequestStatus({ type: 'set-sending', value: true });
       shouldAutoScrollRef.current = true;
       // 供"一键重试"复用；初始化静默计时起点，覆盖 WS 还没收到任何事件的起始状态。
@@ -1683,12 +1998,33 @@ export function useChatMessages(options: {
           creatingRef.current = true;
 
           try {
-            const newSession = await options.createSession();
-            if (!newSession) return false;
+            const newSession = await options.createSession((created) => {
+              if (activeSendOperationRef.current !== operation) return;
+              operation.sessionId = created.id;
+              activeSessionRef.current = created.id;
+              submissionBoundaryRef.current = {
+                sessionId: created.id,
+                knownIds: new Set(),
+              };
+              transitionRun(
+                created.id,
+                stoppingRef.current ? 'stopping' : 'queued',
+                null,
+              );
+            });
+            if (!newSession || activeSendOperationRef.current !== operation)
+              return false;
             if (abortController.signal.aborted) return false;
 
             sessionId = newSession.id;
+            sendingSessionId = sessionId;
+            operation.sessionId = sessionId;
             activeSessionRef.current = sessionId;
+            transitionRun(
+              sessionId,
+              stoppingRef.current ? 'stopping' : 'queued',
+              null,
+            );
             setMessages([]);
             shouldAutoScrollRef.current = true;
           } finally {
@@ -1699,7 +2035,7 @@ export function useChatMessages(options: {
         const optimisticUser: Message = {
           id: `opt-user-${Date.now()}`,
           account_id:
-            options.sessions.find((session) => session.id === sessionId)
+            sessionsRef.current.find((session) => session.id === sessionId)
               ?.account_id ?? 'web',
           sender: '',
           sender_name: '',
@@ -1713,7 +2049,7 @@ export function useChatMessages(options: {
         if (abortController.signal.aborted) return false;
 
         try {
-          const { session_title: sessionTitle } =
+          const { session_title: sessionTitle, request_id: requestId } =
             await sendChatSessionMessageWithOptions(
               chatSessionsApi.send,
               sessionId,
@@ -1721,21 +2057,32 @@ export function useChatMessages(options: {
               sendOptions,
               { signal: abortController.signal },
             );
+          finishAdmission();
+          if (!isCurrentOperation()) return true;
+          if (!isStreamInterrupted(sessionId)) {
+            transitionRun(
+              sessionId,
+              stoppingRef.current ? 'stopping' : 'queued',
+              requestId ?? runRef.current.requestId,
+            );
+          }
 
           const refreshed = await loadMessages(sessionId, { background: true });
+          if (!isCurrentOperation()) return true;
           if (!refreshed.ok) {
             appendReconnectNoticeMessage(sessionId);
+            transitionRun(sessionId, 'syncing');
             updateAwaitingRefresh(true);
-            return false;
+            return true;
           }
           if (!refreshed.active) {
-            return false;
+            return true;
           }
           if (refreshed.processing) {
             updateAwaitingRefresh(true);
           }
 
-          const currentSession = options.sessions.find(
+          const currentSession = sessionsRef.current.find(
             (session) => session.id === sessionId,
           );
           options.touchSession(sessionId, {
@@ -1747,6 +2094,9 @@ export function useChatMessages(options: {
           });
           return true;
         } catch (error) {
+          finishAdmission();
+          if (!isCurrentOperation())
+            return isRecoverableChatSendInterruption(error);
           if (abortController.signal.aborted) {
             updateProcessing(false);
             updateAwaitingRefresh(false);
@@ -1757,19 +2107,27 @@ export function useChatMessages(options: {
             const refreshed = await loadMessages(sessionId, {
               background: true,
             });
+            if (!isCurrentOperation()) return true;
             if (!refreshed.ok) {
               appendReconnectNoticeMessage(sessionId);
+              transitionRun(sessionId, 'syncing');
               updateAwaitingRefresh(true);
-              return false;
+              return true;
             }
             if (!refreshed.active) {
-              return false;
+              return true;
             }
             if (refreshed.processing) {
               updateAwaitingRefresh(true);
-              return false;
+              return true;
             }
-            if (hasFinalAssistantAfterLatestUser(refreshed.messages)) {
+            if (
+              getChatTurnOutcome(
+                refreshed.messages,
+                runRef.current.requestId,
+                submissionBoundaryRef.current?.knownIds,
+              )
+            ) {
               return true;
             }
           }
@@ -1777,13 +2135,17 @@ export function useChatMessages(options: {
           const errorMessage = getAiChatSendErrorMessage(error);
           if (errorMessage === AI_CHAT_RECONNECTING_MESSAGE) {
             appendReconnectNoticeMessage(sessionId);
+            transitionRun(sessionId, 'syncing');
             updateAwaitingRefresh(true);
-            return false;
+            return true;
           }
           appendAssistantErrorMessage(sessionId, errorMessage);
+          transitionRun(sessionId, 'failed', undefined, errorMessage);
           return false;
         }
       } catch (error) {
+        if (!isCurrentOperation()) return false;
+        transitionRun(sendingSessionId, 'failed');
         const errorMessage =
           error instanceof Error
             ? error.message
@@ -1809,11 +2171,17 @@ export function useChatMessages(options: {
         ]);
         return false;
       } finally {
+        finishAdmission();
+        if (admissionRef.current === admission) admissionRef.current = null;
         if (sendAbortControllerRef.current === abortController) {
           sendAbortControllerRef.current = null;
         }
-        dispatchRequestStatus({ type: 'set-sending', value: false });
-        inputRef.current?.focus();
+        if (isCurrentOperation()) {
+          activeSendOperationRef.current = null;
+          sendingRef.current = false;
+          dispatchRequestStatus({ type: 'set-sending', value: false });
+          inputRef.current?.focus();
+        }
       }
     },
     [
@@ -1822,7 +2190,11 @@ export function useChatMessages(options: {
       appendReconnectNoticeMessage,
       isPending,
       loadMessages,
-      options,
+      options.chatAvailable,
+      options.selectedSession,
+      options.createSession,
+      options.touchSession,
+      transitionRun,
       updateAwaitingRefresh,
       updateProcessing,
     ],
@@ -1842,14 +2214,8 @@ export function useChatMessages(options: {
     const content = lastSentMessageContentRef.current;
     if (!sessionId || !content) return false;
 
-    interruptedStreamSessionRef.current = sessionId;
-    try {
-      await chatSessionsApi.cancel(sessionId);
-    } catch {
-      // cancel 对"没有在途请求"本就幂等成功；真失败大概率是网络抖动，
-      // 此时继续重发也是合理兜底，不应阻塞用户重试。
-    }
-    resetStreamingStateForInterrupt();
+    const stopped = await stopGenerating();
+    if (!stopped || activeSessionRef.current !== sessionId) return false;
     setReplySlow(false);
 
     // bypassPendingGuard：此刻 sendMessageWithOptions 闭包捕获的 isPending 仍为
@@ -1858,11 +2224,7 @@ export function useChatMessages(options: {
     return sendMessageWithOptions(content, lastSentMessageOptionsRef.current, {
       bypassPendingGuard: true,
     });
-  }, [
-    options.selectedSession,
-    resetStreamingStateForInterrupt,
-    sendMessageWithOptions,
-  ]);
+  }, [options.selectedSession, stopGenerating, sendMessageWithOptions]);
 
   const refreshMessages = useCallback(async () => {
     if (!options.selectedSession) {
@@ -1871,9 +2233,21 @@ export function useChatMessages(options: {
     await loadMessages(options.selectedSession, { background: false });
   }, [loadMessages, options.selectedSession]);
 
+  const scrollToLatest = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    setFollowingLatest(true);
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, []);
+
   return {
     messages,
     loading,
+    run,
+    historyError,
+    stopping,
+    followingLatest,
+    scrollToLatest,
     sending: isPending,
     loadedSessionId,
     continuationBlocked: activeContinuationBlocked,

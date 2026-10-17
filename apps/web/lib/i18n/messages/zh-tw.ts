@@ -762,6 +762,8 @@ export const zhTWMessages = {
       back: '返回開始方式',
     },
     composer: {
+      stopping: '正在停止',
+      nextDraftLabel: '可編輯下一則訊息',
       disabledPlaceholder: '此對話無法繼續追問',
       messagePlaceholder: '輸入訊息...',
       initialPlaceholder: '有什麼想問的？',
@@ -774,6 +776,25 @@ export const zhTWMessages = {
       useAsBoard: '作為盤面',
       shortcutHint: 'Enter 發送 · Shift+Enter 換行',
       aiDisclaimer: 'AI 生成內容，僅供參考',
+    },
+    context: {
+      currentBoard: '目前盤面',
+      latestBoard: '使用最新盤面',
+      retryBoards: '重新載入盤面',
+    },
+    reading: {
+      retryHistory: '重試同步',
+      newContent: '有新內容 · 回到最新',
+      latest: '回到最新',
+    },
+    run: {
+      queued: '已提交，等待執行',
+      running: '正在執行',
+      syncing: '正在同步最終結果',
+      stopping: '正在停止',
+      stopped: '已停止輸出',
+      completed: '回答完成',
+      failed: '回答失敗',
     },
     home: {
       subtitle: '排盤 · 斷卦',

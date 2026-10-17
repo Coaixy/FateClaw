@@ -7,7 +7,7 @@ import type {
   RefObject,
   ReactNode,
 } from 'react';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import {
   ClipboardPaste,
   Loader2,
@@ -19,6 +19,30 @@ import {
 import { useI18n } from '@/lib/i18n';
 
 const MAX_TEXTAREA_HEIGHT = 96;
+
+interface ComposerKeyboardEvent {
+  key: string;
+  shiftKey: boolean;
+  isComposing?: boolean;
+  keyCode?: number;
+  nativeEvent?: { isComposing?: boolean; keyCode?: number };
+}
+
+export function shouldSendOnEnter(
+  event: ComposerKeyboardEvent,
+  composing = false,
+): boolean {
+  return (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !composing &&
+    !event.isComposing &&
+    !event.nativeEvent?.isComposing &&
+    // Safari can end composition before dispatching the candidate-confirming Enter.
+    event.keyCode !== 229 &&
+    event.nativeEvent?.keyCode !== 229
+  );
+}
 
 interface PasteChoicePanelProps {
   preview?: string;
@@ -42,12 +66,12 @@ function syncTextareaHeight(
     return;
   }
 
-  textarea.style.height = 'auto';
   if (!value) {
     textarea.style.height = '';
     return;
   }
 
+  textarea.style.height = 'auto';
   textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
 }
 
@@ -77,6 +101,7 @@ export function AiChatComposer({
   inputRef,
   input,
   sending,
+  stopping = false,
   disabled,
   disabledMessage,
   selectedSession,
@@ -97,6 +122,7 @@ export function AiChatComposer({
   inputRef: RefObject<HTMLTextAreaElement | null>;
   input: string;
   sending: boolean;
+  stopping?: boolean;
   disabled?: boolean;
   disabledMessage?: string;
   selectedSession: string;
@@ -115,14 +141,15 @@ export function AiChatComposer({
   onStop: () => void;
 }) {
   const { t } = useI18n();
-  const composerDisabled = sending || Boolean(disabled);
-  const actionDisabled = sending
-    ? false
-    : !input.trim() || Boolean(disabled) || Boolean(sendDisabled);
+  const composingRef = useRef(false);
+  const composerDisabled = Boolean(disabled);
+  const actionDisabled =
+    stopping ||
+    (!sending && (!input.trim() || Boolean(disabled) || Boolean(sendDisabled)));
 
   useLayoutEffect(() => {
     syncTextareaHeight(inputRef.current, input);
-  }, [disabled, input, inputRef, selectedSession, sending]);
+  }, [input, inputRef, selectedSession]);
 
   return (
     <div className="relative">
@@ -169,7 +196,22 @@ export function AiChatComposer({
           value={input}
           onChange={onInputChange}
           onPaste={onPaste}
-          onKeyDown={onKeyDown}
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !shouldSendOnEnter(event, composingRef.current)
+            ) {
+              return;
+            }
+            onKeyDown(event);
+          }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
           placeholder={
             disabled
               ? t('aiChat.composer.disabledPlaceholder')
@@ -179,15 +221,12 @@ export function AiChatComposer({
           }
           aria-label={
             sending
-              ? t('aiChat.composer.replyingLabel')
+              ? t('aiChat.composer.nextDraftLabel')
               : t('aiChat.composer.inputLabel')
           }
           disabled={composerDisabled}
           rows={1}
           className="min-h-12 min-w-0 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
-          onInput={(event) => {
-            syncTextareaHeight(event.currentTarget, event.currentTarget.value);
-          }}
         />
         <button
           type="button"
@@ -197,15 +236,25 @@ export function AiChatComposer({
             sending ? 'scale-110' : 'hover:scale-105'
           }`}
           aria-label={
-            sending ? t('aiChat.composer.stop') : t('aiChat.composer.send')
+            stopping
+              ? t('aiChat.composer.stopping')
+              : sending
+                ? t('aiChat.composer.stop')
+                : t('aiChat.composer.send')
           }
+          aria-busy={stopping || undefined}
         >
-          {sending ? (
+          {stopping ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : sending ? (
             <Square size={13} className="fill-current" />
           ) : (
             <Send size={14} />
           )}
         </button>
+        <span role="status" className="sr-only">
+          {stopping ? t('aiChat.composer.stopping') : ''}
+        </span>
         {modelControl ? (
           <div className="w-full border-t border-hairline/60 px-1.5 py-1">
             {modelControl}
