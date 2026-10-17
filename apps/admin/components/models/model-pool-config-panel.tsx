@@ -5,7 +5,6 @@ import { Bot, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import {
   DEFAULT_BENEFIT_POLICY,
   type BenefitPolicyDto,
-  type BenefitQuotaGroupDto,
   type ModelPoolKey,
 } from '@fateclaw/contracts/model-settings';
 import {
@@ -60,13 +59,6 @@ function BenefitConfiguration({
   onChange: (patch: Partial<Draft>) => void;
 }) {
   const policy = draft.benefit_policy ?? DEFAULT_BENEFIT_POLICY;
-  const groups = draft.quota_groups ?? [];
-  const updateGroup = (id: string, patch: Partial<BenefitQuotaGroupDto>) =>
-    onChange({
-      quota_groups: groups.map((group) =>
-        group.id === id ? { ...group, ...patch } : group,
-      ),
-    });
   const field = ([key, label, min, max]: (typeof POLICY_FIELDS)[number]) => (
     <label key={key} className={LABEL_CLASS}>
       <span>{label}</span>
@@ -87,192 +79,41 @@ function BenefitConfiguration({
     </label>
   );
   return (
-    <>
-      <fieldset
-        disabled={disabled}
-        className="rounded-xl border border-hairline bg-surface-card p-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">开放与每日免费额度</h3>
-          <label className="flex items-center gap-2 text-[12px]">
-            <input
-              type="checkbox"
-              checked={draft.enabled ?? false}
-              onChange={(event) => onChange({ enabled: event.target.checked })}
-              className="accent-primary"
-            />
-            开放免费服务
-          </label>
-        </div>
+    <fieldset
+      disabled={disabled}
+      className="rounded-xl border border-hairline bg-surface-card p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">开放与每日免费额度</h3>
+        <label className="flex items-center gap-2 text-[12px]">
+          <input
+            type="checkbox"
+            checked={draft.enabled ?? false}
+            onChange={(event) => onChange({ enabled: event.target.checked })}
+            className="accent-primary"
+          />
+          开放免费服务
+        </label>
+      </div>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {POLICY_FIELDS.slice(0, 2).map(field)}
+      </div>
+      <p className="mt-3 text-[12px] leading-6 text-muted">
+        每日北京时间 00:00
+        重置，不累计。失败返还次数，已消耗的用量仍计入个人执行额度。
+      </p>
+      <details className="mt-4">
+        <summary className="cursor-pointer text-[12px] text-primary">
+          执行与排队上限
+        </summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {POLICY_FIELDS.slice(0, 2).map(field)}
+          {POLICY_FIELDS.slice(2).map(field)}
         </div>
         <p className="mt-3 text-[12px] leading-6 text-muted">
-          每日北京时间 00:00
-          重置，不累计。失败返还次数，已消耗的上游预算仍会计入限制。
+          输入预算包含提示词、知识库与工具定义，调用前按完整上下文的字节数保守预留，收到供应商用量后再结算；实际问题很短也会占用基础上下文预算。
         </p>
-        <details className="mt-4">
-          <summary className="cursor-pointer text-[12px] text-primary">
-            执行与排队上限
-          </summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {POLICY_FIELDS.slice(2).map(field)}
-          </div>
-          <p className="mt-3 text-[12px] leading-6 text-muted">
-            输入预算包含提示词、知识库与工具定义，调用前按完整上下文的字节数保守预留，收到供应商用量后再结算；实际问题很短也会占用基础上下文预算。
-          </p>
-        </details>
-      </fieldset>
-      <fieldset
-        disabled={disabled}
-        className="space-y-4 rounded-xl border border-hairline bg-surface-card p-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">共享上游额度组</h3>
-          <button
-            type="button"
-            disabled={groups.length >= 40}
-            onClick={() =>
-              onChange({
-                quota_groups: [
-                  ...groups,
-                  {
-                    id: crypto.randomUUID(),
-                    display_name: '',
-                    requests_per_minute: 5,
-                    requests_per_day: 50,
-                    tokens_per_minute: 32768,
-                    tokens_per_day: 100000,
-                    reset_timezone: 'UTC',
-                    expires_at: null,
-                    approved: false,
-                  },
-                ],
-              })
-            }
-            className="inline-flex items-center gap-1 rounded-lg border border-hairline px-3 py-2 text-[12px] text-primary"
-          >
-            <Plus size={13} />
-            添加额度组
-          </button>
-        </div>
-        <p className="text-[12px] leading-6 text-muted">
-          按供应商实际账户、项目或组织填写共享额度。同一份额度关联多个节点时只创建一个组，所有调用和状态探测共同使用预算。
-        </p>
-        {groups.map((group) => (
-          <div
-            key={group.id}
-            className="space-y-3 rounded-lg border border-hairline bg-canvas p-4"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] text-muted">
-                {group.display_name || '新额度组'}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  onChange({
-                    quota_groups: groups.filter((item) => item.id !== group.id),
-                  })
-                }
-                aria-label="移除额度组"
-                className="p-1 text-muted hover:text-error"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={LABEL_CLASS}>
-                <span>额度组名称</span>
-                <input
-                  className={FIELD_CLASS}
-                  required
-                  maxLength={120}
-                  value={group.display_name}
-                  onChange={(event) =>
-                    updateGroup(group.id, { display_name: event.target.value })
-                  }
-                />
-              </label>
-              <label className={LABEL_CLASS}>
-                <span>每日重置时区</span>
-                <input
-                  className={FIELD_CLASS}
-                  required
-                  value={group.reset_timezone}
-                  placeholder="UTC / America/Los_Angeles"
-                  onChange={(event) =>
-                    updateGroup(group.id, {
-                      reset_timezone: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              {(
-                [
-                  ['requests_per_minute', '每分钟请求数', 1, 100000],
-                  ['requests_per_day', '每日请求数', 1, 10000000],
-                  ['tokens_per_minute', '每分钟 Token 预算', 128, 1000000000],
-                  ['tokens_per_day', '每日 Token 预算', 128, 2000000000],
-                ] as const
-              ).map(([key, label, min, max]) => (
-                <label key={key} className={LABEL_CLASS}>
-                  <span>{label}</span>
-                  <input
-                    className={FIELD_CLASS}
-                    type="number"
-                    required
-                    min={min}
-                    max={max}
-                    step={1}
-                    value={group[key]}
-                    onChange={(event) =>
-                      updateGroup(group.id, {
-                        [key]: Number(event.target.value),
-                      })
-                    }
-                  />
-                </label>
-              ))}
-              <label className={`${LABEL_CLASS} sm:col-span-2`}>
-                <span>有效期（UTC，可留空）</span>
-                <input
-                  className={FIELD_CLASS}
-                  type="datetime-local"
-                  value={group.expires_at?.slice(0, 16) ?? ''}
-                  onChange={(event) =>
-                    updateGroup(group.id, {
-                      expires_at: event.target.value
-                        ? new Date(event.target.value + 'Z').toISOString()
-                        : null,
-                    })
-                  }
-                />
-              </label>
-            </div>
-            <label className="flex items-start gap-2 text-[12px] leading-6 text-body">
-              <input
-                type="checkbox"
-                className="mt-1.5 accent-primary"
-                checked={group.approved}
-                onChange={(event) =>
-                  updateGroup(group.id, { approved: event.target.checked })
-                }
-              />
-              已确认允许本站个人咨询使用、实际共享额度范围，以及额度用尽后的硬停用边界。
-            </label>
-            <p className="text-[11px] text-muted">
-              本地记录：今日调用 {group.used_requests_today ?? 0} 次，预算占用{' '}
-              {group.reserved_tokens_today ?? 0}{' '}
-              Token；供应商实际剩余额度仍以其后台为准。
-              {group.cooldown_until
-                ? ` 暂停至 ${new Date(group.cooldown_until).toLocaleString('zh-CN')}`
-                : ''}
-            </p>
-          </div>
-        ))}
-      </fieldset>
-    </>
+      </details>
+    </fieldset>
   );
 }
 
@@ -299,7 +140,6 @@ function configFromOverview(overview: AdminSystemConfigOverview): Draft {
     revision: overview.revision,
     enabled: overview.enabled,
     benefit_policy: overview.benefit_policy,
-    quota_groups: overview.quota_groups,
     display_name: overview.model.display_name,
     thinking_level: overview.thinking_level,
     input_token_price_per_million_coins:
@@ -327,7 +167,6 @@ function configFromOverview(overview: AdminSystemConfigOverview): Draft {
             hasSecret: node.has_secret,
             failureCount: node.failure_count,
             cooldownUntil: node.cooldown_until,
-            quota_group_id: node.quota_group_id,
           }))
       : overview.benefit_policy
         ? []
@@ -343,7 +182,7 @@ function nodeStatus(node: DraftNode): { label: string; color: string } {
     return {
       label:
         new Date(node.cooldownUntil).getTime() > Date.now()
-          ? '故障冷却中'
+          ? '冷却中'
           : '等待恢复探测',
       color: 'text-warning',
     };
@@ -476,36 +315,12 @@ export function ModelPoolConfigPanel({
           auth_mode: node.auth_mode,
           enabled: node.enabled,
           weight: node.weight,
-          ...(benefit ? { quota_group_id: node.quota_group_id ?? null } : {}),
           ...(node.api_key?.trim() ? { api_key: node.api_key.trim() } : {}),
         })),
         ...(benefit
           ? {
               enabled: draft.enabled ?? false,
               benefit_policy: draft.benefit_policy ?? DEFAULT_BENEFIT_POLICY,
-              quota_groups: (draft.quota_groups ?? []).map(
-                ({
-                  id,
-                  display_name,
-                  requests_per_minute,
-                  requests_per_day,
-                  tokens_per_minute,
-                  tokens_per_day,
-                  reset_timezone,
-                  expires_at,
-                  approved,
-                }) => ({
-                  id,
-                  display_name,
-                  requests_per_minute,
-                  requests_per_day,
-                  tokens_per_minute,
-                  tokens_per_day,
-                  reset_timezone,
-                  expires_at,
-                  approved,
-                }),
-              ),
             }
           : {}),
       };
@@ -668,7 +483,7 @@ export function ModelPoolConfigPanel({
             </h3>
             <p className="mt-1 text-[12px] text-muted">
               {benefit
-                ? '每个节点绑定实际共享额度组。同一项目的多个密钥不会重复计算容量。'
+                ? '节点限流或额度用尽后自动冷却，并切换其他可用节点；冷却结束后自动尝试恢复。'
                 : '主节点固定保留，配置可以编辑；与子节点按权重分摊调用。'}
             </p>
             {benefit ? (
@@ -677,13 +492,7 @@ export function ModelPoolConfigPanel({
                 disabled={saving || draft.nodes.length >= 20}
                 onClick={() =>
                   patchDraft({
-                    nodes: [
-                      ...draft.nodes,
-                      {
-                        ...newNode(),
-                        quota_group_id: draft.quota_groups?.[0]?.id ?? null,
-                      },
-                    ],
+                    nodes: [...draft.nodes, newNode()],
                   })
                 }
                 className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-2 text-[12px] text-primary"
@@ -767,28 +576,6 @@ export function ModelPoolConfigPanel({
                       </div>
                     </div>
                     <div className="grid gap-4 p-5 sm:grid-cols-2">
-                      {benefit ? (
-                        <label className={`${LABEL_CLASS} sm:col-span-2`}>
-                          <span>共享额度组</span>
-                          <select
-                            className={FIELD_CLASS}
-                            required
-                            value={node.quota_group_id ?? ''}
-                            onChange={(event) =>
-                              patchNode(node.clientKey, {
-                                quota_group_id: event.target.value || null,
-                              })
-                            }
-                          >
-                            <option value="">请选择实际共享额度组</option>
-                            {draft.quota_groups?.map((group) => (
-                              <option key={group.id} value={group.id}>
-                                {group.display_name || '未命名额度组'}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
                       <label className={LABEL_CLASS}>
                         <span className="block">节点名称</span>
                         <input

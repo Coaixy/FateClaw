@@ -127,16 +127,7 @@ function configuredNodes(settings: PlatformModelSettings) {
       model.enabled &&
       model.model_name.trim() &&
       hasSecret &&
-      model.api_key_secret_key &&
-      (!settings.pool.benefit_policy ||
-        settings.quotaGroups?.some(
-          (group) =>
-            group.id ===
-              settings.nodes.find((entry) => entry.model.id === model.id)
-                ?.quotaGroupId &&
-            group.approved &&
-            (!group.expires_at || Date.parse(group.expires_at) > Date.now()),
-        )),
+      model.api_key_secret_key,
   );
 }
 
@@ -180,20 +171,12 @@ function adminOverview(
     ...(settings.pool.benefit_policy
       ? {
           benefit_policy: settings.pool.benefit_policy,
-          quota_groups: settings.quotaGroups ?? [],
         }
       : {}),
     model: publicPoolModel(settings),
     thinking_level: normalizeThinkingLevel(settings.pool.thinking_level),
     nodes: settings.nodes.map(
-      ({
-        model,
-        weight,
-        hasSecret,
-        failureCount,
-        cooldownUntil,
-        quotaGroupId,
-      }) => ({
+      ({ model, weight, hasSecret, failureCount, cooldownUntil }) => ({
         id: model.id,
         is_primary: model.id === settings.pool.primary_node_id,
         display_name: model.display_name,
@@ -208,7 +191,6 @@ function adminOverview(
         failure_count: failureCount,
         cooldown_until: cooldownUntil,
         updated_at: model.updated_at,
-        quota_group_id: quotaGroupId,
       }),
     ),
   };
@@ -266,21 +248,18 @@ function resolvePlatformRuntime(
       settings.pool.input_token_price_per_million_coins,
     outputTokenPricePerMillionCoins:
       settings.pool.output_token_price_per_million_coins,
-    poolNodes: nodes.map(
-      ({ model, weight, revision, secretValue, quotaGroupId }) => ({
-        modelConfigId: model.id,
-        revision,
-        weight,
-        piApi: model.pi_api,
-        model: model.model_name.trim(),
-        providerKey: model.model_key,
-        authMode: normalizeAuthMode(model),
-        apiKey: secretValue!,
-        baseUrl: model.base_url ?? undefined,
-        poolKey,
-        ...(quotaGroupId ? { quotaGroupId } : {}),
-      }),
-    ),
+    poolNodes: nodes.map(({ model, weight, revision, secretValue }) => ({
+      modelConfigId: model.id,
+      revision,
+      weight,
+      piApi: model.pi_api,
+      model: model.model_name.trim(),
+      providerKey: model.model_key,
+      authMode: normalizeAuthMode(model),
+      apiKey: secretValue!,
+      baseUrl: model.base_url ?? undefined,
+      poolKey,
+    })),
   };
 }
 
@@ -400,37 +379,9 @@ export async function saveOfficialModelSettings(
   if (poolKey === 'benefit') {
     if (!input.benefit_policy)
       throw new ModelConfigurationError('请配置免费额度与执行上限');
-    if (
-      new Set((input.quota_groups ?? []).map((group) => group.id)).size !==
-      (input.quota_groups ?? []).length
-    )
-      throw new ModelConfigurationError('共享额度组不能重复');
-    for (const group of input.quota_groups ?? []) {
-      try {
-        new Intl.DateTimeFormat('en', {
-          timeZone: group.reset_timezone,
-        }).format();
-      } catch {
-        throw new ModelConfigurationError('额度重置时区不正确');
-      }
-      if (group.expires_at && !Number.isFinite(Date.parse(group.expires_at)))
-        throw new ModelConfigurationError('额度有效期不正确');
-    }
-    if (
-      input.enabled &&
-      !input.nodes.some(
-        (node) =>
-          node.enabled &&
-          input.quota_groups?.some(
-            (group) =>
-              group.id === node.quota_group_id &&
-              group.approved &&
-              (!group.expires_at || Date.parse(group.expires_at) > Date.now()),
-          ),
-      )
-    )
+    if (input.enabled && !input.nodes.some((node) => node.enabled))
       throw new ModelConfigurationError(
-        '开放免费服务前，请配置已确认授权和免费边界的有效节点',
+        '开放免费服务前，请配置至少一个启用的节点',
       );
   }
   const updated = await savePlatformModelConfig({
@@ -438,7 +389,6 @@ export async function saveOfficialModelSettings(
     revision: input.revision,
     enabled: input.enabled,
     benefitPolicy: input.benefit_policy,
-    quotaGroups: input.quota_groups,
     displayName: input.display_name.trim(),
     thinkingLevel: input.thinking_level,
     inputTokenPricePerMillionCoins:
@@ -459,7 +409,6 @@ export async function saveOfficialModelSettings(
       ),
       enabled: node.enabled,
       weight: node.weight,
-      quotaGroupId: poolKey === 'benefit' ? node.quota_group_id : null,
     })),
     actor: input.actor,
   });

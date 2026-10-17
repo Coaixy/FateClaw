@@ -90,7 +90,7 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
     ).toBe(0);
   });
 
-  it('removes personal free records while preserving other users, probes and idempotent late quota settlement', async () => {
+  it('removes personal free records while preserving other users, probes and idempotent late usage settlement', async () => {
     await state.pool!.query(`
       INSERT INTO users(id,phone,created_at) VALUES ('free-user','13000000002',now()),('other-user','13000000003',now());
       INSERT INTO chat_sessions(id,account_id,user_id,title) VALUES ('free-session','web:free-user','free-user','Synthetic');
@@ -105,12 +105,10 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
         ('free-request','free-user',CURRENT_DATE,'{}','running',now()),
         ('old-request','free-user',CURRENT_DATE-1,'{}','consumed',now()),
         ('other-request','other-user',CURRENT_DATE,'{}','reserved',now());
-      INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,day_requests,day_tokens,day_start,minute_start) VALUES
-        ('shared-group','Synthetic group',10,100,10000,100000,3,100,date_trunc('day',now()),date_trunc('minute',now()));
-      INSERT INTO benefit_model_attempts(id,request_id,node_id,quota_group_id,is_probe,day_start,minute_start,input_tokens,output_tokens,health_generation,state) VALUES
-        ('free-attempt','free-request','synthetic-node','shared-group',false,date_trunc('day',now()),date_trunc('minute',now()),1,1,0,'reserved'),
-        ('old-attempt','old-request','synthetic-node','shared-group',false,date_trunc('day',now()),date_trunc('minute',now()),1,1,0,'settled'),
-        ('probe-attempt',NULL,'synthetic-node','shared-group',true,date_trunc('day',now()),date_trunc('minute',now()),1,1,0,'settled');
+      INSERT INTO benefit_model_attempts(id,request_id,node_id,is_probe,input_tokens,output_tokens,health_generation,state) VALUES
+        ('free-attempt','free-request','synthetic-node',false,1,1,0,'reserved'),
+        ('old-attempt','old-request','synthetic-node',false,1,1,0,'settled'),
+        ('probe-attempt',NULL,'synthetic-node',true,1,1,0,'settled');
     `);
 
     await deleteUser('free-user');
@@ -166,13 +164,17 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
       { id: 'old-attempt', request_id: null, is_probe: false },
       { id: 'probe-attempt', request_id: null, is_probe: true },
     ]);
-    const quota = async () =>
+    const usage = async () =>
       (
         await state.pool!.query(
-          "SELECT day_requests,day_tokens FROM benefit_quota_groups WHERE id='shared-group'",
+          "SELECT input_tokens,output_tokens,state FROM benefit_model_attempts WHERE id='free-attempt'",
         )
       ).rows[0];
-    expect(await quota()).toEqual({ day_requests: 3, day_tokens: '100' });
+    expect(await usage()).toEqual({
+      input_tokens: '1',
+      output_tokens: '1',
+      state: 'reserved',
+    });
     for (let index = 0; index < 2; index += 1) {
       expect(
         (
@@ -181,7 +183,11 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
           )
         ).rows[0].settled,
       ).toBe(true);
-      expect(await quota()).toEqual({ day_requests: 3, day_tokens: '105' });
+      expect(await usage()).toEqual({
+        input_tokens: '3',
+        output_tokens: '4',
+        state: 'settled',
+      });
     }
   });
 });

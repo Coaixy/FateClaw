@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
 
 const {
   mockRateLimitCheck,
@@ -689,6 +690,40 @@ describe('adminRoutes authentication throttling', () => {
     expect(response.headers['retry-after']).toBe('3');
     expect(mockRateLimitRecordFail).not.toHaveBeenCalled();
     expect(mockRateLimitClear).not.toHaveBeenCalled();
+  });
+
+  it('accepts free supply without manually configured upstream quotas', async () => {
+    const payload = {
+      display_name: '免费模型',
+      thinking_level: 'off',
+      input_token_price_per_million_coins: 0,
+      output_token_price_per_million_coins: 0,
+      revision: 1,
+      enabled: true,
+      benefit_policy: DEFAULT_BENEFIT_POLICY,
+      nodes: [
+        {
+          display_name: '免费节点',
+          pi_api: 'openai-completions',
+          base_url: null,
+          model_name: 'synthetic-model',
+          context_window_tokens: null,
+          enabled: true,
+          weight: 1,
+        },
+      ],
+    };
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/system-config/benefit',
+      headers: { 'x-admin-key': 'test-manager-key' },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(saveOfficialModelSettings).toHaveBeenCalledWith(
+      { ...payload, actor: 'manager' },
+      'benefit',
+    );
   });
 
   it('saves mixed-model pool nodes and common pricing atomically', async () => {

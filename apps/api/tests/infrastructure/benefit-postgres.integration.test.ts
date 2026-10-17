@@ -25,6 +25,7 @@ vi.mock('../../../agent-runtime/src/agent-db.js', () => ({
 }));
 import { createPiProviderRuntime } from '../../../agent-runtime/src/pi-runtime/provider.js';
 import { installModelPool } from '../../../agent-runtime/src/pi-runtime/model-pool.js';
+import { probeBenefitModelAvailability } from '../../src/modules/system/model-availability-probe.js';
 import {
   claimBenefitTool,
   markBenefitAnswerVisible,
@@ -55,17 +56,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
   let databaseName: string;
   let nodes: RuntimeModelPoolNode[];
   const policy = { ...DEFAULT_BENEFIT_POLICY };
-  const group = {
-    id: 'shared-project',
-    display_name: 'Synthetic project',
-    requests_per_minute: 100,
-    requests_per_day: 100,
-    tokens_per_minute: 1000000,
-    tokens_per_day: 10000000,
-    reset_timezone: 'America/Los_Angeles',
-    expires_at: null,
-    approved: true,
-  };
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString });
     databaseName = `fateclaw_benefit_${randomUUID().replaceAll('-', '')}`;
@@ -92,7 +82,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     await state.pool!
       .query(`UPDATE official_model_pool_settings SET primary_node_id=NULL;
       TRUNCATE benefit_model_attempts,benefit_requests,benefit_daily_usage,agent_result_deliveries,agent_requests;
-      DELETE FROM official_model_pool_nodes; DELETE FROM official_model_configs; DELETE FROM benefit_quota_groups;
+      DELETE FROM official_model_pool_nodes; DELETE FROM official_model_configs;
       DELETE FROM system_secrets; UPDATE official_model_pool_settings SET enabled=false WHERE id='benefit'`);
     await state.pool!.query(
       "UPDATE chat_sessions SET model_pool_key='benefit'",
@@ -103,7 +93,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       thinkingLevel: 'off',
       enabled: true,
       benefitPolicy: policy,
-      quotaGroups: [group],
       inputTokenPricePerMillionCoins: 0,
       outputTokenPricePerMillionCoins: 0,
       nodes: ['one', 'two'].map((name) => ({
@@ -115,7 +104,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         contextWindowTokens: 32000,
         enabled: true,
         weight: 1,
-        quotaGroupId: group.id,
       })),
     });
     const settings = await getPlatformModelRuntimeSettings('benefit');
@@ -129,7 +117,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       authMode: 'openai_api_key',
       apiKey: 'synthetic-provider-value',
       poolKey: 'benefit',
-      quotaGroupId: group.id,
     }));
   });
   async function admit(user = 'a', turns = policy.daily_turns) {
@@ -234,17 +221,41 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     ).toBe(1);
     expect((await getBenefitAllowance('a', 1)).remaining_turns).toBe(0);
   });
-  it('shares the final upstream request across two model nodes and two resident callers', async () => {
+  it('uses provider cooldowns independently across nodes and leases one recovery attempt', async () => {
+    const id = await admit();
+    await start(id);
+    const attempt = await claim(id);
     await state.pool!.query(
-      'UPDATE benefit_quota_groups SET requests_per_day=1',
+      "SELECT settle_benefit_attempt($1,0,0,false,'failure',120,'rate_limit')",
+      [attempt!.benefitAttemptId],
     );
-    const a = await admit('a');
-    const b = await admit('b');
-    await start(a);
-    await start(b);
-    const results = await Promise.all([claim(a, nodes[0]), claim(b, nodes[1])]);
-    expect(results.filter(Boolean)).toHaveLength(1);
-    expect(await getBenefitSupply()).toBe('exhausted');
+    expect(await claim(id)).toBeNull();
+    expect(await claim(id, nodes[1])).not.toBeNull();
+    expect(await getBenefitSupply()).toBe('available');
+    await state.pool!.query(
+      "UPDATE official_model_pool_nodes SET cooldown_until=now()-interval '1 second' WHERE model_config_id=$1",
+      [nodes[0].modelConfigId],
+    );
+    const probes = await Promise.all([
+      claim('', nodes[0], true),
+      claim('', nodes[0], true),
+    ]);
+    expect(probes.filter(Boolean)).toHaveLength(1);
+    await state.pool!.query(
+      "SELECT settle_benefit_attempt($1,0,0,false,'success')",
+      [probes.find(Boolean)!.benefitAttemptId],
+    );
+    const health = await state.pool!.query(
+      'SELECT failure_count,cooldown_until,cooldown_reason,probe_token FROM official_model_pool_nodes WHERE model_config_id=$1',
+      [nodes[0].modelConfigId],
+    );
+    expect(health.rows[0]).toEqual({
+      failure_count: 0,
+      cooldown_until: null,
+      cooldown_reason: null,
+      probe_token: null,
+    });
+    expect(await claim('', nodes[0], true)).not.toBeNull();
   });
   it('refunds the personal turn without inventing a refund for an ambiguous upstream dispatch', async () => {
     const id = await admit();
@@ -260,13 +271,13 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       return null;
     });
     expect((await getBenefitAllowance('a', 3)).remaining_turns).toBe(3);
-    const quota = (
+    const usage = (
       await state.pool!.query(
-        'SELECT day_requests,day_tokens FROM benefit_quota_groups',
+        'SELECT input_tokens,output_tokens FROM benefit_requests WHERE request_id=$1',
+        [id],
       )
     ).rows[0];
-    expect(quota.day_requests).toBe(1);
-    expect(Number(quota.day_tokens)).toBe(800);
+    expect(usage).toEqual({ input_tokens: '500', output_tokens: '300' });
     expect(
       (await state.pool!.query('SELECT state FROM benefit_model_attempts'))
         .rows[0].state,
@@ -304,10 +315,15 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       ),
     ).toBe(0);
   });
-  it('bounds monitoring calls across nodes without creating user allowances', async () => {
-    for (let index = 0; index < 4; index += 1)
-      expect(await claim('', nodes[index % 2], true)).not.toBeNull();
+  it('skips monitoring calls while a node is cooling without creating user allowances', async () => {
+    const attempt = await claim('', nodes[0], true);
+    expect(attempt).not.toBeNull();
+    await state.pool!.query(
+      "SELECT settle_benefit_attempt($1,0,0,false,'failure',3600,'quota')",
+      [attempt!.benefitAttemptId],
+    );
     expect(await claim('', nodes[0], true)).toBeNull();
+    expect(await claim('', nodes[1], true)).not.toBeNull();
     expect(
       (
         await state.pool!.query(
@@ -364,6 +380,157 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     });
     expect((await getBenefitAllowance('a', 3)).remaining_turns).toBe(2);
     expect((await getBenefitAllowance('b', 3)).remaining_turns).toBe(3);
+  });
+
+  it.each([
+    {
+      status: 429,
+      message: 'rate limit exceeded',
+      retry: '123',
+      seconds: 123,
+      reason: 'rate_limit',
+    },
+    {
+      status: 429,
+      message: 'daily quota exceeded',
+      retry: undefined,
+      seconds: 3600,
+      reason: 'quota',
+    },
+    {
+      status: 402,
+      message: 'insufficient balance',
+      retry: 'invalid',
+      seconds: 3600,
+      reason: 'quota',
+    },
+    {
+      status: 429,
+      message: 'rate limit exceeded',
+      retry: new Date(Date.now() + 180_000).toUTCString(),
+      seconds: 180,
+      reason: 'rate_limit',
+    },
+  ])(
+    'cools an upstream $status $message response and skips it on the next model call',
+    async ({ status, message, retry, seconds, reason }) => {
+      const calls: string[] = [];
+      const server = createServer((request, response) => {
+        calls.push(request.url!);
+        if (request.url!.startsWith('/limited/')) {
+          response.writeHead(status, {
+            'content-type': 'application/json',
+            ...(retry ? { 'retry-after': retry } : {}),
+          });
+          response.end(JSON.stringify({ error: { message } }));
+        } else {
+          response.writeHead(200, { 'content-type': 'text/event-stream' });
+          response.end(
+            `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', content: 'Synthetic reply' }, finish_reason: 'stop' }], usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 } })}\n\ndata: [DONE]\n\n`,
+          );
+        }
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, '127.0.0.1', resolve),
+      );
+      try {
+        const id = await admit();
+        await start(id);
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const runtime: LlmRuntimeSnapshot = {
+          ...nodes[0],
+          source: 'official',
+          billingMode: 'none',
+          poolKey: 'benefit',
+          benefitRequestId: id,
+          benefitPolicy: policy,
+          contextWindowTokens: 32000,
+          poolNodes: nodes.map((node, index) => ({
+            ...node,
+            baseUrl: `${baseUrl}/${index ? 'healthy' : 'limited'}/v1`,
+          })),
+        };
+        const provider = await createPiProviderRuntime(runtime);
+        installModelPool(provider, runtime, { random: () => 0 });
+        const complete = () =>
+          provider.modelRuntime.completeSimple(provider.model, {
+            messages: [
+              { role: 'user', content: 'Synthetic question', timestamp: 1 },
+            ],
+          });
+        expect((await complete()).stopReason).toBe('stop');
+        expect((await complete()).stopReason).toBe('stop');
+        expect(calls).toEqual([
+          '/limited/v1/chat/completions',
+          '/healthy/v1/chat/completions',
+          '/healthy/v1/chat/completions',
+        ]);
+        const health = (
+          await state.pool!.query(
+            'SELECT cooldown_reason,EXTRACT(EPOCH FROM cooldown_until-now())::float8 AS seconds FROM official_model_pool_nodes WHERE model_config_id=$1',
+            [nodes[0].modelConfigId],
+          )
+        ).rows[0];
+        expect(health.cooldown_reason).toBe(reason);
+        expect(health.seconds).toBeGreaterThan(seconds - 10);
+        expect(health.seconds).toBeLessThanOrEqual(seconds);
+        // Monitoring uses the same node lease and must not spend another call during cooldown.
+        expect(
+          await probeBenefitModelAvailability(
+            runtime.poolNodes![0],
+            new AbortController().signal,
+          ),
+        ).toEqual({ latency: null, attempted: false });
+        expect(calls).toHaveLength(3);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
+
+  it('applies provider feedback from scheduled monitoring to the node cooldown', async () => {
+    let calls = 0;
+    const server = createServer((_request, response) => {
+      calls += 1;
+      response.writeHead(429, {
+        'content-type': 'application/json',
+        'retry-after': '240',
+      });
+      response.end(
+        JSON.stringify({ error: { message: 'rate limit exceeded' } }),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    try {
+      const node = {
+        ...nodes[0],
+        baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
+      };
+      const signal = new AbortController().signal;
+      expect(await probeBenefitModelAvailability(node, signal)).toEqual({
+        latency: null,
+        attempted: true,
+      });
+      expect(await probeBenefitModelAvailability(node, signal)).toEqual({
+        latency: null,
+        attempted: false,
+      });
+      expect(calls).toBe(1);
+      const health = (
+        await state.pool!.query(
+          'SELECT cooldown_reason,EXTRACT(EPOCH FROM cooldown_until-now())::float8 AS seconds FROM official_model_pool_nodes WHERE model_config_id=$1',
+          [node.modelConfigId],
+        )
+      ).rows[0];
+      expect(health.cooldown_reason).toBe('rate_limit');
+      expect(health.seconds).toBeGreaterThan(235);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it('enforces the durable model-call budget on a real local stream and never dispatches a paid fallback', async () => {
@@ -491,9 +658,9 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         Number(
           (
             await state.pool!.query(
-              'SELECT day_tokens FROM benefit_quota_groups',
+              'SELECT sum(input_tokens+output_tokens) AS tokens FROM benefit_model_attempts',
             )
-          ).rows[0].day_tokens,
+          ).rows[0].tokens,
         ),
       ).toBe(25);
     } finally {
@@ -502,10 +669,19 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       );
     }
   });
-  it('preserves spent capacity across admin saves and resets only the provider window', async () => {
+  it('preserves node cooldowns and personal usage across unrelated admin saves', async () => {
     const id = await admit();
     await start(id);
-    expect(await claim(id)).not.toBeNull();
+    const attempt = await claim(id);
+    await state.pool!.query(
+      "SELECT settle_benefit_attempt($1,0,0,false,'failure',3600,'quota')",
+      [attempt!.benefitAttemptId],
+    );
+    await state.pool!.query(
+      'UPDATE official_model_configs SET enabled=false WHERE id=$1',
+      [nodes[1].modelConfigId],
+    );
+    expect(await getBenefitSupply()).toBe('exhausted');
     const before = await getPlatformModelSettings('benefit');
     await savePlatformModelConfig({
       poolKey: 'benefit',
@@ -514,7 +690,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
       thinkingLevel: 'off',
       enabled: true,
       benefitPolicy: policy,
-      quotaGroups: [group],
       inputTokenPricePerMillionCoins: 0,
       outputTokenPricePerMillionCoins: 0,
       nodes: before.nodes.map((entry) => ({
@@ -524,22 +699,22 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         baseUrl: null,
         modelName: entry.model.model_name,
         contextWindowTokens: 32000,
-        enabled: true,
+        enabled: entry.model.enabled,
         weight: 2,
-        quotaGroupId: group.id,
       })),
     });
-    expect(
-      (await state.pool!.query('SELECT day_requests FROM benefit_quota_groups'))
-        .rows[0].day_requests,
-    ).toBe(1);
-    await state.pool!.query(
-      "UPDATE benefit_quota_groups SET day_start=day_start-interval '1 day',day_requests=requests_per_day",
-    );
-    expect(await claim(id)).not.toBeNull();
-    const reset = await state.pool!.query(
-      "SELECT day_requests,day_start=date_trunc('day',now() AT TIME ZONE reset_timezone) AT TIME ZONE reset_timezone AS correct FROM benefit_quota_groups",
-    );
-    expect(reset.rows[0]).toEqual({ day_requests: 1, correct: true });
+    expect(await claim(id)).toBeNull();
+    expect(await getBenefitSupply()).toBe('exhausted');
+    const usage = (
+      await state.pool!.query(
+        'SELECT model_calls,input_tokens,output_tokens FROM benefit_requests WHERE request_id=$1',
+        [id],
+      )
+    ).rows[0];
+    expect(usage).toEqual({
+      model_calls: 1,
+      input_tokens: '500',
+      output_tokens: '300',
+    });
   });
 });

@@ -95,36 +95,26 @@ export async function getBenefitSupply(): Promise<BenefitSupplyState> {
   const { rows } = await getDbPool().query<{
     enabled: boolean;
     configured: number;
-    daily: number;
+    exhausted: number;
     ready: number;
   }>(
     `SELECT pool.enabled,
-      count(node.model_config_id) FILTER(WHERE model.enabled AND quota.approved
-        AND (quota.expires_at IS NULL OR quota.expires_at>now())
-        AND EXISTS(SELECT 1 FROM system_secrets WHERE key=model.api_key_secret_key AND secret_value<>''))::integer AS configured,
-      count(node.model_config_id) FILTER(WHERE model.enabled AND quota.approved
-        AND EXISTS(SELECT 1 FROM system_secrets WHERE key=model.api_key_secret_key AND secret_value<>'')
-        AND (quota.expires_at IS NULL OR quota.expires_at>now())
-        AND (quota.cooldown_reason IS DISTINCT FROM 'daily_quota' OR quota.cooldown_until IS NULL OR quota.cooldown_until<=now())
-        AND (quota.day_start IS DISTINCT FROM date_trunc('day',now() AT TIME ZONE quota.reset_timezone) AT TIME ZONE quota.reset_timezone
-          OR (quota.day_requests<quota.requests_per_day AND quota.day_tokens<quota.tokens_per_day)))::integer AS daily,
-      count(node.model_config_id) FILTER(WHERE model.enabled AND quota.approved
-        AND EXISTS(SELECT 1 FROM system_secrets WHERE key=model.api_key_secret_key AND secret_value<>'')
-        AND (quota.expires_at IS NULL OR quota.expires_at>now())
-        AND (quota.cooldown_until IS NULL OR quota.cooldown_until<=now())
-        AND (node.cooldown_until IS NULL OR node.cooldown_until<=now())
-        AND (quota.day_start IS DISTINCT FROM date_trunc('day',now() AT TIME ZONE quota.reset_timezone) AT TIME ZONE quota.reset_timezone
-          OR (quota.day_requests<quota.requests_per_day AND quota.day_tokens<quota.tokens_per_day))
-        AND (quota.minute_start IS DISTINCT FROM date_trunc('minute',now())
-          OR (quota.minute_requests<quota.requests_per_minute AND quota.minute_tokens<quota.tokens_per_minute)))::integer AS ready
+      count(node.model_config_id) FILTER(WHERE model.enabled AND secret.configured)::integer AS configured,
+      count(node.model_config_id) FILTER(WHERE model.enabled AND secret.configured
+        AND node.cooldown_until>now() AND node.cooldown_reason='quota')::integer AS exhausted,
+      count(node.model_config_id) FILTER(WHERE model.enabled AND secret.configured
+        AND (node.cooldown_until IS NULL OR (node.cooldown_until<=now()
+          AND (node.probe_until IS NULL OR node.probe_until<=now()))))::integer AS ready
       FROM official_model_pool_settings pool LEFT JOIN official_model_pool_nodes node ON node.pool_id=pool.id
       LEFT JOIN official_model_configs model ON model.id=node.model_config_id
-      LEFT JOIN benefit_quota_groups quota ON quota.id=node.quota_group_id WHERE pool.id='benefit' GROUP BY pool.id`,
+      LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM system_secrets
+        WHERE key=model.api_key_secret_key AND secret_value<>'') AS configured) secret ON true
+      WHERE pool.id='benefit' GROUP BY pool.id`,
   );
   const row = rows[0];
   if (!row?.enabled) return 'disabled';
   if (!row.configured) return 'unknown';
-  if (!row.daily) return 'exhausted';
+  if (row.exhausted === row.configured) return 'exhausted';
   return row.ready ? 'available' : 'busy';
 }
 

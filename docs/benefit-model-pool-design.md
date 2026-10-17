@@ -1,7 +1,10 @@
 # Free model pool design
 
-Status: Implemented. The current operating contract is [Free model service](benefit-model-pool.md).
-Reviewed against the working tree on October 16, 2026.
+Status: Historical design, implemented October 16, 2026. The current operating
+contract is [Free model service](benefit-model-pool.md). Manual upstream quota groups,
+provider limits, approvals and reset settings described below were removed on
+October 17, 2026. Node cooldowns now follow provider errors and retry hints; the
+historical quota-ledger design is superseded.
 
 ## Outcome and acceptance
 

@@ -7,7 +7,6 @@ import type {
 import { getDbPool, type DbQueryable } from '../db-pool.js';
 import type {
   BenefitPolicyDto,
-  BenefitQuotaGroupDto,
   ModelPoolKey,
   ModelAuthModeDto,
 } from '@fateclaw/contracts/model-settings';
@@ -36,13 +35,11 @@ export interface PlatformModelNode {
   hasSecret: boolean;
   failureCount: number;
   cooldownUntil: string | null;
-  quotaGroupId?: string | null;
 }
 
 export interface PlatformModelSettings {
   pool: PlatformModelPool;
   nodes: PlatformModelNode[];
-  quotaGroups?: BenefitQuotaGroupDto[];
 }
 
 export interface PlatformModelRuntimeSettings extends PlatformModelSettings {
@@ -59,7 +56,6 @@ async function readPlatformModelSettings(
        SELECT jsonb_agg(jsonb_build_object(
          'model', to_jsonb(model), 'weight', node.weight, 'revision', node.revision,
          'failureCount', node.failure_count, 'cooldownUntil', node.cooldown_until,
-         'quotaGroupId', node.quota_group_id,
          ${includeCredential ? "'secretValue', (SELECT secret_value FROM system_secrets WHERE key = model.api_key_secret_key)," : ''}
          'hasSecret', EXISTS (SELECT 1 FROM system_secrets
            WHERE key = model.api_key_secret_key AND secret_value <> '')
@@ -72,23 +68,6 @@ async function readPlatformModelSettings(
     [poolKey === 'benefit' ? 'benefit' : 'default'],
   );
   if (!rows[0]) throw new Error('Official model pool migration is missing');
-  if (poolKey === 'benefit') {
-    const groups =
-      await db.query<BenefitQuotaGroupDto>(`SELECT id,display_name,requests_per_minute,requests_per_day,
-      tokens_per_minute,tokens_per_day,reset_timezone,expires_at,approved,cooldown_until,
-      CASE WHEN day_start=date_trunc('day',now() AT TIME ZONE reset_timezone) AT TIME ZONE reset_timezone THEN day_requests ELSE 0 END AS used_requests_today,
-      CASE WHEN day_start=date_trunc('day',now() AT TIME ZONE reset_timezone) AT TIME ZONE reset_timezone THEN day_tokens::float8 ELSE 0 END AS reserved_tokens_today
-      FROM benefit_quota_groups WHERE NOT archived ORDER BY display_name,id`);
-    rows[0].quotaGroups = groups.rows.map((group) => ({
-      ...group,
-      expires_at: group.expires_at
-        ? new Date(group.expires_at).toISOString()
-        : null,
-      cooldown_until: group.cooldown_until
-        ? new Date(group.cooldown_until).toISOString()
-        : null,
-    }));
-  }
   return rows[0];
 }
 
@@ -116,7 +95,6 @@ export interface PlatformModelNodeInput {
   contextWindowTokens: number | null;
   enabled: boolean;
   weight: number;
-  quotaGroupId?: string | null;
 }
 
 export interface PlatformModelConfigInput {
@@ -130,7 +108,6 @@ export interface PlatformModelConfigInput {
   revision?: number;
   enabled?: boolean;
   benefitPolicy?: BenefitPolicyDto;
-  quotaGroups?: BenefitQuotaGroupDto[];
 }
 
 function defaultAuthMode(piApi: ModelProviderType): ModelAuthModeDto {
@@ -179,37 +156,6 @@ export async function savePlatformModelConfig(
       ? (input.nodes.find((node) => node.id === current.pool.primary_node_id)
           ?.id ?? null)
       : current.pool.primary_node_id;
-    if (benefit) {
-      for (const group of input.quotaGroups ?? []) {
-        await client.query(
-          `INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,reset_timezone,expires_at,approved)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name,
-          requests_per_minute=EXCLUDED.requests_per_minute,requests_per_day=EXCLUDED.requests_per_day,
-          tokens_per_minute=EXCLUDED.tokens_per_minute,tokens_per_day=EXCLUDED.tokens_per_day,
-          reset_timezone=EXCLUDED.reset_timezone,expires_at=EXCLUDED.expires_at,approved=EXCLUDED.approved,archived=false,updated_at=now()`,
-          [
-            group.id,
-            group.display_name,
-            group.requests_per_minute,
-            group.requests_per_day,
-            group.tokens_per_minute,
-            group.tokens_per_day,
-            group.reset_timezone,
-            group.expires_at,
-            group.approved,
-          ],
-        );
-      }
-      for (const group of current.quotaGroups ?? []) {
-        if (!(input.quotaGroups ?? []).some((entry) => entry.id === group.id)) {
-          // Retain accounting references for dispatched attempts; revoked groups cannot supply more calls.
-          await client.query(
-            'UPDATE benefit_quota_groups SET approved=false,archived=true WHERE id=$1',
-            [group.id],
-          );
-        }
-      }
-    }
     const retainedIds: string[] = [];
     for (const node of input.nodes) {
       const previous = current.nodes.find(
@@ -218,13 +164,6 @@ export async function savePlatformModelConfig(
       if (node.id && !previous)
         throw new ModelConfigurationError('模型节点不存在，请刷新后重试');
       const id = previous?.model.id ?? randomUUID();
-      if (
-        benefit &&
-        !(input.quotaGroups ?? []).some(
-          (group) => group.id === node.quotaGroupId,
-        )
-      )
-        throw new ModelConfigurationError('请为免费节点选择共享额度组');
       if (retainedIds.includes(id))
         throw new ModelConfigurationError('模型节点不能重复');
       retainedIds.push(id);
@@ -295,26 +234,19 @@ export async function savePlatformModelConfig(
           (previous.model.model_name !== node.modelName ||
             previous.model.enabled !== node.enabled ||
             previous.model.extra_json?.context_window_tokens !==
-              node.contextWindowTokens ||
-            (previous.quotaGroupId ?? null) !== (node.quotaGroupId ?? null))),
+              node.contextWindowTokens)),
       );
       await client.query(
-        `INSERT INTO official_model_pool_nodes (model_config_id, weight,pool_id,quota_group_id) VALUES ($1,$2,$4,$5)
+        `INSERT INTO official_model_pool_nodes (model_config_id, weight,pool_id) VALUES ($1,$2,$4)
          ON CONFLICT (model_config_id) DO UPDATE SET weight=EXCLUDED.weight,
-           quota_group_id=EXCLUDED.quota_group_id,
            revision=official_model_pool_nodes.revision + CASE WHEN $3 THEN 1 ELSE 0 END,
            health_generation=official_model_pool_nodes.health_generation + CASE WHEN $3 THEN 1 ELSE 0 END,
            failure_count=CASE WHEN $3 THEN 0 ELSE official_model_pool_nodes.failure_count END,
            cooldown_until=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.cooldown_until END,
+           cooldown_reason=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.cooldown_reason END,
            probe_until=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.probe_until END,
            probe_token=CASE WHEN $3 THEN NULL ELSE official_model_pool_nodes.probe_token END`,
-        [
-          id,
-          node.weight,
-          resetHealth,
-          poolId,
-          benefit ? node.quotaGroupId : null,
-        ],
+        [id, node.weight, resetHealth, poolId],
       );
     }
     await client.query(

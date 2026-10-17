@@ -156,7 +156,7 @@ describe.skipIf(!connectionString)(
       });
     }, 30000);
 
-    it('upgrades populated benefit records without losing shared accounting and remains safe on repeated startup', async () => {
+    it('upgrades populated benefit records without losing attempt accounting and remains safe on repeated startup', async () => {
       await withDatabase(async (client) => {
         await replayHistory(client, '0087_benefit_model_pool');
         await client.query(`
@@ -169,14 +169,25 @@ describe.skipIf(!connectionString)(
             VALUES ('upgrade-request','upgrade-user',CURRENT_DATE,'{}','consumed',now());
           INSERT INTO benefit_quota_groups(id,display_name,requests_per_minute,requests_per_day,tokens_per_minute,tokens_per_day,day_requests,day_tokens)
             VALUES ('upgrade-group','Synthetic group',10,100,10000,100000,7,100);
+          UPDATE benefit_quota_groups SET cooldown_until=now()+interval '2 hours',cooldown_reason='daily_quota';
+          INSERT INTO official_model_configs(id,model_key,pi_api,display_name,model_name)
+            VALUES ('upgrade-node','upgrade-provider','openai-completions','Synthetic node','synthetic-model');
+          INSERT INTO official_model_pool_nodes(model_config_id,pool_id,quota_group_id)
+            VALUES ('upgrade-node','benefit','upgrade-group');
           INSERT INTO benefit_model_attempts(id,request_id,node_id,quota_group_id,day_start,minute_start,input_tokens,output_tokens,health_generation,state)
             VALUES ('upgrade-attempt','upgrade-request','synthetic-node','upgrade-group',now(),now(),1,1,0,'settled');
         `);
-        const before = await readSeedFingerprints(client);
-
         await runDatabaseMigrations(client);
+        const upgraded = await readSeedFingerprints(client);
         await runDatabaseMigrations(client);
-        expect(await readSeedFingerprints(client)).toEqual(before);
+        expect(await readSeedFingerprints(client)).toEqual(upgraded);
+        expect(
+          (
+            await client.query(
+              "SELECT cooldown_reason,cooldown_until>now()+interval '1 hour' AS cooling FROM official_model_pool_nodes WHERE model_config_id='upgrade-node'",
+            )
+          ).rows,
+        ).toEqual([{ cooldown_reason: 'quota', cooling: true }]);
 
         await client.query("DELETE FROM users WHERE id='upgrade-user'");
         expect(
@@ -189,10 +200,12 @@ describe.skipIf(!connectionString)(
         expect(
           (
             await client.query(
-              "SELECT day_requests,day_tokens FROM benefit_quota_groups WHERE id='upgrade-group'",
+              "SELECT input_tokens,output_tokens,state FROM benefit_model_attempts WHERE id='upgrade-attempt'",
             )
           ).rows,
-        ).toEqual([{ day_requests: 7, day_tokens: '100' }]);
+        ).toEqual([
+          { input_tokens: '1', output_tokens: '1', state: 'settled' },
+        ]);
         expect(
           (
             await client.query(

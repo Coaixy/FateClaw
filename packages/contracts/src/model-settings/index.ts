@@ -1,5 +1,7 @@
 /** The platform owns model configuration for every client. */
 
+export { modelPoolCooldown, type ModelPoolCooldown } from './cooldown.js';
+
 export type ModelPoolKey = 'official' | 'benefit';
 export type BenefitSupplyState =
   | 'available'
@@ -35,21 +37,6 @@ export const DEFAULT_BENEFIT_POLICY: BenefitPolicyDto = {
   max_output_tokens: 2_048,
   max_total_output_tokens: 4_096,
 };
-
-export interface BenefitQuotaGroupDto {
-  id: string;
-  display_name: string;
-  requests_per_minute: number;
-  requests_per_day: number;
-  tokens_per_minute: number;
-  tokens_per_day: number;
-  reset_timezone: string;
-  expires_at: string | null;
-  approved: boolean;
-  used_requests_today?: number;
-  reserved_tokens_today?: number;
-  cooldown_until?: string | null;
-}
 
 export interface BenefitModelOverviewDto {
   model: OfficialModelDto | null;
@@ -107,7 +94,6 @@ export interface AdminModelPoolNodeDto {
   failure_count: number;
   cooldown_until: string | null;
   updated_at: string;
-  quota_group_id?: string | null;
 }
 
 export interface ModelSettingsOverviewDto {
@@ -123,7 +109,6 @@ export interface AdminModelSettingsOverviewDto {
   revision?: number;
   enabled?: boolean;
   benefit_policy?: BenefitPolicyDto;
-  quota_groups?: BenefitQuotaGroupDto[];
 }
 
 export interface AdminModelPoolNodeUpdateDto {
@@ -137,7 +122,6 @@ export interface AdminModelPoolNodeUpdateDto {
   context_window_tokens: number | null;
   enabled: boolean;
   weight: number;
-  quota_group_id?: string | null;
 }
 
 export interface AdminModelSettingsUpdateDto {
@@ -149,7 +133,6 @@ export interface AdminModelSettingsUpdateDto {
   revision?: number;
   enabled?: boolean;
   benefit_policy?: BenefitPolicyDto;
-  quota_groups?: BenefitQuotaGroupDto[];
 }
 
 /** Request-only connection snapshot. Credentials must be omitted from durable state. */
@@ -164,5 +147,4 @@ export interface RuntimeModelPoolNode {
   apiKey: string;
   baseUrl?: string;
   poolKey?: ModelPoolKey;
-  quotaGroupId?: string;
 }

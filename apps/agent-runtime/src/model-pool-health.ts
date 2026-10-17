@@ -17,6 +17,7 @@ export interface BenefitAttemptUsage {
   outputTokens: number;
   known: boolean;
   retryAfterSeconds?: number;
+  cooldownReason?: 'rate_limit' | 'quota';
 }
 
 export interface ModelPoolHealthStore {
@@ -67,7 +68,7 @@ export const databaseModelPoolHealth: ModelPoolHealthStore = {
     if (claim.benefitAttemptId) {
       if (!usage) throw new Error('Benefit settlement is missing usage');
       await getAgentDbPool().query(
-        'SELECT settle_benefit_attempt($1,$2,$3,$4,$5,$6)',
+        'SELECT settle_benefit_attempt($1,$2,$3,$4,$5,$6,$7)',
         [
           claim.benefitAttemptId,
           usage.inputTokens,
@@ -75,6 +76,7 @@ export const databaseModelPoolHealth: ModelPoolHealthStore = {
           usage.known,
           outcome,
           usage.retryAfterSeconds ?? null,
+          usage.cooldownReason ?? null,
         ],
       );
       return;

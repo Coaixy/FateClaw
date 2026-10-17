@@ -12,25 +12,21 @@ including the `benefit` pool key and existing API routes, remain unchanged.
 ## Administration and activation
 
 `/system/models` configures paid models and public prices. `/system/benefit-models`
-configures free models, policy and shared upstream quota groups. They reuse one node
-editor but use separate endpoints, drafts, revision checks and database locks.
+configures free models and policy. They reuse one node editor but use separate
+endpoints, drafts, revision checks and database locks.
 Saving a page cannot remove the other pool's nodes. Unsaved edits are guarded on
 link navigation, refresh and window close. The paid primary remains protected;
 all free nodes may be removed when the free service is disabled.
 
 Free models are **disabled by default**, with no prepopulated suppliers or credentials.
-To enable them, configure at least one node, assign its actual shared quota group,
-confirm that the supply permits the application's data/use and stops before paid
-overage, then enable the pool. API keys remain in the existing server credential
+To enable them, configure at least one enabled node with its model, endpoint and
+credential, then enable the pool. API keys remain in the existing server credential
 source. Metadata, request persistence and usage records never include their values.
 
-Each group represents a provider's real project, organization or account quota.
-Multiple models/keys drawing on the same capacity must use the same group. Enter
-RPM, RPD, TPM, daily token budget, the provider's IANA reset timezone and optional
-expiry. The local counters are conservative estimates, not an authoritative
-provider balance. Expired, unapproved or archived groups cannot supply new calls.
-Editing a group does not reset its counters. Removing it archives its accounting
-references and prevents further calls.
+Nodes do not require quota groups, provider reset timezones, expiry dates or manually
+entered RPM/RPD/TPM/daily token limits. The provider determines available supply.
+Local usage records enforce personal and per-turn limits; they do not predict or
+cap a node's remaining upstream capacity.
 
 ## Selection and user experience
 
@@ -85,18 +81,18 @@ Input reservations use the UTF-8 size of the complete model context plus a proto
 margin as a conservative upper estimate for unknown provider tokenizers. This
 includes system instructions, tool schemas and history, not just the question.
 Actual reported usage reconciles the reservation. Providers must still enforce
-the approved free/overage boundary; this estimate cannot establish their billing
+their free/overage boundary; this estimate cannot establish their billing
 terms. The initial 12,000 input bound was rejected by an actual synthetic end-to-end
 turn whose full context required 13,979 budget units; the verified initial bound is
 16,384. Large contexts are rejected rather than silently truncated.
 
 ## Per-call enforcement and finalization
 
-PostgreSQL owns allowance, quota, model/tool-call and execution state. The shared
-`claim_benefit_attempt` function serializes project budgets and node recovery leases
-before contacting a provider. RPM/TPM windows and provider-timezone daily windows
-are shared by all resident processes and monitoring calls. This uses the existing
-shared database boundary rather than a transaction spanning PostgreSQL and Redis.
+PostgreSQL owns personal allowance, model/tool-call, execution and node health
+state. The shared `claim_benefit_attempt` function reserves personal execution
+budgets and leases node recovery before contacting a provider. Calls and monitoring
+share the same cooldown state across resident processes. Redis retains its existing
+transport and global scheduling roles.
 
 The runtime applies these guards to every model call, including failover. SDK
 retries and background warming are disabled; free compaction is disabled.
@@ -107,23 +103,35 @@ capacity. Exhausted budgets terminate the turn; tools and agent sessions are nev
 replayed. Switching after content publication remains prohibited.
 
 Reported usage settles exactly once. Unknown usage retains its conservative
-reservation until the corresponding quota window expires; it is not recorded as
-zero. Short upstream rate limits pause the quota group for its retry interval.
-An explicitly reported daily limit pauses it until its configured reset. Keys
-inside that group cannot restore its capacity.
+personal reservation. Upstream rate limits and exhausted quota cool only the
+responding node, and failover tries the other enabled nodes in the same pool.
+A valid `Retry-After` interval or HTTP date sets the cooldown, bounded to one second
+through 24 hours. Without one, rate limits default to 60 seconds; daily quota,
+insufficient balance and exhausted quota default to one hour. Other supplier
+failures keep the existing 30-second exponential backoff capped at five minutes.
+After cooldown, one leased request or scheduled probe tests recovery; success clears
+the cooldown and failure starts another cooldown. Unrelated administration saves
+preserve cooldowns. All nodes cooling due to quota report exhausted supply;
+other cooldowns or an active recovery lease report busy supply.
+
+The pinned pi-ai 0.86 SDK invokes `onResponse` only after successful SDK requests.
+OpenAI and Anthropic adapters therefore capture status and `Retry-After` through
+their supported fetch hook before SDK error normalization. The Google Generative AI
+adapter rejects a custom fetch hook; its normalized error supplies the failure
+classification and default cooldown when no retry header is available.
 
 Final reply persistence and personal allowance settlement share the durable result
 delivery transaction. A complete answer consumes one turn. A provider/platform
 failure refunds the personal turn, including interrupted partial answers, without
-refunding spent upstream budgets. User cancellation consumes a turn after answer
-text has been published, and otherwise releases it. Duplicate results and recovery
+refunding spent personal token budgets. User cancellation consumes a turn after
+answer text has been published, and otherwise releases it. Duplicate results and recovery
 cannot settle twice. Running/ambiguous requests are not resubmitted after a crash.
 Free requests bypass paid wallet admission; wallet debt does not block them.
 
 Account deletion removes personal preferences, daily allowances and free requests.
-Provider attempts detach from those requests and retain shared quota accounting,
+Provider attempts detach from those requests and retain their recorded usage,
 including idempotent settlement of usage reported after deletion. Deleting an
-account does not refund provider requests or discard monitoring attempts.
+account does not discard monitoring attempts or reset node cooldowns.
 
 ## Status and validation
 
@@ -133,20 +141,21 @@ describe paid service. Free health observations and supply are distinct:
 disabled, busy and quota-exhausted supply do not become a paid outage. Recent real
 free successes can confirm health; sampled histories remain independent.
 
-Synthetic checks retain shared six-hour schedules, tiny prompts and finite budgets.
-Free checks claim the same upstream allowance and are capped at four attempts
-per provider quota group per provider day. Refreshing a page never runs inference.
-Exhausted groups skip checks. Stale health and stale cached supply become unknown.
+Synthetic checks retain shared six-hour schedules, tiny prompts and finite timeouts.
+Free checks use the same node health claim and settlement as real calls.
+Refreshing a page never runs inference. Cooling nodes skip checks. Stale health
+and stale cached supply become unknown.
 
-PostgreSQL integration checks cover pool isolation, final-turn contention, shared
-upstream budgets, uncertain usage, transactional/idempotent finalization, active
-session selection fencing, cancellation, tool limits and monitoring budgets. A
+PostgreSQL integration checks cover pool isolation, final-turn contention,
+provider cooldowns, single recovery leases, uncertain usage,
+transactional/idempotent finalization, active session selection fencing,
+cancellation, tool limits and monitoring cooldowns. A
 real local synthetic stream verifies output/model-call guards and excludes paid
 fallback. Historical upgrade and fresh-baseline paths converge on the same schema
 and deterministic seeds.
 
-Browser validation uses the application's actual built pages, a disposable
-PostgreSQL/Redis environment and a local synthetic provider. Three successful
+The October 16, 2026 browser validation used the application's built pages, a
+disposable PostgreSQL/Redis environment and a local synthetic provider. Three successful
 free turns persisted, exhausted the allowance and produced no wallet transaction
 or paid-provider call. An overdrawn synthetic account could use its remaining
 free allowance. Source supplier permissions, real availability and production deployment
@@ -154,11 +163,14 @@ remain **unverified**; operator credentials have not been configured by this wor
 
 The detailed [design decisions](benefit-model-pool-design.md) are background.
 
-The final October 16, 2026 check passed 792 automated tests; 40 opt-in integration
-checks without their external fixtures were skipped. API/runtime compilation and
+The October 16, 2026 check, before removal of manual upstream quota limits, passed
+792 automated tests; 40 opt-in integration checks without their external fixtures
+were skipped. API/runtime compilation and
 both Next.js production exports passed. API lint reported zero errors and 103
 existing-style warnings. The actual 360px conversation layout had no horizontal
 overflow, and the final built application completed a fresh synthetic free turn.
-Public refreshes after setting the synthetic provider's daily cap to its used
-count displayed shared exhaustion and did not increase its four free calls;
-its paid-call count and wallet transaction count remained zero.
+That historical check used the previous local quota counters; automatic node
+cooldown and retry hints are covered by the current PostgreSQL/local-provider tests.
+The simplified admin form was checked on the current production export with a
+synthetic metadata endpoint: adding and saving a node submits neither quota groups
+nor quota-group references.

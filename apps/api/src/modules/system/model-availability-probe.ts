@@ -4,7 +4,11 @@ import {
   type Model,
   type StreamFunction,
 } from '@earendil-works/pi-ai';
-import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
+import {
+  modelPoolCooldown,
+  type ModelPoolCooldown,
+  type RuntimeModelPoolNode,
+} from '@fateclaw/contracts/model-settings';
 import { randomUUID } from 'node:crypto';
 import { getDbPool } from '../../infrastructure/db-pool.js';
 
@@ -19,16 +23,22 @@ export async function probeBenefitModelAvailability(
   node: RuntimeModelPoolNode,
   signal: AbortSignal,
 ): Promise<{ latency: number | null; attempted: boolean }> {
+  if (signal.aborted) return { latency: null, attempted: false };
   const id = randomUUID();
   const { rows } = await getDbPool().query<{ claim: unknown }>(
     'SELECT claim_benefit_attempt(NULL,$1,$2,$3,64,16,true) AS claim',
     [node.modelConfigId, node.revision, id],
   );
   if (!rows[0]?.claim) return { latency: null, attempted: false };
-  const latency = await probeModelAvailability(node, signal);
+  const { latency, cooldown } = await probeModel(node, signal);
   await getDbPool().query(
-    'SELECT settle_benefit_attempt($1,0,0,false,$2,NULL)',
-    [id, latency === null ? 'failure' : 'success'],
+    'SELECT settle_benefit_attempt($1,0,0,false,$2,$3,$4)',
+    [
+      id,
+      signal.aborted ? 'release' : latency === null ? 'failure' : 'success',
+      cooldown?.seconds ?? null,
+      cooldown?.reason ?? null,
+    ],
   );
   return { latency, attempted: true };
 }
@@ -60,7 +70,18 @@ export async function probeModelAvailability(
   callerSignal: AbortSignal,
   timeoutMs = STATUS_PROBE_TIMEOUT_MS,
 ): Promise<number | null> {
-  if (callerSignal.aborted) return null;
+  return (await probeModel(node, callerSignal, timeoutMs)).latency;
+}
+
+async function probeModel(
+  node: RuntimeModelPoolNode,
+  callerSignal: AbortSignal,
+  timeoutMs = STATUS_PROBE_TIMEOUT_MS,
+): Promise<{ latency: number | null; cooldown?: ModelPoolCooldown }> {
+  if (callerSignal.aborted) return { latency: null };
+  let status: number | undefined;
+  let retryAfter: string | undefined;
+  let cooldown: ModelPoolCooldown | undefined;
   const controller = new AbortController();
   const signal = AbortSignal.any([callerSignal, controller.signal]);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -108,10 +129,36 @@ export async function probeModelAvailability(
           maxRetries: 0,
           timeoutMs,
           cacheRetention: 'none',
+          ...(node.poolKey === 'benefit' &&
+          node.piApi !== 'google-generative-ai'
+            ? {
+                // pi-ai 0.86 normalizes SDK errors before exposing onResponse.
+                fetch: async (
+                  input: Parameters<typeof fetch>[0],
+                  init?: Parameters<typeof fetch>[1],
+                ) => {
+                  const response = await globalThis.fetch(input, init);
+                  status = response.status;
+                  retryAfter = response.headers.get('retry-after') ?? undefined;
+                  return response;
+                },
+              }
+            : {}),
+          onResponse(response) {
+            status = response.status;
+            retryAfter = response.headers['retry-after'];
+          },
         },
       );
       for await (const event of events) {
-        if (event.type === 'error') return null;
+        if (event.type === 'error') {
+          cooldown = modelPoolCooldown(
+            status,
+            event.error.errorMessage ?? '',
+            retryAfter,
+          );
+          return null;
+        }
         if (
           (event.type === 'text_delta' || event.type === 'thinking_delta') &&
           event.delta.length > 0
@@ -130,13 +177,19 @@ export async function probeModelAvailability(
           return Math.round(performance.now() - started);
       }
       return null;
-    } catch {
+    } catch (error) {
       // Provider failures are probe outcomes. Never persist or log returned bodies or credentials.
+      cooldown = modelPoolCooldown(
+        status,
+        error instanceof Error ? error.message : String(error),
+        retryAfter,
+      );
       return null;
     }
   };
   try {
-    return await Promise.race([read(), aborted]);
+    const latency = await Promise.race([read(), aborted]);
+    return { latency, cooldown };
   } finally {
     clearTimeout(timer);
     controller.abort();

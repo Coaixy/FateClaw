@@ -112,7 +112,7 @@ describe('model pool repository', () => {
     );
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO official_model_pool_nodes'),
-      [model.id, 2, false, 'default', null],
+      [model.id, 2, false, 'default'],
     );
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE official_model_pool_settings'),

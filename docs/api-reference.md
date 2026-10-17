@@ -966,21 +966,20 @@ Saves the paid pool name, common token prices, thinking level and complete node 
 
 Existing installations enroll only their previously configured official model and preserve its public alias and prices. User custom-provider endpoints remain removed. Provider failures trigger shared cooldown and failover before response content is published; cancellation and input errors do not trigger failover. See [Official model pool](official-model-pool.md) for timeout, recovery and billing boundaries.
 
-### GET / PUT /api/admin/system-config/free
+### GET / PUT /api/admin/system-config/benefit
 
 The independent free overview/update uses `revision`, `enabled`, `display_name`,
-`thinking_level`, zero input/output prices, `benefit_policy`, `quota_groups` and
-`nodes`. Each free node requires `quota_group_id`. An empty node list is valid
-while disabled. Enabling requires at least one configured, approved and unexpired
-supplier. Stale revisions fail without overwriting the current settings.
+`thinking_level`, zero input/output prices, `benefit_policy` and `nodes`.
+Free nodes use the same connection and weight fields as paid nodes; no upstream
+quota group or manual request/token limit is required. An empty node list is valid
+while disabled. Enabling requires at least one configured enabled node. Stale
+revisions fail without overwriting the current settings.
 
-Quota groups contain `id`, `display_name`, `requests_per_minute`,
-`requests_per_day`, `tokens_per_minute`, `tokens_per_day`, `reset_timezone`,
-`expires_at` and `approved`. Approval confirms actual shared scope, permitted use
-and a hard boundary before paid overage. Usage/cooldown metadata is read-only;
-saving settings does not reset it. The paid and free updates cannot change
-each other's membership or policy. See the [operating contract](benefit-model-pool.md)
-for policy defaults, failure/refund rules and activation.
+Provider rate limits or exhausted quota automatically cool the responding node
+and trigger failover within the free pool. Cooldown metadata is read-only; unrelated
+settings saves preserve it. The paid and free updates cannot change each other's
+membership or policy. See the [operating contract](benefit-model-pool.md) for cooldown
+defaults, personal limits, failure/refund rules and activation.
 
 The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-config/model-billing` mutation endpoints remain removed.
 

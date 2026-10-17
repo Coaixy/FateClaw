@@ -7,7 +7,10 @@ import {
   type ModelsSimpleStreamOptions,
   type Usage,
 } from '@earendil-works/pi-ai';
-import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
+import {
+  modelPoolCooldown,
+  type RuntimeModelPoolNode,
+} from '@fateclaw/contracts/model-settings';
 import type { LlmRuntimeSnapshot } from '../types.js';
 import {
   databaseModelPoolHealth,
@@ -89,7 +92,7 @@ function isProviderFailure(status: number | undefined, text: string): boolean {
     )
   )
     return false;
-  return /timeout|timed out|fetch failed|econn|enotfound|socket|network|terminated|stream ended|empty response|50[0-9]|429|unauthori[sz]ed|invalid api key|quota|overload|unavailable/i.test(
+  return /timeout|timed out|fetch failed|econn|enotfound|socket|network|terminated|stream ended|empty response|50[0-9]|429|unauthori[sz]ed|invalid api key|quota|rate.?limit|billing|balance|insufficient|overload|unavailable/i.test(
     text,
   );
 }
@@ -181,6 +184,7 @@ export function installModelPool(
       else await health.finish(node, claim, outcome);
     } catch {
       if (claim.benefitAttemptId)
+        // eslint-disable-next-line preserve-caught-error -- Database errors can contain private values; expose only the public failure.
         throw new Error('免费用量登记失败，请稍后重试');
       options.trace?.({
         type: 'model_pool_health_update_failed',
@@ -246,7 +250,7 @@ export function installModelPool(
         let published = false;
         let latest: AssistantMessage | undefined;
         let status: number | undefined;
-        let retryAfterSeconds: number | undefined;
+        let retryAfter: string | undefined;
         let terminal: AssistantMessageEvent | undefined;
         const startedAt = Date.now();
         let activityAt = startedAt;
@@ -273,23 +277,27 @@ export function installModelPool(
               signal,
               maxRetries: 0,
               ...(budget ? { maxTokens: budget.outputTokens } : {}),
+              ...(budget && node.piApi !== 'google-generative-ai'
+                ? {
+                    // pi-ai 0.86 invokes onResponse only after SDK success; capture error headers before normalization.
+                    fetch: async (
+                      input: Parameters<typeof fetch>[0],
+                      init?: Parameters<typeof fetch>[1],
+                    ) => {
+                      const response = await (
+                        requestOptions?.fetch ?? globalThis.fetch
+                      )(input, init);
+                      status = response.status;
+                      retryAfter =
+                        response.headers.get('retry-after') ?? undefined;
+                      return response;
+                    },
+                  }
+                : {}),
               timeoutMs: options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS,
               async onResponse(response, model) {
                 status = response.status;
-                if (budget && status === 429) {
-                  const retry = response.headers['retry-after'];
-                  const seconds = retry ? Number(retry) : NaN;
-                  retryAfterSeconds = Number.isFinite(seconds)
-                    ? Math.max(1, Math.ceil(seconds))
-                    : retry
-                      ? Math.max(
-                          1,
-                          Math.ceil((Date.parse(retry) - Date.now()) / 1000),
-                        )
-                      : 60;
-                  if (!Number.isFinite(retryAfterSeconds))
-                    retryAfterSeconds = 60;
-                }
+                retryAfter = response.headers['retry-after'];
                 await requestOptions?.onResponse?.(response, model);
               },
             },
@@ -389,14 +397,6 @@ export function installModelPool(
             } else buffered.push(event);
           }
         } catch (error) {
-          if (
-            budget &&
-            status === 429 &&
-            /daily|per.day|\brpd\b|\btpd\b/i.test(
-              error instanceof Error ? error.message : String(error),
-            )
-          )
-            retryAfterSeconds = -1;
           controller.abort();
           const aborted = Boolean(requestOptions?.signal?.aborted);
           const retryable =
@@ -407,6 +407,14 @@ export function installModelPool(
             );
           accumulated = addUsage(accumulated, latest?.usage ?? emptyUsage());
           const attemptUsage = latest?.usage;
+          const cooldown =
+            budget && retryable
+              ? modelPoolCooldown(
+                  status,
+                  error instanceof Error ? error.message : String(error),
+                  retryAfter,
+                )
+              : undefined;
           await finishHealth(
             node,
             claim,
@@ -420,7 +428,8 @@ export function installModelPool(
                     : 0,
                   outputTokens: attemptUsage?.output ?? 0,
                   known: Boolean(attemptUsage?.totalTokens),
-                  retryAfterSeconds,
+                  retryAfterSeconds: cooldown?.seconds,
+                  cooldownReason: cooldown?.reason,
                 }
               : undefined,
           );

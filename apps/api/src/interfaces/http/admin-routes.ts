@@ -371,7 +371,6 @@ const OfficialModelPoolNodeSchema = z
     auth_mode: OfficialModelAuthModeSchema,
     enabled: z.boolean(),
     weight: z.number().int().min(1).max(1000),
-    quota_group_id: z.string().min(1).max(120).nullable().optional(),
     context_window_tokens: z
       .number()
       .int()
@@ -446,21 +445,6 @@ const BenefitModelSettingsSchema = z
       max_output_tokens: z.number().int().min(128).max(16384),
       max_total_output_tokens: z.number().int().min(128).max(65536),
     }),
-    quota_groups: z
-      .array(
-        z.object({
-          id: z.string().min(1).max(120),
-          display_name: z.string().trim().min(1).max(120),
-          requests_per_minute: z.number().int().min(1).max(100000),
-          requests_per_day: z.number().int().min(1).max(10000000),
-          tokens_per_minute: z.number().int().min(128).max(1000000000),
-          tokens_per_day: z.number().int().min(128).max(2000000000),
-          reset_timezone: z.string().min(1).max(100),
-          expires_at: z.string().datetime({ offset: true }).nullable(),
-          approved: z.boolean(),
-        }),
-      )
-      .max(40),
   })
   .superRefine((value, ctx) => {
     if (

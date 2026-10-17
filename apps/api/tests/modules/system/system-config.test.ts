@@ -106,7 +106,6 @@ const benefitSettings: PlatformModelSettings = {
     benefit_policy: DEFAULT_BENEFIT_POLICY,
   },
   nodes: [],
-  quotaGroups: [],
 };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -307,6 +306,26 @@ describe('official model pool', () => {
 });
 
 describe('pool updates', () => {
+  it('activates configured free nodes without manually declared upstream quotas', async () => {
+    const configured = {
+      ...benefitSettings,
+      pool: { ...benefitSettings.pool, enabled: true },
+      nodes: settings.nodes,
+    };
+    db.getPlatformModelSettings.mockResolvedValue(configured);
+    db.savePlatformModelConfig.mockResolvedValue(configured);
+    await expect(
+      saveOfficialModelSettings(
+        { ...update, enabled: true, benefit_policy: DEFAULT_BENEFIT_POLICY },
+        'benefit',
+      ),
+    ).resolves.toMatchObject({ enabled: true });
+    expect(await resolveUserLlmRuntime('user', 'benefit')).toMatchObject({
+      poolKey: 'benefit',
+      billingMode: 'none',
+      poolNodes: [{ modelConfigId: model.id }],
+    });
+  });
   it('normalizes node fields and sends all settings to the same atomic writer', async () => {
     await saveOfficialModelSettings({
       ...update,
@@ -324,7 +343,6 @@ describe('pool updates', () => {
       revision: undefined,
       enabled: undefined,
       benefitPolicy: undefined,
-      quotaGroups: undefined,
       displayName: 'Official pool',
       thinkingLevel: 'low',
       inputTokenPricePerMillionCoins: 2,
@@ -342,7 +360,6 @@ describe('pool updates', () => {
           contextWindowTokens: null,
           enabled: true,
           weight: 2,
-          quotaGroupId: null,
         },
       ],
     });
