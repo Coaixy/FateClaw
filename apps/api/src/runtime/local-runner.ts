@@ -617,8 +617,8 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   }
 
   if (child.stderr) {
-    // 分两个 buffer：trace 事件走 debug 级别（生产不刷屏），其他 stderr
-    // （真正的错误、依赖告警、未捕获异常等）维持 warn 级别，避免被掩盖。
+    // Keep diagnostic failures structured and visible at the default log level.
+    // Routine traces and unstructured stderr retain their existing buffers.
     let stderrBuf: string[] = [];
     let traceBuf: string[] = [];
     let stderrTimer: ReturnType<typeof setTimeout> | null = null;
@@ -642,6 +642,33 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     const rl = createInterface({ input: child.stderr });
     rl.on('line', (line) => {
       if (!line) return;
+      const diagnostic = /^\[trace:(warn|error)\] (.+)$/.exec(line);
+      if (diagnostic) {
+        try {
+          const parsed: unknown = JSON.parse(diagnostic[2]);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const { level: _level, ...entry } = parsed as Record<
+              string,
+              unknown
+            >;
+            const level = diagnostic[1] as 'warn' | 'error';
+            const message =
+              typeof entry.message === 'string' ? entry.message : entry.type;
+            logger[level](
+              {
+                ...entry,
+                traceLevel: level,
+                accountId,
+                source: 'local-agent-trace',
+              },
+              `[agent-runtime] ${message ?? '运行诊断'}`,
+            );
+            return;
+          }
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+        }
+      }
       if (line.startsWith('[trace:debug] ')) {
         traceBuf.push(line);
       } else {

@@ -54,7 +54,21 @@ node is unavailable, the request fails explicitly.
 The pool keeps the request's admitted public prices through switching and
 recovery. Reported usage from failed attempts is included in settlement. Usage a
 provider does not report remains unknown. Trace events identify attempted nodes
-and outcomes without connection details or credentials.
+and outcomes without connection details or credentials. Failed attempts record
+the protocol, provider key, model, HTTP status when captured, duration, whether
+content was published, retry eligibility and a bounded, redacted upstream error.
+Transport error causes are captured before SDK normalization. Warnings and errors
+retain their severity as separate structured host logs at the default log level;
+routine traces remain at debug. Every request-scoped diagnostic carries its
+request ID and is also retained in the conversation trace.
+
+A skipped node emits `model_pool_node_skipped` with `claim_denied`; the claim
+contract does not distinguish cooldown, revision changes or other admission
+conditions. `model_pool_exhausted` lists attempted and skipped node IDs and
+distinguishes `no_claimable_nodes` from `all_attempts_failed`. Infrastructure
+failures identify the execution phase and safe error codes without database
+messages or row values. Public failure messages remain independent of these
+operator diagnostics.
 
 ## Validation
 

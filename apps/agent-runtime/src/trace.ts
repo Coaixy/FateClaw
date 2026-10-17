@@ -8,13 +8,8 @@ import {
 import type { TraceEventEntry } from './types.js';
 
 /**
- * 将 trace 事件双路派发：
- * 1. JSON 写入 stderr（`[trace:debug]` 前缀），供开发期实时观测；
- *    宿主 local-runner.ts 按前缀降级为 debug 日志，生产不刷屏。
- * 2. 追加到 request-state 的 trace 缓冲，请求结束时经 ContainerOutput
- *    回传宿主机落库到 conversation_logs.trace_events 供 admin 排障。
- *
- * 本函数不落盘本地文件，避免无限增长的小文件堆积。
+ * Emit request traces to stderr and the persisted conversation trace buffer.
+ * Warnings and errors retain their severity in the host; routine events use debug.
  */
 export function traceEvent(
   event: Record<string, unknown>,
@@ -36,8 +31,9 @@ export function traceEvent(
     type: typeof event.type === 'string' ? event.type : 'unknown',
   };
 
-  // 1. stderr 通道（dev 实时观测）
-  process.stderr.write(`[trace:debug] ${JSON.stringify(entry)}\n`);
+  const level =
+    event.level === 'warn' || event.level === 'error' ? event.level : 'debug';
+  process.stderr.write(`[trace:${level}] ${JSON.stringify(entry)}\n`);
 
   // 2. 请求缓冲通道（DB 排障）
   if (scope) {

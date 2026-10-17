@@ -115,6 +115,12 @@ their supported fetch hook before SDK error normalization. The Google Generative
 adapter rejects a custom fetch hook; its normalized error supplies the failure
 classification and default cooldown when no retry header is available.
 
+Free calls use the shared [model-pool diagnostics](official-model-pool.md#routing-and-failures).
+Redacted upstream errors, captured HTTP status, node identity and request ID are
+available in default-level operator logs and retained conversation traces. An
+exhausted pool reports whether nodes were skipped or provider attempts failed;
+the public reply keeps the existing free-service failure message.
+
 Final reply persistence and personal allowance settlement share the durable result
 delivery transaction. A complete answer consumes one turn. A provider/platform
 failure refunds the personal turn, including interrupted partial answers.

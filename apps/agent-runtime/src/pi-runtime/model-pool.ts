@@ -19,11 +19,54 @@ import {
   type BenefitAttemptUsage,
 } from '../model-pool-health.js';
 import { markBenefitAnswerVisible } from '../benefit-execution.js';
+import { redactRuntimeSensitiveValues } from '../public-error.js';
 import { createPiProviderRuntime, type PiProviderRuntime } from './provider.js';
 
 const FIRST_CONTENT_TIMEOUT_MS = 45_000;
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 const ATTEMPT_TIMEOUT_MS = 180_000;
+
+function errorDetails(
+  error: unknown,
+  runtime: LlmRuntimeSnapshot,
+  includeMessage = true,
+  depth = 0,
+): Record<string, unknown> {
+  const value =
+    error && typeof error === 'object'
+      ? (error as {
+          name?: unknown;
+          message?: unknown;
+          code?: unknown;
+          cause?: unknown;
+        })
+      : undefined;
+  const redact = (text: string) =>
+    redactRuntimeSensitiveValues(text, runtime)
+      .replace(/\s+/g, ' ')
+      .slice(0, 4096);
+  return {
+    name:
+      typeof value?.name === 'string' && /^[\w.]{1,64}$/.test(value.name)
+        ? redact(value.name)
+        : 'Error',
+    ...(includeMessage
+      ? {
+          message: redact(
+            typeof value?.message === 'string' ? value.message : String(error),
+          ),
+        }
+      : {}),
+    ...(typeof value?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(value.code)
+      ? { code: redact(value.code) }
+      : {}),
+    ...(depth < 3 && value?.cause !== undefined
+      ? {
+          cause: errorDetails(value.cause, runtime, includeMessage, depth + 1),
+        }
+      : {}),
+  };
+}
 
 export function weightedNodeOrder(
   nodes: RuntimeModelPoolNode[],
@@ -170,6 +213,13 @@ export function installModelPool(
   if (runtime.source !== 'official' || !runtime.poolNodes?.length) return;
   const nodes = runtime.poolNodes;
   const health = options.health ?? databaseModelPoolHealth;
+  const nodeContext = (node: RuntimeModelPoolNode) => ({
+    poolKey: runtime.poolKey ?? 'official',
+    nodeId: node.modelConfigId,
+    provider: node.piApi,
+    providerKey: node.providerKey,
+    model: node.model,
+  });
   const finishHealth = async (
     node: RuntimeModelPoolNode,
     claim: ModelPoolClaim,
@@ -180,15 +230,19 @@ export function installModelPool(
       if (claim.benefitAttemptId)
         await health.finish(node, claim, outcome, usage);
       else await health.finish(node, claim, outcome);
-    } catch {
+    } catch (error) {
+      options.trace?.({
+        type: 'model_pool_health_update_failed',
+        level: claim.benefitAttemptId ? 'error' : 'warn',
+        message: '模型池健康状态或用量登记失败',
+        ...nodeContext(node),
+        outcome,
+        // Database messages may contain private row values; retain only error metadata.
+        error: errorDetails(error, runtime, false),
+      });
       if (claim.benefitAttemptId)
         // eslint-disable-next-line preserve-caught-error -- Database errors can contain private values; expose only the public failure.
         throw new Error('免费用量登记失败，请稍后重试');
-      options.trace?.({
-        type: 'model_pool_health_update_failed',
-        nodeId: node.modelConfigId,
-        outcome,
-      });
     }
   };
   const providers = new Map<string, Promise<PiProviderRuntime>>();
@@ -199,6 +253,9 @@ export function installModelPool(
   ) => {
     const output = createAssistantMessageEventStream();
     let accumulated = emptyUsage();
+    let currentNode: RuntimeModelPoolNode | undefined;
+    let phase: 'claim' | 'provider' | 'answer_visibility' | 'settlement' =
+      'claim';
     const fallbackError = (
       aborted: boolean,
       usage: Usage = accumulated,
@@ -225,6 +282,8 @@ export function installModelPool(
         options.answerSessionId !== undefined &&
         requestOptions?.sessionId === options.answerSessionId;
       let answerVisible = false;
+      const attemptedNodeIds: string[] = [];
+      const skippedNodeIds: string[] = [];
       for (const node of weightedNodeOrder(nodes, options.random)) {
         if (runtime.poolKey === 'benefit' && node.poolKey !== 'benefit')
           continue;
@@ -236,12 +295,23 @@ export function installModelPool(
           });
           return;
         }
+        currentNode = node;
+        phase = 'claim';
         const claim = await health.claim(node, randomUUID(), benefitRequestId);
-        if (!claim) continue;
+        if (!claim) {
+          skippedNodeIds.push(node.modelConfigId);
+          options.trace?.({
+            type: 'model_pool_node_skipped',
+            ...nodeContext(node),
+            reason: 'claim_denied',
+          });
+          continue;
+        }
+        attemptedNodeIds.push(node.modelConfigId);
+        phase = 'provider';
         options.trace?.({
           type: 'model_pool_attempt_started',
-          nodeId: node.modelConfigId,
-          model: node.model,
+          ...nodeContext(node),
         });
         const controller = new AbortController();
         const signal = requestOptions?.signal
@@ -252,6 +322,7 @@ export function installModelPool(
         let latest: AssistantMessage | undefined;
         let status: number | undefined;
         let retryAfter: string | undefined;
+        let transportError: unknown;
         let terminal: AssistantMessageEvent | undefined;
         const startedAt = Date.now();
         let activityAt = startedAt;
@@ -277,20 +348,25 @@ export function installModelPool(
               env: undefined,
               signal,
               maxRetries: 0,
-              ...(benefitRequestId && node.piApi !== 'google-generative-ai'
+              ...(node.piApi !== 'google-generative-ai'
                 ? {
                     // pi-ai 0.86 invokes onResponse only after SDK success; capture error headers before normalization.
                     fetch: async (
                       input: Parameters<typeof fetch>[0],
                       init?: Parameters<typeof fetch>[1],
                     ) => {
-                      const response = await (
-                        requestOptions?.fetch ?? globalThis.fetch
-                      )(input, init);
-                      status = response.status;
-                      retryAfter =
-                        response.headers.get('retry-after') ?? undefined;
-                      return response;
+                      try {
+                        const response = await (
+                          requestOptions?.fetch ?? globalThis.fetch
+                        )(input, init);
+                        status = response.status;
+                        retryAfter =
+                          response.headers.get('retry-after') ?? undefined;
+                        return response;
+                      } catch (error) {
+                        transportError = error;
+                        throw error;
+                      }
                     },
                   }
                 : {}),
@@ -341,9 +417,12 @@ export function installModelPool(
                   (block) => block.type === 'text' && block.text.length > 0,
                 )
               ) {
+                phase = 'answer_visibility';
                 await markBenefitAnswerVisible(benefitRequestId);
+                phase = 'provider';
                 answerVisible = true;
               }
+              phase = 'settlement';
               await finishHealth(
                 node,
                 claim,
@@ -359,6 +438,7 @@ export function installModelPool(
                     }
                   : undefined,
               );
+              phase = 'provider';
               for (const pending of buffered) output.push(pending);
               output.push({
                 ...event,
@@ -369,9 +449,10 @@ export function installModelPool(
               });
               options.trace?.({
                 type: 'model_pool_attempt_completed',
-                nodeId: node.modelConfigId,
-                model: node.model,
+                ...nodeContext(node),
                 outcome: 'success',
+                statusCode: status,
+                durationMs: Date.now() - startedAt,
               });
               return;
             }
@@ -388,7 +469,9 @@ export function installModelPool(
                 event.type === 'text_delta' &&
                 event.delta.length
               ) {
+                phase = 'answer_visibility';
                 await markBenefitAnswerVisible(benefitRequestId);
+                phase = 'provider';
                 answerVisible = true;
               }
               output.push(event);
@@ -397,23 +480,37 @@ export function installModelPool(
           }
         } catch (error) {
           controller.abort();
+          const failure = transportError ?? error;
+          const failureMessage =
+            failure instanceof Error ? failure.message : String(failure);
           const aborted = Boolean(requestOptions?.signal?.aborted);
           const retryable =
             !aborted &&
-            isProviderFailure(
-              status,
-              error instanceof Error ? error.message : String(error),
-            );
+            phase === 'provider' &&
+            isProviderFailure(status, failureMessage);
           accumulated = addUsage(accumulated, latest?.usage ?? emptyUsage());
           const attemptUsage = latest?.usage;
           const cooldown =
             benefitRequestId && retryable
-              ? modelPoolCooldown(
-                  status,
-                  error instanceof Error ? error.message : String(error),
-                  retryAfter,
-                )
+              ? modelPoolCooldown(status, failureMessage, retryAfter)
               : undefined;
+          options.trace?.({
+            type: 'model_pool_attempt_completed',
+            level: aborted ? 'debug' : 'warn',
+            message: aborted ? '模型调用已取消' : '模型调用失败',
+            ...nodeContext(node),
+            outcome: aborted
+              ? 'cancelled'
+              : retryable
+                ? 'provider_failure'
+                : 'request_error',
+            statusCode: status,
+            phase,
+            durationMs: Date.now() - startedAt,
+            published,
+            retryable,
+            error: errorDetails(failure, runtime, phase === 'provider'),
+          });
           await finishHealth(
             node,
             claim,
@@ -432,17 +529,6 @@ export function installModelPool(
                 }
               : undefined,
           );
-          options.trace?.({
-            type: 'model_pool_attempt_completed',
-            nodeId: node.modelConfigId,
-            model: node.model,
-            outcome: aborted
-              ? 'cancelled'
-              : retryable
-                ? 'provider_failure'
-                : 'request_error',
-            statusCode: status,
-          });
           if (aborted || published || !retryable) {
             const final = terminal?.type === 'error' ? terminal.error : latest;
             output.push({
@@ -453,7 +539,7 @@ export function installModelPool(
                 usage: accumulated,
                 stopReason: aborted ? 'aborted' : 'error',
                 errorMessage: publicFailureMessage(
-                  error,
+                  failure,
                   aborted,
                   runtime.poolKey === 'benefit',
                 ),
@@ -465,6 +551,19 @@ export function installModelPool(
           controller.abort();
         }
       }
+      options.trace?.({
+        type: 'model_pool_exhausted',
+        level: 'error',
+        message: attemptedNodeIds.length
+          ? '模型池所有尝试均失败'
+          : '模型池没有可认领节点',
+        poolKey: runtime.poolKey ?? 'official',
+        reason: attemptedNodeIds.length
+          ? 'all_attempts_failed'
+          : 'no_claimable_nodes',
+        attemptedNodeIds,
+        skippedNodeIds,
+      });
       output.push({
         type: 'error',
         reason: 'error',
@@ -472,6 +571,15 @@ export function installModelPool(
       });
     };
     void run().catch((error) => {
+      options.trace?.({
+        type: 'model_pool_error',
+        level: 'error',
+        message: '模型池执行失败',
+        poolKey: runtime.poolKey ?? 'official',
+        ...(currentNode ? nodeContext(currentNode) : {}),
+        phase,
+        error: errorDetails(error, runtime, false),
+      });
       // Infrastructure failures terminate the stream; no raw provider or database values cross the boundary.
       output.push({
         type: 'error',

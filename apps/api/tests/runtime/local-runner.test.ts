@@ -158,6 +158,7 @@ import {
   stopAllLocalAgents,
   stopLocalAgent,
 } from '../../src/runtime/local-runner.js';
+import { logger } from '../../src/infrastructure/logger.js';
 
 describe('local-runner', () => {
   beforeEach(() => {
@@ -166,6 +167,9 @@ describe('local-runner', () => {
     __resetLocalRunnerForTests();
     spawnedChildren.length = 0;
     mockSpawn.mockClear();
+    vi.mocked(logger.warn).mockClear();
+    vi.mocked(logger.error).mockClear();
+    vi.mocked(logger.debug).mockClear();
     mockGetHeartbeat.mockReset();
     mockGetHeartbeat.mockResolvedValue('alive');
     mockBuildAgentEnv.mockClear();
@@ -198,6 +202,67 @@ describe('local-runner', () => {
         hasIdleTimer: true,
       }),
     ]);
+  });
+
+  it('forwards warning and error traces as separate structured logs while retaining legacy stderr', async () => {
+    await ensureLocalAgentRunning('account-1');
+    const stderr = spawnedChildren[0].child.stderr;
+    const warning = {
+      type: 'model_pool_attempt_completed',
+      level: 'warn',
+      requestId: 'synthetic-request',
+      nodeId: 'a',
+      statusCode: 401,
+      message: '模型调用失败',
+      error: { message: 'invalid api key [已脱敏]' },
+    };
+    const failure = {
+      type: 'model_pool_exhausted',
+      level: 'error',
+      requestId: 'synthetic-request',
+      message: '模型池没有可用节点',
+    };
+    stderr.write(
+      `[trace:warn] ${JSON.stringify(warning)}\n[trace:error] ${JSON.stringify(failure)}\n`,
+    );
+    stderr.write('[trace:debug] {"type":"model_pool_attempt_started"}\n');
+    stderr.write('[agent-runtime] legacy stderr\n[trace:error] invalid JSON\n');
+    await vi.advanceTimersByTimeAsync(50);
+
+    const { level: warningLevel, ...warningFields } = warning;
+    const { level: failureLevel, ...failureFields } = failure;
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        ...warningFields,
+        traceLevel: warningLevel,
+        accountId: 'account-1',
+        source: 'local-agent-trace',
+      },
+      '[agent-runtime] 模型调用失败',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        ...failureFields,
+        traceLevel: failureLevel,
+        accountId: 'account-1',
+        source: 'local-agent-trace',
+      },
+      '[agent-runtime] 模型池没有可用节点',
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      {
+        accountId: 'account-1',
+        source: 'local-agent-trace',
+      },
+      '[trace:debug] {"type":"model_pool_attempt_started"}',
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        accountId: 'account-1',
+        source: 'local-agent-stderr',
+      },
+      '[agent-runtime] legacy stderr\n[trace:error] invalid JSON',
+    );
   });
 
   it('does not stop a busy runtime when the previous idle timer would fire', async () => {

@@ -37,18 +37,18 @@ function redactLikelyUrls(text: string): string {
   return text.replace(/https?:\/\/[^\s"'<>]+/gi, '[已脱敏]');
 }
 
-function redactRuntimeSensitiveValues(
+export function redactRuntimeSensitiveValues(
   text: string,
   runtime?: LlmRuntimeSnapshot,
 ): string {
-  const withoutUrls = redactLikelyUrls(text);
-  const withoutRuntimeSecrets = runtime
-    ? redactExactValue(
-        redactExactValue(withoutUrls, runtime.apiKey),
-        runtime.baseUrl,
-      )
-    : withoutUrls;
-  return redactLikelyApiKeys(withoutRuntimeSecrets);
+  text = redactLikelyUrls(text);
+  for (const config of runtime ? [runtime, ...(runtime.poolNodes ?? [])] : []) {
+    text = redactExactValue(
+      redactExactValue(text, config.apiKey),
+      config.baseUrl,
+    );
+  }
+  return redactLikelyApiKeys(text);
 }
 
 function inferCustomModelFailureCause(error: string): string {

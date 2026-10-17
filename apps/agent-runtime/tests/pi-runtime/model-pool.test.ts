@@ -13,6 +13,8 @@ import {
   weightedNodeOrder,
 } from '../../src/pi-runtime/model-pool.js';
 import type { ModelPoolHealthStore } from '../../src/model-pool-health.js';
+import { createRequestScope } from '../../src/request-scope.js';
+import { traceEvent } from '../../src/trace.js';
 
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
@@ -84,6 +86,7 @@ async function pool(
   nodes: RuntimeModelPoolNode[],
   store = health(),
   options: Parameters<typeof installModelPool>[2] = {},
+  runtimeOverrides: Partial<LlmRuntimeSnapshot> = {},
 ) {
   const runtime: LlmRuntimeSnapshot = {
     source: 'official',
@@ -92,6 +95,7 @@ async function pool(
     contextWindowTokens: 32_000,
     maxOutputTokens: 1000,
     poolNodes: nodes,
+    ...runtimeOverrides,
   };
   const provider = await createPiProviderRuntime(runtime);
   installModelPool(provider, runtime, {
@@ -128,7 +132,8 @@ describe('model pool transport', () => {
       reply(response);
     });
     const nodes = [node('a', failed), node('b', backup)];
-    const { complete, store } = await pool(nodes);
+    const trace = vi.fn();
+    const { complete, store } = await pool(nodes, health(), { trace });
     const result = await complete();
     expect(result.stopReason).toBe('stop');
     expect(result.model).toBe('model-b');
@@ -143,7 +148,181 @@ describe('model pool transport', () => {
       'failure',
       'success',
     ]);
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'model_pool_attempt_completed',
+        level: 'warn',
+        nodeId: 'a',
+        provider: 'openai-completions',
+        providerKey: 'provider-a',
+        model: 'model-a',
+        statusCode: 503,
+        durationMs: expect.any(Number),
+        error: expect.objectContaining({
+          message: expect.stringContaining('synthetic unavailable'),
+        }),
+      }),
+    );
   });
+
+  it.each(['official', 'benefit'] as const)(
+    'logs a %s pool authentication failure with request context and redacted provider details',
+    async (poolKey) => {
+      const failed = await serve((_request, response) => {
+        response.writeHead(401, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              message:
+                'invalid api key synthetic-key-a at https://synthetic.example/v1; secondary synthetic-key-b',
+            },
+          }),
+        );
+      });
+      const nodes = [node('a', failed), node('b', failed)].map((entry) => ({
+        ...entry,
+        poolKey,
+      }));
+      const scope = createRequestScope();
+      scope.requestId = 'synthetic-request';
+      const stderr = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+      try {
+        const { complete } = await pool(
+          nodes,
+          health(),
+          {
+            trace: (event) => traceEvent(event, scope),
+          },
+          {
+            poolKey,
+            ...(poolKey === 'benefit'
+              ? { billingMode: 'none', benefitRequestId: 'synthetic-request' }
+              : {}),
+          },
+        );
+        const result = await complete();
+        expect(result.stopReason).toBe('error');
+        expect(result.errorMessage).not.toContain('invalid api key');
+        expect(scope.traceEvents).toContainEqual(
+          expect.objectContaining({
+            type: 'model_pool_attempt_completed',
+            level: 'warn',
+            requestId: 'synthetic-request',
+            poolKey,
+            nodeId: 'a',
+            statusCode: 401,
+            error: expect.objectContaining({
+              message: expect.stringContaining('invalid api key [已脱敏]'),
+            }),
+          }),
+        );
+        expect(scope.traceEvents).toContainEqual(
+          expect.objectContaining({
+            type: 'model_pool_exhausted',
+            level: 'error',
+            reason: 'all_attempts_failed',
+            attemptedNodeIds: ['a', 'b'],
+            skippedNodeIds: [],
+          }),
+        );
+        const written = stderr.mock.calls
+          .map(([chunk]) => String(chunk))
+          .join('');
+        expect(written).toContain('[trace:warn] ');
+        expect(written).toContain('[trace:error] ');
+        expect(written).toContain('invalid api key');
+        expect(written).not.toContain('synthetic-key-a');
+        expect(written).not.toContain('synthetic-key-b');
+        expect(written).not.toContain('synthetic.example');
+        expect(JSON.stringify(scope.traceEvents)).not.toContain(
+          'synthetic-key-',
+        );
+      } finally {
+        stderr.mockRestore();
+      }
+    },
+  );
+
+  it('preserves a transport failure cause and fails over before SDK normalization hides it', async () => {
+    const trace = vi.fn();
+    const backup = await serve((_request, response) => reply(response));
+    const { provider } = await pool(
+      [node('a', 'https://synthetic.example/v1'), node('b', backup)],
+      health(),
+      { trace },
+    );
+    const result = await provider.modelRuntime.completeSimple(
+      provider.model,
+      { messages: [] },
+      {
+        apiKey: 'synthetic-representative-key',
+        fetch: async (input, init) => {
+          if (String(input).startsWith('https://synthetic.example/')) {
+            throw new TypeError('fetch failed', {
+              cause: Object.assign(new Error('connect ECONNREFUSED'), {
+                code: 'ECONNREFUSED',
+              }),
+            });
+          }
+          return globalThis.fetch(input, init);
+        },
+      },
+    );
+    expect(result.stopReason).toBe('stop');
+    expect(result.model).toBe('model-b');
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'model_pool_attempt_completed',
+        level: 'warn',
+        outcome: 'provider_failure',
+        error: expect.objectContaining({
+          name: 'TypeError',
+          message: 'fetch failed',
+          cause: expect.objectContaining({
+            code: 'ECONNREFUSED',
+            message: 'connect ECONNREFUSED',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each(['claim', 'health_update'] as const)(
+    'reports %s error codes without logging database values',
+    async (phase) => {
+      const store = health();
+      const databaseError = Object.assign(
+        new Error('synthetic private database value'),
+        { code: '08006' },
+      );
+      if (phase === 'claim')
+        vi.mocked(store.claim).mockRejectedValueOnce(databaseError);
+      else store.finish.mockRejectedValueOnce(databaseError);
+      const trace = vi.fn();
+      const baseUrl = await serve((_request, response) => reply(response));
+      const { complete } = await pool([node('a', baseUrl)], store, { trace });
+      expect((await complete()).stopReason).toBe(
+        phase === 'claim' ? 'error' : 'stop',
+      );
+      expect(trace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type:
+            phase === 'claim'
+              ? 'model_pool_error'
+              : 'model_pool_health_update_failed',
+          level: phase === 'claim' ? 'error' : 'warn',
+          ...(phase === 'claim' ? { phase: 'claim' } : {}),
+          nodeId: 'a',
+          error: expect.objectContaining({ name: 'Error', code: '08006' }),
+        }),
+      );
+      expect(JSON.stringify(trace.mock.calls)).not.toContain(
+        'synthetic private database value',
+      );
+    },
+  );
 
   it('skips a cooling or revised node without contacting its endpoint', async () => {
     const contacted = vi.fn(
@@ -318,12 +497,30 @@ describe('model pool transport', () => {
   });
 
   it('fails finitely when all nodes are cooling', async () => {
+    const trace = vi.fn();
     const { complete, store } = await pool(
       [node('a', 'http://127.0.0.1:1')],
       health(['a']),
+      { trace },
     );
     expect((await complete()).stopReason).toBe('error');
     expect(store.finish).not.toHaveBeenCalled();
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'model_pool_node_skipped',
+        nodeId: 'a',
+        reason: 'claim_denied',
+      }),
+    );
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'model_pool_exhausted',
+        level: 'error',
+        reason: 'no_claimable_nodes',
+        attemptedNodeIds: [],
+        skippedNodeIds: ['a'],
+      }),
+    );
   });
 });
 
