@@ -12,6 +12,7 @@ import type {
   ChatSessionShareResponseDto,
   ChatSessionSendResponseDto,
   MessageDto,
+  SessionBoardListResponseDto,
   SessionMessageListResponseDto,
   SharedChatSessionDto,
 } from '@fateclaw/contracts/chat';
@@ -524,6 +525,7 @@ export async function getOwnedChatSessionMessages(
   sessionId: string,
   limit: number,
   before?: string,
+  beforeId?: string,
 ): Promise<ServiceResult<SessionMessageListResponseDto>> {
   const sessionResult = await getOwnedSession(userId, sessionId);
   if (!sessionResult.ok) {
@@ -532,18 +534,57 @@ export async function getOwnedChatSessionMessages(
 
   const session = sessionResult.data;
   const [messages, processingRequestId] = await Promise.all([
-    getRecentMessages(session.account_id, limit, before, undefined, session.id),
+    getRecentMessages(
+      session.account_id,
+      limit,
+      before,
+      undefined,
+      session.id,
+      beforeId,
+    ),
     getRedis().get(sessionProcessingLockKey(session.id)),
   ]);
   const continuation = await resolveSessionContinuationState(session);
 
   return ok(
     toSessionMessageListResponseDto(messages, Boolean(processingRequestId), {
+      processingRequestId,
       continuationBlocked: continuation.blocked,
       continuationBlockReason: continuation.reason,
       continuationBlockMessage: continuation.message,
     }),
   );
+}
+
+export async function listOwnedChatSessionBoards(
+  userId: string,
+  sessionId: string,
+): Promise<ServiceResult<SessionBoardListResponseDto>> {
+  const sessionResult = await getOwnedSession(userId, sessionId);
+  if (!sessionResult.ok) {
+    return sessionResult;
+  }
+
+  const session = sessionResult.data;
+  const messages = await getSessionMessagesWithToolContext(
+    session.account_id,
+    session.id,
+  );
+  const seenMessageIds = new Set<string>();
+  const boards = buildSessionBoardContexts(messages).flatMap((board) => {
+    if (seenMessageIds.has(board.sourceMessageId)) return [];
+    seenMessageIds.add(board.sourceMessageId);
+    return [
+      {
+        source_message_id: board.sourceMessageId,
+        skill: board.skill,
+        title: board.artifactTitle?.trim() || board.skill,
+        ...(board.createdAt ? { created_at: board.createdAt } : {}),
+      },
+    ];
+  });
+
+  return ok({ boards });
 }
 
 export async function shareOwnedChatSessionForUser(

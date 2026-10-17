@@ -366,11 +366,37 @@ accounting and owner administration.
 | POST   | `/api/chat-sessions/s/:sessionId/restore`                            | 恢复已归档会话             |
 | POST   | `/api/chat-sessions/s/:sessionId/share`                              | 生成或复用会话私密分享链接 |
 | GET    | `/api/chat-sessions/shared/:token`                                   | 通过分享令牌只读查看会话，无需认证 |
-| GET    | `/api/chat-sessions/s/:sessionId/messages`                           | 获取消息，支持 `limit` 和 `before` |
+| GET    | `/api/chat-sessions/s/:sessionId/messages`                           | List messages with `limit`, `before`, and optional `before_id` |
+| GET    | `/api/chat-sessions/s/:sessionId/boards`                             | List selectable board summaries |
 | POST   | `/api/chat-sessions/s/:sessionId/messages`                           | 发送消息，传 `content` 和可选 `selected_board_message_id` |
 | POST   | `/api/chat-sessions/s/:sessionId/messages/cancel`                    | 中断当前会话正在处理的 AI Chat 输出 |
 | POST   | `/api/chat-sessions/s/:sessionId/stream-ticket`                      | 签发一次性 WebSocket stream ticket |
 | GET    | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process`  | 获取脱敏后的查询过程时间线 |
+
+### GET /api/chat-sessions/s/:sessionId/messages
+
+The message response includes `processing` and `processing_request_id`. The request ID is read from the existing session processing lock and is `null` while idle. Clients can correlate it with stream events and persisted message `metadata.request_id` when recovering a turn after a reload.
+
+`limit` defaults to 50 and is capped at 200. Results are ordered by `timestamp DESC, id DESC`. To page into older messages, send the last result's `timestamp` as `before` and its `id` as `before_id`. This compound cursor includes remaining messages sharing the boundary timestamp without repeating the boundary message. Supplying only `before` preserves the existing strict `timestamp < before` behavior; `before_id` alone has no effect. Clients must merge refreshed recent messages with already loaded history.
+
+### GET /api/chat-sessions/s/:sessionId/boards
+
+Returns selectable official and pasted boards from the authenticated owner's session. The newest valid board comes first, matching the default board used by message submission. Duplicate source message IDs are collapsed. Each summary contains `source_message_id`, `skill`, `title` (the artifact title, falling back to the skill), and optional `created_at`; it excludes board text and artifact data.
+
+```json
+{
+  "boards": [
+    {
+      "source_message_id": "paipan-res-example",
+      "skill": "bazi-paipan",
+      "title": "八字排盘",
+      "created_at": "2026-10-17T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+Pass a summary's `source_message_id` as `selected_board_message_id` when sending a message. The send endpoint remains responsible for validating that the selected message belongs to the session and contains a board. Omitting it keeps the existing newest-board default. Missing sessions return 404; sessions owned by another user return 403.
 
 ### POST /api/chat-sessions/s/:sessionId/messages
 

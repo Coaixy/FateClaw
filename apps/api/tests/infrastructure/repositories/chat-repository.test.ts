@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 
 const { mockGetDbPool, mockGetRedis, mockLoggerWarn } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
@@ -157,6 +158,76 @@ describe('chat repository', () => {
       '2026-05-27T01:00:00.000Z',
       '2026-05-27T00:00:00.000Z',
     ]);
+  });
+
+  it('pages through shared timestamps without dropping or repeating messages', async () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec(`CREATE TABLE messages (
+        id TEXT, account_id TEXT, session_id TEXT,
+        timestamp TEXT, deleted_at TEXT
+      )`);
+      const insert = database.prepare(
+        'INSERT INTO messages VALUES (?, ?, ?, ?, ?)',
+      );
+      const timestamp = '2026-10-17T08:00:00.000Z';
+      const tiedIds = Array.from(
+        { length: 120 },
+        (_, index) => `message-${String(index).padStart(3, '0')}`,
+      );
+      for (const id of tiedIds) {
+        insert.run(id, 'account-1', 'session-1', timestamp, null);
+      }
+      insert.run(
+        'older',
+        'account-1',
+        'session-1',
+        '2026-10-17T07:00:00.000Z',
+        null,
+      );
+      insert.run('other-owner', 'account-2', 'session-1', timestamp, null);
+      insert.run('other-session', 'account-1', 'session-2', timestamp, null);
+      insert.run('deleted', 'account-1', 'session-1', timestamp, timestamp);
+      mockGetDbPool.mockReturnValue({
+        async query(sql: string, params: SQLInputValue[]) {
+          const bindings = Object.fromEntries(
+            params.map((value, index) => [`$${index + 1}`, value]),
+          );
+          return { rows: database.prepare(sql).all(bindings) };
+        },
+      });
+
+      const ids: string[] = [];
+      let before: string | undefined;
+      let beforeId: string | undefined;
+      for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
+        const page = await getRecentMessages(
+          'account-1',
+          50,
+          before,
+          undefined,
+          'session-1',
+          beforeId,
+        );
+        ids.push(...page.map((row) => row.id));
+        if (page.length === 0) break;
+        before = page.at(-1)!.timestamp;
+        beforeId = page.at(-1)!.id;
+      }
+
+      expect(ids).toHaveLength(121);
+      expect(ids).toEqual([...tiedIds].reverse().concat('older'));
+      const legacyPage = await getRecentMessages(
+        'account-1',
+        50,
+        timestamp,
+        undefined,
+        'session-1',
+      );
+      expect(legacyPage.map((row) => row.id)).toEqual(['older']);
+    } finally {
+      database.close();
+    }
   });
 
   it('restores an archived chat session owned by a user', async () => {

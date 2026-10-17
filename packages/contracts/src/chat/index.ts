@@ -76,12 +76,25 @@ export interface MessageDto {
 export interface SessionMessageListResponseDto {
   messages: MessageDto[];
   processing: boolean;
+  /** The active request from the session processing lock, or null when idle. */
+  processing_request_id?: string | null;
   /** 当前会话是否因 Pi session 本地状态缺失而禁止继续追问。 */
   continuation_blocked?: boolean;
   /** 禁止追问的机器可读原因。 */
   continuation_block_reason?: 'pi_session_missing';
   /** 禁止追问时展示给用户的提示文案。 */
   continuation_block_message?: string;
+}
+
+export interface SessionBoardSummaryDto {
+  source_message_id: string;
+  skill: string;
+  title: string;
+  created_at?: string;
+}
+
+export interface SessionBoardListResponseDto {
+  boards: SessionBoardSummaryDto[];
 }
 
 export interface ChatSessionDto {

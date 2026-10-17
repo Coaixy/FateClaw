@@ -13,6 +13,7 @@ import {
   getSharedChatSessionByShareToken,
   listChatSessionsByClientForOwnedUser,
   listChatSessionsForOwnedUser,
+  listOwnedChatSessionBoards,
   renameOwnedChatSession,
   restoreOwnedArchivedChatSession,
   shareOwnedChatSessionForUser,
@@ -217,7 +218,7 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/chat-sessions/s/:sessionId/messages — 获取会话消息
   app.get<{
     Params: { sessionId: string };
-    Querystring: { limit?: string; before?: string };
+    Querystring: { limit?: string; before?: string; before_id?: string };
   }>('/s/:sessionId/messages', async (request, reply) => {
     await request.requireAuth();
     const limit = Math.min(
@@ -229,6 +230,22 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
       request.params.sessionId,
       limit,
       request.query.before || undefined,
+      request.query.before_id || undefined,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  // GET /api/chat-sessions/s/:sessionId/boards — List selectable board summaries.
+  app.get<{
+    Params: { sessionId: string };
+  }>('/s/:sessionId/boards', async (request, reply) => {
+    await request.requireAuth();
+    const result = await listOwnedChatSessionBoards(
+      request.user.userId,
+      request.params.sessionId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

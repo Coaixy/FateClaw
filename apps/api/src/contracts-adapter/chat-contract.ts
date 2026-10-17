@@ -131,6 +131,7 @@ export function toSessionMessageListResponseDto(
   messages: NewMessage[],
   processing: boolean,
   options?: {
+    processingRequestId?: string | null;
     continuationBlocked?: boolean;
     continuationBlockReason?: 'pi_session_missing';
     continuationBlockMessage?: string;
@@ -139,6 +140,7 @@ export function toSessionMessageListResponseDto(
   return {
     messages: messages.map(toMessageDto),
     processing,
+    processing_request_id: options?.processingRequestId ?? null,
     continuation_blocked: options?.continuationBlocked,
     continuation_block_reason: options?.continuationBlockReason,
     continuation_block_message: options?.continuationBlockMessage,

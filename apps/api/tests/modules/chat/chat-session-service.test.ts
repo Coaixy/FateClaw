@@ -181,7 +181,9 @@ vi.mock('../../../src/modules/system/system-config.js', () => ({
 import {
   archiveOwnedChatSession,
   cancelOwnedChatSessionMessage,
+  getOwnedChatSessionMessages,
   getSharedChatSessionByShareToken,
+  listOwnedChatSessionBoards,
   restoreOwnedArchivedChatSession,
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
@@ -327,6 +329,137 @@ describe('chat-session-service selected board context', () => {
     });
     mockCancelAiChatSessionRequest.mockResolvedValue(true);
   });
+
+  it.each(['request-active', null])(
+    'includes the current processing request id %s when listing messages',
+    async (requestId) => {
+      mockRedisGet.mockResolvedValueOnce(requestId);
+
+      const result = await getOwnedChatSessionMessages(
+        'user-1',
+        'session-1',
+        50,
+        '2026-04-26T09:00:00.000Z',
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        data: {
+          messages: [],
+          processing: requestId !== null,
+          processing_request_id: requestId,
+          continuation_blocked: false,
+        },
+      });
+      expect(mockGetRecentMessages).toHaveBeenCalledWith(
+        'web:user-1',
+        50,
+        '2026-04-26T09:00:00.000Z',
+        undefined,
+        'session-1',
+        undefined,
+      );
+      expect(mockRedisGet).toHaveBeenCalledWith(
+        'session:processing:session-1',
+      );
+    },
+  );
+
+  it('passes the full history boundary to the repository', async () => {
+    await getOwnedChatSessionMessages(
+      'user-1',
+      'session-1',
+      50,
+      '2026-10-17T08:00:00.000Z',
+      'message-050',
+    );
+
+    expect(mockGetRecentMessages).toHaveBeenCalledWith(
+      'web:user-1',
+      50,
+      '2026-10-17T08:00:00.000Z',
+      undefined,
+      'session-1',
+      'message-050',
+    );
+  });
+
+  it('lists unique selectable board summaries newest first without board contents', async () => {
+    const oldEntry = {
+      skill: 'bazi-paipan',
+      output: 'Synthetic official board',
+      artifactTitle: 'Official chart',
+      artifactData: { synthetic: true },
+    };
+    mockGetSessionMessagesWithToolContext.mockResolvedValueOnce([
+      {
+        id: 'board-old',
+        timestamp: '2026-04-26T09:00:00.000Z',
+        tool_context: JSON.stringify([oldEntry, oldEntry]),
+      },
+      {
+        id: 'board-invalid',
+        tool_context: JSON.stringify([
+          { skill: 'user-pasted-board::bazi', output: '' },
+        ]),
+      },
+      {
+        id: 'board-new',
+        timestamp: '2026-04-26T10:00:00.000Z',
+        tool_context: JSON.stringify([
+          {
+            skill: 'user-pasted-board::qimen',
+            output: 'Synthetic pasted board',
+          },
+        ]),
+      },
+    ]);
+
+    expect(await listOwnedChatSessionBoards('user-1', 'session-1')).toEqual({
+      ok: true,
+      data: {
+        boards: [
+          {
+            source_message_id: 'board-new',
+            skill: 'user-pasted-board::qimen',
+            title: 'user-pasted-board::qimen',
+            created_at: '2026-04-26T10:00:00.000Z',
+          },
+          {
+            source_message_id: 'board-old',
+            skill: 'bazi-paipan',
+            title: 'Official chart',
+            created_at: '2026-04-26T09:00:00.000Z',
+          },
+        ],
+      },
+    });
+    expect(mockGetSessionMessagesWithToolContext).toHaveBeenCalledWith(
+      'web:user-1',
+      'session-1',
+    );
+  });
+
+  it.each([
+    { session: undefined, statusCode: 404, error: '会话不存在' },
+    {
+      session: { user_id: 'other-user' },
+      statusCode: 403,
+      error: '无权操作',
+    },
+  ])(
+    'rejects inaccessible board lists with status $statusCode before reading messages',
+    async ({ session, statusCode, error }) => {
+      mockGetChatSession.mockResolvedValueOnce(session);
+
+      expect(await listOwnedChatSessionBoards('user-1', 'session-1')).toEqual({
+        ok: false,
+        statusCode,
+        error,
+      });
+      expect(mockGetSessionMessagesWithToolContext).not.toHaveBeenCalled();
+    },
+  );
 
   it('archives the Pi session payload and deletes local files when archiving a chat session', async () => {
     const result = await archiveOwnedChatSession('user-1', 'session-1');

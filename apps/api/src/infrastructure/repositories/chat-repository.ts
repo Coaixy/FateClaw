@@ -92,6 +92,7 @@ export async function getRecentMessages(
   before?: string,
   after?: string,
   sessionId?: string,
+  beforeId?: string,
 ): Promise<NewMessage[]> {
   const conditions = ['account_id = $1', 'deleted_at IS NULL'];
   const params: unknown[] = [accountId, limit];
@@ -105,7 +106,14 @@ export async function getRecentMessages(
 
   if (before) {
     params.push(before);
-    conditions.push(`timestamp < $${params.length}`);
+    if (beforeId) {
+      params.push(beforeId);
+      conditions.push(
+        `(timestamp, id) < ($${params.length - 1}, $${params.length})`,
+      );
+    } else {
+      conditions.push(`timestamp < $${params.length}`);
+    }
   }
   if (after) {
     params.push(after);
@@ -115,7 +123,7 @@ export async function getRecentMessages(
   const { rows } = await getDbPool().query(
     `SELECT * FROM messages
      WHERE ${conditions.join(' AND ')}
-     ORDER BY timestamp DESC LIMIT $2`,
+     ORDER BY timestamp DESC, id DESC LIMIT $2`,
     params,
   );
   return rows as NewMessage[];
