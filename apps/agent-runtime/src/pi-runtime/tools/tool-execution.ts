@@ -93,6 +93,17 @@ export function completePiToolExecution<TDetails extends { output: string }>({
     options.requestScope,
   );
 
+  traceEvent(
+    {
+      type: 'agent_timing',
+      stage: 'tool',
+      durationMs: Date.now() - startedAt,
+      toolName,
+      outputBytes: Buffer.byteLength(output, 'utf8'),
+    },
+    options.requestScope,
+  );
+
   return {
     content: [{ type: 'text', text: output }],
     details,

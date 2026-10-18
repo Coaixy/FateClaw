@@ -11,6 +11,7 @@
  */
 
 import { getRedis } from '../infrastructure/redis.js';
+import { getAgentPerformance } from './agent-performance.js';
 import {
   getLocalAgentRuntimeStatus,
   type LocalAgentStatusItem,
@@ -25,6 +26,7 @@ export interface QueueDepthItem {
 
 /** 运行时状态快照。 */
 export interface RuntimeStatusSnapshot {
+  performance: ReturnType<typeof getAgentPerformance>;
   /** 快照生成时间（ISO 8601）。 */
   generatedAt: string;
   /** 本实例管理的本地 agent-runtime 子进程。 */
@@ -95,6 +97,7 @@ export async function collectRuntimeStatus(): Promise<RuntimeStatusSnapshot> {
   ]);
 
   return {
+    performance: getAgentPerformance(),
     generatedAt: new Date().toISOString(),
     localAgents: getLocalAgentRuntimeStatus(),
     ipc: getIpcWorkerStatus(),

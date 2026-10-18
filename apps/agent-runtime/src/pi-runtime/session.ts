@@ -124,6 +124,7 @@ export async function runPiSession(args: {
   // 自配（BYOK）Base URL 的解析型 SSRF 校验：同步字面量校验挡不住「公网域名解析到内网」，
   // 建 provider（发起真实 LLM 请求）之前先做一次 DNS 解析级校验。
   await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
+  const preparationStartedAt = Date.now();
   const userId = resolveUserId(args.containerInput);
   const contextPromise = args.runtime.deps.soulStore
     .canEdit(args.containerInput.accountId)
@@ -163,7 +164,14 @@ export async function runPiSession(args: {
   const sessionContext = prepared[1].value;
   const soulEditEnabled = sessionContext.soulEditEnabled;
   const resourceLoader = prepared[2].value;
-
+  traceEvent(
+    {
+      type: 'agent_timing',
+      stage: 'preparation',
+      durationMs: Date.now() - preparationStartedAt,
+    },
+    args.requestScope,
+  );
   try {
     const readableSkills = resourceLoader
       .getSkills()
@@ -246,10 +254,12 @@ export async function runPiSession(args: {
         );
       });
     });
+    const modelStartedAtMs = Date.now();
     const unsubscribe = session.subscribe(
       createPiEventCollector({
         requestScope: args.requestScope,
         usage,
+        modelStartedAtMs,
         accountId: args.containerInput.accountId,
         requestId: getRequestId(args.requestScope),
         setLastAssistantText(text) {
@@ -348,6 +358,14 @@ export async function runPiSession(args: {
       attachPartialUsage(err, usage);
       throw err;
     } finally {
+      traceEvent(
+        {
+          type: 'agent_timing',
+          stage: 'generation',
+          durationMs: Date.now() - modelStartedAtMs,
+        },
+        args.requestScope,
+      );
       unsubscribe();
       stream.close();
       session.dispose();

@@ -142,6 +142,19 @@ session frame protocol are owned by `packages/contracts/src/agent/`. API admissi
 options remain in `runtime/request-types.ts`; repositories no longer derive their
 stored input type from the IPC worker implementation.
 
+## Performance evidence
+
+`GET /api/admin/runtime-status` includes process-local AI Chat performance observations:
+admission, account wait, runtime readiness, global/benefit queue wait, resource
+preparation, first content, first answer, tools, generation and result delivery.
+Each stage reports its count, mean and P50/P95 from the most recent 256 samples.
+Counts and cache read/write tokens reset on API restart and can include repeated
+delivery observations; they are diagnostic samples rather than billing records or
+global production percentiles. Queue/runtime-ready durations include the capacity
+wait at their respective boundaries. Lightweight timing and provider traces remain
+in conversation logs alongside the session frame reference. Cache-token diagnostics
+remain separate from the unchanged input/output billing calculation.
+
 ## Runtime and dependency compatibility
 
 The supported workspace runtime is Node 24 (`.nvmrc`). Pi packages are pinned to
@@ -221,3 +234,18 @@ in 121 files passed with the PostgreSQL and Redis integration suites enabled.
 API, agent, web and admin type checks passed; contracts and backend TypeScript
 compilation passed. Changed backend files had no lint errors (62 warnings).
 The offline frozen lockfile check passed with lifecycle scripts disabled.
+
+Validation on 2026-10-17 used Node 24.18.0 and pnpm 11.5.0. The backend suite
+passed 764 tests; 135 opt-in integration cases were skipped in that run. A separate
+run passed 28 real PostgreSQL 18.4/Redis 7 checks, including full migration replay,
+frame/delivery rollback, duplicate delivery, admission-order recovery, queue
+priority, cancellation, replacement ownership and reliable blocking results.
+Backend compilation and API/runtime type checks passed. Changed TypeScript files
+had no lint errors; catch-policy warnings remain.
+
+A synthetic 64-turn conversation with 512 ASCII characters in each user and
+assistant message produced four checkpoints. Complete snapshots totaled 2,279,800
+serialized bytes; frames totaled 206,515 bytes, a 90.9% reduction in snapshot
+payload only. This does not measure provider latency, total network traffic or
+production database/storage behavior. Answer quality and live-provider long-context
+compaction remain **unverified**.

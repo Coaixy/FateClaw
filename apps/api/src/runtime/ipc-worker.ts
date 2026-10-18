@@ -1,3 +1,4 @@
+import { recordAgentTiming } from './agent-performance.js';
 import {
   acquireAgentExecution,
   releaseGlobalAgentSlot,
@@ -1215,12 +1216,20 @@ export function submitAiChatInboxRequest(
           llmRuntime,
           billingReservation,
           startedAtMs,
+          timings: [
+            {
+              type: 'agent_timing',
+              stage: 'admission',
+              durationMs: Date.now() - startedAtMs,
+            },
+          ],
           priority,
           concurrencySlotId,
           resolve,
           reject,
           timeout,
         });
+        recordAgentTiming('admission', Date.now() - startedAtMs);
         if (input.waitForResponse === false) {
           acceptedEarly = true;
           resolve({ requestId, status: 'success', text: '' });
@@ -1245,6 +1254,12 @@ export function submitAiChatInboxRequest(
                 );
               }
             }
+          },
+          onTiming: (stage, durationMs) => {
+            recordAgentTiming(stage, durationMs);
+            pendingAiChatRequests
+              .get(requestId)
+              ?.timings?.push({ type: 'agent_timing', stage, durationMs });
           },
           shouldContinue: () =>
             pendingAiChatRequests.has(requestId) && Date.now() < deadlineAtMs,

@@ -134,6 +134,7 @@ export interface PendingInboxRequest {
   capacityToken?: string;
   /** 请求提交到本机运行时的毫秒时间戳，用于计算最终回复耗时。 */
   startedAtMs?: number;
+  timings?: Array<{ type: 'agent_timing'; stage: string; durationMs: number }>;
   resolve: (result: InboxRequestResult) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;

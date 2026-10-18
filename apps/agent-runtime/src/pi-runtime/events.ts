@@ -89,6 +89,10 @@ function mergeAssistantUsage(
   const promptTokens =
     (message.usage.input ?? 0) + cacheReadTokens + cacheWriteTokens;
   const completionTokens = message.usage.output ?? 0;
+  if (cacheReadTokens)
+    usage.cacheReadTokens = (usage.cacheReadTokens ?? 0) + cacheReadTokens;
+  if (cacheWriteTokens)
+    usage.cacheWriteTokens = (usage.cacheWriteTokens ?? 0) + cacheWriteTokens;
   usage.promptTokens += promptTokens;
   usage.completionTokens += completionTokens;
   usage.totalTokens +=
@@ -435,12 +439,23 @@ function buildThinkingProgressMessage(args: {
 export function createPiEventCollector(args: {
   requestScope: RequestScope;
   usage: TokenUsage;
+  modelStartedAtMs?: number;
   accountId: string;
   requestId?: string;
   setLastAssistantText(text: string): void;
   publishStreamEvent?: (event: AiChatStreamEvent) => void;
   pushOutboxProgress?: (message: AiChatProgressOutboxMessage) => void;
 }): (event: AgentSessionEvent) => void {
+  const startedAtMs = args.modelStartedAtMs ?? Date.now();
+  const recordedContent = new Set<string>();
+  const firstContent = (stage: 'first_content' | 'first_answer') => {
+    if (recordedContent.has(stage)) return;
+    recordedContent.add(stage);
+    traceEvent(
+      { type: 'agent_timing', stage, durationMs: Date.now() - startedAtMs },
+      args.requestScope,
+    );
+  };
   let lastAssistantSnapshot = '';
   let lastThinkingSnapshot = '';
   // 回合开始时间：思考在 turn_end 才发射，但要排在本回合工具之前，故落库时盖上此时间戳。
@@ -484,6 +499,7 @@ export function createPiEventCollector(args: {
               : thinkingSnapshot;
             lastThinkingSnapshot = thinkingSnapshot;
             if (thinkingDelta) {
+              firstContent('first_content');
               publish({
                 type: 'thinking_delta',
                 delta: thinkingDelta,
@@ -499,6 +515,8 @@ export function createPiEventCollector(args: {
             : snapshot;
           lastAssistantSnapshot = snapshot;
           if (delta) {
+            firstContent('first_content');
+            firstContent('first_answer');
             publish({
               type: 'assistant_delta',
               delta,
@@ -510,6 +528,14 @@ export function createPiEventCollector(args: {
       case 'turn_end':
         if (isAssistantMessage(event.message)) {
           mergeAssistantUsage(args.usage, event.message);
+          traceEvent(
+            {
+              type: 'model_usage',
+              cacheReadTokens: event.message.usage?.cacheRead ?? 0,
+              cacheWriteTokens: event.message.usage?.cacheWrite ?? 0,
+            },
+            args.requestScope,
+          );
           args.requestScope.partialUsage = { ...args.usage };
           const thinking = thinkingFromContent(event.message.content);
           if (thinking.trim() && thinking !== lastThinkingSnapshot) {

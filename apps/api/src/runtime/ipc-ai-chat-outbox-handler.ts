@@ -1,3 +1,7 @@
+import {
+  recordAgentTiming,
+  recordAgentTraceTimings,
+} from './agent-performance.js';
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import { settleBenefitTurn } from '../infrastructure/repositories/benefit-repository.js';
@@ -683,6 +687,12 @@ async function processAiChatResponse(
       payload: payloadForUsage,
       durationMs,
     });
+    const deliveryStartedAt = Date.now();
+    const runtimeTraceEvents = payloadForUsage.traceEvents;
+    payloadForUsage.traceEvents = [
+      ...(pending?.timings ?? []),
+      ...(runtimeTraceEvents ?? []),
+    ];
     // The delivery receipt, actual usage, and messages commit together. Retries
     // skip these effects; billing remains recoverable from the durable usage log.
     const synthetic =
@@ -730,7 +740,11 @@ async function processAiChatResponse(
           },
         );
     if (synthetic && !finalMessageId) return;
-    if (!synthetic) recordConversationLogSuccess();
+    if (!synthetic) {
+      recordConversationLogSuccess();
+      recordAgentTiming('delivery', Date.now() - deliveryStartedAt);
+      recordAgentTraceTimings(runtimeTraceEvents);
+    }
 
     let billing: BillingSettlementSummary | null = null;
     try {

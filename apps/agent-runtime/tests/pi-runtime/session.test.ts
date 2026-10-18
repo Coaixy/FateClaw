@@ -372,6 +372,8 @@ describe('runPiSession', () => {
     expect(result.text).toBe('assistant fallback');
     expect(result.usage).toEqual({
       promptTokens: 21,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 11,
       completionTokens: 2,
       totalTokens: 23,
     });
