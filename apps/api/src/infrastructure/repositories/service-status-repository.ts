@@ -3,7 +3,7 @@ import type {
   ServiceStatusSampleDto,
   ServiceTokenUsageDto,
 } from '@fateclaw/contracts/service-status';
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 export const SERVICE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60;
 export const SERVICE_STATUS_STALE_SECONDS = 12 * 60 * 60;

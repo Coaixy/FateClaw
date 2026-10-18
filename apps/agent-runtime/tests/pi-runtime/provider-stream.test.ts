@@ -6,8 +6,8 @@ import {
 import { once } from 'node:events';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createPiProviderRuntime } from '../../src/pi-runtime/provider.js';
-import type { LlmRuntimeSnapshot } from '../../src/types.js';
+import { createPiProviderRuntime } from '#agent/pi-runtime/provider';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 
 const servers: ReturnType<typeof createServer>[] = [];
 

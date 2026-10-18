@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aiChatStreamChannel,
   enrichAiChatStreamEvent,
-} from '../src/ai-chat-stream.js';
+} from '#agent/ai-chat-stream';
 
 describe('agent-runtime AI Chat stream helpers', () => {
   it('uses the API stream channel contract', () => {

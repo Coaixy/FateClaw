@@ -54,7 +54,7 @@ const {
   mockUpsertPiSessionCleanupCursor: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   cancelUserMembershipsForAdmin: mockCancelUserMembershipsForAdmin,
   createUser: mockCreateUser,
   getChatSessionPiArchiveStates: mockGetChatSessionPiArchiveStates,
@@ -77,7 +77,7 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   upsertPiSessionCleanupCursor: mockUpsertPiSessionCleanupCursor,
 }));
 
-vi.mock('../../../src/modules/chat/pi-session-files.js', () => ({
+vi.mock('#modules/chat/pi-session-files', () => ({
   deletePiSessionFilesForSession: mockDeletePiSessionFilesForSession,
   deletePiSessionOrphanFiles: mockDeletePiSessionOrphanFiles,
   readPiSessionArchiveForSession: mockReadPiSessionArchiveForSession,
@@ -99,7 +99,7 @@ vi.mock('../../../src/modules/chat/pi-session-files.js', () => ({
     mockWritePiSessionSnapshotArchiveToFiles,
 }));
 
-vi.mock('../../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   getPiSessionHealthPolicy: mockGetPiSessionHealthPolicy,
   getSystemConfigOverview: vi.fn(),
   saveOfficialModelSettings: vi.fn(),
@@ -110,7 +110,7 @@ import {
   createAdminUser,
   resetAdminUserPassword,
   scanPiSessionOrphanFilesForAdmin,
-} from '../../../src/modules/admin/admin-service.js';
+} from '#modules/admin/admin-service';
 
 describe('createAdminUser', () => {
   beforeEach(() => {

@@ -24,17 +24,17 @@ const { fixedWindowRateLimit } = vi.hoisted(() => ({
 }));
 
 vi.mock(
-  '../../../src/infrastructure/repositories/registration-invites-repository.js',
+  '#infrastructure/repositories/registration-invites-repository',
   () => repository,
 );
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit,
 }));
 
 import {
   adminRegistrationInviteRoutes,
   registrationInviteRoutes,
-} from '../../../src/interfaces/http/registration-invite-routes.js';
+} from '#interfaces/http/registration-invite-routes';
 
 const USER_ID = 'synthetic-inviter';
 const INVITE_ID = '11111111-1111-4111-8111-111111111111';

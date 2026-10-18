@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   executeDirectPaipan,
   listDirectPaipanCatalog,
-} from '../../modules/chat/paipan-runtime.js';
+} from '#modules/chat/paipan-runtime';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
 import {
   paipanSchemaToSnakeCase,

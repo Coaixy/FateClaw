@@ -10,7 +10,7 @@ import {
   BILLING_RESERVATION_STALE_MS,
   MANAGER_KEY,
   USER_MANAGER_KEY,
-} from '../../infrastructure/config.js';
+} from '#infrastructure/config';
 import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
@@ -56,12 +56,12 @@ import {
   getMembershipPlanConfigsForAdmin,
   updateMembershipPlanConfig,
   getAdminChatSessionDetail,
-} from '../../modules/admin/admin-service.js';
+} from '#modules/admin/admin-service';
 import {
   toAdminSkillCommentDto,
   toAdminSkillCommentDtos,
-} from '../../contracts-adapter/skills-contract.js';
-import { toMembershipPlanDto } from '../../contracts-adapter/billing-contract.js';
+} from '#contracts-adapter/skills-contract';
+import { toMembershipPlanDto } from '#contracts-adapter/billing-contract';
 import {
   rateLimitCheck,
   rateLimitRecordFail,
@@ -70,15 +70,15 @@ import {
 import {
   MAX_CONFIGURED_CONTEXT_WINDOW_TOKENS,
   MIN_CONFIGURED_CONTEXT_WINDOW_TOKENS,
-} from '../../shared/model-context-window.js';
-import { PI_THINKING_LEVELS } from '../../shared/types.js';
+} from '#shared/model-context-window';
+import { PI_THINKING_LEVELS } from '#shared/types';
 import { MEMBERSHIP_PLAN_KEY } from '@fateclaw/contracts/membership';
 import {
   calculateAvailableSpendableCoins,
   roundCoinsToCents,
-} from '../../shared/balance-coins.js';
+} from '#shared/balance-coins';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
-import { collectRuntimeStatus } from '../../runtime/runtime-status.js';
+import { collectRuntimeStatus } from '#runtime/runtime-status';
 
 type AdminRole = 'owner' | 'user_manager';
 type AdminScope = 'admin:*' | 'users:read' | 'users:create' | 'messages:read';

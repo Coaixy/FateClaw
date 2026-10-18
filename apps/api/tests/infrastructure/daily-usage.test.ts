@@ -4,7 +4,7 @@ const { mockGetDbPool } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getDbPool: mockGetDbPool,
 }));
 
@@ -13,7 +13,7 @@ import {
   getDailyUsageRows,
   getMonthlyTokenUsage,
   incrementDailyTokens,
-} from '../../src/infrastructure/daily-usage.js';
+} from '#infrastructure/daily-usage';
 
 describe('daily usage repository', () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getContextWindow } from '../../src/shared/model-context-window.js';
+import { getContextWindow } from '#shared/model-context-window';
 
 describe('getContextWindow', () => {
   it('matches the shared context window table', () => {

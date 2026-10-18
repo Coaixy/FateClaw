@@ -24,13 +24,13 @@ const {
   mockUpsertWechatChatSessionLink: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/chat/chat-session-service.js', () => ({
+vi.mock('#modules/chat/chat-session-service', () => ({
   createChatSessionForOwnedUser: mockCreateChatSessionForOwnedUser,
   listChatSessionsForOwnedUser: mockListChatSessionsForOwnedUser,
   runOwnedChatSessionTurn: mockRunOwnedChatSessionTurn,
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   deleteWechatChatSessionLink: mockDeleteWechatChatSessionLink,
   getChatSession: mockGetChatSession,
   getWechatChatSessionLink: mockGetWechatChatSessionLink,
@@ -38,14 +38,14 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   upsertWechatChatSessionLink: mockUpsertWechatChatSessionLink,
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     get: mockGetRedisGet,
     set: mockGetRedisSet,
   })),
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -56,8 +56,8 @@ import {
   buildWechatSenderHash,
   handleWechatChatCommand,
   runWechatChatSessionTurn,
-} from '../../../src/modules/chat/wechat-chat-session-service.js';
-import type { Account } from '../../../src/shared/types.js';
+} from '#modules/chat/wechat-chat-session-service';
+import type { Account } from '#shared/types';
 
 function createAccount(): Account {
   return {

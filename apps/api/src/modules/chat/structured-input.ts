@@ -1,5 +1,5 @@
-import type { HistoryMessage } from '../../shared/token-budget.js';
-import { getUserSoulContent } from '../../infrastructure/db.js';
+import type { HistoryMessage } from '#shared/token-budget';
+import { getUserSoulContent } from '#infrastructure/db';
 
 export interface StructuredInput {
   userMessage: string;

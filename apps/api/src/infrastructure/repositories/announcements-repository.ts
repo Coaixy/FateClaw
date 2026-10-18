@@ -2,8 +2,8 @@ import type {
   AnnouncementStatus,
   AnnouncementWriteDto,
 } from '@fateclaw/contracts';
-import { getDbPool } from '../db-pool.js';
-import { queryOne, queryRows } from '../typed-query.js';
+import { getDbPool } from '#infrastructure/db-pool';
+import { queryOne, queryRows } from '#infrastructure/typed-query';
 
 export interface AnnouncementRow {
   id: string;

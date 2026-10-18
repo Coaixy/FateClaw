@@ -4,7 +4,7 @@ import { listTranscriptEvents } from './transcript-store.js';
 import { createRequestRuntime } from './runtime.js';
 import type { AgentRuntimeDeps } from './deps.js';
 import { readPartialUsage } from './partial-usage.js';
-import { executePiRuntime } from './pi-runtime/index.js';
+import { executePiRuntime } from '#agent/pi-runtime/index';
 import {
   createRequestScope,
   listScopedTraceEvents,

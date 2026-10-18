@@ -4,8 +4,8 @@ import {
   getOpenSessionForUserAnyStatus,
   getSessionMessages,
   listOpenSessionsByUserId,
-} from '../../infrastructure/db.js';
-import { getWebChatRuntimeId } from '../../modules/chat/web-chat-runtime.js';
+} from '#infrastructure/db';
+import { getWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
 
 /** 单条会话消息的脱敏视图：只暴露角色 / 正文 / 时间，隐去 account_id 等内部字段。 */
 interface OpenSessionMessageItem {

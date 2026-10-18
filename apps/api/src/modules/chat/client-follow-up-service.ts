@@ -15,9 +15,9 @@ import {
   getClientFollowUpsByClientId,
   getClientProfile,
   softDeleteClientFollowUp,
-} from '../../infrastructure/db.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import type { ClientFollowUp } from '../../shared/types.js';
+} from '#infrastructure/db';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import type { ClientFollowUp } from '#shared/types';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 /** 跟进正文最大长度，与路由 zod 校验保持一致。 */

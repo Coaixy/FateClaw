@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatQimenPaipan } from '../../../../src/modules/chat/paipan-formatters/qimen.js';
+import { formatQimenPaipan } from '#modules/chat/paipan-formatters/qimen';
 
 describe('formatQimenPaipan', () => {
   it('omits center palace and carries center stems to their hosted palaces', () => {

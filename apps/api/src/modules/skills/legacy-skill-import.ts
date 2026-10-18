@@ -4,7 +4,7 @@ import {
   prepareSkillContent,
   SkillContentValidationError,
 } from '@fateclaw/contracts/skills/content';
-import { insertSkillContentRevision } from '../../infrastructure/repositories/skill-content-repository.js';
+import { insertSkillContentRevision } from '#infrastructure/repositories/skill-content-repository';
 import { readLegacySkillFiles } from './legacy-skill-files.js';
 
 interface LegacySkill {

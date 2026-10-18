@@ -16,18 +16,15 @@ const state = vi.hoisted(() => ({
   pool: null as pg.Pool | null,
   redis: null as Redis | null,
 }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => state.redis,
 }));
-import { issuesMigration } from '../../src/infrastructure/migrations/versions/0086-issues.js';
-import {
-  issuesRoutes,
-  adminIssueRoutes,
-} from '../../src/interfaces/http/issues-routes.js';
-import { fixedWindowRateLimit } from '../../src/interfaces/http/rate-limit.js';
+import { issuesMigration } from '#infrastructure/migrations/versions/0086-issues';
+import { issuesRoutes, adminIssueRoutes } from '#interfaces/http/issues-routes';
+import { fixedWindowRateLimit } from '#interfaces/http/rate-limit';
 
 // Both endpoints must identify disposable stores; application configuration is never read.
 const databaseUrl = process.env.FATECLAW_TEST_ISSUES_DATABASE_URL;

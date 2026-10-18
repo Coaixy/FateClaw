@@ -7,13 +7,13 @@ import {
   ISSUE_CLOSE_REASONS,
 } from '@fateclaw/contracts';
 import { fixedWindowRateLimit } from './rate-limit.js';
-import { IssueError } from '../../modules/issues/issue-errors.js';
+import { IssueError } from '#modules/issues/issue-errors';
 import {
   getAdminIssue,
   getPublicIssue,
   listAdminIssues,
   listPublicIssues,
-} from '../../modules/issues/issue-service.js';
+} from '#modules/issues/issue-service';
 import {
   editIssue,
   editIssueComment,
@@ -22,7 +22,7 @@ import {
   moderateIssue,
   moderateIssueComment,
   moderateIssueParticipant,
-} from '../../infrastructure/repositories/issues-repository.js';
+} from '#infrastructure/repositories/issues-repository';
 
 const idSchema = z.coerce.number().int().positive().max(2147483647);
 const paramsSchema = z.object({ id: idSchema });

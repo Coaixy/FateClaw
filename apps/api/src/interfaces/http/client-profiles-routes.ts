@@ -7,12 +7,12 @@ import {
   getClientProfileForOwnedUser,
   listClientProfilesForOwnedUser,
   updateClientProfileForOwnedUser,
-} from '../../modules/chat/client-profile-service.js';
+} from '#modules/chat/client-profile-service';
 import {
   createClientFollowUpForOwnedUser,
   deleteClientFollowUpForOwnedUser,
   listClientFollowUpsForOwnedUser,
-} from '../../modules/chat/client-follow-up-service.js';
+} from '#modules/chat/client-follow-up-service';
 
 /** 阳历生日 YYYY-MM-DD 格式校验。 */
 const SOLAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

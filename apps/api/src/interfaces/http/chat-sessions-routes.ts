@@ -18,9 +18,9 @@ import {
   restoreOwnedArchivedChatSession,
   shareOwnedChatSessionForUser,
   sendOwnedChatSessionMessage,
-} from '../../modules/chat/chat-session-service.js';
-import { toQueryProcessResponseDto } from '../../contracts-adapter/chat-contract.js';
-import { normalizeChatSessionMessageBody } from '../../modules/chat/pasted-board-input.js';
+} from '#modules/chat/chat-session-service';
+import { toQueryProcessResponseDto } from '#contracts-adapter/chat-contract';
+import { normalizeChatSessionMessageBody } from '#modules/chat/pasted-board-input';
 
 interface TraceLikeEntry {
   type?: unknown;

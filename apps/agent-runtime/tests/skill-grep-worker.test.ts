@@ -10,9 +10,9 @@ import {
   type Skill,
 } from '@earendil-works/pi-coding-agent';
 
-import { createPiSkillGrepTool } from '../src/pi-runtime/tools/skill-grep-tool.js';
-import { SKILL_GREP_TIMEOUT_MS } from '../src/pi-runtime/tools/skill-grep-protocol.js';
-import { createRequestScope } from '../src/request-scope.js';
+import { createPiSkillGrepTool } from '#agent/pi-runtime/tools/skill-grep-tool';
+import { SKILL_GREP_TIMEOUT_MS } from '#agent/pi-runtime/tools/skill-grep-protocol';
+import { createRequestScope } from '#agent/request-scope';
 
 const directories: string[] = [];
 
@@ -87,6 +87,7 @@ async function probe(mode: 'timeout' | 'cancel') {
   const { stdout } = await promisify(execFile)(
     process.execPath,
     [
+      '--conditions=development',
       '--import',
       apiRequire.resolve('tsx'),
       '--input-type=module',

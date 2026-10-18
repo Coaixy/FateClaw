@@ -3,20 +3,20 @@ import {
   type ToolDefinition as PiToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 
-import { createPiCurrentTimeTool } from './tools/current-time-tool.js';
-import { createPiGanzhiByDatetimeTool } from './tools/ganzhi-by-datetime-tool.js';
-import { createPiGanzhiReverseTool } from './tools/ganzhi-reverse-tool.js';
-import { createPiSessionBoardTool } from './tools/session-board-tool.js';
-import { createPiSkillGrepTool } from './tools/skill-grep-tool.js';
-import { createPiSkillReadTool } from './tools/skill-read-tool.js';
+import { createPiCurrentTimeTool } from '#agent/pi-runtime/tools/current-time-tool';
+import { createPiGanzhiByDatetimeTool } from '#agent/pi-runtime/tools/ganzhi-by-datetime-tool';
+import { createPiGanzhiReverseTool } from '#agent/pi-runtime/tools/ganzhi-reverse-tool';
+import { createPiSessionBoardTool } from '#agent/pi-runtime/tools/session-board-tool';
+import { createPiSkillGrepTool } from '#agent/pi-runtime/tools/skill-grep-tool';
+import { createPiSkillReadTool } from '#agent/pi-runtime/tools/skill-read-tool';
 import {
   createPiSoulEditTool,
   createPiSoulReadTool,
-} from './tools/soul-tool.js';
-import type { RequestScope } from '../request-scope.js';
+} from '#agent/pi-runtime/tools/soul-tool';
+import type { RequestScope } from '#agent/request-scope';
 import type { PiToolExecutionRecord } from './types.js';
-import type { SessionBoardContext } from '../types.js';
-import type { SoulStore } from '../deps.js';
+import type { SessionBoardContext } from '#agent/types';
+import type { SoulStore } from '#agent/deps';
 
 /**
  * 创建 Pi custom tools 所需的运行时参数。

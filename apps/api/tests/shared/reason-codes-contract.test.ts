@@ -5,7 +5,7 @@ import { PUBLIC_REASON_CODES as CONTRACT_CODES } from '@fateclaw/contracts';
 // 跨 app 直接引用 agent-runtime 源码：仅测试期由 vitest 转译，不影响两个应用
 // 各自的 tsc 构建边界（apps/api/tsconfig.json 只 include src/**）。
 import { mapContainerErrorToPublicError } from '../../../agent-runtime/src/public-error.js';
-import { mapInternalErrorToPublicError } from '../../src/shared/public-error.js';
+import { mapInternalErrorToPublicError } from '#shared/public-error';
 
 describe('reasonCode 跨包契约', () => {
   it('两侧映射器对共同的错误特征产出相同的 reasonCode', () => {

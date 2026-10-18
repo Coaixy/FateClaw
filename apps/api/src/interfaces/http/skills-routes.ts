@@ -48,7 +48,7 @@ import {
   unsubscribeFromSkill,
   updateSkillBundle,
   updateUserCustomSkill,
-} from '../../modules/skills/skills-service.js';
+} from '#modules/skills/skills-service';
 
 import {
   toMarketBundleDtos,
@@ -60,8 +60,8 @@ import {
   toSharedSkillDetailDto,
   toUserCustomSkillSummaryDto,
   toSubscribedSkillSummaryDto,
-} from '../../contracts-adapter/skills-contract.js';
-import type { TextSkillBundleFile } from '../../shared/types.js';
+} from '#contracts-adapter/skills-contract';
+import type { TextSkillBundleFile } from '#shared/types';
 
 const MAX_MARKET_OFFSET = 10_000;
 

@@ -1,7 +1,7 @@
 import type { UserDto } from '@fateclaw/contracts/auth';
 
-import type { User } from '../shared/types.js';
-import { maskPhoneNumber } from '../modules/user/phone.js';
+import type { User } from '#shared/types';
+import { maskPhoneNumber } from '#modules/user/phone';
 
 /**
  * 将宿主内部用户模型映射为对外稳定 DTO。

@@ -7,10 +7,10 @@ import {
   getUserByAccountId,
   storeConversationLog,
   storeMessage,
-} from '../infrastructure/db.js';
-import { incrementDailyTokens } from '../infrastructure/daily-usage.js';
-import { claimOutboundIpcReceipt } from '../infrastructure/repositories/ipc-receipts-repository.js';
-import { sendMessage as ilinkSendMessage } from '../infrastructure/ilink.js';
+} from '#infrastructure/db';
+import { incrementDailyTokens } from '#infrastructure/daily-usage';
+import { claimOutboundIpcReceipt } from '#infrastructure/repositories/ipc-receipts-repository';
+import { sendMessage as ilinkSendMessage } from '#infrastructure/ilink';
 import {
   PendingInboxRequest,
   ProgressIpcPayload,
@@ -25,14 +25,14 @@ import {
 } from './ipc-payloads.js';
 import { normalizeRuntimeTokenUsage } from './token-usage.js';
 import { releaseLocalAgent } from './local-runner.js';
-import { logger } from '../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 import {
   recordConversationLogFailure,
   recordConversationLogSuccess,
-} from '../shared/conversation-log-metrics.js';
-import { mapInternalErrorToPublicError } from '../shared/public-error.js';
-import { settleBillingReservation } from '../modules/billing/plans.js';
-import { estimateTokens } from '../shared/token-budget.js';
+} from '#shared/conversation-log-metrics';
+import { mapInternalErrorToPublicError } from '#shared/public-error';
+import { settleBillingReservation } from '#modules/billing/plans';
+import { estimateTokens } from '#shared/token-budget';
 
 function formatTokens(n: number): string {
   if (n >= 1000) {

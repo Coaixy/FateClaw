@@ -10,11 +10,11 @@ const { mockGetUserModelSettingsOverview, mockRequireAuth } = vi.hoisted(
   }),
 );
 
-vi.mock('../../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   getUserModelSettingsOverview: mockGetUserModelSettingsOverview,
 }));
 
-import { modelSettingsRoutes } from '../../../src/interfaces/http/model-settings-routes.js';
+import { modelSettingsRoutes } from '#interfaces/http/model-settings-routes';
 
 const overview: ModelSettingsOverviewDto = {
   model: {

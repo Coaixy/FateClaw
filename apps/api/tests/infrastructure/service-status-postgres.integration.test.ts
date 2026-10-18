@@ -10,16 +10,16 @@ import {
   vi,
 } from 'vitest';
 const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
 }));
-import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
+import { MIGRATIONS } from '#infrastructure/migrations/manifest';
 import {
   claimServiceStatusCheck,
   completeServiceStatusCheck,
   listServiceStatusChecks,
   getServiceTokenUsage,
-} from '../../src/infrastructure/repositories/service-status-repository.js';
+} from '#infrastructure/repositories/service-status-repository';
 
 // This must be an explicitly supplied disposable server, never the application's DATABASE_URL.
 const connectionString = process.env.FATECLAW_TEST_SERVICE_STATUS_DATABASE_URL;

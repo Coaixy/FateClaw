@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const runtimeIpcReceiptsMigration: DatabaseMigration = {
   id: '0097_runtime_ipc_receipts',

@@ -2,11 +2,11 @@ import {
   expireUserBonusBalanceBefore,
   getMembershipOverview,
   getUserById,
-} from '../../infrastructure/db.js';
+} from '#infrastructure/db';
 import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
-} from '../../shared/balance-coins.js';
+} from '#shared/balance-coins';
 
 /** Central switch for the currently disabled WeChat integration. */
 const WECHAT_CLAW_FEATURE_ENABLED = false;

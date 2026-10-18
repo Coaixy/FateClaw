@@ -5,19 +5,19 @@
 import {
   getUserByAccountId,
   storeMessage,
-} from '../../infrastructure/db.js';
+} from '#infrastructure/db';
 import {
   sendMessage as ilinkSendMessage,
   parseWeixinMessage,
   WeixinMessage,
-} from '../../infrastructure/ilink.js';
-import { logger } from '../../infrastructure/logger.js';
-import { mapInternalErrorToPublicError } from '../../shared/public-error.js';
+} from '#infrastructure/ilink';
+import { logger } from '#infrastructure/logger';
+import { mapInternalErrorToPublicError } from '#shared/public-error';
 import {
   FREE_WECHAT_UNSUPPORTED_MESSAGE,
-} from '../account/account-service.js';
-import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
-import { Account, NewMessage } from '../../shared/types.js';
+} from '#modules/account/account-service';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
+import { Account, NewMessage } from '#shared/types';
 import {
   handleWechatChatCommand,
   runWechatChatSessionTurn,

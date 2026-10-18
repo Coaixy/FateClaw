@@ -7,9 +7,9 @@ import {
   deleteAccount,
   getAccount,
   getAllAccounts,
-} from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
-import { Account } from '../../shared/types.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { Account } from '#shared/types';
 
 export const WECHAT_DEVICE_BINDING_DISABLED_MESSAGE =
   '微信 Claw 功能当前未开放。';

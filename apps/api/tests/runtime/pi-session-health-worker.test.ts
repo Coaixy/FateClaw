@@ -12,21 +12,21 @@ const {
   mockLockRelease: vi.fn(async () => undefined),
 }));
 
-vi.mock('../../src/modules/admin/admin-service.js', () => ({
+vi.mock('#modules/admin/admin-service', () => ({
   cleanupPiSessionFilesForAdmin: mockCleanupPiSessionFilesForAdmin,
 }));
 
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   getPiSessionHealthPolicy: mockGetPiSessionHealthPolicy,
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   // 锁逻辑已移入共享 helper acquireRedisWorkerLock；pi-worker 不再直接触碰 Redis，
   // 仅 mock 该 helper 以控制「拿到锁 / 被其他实例占用」两种路径。
   acquireRedisWorkerLock: mockAcquireRedisWorkerLock,
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -34,7 +34,7 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-import { runPiSessionHealthOnce } from '../../src/runtime/pi-session-health-worker.js';
+import { runPiSessionHealthOnce } from '#runtime/pi-session-health-worker';
 
 function cleanupResult(mode: 'soft_deleted' | 'inactive') {
   return {

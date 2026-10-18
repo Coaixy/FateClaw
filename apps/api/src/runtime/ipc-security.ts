@@ -3,7 +3,7 @@ import {
   openRuntimeIpc,
   sealRuntimeIpc,
 } from '@fateclaw/contracts/runtime-ipc';
-import { JWT_SECRET } from '../infrastructure/config.js';
+import { JWT_SECRET } from '#infrastructure/config';
 
 export function runtimeIpcKey(accountId: string): string {
   return deriveRuntimeIpcKey(JWT_SECRET, `account:${accountId}`);

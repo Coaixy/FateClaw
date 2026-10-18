@@ -6,15 +6,12 @@ const service = vi.hoisted(() => ({
   getAdminAnnouncements: vi.fn(),
   saveAnnouncement: vi.fn(),
 }));
-vi.mock(
-  '../../../src/modules/announcements/announcement-service.js',
-  () => service,
-);
+vi.mock('#modules/announcements/announcement-service', () => service);
 
 import {
   adminAnnouncementRoutes,
   announcementRoutes,
-} from '../../../src/interfaces/http/announcements-routes.js';
+} from '#interfaces/http/announcements-routes';
 
 describe('announcement HTTP contracts', () => {
   let app: FastifyInstance;

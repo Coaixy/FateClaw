@@ -7,21 +7,18 @@ const f = vi.hoisted(() => ({
   benefitProbe: vi.fn(),
   warn: vi.fn(),
 }));
-vi.mock(
-  '../../src/infrastructure/repositories/service-status-repository.js',
-  () => ({
-    claimServiceStatusCheck: f.claim,
-    completeServiceStatusCheck: f.complete,
-  }),
-);
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#infrastructure/repositories/service-status-repository', () => ({
+  claimServiceStatusCheck: f.claim,
+  completeServiceStatusCheck: f.complete,
+}));
+vi.mock('#modules/system/system-config', () => ({
   resolveOfficialLlmRuntime: f.runtime,
 }));
-vi.mock('../../src/modules/system/model-availability-probe.js', () => ({
+vi.mock('#modules/system/model-availability-probe', () => ({
   probeModelAvailability: f.probe,
   probeBenefitModelAvailability: f.benefitProbe,
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { warn: f.warn },
 }));
 import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
@@ -35,11 +32,11 @@ const nodes: RuntimeModelPoolNode[] = ['a', 'b', 'c'].map((id) => ({
   authMode: 'openai_api_key',
   apiKey: 'synthetic-key',
 }));
-let worker: typeof import('../../src/runtime/service-status-worker.js');
+let worker: typeof import('#runtime/service-status-worker');
 beforeEach(async () => {
   vi.resetAllMocks();
   vi.resetModules();
-  worker = await import('../../src/runtime/service-status-worker.js');
+  worker = await import('#runtime/service-status-worker');
   f.claim.mockImplementation(async (poolKey) =>
     poolKey === 'benefit' ? null : 'lease',
   );

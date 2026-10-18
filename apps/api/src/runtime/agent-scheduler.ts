@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { getRedis } from '../infrastructure/redis.js';
-import { logger } from '../infrastructure/logger.js';
-import { getAgentConcurrencyLimit } from '../modules/system/system-config.js';
-import { MAX_REQUEST_TIMEOUT_MS } from '../shared/timeout-chain.js';
+import { getRedis } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
+import { getAgentConcurrencyLimit } from '#modules/system/system-config';
+import { MAX_REQUEST_TIMEOUT_MS } from '#shared/timeout-chain';
 import {
   ensureLocalAgentRunning,
   retainLocalAgent,

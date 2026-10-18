@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type, type Static } from 'typebox';
 
-import type { SessionBoardContext } from '../../types.js';
+import type { SessionBoardContext } from '#agent/types';
 import {
   makeToolResponder,
   type PiToolRuntimeOptions,

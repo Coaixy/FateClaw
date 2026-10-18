@@ -25,14 +25,14 @@ vi.mock('ioredis', () => ({
     return createClient();
   }),
 }));
-vi.mock('../src/io.js', () => ({ log: vi.fn() }));
+vi.mock('#agent/io', () => ({ log: vi.fn() }));
 
 import {
   connectRedis,
   disconnectRedis,
   getRedis,
   getBlockingRedis,
-} from '../src/redis.js';
+} from '#agent/redis';
 import { Redis } from 'ioredis';
 
 describe('runtime Redis connection lifecycle', () => {

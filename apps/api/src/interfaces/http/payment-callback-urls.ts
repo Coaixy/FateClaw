@@ -5,7 +5,7 @@ import {
   PUBLIC_API_BASE_URL,
   PUBLIC_BASE_URL,
   PUBLIC_WEB_BASE_URL,
-} from '../../infrastructure/config.js';
+} from '#infrastructure/config';
 
 const RECHARGE_NOTIFY_PATH = '/api/billing/recharge/notify';
 const RECHARGE_RETURN_PATH = '/wallet/recharge/result';

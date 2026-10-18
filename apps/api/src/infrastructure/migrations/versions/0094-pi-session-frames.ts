@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const piSessionFramesMigration: DatabaseMigration = {
   id: '0094_pi_session_frames',

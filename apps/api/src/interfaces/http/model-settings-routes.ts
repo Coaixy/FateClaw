@@ -2,13 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
-import { getUserModelSettingsOverview } from '../../modules/system/system-config.js';
-import { saveModelPoolPreference } from '../../infrastructure/repositories/benefit-repository.js';
-import { getChatSession } from '../../infrastructure/repositories/chat-repository.js';
+import { getUserModelSettingsOverview } from '#modules/system/system-config';
+import { saveModelPoolPreference } from '#infrastructure/repositories/benefit-repository';
+import { getChatSession } from '#infrastructure/repositories/chat-repository';
 import {
   claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock,
-} from '../../runtime/ipc-payloads.js';
+} from '#runtime/ipc-payloads';
 
 export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (request) => {

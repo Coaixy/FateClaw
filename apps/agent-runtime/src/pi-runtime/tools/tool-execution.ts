@@ -1,9 +1,9 @@
 import type { AgentToolResult } from '@earendil-works/pi-coding-agent';
 
-import { appendTranscriptEvent } from '../../transcript-store.js';
-import { traceEvent } from '../../trace.js';
-import type { RequestScope } from '../../request-scope.js';
-import type { PiToolExecutionRecord } from '../types.js';
+import { appendTranscriptEvent } from '#agent/transcript-store';
+import { traceEvent } from '#agent/trace';
+import type { RequestScope } from '#agent/request-scope';
+import type { PiToolExecutionRecord } from '#agent/pi-runtime/types';
 
 /**
  * Pi 工具运行时依赖。

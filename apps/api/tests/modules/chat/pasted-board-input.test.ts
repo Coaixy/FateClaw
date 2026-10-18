@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeChatSessionMessageBody } from '../../../src/modules/chat/pasted-board-input.js';
+import { normalizeChatSessionMessageBody } from '#modules/chat/pasted-board-input';
 
 describe('normalizeChatSessionMessageBody', () => {
   it('normalizes a regular chat message', () => {

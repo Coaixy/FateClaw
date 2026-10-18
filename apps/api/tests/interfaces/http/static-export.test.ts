@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveStaticExportRequest } from '../../../src/interfaces/http/static-export.js';
+import { resolveStaticExportRequest } from '#interfaces/http/static-export';
 
 describe('resolveStaticExportRequest', () => {
   it('keeps API misses out of the static export fallback', () => {

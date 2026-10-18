@@ -1,7 +1,7 @@
 import {
   getPiSessionBase,
   getPiSessionSnapshot,
-} from '../../infrastructure/repositories/pi-session-frames-repository.js';
+} from '#infrastructure/repositories/pi-session-frames-repository';
 /**
  * AI 对话会话服务层。
  *
@@ -41,39 +41,39 @@ import {
   restoreArchivedChatSession,
   shareOwnedChatSession,
   updateChatSessionTitle,
-} from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
-import { getRedis } from '../../infrastructure/redis.js';
-import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
-import { cancelAiChatSessionRequest } from '../../runtime/ipc-worker.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { getRedis } from '#infrastructure/redis';
+import { dispatchAiChatPrompt } from '#runtime/resident-agent';
+import { cancelAiChatSessionRequest } from '#runtime/ipc-worker';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
 import {
   claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
-} from '../../runtime/ipc-payloads.js';
+} from '#runtime/ipc-payloads';
 import {
   DEFAULT_OWNED_CHAT_SESSION_TITLE,
   normalizeOwnedChatSessionTitle,
-} from '../../shared/chat-session-title-policy.js';
+} from '#shared/chat-session-title-policy';
 import {
   getRuntimeEntitlementSnapshot,
   type RuntimeEntitlementSnapshot,
-} from '../billing/entitlements.js';
-import type { ChatSession, NewMessage } from '../../shared/types.js';
+} from '#modules/billing/entitlements';
+import type { ChatSession, NewMessage } from '#shared/types';
 import {
   toChatSessionDto,
   toMessageDto,
   toSharedChatSessionDto,
   toSessionMessageListResponseDto,
-} from '../../contracts-adapter/chat-contract.js';
+} from '#contracts-adapter/chat-contract';
 import {
   buildSessionBoardContexts,
   messageHasBoardContext,
   type SessionBoardContextDto,
 } from './active-board-context.js';
 import { buildStructuredInputForSession } from './structured-input.js';
-import { resolveUserLlmRuntime } from '../system/system-config.js';
+import { resolveUserLlmRuntime } from '#modules/system/system-config';
 import {
   getWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
@@ -84,9 +84,9 @@ import {
   getPreferredModelPool,
   BenefitAdmissionError,
   ModelSelectionError,
-} from '../../infrastructure/repositories/benefit-repository.js';
+} from '#infrastructure/repositories/benefit-repository';
 import type { StructuredInput } from './structured-input.js';
-import { BILLING_ARREARS_MESSAGE } from '../billing/plans.js';
+import { BILLING_ARREARS_MESSAGE } from '#modules/billing/plans';
 import {
   deletePiSessionFilesForSession,
   readPiSessionArchiveForSession,

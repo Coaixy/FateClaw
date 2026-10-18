@@ -20,7 +20,7 @@ const {
   mockStoreMessage: vi.fn(async () => undefined),
 }));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getAllAccounts: vi.fn(),
   getAccount: mockGetAccount,
   getUserByAccountId: mockGetUserByAccountId,
@@ -28,21 +28,21 @@ vi.mock('../../src/infrastructure/db.js', () => ({
   storeMessage: mockStoreMessage,
 }));
 
-vi.mock('../../src/infrastructure/daily-usage.js', () => ({
+vi.mock('#infrastructure/daily-usage', () => ({
   incrementDailyTokens: mockIncrementDailyTokens,
 }));
 
-vi.mock('../../src/infrastructure/ilink.js', () => ({
+vi.mock('#infrastructure/ilink', () => ({
   sendMessage: mockSendMessage,
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     del: vi.fn(async () => 1),
   })),
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -51,21 +51,21 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/modules/billing/plans.js', () => ({
+vi.mock('#modules/billing/plans', () => ({
   settleBillingReservation: mockSettleBillingReservation,
 }));
 
-vi.mock('../../src/shared/conversation-log-metrics.js', () => ({
+vi.mock('#shared/conversation-log-metrics', () => ({
   recordConversationLogFailure: vi.fn(),
   recordConversationLogSuccess: vi.fn(),
 }));
 
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#runtime/local-runner', () => ({
   releaseLocalAgent: mockReleaseLocalAgent,
 }));
 
-import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
-import { processOutboxPayload } from '../../src/runtime/ipc-outbox-handler.js';
+import type { PendingInboxRequest } from '#runtime/ipc-payloads';
+import { processOutboxPayload } from '#runtime/ipc-outbox-handler';
 
 describe('processOutboxPayload', () => {
   beforeEach(() => {

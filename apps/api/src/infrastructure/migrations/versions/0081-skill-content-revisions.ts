@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const skillContentRevisionsMigration: DatabaseMigration = {
   id: '0081_skill_content_revisions',

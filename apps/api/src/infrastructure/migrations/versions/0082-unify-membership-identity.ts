@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const unifyMembershipIdentityMigration: DatabaseMigration = {
   id: '0082_unify_membership_identity',

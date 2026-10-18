@@ -1,6 +1,6 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 /**
  * 删除两组已无任何代码接线的死功能表（2026-07-05 大扫除）。

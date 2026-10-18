@@ -6,7 +6,7 @@ const { created, logError } = vi.hoisted(() => ({
   logError: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { error: logError },
 }));
 vi.mock('pg', () => ({
@@ -21,7 +21,7 @@ vi.mock('pg', () => ({
   },
 }));
 
-import { closeDbPool, initDbPool } from '../../src/infrastructure/db-pool.js';
+import { closeDbPool, initDbPool } from '#infrastructure/db-pool';
 
 afterEach(async () => {
   await closeDbPool();

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
-import { getDbPool } from '../db-pool.js';
-import type { ClientProfile } from '../../shared/types.js';
+import { getDbPool } from '#infrastructure/db-pool';
+import type { ClientProfile } from '#shared/types';
 
 const pool = {
   query(sql: string, params?: unknown[]) {

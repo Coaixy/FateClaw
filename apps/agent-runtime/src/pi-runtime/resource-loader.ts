@@ -7,14 +7,14 @@ import {
   type Skill,
 } from '@earendil-works/pi-coding-agent';
 
-import type { AgentRuntimeDeps } from '../deps.js';
-import { traceEvent } from '../trace.js';
-import type { RequestScope } from '../request-scope.js';
-import type { ContainerInput } from '../types.js';
+import type { AgentRuntimeDeps } from '#agent/deps';
+import { traceEvent } from '#agent/trace';
+import type { RequestScope } from '#agent/request-scope';
+import type { ContainerInput } from '#agent/types';
 import {
   getSkillContentCache,
   type SkillSnapshot,
-} from '../skill-content-cache.js';
+} from '#agent/skill-content-cache';
 
 export interface CreatePiResourceLoaderOptions {
   deps: AgentRuntimeDeps;

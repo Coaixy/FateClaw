@@ -4,9 +4,9 @@ import {
   BASELINES,
   MIGRATIONS,
   validateMigrationManifest,
-} from '../../src/infrastructure/migrations/manifest.js';
-import { runDatabaseMigrations } from '../../src/infrastructure/migrations/runner.js';
-import type { DatabaseMigration } from '../../src/infrastructure/migrations/types.js';
+} from '#infrastructure/migrations/manifest';
+import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 interface QueryCall {
   sql: string;

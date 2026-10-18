@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { resolveProjectRoot } from '../../infrastructure/project-root.js';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 
 const PI_SESSION_DIR_ENV = 'FATECLAW_PI_SESSION_DIR';
 

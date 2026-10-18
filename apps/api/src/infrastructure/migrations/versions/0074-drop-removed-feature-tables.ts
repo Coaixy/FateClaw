@@ -1,6 +1,6 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 /**
  * 删除三组已确认为「已删功能残留」的死表（2026-07-05 大扫除补充轮）。

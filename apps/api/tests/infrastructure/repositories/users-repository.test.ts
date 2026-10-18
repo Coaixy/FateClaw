@@ -4,7 +4,7 @@ const { mockGetDbPool } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
@@ -14,8 +14,8 @@ import {
   getUserByIdUsing,
   listUsersPageForAdmin,
   updateUserPasswordHash,
-} from '../../../src/infrastructure/repositories/users-repository.js';
-import type { User } from '../../../src/shared/types.js';
+} from '#infrastructure/repositories/users-repository';
+import type { User } from '#shared/types';
 
 interface QueryCall {
   sql: string;

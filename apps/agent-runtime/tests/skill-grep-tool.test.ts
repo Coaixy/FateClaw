@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMatcher } from '../src/pi-runtime/tools/skill-grep-search.js';
+import { buildMatcher } from '#agent/pi-runtime/tools/skill-grep-search';
 
 describe('skill grep matcher', () => {
   it('matches normal short lines by regex', () => {

@@ -4,11 +4,11 @@ const { mockGetUserSoulContent } = vi.hoisted(() => ({
   mockGetUserSoulContent: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getUserSoulContent: mockGetUserSoulContent,
 }));
 
-import { buildStructuredInputForSession } from '../../../src/modules/chat/structured-input.js';
+import { buildStructuredInputForSession } from '#modules/chat/structured-input';
 
 const identity = {
   runtimeId: 'web:user-1',

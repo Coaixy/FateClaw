@@ -1,9 +1,9 @@
-import { ChatSession, NewMessage } from '../../shared/types.js';
-import { getDbPool, type DbQueryable } from '../db-pool.js';
-import { logger } from '../logger.js';
-import { getRedis } from '../redis.js';
+import { ChatSession, NewMessage } from '#shared/types';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
+import { logger } from '#infrastructure/logger';
+import { getRedis } from '#infrastructure/redis';
 import { getAccountsByUserId } from './accounts-repository.js';
-import { InvalidAiChatPayloadError } from '../../shared/ipc-errors.js';
+import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 
 /** Redis 中每个账号保留的最大历史消息条数。 */
 const HISTORY_REDIS_MAX = 500;

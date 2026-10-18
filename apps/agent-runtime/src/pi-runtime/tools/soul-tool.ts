@@ -7,7 +7,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type, type Static } from 'typebox';
 
-import type { SoulStore } from '../../deps.js';
+import type { SoulStore } from '#agent/deps';
 import {
   completePiToolExecution,
   type PiToolRuntimeOptions,

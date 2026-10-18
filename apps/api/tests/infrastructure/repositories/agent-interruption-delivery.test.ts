@@ -3,13 +3,13 @@ const { query, release } = vi.hoisted(() => ({
   query: vi.fn(),
   release: vi.fn(),
 }));
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => ({ connect: async () => ({ query, release }) }),
 }));
-vi.mock('../../../src/infrastructure/repositories/chat-repository.js', () => ({
+vi.mock('#infrastructure/repositories/chat-repository', () => ({
   storeMessage: vi.fn(),
 }));
-import { withAgentInterruptionDelivery } from '../../../src/infrastructure/repositories/agent-requests-repository.js';
+import { withAgentInterruptionDelivery } from '#infrastructure/repositories/agent-requests-repository';
 
 describe('interruption delivery ownership', () => {
   beforeEach(() => {

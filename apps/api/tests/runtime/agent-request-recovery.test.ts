@@ -11,38 +11,35 @@ const f = vi.hoisted(() => ({
   renew: vi.fn(),
   release: vi.fn(),
 }));
-vi.mock(
-  '../../src/infrastructure/repositories/agent-requests-repository.js',
-  () => ({
-    renewAgentRequestLeases: f.renew,
-    takeRecoverableRequests: f.take,
-    persistAgentFailure: f.failure,
-    interruptAgentRequest: f.interrupt,
-    acknowledgeAgentInterruption: f.ack,
-  }),
-);
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#infrastructure/repositories/agent-requests-repository', () => ({
+  renewAgentRequestLeases: f.renew,
+  takeRecoverableRequests: f.take,
+  persistAgentFailure: f.failure,
+  interruptAgentRequest: f.interrupt,
+  acknowledgeAgentInterruption: f.ack,
+}));
+vi.mock('#runtime/local-runner', () => ({
   ensureLocalAgentRunning: vi.fn(async () => {}),
 }));
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   resolveUserLlmRuntime: f.runtime,
 }));
-vi.mock('../../src/runtime/ipc-worker.js', () => ({
+vi.mock('#runtime/ipc-worker', () => ({
   getPendingAiChatRequests: () => new Map(),
   submitAiChatInboxRequest: f.submit,
   releaseGlobalAgentSlot: f.release,
 }));
-vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
+vi.mock('#runtime/ipc-ai-chat-outbox-handler', () => ({
   processAiChatOutboxPayload: f.deliver,
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { error: vi.fn(), debug: vi.fn() },
 }));
 import {
   recoverAgentRequest,
   runAgentRequestRecoveryOnce,
-} from '../../src/runtime/agent-request-recovery.js';
-import type { DurableRequest } from '../../src/infrastructure/repositories/agent-requests-repository.js';
+} from '#runtime/agent-request-recovery';
+import type { DurableRequest } from '#infrastructure/repositories/agent-requests-repository';
 
 function request(overrides: Partial<DurableRequest> = {}): DurableRequest {
   return {

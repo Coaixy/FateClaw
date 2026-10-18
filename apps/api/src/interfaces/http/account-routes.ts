@@ -12,7 +12,7 @@ import {
   updateOwnedSoulContent,
   updateOwnedUserSoulEditEnabled,
   updateOwnedUserSoulContent,
-} from '../../modules/account/account-http-service.js';
+} from '#modules/account/account-http-service';
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/account — list my accounts

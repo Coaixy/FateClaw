@@ -1,7 +1,7 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
-import { logger } from '../../logger.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
+import { logger } from '#infrastructure/logger';
 
 /**
  * 一次性回收历史遗留的「孤儿 bundle 订阅」——即来源 bundle 已失效但订阅仍 active、继续授予权益的存量脏数据。

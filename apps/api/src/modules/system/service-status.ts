@@ -7,11 +7,11 @@ import {
   getServiceTokenUsage,
   SERVICE_CHECK_INTERVAL_SECONDS,
   SERVICE_STATUS_STALE_SECONDS,
-} from '../../infrastructure/repositories/service-status-repository.js';
+} from '#infrastructure/repositories/service-status-repository';
 import {
   getBenefitSupply,
   getRecentBenefitSuccess,
-} from '../../infrastructure/repositories/benefit-repository.js';
+} from '#infrastructure/repositories/benefit-repository';
 
 export function publicServiceStatus(
   history: ServiceStatusSampleDto[],

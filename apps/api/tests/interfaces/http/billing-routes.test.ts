@@ -5,7 +5,7 @@ const { mockSubscribeCurrentUserMembership } = vi.hoisted(() => ({
   mockSubscribeCurrentUserMembership: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/billing/billing-service.js', () => ({
+vi.mock('#modules/billing/billing-service', () => ({
   getBillingDailyUsage: vi.fn(),
   getBillingOverview: vi.fn(),
   getBillingTransactions: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('../../../src/modules/billing/billing-service.js', () => ({
   subscribeCurrentUserMembership: mockSubscribeCurrentUserMembership,
 }));
 
-vi.mock('../../../src/modules/billing/recharge-service.js', () => ({
+vi.mock('#modules/billing/recharge-service', () => ({
   createRechargeOrderForUser: vi.fn(),
   getRechargeStatsForUser: vi.fn(),
   handleRechargeNotification: vi.fn(),
@@ -22,15 +22,15 @@ vi.mock('../../../src/modules/billing/recharge-service.js', () => ({
   syncRechargeOrderForUser: vi.fn(),
 }));
 
-vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
+vi.mock('#interfaces/http/payment-callback-urls', () => ({
   resolvePaymentCallbackUrls: vi.fn(() => ({
     notify_url: 'https://app.example.test/api/billing/recharge/notify',
     return_url: 'https://app.example.test/wallet/recharge/result',
   })),
 }));
 
-import { billingRoutes } from '../../../src/interfaces/http/billing-routes.js';
-import { subscribeCurrentUserMembership } from '../../../src/modules/billing/billing-service.js';
+import { billingRoutes } from '#interfaces/http/billing-routes';
+import { subscribeCurrentUserMembership } from '#modules/billing/billing-service';
 
 describe('billingRoutes', () => {
   let app: FastifyInstance;

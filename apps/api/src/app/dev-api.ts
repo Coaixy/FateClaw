@@ -7,11 +7,11 @@
  * 使用：pnpm run dev:api-only
  */
 
-import { startApiServer } from '../interfaces/http/server.js';
-import { initDatabase, closeDatabase } from '../infrastructure/db.js';
-import { connectRedis, disconnectRedis } from '../infrastructure/redis.js';
-import { logger } from '../infrastructure/logger.js';
-import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
+import { startApiServer } from '#interfaces/http/server';
+import { initDatabase, closeDatabase } from '#infrastructure/db';
+import { connectRedis, disconnectRedis } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
+import { seedOfficialSkillsFromRegistry } from '#infrastructure/paths';
 
 async function main(): Promise<void> {
   logger.info('API-only 开发模式启动中...');

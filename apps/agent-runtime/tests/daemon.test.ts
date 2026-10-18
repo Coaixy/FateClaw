@@ -1,10 +1,10 @@
-vi.mock('../src/result-spool.js', () => ({
+vi.mock('#agent/result-spool', () => ({
   spoolResult: vi.fn(async () => '/synthetic/result'),
   removeSpooledResult: vi.fn(async () => {}),
   readSpooledResults: vi.fn(async () => []),
 }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeAgentIpc, encodeAgentIpc } from '../src/ipc-security.js';
+import { decodeAgentIpc, encodeAgentIpc } from '#agent/ipc-security';
 
 beforeEach(() => {
   vi.stubEnv('FATECLAW_IPC_KEY', 'a'.repeat(64));
@@ -14,38 +14,38 @@ const { mockLog } = vi.hoisted(() => ({
   mockLog: vi.fn(),
 }));
 
-vi.mock('../src/io.js', () => ({
+vi.mock('#agent/io', () => ({
   log: mockLog,
 }));
 
-vi.mock('../src/agent-db.js', () => ({
+vi.mock('#agent/agent-db', () => ({
   closeAgentDb: vi.fn(),
 }));
 
-vi.mock('../src/context.js', () => ({
+vi.mock('#agent/context', () => ({
   getContext: vi.fn(),
   initContext: vi.fn(() => ({ accountId: 'web:user-1' })),
 }));
 
-vi.mock('../src/redis.js', () => ({
+vi.mock('#agent/redis', () => ({
   connectRedis: vi.fn(),
   disconnectRedis: vi.fn(),
   getRedis: vi.fn(),
 }));
 
-vi.mock('../src/request-boundary.js', () => ({
+vi.mock('#agent/request-boundary', () => ({
   executeContainerInput: vi.fn(),
 }));
 
-import { markRequestActivity } from '../src/request-scope.js';
-import { executeContainerInput } from '../src/request-boundary.js';
-import { getRedis } from '../src/redis.js';
+import { markRequestActivity } from '#agent/request-scope';
+import { executeContainerInput } from '#agent/request-boundary';
+import { getRedis } from '#agent/redis';
 import {
   __buildFatalOutboxResponseForTests,
   __cleanupPendingCancelRequestsForTests,
   __drainCancelRequestsForTests,
   __processInboxMessageForTests,
-} from '../src/daemon.js';
+} from '#agent/daemon';
 
 const VALID_LLM_RUNTIME = {
   piApi: 'anthropic-messages',
@@ -270,10 +270,10 @@ describe('daemon fatal error response', () => {
     const request = {
       accountId: 'a',
       requestId: 'r',
-    } as import('../src/types.js').InboxRequest;
+    } as import('#agent/types').InboxRequest;
     const scope = {
       partialUsage: { promptTokens: 5, completionTokens: 2, totalTokens: 7 },
-    } as import('../src/request-scope.js').RequestScope;
+    } as import('#agent/request-scope').RequestScope;
     const result = __buildFatalOutboxResponseForTests(
       'uncaughtException',
       'synthetic crash',

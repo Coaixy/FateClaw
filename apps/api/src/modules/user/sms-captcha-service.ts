@@ -5,12 +5,12 @@ import {
   ALIYUN_SMS_ACCESS_KEY_ID,
   ALIYUN_SMS_ACCESS_KEY_SECRET,
   ALIYUN_SMS_ENDPOINT,
-} from '../../infrastructure/config.js';
-import { getRedis } from '../../infrastructure/redis.js';
-import { getUserByPhone } from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
+} from '#infrastructure/config';
+import { getRedis } from '#infrastructure/redis';
+import { getUserByPhone } from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
 import { normalizePhoneNumber, isValidMainlandChinaPhone } from './phone.js';
-import { assertRegistrationInviteValid } from '../../infrastructure/repositories/registration-invites-repository.js';
+import { assertRegistrationInviteValid } from '#infrastructure/repositories/registration-invites-repository';
 import { RegistrationInviteError } from './registration-invite-errors.js';
 
 const SMS_CAPTCHA_TTL_MINUTES = 3;

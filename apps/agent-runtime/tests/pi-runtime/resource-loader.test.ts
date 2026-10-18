@@ -3,13 +3,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { createRequestScope } from '../../src/request-scope.js';
-import type { AgentRuntimeDeps } from '../../src/deps.js';
-import type { EffectiveUserSkill } from '../../src/agent-db.js';
-import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
-import { createPiResourceLoader } from '../../src/pi-runtime/resource-loader.js';
+import { createRequestScope } from '#agent/request-scope';
+import type { AgentRuntimeDeps } from '#agent/deps';
+import type { EffectiveUserSkill } from '#agent/agent-db';
+import type { ContainerInput, LlmRuntimeSnapshot } from '#agent/types';
+import { createPiResourceLoader } from '#agent/pi-runtime/resource-loader';
 import { prepareSkillContent } from '@fateclaw/contracts/skills/content';
-import { SkillContentCache } from '../../src/skill-content-cache.js';
+import { SkillContentCache } from '#agent/skill-content-cache';
 
 const roots: string[] = [];
 const originalTextSkillsDir = process.env.FATECLAW_TEXT_SKILLS_DIR;

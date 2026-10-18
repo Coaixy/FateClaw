@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const aiServiceStatusMigration: DatabaseMigration = {
   id: '0085_ai_service_status',

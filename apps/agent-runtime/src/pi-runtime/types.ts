@@ -5,9 +5,9 @@ import type {
   PiSessionSnapshot,
   SkillContextEntry,
   TokenUsage,
-} from '../types.js';
-import type { RequestScope } from '../request-scope.js';
-import type { RequestRuntime } from '../runtime.js';
+} from '#agent/types';
+import type { RequestScope } from '#agent/request-scope';
+import type { RequestRuntime } from '#agent/runtime';
 
 export interface PiRuntimeResult {
   text: string | null;

@@ -14,7 +14,7 @@ import {
   listUserApiKeys,
   revokeUserApiKey,
   toApiKeyDto,
-} from '../../infrastructure/db.js';
+} from '#infrastructure/db';
 
 /** 生成 API Key 的请求体校验。 */
 const CreateApiKeySchema = z.object({

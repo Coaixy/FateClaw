@@ -6,9 +6,9 @@ import {
   getDbPool as getSharedDbPool,
   initDbPool,
 } from './db-pool.js';
-import { runDatabaseMigrations } from './migrations/runner.js';
+import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 import { logger } from './logger.js';
-import { importLegacySkillContent } from '../modules/skills/legacy-skill-import.js';
+import { importLegacySkillContent } from '#modules/skills/legacy-skill-import';
 import {
   bindAccountToUser,
   createAccount,
@@ -22,7 +22,7 @@ import {
   getSoulContent,
   updateAccount,
   updateSoulContent,
-} from './repositories/accounts-repository.js';
+} from '#infrastructure/repositories/accounts-repository';
 import {
   countActiveUserApiKeys,
   createUserApiKey,
@@ -32,7 +32,7 @@ import {
   revokeUserApiKey,
   toApiKeyDto,
   touchApiKeyLastUsed,
-} from './repositories/api-keys-repository.js';
+} from '#infrastructure/repositories/api-keys-repository';
 import {
   createOpenSession,
   findOpenSessionByIdForUser,
@@ -42,7 +42,7 @@ import {
   softDeleteOpenSession,
   toOpenSessionDto,
   touchOpenSessionActivity,
-} from './repositories/open-sessions-repository.js';
+} from '#infrastructure/repositories/open-sessions-repository';
 import {
   getAdminGlobalStats,
   getChatSessionPiArchiveStates,
@@ -54,7 +54,7 @@ import {
   getPiSessionCleanupCursor,
   resetPiSessionCleanupCursor,
   upsertPiSessionCleanupCursor,
-} from './repositories/admin-repository.js';
+} from '#infrastructure/repositories/admin-repository';
 import {
   adjustUserPurchasedBalance,
   cancelUserMembershipsForAdmin,
@@ -93,14 +93,14 @@ import {
   subscribeMembershipWithWallet,
   updateMembershipConfig,
   updateRechargePaymentConfig,
-} from './repositories/billing-repository.js';
+} from '#infrastructure/repositories/billing-repository';
 import type {
   MembershipEntitlementRow,
   RechargeOrderRow,
   RechargePayType,
   RechargePaymentConfigRow,
   RechargeStatsRow,
-} from './repositories/billing-repository.js';
+} from '#infrastructure/repositories/billing-repository';
 import {
   archiveChatSession,
   createChatSession,
@@ -125,7 +125,7 @@ import {
   storeMessage,
   touchChatSession,
   updateChatSessionTitle,
-} from './repositories/chat-repository.js';
+} from '#infrastructure/repositories/chat-repository';
 import {
   createClientProfile,
   getClientProfile,
@@ -133,25 +133,25 @@ import {
   getClientProfilesByUserId,
   softDeleteClientProfile,
   updateClientProfile,
-} from './repositories/client-profiles-repository.js';
-import type { ClientProfileWithStats } from './repositories/client-profiles-repository.js';
+} from '#infrastructure/repositories/client-profiles-repository';
+import type { ClientProfileWithStats } from '#infrastructure/repositories/client-profiles-repository';
 import {
   createClientFollowUp,
   getClientFollowUpsByClientId,
   softDeleteClientFollowUp,
-} from './repositories/client-follow-ups-repository.js';
+} from '#infrastructure/repositories/client-follow-ups-repository';
 import {
   deleteWechatChatSessionLink,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
   upsertWechatChatSessionLink,
-} from './repositories/wechat-session-link-repository.js';
+} from '#infrastructure/repositories/wechat-session-link-repository';
 import {
   createConfigAuditLog,
   getPlatformModelSettings,
   getPlatformModelRuntimeSettings,
   savePlatformModelConfig,
-} from './repositories/config-repository.js';
+} from '#infrastructure/repositories/config-repository';
 import {
   deleteConversationLogsByAccountIds,
   getConversationLogById,
@@ -159,7 +159,7 @@ import {
   getConversationLogSummaries,
   purgeExpiredTraceEvents,
   storeConversationLog,
-} from './repositories/conversation-log-repository.js';
+} from '#infrastructure/repositories/conversation-log-repository';
 import {
   createUser,
   createUserUsing,
@@ -172,7 +172,7 @@ import {
   updateUserSoulEditEnabled,
   updateUserPasswordHash,
   updateUserSoulContent,
-} from './repositories/users-repository.js';
+} from '#infrastructure/repositories/users-repository';
 import {
   createSkillBundle,
   createSkillAccessInvite,
@@ -218,12 +218,12 @@ import {
   unshareUserCustomSkill,
   updateSkillBundle,
   updateUserCustomSkill,
-} from './repositories/skills-repository.js';
+} from '#infrastructure/repositories/skills-repository';
 import type {
   AdminSkillCommentRow,
   RedeemSkillAccessInviteResult,
   SkillAccessInvitePreviewResult,
-} from './repositories/skills-repository.js';
+} from '#infrastructure/repositories/skills-repository';
 
 export {
   countActiveUserApiKeys,

@@ -8,7 +8,7 @@ const { mockGetOwnedChatSessionMessages, mockListOwnedChatSessionBoards } =
     mockListOwnedChatSessionBoards: vi.fn(),
   }));
 
-vi.mock('../../../src/modules/chat/chat-session-service.js', () => ({
+vi.mock('#modules/chat/chat-session-service', () => ({
   archiveOwnedChatSession: vi.fn(),
   createChatSessionForOwnedUser: vi.fn(),
   cancelOwnedChatSessionMessage: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock('../../../src/modules/chat/chat-session-service.js', () => ({
   sendOwnedChatSessionMessage: vi.fn(),
 }));
 
-import { chatSessionsRoutes } from '../../../src/interfaces/http/chat-sessions-routes.js';
+import { chatSessionsRoutes } from '#interfaces/http/chat-sessions-routes';
 
 describe('chat session routes', () => {
   let app: FastifyInstance;

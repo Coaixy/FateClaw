@@ -7,10 +7,10 @@ import {
   type Skill,
 } from '@earendil-works/pi-coding-agent';
 
-import { createRequestScope } from '../../src/request-scope.js';
-import type { SessionBoardContext } from '../../src/types.js';
-import { createPiCustomTools } from '../../src/pi-runtime/tools.js';
-import type { CreatePiToolsOptions } from '../../src/pi-runtime/tools.js';
+import { createRequestScope } from '#agent/request-scope';
+import type { SessionBoardContext } from '#agent/types';
+import { createPiCustomTools } from '#agent/pi-runtime/tools';
+import type { CreatePiToolsOptions } from '#agent/pi-runtime/tools';
 
 const DEFAULT_PI_TOOL_NAMES = [
   'get_current_time',

@@ -1,21 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  initDbPool,
-  getDbPool,
-  closeDbPool,
-} from '../../src/infrastructure/db-pool.js';
-import { piSessionFramesMigration } from '../../src/infrastructure/migrations/versions/0094-pi-session-frames.js';
-import { durableAgentRequestsMigration } from '../../src/infrastructure/migrations/versions/0076-durable-agent-requests.js';
+import { initDbPool, getDbPool, closeDbPool } from '#infrastructure/db-pool';
+import { piSessionFramesMigration } from '#infrastructure/migrations/versions/0094-pi-session-frames';
+import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import {
   storeConversationLog,
   getConversationLogByRequestId,
   purgeExpiredTraceEvents,
-} from '../../src/infrastructure/repositories/conversation-log-repository.js';
+} from '#infrastructure/repositories/conversation-log-repository';
 import {
   getPiSessionBase,
   getPiSessionSnapshot,
-} from '../../src/infrastructure/repositories/pi-session-frames-repository.js';
-import { withAgentResultDelivery } from '../../src/infrastructure/repositories/agent-requests-repository.js';
+} from '#infrastructure/repositories/pi-session-frames-repository';
+import { withAgentResultDelivery } from '#infrastructure/repositories/agent-requests-repository';
 import { createPiSessionFrame } from '@fateclaw/contracts/agent/session';
 import type { PiSessionFrame } from '@fateclaw/contracts/agent';
 

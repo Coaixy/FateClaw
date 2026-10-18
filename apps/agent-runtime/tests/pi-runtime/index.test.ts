@@ -4,20 +4,20 @@ const { mockRunPiSession } = vi.hoisted(() => ({
   mockRunPiSession: vi.fn(),
 }));
 
-vi.mock('../../src/pi-runtime/session.js', () => ({
+vi.mock('#agent/pi-runtime/session', () => ({
   runPiSession: mockRunPiSession,
 }));
 
-import { createRequestScope, setRequestId } from '../../src/request-scope.js';
+import { createRequestScope, setRequestId } from '#agent/request-scope';
 import type {
   Artifact,
   ContainerInput,
   LlmRuntimeSnapshot,
   SkillContextEntry,
-} from '../../src/types.js';
-import type { RequestRuntime } from '../../src/runtime.js';
-import { executePiRuntime } from '../../src/pi-runtime/index.js';
-import type { PiToolExecutionRecord } from '../../src/pi-runtime/types.js';
+} from '#agent/types';
+import type { RequestRuntime } from '#agent/runtime';
+import { executePiRuntime } from '#agent/pi-runtime/index';
+import type { PiToolExecutionRecord } from '#agent/pi-runtime/types';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',

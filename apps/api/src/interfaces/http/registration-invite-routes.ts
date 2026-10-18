@@ -11,7 +11,7 @@ import {
   revokeRegistrationInvite,
   saveRegistrationInvitePolicy,
   updateRegistrationInviteAccount,
-} from '../../infrastructure/repositories/registration-invites-repository.js';
+} from '#infrastructure/repositories/registration-invites-repository';
 import { fixedWindowRateLimit } from './rate-limit.js';
 
 export const RegistrationInviteCodeSchema = z

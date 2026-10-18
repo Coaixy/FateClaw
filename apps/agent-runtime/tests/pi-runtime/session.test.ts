@@ -34,18 +34,18 @@ vi.mock('@earendil-works/pi-coding-agent', async () => {
   };
 });
 
-import { createRequestScope } from '../../src/request-scope.js';
-import type { AgentRuntimeDeps } from '../../src/deps.js';
-import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
-import type { RequestRuntime } from '../../src/runtime.js';
-import { runPiSession } from '../../src/pi-runtime/session.js';
-import * as streamApi from '../../src/ai-chat-stream.js';
-import { SkillContentCache } from '../../src/skill-content-cache.js';
+import { createRequestScope } from '#agent/request-scope';
+import type { AgentRuntimeDeps } from '#agent/deps';
+import type { ContainerInput, LlmRuntimeSnapshot } from '#agent/types';
+import type { RequestRuntime } from '#agent/runtime';
+import { runPiSession } from '#agent/pi-runtime/session';
+import * as streamApi from '#agent/ai-chat-stream';
+import { SkillContentCache } from '#agent/skill-content-cache';
 import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
 import {
   mapContainerErrorToPublicError,
   ModelCallError,
-} from '../../src/public-error.js';
+} from '#agent/public-error';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',

@@ -10,7 +10,7 @@ import {
   type RuntimeModelPoolNode,
 } from '@fateclaw/contracts/model-settings';
 import { randomUUID } from 'node:crypto';
-import { getDbPool } from '../../infrastructure/db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 const DEFAULT_BASE_URLS = {
   'openai-completions': 'https://api.openai.com/v1',

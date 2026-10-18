@@ -18,25 +18,25 @@ const {
   mockFixedWindowRateLimit: vi.fn(),
 }));
 
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit: mockFixedWindowRateLimit,
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getUserById: mockGetUserById,
 }));
 
-vi.mock('../../../src/modules/chat/paipan-service.js', () => ({
+vi.mock('#modules/chat/paipan-service', () => ({
   commitDirectPaipanForOwnedUser: mockCommitDirectPaipanForOwnedUser,
   listDirectPaipanCatalogForOwnedUser: mockListDirectPaipanCatalogForOwnedUser,
   previewDirectPaipanForOwnedUser: mockPreviewDirectPaipanForOwnedUser,
 }));
 
-vi.mock('../../../src/modules/chat/ganzhi-reverse-service.js', () => ({
+vi.mock('#modules/chat/ganzhi-reverse-service', () => ({
   reverseGanzhiForPaipan: mockReverseGanzhiForPaipan,
 }));
 
-import { paipanRoutes } from '../../../src/interfaces/http/paipan-routes.js';
+import { paipanRoutes } from '#interfaces/http/paipan-routes';
 
 describe('paipanRoutes', () => {
   let app: FastifyInstance;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { toUserDto } from '../../src/contracts-adapter/auth-contract.js';
-import type { User } from '../../src/shared/types.js';
+import { toUserDto } from '#contracts-adapter/auth-contract';
+import type { User } from '#shared/types';
 
 function user(overrides: Partial<User> = {}): User {
   return {

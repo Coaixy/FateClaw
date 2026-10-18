@@ -2,7 +2,7 @@ import type {
   AdminCustomSkillDto,
   AdminCustomSkillSummaryDto,
 } from '@fateclaw/contracts/skills';
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 const pool = {
   query(sql: string, params?: unknown[]) {

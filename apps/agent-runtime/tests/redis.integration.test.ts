@@ -5,7 +5,7 @@ import {
   disconnectRedis,
   getRedis,
   getBlockingRedis,
-} from '../src/redis.js';
+} from '#agent/redis';
 
 // Explicit disposable Redis only; never use the application's configured source.
 const testUrl = process.env.FATECLAW_TEST_REDIS_URL;

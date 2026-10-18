@@ -1,7 +1,7 @@
-import { User } from '../../shared/types.js';
-import type { DbQueryable } from '../db-pool.js';
-import { getDbPool } from '../db-pool.js';
-import { queryOne } from '../typed-query.js';
+import { User } from '#shared/types';
+import type { DbQueryable } from '#infrastructure/db-pool';
+import { getDbPool } from '#infrastructure/db-pool';
+import { queryOne } from '#infrastructure/typed-query';
 
 const USER_SELECT_COLUMNS = `
   u.id,

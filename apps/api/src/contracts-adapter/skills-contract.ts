@@ -20,12 +20,12 @@ import {
   resolveSkillAccessInviteStatus,
   type RedeemSkillAccessInviteResult,
   type SkillAccessInvitePreviewResult,
-} from '../infrastructure/db.js';
+} from '#infrastructure/db';
 import type {
   SkillAccessInvite,
   SkillBundle,
   UserCustomSkill,
-} from '../shared/types.js';
+} from '#shared/types';
 
 /**
  * 公开分享与订阅场景不再暴露创作者联系方式，只返回统一的安全标识。

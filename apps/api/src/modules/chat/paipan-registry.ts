@@ -1,10 +1,10 @@
-import { runBaziPaipan } from './paipan-runners/bazi.js';
-import { runIchingPaipan } from './paipan-runners/iching.js';
-import { runJingzhanPaipan } from './paipan-runners/jingzhan.js';
-import { runLiurenPaipan } from './paipan-runners/liuren.js';
-import { runMeihuaPaipan } from './paipan-runners/meihua.js';
-import { runQimenPaipan } from './paipan-runners/qimen.js';
-import { runZiweiPaipan } from './paipan-runners/ziwei.js';
+import { runBaziPaipan } from '#modules/chat/paipan-runners/bazi';
+import { runIchingPaipan } from '#modules/chat/paipan-runners/iching';
+import { runJingzhanPaipan } from '#modules/chat/paipan-runners/jingzhan';
+import { runLiurenPaipan } from '#modules/chat/paipan-runners/liuren';
+import { runMeihuaPaipan } from '#modules/chat/paipan-runners/meihua';
+import { runQimenPaipan } from '#modules/chat/paipan-runners/qimen';
+import { runZiweiPaipan } from '#modules/chat/paipan-runners/ziwei';
 
 export type SkillParamType =
   | 'string'

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { mapContainerErrorToPublicError } from '../src/public-error.js';
-import type { LlmRuntimeSnapshot } from '../src/types.js';
+import { mapContainerErrorToPublicError } from '#agent/public-error';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 
 const customRuntime = {
   source: 'custom',

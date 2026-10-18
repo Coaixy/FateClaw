@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
-import { getRedis } from '../infrastructure/redis.js';
-import { logger } from '../infrastructure/logger.js';
+import { getRedis } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
 
 export const CAPACITY_CHANNEL = 'agent:capacity:changed';
 

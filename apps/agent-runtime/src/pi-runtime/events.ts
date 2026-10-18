@@ -4,14 +4,14 @@ import {
   type ModelFailure,
 } from '@fateclaw/contracts/model-settings';
 
-import { appendTranscriptEvent } from '../transcript-store.js';
-import { traceEvent } from '../trace.js';
-import { markRequestActivity, type RequestScope } from '../request-scope.js';
+import { appendTranscriptEvent } from '#agent/transcript-store';
+import { traceEvent } from '#agent/trace';
+import { markRequestActivity, type RequestScope } from '#agent/request-scope';
 import type {
   AiChatProgressOutboxMessage,
   AiChatStreamEvent,
   TokenUsage,
-} from '../types.js';
+} from '#agent/types';
 
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;

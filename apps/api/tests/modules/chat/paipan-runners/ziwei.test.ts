@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { astro } from 'iztro';
 
-import { runZiweiPaipan } from '../../../../src/modules/chat/paipan-runners/ziwei.js';
+import { runZiweiPaipan } from '#modules/chat/paipan-runners/ziwei';
 
 describe('ziwei-paipan mutagens', () => {
   it('returns natal, palace stem and annual mutagen data', async () => {

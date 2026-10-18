@@ -7,12 +7,9 @@
 
 import type { MessageDto } from '@fateclaw/contracts/chat';
 
-import {
-  getAccountsByUserId,
-  getRecentMessages,
-} from '../../infrastructure/db.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { toMessageDto } from '../../contracts-adapter/chat-contract.js';
+import { getAccountsByUserId, getRecentMessages } from '#infrastructure/db';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import { toMessageDto } from '#contracts-adapter/chat-contract';
 
 export async function listMessagesForOwnedAccount(
   userId: string,

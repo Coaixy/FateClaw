@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { getPool } = vi.hoisted(() => ({ getPool: vi.fn() }));
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: getPool,
 }));
 import {
   getPlatformModelRuntimeSettings,
   getPlatformModelSettings,
   savePlatformModelConfig,
-} from '../../../src/infrastructure/repositories/config-repository.js';
+} from '#infrastructure/repositories/config-repository';
 
 const model = {
   id: 'node-a',

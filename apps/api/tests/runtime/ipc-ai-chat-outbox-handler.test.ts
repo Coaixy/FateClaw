@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeRuntimeIpc } from '../../src/runtime/ipc-security.js';
+import { decodeRuntimeIpc } from '#runtime/ipc-security';
 
 const {
   mockInterruption,
@@ -42,15 +42,12 @@ const {
   mockIncrementDailyMessageCount: vi.fn(async () => undefined),
 }));
 
-vi.mock(
-  '../../src/infrastructure/repositories/agent-requests-repository.js',
-  () => ({
-    withAgentResultDelivery: mockDeliver,
-    withAgentInterruptionDelivery: mockInterruption,
-  }),
-);
+vi.mock('#infrastructure/repositories/agent-requests-repository', () => ({
+  withAgentResultDelivery: mockDeliver,
+  withAgentInterruptionDelivery: mockInterruption,
+}));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getAllAccounts: vi.fn(),
   getUserById: vi.fn(),
   // 「先落库后结算」的扣费金额回填路径。
@@ -60,12 +57,12 @@ vi.mock('../../src/infrastructure/db.js', () => ({
   touchChatSession: mockTouchChatSession,
 }));
 
-vi.mock('../../src/infrastructure/daily-usage.js', () => ({
+vi.mock('#infrastructure/daily-usage', () => ({
   incrementDailyMessageCount: mockIncrementDailyMessageCount,
   incrementDailyTokens: mockIncrementDailyTokens,
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     del: mockDel,
     eval: mockEval,
@@ -73,7 +70,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     error: vi.fn(),
     info: vi.fn(),
@@ -81,24 +78,24 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/modules/billing/plans.js', () => ({
+vi.mock('#modules/billing/plans', () => ({
   settleBillingReservationDetailed: mockSettleBillingReservationDetailed,
   recoverStalePendingReservation: mockRecover,
   settleBillingReservation: mockSettleBillingReservation,
 }));
 
-vi.mock('../../src/shared/conversation-log-metrics.js', () => ({
+vi.mock('#shared/conversation-log-metrics', () => ({
   recordConversationLogFailure: vi.fn(),
   recordConversationLogSuccess: vi.fn(),
 }));
 
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#runtime/local-runner', () => ({
   releaseLocalAgent: mockReleaseLocalAgent,
 }));
 
-import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
-import { getUserById } from '../../src/infrastructure/db.js';
-import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
+import type { PendingInboxRequest } from '#runtime/ipc-payloads';
+import { getUserById } from '#infrastructure/db';
+import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
 
 describe('processAiChatOutboxPayload', () => {
   beforeEach(() => {

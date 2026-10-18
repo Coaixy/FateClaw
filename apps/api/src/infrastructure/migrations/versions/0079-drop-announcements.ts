@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const dropAnnouncementsMigration: DatabaseMigration = {
   id: '0079_drop_announcements',

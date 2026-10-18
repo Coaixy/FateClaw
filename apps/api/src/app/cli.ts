@@ -1,15 +1,15 @@
 /**
- * FateClaw CLI - 交互式命令入口
+ * FateClaw CLI entry point.
  *
- * 用法:
- *   npx tsx apps/api/src/app/cli.ts login    扫码登录微信账号
- *   npx tsx apps/api/src/app/cli.ts list     列出已绑定的账号
- *   npx tsx apps/api/src/app/cli.ts remove   移除账号
+ * Run from the repository root:
+ *   pnpm run login            Bind a WeChat account.
+ *   pnpm run accounts         List bound accounts.
+ *   pnpm run account:remove   Remove an account.
  */
 
-import { initDatabase } from '../infrastructure/db.js';
+import { initDatabase } from '#infrastructure/db';
 import { addAccount, listAccounts, removeAccount } from './index.js';
-import { scanLogin } from '../infrastructure/ilink.js';
+import { scanLogin } from '#infrastructure/ilink';
 
 async function cmdLogin(): Promise<void> {
   await initDatabase();
@@ -39,9 +39,7 @@ async function cmdList(): Promise<void> {
   const accounts = await listAccounts();
 
   if (accounts.length === 0) {
-    console.log(
-      '暂无绑定账号。运行 "npx tsx apps/api/src/app/cli.ts login" 添加。',
-    );
+    console.log('暂无绑定账号。运行 "pnpm run login" 添加。');
     return;
   }
 
@@ -93,11 +91,11 @@ switch (cmd) {
     await cmdRemove();
     break;
   default:
-    console.log(`用法: npx tsx apps/api/src/app/cli.ts <command>
+    console.log(`用法:
 
 命令:
-  login   扫码登录微信账号（ClawBot）
-  list    列出已绑定的账号
-  remove  移除账号
+  pnpm run login            扫码登录微信账号（ClawBot）
+  pnpm run accounts         列出已绑定的账号
+  pnpm run account:remove   移除账号
 `);
 }

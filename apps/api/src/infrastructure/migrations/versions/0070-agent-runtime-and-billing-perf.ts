@@ -1,6 +1,6 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 /**
  * 补登「agent 运行时超时/并发配置」与「账单/用量性能索引」。

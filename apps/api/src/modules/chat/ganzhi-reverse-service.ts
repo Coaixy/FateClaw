@@ -10,7 +10,7 @@ import type {
   PaipanGanzhiReverseResponseDto,
 } from '@fateclaw/contracts/chat';
 
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
 
 const MAX_REVERSE_YEAR_SPAN = 240;
 const DEFAULT_REVERSE_LIMIT = 50;

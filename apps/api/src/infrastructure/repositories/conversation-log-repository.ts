@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 import { isPiSessionFrame } from '@fateclaw/contracts/agent/session';
 import {
   getPiSessionSnapshot,

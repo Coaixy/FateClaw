@@ -16,27 +16,27 @@ const {
   mockListAdminIssues: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   BILLING_RESERVATION_STALE_MS: 2_400_000,
   MANAGER_KEY: 'test-manager-key',
   USER_MANAGER_KEY: 'test-user-manager-key',
 }));
 
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   rateLimitCheck: mockRateLimitCheck,
   rateLimitClear: mockRateLimitClear,
   rateLimitRecordFail: mockRateLimitRecordFail,
   fixedWindowRateLimit: mockFixedWindowRateLimit,
 }));
 
-vi.mock('../../../src/modules/issues/issue-service.js', () => ({
+vi.mock('#modules/issues/issue-service', () => ({
   listAdminIssues: mockListAdminIssues,
   getAdminIssue: vi.fn(),
   getPublicIssue: vi.fn(),
   listPublicIssues: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/announcements/announcement-service.js', () => ({
+vi.mock('#modules/announcements/announcement-service', () => ({
   getAdminAnnouncements: vi.fn(async () => ({
     items: [],
     total: 0,
@@ -47,7 +47,7 @@ vi.mock('../../../src/modules/announcements/announcement-service.js', () => ({
   saveAnnouncement: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/admin/admin-service.js', () => ({
+vi.mock('#modules/admin/admin-service', () => ({
   adjustUserPurchasedBalance: vi.fn(),
   cancelAdminUserMembership: vi.fn(),
   cleanupPiSessionFilesForAdmin: vi.fn(),
@@ -91,14 +91,14 @@ vi.mock('../../../src/modules/admin/admin-service.js', () => ({
   updateAdminRechargePaymentConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/interfaces/http/payment-callback-urls.js', () => ({
+vi.mock('#interfaces/http/payment-callback-urls', () => ({
   resolvePaymentCallbackUrls: vi.fn(() => ({
     notify_url: 'https://app.example.test/api/billing/recharge/notify',
     return_url: 'https://app.example.test/wallet/recharge/result',
   })),
 }));
 
-import { adminRoutes } from '../../../src/interfaces/http/admin-routes.js';
+import { adminRoutes } from '#interfaces/http/admin-routes';
 import {
   adjustUserPurchasedBalance,
   cancelAdminUserMembership,
@@ -121,7 +121,7 @@ import {
   setAdminUserMembership,
   setSkillCommentPinnedForAdmin,
   saveOfficialModelSettings,
-} from '../../../src/modules/admin/admin-service.js';
+} from '#modules/admin/admin-service';
 
 function skillCommentFixture(overrides: Record<string, unknown> = {}) {
   return {

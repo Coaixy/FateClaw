@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
-import { runDatabaseMigrations } from '../../src/infrastructure/migrations/runner.js';
+import { MIGRATIONS } from '#infrastructure/migrations/manifest';
+import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 
 // This opt-in connection must point to a disposable server with CREATE DATABASE permission.
 const connectionString = process.env.FATECLAW_TEST_MIGRATIONS_DATABASE_URL;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatJingzhanPaipan } from '../../../../src/modules/chat/paipan-formatters/jingzhan.js';
-import { runJingzhanPaipan } from '../../../../src/modules/chat/paipan-runners/jingzhan.js';
+import { formatJingzhanPaipan } from '#modules/chat/paipan-formatters/jingzhan';
+import { runJingzhanPaipan } from '#modules/chat/paipan-runners/jingzhan';
 
 describe('formatJingzhanPaipan 高岛易断解读小节', () => {
   it('存在 gaoDaoYiDuan 时输出本卦总论与逐条动爻详解', async () => {

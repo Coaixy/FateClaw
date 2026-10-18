@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   attachStreamSocket,
   StreamSubscriptions,
-} from '../../src/runtime/stream-sockets.js';
+} from '#runtime/stream-sockets';
 
 function subscriber() {
   return Object.assign(new EventEmitter(), {

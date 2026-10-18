@@ -1,4 +1,4 @@
-import { getRedis } from '../infrastructure/redis.js';
+import { getRedis } from '#infrastructure/redis';
 import type { Redis } from 'ioredis';
 
 export function processingOutboxKey(queue: string): string {

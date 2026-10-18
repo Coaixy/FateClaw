@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatZiweiPaipan } from '../../../../src/modules/chat/paipan-formatters/ziwei.js';
+import { formatZiweiPaipan } from '#modules/chat/paipan-formatters/ziwei';
 
 describe('formatZiweiPaipan', () => {
   it('prints adjective and decorative stars in palace lines', () => {

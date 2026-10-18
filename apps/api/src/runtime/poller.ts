@@ -5,11 +5,11 @@
  * 同一网页 AI Chat session 的互斥由 session processing lock 负责；微信侧限制并发和待处理积压。
  */
 
-import { updateAccount } from '../infrastructure/db.js';
-import { getUpdates, IlinkAccount } from '../infrastructure/ilink.js';
-import { logger } from '../infrastructure/logger.js';
-import { processWeixinMessage } from '../modules/chat/message-handler.js';
-import { Account } from '../shared/types.js';
+import { updateAccount } from '#infrastructure/db';
+import { getUpdates, IlinkAccount } from '#infrastructure/ilink';
+import { logger } from '#infrastructure/logger';
+import { processWeixinMessage } from '#modules/chat/message-handler';
+import { Account } from '#shared/types';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

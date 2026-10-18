@@ -9,17 +9,13 @@ vi.mock('ioredis', () => ({
     return client;
   }),
 }));
-vi.mock('../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   REDIS_URL: 'redis://127.0.0.1:1',
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { info: vi.fn() },
 }));
-import {
-  connectRedis,
-  disconnectRedis,
-  getRedis,
-} from '../../src/infrastructure/redis.js';
+import { connectRedis, disconnectRedis, getRedis } from '#infrastructure/redis';
 describe('API Redis lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();

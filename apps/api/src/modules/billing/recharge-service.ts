@@ -21,15 +21,15 @@ import {
   type RechargeOrderRow,
   type RechargePaymentConfigRow,
   type RechargePayType,
-} from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
 import {
   toRechargeOrderDto,
   toRechargeOrdersDto,
   toRechargeStatsDto,
-} from '../../contracts-adapter/billing-contract.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { roundCoinsToCents } from '../../shared/balance-coins.js';
+} from '#contracts-adapter/billing-contract';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import { roundCoinsToCents } from '#shared/balance-coins';
 import {
   createEpayPayment,
   isSafeEpayUrlPrefix,

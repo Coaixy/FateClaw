@@ -9,21 +9,21 @@ import type {
   SkillContextEntryDto,
 } from '@fateclaw/contracts/chat';
 
-import { getPreferredModelPool } from '../../infrastructure/repositories/benefit-repository.js';
+import { getPreferredModelPool } from '#infrastructure/repositories/benefit-repository';
 import {
   createChatSession,
   getChatSession,
   storeMessage,
   touchChatSession,
-} from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
-import { getRedis } from '../../infrastructure/redis.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { getRedis } from '#infrastructure/redis';
 import {
   toChatSessionDto,
   toMessageDto,
-} from '../../contracts-adapter/chat-contract.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import type { ChatSession, NewMessage } from '../../shared/types.js';
+} from '#contracts-adapter/chat-contract';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import type { ChatSession, NewMessage } from '#shared/types';
 import { applyClientProfilePrefill } from './client-profile-service.js';
 import {
   DirectPaipanError,

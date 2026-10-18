@@ -3,7 +3,7 @@ import type {
   SkillContextEntryDto,
 } from '@fateclaw/contracts/chat';
 
-import { getResolvedEnabledOfficialSkillNames } from '../../infrastructure/db.js';
+import { getResolvedEnabledOfficialSkillNames } from '#infrastructure/db';
 import {
   getPaipanRegistryEntry,
   listPaipanRegistry,

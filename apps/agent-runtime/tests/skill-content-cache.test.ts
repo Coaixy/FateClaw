@@ -6,7 +6,7 @@ import {
   prepareSkillContent,
   type SkillContentRevision,
 } from '@fateclaw/contracts/skills/content';
-import { SkillContentCache } from '../src/skill-content-cache.js';
+import { SkillContentCache } from '#agent/skill-content-cache';
 
 const roots: string[] = [];
 function root(): string {

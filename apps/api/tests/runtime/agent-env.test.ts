@@ -5,19 +5,16 @@ const { mockGetUserByAccountId, mockGetUserById } = vi.hoisted(() => ({
   mockGetUserById: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getUserByAccountId: mockGetUserByAccountId,
   getUserById: mockGetUserById,
 }));
 
-vi.mock('../../src/modules/chat/web-chat-runtime.js', () => ({
+vi.mock('#modules/chat/web-chat-runtime', () => ({
   getUserIdFromWebChatRuntimeId: vi.fn(() => null),
 }));
 
-import {
-  agentEnvToRecord,
-  buildAgentEnv,
-} from '../../src/runtime/agent-env.js';
+import { agentEnvToRecord, buildAgentEnv } from '#runtime/agent-env';
 
 describe('buildAgentEnv', () => {
   beforeEach(() => {

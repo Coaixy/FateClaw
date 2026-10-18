@@ -16,7 +16,7 @@ import {
 import {
   getSkillBundleLimitsPolicy,
   getUserSkillLimitPolicy,
-} from '../system/system-config.js';
+} from '#modules/system/system-config';
 
 import {
   createSkillBundle,
@@ -56,7 +56,7 @@ import {
   unshareUserCustomSkill,
   updateSkillBundle,
   updateUserCustomSkill,
-} from '../../infrastructure/db.js';
+} from '#infrastructure/db';
 import { normalizeCategory } from './category-map.js';
 export { SkillRevisionConflictError } from './skill-errors.js';
 

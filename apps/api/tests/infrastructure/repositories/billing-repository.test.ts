@@ -8,19 +8,19 @@ const { mockGetDbPool, mockGetUserByIdUsing, mockLoggerWarn } = vi.hoisted(
   }),
 );
 
-vi.mock('../../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   MAX_OVERDRAFT_COINS: 50,
 }));
 
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
-vi.mock('../../../src/infrastructure/repositories/users-repository.js', () => ({
+vi.mock('#infrastructure/repositories/users-repository', () => ({
   getUserByIdUsing: mockGetUserByIdUsing,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     warn: mockLoggerWarn,
     // billing-repository 现引入 config.js → env.js，后者在无 .env 时会调 logger.debug
@@ -52,7 +52,7 @@ import {
   subscribeMembershipWithWallet,
   MembershipSubscribeDebounceError,
   cancelUserMembershipsForAdmin,
-} from '../../../src/infrastructure/repositories/billing-repository.js';
+} from '#infrastructure/repositories/billing-repository';
 
 interface QueryCall {
   sql: string;
@@ -579,7 +579,7 @@ describe('billing repository', () => {
     );
 
     const { settleUserModelChargeCoins } =
-      await import('../../../src/infrastructure/repositories/billing-repository.js');
+      await import('#infrastructure/repositories/billing-repository');
 
     await expect(
       settleUserModelChargeCoins('request-1', 141_873, 0.63),
@@ -647,7 +647,7 @@ describe('billing repository', () => {
     );
 
     const { settleUserModelChargeCoins } =
-      await import('../../../src/infrastructure/repositories/billing-repository.js');
+      await import('#infrastructure/repositories/billing-repository');
 
     await expect(
       settleUserModelChargeCoins('request-1', 2_000_000, 500),
@@ -719,7 +719,7 @@ describe('billing repository', () => {
     );
 
     const { settleUserModelChargeCoins } =
-      await import('../../../src/infrastructure/repositories/billing-repository.js');
+      await import('#infrastructure/repositories/billing-repository');
 
     await expect(
       settleUserModelChargeCoins('request-1', 1000, 0.63),

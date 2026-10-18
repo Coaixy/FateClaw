@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   runIchingPaipan,
   type IchingPaipanResult,
-} from '../../../../src/modules/chat/paipan-runners/iching.js';
+} from '#modules/chat/paipan-runners/iching';
 
 async function runPaipan(
   input: Record<string, unknown> = {},

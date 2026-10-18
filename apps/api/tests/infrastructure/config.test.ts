@@ -14,7 +14,7 @@ afterEach(() => {
 describe('infrastructure config', () => {
   it('does not expose model provider defaults from environment config', async () => {
     vi.resetModules();
-    const config = await import('../../src/infrastructure/config.js');
+    const config = await import('#infrastructure/config');
 
     expect(config).not.toHaveProperty('AGENT_MODEL');
   });
@@ -24,7 +24,7 @@ describe('infrastructure config', () => {
       'https://www.letfate.com, https://admin.letfate.com/path, invalid';
     vi.resetModules();
 
-    const config = await import('../../src/infrastructure/config.js');
+    const config = await import('#infrastructure/config');
 
     expect(config.ALLOWED_ORIGINS).toEqual([
       'https://www.letfate.com',

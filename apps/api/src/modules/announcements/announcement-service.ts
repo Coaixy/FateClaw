@@ -11,7 +11,7 @@ import {
   listPublishedAnnouncements,
   writeAnnouncementRow,
   type AnnouncementRow,
-} from '../../infrastructure/repositories/announcements-repository.js';
+} from '#infrastructure/repositories/announcements-repository';
 
 function adminDto(row: AnnouncementRow): AdminAnnouncementDto {
   return {

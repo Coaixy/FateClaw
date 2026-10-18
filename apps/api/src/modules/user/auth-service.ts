@@ -7,15 +7,15 @@ import {
   getUserByPhone,
   getUserById,
   updateUserPasswordHash,
-} from '../../infrastructure/db.js';
-import { User } from '../../shared/types.js';
-import { toUserDto } from '../../contracts-adapter/auth-contract.js';
+} from '#infrastructure/db';
+import { User } from '#shared/types';
+import { toUserDto } from '#contracts-adapter/auth-contract';
 import { isValidMainlandChinaPhone, normalizePhoneNumber } from './phone.js';
 import { verifySMSCaptcha } from './sms-captcha-service.js';
 import {
   assertRegistrationInviteValid,
   createInvitedUser,
-} from '../../infrastructure/repositories/registration-invites-repository.js';
+} from '#infrastructure/repositories/registration-invites-repository';
 import { RegistrationInviteError } from './registration-invite-errors.js';
 
 const SALT_ROUNDS = 10;

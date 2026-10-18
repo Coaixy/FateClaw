@@ -13,9 +13,9 @@ import { InvalidRuntimeIpcError } from '@fateclaw/contracts/runtime-ipc';
  * WeChat outboxes are excluded because external sends are not safely replayable.
  */
 
-import { sendOpsAlert } from '../infrastructure/alerts.js';
-import { acquireRedisWorkerLock, getRedis } from '../infrastructure/redis.js';
-import { logger } from '../infrastructure/logger.js';
+import { sendOpsAlert } from '#infrastructure/alerts';
+import { acquireRedisWorkerLock, getRedis } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 import {
   releaseGlobalAgentSlot,
@@ -25,7 +25,7 @@ import {
   AI_CHAT_OUTBOX_ORPHAN_MS,
   INBOX_STALL_FAIL_MS,
   INBOX_STALL_WARN_MS,
-} from '../shared/timeout-chain.js';
+} from '#shared/timeout-chain';
 import {
   InvalidAiChatPayloadError,
   buildAiChatErrorResponsePayload,

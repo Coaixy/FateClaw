@@ -9,9 +9,9 @@ import { StreamSubscriptions, attachStreamSocket } from './stream-sockets.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 
-import { getChatSession, getUserById } from '../infrastructure/db.js';
-import { logger } from '../infrastructure/logger.js';
-import { getRedis } from '../infrastructure/redis.js';
+import { getChatSession, getUserById } from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { getRedis } from '#infrastructure/redis';
 import type {
   ProgressIpcPayload,
   ResponseIpcPayload,

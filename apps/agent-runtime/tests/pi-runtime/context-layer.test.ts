@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRequestScope } from '../../src/request-scope.js';
-import type { AgentRuntimeDeps } from '../../src/deps.js';
-import type { ContainerInput, LlmRuntimeSnapshot } from '../../src/types.js';
-import type { RequestRuntime } from '../../src/runtime.js';
-import { createPiSessionContext } from '../../src/pi-runtime/context-layer.js';
+import { createRequestScope } from '#agent/request-scope';
+import type { AgentRuntimeDeps } from '#agent/deps';
+import type { ContainerInput, LlmRuntimeSnapshot } from '#agent/types';
+import type { RequestRuntime } from '#agent/runtime';
+import { createPiSessionContext } from '#agent/pi-runtime/context-layer';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',

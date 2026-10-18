@@ -11,10 +11,10 @@ import type {
   RegistrationInvitePreviewDto,
   RegistrationInviteSummaryDto,
 } from '@fateclaw/contracts/auth';
-import { RegistrationInviteError } from '../../modules/user/registration-invite-errors.js';
-import type { User } from '../../shared/types.js';
-import { getDbPool, type DbQueryable } from '../db-pool.js';
-import { queryOne, queryRows } from '../typed-query.js';
+import { RegistrationInviteError } from '#modules/user/registration-invite-errors';
+import type { User } from '#shared/types';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
+import { queryOne, queryRows } from '#infrastructure/typed-query';
 import { createUserUsing } from './users-repository.js';
 
 interface PolicyRow {

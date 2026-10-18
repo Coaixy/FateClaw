@@ -11,8 +11,8 @@
 
 import crypto from 'node:crypto';
 
-import { JWT_SECRET } from '../../infrastructure/config.js';
-import { getRedis } from '../../infrastructure/redis.js';
+import { JWT_SECRET } from '#infrastructure/config';
+import { getRedis } from '#infrastructure/redis';
 
 const CAPTCHA_TTL_MS = 2 * 60 * 1000; // 2 分钟
 const CAPTCHA_TTL_SECONDS = CAPTCHA_TTL_MS / 1000;

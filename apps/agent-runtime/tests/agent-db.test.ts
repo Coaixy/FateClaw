@@ -35,7 +35,7 @@ import {
   queryEffectiveUserSkills,
   querySkillContentRevision,
   updateSoulContentDb,
-} from '../src/agent-db.js';
+} from '#agent/agent-db';
 
 describe('agent-db effective user skills', () => {
   beforeEach(async () => {

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/modules/chat/paipan-runtime.js', () => ({
+vi.mock('#modules/chat/paipan-runtime', () => ({
   isDirectPaipanSkill: vi.fn((skill: string) =>
     ['bazi-paipan', 'qimen-paipan'].includes(skill),
   ),
 }));
 
-import { buildSessionBoardContexts } from '../../../src/modules/chat/active-board-context.js';
+import { buildSessionBoardContexts } from '#modules/chat/active-board-context';
 
 describe('buildSessionBoardContexts', () => {
   it('collects all official and pasted boards while selected id only marks current', () => {

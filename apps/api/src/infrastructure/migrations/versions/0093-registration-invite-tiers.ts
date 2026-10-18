@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const registrationInviteTiersMigration: DatabaseMigration = {
   id: '0093_registration_invite_tiers',

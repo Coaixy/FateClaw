@@ -3,7 +3,7 @@ import type {
   BenefitSupplyState,
   ModelPoolKey,
 } from '@fateclaw/contracts/model-settings';
-import { getDbPool, type DbQueryable } from '../db-pool.js';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 import { getActiveMembershipForUserUsing } from './billing-repository.js';
 
 export class BenefitAdmissionError extends Error {

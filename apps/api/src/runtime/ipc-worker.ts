@@ -22,21 +22,21 @@ import {
 
 import { Redis } from 'ioredis';
 
-import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
-import { LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS } from '../infrastructure/config.js';
+import { getUserByAccountId, getUserById } from '#infrastructure/db';
+import { LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS } from '#infrastructure/config';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 import {
   getRuntimeEntitlementSnapshot,
   type RuntimeEntitlementSnapshot,
-} from '../modules/billing/entitlements.js';
+} from '#modules/billing/entitlements';
 
 import {
   AGENT_REQUEST_TIMEOUT_MS as AGENT_REQUEST_TIMEOUT,
   AI_CHAT_REQUEST_TIMEOUT_MS as AI_CHAT_REQUEST_TIMEOUT,
   MAX_REQUEST_TIMEOUT_MS,
   SESSION_PROCESSING_LOCK_TTL_SECONDS,
-} from '../shared/timeout-chain.js';
+} from '#shared/timeout-chain';
 
 const GLOBAL_AGENT_GATE_POLL_MS = 500;
 const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
@@ -53,36 +53,36 @@ import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
 } from './ipc-payloads.js';
-import { logger } from '../infrastructure/logger.js';
-import type { BillingReservation } from '../modules/billing/plans.js';
+import { logger } from '#infrastructure/logger';
+import type { BillingReservation } from '#modules/billing/plans';
 import {
   applyNonMemberPricingMarkup,
   reserveBillingForRequest,
   settleBillingReservationDetailed,
-} from '../modules/billing/plans.js';
-import { getRedis } from '../infrastructure/redis.js';
+} from '#modules/billing/plans';
+import { getRedis } from '#infrastructure/redis';
 import {
   resolveUserLlmRuntime,
   type EffectiveLlmRuntimeConfig,
-} from '../modules/system/system-config.js';
+} from '#modules/system/system-config';
 import {
   releaseLocalAgent,
   onLocalAgentProcessExit,
   type LocalAgentProcessExitInfo,
 } from './local-runner.js';
-import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
-import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
-import type { User } from '../shared/types.js';
+import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '#modules/account/account-service';
+import { getUserIdFromWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
+import type { User } from '#shared/types';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,
   requestAgentCancellation,
   persistAgentFailure,
-} from '../infrastructure/repositories/agent-requests-repository.js';
+} from '#infrastructure/repositories/agent-requests-repository';
 import {
   tryAcquireBenefitExecutionSlot,
   ModelSelectionError,
-} from '../infrastructure/repositories/benefit-repository.js';
+} from '#infrastructure/repositories/benefit-repository';
 export type { InboxRequestResult } from './ipc-payloads.js';
 
 async function resolveLlmRuntimeSnapshot(

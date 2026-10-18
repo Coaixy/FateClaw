@@ -10,7 +10,7 @@ import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
 import crypto from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
-import { logger } from '../../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 import type {
   AdminStatusStatsDto,
   MembershipEntitlementDto,
@@ -67,18 +67,18 @@ import {
   getChatSessionByIdForAdmin,
   getClientProfileByIdForAdmin,
   getSessionMessagesForAdmin,
-} from '../../infrastructure/db.js';
-import { calculateAvailableSpendableCoins } from '../../shared/balance-coins.js';
+} from '#infrastructure/db';
+import { calculateAvailableSpendableCoins } from '#shared/balance-coins';
 import {
   getAdminStatusStats,
   getUsageStats,
   getUsageStatsByUserIds,
-} from '../../infrastructure/daily-usage.js';
+} from '#infrastructure/daily-usage';
 import {
   getPiSessionHealthPolicy,
   getSystemConfigOverview,
   saveOfficialModelSettings,
-} from '../system/system-config.js';
+} from '#modules/system/system-config';
 import {
   getMembershipBillingSummary,
   getMembershipBillingSummariesByUserIds,
@@ -88,17 +88,17 @@ import {
   getMonthlyMeteredBillingSummary,
   getMonthlyMeteredBillingSummariesByUserIds,
   getWalletBalanceSummary,
-} from '../billing/plans.js';
+} from '#modules/billing/plans';
 import {
   getAdminRechargePaymentConfig,
   updateAdminRechargePaymentConfig,
-} from '../billing/recharge-service.js';
+} from '#modules/billing/recharge-service';
 import {
   toMembershipPlanDto,
   toMembershipStatusDto,
-} from '../../contracts-adapter/billing-contract.js';
-import { listPaipanRegistry } from '../chat/paipan-registry.js';
-import { getWebChatRuntimeId } from '../chat/web-chat-runtime.js';
+} from '#contracts-adapter/billing-contract';
+import { listPaipanRegistry } from '#modules/chat/paipan-registry';
+import { getWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
 import {
   deletePiSessionFilesForSession,
   deletePiSessionOrphanFiles,
@@ -108,12 +108,12 @@ import {
   writePiSessionSnapshotArchiveToFiles,
   type PiSessionArchivePayload,
   type PiSessionOrphanFileEntry,
-} from '../chat/pi-session-files.js';
+} from '#modules/chat/pi-session-files';
 import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
-} from '../user/phone.js';
-import type { User, UserRole } from '../../shared/types.js';
+} from '#modules/user/phone';
+import type { User, UserRole } from '#shared/types';
 import type {
   ChatSessionDto,
   ClientProfileDto,
@@ -122,9 +122,9 @@ import type {
 import {
   toChatSessionDto,
   toMessageDto,
-} from '../../contracts-adapter/chat-contract.js';
-import { toClientProfileDto } from '../chat/client-profile-service.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
+} from '#contracts-adapter/chat-contract';
+import { toClientProfileDto } from '#modules/chat/client-profile-service';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
 
 const ADMIN_CREATE_USER_SALT_ROUNDS = 10;
 const ADMIN_CREATE_USER_PASSWORD_MIN_LENGTH = 8;

@@ -12,33 +12,33 @@ const {
   mockListScopedTraceEvents: vi.fn(),
 }));
 
-vi.mock('../src/runtime.js', () => ({
+vi.mock('#agent/runtime', () => ({
   createRequestRuntime: mockCreateRequestRuntime,
 }));
 
-vi.mock('../src/pi-runtime/index.js', () => ({
+vi.mock('#agent/pi-runtime/index', () => ({
   executePiRuntime: mockExecutePiRuntime,
 }));
 
-vi.mock('../src/transcript-store.js', () => ({
+vi.mock('#agent/transcript-store', () => ({
   listTranscriptEvents: mockListTranscriptEvents,
 }));
 
-vi.mock('../src/request-scope.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../src/request-scope.js')
-  >('../src/request-scope.js');
+vi.mock('#agent/request-scope', async () => {
+  const actual = await vi.importActual<typeof import('#agent/request-scope')>(
+    '#agent/request-scope',
+  );
   return {
     ...actual,
     listScopedTraceEvents: mockListScopedTraceEvents,
   };
 });
 
-import { createRequestScope } from '../src/request-scope.js';
-import { executeContainerInput } from '../src/request-boundary.js';
-import { attachPartialUsage } from '../src/partial-usage.js';
-import { ModelCallError } from '../src/public-error.js';
-import type { LlmRuntimeSnapshot } from '../src/types.js';
+import { createRequestScope } from '#agent/request-scope';
+import { executeContainerInput } from '#agent/request-boundary';
+import { attachPartialUsage } from '#agent/partial-usage';
+import { ModelCallError } from '#agent/public-error';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 
 const llmRuntime: LlmRuntimeSnapshot = {
   source: 'custom',

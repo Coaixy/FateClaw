@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 /** 对外开放会话的 public sid 前缀（与 fc_live_ 风格一致，便于辨识）。 */
 export const OPEN_SESSION_ID_PREFIX = 'sess_';

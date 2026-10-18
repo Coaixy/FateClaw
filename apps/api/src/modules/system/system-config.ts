@@ -2,23 +2,23 @@ import {
   getPlatformModelSettings,
   getPlatformModelRuntimeSettings,
   savePlatformModelConfig,
-} from '../../infrastructure/db.js';
+} from '#infrastructure/db';
 import {
   ModelConfigurationError,
   type PlatformModelSettings,
   type PlatformModelRuntimeSettings,
-} from '../../infrastructure/repositories/config-repository.js';
-import { getDefaultMaxOutputTokens } from '../../shared/output-token-policy.js';
+} from '#infrastructure/repositories/config-repository';
+import { getDefaultMaxOutputTokens } from '#shared/output-token-policy';
 import {
   normalizeConfiguredContextWindowTokens,
   resolveContextWindow,
-} from '../../shared/model-context-window.js';
+} from '#shared/model-context-window';
 import type {
   ModelProviderType,
   OfficialModelConfig,
   PiThinkingLevel,
-} from '../../shared/types.js';
-import { PI_THINKING_LEVELS } from '../../shared/types.js';
+} from '#shared/types';
+import { PI_THINKING_LEVELS } from '#shared/types';
 import type {
   AdminModelSettingsOverviewDto,
   AdminModelSettingsUpdateDto,
@@ -33,9 +33,9 @@ import {
   getBenefitAllowance,
   getBenefitSupply,
   getPreferredModelPool,
-} from '../../infrastructure/repositories/benefit-repository.js';
-import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
-import { NON_MEMBER_PRICE_MULTIPLIER } from '../billing/plans.js';
+} from '#infrastructure/repositories/benefit-repository';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
+import { NON_MEMBER_PRICE_MULTIPLIER } from '#modules/billing/plans';
 import {
   MAX_SKILL_BUNDLE_FILE_LENGTH,
   MAX_SKILL_BUNDLE_FILES,

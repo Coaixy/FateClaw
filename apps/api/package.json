@@ -5,11 +5,41 @@
   "license": "GPL-3.0-only",
   "type": "module",
   "main": "dist/app/index.js",
+  "imports": {
+    "#app/*": {
+      "development": "./src/app/*.ts",
+      "default": "./dist/app/*.js"
+    },
+    "#contracts-adapter/*": {
+      "development": "./src/contracts-adapter/*.ts",
+      "default": "./dist/contracts-adapter/*.js"
+    },
+    "#infrastructure/*": {
+      "development": "./src/infrastructure/*.ts",
+      "default": "./dist/infrastructure/*.js"
+    },
+    "#interfaces/*": {
+      "development": "./src/interfaces/*.ts",
+      "default": "./dist/interfaces/*.js"
+    },
+    "#modules/*": {
+      "development": "./src/modules/*.ts",
+      "default": "./dist/modules/*.js"
+    },
+    "#runtime/*": {
+      "development": "./src/runtime/*.ts",
+      "default": "./dist/runtime/*.js"
+    },
+    "#shared/*": {
+      "development": "./src/shared/*.ts",
+      "default": "./dist/shared/*.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node ../../scripts/copy-shared-assets.mjs api",
     "start": "node dist/app/index.js",
-    "dev": "pnpm --dir ../.. exec tsx watch apps/api/src/app/index.ts",
-    "dev:api-only": "pnpm --dir ../.. exec tsx watch apps/api/src/app/dev-api.ts",
+    "dev": "pnpm --dir ../.. exec tsx watch --conditions=development apps/api/src/app/index.ts",
+    "dev:api-only": "pnpm --dir ../.. exec tsx watch --conditions=development apps/api/src/app/dev-api.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "pnpm --dir ../.. exec prettier --write \"apps/api/src/**/*.ts\" \"apps/api/tests/**/*.ts\"",
     "format:fix": "pnpm --dir ../.. exec prettier --write \"apps/api/src/**/*.ts\" \"apps/api/tests/**/*.ts\"",
@@ -18,9 +48,9 @@
     "lint:fix": "pnpm --dir ../.. exec eslint apps/api/src/ apps/api/tests/ --fix",
     "test": "pnpm --dir ../.. exec vitest run --passWithNoTests apps/api/tests",
     "test:watch": "pnpm --dir ../.. exec vitest --passWithNoTests apps/api/tests",
-    "login": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts login",
-    "accounts": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts list",
-    "account:remove": "pnpm --dir ../.. exec tsx apps/api/src/app/cli.ts remove"
+    "login": "pnpm --dir ../.. exec tsx --conditions=development apps/api/src/app/cli.ts login",
+    "accounts": "pnpm --dir ../.. exec tsx --conditions=development apps/api/src/app/cli.ts list",
+    "account:remove": "pnpm --dir ../.. exec tsx --conditions=development apps/api/src/app/cli.ts remove"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.4",

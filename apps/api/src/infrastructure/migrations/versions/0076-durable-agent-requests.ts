@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const durableAgentRequestsMigration: DatabaseMigration = {
   id: '0076_durable_agent_requests',

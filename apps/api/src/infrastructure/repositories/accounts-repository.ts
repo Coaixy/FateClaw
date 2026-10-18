@@ -1,5 +1,5 @@
-import { Account } from '../../shared/types.js';
-import { getDbPool } from '../db-pool.js';
+import { Account } from '#shared/types';
+import { getDbPool } from '#infrastructure/db-pool';
 
 export async function createAccount(account: Account): Promise<void> {
   await getDbPool().query(

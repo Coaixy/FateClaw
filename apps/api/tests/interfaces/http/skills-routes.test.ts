@@ -70,7 +70,7 @@ const {
   };
 });
 
-vi.mock('../../../src/modules/skills/skills-service.js', () => ({
+vi.mock('#modules/skills/skills-service', () => ({
   ...serviceMocks,
   MAX_SKILL_BUNDLE_FILE_LENGTH: 100000,
   MAX_SKILL_BUNDLE_FILES: 50,
@@ -78,7 +78,7 @@ vi.mock('../../../src/modules/skills/skills-service.js', () => ({
   MAX_USER_SKILLS: 30,
 }));
 
-import { skillsRoutes } from '../../../src/interfaces/http/skills-routes.js';
+import { skillsRoutes } from '#interfaces/http/skills-routes';
 
 const inviteRow = {
   id: 'invite-1',

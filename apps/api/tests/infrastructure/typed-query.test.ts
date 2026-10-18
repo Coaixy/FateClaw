@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  queryOne,
-  queryResult,
-  queryRows,
-} from '../../src/infrastructure/typed-query.js';
+import { queryOne, queryResult, queryRows } from '#infrastructure/typed-query';
 
 interface QueryCall {
   sql: string;

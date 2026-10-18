@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // 纯函数测试：mock 掉 db/redis，隔离 import 链的任何副作用，只验证构造逻辑。
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getSingleAccountIdIfOnlyOne: vi.fn(),
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(),
 }));
 
 import {
   buildAiChatErrorResponsePayload,
   validateResponsePayload,
-} from '../../src/runtime/ipc-payloads.js';
+} from '#runtime/ipc-payloads';
 
 describe('buildAiChatErrorResponsePayload', () => {
   it('产出的 error payload 必含 text 且能通过 validateResponsePayload', () => {

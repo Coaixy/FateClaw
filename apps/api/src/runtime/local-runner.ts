@@ -13,15 +13,15 @@ import path from 'path';
 import { createInterface } from 'readline';
 
 import { agentEnvToRecord, buildAgentEnv } from './agent-env.js';
-import { sendOpsAlert } from '../infrastructure/alerts.js';
-import { logger } from '../infrastructure/logger.js';
-import { getRedis } from '../infrastructure/redis.js';
-import { resolveProjectRoot } from '../infrastructure/project-root.js';
+import { sendOpsAlert } from '#infrastructure/alerts';
+import { logger } from '#infrastructure/logger';
+import { getRedis } from '#infrastructure/redis';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 import {
   DEFAULT_LOCAL_AGENT_IDLE_TTL_MS,
   DEFAULT_LOCAL_AGENT_MAX_PROCESSES,
   getLocalAgentRuntimePolicy,
-} from '../modules/system/system-config.js';
+} from '#modules/system/system-config';
 
 const LOCAL_AGENT_POLICY_CACHE_MS = 2_000;
 const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
@@ -547,16 +547,22 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
     if (mode === 'dist') {
       return ['node', [...nodeMemoryArgs, daemonEntry]] as [string, string[]];
     }
+    // Source daemons must use src imports even when compiled files are present.
     if (devAgent.command === process.execPath) {
       return [
         devAgent.command,
-        [...nodeMemoryArgs, ...devAgent.args, daemonEntry],
+        [
+          ...nodeMemoryArgs,
+          ...devAgent.args,
+          '--conditions=development',
+          daemonEntry,
+        ],
       ] as [string, string[]];
     }
-    return [devAgent.command, [...devAgent.args, daemonEntry]] as [
-      string,
-      string[],
-    ];
+    return [
+      devAgent.command,
+      [...devAgent.args, '--conditions=development', daemonEntry],
+    ] as [string, string[]];
   })();
 
   if (shuttingDown) throw new Error('Local agent runtime is shutting down');

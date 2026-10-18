@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { truncateStringFields } from '../src/request-scope.js';
+import { truncateStringFields } from '#agent/request-scope';
 
 describe('request scope trace field truncation', () => {
   it('keeps truncated UTF-8 strings within the byte limit recursively', () => {

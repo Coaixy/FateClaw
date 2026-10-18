@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { toSubscribedSkillDto } from '../../src/contracts-adapter/skills-contract.js';
-import type { UserCustomSkill } from '../../src/shared/types.js';
+import { toSubscribedSkillDto } from '#contracts-adapter/skills-contract';
+import type { UserCustomSkill } from '#shared/types';
 
 function customSkill(): UserCustomSkill {
   return {

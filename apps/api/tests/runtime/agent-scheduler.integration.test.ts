@@ -15,16 +15,16 @@ const { holder, ready, retain } = vi.hoisted(() => ({
   ready: vi.fn(async (_accountId: string) => {}),
   retain: vi.fn((accountId: string) => `lease:${accountId}`),
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => holder.redis,
 }));
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   getAgentConcurrencyLimit: async () => 2,
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { warn: vi.fn() },
 }));
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#runtime/local-runner', () => ({
   ensureLocalAgentRunning: ready,
   retainLocalAgent: retain,
   releaseLocalAgent: vi.fn(async () => {}),
@@ -33,7 +33,7 @@ import {
   acquireAgentExecution,
   releaseGlobalAgentSlot,
   resetAgentScheduler,
-} from '../../src/runtime/agent-scheduler.js';
+} from '#runtime/agent-scheduler';
 
 const url = process.env.FATECLAW_TEST_SCHEDULER_REDIS_URL;
 describe.skipIf(!url)('execution scheduling with real Redis', () => {

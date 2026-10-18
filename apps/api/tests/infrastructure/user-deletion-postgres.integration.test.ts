@@ -3,21 +3,19 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
-vi.mock('../../src/infrastructure/env.js', () => ({ readEnvFile: () => ({}) }));
-vi.mock('../../src/infrastructure/config.js', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('../../src/infrastructure/config.js')
-  >()),
+vi.mock('#infrastructure/env', () => ({ readEnvFile: () => ({}) }));
+vi.mock('#infrastructure/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#infrastructure/config')>()),
   DATABASE_URL: 'postgresql://synthetic-disposable-client',
 }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
   initDbPool: () => state.pool,
   closeDbPool: async () => {
     await state.pool?.end();
   },
 }));
-vi.mock('../../src/modules/skills/legacy-skill-import.js', () => ({
+vi.mock('#modules/skills/legacy-skill-import', () => ({
   importLegacySkillContent: async () => ({
     migrated: 0,
     missing: 0,
@@ -26,12 +24,8 @@ vi.mock('../../src/modules/skills/legacy-skill-import.js', () => ({
   }),
 }));
 
-import {
-  closeDatabase,
-  deleteUser,
-  initDatabase,
-} from '../../src/infrastructure/db.js';
-import { saveModelPoolPreference } from '../../src/infrastructure/repositories/benefit-repository.js';
+import { closeDatabase, deleteUser, initDatabase } from '#infrastructure/db';
+import { saveModelPoolPreference } from '#infrastructure/repositories/benefit-repository';
 
 // Only the explicit disposable test server is used; workspace configuration is never read.
 const connectionString = process.env.FATECLAW_TEST_BENEFIT_DATABASE_URL;

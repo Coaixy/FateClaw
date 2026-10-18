@@ -1,7 +1,7 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
-import { logger } from '../../logger.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
+import { logger } from '#infrastructure/logger';
 
 const INVALID_PHONE_USER_DELETE_TEMP_TABLE = 'users_without_valid_phone';
 

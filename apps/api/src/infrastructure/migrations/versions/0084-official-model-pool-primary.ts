@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const officialModelPoolPrimaryMigration: DatabaseMigration = {
   id: '0084_official_model_pool_primary',

@@ -9,17 +9,17 @@ import {
   it,
   vi,
 } from 'vitest';
-import type { User } from '../../src/shared/types.js';
+import type { User } from '#shared/types';
 
 const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
+import { MIGRATIONS } from '#infrastructure/migrations/manifest';
 import {
   assertRegistrationInviteValid,
   createInvitedUser,
@@ -31,7 +31,7 @@ import {
   revokeRegistrationInvite,
   saveRegistrationInvitePolicy,
   updateRegistrationInviteAccount,
-} from '../../src/infrastructure/repositories/registration-invites-repository.js';
+} from '#infrastructure/repositories/registration-invites-repository';
 
 // Only an explicitly supplied disposable server is used; application configuration is never loaded.
 const databaseUrl = process.env.FATECLAW_TEST_INVITES_DATABASE_URL;

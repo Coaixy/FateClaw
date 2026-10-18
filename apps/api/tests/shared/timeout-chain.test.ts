@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 async function importFreshTimeoutChain() {
   vi.resetModules();
-  return import('../../src/shared/timeout-chain.js');
+  return import('#shared/timeout-chain');
 }
 
 describe('timeout-chain', () => {

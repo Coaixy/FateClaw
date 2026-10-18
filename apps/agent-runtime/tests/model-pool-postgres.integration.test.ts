@@ -12,11 +12,11 @@ import {
 import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
 
 const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
-vi.mock('../src/agent-db.js', () => ({ getAgentDbPool: () => state.pool }));
+vi.mock('#agent/agent-db', () => ({ getAgentDbPool: () => state.pool }));
 vi.mock('../../api/src/infrastructure/db-pool.js', () => ({
   getDbPool: () => state.pool,
 }));
-import { databaseModelPoolHealth } from '../src/model-pool-health.js';
+import { databaseModelPoolHealth } from '#agent/model-pool-health';
 import { MIGRATIONS } from '../../api/src/infrastructure/migrations/manifest.js';
 import { officialModelPoolMigration } from '../../api/src/infrastructure/migrations/versions/0083-official-model-pool.js';
 import { officialModelPoolPrimaryMigration } from '../../api/src/infrastructure/migrations/versions/0084-official-model-pool-primary.js';

@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock(
-  '../../../src/infrastructure/repositories/benefit-repository.js',
-  () => ({ getPreferredModelPool: async () => 'official' }),
-);
+vi.mock('#infrastructure/repositories/benefit-repository', () => ({
+  getPreferredModelPool: async () => 'official',
+}));
 
 const {
   mockCreateChatSession,
@@ -22,21 +21,21 @@ const {
   mockExecuteDirectPaipan: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   createChatSession: mockCreateChatSession,
   getChatSession: vi.fn(),
   storeMessage: mockStoreMessage,
   touchChatSession: mockTouchChatSession,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     info: vi.fn(),
     error: vi.fn(),
   },
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     get: mockRedisGet,
     set: mockRedisSet,
@@ -44,7 +43,7 @@ vi.mock('../../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
-vi.mock('../../../src/modules/chat/paipan-runtime.js', () => ({
+vi.mock('#modules/chat/paipan-runtime', () => ({
   DirectPaipanError: class DirectPaipanError extends Error {
     constructor(
       public code: string,
@@ -61,7 +60,7 @@ vi.mock('../../../src/modules/chat/paipan-runtime.js', () => ({
 import {
   commitDirectPaipanForOwnedUser,
   previewDirectPaipanForOwnedUser,
-} from '../../../src/modules/chat/paipan-service.js';
+} from '#modules/chat/paipan-service';
 
 describe('previewDirectPaipanForOwnedUser', () => {
   beforeEach(() => {

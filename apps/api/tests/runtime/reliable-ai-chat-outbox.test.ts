@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { redis } = vi.hoisted(() => ({
   redis: { lindex: vi.fn(), rpoplpush: vi.fn(), lrem: vi.fn(), eval: vi.fn() },
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({ getRedis: () => redis }));
+vi.mock('#infrastructure/redis', () => ({ getRedis: () => redis }));
 import {
   acknowledgeAiChatResult,
   claimAiChatResult,
-} from '../../src/runtime/reliable-ai-chat-outbox.js';
+} from '#runtime/reliable-ai-chat-outbox';
 
 describe('reliable AI Chat result transport', () => {
   beforeEach(() => vi.resetAllMocks());

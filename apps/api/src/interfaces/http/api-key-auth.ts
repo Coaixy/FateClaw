@@ -6,9 +6,9 @@ import {
   findActiveApiKeyByHash,
   hashApiKey,
   touchApiKeyLastUsed,
-} from '../../infrastructure/db.js';
-import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
-import { getRedis } from '../../infrastructure/redis.js';
+} from '#infrastructure/db';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
+import { getRedis } from '#infrastructure/redis';
 import { fixedWindowRateLimit } from './rate-limit.js';
 
 /**

@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { ApiKeyDto, ApiKeyStatus } from '@fateclaw/contracts/api-keys';
 import { API_KEY_LIVE_PREFIX } from '@fateclaw/contracts/api-keys';
 
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 /**
  * user_api_keys 表行（含敏感字段 user_id / key_hash，**不可直接对外返回**）。

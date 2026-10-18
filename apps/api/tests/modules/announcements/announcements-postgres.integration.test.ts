@@ -11,16 +11,16 @@ import {
 } from 'vitest';
 
 const database = vi.hoisted(() => ({ pool: undefined as pg.Pool | undefined }));
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => database.pool!,
 }));
 
-import { popupAnnouncementsMigration } from '../../../src/infrastructure/migrations/versions/0091-popup-announcements.js';
+import { popupAnnouncementsMigration } from '#infrastructure/migrations/versions/0091-popup-announcements';
 import {
   getAdminAnnouncements,
   getPublicAnnouncements,
   saveAnnouncement,
-} from '../../../src/modules/announcements/announcement-service.js';
+} from '#modules/announcements/announcement-service';
 
 const connectionString = process.env.FATECLAW_TEST_MIGRATIONS_DATABASE_URL;
 

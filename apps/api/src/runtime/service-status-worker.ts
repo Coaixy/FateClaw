@@ -3,13 +3,13 @@ import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
 import {
   claimServiceStatusCheck,
   completeServiceStatusCheck,
-} from '../infrastructure/repositories/service-status-repository.js';
-import { resolveOfficialLlmRuntime } from '../modules/system/system-config.js';
+} from '#infrastructure/repositories/service-status-repository';
+import { resolveOfficialLlmRuntime } from '#modules/system/system-config';
 import {
   probeModelAvailability,
   probeBenefitModelAvailability,
-} from '../modules/system/model-availability-probe.js';
-import { logger } from '../infrastructure/logger.js';
+} from '#modules/system/model-availability-probe';
+import { logger } from '#infrastructure/logger';
 
 export async function checkServiceAvailability(
   nodes: RuntimeModelPoolNode[],

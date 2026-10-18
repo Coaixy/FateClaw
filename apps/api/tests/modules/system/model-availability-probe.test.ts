@@ -6,7 +6,7 @@ import {
 import { once } from 'node:events';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
-import { probeModelAvailability } from '../../../src/modules/system/model-availability-probe.js';
+import { probeModelAvailability } from '#modules/system/model-availability-probe';
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
   await Promise.all(

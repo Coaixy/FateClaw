@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { reverseGanzhiForPaipan } from '../../../src/modules/chat/ganzhi-reverse-service.js';
+import { reverseGanzhiForPaipan } from '#modules/chat/ganzhi-reverse-service';
 
 describe('reverseGanzhiForPaipan', () => {
   it('returns a known Gregorian candidate from four pillars', () => {

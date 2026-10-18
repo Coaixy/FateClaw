@@ -5,7 +5,7 @@ import {
   decodeControlIpc,
   encodeControlIpc,
   encodeRuntimeIpc,
-} from '../../src/runtime/ipc-security.js';
+} from '#runtime/ipc-security';
 import Fastify from 'fastify';
 
 const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
@@ -18,12 +18,12 @@ const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getChatSession: mockGetChatSession,
   getUserById: mockGetUserById,
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => mockRedis,
 }));
 
@@ -35,7 +35,7 @@ import {
   streamEventFromMessagePayload,
   streamEventFromProgressPayload,
   streamEventFromResponsePayload,
-} from '../../src/runtime/ai-chat-stream.js';
+} from '#runtime/ai-chat-stream';
 
 beforeEach(() => {
   vi.clearAllMocks();

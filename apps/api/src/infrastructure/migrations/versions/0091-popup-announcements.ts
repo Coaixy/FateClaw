@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const popupAnnouncementsMigration: DatabaseMigration = {
   id: '0091_popup_announcements',

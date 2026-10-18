@@ -6,7 +6,7 @@ import {
   SkillContentValidationError,
   type SkillContentFile,
 } from '@fateclaw/contracts/skills/content';
-import { resolveProjectRoot } from '../../infrastructure/project-root.js';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 
 function inside(target: string, root: string): boolean {
   const relative = path.relative(root, target);

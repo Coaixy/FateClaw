@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   runQimenPaipan,
   type QimenPaipanResult,
-} from '../../../../src/modules/chat/paipan-runners/qimen.js';
+} from '#modules/chat/paipan-runners/qimen';
 
 async function runPaipan(
   input: Record<string, unknown> = {},

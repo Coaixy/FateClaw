@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   deletePiSessionOrphanFiles,
   scanPiSessionOrphanFiles,
-} from '../../../src/modules/chat/pi-session-files.js';
+} from '#modules/chat/pi-session-files';
 
 const PI_SESSION_DIR_ENV = 'FATECLAW_PI_SESSION_DIR';
 

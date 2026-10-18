@@ -4,11 +4,11 @@ import {
 } from './agent-performance.js';
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
-import { settleBenefitTurn } from '../infrastructure/repositories/benefit-repository.js';
+import { settleBenefitTurn } from '#infrastructure/repositories/benefit-repository';
 import {
   withAgentInterruptionDelivery,
   withAgentResultDelivery,
-} from '../infrastructure/repositories/agent-requests-repository.js';
+} from '#infrastructure/repositories/agent-requests-repository';
 /**
  * AI Chat 专属 outbox 队列处理。
  *
@@ -24,11 +24,11 @@ import {
   storeConversationLog,
   storeMessage,
   touchChatSession,
-} from '../infrastructure/db.js';
+} from '#infrastructure/db';
 import {
   incrementDailyMessageCount,
   incrementDailyTokens,
-} from '../infrastructure/daily-usage.js';
+} from '#infrastructure/daily-usage';
 import {
   InvalidAiChatPayloadError,
   bindIpcPayloadIdentity,
@@ -44,7 +44,7 @@ import {
 } from './ipc-payloads.js';
 import { normalizeRuntimeTokenUsage } from './token-usage.js';
 import { releaseLocalAgent } from './local-runner.js';
-import { logger } from '../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 import {
   publishAiChatStreamEvent,
   streamEventFromMessagePayload,
@@ -54,17 +54,17 @@ import {
 import {
   recordConversationLogFailure,
   recordConversationLogSuccess,
-} from '../shared/conversation-log-metrics.js';
-import { mapInternalErrorToPublicError } from '../shared/public-error.js';
+} from '#shared/conversation-log-metrics';
+import { mapInternalErrorToPublicError } from '#shared/public-error';
 import {
   settleBillingReservationDetailed,
   recoverStalePendingReservation,
   type BillingSettlementSummary,
-} from '../modules/billing/plans.js';
+} from '#modules/billing/plans';
 import {
   getUserIdFromWebChatRuntimeId,
   WEB_CHAT_ASSISTANT_NAME,
-} from '../modules/chat/web-chat-runtime.js';
+} from '#modules/chat/web-chat-runtime';
 
 function formatTokens(n: number): string {
   if (n >= 1000) {

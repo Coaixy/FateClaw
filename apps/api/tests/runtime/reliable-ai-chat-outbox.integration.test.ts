@@ -12,14 +12,14 @@ import {
 const { holder } = vi.hoisted(() => ({
   holder: { redis: undefined as unknown },
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => holder.redis,
 }));
 import {
   acknowledgeAiChatResult,
   claimAiChatResult,
   quarantineAiChatResult,
-} from '../../src/runtime/reliable-ai-chat-outbox.js';
+} from '#runtime/reliable-ai-chat-outbox';
 
 const url = process.env.FATECLAW_TEST_REDIS_URL;
 describe.skipIf(!url)('reliable results with real Redis', () => {

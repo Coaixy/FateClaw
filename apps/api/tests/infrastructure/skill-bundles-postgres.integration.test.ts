@@ -5,19 +5,19 @@ import path from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closeDbPool, initDbPool } from '../../src/infrastructure/db-pool.js';
-import { runDatabaseMigrations } from '../../src/infrastructure/migrations/runner.js';
+import { closeDbPool, initDbPool } from '#infrastructure/db-pool';
+import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 import {
   createUserCustomSkill,
   getUserCustomSkill,
   updateUserCustomSkill,
-} from '../../src/infrastructure/repositories/skills-repository.js';
+} from '#infrastructure/repositories/skills-repository';
 import {
   getCustomSkillForAdmin,
   getCustomSkillsForAdmin,
-} from '../../src/infrastructure/repositories/admin-repository.js';
-import { importLegacySkillContent } from '../../src/modules/skills/legacy-skill-import.js';
-import { SkillRevisionConflictError } from '../../src/modules/skills/skill-errors.js';
+} from '#infrastructure/repositories/admin-repository';
+import { importLegacySkillContent } from '#modules/skills/legacy-skill-import';
+import { SkillRevisionConflictError } from '#modules/skills/skill-errors';
 import {
   closeAgentDb,
   queryEffectiveUserSkills,

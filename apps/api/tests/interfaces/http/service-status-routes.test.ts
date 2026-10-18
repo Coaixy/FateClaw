@@ -7,27 +7,21 @@ const f = vi.hoisted(() => ({
   usage: vi.fn(),
   limit: vi.fn(),
 }));
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit: f.limit,
 }));
-vi.mock(
-  '../../../src/infrastructure/repositories/benefit-repository.js',
-  () => ({
-    getBenefitSupply: f.supply,
-    getRecentBenefitSuccess: f.success,
-  }),
-);
-vi.mock(
-  '../../../src/infrastructure/repositories/service-status-repository.js',
-  () => ({
-    listServiceStatusChecks: f.list,
-    getServiceTokenUsage: f.usage,
-    SERVICE_CHECK_INTERVAL_SECONDS: 21600,
-    SERVICE_STATUS_STALE_SECONDS: 43200,
-  }),
-);
-import { serviceStatusRoutes } from '../../../src/interfaces/http/service-status-routes.js';
-import { publicServiceStatus } from '../../../src/modules/system/service-status.js';
+vi.mock('#infrastructure/repositories/benefit-repository', () => ({
+  getBenefitSupply: f.supply,
+  getRecentBenefitSuccess: f.success,
+}));
+vi.mock('#infrastructure/repositories/service-status-repository', () => ({
+  listServiceStatusChecks: f.list,
+  getServiceTokenUsage: f.usage,
+  SERVICE_CHECK_INTERVAL_SECONDS: 21600,
+  SERVICE_STATUS_STALE_SECONDS: 43200,
+}));
+import { serviceStatusRoutes } from '#interfaces/http/service-status-routes';
+import { publicServiceStatus } from '#modules/system/service-status';
 
 describe('public service status', () => {
   const apps: FastifyInstance[] = [];

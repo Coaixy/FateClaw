@@ -77,6 +77,18 @@ The host resolves model settings into a request-level `llmRuntime` snapshot. Do 
 
 The lightweight entry initializes the database, Redis, and HTTP server but skips IPC worker and background startup. Use full development mode to validate the complete AI Chat lifecycle.
 
+## Backend imports
+
+Backend package aliases are defined by each app's `package.json` `imports` field. In the API, use the source directory prefix for imports across directories, such as `#modules/chat/chat-session-service`, `#infrastructure/db`, or `#shared/types`. In Agent Runtime, use `#agent/` followed by the path relative to `src`, such as `#agent/types` or `#agent/pi-runtime/tools/skill-path`. Alias specifiers omit the file extension. Keep relative imports for files in the same directory, and use the existing `@fateclaw/contracts` exports for shared contracts.
+
+The `development` condition resolves these aliases to TypeScript source; the default resolves to compiled JavaScript in `dist`. The backend TypeScript configurations and Vitest use the development condition. API development and CLI scripts, as well as the host's source daemon launcher, pass `--conditions=development` to `tsx`. When running a source file directly, pass the same flag, for example:
+
+```bash
+pnpm --filter @fateclaw/api exec tsx --conditions=development src/app/cli.ts list
+```
+
+Compiled entry points run with ordinary Node.js and require the app's `package.json` alongside `dist`. The backend runtime package includes both.
+
 ## Verify a local run
 
 - `GET /api/health` checks that HTTP is serving; `GET /api/ready` checks database and Redis connectivity.

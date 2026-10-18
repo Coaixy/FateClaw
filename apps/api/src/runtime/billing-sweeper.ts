@@ -1,4 +1,4 @@
-import { getDbPool } from '../infrastructure/db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 /**
  * 计费兜底扫描任务（billing sweeper）。
  *
@@ -21,10 +21,10 @@ import { getDbPool } from '../infrastructure/db-pool.js';
 import {
   getConversationLogByRequestId,
   listStalePendingReservations,
-} from '../infrastructure/db.js';
-import { sendOpsAlert } from '../infrastructure/alerts.js';
-import { logger } from '../infrastructure/logger.js';
-import { recoverStalePendingReservation } from '../modules/billing/plans.js';
+} from '#infrastructure/db';
+import { sendOpsAlert } from '#infrastructure/alerts';
+import { logger } from '#infrastructure/logger';
+import { recoverStalePendingReservation } from '#modules/billing/plans';
 import {
   normalizeRuntimeTokenUsage,
   type RuntimeTokenUsageInput,

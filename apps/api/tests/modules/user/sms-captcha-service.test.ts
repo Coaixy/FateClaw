@@ -66,31 +66,28 @@ vi.mock('node:module', () => ({
   }),
 }));
 
-vi.mock('../../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   ALIYUN_SMS_ACCESS_KEY_ID: 'access-key-id',
   ALIYUN_SMS_ACCESS_KEY_SECRET: 'access-key-secret',
   ALIYUN_SMS_ENDPOINT: 'https://dypnsapi.aliyuncs.com',
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getUserByPhone: mockGetUserByPhone,
 }));
 
-vi.mock(
-  '../../../src/infrastructure/repositories/registration-invites-repository.js',
-  () => ({
-    assertRegistrationInviteValid: mockAssertRegistrationInviteValid,
-  }),
-);
+vi.mock('#infrastructure/repositories/registration-invites-repository', () => ({
+  assertRegistrationInviteValid: mockAssertRegistrationInviteValid,
+}));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     error: mockLoggerError,
     warn: mockLoggerWarn,
   },
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     eval: mockRedisEval,
     expire: mockRedisExpire,
@@ -100,7 +97,7 @@ vi.mock('../../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
-import { sendSMSCaptcha } from '../../../src/modules/user/sms-captcha-service.js';
+import { sendSMSCaptcha } from '#modules/user/sms-captcha-service';
 
 const PHONE_NUMBER = '13800138000';
 const CLIENT_IP = '203.0.113.7';

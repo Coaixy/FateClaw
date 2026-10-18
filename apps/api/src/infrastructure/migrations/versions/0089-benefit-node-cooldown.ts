@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const benefitNodeCooldownMigration: DatabaseMigration = {
   id: '0089_benefit_node_cooldown',

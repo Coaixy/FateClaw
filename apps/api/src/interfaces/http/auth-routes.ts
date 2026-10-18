@@ -14,17 +14,17 @@ import {
   resetPasswordBySMS,
   getCurrentUserVerifiedPhone,
   resetCurrentUserPasswordBySMS,
-} from '../../modules/user/auth-service.js';
+} from '#modules/user/auth-service';
 import {
   getSMSCaptchaPublicMessage,
   sendSMSCaptcha,
   SMSCaptchaError,
-} from '../../modules/user/sms-captcha-service.js';
+} from '#modules/user/sms-captcha-service';
 import {
   isValidMainlandChinaPhone,
   normalizePhoneNumber,
-} from '../../modules/user/phone.js';
-import { toUserDto } from '../../contracts-adapter/auth-contract.js';
+} from '#modules/user/phone';
+import { toUserDto } from '#contracts-adapter/auth-contract';
 import { generateCaptcha, verifyCaptcha } from './captcha.js';
 import {
   rateLimitCheck,
@@ -35,7 +35,7 @@ import {
   RegistrationInviteCodeSchema,
   allowRegistrationAttempt,
 } from './registration-invite-routes.js';
-import { RegistrationInviteError } from '../../modules/user/registration-invite-errors.js';
+import { RegistrationInviteError } from '#modules/user/registration-invite-errors';
 
 type AuthTokenUser = {
   id: string;

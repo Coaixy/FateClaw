@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGetDbPool } = vi.hoisted(() => ({ mockGetDbPool: vi.fn() }));
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
@@ -24,7 +24,7 @@ import {
   setSkillCommentPinnedForAdmin,
   subscribeToBundle,
   unsubscribeFromSkill,
-} from '../../../src/infrastructure/repositories/skills-repository.js';
+} from '#infrastructure/repositories/skills-repository';
 
 interface QueryCall {
   sql: string;

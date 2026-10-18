@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const benefitTurnsAndConcurrencyMigration: DatabaseMigration = {
   id: '0090_benefit_turns_and_concurrency',

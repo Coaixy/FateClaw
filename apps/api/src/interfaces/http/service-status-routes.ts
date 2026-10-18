@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ServiceStatusOverviewDto } from '@fateclaw/contracts/service-status';
-import { getPublicServiceStatus } from '../../modules/system/service-status.js';
+import { getPublicServiceStatus } from '#modules/system/service-status';
 import { fixedWindowRateLimit } from './rate-limit.js';
 
 const STATUS_CACHE_TTL_MS = 60_000;

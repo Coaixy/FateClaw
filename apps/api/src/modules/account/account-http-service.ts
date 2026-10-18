@@ -23,19 +23,19 @@ import {
   updateSoulContent,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
-} from '../../infrastructure/db.js';
-import { getLoginQrCode, getQrCodeStatus } from '../../infrastructure/ilink.js';
+} from '#infrastructure/db';
+import { getLoginQrCode, getQrCodeStatus } from '#infrastructure/ilink';
 import { WECHAT_DEVICE_BINDING_DISABLED_MESSAGE } from './account-service.js';
-import { removeAccountListener } from '../../runtime/ipc-worker.js';
-import { stopLocalAgent } from '../../runtime/local-runner.js';
-import { stopAccountPolling } from '../../runtime/poller.js';
-import { activateAccount } from '../../app/index.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { getRuntimeEntitlementSnapshot } from '../billing/entitlements.js';
+import { removeAccountListener } from '#runtime/ipc-worker';
+import { stopLocalAgent } from '#runtime/local-runner';
+import { stopAccountPolling } from '#runtime/poller';
+import { activateAccount } from '#app/index';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 import {
   toAccountDto,
   toAccountSoulDto,
-} from '../../contracts-adapter/account-contract.js';
+} from '#contracts-adapter/account-contract';
 
 export async function checkAccountBindingLimit(
   userId: string,

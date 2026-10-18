@@ -18,7 +18,7 @@ const {
   mockUpdateMembershipConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getBillingRequestReservationByRequestId:
     mockGetBillingRequestReservationByRequestId,
   getMembershipOverview: mockGetMembershipOverview,
@@ -31,12 +31,12 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   updateMembershipConfig: mockUpdateMembershipConfig,
 }));
 
-vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
+vi.mock('#infrastructure/daily-usage', () => ({
   getMonthlyTokenUsage: vi.fn(),
   getMonthlyTokenUsageByUserIds: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     warn: vi.fn(),
   },
@@ -51,8 +51,8 @@ import {
   settleBillingReservation,
   settleBillingReservationDetailed,
   updateMembershipPlanConfig,
-} from '../../../src/modules/billing/plans.js';
-import { logger } from '../../../src/infrastructure/logger.js';
+} from '#modules/billing/plans';
+import { logger } from '#infrastructure/logger';
 
 it('rejects an unknown membership configuration identity without editing the canonical configuration', async () => {
   mockUpdateMembershipConfig.mockClear();

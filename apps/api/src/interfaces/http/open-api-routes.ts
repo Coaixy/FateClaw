@@ -1,8 +1,8 @@
 import type { FastifyError, FastifyInstance } from 'fastify';
 
-import { DirectPaipanError } from '../../modules/chat/paipan-runtime.js';
-import { listPublicOfficialModels } from '../../modules/system/system-config.js';
-import { listEffectiveUserSkillsForOpenApi } from '../../infrastructure/repositories/skills-repository.js';
+import { DirectPaipanError } from '#modules/chat/paipan-runtime';
+import { listPublicOfficialModels } from '#modules/system/system-config';
+import { listEffectiveUserSkillsForOpenApi } from '#infrastructure/repositories/skills-repository';
 import {
   apiKeyAuthOnRequest,
   requireApiKeyPrincipal,

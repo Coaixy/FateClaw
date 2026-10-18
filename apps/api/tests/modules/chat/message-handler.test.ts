@@ -26,7 +26,7 @@ const {
   mockStoreMessage: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,
     totalCoinsExpired: 0,
@@ -38,20 +38,20 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   storeMessage: mockStoreMessage,
 }));
 
-vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+vi.mock('#modules/billing/entitlements', () => ({
   getRuntimeEntitlementSnapshot: mockGetRuntimeEntitlementSnapshot,
 }));
 
-vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
+vi.mock('#infrastructure/daily-usage', () => ({
   incrementDailyMessageCount: mockIncrementDailyMessageCount,
 }));
 
-vi.mock('../../../src/infrastructure/ilink.js', () => ({
+vi.mock('#infrastructure/ilink', () => ({
   parseWeixinMessage: mockParseWeixinMessage,
   sendMessage: mockSendMessage,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     child: vi.fn(() => ({
       error: vi.fn(),
@@ -62,21 +62,21 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   resolveUserLlmRuntime: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/chat/wechat-chat-session-service.js', () => ({
+vi.mock('#modules/chat/wechat-chat-session-service', () => ({
   handleWechatChatCommand: mockHandleWechatChatCommand,
   runWechatChatSessionTurn: mockRunWechatChatSessionTurn,
   WECHAT_CHAT_THINKING_ACK:
     '收到，正在思考。完成后会直接回复；期间新消息不会进入本轮。',
 }));
 
-import { processWeixinMessage } from '../../../src/modules/chat/message-handler.js';
-import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../../../src/modules/account/account-service.js';
-import type { Account } from '../../../src/shared/types.js';
-import type { WeixinMessage } from '../../../src/infrastructure/ilink.js';
+import { processWeixinMessage } from '#modules/chat/message-handler';
+import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '#modules/account/account-service';
+import type { Account } from '#shared/types';
+import type { WeixinMessage } from '#infrastructure/ilink';
 
 function createAccount(): Account {
   return {

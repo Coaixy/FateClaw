@@ -8,7 +8,7 @@ import type {
   OpenAICompletionsCompat,
 } from '@earendil-works/pi-ai';
 
-import type { LlmRuntimeSnapshot } from '../types.js';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 
 /**
  * 请求级模型/凭据运行时。

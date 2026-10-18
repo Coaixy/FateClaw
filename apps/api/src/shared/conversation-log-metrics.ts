@@ -5,7 +5,7 @@
  * 无法重试。这里维护一个滚动失败计数器，达到阈值时升级日志级别让 SRE 关注。
  */
 
-import { logger } from '../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 
 const ESCALATE_THRESHOLD = 10;
 

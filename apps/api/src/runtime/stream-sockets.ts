@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 import type WebSocket from 'ws';
-import { logger } from '../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 
 const MAX_BUFFER_BYTES = 1024 * 1024;
 const PING_INTERVAL_MS = 30_000;

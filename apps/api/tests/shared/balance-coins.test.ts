@@ -6,7 +6,7 @@ import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
   roundCoinsToCents,
-} from '../../src/shared/balance-coins.js';
+} from '#shared/balance-coins';
 
 describe('balance coins guards', () => {
   it('blocks positive reservations when no spendable balance is available', () => {

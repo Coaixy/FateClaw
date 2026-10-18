@@ -1,18 +1,18 @@
-vi.mock('../src/result-spool.js', () => ({
+vi.mock('#agent/result-spool', () => ({
   spoolResult: vi.fn(async () => '/synthetic/result'),
   removeSpooledResult: vi.fn(async () => {}),
   readSpooledResults: vi.fn(async () => []),
 }));
 import { afterEach, describe, expect, it, vi } from 'vitest';
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock('../src/agent-db.js', () => ({ getAgentDbPool: () => ({ query }) }));
-vi.mock('../src/io.js', () => ({ log: vi.fn() }));
+vi.mock('#agent/agent-db', () => ({ getAgentDbPool: () => ({ query }) }));
+vi.mock('#agent/io', () => ({ log: vi.fn() }));
 import {
   claimDurableExecution,
   deliverDurableResult,
   startDurableExecutionHeartbeat,
-} from '../src/durable-execution.js';
-import type { InboxRequest, OutboxResponse } from '../src/types.js';
+} from '#agent/durable-execution';
+import type { InboxRequest, OutboxResponse } from '#agent/types';
 const request = {
   requestId: 'r',
   executionId: 'e',

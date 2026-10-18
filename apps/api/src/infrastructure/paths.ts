@@ -4,7 +4,7 @@
 
 import { seedOfficialSkills } from './db.js';
 import { logger } from './logger.js';
-import { listPaipanRegistry } from '../modules/chat/paipan-registry.js';
+import { listPaipanRegistry } from '#modules/chat/paipan-registry';
 
 /**
  * 将系统排盘名称写入 skill_global_config 表。

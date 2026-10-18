@@ -10,7 +10,7 @@
  * Redis 侧数据（队列/心跳/并发闸门）是全局的。
  */
 
-import { getRedis } from '../infrastructure/redis.js';
+import { getRedis } from '#infrastructure/redis';
 import { getAgentPerformance } from './agent-performance.js';
 import {
   getLocalAgentRuntimeStatus,

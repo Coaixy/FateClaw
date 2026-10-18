@@ -1,20 +1,20 @@
 import pg from 'pg';
 
-import { getDbPool } from '../db-pool.js';
-import { logger } from '../logger.js';
-import { MAX_OVERDRAFT_COINS } from '../config.js';
+import { getDbPool } from '#infrastructure/db-pool';
+import { logger } from '#infrastructure/logger';
+import { MAX_OVERDRAFT_COINS } from '#infrastructure/config';
 import { getUserByIdUsing } from './users-repository.js';
 import type {
   BalanceGrantSource,
   MembershipConfig,
   User,
   UserMembership,
-} from '../../shared/types.js';
+} from '#shared/types';
 import {
   assertSufficientSpendableCoins,
   roundCoinsToCents,
-} from '../../shared/balance-coins.js';
-import { resolveMembershipPeriodStart } from '../../shared/membership-cycle.js';
+} from '#shared/balance-coins';
+import { resolveMembershipPeriodStart } from '#shared/membership-cycle';
 import {
   DEFAULT_MEMBERSHIP_NAME,
   MEMBERSHIP_PLAN_KEY,

@@ -1,8 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { OpenSessionRow } from '../../../src/infrastructure/repositories/open-sessions-repository.js';
-import type { EffectiveLlmRuntimeConfig } from '../../../src/modules/system/system-config.js';
+import type { OpenSessionRow } from '#infrastructure/repositories/open-sessions-repository';
+import type { EffectiveLlmRuntimeConfig } from '#modules/system/system-config';
 
 const mocks = vi.hoisted(() => ({
   archiveChatSession: vi.fn(),
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   requireApiKeyPrincipal: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   archiveChatSession: mocks.archiveChatSession,
   createChatSession: mocks.createChatSession,
   createOpenSession: mocks.createOpenSession,
@@ -33,26 +33,26 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   touchOpenSessionActivity: mocks.touchOpenSessionActivity,
 }));
 
-vi.mock('../../../src/runtime/resident-agent.js', () => ({
+vi.mock('#runtime/resident-agent', () => ({
   dispatchAiChatPrompt: mocks.dispatchAiChatPrompt,
 }));
 
-vi.mock('../../../src/runtime/ipc-payloads.js', () => ({
+vi.mock('#runtime/ipc-payloads', () => ({
   claimOrRefreshSessionProcessingLock:
     mocks.claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock: mocks.releaseSessionProcessingLock,
 }));
 
-vi.mock('../../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   resolveOfficialLlmRuntime: mocks.resolveOfficialLlmRuntime,
   resolveOfficialRuntimeByModelKey: mocks.resolveOfficialRuntimeByModelKey,
 }));
 
-vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+vi.mock('#modules/billing/entitlements', () => ({
   getRuntimeEntitlementSnapshot: mocks.getRuntimeEntitlementSnapshot,
 }));
 
-vi.mock('../../../src/interfaces/http/api-key-auth.js', () => ({
+vi.mock('#interfaces/http/api-key-auth', () => ({
   requireApiKeyPrincipal: mocks.requireApiKeyPrincipal,
   sendOpenAiError: (
     reply: FastifyReply,
@@ -66,7 +66,7 @@ vi.mock('../../../src/interfaces/http/api-key-auth.js', () => ({
       .send({ error: { message, type, code, param: null } }),
 }));
 
-import { openSessionRoutes } from '../../../src/interfaces/http/open-session-routes.js';
+import { openSessionRoutes } from '#interfaces/http/open-session-routes';
 
 function runtimeFixture(
   patch: Partial<EffectiveLlmRuntimeConfig> = {},

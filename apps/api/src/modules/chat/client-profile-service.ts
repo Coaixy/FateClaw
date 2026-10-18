@@ -18,10 +18,10 @@ import {
   softDeleteClientProfile,
   updateClientProfile,
   type ClientProfileWithStats,
-} from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import type { ClientProfile } from '../../shared/types.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import type { ClientProfile } from '#shared/types';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
 
 /** 重名（唯一索引冲突）时返回的错误文案。 */

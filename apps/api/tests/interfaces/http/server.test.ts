@@ -15,25 +15,25 @@ const {
   mockStatusLimit: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/system/service-status.js', () => ({
+vi.mock('#modules/system/service-status', () => ({
   getPublicServiceStatus: mockPublicStatus,
 }));
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit: mockStatusLimit,
 }));
 
-vi.mock('../../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   ALLOWED_ORIGINS: ['https://admin.letfate.test'],
   JWT_SECRET: 'test-jwt-secret',
   PUBLIC_WEB_BASE_URL: 'https://www.letfate.test',
   TRUST_PROXY: 'loopback',
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getUserById: mockGetUserById,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     error: mockLoggerError,
     info: vi.fn(),
@@ -41,40 +41,40 @@ vi.mock('../../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../../src/infrastructure/project-root.js', () => ({
+vi.mock('#infrastructure/project-root', () => ({
   resolveProjectRoot: vi.fn(() => '/tmp/fateclaw-api-server-test'),
 }));
 
-vi.mock('../../../src/runtime/ai-chat-stream.js', () => ({
+vi.mock('#runtime/ai-chat-stream', () => ({
   registerAiChatStreamWebSocket: vi.fn(),
 }));
 
-vi.mock('../../../src/interfaces/http/account-routes.js', () => ({
+vi.mock('#interfaces/http/account-routes', () => ({
   accountRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/admin-routes.js', () => ({
+vi.mock('#interfaces/http/admin-routes', () => ({
   adminRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/billing-routes.js', () => ({
+vi.mock('#interfaces/http/billing-routes', () => ({
   billingRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/chat-sessions-routes.js', () => ({
+vi.mock('#interfaces/http/chat-sessions-routes', () => ({
   chatSessionsRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/messages-routes.js', () => ({
+vi.mock('#interfaces/http/messages-routes', () => ({
   messagesRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/model-settings-routes.js', () => ({
+vi.mock('#interfaces/http/model-settings-routes', () => ({
   modelSettingsRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/paipan-routes.js', () => ({
+vi.mock('#interfaces/http/paipan-routes', () => ({
   paipanRoutes: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/interfaces/http/skills-routes.js', () => ({
+vi.mock('#interfaces/http/skills-routes', () => ({
   skillsRoutes: vi.fn(async () => {}),
 }));
 
-vi.mock('../../../src/interfaces/http/auth-routes.js', () => ({
+vi.mock('#interfaces/http/auth-routes', () => ({
   authRoutes: vi.fn(async (app: FastifyInstance) => {
     app.get('/protected-test', async (request) => {
       await request.requireAuth();
@@ -83,7 +83,7 @@ vi.mock('../../../src/interfaces/http/auth-routes.js', () => ({
   }),
 }));
 
-import { createApiServer } from '../../../src/interfaces/http/server.js';
+import { createApiServer } from '#interfaces/http/server';
 
 describe('createApiServer auth guard', () => {
   let app: FastifyInstance;

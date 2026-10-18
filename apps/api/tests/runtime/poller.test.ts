@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   updateAccount: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/ilink.js', () => ({
+vi.mock('#infrastructure/ilink', () => ({
   getUpdates: vi.fn(),
 }));
 
-vi.mock('../../src/modules/chat/message-handler.js', () => ({
+vi.mock('#modules/chat/message-handler', () => ({
   processWeixinMessage: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     child: vi.fn(() => ({
       debug: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
 import {
   __createAccountMessageLimiterForTests,
   __getWeixinMessageLimiterConfigForTests,
-} from '../../src/runtime/poller.js';
+} from '#runtime/poller';
 
 function createDeferred() {
   let resolve!: () => void;

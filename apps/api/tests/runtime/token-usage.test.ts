@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeRuntimeTokenUsage } from '../../src/runtime/token-usage.js';
+import { normalizeRuntimeTokenUsage } from '#runtime/token-usage';
 
 describe('normalizeRuntimeTokenUsage', () => {
   it('adds total-only cache tokens into input tokens', () => {

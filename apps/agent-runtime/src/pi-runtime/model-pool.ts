@@ -15,15 +15,15 @@ import {
   type ModelFailureKind,
   type RuntimeModelPoolNode,
 } from '@fateclaw/contracts/model-settings';
-import type { LlmRuntimeSnapshot } from '../types.js';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 import {
   databaseModelPoolHealth,
   type ModelPoolHealthStore,
   type ModelPoolClaim,
   type BenefitAttemptUsage,
-} from '../model-pool-health.js';
-import { markBenefitAnswerVisible } from '../benefit-execution.js';
-import { redactRuntimeSensitiveValues } from '../public-error.js';
+} from '#agent/model-pool-health';
+import { markBenefitAnswerVisible } from '#agent/benefit-execution';
+import { redactRuntimeSensitiveValues } from '#agent/public-error';
 import { createPiProviderRuntime, type PiProviderRuntime } from './provider.js';
 
 const FIRST_CONTENT_TIMEOUT_MS = 45_000;

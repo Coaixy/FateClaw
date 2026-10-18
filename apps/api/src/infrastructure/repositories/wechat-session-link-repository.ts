@@ -1,5 +1,5 @@
-import type { WechatChatSessionLink } from '../../shared/types.js';
-import { getDbPool } from '../db-pool.js';
+import type { WechatChatSessionLink } from '#shared/types';
+import { getDbPool } from '#infrastructure/db-pool';
 
 /**
  * 读取微信 sender 当前接续的网页 AI Chat 会话。

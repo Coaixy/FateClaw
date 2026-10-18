@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatLiurenPaipan } from '../../../../src/modules/chat/paipan-formatters/liuren.js';
+import { formatLiurenPaipan } from '#modules/chat/paipan-formatters/liuren';
 
 describe('formatLiurenPaipan', () => {
   it('formats empty dun gan as kong and separates jian chu by sky branch', () => {

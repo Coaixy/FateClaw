@@ -8,7 +8,7 @@ import {
   unlink,
 } from 'node:fs/promises';
 import path from 'node:path';
-import { resolvePiSessionDir } from './pi-runtime/session-manager.js';
+import { resolvePiSessionDir } from '#agent/pi-runtime/session-manager';
 import type { InboxRequest, OutboxResponse } from './types.js';
 
 export type ResultRouting = Pick<

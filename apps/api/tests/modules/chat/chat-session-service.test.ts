@@ -70,7 +70,7 @@ const {
   mockRedisSet: vi.fn(async () => 'OK'),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   archiveChatSession: mockArchiveChatSession,
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,
@@ -100,26 +100,23 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   updateChatSessionTitle: mockUpdateChatSessionTitle,
 }));
 
-vi.mock(
-  '../../../src/infrastructure/repositories/pi-session-frames-repository.js',
-  () => ({
-    getPiSessionBase: vi.fn(async () => undefined),
-    getPiSessionSnapshot: vi.fn(async () => undefined),
-  }),
-);
+vi.mock('#infrastructure/repositories/pi-session-frames-repository', () => ({
+  getPiSessionBase: vi.fn(async () => undefined),
+  getPiSessionSnapshot: vi.fn(async () => undefined),
+}));
 
-vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
+vi.mock('#infrastructure/daily-usage', () => ({
   incrementDailyMessageCount: mockIncrementDailyMessageCount,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     warn: vi.fn(),
     error: vi.fn(),
   },
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     get: mockRedisGet,
     set: mockRedisSet,
@@ -128,19 +125,19 @@ vi.mock('../../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
-vi.mock('../../../src/runtime/resident-agent.js', () => ({
+vi.mock('#runtime/resident-agent', () => ({
   dispatchAiChatPrompt: mockDispatchAiChatPrompt,
 }));
 
-vi.mock('../../../src/runtime/ipc-worker.js', () => ({
+vi.mock('#runtime/ipc-worker', () => ({
   cancelAiChatSessionRequest: mockCancelAiChatSessionRequest,
 }));
 
-vi.mock('../../../src/modules/chat/structured-input.js', () => ({
+vi.mock('#modules/chat/structured-input', () => ({
   buildStructuredInputForSession: mockBuildStructuredInputForSession,
 }));
 
-vi.mock('../../../src/modules/chat/pi-session-files.js', () => ({
+vi.mock('#modules/chat/pi-session-files', () => ({
   deletePiSessionFilesForSession: mockDeletePiSessionFilesForSession,
   readPiSessionArchiveForSession: mockReadPiSessionArchiveForSession,
   readPiSessionFileState: mockReadPiSessionFileState,
@@ -162,11 +159,11 @@ vi.mock('../../../src/modules/chat/pi-session-files.js', () => ({
   writePiSessionArchiveToFiles: mockWritePiSessionArchiveToFiles,
 }));
 
-vi.mock('../../../src/modules/chat/paipan-runtime.js', () => ({
+vi.mock('#modules/chat/paipan-runtime', () => ({
   isDirectPaipanSkill: vi.fn((skill: string) => skill === 'bazi-paipan'),
 }));
 
-vi.mock('../../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   resolveUserLlmRuntime: vi.fn(async () => ({
     source: 'custom',
     billingMode: 'none',
@@ -195,12 +192,12 @@ import {
   restoreOwnedArchivedChatSession,
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
-} from '../../../src/modules/chat/chat-session-service.js';
-import { BenefitAdmissionError } from '../../../src/infrastructure/repositories/benefit-repository.js';
+} from '#modules/chat/chat-session-service';
+import { BenefitAdmissionError } from '#infrastructure/repositories/benefit-repository';
 import {
   getPiSessionBase,
   getPiSessionSnapshot,
-} from '../../../src/infrastructure/repositories/pi-session-frames-repository.js';
+} from '#infrastructure/repositories/pi-session-frames-repository';
 
 describe('chat-session-service selected board context', () => {
   it('restores the latest durable frame before considering an older session archive', async () => {

@@ -9,9 +9,9 @@ import type {
   IssueEntryType,
   IssueCloseReason,
 } from '@fateclaw/contracts';
-import { getDbPool } from '../db-pool.js';
-import { queryOne, queryRows } from '../typed-query.js';
-import { IssueError } from '../../modules/issues/issue-errors.js';
+import { getDbPool } from '#infrastructure/db-pool';
+import { queryOne, queryRows } from '#infrastructure/typed-query';
+import { IssueError } from '#modules/issues/issue-errors';
 
 export type IssueActor =
   | { kind: 'user'; userId: string }

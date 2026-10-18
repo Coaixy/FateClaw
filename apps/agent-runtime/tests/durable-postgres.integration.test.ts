@@ -12,12 +12,12 @@ import {
 } from 'vitest';
 import pg from 'pg';
 import { durableAgentRequestsMigration } from '../../api/src/infrastructure/migrations/versions/0076-durable-agent-requests.js';
-import { closeAgentDb } from '../src/agent-db.js';
+import { closeAgentDb } from '#agent/agent-db';
 import {
   claimDurableExecution,
   deliverDurableResult,
-} from '../src/durable-execution.js';
-import type { InboxRequest, OutboxResponse } from '../src/types.js';
+} from '#agent/durable-execution';
+import type { InboxRequest, OutboxResponse } from '#agent/types';
 
 const connectionString = process.env.FATECLAW_DURABLE_TEST_DATABASE_URL;
 const request = {

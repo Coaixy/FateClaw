@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatIchingPaipan } from '../../../../src/modules/chat/paipan-formatters/iching.js';
-import { runIchingPaipan } from '../../../../src/modules/chat/paipan-runners/iching.js';
+import { formatIchingPaipan } from '#modules/chat/paipan-formatters/iching';
+import { runIchingPaipan } from '#modules/chat/paipan-runners/iching';
 
 /**
  * 用真实排盘数据驱动 formatter:先跑 runner 得到结构化盘面,再经一次 JSON

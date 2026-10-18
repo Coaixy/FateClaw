@@ -1,20 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BENEFIT_POLICY } from '@fateclaw/contracts/model-settings';
 const entitlement = vi.hoisted(() => vi.fn());
-vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+vi.mock('#modules/billing/entitlements', () => ({
   getRuntimeEntitlementSnapshot: entitlement,
 }));
-vi.mock(
-  '../../../src/infrastructure/repositories/benefit-repository.js',
-  () => ({
-    getBenefitAllowance: vi.fn(async (userId?: string) => ({
-      remaining_turns: userId ? 3 : null,
-      resets_at: '2026-10-17T00:00:00+08:00',
-    })),
-    getBenefitSupply: vi.fn(async () => 'disabled'),
-    getPreferredModelPool: vi.fn(async () => 'official'),
-  }),
-);
+vi.mock('#infrastructure/repositories/benefit-repository', () => ({
+  getBenefitAllowance: vi.fn(async (userId?: string) => ({
+    remaining_turns: userId ? 3 : null,
+    resets_at: '2026-10-17T00:00:00+08:00',
+  })),
+  getBenefitSupply: vi.fn(async () => 'disabled'),
+  getPreferredModelPool: vi.fn(async () => 'official'),
+}));
 
 const db = vi.hoisted(() => ({
   getPlatformModelSettings: vi.fn(),
@@ -24,7 +21,7 @@ const db = vi.hoisted(() => ({
   getUserModelSelection: vi.fn(),
   getUserModelConfig: vi.fn(),
 }));
-vi.mock('../../../src/infrastructure/db.js', () => db);
+vi.mock('#infrastructure/db', () => db);
 import {
   getAgentConcurrencyLimit,
   getLocalAgentRuntimePolicy,
@@ -37,8 +34,8 @@ import {
   resolveOfficialRuntimeByModelKey,
   resolveUserLlmRuntime,
   saveOfficialModelSettings,
-} from '../../../src/modules/system/system-config.js';
-import type { PlatformModelSettings } from '../../../src/infrastructure/repositories/config-repository.js';
+} from '#modules/system/system-config';
+import type { PlatformModelSettings } from '#infrastructure/repositories/config-repository';
 
 const model = {
   id: 'node-a',

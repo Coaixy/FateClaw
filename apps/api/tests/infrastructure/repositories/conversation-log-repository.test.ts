@@ -5,7 +5,7 @@ const { mockGetDbPool } = vi.hoisted(() => ({
   mockGetDbPool: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
@@ -14,7 +14,7 @@ import {
   getConversationLogSummaries,
   purgeExpiredTraceEvents,
   storeConversationLog,
-} from '../../../src/infrastructure/repositories/conversation-log-repository.js';
+} from '#infrastructure/repositories/conversation-log-repository';
 
 interface QueryCall {
   sql: string;

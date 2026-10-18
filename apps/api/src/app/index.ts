@@ -1,8 +1,8 @@
-import { stopAgentScheduler } from '../runtime/agent-scheduler.js';
+import { stopAgentScheduler } from '#runtime/agent-scheduler';
 import {
   startAgentRequestRecovery,
   stopAgentRequestRecovery,
-} from '../runtime/agent-request-recovery.js';
+} from '#runtime/agent-request-recovery';
 /**
  * FateClaw Runtime — 启动入口
  *
@@ -17,56 +17,53 @@ import {
 
 import { pathToFileURL } from 'url';
 
-import { startApiServer } from '../interfaces/http/server.js';
+import { startApiServer } from '#interfaces/http/server';
 import {
   initDatabase,
   closeDatabase,
   getEnabledAccounts,
-} from '../infrastructure/db.js';
+} from '#infrastructure/db';
 import {
   cleanupStaleLocalAgentsOnStartup,
   stopAllLocalAgents,
-} from '../runtime/local-runner.js';
-import { addAccountListener, startIpcWorker } from '../runtime/ipc-worker.js';
-import { startAccountPolling } from '../runtime/poller.js';
-import { connectRedis, disconnectRedis } from '../infrastructure/redis.js';
-import {
-  startRetentionWorker,
-  stopRetentionWorker,
-} from '../runtime/retention.js';
+} from '#runtime/local-runner';
+import { addAccountListener, startIpcWorker } from '#runtime/ipc-worker';
+import { startAccountPolling } from '#runtime/poller';
+import { connectRedis, disconnectRedis } from '#infrastructure/redis';
+import { startRetentionWorker, stopRetentionWorker } from '#runtime/retention';
 import {
   startBillingSweepWorker,
   stopBillingSweepWorker,
-} from '../runtime/billing-sweeper.js';
+} from '#runtime/billing-sweeper';
 import {
   startPiSessionHealthWorker,
   stopPiSessionHealthWorker,
-} from '../runtime/pi-session-health-worker.js';
+} from '#runtime/pi-session-health-worker';
 import {
   startInboxStallSweeper,
   stopInboxStallSweeper,
-} from '../runtime/inbox-stall-sweeper.js';
-import { logger } from '../infrastructure/logger.js';
+} from '#runtime/inbox-stall-sweeper';
+import { logger } from '#infrastructure/logger';
 import {
   startServiceStatusWorker,
   stopServiceStatusWorker,
-} from '../runtime/service-status-worker.js';
-import { seedOfficialSkillsFromRegistry } from '../infrastructure/paths.js';
-import { getRuntimeEntitlementSnapshot } from '../modules/billing/entitlements.js';
+} from '#runtime/service-status-worker';
+import { seedOfficialSkillsFromRegistry } from '#infrastructure/paths';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 
 // Re-export for CLI and external consumers
 export {
   addAccount,
   removeAccount,
   listAccounts,
-} from '../modules/account/account-service.js';
+} from '#modules/account/account-service';
 
 /**
  * 热激活新账号入口。
  * 会员微信 Claw 账号绑定后，立即启动轮询和 IPC 监听。
  */
 export async function activateAccount(
-  account: import('../shared/types.js').Account,
+  account: import('#shared/types').Account,
 ): Promise<void> {
   // 微信 Claw 账号监听常驻（pinned），不参与站内监听的空闲回收。
   addAccountListener(account.id, { pinned: true });

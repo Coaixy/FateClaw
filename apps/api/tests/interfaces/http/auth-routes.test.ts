@@ -20,39 +20,36 @@ const { sendSMSCaptcha, fixedWindowRateLimit } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('../../../src/modules/user/auth-service.js', () => services);
-vi.mock('../../../src/modules/user/sms-captcha-service.js', () => ({
+vi.mock('#modules/user/auth-service', () => services);
+vi.mock('#modules/user/sms-captcha-service', () => ({
   SMSCaptchaError: class extends Error {},
   getSMSCaptchaPublicMessage: vi.fn(),
   sendSMSCaptcha,
 }));
-vi.mock(
-  '../../../src/infrastructure/repositories/registration-invites-repository.js',
-  () => ({
-    assertRegistrationInviteValid: vi.fn(),
-    createRegistrationInvite: vi.fn(),
-    getRegistrationInvitePolicy: vi.fn(),
-    getRegistrationInviteSummary: vi.fn(),
-    listCompletedRechargeRefunds: vi.fn(),
-    listRegistrationInvites: vi.fn(),
-    recordCompletedRechargeRefund: vi.fn(),
-    revokeRegistrationInvite: vi.fn(),
-    saveRegistrationInvitePolicy: vi.fn(),
-    updateRegistrationInviteAccount: vi.fn(),
-  }),
-);
-vi.mock('../../../src/interfaces/http/captcha.js', () => ({
+vi.mock('#infrastructure/repositories/registration-invites-repository', () => ({
+  assertRegistrationInviteValid: vi.fn(),
+  createRegistrationInvite: vi.fn(),
+  getRegistrationInvitePolicy: vi.fn(),
+  getRegistrationInviteSummary: vi.fn(),
+  listCompletedRechargeRefunds: vi.fn(),
+  listRegistrationInvites: vi.fn(),
+  recordCompletedRechargeRefund: vi.fn(),
+  revokeRegistrationInvite: vi.fn(),
+  saveRegistrationInvitePolicy: vi.fn(),
+  updateRegistrationInviteAccount: vi.fn(),
+}));
+vi.mock('#interfaces/http/captcha', () => ({
   generateCaptcha: vi.fn(),
   verifyCaptcha: vi.fn(async () => ({ ok: true })),
 }));
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit,
   rateLimitCheck: vi.fn(async () => ({ allowed: true })),
   rateLimitClear: vi.fn(),
   rateLimitRecordFail: vi.fn(),
 }));
 
-import { authRoutes } from '../../../src/interfaces/http/auth-routes.js';
+import { authRoutes } from '#interfaces/http/auth-routes';
 
 describe('authentication HTTP routes', () => {
   let app: FastifyInstance;

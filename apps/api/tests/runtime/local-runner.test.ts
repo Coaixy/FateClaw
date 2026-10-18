@@ -116,7 +116,7 @@ vi.mock('fs', () => ({
   },
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -125,25 +125,25 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/infrastructure/alerts.js', () => ({
+vi.mock('#infrastructure/alerts', () => ({
   sendOpsAlert: vi.fn(async () => undefined),
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => ({ get: mockGetHeartbeat }),
 }));
 
-vi.mock('../../src/infrastructure/project-root.js', () => ({
+vi.mock('#infrastructure/project-root', () => ({
   resolveProjectRoot: vi.fn(() => '/project'),
 }));
 
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   DEFAULT_LOCAL_AGENT_IDLE_TTL_MS: 600_000,
   DEFAULT_LOCAL_AGENT_MAX_PROCESSES: 4,
   getLocalAgentRuntimePolicy: mockGetLocalAgentRuntimePolicy,
 }));
 
-vi.mock('../../src/runtime/agent-env.js', () => ({
+vi.mock('#runtime/agent-env', () => ({
   agentEnvToRecord: (env: Record<string, string>) => env,
   buildAgentEnv: mockBuildAgentEnv,
 }));
@@ -157,8 +157,8 @@ import {
   retainLocalAgent,
   stopAllLocalAgents,
   stopLocalAgent,
-} from '../../src/runtime/local-runner.js';
-import { logger } from '../../src/infrastructure/logger.js';
+} from '#runtime/local-runner';
+import { logger } from '#infrastructure/logger';
 
 describe('local-runner', () => {
   beforeEach(() => {
@@ -613,6 +613,17 @@ describe('local-runner', () => {
     expect(spawnedChildren[0].args).toEqual([
       '--max-old-space-size=128',
       '/project/apps/agent-runtime/dist/daemon.js',
+    ]);
+  });
+
+  it('starts source daemons with development package imports', async () => {
+    process.env.LOCAL_AGENT_ENTRY_MODE = 'src';
+
+    await ensureLocalAgentRunning('account-1');
+
+    expect(spawnedChildren[0].args.slice(-2)).toEqual([
+      '--conditions=development',
+      '/project/apps/agent-runtime/src/daemon.ts',
     ]);
   });
 

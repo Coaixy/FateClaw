@@ -1,4 +1,4 @@
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 
 export async function claimOutboundIpcReceipt(
   accountId: string,

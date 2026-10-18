@@ -7,15 +7,15 @@ const { mockGetDbPool, mockGetRedis, mockLoggerWarn } = vi.hoisted(() => ({
   mockLoggerWarn: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: mockGetRedis,
 }));
 
-vi.mock('../../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     warn: mockLoggerWarn,
   },
@@ -27,8 +27,8 @@ import {
   resetUserMessages,
   restoreArchivedChatSession,
   storeMessage,
-} from '../../../src/infrastructure/repositories/chat-repository.js';
-import type { NewMessage } from '../../../src/shared/types.js';
+} from '#infrastructure/repositories/chat-repository';
+import type { NewMessage } from '#shared/types';
 
 interface QueryCall {
   sql: string;

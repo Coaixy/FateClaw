@@ -12,12 +12,12 @@
 import {
   OPEN_SESSION_RETENTION_DAYS,
   TRACE_RETENTION_DAYS,
-} from '../infrastructure/config.js';
+} from '#infrastructure/config';
 import {
   purgeExpiredOpenSessions,
   purgeExpiredTraceEvents,
-} from '../infrastructure/db.js';
-import { logger } from '../infrastructure/logger.js';
+} from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
 
 /** 清理任务运行间隔：每 24 小时一次。 */
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;

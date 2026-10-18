@@ -1,14 +1,14 @@
-import { log } from '../io.js';
-import { buildUserPastedBoardSkillContext } from '../pasted-board-context.js';
-import type { RequestScope } from '../request-scope.js';
-import { traceEvent } from '../trace.js';
+import { log } from '#agent/io';
+import { buildUserPastedBoardSkillContext } from '#agent/pasted-board-context';
+import type { RequestScope } from '#agent/request-scope';
+import { traceEvent } from '#agent/trace';
 import type {
   ContainerInput,
   SessionBoardContext,
   SkillContextEntry,
-} from '../types.js';
-import type { RequestRuntime } from '../runtime.js';
-import { getJingzhanPrompt } from './prompts/jingzhan.js';
+} from '#agent/types';
+import type { RequestRuntime } from '#agent/runtime';
+import { getJingzhanPrompt } from '#agent/pi-runtime/prompts/jingzhan';
 
 const BOARD_MANIFEST_PREVIEW_CHARS = 240;
 const SOUL_MANIFEST_PREVIEW_CHARS = 800;

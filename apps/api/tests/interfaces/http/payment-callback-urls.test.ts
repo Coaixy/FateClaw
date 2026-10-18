@@ -53,7 +53,7 @@ async function loadResolver(env: {
   if (env.publicWebBaseUrl !== undefined) {
     process.env.PUBLIC_WEB_BASE_URL = env.publicWebBaseUrl;
   }
-  return import('../../../src/interfaces/http/payment-callback-urls.js');
+  return import('#interfaces/http/payment-callback-urls');
 }
 
 afterEach(() => {

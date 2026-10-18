@@ -8,17 +8,17 @@ import {
   getBillingUsage,
   resetBillingScope,
   subscribeCurrentUserMembership,
-} from '../../modules/billing/billing-service.js';
+} from '#modules/billing/billing-service';
 import {
   createRechargeOrderForUser,
   getRechargeStatsForUser,
   handleRechargeNotification,
   listRechargeOrdersForUser,
   syncRechargeOrderForUser,
-} from '../../modules/billing/recharge-service.js';
+} from '#modules/billing/recharge-service';
 import { MEMBERSHIP_PLAN_KEY } from '@fateclaw/contracts/membership';
 import { resolvePaymentCallbackUrls } from './payment-callback-urls.js';
-import { getRedis } from '../../infrastructure/redis.js';
+import { getRedis } from '#infrastructure/redis';
 
 // 易支付 notify 是免登录入口、验签是唯一闸门。加一道**宽松**的 per-IP 限流，
 // 防止用无效签名洪泛放大验签（RSA）和单行 upsert 写的 CPU/DB 负载。

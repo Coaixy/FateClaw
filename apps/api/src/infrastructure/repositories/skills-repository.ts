@@ -1,14 +1,14 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
 
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 import {
   prepareSkillContent,
   readSkillMarkdownMetadata,
 } from '@fateclaw/contracts/skills/content';
 import { insertSkillContentRevision } from './skill-content-repository.js';
-import { SkillRevisionConflictError } from '../../modules/skills/skill-errors.js';
-import { deriveSkillCategory } from '../../modules/skills/category-map.js';
+import { SkillRevisionConflictError } from '#modules/skills/skill-errors';
+import { deriveSkillCategory } from '#modules/skills/category-map';
 import type {
   SkillAccessInvite,
   SkillAccessInviteTargetType,
@@ -18,7 +18,7 @@ import type {
   TextSkillBundleFile,
   UserCustomSkill,
   UserSkillSubscription,
-} from '../../shared/types.js';
+} from '#shared/types';
 
 const pool = {
   query(sql: string, params?: unknown[]) {

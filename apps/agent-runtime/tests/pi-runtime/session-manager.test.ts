@@ -36,7 +36,7 @@ vi.mock('@earendil-works/pi-coding-agent', async () => {
 import {
   createFateClawPiSessionManager,
   resolvePiSessionFile,
-} from '../../src/pi-runtime/session-manager.js';
+} from '#agent/pi-runtime/session-manager';
 
 describe('createFateClawPiSessionManager', () => {
   beforeEach(() => {

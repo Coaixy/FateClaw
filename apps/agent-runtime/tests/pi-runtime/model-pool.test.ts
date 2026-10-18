@@ -6,15 +6,15 @@ import {
 import { once } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
-import type { LlmRuntimeSnapshot } from '../../src/types.js';
-import { createPiProviderRuntime } from '../../src/pi-runtime/provider.js';
+import type { LlmRuntimeSnapshot } from '#agent/types';
+import { createPiProviderRuntime } from '#agent/pi-runtime/provider';
 import {
   installModelPool,
   weightedNodeOrder,
-} from '../../src/pi-runtime/model-pool.js';
-import type { ModelPoolHealthStore } from '../../src/model-pool-health.js';
-import { createRequestScope } from '../../src/request-scope.js';
-import { traceEvent } from '../../src/trace.js';
+} from '#agent/pi-runtime/model-pool';
+import type { ModelPoolHealthStore } from '#agent/model-pool-health';
+import { createRequestScope } from '#agent/request-scope';
+import { traceEvent } from '#agent/trace';
 
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {

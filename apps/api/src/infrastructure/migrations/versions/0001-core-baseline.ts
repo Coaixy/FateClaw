@@ -1,6 +1,6 @@
 import type pg from 'pg';
 
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 /**
  * Frozen legacy schema through historical migration 0067.

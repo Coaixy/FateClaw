@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
-import { getDbPool } from '../db-pool.js';
+import { getDbPool } from '#infrastructure/db-pool';
 import { storeMessage } from './chat-repository.js';
-import { InvalidAiChatPayloadError } from '../../shared/ipc-errors.js';
-import type { AiChatSubmission } from '../../runtime/request-types.js';
-import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
+import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
+import type { AiChatSubmission } from '#runtime/request-types';
+import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
 import {
   reserveBenefitTurn,
   ModelSelectionError,

@@ -12,14 +12,12 @@ const state = vi.hoisted(() => ({
   pool: null as pg.Pool | null,
   publish: vi.fn(async () => 1),
 }));
-vi.mock('../../src/infrastructure/env.js', () => ({ readEnvFile: () => ({}) }));
-vi.mock('../../src/infrastructure/config.js', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('../../src/infrastructure/config.js')
-  >()),
+vi.mock('#infrastructure/env', () => ({ readEnvFile: () => ({}) }));
+vi.mock('#infrastructure/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#infrastructure/config')>()),
   DATABASE_URL: 'postgresql://synthetic-disposable-client',
 }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
   initDbPool: () => state.pool,
   closeDbPool: async () => {
@@ -29,16 +27,16 @@ vi.mock('../../src/infrastructure/db-pool.js', () => ({
 vi.mock('../../../agent-runtime/src/agent-db.js', () => ({
   getAgentDbPool: () => state.pool,
 }));
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => ({ publish: state.publish, eval: async () => 1 }),
 }));
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#runtime/local-runner', () => ({
   releaseLocalAgent: vi.fn(async () => undefined),
 }));
-vi.mock('../../src/modules/skills/legacy-skill-import.js', () => ({
+vi.mock('#modules/skills/legacy-skill-import', () => ({
   importLegacySkillContent: async () => ({
     migrated: 0,
     missing: 0,
@@ -47,40 +45,36 @@ vi.mock('../../src/modules/skills/legacy-skill-import.js', () => ({
   }),
 }));
 
-import {
-  initDatabase,
-  closeDatabase,
-  deleteUser,
-} from '../../src/infrastructure/db.js';
-import { settleRechargeOrderPaid } from '../../src/infrastructure/repositories/billing-repository.js';
+import { initDatabase, closeDatabase, deleteUser } from '#infrastructure/db';
+import { settleRechargeOrderPaid } from '#infrastructure/repositories/billing-repository';
 import {
   archiveChatSession,
   storeMessage,
-} from '../../src/infrastructure/repositories/chat-repository.js';
-import { claimOutboundIpcReceipt } from '../../src/infrastructure/repositories/ipc-receipts-repository.js';
+} from '#infrastructure/repositories/chat-repository';
+import { claimOutboundIpcReceipt } from '#infrastructure/repositories/ipc-receipts-repository';
 import { claimDurableExecution } from '../../../agent-runtime/src/durable-execution.js';
 import type { InboxRequest } from '../../../agent-runtime/src/types.js';
 import {
   admitAgentRequest,
   withAgentResultDelivery,
-} from '../../src/infrastructure/repositories/agent-requests-repository.js';
+} from '#infrastructure/repositories/agent-requests-repository';
 import {
   getBenefitAllowance,
   getBenefitSupply,
   settleBenefitTurn,
   tryAcquireBenefitExecutionSlot,
-} from '../../src/infrastructure/repositories/benefit-repository.js';
+} from '#infrastructure/repositories/benefit-repository';
 import {
   getPlatformModelRuntimeSettings,
   savePlatformModelConfig,
-} from '../../src/infrastructure/repositories/config-repository.js';
+} from '#infrastructure/repositories/config-repository';
 import { createPiProviderRuntime } from '../../../agent-runtime/src/pi-runtime/provider.js';
 import { installModelPool } from '../../../agent-runtime/src/pi-runtime/model-pool.js';
-import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
+import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
 import type {
   LlmRuntimeSnapshot,
   PendingInboxRequest,
-} from '../../src/runtime/ipc-payloads.js';
+} from '#runtime/ipc-payloads';
 
 const connectionString = process.env.FATECLAW_TEST_SECURITY_DATABASE_URL;
 describe.skipIf(!connectionString)(

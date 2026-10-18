@@ -4,7 +4,7 @@ import path from 'path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { resolveProjectRoot } from '../../src/infrastructure/project-root.js';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 
 const tempDirs: string[] = [];
 

@@ -15,13 +15,13 @@ import type {
   MembershipEntitlementRow,
   RechargeOrderRow,
   RechargeStatsRow,
-} from '../infrastructure/db.js';
+} from '#infrastructure/db';
 import type {
   MembershipBillingSummary,
   MembershipPlanSummary,
   MonthlyMeteredBillingSummary,
   WalletBalanceSummary,
-} from '../modules/billing/plans.js';
+} from '#modules/billing/plans';
 
 /** 统一的钱包余额 contract 字段，所有余额变动响应都应保持这四项。 */
 export type WalletBalanceDto = Pick<

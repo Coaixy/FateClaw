@@ -1,4 +1,4 @@
-import type { DatabaseMigration } from '../types.js';
+import type { DatabaseMigration } from '#infrastructure/migrations/types';
 
 export const dropPublicFinancialLedgerMigration: DatabaseMigration = {
   id: '0078_drop_public_financial_ledger',

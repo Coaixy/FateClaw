@@ -8,7 +8,7 @@ import {
   PI_SESSION_CHECKPOINT_INTERVAL,
   restorePiSessionFrame,
 } from '@fateclaw/contracts/agent/session';
-import { getDbPool, type DbQueryable } from '../db-pool.js';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 
 export async function getPiSessionBase(
   sessionId: string,

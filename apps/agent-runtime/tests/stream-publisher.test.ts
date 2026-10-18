@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createAiChatStreamPublisher } from '../src/ai-chat-stream.js';
-import type { AiChatStreamEvent } from '../src/types.js';
+import { createAiChatStreamPublisher } from '#agent/ai-chat-stream';
+import type { AiChatStreamEvent } from '#agent/types';
 
 describe('request-scoped stream publisher', () => {
   beforeEach(() => vi.useFakeTimers());

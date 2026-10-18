@@ -3,8 +3,8 @@ import type {
   ModelProviderType,
   OfficialModelConfig,
   PiThinkingLevel,
-} from '../../shared/types.js';
-import { getDbPool, type DbQueryable } from '../db-pool.js';
+} from '#shared/types';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 import type {
   BenefitPolicyDto,
   ModelPoolKey,

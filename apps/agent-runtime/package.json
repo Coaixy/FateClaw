@@ -5,6 +5,12 @@
   "description": "Account-scoped Agent Runtime for FateClaw (OpenAI-compatible)",
   "license": "GPL-3.0-only",
   "main": "dist/daemon.js",
+  "imports": {
+    "#agent/*": {
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
   "scripts": {
     "build": "node ../../scripts/clean-build-dist.mjs agent-runtime && tsc -p tsconfig.build.json && node ../../scripts/copy-shared-assets.mjs agent-runtime",
     "start": "node dist/daemon.js"

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { encodeRuntimeIpc } from '../../src/runtime/ipc-security.js';
+import { encodeRuntimeIpc } from '#runtime/ipc-security';
 
 const {
   mockLindex,
@@ -35,7 +35,7 @@ const {
   mockReleasePerUserMeteredSlotByRequestId: vi.fn(async () => undefined),
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   // 锁逻辑已移入共享 helper acquireRedisWorkerLock，这里 mock 它以控制「拿到锁 /
   // 被其他实例占用」；getRedis 仅用于队列读写（scan/lrange）与 pop 脚本（eval）。
   getRedis: vi.fn(() => ({
@@ -50,7 +50,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
   acquireRedisWorkerLock: mockAcquireRedisWorkerLock,
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -59,22 +59,22 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
+vi.mock('#runtime/ipc-ai-chat-outbox-handler', () => ({
   processAiChatOutboxPayload: mockProcessAiChatOutboxPayload,
 }));
 
-vi.mock('../../src/infrastructure/alerts.js', () => ({
+vi.mock('#infrastructure/alerts', () => ({
   sendOpsAlert: mockSendOpsAlert,
 }));
 
-vi.mock('../../src/runtime/ipc-worker.js', () => ({
+vi.mock('#runtime/ipc-worker', () => ({
   releaseGlobalAgentSlot: mockReleaseGlobalAgentSlot,
   releasePerUserMeteredSlotByRequestId:
     mockReleasePerUserMeteredSlotByRequestId,
 }));
 
-import { runInboxStallSweepOnce } from '../../src/runtime/inbox-stall-sweeper.js';
-import { INBOX_STALL_FAIL_MS } from '../../src/shared/timeout-chain.js';
+import { runInboxStallSweepOnce } from '#runtime/inbox-stall-sweeper';
+import { INBOX_STALL_FAIL_MS } from '#shared/timeout-chain';
 
 function buildPayload(overrides: Record<string, unknown> = {}): string {
   return encodeRuntimeIpc(

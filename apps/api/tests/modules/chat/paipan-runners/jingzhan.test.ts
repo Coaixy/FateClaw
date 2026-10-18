@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { runJingzhanPaipan } from '../../../../src/modules/chat/paipan-runners/jingzhan.js';
+import { runJingzhanPaipan } from '#modules/chat/paipan-runners/jingzhan';
 
 describe('runJingzhanPaipan 高岛易断解读', () => {
   it('略筮法起卦附带高岛易断解读，卦名与动爻数均对齐本卦', async () => {

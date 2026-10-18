@@ -13,11 +13,11 @@ import {
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
   upsertWechatChatSessionLink,
-} from '../../infrastructure/db.js';
-import { getRedis } from '../../infrastructure/redis.js';
-import { logger } from '../../infrastructure/logger.js';
-import { sessionProcessingLockKey } from '../../runtime/ipc-payloads.js';
-import type { Account, User } from '../../shared/types.js';
+} from '#infrastructure/db';
+import { getRedis } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
+import { sessionProcessingLockKey } from '#runtime/ipc-payloads';
+import type { Account, User } from '#shared/types';
 
 const WECHAT_SESSION_LIST_LIMIT = 5;
 const WECHAT_SESSION_LIST_CACHE_SECONDS = 600;

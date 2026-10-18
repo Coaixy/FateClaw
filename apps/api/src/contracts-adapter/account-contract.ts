@@ -5,7 +5,7 @@ import type {
   QrCodeStatusResultDto,
 } from '@fateclaw/contracts/account';
 
-import type { Account } from '../shared/types.js';
+import type { Account } from '#shared/types';
 
 /**
  * 用户态账号 DTO。

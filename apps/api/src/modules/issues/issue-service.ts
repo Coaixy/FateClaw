@@ -10,7 +10,7 @@ import {
   listIssueRows,
   type IssueListFilter,
   type IssueRow,
-} from '../../infrastructure/repositories/issues-repository.js';
+} from '#infrastructure/repositories/issues-repository';
 
 function publicIssue(row: IssueRow, viewer?: string): IssueDto {
   // Public DTOs are allowlists: private attribution never reaches the public response.

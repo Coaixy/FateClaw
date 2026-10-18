@@ -5,10 +5,10 @@
  * 长期未活跃会话。孤儿文件的物理清理风险更高，保留为管理员手动入口。
  */
 
-import { acquireRedisWorkerLock } from '../infrastructure/redis.js';
-import { logger } from '../infrastructure/logger.js';
-import { cleanupPiSessionFilesForAdmin } from '../modules/admin/admin-service.js';
-import { getPiSessionHealthPolicy } from '../modules/system/system-config.js';
+import { acquireRedisWorkerLock } from '#infrastructure/redis';
+import { logger } from '#infrastructure/logger';
+import { cleanupPiSessionFilesForAdmin } from '#modules/admin/admin-service';
+import { getPiSessionHealthPolicy } from '#modules/system/system-config';
 
 /** Pi session 健康任务固定运行间隔：每 24 小时检查一次后台配置。 */
 const PI_SESSION_HEALTH_INTERVAL_MS = 24 * 60 * 60 * 1000;

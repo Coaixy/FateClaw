@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   runBaziPaipan,
   type BaziPaipanResult,
-} from '../../../../src/modules/chat/paipan-runners/bazi.js';
+} from '#modules/chat/paipan-runners/bazi';
 
 interface AnnualFortuneItem {
   year: number;

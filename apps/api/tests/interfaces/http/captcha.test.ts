@@ -57,18 +57,15 @@ const { mockRedis } = vi.hoisted(() => {
   return { mockRedis: redis };
 });
 
-vi.mock('../../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   JWT_SECRET: 'test-jwt-secret',
 }));
 
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => mockRedis),
 }));
 
-import {
-  generateCaptcha,
-  verifyCaptcha,
-} from '../../../src/interfaces/http/captcha.js';
+import { generateCaptcha, verifyCaptcha } from '#interfaces/http/captcha';
 
 const CLIENT_IP = '203.0.113.7';
 

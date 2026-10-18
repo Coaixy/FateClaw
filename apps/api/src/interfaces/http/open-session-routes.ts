@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import type { SessionBoardContext } from '../../shared/token-budget.js';
-import { dispatchAiChatPrompt } from '../../runtime/resident-agent.js';
+import type { SessionBoardContext } from '#shared/token-budget';
+import { dispatchAiChatPrompt } from '#runtime/resident-agent';
 import {
   claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock,
-} from '../../runtime/ipc-payloads.js';
+} from '#runtime/ipc-payloads';
 import {
   archiveChatSession,
   createChatSession,
@@ -18,17 +18,17 @@ import {
   storeMessage,
   toOpenSessionDto,
   touchOpenSessionActivity,
-} from '../../infrastructure/db.js';
-import type { OpenSessionRow } from '../../infrastructure/repositories/open-sessions-repository.js';
+} from '#infrastructure/db';
+import type { OpenSessionRow } from '#infrastructure/repositories/open-sessions-repository';
 import {
   WEB_CHAT_USER_NAME,
   getWebChatRuntimeId,
-} from '../../modules/chat/web-chat-runtime.js';
+} from '#modules/chat/web-chat-runtime';
 import {
   resolveOfficialLlmRuntime,
   resolveOfficialRuntimeByModelKey,
-} from '../../modules/system/system-config.js';
-import { getRuntimeEntitlementSnapshot } from '../../modules/billing/entitlements.js';
+} from '#modules/system/system-config';
+import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
 
 /** FateClaw 扩展字段（建会话时一次性传入，服务端按会话存快照）。 */

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGetDbPool } = vi.hoisted(() => ({ mockGetDbPool: vi.fn() }));
 
-vi.mock('../../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: mockGetDbPool,
 }));
 
@@ -12,7 +12,7 @@ import {
   getChatSessionPiCleanupCandidates,
   getCustomSkillsForAdmin,
   getMessagesForAdmin,
-} from '../../../src/infrastructure/repositories/admin-repository.js';
+} from '#infrastructure/repositories/admin-repository';
 
 interface QueryCall {
   sql: string;

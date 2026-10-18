@@ -16,10 +16,10 @@ import {
   JWT_SECRET,
   PUBLIC_WEB_BASE_URL,
   TRUST_PROXY,
-} from '../../infrastructure/config.js';
-import { getUserById } from '../../infrastructure/db.js';
-import { logger } from '../../infrastructure/logger.js';
-import { resolveProjectRoot } from '../../infrastructure/project-root.js';
+} from '#infrastructure/config';
+import { getUserById } from '#infrastructure/db';
+import { logger } from '#infrastructure/logger';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 import { accountRoutes } from './account-routes.js';
 import { adminRoutes } from './admin-routes.js';
 import { apiKeysRoutes } from './api-keys-routes.js';
@@ -36,7 +36,7 @@ import { announcementRoutes } from './announcements-routes.js';
 import { openApiRoutes } from './open-api-routes.js';
 import { openSessionsAdminRoutes } from './open-sessions-admin-routes.js';
 import { paipanRoutes } from './paipan-routes.js';
-import { registerAiChatStreamWebSocket } from '../../runtime/ai-chat-stream.js';
+import { registerAiChatStreamWebSocket } from '#runtime/ai-chat-stream';
 
 import { normalizeHttpError } from './http-error.js';
 import { skillsRoutes } from './skills-routes.js';
@@ -375,7 +375,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
     const checks: Record<string, 'ok' | string> = {};
     let healthy = true;
     try {
-      const { pingDatabase } = await import('../../infrastructure/db.js');
+      const { pingDatabase } = await import('#infrastructure/db');
       await pingDatabase();
       checks.postgres = 'ok';
     } catch (err) {
@@ -383,7 +383,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
       checks.postgres = err instanceof Error ? err.message : 'down';
     }
     try {
-      const { getRedis } = await import('../../infrastructure/redis.js');
+      const { getRedis } = await import('#infrastructure/redis');
       await getRedis().ping();
       checks.redis = 'ok';
     } catch (err) {

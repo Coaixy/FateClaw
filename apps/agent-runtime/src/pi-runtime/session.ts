@@ -4,16 +4,16 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 
-import { getContext } from '../context.js';
-import { traceEvent } from '../trace.js';
+import { getContext } from '#agent/context';
+import { traceEvent } from '#agent/trace';
 import type {
   ContainerInput,
   PiThinkingLevel,
   PiSessionSnapshot,
   TokenUsage,
-} from '../types.js';
-import type { RequestRuntime } from '../runtime.js';
-import type { RequestScope } from '../request-scope.js';
+} from '#agent/types';
+import type { RequestRuntime } from '#agent/runtime';
+import type { RequestScope } from '#agent/request-scope';
 import { createPiResourceLoader } from './resource-loader.js';
 import {
   assertCustomBaseUrlIsPublic,
@@ -33,16 +33,19 @@ import {
   enrichAiChatStreamEvent,
   publishAiChatStreamEvent,
   pushAiChatOutboxMessage,
-} from '../ai-chat-stream.js';
-import { log } from '../io.js';
-import { attachPartialUsage } from '../partial-usage.js';
-import { recordBenefitToolCall } from '../benefit-execution.js';
+} from '#agent/ai-chat-stream';
+import { log } from '#agent/io';
+import { attachPartialUsage } from '#agent/partial-usage';
+import { recordBenefitToolCall } from '#agent/benefit-execution';
 import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
-import type { SkillContextEntry } from '../types.js';
-import { getRequestId } from '../request-scope.js';
+import type { SkillContextEntry } from '#agent/types';
+import { getRequestId } from '#agent/request-scope';
 import { installModelPool } from './model-pool.js';
-import { CancelledAgentRequestError, ModelCallError } from '../public-error.js';
+import {
+  CancelledAgentRequestError,
+  ModelCallError,
+} from '#agent/public-error';
 
 const DEFAULT_THINKING_LEVEL: PiThinkingLevel = 'medium';
 

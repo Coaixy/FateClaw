@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   RechargeOrderRow,
   RechargePaymentConfigRow,
-} from '../../../src/infrastructure/db.js';
+} from '#infrastructure/db';
 
 const {
   mockCreateEpayPayment,
@@ -31,7 +31,7 @@ const {
   mockVerifyEpayNotification: vi.fn(),
 }));
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getRechargeOrderByTradeId: mockGetRechargeOrderByTradeId,
   getRechargeOrderByTradeIdForUser: mockGetRechargeOrderByTradeIdForUser,
   getRechargePaymentConfig: mockGetRechargePaymentConfig,
@@ -45,10 +45,10 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   updateRechargePaymentConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/modules/billing/epay-client.js', async () => {
+vi.mock('#modules/billing/epay-client', async () => {
   const actual = await vi.importActual<
-    typeof import('../../../src/modules/billing/epay-client.js')
-  >('../../../src/modules/billing/epay-client.js');
+    typeof import('#modules/billing/epay-client')
+  >('#modules/billing/epay-client');
   return {
     ...actual,
     createEpayPayment: mockCreateEpayPayment,
@@ -61,7 +61,7 @@ import {
   createRechargeOrderForUser,
   handleRechargeNotification,
   syncRechargeOrderForUser,
-} from '../../../src/modules/billing/recharge-service.js';
+} from '#modules/billing/recharge-service';
 
 function paymentConfig(
   overrides: Partial<RechargePaymentConfigRow> = {},

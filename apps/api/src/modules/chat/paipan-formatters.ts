@@ -1,2 +1,2 @@
-export { formatOfficialPaipan } from './paipan-formatters/index.js';
-export type { PaipanFormatter } from './paipan-formatters/index.js';
+export { formatOfficialPaipan } from '#modules/chat/paipan-formatters/index';
+export type { PaipanFormatter } from '#modules/chat/paipan-formatters/index';

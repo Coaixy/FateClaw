@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import type { DatabaseBaseline } from '../types.js';
+import type { DatabaseBaseline } from '#infrastructure/migrations/types';
 
 export const currentSchemaBaseline: DatabaseBaseline = {
   throughMigrationId: '0077_drop_bazi_cases',

@@ -5,12 +5,12 @@
 
 import type { PublicReasonCode } from '@fateclaw/contracts';
 
-import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
-import { getRedis } from '../infrastructure/redis.js';
-import type { BillingReservation } from '../modules/billing/plans.js';
+import { getSingleAccountIdIfOnlyOne } from '#infrastructure/db';
+import { getRedis } from '#infrastructure/redis';
+import type { BillingReservation } from '#modules/billing/plans';
 import type { NormalizedRuntimeTokenUsage } from './token-usage.js';
-import { InvalidAiChatPayloadError } from '../shared/ipc-errors.js';
-export { InvalidAiChatPayloadError } from '../shared/ipc-errors.js';
+import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
+export { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 
 // ─── 公共类型 ──────────────────────────────────────────
 

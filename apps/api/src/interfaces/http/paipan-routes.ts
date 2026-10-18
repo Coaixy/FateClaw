@@ -4,9 +4,9 @@ import {
   commitDirectPaipanForOwnedUser,
   listDirectPaipanCatalogForOwnedUser,
   previewDirectPaipanForOwnedUser,
-} from '../../modules/chat/paipan-service.js';
-import { reverseGanzhiForPaipan } from '../../modules/chat/ganzhi-reverse-service.js';
-import { getUserById } from '../../infrastructure/db.js';
+} from '#modules/chat/paipan-service';
+import { reverseGanzhiForPaipan } from '#modules/chat/ganzhi-reverse-service';
+import { getUserById } from '#infrastructure/db';
 import { fixedWindowRateLimit } from './rate-limit.js';
 
 /** 免登录排盘端点（preview / ganzhi-reverse）的每分钟按 IP 限流额度。 */

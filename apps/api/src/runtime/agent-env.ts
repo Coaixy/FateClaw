@@ -5,16 +5,16 @@
  * 新增 env 字段只需改这一个文件。
  */
 
-import { DATABASE_URL, REDIS_URL, TIMEZONE } from '../infrastructure/config.js';
-import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
-import { pickSystemEnv } from '../infrastructure/process-env.js';
+import { DATABASE_URL, REDIS_URL, TIMEZONE } from '#infrastructure/config';
+import { getUserByAccountId, getUserById } from '#infrastructure/db';
+import { pickSystemEnv } from '#infrastructure/process-env';
 import { runtimeIpcKey } from './ipc-security.js';
-import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
-import { resolveProjectRoot } from '../infrastructure/project-root.js';
+import { getUserIdFromWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
+import { resolveProjectRoot } from '#infrastructure/project-root';
 import {
   AGENT_RUNTIME_REQUEST_MAX_DURATION_MS,
   AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
-} from '../shared/timeout-chain.js';
+} from '#shared/timeout-chain';
 
 // ---------------------------------------------------------------------------
 // 契约接口

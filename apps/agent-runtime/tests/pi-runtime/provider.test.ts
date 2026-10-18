@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const lookupMock = vi.hoisted(() => vi.fn());
 vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
 
-import type { LlmRuntimeSnapshot } from '../../src/types.js';
+import type { LlmRuntimeSnapshot } from '#agent/types';
 import {
   assertCustomBaseUrlIsPublic,
   createPiProviderRuntime,
-} from '../../src/pi-runtime/provider.js';
+} from '#agent/pi-runtime/provider';
 
 const runtime: LlmRuntimeSnapshot = {
   source: 'custom',

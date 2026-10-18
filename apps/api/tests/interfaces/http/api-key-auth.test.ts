@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_KEY_LIVE_PREFIX } from '@fateclaw/contracts/api-keys';
 
 const f = vi.hoisted(() => ({ limit: vi.fn(), entitlement: vi.fn() }));
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   findActiveApiKeyByHash: vi.fn(async () => ({
     id: 'synthetic-key',
     user_id: 'synthetic-user',
@@ -13,16 +13,16 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   hashApiKey: vi.fn(() => 'synthetic-hash'),
   touchApiKeyLastUsed: vi.fn(),
 }));
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => ({ set: vi.fn(async () => null) }),
 }));
-vi.mock('../../../src/modules/billing/entitlements.js', () => ({
+vi.mock('#modules/billing/entitlements', () => ({
   getRuntimeEntitlementSnapshot: f.entitlement,
 }));
-vi.mock('../../../src/interfaces/http/rate-limit.js', () => ({
+vi.mock('#interfaces/http/rate-limit', () => ({
   fixedWindowRateLimit: f.limit,
 }));
-import { apiKeyAuthOnRequest } from '../../../src/interfaces/http/api-key-auth.js';
+import { apiKeyAuthOnRequest } from '#interfaces/http/api-key-auth';
 
 describe('external API limiter failure boundary', () => {
   beforeEach(() => vi.clearAllMocks());

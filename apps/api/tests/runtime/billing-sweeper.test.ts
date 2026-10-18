@@ -12,27 +12,27 @@ const {
   mockRecoverStalePendingReservation: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => ({ query: mockDurableQuery }),
 }));
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   listStalePendingReservations: mockListStalePendingReservations,
   getConversationLogByRequestId: mockGetConversationLogByRequestId,
 }));
 
-vi.mock('../../src/modules/billing/plans.js', () => ({
+vi.mock('#modules/billing/plans', () => ({
   recoverStalePendingReservation: mockRecoverStalePendingReservation,
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('../../src/infrastructure/alerts.js', () => ({
+vi.mock('#infrastructure/alerts', () => ({
   sendOpsAlert: vi.fn(async () => undefined),
 }));
 
-import { runBillingSweepOnce } from '../../src/runtime/billing-sweeper.js';
+import { runBillingSweepOnce } from '#runtime/billing-sweeper';
 
 const isoMinutesAgo = (minutes: number): string =>
   new Date(Date.now() - minutes * 60 * 1000).toISOString();

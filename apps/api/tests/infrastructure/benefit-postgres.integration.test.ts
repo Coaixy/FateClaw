@@ -17,7 +17,7 @@ import {
 } from '@fateclaw/contracts/model-settings';
 
 const state = vi.hoisted(() => ({ pool: null as pg.Pool | null }));
-vi.mock('../../src/infrastructure/db-pool.js', () => ({
+vi.mock('#infrastructure/db-pool', () => ({
   getDbPool: () => state.pool,
 }));
 vi.mock('../../../agent-runtime/src/agent-db.js', () => ({
@@ -25,21 +25,21 @@ vi.mock('../../../agent-runtime/src/agent-db.js', () => ({
 }));
 import { createPiProviderRuntime } from '../../../agent-runtime/src/pi-runtime/provider.js';
 import { installModelPool } from '../../../agent-runtime/src/pi-runtime/model-pool.js';
-import { probeBenefitModelAvailability } from '../../src/modules/system/model-availability-probe.js';
+import { probeBenefitModelAvailability } from '#modules/system/model-availability-probe';
 import {
   recordBenefitToolCall,
   markBenefitAnswerVisible,
 } from '../../../agent-runtime/src/benefit-execution.js';
-import { MIGRATIONS } from '../../src/infrastructure/migrations/manifest.js';
+import { MIGRATIONS } from '#infrastructure/migrations/manifest';
 import {
   savePlatformModelConfig,
   getPlatformModelSettings,
   getPlatformModelRuntimeSettings,
-} from '../../src/infrastructure/repositories/config-repository.js';
+} from '#infrastructure/repositories/config-repository';
 import {
   admitAgentRequest,
   withAgentResultDelivery,
-} from '../../src/infrastructure/repositories/agent-requests-repository.js';
+} from '#infrastructure/repositories/agent-requests-repository';
 import {
   settleBenefitTurn,
   tryAcquireBenefitExecutionSlot,
@@ -47,8 +47,8 @@ import {
   getBenefitSupply,
   getPreferredModelPool,
   saveModelPoolPreference,
-} from '../../src/infrastructure/repositories/benefit-repository.js';
-import type { LlmRuntimeSnapshot } from '../../src/runtime/ipc-payloads.js';
+} from '#infrastructure/repositories/benefit-repository';
+import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
 
 // Only this explicitly supplied disposable server is permitted; application credentials are never used.
 const connectionString = process.env.FATECLAW_TEST_BENEFIT_DATABASE_URL;

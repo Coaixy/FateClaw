@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 
-import { listMessagesForOwnedAccount } from '../../modules/chat/web-chat-service.js';
+import { listMessagesForOwnedAccount } from '#modules/chat/web-chat-service';
 
 export async function messagesRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/messages/:accountId?limit=50

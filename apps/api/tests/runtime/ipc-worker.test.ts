@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  decodeRuntimeIpc,
-  encodeRuntimeIpc,
-} from '../../src/runtime/ipc-security.js';
+import { decodeRuntimeIpc, encodeRuntimeIpc } from '#runtime/ipc-security';
 
 const {
   mockGet,
@@ -56,17 +53,14 @@ const {
   mockPexpire: vi.fn(async () => 1),
 }));
 
-vi.mock(
-  '../../src/infrastructure/repositories/agent-requests-repository.js',
-  () => ({
-    admitAgentRequest: vi.fn(async () => 'execution-1'),
-    markAgentRequestDispatched: vi.fn(async () => true),
-    requestAgentCancellation: vi.fn(async () => undefined),
-    persistAgentFailure: vi.fn(async (_id, payload) => payload),
-  }),
-);
+vi.mock('#infrastructure/repositories/agent-requests-repository', () => ({
+  admitAgentRequest: vi.fn(async () => 'execution-1'),
+  markAgentRequestDispatched: vi.fn(async () => true),
+  requestAgentCancellation: vi.fn(async () => undefined),
+  persistAgentFailure: vi.fn(async (_id, payload) => payload),
+}));
 
-vi.mock('../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,
     totalCoinsExpired: 0,
@@ -76,7 +70,7 @@ vi.mock('../../src/infrastructure/db.js', () => ({
   getUserById: vi.fn(),
 }));
 
-vi.mock('../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: vi.fn(() => ({
     duplicate: mockDuplicate,
     get: mockGet,
@@ -98,12 +92,12 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
   })),
 }));
 
-vi.mock('../../src/infrastructure/config.js', () => ({
+vi.mock('#infrastructure/config', () => ({
   JWT_SECRET: 'synthetic-runtime-transport-root',
   LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS: 5,
 }));
 
-vi.mock('../../src/infrastructure/logger.js', () => ({
+vi.mock('#infrastructure/logger', () => ({
   logger: {
     debug: vi.fn(),
     error: mockLoggerError,
@@ -112,22 +106,22 @@ vi.mock('../../src/infrastructure/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/runtime/ipc-outbox-handler.js', () => ({
+vi.mock('#runtime/ipc-outbox-handler', () => ({
   processOutboxPayload: vi.fn(),
 }));
 
-vi.mock('../../src/runtime/ipc-ai-chat-outbox-handler.js', () => ({
+vi.mock('#runtime/ipc-ai-chat-outbox-handler', () => ({
   processAiChatOutboxPayload: vi.fn(),
 }));
 
-vi.mock('../../src/runtime/local-runner.js', () => ({
+vi.mock('#runtime/local-runner', () => ({
   ensureLocalAgentRunning: mockEnsureLocalAgentRunning,
   releaseLocalAgent: mockReleaseLocalAgent,
   retainLocalAgent: mockRetainLocalAgent,
   onLocalAgentProcessExit: mockOnLocalAgentProcessExit,
 }));
 
-vi.mock('../../src/modules/billing/plans.js', () => ({
+vi.mock('#modules/billing/plans', () => ({
   // 非会员加价直通：测试关注并发/租约生命周期，不关心价格改写细节。
   applyNonMemberPricingMarkup: vi.fn(
     (runtime: unknown, _membershipActive: boolean) => runtime,
@@ -136,17 +130,17 @@ vi.mock('../../src/modules/billing/plans.js', () => ({
   settleBillingReservation: mockSettleBillingReservation,
 }));
 
-vi.mock('../../src/modules/account/account-service.js', () => ({
+vi.mock('#modules/account/account-service', () => ({
   FREE_WECHAT_UNSUPPORTED_MESSAGE: 'free unsupported',
 }));
 
-vi.mock('../../src/modules/chat/web-chat-runtime.js', () => ({
+vi.mock('#modules/chat/web-chat-runtime', () => ({
   getUserIdFromWebChatRuntimeId: vi.fn((value: string) =>
     value.startsWith('web:') ? value.slice(4) : null,
   ),
 }));
 
-vi.mock('../../src/modules/system/system-config.js', () => ({
+vi.mock('#modules/system/system-config', () => ({
   getAgentConcurrencyLimit: vi.fn(async () => 10),
   resolveUserLlmRuntime: vi.fn(),
 }));
@@ -161,15 +155,15 @@ import {
   startIpcWorker,
   submitAiChatInboxRequest,
   submitInboxRequest,
-} from '../../src/runtime/ipc-worker.js';
-import type { PendingInboxRequest } from '../../src/runtime/ipc-payloads.js';
-import { processAiChatOutboxPayload } from '../../src/runtime/ipc-ai-chat-outbox-handler.js';
-import { processOutboxPayload } from '../../src/runtime/ipc-outbox-handler.js';
+} from '#runtime/ipc-worker';
+import type { PendingInboxRequest } from '#runtime/ipc-payloads';
+import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
+import { processOutboxPayload } from '#runtime/ipc-outbox-handler';
 import {
   getMembershipOverview,
   getUserByAccountId,
   getUserById,
-} from '../../src/infrastructure/db.js';
+} from '#infrastructure/db';
 
 const effectiveRuntime = {
   source: 'official' as const,
@@ -349,7 +343,7 @@ describe('cancelAiChatSessionRequest', () => {
 
   it('releases the busy marker and enqueues a cancel request for the active AI chat', async () => {
     const pendingRequests = (
-      await import('../../src/runtime/ipc-worker.js')
+      await import('#runtime/ipc-worker')
     ).__getPendingAiChatRequestsForTests();
     pendingRequests.clear();
     const pending = createPending();
@@ -436,7 +430,7 @@ describe('global agent concurrency gate', () => {
 
   it('exposes member and normal wait queues separately', async () => {
     const state = (
-      await import('../../src/runtime/ipc-worker.js')
+      await import('#runtime/ipc-worker')
     ).__getGlobalAgentConcurrencyStateForTests();
 
     expect(state.limit).toBe(10);
@@ -451,7 +445,7 @@ describe('global agent concurrency gate', () => {
       .mockResolvedValueOnce(['normal-request']);
 
     const next = await (
-      await import('../../src/runtime/ipc-worker.js')
+      await import('#runtime/ipc-worker')
     ).__peekNextGlobalAgentWaiterForTests();
 
     expect(next).toBe('member-request');
@@ -473,7 +467,7 @@ describe('global agent concurrency gate', () => {
       .mockResolvedValueOnce(['normal-request']);
 
     const next = await (
-      await import('../../src/runtime/ipc-worker.js')
+      await import('#runtime/ipc-worker')
     ).__peekNextGlobalAgentWaiterForTests();
 
     expect(next).toBe('normal-request');
@@ -486,7 +480,7 @@ describe('global agent concurrency gate', () => {
 
   it('releases the stored concurrency slot when cancelling a pending AI chat', async () => {
     const pendingRequests = (
-      await import('../../src/runtime/ipc-worker.js')
+      await import('#runtime/ipc-worker')
     ).__getPendingAiChatRequestsForTests();
     pendingRequests.clear();
     const pending = createPending({ concurrencySlotId: 'slot-1' });
@@ -613,7 +607,7 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
   });
   it('releases an unqueued runtime and leaves failed persistence eligible for durable recovery', async () => {
     const requests =
-      await import('../../src/infrastructure/repositories/agent-requests-repository.js');
+      await import('#infrastructure/repositories/agent-requests-repository');
     vi.mocked(requests.markAgentRequestDispatched).mockResolvedValueOnce(false);
     vi.mocked(requests.persistAgentFailure).mockRejectedValueOnce(
       new Error('synthetic database failure'),

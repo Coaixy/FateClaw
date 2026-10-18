@@ -3,18 +3,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock('../src/agent-db.js', () => ({ getAgentDbPool: () => ({ query }) }));
-vi.mock('../src/io.js', () => ({ log: vi.fn() }));
+vi.mock('#agent/agent-db', () => ({ getAgentDbPool: () => ({ query }) }));
+vi.mock('#agent/io', () => ({ log: vi.fn() }));
 import {
   deliverDurableResult,
   replayDurableResults,
-} from '../src/durable-execution.js';
+} from '#agent/durable-execution';
 import {
   readSpooledResults,
   spoolResult,
   removeSpooledResult,
-} from '../src/result-spool.js';
-import type { InboxRequest, OutboxResponse } from '../src/types.js';
+} from '#agent/result-spool';
+import type { InboxRequest, OutboxResponse } from '#agent/types';
 let dir: string;
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), 'fateclaw-result-spool-'));

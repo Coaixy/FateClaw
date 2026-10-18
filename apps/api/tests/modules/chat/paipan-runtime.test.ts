@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/infrastructure/db.js', () => ({
+vi.mock('#infrastructure/db', () => ({
   getResolvedEnabledOfficialSkillNames: vi.fn(async () => ['八字排盘']),
 }));
 
-import { executeDirectPaipan } from '../../../src/modules/chat/paipan-runtime.js';
+import { executeDirectPaipan } from '#modules/chat/paipan-runtime';
 
 describe('executeDirectPaipan', () => {
   it('keeps structured artifactData and stores formatter text as output', async () => {

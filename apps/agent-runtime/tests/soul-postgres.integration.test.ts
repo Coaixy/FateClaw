@@ -6,7 +6,7 @@ import {
   getAgentDbPool,
   querySoulContent,
   updateSoulContentDb,
-} from '../src/agent-db.js';
+} from '#agent/agent-db';
 
 // Explicit opt-in must point to a disposable database owned by the test runner.
 const connectionString = process.env.FATECLAW_TEST_DATABASE_URL;

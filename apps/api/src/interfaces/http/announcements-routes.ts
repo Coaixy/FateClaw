@@ -4,7 +4,7 @@ import {
   getAdminAnnouncements,
   getPublicAnnouncements,
   saveAnnouncement,
-} from '../../modules/announcements/announcement-service.js';
+} from '#modules/announcements/announcement-service';
 
 const statusSchema = z.enum(['draft', 'published', 'archived']);
 const writeSchema = z.object({

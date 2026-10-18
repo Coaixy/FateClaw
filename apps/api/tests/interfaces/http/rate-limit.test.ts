@@ -5,10 +5,10 @@ const redis = vi.hoisted(() => ({
   incr: vi.fn(),
   expire: vi.fn(),
 }));
-vi.mock('../../../src/infrastructure/redis.js', () => ({
+vi.mock('#infrastructure/redis', () => ({
   getRedis: () => redis,
 }));
-import { fixedWindowRateLimit } from '../../../src/interfaces/http/rate-limit.js';
+import { fixedWindowRateLimit } from '#interfaces/http/rate-limit';
 
 describe('fixed-window rate limiting', () => {
   beforeEach(() => vi.resetAllMocks());

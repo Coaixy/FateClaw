@@ -8,7 +8,7 @@
  * 状态存于 Redis，进程重启或多实例部署后限流仍然生效。
  */
 
-import { getRedis } from '../../infrastructure/redis.js';
+import { getRedis } from '#infrastructure/redis';
 
 const MAX_BACKOFF_MS = 10 * 60 * 1000; // 10 分钟封顶
 const BASE_BACKOFF_MS = 1000; // 2^1 = 2s 起步

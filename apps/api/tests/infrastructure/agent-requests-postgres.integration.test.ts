@@ -7,16 +7,12 @@ import {
   it,
   vi,
 } from 'vitest';
-import {
-  closeDbPool,
-  getDbPool,
-  initDbPool,
-} from '../../src/infrastructure/db-pool.js';
-vi.mock('../../src/infrastructure/config.js', () => ({
+import { closeDbPool, getDbPool, initDbPool } from '#infrastructure/db-pool';
+vi.mock('#infrastructure/config', () => ({
   MAX_OVERDRAFT_COINS: 50,
 }));
-import { listStalePendingReservations } from '../../src/infrastructure/repositories/billing-repository.js';
-import { durableAgentRequestsMigration } from '../../src/infrastructure/migrations/versions/0076-durable-agent-requests.js';
+import { listStalePendingReservations } from '#infrastructure/repositories/billing-repository';
+import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,
@@ -25,9 +21,9 @@ import {
   withAgentResultDelivery,
   withAgentInterruptionDelivery,
   acknowledgeAgentInterruption,
-} from '../../src/infrastructure/repositories/agent-requests-repository.js';
-import type { AiChatSubmission } from '../../src/runtime/ipc-worker.js';
-import type { LlmRuntimeSnapshot } from '../../src/runtime/ipc-payloads.js';
+} from '#infrastructure/repositories/agent-requests-repository';
+import type { AiChatSubmission } from '#runtime/ipc-worker';
+import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
 
 // Run only against an explicitly supplied disposable database, never DATABASE_URL.
 const connectionString = process.env.FATECLAW_TEST_DURABLE_DATABASE_URL;

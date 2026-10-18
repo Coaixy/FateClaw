@@ -6,8 +6,8 @@ import {
   interruptAgentRequest,
   acknowledgeAgentInterruption,
   type DurableRequest,
-} from '../infrastructure/repositories/agent-requests-repository.js';
-import { resolveUserLlmRuntime } from '../modules/system/system-config.js';
+} from '#infrastructure/repositories/agent-requests-repository';
+import { resolveUserLlmRuntime } from '#modules/system/system-config';
 import {
   getPendingAiChatRequests,
   submitAiChatInboxRequest,
@@ -15,7 +15,7 @@ import {
 } from './ipc-worker.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
 import { buildAiChatErrorResponsePayload } from './ipc-payloads.js';
-import { logger } from '../infrastructure/logger.js';
+import { logger } from '#infrastructure/logger';
 
 let timer: NodeJS.Timeout | undefined;
 let active: Promise<void> | undefined;

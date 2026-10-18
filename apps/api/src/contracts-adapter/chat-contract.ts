@@ -7,8 +7,8 @@ import type {
   SessionMessageListResponseDto,
 } from '@fateclaw/contracts/chat';
 
-import type { ChatSession, NewMessage } from '../shared/types.js';
-import { normalizeOwnedChatSessionTitle } from '../shared/chat-session-title-policy.js';
+import type { ChatSession, NewMessage } from '#shared/types';
+import { normalizeOwnedChatSessionTitle } from '#shared/chat-session-title-policy';
 
 /**
  * 聊天域 DTO 映射。

@@ -8,7 +8,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
-import { traceEvent } from '../../trace.js';
+import { traceEvent } from '#agent/trace';
 import {
   completePiToolExecution,
   type PiToolRuntimeOptions,

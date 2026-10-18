@@ -30,26 +30,23 @@ import {
   resetUserMessages,
   updateSoulContent,
   updateUserSoulContent,
-} from '../../infrastructure/db.js';
-import {
-  getDailyUsageRows,
-  getUsageStats,
-} from '../../infrastructure/daily-usage.js';
+} from '#infrastructure/db';
+import { getDailyUsageRows, getUsageStats } from '#infrastructure/daily-usage';
 import {
   getMonthlyMeteredBillingSummary,
   getMembershipBillingSummary,
   getMembershipPlanSummaries,
   getWalletBalanceSummary,
 } from './plans.js';
-import { fail, ok, type ServiceResult } from '../../shared/service-result.js';
-import { getRedis } from '../../infrastructure/redis.js';
+import { fail, ok, type ServiceResult } from '#shared/service-result';
+import { getRedis } from '#infrastructure/redis';
 import {
   toBillingStatusDto,
   toDailyUsageRowsDto,
   toMembershipSubscribeResultDto,
   toWalletTransactionsDto,
   toUsageStatsDto,
-} from '../../contracts-adapter/billing-contract.js';
+} from '#contracts-adapter/billing-contract';
 
 export async function getBillingOverview(
   userId: string,

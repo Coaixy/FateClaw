@@ -6,15 +6,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/ai-chat-stream.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/ai-chat-stream.js')>()),
+vi.mock('#agent/ai-chat-stream', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#agent/ai-chat-stream')>()),
   publishAiChatStreamEvent: vi.fn(async () => {}),
 }));
 
-import type { AgentRuntimeDeps } from '../../src/deps.js';
-import { runPiSession } from '../../src/pi-runtime/session.js';
-import { createRequestScope } from '../../src/request-scope.js';
-import type { ContainerInput } from '../../src/types.js';
+import type { AgentRuntimeDeps } from '#agent/deps';
+import { runPiSession } from '#agent/pi-runtime/session';
+import { createRequestScope } from '#agent/request-scope';
+import type { ContainerInput } from '#agent/types';
 
 const servers: ReturnType<typeof createServer>[] = [];
 const directories: string[] = [];
