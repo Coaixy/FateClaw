@@ -775,11 +775,6 @@ export const zhTWMessages = {
       shortcutHint: 'Enter 發送 · Shift+Enter 換行',
       aiDisclaimer: 'AI 生成內容，僅供參考',
     },
-    context: {
-      currentBoard: '目前盤面',
-      latestBoard: '使用最新盤面',
-      retryBoards: '重新載入盤面',
-    },
     reading: {
       retryHistory: '重試同步',
       newContent: '有新內容 · 回到最新',

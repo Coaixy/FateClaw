@@ -9,16 +9,16 @@ import type {
 } from 'react';
 import { useLayoutEffect, useRef } from 'react';
 import {
+  ArrowUp,
   ClipboardPaste,
   Loader2,
-  Send,
   Sparkles,
   Square,
   X,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 
-const MAX_TEXTAREA_HEIGHT = 96;
+const MAX_TEXTAREA_HEIGHT = 128;
 
 interface ComposerKeyboardEvent {
   key: string;
@@ -169,28 +169,12 @@ export function AiChatComposer({
       )}
 
       <div
-        className={`flex flex-wrap items-end gap-0 rounded-xl border bg-surface-raised transition-all duration-200 touch-manipulation ${
+        className={`flex flex-col rounded-[28px] border bg-surface-raised transition-all duration-200 touch-manipulation ${
           sending
-            ? 'border-primary/40 shadow-lg shadow-primary/5'
-            : 'border-hairline shadow-raised focus-within:shadow-lg focus-within:shadow-primary/10'
+            ? 'border-primary/40 shadow-sm'
+            : 'border-hairline shadow-sm focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5'
         }`}
       >
-        {paipanAction && (
-          <button
-            type="button"
-            onClick={paipanAction.onOpen}
-            disabled={paipanAction.disabled || paipanAction.loading}
-            title={paipanAction.title}
-            aria-label={paipanAction.title}
-            className="m-1 mr-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-hairline/70 bg-surface-cream-strong text-primary transition-all duration-200 hover:border-primary/30 hover:bg-primary/8 active:scale-95 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
-          >
-            {paipanAction.loading ? (
-              <Loader2 size={15} className="animate-spin" />
-            ) : (
-              <Sparkles size={15} />
-            )}
-          </button>
-        )}
         <textarea
           ref={inputRef}
           value={input}
@@ -226,40 +210,52 @@ export function AiChatComposer({
           }
           disabled={composerDisabled}
           rows={1}
-          className="min-h-12 min-w-0 flex-1 resize-none bg-transparent px-3 py-3 text-[15px] leading-7 placeholder:text-muted/60 focus:outline-none disabled:opacity-50 max-h-24 overflow-y-auto"
+          className="block min-h-14 max-h-32 w-full resize-none overflow-y-auto bg-transparent px-5 pt-3 pb-1 text-base leading-7 placeholder:text-muted/60 focus:outline-none! disabled:opacity-50"
         />
-        <button
-          type="button"
-          onClick={sending ? onStop : onSend}
-          disabled={actionDisabled}
-          className={`btn-tactile-primary shrink-0 w-10 h-10 m-1 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-20 text-on-primary active:scale-90 ${
-            sending ? 'scale-110' : 'hover:scale-105'
-          }`}
-          aria-label={
-            stopping
-              ? t('aiChat.composer.stopping')
-              : sending
-                ? t('aiChat.composer.stop')
-                : t('aiChat.composer.send')
-          }
-          aria-busy={stopping || undefined}
-        >
-          {stopping ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : sending ? (
-            <Square size={13} className="fill-current" />
-          ) : (
-            <Send size={14} />
+        <div className="flex items-center gap-2 px-3 pb-2">
+          {paipanAction && (
+            <button
+              type="button"
+              onClick={paipanAction.onOpen}
+              disabled={paipanAction.disabled || paipanAction.loading}
+              title={paipanAction.title}
+              aria-label={paipanAction.title}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/5 text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
+            >
+              {paipanAction.loading ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Sparkles size={20} />
+              )}
+            </button>
           )}
-        </button>
+          <div className="min-w-0 flex-1">{modelControl}</div>
+          <button
+            type="button"
+            onClick={sending ? onStop : onSend}
+            disabled={actionDisabled}
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-on-primary transition-colors hover:bg-primary-active active:scale-95 disabled:cursor-not-allowed disabled:bg-primary/35"
+            aria-label={
+              stopping
+                ? t('aiChat.composer.stopping')
+                : sending
+                  ? t('aiChat.composer.stop')
+                  : t('aiChat.composer.send')
+            }
+            aria-busy={stopping || undefined}
+          >
+            {stopping ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : sending ? (
+              <Square size={16} className="fill-current" />
+            ) : (
+              <ArrowUp size={24} />
+            )}
+          </button>
+        </div>
         <span role="status" className="sr-only">
           {stopping ? t('aiChat.composer.stopping') : ''}
         </span>
-        {modelControl ? (
-          <div className="w-full border-t border-hairline/60 px-1.5 py-1">
-            {modelControl}
-          </div>
-        ) : null}
       </div>
     </div>
   );

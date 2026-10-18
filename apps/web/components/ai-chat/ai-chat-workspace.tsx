@@ -53,7 +53,6 @@ import {
   useChatDraft,
   type ChatDraftSubmission,
 } from '@/features/chat/hooks/use-chat-draft';
-import { useSessionBoards } from '@/features/chat/hooks/use-session-boards';
 import { SessionContextBar } from '@/components/ai-chat/session-context-bar';
 import {
   PENDING_CHAT_INPUT_KEY,
@@ -366,19 +365,6 @@ function AiChatWorkspaceContent() {
   const selectedSessionInfo = sessions.find(
     (entry) => entry.id === selectedSession,
   );
-  const boardRevision = useMemo(
-    () =>
-      chatMessages.messages
-        .filter((message) => message.tool_context)
-        .map((message) => message.id)
-        .join('|'),
-    [chatMessages.messages],
-  );
-  const sessionBoards = useSessionBoards({
-    userId: user?.id,
-    sessionId: selectedSession,
-    revision: boardRevision,
-  });
   const modelSelection = useModelSelection({
     userId: user?.id,
     sessionId: selectedSession || undefined,
@@ -480,7 +466,6 @@ function AiChatWorkspaceContent() {
         requestLogin(text);
         return;
       }
-      if (sessionBoards.loading || sessionBoards.error) return;
       if (modelSelection.blocked) {
         toast('error', modelSelection.error || t('modelChoice.blocked'));
         return;
@@ -489,9 +474,7 @@ function AiChatWorkspaceContent() {
       activeSubmissionRef.current = submission;
 
       try {
-        const sent = await chatMessages.sendMessageWithOptions(text, {
-          selectedBoardMessageId: sessionBoards.selectedBoardId || undefined,
-        });
+        const sent = await chatMessages.sendMessageWithOptions(text);
         if (!sent && submission) restoreDraft(submission);
       } catch (error) {
         if (submission) restoreDraft(submission);
@@ -512,7 +495,6 @@ function AiChatWorkspaceContent() {
       authLoading,
       input,
       requestLogin,
-      sessionBoards,
       takeDraft,
       restoreDraft,
       t,
@@ -628,8 +610,7 @@ function AiChatWorkspaceContent() {
               content,
               options,
             );
-            if (sent) sessionBoards.selectBoard('');
-            else if (submission) restoreDraft(submission);
+            if (!sent && submission) restoreDraft(submission);
             return sent;
           } catch (error) {
             if (submission) restoreDraft(submission);
@@ -652,7 +633,6 @@ function AiChatWorkspaceContent() {
       chatMessages.sendMessageWithOptions,
       chatMessages.sending,
       pastedBoardSheet.draftSource,
-      sessionBoards,
       takeDraft,
       restoreDraft,
       requestLogin,
@@ -730,7 +710,6 @@ function AiChatWorkspaceContent() {
     async (result: PaipanCommitResponse) => {
       touchSession(result.session.id, result.session);
       if (result.session.id === selectedSession) {
-        sessionBoards.selectBoard('');
         await chatMessages.refreshMessages();
         return;
       }
@@ -741,7 +720,6 @@ function AiChatWorkspaceContent() {
       selectedSession,
       setSelectedSession,
       touchSession,
-      sessionBoards,
     ],
   );
 
@@ -847,9 +825,7 @@ function AiChatWorkspaceContent() {
       disabledMessage=""
       selectedSession={selectedSession}
       modelControl={modelControl}
-      sendDisabled={
-        modelSelection.blocked || sessionBoards.loading || sessionBoards.error
-      }
+      sendDisabled={modelSelection.blocked}
       paipanAction={
         selectedSession
           ? {
@@ -942,23 +918,16 @@ function AiChatWorkspaceContent() {
     : undefined;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] pt-1.5 lg:pt-0">
+    <div className="flex min-h-0 flex-1 flex-col pt-1.5 lg:pt-0">
       {selectedSession && (
         <SessionContextBar
-          boards={sessionBoards.boards}
-          selectedBoardId={sessionBoards.selectedBoardId}
           clientId={selectedSessionInfo?.client_id}
-          loading={sessionBoards.loading}
-          error={sessionBoards.error}
-          disabled={chatMessages.sending}
-          onSelect={sessionBoards.selectBoard}
-          onRetry={sessionBoards.refresh}
         />
       )}
       {chatMessages.historyError && (
         <div
           role="alert"
-          className="mx-auto mb-2 flex w-full max-w-2xl items-center justify-between gap-2 rounded-lg border border-error/25 bg-error/5 px-3 py-2 text-[12px] text-error"
+          className="mx-auto mb-2 flex w-full max-w-3xl items-center justify-between gap-2 rounded-lg border border-error/25 bg-error/5 px-3 py-2 text-[12px] text-error"
         >
           <span>{chatMessages.historyError}</span>
           <button
@@ -972,7 +941,7 @@ function AiChatWorkspaceContent() {
       )}
       <div
         ref={chatMessages.scrollRef}
-        className={`relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3 ${
+        className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5 ${
           chatMessages.sending ? '' : 'scroll-smooth'
         }`}
       >
@@ -1019,7 +988,7 @@ function AiChatWorkspaceContent() {
 
       {!showCenteredComposer && (
         <div className="shrink-0 pt-1.5 pb-1 safe-bottom">
-          <div className="max-w-2xl mx-auto px-2.5 sm:px-3">
+          <div className="max-w-3xl mx-auto px-2.5 sm:px-3">
             {(chatMessages.sending || chatMessages.run.error) && (
               <p
                 role="status"

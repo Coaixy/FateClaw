@@ -8,7 +8,6 @@ import type {
   ModelSettingsOverviewDto,
 } from '@fateclaw/contracts/model-settings';
 import { useI18n } from '@/lib/i18n';
-import { OfficialModelPriceTags } from '@/components/settings/official-model-price-tags';
 
 export function ModelSelector({
   overview,
@@ -56,7 +55,7 @@ export function ModelSelector({
         }}
       >
         <summary
-          className="flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 text-ink hover:bg-surface-soft [&::-webkit-details-marker]:hidden"
+          className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full px-3 text-ink hover:bg-surface-soft [&::-webkit-details-marker]:hidden"
           aria-label={t('modelChoice.switch', { model: label })}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}
@@ -64,7 +63,7 @@ export function ModelSelector({
           <ChevronDown size={12} />
         </summary>
         <div
-          className="absolute bottom-full left-0 z-30 mb-2 w-72 max-w-[calc(100vw-3.5rem)] space-y-1 rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-raised"
+          className="absolute bottom-full left-0 z-30 mb-2 w-72 max-w-[calc(100vw-7rem)] space-y-1 rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-raised"
           role="group"
           aria-label={t('modelChoice.title')}
         >
@@ -163,11 +162,9 @@ export function ModelSelector({
               </Link>
             ) : null}
           </span>
-        ) : overview?.model ? (
-          <OfficialModelPriceTags model={overview.model} compact />
-        ) : (
+        ) : !overview?.model ? (
           t('modelChoice.unknown')
-        )}
+        ) : null}
       </div>
       {poolKey === 'benefit' && state === 'personal' && benefit ? (
         <span className="w-full px-2 text-[11px]">

@@ -169,7 +169,7 @@ export const AiChatMessageList = memo(function AiChatMessageList({
     (pendingTrajectory.length > 0 || !hasThinkingMessage);
 
   return (
-    <div className="px-1.5 lg:px-3 space-y-2.5 lg:space-y-3">
+    <div className="space-y-6 pb-4 sm:space-y-8">
       {loadingOlder && (
         <div className="flex justify-center py-1.5">
           <Loader2 size={15} className="animate-spin text-muted" />
@@ -179,9 +179,9 @@ export const AiChatMessageList = memo(function AiChatMessageList({
         row.trajectoryOnly ? (
           <div
             key={row.message.id}
-            className="max-w-2xl mx-auto flex justify-start animate-message-in"
+            className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
           >
-            <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
+            <div className="flex min-w-0 w-full flex-col items-start">
               <TrajectoryTimeline blocks={row.trajectory} completed />
             </div>
           </div>
@@ -266,7 +266,7 @@ function LatestMessageBillingNotice({
   return (
     <div
       ref={containerRef}
-      className="max-w-2xl mx-auto flex justify-start animate-message-in"
+      className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
     >
       <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
         <div
@@ -375,13 +375,13 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       <TrajectoryTimeline blocks={trajectory} completed={isFinalMessage} />
     ) : null;
   const messageColumnClass = isBot
-    ? 'max-w-[88%] items-start sm:max-w-[78%]'
+    ? 'w-full items-start'
     : 'max-w-[88%] items-end sm:max-w-[74%]';
 
   if (hasChart && !isFinalMessage) {
     return (
       <div
-        className="w-full max-w-6xl mx-auto animate-message-in"
+        className="w-full max-w-6xl mx-auto px-2.5 sm:px-3 animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
       >
         {trajectoryNode && <div className="mb-2">{trajectoryNode}</div>}
@@ -398,7 +398,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
 
   return (
     <div
-      className={`max-w-2xl mx-auto flex animate-message-in ${
+      className={`mx-auto flex w-full max-w-3xl px-2.5 sm:px-3 animate-message-in ${
         isBot ? 'justify-start' : 'justify-end'
       }`}
       style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
@@ -406,15 +406,15 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       <div className={`flex min-w-0 flex-col ${messageColumnClass}`}>
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
-        <div className="group relative max-w-full">
+        <div className={`group relative min-w-0 max-w-full ${isBot ? 'w-full' : ''}`}>
           <div
             role={isErrorMessage ? 'alert' : undefined}
-            className={`rounded-xl px-3.5 py-2.5 text-[14px] leading-7 transition-shadow duration-200 ${
+            className={`min-w-0 [overflow-wrap:anywhere] ${
               isBot
                 ? isErrorMessage
-                  ? 'border border-error/30 bg-error/8 text-error shadow-sm'
-                  : 'bg-surface-card border border-hairline shadow-sm hover:shadow-md'
-                : 'bg-surface-dark text-on-dark shadow-sm'
+                  ? 'rounded-xl border border-error/30 bg-error/8 px-3.5 py-2.5 text-base leading-8 text-error'
+                  : 'text-base leading-8 text-ink'
+                : 'rounded-2xl bg-surface-soft px-4 py-2.5 text-[15px] leading-7 text-ink'
             }`}
           >
             <CollapsibleMessage
@@ -930,8 +930,8 @@ function StreamingTrajectory({
     : t('aiChat.messageList.aiReplying');
 
   return (
-    <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
-      <div className="flex min-w-0 max-w-[88%] flex-col items-start gap-1 sm:max-w-[78%]">
+    <div className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in">
+      <div className="flex min-w-0 w-full flex-col items-start gap-1">
         {pendingTrajectory.length > 0 && (
           <TrajectoryTimeline blocks={pendingTrajectory} />
         )}
@@ -961,7 +961,7 @@ function ReplySlowNotice({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
 
   return (
-    <div className="max-w-2xl mx-auto flex justify-start animate-message-in">
+    <div className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in">
       <div className="flex min-w-0 max-w-[88%] flex-col items-start sm:max-w-[78%]">
         <div
           role="status"

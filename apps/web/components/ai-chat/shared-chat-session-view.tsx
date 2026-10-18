@@ -91,8 +91,8 @@ export function SharedChatSessionView() {
 
   return (
     <AppShell wide noPadding requireAuth={false}>
-      <div className="flex h-[calc(100dvh-3.5rem)] flex-col pt-2 lg:h-[calc(100dvh-4rem)] lg:pt-0">
-        <div className="mx-auto flex w-full max-w-2xl shrink-0 items-center justify-between gap-3 px-2.5 py-2 sm:px-3">
+      <div className="flex min-h-0 flex-1 flex-col pt-2 lg:pt-0">
+        <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center justify-between gap-3 px-2.5 py-2 sm:px-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
               <Share2 size={12} />
@@ -119,7 +119,7 @@ export function SharedChatSessionView() {
           </div>
         </div>
 
-        <div className="relative flex-1 overflow-y-auto overscroll-contain py-1.5 lg:py-3">
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 size={18} className="animate-spin text-muted" />

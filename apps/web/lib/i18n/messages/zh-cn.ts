@@ -775,11 +775,6 @@ export const zhCNMessages = {
       shortcutHint: 'Enter 发送 · Shift+Enter 换行',
       aiDisclaimer: 'AI 生成内容，仅供参考',
     },
-    context: {
-      currentBoard: '当前盘面',
-      latestBoard: '使用最新盘面',
-      retryBoards: '重试加载盘面',
-    },
     reading: {
       retryHistory: '重试同步',
       newContent: '有新内容 · 回到最新',

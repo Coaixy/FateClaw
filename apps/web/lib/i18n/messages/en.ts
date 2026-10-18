@@ -804,11 +804,6 @@ export const enMessages = {
       shortcutHint: 'Enter to send · Shift+Enter for new line',
       aiDisclaimer: 'AI-generated content, for reference only',
     },
-    context: {
-      currentBoard: 'Current chart',
-      latestBoard: 'Use latest chart',
-      retryBoards: 'Reload charts',
-    },
     reading: {
       retryHistory: 'Retry sync',
       newContent: 'New content · Jump to latest',

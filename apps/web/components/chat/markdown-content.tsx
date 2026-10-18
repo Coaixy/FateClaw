@@ -29,42 +29,42 @@ function createComponents(isBot: boolean): Components {
 
   return {
     p: ({ children }) => (
-      <p className="mb-2 last:mb-0 break-words leading-relaxed whitespace-pre-wrap">
+      <p className="mb-4 last:mb-0 break-words whitespace-pre-wrap">
         {children}
       </p>
     ),
-    // Small Markdown headings override the global serif face for legibility.
+    // Keep answer headings in the body face and scale them with the reading text.
     h1: ({ children }) => (
-      <h1 className="font-sans text-[15px] font-semibold mb-2 mt-3 first:mt-0">
+      <h1 className="font-sans text-[1.35em] font-semibold leading-normal mb-3 mt-6 first:mt-0">
         {children}
       </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-[14px] font-semibold mb-1.5 mt-2.5 first:mt-0">
+      <h2 className="text-[1.2em] font-semibold leading-normal mb-3 mt-6 first:mt-0">
         {children}
       </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-[13px] font-semibold mb-1 mt-2 first:mt-0">
+      <h3 className="text-[1.075em] font-semibold leading-normal mb-2 mt-5 first:mt-0">
         {children}
       </h3>
     ),
     ul: ({ children }) => (
       <ul
-        className={`mb-2 list-outside list-disc space-y-0.5 pl-5 ${listMarker}`}
+        className={`mb-4 list-outside list-disc space-y-1 pl-5 ${listMarker}`}
       >
         {children}
       </ul>
     ),
     ol: ({ children }) => (
       <ol
-        className={`mb-2 list-outside list-decimal space-y-0.5 pl-5 ${listMarker}`}
+        className={`mb-4 list-outside list-decimal space-y-1 pl-5 ${listMarker}`}
       >
         {children}
       </ol>
     ),
     li: ({ children }) => (
-      <li className="break-words pl-0.5 leading-relaxed [&>p]:mb-0">
+      <li className="break-words pl-0.5 [&>p]:mb-0">
         {children}
       </li>
     ),
@@ -75,7 +75,7 @@ function createComponents(isBot: boolean): Components {
       }
       return (
         <code
-          className={`${codeBg} ${codeText} rounded px-1 py-0.5 text-[11px] font-mono`}
+          className={`${codeBg} ${codeText} rounded px-1 py-0.5 text-[0.85em] font-mono`}
         >
           {children}
         </code>
@@ -83,14 +83,14 @@ function createComponents(isBot: boolean): Components {
     },
     pre: ({ children }) => (
       <pre
-        className={`${codeBg} ${borderColor} border rounded-lg px-3 py-2.5 mb-2 overflow-x-auto text-[11px] font-mono leading-relaxed`}
+        className={`${codeBg} ${borderColor} border rounded-lg px-4 py-3 mb-4 overflow-x-auto text-[13px] font-mono leading-relaxed`}
       >
         <CodeBlockContext value>{children}</CodeBlockContext>
       </pre>
     ),
     blockquote: ({ children }) => (
       <blockquote
-        className={`border-l-2 ${blockquoteBorder} pl-3 mb-2 ${textMuted} italic`}
+        className={`border-l-2 ${blockquoteBorder} pl-4 mb-4 ${textMuted}`}
       >
         {children}
       </blockquote>
@@ -109,10 +109,10 @@ function createComponents(isBot: boolean): Components {
         {children}
       </a>
     ),
-    hr: () => <hr className={`${borderColor} border-t my-3`} />,
+    hr: () => <hr className={`${borderColor} border-t my-6`} />,
     table: ({ children }) => (
-      <div className="overflow-x-auto mb-2">
-        <table className={`w-full text-[12px] border-collapse ${borderColor}`}>
+      <div className="max-w-full overflow-x-auto mb-4">
+        <table className={`w-full text-[14px] leading-7 border-collapse ${borderColor}`}>
           {children}
         </table>
       </div>
