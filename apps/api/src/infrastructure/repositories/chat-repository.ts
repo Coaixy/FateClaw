@@ -184,9 +184,9 @@ export async function getSessionMessageById(
 export async function getSessionMessagesWithToolContext(
   accountId: string,
   sessionId: string,
-): Promise<NewMessage[]> {
+): Promise<Array<Pick<NewMessage, 'id' | 'timestamp' | 'tool_context'>>> {
   const { rows } = await getDbPool().query(
-    `SELECT * FROM messages
+    `SELECT id, timestamp, tool_context FROM messages
      WHERE account_id = $1
        AND session_id = $2
        AND tool_context IS NOT NULL
@@ -194,7 +194,7 @@ export async function getSessionMessagesWithToolContext(
      ORDER BY timestamp DESC`,
     [accountId, sessionId],
   );
-  return rows as NewMessage[];
+  return rows as Array<Pick<NewMessage, 'id' | 'timestamp' | 'tool_context'>>;
 }
 
 /**
@@ -207,12 +207,14 @@ export async function getSessionMessagesWithToolContext(
 export async function hasFinalAiChatSessionReply(
   accountId: string,
   sessionId: string,
+  afterTimestamp?: string,
 ): Promise<boolean> {
   const { rows } = await getDbPool().query(
     `SELECT 1
      FROM messages
      WHERE account_id = $1
        AND session_id = $2
+       ${afterTimestamp ? 'AND timestamp > $3::timestamptz' : ''}
        AND is_bot_message = true
        AND deleted_at IS NULL
        AND (
@@ -220,7 +222,9 @@ export async function hasFinalAiChatSessionReply(
          OR id LIKE 'aichat-%_reply%'
        )
      LIMIT 1`,
-    [accountId, sessionId],
+    afterTimestamp
+      ? [accountId, sessionId, afterTimestamp]
+      : [accountId, sessionId],
   );
   return rows.length > 0;
 }

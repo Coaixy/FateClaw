@@ -187,22 +187,6 @@ function buildSelectedBoardContext(message: NewMessage): boolean {
   return messageHasBoardContext(message);
 }
 
-function getMessageTime(message: Pick<NewMessage, 'timestamp'>): number {
-  const time = new Date(message.timestamp).getTime();
-  return Number.isNaN(time) ? 0 : time;
-}
-
-function isFinalAssistantReplyMessage(message: NewMessage): boolean {
-  if (!message.is_bot_message) return false;
-  const metadata =
-    message.metadata &&
-    typeof message.metadata === 'object' &&
-    !Array.isArray(message.metadata)
-      ? (message.metadata as Record<string, unknown>)
-      : null;
-  return metadata?.kind === 'final' || /^aichat-.*_reply/.test(message.id);
-}
-
 function buildBoardFirstQuestionPrompt(args: {
   question: string;
   board: SessionBoardContextDto;
@@ -216,31 +200,29 @@ function buildBoardFirstQuestionPrompt(args: {
   ].join('\n');
 }
 
-function buildRuntimeUserMessageForBoardFirstQuestion(args: {
+async function buildRuntimeUserMessageForBoardFirstQuestion(args: {
   input: NormalizedChatSessionMessageInput;
-  previousMessages: NewMessage[];
+  accountId: string;
+  sessionId: string;
   sessionBoardContexts: SessionBoardContextDto[];
-}): string {
+}): Promise<string> {
   if (args.input.inputKind !== 'normal') return args.input.content;
-
   const currentBoard = args.sessionBoardContexts.find(
     (board) => board.isCurrent,
   );
-  if (!currentBoard?.createdAt) return args.input.content;
-
-  const boardMessage = args.previousMessages.find(
-    (message) => message.id === currentBoard.sourceMessageId,
-  );
-  if (!boardMessage) return args.input.content;
-
-  const boardTime = getMessageTime(boardMessage);
-  const hasFinalReplyAfterBoard = args.previousMessages.some(
-    (message) =>
-      getMessageTime(message) > boardTime &&
-      isFinalAssistantReplyMessage(message),
-  );
-  if (hasFinalReplyAfterBoard) return args.input.content;
-
+  if (
+    !currentBoard?.createdAt ||
+    !Number.isFinite(Date.parse(currentBoard.createdAt))
+  )
+    return args.input.content;
+  if (
+    await hasFinalAiChatSessionReply(
+      args.accountId,
+      args.sessionId,
+      currentBoard.createdAt,
+    )
+  )
+    return args.input.content;
   return buildBoardFirstQuestionPrompt({
     question: args.input.content,
     board: currentBoard,
@@ -847,10 +829,6 @@ async function prepareOwnedChatSessionTurn(
     );
     if (llmRuntime.billingMode === 'metered' && entitlement.wallet.inArrears)
       throw new Error(BILLING_ARREARS_MESSAGE);
-    const previousMessages =
-      input.inputKind === 'normal'
-        ? await getSessionMessages(session.account_id, session.id)
-        : [];
     const userMessage: NewMessage = {
       id: msgId,
       account_id: session.account_id,
@@ -887,11 +865,13 @@ async function prepareOwnedChatSessionTurn(
             }
           : undefined,
     });
-    const runtimeUserMessage = buildRuntimeUserMessageForBoardFirstQuestion({
-      input,
-      previousMessages,
-      sessionBoardContexts,
-    });
+    const runtimeUserMessage =
+      await buildRuntimeUserMessageForBoardFirstQuestion({
+        input,
+        accountId: session.account_id,
+        sessionId: session.id,
+        sessionBoardContexts,
+      });
 
     const structured = await buildStructuredInputForSession(
       {

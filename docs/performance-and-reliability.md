@@ -92,6 +92,10 @@ retained for recovery/operator inspection rather than silently evicted.
 
 ## Submission, resources and result latency
 
+Normal submission queries only board fields and checks for a final reply after
+the current board with an existence query. It does not fetch the complete message
+history. All authorized boards and the existing first-question wording remain.
+
 The IPC request data, model snapshot, thinking levels, board/history shapes and
 session frame protocol are owned by `packages/contracts/src/agent/`. API admission
 options remain in `runtime/request-types.ts`; repositories no longer derive their

@@ -189,7 +189,6 @@ import {
   shareOwnedChatSessionForUser,
 } from '../../../src/modules/chat/chat-session-service.js';
 import { BenefitAdmissionError } from '../../../src/infrastructure/repositories/benefit-repository.js';
-
 describe('chat-session-service selected board context', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -359,9 +358,7 @@ describe('chat-session-service selected board context', () => {
         'session-1',
         undefined,
       );
-      expect(mockRedisGet).toHaveBeenCalledWith(
-        'session:processing:session-1',
-      );
+      expect(mockRedisGet).toHaveBeenCalledWith('session:processing:session-1');
     },
   );
 
@@ -598,34 +595,6 @@ describe('chat-session-service selected board context', () => {
   });
 
   it('wraps the first normal question after a board insert for the runtime only', async () => {
-    mockGetSessionMessages.mockResolvedValueOnce([
-      {
-        id: 'board-msg-1',
-        account_id: 'web:user-1',
-        user_id: 'user-1',
-        sender: 'web:user-1',
-        sender_name: '命枢',
-        content:
-          '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
-        timestamp: '2026-04-26T09:30:00.000Z',
-        is_from_me: true,
-        is_bot_message: true,
-        session_id: 'session-1',
-        tool_context: JSON.stringify([
-          {
-            skill: 'bazi-paipan',
-            output: '八字排盘（系统排盘结果）\nbazi：true',
-            artifactTitle: '八字排盘',
-            artifactData: { bazi: true },
-          },
-        ]),
-        metadata: {
-          kind: 'board_result',
-          workflow: 'direct_paipan',
-          board_skill: 'bazi-paipan',
-        },
-      },
-    ]);
     mockBuildStructuredInputForSession.mockImplementationOnce(
       async (_identity, userMessage: string) => ({
         userMessage,
@@ -643,6 +612,7 @@ describe('chat-session-service selected board context', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(mockGetSessionMessages).not.toHaveBeenCalled();
     expect(mockBuildStructuredInputForSession).toHaveBeenCalledWith(
       expect.any(Object),
       [
@@ -672,50 +642,9 @@ describe('chat-session-service selected board context', () => {
   });
 
   it('does not wrap later normal questions after a final reply already followed the board', async () => {
-    mockGetSessionMessages.mockResolvedValueOnce([
-      {
-        id: 'board-msg-1',
-        account_id: 'web:user-1',
-        user_id: 'user-1',
-        sender: 'web:user-1',
-        sender_name: '命枢',
-        content:
-          '已生成八字排盘。你可以直接提问，后续未切换主题时会参考此盘面。',
-        timestamp: '2026-04-26T09:30:00.000Z',
-        is_from_me: true,
-        is_bot_message: true,
-        session_id: 'session-1',
-        tool_context: JSON.stringify([
-          {
-            skill: 'bazi-paipan',
-            output: '八字排盘（系统排盘结果）\nbazi：true',
-            artifactTitle: '八字排盘',
-            artifactData: { bazi: true },
-          },
-        ]),
-        metadata: {
-          kind: 'board_result',
-          workflow: 'direct_paipan',
-          board_skill: 'bazi-paipan',
-        },
-      },
-      {
-        id: 'aichat-existing_reply',
-        account_id: 'web:user-1',
-        user_id: 'user-1',
-        sender: 'web:user-1',
-        sender_name: '命枢',
-        content: '之前已经基于盘面回复过一次',
-        timestamp: '2026-04-26T09:31:00.000Z',
-        is_from_me: true,
-        is_bot_message: true,
-        session_id: 'session-1',
-        metadata: {
-          kind: 'final',
-          turn_complete: true,
-        },
-      },
-    ]);
+    mockHasFinalAiChatSessionReply.mockImplementation(
+      async (_account, _session, after) => Boolean(after),
+    );
     mockBuildStructuredInputForSession.mockImplementationOnce(
       async (_identity, userMessage: string) => ({
         userMessage,
@@ -1071,6 +1000,7 @@ describe('chat-session-service selected board context', () => {
   });
 
   it('uses the user id as the Soul source for web AI chat', async () => {
+    mockGetSessionMessagesWithToolContext.mockResolvedValueOnce([]);
     const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
       content: '继续分析事业',
       selectedBoardMessageId: undefined,
