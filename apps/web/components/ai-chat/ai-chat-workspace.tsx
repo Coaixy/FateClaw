@@ -939,52 +939,56 @@ function AiChatWorkspaceContent() {
           </button>
         </div>
       )}
-      <div
-        ref={chatMessages.scrollRef}
-        className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5 ${
-          chatMessages.sending ? '' : 'scroll-smooth'
-        }`}
-      >
-        <AiChatMessageList
-          messages={displayMessages}
-          loading={chatMessages.loading}
-          sending={chatMessages.sending}
-          progressLabel={progressLabel}
-          replySlow={chatMessages.replySlow}
-          onRetry={handleRetrySending}
-          selectedSession={selectedSession}
-          switchingSession={switchingSession}
-          loadingOlder={chatMessages.loadingOlder}
-          showCenteredComposer={showCenteredComposer}
-          latestMessageNotice={latestMessageNotice}
-          composer={showCenteredComposer ? centeredContent : null}
-          emptyStateTitle={emptyStateTitle}
-          emptyStateDescription={emptyStateDescription}
-          emptyStateHint={emptyStateHint}
-          emptyStateFrameClassName={emptyStateFrameClassName}
-          emptyStateMaxWidthClassName="max-w-xl"
-        />
-        {!showCenteredComposer && replyStatus && (
-          <AiChatFloatingStatus status={replyStatus} />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={chatMessages.scrollRef}
+          className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5 ${
+            chatMessages.sending ? '' : 'scroll-smooth'
+          }`}
+        >
+          <AiChatMessageList
+            messages={displayMessages}
+            loading={chatMessages.loading}
+            sending={chatMessages.sending}
+            progressLabel={progressLabel}
+            replySlow={chatMessages.replySlow}
+            onRetry={handleRetrySending}
+            selectedSession={selectedSession}
+            switchingSession={switchingSession}
+            loadingOlder={chatMessages.loadingOlder}
+            showCenteredComposer={showCenteredComposer}
+            latestMessageNotice={latestMessageNotice}
+            composer={showCenteredComposer ? centeredContent : null}
+            emptyStateTitle={emptyStateTitle}
+            emptyStateDescription={emptyStateDescription}
+            emptyStateHint={emptyStateHint}
+            emptyStateFrameClassName={emptyStateFrameClassName}
+            emptyStateMaxWidthClassName="max-w-xl"
+          />
+          {!showCenteredComposer && replyStatus && (
+            <AiChatFloatingStatus status={replyStatus} />
+          )}
+        </div>
+
+        {!showCenteredComposer && !chatMessages.followingLatest && (
+          <div
+            className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 ${replyStatus ? 'bottom-12' : 'bottom-3'}`}
+          >
+            <button
+              type="button"
+              onClick={chatMessages.scrollToLatest}
+              className="pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-full border border-hairline bg-surface-card/90 px-3 text-[12px] text-ink shadow-sm backdrop-blur-sm hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <ArrowDown size={13} aria-hidden="true" />
+              {t(
+                chatMessages.sending
+                  ? 'aiChat.reading.newContent'
+                  : 'aiChat.reading.latest',
+              )}
+            </button>
+          </div>
         )}
       </div>
-
-      {!showCenteredComposer && !chatMessages.followingLatest && (
-        <div className="flex shrink-0 justify-center py-1">
-          <button
-            type="button"
-            onClick={chatMessages.scrollToLatest}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-hairline bg-surface-card px-3 text-[12px] text-ink shadow-sm hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          >
-            <ArrowDown size={13} />
-            {t(
-              chatMessages.sending
-                ? 'aiChat.reading.newContent'
-                : 'aiChat.reading.latest',
-            )}
-          </button>
-        </div>
-      )}
 
       {!showCenteredComposer && (
         <div className="shrink-0 pt-1.5 pb-1 safe-bottom">

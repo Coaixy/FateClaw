@@ -2,13 +2,17 @@
 
 import { useState } from 'react';
 import {
+  ArrowRight,
   CheckCircle2,
+  Coins,
   Crown,
   Info,
+  KeyRound,
   Loader2,
   ReceiptText,
   Sparkles,
   Wallet,
+  Zap,
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -48,153 +52,80 @@ function formatMembershipDate(
     value: string | number | Date,
     options?: Intl.DateTimeFormatOptions,
   ) => string,
-  t: TranslationFn,
 ) {
-  if (!value) return t('pages.membership.notSubscribed');
-  return formatDate(value, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+  if (!value) return '—';
+  return (
+    formatDate(value, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }) || '—'
+  );
 }
 
 function resolvePlanDisplayName(plan: Pick<MembershipPlan, 'name'>) {
   return plan.name?.trim() || DEFAULT_MEMBERSHIP_NAME;
 }
 
-function resolvePlanBenefitLabels(t: TranslationFn) {
-  return [
-    t('pages.membership.compareRowModelPrice'),
-    t('pages.membership.compareRowBenefitModel'),
-    t('pages.membership.compareRowQueue'),
-    t('pages.membership.compareRowOpenApi'),
-  ];
-}
-
-/** 订阅卡内的单项指标（如月消息 / 月 Token）。 */
-function SubscriptionMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-hairline/60 bg-canvas/50 px-3 py-2.5">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
-        {label}
-      </div>
-      <div className="mt-1 text-[15px] font-bold tabular-nums text-ink">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function MembershipCompareTable({
-  rows,
-  planName,
+function MembershipBenefits({
+  isActive,
   t,
 }: {
-  rows: string[];
-  planName: string;
+  isActive: boolean;
   t: TranslationFn;
 }) {
-  // 列取值与 resolvePlanBenefitLabels 的行序一一对应。文案刻意保持短语，
-  // 让三列在窄容器内也能放下而不出现横向滚动（细节差异由脚注补充说明）。
-  const nonMemberValues = [
-    t('pages.membership.compareNonMemberModelPrice'),
-    t('pages.membership.compareNonMemberUnavailable'),
-    t('pages.membership.compareNonMemberQueue'),
-    t('pages.membership.compareNonMemberUnavailable'),
-  ];
-  const memberValues = [
-    t('pages.membership.compareMemberModelPrice'),
-    t('pages.membership.compareMemberBenefitModel'),
-    t('pages.membership.compareMemberQueue'),
-    t('pages.membership.compareMemberAvailable'),
-  ];
+  const benefits = [
+    { icon: Coins, title: 'paidModels', description: 'paidModelsDescription' },
+    {
+      icon: Sparkles,
+      title: 'freeModels',
+      description: 'freeModelsDescription',
+    },
+    {
+      icon: Zap,
+      title: 'priorityAccess',
+      description: 'priorityAccessDescription',
+    },
+    { icon: KeyRound, title: 'openApi', description: 'openApiDescription' },
+  ] as const;
 
   return (
     <div>
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr>
-            <th
-              scope="col"
-              className="w-[38%] pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted"
-            >
-              {t('pages.membership.compareColumnFeature')}
-            </th>
-            <th
-              scope="col"
-              className="pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted"
-            >
-              {t('pages.membership.compareColumnNonMember')}
-            </th>
-            <th
-              scope="col"
-              className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-primary"
-            >
-              {planName}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((feature, index) => (
-            <tr key={feature} className="border-t border-hairline/50">
-              <th
-                scope="row"
-                className="py-2.5 pr-3 align-top text-[12px] font-medium leading-5 text-ink"
-              >
-                {feature}
-              </th>
-              <td className="py-2.5 pr-3 align-top text-[12px] leading-5 text-muted">
-                {nonMemberValues[index]}
-              </td>
-              {/* 第三列（会员）用 primary 底色整列强调，色块完全贴合单元格内缘，
-                  不外扩，避免把表格撑出横向溢出。 */}
-              <td className="relative py-2.5 align-top text-[12px] font-medium leading-5 text-ink">
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-0 inset-x-0 rounded-md bg-primary/6"
-                />
-                <span className="relative flex items-start gap-1.5">
-                  <CheckCircle2
-                    size={13}
-                    aria-hidden="true"
-                    className="mt-0.5 shrink-0 text-primary"
-                  />
-                  {memberValues[index]}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted/80">
-        <Info
-          size={12}
-          aria-hidden="true"
-          className="mt-0.5 shrink-0 text-muted/50"
-        />
-        {t('pages.membership.compareFootnote')}
+      <h4 className="text-[14px] font-semibold text-ink">
+        {t(
+          isActive
+            ? 'pages.membership.yourBenefits'
+            : 'pages.membership.includedBenefits',
+        )}
+      </h4>
+      <ul className="mt-5 grid grid-cols-2 gap-x-5 gap-y-6 sm:gap-x-8">
+        {benefits.map(({ icon: Icon, title, description }) => (
+          <li key={title} className="flex items-start gap-2.5">
+            <Icon
+              size={18}
+              strokeWidth={1.7}
+              aria-hidden="true"
+              className="mt-0.5 shrink-0 text-primary"
+            />
+            <div className="min-w-0">
+              <p className="text-[14px] font-medium leading-5 text-ink">
+                {t(`pages.membership.${title}`)}
+              </p>
+              <p className="mt-1 text-[12px] leading-5 text-muted">
+                {t(`pages.membership.${description}`)}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-6 flex items-start gap-1.5 text-[11px] leading-5 text-muted">
+        <Info size={12} aria-hidden="true" className="mt-1 shrink-0" />
+        {t('pages.membership.billingNote')}
       </p>
     </div>
   );
 }
 
-/**
- * 去游戏化后的订阅卡：展示当前套餐名、续费/到期日期、月额度与开通/续费按钮。
- *
- * @param props.plan 当前在售（或生效中）的套餐；为空时不渲染。
- * @param props.membership 当前会员状态，用于判断有效性与到期日。
- * @param props.monthlyMessages 本月消息数。
- * @param props.monthlyTokens 本月 Token 数。
- * @param props.busy 是否正在提交订阅/续费请求。
- * @param props.onSubscribe 点击开通/续费时的回调。
- * @returns 简洁的订阅信息面板。
- */
 function SubscriptionCard({
   plan,
   membership,
@@ -223,6 +154,7 @@ function SubscriptionCard({
 }) {
   const isActive = Boolean(membership?.active);
   const planDisplayName = resolvePlanDisplayName(plan);
+  const price = formatCoins(plan.monthly_price_coins, locale);
   const actionLabel = isActive
     ? t('pages.membership.renewPlan', { plan: planDisplayName })
     : t('pages.membership.subscribePlan', { plan: planDisplayName });
@@ -233,82 +165,148 @@ function SubscriptionCard({
   const dateValue = formatMembershipDate(
     membership?.current_period_end ?? null,
     formatDate,
-    t,
   );
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-raised">
-      <div className="border-b border-hairline/60 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Crown size={16} className="shrink-0 text-primary" />
-              <h3 className="text-[18px] font-extrabold leading-tight text-ink">
+    <section
+      aria-label={t('pages.membership.detailAria')}
+      className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-sm"
+    >
+      {isActive ? (
+        <div className="bg-surface-dark px-6 py-6 text-on-dark sm:px-8 sm:py-7">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[13px] text-on-dark-soft">
+              <Crown
+                size={18}
+                strokeWidth={1.6}
+                aria-hidden="true"
+                className="text-primary"
+              />
+              {t('common.brandName')}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-1 text-[12px] text-primary">
+              <CheckCircle2 size={12} aria-hidden="true" />
+              {t('pages.membership.subscribed')}
+            </span>
+          </div>
+          <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="font-display text-[30px] leading-tight sm:text-[32px]">
                 {planDisplayName}
               </h3>
-              {isActive && (
-                <span className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
-                  <CheckCircle2 size={12} aria-hidden="true" />
-                  {t('pages.membership.currentPlan')}
-                </span>
-              )}
+              <p className="mt-2 text-[13px] leading-5 text-on-dark-soft">
+                {t('pages.membership.activeDescription')}
+              </p>
             </div>
-            <div className="mt-2 flex flex-wrap items-baseline gap-2">
-              <span className="text-[28px] font-extrabold leading-none tabular-nums text-ink">
-                {formatCoins(plan.monthly_price_coins, locale)}
-              </span>
-              <span className="text-[12px] font-medium text-muted">
-                {t('pages.membership.perMonth')}
-              </span>
-              {plan.display_price_coins > plan.monthly_price_coins && (
-                <span className="text-[12px] text-muted-soft line-through">
-                  {formatCoins(plan.display_price_coins, locale)}
-                </span>
-              )}
-            </div>
+            <dl className="border-t border-on-dark/15 pt-4 sm:shrink-0 sm:border-t-0 sm:pt-0 sm:text-right">
+              <dt className="text-[11px] text-on-dark-soft">
+                {t('pages.membership.expiresAt')}
+              </dt>
+              <dd className="mt-1 text-[22px] leading-7 tabular-nums text-on-dark">
+                {dateValue}
+              </dd>
+            </dl>
           </div>
         </div>
+      ) : (
+        <div className="border-b border-hairline/60 bg-canvas px-6 py-6 sm:px-8 sm:py-7">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[13px] text-muted">
+              <Crown
+                size={18}
+                strokeWidth={1.6}
+                aria-hidden="true"
+                className="text-primary"
+              />
+              {t('common.brandName')}
+            </span>
+            <span className="rounded-full border border-hairline bg-surface-raised px-2.5 py-1 text-[12px] text-muted">
+              {t('pages.membership.notSubscribed')}
+            </span>
+          </div>
+          <h3 className="mt-6 font-display text-[30px] leading-tight sm:text-[32px]">
+            {planDisplayName}
+          </h3>
+          <p className="mt-2 text-[13px] leading-5 text-muted">
+            {t('pages.membership.inactiveDescription')}
+          </p>
+          <div className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="font-display text-[32px] leading-tight tabular-nums text-ink">
+              {price}
+            </span>
+            <span className="text-[13px] text-muted">
+              {t('pages.membership.perMonth')}
+            </span>
+            {plan.display_price_coins > plan.monthly_price_coins && (
+              <span className="text-[12px] tabular-nums text-muted-soft line-through">
+                {formatCoins(plan.display_price_coins, locale)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
-        <MembershipCompareTable
-          rows={resolvePlanBenefitLabels(t)}
-          planName={planDisplayName}
-          t={t}
-        />
+      <div className="px-6 py-6 sm:px-8">
+        <MembershipBenefits isActive={isActive} t={t} />
+        {isActive && (
+          <div className="mt-6 border-t border-hairline/60 pt-5">
+            <h4 className="text-[12px] text-muted">
+              {t('pages.membership.monthlyUsage')}
+            </h4>
+            <dl className="mt-3 grid grid-cols-2 gap-5">
+              {[
+                {
+                  label: t('pages.membership.monthlyMessages'),
+                  value: formatNumber(monthlyMessages),
+                },
+                {
+                  label: t('pages.membership.monthlyToken'),
+                  value: formatCompactNumber(monthlyTokens),
+                },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-[11px] text-muted">{label}</dt>
+                  <dd className="mt-1 text-[24px] leading-8 tabular-nums text-ink">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 p-5">
-        <SubscriptionMetric
-          label={
-            isActive
-              ? t('pages.membership.expiresAt')
-              : t('pages.membership.membershipPrice')
-          }
-          value={isActive ? dateValue : t('pages.membership.notSubscribed')}
-        />
-        <SubscriptionMetric
-          label={t('pages.membership.monthlyMessages')}
-          value={formatNumber(monthlyMessages)}
-        />
-        <SubscriptionMetric
-          label={t('pages.membership.monthlyToken')}
-          value={formatCompactNumber(monthlyTokens)}
-        />
-      </div>
-
-      <div className="border-t border-hairline/60 p-4">
+      <div
+        className={`border-t border-hairline/60 px-6 py-5 sm:px-8 ${isActive ? 'flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3' : ''}`}
+      >
+        {isActive && (
+          <div className="min-w-0">
+            <p className="text-[14px] font-medium text-ink">
+              {t('pages.membership.pricePerMonth', { price })}
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-muted">
+              {t('pages.membership.renewHint')}
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => onSubscribe(plan)}
           disabled={buttonDisabled}
-          aria-label={buttonLabel}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[14px] font-semibold text-on-primary transition-colors hover:bg-primary-active disabled:opacity-40"
+          aria-busy={busy}
+          className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${isActive ? 'border border-hairline bg-canvas text-ink hover:bg-surface-card' : 'w-full bg-primary text-on-primary hover:bg-primary-active'}`}
         >
-          {busy ? (
-            <Loader2 size={15} className="shrink-0 animate-spin" />
-          ) : (
-            <Sparkles size={15} className="shrink-0" />
+          {busy && (
+            <Loader2
+              size={15}
+              aria-hidden="true"
+              className="shrink-0 animate-spin"
+            />
           )}
           {buttonLabel}
+          {!busy && (
+            <ArrowRight size={15} aria-hidden="true" className="shrink-0" />
+          )}
         </button>
       </div>
     </section>
