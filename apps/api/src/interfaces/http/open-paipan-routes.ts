@@ -89,7 +89,7 @@ export async function openPaipanRoutes(app: FastifyInstance): Promise<void> {
       type,
       // text：formatOfficialPaipan 生成的中文文本（稳定，适合喂给模型解读）。
       text: entry.output,
-      // data：底层算法库的结构化盘面（shape 跟随 lib 版本，见设计文档 §6.3 稳定性提醒）。
+      // Raw chart data follows the algorithm library version; see docs/open-api.md#chart-calculation.
       data: entry.artifactData,
     };
   });

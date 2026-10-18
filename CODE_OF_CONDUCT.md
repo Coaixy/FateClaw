@@ -1,13 +1,13 @@
-# 行为准则
+# Code of conduct
 
-FateClaw 欢迎围绕软件工程、Agent 架构、排盘工具和知识库检索的建设性贡献。
+FateClaw welcomes constructive contributions to software engineering, agent architecture, chart-calculation tools, and knowledge retrieval.
 
-参与讨论时请遵守：
+When participating in discussions:
 
-- 聚焦事实、代码和可复现问题。
-- 尊重不同背景的贡献者。
-- 不发布骚扰、歧视、攻击、人肉搜索或泄露隐私的内容。
-- 不在公开区粘贴密钥、用户数据、聊天记录或未脱敏日志。
-- 对玄学相关内容保持边界意识，不把项目输出包装成医疗、法律、投资等专业建议。
+- Focus on facts, code, and reproducible issues.
+- Respect contributors from different backgrounds.
+- Do not post harassment, discrimination, personal attacks, doxxing, or private information.
+- Do not post secrets, user data, chat histories, or unredacted logs in public spaces.
+- Respect the limits of metaphysics-related content. Do not present project output as medical, legal, investment, or other professional advice.
 
-维护者可以删除违反本准则的内容，并限制持续破坏协作环境的账号参与项目。
+Maintainers may remove content that violates this code and restrict accounts that repeatedly disrupt collaboration.

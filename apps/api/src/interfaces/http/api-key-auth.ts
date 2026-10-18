@@ -14,7 +14,7 @@ import { fixedWindowRateLimit } from './rate-limit.js';
 /**
  * 对外 API 单个 key 的调用频率上限（次/分钟）。
  *
- * @remarks MVP 统一额度；后续可按会员档 / key 分级（见 docs/open-api-design.md §8）。
+ * @remarks All keys share this limit; see docs/open-api.md#rate-limits-and-errors.
  */
 const OPEN_API_RATE_LIMIT_PER_MINUTE = 60;
 

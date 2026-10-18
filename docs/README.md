@@ -19,7 +19,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Configure model supply and failover | [Official model pool](official-model-pool.md) | Mixed-model nodes, weighted routing, circuit recovery and billing |
 | Configure daily free AI usage | [Free model service](benefit-model-pool.md) | Separate pools, user allowance, shared upstream budgets, activation and status |
 | Change schema or generate a database baseline | [Database migrations](database-migrations.md) | Empty database bootstrap, existing database upgrades, and snapshot validation |
-| Integrate an external client | [Open API](open-api-design.md) | API keys, chart endpoints, and agent sessions |
+| Integrate an external client | [Open API](open-api.md) | API keys, chart endpoints, and agent sessions |
 | Deploy the three apps | [Deployment](deployment-split.md) | API, user site, and admin site deployment |
 | Work on the retained WeChat integration | [OpenClaw/iLink](openclaw-integration.md) | Integration status and restoration boundaries |
 | Contribute or report a vulnerability | [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md) | Contribution and disclosure procedures |
@@ -30,4 +30,4 @@ The index is navigation, not a second copy of the architecture or API contracts.
 
 When behavior changes, update its topic document and affected links. Add a new document only when it owns a distinct topic, then link it here. Keep setup commands in the development guide and code navigation in the Agent guide.
 
-[archive/](archive/) holds historical designs, migration plans, and reviews. Read it only for historical context; it does not establish current behavior.
+Keep this directory focused on current product behavior, integration references, deployment, and maintenance. Do not retain obsolete drafts, review reports, implementation plans, or unfinished-work records here.

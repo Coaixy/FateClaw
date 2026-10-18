@@ -1,10 +1,10 @@
-# Web 前端
+# Web frontend
 
-这是一个基于 Next.js 16 App Router 的 www 用户前端。它不是单纯营销站，主要是用户业务控制台；管理后台已经拆到 `apps/admin`。
+This is the user-facing www frontend built with Next.js 16 App Router. It primarily serves as the user console rather than a marketing site. The admin app has been separated into `apps/admin`.
 
-## 从哪里看起
+## Where to start
 
-第一次接手前端时，建议按这个顺序看：
+When first working on the frontend, read these files in order:
 
 1. `apps/web/app/layout.tsx`
 2. `apps/web/app/page.tsx`
@@ -14,9 +14,9 @@
 6. `apps/web/components/sidebar.tsx`
 7. `apps/web/components/ai-chat/ai-chat-workspace.tsx`
 
-如果是后台相关，请直接看 `apps/admin`。
+For admin work, go directly to `apps/admin`.
 
-## 结构
+## Structure
 
 ```text
 apps/web/
@@ -54,79 +54,79 @@ apps/web/
 └── utils/
 ```
 
-## 开发与生产差异
+## Development and production differences
 
-- 开发态：根目录 `pnpm run dev` 同时启动 API + www + admin；只跑 www 用 `pnpm run dev:www`
-- Next dev server 跑在 `3001`
-- 开发态 API 通过 `apps/web/next.config.ts` rewrites 转发到 `http://localhost:3000/api/*`
-- 生产态：`next build` 后静态导出到 `apps/web/out/`
-- 生产态最终部署为独立 www 静态站点，不是单独部署 Next server
+- Development: `pnpm run dev` at the repository root starts API + www + admin; use `pnpm run dev:www` to run www alone.
+- The Next development server runs on port `3001`.
+- Development API calls are forwarded to `http://localhost:3000/api/*` through rewrites in `apps/web/next.config.ts`.
+- Production: `next build` exports static files to `apps/web/out/`.
+- Production deploys as an independent www static site, without a separate Next server.
 
-排查“本地正常、线上不正常”时，先确认问题是出在：
+When investigating behavior that works locally but fails in production, first identify whether the problem lies in:
 
-- Next 开发模式
-- 静态导出结果
-- 静态站点托管与回退规则
+- Next development mode.
+- The static export output.
+- Static-site hosting and fallback rules.
 
-## 关键模块
+## Key modules
 
-### 路由页面
+### Route pages
 
-- `app/page.tsx`: 根路径入口，直接渲染 AI Chat 新建对话状态
-- `app/login/page.tsx`: 登录注册
-- `app/dashboard/page.tsx`: 账号总览、绑定、Soul、计划和主要入口
-- `app/chat/page.tsx`: 聊天记录页
-- `app/ai-chat/page.tsx`: Web 侧 AI 聊天界面
-- `app/discover/page.tsx`: Skill 市场发现页
-- `app/studio/*`: 创作者工作台、Skill 和 Bundle 创建编辑
-- `app/skills/install/page.tsx`: 单个 Skill 安装页
-- `app/skills/bundle/install/page.tsx`: Bundle 安装页
-- `app/wallet/page.tsx`: 钱包与充值
-- `app/devices/page.tsx`: 设备与账号绑定入口
-- `app/profile/page.tsx`: 个人资料
-- `app/settings/page.tsx`: 设置
+- `app/page.tsx`: Root entry point, directly rendering the new-conversation state in AI Chat.
+- `app/login/page.tsx`: Login and registration.
+- `app/dashboard/page.tsx`: Account overview, bindings, Soul, plans, and main entry points.
+- `app/chat/page.tsx`: Chat history.
+- `app/ai-chat/page.tsx`: Web AI chat interface.
+- `app/discover/page.tsx`: Skill marketplace discovery.
+- `app/studio/*`: Creator workspace and Skill/Bundle creation and editing.
+- `app/skills/install/page.tsx`: Single-Skill installation.
+- `app/skills/bundle/install/page.tsx`: Bundle installation.
+- `app/wallet/page.tsx`: Wallet and recharge.
+- `app/devices/page.tsx`: Device and account binding.
+- `app/profile/page.tsx`: User profile.
+- `app/settings/page.tsx`: Settings.
 
-### API 封装
+### API clients
 
-- `features/*/api.ts`: 普通用户各业务域 API client
-- `features/paipan/api.ts`: 直排盘 API client
-- `features/auth/hooks/use-auth.ts`: 登录态 hook
-- `features/auth/providers/auth-provider.tsx`: 认证上下文
+- `features/*/api.ts`: API clients for regular-user business domains.
+- `features/paipan/api.ts`: Direct chart-calculation API client.
+- `features/auth/hooks/use-auth.ts`: Authentication-state hook.
+- `features/auth/providers/auth-provider.tsx`: Authentication context.
 
-如果后端接口变更，前端这里通常要同步改。
+Backend API changes usually require corresponding changes here.
 
-### AI Chat 工作区
+### AI Chat workspace
 
-当前主产品入口是 `components/ai-chat/ai-chat-workspace.tsx`：
+The current main product entry point is `components/ai-chat/ai-chat-workspace.tsx`:
 
-- 普通聊天、自贴盘面、手动排盘、简易模式都围绕 AI Chat 会话运行。
-- `chatSessionsApi.send()` 成功通常只表示后端已入队，返回 `accepted` 和 `request_id`；不要把它当最终回复。
-- 实时输出先调用 `chatSessionsApi.createStreamTicket()`，再通过 `buildChatSessionStreamUrl()` 连接 WebSocket。
-- 最终消息仍以服务端落库为准；WebSocket 断开时应能通过重新拉取消息列表恢复展示。
-- `PaipanSheet` 调 `/api/paipan/preview` 和 `/api/paipan/commit`，排盘结果以消息 `tool_context` 形式进入会话。
-- 简易模式经统一 AI Chat 会话回合发起，无独立 workflow 路由 / client。
+- Regular chat, user-pasted charts, manual chart calculation, and simple mode all run through AI Chat sessions.
+- A successful `chatSessionsApi.send()` usually means only that the backend has queued the request, returning `accepted` and `request_id`. It is not the final reply.
+- Live output first calls `chatSessionsApi.createStreamTicket()`, then connects to WebSocket through `buildChatSessionStreamUrl()`.
+- Persisted server messages remain authoritative. After a WebSocket disconnect, reloading the message list should restore the display.
+- `PaipanSheet` calls `/api/paipan/preview` and `/api/paipan/commit`; chart results enter the conversation as message `tool_context`.
+- Simple mode starts through the unified AI Chat turn flow, with no separate workflow route or client.
 
-## UI 特征
+## UI characteristics
 
-- 当前样式不是保守后台模板，页面视觉较强，尤其首页和 dashboard
-- CSS 变量和 `globals.css` 承担了较多主题职责
-- 组件里存在不少动画、渐变和视觉状态，不要在小改动时无意抹平整体风格
+- The current UI has a strong visual style, especially on the home page and dashboard, rather than a conventional admin-template appearance.
+- CSS variables and `globals.css` define much of the theme.
+- Components contain many animations, gradients, and visual states. Preserve the overall style when making small changes.
 
-## 改动约定
+## Change conventions
 
-- 优先复用已有 `features/*/api.ts`，不要在页面内散落原始 `fetch`
-- 登录态逻辑优先走现有 auth hooks / provider
-- 调路由时同时检查桌面侧栏、移动导航和入口页是否受影响
-- 如果接口字段变更，检查 dashboard、chat、settings 和相关业务页，这几个页面依赖较重
-- 仓库保留了前端 Vitest 测试源文件；前端改动后优先跑相关 `*.test.ts`，再跑 `pnpm --filter fateclaw-web exec tsc --noEmit`，必要时再跑 `pnpm --filter fateclaw-web build`
+- Reuse existing `features/*/api.ts` clients instead of scattering raw `fetch` calls across pages.
+- Use the existing auth hooks and provider for authentication state.
+- When changing routes, check the desktop sidebar, mobile navigation, and entry pages for related effects.
+- When API fields change, check the dashboard, chat, settings, and related business pages, which depend heavily on them.
+- Frontend Vitest test sources are kept in the repository. After frontend changes, run relevant `*.test.ts` tests first, then `pnpm --filter fateclaw-web exec tsc --noEmit`, and `pnpm --filter fateclaw-web build` when needed.
 
-## 安全部署要求（必读）
+## Secure deployment requirements (required reading)
 
-由于使用 `output: 'export'` 静态导出，Next.js **没有运行时 middleware**。生产部署必须在反向代理层（Nginx / Caddy / Traefik）实施基础保护：
+With `output: 'export'`, Next.js has **no runtime middleware**. Production deployments must apply basic protections at the reverse proxy (Nginx / Caddy / Traefik):
 
-1. **API 后端 CORS 白名单**：宿主侧已通过 `ALLOWED_ORIGINS` env 强制白名单（缺失时拒绝启动）
-2. **JWT 存储**
-   - 用户 JWT 存于 `localStorage`，依赖严格 CSP 防 XSS（建议反代加 `Content-Security-Policy: default-src 'self'`）
-3. **HTTPS 强制**：反代应做 HTTP→HTTPS 301，避免 token 明文传输
+1. **API backend CORS allowlist**: The host enforces an allowlist through the `ALLOWED_ORIGINS` environment variable and refuses to start if it is missing.
+2. **JWT storage**
+   - User JWTs are stored in `localStorage` and depend on a strict CSP against XSS. Add `Content-Security-Policy: default-src 'self'` at the reverse proxy.
+3. **Enforce HTTPS**: The reverse proxy should issue an HTTP-to-HTTPS 301 redirect to prevent plaintext token transmission.
 
-admin 站点的额外安全要求见 `apps/admin/AGENT.md` 和 `SECURITY.md`。
+For additional admin-site requirements, see `apps/admin/AGENT.md` and `SECURITY.md`.

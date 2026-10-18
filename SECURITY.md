@@ -1,39 +1,39 @@
-# 安全策略
+# Security policy
 
-FateClaw 会处理用户账号、聊天内容、知识库、模型密钥、支付/钱包记录和 OpenClaw/iLink 相关凭据。部署前请先理解这些数据边界。
+FateClaw handles user accounts, chat content, knowledge libraries, model keys, payment and wallet records, and OpenClaw/iLink credentials. Understand these data boundaries before deploying.
 
-## 报告漏洞
+## Reporting vulnerabilities
 
-如果你发现安全问题，请不要公开创建 Issue。请通过项目维护者在代码托管平台公开的安全报告入口或私有联系方式提交，报告中尽量包含：
+If you discover a security issue, do not open a public issue. Use the security reporting channel or private contact details published by the project maintainer on the code hosting platform. Where possible, include:
 
-- 影响版本或提交。
-- 复现步骤。
-- 影响范围。
-- 你已经确认不会公开的 PoC 或日志片段。
+- The affected version or commit.
+- Steps to reproduce.
+- The scope of the impact.
+- A proof of concept or log excerpts that you have confirmed will remain private.
 
-请不要在未授权的第三方系统上测试漏洞，也不要导出真实用户数据。
+Do not test vulnerabilities on third-party systems without authorization or export real user data.
 
-## 敏感信息
+## Sensitive information
 
-不要提交以下内容：
+Do not commit:
 
-- `.env`、数据库连接串、JWT 密钥、`MANAGER_KEY`、`USER_MANAGER_KEY`。
-- OpenAI、Anthropic、Gemini 或其他模型 API Key。
-- OpenClaw/iLink Bot token、扫码登录产物、微信账号数据。
-- 阿里云短信密钥、支付网关密钥。
-- 用户聊天记录、知识库内容、账单流水或数据库 dump。
+- `.env` files, database connection strings, JWT secrets, `MANAGER_KEY`, or `USER_MANAGER_KEY`.
+- OpenAI, Anthropic, Gemini, or other model API keys.
+- OpenClaw/iLink Bot tokens, QR-code login artifacts, or WeChat account data.
+- Alibaba Cloud SMS keys or payment gateway keys.
+- User chat histories, knowledge-library content, billing transactions, or database dumps.
 
-## 生产部署最低要求
+## Minimum production deployment requirements
 
-- `JWT_SECRET` 和已配置的后台密钥必须使用强随机值。
-- 生产环境必须设置 `ALLOWED_ORIGINS`，同时包含 www 和 admin 站点来源，不要使用宽松 CORS。
-- admin 管理站点建议在反向代理层增加 IP 白名单、VPN 或额外认证。
-- 全站强制 HTTPS，避免 JWT、管理密钥和模型配置明文传输。
-- PostgreSQL 和 Redis 不应暴露到公网。
-- 定期轮换模型 API Key、短信密钥、支付密钥和 OpenClaw/iLink 凭据。
+- Use strong random values for `JWT_SECRET` and any configured admin keys.
+- Set `ALLOWED_ORIGINS` in production to include both the www and admin site origins. Do not use permissive CORS.
+- Protect the admin site with an IP allowlist, VPN, or additional authentication at the reverse proxy.
+- Enforce HTTPS site-wide to prevent plaintext transmission of JWTs, admin keys, and model configuration.
+- Do not expose PostgreSQL or Redis to the public internet.
+- Rotate model API keys, SMS keys, payment keys, and OpenClaw/iLink credentials regularly.
 
-## 已知边界
+## Known boundaries
 
-- www 和 admin 都是静态导出形态，管理后台前端站点本身不能替代服务端鉴权；后端 `/api/admin/*` 依赖 `x-admin-key`，生产部署仍应在反向代理层保护 admin 入口。
-- 当前后端正式入口会为已启用且会员有效的既有微信账号启动 listener/poller，但 Web 新绑定入口仍关闭；如果重新开放完整 OpenClaw/iLink 入口，需要重新评估消息发送权限、账号隔离、速率限制和日志脱敏。
-- Agent 输出可能包含模型生成内容。业务上线时应根据场景补充免责声明、审核和风控策略。
+- Both www and admin are static exports. The admin frontend cannot replace server-side authentication: backend `/api/admin/*` routes rely on `x-admin-key`, and production deployments should also protect the admin entry point at the reverse proxy.
+- WeChat OpenClaw/iLink is currently disabled. The backend retains listener and poller code, while new web bindings remain closed. Reopening the full flow requires reassessing message-delivery permissions, account isolation, rate limits, and log redaction.
+- Agent output may contain model-generated content. Add disclaimers, moderation, and risk controls appropriate to the deployment context.

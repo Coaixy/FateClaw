@@ -1,6 +1,6 @@
 # Membership identity, entitlements and billing
 
-This document describes the current implementation. Historical plans under `archive/` are not current contracts.
+This document describes the current implementation.
 
 ## Identity and display name
 
@@ -8,11 +8,11 @@ The system has one membership identity: `membership`. Its constants and literal 
 
 `membership_config.id` and `user_memberships.plan_key` use this identity. Database checks reject other identities, and the existing primary key permits at most one membership row per user. HTTP inputs accept only this identity; omitted `plan_key` in a subscription request selects the same membership. There are no tier ranks, minimum-tier comparisons, legacy aliases or unknown-key normalization.
 
-The default UI name is **卦师使用权**. A configured `membership_config.name` takes precedence. The membership name does not determine permissions.
+The default UI name means **Diviner Access**. A configured `membership_config.name` takes precedence. The membership name does not determine permissions.
 
 [Migration 0082](../apps/api/src/infrastructure/migrations/versions/0082-unify-membership-identity.ts) renames the stored identity in place and changes the old built-in display name to the default name. Configured prices, sale status, custom names, membership status, period boundaries, timestamps and balances are preserved. Historical wallet records and billing snapshots retain their original audit data. Purchase deduplication is scoped to the user and does not depend on an old plan identifier in wallet metadata.
 
-Deploy the API and both web clients together: old identifiers are rejected by current HTTP inputs. Published migration SQL and archived plans remain frozen; runtime code does not translate old identifiers.
+Deploy the API and both web clients together: old identifiers are rejected by current HTTP inputs. Published migration SQL remains frozen; runtime code does not translate old identifiers.
 
 ## Entitlements
 

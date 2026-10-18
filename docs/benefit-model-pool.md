@@ -8,7 +8,7 @@ agent, durable request recovery and model-call failover. Users choose a service;
 they cannot supply providers or credentials. A free request never selects a
 paid node or creates a wallet charge.
 
-User-facing labels use **免费模型** and **免费额度**. Internal identifiers,
+User-facing labels mean **Free models** and **Free allowance**. Internal identifiers,
 including the `benefit` pool key and existing API routes, remain unchanged.
 
 ## Administration and activation
@@ -158,7 +158,7 @@ Provider attempts detach from those requests and retain their recorded usage,
 including idempotent settlement of usage reported after deletion. Deleting an
 account does not discard monitoring attempts or reset node cooldowns.
 
-## Status and validation
+## Public status
 
 The public status endpoint returns separate paid/free sections without exposing
 node/provider identities or personal allowance. Existing top-level fields still
@@ -170,43 +170,3 @@ Synthetic checks retain shared six-hour schedules, tiny prompts and finite timeo
 Free checks use the same node health claim and settlement as real calls.
 Refreshing a page never runs inference. Cooling nodes skip checks. Stale health
 and stale cached supply become unknown.
-
-PostgreSQL integration checks cover pool isolation, final-turn contention,
-membership admission and completion after expiry,
-provider cooldowns, single recovery leases, uncertain usage,
-transactional/idempotent finalization, active session selection fencing,
-cancellation and monitoring cooldowns. Synthetic provider checks exercise free
-routing without paid fallback. Historical upgrade and fresh-baseline paths
-converge on the same schema and deterministic seeds.
-
-The October 17, 2026 check of the simplified policy passed 842 tests; 25 opt-in
-checks without their external fixtures were skipped. Synthetic streams accepted
-a system prompt larger than the former input bound, retained the ordinary output
-ceiling across five answer calls, and did not dispatch a paid fallback. Tool
-execution beyond the former cap, cancellation after a hidden summary, and
-preservation of configured limits and completed snapshots during upgrade were
-also checked. API, runtime, web and admin type checks passed. Real supplier
-execution and production deployment remain **unverified**.
-
-The October 16, 2026 browser validation used the application's built pages, a
-disposable PostgreSQL/Redis environment and a local synthetic provider. Three successful
-free turns persisted, exhausted the allowance and produced no wallet transaction
-or paid-provider call. An overdrawn synthetic account could use its remaining
-free allowance. Source supplier permissions, real availability and production deployment
-remain **unverified**; operator credentials have not been configured by this work.
-
-The detailed [design decisions](benefit-model-pool-design.md) are background.
-
-The October 16, 2026 check, before removal of manual upstream quotas and extra
-free execution limits, passed 792 automated tests; 40 opt-in integration checks
-without their external fixtures were skipped. API/runtime compilation and
-both Next.js production exports passed. API lint reported zero errors and 103
-existing-style warnings. The actual 360px conversation layout had no horizontal
-overflow, and the final built application completed a fresh synthetic free turn.
-That historical check used the previous local quota counters and execution budgets;
-it does not validate the current simplified policy. Automatic node
-cooldown and retry hints are covered by the current PostgreSQL/local-provider tests.
-The earlier admin simplification was checked on a production export with a
-synthetic metadata endpoint: adding and saving a node submitted neither quota
-groups nor quota-group references. That browser check preceded removal of the
-extra free execution policy fields.

@@ -1,10 +1,10 @@
-# Agent 架构
+# Agent architecture
 
 Last checked: 2026-10-18.
 
-这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runtime，agent-runtime 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
+This document describes the agent runtime architecture in the current code. In the main flow, the host process calls an account-level agent-runtime through Redis IPC. For each request, agent-runtime creates a Pi SDK Runtime, which handles the model loop, user knowledge reads, and final reply. System chart calculation runs in deterministic packages on the Web/API side.
 
-核心代码入口：
+Core code entry points:
 
 - `apps/api/src/runtime/resident-agent.ts`
 - `apps/api/src/runtime/ipc-worker.ts`
@@ -14,18 +14,18 @@ Last checked: 2026-10-18.
 - `apps/agent-runtime/src/pi-runtime/`
 - `apps/agent-runtime/src/skill-content-cache.ts`
 
-## 总体分层
+## Architecture layers
 
 ```text
-Web AI Chat / 微信消息代码
+Web AI Chat / WeChat message handling
         │
         ▼
-apps/api 宿主进程
-  - 会话、账号、账单、模型配置
-  - 构建 history / activeBoardContext
-  - 调用系统排盘运行包生成盘面 artifact
-  - 管理 Text Skill Bundle metadata 和权限
-  - Redis IPC 入队、监听 outbox
+apps/api host process
+  - Sessions, accounts, billing, model configuration
+  - Build history / activeBoardContext
+  - Call system chart runners to generate chart artifacts
+  - Manage Text Skill Bundle metadata and permissions
+  - Enqueue Redis IPC requests and listen to outboxes
         │
         ▼
 Redis IPC
@@ -36,48 +36,48 @@ Redis IPC
   ipc:{runtimeId}:cancel
         │
         ▼
-账号级 agent-runtime 常驻进程
+Account-level resident agent-runtime process
   - daemon BRPOP inbox
-  - request-boundary 处理单次请求
-  - 创建 request-scoped Pi Runtime
-  - Pi ResourceLoader 暴露本轮授权 Text Skill Bundle
+  - request-boundary handles each request
+  - Create a request-scoped Pi Runtime
+  - Pi ResourceLoader exposes Text Skill Bundles authorized for the turn
         │
         ▼
-Pi SDK 模型 loop / 授权 Skill 文件读取
+Pi SDK model loop / authorized Skill file reads
         │
         ▼
-宿主落库、结算、返回 Web 或微信
+Host persists results, settles billing, and replies to Web or WeChat
 ```
 
-宿主和 agent-runtime 是两个边界清晰的运行时：
+The host and agent-runtime have distinct responsibilities:
 
-- 宿主负责平台侧事务：用户、账号、会话、消息落库、账单预扣与结算、模型 runtime 解析、Redis IPC、Fastify API、Text Skill Bundle 写入，以及系统排盘 runner 调用。
-- agent-runtime 负责 AI 执行：创建 request runtime、调用 Pi SDK、读取授权 Skill 文件、生成 transcript / trace / agentGraph。
-- 模型密钥和 provider 是 AI 请求级数据。宿主在 AI Chat / 微信消息入队前解析数据库配置，并通过 `llmRuntime` 快照随 IPC payload 下发；手动排盘请求由 API 侧调用系统排盘运行包，不需要模型 runtime。
+- The host owns platform operations: users, accounts, sessions, message persistence, billing reservations and settlement, model runtime resolution, Redis IPC, Fastify API, Text Skill Bundle writes, and system chart-runner calls.
+- agent-runtime owns AI execution: creating request runtimes, calling Pi SDK, reading authorized Skill files, and generating transcript / trace / agentGraph data.
+- Model keys and providers are AI request-level data. Before enqueueing AI Chat or WeChat messages, the host resolves database configuration and sends an `llmRuntime` snapshot in the IPC payload. Manual chart requests call system chart runners in the API and do not require a model runtime.
 
-## 本地 agent-runtime 生命周期
+## Local agent-runtime lifecycle
 
-当前本地部署不再依赖 Docker 运行 agent-runtime。宿主通过 `apps/api/src/runtime/local-runner.ts` 用子进程启动 `apps/agent-runtime`：
+Local deployments no longer require Docker to run agent-runtime. The host uses `apps/api/src/runtime/local-runner.ts` to launch `apps/agent-runtime` as a child process:
 
-- 开发环境默认优先源码入口 `src/daemon.ts`，生产或 `LOCAL_AGENT_ENTRY_MODE=dist` 使用 `dist/daemon.js`。
-- 每个 runtimeId 对应一个常驻子进程；站内 AI Chat runtimeId 为 `web:{userId}`，微信场景为账号 ID。
-- 子进程 env 由 `apps/api/src/runtime/agent-env.ts` 统一构建，只注入身份、PostgreSQL、Redis、项目根、Pi session 目录等运行依赖，不注入全局模型密钥。
+- Development prefers the source entry point `src/daemon.ts`; production or `LOCAL_AGENT_ENTRY_MODE=dist` uses `dist/daemon.js`.
+- Each runtimeId maps to one resident child process. AI Chat uses `web:{userId}`; WeChat uses the account ID.
+- `apps/api/src/runtime/agent-env.ts` centrally builds the child environment, injecting only runtime dependencies such as identity, PostgreSQL, Redis, project root, and Pi session directories. It does not inject global model keys.
 - The current local policy permits four resident account processes. At capacity, the host retires the oldest idle runtime and counts it until actual exit.
 - Idle runtimes retire after ten minutes. An admitted execution retains its exact child lease until final response, cancellation or timeout.
-- Linux 启动时会清理上一任宿主异常退出后留下的本项目孤儿 agent-runtime，避免旧进程继续消费 Redis 队列。
+- On Linux startup, the host cleans up this project's orphaned agent-runtime processes left by a previous host crash, preventing old processes from continuing to consume Redis queues.
 
-## Skill 与排盘模型
+## Skill and chart-calculation model
 
-当前只有用户 Text Skill Bundle 以 Pi Skill 方式暴露给模型。系统排盘不再是 Pi Skill，而是 Web/API 侧可控的确定性业务资源：
+Only user Text Skill Bundles are currently exposed to the model as Pi Skills. System chart calculation is a controlled, deterministic business resource on the Web/API side:
 
-| 类型 | 文件来源 | 暴露方式 | DB 存储 |
+| Type | File source | Exposure | Database storage |
 | --- | --- | --- | --- |
 | System chart runner | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts` | Manual `/api/paipan/*` requests and the conversation `create_paipan` tool call the same API-owned runners | `skill_global_config` controls enabled chart types; results are saved in message `tool_context` |
 | User Text Skill Bundle | Rebuildable process-owned snapshots in `.fateclaw/text-skills/cache-v1/` | Authorized per request through ResourceLoader | Immutable `skill_content_revisions`, a current revision pointer, metadata, and permissions |
 
 PostgreSQL owns user skill content. API saves atomically insert an immutable revision and update its skill pointer after checking the editor's base revision. Agent-runtime authorizes and fixes a revision for each request, then restores it with the shared content protocol and process-owned local cache. Active snapshot leases are released when session creation or execution finishes or fails. Cache retention never deletes active snapshots. Legacy filesystem reads are confined to the API's independent import module; ordinary skill reads use PostgreSQL. See [Skill content architecture](skill-content-architecture.md).
 
-用户 Text Skill Bundle 的典型结构：
+A typical user Text Skill Bundle has this structure:
 
 ```text
 SKILL.md
@@ -88,63 +88,63 @@ examples/
 notes/
 ```
 
-私有用户 Skill 不进入 `.pi/skills`、`~/.pi/agent/skills` 或任何全局可扫描目录。`apps/agent-runtime/src/skill-content-cache.ts` 会拒绝这些路径，并只读取 `SKILL.md`、`index.md`、`docs/`、`examples/`、`notes/` 中的 Markdown。
+Private user Skills never enter `.pi/skills`, `~/.pi/agent/skills`, or any globally discoverable directory. `apps/agent-runtime/src/skill-content-cache.ts` rejects those paths and reads only `SKILL.md`, `index.md`, and Markdown files under `docs/`, `examples/`, and `notes/`.
 
-## 宿主请求链路
+## Host request flow
 
-站内 AI Chat 的主要链路在 `apps/api/src/modules/chat/chat-session-service.ts`：
+The main AI Chat flow lives in `apps/api/src/modules/chat/chat-session-service.ts`:
 
-1. 校验会话归属，并用 Redis `session:processing:{sessionId}` 做会话级并发锁。
-2. 写入用户消息。
+1. Verify session ownership and acquire a session-level concurrency lock using Redis `session:processing:{sessionId}`.
+2. Persist the user message.
 3. `resolveUserLlmRuntime()` captures the official model pool, common prices and thinking level; legacy user selections are ignored. Model-call routing, failover and shared circuit state are described in [Official model pool](official-model-pool.md).
-4. 用 `buildStructuredInputForSession()` 构建历史上下文。
-5. 如用户选中盘面，追加 `activeBoardContext`。
-6. 调 `dispatchAiChatPrompt()`。
+4. Build historical context with `buildStructuredInputForSession()`.
+5. Append `activeBoardContext` if the user selected a chart.
+6. Call `dispatchAiChatPrompt()`.
 
-`dispatchAiChatPrompt()` 会先确保对应 `web:{userId}` 的 agent-runtime 已运行，再调用 `addAccountListener()` 启动宿主侧 outbox 监听，最后通过 `submitAiChatInboxRequest()` 入队。
+`dispatchAiChatPrompt()` first ensures that agent-runtime is running for `web:{userId}`, then calls `addAccountListener()` to start the host-side outbox listener, and finally enqueues the request through `submitAiChatInboxRequest()`.
 
-站内 AI Chat 默认面向前端异步返回：HTTP `POST /api/chat-sessions/s/:sessionId/messages` 入队成功后通常返回 `accepted: true` 和 `request_id`，最终回复由 `ipc-ai-chat-outbox-handler.ts` 处理 `ipc:{runtimeId}:ai-chat:outbox` 后落库。Web 通过 `POST /api/chat-sessions/s/:sessionId/stream-ticket` 换取短期一次性票据，再连接 `/api/chat-sessions/s/:sessionId/stream` WebSocket；服务端用 Redis pub/sub 把 Pi session 事件、进度、最终回复和错误推给当前会话。
+AI Chat normally responds to the frontend asynchronously: after successful enqueueing, HTTP `POST /api/chat-sessions/s/:sessionId/messages` usually returns `accepted: true` and `request_id`. `ipc-ai-chat-outbox-handler.ts` handles `ipc:{runtimeId}:ai-chat:outbox` and persists the final reply. The web client exchanges `POST /api/chat-sessions/s/:sessionId/stream-ticket` for a short-lived, single-use ticket, then connects to the `/api/chat-sessions/s/:sessionId/stream` WebSocket. The server uses Redis pub/sub to push Pi session events, progress, final replies, and errors to the current session.
 
-微信/居民 agent 走默认 `ipc:{runtimeId}:outbox`，由 `ipc-outbox-handler.ts` 处理并可按 `autoDeliver` 发送到 iLink。AI Chat 专属 outbox 永远不发微信。
+WeChat/resident agents use the default `ipc:{runtimeId}:outbox`, handled by `ipc-outbox-handler.ts`, which may deliver to iLink according to `autoDeliver`. The dedicated AI Chat outbox never sends WeChat messages.
 
-## 并发、取消与结算
+## Concurrency, cancellation, and settlement
 
-宿主在请求进入 agent-runtime 前后维护几类运行态保护：
+The host maintains several runtime safeguards before and after requests enter agent-runtime:
 
-- 会话级忙碌锁：`session:processing:{sessionId}` 防止同一 AI Chat 会话并发多轮；只有当前 requestId 才能续期或释放；TTL 由超时链派生（API 超时 + 5 分钟）。
-- 全局 agent 并发槽：`agent:concurrency:active` 限制全站同时进入模型 loop 的请求数；等待队列为 ZSET（`agent:concurrency:waitq:member` / `waitq:normal`，score=入队时间），配合心跳哈希 `agent:concurrency:wait:heartbeat`——等待者每次轮询报活，任何存活等待者的 Lua 调用都会原子驱逐心跳超时（15 秒）的死亡队头，进程崩溃不会永久毒化队列；释放槽位时优先会员队列。
-- 本地 agent 租约：请求持有 runtime 子进程，最终响应、取消、出错或超时时释放，之后按 idle TTL 回收。
-- 监听器回收：站内 `web:{userId}` 的 outbox 监听是懒创建的，空闲 10 分钟且无在途请求时自动退出释放 Redis 连接；微信账号监听常驻（pinned）。回收/进程重启后迟到的 outbox 消息由 `inbox-stall-sweeper` 的 outbox 巡检代为消费落库（无主阈值 3 分钟），不会丢失。
-- 取消队列：前端中断会向 `ipc:{runtimeId}:cancel` 写入 cancel payload；agent-runtime 在处理当前请求时轮询该队列并调用 Pi session `abort()`。
-- 账务预留与结算：入队前按 `llmRuntime` 预留；最终响应「先落库交付、再结算扣费」——落库失败则预留保持 pending 由 billing-sweeper 按对话日志补收，杜绝"已扣费但用户收不到消息"；结算完成后把扣费金额回填进最终消息 metadata。
-- 超时链：全部请求链路超时由 `apps/api/src/shared/timeout-chain.ts` 单一来源派生（daemon 硬超时 8 分钟 < inbox 清理阈值 < API 超时 30 分钟 < 会话锁 TTL），daemon 侧的值由宿主 spawn 时经 env 注入，违例配置启动即报错。
-- 存活心跳：daemon 每 10 秒写 `agent:heartbeat:{accountId}`（TTL 30 秒），优雅退出时主动删除；巡检任务对"inbox 有堆积但心跳缺失"的账号立即发运维告警（`ALERT_WEBHOOK_URL`，可选），无需等到清理阈值。
+- Session busy lock: `session:processing:{sessionId}` prevents concurrent turns in one AI Chat session. Only the current requestId can renew or release it. Its TTL is derived from the timeout chain (API timeout + five minutes).
+- Global agent concurrency slots: `agent:concurrency:active` limits site-wide requests entering the model loop simultaneously. Wait queues are ZSETs (`agent:concurrency:waitq:member` / `waitq:normal`, scored by enqueue time) paired with heartbeat hash `agent:concurrency:wait:heartbeat`. Waiters report liveness on each poll. Any live waiter's Lua call atomically evicts a dead queue head after a 15-second heartbeat timeout, so a process crash cannot permanently block the queue. Released slots prioritize the member queue.
+- Local agent leases: A request retains its runtime child process until the final response, cancellation, error, or timeout. Idle TTL reclamation follows release.
+- Listener reclamation: Outbox listeners for `web:{userId}` are created lazily and exit after ten idle minutes with no in-flight requests, releasing Redis connections. WeChat account listeners remain pinned. After reclamation or process restart, the `inbox-stall-sweeper` outbox scan consumes and persists late orphaned messages after a three-minute threshold, preventing message loss.
+- Cancellation queue: A frontend interruption writes a cancel payload to `ipc:{runtimeId}:cancel`. agent-runtime polls this queue while processing the current request and calls Pi session `abort()`.
+- Billing reservations and settlement: A billing reservation is recorded according to `llmRuntime` before enqueueing. The final reply is persisted and delivered before charges are settled. If persistence fails, the reservation remains pending and billing-sweeper reconciles charges from conversation logs, preventing users from being charged without receiving a message. After settlement, the charged amount is written back to the final message metadata.
+- Timeout chain: All request-flow timeouts derive from the single source `apps/api/src/shared/timeout-chain.ts` (eight-minute daemon hard timeout < inbox cleanup threshold < 30-minute API timeout < session-lock TTL). The host injects daemon values through the environment at spawn time. Invalid configurations fail at startup.
+- Liveness heartbeat: Every ten seconds, the daemon writes `agent:heartbeat:{accountId}` with a 30-second TTL and deletes it on graceful exit. Monitoring immediately alerts on accounts with an inbox backlog but no heartbeat (`ALERT_WEBHOOK_URL`, optional), without waiting for the cleanup threshold.
 
-## Agent Runtime 单次请求
+## A single Agent Runtime request
 
-`apps/agent-runtime/src/daemon.ts` 是唯一常驻入口：
+`apps/agent-runtime/src/daemon.ts` is the sole resident entry point:
 
-1. `initContext()` 从环境读取 runtimeId 和用户身份。
-2. 连接 Redis。
-3. `BRPOP ipc:{accountId}:inbox` 等待请求。
-4. 解析 `InboxRequest`；AI 请求校验 `llmRuntime`。
-5. 如果请求指定 `outboxQueue`，创建定制 `AgentRuntimeDeps`，把 `messageBus.pushOutbox()` 改到指定队列。
-6. AI 请求调 `executeContainerInput()`。
-7. 把 `ContainerOutput` 包装为 `OutboxResponse` 并 `LPUSH` 到 outbox。
+1. `initContext()` reads runtimeId and user identity from the environment.
+2. Connect to Redis.
+3. Wait for requests with `BRPOP ipc:{accountId}:inbox`.
+4. Parse `InboxRequest`; validate `llmRuntime` for AI requests.
+5. If the request specifies `outboxQueue`, create customized `AgentRuntimeDeps` that redirect `messageBus.pushOutbox()` to that queue.
+6. Call `executeContainerInput()` for AI requests.
+7. Wrap `ContainerOutput` as `OutboxResponse` and `LPUSH` it to the outbox.
 
-`request-boundary.ts` 负责单次请求的外围逻辑：
+`request-boundary.ts` handles the logic surrounding each request:
 
-- 创建 `createRequestRuntime()`，并把请求交给 `executePiRuntime()`。
-- 合并本轮 skill context、transcript、traceEvents、agentGraph、usage 后返回。
-- 出错时把内部错误映射为用户可见错误，并保留已有 trace/transcript 便于排障。
+- Call `createRequestRuntime()` and pass the request to `executePiRuntime()`.
+- Merge and return the turn's skill context, transcript, traceEvents, agentGraph, and usage.
+- Map internal errors to user-facing errors while retaining existing trace/transcript data for diagnosis.
 
 ## Pi Runtime
 
-`apps/agent-runtime/src/pi-runtime/` 是当前 AI 执行主路径：
+`apps/agent-runtime/src/pi-runtime/` is the current main AI execution path:
 
-- `resource-loader.ts`：按请求注入授权 Text Skill Bundle。
-- `session.ts`：创建 Pi session，配置 provider、prompt、工具和 ResourceLoader。
-- `skill-read-tool.ts`：让模型按需读取当前授权 Skill Bundle 内的 Markdown 文件。
+- `resource-loader.ts`: Injects authorized Text Skill Bundles per request.
+- `session.ts`: Creates Pi sessions and configures the provider, prompt, tools, and ResourceLoader.
+- `skill-read-tool.ts`: Lets the model read Markdown files from currently authorized Skill Bundles on demand.
 
 The API generates structured chart artifacts. Pi can request a new chart through
 `create_paipan` and interpret the returned facts in the same turn. Skill file
@@ -230,25 +230,25 @@ extensions require separate host integration.
   cannot change a replacement's busy count. Existing exit handling and durable
   recovery terminate interrupted requests without automatically replaying execution.
 
-## 状态与可观测性
+## State and observability
 
-主要真源：
+Primary sources of truth:
 
-- PostgreSQL：用户、账号、会话、消息、任务、模型配置、技能 metadata、账单、`conversation_logs` 和 `conversation_log_payloads`。
+- PostgreSQL: Users, accounts, sessions, messages, tasks, model configuration, Skill metadata, billing, `conversation_logs`, and `conversation_log_payloads`.
 - Filesystem: rebuildable authorized Skill revision snapshots, Pi session files and unsent result spools. PostgreSQL owns Skill content.
-- Redis：IPC 队列、会话 busy 标记、短期历史/上下文边界等运行态数据。
-- `apps/api/src/modules/chat/paipan-registry.ts`：系统排盘目录清单、参数 schema 和 runner 绑定。
-- `apps/api/src/modules/chat/paipan-runners/`：系统排盘 TypeScript 确定性实现。
+- Redis: IPC queues, session busy flags, short-lived history/context boundaries, and other runtime state.
+- `apps/api/src/modules/chat/paipan-registry.ts`: System chart catalog, parameter schemas, and runner bindings.
+- `apps/api/src/modules/chat/paipan-runners/`: Deterministic TypeScript implementations of system chart calculation.
 
-每次请求完成时，agent-runtime 会返回：
+On request completion, agent-runtime returns:
 
-- `usage`：模型真实 token 用量。
-- `skillContext`：可被后续对话复用的工具/Skill 结果。
-- `transcript`：assistant/tool_use/tool_result 事件。
-- `traceEvents`：Pi Runtime、工具、错误、进度等结构化事件。
-- `agentGraph`：任务、证据和最终回复的图结构。
+- `usage`: Actual model token usage.
+- `skillContext`: Tool/Skill results reusable in subsequent turns.
+- `transcript`: assistant/tool_use/tool_result events.
+- `traceEvents`: Structured Pi Runtime, tool, error, and progress events.
+- `agentGraph`: A graph of tasks, evidence, and the final reply.
 
-宿主在 outbox handler 中把 usage、模型、事件计数和摘要写入 `conversation_logs`，把 transcript、traceEvents 和 agentGraph 正文写入 `conversation_log_payloads`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
+In the outbox handler, the host writes usage, model, event counts, and summaries to `conversation_logs`, and stores transcript, traceEvents, and agentGraph bodies in `conversation_log_payloads`. The web Execution Details feature looks up these logs through the `request_id` in message metadata.
 
 ## Runtime scheduling and recovery frames
 
@@ -283,16 +283,15 @@ preparation, timing definitions, retention and validation boundaries.
   batching timer through the Pi session cleanup path. Publication remains
   best-effort; persisted final messages remain the delivery source of truth.
 
-## 容易误判的点
+## Common misconceptions
 
-- 当前不是每条消息临时起一个 agent，而是每个 runtimeId 复用一个常驻 agent-runtime。
-- `web:{userId}` 不是账号表记录，只是复用 agent-runtime、消息归档和日志分区的运行时键。
-- Redis 在这里是 IPC 主通道，不只是缓存。
-- AI Chat 的 HTTP 发送接口成功并不等于最终回复已生成；最终消息由 ai-chat outbox 异步落库并经 WebSocket 推送。
-- 模型 provider、model、secret 是请求级 `llmRuntime` 快照，不从 agent 进程 env 读取。
-- 系统排盘不再使用旧版说明文件或独立脚本目录；参数 schema 和 runner 绑定在 `apps/api/src/modules/chat/paipan-registry.ts` 中维护。
-- 用户知识正文不存 DB；DB 只存控制平面 metadata、权限、版本、安装状态和 bundle 地址。
-- 不要在 agent-runtime 里找 one-shot stdin/stdout 入口；当前唯一入口是 `daemon.ts`。
+- Each runtimeId reuses a resident agent-runtime; a temporary agent is not started for every message.
+- `web:{userId}` is not an account-table record. It is a runtime key used for agent-runtime reuse, message archiving, and log partitioning.
+- Redis is the primary IPC transport here, not just a cache.
+- A successful AI Chat HTTP send does not mean the final reply exists. The ai-chat outbox persists the final message asynchronously and pushes it through WebSocket.
+- Model provider, model, and secret are a request-level `llmRuntime` snapshot, not values read from the agent process environment.
+- System chart calculation no longer uses the legacy instruction files or a separate script directory. Parameter schemas and runner bindings are maintained in `apps/api/src/modules/chat/paipan-registry.ts`.
+- Do not look for a one-shot stdin/stdout entry point in agent-runtime. Its sole current entry point is `daemon.ts`.
 
 ## Reliability contract
 

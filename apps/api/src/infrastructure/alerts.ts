@@ -1,15 +1,12 @@
 /**
- * 运维告警投递模块。
+ * Best-effort operations alert delivery.
  *
- * 背景：inbox 堆积、子进程异常退出、计费按 0 关账等异常此前只落 pino 日志，
- * 实测出过「堆积近 8 小时才被用户投诉发现」的事故（见
- * docs/archive/ai-chat-agent-runtime-stall-fix-plan-2026-07-01.md）。本模块提供
- * 一条主动通知通道：配置 ALERT_WEBHOOK_URL 后，关键异常会 POST JSON 到该地址
- * （企业微信/飞书/钉钉机器人或任意自建接收端均可）；未配置时降级为仅记 error 日志，
- * 不引入任何新外部依赖或中间件。
+ * Inbox backlogs, unexpected child exits, and zero-charge billing closures need
+ * a proactive signal beyond logs. ALERT_WEBHOOK_URL enables JSON delivery to an
+ * operator-controlled receiver; without it, alerts remain error-level logs.
  *
- * 投递语义：尽力而为（fire-and-forget）。告警失败绝不能影响主流程，
- * 因此所有调用方都应 `void sendOpsAlert(...)`，本模块内部吞掉一切投递错误。
+ * Callers use `void sendOpsAlert(...)`: delivery failures are contained here so
+ * an unavailable alert receiver cannot interrupt the operation being monitored.
  */
 
 import { ALERT_WEBHOOK_URL } from './config.js';

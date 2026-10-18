@@ -1,10 +1,10 @@
-# API 模块
+# API module
 
-这里是宿主进程上的 Fastify API，不是独立服务。它和账号运行时、数据库、日志系统共处于同一 Node 进程里。
+This is the Fastify API in the host process, not a standalone service. It shares a Node process with account runtime management, database access, and logging.
 
-## 从哪里看起
+## Where to start
 
-优先阅读：
+Read these files first:
 
 1. `apps/api/src/interfaces/http/server.ts`
 2. `apps/api/src/interfaces/http/auth-routes.ts`
@@ -13,13 +13,13 @@
 5. `apps/api/src/interfaces/http/skills-routes.ts`
 6. `apps/api/src/infrastructure/db.ts`
 
-## 结构
+## Structure
 
 ```text
 apps/api/src/interfaces/http/
-├── server.ts       # Fastify 服务创建、插件注册、全局钩子、错误处理、静态站点托管
-├── captcha.ts      # 验证码能力
-├── rate-limit.ts   # 限流辅助
+├── server.ts       # Fastify setup, plugins, global hooks, error handling, static-site hosting
+├── captcha.ts      # Captcha support
+├── rate-limit.ts   # Rate-limit helpers
 ├── account-routes.ts
 ├── admin-routes.ts
 ├── auth-routes.ts
@@ -31,21 +31,21 @@ apps/api/src/interfaces/http/
 └── skills-routes.ts
 ```
 
-配套业务模块：
+Supporting business modules:
 
-- `apps/api/src/modules/user/auth-service.ts`：注册、登录、用户安全 DTO
-- `apps/api/src/modules/account/account-http-service.ts`：账号绑定、运行时停启、Soul 读写
-- `apps/api/src/modules/chat/web-chat-service.ts`：网页聊天消息收发
-- `apps/api/src/modules/chat/chat-session-service.ts`：AI 对话会话与查询过程
-- `apps/api/src/modules/chat/paipan-service.ts`：直排盘预览与提交到 AI Chat
-- `apps/api/src/modules/billing/billing-service.ts`：计费快照与用户重置
-- `apps/api/src/modules/skills/skills-service.ts`：技能域门面
-- `apps/api/src/modules/admin/admin-service.ts`：管理后台聚合逻辑
-- `apps/api/src/infrastructure/db.ts`：底层数据访问层
+- `apps/api/src/modules/user/auth-service.ts`: Registration, login, and user DTOs safe to expose.
+- `apps/api/src/modules/account/account-http-service.ts`: Account binding, runtime start/stop, and Soul reads/writes.
+- `apps/api/src/modules/chat/web-chat-service.ts`: Sending and receiving web chat messages.
+- `apps/api/src/modules/chat/chat-session-service.ts`: AI chat sessions and execution details.
+- `apps/api/src/modules/chat/paipan-service.ts`: Direct chart previews and submission to AI Chat.
+- `apps/api/src/modules/billing/billing-service.ts`: Billing snapshots and user resets.
+- `apps/api/src/modules/skills/skills-service.ts`: Skill-domain facade.
+- `apps/api/src/modules/admin/admin-service.ts`: Admin aggregation logic.
+- `apps/api/src/infrastructure/db.ts`: Underlying data-access layer.
 
-## 当前路由装配
+## Current route registration
 
-`apps/api/src/interfaces/http/server.ts` 当前注册的前缀：
+`apps/api/src/interfaces/http/server.ts` currently registers these prefixes:
 
 - `/api/admin`
 - `/api/auth`
@@ -60,69 +60,69 @@ apps/api/src/interfaces/http/
 - `/api/billing`
 - `/api/api-keys`
 - `/api/open-sessions`
-- `/api/v1`（开放 API）
+- `/api/v1` (Open API)
 
-加路由时，优先沿用现有 prefix 分组，不要新建风格不一致的前缀。
+When adding routes, reuse existing prefix groups rather than introducing inconsistent prefixes.
 
-## 关键行为
+## Key behavior
 
-### 鉴权
+### Authentication
 
-- 使用 `@fastify/jwt`
-- `request.requireAuth()` 在 `onRequest` hook 里注入
-- 大部分登录态接口由路由内部主动调用 `request.requireAuth()`
-- 管理后台通常走 `MANAGER_KEY` 体系，和普通用户 JWT 不是一套认证入口
+- Uses `@fastify/jwt`.
+- `request.requireAuth()` is injected in the `onRequest` hook.
+- Most authenticated endpoints explicitly call `request.requireAuth()` inside the route.
+- Admin access generally uses the `MANAGER_KEY` system, separate from regular-user JWT authentication.
 - Open API `/api/v1` uses `api-key-auth.ts` for key validation, rate limits and the arrears gate. Active membership is required to create a key, not to keep using an existing valid key.
 
-### 错误处理
+### Error handling
 
-- `server.ts` 统一设置 `setErrorHandler`
-- 4xx 走 warn，5xx 走 error
-- API 错误返回 JSON，不返回 HTML
+- `server.ts` centrally configures `setErrorHandler`.
+- 4xx errors are logged at warn level; 5xx errors at error level.
+- API errors return JSON, not HTML.
 
-### 静态前端托管
+### Static frontend hosting
 
-- 如果 `apps/web/out/` 存在，Fastify 会直接托管静态导出结果
-- 404 时对 `/api/*` 返回 JSON 404
-- 非 API 页面请求优先尝试 `{path}/index.html`、`{path}.html`
-- App Router 客户端跳转触发的 `{path}.txt` 会补映射到真实的 `route/index.txt`
-- 真实缺失的静态资源返回 404，不再错误兜底到首页
+- If `apps/web/out/` exists, Fastify serves the static export directly.
+- Missing `/api/*` routes return a JSON 404.
+- Non-API page requests first try `{path}/index.html` and `{path}.html`.
+- `{path}.txt` requests from App Router client navigation are also mapped to the actual `route/index.txt`.
+- Missing static assets return 404 rather than incorrectly falling back to the home page.
 
-这意味着 API 层同时承担了前端生产站点托管职责。
+The API layer therefore also hosts the production frontend site.
 
-### AI Chat 异步链路
+### Asynchronous AI Chat flow
 
-站内 AI Chat 的发送接口不是同步拿最终回复：
+The site's AI Chat send endpoint does not return the final reply synchronously:
 
-- `POST /api/chat-sessions/s/:sessionId/messages` 由 `chat-session-service.ts` 写入用户消息、抢占会话锁、解析 `llmRuntime` 后入队。
-- 正常响应通常是 `accepted: true` 和 `request_id`，最终 assistant 消息由 `runtime/ipc-ai-chat-outbox-handler.ts` 从 `ipc:{runtimeId}:ai-chat:outbox` 异步落库。
-- 前端实时展示走 `runtime/ai-chat-stream.ts`：先 `POST /api/chat-sessions/s/:sessionId/stream-ticket`，再连 `/api/chat-sessions/s/:sessionId/stream` WebSocket。
-- 取消接口会释放 pending、会话锁、全局并发槽和本地 agent 租约，并向 `ipc:{runtimeId}:cancel` 写入取消请求。
+- For `POST /api/chat-sessions/s/:sessionId/messages`, `chat-session-service.ts` saves the user message, acquires the session lock, resolves `llmRuntime`, and queues the request.
+- A normal response usually contains `accepted: true` and `request_id`. `runtime/ipc-ai-chat-outbox-handler.ts` asynchronously persists the final assistant message from `ipc:{runtimeId}:ai-chat:outbox`.
+- Live frontend output uses `runtime/ai-chat-stream.ts`: first `POST /api/chat-sessions/s/:sessionId/stream-ticket`, then connect to the `/api/chat-sessions/s/:sessionId/stream` WebSocket.
+- Cancellation releases pending state, the session lock, the global concurrency slot, and the local agent lease, and writes a cancellation request to `ipc:{runtimeId}:cancel`.
 
-### 排盘与简易模式
+### Chart calculation and simple mode
 
-- `/api/paipan/*` 是 API 内部 TypeScript runner 的确定性排盘，不需要模型 runtime。
-- 简易模式不再有独立 `/api/simple-workflows` 路由，已收口到 AI Chat 会话回合 `prepareOwnedChatSessionTurn`，and shares the wallet arrears gate with ordinary chat.
+- `/api/paipan/*` performs deterministic chart calculation with TypeScript runners inside the API and does not require a model runtime.
+- Simple mode no longer has a separate `/api/simple-workflows` route. It uses the AI Chat turn flow through `prepareOwnedChatSessionTurn` and shares the wallet arrears gate with ordinary chat.
 
-### 健康探针
+### Health probes
 
-- `/api/health` 只返回进程存活状态
-- `/api/ready` 会检查 PostgreSQL 与 Redis，可用于部署就绪探针
+- `/api/health` reports process liveness only.
+- `/api/ready` checks PostgreSQL and Redis and can serve as a deployment readiness probe.
 
-## 和数据库的关系
+## Relationship to the database
 
-路由层应尽量保持薄，业务流程优先下沉到 `apps/api/src/modules/*` service。理解接口行为时，不要只读 route handler，至少还要同步看：
+Keep the route layer thin and place business orchestration in `apps/api/src/modules/*` services. To understand endpoint behavior, read more than the route handler. At minimum, also check:
 
-- 对应模块 service 的编排逻辑
-- 数据表结构创建/迁移
-- 查询字段
-- 所有权校验
-- 开关与状态字段
+- Orchestration in the corresponding module service.
+- Table creation and migrations.
+- Queried fields.
+- Ownership checks.
+- Feature switches and state fields.
 
-## 改动约定
+## Change conventions
 
-- 新接口优先复用现有 prefix
-- 返回结构尽量延续当前中文错误消息风格
-- 权限校验要和资源所有权绑定，不要只校验 JWT
-- 如果改了 API 路由或参数，同步检查 `apps/web/features/*/api.ts`、`apps/web/lib/admin-api.ts` 和 `docs/api-reference.md`
-- 仓库保留了 API Vitest 测试源文件；API 改动后优先跑相关 `*.test.ts`，再跑 `pnpm --filter @fateclaw/api typecheck` 和 `pnpm --filter @fateclaw/api lint`
+- Reuse existing prefixes for new endpoints.
+- Preserve the current style of Chinese error messages in response structures where possible.
+- Bind authorization checks to resource ownership; JWT validation alone is insufficient.
+- When changing API routes or parameters, also check `apps/web/features/*/api.ts`, `apps/web/lib/admin-api.ts`, and `docs/api-reference.md`.
+- API Vitest test sources are kept in the repository. After API changes, run relevant `*.test.ts` tests first, then `pnpm --filter @fateclaw/api typecheck` and `pnpm --filter @fateclaw/api lint`.

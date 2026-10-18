@@ -1,43 +1,43 @@
-# 贡献指南
+# Contributing
 
-感谢你关注 FateClaw。这个仓库当前更适合以小步、可验证的方式推进：修复具体问题、补齐测试、完善文档、增加明确边界内的 Skill 或接入能力。
+Thank you for your interest in FateClaw. Contributions work best as small, verifiable changes: fixing specific issues, filling gaps in tests, improving documentation, or adding skills and integrations with a clearly defined scope.
 
-## 开始之前
+## Before you start
 
-请先阅读：
+Read these documents first:
 
 - [README.md](README.md): Project introduction.
 - [docs/development.md](docs/development.md): Local setup and validation.
 - [docs/README.md](docs/README.md): Documentation by task.
-- [docs/agent-architecture.md](docs/agent-architecture.md)：Agent、Redis IPC、Pi Runtime 和 request-scoped Skill 资源。
-- [docs/api-reference.md](docs/api-reference.md)：HTTP API 参考。
-- [docs/openclaw-integration.md](docs/openclaw-integration.md)：微信 OpenClaw/iLink 对接现状。
-- [AGENT.md](AGENT.md)：面向协作者和 AI Agent 的仓库入口说明。
+- [docs/agent-architecture.md](docs/agent-architecture.md): Agents, Redis IPC, Pi Runtime, and request-scoped Skill resources.
+- [docs/api-reference.md](docs/api-reference.md): HTTP API reference.
+- [docs/openclaw-integration.md](docs/openclaw-integration.md): Current status of the WeChat OpenClaw/iLink integration.
+- [AGENT.md](AGENT.md): Repository entry point for contributors and AI agents.
 
-如果你要修改前端，也请读 [apps/web/AGENT.md](apps/web/AGENT.md)。如果你要改 API 路由，也请读 [apps/api/src/interfaces/http/AGENT.md](apps/api/src/interfaces/http/AGENT.md)。
+For frontend changes, also read [apps/web/AGENT.md](apps/web/AGENT.md). For API route changes, read [apps/api/src/interfaces/http/AGENT.md](apps/api/src/interfaces/http/AGENT.md).
 
 ## Local development
 
 Follow [Local development](docs/development.md) for prerequisites, configuration, startup, and validation commands.
 
-## 分支和提交
+## Branches and commits
 
-- 一个 Pull Request 只解决一个清晰问题。
-- 不把格式化、重命名、目录迁移和功能改动混在一起。
-- 不提交 `.env`、私钥、模型 API Key、OpenClaw/iLink token、数据库导出或用户聊天记录。
-- 如果改动涉及 GPLv3 以外许可证的代码或素材，请在 PR 中说明来源和许可证。
+- Keep each pull request focused on one clearly defined problem.
+- Keep formatting, renaming, directory moves, and feature changes separate.
+- Do not commit `.env` files, private keys, model API keys, OpenClaw/iLink tokens, database exports, or user chat histories.
+- If a change includes code or assets under a license other than GPLv3, document their source and license in the PR.
 
-## 修改原则
+## Change guidelines
 
-- 优先复用现有模块和风格，避免为一次性需求增加抽象。
-- 修改 API 契约时，同步检查 `packages/contracts`、前端 API client 和 `docs/api-reference.md`。
-- 修改 Agent 能力时，同步检查 `apps/agent-runtime/src/pi-runtime/`、官方 `SKILL.md`、Text Skill Bundle 读取逻辑和相关测试。
-- 修改排盘 Skill 时，保留本地确定性计算，不把排盘基础结果改成纯模型生成。
-- 修改微信 OpenClaw/iLink 相关代码时，必须说明影响的是既有账号后端轮询、新扫码绑定入口、自动发送链路还是部署前置条件。
+- Reuse existing modules and conventions; avoid adding abstractions for one-off requirements.
+- When changing API contracts, also check `packages/contracts`, frontend API clients, and `docs/api-reference.md`.
+- When changing agent capabilities, also check `apps/agent-runtime/src/pi-runtime/`, official `SKILL.md` files, Text Skill Bundle loading, and related tests.
+- When changing chart-calculation skills, preserve local deterministic calculations. Do not replace base chart results with model-generated output.
+- For WeChat OpenClaw/iLink changes, specify whether they affect backend polling for existing accounts, new QR-code bindings, automatic delivery, or deployment prerequisites.
 
-## 测试与验证
+## Testing and validation
 
-提交前至少执行和改动相关的检查：
+Before submitting, run at least the checks relevant to your change:
 
 ```bash
 pnpm run typecheck
@@ -45,7 +45,7 @@ pnpm run lint
 pnpm test
 ```
 
-可按范围缩小命令：
+You can narrow the commands to the affected scope:
 
 ```bash
 pnpm --filter @fateclaw/api typecheck
@@ -54,20 +54,20 @@ pnpm --filter fateclaw-web exec tsc --noEmit
 pnpm --filter fateclaw-web build
 ```
 
-文档改动请至少检查 Markdown 链接、命令和路径是否仍然存在。
+For documentation changes, at least verify that Markdown links, commands, and paths still resolve.
 
-## Pull Request 内容
+## Pull request contents
 
-PR 描述建议包含：
+A PR description should include:
 
-- 这次解决什么问题。
-- 主要改动点。
-- 已运行的验证命令。
-- 未验证的部分和原因。
-- 是否影响数据库、环境变量、模型 Provider、OpenClaw/iLink 或 GPLv3 许可证边界。
+- The problem being solved.
+- The main changes.
+- Validation commands you ran.
+- Anything left unverified and why.
+- Whether the change affects the database, environment variables, model providers, OpenClaw/iLink, or GPLv3 licensing boundaries.
 
-仓库已有 [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)，提交 PR 时请按模板勾选类型并补充说明。
+Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR: select the appropriate change type and provide the requested details.
 
-## 安全问题
+## Security issues
 
-安全漏洞不要直接公开提交 Issue。请按 [SECURITY.md](SECURITY.md) 中的方式报告。
+Do not report security vulnerabilities in public issues. Follow the reporting process in [SECURITY.md](SECURITY.md).

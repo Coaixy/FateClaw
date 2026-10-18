@@ -42,4 +42,4 @@ All paths below are relative to the repository root.
 
 ## Documentation ownership
 
-[docs/README.md](docs/README.md) routes tasks to topic references. Keep detailed explanations in those files rather than copying them into each entry point. [docs/archive/](docs/archive/) contains historical plans and reviews, not current contracts.
+[docs/README.md](docs/README.md) routes tasks to current topic references. Keep detailed explanations in those files rather than copying them into each entry point. Retain operating contracts and maintenance guidance; keep development plans, review reports, and obsolete drafts out of the documentation tree.

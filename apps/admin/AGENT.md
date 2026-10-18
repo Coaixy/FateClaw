@@ -1,11 +1,11 @@
-# Admin 管理站点
+# Admin site
 
-这是一个基于 Next.js 16 App Router 的独立管理后台静态站点。它和 `apps/web`
-分开构建、分开部署，生产环境建议部署到 `admin.example.com`。
+This is an independent static admin site built with Next.js 16 App Router. It is built and deployed
+separately from `apps/web`. Use `admin.example.com` for production deployments.
 
-## 从哪里看起
+## Where to start
 
-第一次接手管理后台时，建议按这个顺序看：
+When first working on the admin app, read these files in order:
 
 1. `apps/admin/app/layout.tsx`
 2. `apps/admin/app/page.tsx`
@@ -14,39 +14,39 @@
 5. `apps/admin/lib/admin-api.ts`
 6. `apps/admin/lib/admin-navigation.ts`
 
-## 路由约定
+## Route conventions
 
-admin 站点以域名根路径作为登录页：
+The admin site's login page is at the domain root:
 
-- `/`: 管理登录页
-- `/overview`: 总览
-- `/billing`: 账单管理
-- `/users`: 用户
-- `/messages`: 消息
-- `/skills`: 技能
+- `/`: Admin login
+- `/overview`: Overview
+- `/billing`: Billing management
+- `/users`: Users
+- `/messages`: Messages
+- `/skills`: Skills
 - `/issues`: issue management and private account attribution
 - `/workflows`: Workflow
-- `/logs`: 日志
-- `/system/models`: 模型配置
-- `/system/rewards`: 软妹币配置
+- `/logs`: Logs
+- `/system/models`: Model configuration
+- `/system/rewards`: RMB credit configuration
 - `/system/registration-invites`: owner-only invitation policy, allowances, operational codes and completed-refund records
 
-后端 `/api/admin/verify` 仍可能返回历史路径 `/admin/overview` 或 `/admin/users`。
-`apps/admin/lib/admin-navigation.ts` 会把旧路径转换为本站根路径，不要在页面里手写兼容逻辑。
+The backend `/api/admin/verify` endpoint may still return legacy paths such as `/admin/overview` or `/admin/users`.
+`apps/admin/lib/admin-navigation.ts` converts those paths to this site's root-relative routes. Do not duplicate compatibility logic in pages.
 
-## 开发与生产差异
+## Development and production differences
 
-- 开发态：`pnpm run dev:admin` 启动在 `http://localhost:3002`
-- 开发态 API 通过 `apps/admin/next.config.ts` rewrites 转发到 `http://localhost:3000/api/*`
-- 生产态：`next build` 后静态导出到 `apps/admin/out/`
-- 生产态需要设置 `NEXT_PUBLIC_API_BASE=https://api.example.com`，或者由反向代理为 admin 站点代理 `/api/*`
+- Development: `pnpm run dev:admin` starts the site at `http://localhost:3002`.
+- Development API calls are forwarded to `http://localhost:3000/api/*` through rewrites in `apps/admin/next.config.ts`.
+- Production: `next build` exports static files to `apps/admin/out/`.
+- Production requires `NEXT_PUBLIC_API_BASE=https://api.example.com` or a reverse proxy forwarding the admin site's `/api/*` requests.
 
-## 安全部署要求
+## Secure deployment requirements
 
-admin 是静态导出站点，前端页面本身不是安全边界。生产部署必须满足：
+The admin app is a static export; frontend pages are not a security boundary. Production deployments must meet these requirements:
 
-1. `/api/admin/*` 继续依赖后端 `X-Admin-Key` 鉴权。
-2. `admin.example.com` 建议增加 IP 白名单、VPN、Basic Auth 或其他入口保护。
-3. API 的 `ALLOWED_ORIGINS` 必须包含 admin 站点来源。
-4. 管理密钥只应由管理员输入，不要编译进前端环境变量或静态文件。
-5. 强制 HTTPS，避免管理密钥明文传输。
+1. `/api/admin/*` must continue to use backend `X-Admin-Key` authentication.
+2. Protect `admin.example.com` with an IP allowlist, VPN, Basic Auth, or another access control.
+3. The API's `ALLOWED_ORIGINS` must include the admin site's origin.
+4. Admin keys must be entered by administrators; do not compile them into frontend environment variables or static files.
+5. Enforce HTTPS to prevent plaintext transmission of admin keys.
