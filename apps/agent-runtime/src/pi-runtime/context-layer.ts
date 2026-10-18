@@ -8,6 +8,7 @@ import type {
   SkillContextEntry,
 } from '../types.js';
 import type { RequestRuntime } from '../runtime.js';
+import { getJingzhanPrompt } from './prompts/jingzhan.js';
 
 const BOARD_MANIFEST_PREVIEW_CHARS = 240;
 const SOUL_MANIFEST_PREVIEW_CHARS = 800;
@@ -161,6 +162,7 @@ function renderBoardManifest(board: SessionBoardContext, index: number): string 
   );
   return [
     `<board ${attrs}>`,
+    getJingzhanPrompt(board.skill),
     `hasArtifactData=${board.artifactData !== undefined}`,
     `previewTruncated=${preview.truncated}`,
     board.source === 'user_pasted_board'

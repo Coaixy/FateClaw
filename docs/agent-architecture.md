@@ -148,6 +148,11 @@ notes/
 
 排盘先由 API 侧生成结构化 artifact；Pi Runtime 只基于本轮盘面、用户问题和授权知识推理。Skill 文件读取只作用于当前 ResourceLoader 授权的用户知识文件。
 
+Chart-specific prompts live in `apps/agent-runtime/src/pi-runtime/prompts/` and
+attach to the matching board in the context manifest. The Jingzhan prompt applies
+to official and user-pasted Jingzhan boards and prohibits Liuyao interpretation
+methods. It is loaded only with a Jingzhan board.
+
 Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 custom tools，例如授权 Markdown 读取、Soul 读取/编辑和与当前会话盘面相关的上下文工具。模型不能假设存在全局本地 Skill 或排盘执行工具。
 
 ## Bounded Skill search and runtime recovery
