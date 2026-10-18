@@ -392,6 +392,7 @@ async function processInboxMessage(
         executeContainerInput(
           {
             accountId,
+            executionId: request.executionId,
             sessionId: request.sessionId,
             llmRuntime: request.llmRuntime,
             userMessage: request.userMessage,

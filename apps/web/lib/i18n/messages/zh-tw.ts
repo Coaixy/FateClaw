@@ -823,6 +823,7 @@ export const zhTWMessages = {
         get_ganzhi_by_datetime: '排八字',
         get_current_time: '當前時間',
         get_session_board: '盤面',
+        create_paipan: '起盤',
       },
       toolTrace: '工具軌跡',
       processTrace: '思考與執行過程',

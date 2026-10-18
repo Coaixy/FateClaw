@@ -4,6 +4,8 @@ import {
 } from '@earendil-works/pi-coding-agent';
 
 import { createPiCurrentTimeTool } from '#agent/pi-runtime/tools/current-time-tool';
+import type { PaipanCaller } from '@fateclaw/contracts/agent/paipan';
+import { createPiPaipanTool } from '#agent/pi-runtime/tools/paipan-tool';
 import { createPiGanzhiByDatetimeTool } from '#agent/pi-runtime/tools/ganzhi-by-datetime-tool';
 import { createPiGanzhiReverseTool } from '#agent/pi-runtime/tools/ganzhi-reverse-tool';
 import { createPiSessionBoardTool } from '#agent/pi-runtime/tools/session-board-tool';
@@ -24,7 +26,8 @@ import type { SoulStore } from '#agent/deps';
  * 参数：
  * - requestScope：当前请求作用域。
  * - readableSkills：本轮授权可检索/读取的 Skill 清单；为空时不暴露 grep/read。
- * - sessionBoards：本轮授权给 Pi 读取的会话盘面集合；为空时不暴露 get_session_board。
+ * - sessionBoards: Boards authorized for this request.
+ * - paipan: Host caller bound to an admitted request; also enables reading newly created boards.
  * - accountId：当前 agent-runtime 账号 ID，用于读写 Dashboard 维护的唯一 Soul。
  * - soulStore：Soul 读写存储。
  * - soulEditEnabled：是否允许本轮注册 edit_soul；默认开启用于兼容测试和历史调用。
@@ -38,6 +41,7 @@ export interface CreatePiToolsOptions {
   requestScope: RequestScope;
   readableSkills?: Skill[];
   sessionBoards?: SessionBoardContext[];
+  paipan?: PaipanCaller;
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
@@ -51,11 +55,14 @@ export interface CreatePiToolsOptions {
  *
  * 参数：CreatePiToolsOptions。
  * 返回：Pi coding agent 可注册的工具定义列表。
- * 注意：时间/干支/Soul 工具默认可用；Skill grep/read 和盘面工具仅在存在授权资源时可用。
+ * Chart creation requires an admitted host request; Skill grep/read requires authorized knowledge.
  */
 export function createPiCustomTools(
   options: CreatePiToolsOptions,
 ): PiToolDefinition[] {
+  const sessionBoards = (options.sessionBoards ?? []).map((board) => ({
+    ...board,
+  }));
   const tools: PiToolDefinition[] = [
     createPiCurrentTimeTool({
       requestScope: options.requestScope,
@@ -104,11 +111,21 @@ export function createPiCustomTools(
       }),
     );
   }
-  if (options.sessionBoards?.length) {
+  if (options.paipan) {
+    tools.push(
+      createPiPaipanTool({
+        requestScope: options.requestScope,
+        recordExecution: options.recordExecution,
+        sessionBoards,
+        paipan: options.paipan,
+      }),
+    );
+  }
+  if (sessionBoards.length || options.paipan) {
     tools.push(
       createPiSessionBoardTool({
         requestScope: options.requestScope,
-        sessionBoards: options.sessionBoards,
+        sessionBoards,
         recordExecution: options.recordExecution,
       }),
     );

@@ -24,6 +24,13 @@ preserves ownership so admitted results can still commit and settle while the
 session remains archived. New turns use the existing active-session checks.
 Intermediate messages persist before stream publication and retain stable IDs
 across transport retries.
+Conversation chart requests and replies use the same account encryption with
+queue-bound authentication. The host takes user and session identity from an
+active admitted request, checks its execution ID and cancellation/deadline, and
+locks the request row before calculating and persisting a chart. Tool arguments
+contain no identity or credential fields. Identical request/tool-call retries
+return the saved chart; changed arguments for that call are rejected. The RPC
+deadline and envelope lifetime are 15 seconds, with 30-second queue expiry.
 Only successfully handled responses release concurrency slots. Stream subscribers
 check the authenticated account/session and discard repeated event IDs.
 Legacy inbox execution and external message delivery claim database receipts

@@ -80,6 +80,11 @@
       "types": "./dist/agent/session.d.ts",
       "import": "./dist/agent/session.js",
       "default": "./dist/agent/session.js"
+    },
+    "./agent/paipan": {
+      "types": "./dist/agent/paipan.d.ts",
+      "import": "./dist/agent/paipan.js",
+      "default": "./dist/agent/paipan.js"
     }
   },
   "files": [

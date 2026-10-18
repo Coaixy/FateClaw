@@ -29,6 +29,13 @@
 - AI Chat 请求会由 API 写入用户消息、解析请求级 `llmRuntime`、抢占会话 busy 锁，再通过 Redis IPC 投递到 `web:{userId}` 对应的本地 agent-runtime。
 - `POST /api/chat-sessions/s/:sessionId/messages` 通常只表示请求已入队；最终 assistant 消息由 `ipc:{runtimeId}:ai-chat:outbox` handler 异步落库、结算并通过 WebSocket 推送。
 - 手动排盘不调用模型。API 侧直接执行 `paipan-runners/*.ts`，把结构化盘面作为 `tool_context/artifactData` 写入会话。
+- AI Chat can create charts through the `create_paipan` tool during an admitted
+  conversation turn. It discovers enabled chart schemas with `mode=catalog`,
+  then calls the same API-owned runners with `mode=create`. The API saves a
+  standalone `board_result` message before interpretation continues. The web
+  client refreshes saved messages on the stream `message` event; a final reply
+  is not required for the chart to remain available. This adds no public HTTP
+  endpoint. See [Conversation chart creation](agent-architecture.md#conversation-chart-creation).
 - Complete Text Skill Bundles are stored in PostgreSQL alongside their metadata and permissions. `.fateclaw/text-skills` is a rebuildable local cache; agent-runtime restores only request-authorized bundles when needed.
 
 ## 认证

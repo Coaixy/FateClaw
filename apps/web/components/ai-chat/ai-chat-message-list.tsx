@@ -780,6 +780,7 @@ const FRIENDLY_TOOL_NAMES = new Set([
   'get_ganzhi_by_datetime',
   'get_current_time',
   'get_session_board',
+  'create_paipan',
 ]);
 
 /** 老数据可能把原始 JSON 包装存进了 text，遇到 JSON 直接不展示，避免脏卡片。 */

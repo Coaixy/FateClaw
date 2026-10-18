@@ -42,6 +42,7 @@ import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '#agent/types';
 import { getRequestId } from '#agent/request-scope';
 import { installModelPool } from './model-pool.js';
+import { createPaipanCaller } from '#agent/paipan-client';
 import {
   CancelledAgentRequestError,
   ModelCallError,
@@ -129,6 +130,17 @@ export async function runPiSession(args: {
   await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
   const preparationStartedAt = Date.now();
   const userId = resolveUserId(args.containerInput);
+  const requestId = getRequestId(args.requestScope);
+  const paipan =
+    requestId &&
+    args.containerInput.executionId &&
+    args.containerInput.sessionId
+      ? createPaipanCaller({
+          accountId: args.containerInput.accountId,
+          requestId,
+          executionId: args.containerInput.executionId,
+        })
+      : undefined;
   const contextPromise = args.runtime.deps.soulStore
     .canEdit(args.containerInput.accountId)
     .then(async (soulEditEnabled) => ({
@@ -137,6 +149,7 @@ export async function runPiSession(args: {
         runtime: args.runtime,
         requestScope: args.requestScope,
         soulEditEnabled,
+        paipanEnabled: Boolean(paipan),
       })),
       soulEditEnabled,
     }));
@@ -149,6 +162,7 @@ export async function runPiSession(args: {
       requestScope: args.requestScope,
       containerInput: args.containerInput,
       context: contextPromise,
+      paipanEnabled: Boolean(paipan),
     }),
   ]);
   const failure = prepared.find((result) => result.status === 'rejected');
@@ -185,6 +199,7 @@ export async function runPiSession(args: {
       requestScope: args.requestScope,
       readableSkills,
       sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
+      paipan,
       accountId: args.containerInput.accountId,
       soulStore: args.runtime.deps.soulStore,
       soulEditEnabled,

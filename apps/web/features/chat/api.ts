@@ -110,6 +110,14 @@ export type ChatSessionStreamEvent = (
       metadata?: unknown;
     }
   | {
+      type: 'message';
+      timestamp?: string;
+      sessionId?: string;
+      text: string;
+      metadata?: unknown;
+      skillContext?: unknown;
+    }
+  | {
       type: 'error';
       timestamp?: string;
       sessionId?: string;

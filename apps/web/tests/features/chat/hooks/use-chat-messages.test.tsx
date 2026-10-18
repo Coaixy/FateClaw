@@ -284,6 +284,45 @@ afterEach(async () => {
 });
 
 describe('chat lifecycle', () => {
+  it('loads a saved board notification while the assistant continues interpreting', async () => {
+    await mount();
+    const socket = SyntheticSocket.instances[0];
+    const user = message('user');
+    vi.mocked(chatSessionsApi.messages).mockResolvedValue(
+      history([user], 'request-1'),
+    );
+    await act(async () => {
+      expect(await latest.chat.sendMessage('帮我起盘')).toBe(true);
+    });
+    const board = {
+      ...message('saved-board', true, 'board_result', 'request-1'),
+      tool_context: JSON.stringify([
+        {
+          skill: 'bazi-paipan',
+          output: '合成盘面',
+          artifactData: { synthetic: true },
+        },
+      ]),
+    };
+    vi.mocked(chatSessionsApi.messages).mockResolvedValue(
+      history([user, board], 'request-1'),
+    );
+    await act(async () =>
+      socket.emit({
+        type: 'message',
+        requestId: 'request-1',
+        text: '已生成八字排盘。',
+        metadata: { kind: 'board_result' },
+      }),
+    );
+    expect(
+      latest.chat.messages.find((entry) => entry.id === 'saved-board')
+        ?.tool_context,
+    ).toBe(board.tool_context);
+    expect(latest.chat.run.phase).toBe('running');
+    expect(latest.chat.sending).toBe(true);
+  });
+
   it('retains more than 200 expanded messages through a foreground refresh', async () => {
     const stored = Array.from({ length: 260 }, (_, index) => ({
       ...message(`message-${index}`),

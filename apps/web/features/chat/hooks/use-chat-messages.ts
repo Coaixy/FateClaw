@@ -1610,6 +1610,12 @@ export function useChatMessages(options: {
         return;
       }
 
+      if (payload.type === 'message') {
+        void loadMessages(sessionId, { background: true });
+        updateProcessing(true);
+        return;
+      }
+
       if (payload.type === 'final') {
         transitionRun(
           sessionId,

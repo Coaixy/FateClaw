@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { getDbPool } from '#infrastructure/db-pool';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 import type { ClientProfile } from '#shared/types';
 
 const pool = {
@@ -156,8 +156,9 @@ export async function getClientProfilesByUserId(
 export async function getClientProfile(
   id: string,
   userId: string,
+  db: DbQueryable = getDbPool(),
 ): Promise<ClientProfile | undefined> {
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `SELECT ${CLIENT_PROFILE_SELECT_COLUMNS}
      FROM client_profiles c
      WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL`,

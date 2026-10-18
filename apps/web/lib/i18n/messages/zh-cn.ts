@@ -823,6 +823,7 @@ export const zhCNMessages = {
         get_ganzhi_by_datetime: '排八字',
         get_current_time: '当前时间',
         get_session_board: '盘面',
+        create_paipan: '起盘',
       },
       toolTrace: '工具轨迹',
       processTrace: '思考与执行过程',

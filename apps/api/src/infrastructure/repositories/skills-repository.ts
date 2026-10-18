@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
 
-import { getDbPool } from '#infrastructure/db-pool';
+import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 import {
   prepareSkillContent,
   readSkillMarkdownMetadata,
@@ -141,8 +141,9 @@ export async function seedOfficialSkills(skillNames: string[]): Promise<void> {
  */
 export async function getResolvedEnabledOfficialSkillNames(
   _userId?: string,
+  db: DbQueryable = getDbPool(),
 ): Promise<string[]> {
-  const { rows } = await getDbPool().query(
+  const { rows } = await db.query(
     `SELECT skill_name FROM skill_global_config
      WHERE globally_enabled = true
      ORDER BY skill_name`,

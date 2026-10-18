@@ -4,6 +4,7 @@ import type {
 } from '@fateclaw/contracts/chat';
 
 import { getResolvedEnabledOfficialSkillNames } from '#infrastructure/db';
+import type { DbQueryable } from '#infrastructure/db-pool';
 import {
   getPaipanRegistryEntry,
   listPaipanRegistry,
@@ -42,9 +43,10 @@ function getPaipanSkillCatalogEntry(
 
 async function loadAvailablePaipanSkillCatalog(
   userId?: string,
+  db?: DbQueryable,
 ): Promise<PaipanRegistryEntry[]> {
   const enabledSkillNames = new Set(
-    await getResolvedEnabledOfficialSkillNames(userId),
+    await getResolvedEnabledOfficialSkillNames(userId, db),
   );
   return listPaipanRegistry().filter(
     (skill) =>
@@ -58,8 +60,9 @@ export function isDirectPaipanSkill(skillDir: string): boolean {
 
 export async function listDirectPaipanCatalog(
   userId?: string,
+  db?: DbQueryable,
 ): Promise<PaipanCatalogItemDto[]> {
-  const skills = await loadAvailablePaipanSkillCatalog(userId);
+  const skills = await loadAvailablePaipanSkillCatalog(userId, db);
   return skills.map((skill) => ({
     skill: skill.dir,
     name: skill.name,
@@ -72,6 +75,7 @@ export async function listDirectPaipanCatalog(
 export async function resolveDirectPaipanSkillOrThrow(args: {
   userId?: string;
   skillDir: string;
+  db?: DbQueryable;
 }): Promise<PaipanRegistryEntry> {
   if (!isDirectPaipanSkill(args.skillDir)) {
     throw new DirectPaipanError(
@@ -81,7 +85,7 @@ export async function resolveDirectPaipanSkillOrThrow(args: {
     );
   }
 
-  const skills = await loadAvailablePaipanSkillCatalog(args.userId);
+  const skills = await loadAvailablePaipanSkillCatalog(args.userId, args.db);
   const skill = getPaipanSkillCatalogEntry(args.skillDir, skills);
   if (skill) {
     return skill;
@@ -341,6 +345,7 @@ export async function executeDirectPaipan(args: {
   userId?: string;
   skillDir: string;
   input: Record<string, unknown>;
+  db?: DbQueryable;
 }): Promise<{
   skill: PaipanRegistryEntry;
   requestSummary: string;
@@ -350,6 +355,7 @@ export async function executeDirectPaipan(args: {
   const skill = await resolveDirectPaipanSkillOrThrow({
     userId: args.userId,
     skillDir: args.skillDir,
+    db: args.db,
   });
   const title = skill.name;
 

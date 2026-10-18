@@ -852,6 +852,7 @@ export const enMessages = {
         get_ganzhi_by_datetime: 'Compute chart',
         get_current_time: 'Current time',
         get_session_board: 'Board',
+        create_paipan: 'Create chart',
       },
       toolTrace: 'Tool trace',
       processTrace: 'Reasoning and actions',

@@ -20,6 +20,7 @@ import {
   type ClientProfileWithStats,
 } from '#infrastructure/db';
 import { logger } from '#infrastructure/logger';
+import type { DbQueryable } from '#infrastructure/db-pool';
 import { fail, ok, type ServiceResult } from '#shared/service-result';
 import type { ClientProfile } from '#shared/types';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
@@ -298,10 +299,11 @@ export async function applyClientProfilePrefill(
   userId: string,
   clientId: string | undefined,
   baseInput: Record<string, unknown>,
+  db?: DbQueryable,
 ): Promise<Record<string, unknown>> {
   if (!clientId) return baseInput;
 
-  const profile = await getClientProfile(clientId, userId);
+  const profile = await getClientProfile(clientId, userId, db);
   if (!profile) return baseInput;
 
   const merged: Record<string, unknown> = { ...baseInput };

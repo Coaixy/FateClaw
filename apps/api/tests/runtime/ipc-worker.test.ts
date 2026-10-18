@@ -115,6 +115,10 @@ vi.mock('#runtime/ipc-outbox-handler', () => ({
   processOutboxPayload: vi.fn(),
 }));
 
+vi.mock('#runtime/paipan-tool-handler', () => ({
+  processPaipanToolPayload: vi.fn(),
+}));
+
 vi.mock('#runtime/ipc-ai-chat-outbox-handler', () => ({
   processAiChatOutboxPayload: vi.fn(),
 }));
@@ -164,6 +168,7 @@ import {
 import type { PendingInboxRequest } from '#runtime/ipc-payloads';
 import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
 import { processOutboxPayload } from '#runtime/ipc-outbox-handler';
+import { processPaipanToolPayload } from '#runtime/paipan-tool-handler';
 import {
   getMembershipOverview,
   getUserByAccountId,
@@ -284,7 +289,11 @@ describe('Redis IPC listener lifecycle', () => {
     ready();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(consumer.brpop).toHaveBeenCalledWith(queue, 1);
+    expect(consumer.brpop).toHaveBeenCalledWith(
+      queue,
+      `ipc:${accountId}:paipan`,
+      1,
+    );
     expect(processOutboxPayload).toHaveBeenCalledWith(
       expect.objectContaining(payload),
       accountId,
@@ -295,6 +304,30 @@ describe('Redis IPC listener lifecycle', () => {
     expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
     expect(mockLoggerError).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('routes chart tool requests through the existing account listener', async () => {
+    const consumer = createConsumer();
+    const toolQueue = `ipc:${accountId}:paipan`;
+    const request = { rpcId: 'synthetic-rpc', operation: { mode: 'catalog' } };
+    consumer.brpop.mockImplementationOnce(async () => {
+      removeAccountListener(accountId);
+      return [
+        toolQueue,
+        encodeRuntimeIpc(accountId, toolQueue, JSON.stringify(request)),
+      ];
+    });
+    mockDuplicate
+      .mockReturnValueOnce(consumer)
+      .mockReturnValueOnce(createAiConsumer());
+    addAccountListener(accountId);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(processPaipanToolPayload).toHaveBeenCalledWith(
+      expect.objectContaining(request),
+      accountId,
+    );
+    expect(processOutboxPayload).not.toHaveBeenCalled();
+    expect(processAiChatOutboxPayload).not.toHaveBeenCalled();
   });
 
   it.each(['connect', 'brpop'] as const)(

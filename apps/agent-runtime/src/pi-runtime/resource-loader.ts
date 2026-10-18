@@ -23,6 +23,7 @@ export interface CreatePiResourceLoaderOptions {
   containerInput: ContainerInput;
   piContextPrompt?: string;
   soulEditEnabled?: boolean;
+  paipanEnabled?: boolean;
   context?: Promise<{ prompt: string; soulEditEnabled: boolean }>;
 }
 
@@ -213,6 +214,7 @@ export async function createPiResourceLoader(
     const systemPrompt = buildPiSystemPrompt(
       resolved.containerInput,
       resolved.soulEditEnabled ?? true,
+      resolved.paipanEnabled ?? false,
     );
     const appendSystemPrompt = buildAppendSystemPrompt(
       privateKnowledgeEntries,
@@ -305,6 +307,7 @@ function stripPersonaOverrideTags(
 function buildPiSystemPrompt(
   containerInput: ContainerInput,
   soulEditEnabled: boolean,
+  paipanEnabled: boolean,
 ): string {
   // persona 来自调用方（对外 API 的 system / 站内 Soul），属不可信文本。循环剥离其中伪造的
   // <fateclaw_persona_override> 成对标签字面量（见 stripPersonaOverrideTags 说明），防止它提前
@@ -319,8 +322,12 @@ function buildPiSystemPrompt(
     '除非用户明确要求或对方长期使用粗口，否则不要主动使用粗口；即使使用，也应保持克制。',
     '避免使用“真正地”、“诚实地”、“实际上”这类填充式强调词。',
     '你负责 AI session、上下文连续性、用户问题理解和最终推理。',
-    '排盘是 Web/API 侧已经完成的确定性业务能力；不要自行调用或声称拥有排盘工具。',
-    '不要调用或假设存在排盘/专用解读的执行型工具；可读取本轮授权的 Markdown Skill 作为方法和知识依据。',
+    paipanEnabled
+      ? '本轮提供 create_paipan 工具，用户要求起盘时可通过它调用 API 排盘引擎并保存盘面；不要用模型自行推算或编造盘面。'
+      : '排盘是 Web/API 侧已经完成的确定性业务能力；不要自行调用或声称拥有排盘工具。',
+    paipanEnabled
+      ? '先查询 create_paipan 的 catalog 获取参数，缺失或含糊的信息先追问；工具返回盘面事实后再解读，后续追问使用 get_session_board 沿用同一盘面。'
+      : '不要调用或假设存在排盘/专用解读的执行型工具；可读取本轮授权的 Markdown Skill 作为方法和知识依据。',
     '涉及玄学问题时，直接在 Pi 循环内基于 Pi context 中的盘面 artifact、自贴盘面或追问上下文推理。',
     '知识只通过本次请求授权的普通 Markdown Skill 读取，不能假设存在全局本地 Skill。',
     soulEditEnabled

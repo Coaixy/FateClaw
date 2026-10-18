@@ -19,6 +19,7 @@ import type {
 /** Request-scoped input passed from the Redis envelope into Pi. */
 export interface ContainerInput {
   accountId: string;
+  executionId?: string;
   sessionId?: string;
   /** 本次请求使用的显式 DB runtime 快照。 */
   llmRuntime: LlmRuntimeSnapshot;

@@ -72,7 +72,7 @@ Pi SDK 模型 loop / 授权 Skill 文件读取
 
 | 类型 | 文件来源 | 暴露方式 | DB 存储 |
 | --- | --- | --- | --- |
-| 系统排盘 runner | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts` | API `/api/paipan/*` 直接调用，结果作为盘面 artifact 进入会话 | `skill_global_config` 和用户启用状态（兼容旧命名） |
+| System chart runner | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts` | Manual `/api/paipan/*` requests and the conversation `create_paipan` tool call the same API-owned runners | `skill_global_config` controls enabled chart types; results are saved in message `tool_context` |
 | User Text Skill Bundle | Rebuildable process-owned snapshots in `.fateclaw/text-skills/cache-v1/` | Authorized per request through ResourceLoader | Immutable `skill_content_revisions`, a current revision pointer, metadata, and permissions |
 
 PostgreSQL owns user skill content. API saves atomically insert an immutable revision and update its skill pointer after checking the editor's base revision. Agent-runtime authorizes and fixes a revision for each request, then restores it with the shared content protocol and process-owned local cache. Active snapshot leases are released when session creation or execution finishes or fails. Cache retention never deletes active snapshots. Legacy filesystem reads are confined to the API's independent import module; ordinary skill reads use PostgreSQL. See [Skill content architecture](skill-content-architecture.md).
@@ -146,14 +146,58 @@ notes/
 - `session.ts`：创建 Pi session，配置 provider、prompt、工具和 ResourceLoader。
 - `skill-read-tool.ts`：让模型按需读取当前授权 Skill Bundle 内的 Markdown 文件。
 
-排盘先由 API 侧生成结构化 artifact；Pi Runtime 只基于本轮盘面、用户问题和授权知识推理。Skill 文件读取只作用于当前 ResourceLoader 授权的用户知识文件。
+The API generates structured chart artifacts. Pi can request a new chart through
+`create_paipan` and interpret the returned facts in the same turn. Skill file
+reads remain limited to the current ResourceLoader's authorized knowledge files.
 
 Chart-specific prompts live in `apps/agent-runtime/src/pi-runtime/prompts/` and
 attach to the matching board in the context manifest. The Jingzhan prompt applies
 to official and user-pasted Jingzhan boards and prohibits Liuyao interpretation
 methods. It is loaded only with a Jingzhan board.
 
-Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 custom tools，例如授权 Markdown 读取、Soul 读取/编辑和与当前会话盘面相关的上下文工具。模型不能假设存在全局本地 Skill 或排盘执行工具。
+Pi sessions disable built-in tools and explicitly register FateClaw tools for
+authorized Markdown, Soul, calendar and session-board access. Chart creation is
+available only when the host supplies a durable execution ID, request ID and
+session. Other callers retain the existing instruction to use the dedicated chart
+entry point.
+
+### Conversation chart creation
+
+`create_paipan({ mode: "catalog", skill? })` returns enabled chart types and their
+canonical parameter schemas. `mode: "create"` requires `skill` and `input` and
+uses the same validation, profile prefill, runners and formatters as manual
+charting. The agent must clarify missing birth information, calendar ambiguity
+and unspecified random casting methods before creating a chart. Follow-up
+questions reuse the existing board unless the user requests a new one.
+
+The runtime sends an account-encrypted operation to `ipc:{accountId}:paipan`.
+The existing account outbox listener handles this queue as well, so a waiting
+model does not need another resident host listener. The host resolves the user
+and session from the admitted `agent_requests` row and checks the execution ID,
+running state, cancellation, deadline and active session ownership. Model
+arguments cannot select a user, session or customer profile.
+
+The host locks that request row, calculates and saves a standalone `board_result`
+message in one PostgreSQL transaction. The request and tool-call IDs determine a
+stable message ID; identical retries return the stored result, and changed
+arguments for that same call fail. The transaction shares its database client
+with chart permissions, profile prefill and message persistence. This keeps
+concurrent retries from generating different random charts or exhausting the
+pool with nested connections.
+
+After commit, a best-effort stream message asks the web client to reload saved
+messages, and the host returns chart facts to the model through an encrypted
+reply queue. The runtime updates the same mutable board collection used by
+`get_session_board`, preserving existing board indices. The saved chart is not
+attached again to the final assistant reply. Subsequent requests rebuild board
+context from its persisted message, including after a refresh or interrupted
+interpretation. Jingzhan creation results also carry its interpretation rule.
+
+RPC waits end after 15 seconds or cancellation and release their dedicated
+blocking Redis connection. Request queues expire after 30 seconds; reply queues
+also expire after 30 seconds, and both envelope lifetimes are 15 seconds. A lost
+reply does not undo a committed chart. The agent must not automatically reroll
+when the outcome is uncertain.
 
 The runtime and API pin Pi SDK packages to 1.3.0. `SessionManager` owns finalized
 provider context, including compaction and context edits; restore version-3 JSONL

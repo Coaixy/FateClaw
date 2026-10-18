@@ -149,7 +149,10 @@ function buildSummary(board: SessionBoardContext, index: number): BoardSummary {
   };
 }
 
-function buildDetail(board: SessionBoardContext, index: number): BoardDetail {
+export function buildSessionBoardDetail(
+  board: SessionBoardContext,
+  index: number,
+): BoardDetail {
   const summary = buildSummary(board, index);
   const promptText = truncateText(
     board.promptText.trim(),
@@ -306,7 +309,7 @@ export function createPiSessionBoardTool(
         isError: false,
         mode,
         total: boards.length,
-        board: buildDetail(found.board, found.index),
+        board: buildSessionBoardDetail(found.board, found.index),
       };
       details.output = toJsonOutput(details);
       return respond(details, {

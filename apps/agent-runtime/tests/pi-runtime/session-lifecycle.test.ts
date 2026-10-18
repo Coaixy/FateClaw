@@ -15,6 +15,7 @@ import type { AgentRuntimeDeps } from '#agent/deps';
 import { runPiSession } from '#agent/pi-runtime/session';
 import { createRequestScope } from '#agent/request-scope';
 import type { ContainerInput } from '#agent/types';
+import * as paipanClient from '#agent/paipan-client';
 
 const servers: ReturnType<typeof createServer>[] = [];
 const directories: string[] = [];
@@ -23,6 +24,7 @@ const provider = 'fateclaw-openai-completions-synthetic-provider';
 const model = 'synthetic-model';
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await Promise.all(
     servers.splice(0).map(async (server) => {
@@ -195,6 +197,111 @@ async function seedV3(
 }
 
 describe('Pi SDK session lifecycle', () => {
+  it('creates a chart through the model tool loop and reuses it in a later conversation turn', async () => {
+    const board = {
+      sourceMessageId: 'saved-chart',
+      source: 'official_paipan' as const,
+      skill: 'bazi-paipan',
+      artifactTitle: '八字排盘',
+      promptText: '合成测试盘面：庚午 辛巳 庚辰 辛巳',
+      isCurrent: true,
+    };
+    const caller = vi.fn(async () => ({
+      ok: true as const,
+      mode: 'create' as const,
+      sessionId,
+      board,
+    }));
+    vi.spyOn(paipanClient, 'createPaipanCaller').mockReturnValue(caller);
+    const { input, deps, requests } = await setup((_body, response, index) => {
+      if (index === 0 || index === 1 || index === 3) {
+        send(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id: `synthetic-tool-${index}`,
+                type: 'function',
+                function:
+                  index === 0
+                    ? {
+                        name: 'create_paipan',
+                        arguments: JSON.stringify({
+                          mode: 'create',
+                          skill: 'bazi-paipan',
+                          input: {
+                            solarDate: '1990-05-15',
+                            hour: 10,
+                            gender: '男',
+                          },
+                        }),
+                      }
+                    : {
+                        name: 'get_session_board',
+                        arguments: JSON.stringify({
+                          mode: 'detail',
+                          sourceMessageId: 'saved-chart',
+                        }),
+                      },
+              },
+            ],
+          },
+          true,
+        );
+      } else
+        send(response, {
+          content:
+            index === 2
+              ? 'Synthetic chart interpretation'
+              : 'Synthetic chart follow-up',
+        });
+    });
+    const scope = createRequestScope();
+    scope.requestId = 'synthetic-create-request';
+    const result = await runPiSession({
+      containerInput: { ...input, executionId: 'synthetic-execution' },
+      runtime: { deps },
+      requestScope: scope,
+    });
+    expect(result.text).toBe('Synthetic chart interpretation');
+    expect(result.records.map((record) => record.invocation.toolName)).toEqual([
+      'create_paipan',
+      'get_session_board',
+    ]);
+    expect(requests[0].tools?.map((tool) => tool.function.name)).toContain(
+      'create_paipan',
+    );
+    expect(JSON.stringify(requests[0].messages)).toContain(
+      'conversation_paipan_policy',
+    );
+    expect(JSON.stringify(requests[0].messages)).not.toContain(
+      '只能引导用户使用 FateClaw Web/API',
+    );
+    expect(JSON.stringify(requests[0].messages)).not.toContain(
+      '不要自行调用或声称拥有排盘工具',
+    );
+    expect(JSON.stringify(requests[2].messages)).toContain(board.promptText);
+
+    const next = createRequestScope();
+    next.requestId = 'synthetic-follow-up-request';
+    const followUp = await runPiSession({
+      containerInput: {
+        ...input,
+        executionId: 'synthetic-next-execution',
+        userMessage: '继续看大运',
+        sessionBoardContexts: [board],
+      },
+      runtime: { deps },
+      requestScope: next,
+    });
+    expect(followUp.text).toBe('Synthetic chart follow-up');
+    expect(
+      followUp.records.map((record) => record.invocation.toolName),
+    ).toEqual(['get_session_board']);
+    expect(caller).toHaveBeenCalledTimes(1);
+  });
+
   it('resumes version-3 history, executes host tools, and reopens the completed conversation', async () => {
     const { dir, input, requests, run } = await setup(
       (_body, response, index) => {

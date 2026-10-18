@@ -204,6 +204,7 @@ function hasAuthorizedBoardContext(input: ContainerInput): boolean {
 
 function buildBoardAbsencePolicySection(
   input: ContainerInput,
+  paipanEnabled: boolean,
 ): PiContextSection | null {
   if (hasAuthorizedBoardContext(input)) return null;
 
@@ -214,13 +215,20 @@ function buildBoardAbsencePolicySection(
     lines: [
       '本轮没有授权盘面材料。',
       '用户自然语言中的出生日期、出生时辰、性别、地点或问题描述，不等于已授权的盘面 artifact。',
-      '如果用户要求排盘、生成命盘/卦盘/星盘/八字四柱，或要求根据聊天中的出生信息推盘，不要自行计算或生成盘面。',
-      '只能引导用户使用 FateClaw Web/API 的专用排盘入口创建盘面；获得 session_board_manifest 并通过 get_session_board 读取授权盘面后，才可以基于盘面事实解读。',
+      paipanEnabled
+        ? '不要用模型自行推算或编造盘面；必须调用系统排盘引擎，或读取已授权的盘面事实材料。'
+        : '如果用户要求排盘、生成命盘/卦盘/星盘/八字四柱，或要求根据聊天中的出生信息推盘，不要自行计算或生成盘面。',
+      paipanEnabled
+        ? '可以通过 create_paipan 工具调用系统排盘引擎；先查询 mode=catalog 获取盘种参数，补齐信息后用 mode=create 创建盘面。工具成功返回盘面事实后，才可以据此解读。'
+        : '只能引导用户使用 FateClaw Web/API 的专用排盘入口创建盘面；获得 session_board_manifest 并通过 get_session_board 读取授权盘面后，才可以基于盘面事实解读。',
     ],
   });
 }
 
-function buildCurrentInputSection(input: ContainerInput): PiContextSection[] {
+function buildCurrentInputSection(
+  input: ContainerInput,
+  paipanEnabled: boolean,
+): PiContextSection[] {
   const sections: PiContextSection[] = [];
   const current = createSection({
     id: 'current_request_metadata',
@@ -233,11 +241,30 @@ function buildCurrentInputSection(input: ContainerInput): PiContextSection[] {
   });
   if (current) sections.push(current);
 
-  const boardAbsencePolicy = buildBoardAbsencePolicySection(input);
+  const boardAbsencePolicy = buildBoardAbsencePolicySection(
+    input,
+    paipanEnabled,
+  );
   if (boardAbsencePolicy) sections.push(boardAbsencePolicy);
 
   const boardContext = buildSessionBoardContextSection(input);
   if (boardContext) sections.push(boardContext);
+
+  if (paipanEnabled) {
+    const policy = createSection({
+      id: 'conversation_paipan_policy',
+      title: '对话起盘规则',
+      source: 'request',
+      lines: [
+        '本轮可使用 create_paipan 查询可用盘种与参数，并在当前会话生成、保存真实盘面。',
+        '仅在用户要求起盘或重新起盘时创建；缺少必填信息或历法、时辰有歧义时先追问，不要自行补造。',
+        'create_paipan 成功返回的盘面详情也是授权事实材料，可以立即解读；需要更多详情时调用 get_session_board。',
+        '用户继续追问时沿用已生成或已选中的盘面；除非明确要求重新起盘，不要再次创建，尤其不要重摇随机卦。',
+        '创建成功的盘面已保存为独立消息，不要在回复中重复输出盘面 JSON。工具失败或超时不代表获得了可解读的新盘面。',
+      ],
+    });
+    if (policy) sections.push(policy);
+  }
 
   return sections;
 }
@@ -338,9 +365,13 @@ export async function createPiSessionContext(args: {
   runtime: RequestRuntime;
   requestScope: RequestScope;
   soulEditEnabled?: boolean;
+  paipanEnabled?: boolean;
 }): Promise<PiSessionContext> {
   const sections: PiContextSection[] = [
-    ...buildCurrentInputSection(args.containerInput),
+    ...buildCurrentInputSection(
+      args.containerInput,
+      args.paipanEnabled ?? false,
+    ),
   ];
 
   const soulSection = await buildSoulSection({
