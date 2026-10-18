@@ -4,6 +4,8 @@ import {
   quarantineAiChatResult,
   processingOutboxKey,
 } from './reliable-ai-chat-outbox.js';
+import { decodeRuntimeIpc, encodeRuntimeIpc } from './ipc-security.js';
+import { InvalidRuntimeIpcError } from '@fateclaw/contracts/runtime-ipc';
 /**
  * Recover abandoned AI Chat transport work. Durable admissions own execution
  * recovery; legacy expired inbox requests atomically enqueue a failure before
@@ -184,9 +186,16 @@ async function sweepInboxQueue(queueKey: string): Promise<void> {
 
     let payload: StaleInboxPayload;
     try {
-      payload = JSON.parse(raw) as StaleInboxPayload;
+      const account = accountIdFromInboxKey(queueKey);
+      if (!account) return;
+      // Expired input is inspected only to retire its transport copy, never executed.
+      payload = JSON.parse(
+        decodeRuntimeIpc(account, queueKey, raw, true),
+      ) as StaleInboxPayload;
     } catch {
-      return; // 解析不了的脏数据挡在队尾，不是本任务职责，本队列到此为止
+      if (!(await popIfStillTail(queueKey, raw))) return;
+      cleaned += 1;
+      continue;
     }
 
     const timestampMs =
@@ -272,7 +281,11 @@ async function sweepInboxQueue(queueKey: string): Promise<void> {
       queueKey,
       `ipc:${accountId}:ai-chat:outbox`,
       raw,
-      JSON.stringify(failure),
+      encodeRuntimeIpc(
+        accountId,
+        `ipc:${accountId}:ai-chat:outbox`,
+        JSON.stringify(failure),
+      ),
     );
     if (moved !== 1) return;
     await processAiChatOutboxPayload(
@@ -325,7 +338,9 @@ async function sweepAiChatOutboxQueue(queueKey: string): Promise<void> {
       : await getRedis().lrange(queueKey, -1, -1);
     if (!tail.length) return;
     try {
-      const timestamp = Date.parse(JSON.parse(tail[0]).timestamp);
+      const timestamp = Date.parse(
+        JSON.parse(decodeRuntimeIpc(accountId, queueKey, tail[0])).timestamp,
+      );
       if (
         !processing.length &&
         Number.isFinite(timestamp) &&
@@ -339,7 +354,7 @@ async function sweepAiChatOutboxQueue(queueKey: string): Promise<void> {
     if (raw === null) return;
     let payload: unknown;
     try {
-      payload = JSON.parse(raw);
+      payload = JSON.parse(decodeRuntimeIpc(accountId, queueKey, raw));
     } catch {
       await quarantineAiChatResult(queueKey, raw);
       logger.error({ queueKey }, 'Invalid AI Chat result quarantined');
@@ -358,7 +373,10 @@ async function sweepAiChatOutboxQueue(queueKey: string): Promise<void> {
         await releasePerUserMeteredSlotByRequestId(requestId);
       }
     } catch (err) {
-      if (err instanceof InvalidAiChatPayloadError) {
+      if (
+        err instanceof InvalidAiChatPayloadError ||
+        err instanceof InvalidRuntimeIpcError
+      ) {
         await quarantineAiChatResult(queueKey, raw);
         continue;
       }

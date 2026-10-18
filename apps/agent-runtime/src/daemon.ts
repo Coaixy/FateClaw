@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { decodeAgentIpc, encodeAgentIpc } from './ipc-security.js';
 
 import { closeAgentDb } from './agent-db.js';
 import {
@@ -231,7 +232,9 @@ async function drainCancelRequests(
     }
 
     try {
-      const cancelRequest = parseCancelInboxRequest(raw);
+      const cancelRequest = parseCancelInboxRequest(
+        decodeAgentIpc(`ipc:${accountId}:cancel`, raw),
+      );
       if (!cancelRequest) {
         log('忽略无效的 cancel 请求');
         continue;
@@ -475,7 +478,7 @@ async function processInboxMessage(
     const outboxQueue = request.outboxQueue ?? `ipc:${accountId}:outbox`;
     generatedResult = true;
     await deliverDurableResult(request, response, (queue, payload) =>
-      getRedis().lpush(queue, payload),
+      getRedis().lpush(queue, encodeAgentIpc(queue, payload)),
     );
 
     log(
@@ -524,7 +527,7 @@ async function processInboxMessage(
         };
         // 写入指定的 outbox 队列（或默认队列）
         await deliverDurableResult(request, errorResponse, (queue, payload) =>
-          getRedis().lpush(queue, payload),
+          getRedis().lpush(queue, encodeAgentIpc(queue, payload)),
         );
       } catch (pushError) {
         log(
@@ -579,7 +582,7 @@ async function loop(): Promise<void> {
     replayInFlight = true;
     try {
       await replayDurableResults(ctx.accountId, (queue, payload) =>
-        redis.lpush(queue, payload),
+        redis.lpush(queue, encodeAgentIpc(queue, payload)),
       );
     } catch {
       log('Result spool replay failed; retained for next attempt');
@@ -648,7 +651,7 @@ async function loop(): Promise<void> {
             request,
           );
           await deliverDurableResult(request, errorResponse, (queue, payload) =>
-            getRedis().lpush(queue, payload),
+            getRedis().lpush(queue, encodeAgentIpc(queue, payload)),
           );
         } catch (pushError) {
           log(
@@ -741,7 +744,8 @@ async function loop(): Promise<void> {
       );
       if (!result || shuttingDown) continue;
 
-      const [, raw] = result;
+      const [queue, encrypted] = result;
+      const raw = decodeAgentIpc(queue, encrypted);
       const requestId = readInboxRequestIdForTask(raw);
       const task = processInboxMessage(
         ctx.accountId,

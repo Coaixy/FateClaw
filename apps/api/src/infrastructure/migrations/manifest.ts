@@ -28,6 +28,7 @@ import { registrationInviteTiersMigration } from './versions/0093-registration-i
 import { piSessionFramesMigration } from './versions/0094-pi-session-frames.js';
 import { benefitFailureBudgetMigration } from './versions/0095-benefit-failure-budget.js';
 import { userDeletionOrdersMigration } from './versions/0096-user-deletion-orders.js';
+import { runtimeIpcReceiptsMigration } from './versions/0097-runtime-ipc-receipts.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -59,6 +60,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   piSessionFramesMigration,
   benefitFailureBudgetMigration,
   userDeletionOrdersMigration,
+  runtimeIpcReceiptsMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

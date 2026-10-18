@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeRuntimeIpc } from '../../src/runtime/ipc-security.js';
 
 const {
   mockInterruption,
@@ -484,14 +485,13 @@ describe('processAiChatOutboxPayload', () => {
       }),
       mockTransaction,
     );
-    expect(mockPublish).toHaveBeenCalledWith(
-      'ipc:ai-chat:stream:session-2',
-      expect.stringContaining('"promptTokens":15'),
+    const stream = decodeRuntimeIpc(
+      'web:user-1',
+      mockPublish.mock.calls[0][0],
+      mockPublish.mock.calls[0][1],
     );
-    expect(mockPublish).toHaveBeenCalledWith(
-      'ipc:ai-chat:stream:session-2',
-      expect.stringContaining('"actual_charge_coins":1.23'),
-    );
+    expect(stream).toContain('"promptTokens":15');
+    expect(stream).toContain('"actual_charge_coins":1.23');
   });
 
   it('records total-only usage as input tokens', async () => {

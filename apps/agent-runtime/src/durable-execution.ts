@@ -15,7 +15,14 @@ const workerId = randomUUID();
 export async function claimDurableExecution(
   request: InboxRequest,
 ): Promise<boolean> {
-  if (!request.executionId) return true;
+  if (!request.executionId) {
+    if (!('eventId' in request)) return true;
+    const { rows } = await getAgentDbPool().query<{ claimed: boolean }>(
+      "SELECT claim_runtime_ipc_receipt($1,'inbox',$2) AS claimed",
+      [request.accountId, request.requestId],
+    );
+    return rows[0]?.claimed === true;
+  }
   const result = await getAgentDbPool().query(
     `UPDATE agent_requests SET state='running',lease_owner=$4,
        lease_until=now()+interval '60 seconds',updated_at=now()

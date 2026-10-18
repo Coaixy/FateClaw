@@ -31,6 +31,7 @@ import {
 } from '../infrastructure/daily-usage.js';
 import {
   InvalidAiChatPayloadError,
+  bindIpcPayloadIdentity,
   PendingInboxRequest,
   ProgressIpcPayload,
   ResponseIpcPayload,
@@ -599,7 +600,15 @@ function buildProgressMessageId(payload: ProgressIpcPayload): string {
     ].join('-');
   }
 
-  return `aichat-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return payload.eventId
+    ? `aichat-progress-${createHash('sha256')
+        .update(payload.accountId ?? '')
+        .update('\0')
+        .update(payload.requestId ?? '')
+        .update('\0')
+        .update(payload.eventId)
+        .digest('hex')}`
+    : `aichat-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -612,15 +621,27 @@ export async function processAiChatOutboxPayload(
   pendingRequests: Map<string, PendingInboxRequest>,
 ): Promise<void> {
   if (validateResponsePayload(payload)) {
-    await processAiChatResponse(payload, fallbackAccountId, pendingRequests);
+    await processAiChatResponse(
+      bindIpcPayloadIdentity(payload, fallbackAccountId, pendingRequests),
+      fallbackAccountId,
+      pendingRequests,
+    );
     return;
   }
   if (validateMessagePayload(payload)) {
-    await processAiChatMessage(payload, fallbackAccountId, pendingRequests);
+    await processAiChatMessage(
+      bindIpcPayloadIdentity(payload, fallbackAccountId, pendingRequests),
+      fallbackAccountId,
+      pendingRequests,
+    );
     return;
   }
   if (validateProgressPayload(payload)) {
-    await processAiChatProgress(payload, fallbackAccountId, pendingRequests);
+    await processAiChatProgress(
+      bindIpcPayloadIdentity(payload, fallbackAccountId, pendingRequests),
+      fallbackAccountId,
+      pendingRequests,
+    );
     return;
   }
   throw new InvalidAiChatPayloadError('Invalid AI Chat outbox envelope');
@@ -712,6 +733,7 @@ async function processAiChatResponse(
               finalMetadata,
               db,
             }),
+          payloadForUsage,
         )
       : await withAgentResultDelivery(
           payload.requestId,
@@ -738,6 +760,7 @@ async function processAiChatResponse(
               db,
             });
           },
+          payloadForUsage,
         );
     if (synthetic && !finalMessageId) return;
     if (!synthetic) {
@@ -862,15 +885,17 @@ async function processAiChatMessage(
     accountId,
     sessionId: pending.sessionId,
   });
-  if (streamEvent) {
-    await publishAiChatStreamEvent({
-      sessionId: pending.sessionId,
-      event: streamEvent,
-    });
-  }
 
   const ownerUserId = await resolveOwnerUserId({ accountId, pending });
-  const msgId = `aichat-interm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const msgId = payload.eventId
+    ? `aichat-interm-${createHash('sha256')
+        .update(accountId)
+        .update('\0')
+        .update(payload.requestId ?? '')
+        .update('\0')
+        .update(payload.eventId)
+        .digest('hex')}`
+    : `aichat-interm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await storeMessage({
     id: msgId,
     account_id: accountId,
@@ -888,6 +913,11 @@ async function processAiChatMessage(
         : null,
     metadata: payload.metadata,
   });
+  if (streamEvent)
+    await publishAiChatStreamEvent({
+      sessionId: pending.sessionId,
+      event: streamEvent,
+    });
 
   logger.info(
     {
@@ -928,14 +958,6 @@ async function processAiChatProgress(
     );
     return;
   }
-  await publishAiChatStreamEvent({
-    sessionId: pending.sessionId,
-    event: streamEventFromProgressPayload({
-      payload,
-      accountId,
-      sessionId: pending.sessionId,
-    }),
-  });
 
   const stage = (payload.metadata as Record<string, unknown>)?.stage;
   const metadata =
@@ -965,6 +987,14 @@ async function processAiChatProgress(
       kind,
       stage,
     },
+  });
+  await publishAiChatStreamEvent({
+    sessionId: pending.sessionId,
+    event: streamEventFromProgressPayload({
+      payload,
+      accountId,
+      sessionId: pending.sessionId,
+    }),
   });
 
   logger.info(

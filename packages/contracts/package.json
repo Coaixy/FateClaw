@@ -71,6 +71,11 @@
       "import": "./dist/agent/index.js",
       "default": "./dist/agent/index.js"
     },
+    "./runtime-ipc": {
+      "types": "./dist/runtime-ipc/index.d.ts",
+      "import": "./dist/runtime-ipc/index.js",
+      "default": "./dist/runtime-ipc/index.js"
+    },
     "./agent/session": {
       "types": "./dist/agent/session.d.ts",
       "import": "./dist/agent/session.js",

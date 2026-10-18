@@ -123,6 +123,7 @@ export function attachStreamSocket(
   subscriptions: StreamSubscriptions,
   channel: string,
   connectedMessage: string,
+  decode?: (message: string) => string | null,
 ): void {
   let closed = false;
   let lastPongAt = Date.now();
@@ -221,7 +222,17 @@ export function attachStreamSocket(
   });
   socket.on('close', stop);
   socket.on('error', stop);
-  const subscription = subscriptions.add(channel, { send, disconnect: stop });
+  const subscription = subscriptions.add(channel, {
+    send(message) {
+      try {
+        const plaintext = decode ? decode(message) : message;
+        if (plaintext !== null) send(plaintext);
+      } catch {
+        logger.warn({ channel }, 'Unauthenticated chat stream event discarded');
+      }
+    },
+    disconnect: stop,
+  });
   release = subscription.release;
   void subscription.ready
     .then(() => {

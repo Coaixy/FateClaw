@@ -8,6 +8,7 @@
 import { DATABASE_URL, REDIS_URL, TIMEZONE } from '../infrastructure/config.js';
 import { getUserByAccountId, getUserById } from '../infrastructure/db.js';
 import { pickSystemEnv } from '../infrastructure/process-env.js';
+import { runtimeIpcKey } from './ipc-security.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
 import { resolveProjectRoot } from '../infrastructure/project-root.js';
 import {
@@ -26,6 +27,7 @@ export interface AgentEnv {
   // --- 身份 ---
   FATECLAW_ACCOUNT_ID: string;
   FATECLAW_USER_ID: string;
+  FATECLAW_IPC_KEY: string;
 
   // --- 运行时 ---
   TZ: string;
@@ -81,6 +83,7 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     // 身份
     FATECLAW_ACCOUNT_ID: accountId,
     FATECLAW_USER_ID: user?.id ?? '',
+    FATECLAW_IPC_KEY: runtimeIpcKey(accountId),
 
     // 运行时
     TZ: TIMEZONE,

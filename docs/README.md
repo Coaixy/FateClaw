@@ -9,6 +9,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Install, configure, run, or validate locally | [Local development](development.md) | Prerequisites, startup, model setup, and checks |
 | Locate code for a change | [Agent guide](../AGENT.md) | Task-to-source map and subsystem boundaries |
 | Understand agent execution | [Runtime architecture](agent-architecture.md) | Host, Redis IPC, resident processes, Pi Runtime, and knowledge resources |
+| Secure host/runtime transport | [Runtime security](runtime-security.md) | Authenticated Redis IPC envelopes, identity binding and the remaining process boundary |
 | Change or consume internal HTTP APIs | [API reference](api-reference.md) | Routes, authentication, request and response contracts |
 | Change access or charging behavior | [Entitlements and billing](membership-entitlement-current.md) | Membership gates and reservation/settlement behavior |
 | Control new account registration | [Registration invitations](registration-invites.md) | Paid-user allowances, single-use codes, refund accounting and owner controls |

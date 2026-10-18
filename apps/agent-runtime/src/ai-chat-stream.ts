@@ -1,5 +1,6 @@
 import type { AiChatStreamEvent } from './types.js';
 import { getRedis } from './redis.js';
+import { encodeAgentIpc } from './ipc-security.js';
 
 type TextStreamEvent = Extract<
   AiChatStreamEvent,
@@ -79,7 +80,11 @@ export async function publishAiChatStreamEvent(args: {
   if (!args.sessionId) return;
   await getRedis().publish(
     aiChatStreamChannel(args.sessionId),
-    JSON.stringify(args.event),
+    encodeAgentIpc(
+      aiChatStreamChannel(args.sessionId),
+      JSON.stringify(args.event),
+      60_000,
+    ),
   );
 }
 
@@ -88,5 +93,8 @@ export async function pushAiChatOutboxMessage(args: {
   message: unknown;
 }): Promise<void> {
   if (!args.outboxQueue) return;
-  await getRedis().lpush(args.outboxQueue, JSON.stringify(args.message));
+  await getRedis().lpush(
+    args.outboxQueue,
+    encodeAgentIpc(args.outboxQueue, JSON.stringify(args.message)),
+  );
 }

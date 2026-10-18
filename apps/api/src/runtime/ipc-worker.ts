@@ -1,4 +1,6 @@
 import { recordAgentTiming } from './agent-performance.js';
+import { decodeRuntimeIpc, encodeRuntimeIpc } from './ipc-security.js';
+import { InvalidRuntimeIpcError } from '@fateclaw/contracts/runtime-ipc';
 import {
   acquireAgentExecution,
   releaseGlobalAgentSlot,
@@ -165,7 +167,10 @@ async function enqueueInboxPayload(
     priority === 'member'
       ? `ipc:${accountId}:inbox:member`
       : `ipc:${accountId}:inbox`;
-  await getRedis().lpush(key, payload);
+  await getRedis().lpush(
+    key,
+    encodeRuntimeIpc(accountId, key, payload, MAX_REQUEST_TIMEOUT_MS),
+  );
 }
 
 function delay(ms: number): Promise<void> {
@@ -391,12 +396,17 @@ export async function cancelAiChatSessionRequest(
   // 由 billing-sweeper 按 daemon 中断响应落库的真实 usage 兜底补结算。
   await getRedis().lpush(
     `ipc:${runtimeAccountId}:cancel`,
-    buildAiChatCancelPayload({
-      requestId,
-      accountId: runtimeAccountId,
-      sessionId,
-      reason,
-    }),
+    encodeRuntimeIpc(
+      runtimeAccountId,
+      `ipc:${runtimeAccountId}:cancel`,
+      buildAiChatCancelPayload({
+        requestId,
+        accountId: runtimeAccountId,
+        sessionId,
+        reason,
+      }),
+      60_000,
+    ),
   );
   pending?.resolve({
     requestId,
@@ -492,33 +502,29 @@ async function listenForAccount(accountId: string): Promise<void> {
         const [queue, raw] = result;
 
         try {
-          const payload = JSON.parse(raw) as unknown;
-          try {
-            if (queue.endsWith(':ai-chat:outbox')) {
-              // AI Chat 专属队列：永远不发微信
-              await processAiChatOutboxPayload(
-                payload,
-                accountId,
-                pendingAiChatRequests,
-              );
-              await acknowledgeAiChatResult(queue, raw);
-            } else if (queue.endsWith(':outbox')) {
-              await processOutboxPayload(
-                payload,
-                accountId,
-                pendingInboxRequests,
-              );
-            }
-          } finally {
-            await releaseGlobalAgentSlotForPayload(queue, payload).catch(
-              (err) => {
-                logger.warn(
-                  { accountId, queue, err },
-                  '释放 agent 并发槽位失败',
-                );
-              },
+          const payload = JSON.parse(
+            decodeRuntimeIpc(accountId, queue, raw),
+          ) as unknown;
+          if (queue.endsWith(':ai-chat:outbox')) {
+            // AI Chat 专属队列：永远不发微信
+            await processAiChatOutboxPayload(
+              payload,
+              accountId,
+              pendingAiChatRequests,
+            );
+            await acknowledgeAiChatResult(queue, raw);
+          } else if (queue.endsWith(':outbox')) {
+            await processOutboxPayload(
+              payload,
+              accountId,
+              pendingInboxRequests,
             );
           }
+          await releaseGlobalAgentSlotForPayload(queue, payload).catch(
+            (err) => {
+              logger.warn({ accountId, queue, err }, '释放 agent 并发槽位失败');
+            },
+          );
         } catch (error) {
           // AI Chat keeps its processing copy for retry; external-message delivery
           // retains its existing non-replay policy.
@@ -531,6 +537,7 @@ async function listenForAccount(accountId: string): Promise<void> {
           if (queue.endsWith(':ai-chat:outbox')) {
             if (
               error instanceof SyntaxError ||
+              error instanceof InvalidRuntimeIpcError ||
               error instanceof InvalidAiChatPayloadError
             )
               await quarantineAiChatResult(queue, raw);

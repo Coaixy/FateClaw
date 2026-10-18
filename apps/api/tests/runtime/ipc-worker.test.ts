@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  decodeRuntimeIpc,
+  encodeRuntimeIpc,
+} from '../../src/runtime/ipc-security.js';
 
 const {
   mockGet,
@@ -95,6 +99,7 @@ vi.mock('../../src/infrastructure/redis.js', () => ({
 }));
 
 vi.mock('../../src/infrastructure/config.js', () => ({
+  JWT_SECRET: 'synthetic-runtime-transport-root',
   LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS: 5,
 }));
 
@@ -220,7 +225,10 @@ describe('Redis IPC listener lifecycle', () => {
       connect: vi.fn<() => Promise<void>>(async () => undefined),
       brpop: vi.fn(async (): Promise<[string, string] | null> => {
         removeAccountListener(accountId);
-        return [queue, JSON.stringify(payload)];
+        return [
+          queue,
+          encodeRuntimeIpc(accountId, queue, JSON.stringify(payload)),
+        ];
       }),
       quit: vi.fn(async () => 'OK'),
       disconnect: vi.fn(),
@@ -276,7 +284,7 @@ describe('Redis IPC listener lifecycle', () => {
 
     expect(consumer.brpop).toHaveBeenCalledWith(queue, 1);
     expect(processOutboxPayload).toHaveBeenCalledWith(
-      payload,
+      expect.objectContaining(payload),
       accountId,
       expect.any(Map),
     );
@@ -322,7 +330,7 @@ describe('Redis IPC listener lifecycle', () => {
 
       expect(mockDuplicate).toHaveBeenCalledTimes(4);
       expect(processOutboxPayload).toHaveBeenCalledWith(
-        payload,
+        expect.objectContaining(payload),
         accountId,
         expect.any(Map),
       );
@@ -358,14 +366,15 @@ describe('cancelAiChatSessionRequest', () => {
       'req-1',
     );
     expect(mockDel).not.toHaveBeenCalled();
-    expect(mockLpush).toHaveBeenCalledWith(
-      'ipc:web:user-1:cancel',
-      expect.stringContaining('"type":"cancel"'),
-    );
-    expect(mockLpush).toHaveBeenCalledWith(
-      'ipc:web:user-1:cancel',
-      expect.stringContaining('"requestId":"req-1"'),
-    );
+    expect(
+      JSON.parse(
+        decodeRuntimeIpc(
+          'web:user-1',
+          mockLpush.mock.calls[0][0],
+          mockLpush.mock.calls[0][1],
+        ),
+      ),
+    ).toMatchObject({ type: 'cancel', requestId: 'req-1' });
     // 取消不再就地 settle(0,0)：预留保留为 charge_state='pending'，
     // 由 billing-sweeper 按 daemon 中断响应落库的真实 usage 兜底补结算，避免取消前 token 免费。
     expect(mockSettleBillingReservation).not.toHaveBeenCalled();
@@ -403,10 +412,15 @@ describe('cancelAiChatSessionRequest', () => {
       'req-restore',
     );
     expect(mockDel).not.toHaveBeenCalled();
-    expect(mockLpush).toHaveBeenCalledWith(
-      'ipc:web:user-1:cancel',
-      expect.stringContaining('"requestId":"req-restore"'),
-    );
+    expect(
+      JSON.parse(
+        decodeRuntimeIpc(
+          'web:user-1',
+          mockLpush.mock.calls[0][0],
+          mockLpush.mock.calls[0][1],
+        ),
+      ),
+    ).toMatchObject({ requestId: 'req-restore' });
     expect(mockSettleBillingReservation).not.toHaveBeenCalled();
   });
 });
@@ -580,9 +594,18 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     await vi.waitFor(() =>
       expect(mockLpush).toHaveBeenCalledWith(
         'ipc:web:user-1:inbox:member',
-        expect.stringContaining('"authorizedSkillIds":["skill-bazi"]'),
+        expect.any(String),
       ),
     );
+    expect(
+      JSON.parse(
+        decodeRuntimeIpc(
+          'web:user-1',
+          mockLpush.mock.calls[0][0],
+          mockLpush.mock.calls[0][1],
+        ),
+      ),
+    ).toMatchObject({ authorizedSkillIds: ['skill-bazi'] });
     expect(
       __getPendingAiChatRequestsForTests().get(result.requestId)
         ?.localAgentLeaseId,

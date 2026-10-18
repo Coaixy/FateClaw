@@ -4,6 +4,11 @@ vi.mock('../src/result-spool.js', () => ({
   readSpooledResults: vi.fn(async () => []),
 }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeAgentIpc, encodeAgentIpc } from '../src/ipc-security.js';
+
+beforeEach(() => {
+  vi.stubEnv('FATECLAW_IPC_KEY', 'a'.repeat(64));
+});
 
 const { mockLog } = vi.hoisted(() => ({
   mockLog: vi.fn(),
@@ -65,13 +70,16 @@ describe('daemon cancel queue', () => {
       rpop: vi
         .fn()
         .mockResolvedValueOnce(
-          JSON.stringify({
-            type: 'cancel',
-            accountId: 'web:user-1',
-            requestId: 'req-1',
-            sessionId: 'session-1',
-            reason: 'user_stop',
-          }),
+          encodeAgentIpc(
+            'ipc:web:user-1:cancel',
+            JSON.stringify({
+              type: 'cancel',
+              accountId: 'web:user-1',
+              requestId: 'req-1',
+              sessionId: 'session-1',
+              reason: 'user_stop',
+            }),
+          ),
         )
         .mockResolvedValueOnce(null),
     };
@@ -93,12 +101,15 @@ describe('daemon cancel queue', () => {
       rpop: vi
         .fn()
         .mockResolvedValueOnce(
-          JSON.stringify({
-            type: 'cancel',
-            accountId: 'web:user-1',
-            requestId: 'req-early',
-            sessionId: 'session-1',
-          }),
+          encodeAgentIpc(
+            'ipc:web:user-1:cancel',
+            JSON.stringify({
+              type: 'cancel',
+              accountId: 'web:user-1',
+              requestId: 'req-early',
+              sessionId: 'session-1',
+            }),
+          ),
         )
         .mockResolvedValueOnce(null),
     };
@@ -177,8 +188,10 @@ describe('daemon request timeout', () => {
       expect(sessions.size).toBe(0);
 
       expect(lpush).toHaveBeenCalledTimes(1);
-      const [, payload] = lpush.mock.calls[0];
-      const parsed = JSON.parse(payload as string);
+      const [queue, payload] = lpush.mock.calls[0];
+      const parsed = JSON.parse(
+        decodeAgentIpc(queue as string, payload as string),
+      );
       expect(parsed.status).toBe('error');
       expect(parsed.error).toMatch(/无进展/);
       expect(parsed.publicErrorText).toBe('这次处理超时了，请稍后再试。');
@@ -240,8 +253,10 @@ describe('daemon request timeout', () => {
       await runPromise;
 
       expect(lpush).toHaveBeenCalledTimes(1);
-      const [, payload] = lpush.mock.calls[0];
-      const parsed = JSON.parse(payload as string);
+      const [queue, payload] = lpush.mock.calls[0];
+      const parsed = JSON.parse(
+        decodeAgentIpc(queue as string, payload as string),
+      );
       expect(parsed.status).toBe('success');
       expect(parsed.text).toBe('done');
     } finally {

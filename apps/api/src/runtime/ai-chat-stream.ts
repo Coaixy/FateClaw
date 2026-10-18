@@ -1,4 +1,10 @@
 import websocket from '@fastify/websocket';
+import {
+  decodeRuntimeIpc,
+  encodeRuntimeIpc,
+  encodeControlIpc,
+  decodeControlIpc,
+} from './ipc-security.js';
 import { StreamSubscriptions, attachStreamSocket } from './stream-sockets.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -137,6 +143,7 @@ const STREAM_TICKET_TTL_SECONDS = 60;
 
 interface AiChatStreamTicketPayload {
   userId: string;
+  accountId: string;
   sessionId: string;
   expiresAt: string;
 }
@@ -163,7 +170,7 @@ export async function issueAiChatStreamTicket(args: {
   userId: string;
   sessionId: string;
 }): Promise<{ ticket: string; expiresAt: string }> {
-  await verifySessionOwner(args.userId, args.sessionId);
+  const session = await verifySessionOwner(args.userId, args.sessionId);
 
   const ticket = randomBytes(STREAM_TICKET_BYTES).toString('base64url');
   const expiresAt = new Date(
@@ -171,13 +178,19 @@ export async function issueAiChatStreamTicket(args: {
   ).toISOString();
   const payload: AiChatStreamTicketPayload = {
     userId: args.userId,
+    accountId: session.account_id,
     sessionId: args.sessionId,
     expiresAt,
   };
 
   await getRedis().set(
     aiChatStreamTicketKey(ticket),
-    JSON.stringify(payload),
+    encodeControlIpc(
+      'stream-ticket',
+      aiChatStreamTicketKey(ticket),
+      JSON.stringify(payload),
+      STREAM_TICKET_TTL_SECONDS * 1000,
+    ),
     'EX',
     STREAM_TICKET_TTL_SECONDS,
   );
@@ -205,9 +218,15 @@ export async function publishAiChatStreamEvent(args: {
   event: AiChatStreamEvent;
 }): Promise<void> {
   if (!args.sessionId) return;
+  if (!args.event.accountId) throw new Error('Stream event has no account');
   await getRedis().publish(
     aiChatStreamChannel(args.sessionId),
-    JSON.stringify(args.event),
+    encodeRuntimeIpc(
+      args.event.accountId,
+      aiChatStreamChannel(args.sessionId),
+      JSON.stringify(args.event),
+      60_000,
+    ),
   );
 }
 
@@ -317,7 +336,9 @@ return value
 
   let payload: AiChatStreamTicketPayload;
   try {
-    payload = JSON.parse(raw) as AiChatStreamTicketPayload;
+    payload = JSON.parse(
+      decodeControlIpc('stream-ticket', aiChatStreamTicketKey(ticket), raw),
+    ) as AiChatStreamTicketPayload;
   } catch (err) {
     throw new Error('invalid_ticket', { cause: err });
   }
@@ -333,14 +354,14 @@ return value
   }
 
   // ticket 绑定会话和用户；消费时再次查库，防止签发后会话归属发生变化。
-  await verifySessionOwner(payload.userId, sessionId);
-  return payload;
+  const session = await verifySessionOwner(payload.userId, sessionId);
+  return { ...payload, accountId: session.account_id };
 }
 
 async function verifySessionOwner(
   userId: string,
   sessionId: string,
-): Promise<void> {
+): Promise<NonNullable<Awaited<ReturnType<typeof getChatSession>>>> {
   const session = await getChatSession(sessionId);
   if (!session) {
     throw new Error('session_not_found');
@@ -348,6 +369,7 @@ async function verifySessionOwner(
   if (session.user_id !== userId) {
     throw new Error('forbidden');
   }
+  return session;
 }
 
 export async function registerAiChatStreamWebSocket(
@@ -367,6 +389,7 @@ export async function registerAiChatStreamWebSocket(
       connectTimeout: 5_000,
     }),
   );
+  const streamAccounts = new WeakMap<object, string>();
   app.addHook('onClose', async () => subscriptions.close());
   app.post<{
     Params: { sessionId: string };
@@ -410,10 +433,11 @@ export async function registerAiChatStreamWebSocket(
       preValidation: async (request, reply) => {
         try {
           if (!request.query.ticket) throw new Error('missing_ticket');
-          await consumeAiChatStreamTicket(
+          const ticket = await consumeAiChatStreamTicket(
             request.query.ticket,
             request.params.sessionId,
           );
+          streamAccounts.set(request, ticket.accountId);
         } catch (err) {
           logger.warn(
             { err, sessionId: request.params.sessionId },
@@ -425,6 +449,12 @@ export async function registerAiChatStreamWebSocket(
     },
     (socket, request) => {
       const sessionId = request.params.sessionId;
+      const accountId = streamAccounts.get(request);
+      if (!accountId) {
+        socket.terminate();
+        return;
+      }
+      const seen = new Set<string>();
       attachStreamSocket(
         socket,
         subscriptions,
@@ -436,6 +466,24 @@ export async function registerAiChatStreamWebSocket(
             sessionId,
           }),
         ),
+        (raw) => {
+          const plaintext = decodeRuntimeIpc(
+            accountId,
+            aiChatStreamChannel(sessionId),
+            raw,
+          );
+          const event = JSON.parse(plaintext);
+          if (
+            event.accountId !== accountId ||
+            event.sessionId !== sessionId ||
+            typeof event.eventId !== 'string'
+          )
+            throw new Error('Stream event identity mismatch');
+          if (seen.has(event.eventId)) return null;
+          seen.add(event.eventId);
+          if (seen.size > 1024) seen.delete(seen.values().next().value!);
+          return plaintext;
+        },
       );
     },
   );

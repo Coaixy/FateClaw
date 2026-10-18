@@ -9,6 +9,7 @@ import {
   storeMessage,
 } from '../infrastructure/db.js';
 import { incrementDailyTokens } from '../infrastructure/daily-usage.js';
+import { claimOutboundIpcReceipt } from '../infrastructure/repositories/ipc-receipts-repository.js';
 import { sendMessage as ilinkSendMessage } from '../infrastructure/ilink.js';
 import {
   PendingInboxRequest,
@@ -17,6 +18,7 @@ import {
   SendMessageIpcPayload,
   releaseSessionProcessingLock,
   resolveAccountId,
+  bindIpcPayloadIdentity,
   validateMessagePayload,
   validateProgressPayload,
   validateResponsePayload,
@@ -539,17 +541,47 @@ export async function processOutboxPayload(
   pendingRequests: Map<string, PendingInboxRequest>,
 ): Promise<void> {
   if (validateResponsePayload(payload)) {
-    await processOutboxResponse(payload, fallbackAccountId, pendingRequests);
+    const bound = bindIpcPayloadIdentity(
+      payload,
+      fallbackAccountId,
+      pendingRequests,
+    );
+    if (
+      bound.eventId &&
+      !(await claimOutboundIpcReceipt(
+        bound.accountId!,
+        `response:${bound.requestId}`,
+      ))
+    )
+      return;
+    await processOutboxResponse(bound, fallbackAccountId, pendingRequests);
     return;
   }
 
   if (validateMessagePayload(payload)) {
-    await processOutboxMessage(payload, fallbackAccountId, pendingRequests);
+    const bound = bindIpcPayloadIdentity(
+      payload,
+      fallbackAccountId,
+      pendingRequests,
+    );
+    if (
+      bound.eventId &&
+      !(await claimOutboundIpcReceipt(
+        bound.accountId!,
+        `message:${bound.eventId}`,
+      ))
+    )
+      return;
+    await processOutboxMessage(bound, fallbackAccountId, pendingRequests);
     return;
   }
 
   if (validateProgressPayload(payload)) {
-    await processOutboxProgress(payload, fallbackAccountId, pendingRequests);
+    await processOutboxProgress(
+      bindIpcPayloadIdentity(payload, fallbackAccountId, pendingRequests),
+      fallbackAccountId,
+      pendingRequests,
+    );
     return;
   }
 

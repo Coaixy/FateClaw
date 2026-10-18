@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
+import {
+  decodeControlIpc,
+  encodeControlIpc,
+  encodeRuntimeIpc,
+} from '../../src/runtime/ipc-security.js';
 import Fastify from 'fastify';
 
 const { mockGetChatSession, mockGetUserById, mockRedis } = vi.hoisted(() => ({
@@ -38,6 +44,7 @@ beforeEach(() => {
   mockGetChatSession.mockResolvedValue({
     id: 'session-1',
     user_id: 'user-1',
+    account_id: 'web:user-1',
   });
   mockGetUserById.mockResolvedValue({
     id: 'user-1',
@@ -151,11 +158,16 @@ describe('AI Chat stream tickets', () => {
     expect(mockGetChatSession).toHaveBeenCalledWith('session-1');
     expect(mockRedis.set).toHaveBeenCalledWith(
       expect.stringMatching(/^aichat:stream-ticket:[a-f0-9]{64}$/),
-      expect.stringContaining('"sessionId":"session-1"'),
+      expect.any(String),
       'EX',
       60, // 与源码 STREAM_TICKET_TTL_SECONDS 保持一致
     );
     expect(mockRedis.set.mock.calls[0][0]).not.toContain(result.ticket);
+    const [key, raw] = mockRedis.set.mock.calls[0];
+    expect(raw).not.toContain('"userId"');
+    expect(
+      JSON.parse(decodeControlIpc('stream-ticket', key, raw)),
+    ).toMatchObject({ userId: 'user-1', sessionId: 'session-1' });
   });
 
   it('rejects ticket issuing when the session does not belong to the user', async () => {
@@ -175,11 +187,16 @@ describe('AI Chat stream tickets', () => {
 
   it('consumes a ticket once and validates its session owner', async () => {
     mockRedis.eval.mockResolvedValueOnce(
-      JSON.stringify({
-        userId: 'user-1',
-        sessionId: 'session-1',
-        expiresAt: new Date(Date.now() + 30_000).toISOString(),
-      }),
+      encodeControlIpc(
+        'stream-ticket',
+        `aichat:stream-ticket:${createHash('sha256').update('ticket-1').digest('hex')}`,
+        JSON.stringify({
+          userId: 'user-1',
+          sessionId: 'session-1',
+          expiresAt: new Date(Date.now() + 30_000).toISOString(),
+        }),
+        60_000,
+      ),
     );
 
     await expect(
@@ -245,12 +262,17 @@ describe('AI Chat WebSocket routes', () => {
       disconnect: vi.fn(),
     });
     mockRedis.duplicate.mockReturnValue(subscriber);
-    mockRedis.eval.mockImplementation(async () =>
-      JSON.stringify({
-        userId: 'user-1',
-        sessionId: 'session-1',
-        expiresAt: new Date(Date.now() + 30_000).toISOString(),
-      }),
+    mockRedis.eval.mockImplementation(async (_script, _count, key) =>
+      encodeControlIpc(
+        'stream-ticket',
+        key,
+        JSON.stringify({
+          userId: 'user-1',
+          sessionId: 'session-1',
+          expiresAt: new Date(Date.now() + 30_000).toISOString(),
+        }),
+        60_000,
+      ),
     );
     const app = Fastify();
     await registerAiChatStreamWebSocket(app);
@@ -275,9 +297,20 @@ describe('AI Chat WebSocket routes', () => {
       type: 'assistant_delta',
       delta: 'hello',
       snapshot: 'hello',
+      accountId: 'web:user-1',
+      sessionId: 'session-1',
     });
-    subscriber.emit('message', aiChatStreamChannel('session-1'), event);
-    await expect(received).resolves.toBe(event);
+    subscriber.emit(
+      'message',
+      aiChatStreamChannel('session-1'),
+      JSON.stringify({ type: 'assistant_delta', snapshot: 'forged' }),
+    );
+    subscriber.emit(
+      'message',
+      aiChatStreamChannel('session-1'),
+      encodeRuntimeIpc('web:user-1', aiChatStreamChannel('session-1'), event),
+    );
+    expect(JSON.parse(await received)).toMatchObject(JSON.parse(event));
     const pong = new Promise<void>((resolve) =>
       second.once('pong', () => resolve()),
     );

@@ -9,6 +9,8 @@ import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
 import type { NormalizedRuntimeTokenUsage } from './token-usage.js';
+import { InvalidAiChatPayloadError } from '../shared/ipc-errors.js';
+export { InvalidAiChatPayloadError } from '../shared/ipc-errors.js';
 
 // ─── 公共类型 ──────────────────────────────────────────
 
@@ -154,6 +156,7 @@ export interface CancelInboxRequestPayload {
 
 export interface SendMessageIpcPayload {
   type: 'message';
+  eventId?: string;
   accountId?: string;
   requestId?: string;
   /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
@@ -177,6 +180,7 @@ export interface SendMessageIpcPayload {
 
 export interface ProgressIpcPayload {
   type: 'progress';
+  eventId?: string;
   accountId?: string;
   requestId?: string;
   text?: string;
@@ -207,6 +211,7 @@ export interface ProgressIpcPayload {
 
 export interface ResponseIpcPayload {
   type: 'response';
+  eventId?: string;
   accountId?: string;
   requestId?: string;
   /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
@@ -253,6 +258,21 @@ export interface ResponseIpcPayload {
 
 // ─── 验证函数 ─────────────────────────────────────────
 
+function validIdentityFields(record: Record<string, unknown>): boolean {
+  return [
+    'accountId',
+    'requestId',
+    'sessionId',
+    'ownerUserId',
+    'userMessageId',
+    'eventId',
+  ].every(
+    (field) =>
+      record[field] === undefined ||
+      (typeof record[field] === 'string' && record[field].length > 0),
+  );
+}
+
 export function validateMessagePayload(
   payload: unknown,
 ): payload is SendMessageIpcPayload {
@@ -261,7 +281,11 @@ export function validateMessagePayload(
   }
 
   const record = payload as Record<string, unknown>;
-  return record.type === 'message' && typeof record.text === 'string';
+  return (
+    record.type === 'message' &&
+    typeof record.text === 'string' &&
+    validIdentityFields(record)
+  );
 }
 
 export function validateProgressPayload(
@@ -272,7 +296,11 @@ export function validateProgressPayload(
   }
 
   const record = payload as Record<string, unknown>;
-  return record.type === 'progress' && typeof record.text === 'string';
+  return (
+    record.type === 'progress' &&
+    typeof record.text === 'string' &&
+    validIdentityFields(record)
+  );
 }
 
 export function validateResponsePayload(
@@ -285,6 +313,7 @@ export function validateResponsePayload(
   const record = payload as Record<string, unknown>;
   return (
     record.type === 'response' &&
+    validIdentityFields(record) &&
     typeof record.requestId === 'string' &&
     typeof record.text === 'string' &&
     (record.status === 'success' || record.status === 'error')
@@ -358,4 +387,37 @@ export async function resolveAccountId(
   return getSingleAccountIdIfOnlyOne();
 }
 
-export class InvalidAiChatPayloadError extends Error {}
+export function bindIpcPayloadIdentity<
+  T extends SendMessageIpcPayload | ProgressIpcPayload | ResponseIpcPayload,
+>(
+  payload: T,
+  queueAccountId: string | undefined,
+  pendingRequests: Map<string, PendingInboxRequest>,
+): T {
+  const pending = payload.requestId
+    ? pendingRequests.get(payload.requestId)
+    : undefined;
+  const accountId = queueAccountId ?? pending?.accountId ?? payload.accountId;
+  if (
+    !accountId ||
+    (payload.accountId !== undefined && payload.accountId !== accountId) ||
+    (pending && pending.accountId !== accountId)
+  )
+    throw new InvalidAiChatPayloadError('IPC account mismatch');
+  const record = payload as SendMessageIpcPayload;
+  for (const field of ['sessionId', 'ownerUserId', 'userMessageId'] as const) {
+    if (
+      pending?.[field] !== undefined &&
+      record[field] !== undefined &&
+      pending[field] !== record[field]
+    )
+      throw new InvalidAiChatPayloadError('IPC request context mismatch');
+  }
+  return {
+    ...payload,
+    accountId,
+    ...(pending?.sessionId ? { sessionId: pending.sessionId } : {}),
+    ...(pending?.ownerUserId ? { ownerUserId: pending.ownerUserId } : {}),
+    ...(pending?.userMessageId ? { userMessageId: pending.userMessageId } : {}),
+  };
+}

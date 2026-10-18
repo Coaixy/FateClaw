@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { getDbPool } from '../db-pool.js';
 import { storeMessage } from './chat-repository.js';
+import { InvalidAiChatPayloadError } from '../../shared/ipc-errors.js';
 import type { AiChatSubmission } from '../../runtime/request-types.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import {
@@ -212,23 +213,52 @@ export async function interruptAgentRequest(
   return result.rowCount === 1;
 }
 
+interface ResultContext {
+  sessionId?: string;
+  ownerUserId?: string;
+  userMessageId?: string;
+}
+
+function assertResultContext(
+  request:
+    | Pick<
+        DurableRequest,
+        'account_id' | 'session_id' | 'owner_user_id' | 'user_message_id'
+      >
+    | undefined,
+  accountId: string,
+  context?: ResultContext,
+): void {
+  if (!request) return;
+  if (
+    request.account_id !== accountId ||
+    (context?.sessionId !== undefined &&
+      context.sessionId !== request.session_id) ||
+    (context?.ownerUserId !== undefined &&
+      context.ownerUserId !== request.owner_user_id) ||
+    (context?.userMessageId !== undefined &&
+      request.user_message_id !== null &&
+      context.userMessageId !== request.user_message_id)
+  )
+    throw new InvalidAiChatPayloadError('Result request context mismatch');
+}
+
 export async function withAgentResultDelivery(
   requestId: string,
   accountId: string,
   deliver: (client: pg.PoolClient) => Promise<string | null>,
+  context?: ResultContext,
 ): Promise<string | null> {
   const client = await getDbPool().connect();
   let discardClient = false;
   try {
     await client.query('BEGIN');
-    const admitted = await client.query<{ account_id: string }>(
-      'SELECT account_id FROM agent_requests WHERE request_id=$1 FOR UPDATE',
+    const admitted = await client.query<DurableRequest>(
+      'SELECT account_id,session_id,owner_user_id,user_message_id FROM agent_requests WHERE request_id=$1 FOR UPDATE',
       [requestId],
     );
     // Legacy results have no admission row; durable results must match its owner.
-    if (admitted.rows[0] && admitted.rows[0].account_id !== accountId) {
-      throw new Error('Result account mismatch');
-    }
+    assertResultContext(admitted.rows[0], accountId, context);
     await client.query(
       `INSERT INTO agent_result_deliveries (request_id,account_id) VALUES ($1,$2)
        ON CONFLICT (request_id) DO NOTHING`,
@@ -284,18 +314,18 @@ export async function withAgentInterruptionDelivery(
   requestId: string,
   accountId: string,
   deliver: (client: pg.PoolClient) => Promise<string | null>,
+  context?: ResultContext,
 ): Promise<string | null> {
   const client = await getDbPool().connect();
   let discardClient = false;
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query<{ account_id: string; state: string }>(
-      'SELECT account_id,state FROM agent_requests WHERE request_id=$1 FOR UPDATE',
+    const { rows } = await client.query<DurableRequest>(
+      'SELECT account_id,state,session_id,owner_user_id,user_message_id FROM agent_requests WHERE request_id=$1 FOR UPDATE',
       [requestId],
     );
     const request = rows[0];
-    if (request && request.account_id !== accountId)
-      throw new Error('Result account mismatch');
+    assertResultContext(request, accountId, context);
     // Missing rows are legacy in-flight requests. Never overwrite a known result.
     const finalMessageId =
       request && !['running', 'interrupted'].includes(request.state)

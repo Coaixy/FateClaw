@@ -3,6 +3,7 @@ import { getDbPool, type DbQueryable } from '../db-pool.js';
 import { logger } from '../logger.js';
 import { getRedis } from '../redis.js';
 import { getAccountsByUserId } from './accounts-repository.js';
+import { InvalidAiChatPayloadError } from '../../shared/ipc-errors.js';
 
 /** Redis 中每个账号保留的最大历史消息条数。 */
 const HISTORY_REDIS_MAX = 500;
@@ -11,9 +12,12 @@ export async function storeMessage(
   msg: NewMessage,
   db: DbQueryable = getDbPool(),
 ): Promise<void> {
-  await db.query(
+  const result = await db.query(
     `INSERT INTO messages (id, account_id, user_id, sender, sender_name, content, timestamp, is_from_me, is_bot_message, tool_context, session_id, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+     WHERE $11::text IS NULL OR EXISTS (
+       SELECT 1 FROM chat_sessions WHERE id=$11 AND account_id=$2
+         AND ($3::text IS NULL OR user_id=$3) AND deleted_at IS NULL)
      ON CONFLICT (id, account_id) DO UPDATE SET
        user_id = EXCLUDED.user_id,
        sender = EXCLUDED.sender,
@@ -40,6 +44,8 @@ export async function storeMessage(
       msg.metadata ? JSON.stringify(msg.metadata) : null,
     ],
   );
+  if (result.rowCount === 0)
+    throw new InvalidAiChatPayloadError('Message session ownership mismatch');
 
   // AI 对话消息不同步到 Redis（Redis 仅用于微信 recall_history 工具）。
   if (msg.session_id) return;

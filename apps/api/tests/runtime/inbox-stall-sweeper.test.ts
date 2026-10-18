@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeRuntimeIpc } from '../../src/runtime/ipc-security.js';
 
 const {
   mockLindex,
@@ -76,18 +77,22 @@ import { runInboxStallSweepOnce } from '../../src/runtime/inbox-stall-sweeper.js
 import { INBOX_STALL_FAIL_MS } from '../../src/shared/timeout-chain.js';
 
 function buildPayload(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    type: 'chat',
-    requestId: 'aichat-1-abc',
-    accountId: 'web:acct-1',
-    sessionId: 'session-1',
-    userMessageId: 'msg-1',
-    ownerUserId: 'user-1',
-    timestamp: new Date(
-      Date.now() - INBOX_STALL_FAIL_MS - 60_000,
-    ).toISOString(),
-    ...overrides,
-  });
+  return encodeRuntimeIpc(
+    'web:acct-1',
+    'ipc:web:acct-1:inbox:member',
+    JSON.stringify({
+      type: 'chat',
+      requestId: 'aichat-1-abc',
+      accountId: 'web:acct-1',
+      sessionId: 'session-1',
+      userMessageId: 'msg-1',
+      ownerUserId: 'user-1',
+      timestamp: new Date(
+        Date.now() - INBOX_STALL_FAIL_MS - 60_000,
+      ).toISOString(),
+      ...overrides,
+    }),
+  );
 }
 
 // pop 脚本含 'rpop'，锁释放脚本含 'del'——用脚本内容区分调用目的，
@@ -288,17 +293,21 @@ describe('runInboxStallSweepOnce · ai-chat outbox 无主消息代消费', () =>
   function buildOutboxResponse(
     overrides: Record<string, unknown> = {},
   ): string {
-    return JSON.stringify({
-      type: 'response',
-      requestId: 'aichat-9-zzz',
-      accountId: 'web:acct-1',
-      sessionId: 'session-9',
-      status: 'success',
-      text: '这是生成好的回复',
-      // 超过无主阈值（3 分钟）
-      timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
-      ...overrides,
-    });
+    return encodeRuntimeIpc(
+      'web:acct-1',
+      OUTBOX_KEY,
+      JSON.stringify({
+        type: 'response',
+        requestId: 'aichat-9-zzz',
+        accountId: 'web:acct-1',
+        sessionId: 'session-9',
+        status: 'success',
+        text: '这是生成好的回复',
+        // 超过无主阈值（3 分钟）
+        timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
+        ...overrides,
+      }),
+    );
   }
 
   beforeEach(() => {
