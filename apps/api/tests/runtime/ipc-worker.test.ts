@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import { Redis } from 'ioredis';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeRuntimeIpc, encodeRuntimeIpc } from '#runtime/ipc-security';
+import { getRedis } from '#infrastructure/redis';
 
 const {
   mockGet,
@@ -13,6 +16,7 @@ const {
   mockRpoplpush,
   mockLoggerError,
   mockLoggerInfo,
+  mockLoggerWarn,
   mockEnsureLocalAgentRunning,
   mockReleaseLocalAgent,
   mockRetainLocalAgent,
@@ -38,6 +42,7 @@ const {
   mockRpoplpush: vi.fn(async () => null),
   mockLoggerError: vi.fn(),
   mockLoggerInfo: vi.fn(),
+  mockLoggerWarn: vi.fn(),
   mockEnsureLocalAgentRunning: vi.fn(async () => undefined),
   mockReleaseLocalAgent: vi.fn(async () => undefined),
   mockRetainLocalAgent: vi.fn((accountId: string) => accountId),
@@ -102,7 +107,7 @@ vi.mock('#infrastructure/logger', () => ({
     debug: vi.fn(),
     error: mockLoggerError,
     info: mockLoggerInfo,
-    warn: vi.fn(),
+    warn: mockLoggerWarn,
   },
 }));
 
@@ -202,6 +207,7 @@ function createPending(
 
 beforeEach(() => {
   mockDuplicate.mockImplementation(() => ({
+    on: vi.fn(),
     connect: vi.fn(async () => undefined),
     brpop: vi.fn(() => new Promise<null>(() => {})),
     blmove: vi.fn(() => new Promise<null>(() => {})),
@@ -216,6 +222,7 @@ describe('Redis IPC listener lifecycle', () => {
 
   function createConsumer() {
     return {
+      on: vi.fn(),
       connect: vi.fn<() => Promise<void>>(async () => undefined),
       brpop: vi.fn(async (): Promise<[string, string] | null> => {
         removeAccountListener(accountId);
@@ -231,6 +238,7 @@ describe('Redis IPC listener lifecycle', () => {
 
   function createAiConsumer() {
     return {
+      on: vi.fn(),
       connect: vi.fn(async () => undefined),
       blmove: vi.fn(() => new Promise<null>(() => {})),
       disconnect: vi.fn(),
@@ -335,6 +343,117 @@ describe('Redis IPC listener lifecycle', () => {
     },
   );
 });
+
+// Only use an explicitly supplied disposable Redis, never the application source.
+const testRedisUrl = process.env.FATECLAW_TEST_REDIS_URL;
+it.skipIf(!testRedisUrl)(
+  'keeps both real IPC consumers blocking and delivers again after reconnecting',
+  async () => {
+    _resetIpcWorkerForTests();
+    vi.clearAllMocks();
+    const originalGetRedis = vi.mocked(getRedis).getMockImplementation()!;
+    const commands = new Redis(testRedisUrl!, {
+      maxRetriesPerRequest: 1,
+      commandTimeout: 5_000,
+      connectTimeout: 5_000,
+      enableOfflineQueue: false,
+      enableReadyCheck: true,
+      lazyConnect: true,
+    });
+    const duplicate = vi.spyOn(commands, 'duplicate');
+    const inspectProcessing = vi.spyOn(commands, 'lindex');
+    const accountId = `web:test-${randomUUID()}`;
+    const queue = `ipc:${accountId}:outbox`;
+    const aiQueue = `ipc:${accountId}:ai-chat:outbox`;
+    const payload = { type: 'progress', text: 'synthetic progress' };
+    const waitOptions = { timeout: 3_000, interval: 25 };
+    try {
+      await commands.connect();
+      vi.mocked(getRedis).mockReturnValue(commands);
+      // Exercise readiness with nonzero server latency as well as blocking reads.
+      await commands.call('CLIENT', 'PAUSE', 50, 'ALL');
+      addAccountListener(accountId);
+
+      // A second processing check proves BLMOVE completed an idle blocking cycle.
+      await vi.waitFor(() => {
+        expect(inspectProcessing.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(duplicate).toHaveBeenCalledTimes(2);
+        for (const result of duplicate.mock.results) {
+          expect(result.value.status).toBe('ready');
+        }
+      }, waitOptions);
+      expect(mockLoggerError).not.toHaveBeenCalled();
+
+      const failure = new Error('synthetic consumer connection failure');
+      const consumer = duplicate.mock.results[0].value;
+      for (const result of duplicate.mock.results) {
+        result.value.emit('error', failure);
+      }
+      expect(mockLoggerWarn).toHaveBeenCalledTimes(2);
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        {
+          accountId,
+          err: {
+            type: failure.name,
+            message: failure.message,
+            stack: failure.stack,
+          },
+        },
+        'Redis IPC 连接异常',
+      );
+
+      for (let round = 1; round <= 2; round += 1) {
+        await commands.lpush(
+          queue,
+          encodeRuntimeIpc(accountId, queue, JSON.stringify(payload)),
+        );
+        await commands.lpush(
+          aiQueue,
+          encodeRuntimeIpc(accountId, aiQueue, JSON.stringify(payload)),
+        );
+        await vi.waitFor(async () => {
+          expect(processOutboxPayload).toHaveBeenCalledTimes(round);
+          expect(processAiChatOutboxPayload).toHaveBeenCalledTimes(round);
+          expect(processOutboxPayload).toHaveBeenLastCalledWith(
+            expect.objectContaining(payload),
+            accountId,
+            expect.any(Map),
+          );
+          expect(processAiChatOutboxPayload).toHaveBeenLastCalledWith(
+            expect.objectContaining(payload),
+            accountId,
+            expect.any(Map),
+          );
+          expect(await commands.llen(`${aiQueue}:processing`)).toBe(0);
+        }, waitOptions);
+
+        if (round === 1) {
+          consumer.disconnect();
+          await vi.waitFor(() => {
+            expect(duplicate).toHaveBeenCalledTimes(4);
+            expect(duplicate.mock.results[2].value.status).toBe('ready');
+            expect(duplicate.mock.results[3].value.status).toBe('ready');
+          }, waitOptions);
+          expect(mockLoggerError).toHaveBeenCalledTimes(1);
+        }
+      }
+      removeAccountListener(accountId);
+      await vi.waitFor(() => {
+        expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
+      }, waitOptions);
+      expect(mockLoggerError).toHaveBeenCalledTimes(1);
+    } finally {
+      _resetIpcWorkerForTests();
+      vi.mocked(getRedis).mockImplementation(originalGetRedis);
+      try {
+        await commands.del(queue, aiQueue, `${aiQueue}:processing`);
+      } finally {
+        commands.disconnect();
+      }
+    }
+  },
+  15_000,
+);
 
 describe('cancelAiChatSessionRequest', () => {
   beforeEach(() => {

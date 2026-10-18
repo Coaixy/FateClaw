@@ -454,8 +454,21 @@ function hasPendingRequestsForAccount(accountId: string): boolean {
  * 为单个 account 启动 BRPOP 监听协程。
  */
 async function listenForAccount(accountId: string): Promise<void> {
-  const redis = getRedis().duplicate({ commandTimeout: 0 });
-  const aiRedis = getRedis().duplicate({ commandTimeout: 0 });
+  // The 1s reads fit within the inherited 5s deadline; ioredis treats 0 as immediate.
+  const redis = getRedis().duplicate();
+  const aiRedis = getRedis().duplicate();
+  for (const client of [redis, aiRedis]) {
+    client.on('error', (err) => {
+      // Redis errors can carry command arguments, including authentication values.
+      logger.warn(
+        {
+          accountId,
+          err: { type: err.name, message: err.message, stack: err.stack },
+        },
+        'Redis IPC 连接异常',
+      );
+    });
+  }
   const listener = { running: true, redis, aiRedis };
   accountListeners.set(accountId, listener);
   let lastActivityAtMs = Date.now();
