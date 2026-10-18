@@ -44,6 +44,7 @@ export function durableSubmissionInput(
     pastedBoard: input.pastedBoard,
     history: input.history,
     sessionBoardContexts: input.sessionBoardContexts,
+    piSessionBase: input.piSessionBase,
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,

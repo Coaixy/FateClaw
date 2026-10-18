@@ -14,7 +14,9 @@ export interface PiRuntimeResult {
   usage: TokenUsage;
   skillContext: SkillContextEntry[];
   agentGraph: AgentTaskGraph;
-  piSession?: PiSessionSnapshot;
+  piSession?:
+    | PiSessionSnapshot
+    | import('@fateclaw/contracts/agent').PiSessionFrame;
 }
 
 export interface PiRuntimeInput {

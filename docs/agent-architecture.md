@@ -194,7 +194,7 @@ Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 cu
 
 宿主在 outbox handler 中把 usage、模型、事件计数和摘要写入 `conversation_logs`，把 transcript、traceEvents 和 agentGraph 正文写入 `conversation_log_payloads`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
 
-## Runtime scheduling
+## Runtime scheduling and recovery frames
 
 Capacity scheduling is owned by `apps/api/src/runtime/agent-scheduler.ts`.
 A Redis account lease precedes local startup and the global execution gate.
@@ -203,6 +203,13 @@ occupying global slots. Member priority applies among runnable accounts. Release
 atomically removes account/global ownership and publishes a capacity notification;
 local wakeups and finite reconciliation bound recovery when notifications fail.
 Queued requests are not failed when an earlier execution's child exits.
+
+Pi session frame data is owned by `packages/contracts/src/agent/` and persisted by
+`pi-session-frames-repository.ts` in the result delivery transaction. Full
+checkpoints occur every sixteen frames and after compaction changes the message
+prefix. Lightweight traces remain independent of snapshot storage. See
+[performance and reliability](performance-and-reliability.md) for rollout, resource
+preparation, timing definitions, retention and validation boundaries.
 
 ## Runtime transport and stream batching
 

@@ -1,5 +1,10 @@
 import type pg from 'pg';
 import { getDbPool } from '../db-pool.js';
+import { isPiSessionFrame } from '@fateclaw/contracts/agent/session';
+import {
+  getPiSessionSnapshot,
+  storePiSessionFrame,
+} from './pi-session-frames-repository.js';
 
 export interface ConversationLogRow {
   id: string;
@@ -39,6 +44,7 @@ export interface ConversationLogSummaryRow {
 }
 
 function buildTraceEventsForStorage(log: {
+  requestId: string;
   traceEvents?: unknown[];
   piSession?: unknown;
 }): unknown[] {
@@ -47,11 +53,16 @@ function buildTraceEventsForStorage(log: {
   }
 
   return [
-    {
-      type: 'pi_session_snapshot',
-      timestamp: new Date().toISOString(),
-      session: log.piSession,
-    },
+    ...(log.traceEvents ?? []),
+    ...(isPiSessionFrame(log.piSession)
+      ? [{ type: 'pi_session_frame', requestId: log.requestId }]
+      : [
+          {
+            type: 'pi_session_snapshot',
+            timestamp: new Date().toISOString(),
+            session: log.piSession,
+          },
+        ]),
   ];
 }
 
@@ -74,6 +85,7 @@ export async function storeConversationLog(
     id: string;
     accountId: string;
     requestId: string;
+    sessionId?: string;
     transcript: unknown[];
     usage?: unknown;
     model?: string | null;
@@ -97,6 +109,17 @@ export async function storeConversationLog(
   const client = transaction ?? (await getDbPool().connect());
   try {
     if (!transaction) await client.query('BEGIN');
+    if (isPiSessionFrame(log.piSession)) {
+      if (!log.sessionId)
+        throw new Error('Pi session frame is missing its session owner');
+      await storePiSessionFrame(
+        client,
+        log.requestId,
+        log.sessionId,
+        log.accountId,
+        log.piSession,
+      );
+    }
     await client.query(
       `INSERT INTO conversation_logs (
          id, account_id, request_id, usage, model, provider,
@@ -112,8 +135,8 @@ export async function storeConversationLog(
         log.usage ? JSON.stringify(log.usage) : null,
         log.model ?? null,
         log.provider ?? null,
-        transcript.length,
-        countToolUseEvents(transcript),
+        log.transcript.length,
+        countToolUseEvents(log.transcript),
         traceEvents.length,
         graphSummary ? JSON.stringify(graphSummary) : null,
         null,
@@ -203,7 +226,7 @@ export async function getConversationLogById(
      WHERE l.id = $1`,
     [id],
   );
-  return rows[0] as ConversationLogRow | undefined;
+  return hydratePiSession(rows[0] as ConversationLogRow | undefined);
 }
 
 /**
@@ -234,7 +257,33 @@ export async function getConversationLogByRequestId(
      LIMIT 1`,
     [requestId],
   );
-  return rows[0] as ConversationLogRow | undefined;
+  return hydratePiSession(rows[0] as ConversationLogRow | undefined);
+}
+
+async function hydratePiSession(
+  row: ConversationLogRow | undefined,
+): Promise<ConversationLogRow | undefined> {
+  if (
+    !row?.trace_events?.some(
+      (event) =>
+        event &&
+        typeof event === 'object' &&
+        (event as { type?: string }).type === 'pi_session_frame',
+    )
+  )
+    return row;
+  const snapshot = await getPiSessionSnapshot(row.request_id, row.account_id);
+  if (!snapshot) throw new Error('Missing persisted Pi session frame');
+  return {
+    ...row,
+    trace_events: row.trace_events.map((event) =>
+      event &&
+      typeof event === 'object' &&
+      (event as { type?: string }).type === 'pi_session_frame'
+        ? { type: 'pi_session_snapshot', session: snapshot }
+        : event,
+    ),
+  };
 }
 
 /**
@@ -250,7 +299,6 @@ export async function purgeExpiredTraceEvents(
   // 分批 UPDATE 防止生产大数据量时长事务锁表 + WAL 膨胀
   const BATCH_SIZE = 1000;
   let totalCleared = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const result = await getDbPool().query(
       `WITH target AS (

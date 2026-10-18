@@ -96,6 +96,29 @@ retained for recovery/operator inspection rather than silently evicted.
 - Soul updates lock the canonical and applicable legacy rows in a serializable
   transaction, check the base hash, and report conflicts instead of overwriting.
 
+## Incremental session persistence
+
+Migration `0094_pi_session_frames` adds immutable per-request Pi session frames.
+The first frame is complete; subsequent frames contain only appended messages.
+Every sixteenth frame is a complete checkpoint. Compaction, changed message
+prefixes or an unmatched committed base start a new checkpoint immediately.
+Canonical SHA-256 hashes survive JSONB key reordering, and reconstruction follows
+at most sixteen frames with explicit account/session and integrity checks.
+
+Frames commit with the delivery receipt, log, usage and final messages. Their
+ordering follows durable admission rather than arrival time, so a late older
+result cannot become the latest recovery checkpoint. Conversation logs retain
+lightweight traces and a frame reference; detail queries reconstruct the same
+snapshot interface. Missing local session files restore from the latest durable
+frame before considering historical archives and legacy log snapshots. Frame
+storage follows the owning chat session's lifetime and cascades on physical
+session deletion; debug-trace expiration does not remove recovery state.
+
+New frames are enabled only by an explicit admitted request field. Legacy inbox
+messages and old daemons retain complete snapshots during rollout. Deploy the API
+migration before starting the new daemon. Preserve unresolved results when rolling
+back; an older API cannot reconstruct new frame references.
+
 ## Submission, resources and result latency
 
 Normal submission queries only board fields and checks for a final reply after

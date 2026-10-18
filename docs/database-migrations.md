@@ -56,6 +56,15 @@ policy-row lock keeps an account transaction on one version of the rules.
 The published 0092 migration remains unchanged. Deploy the API and both clients
 together for the new `tiers` policy contract.
 
+## Incremental agent sessions
+
+`0094_pi_session_frames` stores immutable complete checkpoints and appended-message
+deltas for admitted AI Chat requests. Frames belong to their chat session, commit
+with result delivery and cascade on physical session deletion. The latest frame
+index follows admission time. Trace retention does not delete recovery frames.
+The API must apply this migration before the new daemon emits frame results;
+legacy complete snapshots remain readable. No credential values are migrated.
+
 ## Adding an upgrade
 
 `0087_benefit_model_pool` adds pool-scoped membership, a disabled free model pool,

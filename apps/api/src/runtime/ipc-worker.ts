@@ -1276,6 +1276,8 @@ export function submitAiChatInboxRequest(
           pastedBoard: input.pastedBoard,
           history: input.history,
           sessionBoardContexts: input.sessionBoardContexts,
+          piSessionBase: input.piSessionBase,
+          acceptedAtMs: startedAtMs,
           sessionId: input.sessionId,
           userMessageId: input.userMessageId,
           ownerUserId,

@@ -210,6 +210,7 @@ async function storeAiChatConversationLog(args: {
         id: logId,
         accountId: args.accountId,
         requestId: args.payload.requestId,
+        sessionId: args.payload.sessionId,
         transcript: args.payload.transcript ?? [],
         usage: args.payload.usage,
         model: args.payload.model,

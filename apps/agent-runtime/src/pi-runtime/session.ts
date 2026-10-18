@@ -1,3 +1,4 @@
+import { createPiSessionFrame } from '@fateclaw/contracts/agent/session';
 import {
   createAgentSession,
   SettingsManager,
@@ -56,7 +57,9 @@ export interface PiSessionRunResult {
   usage: TokenUsage;
   records: PiToolExecutionRecord[];
   persistedSkillContext: SkillContextEntry[];
-  piSession?: PiSessionSnapshot;
+  piSession?:
+    | PiSessionSnapshot
+    | import('@fateclaw/contracts/agent').PiSessionFrame;
 }
 
 function buildPiSessionSnapshot(args: {
@@ -308,27 +311,34 @@ export async function runPiSession(args: {
         !latestAssistant?.text?.trim()
       )
         throw new Error('免费模型未能完成回答，请稍后重试');
+      const snapshot = buildPiSessionSnapshot({
+        id: piSession.piSessionId,
+        file: piSession.sessionFile,
+        persisted: piSession.persisted,
+        provider: args.containerInput.llmRuntime.piApi,
+        model: args.containerInput.llmRuntime.model,
+        userPrompt: args.containerInput.userMessage,
+        systemPrompt,
+        appendSystemPrompt,
+        allowedTools: allowedToolNames,
+        readableSkills: readableSkills.map(({ name, description }) => ({
+          name,
+          description,
+        })),
+        messages: session.state.messages,
+      });
       return {
         text: latestAssistant?.text ?? lastAssistantText,
         usage,
         records,
         persistedSkillContext: sessionContext.persistedSkillContext,
-        piSession: buildPiSessionSnapshot({
-          id: piSession.piSessionId,
-          file: piSession.sessionFile,
-          persisted: piSession.persisted,
-          provider: args.containerInput.llmRuntime.piApi,
-          model: args.containerInput.llmRuntime.model,
-          userPrompt: args.containerInput.userMessage,
-          systemPrompt,
-          appendSystemPrompt,
-          allowedTools: allowedToolNames,
-          readableSkills: readableSkills.map((skill) => ({
-            name: skill.name,
-            description: skill.description,
-          })),
-          messages: session.state.messages,
-        }),
+        piSession:
+          args.containerInput.piSessionBase !== undefined
+            ? createPiSessionFrame(
+                snapshot,
+                args.containerInput.piSessionBase ?? undefined,
+              )
+            : snapshot,
       };
     } catch (err) {
       // usage 已被事件采集器就地累加为"截至出错时的真实 partial 用量"。

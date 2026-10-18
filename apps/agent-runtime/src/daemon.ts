@@ -395,6 +395,8 @@ async function processInboxMessage(
             inputKind: request.inputKind,
             pastedBoard: request.pastedBoard,
             sessionBoardContexts: request.sessionBoardContexts,
+            piSessionBase: request.piSessionBase,
+            acceptedAtMs: request.acceptedAtMs,
             history: request.history ?? [],
             userName: request.userName,
             assistantName: request.assistantName,

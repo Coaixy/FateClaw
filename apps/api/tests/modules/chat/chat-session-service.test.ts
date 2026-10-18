@@ -100,6 +100,14 @@ vi.mock('../../../src/infrastructure/db.js', () => ({
   updateChatSessionTitle: mockUpdateChatSessionTitle,
 }));
 
+vi.mock(
+  '../../../src/infrastructure/repositories/pi-session-frames-repository.js',
+  () => ({
+    getPiSessionBase: vi.fn(async () => undefined),
+    getPiSessionSnapshot: vi.fn(async () => undefined),
+  }),
+);
+
 vi.mock('../../../src/infrastructure/daily-usage.js', () => ({
   incrementDailyMessageCount: mockIncrementDailyMessageCount,
 }));
@@ -189,7 +197,51 @@ import {
   shareOwnedChatSessionForUser,
 } from '../../../src/modules/chat/chat-session-service.js';
 import { BenefitAdmissionError } from '../../../src/infrastructure/repositories/benefit-repository.js';
+import {
+  getPiSessionBase,
+  getPiSessionSnapshot,
+} from '../../../src/infrastructure/repositories/pi-session-frames-repository.js';
+
 describe('chat-session-service selected board context', () => {
+  it('restores the latest durable frame before considering an older session archive', async () => {
+    mockHasFinalAiChatSessionReply.mockResolvedValue(true);
+    mockReadPiSessionFileState.mockResolvedValueOnce({ hasSessionFile: false });
+    vi.mocked(getPiSessionBase).mockResolvedValueOnce({
+      requestId: 'latest',
+      messageCount: 1,
+      messagesHash: '0'.repeat(64),
+      checkpointDepth: 0,
+    });
+    const snapshot = {
+      persisted: true,
+      provider: 'synthetic',
+      model: 'synthetic',
+      userPrompt: 'synthetic',
+      systemPrompt: 'synthetic',
+      appendSystemPrompt: [],
+      allowedTools: [],
+      readableSkills: [],
+      messageCount: 1,
+      messages: [{ role: 'user', content: 'latest' }],
+    };
+    vi.mocked(getPiSessionSnapshot).mockResolvedValueOnce(snapshot);
+    mockWritePiSessionSnapshotArchiveToFiles.mockResolvedValueOnce({
+      writtenMappingFile: true,
+      writtenSessionFiles: 1,
+    });
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续',
+      inputKind: 'normal',
+      selectedBoardMessageId: undefined,
+      pastedBoard: undefined,
+    });
+    expect(result.ok).toBe(true);
+    expect(mockWritePiSessionSnapshotArchiveToFiles).toHaveBeenCalledWith(
+      'session-1',
+      snapshot,
+    );
+    expect(mockGetChatSessionPiSessionArchive).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
 

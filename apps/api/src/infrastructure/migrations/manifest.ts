@@ -25,6 +25,7 @@ import { benefitTurnsAndConcurrencyMigration } from './versions/0090-benefit-tur
 import { popupAnnouncementsMigration } from './versions/0091-popup-announcements.js';
 import { registrationInvitesMigration } from './versions/0092-registration-invites.js';
 import { registrationInviteTiersMigration } from './versions/0093-registration-invite-tiers.js';
+import { piSessionFramesMigration } from './versions/0094-pi-session-frames.js';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -53,6 +54,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   popupAnnouncementsMigration,
   registrationInvitesMigration,
   registrationInviteTiersMigration,
+  piSessionFramesMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

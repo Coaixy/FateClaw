@@ -1,3 +1,7 @@
+import {
+  getPiSessionBase,
+  getPiSessionSnapshot,
+} from '../../infrastructure/repositories/pi-session-frames-repository.js';
 /**
  * AI 对话会话服务层。
  *
@@ -373,6 +377,21 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
   const piSession = await readPiSessionFileState(session.id);
   if (piSession.hasSessionFile) {
     return { blocked: false };
+  }
+
+  const base = await getPiSessionBase(session.id, session.account_id);
+  const durableSnapshot = base
+    ? await getPiSessionSnapshot(base.requestId, session.account_id)
+    : undefined;
+  if (durableSnapshot) {
+    const restored = await writePiSessionSnapshotArchiveToFiles(
+      session.id,
+      durableSnapshot,
+    );
+    if (restored?.writtenMappingFile && restored.writtenSessionFiles > 0) {
+      await markChatSessionPiSessionArchiveRestored(session.id);
+      return { blocked: false };
+    }
   }
 
   const archive = await getChatSessionPiSessionArchive(session.id);
@@ -933,6 +952,8 @@ async function enqueuePreparedOwnedChatSessionTurn(
       pastedBoard: input.pastedBoard,
       history: [],
       sessionBoardContexts: prepared.sessionBoardContexts,
+      piSessionBase:
+        (await getPiSessionBase(session.id, session.account_id)) ?? null,
       userName: structured.userName,
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,
@@ -993,6 +1014,8 @@ async function completeOwnedChatSessionTurn(
       pastedBoard: input.pastedBoard,
       history: [],
       sessionBoardContexts: prepared.sessionBoardContexts,
+      piSessionBase:
+        (await getPiSessionBase(session.id, session.account_id)) ?? null,
       userName: structured.userName,
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,

@@ -115,7 +115,7 @@ describe('conversation log repository', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
-  it('stores only the pi session snapshot when provided', async () => {
+  it('preserves timing traces alongside the pi session snapshot', async () => {
     const { clientCalls } = createMockPool();
 
     await storeConversationLog({
@@ -135,10 +135,12 @@ describe('conversation log repository', () => {
 
     expect(clientCalls[1]?.params?.[6]).toBe(0);
     expect(clientCalls[1]?.params?.[7]).toBe(0);
-    expect(clientCalls[1]?.params?.[8]).toBe(1);
+    expect(clientCalls[1]?.params?.[8]).toBe(3);
     expect(clientCalls[2]?.params?.[1]).toBe(JSON.stringify([]));
     const storedTraceEvents = JSON.parse(clientCalls[2]?.params?.[2] as string);
     expect(storedTraceEvents).toEqual([
+      { type: 'pi_turn_start' },
+      { type: 'pi_turn_end' },
       {
         type: 'pi_session_snapshot',
         timestamp: expect.any(String),

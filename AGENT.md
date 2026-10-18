@@ -13,7 +13,7 @@ All paths below are relative to the repository root.
 | Dispatch, process lifecycle, or missing replies | `apps/api/src/runtime/resident-agent.ts`, `local-runner.ts`, `ipc-worker.ts`, `ipc-ai-chat-outbox-handler.ts`, `ai-chat-stream.ts` (all in the same directory) | [Runtime architecture](docs/agent-architecture.md) |
 | Model execution and tools | `apps/agent-runtime/src/daemon.ts`, `request-boundary.ts`, `pi-runtime/` (all under `src/`) | [Runtime architecture](docs/agent-architecture.md) |
 | Chart calculation | `apps/api/src/modules/chat/paipan-registry.ts`, `apps/api/src/modules/chat/paipan-runners/` | [API reference](docs/api-reference.md) |
-| Knowledge storage and access | `apps/api/src/modules/skills/text-skill-bundle-store.ts`, `apps/agent-runtime/src/text-skill-bundle.ts`, `apps/agent-runtime/src/pi-runtime/resource-loader.ts` | [Runtime architecture](docs/agent-architecture.md) |
+| Knowledge storage and access | `apps/api/src/modules/skills/skills-service.ts`, `apps/agent-runtime/src/skill-content-cache.ts`, `apps/agent-runtime/src/pi-runtime/resource-loader.ts` | [Runtime architecture](docs/agent-architecture.md) |
 | Membership and billing | `apps/api/src/modules/billing/` | [Entitlements and billing](docs/membership-entitlement-current.md) |
 | User interface | `apps/web/app/`, `apps/web/features/` | [Web guide](apps/web/AGENT.md) |
 | Admin interface | `apps/admin/` | [Admin guide](apps/admin/AGENT.md) |
@@ -26,9 +26,10 @@ All paths below are relative to the repository root.
 
 - The API owns permissions, persistence, billing, chart calculation, and runtime dispatch. `apps/api/src/app/index.ts` is the full startup entry; `dev-api.ts` skips IPC workers and background startup.
 - Redis carries requests and responses between the host and resident processes. Web chat uses runtime IDs of the form `web:{userId}`. `local-runner.ts` selects the source daemon during development and prefers the compiled daemon in production.
+- Shared IPC data and session frames belong to `packages/contracts/src/agent/`; capacity scheduling belongs to `runtime/agent-scheduler.ts`.
 - Chat submission returns acceptance and a request ID. The final reply is persisted by the AI Chat outbox handler and delivered through the stream; an accepted POST is not proof of completion.
 - Model configuration is a request-level `llmRuntime` snapshot. Runtime process environment construction belongs to `apps/api/src/runtime/agent-env.ts`; do not introduce a second model configuration path.
-- Chart runners produce structured artifacts in the API. Knowledge bundles contain Markdown in `.fateclaw/text-skills/`; the database stores metadata and access rules. Runtime resources must remain scoped to the authorized request.
+- Chart runners produce structured artifacts in the API. PostgreSQL owns immutable Skill content revisions and access rules; `.fateclaw/text-skills/` contains rebuildable process-owned snapshots. Runtime resources remain scoped to the authorized request.
 - WeChat availability is gated by `apps/api/src/modules/billing/entitlements.ts`. Consult the [integration guide](docs/openclaw-integration.md) and current callers before changing that path.
 
 ## Validate a change
