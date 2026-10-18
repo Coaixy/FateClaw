@@ -471,6 +471,8 @@ export async function deleteUser(userId: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Payment settlement takes the same user-before-order lock order.
+    await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [userId]);
     // 删除用户作为订阅者 / 创作者 / 拥有者的全部关系数据
     await client.query(
       `DELETE FROM user_skill_subscriptions

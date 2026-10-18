@@ -108,7 +108,7 @@ export type RechargeOrderStatusDto = 'pending' | 'paid' | 'failed';
 
 export interface RechargeOrderDto {
   id: string;
-  user_id: string;
+  user_id: string | null;
   trade_id: string;
   provider: string;
   provider_trade_id: string | null;
@@ -116,6 +116,7 @@ export interface RechargeOrderDto {
   amount_coins: number;
   pay_url: string | null;
   status: RechargeOrderStatusDto;
+  credit_status: 'pending' | 'credited' | 'reconciliation_required';
   paid_at: string | null;
   notified_at: string | null;
   created_at: string;

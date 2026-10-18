@@ -460,9 +460,18 @@ export async function recordCompletedRechargeRefund(
         );
       return toRefund(previous);
     }
+    const owner = await queryOne<{ user_id: string | null }>(
+      client,
+      'SELECT user_id FROM recharge_orders WHERE trade_id=$1',
+      [input.trade_id],
+    );
+    if (owner?.user_id)
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [
+        owner.user_id,
+      ]);
     const order = await queryOne<{
       id: string;
-      user_id: string;
+      user_id: string | null;
       status: string;
       paid_cents: string;
     }>(
@@ -472,7 +481,8 @@ export async function recordCompletedRechargeRefund(
     );
     if (!order || order.status !== 'paid')
       throw new RegistrationInviteError(400, '只能登记已支付订单的已完成退款');
-    await lockAccount(client, order.user_id);
+    // 用户已删除时订单 user_id 已被置空，退款只做财务对账，不再触碰邀请名额。
+    if (order.user_id !== null) await lockAccount(client, order.user_id);
     const refunded = await queryOne<{ cents: string }>(
       client,
       'SELECT COALESCE(sum(amount_cents),0)::text AS cents FROM completed_recharge_refunds WHERE recharge_order_id=$1',
@@ -498,9 +508,10 @@ export async function recordCompletedRechargeRefund(
       ],
     );
     if (!row) throw new Error('Completed recharge refund recording failed');
-    await client.query('SELECT reconcile_registration_invites($1)', [
-      order.user_id,
-    ]);
+    if (order.user_id !== null)
+      await client.query('SELECT reconcile_registration_invites($1)', [
+        order.user_id,
+      ]);
     return toRefund(row);
   });
 }

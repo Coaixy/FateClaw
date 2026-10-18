@@ -249,7 +249,7 @@ export type RechargeOrderStatus = 'pending' | 'paid' | 'failed';
 
 export interface RechargeOrderRow {
   id: string;
-  user_id: string;
+  user_id: string | null;
   trade_id: string;
   provider: 'epay' | string;
   provider_trade_id: string | null;
@@ -257,6 +257,7 @@ export interface RechargeOrderRow {
   amount_coins: number;
   pay_url: string | null;
   status: RechargeOrderStatus;
+  credit_status: 'pending' | 'credited' | 'reconciliation_required';
   paid_at: string | null;
   notified_at: string | null;
   metadata: unknown;
@@ -1018,6 +1019,17 @@ export async function settleRechargeOrderPaid(input: {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Lock the user before its order, matching deletion and recharge triggers.
+    // Re-read the order after waiting: deletion may have detached it meanwhile.
+    const owner = await client.query<{ user_id: string | null }>(
+      'SELECT user_id FROM recharge_orders WHERE trade_id=$1',
+      [input.tradeId],
+    );
+    if (owner.rows[0]?.user_id) {
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [
+        owner.rows[0].user_id,
+      ]);
+    }
     const { rows: orderRows } = await client.query(
       `SELECT * FROM recharge_orders
        WHERE trade_id = $1
@@ -1040,31 +1052,35 @@ export async function settleRechargeOrderPaid(input: {
       throw new Error('充值单状态不可入账');
     }
 
-    await client.query(
-      `UPDATE users
+    if (order.user_id !== null) {
+      const credited = await client.query(
+        `UPDATE users
        SET purchased_coins = purchased_coins + $1
        WHERE id = $2`,
-      [order.amount_coins, order.user_id],
-    );
+        [order.amount_coins, order.user_id],
+      );
+      if (!credited.rowCount) throw new Error('充值用户不存在');
 
-    await insertWalletTransaction(client, {
-      userId: order.user_id,
-      kind: 'recharge_topup',
-      amountCoins: order.amount_coins,
-      balanceSource: 'purchased',
-      requestId: order.trade_id,
-      note: `积分到账 ${order.amount_coins}`,
-      metadata: {
-        trade_id: order.trade_id,
-        provider: order.provider,
-        provider_trade_id: input.providerTradeId ?? order.provider_trade_id,
-        pay_type: input.payType ?? order.pay_type,
-      },
-    });
+      await insertWalletTransaction(client, {
+        userId: order.user_id,
+        kind: 'recharge_topup',
+        amountCoins: order.amount_coins,
+        balanceSource: 'purchased',
+        requestId: order.trade_id,
+        note: `积分到账 ${order.amount_coins}`,
+        metadata: {
+          trade_id: order.trade_id,
+          provider: order.provider,
+          provider_trade_id: input.providerTradeId ?? order.provider_trade_id,
+          pay_type: input.payType ?? order.pay_type,
+        },
+      });
+    }
 
     const { rows: updatedRows } = await client.query(
       `UPDATE recharge_orders
        SET status = 'paid',
+           credit_status = $6,
            provider_trade_id = COALESCE($2, provider_trade_id),
            pay_type = COALESCE($3::text, pay_type),
            paid_at = COALESCE($4::timestamptz, NOW()),
@@ -1079,6 +1095,7 @@ export async function settleRechargeOrderPaid(input: {
         input.payType ?? null,
         input.paidAt ?? null,
         JSON.stringify({ notify_payload: input.notifyPayload ?? null }),
+        order.user_id === null ? 'reconciliation_required' : 'credited',
       ],
     );
 

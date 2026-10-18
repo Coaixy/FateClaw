@@ -76,8 +76,8 @@ function shortId(value: string | null | undefined) {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
-function userLabel(phone: string | null | undefined, userId: string) {
-  return phone || shortId(userId);
+function userLabel(phone: string | null | undefined, userId: string | null) {
+  return phone || (userId ? shortId(userId) : '已删除用户');
 }
 
 function rechargeStatusLabel(status: AdminRechargeOrderStatus) {
@@ -139,14 +139,16 @@ function replaceBillingQuery(input: {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams();
   if (input.userId.trim()) params.set('user_id', input.userId.trim());
-  if (input.orderStatus !== 'all') params.set('order_status', input.orderStatus);
+  if (input.orderStatus !== 'all')
+    params.set('order_status', input.orderStatus);
   if (input.payType !== 'all') params.set('pay_type', input.payType);
   if (input.walletKind !== 'all') params.set('wallet_kind', input.walletKind);
   if (input.holdState !== 'all') params.set('hold_state', input.holdState);
   if (input.chargeState !== 'all') {
     params.set('charge_state', input.chargeState);
   }
-  if (input.orderPage > 0) params.set('order_page', String(input.orderPage + 1));
+  if (input.orderPage > 0)
+    params.set('order_page', String(input.orderPage + 1));
   if (input.transactionPage > 0) {
     params.set('wallet_page', String(input.transactionPage + 1));
   }
@@ -213,7 +215,11 @@ function ReservationStatusBadge({
   if (reservation.hold_state === 'held') {
     return <StatusBadge tone="warning">冻结中</StatusBadge>;
   }
-  return <StatusBadge tone="neutral">{holdStateLabel(reservation.hold_state)}</StatusBadge>;
+  return (
+    <StatusBadge tone="neutral">
+      {holdStateLabel(reservation.hold_state)}
+    </StatusBadge>
+  );
 }
 
 function MetricCard({
@@ -242,7 +248,10 @@ function MetricCard({
 function EmptyRows({ colSpan, text }: { colSpan: number; text: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-12 text-center text-[13px] text-muted">
+      <td
+        colSpan={colSpan}
+        className="px-4 py-12 text-center text-[13px] text-muted"
+      >
         {text}
       </td>
     </tr>
@@ -295,11 +304,7 @@ function PaginationControls({
   );
 }
 
-function DataTable({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function DataTable({ children }: { children: React.ReactNode }) {
   return (
     // 横向滚动 + 限高滚动容器：配合 sticky thead，长表格表头始终可见，
     // 窄屏下宽表横向滚动不撑破布局。
@@ -336,7 +341,9 @@ function BodyCell({
   className?: string;
 }) {
   return (
-    <td className={`border-b border-hairline px-4 py-3 align-top text-[13px] ${className}`}>
+    <td
+      className={`border-b border-hairline px-4 py-3 align-top text-[13px] ${className}`}
+    >
       {children}
     </td>
   );
@@ -367,10 +374,12 @@ function OrdersTable({ orders }: { orders: AdminRechargeOrder[] }) {
                 {formatDateTime(order.created_at)}
               </BodyCell>
               <BodyCell>
-                <div className="font-medium">{userLabel(order.user_phone, order.user_id)}</div>
+                <div className="font-medium">
+                  {userLabel(order.user_phone, order.user_id)}
+                </div>
                 <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
                   <span>{shortId(order.user_id)}</span>
-                  <AdminCopyButton text={order.user_id} />
+                  {order.user_id && <AdminCopyButton text={order.user_id} />}
                 </div>
               </BodyCell>
               <BodyCell className="whitespace-nowrap font-semibold tabular-nums">
@@ -379,7 +388,11 @@ function OrdersTable({ orders }: { orders: AdminRechargeOrder[] }) {
               <BodyCell>
                 <OrderStatusBadge status={order.status} />
                 <div className="mt-1 text-[11px] text-muted">
-                  {order.paid_at ? formatDateTime(order.paid_at) : '未入账'}
+                  {order.credit_status === 'reconciliation_required'
+                    ? '已收款，待人工对账'
+                    : order.paid_at
+                      ? formatDateTime(order.paid_at)
+                      : '未入账'}
                 </div>
               </BodyCell>
               <BodyCell className="whitespace-nowrap">
@@ -388,7 +401,9 @@ function OrdersTable({ orders }: { orders: AdminRechargeOrder[] }) {
               <BodyCell className="font-mono text-[12px]">
                 <span className="inline-flex items-center gap-1">
                   {shortId(order.trade_id)}
-                  {order.trade_id ? <AdminCopyButton text={order.trade_id} /> : null}
+                  {order.trade_id ? (
+                    <AdminCopyButton text={order.trade_id} />
+                  ) : null}
                 </span>
               </BodyCell>
               <BodyCell className="font-mono text-[12px] text-muted">
@@ -557,17 +572,25 @@ export default function AdminBillingPage() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [orders, setOrders] = useState<AdminRechargeOrder[]>([]);
   const [orderTotal, setOrderTotal] = useState(0);
-  const [transactions, setTransactions] = useState<AdminWalletTransaction[]>([]);
+  const [transactions, setTransactions] = useState<AdminWalletTransaction[]>(
+    [],
+  );
   const [transactionTotal, setTransactionTotal] = useState(0);
   const [reservations, setReservations] = useState<
     AdminBillingRequestReservation[]
   >([]);
   const [reservationTotal, setReservationTotal] = useState(0);
-  const [userId, setUserId] = useState(() => readInitialBillingQuery('user_id'));
+  const [userId, setUserId] = useState(() =>
+    readInitialBillingQuery('user_id'),
+  );
   const [orderStatus, setOrderStatus] = useState<
     'all' | AdminRechargeOrderStatus
   >(() =>
-    readInitialOption('order_status', ['all', 'pending', 'paid', 'failed'], 'all'),
+    readInitialOption(
+      'order_status',
+      ['all', 'pending', 'paid', 'failed'],
+      'all',
+    ),
   );
   const [payType, setPayType] = useState<'all' | AdminRechargePayType>(() =>
     readInitialOption('pay_type', ['all', 'alipay', 'wechat'], 'all'),
@@ -588,7 +611,9 @@ export default function AdminBillingPage() {
   );
   const [chargeState, setChargeState] = useState<
     'all' | AdminBillingChargeState
-  >(() => readInitialOption('charge_state', ['all', 'pending', 'charged'], 'all'));
+  >(() =>
+    readInitialOption('charge_state', ['all', 'pending', 'charged'], 'all'),
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -711,34 +736,30 @@ export default function AdminBillingPage() {
     setRefreshing(true);
     setError('');
     try {
-      const [
-        nextStats,
-        nextOrders,
-        nextTransactions,
-        nextReservations,
-      ] = await Promise.all([
-        admin.stats({ rechargeRange: '30d' }),
-        admin.rechargeOrders({
-          user_id: appliedUserId,
-          status: orderStatus === 'all' ? undefined : orderStatus,
-          pay_type: payType === 'all' ? undefined : payType,
-          limit: PAGE_SIZE,
-          offset: orderPage * PAGE_SIZE,
-        }),
-        admin.walletTransactions({
-          user_id: appliedUserId,
-          kind: walletKind === 'all' ? undefined : walletKind,
-          limit: PAGE_SIZE,
-          offset: transactionPage * PAGE_SIZE,
-        }),
-        admin.billingReservations({
-          user_id: appliedUserId,
-          hold_state: holdState === 'all' ? undefined : holdState,
-          charge_state: chargeState === 'all' ? undefined : chargeState,
-          limit: PAGE_SIZE,
-          offset: reservationPage * PAGE_SIZE,
-        }),
-      ]);
+      const [nextStats, nextOrders, nextTransactions, nextReservations] =
+        await Promise.all([
+          admin.stats({ rechargeRange: '30d' }),
+          admin.rechargeOrders({
+            user_id: appliedUserId,
+            status: orderStatus === 'all' ? undefined : orderStatus,
+            pay_type: payType === 'all' ? undefined : payType,
+            limit: PAGE_SIZE,
+            offset: orderPage * PAGE_SIZE,
+          }),
+          admin.walletTransactions({
+            user_id: appliedUserId,
+            kind: walletKind === 'all' ? undefined : walletKind,
+            limit: PAGE_SIZE,
+            offset: transactionPage * PAGE_SIZE,
+          }),
+          admin.billingReservations({
+            user_id: appliedUserId,
+            hold_state: holdState === 'all' ? undefined : holdState,
+            charge_state: chargeState === 'all' ? undefined : chargeState,
+            limit: PAGE_SIZE,
+            offset: reservationPage * PAGE_SIZE,
+          }),
+        ]);
 
       setStats(nextStats);
       setOrders(nextOrders.orders);
@@ -832,10 +853,7 @@ export default function AdminBillingPage() {
     const limitText = reconcileLimit.trim();
     const minutes = minutesText ? Number(minutesText) : undefined;
     const limit = limitText ? Number(limitText) : undefined;
-    if (
-      minutes !== undefined &&
-      (!Number.isFinite(minutes) || minutes < 1)
-    ) {
+    if (minutes !== undefined && (!Number.isFinite(minutes) || minutes < 1)) {
       setReconcileMessage('陈旧分钟数必须大于等于 1');
       toast('error', '陈旧分钟数必须大于等于 1');
       return;
@@ -912,9 +930,7 @@ export default function AdminBillingPage() {
         }
       />
 
-      {error ? (
-        <AdminAlert tone="error">{error}</AdminAlert>
-      ) : null}
+      {error ? <AdminAlert tone="error">{error}</AdminAlert> : null}
 
       {summary ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1028,7 +1044,10 @@ export default function AdminBillingPage() {
             </select>
           </label>
         </div>
-        <AdminActiveFilters chips={activeFilterChips} onClear={clearAllFilters} />
+        <AdminActiveFilters
+          chips={activeFilterChips}
+          onClear={clearAllFilters}
+        />
       </AdminFilterSection>
 
       <ReconcileSection

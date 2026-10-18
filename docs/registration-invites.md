@@ -128,12 +128,13 @@ SMS/payment-channel execution were not exercised (unverified).
 Fragment-link browser checks also confirmed the code is absent from GET request
 URLs and Referer headers while SMS and signup still receive it in their POST bodies.
 
-Source inspection also found an existing administrative deletion limitation:
-`deleteUser()` does not remove `recharge_orders`, whose user foreign key prevents
-deleting a paying account. Invitation code consumption remains durable when an
-otherwise deletable invitee is removed. Changing the existing payer deletion
-policy is outside this change; that administrative path was not exercised
-(unverified).
+User deletion detaches recharge orders instead of removing them, including their
+completed refund records. Skill access invitations cascade with their creator.
+A payment received after deletion records `status=paid` and
+`credit_status=reconciliation_required` without crediting a wallet. The admin
+billing list exposes this state for manual reconciliation. Payment settlement,
+completed-refund recording and deletion lock the user before the order to avoid
+lock inversions. Invitation code consumption remains durable when an invitee is removed.
 
 Migration `0093_registration_invite_tiers` upgrades the single-threshold policy
 to the new ladder, preserves code lifetimes, used invitations and manual

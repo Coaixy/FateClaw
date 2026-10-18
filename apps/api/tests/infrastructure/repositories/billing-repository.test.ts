@@ -162,11 +162,21 @@ describe('billing repository', () => {
       pay_type: 'alipay',
       amount_coins: 10,
       status: 'pending',
+      credit_status: 'pending',
     };
-    const updated = { ...order, status: 'paid' };
+    const updated = { ...order, status: 'paid', credit_status: 'credited' };
     const { clientCalls, client } = createMockPool(
       [],
-      [[], [order], [], [], [updated], []],
+      [
+        [],
+        [{ user_id: 'user-1' }],
+        [{ id: 'user-1' }],
+        [order],
+        { rowCount: 1 },
+        [],
+        [updated],
+        [],
+      ],
     );
 
     await expect(
@@ -178,13 +188,14 @@ describe('billing repository', () => {
     ).resolves.toEqual(updated);
 
     expect(clientCalls[0]?.sql).toBe('BEGIN');
-    expect(clientCalls[1]?.sql).toContain('FOR UPDATE');
-    expect(clientCalls[2]?.sql).toContain('SET purchased_coins');
-    expect(clientCalls[3]?.sql).toContain('INSERT INTO wallet_transactions');
-    expect(clientCalls[3]?.params?.[1]).toBe('user-1');
-    expect(clientCalls[3]?.params?.[3]).toBe(10);
-    expect(clientCalls[4]?.sql).toContain('UPDATE recharge_orders');
-    expect(clientCalls[5]?.sql).toBe('COMMIT');
+    expect(clientCalls[2]?.sql).toContain('FROM users WHERE id=$1 FOR UPDATE');
+    expect(clientCalls[3]?.sql).toContain('FOR UPDATE');
+    expect(clientCalls[4]?.sql).toContain('SET purchased_coins');
+    expect(clientCalls[5]?.sql).toContain('INSERT INTO wallet_transactions');
+    expect(clientCalls[5]?.params?.[1]).toBe('user-1');
+    expect(clientCalls[5]?.params?.[3]).toBe(10);
+    expect(clientCalls[6]?.sql).toContain('UPDATE recharge_orders');
+    expect(clientCalls[7]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 

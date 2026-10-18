@@ -335,7 +335,7 @@ export type AdminRechargePayType = 'alipay' | 'wechat';
 /** 管理后台充值订单行。 */
 export interface AdminRechargeOrder {
   id: string;
-  user_id: string;
+  user_id: string | null;
   user_phone: string | null;
   trade_id: string;
   provider: string;
@@ -344,6 +344,7 @@ export interface AdminRechargeOrder {
   amount_coins: number;
   pay_url: string | null;
   status: AdminRechargeOrderStatus;
+  credit_status: 'pending' | 'credited' | 'reconciliation_required';
   paid_at: string | null;
   notified_at: string | null;
   metadata: unknown;

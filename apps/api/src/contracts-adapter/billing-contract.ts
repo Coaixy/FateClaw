@@ -199,6 +199,7 @@ export function toRechargeOrderDto(row: RechargeOrderRow): RechargeOrderDto {
     amount_coins: row.amount_coins,
     pay_url: row.pay_url,
     status: row.status,
+    credit_status: row.credit_status,
     paid_at: row.paid_at,
     notified_at: row.notified_at,
     created_at: row.created_at,
