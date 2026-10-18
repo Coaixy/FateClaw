@@ -53,7 +53,10 @@ import {
   deleteUser,
 } from '../../src/infrastructure/db.js';
 import { settleRechargeOrderPaid } from '../../src/infrastructure/repositories/billing-repository.js';
-import { storeMessage } from '../../src/infrastructure/repositories/chat-repository.js';
+import {
+  archiveChatSession,
+  storeMessage,
+} from '../../src/infrastructure/repositories/chat-repository.js';
 import { claimOutboundIpcReceipt } from '../../src/infrastructure/repositories/ipc-receipts-repository.js';
 import { claimDurableExecution } from '../../../agent-runtime/src/durable-execution.js';
 import type { InboxRequest } from '../../../agent-runtime/src/types.js';
@@ -576,6 +579,115 @@ describe.skipIf(!connectionString)(
           session_id: 'review-victim-session',
         }),
       ).rejects.toThrow('ownership mismatch');
+    });
+
+    it('settles an in-flight result after archival while preserving ownership and admission checks', async () => {
+      const userId = 'review-archived';
+      const accountId = `web:${userId}`;
+      const sessionId = 'review-archived-session';
+      const nextSessionId = 'review-next-session';
+      const requestId = 'review-archived-request';
+      await state.pool!.query(`
+        INSERT INTO users(id,phone,created_at) VALUES('review-archived','13000000009',now());
+        INSERT INTO chat_sessions(id,account_id,user_id,title,model_pool_key) VALUES
+          ('review-archived-session','web:review-archived','review-archived','Synthetic','benefit'),
+          ('review-next-session','web:review-archived','review-archived','Synthetic','benefit');
+        INSERT INTO user_memberships(user_id,plan_key,status,current_period_start,current_period_end)
+          VALUES('review-archived','membership','active',now()-interval '1 day',now()+interval '1 day');
+      `);
+      const runtime: LlmRuntimeSnapshot = {
+        ...nodes[0],
+        source: 'official',
+        billingMode: 'none',
+        poolKey: 'benefit',
+        benefitPolicy: DEFAULT_BENEFIT_POLICY,
+        poolNodes: nodes,
+      };
+      const admit = (id: string, session: string) =>
+        admitAgentRequest({
+          requestId: id,
+          ownerUserId: userId,
+          runtime: { ...runtime, benefitRequestId: id },
+          deadlineAt: Date.now() + 60_000,
+          input: {
+            accountId,
+            sessionId: session,
+            userMessageId: `message-${id}`,
+            userMessage: 'Synthetic question',
+            history: [],
+          },
+        });
+      await admit(requestId, sessionId);
+      expect(await tryAcquireBenefitExecutionSlot(requestId)).toBe(true);
+      await state.pool!.query(
+        "UPDATE agent_requests SET state='running' WHERE request_id=$1",
+        [requestId],
+      );
+      await archiveChatSession(sessionId);
+      const response = {
+        type: 'response',
+        requestId,
+        accountId,
+        ownerUserId: userId,
+        sessionId,
+        userMessageId: `message-${requestId}`,
+        text: 'Synthetic archived reply',
+        status: 'success',
+      };
+      await state.pool!.query(
+        "UPDATE agent_requests SET state='result_ready',result=$2 WHERE request_id=$1",
+        [requestId, JSON.stringify(response)],
+      );
+
+      await processAiChatOutboxPayload(response, accountId, new Map());
+
+      const { rows } = await state.pool!.query(
+        `SELECT agent.state AS request_state,benefit.state AS benefit_state,
+          usage.reserved_turns,usage.consumed_turns,session.deleted_at IS NOT NULL AS archived
+        FROM agent_requests agent JOIN benefit_requests benefit USING(request_id)
+        JOIN benefit_daily_usage usage ON usage.user_id=benefit.user_id AND usage.allowance_date=benefit.allowance_date
+        JOIN chat_sessions session ON session.id=agent.session_id WHERE agent.request_id=$1`,
+        [requestId],
+      );
+      expect(rows[0]).toEqual({
+        request_state: 'completed',
+        benefit_state: 'consumed',
+        reserved_turns: 0,
+        consumed_turns: 1,
+        archived: true,
+      });
+      expect(
+        (
+          await state.pool!.query(
+            'SELECT account_id,user_id,session_id FROM messages WHERE id=$1',
+            [`message-${requestId}_reply`],
+          )
+        ).rows,
+      ).toEqual([
+        { account_id: accountId, user_id: userId, session_id: sessionId },
+      ]);
+      for (const identity of [
+        { account_id: 'web:review-victim', user_id: userId },
+        { account_id: accountId, user_id: 'review-victim' },
+      ])
+        await expect(
+          storeMessage({
+            id: 'review-invalid-archived-owner',
+            ...identity,
+            sender: identity.account_id,
+            content: 'Synthetic wrong archived owner',
+            timestamp: new Date().toISOString(),
+            session_id: sessionId,
+          }),
+        ).rejects.toThrow('ownership mismatch');
+      await expect(
+        admit('review-rejected-archived', sessionId),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      await admit('review-next-request', nextSessionId);
+      expect(await tryAcquireBenefitExecutionSlot('review-next-request')).toBe(
+        true,
+      );
+      await deleteUser(userId);
     });
 
     it('allows only one concurrent legacy execution and external result receipt, including re-enveloped replays', async () => {

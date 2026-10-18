@@ -19,8 +19,11 @@ rejected, and malformed reliable outbox entries are quarantined.
 Queue identity, pending request identity and supplied account/session/user/message
 identifiers must agree before side effects. Durable delivery additionally checks
 the admitted request context under its row lock. Session message writes atomically
-require a matching session account and, when supplied, owner. Intermediate messages
-persist before stream publication and retain stable IDs across transport retries.
+require a matching session account and, when supplied, owner. Archiving a session
+preserves ownership so admitted results can still commit and settle while the
+session remains archived. New turns use the existing active-session checks.
+Intermediate messages persist before stream publication and retain stable IDs
+across transport retries.
 Only successfully handled responses release concurrency slots. Stream subscribers
 check the authenticated account/session and discard repeated event IDs.
 Legacy inbox execution and external message delivery claim database receipts

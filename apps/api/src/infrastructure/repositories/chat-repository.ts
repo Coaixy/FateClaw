@@ -12,12 +12,13 @@ export async function storeMessage(
   msg: NewMessage,
   db: DbQueryable = getDbPool(),
 ): Promise<void> {
+  // Archived sessions retain ownership so in-flight results can commit and settle.
   const result = await db.query(
     `INSERT INTO messages (id, account_id, user_id, sender, sender_name, content, timestamp, is_from_me, is_bot_message, tool_context, session_id, metadata)
      SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
      WHERE $11::text IS NULL OR EXISTS (
        SELECT 1 FROM chat_sessions WHERE id=$11 AND account_id=$2
-         AND ($3::text IS NULL OR user_id=$3) AND deleted_at IS NULL)
+         AND ($3::text IS NULL OR user_id=$3))
      ON CONFLICT (id, account_id) DO UPDATE SET
        user_id = EXCLUDED.user_id,
        sender = EXCLUDED.sender,
