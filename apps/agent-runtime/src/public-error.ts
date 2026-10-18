@@ -130,6 +130,12 @@ function formatCustomModelError(
   ].join('\n');
 }
 
+export class CancelledAgentRequestError extends Error {
+  constructor() {
+    super('请求已取消');
+  }
+}
+
 export function mapContainerErrorToPublicError(
   failure: unknown,
   options?: { llmRuntime?: LlmRuntimeSnapshot },
@@ -139,6 +145,11 @@ export function mapContainerErrorToPublicError(
   publicReasonCode: PublicReasonCode;
 } {
   const error = failure instanceof Error ? failure.message : String(failure);
+  if (failure instanceof CancelledAgentRequestError)
+    return {
+      publicErrorText: '已取消本次请求。',
+      publicReasonCode: 'user_stop',
+    };
   if (options?.llmRuntime?.source === 'custom') {
     return {
       publicErrorText: formatCustomModelError(error, options.llmRuntime),

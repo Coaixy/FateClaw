@@ -41,7 +41,7 @@ import type { PiToolExecutionRecord } from './types.js';
 import type { SkillContextEntry } from '../types.js';
 import { getRequestId } from '../request-scope.js';
 import { installModelPool } from './model-pool.js';
-import { ModelCallError } from '../public-error.js';
+import { CancelledAgentRequestError, ModelCallError } from '../public-error.js';
 
 const DEFAULT_THINKING_LEVEL: PiThinkingLevel = 'medium';
 
@@ -121,27 +121,46 @@ export async function runPiSession(args: {
   // 自配（BYOK）Base URL 的解析型 SSRF 校验：同步字面量校验挡不住「公网域名解析到内网」，
   // 建 provider（发起真实 LLM 请求）之前先做一次 DNS 解析级校验。
   await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
-  const providerRuntime = await createPiProviderRuntime(
-    args.containerInput.llmRuntime,
-  );
   const userId = resolveUserId(args.containerInput);
-  const soulEditEnabled = await args.runtime.deps.soulStore.canEdit(
-    args.containerInput.accountId,
-  );
-  const sessionContext = await createPiSessionContext({
-    containerInput: args.containerInput,
-    runtime: args.runtime,
-    requestScope: args.requestScope,
-    soulEditEnabled,
-  });
-  const resourceLoader = await createPiResourceLoader({
-    deps: args.runtime.deps,
-    userId,
-    requestScope: args.requestScope,
-    containerInput: args.containerInput,
-    piContextPrompt: sessionContext.prompt,
-    soulEditEnabled,
-  });
+  const contextPromise = args.runtime.deps.soulStore
+    .canEdit(args.containerInput.accountId)
+    .then(async (soulEditEnabled) => ({
+      ...(await createPiSessionContext({
+        containerInput: args.containerInput,
+        runtime: args.runtime,
+        requestScope: args.requestScope,
+        soulEditEnabled,
+      })),
+      soulEditEnabled,
+    }));
+  const prepared = await Promise.allSettled([
+    createPiProviderRuntime(args.containerInput.llmRuntime),
+    contextPromise,
+    createPiResourceLoader({
+      deps: args.runtime.deps,
+      userId,
+      requestScope: args.requestScope,
+      containerInput: args.containerInput,
+      context: contextPromise,
+    }),
+  ]);
+  const failure = prepared.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    if (prepared[2].status === 'fulfilled')
+      prepared[2].value.disposeSkillSnapshots();
+    throw failure.reason;
+  }
+  if (
+    prepared[0].status !== 'fulfilled' ||
+    prepared[1].status !== 'fulfilled' ||
+    prepared[2].status !== 'fulfilled'
+  )
+    throw new Error('Request resource preparation failed');
+  const providerRuntime = prepared[0].value;
+  const sessionContext = prepared[1].value;
+  const soulEditEnabled = sessionContext.soulEditEnabled;
+  const resourceLoader = prepared[2].value;
+
   try {
     const readableSkills = resourceLoader
       .getSkills()
@@ -207,9 +226,7 @@ export async function runPiSession(args: {
       customTools,
     });
 
-    args.onSessionReady?.({
-      abort: () => session.abort(),
-    });
+    let cancelled = false;
 
     const stream = createAiChatStreamPublisher((event) => {
       void publishAiChatStreamEvent({
@@ -250,6 +267,12 @@ export async function runPiSession(args: {
     );
 
     try {
+      args.onSessionReady?.({
+        abort: () => {
+          cancelled = true;
+          return session.abort();
+        },
+      });
       traceEvent(
         {
           type: 'pi_session_started',
@@ -263,6 +286,7 @@ export async function runPiSession(args: {
         },
         args.requestScope,
       );
+      if (cancelled) throw new CancelledAgentRequestError();
       await session.prompt(args.containerInput.userMessage, {
         source: 'extension',
       });

@@ -350,6 +350,7 @@ async function processInboxMessage(
   let stopLease = () => {};
   let ownsExecution = false;
   let generatedResult = false;
+  let executionEnded = false;
 
   try {
     request = parseInboxRequest(raw);
@@ -405,9 +406,13 @@ async function processInboxMessage(
           undefined,
           {
             onSessionReady(sessionControls) {
+              if (executionEnded) {
+                void sessionControls.abort().catch(() => {});
+                return;
+              }
               activeSessions.set(request!.requestId, sessionControls);
               if (pendingCancelRequests.delete(request!.requestId)) {
-                void sessionControls.abort();
+                void sessionControls.abort().catch(() => {});
               }
             },
           },
@@ -419,6 +424,7 @@ async function processInboxMessage(
     }
 
     if (raced === 'stall_timeout' || raced === 'max_duration') {
+      executionEnded = true;
       // 放弃等待并尝试 abort 当前 session；若卡死原因是同步阻塞（如灾难性正则回溯），
       // abort 无法真正打断执行，但至少能让本次请求以明确错误结束，不再无限静默。
       void activeSessions
@@ -525,6 +531,7 @@ async function processInboxMessage(
       }
     }
   } finally {
+    executionEnded = true;
     stopLease();
     if (request?.requestId && ownsExecution) {
       activeSessions.delete(request.requestId);

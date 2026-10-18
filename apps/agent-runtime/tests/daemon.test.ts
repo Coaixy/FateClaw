@@ -135,14 +135,20 @@ describe('daemon request timeout', () => {
   it('pushes a timeout error response when executeContainerInput never settles', async () => {
     vi.useFakeTimers();
     try {
-      vi.mocked(executeContainerInput).mockImplementation((_input, scope) => {
-        scope.partialUsage = {
-          promptTokens: 5,
-          completionTokens: 2,
-          totalTokens: 7,
-        };
-        return new Promise(() => {});
-      });
+      let lateReady: NonNullable<
+        Parameters<typeof executeContainerInput>[3]
+      >['onSessionReady'];
+      vi.mocked(executeContainerInput).mockImplementation(
+        (_input, scope, _deps, options) => {
+          lateReady = options?.onSessionReady;
+          scope.partialUsage = {
+            promptTokens: 5,
+            completionTokens: 2,
+            totalTokens: 7,
+          };
+          return new Promise(() => {});
+        },
+      );
       const lpush = vi.fn().mockResolvedValue(1);
       vi.mocked(getRedis).mockReturnValue({ lpush } as never);
 
@@ -154,16 +160,21 @@ describe('daemon request timeout', () => {
         llmRuntime: VALID_LLM_RUNTIME,
       });
 
+      const sessions = new Map();
       const runPromise = __processInboxMessageForTests(
         'web:user-1',
         raw,
-        new Map(),
+        sessions,
         new Map(),
         new Map(),
       );
 
       await vi.advanceTimersByTimeAsync(8 * 60 * 1000 + 1_000);
       await runPromise;
+      const abort = vi.fn(async () => {});
+      lateReady?.({ abort });
+      expect(abort).toHaveBeenCalledOnce();
+      expect(sessions.size).toBe(0);
 
       expect(lpush).toHaveBeenCalledTimes(1);
       const [, payload] = lpush.mock.calls[0];

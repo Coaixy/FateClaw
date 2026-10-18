@@ -117,6 +117,28 @@ function createInput(): ContainerInput {
 }
 
 describe('runPiSession', () => {
+  it('does not contact a model when cancellation arrived before session readiness', async () => {
+    const session = {
+      state: { messages: [] },
+      prompt: vi.fn(async () => {}),
+      subscribe: vi.fn(() => vi.fn()),
+      abort: vi.fn(async () => {}),
+      dispose: vi.fn(),
+    };
+    mockCreateAgentSession.mockResolvedValueOnce({ session });
+    await expect(
+      runPiSession({
+        containerInput: createInput(),
+        runtime: { deps: createDeps() } as RequestRuntime,
+        requestScope: createRequestScope(),
+        onSessionReady: (controls) => {
+          void controls.abort();
+        },
+      }),
+    ).rejects.toThrow('请求已取消');
+    expect(session.prompt).not.toHaveBeenCalled();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();

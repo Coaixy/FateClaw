@@ -68,7 +68,10 @@ function createTextSkillBundleFixture(dirName = 'private-bazi'): string {
 
 function createDeps(): AgentRuntimeDeps {
   const bundleUri = createTextSkillBundleFixture();
-  process.env.FATECLAW_TEXT_SKILLS_DIR = path.join(path.dirname(bundleUri), 'cache');
+  process.env.FATECLAW_TEXT_SKILLS_DIR = path.join(
+    path.dirname(bundleUri),
+    'cache',
+  );
   const revision = {
     skillId: 'private-bazi-id',
     revisionId: 'private-bazi-revision',
@@ -106,6 +109,53 @@ function createDeps(): AgentRuntimeDeps {
 }
 
 describe('createPiResourceLoader', () => {
+  it('settles concurrent acquisitions before releasing snapshots when a sibling fails', async () => {
+    const deps = createDeps();
+    const skills = await deps.skillCatalog.listEffectiveUserSkills('user-1');
+    vi.mocked(deps.skillCatalog.listEffectiveUserSkills).mockResolvedValue([
+      skills[0],
+      { ...skills[0], id: 'second' },
+    ]);
+    let failFirst!: (error: Error) => void;
+    let finishSecond!: (value: {
+      baseDir: string;
+      filePath: string;
+      release: () => void;
+    }) => void;
+    const release = vi.fn();
+    const acquire = vi
+      .spyOn(SkillContentCache.prototype, 'acquire')
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            failFirst = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishSecond = resolve;
+          }),
+      );
+    const loading = createPiResourceLoader({
+      deps,
+      userId: 'user-1',
+      requestScope: createRequestScope(),
+      containerInput,
+    });
+    void loading.catch(() => {});
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(2));
+    failFirst(new Error('synthetic acquisition failure'));
+    await Promise.resolve();
+    expect(release).not.toHaveBeenCalled();
+    finishSecond({
+      baseDir: '/synthetic',
+      filePath: '/synthetic/SKILL.md',
+      release,
+    });
+    await expect(loading).rejects.toThrow('synthetic acquisition failure');
+    expect(release).toHaveBeenCalledOnce();
+  });
   it('releases acquired snapshots if a later loader initialization step fails', async () => {
     const release = vi.fn();
     const deps = createDeps();

@@ -102,6 +102,13 @@ Normal submission queries only board fields and checks for a final reply after
 the current board with an existence query. It does not fetch the complete message
 history. All authorized boards and the existing first-question wording remain.
 
+Independent provider, Soul/context and knowledge preparation settle concurrently.
+Skill snapshot acquisition has a concurrency of two, matching each daemon's
+PostgreSQL pool. Failures wait for started acquisitions before releasing every
+successful snapshot. Request-scoped authorization and immutable revision leases
+remain authoritative. Cancellation before session readiness prevents a model call;
+a session arriving after its outer watchdog has finished is aborted and discarded.
+
 Each account listener uses separate finite blocking reads for ordinary results
 and reliable AI results. AI `BLMOVE` wakes on its own queue and retains the
 processing copy until successful delivery; waiting on an ordinary outbox cannot

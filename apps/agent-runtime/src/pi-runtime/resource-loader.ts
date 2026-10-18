@@ -23,6 +23,7 @@ export interface CreatePiResourceLoaderOptions {
   containerInput: ContainerInput;
   piContextPrompt?: string;
   soulEditEnabled?: boolean;
+  context?: Promise<{ prompt: string; soulEditEnabled: boolean }>;
 }
 
 function createSkill(args: {
@@ -91,29 +92,47 @@ async function loadRequestScopedSkills(
       ? await options.deps.skillCatalog.listEffectiveUserSkills(options.userId)
       : [];
   const snapshots: SkillSnapshot[] = [];
-  const resolvedSkills = [];
+  const resolvedSkills: Array<{
+    skill: (typeof effectivePrivateKnowledge)[number];
+    bundle: SkillSnapshot;
+  }> = [];
   try {
-    for (const skill of effectivePrivateKnowledge) {
-      if (
-        !skill.revision_id ||
-        !skill.checksum ||
-        skill.format_version === null
-      ) {
-        throw new Error('Skill 尚未完成内容导入，请在原部署完成迁移');
+    let nextIndex = 0;
+    let failed = false;
+    const acquire = async () => {
+      while (!failed && nextIndex < effectivePrivateKnowledge.length) {
+        const index = nextIndex++;
+        const skill = effectivePrivateKnowledge[index];
+        try {
+          if (
+            !skill.revision_id ||
+            !skill.checksum ||
+            skill.format_version === null
+          ) {
+            throw new Error('Skill 尚未完成内容导入，请在原部署完成迁移');
+          }
+          const revisionId = skill.revision_id;
+          const bundle = await getSkillContentCache().acquire(
+            {
+              skillId: skill.id,
+              revisionId,
+              checksum: skill.checksum,
+              formatVersion: skill.format_version,
+            },
+            () =>
+              options.deps.skillRevisions.readRevision(skill.id, revisionId),
+          );
+          snapshots.push(bundle);
+          resolvedSkills[index] = { skill, bundle };
+        } catch (error) {
+          failed = true;
+          throw error;
+        }
       }
-      const revisionId = skill.revision_id;
-      const bundle = await getSkillContentCache().acquire(
-        {
-          skillId: skill.id,
-          revisionId,
-          checksum: skill.checksum,
-          formatVersion: skill.format_version,
-        },
-        () => options.deps.skillRevisions.readRevision(skill.id, revisionId),
-      );
-      snapshots.push(bundle);
-      resolvedSkills.push({ skill, bundle });
-    }
+    };
+    const acquired = await Promise.allSettled([acquire(), acquire()]);
+    const failure = acquired.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
     const privateKnowledgeEntries = resolvedSkills
       .filter(({ bundle }) => bundle)
       .map(({ skill }) => ({
@@ -172,18 +191,33 @@ export function createEmptyExtensionsResult(): LoadExtensionsResult {
 export async function createPiResourceLoader(
   options: CreatePiResourceLoaderOptions,
 ): Promise<ResourceLoader & { disposeSkillSnapshots(): void }> {
+  const [knowledge, context] = await Promise.allSettled([
+    loadRequestScopedSkills(options),
+    options.context ??
+      Promise.resolve({
+        prompt: options.piContextPrompt,
+        soulEditEnabled: options.soulEditEnabled ?? true,
+      }),
+  ]);
+  if (knowledge.status === 'rejected') throw knowledge.reason;
   const { skills, diagnostics, privateKnowledgeEntries, snapshots } =
-    await loadRequestScopedSkills(options);
+    knowledge.value;
   try {
+    if (context.status === 'rejected') throw context.reason;
+    const resolved = {
+      ...options,
+      piContextPrompt: context.value.prompt,
+      soulEditEnabled: context.value.soulEditEnabled,
+    };
     const extensions = createEmptyExtensionsResult();
     const systemPrompt = buildPiSystemPrompt(
-      options.containerInput,
-      options.soulEditEnabled ?? true,
+      resolved.containerInput,
+      resolved.soulEditEnabled ?? true,
     );
     const appendSystemPrompt = buildAppendSystemPrompt(
       privateKnowledgeEntries,
-      options.piContextPrompt,
-      hasExplicitSkillScope(options.containerInput),
+      resolved.piContextPrompt,
+      hasExplicitSkillScope(resolved.containerInput),
     );
 
     return {
